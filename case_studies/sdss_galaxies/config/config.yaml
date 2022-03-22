@@ -206,7 +206,7 @@ training:
         batch_size: 32
         num_workers: 0
     weight_save_path: ${paths.project}/models/${training.name}.pt
-    seed: null
+    seed: 42
 
 plots:
     figs:
