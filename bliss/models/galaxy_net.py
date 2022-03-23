@@ -22,13 +22,14 @@ class CenteredGalaxyEncoder(nn.Module):
 
         self.slen = slen
         self.latent_dim = latent_dim
+        self.n_bands = n_bands
 
         f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
         min_slen = f(f(slen))
         wn = lambda x: weight_norm(x) if use_weight_norm else x
 
         self.features = nn.Sequential(
-            wn(nn.Conv2d(n_bands, 4, 5, stride=3, padding=0)),
+            wn(nn.Conv2d(self.n_bands, 4, 5, stride=3, padding=0)),
             nn.LeakyReLU(),
             wn(nn.Conv2d(4, 8, 5, stride=3, padding=0)),
             nn.LeakyReLU(),
@@ -38,7 +39,7 @@ class CenteredGalaxyEncoder(nn.Module):
             wn(nn.Linear(hidden, latent_dim)),
         )
 
-    def forward(self, image):
+    def forward(self, image, log_fluxes):
         """Encodes galaxy from image."""
         return self.features(image), torch.tensor(0.0, device=image.device)
 
@@ -56,11 +57,13 @@ class CenteredGalaxyDecoder(nn.Module):
         g = lambda x: (x - 1) * 3 + 5
         self.min_slen = f(f(slen))
         assert g(g(self.min_slen)) == slen
+        self.latent_dim = latent_dim
+        self.n_bands = n_bands
 
         wn = lambda x: weight_norm(x) if use_weight_norm else x
 
         self.fc = nn.Sequential(
-            wn(nn.Linear(latent_dim, hidden)),
+            wn(nn.Linear(self.latent_dim, hidden)),
             nn.LeakyReLU(),
             wn(nn.Linear(hidden, 8 * self.min_slen ** 2)),
             nn.LeakyReLU(),
@@ -69,17 +72,23 @@ class CenteredGalaxyDecoder(nn.Module):
         self.deconv = nn.Sequential(
             wn(nn.ConvTranspose2d(8, 4, 5, stride=3)),
             nn.LeakyReLU(),
-            wn(nn.ConvTranspose2d(4, n_bands, 5, stride=3)),
+            wn(nn.ConvTranspose2d(4, self.n_bands, 5, stride=3)),
         )
 
-    def forward(self, z):
+    def forward(self, z: Tensor):
         """Decodes image from latent representation."""
+        z, log_flux = torch.split(z, (self.latent_dim, self.n_bands), -1)
         z = self.fc(z)
         z = z.view(-1, 8, self.min_slen, self.min_slen)
         z = self.deconv(z)
         z = z[:, :, : self.slen, : self.slen]
         assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
-        return F.relu(z)
+        # shape = F.sigmoid(z)
+        shape = z.reshape(*z.shape[:2], -1).softmax(dim=-1).reshape(*z.shape)
+        # shape = F.relu(z)
+        # shape = shape / (shape.sum(dim=(-2, -1), keepdim=True) + 1e-1)
+        img = shape * log_flux.exp().reshape(-1, self.n_bands, 1, 1)
+        return img
 
 
 class OneCenteredGalaxyAE(pl.LightningModule):
@@ -107,9 +116,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
-    def forward(self, image: Tensor, background: Tensor) -> Tuple[Tensor, Tensor]:
+    def forward(self, image: Tensor, log_fluxes:Tensor, background: Tensor) -> Tuple[Tensor, Tensor]:
         """Gets reconstructed image from running through encoder and decoder."""
-        z, pq_z = self.enc.forward(image - background)
+        z, pq_z = self.enc.forward(image - background, log_fluxes)
         recon_mean = self.dec.forward(z)
         return recon_mean + background, pq_z
 
@@ -158,8 +167,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
-        images, background = batch["images"], batch["background"]
-        recon_mean, pq_z = self.forward(images, background)
+        images, total_flux, background = batch["images"], batch["total_flux"], batch["background"]
+        log_fluxes = total_flux.log()
+        recon_mean, pq_z = self.forward(images, log_fluxes, background)
         loss = self.get_loss(images, recon_mean, pq_z)
         self.log("train/loss", loss)
         return loss
@@ -170,8 +180,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
-        images, background = batch["images"], batch["background"]
-        recon_mean, pq_z = self.forward(images, background)
+        images, total_flux, background = batch["images"], batch["total_flux"], batch["background"]
+        log_fluxes = total_flux.log()
+        recon_mean, pq_z = self.forward(images, log_fluxes, background)
         residuals = (images - recon_mean) / torch.sqrt(recon_mean)
         loss = self.get_loss(images, recon_mean, pq_z)
 

@@ -217,7 +217,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         image += self.background.mean()
         image += image.sqrt() * torch.randn(*image.shape)
 
-        return {"images": image, "background": self.background, "noiseless": noiseless}
+        return {"images": image, "background": self.background, "noiseless": noiseless, "total_flux": total_flux}
 
     def __len__(self):
         return self.batch_size * self.n_batches

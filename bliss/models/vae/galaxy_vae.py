@@ -34,7 +34,7 @@ class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
         mean, logvar = torch.split(encoded, (self.latent_dim, self.latent_dim), -1)
         return Normal(mean, F.softplus(logvar) + 1e-3)
 
-    def forward(self, image: Tensor):
+    def forward(self, image: Tensor, log_flux: Tensor):
         q_z = self.encode(image)
         z = q_z.rsample()
         p_z = Normal(self.p_z.loc, self.p_z.scale)
@@ -44,7 +44,8 @@ class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
         log_qz = q_z.log_prob(z).sum(-1)
         assert not torch.any(torch.isnan(log_qz))
         assert not torch.any(torch.isinf(log_qz))
-        return z, log_pz - log_qz
+        return torch.cat((z, log_flux), dim=-1), log_pz - log_qz
 
-    def max_a_post(self, image):
-        return self.encode(image).loc
+    def max_a_post(self, image, log_flux):
+        q_z = self.encode(image)
+        return torch.cat((q_z.loc, log_flux), dim=-1)
