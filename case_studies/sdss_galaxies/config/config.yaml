@@ -220,3 +220,37 @@ plots:
     device: "cuda:0"
     coadd_cat: ${paths.data}/coadd_catalog_94_1_12.fits
     psf_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+    frame:
+        _target_: bliss.inference.SDSSFrame
+        sdss_dir: ${paths.sdss}
+        pixel_scale: 0.396
+        coadd_file: ${paths.data}/coadd_catalog_94_1_12.fits
+    scenes:
+        sdss_recon0:
+            h: 200
+            w: 1700
+            size: 300
+        sdss_recon1:
+            h: 1150
+            w: 1000
+            size: 300
+        sdss_gal_blend1:
+            h: 460
+            w: 742
+            size: 48
+        sdss_gal_blend2:
+            h: 1400
+            w: 1710
+            size: 48
+        sdss_gal_blend3:
+            h: 210
+            w: 280
+            size: 32
+        sdss_gal_blend4:
+            h: 1240
+            w: 240
+            size: 48
+        sdss_gal_blend5:
+            h: 450
+            w: 500
+            size: 64
