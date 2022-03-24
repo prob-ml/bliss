@@ -126,6 +126,17 @@ models:
         hidden: ${models.galaxy_vae.hidden}
         #vae_flow: ${models.galaxy_flow}
         #vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
+    galaxy_flux_encoder:
+        _target_: bliss.models.galaxy_flux.GalaxyFluxEncoder
+        input_transform:
+            _target_: bliss.models.location_encoder.ConcatBackgroundTransform
+        n_bands: ${models.prior.n_bands}
+        tile_slen: ${models.decoder.tile_slen}
+        ptile_slen: ${models.decoder.ptile_slen}
+        channel: 8
+        hidden: 128
+        spatial_dropout: 0.0
+        dropout: 0.0
     galaxy_flow:
         _target_: bliss.models.vae.galaxy_flow.CenteredGalaxyLatentFlow
         vae: ${models.galaxy_vae}
