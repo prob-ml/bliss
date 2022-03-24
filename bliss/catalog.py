@@ -16,6 +16,7 @@ class TileCatalog(UserDict):
         "galaxy_bools",
         "galaxy_params",
         "galaxy_fluxes",
+        "galaxy_log_fluxes",
         "galaxy_probs",
         "galaxy_blends",
         "star_bools",

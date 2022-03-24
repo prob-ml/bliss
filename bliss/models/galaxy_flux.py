@@ -6,6 +6,7 @@ from einops import rearrange
 from matplotlib import pyplot as plt
 from torch import Tensor
 from torch.distributions import Normal
+from torch.nn import functional as F
 from torch.optim import Adam
 
 from bliss.catalog import TileCatalog, get_images_in_tiles
@@ -73,11 +74,16 @@ class GalaxyFluxEncoder(pl.LightningModule):
         tile_catalog = TileCatalog(self.tile_slen, {k:v for k, v in batch.items() if k not in {"images", "background"}})
         galaxy_log_flux_params = self.encode(images, background, tile_catalog.locs)
         
-        true_log_fluxes = tile_catalog["galaxy_params"][:, :, :, :, -self.n_bands:].log()
+        true_log_fluxes = tile_catalog["galaxy_params"][:, :, :, :, -self.n_bands:]
         galaxy_log_flux_mean, galaxy_log_flux_logvar = torch.split(galaxy_log_flux_params, (self.n_bands, self.n_bands), -1)
-        galaxy_log_flux_dist = Normal(galaxy_log_flux_mean, galaxy_log_flux_logvar)
+        # galaxy_log_flux_mean.clamp(min=)
+        # galaxy_log_flux_mean += 5
+        # galaxy_log_flux_mean = galaxy_log_flux_mean.clamp_max(14.0)
+        galaxy_log_flux_dist = Normal(galaxy_log_flux_mean, F.softplus(galaxy_log_flux_logvar) + 1e-3)
         log_probs = galaxy_log_flux_dist.log_prob(true_log_fluxes)
-        return (-log_probs * tile_catalog["galaxy_bools"]).sum(), galaxy_log_flux_params, tile_catalog
+        # log_probs = -torch.pow(galaxy_log_flux_mean - true_log_fluxes, 2)
+        # return (-log_probs * tile_catalog["galaxy_bools"]).sum(), galaxy_log_flux_params, tile_catalog
+        return (-log_probs[tile_catalog["galaxy_bools"] > 0.5]).sum(), galaxy_log_flux_params, tile_catalog
     
     def training_step(self, batch, batch_idx):
         loss, _, _ = self.get_loss(batch)
@@ -90,7 +96,7 @@ class GalaxyFluxEncoder(pl.LightningModule):
         output = ({"images": batch["images"], "background": batch["background"], "loss": loss, "galaxy_log_flux_params": galaxy_log_flux_params, "tile_catalog": tile_catalog})
         return output
 
-    def validation_epoch_end(self, outputs: List[Dict[str, Tensor]], n_samples = 16):
+    def validation_epoch_end(self, outputs: List[Dict[str, Tensor]], n_samples = 9):
         assert n_samples ** (0.5) % 1 == 0
         if n_samples > len(outputs):  # do nothing if low on samples.
             return
@@ -105,17 +111,18 @@ class GalaxyFluxEncoder(pl.LightningModule):
             tile_catalog["galaxy_log_fluxes"] = galaxy_log_flux_mean * tile_catalog["galaxy_bools"]
             full_catalog = tile_catalog.to_full_params()
             ax = axes[i]
-            ax.imshow(batch["images"][0,0].numpy(), cmap="gist_gray")
-            ax.scatter(full_catalog.plocs[0, :, 1], full_catalog.plocs[0, :, 0])
+            ax.imshow(batch["images"][0,0].cpu().numpy(), cmap="gist_gray")
+            plocs = full_catalog.plocs[0, :, :] + self.border_padding - 0.5
+            ax.scatter(plocs[:, 1].cpu(), plocs[:, 0].cpu())
 
-            galaxy_bools = full_catalog["galaxy_bools"][0, :, 0]
-            plocs_galaxies = full_catalog.plocs[0, galaxy_bools]
+            galaxy_bools = full_catalog["galaxy_bools"][0, :, 0] > 0.5
+            plocs_galaxies = plocs[galaxy_bools]
             true_galaxy_fluxes = full_catalog["galaxy_params"][0, galaxy_bools][:, -self.n_bands:]
             est_galaxy_fluxes = full_catalog["galaxy_log_fluxes"][0, galaxy_bools]
             for (i, ploc) in enumerate(plocs_galaxies):
                 xi = ploc[1]
                 yi = ploc[0]
-                ax.annotate(f"True:{true_galaxy_fluxes[i, 0]}. Est:{est_galaxy_fluxes[i, 0]}", (xi, yi), color = "y")
+                ax.annotate(f"True:{true_galaxy_fluxes[i, 0]:.2e}.\nEst:{est_galaxy_fluxes[i, 0]:.2e}", (xi, yi), color = "c")
         fig.tight_layout()
 
         title = f"Epoch:{self.current_epoch}/Validation Images"
