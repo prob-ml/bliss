@@ -467,15 +467,15 @@ def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="viridis"):
         fig.colorbar(im, cax=cax, orientation="vertical")
 
 
-def plot_locs(ax, bpad, locs, color="r", marker="x", s=20, galaxy_probs=None):
-    assert len(locs.shape) == 2
-    assert locs.shape[1] == 2
+def plot_locs(ax, bpad, plocs, color="r", marker="x", s=20, galaxy_probs=None):
+    assert len(plocs.shape) == 2
+    assert plocs.shape[1] == 2
     assert isinstance(bpad, int)
     if galaxy_probs is not None:
         assert len(galaxy_probs.shape) == 1
 
-    x = locs[:, 1] - 0.5 + bpad
-    y = locs[:, 0] - 0.5 + bpad
+    x = plocs[:, 1] - 0.5 + bpad
+    y = plocs[:, 0] - 0.5 + bpad
     for i, (xi, yi) in enumerate(zip(x, y)):
         if xi > bpad and yi > bpad:
             ax.scatter(xi, yi, color=color, marker=marker, s=s)
@@ -508,16 +508,16 @@ def plot_image_and_locs(
 
     # true parameters on full image.
     true_n_sources = true_params.n_sources[idx].cpu().numpy()
-    true_locs = true_params.plocs[idx].cpu().numpy()
+    true_plocs = true_params.plocs[idx].cpu().numpy()
     true_galaxy_bools = true_params["galaxy_bools"][idx].cpu().numpy()
     true_star_bools = true_params["star_bools"][idx].cpu().numpy()
-    true_galaxy_locs = true_locs * true_galaxy_bools
-    true_star_locs = true_locs * true_star_bools
+    true_galaxy_plocs = true_plocs * true_galaxy_bools
+    true_star_plocs = true_plocs * true_star_bools
 
     # convert tile estimates to full parameterization for plotting
     if estimate is not None:
         n_sources = estimate.n_sources[idx].cpu().numpy()
-        locs = estimate.plocs[idx].cpu().numpy()
+        plocs = estimate.plocs[idx].cpu().numpy()
 
     if galaxy_probs is not None:
         galaxy_probs = galaxy_probs[idx].cpu().numpy().reshape(-1)
@@ -539,19 +539,19 @@ def plot_image_and_locs(
     plot_image(fig, ax, image, vrange=(vmin, vmax))
 
     # plot locations
-    plot_locs(ax, bpad, true_galaxy_locs, "r", "x", s=20, galaxy_probs=None)
-    plot_locs(ax, bpad, true_star_locs, "c", "x", s=20, galaxy_probs=None)
+    plot_locs(ax, bpad, true_galaxy_plocs, "r", "x", s=20, galaxy_probs=None)
+    plot_locs(ax, bpad, true_star_plocs, "c", "x", s=20, galaxy_probs=None)
 
     if estimate is not None:
         if use_galaxy_bools:
             galaxy_bools = estimate["galaxy_bools"][idx].cpu().numpy()
             star_bools = estimate["star_bools"][idx].cpu().numpy()
-            galaxy_locs = locs * galaxy_bools
-            star_locs = locs * star_bools
-            plot_locs(ax, bpad, galaxy_locs, "b", "+", s=30, galaxy_probs=galaxy_probs)
-            plot_locs(ax, bpad, star_locs, "m", "+", s=30, galaxy_probs=galaxy_probs)
+            galaxy_plocs = plocs * galaxy_bools
+            star_plocs = plocs * star_bools
+            plot_locs(ax, bpad, galaxy_plocs, "b", "+", s=30, galaxy_probs=galaxy_probs)
+            plot_locs(ax, bpad, star_plocs, "m", "+", s=30, galaxy_probs=galaxy_probs)
         else:
-            plot_locs(ax, bpad, locs, "b", "+", s=30, galaxy_probs=None)
+            plot_locs(ax, bpad, plocs, "b", "+", s=30, galaxy_probs=None)
 
     if labels is not None:
         colors = ["r", "b", "c", "m"]

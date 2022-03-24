@@ -25,9 +25,6 @@ from bliss.models.decoder import ImageDecoder
 from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
 
-# class Frame(ABC):
-#     pass
-
 
 def reconstruct(cfg):
     if cfg.reconstruct.outdir is not None:

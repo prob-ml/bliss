@@ -5,7 +5,7 @@ repos:
         name: trailing-whitespace
         entry: trailing-whitespace-fixer
         language: python
-        exclude: ^(.*fits|.*pt|.*npz|.*ckpt|.*png|.*inv|.*npy)
+        exclude: ^(.*fits|.*pt|.*npz|.*ckpt|.*png|.*inv|.*npy|.*pdf|.*jpg)
       - id: check-added-large-files
         name: check-added-large-files
         entry: check-added-large-files
@@ -20,7 +20,7 @@ repos:
         name: end-of-file-fixer
         entry: end-of-file-fixer
         language: python
-        exclude: ^(.*fits|.*pt|.*npz|.*ckpt|.*png|.*inv|.*npy)
+        exclude: ^(.*fits|.*pt|.*npz|.*ckpt|.*png|.*inv|.*npy|.*pdf|.*jpg)
       - id: isort
         name: isort
         entry: isort
