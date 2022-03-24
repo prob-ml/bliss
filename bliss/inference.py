@@ -262,9 +262,7 @@ def reconstruct_img(
     with torch.no_grad():
         tile_map = encoder.max_a_post(img, bg)
         recon_image = decoder.render_images(tile_map)
-        tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
-            tile_map["galaxy_bools"], tile_map["galaxy_params"]
-        )
+        tile_map["galaxy_fluxes"] = tile_map["galaxy_log_fluxes"].exp()
     return recon_image, tile_map
 
 
