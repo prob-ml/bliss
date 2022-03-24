@@ -195,6 +195,7 @@ predict:
     sleep_checkpoint: ${paths.project}/models/sdss_sleep.pt
     galaxy_checkpoint: ${paths.project}/models/sdss_galaxy_encoder.pt
     galaxy_checkpoint_real: ${paths.project}/models/sdss_galaxy_encoder_real.pt
+    galaxy_flux_checkpoint: ${paths.project}/models/sdss_galaxy_flux_encoder.pt
     binary_checkpoint: ${paths.project}/models/sdss_binary.pt
     device: "cuda:0"
     output_file: null

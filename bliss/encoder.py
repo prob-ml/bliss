@@ -7,6 +7,7 @@ from torch import Tensor, nn
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
+from bliss.models.galaxy_flux import GalaxyFluxEncoder
 from bliss.models.location_encoder import LocationEncoder
 
 
@@ -31,6 +32,7 @@ class Encoder(nn.Module):
         self,
         location_encoder: LocationEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
+        galaxy_flux_encoder: Optional[GalaxyFluxEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
     ):
         """Initializes Encoder.
@@ -53,6 +55,7 @@ class Encoder(nn.Module):
 
         self.location_encoder = location_encoder
         self.binary_encoder = binary_encoder
+        self.galaxy_flux_encoder = galaxy_flux_encoder
         self.galaxy_encoder = galaxy_encoder
 
     def forward(self, x):
@@ -102,9 +105,18 @@ class Encoder(nn.Module):
                     "galaxy_probs": galaxy_probs,
                 }
             )
+        
+        if self.galaxy_flux_encoder is not None:
+            galaxy_log_flux_params = self.galaxy_flux_encoder.encode(image, background, tile_map.locs)
+            galaxy_log_fluxes, _ = torch.split(
+                galaxy_log_flux_params,
+                (self.galaxy_flux_encoder.n_bands, self.galaxy_flux_encoder.n_bands),
+                -1
+            )
+            tile_map.update({"galaxy_log_fluxes": galaxy_log_fluxes})
 
         if self.galaxy_encoder is not None:
-            galaxy_params = self.galaxy_encoder.max_a_post(image, background, tile_map.locs)
+            galaxy_params = self.galaxy_encoder.max_a_post(image, background, tile_map.locs, galaxy_log_fluxes)
             galaxy_params *= tile_map.is_on_array.unsqueeze(-1) * tile_map["galaxy_bools"]
             tile_map.update({"galaxy_params": galaxy_params})
         return tile_map

@@ -77,9 +77,9 @@ class GalaxyFluxEncoder(pl.LightningModule):
         true_log_fluxes = tile_catalog["galaxy_params"][:, :, :, :, -self.n_bands:]
         galaxy_log_flux_mean, galaxy_log_flux_logvar = torch.split(galaxy_log_flux_params, (self.n_bands, self.n_bands), -1)
         # galaxy_log_flux_mean.clamp(min=)
-        galaxy_log_flux_mean =  6.0 + F.softplus(galaxy_log_flux_mean)
+        # galaxy_log_flux_mean =  6.0 + F.softplus(galaxy_log_flux_mean)
         # galaxy_log_flux_mean = galaxy_log_flux_mean.clamp_max(14.0)
-        galaxy_log_flux_dist = Normal(galaxy_log_flux_mean, F.softplus(galaxy_log_flux_logvar) + 1e-3)
+        galaxy_log_flux_dist = Normal(galaxy_log_flux_mean, torch.exp(galaxy_log_flux_logvar * 0.5) + 1e-3)
         log_probs = galaxy_log_flux_dist.log_prob(true_log_fluxes)
         # log_probs = -torch.pow(galaxy_log_flux_mean - true_log_fluxes, 2)
         # return (-log_probs * tile_catalog["galaxy_bools"]).sum(), galaxy_log_flux_params, tile_catalog
@@ -108,7 +108,7 @@ class GalaxyFluxEncoder(pl.LightningModule):
             batch = outputs[i]
             tile_catalog: TileCatalog = batch["tile_catalog"]
             galaxy_log_flux_mean, _ = torch.split(batch["galaxy_log_flux_params"], (self.n_bands, self.n_bands), -1)
-            galaxy_log_flux_mean = 6.0 + F.softplus(galaxy_log_flux_mean)
+            # galaxy_log_flux_mean = 6.0 + F.softplus(galaxy_log_flux_mean)
             tile_catalog["galaxy_log_fluxes"] = galaxy_log_flux_mean * tile_catalog["galaxy_bools"]
             full_catalog = tile_catalog.to_full_params()
             ax = axes[i]

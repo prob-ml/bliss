@@ -111,7 +111,8 @@ class GalaxyEncoder(pl.LightningModule):
     def max_a_post(self, images: Tensor, background: Tensor, tile_locs: Tensor, galaxy_log_fluxes: Tensor) -> Tensor:
         batch_size, nth, ntw, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
-        galaxy_params_flat = self.enc.max_a_post(centered_ptiles)
+        galaxy_log_fluxes = rearrange(galaxy_log_fluxes, "n nth ntw s b -> (n nth ntw s) b")
+        galaxy_params_flat = self.enc.max_a_post(centered_ptiles, galaxy_log_fluxes)
         return rearrange(
             galaxy_params_flat,
             "(b nth ntw s) d -> b nth ntw s d",
