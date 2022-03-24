@@ -13,7 +13,7 @@ class TestGenerate:
             generate_device="cuda:0" if devices.use_cuda else "cpu",
         )
         filepath = Path(cfg.paths.root) / "example.pt"
-        imagepath = Path(cfg.paths.root) / "example_images.pdf"
+        imagepath = Path(cfg.paths.root) / "example_images.jpg"
         generate.generate(
             dataset, filepath, imagepath, n_plots=25, global_params=("background", "slen")
         )
