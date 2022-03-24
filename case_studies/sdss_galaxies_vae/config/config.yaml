@@ -147,6 +147,9 @@ models:
         alpha: 0.5
         prob_galaxy: 0.7
         galaxy_prior:
+            min_flux: ${datasets.sdss_galaxies.min_flux}
+            max_flux: ${datasets.sdss_galaxies.max_flux}
+            alpha: ${datasets.sdss_galaxies.alpha}
             _target_: bliss.models.vae.prior.GalaxyVAEPrior
             latent_dim: ${models.galaxy_vae.latent_dim}
             #vae_flow: ${models.galaxy_flow}
