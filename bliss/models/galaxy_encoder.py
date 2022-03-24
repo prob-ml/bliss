@@ -75,13 +75,14 @@ class GalaxyEncoder(pl.LightningModule):
             )
 
     def encode(
-        self, images: Tensor, background: Tensor, tile_locs: Tensor
+        self, images: Tensor, background: Tensor, tile_locs: Tensor, galaxy_log_fluxes: Tensor,
     ) -> Tuple[Tensor, Tensor]:
         """Runs galaxy encoder on input image ptiles (with bg substracted)."""
         batch_size, nth, ntw, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
-        galaxy_params_flat, pq_divergence_flat = self.enc(centered_ptiles)
+        galaxy_log_fluxes = galaxy_log_fluxes.reshape(-1, self.n_bands)
+        galaxy_params_flat, pq_divergence_flat = self.enc(centered_ptiles, galaxy_log_fluxes)
         galaxy_params = rearrange(
             galaxy_params_flat,
             "(b nth ntw s) d -> b nth ntw s d",
@@ -103,11 +104,11 @@ class GalaxyEncoder(pl.LightningModule):
             pq_divergence = pq_divergence_flat
         return galaxy_params, pq_divergence
 
-    def sample(self, images, background, tile_locs):
-        galaxy_params, _ = self.encode(images, background, tile_locs)
+    def sample(self, images, background, tile_locs, galaxy_log_fluxes):
+        galaxy_params, _ = self.encode(images, background, tile_locs, galaxy_log_fluxes)
         return galaxy_params
 
-    def max_a_post(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
+    def max_a_post(self, images: Tensor, background: Tensor, tile_locs: Tensor, galaxy_log_fluxes: Tensor) -> Tensor:
         batch_size, nth, ntw, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
         galaxy_params_flat = self.enc.max_a_post(centered_ptiles)
@@ -140,7 +141,8 @@ class GalaxyEncoder(pl.LightningModule):
         tile_catalog = TileCatalog(
             self.tile_slen, {k: v for k, v in batch.items() if k not in {"images", "background"}}
         )
-        galaxy_params, pq_divergence = self.encode(images, background, tile_catalog.locs)
+        galaxy_log_fluxes = tile_catalog["galaxy_params"][:, :, :, :, -self.n_bands:]
+        galaxy_params, pq_divergence = self.encode(images, background, tile_catalog.locs, galaxy_log_fluxes)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
         tile_catalog["galaxy_params"] = galaxy_params
@@ -185,6 +187,7 @@ class GalaxyEncoder(pl.LightningModule):
             "fluxes",
             "log_fluxes",
             "n_sources",
+            "galaxy_params"
         ]
         for k in keys:
             batch[k] = batch[k][samples]
@@ -193,9 +196,10 @@ class GalaxyEncoder(pl.LightningModule):
         images = batch["images"]
         background = batch["background"]
         tile_locs = batch["locs"]
+        galaxy_log_fluxes = batch["galaxy_params"][:, :, :, :, -self.n_bands:]
 
         # obtain map estimates
-        z, _ = self.encode(images, background, tile_locs)
+        z, _ = self.encode(images, background, tile_locs, galaxy_log_fluxes)
 
         tile_est = TileCatalog(
             self.tile_slen,
