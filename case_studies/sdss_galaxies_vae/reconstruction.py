@@ -83,6 +83,7 @@ def reconstruct(cfg):
             scene_metrics_map = reporting.scene_metrics(
                 ground_truth_catalog,
                 map_recon,
+                mag_min=float(mag) - 1.0,
                 mag_max=float(mag),
             )
             scene_metrics_by_mag[mag] = scene_metrics_map
