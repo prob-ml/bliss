@@ -12,15 +12,12 @@ import numpy as np
 import pytorch_lightning as pl
 import seaborn as sns
 import torch
-from astropy.table import Table
-from astropy.wcs.wcs import WCS
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 
 from bliss import generate, reporting
 from bliss.catalog import FullCatalog
 from bliss.datasets import sdss
-from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
@@ -117,26 +114,6 @@ def remove_outliers(*args, level=0.99):
         keep &= keep_x
 
     return (arg[keep] for arg in args)
-
-
-def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: float, wcs: WCS):
-    """Add additional useful information to coadd catalog."""
-    coadd_cat = Table.read(coadd_cat_file)
-
-    psf = load_psf_from_file(psf_image_file, pixel_scale)
-    x, y = wcs.all_world2pix(coadd_cat["ra"], coadd_cat["dec"], 0)
-    galaxy_bools = ~coadd_cat["probpsf"].data.astype(bool)
-    flux, mag = reporting.get_flux_coadd(coadd_cat)
-    hlr = reporting.get_hlr_coadd(coadd_cat, psf)
-
-    coadd_cat["x"] = x
-    coadd_cat["y"] = y
-    coadd_cat["galaxy_bool"] = galaxy_bools
-    coadd_cat["flux"] = flux
-    coadd_cat["mag"] = mag
-    coadd_cat["hlr"] = hlr
-    coadd_cat.replace_column("is_saturated", coadd_cat["is_saturated"].data.astype(bool))
-    coadd_cat.write(coadd_cat_file, overwrite=True)  # overwrite with additional info.
 
 
 class BlissFigures:
