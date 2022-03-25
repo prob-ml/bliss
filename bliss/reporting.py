@@ -137,6 +137,7 @@ class ClassificationMetrics(Metric):
     def compute(self):
         """Calculate misclassification accuracy, and confusion matrix."""
         return {
+            "acc_n_matches": self.total_n_matches,
             "class_acc": self.total_correct_class / self.total_n_matches,
             "conf_matrix": self.conf_matrix,
         }
@@ -194,9 +195,11 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 def scene_metrics(
     true_params: FullCatalog,
     est_params: FullCatalog,
-    mag_cut=25.0,
-    slack=1.0,
-    mag_slack=1.0,
+    mag_min: float = -np.inf,
+    mag_max: float = np.inf,
+    slack: float = 1.0,
+    mag_slack: float = 1.0,
+    mag_slack_accuracy: float = 0.0,
 ):
     """Metrics based on using the coadd catalog as truth.
 
@@ -207,9 +210,11 @@ def scene_metrics(
     Args:
         true_params: True parameters of each source in the scene (e.g. from coadd catalog)
         est_params: Predictions on scene obtained from predict_on_scene function.
-        mag_cut: Magnitude cut, discard all objects with magnitude higher than this.
+        mag_min: Discard all objects with magnitude lower than this.
+        mag_max: Discard all objects with magnitude higher than this.
         slack: Pixel L-infinity distance slack when doing matching for metrics.
-        mag_slack: Consider objects above mag_cut for precision/recall to avoid edge effects.
+        mag_slack: Consider objects outside of mag min/max for precision/recall metric.
+        mag_slack_accuracy: Consider objects outside of mag min/max for accuracy metric.
 
     Returns:
         Dictionary with output from DetectionMetrics, ClassificationMetrics.
@@ -222,8 +227,8 @@ def scene_metrics(
     # For calculating precision, we consider a wider bin for the 'true' objects, this way
     # we ensure that underestimating the magnitude of a true object close and above the
     # boundary does not mark this estimated object as FP, thus reducing our precision.
-    tparams = true_params.apply_mag_cut(mag_cut + mag_slack)
-    eparams = est_params.apply_mag_cut(mag_cut)
+    tparams = true_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
+    eparams = est_params.apply_mag_bin(mag_min, mag_max)
 
     # update
     detection_metrics.update(tparams, eparams)
@@ -234,8 +239,8 @@ def scene_metrics(
     # For calculating recall, we consider a wider bin for the 'estimated' objects, this way
     # we ensure that overestimating the magnitude of a true object close and below the boundary
     # does not mean that we missed this object, reducing our TP, and reducing recall.
-    tparams = true_params.apply_mag_cut(mag_cut)
-    eparams = est_params.apply_mag_cut(mag_cut + mag_slack)
+    tparams = true_params.apply_mag_bin(mag_min, mag_max)
+    eparams = est_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
     detection_metrics.update(tparams, eparams)
     recall = detection_metrics.compute()["recall"]
     detection_metrics.reset()
@@ -245,13 +250,18 @@ def scene_metrics(
     detection_result = {"precision": precision, "recall": recall, "f1": f1}
 
     # compute classification metrics, these are only computed on matches so ignore mag_slack.
-    tparams = true_params.apply_mag_cut(mag_cut)
-    eparams = est_params.apply_mag_cut(mag_cut)
+    tparams = true_params.apply_mag_bin(mag_min, mag_max)
+    eparams = est_params.apply_mag_bin(mag_min - mag_slack_accuracy, mag_max + mag_slack_accuracy)
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
+    counts = {
+        "n": tparams.n_sources,
+        "n_galaxies": tparams["galaxy_bools"].sum().item(),
+    }
+
     # compute and return results
-    return {**detection_result, **classification_result}
+    return {**detection_result, **classification_result, **counts}
 
 
 class CoaddFullCatalog(FullCatalog):

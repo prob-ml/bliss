@@ -500,7 +500,7 @@ class DetectionClassificationFigures(BlissFigures):
         # compute data for precision/recall/classification accuracy as a function of magnitude.
         for mag in mag_bins:
             res = reporting.scene_metrics(
-                coadd_params, est_params, mag_cut=mag, slack=1.0, mag_slack=1.0
+                coadd_params, est_params, mag_max=mag, slack=1.0, mag_slack=1.0
             )
             precisions.append(res["precision"].item())
             recalls.append(res["recall"].item())
