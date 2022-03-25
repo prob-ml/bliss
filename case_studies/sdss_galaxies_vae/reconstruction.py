@@ -10,6 +10,7 @@ import torch
 from einops import rearrange, repeat
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
+from torch import Tensor
 from torch.distributions import Normal
 
 from bliss import reporting
@@ -420,11 +421,13 @@ def create_scene_accuracy_table(scene_metrics_by_mag):
         "star_accuracy",
         "expected_star_accuracy",
         "n",
+        "acc_n_matches",
+        "n_galaxies",
     )
     for k, v in scene_metrics_by_mag.items():
         line = f"{k} & {v['class_acc'].item():.2f} ({v['expected_accuracy'].item():.2f}) & {v['galaxy_accuracy']:.2f} ({v['expected_galaxy_accuracy']:.2f}) & {v['star_accuracy']:.2f} ({v['expected_star_accuracy']:.2f})\\\\\n"
         for metric in cols:
-            df[metric][k] = v[metric].item()
+            df[metric][k] = v[metric] if not isinstance(v[metric], Tensor) else v[metric].item()
         tex_lines.append(line)
     df = pd.DataFrame(df)
     return df, tex_lines
@@ -432,14 +435,12 @@ def create_scene_accuracy_table(scene_metrics_by_mag):
 
 def create_scene_metrics_table(scene_metrics_by_mag):
     x = {}
-    columns = ("recall", "expected_recall", "precision", "expected_precision", "n")
+    columns = ("recall", "expected_recall", "precision", "expected_precision", "n", "n_galaxies")
     for c in columns:
         x[c] = {}
         for k, v in scene_metrics_by_mag.items():
             if c in v:
-                if c == "n":
-                    v[c] = v[c][0]
-                x[c][k] = v[c].item()
+                x[c][k] = v[c] if not isinstance(v[c], Tensor) else v[c].item()
     scene_metrics_df = pd.DataFrame(x)
     tex_lines = []
     for k, v in scene_metrics_df.iterrows():

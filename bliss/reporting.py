@@ -137,6 +137,7 @@ class ClassificationMetrics(Metric):
     def compute(self):
         """Calculate misclassification accuracy, and confusion matrix."""
         return {
+            "acc_n_matches": self.total_n_matches,
             "class_acc": self.total_correct_class / self.total_n_matches,
             "conf_matrix": self.conf_matrix,
         }
@@ -252,8 +253,14 @@ def scene_metrics(
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
+    ## n_galaxies vs n_stars
+    counts = {
+        "n": tparams.n_sources,
+        "n_galaxies": tparams["galaxy_bools"].sum().item(),
+    }
+
     # compute and return results
-    return {**detection_result, **classification_result, "n": tparams.n_sources}
+    return {**detection_result, **classification_result, **counts}
 
 
 class CoaddFullCatalog(FullCatalog):
