@@ -294,6 +294,13 @@ class CoaddFullCatalog(FullCatalog):
         assert set(cls.coadd_names.values()).issubset(set(coadd_table.columns))
         # filter saturated objects
         coadd_table = coadd_table[~coadd_table["is_saturated"].data]
+
+        # misclassified bright galaxies in PHOTO as galaxies (obtaind by eye)
+        misclass_ids = (8647475119820964111, 8647475119820964100, 8647475119820964192)
+        for iid in misclass_ids:
+            idx = np.where(coadd_table["objid"] == iid)[0].item()
+            coadd_table["galaxy_bool"][idx] = 0
+
         # only return objects inside limits.
         w, h = coadd_table["x"], coadd_table["y"]
         keep = np.ones(len(coadd_table)).astype(bool)
@@ -310,6 +317,7 @@ class CoaddFullCatalog(FullCatalog):
         for bliss_name, coadd_name in cls.coadd_names.items():
             arr = column_to_tensor(coadd_table, coadd_name)[keep]
             data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
+
         data["galaxy_bools"] = data["galaxy_bools"].bool()
         return cls(height, width, data)
 

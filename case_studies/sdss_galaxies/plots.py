@@ -442,12 +442,6 @@ class DetectionClassificationFigures(BlissFigures):
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
         coadd_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
 
-        # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
-        ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
-        for my_id in ids:
-            idx = np.where(coadd_params["objid"] == my_id)[0].item()
-            coadd_params["galaxy_bools"][:, idx, :] = 0
-
         _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder,
             decoder,
