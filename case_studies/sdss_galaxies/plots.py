@@ -453,6 +453,7 @@ class DetectionClassificationFigures(BlissFigures):
             "detection": "sdss-precision-recall.png",
             "classification": "sdss-classification-acc.png",
             "scatter": "sdss-mag-class-scatter.png",
+            "flux_comparison": "flux-comparison.png",
         }
 
     def compute_data(self, frame: Union[SDSSFrame, SimulatedFrame], encoder, decoder):
@@ -521,6 +522,7 @@ class DetectionClassificationFigures(BlissFigures):
         egbool = est_params["galaxy_bools"].reshape(-1)[eindx][dkeep]
         egprob = est_params["galaxy_probs"].reshape(-1)[eindx][dkeep]
         tmag = coadd_params["mags"].reshape(-1)[tindx][dkeep]
+        emag = est_params["mags"].reshape(-1)[eindx][dkeep]
 
         return {
             "mag_bins": mag_bins,
@@ -529,10 +531,10 @@ class DetectionClassificationFigures(BlissFigures):
             "class_accs": class_accs,
             "star_accs": star_accs,
             "galaxy_accs": galaxy_accs,
-            "scatter_class": (tgbool, egbool, egprob, tmag),
+            "scatter_class": (tgbool, egbool, egprob, tmag, emag),
         }
 
-    def create_figures(self, data):
+    def create_figures(self, data):  # pylint: disable=too-many-statements
         """Make figures related to detection and classification in SDSS."""
         sns.set_theme(style="darkgrid")
 
@@ -562,11 +564,13 @@ class DetectionClassificationFigures(BlissFigures):
         plt.xlim(18, 23)
         ax.legend(loc="best", prop={"size": 22})
 
-        # magnitude classification scatter
+        # magnitude / classification scatter
         set_rc_params(tick_label_size=22, label_size=30)
-        f3, ax = plt.subplots(2, 1, figsize=(10, 10))
-        tgbool, egbool, egprob, tmag = data["scatter_class"]
-        tgbool, egbool, egprob, tmag = tgbool.numpy(), egbool.numpy(), egprob.numpy(), tmag.numpy()
+        f3, ax = plt.subplots(1, 1, figsize=(10, 10))
+        tgbool, egbool, egprob, tmag, emag = data["scatter_class"]
+        tgbool, egbool = tgbool.numpy().astype(bool), egbool.numpy().astype(bool)
+        egprob = egprob.numpy()
+        tmag, emag = tmag.numpy(), emag.numpy()
         correct = np.equal(tgbool, egbool).astype(bool)
         ax.scatter(tmag[correct], egprob[correct], marker="+", c="b", label="correct", alpha=0.5)
         ax.scatter(
@@ -577,8 +581,24 @@ class DetectionClassificationFigures(BlissFigures):
         ax.axhline(0.9, linestyle="--")
         ax.set_xlabel("True Magnitude")
         ax.set_ylabel("Estimated Probability of Galaxy")
+        ax.legend(loc="best", prop={"size": 22})
 
-        return {"detection": f1, "classification": f2, "scatter": f3}
+        # mag / mag scatter
+        f4, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
+        ax1.scatter(tmag[tgbool], emag[tgbool], marker="o", c="r", alpha=0.5)
+        ax1.plot([15, 23], [15, 23], c="r", label="x=y line")
+        ax2.scatter(tmag[~tgbool], emag[~tgbool], marker="o", c="b", alpha=0.5)
+        ax2.plot([15, 23], [15, 23], c="b", label="x=y line")
+        ax1.legend(loc="best", prop={"size": 22})
+        ax2.legend(loc="best", prop={"size": 22})
+
+        ax1.set_xlabel("True Magnitude")
+        ax2.set_xlabel("True Magnitude")
+        ax1.set_ylabel("Estimated Magnitude")
+        ax2.set_ylabel("Estimated Magnitude")
+        ax1.set_title("Matched Coadd Galaxies")
+        ax2.set_title("Matched Coadd Stars")
+        return {"detection": f1, "classification": f2, "scatter": f3, "flux_comparison": f4}
 
 
 class SDSSReconstructionFigures(BlissFigures):
