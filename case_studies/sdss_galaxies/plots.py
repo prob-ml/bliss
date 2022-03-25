@@ -18,6 +18,7 @@ from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 
 from bliss import generate, reporting
+from bliss.catalog import FullCatalog
 from bliss.datasets import sdss
 from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.encoder import Encoder
@@ -460,13 +461,13 @@ class DetectionClassificationFigures(BlissFigures):
         h, w = bp, bp
         h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
-        coadd_params = frame.get_catalog((h, h_end), (w, w_end))
+        coadd_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
 
         # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
         ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
         for my_id in ids:
             idx = np.where(coadd_params["objid"] == my_id)[0].item()
-            coadd_params["galaxy_bools"][idx] = 0
+            coadd_params["galaxy_bools"][:, idx, :] = 0
 
         _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder,
@@ -495,7 +496,7 @@ class DetectionClassificationFigures(BlissFigures):
         star_accs = []
         for mag in mag_bins:
             res = reporting.scene_metrics(
-                coadd_params, est_params, mag_cut=mag, slack=1.0, mag_slack=0.5
+                coadd_params, est_params, mag_cut=mag, slack=1.0, mag_slack=1.0
             )
             precisions.append(res["precision"].item())
             recalls.append(res["recall"].item())

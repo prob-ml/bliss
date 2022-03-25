@@ -124,7 +124,7 @@ class ClassificationMetrics(Metric):
         for b in range(true.batch_size):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
-            tgbool, egbool = true["galaxy_bools"].reshape(-1), est["galaxy_bools"][b].reshape(-1)
+            tgbool, egbool = true["galaxy_bools"][b].reshape(-1), est["galaxy_bools"][b].reshape(-1)
             if ntrue > 0 and nest > 0:
                 mtrue, mest, dkeep, _ = match_by_locs(tlocs, elocs, self.slack)
                 tgbool = tgbool[mtrue][dkeep].reshape(-1)
@@ -196,7 +196,7 @@ def scene_metrics(
     est_params: FullCatalog,
     mag_cut=25.0,
     slack=1.0,
-    mag_slack=0.25,
+    mag_slack=1.0,
 ):
     """Metrics based on using the coadd catalog as truth.
 
