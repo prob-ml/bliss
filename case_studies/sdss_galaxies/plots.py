@@ -718,6 +718,26 @@ class SDSSReconstructionFigures(BlissFigures):
         return out_figures
 
 
+def load_models(cfg, device):
+    # load models required for SDSS reconstructions.
+    sleep = instantiate(cfg.models.sleep)
+    sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
+    location = sleep.image_encoder.to(device).eval()
+
+    binary = instantiate(cfg.models.binary)
+    binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
+    binary = binary.to(device).eval()
+
+    galaxy = instantiate(cfg.models.galaxy_encoder)
+    galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
+    galaxy = galaxy.to(device).eval()
+
+    decoder = sleep.image_decoder.to(device).eval()
+    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
+
+    return encoder, decoder
+
+
 @hydra.main(config_path="./config", config_name="config")
 def plots(cfg):  # pylint: disable=too-many-statements
 
@@ -731,24 +751,9 @@ def plots(cfg):  # pylint: disable=too-many-statements
         Path(outdir).mkdir(exist_ok=True, parents=True)
 
     if figs.intersection({2, 3}):
-        # load SDSS frame
+        # load SDSS frame and models for prediction
         frame: Union[SDSSFrame, SimulatedFrame] = instantiate(cfg.plots.frame)
-
-        # load models required for SDSS reconstructions.
-        sleep = instantiate(cfg.models.sleep)
-        sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
-        location = sleep.image_encoder.to(device).eval()
-
-        binary = instantiate(cfg.models.binary)
-        binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
-        binary = binary.to(device).eval()
-
-        galaxy = instantiate(cfg.models.galaxy_encoder)
-        galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
-        galaxy = galaxy.to(device).eval()
-
-        decoder = sleep.image_decoder.to(device).eval()
-        encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
+        encoder, decoder = load_models(cfg, device)
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if 1 in figs:
