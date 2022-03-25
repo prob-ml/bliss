@@ -79,12 +79,18 @@ def reconstruct(cfg):
         tile_map_recon["mags"] = convert_flux_to_mag(tile_map_recon["fluxes"])
         scene_metrics_by_mag = {}
         ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
-        for mag in range(18, 25):
+        for mag in list(range(18, 25)) + ["overall"]:
+            if mag != "overall":
+                mag_min = float(mag) - 1.0
+                mag_max = float(mag)
+            else:
+                mag_min = -np.inf
+                mag_max = 24.0
             scene_metrics_map = reporting.scene_metrics(
                 ground_truth_catalog,
                 map_recon,
-                mag_min=float(mag) - 1.0,
-                mag_max=float(mag),
+                mag_min=mag_min,
+                mag_max=mag_max,
             )
             scene_metrics_by_mag[mag] = scene_metrics_map
             conf_matrix = scene_metrics_map["conf_matrix"]
@@ -95,9 +101,9 @@ def reconstruct(cfg):
                 conf_matrix[1, 1] + conf_matrix[1, 0]
             )
             scene_metrics_by_mag[mag].update(
-                expected_accuracy(tile_map_recon, mag_cutoff=float(mag))
+                expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
             )
-            if mag == 24:
+            if mag == "overall":
                 scene_metrics_by_mag[mag]["expected_recall"] = expected_recall(tile_map_recon)
                 scene_metrics_by_mag[mag]["expected_precision"] = expected_precision(tile_map_recon)
         if outdir is not None:
@@ -418,8 +424,6 @@ def create_scene_accuracy_table(scene_metrics_by_mag):
     for k, v in scene_metrics_by_mag.items():
         line = f"{k} & {v['class_acc'].item():.2f} ({v['expected_accuracy'].item():.2f}) & {v['galaxy_accuracy']:.2f} ({v['expected_galaxy_accuracy']:.2f}) & {v['star_accuracy']:.2f} ({v['expected_star_accuracy']:.2f})\\\\\n"
         for metric in cols:
-            if metric == "n":
-                v = v[0]
             df[metric][k] = v[metric].item()
         tex_lines.append(line)
     df = pd.DataFrame(df)
@@ -465,22 +469,16 @@ def expected_precision(tile_map: TileCatalog):
     return precision
 
 
-def expected_accuracy(tile_map, mag_cutoff=24.0):
-    gal_probs = (
-        tile_map["galaxy_bools"] * tile_map["galaxy_probs"] * (tile_map["mags"] <= mag_cutoff)
-    )
-    star_probs = (
-        tile_map["star_bools"] * (1 - tile_map["galaxy_probs"]) * (tile_map["mags"] <= mag_cutoff)
-    )
+def expected_accuracy(tile_map, mag_min, mag_max):
+    keep = tile_map["mags"] <= mag_max
+    keep = keep & (tile_map["mags"] >= mag_min)
+    gal_probs = tile_map["galaxy_bools"] * tile_map["galaxy_probs"] * keep
+    star_probs = tile_map["star_bools"] * (1 - tile_map["galaxy_probs"]) * keep
     expected_accuracy = (gal_probs + star_probs).sum() / (
-        (tile_map["galaxy_bools"] + tile_map["star_bools"]) * (tile_map["mags"] <= mag_cutoff)
+        (tile_map["galaxy_bools"] + tile_map["star_bools"]) * keep
     ).sum()
-    expected_galaxy_accuracy = (
-        gal_probs.sum() / (tile_map["galaxy_bools"] * (tile_map["mags"] <= mag_cutoff)).sum()
-    )
-    expected_star_accuracy = (
-        star_probs.sum() / (tile_map["star_bools"] * (tile_map["mags"] <= mag_cutoff)).sum()
-    )
+    expected_galaxy_accuracy = gal_probs.sum() / (tile_map["galaxy_bools"] * keep).sum()
+    expected_star_accuracy = star_probs.sum() / (tile_map["star_bools"] * keep).sum()
     return {
         "expected_accuracy": expected_accuracy,
         "expected_galaxy_accuracy": expected_galaxy_accuracy,
