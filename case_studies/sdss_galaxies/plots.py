@@ -466,7 +466,7 @@ class DetectionClassificationFigures(BlissFigures):
         ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
         for my_id in ids:
             idx = np.where(coadd_params["objid"] == my_id)[0].item()
-            coadd_params["galaxy_bools"][idx] = 0
+            coadd_params["galaxy_bools"][:, idx] = 0
 
         _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder,
