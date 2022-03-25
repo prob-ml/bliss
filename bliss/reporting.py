@@ -196,7 +196,7 @@ def scene_metrics(
     est_params: FullCatalog,
     mag_cut=25.0,
     slack=1.0,
-    mag_slack=0.25,
+    mag_slack=1.0,
 ):
     """Metrics based on using the coadd catalog as truth.
 
