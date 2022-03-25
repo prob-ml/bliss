@@ -2,7 +2,6 @@ import math
 from collections import UserDict
 from typing import Dict, Optional
 
-import numpy as np
 import torch
 from einops import rearrange, reduce, repeat
 from torch import Tensor

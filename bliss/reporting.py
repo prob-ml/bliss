@@ -196,8 +196,8 @@ def scene_metrics(
     est_params: FullCatalog,
     mag_min: float = -np.inf,
     mag_max: float = np.inf,
-    slack=1.0,
-    mag_slack=1.0,
+    slack: float = 1.0,
+    mag_slack: float = 1.0,
 ):
     """Metrics based on using the coadd catalog as truth.
 
@@ -208,7 +208,8 @@ def scene_metrics(
     Args:
         true_params: True parameters of each source in the scene (e.g. from coadd catalog)
         est_params: Predictions on scene obtained from predict_on_scene function.
-        mag_cut: Magnitude cut, discard all objects with magnitude higher than this.
+        mag_min: Discard all objects with magnitude lower than this.
+        mag_max: Discard all objects with magnitude higher than this.
         slack: Pixel L-infinity distance slack when doing matching for metrics.
         mag_slack: Consider objects above mag_cut for precision/recall to avoid edge effects.
 
