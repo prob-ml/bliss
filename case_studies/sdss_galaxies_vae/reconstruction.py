@@ -80,13 +80,13 @@ def reconstruct(cfg):
         tile_map_recon["mags"] = convert_flux_to_mag(tile_map_recon["fluxes"])
         scene_metrics_by_mag = {}
         ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
-        for mag in list(range(18, 24)) + ["overall"]:
+        for mag in list(range(cfg.reconstruct.max_min, cfg.reconstruct.mag_max + 1)) + ["overall"]:
             if mag != "overall":
                 mag_min = float(mag) - 1.0
                 mag_max = float(mag)
             else:
-                mag_min = -np.inf
-                mag_max = 23.0
+                mag_min = float(cfg.reconstruct.mag_min)
+                mag_max = float(cfg.reconstruct.mag_max)
             scene_metrics_map = reporting.scene_metrics(
                 ground_truth_catalog,
                 map_recon,
