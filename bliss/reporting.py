@@ -213,7 +213,8 @@ def scene_metrics(
         mag_min: Discard all objects with magnitude lower than this.
         mag_max: Discard all objects with magnitude higher than this.
         slack: Pixel L-infinity distance slack when doing matching for metrics.
-        mag_slack: Consider objects above mag_cut for precision/recall to avoid edge effects.
+        mag_slack: Consider objects outside of mag min/max for precision/recall metric.
+        mag_slack_accuracy: Consider objects outside of mag min/max for accuracy metric.
 
     Returns:
         Dictionary with output from DetectionMetrics, ClassificationMetrics.
@@ -254,7 +255,6 @@ def scene_metrics(
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
-    ## n_galaxies vs n_stars
     counts = {
         "n": tparams.n_sources,
         "n_galaxies": tparams["galaxy_bools"].sum().item(),
