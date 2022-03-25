@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from bliss.catalog import TileCatalog
+from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
@@ -338,7 +338,7 @@ class SimulatedFrame:
         assert self.image.shape[0] == 1
         assert self.background.shape[0] == 1
 
-    def get_catalog(self, hlims, wlims):
+    def get_catalog(self, hlims, wlims) -> FullCatalog:
         h, h_end = hlims[0] - self.bp, hlims[1] - self.bp
         w, w_end = wlims[0] - self.bp, wlims[1] - self.bp
         hlims_tile = int(np.floor(h / self.tile_slen)), int(np.ceil(h_end / self.tile_slen))
