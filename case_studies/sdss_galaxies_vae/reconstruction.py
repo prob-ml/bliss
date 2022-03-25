@@ -1,5 +1,6 @@
 # flake8: noqa
 # pylint: skip-file
+from collections import defaultdict
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
@@ -390,12 +391,35 @@ def create_figure(
     return fig
 
 
+def collect_metrics(outdir):
+    out = {}
+    for run in Path(outdir).iterdir():
+        results = torch.load(run / "sdss_recon_all.pt")
+        out[run] = {
+            "detections": create_scene_metrics_table(results)[0],
+            "accuracy": create_scene_accuracy_table(results)[0],
+        }
+    return out
+
+
 def create_scene_accuracy_table(scene_metrics_by_mag):
     tex_lines = []
+    df = defaultdict(dict)
+    cols = (
+        "class_acc",
+        "expected_accuracy",
+        "galaxy_accuracy",
+        "expected_galaxy_accuracy",
+        "star_accuracy",
+        "expected_star_accuracy",
+    )
     for k, v in scene_metrics_by_mag.items():
         line = f"{k} & {v['class_acc'].item():.2f} ({v['expected_accuracy'].item():.2f}) & {v['galaxy_accuracy']:.2f} ({v['expected_galaxy_accuracy']:.2f}) & {v['star_accuracy']:.2f} ({v['expected_star_accuracy']:.2f})\\\\\n"
+        for metric in cols:
+            df[metric][k] = v[metric].item()
         tex_lines.append(line)
-    return tex_lines
+    df = pd.DataFrame(df)
+    return df, tex_lines
 
 
 def create_scene_metrics_table(scene_metrics_by_mag):
