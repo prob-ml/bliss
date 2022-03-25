@@ -391,6 +391,17 @@ def create_figure(
     return fig
 
 
+def collect_metrics(outdir):
+    out = {}
+    for run in Path(outdir).iterdir():
+        results = torch.load(run / "sdss_recon_all.pt")
+        out[run] = {
+            "detections": create_scene_metrics_table(results)[0],
+            "accuracy": create_scene_accuracy_table(results)[0],
+        }
+    return out
+
+
 def create_scene_accuracy_table(scene_metrics_by_mag):
     tex_lines = []
     df = defaultdict(dict)
