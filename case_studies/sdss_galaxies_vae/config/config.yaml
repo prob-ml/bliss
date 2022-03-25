@@ -40,13 +40,14 @@ datasets:
         n_bands: 1
         slen: 53
         min_flux: 1e3
-        max_flux: 3.5e5
+        max_flux: 1e6
+        alpha: 0.55
         min_a_d: 0.8
         max_a_d: 6.5
         min_a_b: 0.8
         max_a_b: 3.6 # from catalog with mag < 22.2 cut.
         pixel_scale: 0.396
-        flux_sample: "uniform"
+        flux_sample: "pareto"
         psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
