@@ -237,7 +237,7 @@ def scene_metrics(
     # we ensure that overestimating the magnitude of a true object close and below the boundary
     # does not mean that we missed this object, reducing our TP, and reducing recall.
     tparams = true_params.apply_mag_bin(mag_min, mag_max)
-    eparams = est_params.apply_mag_bin(mag_min - mag_slack, mag_min + mag_slack)
+    eparams = est_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
     detection_metrics.update(tparams, eparams)
     recall = detection_metrics.compute()["recall"]
     detection_metrics.reset()
