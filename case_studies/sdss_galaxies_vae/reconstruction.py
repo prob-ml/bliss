@@ -413,10 +413,13 @@ def create_scene_accuracy_table(scene_metrics_by_mag):
         "expected_galaxy_accuracy",
         "star_accuracy",
         "expected_star_accuracy",
+        "n",
     )
     for k, v in scene_metrics_by_mag.items():
         line = f"{k} & {v['class_acc'].item():.2f} ({v['expected_accuracy'].item():.2f}) & {v['galaxy_accuracy']:.2f} ({v['expected_galaxy_accuracy']:.2f}) & {v['star_accuracy']:.2f} ({v['expected_star_accuracy']:.2f})\\\\\n"
         for metric in cols:
+            if metric == "n":
+                v = v[0]
             df[metric][k] = v[metric].item()
         tex_lines.append(line)
     df = pd.DataFrame(df)
@@ -425,11 +428,13 @@ def create_scene_accuracy_table(scene_metrics_by_mag):
 
 def create_scene_metrics_table(scene_metrics_by_mag):
     x = {}
-    columns = ("recall", "expected_recall", "precision", "expected_precision")
+    columns = ("recall", "expected_recall", "precision", "expected_precision", "n")
     for c in columns:
         x[c] = {}
         for k, v in scene_metrics_by_mag.items():
             if c in v:
+                if c == "n":
+                    v[c] = v[c][0]
                 x[c][k] = v[c].item()
     scene_metrics_df = pd.DataFrame(x)
     tex_lines = []

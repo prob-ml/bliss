@@ -253,7 +253,7 @@ def scene_metrics(
     classification_result = classification_metrics.compute()
 
     # compute and return results
-    return {**detection_result, **classification_result}
+    return {**detection_result, **classification_result, "n": tparams.n_sources}
 
 
 class CoaddFullCatalog(FullCatalog):
