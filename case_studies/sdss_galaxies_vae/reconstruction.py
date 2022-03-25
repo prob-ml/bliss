@@ -92,6 +92,8 @@ def reconstruct(cfg):
                 map_recon,
                 mag_min=mag_min,
                 mag_max=mag_max,
+                mag_slack=1.0,
+                mag_slack_accuracy=1.0,
             )
             scene_metrics_by_mag[mag] = scene_metrics_map
             conf_matrix = scene_metrics_map["conf_matrix"]

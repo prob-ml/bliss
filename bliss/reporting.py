@@ -199,6 +199,7 @@ def scene_metrics(
     mag_max: float = np.inf,
     slack: float = 1.0,
     mag_slack: float = 1.0,
+    mag_slack_accuracy: float = 0.0,
 ):
     """Metrics based on using the coadd catalog as truth.
 
@@ -249,7 +250,7 @@ def scene_metrics(
 
     # compute classification metrics, these are only computed on matches so ignore mag_slack.
     tparams = true_params.apply_mag_bin(mag_min, mag_max)
-    eparams = est_params.apply_mag_bin(mag_min, mag_max)
+    eparams = est_params.apply_mag_bin(mag_min - mag_slack_accuracy, mag_max + mag_slack_accuracy)
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
