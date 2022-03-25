@@ -204,7 +204,7 @@ class AEReconstructionFigures(BlissFigures):
         background = image_data["background"].reshape(1, 1, 53, 53).to(device)
         noiseless_images = image_data["noiseless"].numpy()  # no background or noise.
 
-        print("Computing reconstructions from saved autoencoder model...")
+        print("INFO: Computing reconstructions from saved autoencoder model...")
         n_images = images.shape[0]
         batch_size = 128
         n_iters = int(np.ceil(n_images // 128))
@@ -452,6 +452,7 @@ class DetectionClassificationFigures(BlissFigures):
         return {
             "detection": "sdss-precision-recall.png",
             "classification": "sdss-classification-acc.png",
+            "scatter": "sdss-mag-class-scatter.png",
         }
 
     def compute_data(self, frame: Union[SDSSFrame, SimulatedFrame], encoder, decoder):
@@ -494,6 +495,8 @@ class DetectionClassificationFigures(BlissFigures):
         class_accs = []
         galaxy_accs = []
         star_accs = []
+
+        # compute data for precision/recall/classification accuracy as a function of magnitude.
         for mag in mag_bins:
             res = reporting.scene_metrics(
                 coadd_params, est_params, mag_cut=mag, slack=1.0, mag_slack=1.0
@@ -510,6 +513,15 @@ class DetectionClassificationFigures(BlissFigures):
             star_acc = res["conf_matrix"][1, 1] / res["conf_matrix"][1, :].sum()
             star_accs.append(star_acc)
 
+        # data for scatter plot of misclassifications.
+        tplocs = coadd_params.plocs.reshape(-1, 2)
+        eplocs = est_params.plocs.reshape(-1, 2)
+        tindx, eindx, dkeep, _ = reporting.match_by_locs(tplocs, eplocs, slack=1.0)
+        tgbool = coadd_params["galaxy_bools"].reshape(-1)[tindx][dkeep]
+        egbool = est_params["galaxy_bools"].reshape(-1)[eindx][dkeep]
+        egprob = est_params["galaxy_probs"].reshape(-1)[eindx][dkeep]
+        tmag = coadd_params["mags"].reshape(-1)[tindx][dkeep]
+
         return {
             "mag_bins": mag_bins,
             "precisions": precisions,
@@ -517,6 +529,7 @@ class DetectionClassificationFigures(BlissFigures):
             "class_accs": class_accs,
             "star_accs": star_accs,
             "galaxy_accs": galaxy_accs,
+            "scatter_class": (tgbool, egbool, egprob, tmag),
         }
 
     def create_figures(self, data):
@@ -530,6 +543,7 @@ class DetectionClassificationFigures(BlissFigures):
         galaxy_accs = data["galaxy_accs"]
         star_accs = data["star_accs"]
 
+        # precision / recall
         set_rc_params(tick_label_size=22, label_size=30)
         f1, ax = plt.subplots(1, 1, figsize=(10, 10))
         format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="value of metric")
@@ -538,6 +552,7 @@ class DetectionClassificationFigures(BlissFigures):
         plt.xlim(18, 23)
         ax.legend(loc="best", prop={"size": 22})
 
+        # classification accuracy
         set_rc_params(tick_label_size=22, label_size=30)
         f2, ax = plt.subplots(1, 1, figsize=(10, 10))
         format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="accuracy")
@@ -547,26 +562,23 @@ class DetectionClassificationFigures(BlissFigures):
         plt.xlim(18, 23)
         ax.legend(loc="best", prop={"size": 22})
 
-        return {"detection": f1, "classification": f2}
-
-    def scatter_plot_misclass(self, ax, galaxy_probs, misclass, true_mags):
-        # TODO: Revive if useful later on.
-
-        # scatter plot of miscclassification probs
-        probs_correct = galaxy_probs[~misclass]
-        probs_misclass = galaxy_probs[misclass]
-
-        ax.scatter(true_mags[~misclass], probs_correct, marker="x", c="b")
-        ax.scatter(true_mags[misclass], probs_misclass, marker="x", c="r")
+        # magnitude classification scatter
+        set_rc_params(tick_label_size=22, label_size=30)
+        f3, ax = plt.subplots(2, 1, figsize=(10, 10))
+        tgbool, egbool, egprob, tmag = data["scatter_class"]
+        tgbool, egbool, egprob, tmag = tgbool.numpy(), egbool.numpy(), egprob.numpy(), tmag.numpy()
+        correct = np.equal(tgbool, egbool).astype(bool)
+        ax.scatter(tmag[correct], egprob[correct], marker="+", c="b", label="correct", alpha=0.5)
+        ax.scatter(
+            tmag[~correct], egprob[~correct], marker="x", c="r", label="incorrect", alpha=0.5
+        )
         ax.axhline(0.5, linestyle="--")
         ax.axhline(0.1, linestyle="--")
         ax.axhline(0.9, linestyle="--")
+        ax.set_xlabel("True Magnitude")
+        ax.set_ylabel("Estimated Probability of Galaxy")
 
-        uncertain = (galaxy_probs[misclass] > 0.2) & (galaxy_probs[misclass] < 0.8)
-        r_uncertain = sum(uncertain) / len(galaxy_probs[misclass])
-        print(
-            f"ratio misclass with probability between 10%-90%: {r_uncertain:.3f}",
-        )
+        return {"detection": f1, "classification": f2, "scatter": f3}
 
 
 class SDSSReconstructionFigures(BlissFigures):
@@ -743,7 +755,7 @@ def plots(cfg):  # pylint: disable=too-many-statements
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if 1 in figs:
-        print("Creating autoencoder figures...")
+        print("INFO: Creating autoencoder figures...")
         autoencoder = instantiate(cfg.models.galaxy_net)
         autoencoder.load_state_dict(torch.load(cfg.models.prior.galaxy_prior.autoencoder_ckpt))
         autoencoder = autoencoder.to(device).eval()
@@ -751,7 +763,7 @@ def plots(cfg):  # pylint: disable=too-many-statements
         # generate galsim simulated galaxies images if file does not exist.
         galaxies_file = Path(cfg.plots.simulated_sdss_individual_galaxies)
         if not galaxies_file.exists():
-            print(f"Generating individual galaxy images and saving to: {galaxies_file}")
+            print(f"INFO: Generating individual galaxy images and saving to: {galaxies_file}")
             dataset = instantiate(
                 cfg.datasets.sdss_galaxies, batch_size=512, n_batches=20, num_workers=20
             )
@@ -769,14 +781,14 @@ def plots(cfg):  # pylint: disable=too-many-statements
 
     # FIGURE 2: Classification and Detection metrics
     if 2 in figs:
-        print("Creating classification and detection metrics from SDSS frame figures...")
+        print("INFO: Creating classification and detection metrics from SDSS frame figures...")
         dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
         dc_fig.save_figures(frame, encoder, decoder)
         mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
     if 3 in figs:
-        print("Creating reconstructions from SDSS figures...")
+        print("INFO: Creating reconstructions from SDSS figures...")
         sdss_rec_fig = SDSSReconstructionFigures(cfg.plots.scenes, outdir, overwrite=overwrite)
         sdss_rec_fig.save_figures(frame, encoder, decoder)
         mpl.rc_file_defaults()
