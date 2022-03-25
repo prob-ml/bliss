@@ -194,7 +194,8 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 def scene_metrics(
     true_params: FullCatalog,
     est_params: FullCatalog,
-    mag_cut=25.0,
+    mag_min: float = -np.inf,
+    mag_max: float = np.inf,
     slack=1.0,
     mag_slack=1.0,
 ):
@@ -222,8 +223,8 @@ def scene_metrics(
     # For calculating precision, we consider a wider bin for the 'true' objects, this way
     # we ensure that underestimating the magnitude of a true object close and above the
     # boundary does not mark this estimated object as FP, thus reducing our precision.
-    tparams = true_params.apply_mag_cut(mag_cut + mag_slack)
-    eparams = est_params.apply_mag_cut(mag_cut)
+    tparams = true_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
+    eparams = est_params.apply_mag_bin(mag_min, mag_max)
 
     # update
     detection_metrics.update(tparams, eparams)
@@ -234,8 +235,8 @@ def scene_metrics(
     # For calculating recall, we consider a wider bin for the 'estimated' objects, this way
     # we ensure that overestimating the magnitude of a true object close and below the boundary
     # does not mean that we missed this object, reducing our TP, and reducing recall.
-    tparams = true_params.apply_mag_cut(mag_cut)
-    eparams = est_params.apply_mag_cut(mag_cut + mag_slack)
+    tparams = true_params.apply_mag_bin(mag_min, mag_max)
+    eparams = est_params.apply_mag_bin(mag_min - mag_slack, mag_min + mag_slack)
     detection_metrics.update(tparams, eparams)
     recall = detection_metrics.compute()["recall"]
     detection_metrics.reset()
@@ -245,8 +246,8 @@ def scene_metrics(
     detection_result = {"precision": precision, "recall": recall, "f1": f1}
 
     # compute classification metrics, these are only computed on matches so ignore mag_slack.
-    tparams = true_params.apply_mag_cut(mag_cut)
-    eparams = est_params.apply_mag_cut(mag_cut)
+    tparams = true_params.apply_mag_bin(mag_min, mag_max)
+    eparams = est_params.apply_mag_bin(mag_min, mag_max)
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 

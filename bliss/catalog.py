@@ -2,6 +2,7 @@ import math
 from collections import UserDict
 from typing import Dict, Optional
 
+import numpy as np
 import torch
 from einops import rearrange, reduce, repeat
 from torch import Tensor
@@ -257,11 +258,12 @@ class FullCatalog(UserDict):
             d[k] = v[:, keep]
         return type(self)(self.height - h_min - h_max, self.width - w_min - w_max, d)
 
-    def apply_mag_cut(self, mag_cut: float):
-        """Apply magnitude cut to given parameters."""
+    def apply_mag_bin(self, mag_min: float, mag_max: float):
+        """Apply magnitude bin to given parameters."""
         assert self.batch_size == 1
         assert "mags" in self, "Parameter 'mags' required to apply mag cut."
-        keep = self["mags"] < mag_cut
+        keep = self["mags"] < mag_max
+        keep = keep & (self["mags"] > mag_min)
         keep = rearrange(keep, "n s 1 -> n s")
         d = {k: v[keep].unsqueeze(0) for k, v in self.items()}
         d["plocs"] = self.plocs[keep].unsqueeze(0)
