@@ -1,4 +1,5 @@
 from pathlib import Path
+from tkinter import N
 from typing import Optional, Tuple
 
 import numpy as np
@@ -10,6 +11,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
+from bliss.datasets.galsim_galaxies import SDSSGalaxyDecoder
 from bliss.models import galaxy_net
 
 
@@ -36,6 +38,7 @@ class ImageDecoder(pl.LightningModule):
         border_padding: Optional[int] = None,
         galaxy_ae: Optional[galaxy_net.OneCenteredGalaxyAE] = None,
         galaxy_ae_ckpt: Optional[str] = None,
+        sdss_galaxy_decoder: Optional[SDSSGalaxyDecoder] = None,
     ):
         """Initializes ImageDecoder.
 
@@ -66,19 +69,28 @@ class ImageDecoder(pl.LightningModule):
             psf_params_file=psf_params_file,
         )
 
+        self.galaxy_tile_decoder = None
+        self.sdss_galaxy_decoder = sdss_galaxy_decoder
         if galaxy_ae is not None:
             assert galaxy_ae_ckpt is not None
             galaxy_ae.load_state_dict(torch.load(galaxy_ae_ckpt, map_location=torch.device("cpu")))
             galaxy_ae.eval().requires_grad_(False)
-            galaxy_decoder = galaxy_ae.get_decoder()
-            self.galaxy_tile_decoder = GalaxyTileDecoder(
-                tile_slen,
-                ptile_slen,
-                self.n_bands,
-                galaxy_decoder,
-            )
-        else:
-            self.galaxy_tile_decoder = None
+            self.autodecoder = galaxy_ae.get_decoder()
+        self.set_decoder_type("autoencoder")
+
+    def set_decoder_type(self, type):
+        if type == "galsim":
+            assert self.sdss_galaxy_encoder is not None
+            galaxy_decoder = self.sdss_galaxy_encoder
+        elif type == "autoencoder":
+            assert self.autodecoder is not None
+            galaxy_decoder = self.autodecoder
+        self.galaxy_tile_decoder = GalaxyTileDecoder(
+            self.tile_slen,
+            self.ptile_slen,
+            self.n_bands,
+            galaxy_decoder,
+        )
 
     @property
     def galaxy_decoder(self):

@@ -163,8 +163,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         uniform_samples = torch.rand(1) * u_max
         return self.min_flux / (1.0 - uniform_samples) ** (1 / self.alpha)
 
-    def __getitem__(self, idx):
-
+    def draw_galaxy_params(self):
         # create galaxy as mixture of Exponential + DeVacauleurs
         if self.flux_sample == "uniform":
             total_flux = self._uniform(self.min_flux, self.max_flux)
@@ -172,19 +171,24 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
             total_flux = self._draw_pareto_flux()
         else:
             raise NotImplementedError()
-
         disk_frac = self._uniform(0, 1)
+        beta_radians = self._uniform(0, 2 * np.pi)
+        disk_q = self._uniform(0, 1)
+        a_d = self._uniform(self.min_a_d, self.max_a_d)
+
+        bulge_q = self._uniform(0, 1)
+        a_b = self._uniform(self.min_a_b, self.max_a_b)
+        return (total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b)
+
+    def render_galaxy(self, galaxy_params):
+        total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
         bulge_frac = 1 - disk_frac
 
         disk_flux = total_flux * disk_frac
         bulge_flux = total_flux * bulge_frac
 
-        beta_radians = self._uniform(0, 2 * np.pi)
-
         components = []
         if disk_flux > 0:
-            disk_q = self._uniform(0, 1)
-            a_d = self._uniform(self.min_a_d, self.max_a_d)
             b_d = a_d * disk_q
             disk_hlr_arcsecs = np.sqrt(a_d * b_d)
             disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
@@ -192,19 +196,14 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
                 beta=beta_radians * galsim.radians,
             )
             components.append(disk)
-
         if bulge_flux > 0:
-            bulge_q = self._uniform(0, 1)
-            a_b = self._uniform(self.min_a_b, self.max_a_b)
             b_b = bulge_q * a_b
             bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
             bulge = galsim.DeVaucouleurs(
                 flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
             ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
             components.append(bulge)
-
         galaxy = galsim.Add(components)
-
         # convolve with PSF
         gal_conv = galsim.Convolution(galaxy, self.psf)
         image = gal_conv.drawImage(
@@ -212,12 +211,14 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         )
         image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
         noiseless = image.clone()
-
         # add noise and background.
         image += self.background.mean()
         image += image.sqrt() * torch.randn(*image.shape)
-
         return {"images": image, "background": self.background, "noiseless": noiseless}
+
+    def __getitem__(self, idx):
+        galaxy_params = self.draw_galaxy_params()
+        return self.render_galaxy(galaxy_params)
 
     def __len__(self):
         return self.batch_size * self.n_batches
@@ -230,3 +231,27 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+
+class SDSSGalaxyPrior:
+    def __init__(self, sdss_galaxies: SDSSGalaxies) -> None:
+        self.sdss_galaxies = sdss_galaxies
+
+    def sample(self, total_latent, device):
+        latents = []
+        for _ in total_latent:
+            params = self.sdss_galaxies.draw_galaxy_params()
+            torch.tensor(params, dtype=torch.float32, device=device)
+        return torch.stack(latents, dim=0)
+
+
+class SDSSGalaxyDecoder:
+    def __init__(self, sdss_galaxies: SDSSGalaxies) -> None:
+        self.sdss_galaxies = sdss_galaxies
+
+    def __call__(self, z):
+        images = []
+        for latent in z:
+            image = self.sdss_galaxies.render_galaxy(latent)["noiseless"]
+            images.append(image)
+        return torch.stack(images, dim=0)

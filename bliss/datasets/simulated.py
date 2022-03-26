@@ -9,6 +9,7 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
 from bliss.catalog import TileCatalog
+from bliss.datasets.galsim_galaxies import SDSSGalaxyPrior
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.decoder import ImageDecoder
 from bliss.models.prior import ImagePrior
@@ -84,6 +85,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.image_decoder.requires_grad_(False)
         self.background.requires_grad_(False)
         self.to(generate_device)
+
+        if isinstance(self.image_prior.galaxy_prior, SDSSGalaxyPrior):
+            self.image_decoder.set_decoder_type("galsim")
 
         # check sleep training will work.
         total_ptiles = self.batch_size * self.n_tiles_h * self.n_tiles_w

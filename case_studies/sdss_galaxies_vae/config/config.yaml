@@ -105,6 +105,9 @@ models:
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
         galaxy_ae: ${models.galaxy_vae}
         galaxy_ae_ckpt: ${paths.project}/models/sdss_vae.pt
+        sdss_galaxy_decoder:
+            _target_: bliss.datasets.galsim_galaxies.SDSSGalaxyDecoder
+            sdss_galaxies: ${datasets.sdss_galaxies}
         sdss_bands:
             - 2
     encoder:
@@ -147,8 +150,10 @@ models:
         alpha: 0.5
         prob_galaxy: 0.7
         galaxy_prior:
-            _target_: bliss.models.vae.prior.GalaxyVAEPrior
-            latent_dim: ${models.galaxy_vae.latent_dim}
+            _target_: bliss.datasets.galsim_galaxies.SDSSGalaxyPrior
+            sdss_galaxies: ${datasets.sdss_galaxies}
+            # _target_: bliss.models.vae.prior.GalaxyVAEPrior
+            # latent_dim: ${models.galaxy_vae.latent_dim}
             #vae_flow: ${models.galaxy_flow}
             #vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
     sleep:
