@@ -170,6 +170,7 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     """
     assert len(true_locs.shape) == len(est_locs.shape) == 2
     assert true_locs.shape[-1] == est_locs.shape[-1] == 2
+    assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
 
     locs1 = true_locs.view(-1, 2)
     locs2 = est_locs.view(-1, 2)
