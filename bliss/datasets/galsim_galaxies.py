@@ -5,6 +5,7 @@ import galsim
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
 
@@ -181,6 +182,8 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         return (total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b)
 
     def render_galaxy(self, galaxy_params):
+        if isinstance(galaxy_params, Tensor):
+            galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
         bulge_frac = 1 - disk_frac
 
@@ -239,9 +242,9 @@ class SDSSGalaxyPrior:
 
     def sample(self, total_latent, device):
         latents = []
-        for _ in total_latent:
+        for _ in range(total_latent):
             params = self.sdss_galaxies.draw_galaxy_params()
-            torch.tensor(params, dtype=torch.float32, device=device)
+            latents.append(torch.tensor(params, dtype=torch.float32, device=device))
         return torch.stack(latents, dim=0)
 
 
@@ -249,9 +252,9 @@ class SDSSGalaxyDecoder:
     def __init__(self, sdss_galaxies: SDSSGalaxies) -> None:
         self.sdss_galaxies = sdss_galaxies
 
-    def __call__(self, z):
+    def __call__(self, z: Tensor):
         images = []
         for latent in z:
             image = self.sdss_galaxies.render_galaxy(latent)["noiseless"]
             images.append(image)
-        return torch.stack(images, dim=0)
+        return torch.stack(images, dim=0).to(z.device)

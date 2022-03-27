@@ -79,8 +79,8 @@ class ImageDecoder(pl.LightningModule):
 
     def set_decoder_type(self, mode):
         if mode == "galsim":
-            assert self.sdss_galaxy_encoder is not None
-            galaxy_decoder = self.sdss_galaxy_encoder
+            assert self.sdss_galaxy_decoder is not None
+            galaxy_decoder = self.sdss_galaxy_decoder
         elif mode == "autoencoder":
             assert self.autodecoder is not None
             galaxy_decoder = self.autodecoder
