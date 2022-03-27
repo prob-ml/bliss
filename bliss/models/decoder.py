@@ -1,5 +1,4 @@
 from pathlib import Path
-from tkinter import N
 from typing import Optional, Tuple
 
 import numpy as np
@@ -78,11 +77,11 @@ class ImageDecoder(pl.LightningModule):
             self.autodecoder = galaxy_ae.get_decoder()
         self.set_decoder_type("autoencoder")
 
-    def set_decoder_type(self, type):
-        if type == "galsim":
+    def set_decoder_type(self, mode):
+        if mode == "galsim":
             assert self.sdss_galaxy_encoder is not None
             galaxy_decoder = self.sdss_galaxy_encoder
-        elif type == "autoencoder":
+        elif mode == "autoencoder":
             assert self.autodecoder is not None
             galaxy_decoder = self.autodecoder
         self.galaxy_tile_decoder = GalaxyTileDecoder(
