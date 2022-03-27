@@ -189,7 +189,7 @@ class BinaryEncoder(pl.LightningModule):
         pred = self.get_prediction(batch)
         self.log("val/loss", pred["loss"], batch_size=batch_size)
         self.log("val/acc", pred["acc"], batch_size=batch_size)
-        return batch
+        return {**batch, **pred}
 
     def validation_epoch_end(self, outputs):
         """Pytorch lightning method."""
@@ -198,6 +198,8 @@ class BinaryEncoder(pl.LightningModule):
         for b in outputs:
             for k, v in b.items():
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
+                if not len(v.shape):
+                    v = v.reshape(1)
                 batch[k] = torch.cat((curr_val, v))
 
         if self.n_bands == 1:
@@ -218,17 +220,16 @@ class BinaryEncoder(pl.LightningModule):
         nrows = int(n_samples ** 0.5)  # for figure
 
         # extract non-params entries so that 'get_full_params' to works.
-        exclude = {"images", "background"}
+        exclude = {"images", "background", "loss", "acc"}
         true_tile_params = TileCatalog(
             self.tile_slen, {k: v for k, v in batch.items() if k not in exclude}
         )
         true_params = true_tile_params.to_full_params()
         # prediction
-        pred = self.get_prediction(batch)
         tile_est = true_tile_params.copy()
-        tile_est["galaxy_bools"] = pred["galaxy_bools"]
-        tile_est["star_bools"] = pred["star_bools"]
-        tile_est["galaxy_probs"] = pred["galaxy_probs"]
+        tile_est["galaxy_bools"] = batch["galaxy_bools"]
+        tile_est["star_bools"] = batch["star_bools"]
+        tile_est["galaxy_probs"] = batch["galaxy_probs"]
         est = tile_est.to_full_params()
         # setup figure and axes
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
