@@ -65,8 +65,9 @@ datasets:
         n_tiles_w: 10
         n_batches: 10
         batch_size: 32
-        generate_device: "cuda:0"
+        generate_device: "cpu"
         testing_file: null
+        num_workers: 5
     toy_gaussian:
         _target_: bliss.datasets.galsim_galaxies.ToyGaussian
         num_workers: 0
