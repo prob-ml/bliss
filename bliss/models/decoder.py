@@ -45,12 +45,13 @@ class ImageDecoder(pl.LightningModule):
             n_bands: Number of bands (colors) in the image
             tile_slen: Side-length of each tile.
             ptile_slen: Padded side-length of each tile (for reconstructing image).
+            psf_slen: Side-length of reconstruced star image from PSF.
+            sdss_bands: Bands to retrieve from PSF.
+            psf_params_file: Path where point-spread-function (PSF) data is located.
             border_padding: Size of border around the final image where sources will not be present.
             galaxy_ae: An autoencoder object for images of single galaxies.
             galaxy_ae_ckpt: Path where state_dict of trained galaxy autoencoder is located.
-            psf_params_file: Path where point-spread-function (PSF) data is located.
-            psf_slen: Side-length of reconstruced star image from PSF.
-            sdss_bands: Bands to retrieve from PSF.
+            sdss_galaxy_decoder: Object to decode Galsim representation of galaxies.
         """
         super().__init__()
         self.n_bands = n_bands

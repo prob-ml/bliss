@@ -198,7 +198,7 @@ class BinaryEncoder(pl.LightningModule):
         for b in outputs:
             for k, v in b.items():
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
-                if not len(v.shape):
+                if len(v.shape) == 0:
                     v = v.reshape(1)
                 batch[k] = torch.cat((curr_val, v))
 

@@ -10,7 +10,6 @@ from torch.nn import functional as F
 from tqdm import tqdm
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.datasets.galsim_galaxies import SDSSGalaxyPrior
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
