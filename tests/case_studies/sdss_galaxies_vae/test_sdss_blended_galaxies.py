@@ -18,5 +18,5 @@ class TestSdssBlendedGalaxies:
             "training.trainer.log_every_n_steps": 1,
         }
 
-    def test_sdss_blended_galaxies(self, overrides, sdss_galaxies_setup):
-        sdss_galaxies_setup.get_trained_model(overrides)
+    def test_sdss_blended_galaxies(self, overrides, vae_setup):
+        vae_setup.get_trained_model(overrides)

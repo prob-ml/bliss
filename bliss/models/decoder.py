@@ -76,21 +76,24 @@ class ImageDecoder(pl.LightningModule):
             galaxy_ae.load_state_dict(torch.load(galaxy_ae_ckpt, map_location=torch.device("cpu")))
             galaxy_ae.eval().requires_grad_(False)
             self.autodecoder = galaxy_ae.get_decoder()
+        else:
+            self.autodecoder = None
         self.set_decoder_type("autoencoder")
 
     def set_decoder_type(self, mode):
         if mode == "galsim":
-            assert self.sdss_galaxy_decoder is not None
             galaxy_decoder = self.sdss_galaxy_decoder
         elif mode == "autoencoder":
-            assert self.autodecoder is not None
             galaxy_decoder = self.autodecoder
-        self.galaxy_tile_decoder = GalaxyTileDecoder(
-            self.tile_slen,
-            self.ptile_slen,
-            self.n_bands,
-            galaxy_decoder,
-        )
+        if galaxy_decoder is not None:
+            self.galaxy_tile_decoder = GalaxyTileDecoder(
+                self.tile_slen,
+                self.ptile_slen,
+                self.n_bands,
+                galaxy_decoder,
+            )
+        else:
+            self.galaxy_tile_decoder = None
 
     @property
     def galaxy_decoder(self):
