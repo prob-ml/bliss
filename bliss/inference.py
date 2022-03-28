@@ -10,6 +10,7 @@ from torch.nn import functional as F
 from tqdm import tqdm
 
 from bliss.catalog import FullCatalog, TileCatalog
+from bliss.datasets.galsim_galaxies import SDSSGalaxyPrior
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
@@ -373,9 +374,9 @@ class SemiSyntheticFrame:
             hlim = (self.bp, self.bp + n_tiles_h * self.tile_slen)
             wlim = (self.bp, self.bp + n_tiles_w * self.tile_slen)
             full_coadd_cat = CoaddFullCatalog.from_file(coadd, hlim, wlim)
-            full_coadd_cat["galaxy_params"] = (
-                torch.randn((1, full_coadd_cat.n_sources, 32)) * full_coadd_cat["galaxy_bools"]
-            )
+            full_coadd_cat["galaxy_params"] = dataset.image_prior.galaxy_prior.sample(
+                full_coadd_cat.n_sources, "cpu"
+            ).unsqueeze(0)
             full_coadd_cat.plocs = full_coadd_cat.plocs + 0.5
             max_sources = dataset.image_prior.max_sources
             tile_catalog = full_coadd_cat.to_tile_params(self.tile_slen, max_sources)

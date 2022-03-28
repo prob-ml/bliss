@@ -90,7 +90,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.to(generate_device)
         self.num_workers = num_workers
 
-
         # check sleep training will work.
         total_ptiles = self.batch_size * self.n_tiles_h * self.n_tiles_w
         assert total_ptiles > 1, "Need at least 2 tiles over all batches."

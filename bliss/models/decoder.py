@@ -112,12 +112,19 @@ class ImageDecoder(pl.LightningModule):
         return reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
 
     def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
+        galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
         galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(galaxy_params)
+        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(
+            galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5]
+        )
         galaxy_fluxes = reduce(galaxy_shapes, "n 1 h w -> n", "sum")
         assert torch.all(galaxy_fluxes >= 0.0)
+        galaxy_fluxes_all = torch.zeros_like(
+            galaxy_bools_flat.reshape(-1), dtype=galaxy_fluxes.dtype
+        )
+        galaxy_fluxes_all[galaxy_bools_flat.squeeze(-1) > 0.5] = galaxy_fluxes
         galaxy_fluxes = rearrange(
-            galaxy_fluxes,
+            galaxy_fluxes_all,
             "(b nth ntw s) -> b nth ntw s 1",
             b=galaxy_params_in.shape[0],
             nth=galaxy_params_in.shape[1],
