@@ -107,7 +107,7 @@ models:
         galaxy_ae: ${models.galaxy_vae}
         galaxy_ae_ckpt: ${paths.project}/models/sdss_vae.pt
         sdss_galaxy_decoder:
-            _target_: bliss.datasets.galsim_galaxies.SDSSGalaxyDecoder
+            _target_: bliss.datasets.galsim_galaxies.GalsimGalaxyDecoder
             sdss_galaxies: ${datasets.sdss_galaxies}
         sdss_bands:
             - 2
@@ -151,7 +151,7 @@ models:
         alpha: 0.5
         prob_galaxy: 0.7
         galaxy_prior:
-            _target_: bliss.datasets.galsim_galaxies.SDSSGalaxyPrior
+            _target_: bliss.datasets.galsim_galaxies.GalsimGalaxyPrior
             sdss_galaxies: ${datasets.sdss_galaxies}
             # _target_: bliss.models.vae.prior.GalaxyVAEPrior
             # latent_dim: ${models.galaxy_vae.latent_dim}

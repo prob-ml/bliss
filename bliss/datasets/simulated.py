@@ -9,7 +9,7 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
 from bliss.catalog import TileCatalog
-from bliss.datasets.galsim_galaxies import SDSSGalaxyPrior
+from bliss.datasets.galsim_galaxies import GalsimGalaxyPrior
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.decoder import ImageDecoder
 from bliss.models.prior import ImagePrior
@@ -81,7 +81,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         self.image_prior = prior
         self.image_decoder = decoder
-        if isinstance(self.image_prior.galaxy_prior, SDSSGalaxyPrior):
+        if isinstance(self.image_prior.galaxy_prior, GalsimGalaxyPrior):
             self.image_decoder.set_decoder_type("galsim")
         self.background = background
         self.image_prior.requires_grad_(False)

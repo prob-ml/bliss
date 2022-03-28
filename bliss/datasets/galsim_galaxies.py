@@ -236,7 +236,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
 
-class SDSSGalaxyPrior:
+class GalsimGalaxyPrior:
     def __init__(self, sdss_galaxies: SDSSGalaxies) -> None:
         self.sdss_galaxies = sdss_galaxies
 
@@ -248,7 +248,7 @@ class SDSSGalaxyPrior:
         return torch.stack(latents, dim=0)
 
 
-class SDSSGalaxyDecoder:
+class GalsimGalaxyDecoder:
     def __init__(self, sdss_galaxies: SDSSGalaxies) -> None:
         self.sdss_galaxies = sdss_galaxies
 

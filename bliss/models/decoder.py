@@ -10,7 +10,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.datasets.galsim_galaxies import SDSSGalaxyDecoder
+from bliss.datasets.galsim_galaxies import GalsimGalaxyDecoder
 from bliss.models import galaxy_net
 
 
@@ -37,7 +37,7 @@ class ImageDecoder(pl.LightningModule):
         border_padding: Optional[int] = None,
         galaxy_ae: Optional[galaxy_net.OneCenteredGalaxyAE] = None,
         galaxy_ae_ckpt: Optional[str] = None,
-        sdss_galaxy_decoder: Optional[SDSSGalaxyDecoder] = None,
+        galsim_galaxy_decoder: Optional[GalsimGalaxyDecoder] = None,
     ):
         """Initializes ImageDecoder.
 
@@ -51,7 +51,7 @@ class ImageDecoder(pl.LightningModule):
             border_padding: Size of border around the final image where sources will not be present.
             galaxy_ae: An autoencoder object for images of single galaxies.
             galaxy_ae_ckpt: Path where state_dict of trained galaxy autoencoder is located.
-            sdss_galaxy_decoder: Object to decode Galsim representation of galaxies.
+            galsim_galaxy_decoder: Object to decode Galsim representation of galaxies.
         """
         super().__init__()
         self.n_bands = n_bands
@@ -70,7 +70,7 @@ class ImageDecoder(pl.LightningModule):
         )
 
         self.galaxy_tile_decoder = None
-        self.sdss_galaxy_decoder = sdss_galaxy_decoder
+        self.galsim_galaxy_decoder = galsim_galaxy_decoder
         if galaxy_ae is not None:
             assert galaxy_ae_ckpt is not None
             galaxy_ae.load_state_dict(torch.load(galaxy_ae_ckpt, map_location=torch.device("cpu")))
@@ -82,7 +82,7 @@ class ImageDecoder(pl.LightningModule):
 
     def set_decoder_type(self, mode):
         if mode == "galsim":
-            galaxy_decoder = self.sdss_galaxy_decoder
+            galaxy_decoder = self.galsim_galaxy_decoder
         elif mode == "autoencoder":
             galaxy_decoder = self.autodecoder
         if galaxy_decoder is not None:
