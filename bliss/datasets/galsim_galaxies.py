@@ -122,6 +122,11 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         flux_sample,
         psf_image_file: str,
         alpha: Optional[float] = None,
+        a_sample="gamma",
+        a_concentration=0.39330758068481686,
+        a_loc=0.8371888967872619,
+        a_scale=4.432725319432478,
+        a_bulge_disk_ratio=2.0,
     ):
         super().__init__()
         assert n_bands == 1, "Only 1 band is supported"
@@ -152,6 +157,12 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         if self.flux_sample == "pareto":
             assert self.alpha is not None
 
+        self.a_sample = a_sample
+        self.a_concentration = a_concentration
+        self.a_loc = a_loc
+        self.a_scale = a_scale
+        self.a_bulge_disk_ratio = a_bulge_disk_ratio
+
     @staticmethod
     def _uniform(a, b, n_samples=1) -> Tensor:
         # uses pytorch to return a single float ~ U(a, b)
@@ -162,6 +173,11 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         u_max = 1 - (self.min_flux / self.max_flux) ** self.alpha
         uniform_samples = torch.rand(n_samples) * u_max
         return self.min_flux / (1.0 - uniform_samples) ** (1 / self.alpha)
+
+    @staticmethod
+    def _gamma(concentration, loc, scale, n_samples=1):
+        x = torch.distributions.Gamma(concentration, rate=1.0).sample((n_samples,))
+        return x * scale + loc
 
     def draw_galaxy_params(self, n_samples=1):
         # create galaxy as mixture of Exponential + DeVacauleurs
@@ -174,10 +190,22 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         disk_frac = self._uniform(0, 1, n_samples=n_samples)
         beta_radians = self._uniform(0, 2 * np.pi, n_samples=n_samples)
         disk_q = self._uniform(0, 1, n_samples=n_samples)
-        disk_a = self._uniform(self.min_a_d, self.max_a_d, n_samples=n_samples)
-
         bulge_q = self._uniform(0, 1, n_samples=n_samples)
-        bulge_a = self._uniform(self.min_a_b, self.max_a_b, n_samples=n_samples)
+        if self.a_sample == "uniform":
+            disk_a = self._uniform(self.min_a_d, self.max_a_d, n_samples=n_samples)
+            bulge_a = self._uniform(self.min_a_b, self.max_a_b, n_samples=n_samples)
+        elif self.a_sample == "gamma":
+            disk_a = self._gamma(
+                self.a_concentration, self.a_loc, self.a_scale, n_samples=n_samples
+            )
+            bulge_a = self._gamma(
+                self.a_concentration,
+                self.a_loc / self.a_bulge_disk_ratio,
+                self.a_scale / self.a_bulge_disk_ratio,
+                n_samples=n_samples,
+            )
+        else:
+            raise NotImplementedError()
         return torch.stack(
             [total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a], dim=1
         )
