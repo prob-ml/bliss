@@ -12,15 +12,12 @@ import numpy as np
 import pytorch_lightning as pl
 import seaborn as sns
 import torch
-from astropy.table import Table
-from astropy.wcs.wcs import WCS
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 
 from bliss import generate, reporting
 from bliss.catalog import FullCatalog
 from bliss.datasets import sdss
-from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
@@ -117,26 +114,6 @@ def remove_outliers(*args, level=0.99):
         keep &= keep_x
 
     return (arg[keep] for arg in args)
-
-
-def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: float, wcs: WCS):
-    """Add additional useful information to coadd catalog."""
-    coadd_cat = Table.read(coadd_cat_file)
-
-    psf = load_psf_from_file(psf_image_file, pixel_scale)
-    x, y = wcs.all_world2pix(coadd_cat["ra"], coadd_cat["dec"], 0)
-    galaxy_bools = ~coadd_cat["probpsf"].data.astype(bool)
-    flux, mag = reporting.get_flux_coadd(coadd_cat)
-    hlr = reporting.get_hlr_coadd(coadd_cat, psf)
-
-    coadd_cat["x"] = x
-    coadd_cat["y"] = y
-    coadd_cat["galaxy_bool"] = galaxy_bools
-    coadd_cat["flux"] = flux
-    coadd_cat["mag"] = mag
-    coadd_cat["hlr"] = hlr
-    coadd_cat.replace_column("is_saturated", coadd_cat["is_saturated"].data.astype(bool))
-    coadd_cat.write(coadd_cat_file, overwrite=True)  # overwrite with additional info.
 
 
 class BlissFigures:
@@ -465,12 +442,6 @@ class DetectionClassificationFigures(BlissFigures):
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
         coadd_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
 
-        # misclassified galaxies in PHOTO as galaxies (obtaind by eye)
-        ids = [8647475119820964111, 8647475119820964100, 8647475119820964192]
-        for my_id in ids:
-            idx = np.where(coadd_params["objid"] == my_id)[0].item()
-            coadd_params["galaxy_bools"][:, idx, :] = 0
-
         _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder,
             decoder,
@@ -741,6 +712,26 @@ class SDSSReconstructionFigures(BlissFigures):
         return out_figures
 
 
+def load_models(cfg, device):
+    # load models required for SDSS reconstructions.
+    sleep = instantiate(cfg.models.sleep)
+    sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
+    location = sleep.image_encoder.to(device).eval()
+
+    binary = instantiate(cfg.models.binary)
+    binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
+    binary = binary.to(device).eval()
+
+    galaxy = instantiate(cfg.models.galaxy_encoder)
+    galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
+    galaxy = galaxy.to(device).eval()
+
+    decoder = sleep.image_decoder.to(device).eval()
+    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
+
+    return encoder, decoder
+
+
 @hydra.main(config_path="./config", config_name="config")
 def plots(cfg):  # pylint: disable=too-many-statements
 
@@ -754,24 +745,9 @@ def plots(cfg):  # pylint: disable=too-many-statements
         Path(outdir).mkdir(exist_ok=True, parents=True)
 
     if figs.intersection({2, 3}):
-        # load SDSS frame
+        # load SDSS frame and models for prediction
         frame: Union[SDSSFrame, SimulatedFrame] = instantiate(cfg.plots.frame)
-
-        # load models required for SDSS reconstructions.
-        sleep = instantiate(cfg.models.sleep)
-        sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
-        location = sleep.image_encoder.to(device).eval()
-
-        binary = instantiate(cfg.models.binary)
-        binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
-        binary = binary.to(device).eval()
-
-        galaxy = instantiate(cfg.models.galaxy_encoder)
-        galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
-        galaxy = galaxy.to(device).eval()
-
-        decoder = sleep.image_decoder.to(device).eval()
-        encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
+        encoder, decoder = load_models(cfg, device)
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if 1 in figs:
