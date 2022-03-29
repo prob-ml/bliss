@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import tqdm
 from astropy.table import Table
+from astropy.wcs import WCS
 from einops import rearrange, reduce
 from matplotlib.figure import Figure
 from matplotlib.pyplot import Axes
@@ -16,6 +17,7 @@ from torch import Tensor
 from torchmetrics import Metric
 
 from bliss.catalog import FullCatalog
+from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.datasets.sdss import convert_flux_to_mag, convert_mag_to_flux
 
 
@@ -168,6 +170,7 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     """
     assert len(true_locs.shape) == len(est_locs.shape) == 2
     assert true_locs.shape[-1] == est_locs.shape[-1] == 2
+    assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
 
     locs1 = true_locs.view(-1, 2)
     locs2 = est_locs.view(-1, 2)
@@ -292,6 +295,13 @@ class CoaddFullCatalog(FullCatalog):
         assert set(cls.coadd_names.values()).issubset(set(coadd_table.columns))
         # filter saturated objects
         coadd_table = coadd_table[~coadd_table["is_saturated"].data]
+
+        # misclassified bright galaxies in PHOTO as galaxies (obtaind by eye)
+        misclass_ids = (8647475119820964111, 8647475119820964100, 8647475119820964192)
+        for iid in misclass_ids:
+            idx = np.where(coadd_table["objid"] == iid)[0].item()
+            coadd_table["galaxy_bool"][idx] = 0
+
         # only return objects inside limits.
         w, h = coadd_table["x"], coadd_table["y"]
         keep = np.ones(len(coadd_table)).astype(bool)
@@ -308,6 +318,7 @@ class CoaddFullCatalog(FullCatalog):
         for bliss_name, coadd_name in cls.coadd_names.items():
             arr = column_to_tensor(coadd_table, coadd_name)[keep]
             data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
+
         data["galaxy_bools"] = data["galaxy_bools"].bool()
         return cls(height, width, data)
 
@@ -388,6 +399,26 @@ def get_hlr_coadd(coadd_cat: Table, psf: galsim.GSObject, nelec_per_nmgy: float 
                 hlr = np.nan
             hlrs.append(hlr)
     return np.array(hlrs)
+
+
+def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: float, wcs: WCS):
+    """Add additional useful information to coadd catalog."""
+    coadd_cat = Table.read(coadd_cat_file)
+
+    psf = load_psf_from_file(psf_image_file, pixel_scale)
+    x, y = wcs.all_world2pix(coadd_cat["ra"], coadd_cat["dec"], 0)
+    galaxy_bools = ~coadd_cat["probpsf"].data.astype(bool)
+    flux, mag = get_flux_coadd(coadd_cat)
+    hlr = get_hlr_coadd(coadd_cat, psf)
+
+    coadd_cat["x"] = x
+    coadd_cat["y"] = y
+    coadd_cat["galaxy_bool"] = galaxy_bools
+    coadd_cat["flux"] = flux
+    coadd_cat["mag"] = mag
+    coadd_cat["hlr"] = hlr
+    coadd_cat.replace_column("is_saturated", coadd_cat["is_saturated"].data.astype(bool))
+    coadd_cat.write(coadd_cat_file, overwrite=True)  # overwrite with additional info.
 
 
 def get_single_galaxy_measurements(

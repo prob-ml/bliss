@@ -48,10 +48,11 @@ def test_coadd(devices, get_sdss_galaxies_config):
 
     # read file and get flux / hlr
     coadd_cat_file = Path(cfg.paths.data).joinpath("coadd_catalog_94_1_12.fits")
-    coadd_cat = Table.read(coadd_cat_file)[:5]
+    coadd_cat = Table.read(coadd_cat_file)
     coadd_cat.remove_column("hlr")
-    reporting.get_flux_coadd(coadd_cat)
-    coadd_cat["hlr"] = reporting.get_hlr_coadd(coadd_cat[:5], psf)
+    reporting.get_flux_coadd(coadd_cat[:5])
+    reporting.get_hlr_coadd(coadd_cat[:5], psf)
+    coadd_cat["hlr"] = 0.0
 
     # params for calculating metrics
     h = 1489
