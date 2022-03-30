@@ -441,6 +441,7 @@ class DetectionClassificationFigures(BlissFigures):
         h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
         coadd_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
+        coadd_params.plocs += bp
 
         _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder,
@@ -453,7 +454,7 @@ class DetectionClassificationFigures(BlissFigures):
             device=device,
         )
         est_params = tile_est_params.to_full_params()
-        est_params.plocs -= 0.5
+        est_params.plocs += bp - 0.5
         est_params["fluxes"] = (
             est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
             + est_params["star_bools"] * est_params["fluxes"]
@@ -461,7 +462,7 @@ class DetectionClassificationFigures(BlissFigures):
 
         est_params["mags"] = sdss.convert_flux_to_mag(est_params["fluxes"])
 
-        mag_bins = np.arange(18, 23, 0.25)  # skip 23
+        mag_bins = np.arange(18, 24.5, 0.5)
         precisions = []
         recalls = []
         class_accs = []
