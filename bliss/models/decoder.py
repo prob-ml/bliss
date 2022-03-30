@@ -402,7 +402,7 @@ class StarTileDecoder(nn.Module):
         # extra factor to be consistent with old repo
         # but probably doesn't matter ...
         grid *= self.psf_slen / (self.psf_slen - 1)
-        self.register_buffer("cached_radii_grid", (grid ** 2).sum(2).sqrt())
+        self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
 
         # get psf normalization_constant
         self.normalization_constant = torch.zeros(self.n_bands)
@@ -472,9 +472,9 @@ class StarTileDecoder(nn.Module):
 
     @staticmethod
     def _psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
-        term1 = torch.exp(-(r ** 2) / (2 * sigma1))
-        term2 = b * torch.exp(-(r ** 2) / (2 * sigma2))
-        term3 = p0 * (1 + r ** 2 / (beta * sigmap)) ** (-beta / 2)
+        term1 = torch.exp(-(r**2) / (2 * sigma1))
+        term2 = b * torch.exp(-(r**2) / (2 * sigma2))
+        term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
     def _get_psf_single_band(self, band_idx):

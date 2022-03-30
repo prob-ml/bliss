@@ -345,7 +345,7 @@ class SleepPhase(pl.LightningModule):
         assert n_samples ** (0.5) % 1 == 0
         if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
             return
-        nrows = int(n_samples ** 0.5)  # for figure
+        nrows = int(n_samples**0.5)  # for figure
 
         true_params, est_params = self._get_full_params(batch)
 

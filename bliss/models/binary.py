@@ -72,7 +72,7 @@ class BinaryEncoder(pl.LightningModule):
         dim_enc_conv_out = ((self.slen + 1) // 2 + 1) // 2
         n_bands_in = self.input_transform.output_channels(n_bands)
         self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
-        self.enc_final = make_enc_final(channel * 4 * dim_enc_conv_out ** 2, hidden, 1, dropout)
+        self.enc_final = make_enc_final(channel * 4 * dim_enc_conv_out**2, hidden, 1, dropout)
 
         # grid for center cropped tiles
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
@@ -217,7 +217,7 @@ class BinaryEncoder(pl.LightningModule):
         assert n_samples ** (0.5) % 1 == 0
         if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
             return
-        nrows = int(n_samples ** 0.5)  # for figure
+        nrows = int(n_samples**0.5)  # for figure
 
         # extract non-params entries so that 'get_full_params' to works.
         exclude = {"images", "background", "loss", "acc"}
