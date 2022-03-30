@@ -49,6 +49,7 @@ class DetectionMetrics(Metric):
         self.slack = slack
 
         self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("tp_gal", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("fp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total_true_n_sources", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -67,11 +68,14 @@ class DetectionMetrics(Metric):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
             if ntrue > 0 and nest > 0:
-                _, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
+                mtrue, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
                 tp = len(elocs[mest][dkeep])  # n_matches
+                true_galaxy_bools = true["galaxy_bools"][b][mtrue][dkeep]
+                tp_gal = true_galaxy_bools.bool().sum()
                 fp = nest - tp
                 assert fp >= 0
                 self.tp += tp
+                self.tp_gal += tp_gal
                 self.fp += fp
                 self.avg_distance += avg_distance
                 self.total_true_n_sources += ntrue
@@ -87,6 +91,7 @@ class DetectionMetrics(Metric):
             "recall": recall,
             "f1": f1,
             "avg_distance": self.avg_distance,
+            "n_galaxies_detected": self.tp_gal,
         }
 
 
@@ -162,11 +167,11 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
             number of sources. The centroids should be in units of PIXELS.
 
     Returns:
-        dist_keep: Matched objects to keep based on l1 distances.
-        distances: Average l-infinity distance over matched objects.
-        match_true, match_est: Tensors corresponding to indices matched, so
-            that `true_locs[true_match]`, `est_locs[est_match]` will have the matched
-            locations for each pair of matched objects at the same position.
+        A tuple of the following objects:
+        - row_indx: Indicies of true objects matched to estimated objects.
+        - col_indx: Indicies of estimated objects matched to true objects.
+        - dist_keep: Matched objects to keep based on l1 distances.
+        - avg_distance: Average l-infinity distance over matched objects.
     """
     assert len(true_locs.shape) == len(est_locs.shape) == 2
     assert true_locs.shape[-1] == est_locs.shape[-1] == 2
@@ -246,11 +251,17 @@ def scene_metrics(
     eparams = est_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
     detection_metrics.update(tparams, eparams)
     recall = detection_metrics.compute()["recall"]
+    n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"]
     detection_metrics.reset()
 
     # combine into f1 score and into single dictionary
     f1 = 2 * precision * recall / (precision + recall)
-    detection_result = {"precision": precision, "recall": recall, "f1": f1}
+    detection_result = {
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "n_galaxies_detected": n_galaxies_detected,
+    }
 
     # compute classification metrics, these are only computed on matches so ignore mag_slack.
     tparams = true_params.apply_mag_bin(mag_min, mag_max)

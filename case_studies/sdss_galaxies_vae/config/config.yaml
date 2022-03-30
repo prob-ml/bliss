@@ -65,8 +65,9 @@ datasets:
         n_tiles_w: 10
         n_batches: 10
         batch_size: 32
-        generate_device: "cuda:0"
+        generate_device: "cpu"
         testing_file: null
+        num_workers: 5
     toy_gaussian:
         _target_: bliss.datasets.galsim_galaxies.ToyGaussian
         num_workers: 0
@@ -105,6 +106,9 @@ models:
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
         galaxy_ae: ${models.galaxy_vae}
         galaxy_ae_ckpt: ${paths.project}/models/sdss_vae.pt
+        galsim_galaxy_decoder:
+            _target_: bliss.datasets.galsim_galaxies.GalsimGalaxyDecoder
+            sdss_galaxies: ${datasets.sdss_galaxies}
         sdss_bands:
             - 2
     encoder:
@@ -147,8 +151,10 @@ models:
         alpha: 0.5
         prob_galaxy: 0.7
         galaxy_prior:
-            _target_: bliss.models.vae.prior.GalaxyVAEPrior
-            latent_dim: ${models.galaxy_vae.latent_dim}
+            _target_: bliss.datasets.galsim_galaxies.GalsimGalaxyPrior
+            sdss_galaxies: ${datasets.sdss_galaxies}
+            # _target_: bliss.models.vae.prior.GalaxyVAEPrior
+            # latent_dim: ${models.galaxy_vae.latent_dim}
             #vae_flow: ${models.galaxy_flow}
             #vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
     sleep:

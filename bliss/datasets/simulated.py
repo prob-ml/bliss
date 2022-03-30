@@ -9,6 +9,7 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
 from bliss.catalog import TileCatalog
+from bliss.datasets.galsim_galaxies import GalsimGalaxyPrior
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.models.decoder import ImageDecoder
 from bliss.models.prior import ImagePrior
@@ -68,6 +69,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         batch_size,
         generate_device,
         testing_file=None,
+        num_workers: int = 0,
     ):
         super().__init__()
 
@@ -79,11 +81,14 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         self.image_prior = prior
         self.image_decoder = decoder
+        if isinstance(self.image_prior.galaxy_prior, GalsimGalaxyPrior):
+            self.image_decoder.set_decoder_type("galsim")
         self.background = background
         self.image_prior.requires_grad_(False)
         self.image_decoder.requires_grad_(False)
         self.background.requires_grad_(False)
         self.to(generate_device)
+        self.num_workers = num_workers
 
         # check sleep training will work.
         total_ptiles = self.batch_size * self.n_tiles_h * self.n_tiles_w
@@ -140,13 +145,13 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             return {**tile_catalog.to_dict(), "images": images, "background": background}
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=0)
+        return DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=0)
+        return DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        dl = DataLoader(self, batch_size=None, num_workers=0)
+        dl = DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
         if self.testing_file:
             test_dataset = BlissDataset(self.testing_file)

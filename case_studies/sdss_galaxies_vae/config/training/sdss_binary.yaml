@@ -3,7 +3,8 @@ model: ${models.binary}
 dataset: ${datasets.simulated}
 optimizer_params:
   lr: 1e-4
-n_epochs: 501
+n_epochs: 101
 save_top_k: 5
 trainer:
   enable_checkpointing: true
+  check_val_every_n_epoch: 5
