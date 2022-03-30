@@ -107,72 +107,21 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
     def __init__(
         self,
         prior,
+        decoder,
         num_workers,
         batch_size,
         n_batches,
-        n_bands,
-        slen,
-        background,
-        pixel_scale,  # SDSS
-        psf_image_file: str,
     ):
         super().__init__()
         self.prior = prior
-        assert n_bands == 1, "Only 1 band is supported"
-
+        self.decoder = decoder
         self.n_batches = n_batches
         self.batch_size = batch_size
         self.num_workers = num_workers
 
-        self.n_bands = 1
-        self.slen = slen
-        self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
-        self.background[...] = background
-        self.pixel_scale = pixel_scale
-
-        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
-
-    def render_galaxy(self, galaxy_params):
-        if isinstance(galaxy_params, Tensor):
-            galaxy_params = galaxy_params.cpu().detach()
-        total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
-        bulge_frac = 1 - disk_frac
-
-        disk_flux = total_flux * disk_frac
-        bulge_flux = total_flux * bulge_frac
-
-        components = []
-        if disk_flux > 0:
-            b_d = a_d * disk_q
-            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
-            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
-                q=disk_q,
-                beta=beta_radians * galsim.radians,
-            )
-            components.append(disk)
-        if bulge_flux > 0:
-            b_b = bulge_q * a_b
-            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
-            bulge = galsim.DeVaucouleurs(
-                flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
-            ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
-            components.append(bulge)
-        galaxy = galsim.Add(components)
-        # convolve with PSF
-        gal_conv = galsim.Convolution(galaxy, self.psf)
-        image = gal_conv.drawImage(
-            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
-        )
-        image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
-        noiseless = image.clone()
-        # add noise and background.
-        image += self.background.mean()
-        image += image.sqrt() * torch.randn(*image.shape)
-        return {"images": image, "background": self.background, "noiseless": noiseless}
-
     def __getitem__(self, idx):
         galaxy_params = self.prior.sample(1, "cpu")
-        return self.render_galaxy(galaxy_params[0])
+        return self.decoder.render_galaxy(galaxy_params[0])
 
     def __len__(self):
         return self.batch_size * self.n_batches
@@ -271,12 +220,64 @@ class GalsimGalaxyPrior:
 
 
 class GalsimGalaxyDecoder:
-    def __init__(self, sdss_galaxies: SDSSGalaxies) -> None:
-        self.sdss_galaxies = sdss_galaxies
+    def __init__(
+        self,
+        slen,
+        n_bands,
+        background,
+        pixel_scale,  # SDSS
+        psf_image_file: str,
+    ) -> None:
+
+        self.slen = slen
+        assert n_bands == 1, "Only 1 band is supported"
+        self.n_bands = 1
+        self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
+        self.background[...] = background
+        self.pixel_scale = pixel_scale
+        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
 
     def __call__(self, z: Tensor):
         images = []
         for latent in z:
-            image = self.sdss_galaxies.render_galaxy(latent)["noiseless"]
+            image = self.render_galaxy(latent)["noiseless"]
             images.append(image)
         return torch.stack(images, dim=0).to(z.device)
+
+    def render_galaxy(self, galaxy_params):
+        if isinstance(galaxy_params, Tensor):
+            galaxy_params = galaxy_params.cpu().detach()
+        total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
+        bulge_frac = 1 - disk_frac
+
+        disk_flux = total_flux * disk_frac
+        bulge_flux = total_flux * bulge_frac
+
+        components = []
+        if disk_flux > 0:
+            b_d = a_d * disk_q
+            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
+            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
+                q=disk_q,
+                beta=beta_radians * galsim.radians,
+            )
+            components.append(disk)
+        if bulge_flux > 0:
+            b_b = bulge_q * a_b
+            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
+            bulge = galsim.DeVaucouleurs(
+                flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
+            ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
+            components.append(bulge)
+        galaxy = galsim.Add(components)
+        # convolve with PSF
+        gal_conv = galsim.Convolution(galaxy, self.psf)
+        image = gal_conv.drawImage(
+            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
+        )
+        image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
+        noiseless = image.clone()
+        # add noise and background.
+        image += self.background.mean()
+        image += image.sqrt() * torch.randn(*image.shape)
+        return {"images": image, "background": self.background, "noiseless": noiseless}

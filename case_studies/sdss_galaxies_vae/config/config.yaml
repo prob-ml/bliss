@@ -44,14 +44,16 @@ datasets:
             a_loc: 0.8371888967872619
             a_scale: 4.432725319432478
             a_bulge_disk_ratio: 2.0
+        decoder:
+            _target_: bliss.datasets.galsim_galaxies.GalsimGalaxyDecoder
+            background: 865
+            n_bands: 1
+            slen: 53
+            pixel_scale: 0.396
+            psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
         num_workers: 5
         batch_size: 64
         n_batches: 10
-        background: 865
-        n_bands: 1
-        slen: 53
-        pixel_scale: 0.396
-        psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
