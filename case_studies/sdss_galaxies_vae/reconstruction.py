@@ -85,7 +85,7 @@ def reconstruct(cfg):
                 mag_min = float(mag) - 1.0
                 mag_max = float(mag)
             else:
-                mag_min = float(cfg.reconstruct.mag_min)
+                mag_min = -np.inf
                 mag_max = float(cfg.reconstruct.mag_max)
             scene_metrics_map = reporting.scene_metrics(
                 ground_truth_catalog,
@@ -437,7 +437,15 @@ def create_scene_accuracy_table(scene_metrics_by_mag):
 
 def create_scene_metrics_table(scene_metrics_by_mag):
     x = {}
-    columns = ("recall", "expected_recall", "precision", "expected_precision", "n", "n_galaxies")
+    columns = (
+        "recall",
+        "expected_recall",
+        "precision",
+        "expected_precision",
+        "n",
+        "n_galaxies",
+        "n_galaxies_detected",
+    )
     for c in columns:
         x[c] = {}
         for k, v in scene_metrics_by_mag.items():

@@ -5,7 +5,9 @@ training:
   dataset: ${datasets.simulated}
   optimizer_params:
     lr: 1e-4
-  n_epochs: 1501
+  # n_epochs: 1501
+  n_epochs: 300
   save_top_k: 10
   trainer:
     enable_checkpointing: true
+    check_val_every_n_epoch: 5

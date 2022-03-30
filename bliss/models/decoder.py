@@ -10,6 +10,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
+from bliss.datasets.galsim_galaxies import GalsimGalaxyDecoder
 from bliss.models import galaxy_net
 
 
@@ -36,6 +37,7 @@ class ImageDecoder(pl.LightningModule):
         border_padding: Optional[int] = None,
         galaxy_ae: Optional[galaxy_net.OneCenteredGalaxyAE] = None,
         galaxy_ae_ckpt: Optional[str] = None,
+        galsim_galaxy_decoder: Optional[GalsimGalaxyDecoder] = None,
     ):
         """Initializes ImageDecoder.
 
@@ -43,12 +45,13 @@ class ImageDecoder(pl.LightningModule):
             n_bands: Number of bands (colors) in the image
             tile_slen: Side-length of each tile.
             ptile_slen: Padded side-length of each tile (for reconstructing image).
+            psf_slen: Side-length of reconstruced star image from PSF.
+            sdss_bands: Bands to retrieve from PSF.
+            psf_params_file: Path where point-spread-function (PSF) data is located.
             border_padding: Size of border around the final image where sources will not be present.
             galaxy_ae: An autoencoder object for images of single galaxies.
             galaxy_ae_ckpt: Path where state_dict of trained galaxy autoencoder is located.
-            psf_params_file: Path where point-spread-function (PSF) data is located.
-            psf_slen: Side-length of reconstruced star image from PSF.
-            sdss_bands: Bands to retrieve from PSF.
+            galsim_galaxy_decoder: Object to decode Galsim representation of galaxies.
         """
         super().__init__()
         self.n_bands = n_bands
@@ -66,14 +69,26 @@ class ImageDecoder(pl.LightningModule):
             psf_params_file=psf_params_file,
         )
 
+        self.galaxy_tile_decoder = None
+        self.galsim_galaxy_decoder = galsim_galaxy_decoder
         if galaxy_ae is not None:
             assert galaxy_ae_ckpt is not None
             galaxy_ae.load_state_dict(torch.load(galaxy_ae_ckpt, map_location=torch.device("cpu")))
             galaxy_ae.eval().requires_grad_(False)
-            galaxy_decoder = galaxy_ae.get_decoder()
+            self.autodecoder = galaxy_ae.get_decoder()
+        else:
+            self.autodecoder = None
+        self.set_decoder_type("autoencoder")
+
+    def set_decoder_type(self, mode):
+        if mode == "galsim":
+            galaxy_decoder = self.galsim_galaxy_decoder
+        elif mode == "autoencoder":
+            galaxy_decoder = self.autodecoder
+        if galaxy_decoder is not None:
             self.galaxy_tile_decoder = GalaxyTileDecoder(
-                tile_slen,
-                ptile_slen,
+                self.tile_slen,
+                self.ptile_slen,
                 self.n_bands,
                 galaxy_decoder,
             )
@@ -101,12 +116,19 @@ class ImageDecoder(pl.LightningModule):
         return reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
 
     def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
+        galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
         galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(galaxy_params)
+        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(
+            galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5]
+        )
         galaxy_fluxes = reduce(galaxy_shapes, "n 1 h w -> n", "sum")
         assert torch.all(galaxy_fluxes >= 0.0)
+        galaxy_fluxes_all = torch.zeros_like(
+            galaxy_bools_flat.reshape(-1), dtype=galaxy_fluxes.dtype
+        )
+        galaxy_fluxes_all[galaxy_bools_flat.squeeze(-1) > 0.5] = galaxy_fluxes
         galaxy_fluxes = rearrange(
-            galaxy_fluxes,
+            galaxy_fluxes_all,
             "(b nth ntw s) -> b nth ntw s 1",
             b=galaxy_params_in.shape[0],
             nth=galaxy_params_in.shape[1],
