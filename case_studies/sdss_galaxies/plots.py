@@ -462,7 +462,7 @@ class DetectionClassificationFigures(BlissFigures):
 
         est_params["mags"] = sdss.convert_flux_to_mag(est_params["fluxes"])
 
-        mag_bins = np.arange(18, 24.5, 0.5)
+        mag_bins = np.arange(18, 24.5, 0.25)
         precisions = []
         recalls = []
         class_accs = []
@@ -523,7 +523,7 @@ class DetectionClassificationFigures(BlissFigures):
         format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="value of metric")
         ax.plot(mag_bins, recalls, "-o", label=r"\rm recall")
         ax.plot(mag_bins, precisions, "-o", label=r"\rm precision")
-        plt.xlim(18, 23)
+        plt.xlim(18, 24)
         ax.legend(loc="best", prop={"size": 22})
 
         # classification accuracy
@@ -533,7 +533,7 @@ class DetectionClassificationFigures(BlissFigures):
         ax.plot(mag_bins, class_accs, "-o", label=r"\rm classification accuracy")
         ax.plot(mag_bins, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
         ax.plot(mag_bins, star_accs, "-o", label=r"\rm star classification accuracy")
-        plt.xlim(18, 23)
+        plt.xlim(18, 24)
         ax.legend(loc="best", prop={"size": 22})
 
         # magnitude / classification scatter
