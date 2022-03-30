@@ -441,7 +441,7 @@ class DetectionClassificationFigures(BlissFigures):
         h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
         coadd_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
-        coadd_params.plocs += bp
+        coadd_params.plocs += bp - 0.5
 
         _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder,
@@ -594,6 +594,7 @@ class SDSSReconstructionFigures(BlissFigures):
             w_end = w + scene_size
             true = frame.image[:, :, h:h_end, w:w_end]
             coadd_params = frame.get_catalog((h, h_end), (w, w_end))
+            coadd_params.plocs -= 0.5
 
             recon, tile_map_recon = reconstruct_scene_at_coordinates(
                 encoder,
@@ -608,7 +609,7 @@ class SDSSReconstructionFigures(BlissFigures):
             resid = (true - recon) / recon.sqrt()
 
             recon_map = tile_map_recon.to_full_params()
-            recon_map.plocs = recon_map.plocs - 0.5
+            recon_map.plocs -= 0.5
 
             true = true[0, 0].cpu().numpy()
             recon = recon[0, 0].cpu().numpy()
