@@ -171,7 +171,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         return {"images": image, "background": self.background, "noiseless": noiseless}
 
     def __getitem__(self, idx):
-        galaxy_params = self.prior.draw_galaxy_params()
+        galaxy_params = self.prior.sample(1, "cpu")
         return self.render_galaxy(galaxy_params[0])
 
     def __len__(self):
@@ -223,32 +223,29 @@ class GalsimGalaxyPrior:
         self.a_bulge_disk_ratio = a_bulge_disk_ratio
 
     def sample(self, total_latent, device):
-        return self.draw_galaxy_params(n_samples=total_latent)
-
-    def draw_galaxy_params(self, n_samples=1):
         # create galaxy as mixture of Exponential + DeVacauleurs
         if self.flux_sample == "uniform":
-            total_flux = self._uniform(self.min_flux, self.max_flux, n_samples=n_samples)
+            total_flux = self._uniform(self.min_flux, self.max_flux, n_samples=total_latent)
         elif self.flux_sample == "pareto":
-            total_flux = self._draw_pareto_flux(n_samples=n_samples)
+            total_flux = self._draw_pareto_flux(n_samples=total_latent)
         else:
             raise NotImplementedError()
-        disk_frac = self._uniform(0, 1, n_samples=n_samples)
-        beta_radians = self._uniform(0, 2 * np.pi, n_samples=n_samples)
-        disk_q = self._uniform(0, 1, n_samples=n_samples)
-        bulge_q = self._uniform(0, 1, n_samples=n_samples)
+        disk_frac = self._uniform(0, 1, n_samples=total_latent)
+        beta_radians = self._uniform(0, 2 * np.pi, n_samples=total_latent)
+        disk_q = self._uniform(0, 1, n_samples=total_latent)
+        bulge_q = self._uniform(0, 1, n_samples=total_latent)
         if self.a_sample == "uniform":
-            disk_a = self._uniform(self.min_a_d, self.max_a_d, n_samples=n_samples)
-            bulge_a = self._uniform(self.min_a_b, self.max_a_b, n_samples=n_samples)
+            disk_a = self._uniform(self.min_a_d, self.max_a_d, n_samples=total_latent)
+            bulge_a = self._uniform(self.min_a_b, self.max_a_b, n_samples=total_latent)
         elif self.a_sample == "gamma":
             disk_a = self._gamma(
-                self.a_concentration, self.a_loc, self.a_scale, n_samples=n_samples
+                self.a_concentration, self.a_loc, self.a_scale, n_samples=total_latent
             )
             bulge_a = self._gamma(
                 self.a_concentration,
                 self.a_loc / self.a_bulge_disk_ratio,
                 self.a_scale / self.a_bulge_disk_ratio,
-                n_samples=n_samples,
+                n_samples=total_latent,
             )
         else:
             raise NotImplementedError()
