@@ -33,7 +33,7 @@ class CenteredGalaxyEncoder(nn.Module):
             wn(nn.Conv2d(4, 8, 5, stride=3, padding=0)),
             nn.LeakyReLU(),
             nn.Flatten(1, -1),
-            wn(nn.Linear(8 * min_slen ** 2, hidden)),
+            wn(nn.Linear(8 * min_slen**2, hidden)),
             nn.LeakyReLU(),
             wn(nn.Linear(hidden, latent_dim)),
         )
@@ -62,7 +62,7 @@ class CenteredGalaxyDecoder(nn.Module):
         self.fc = nn.Sequential(
             wn(nn.Linear(latent_dim, hidden)),
             nn.LeakyReLU(),
-            wn(nn.Linear(hidden, 8 * self.min_slen ** 2)),
+            wn(nn.Linear(hidden, 8 * self.min_slen**2)),
             nn.LeakyReLU(),
         )
 
