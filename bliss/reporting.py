@@ -166,11 +166,12 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
         est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
             number of sources. The centroids should be in units of PIXELS.
 
-    Returns: A tuple of the following objects.
-        row_indx: Indicies of true objects matched to estimated objects.
-        col_indx: Indicies of estimated objects matched to true objects.
-        dist_keep: Matched objects to keep based on l1 distances.
-        avg_distance: Average l-infinity distance over matched objects.
+    Returns:
+        A tuple of the following objects:
+        - row_indx: Indicies of true objects matched to estimated objects.
+        - col_indx: Indicies of estimated objects matched to true objects.
+        - dist_keep: Matched objects to keep based on l1 distances.
+        - avg_distance: Average l-infinity distance over matched objects.
     """
     assert len(true_locs.shape) == len(est_locs.shape) == 2
     assert true_locs.shape[-1] == est_locs.shape[-1] == 2

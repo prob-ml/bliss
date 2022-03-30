@@ -155,8 +155,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
     @staticmethod
     def _uniform(a, b, n_samples=1) -> Tensor:
         # uses pytorch to return a single float ~ U(a, b)
-        unif = (a - b) * torch.rand(n_samples) + b
-        return unif
+        return (a - b) * torch.rand(n_samples) + b
 
     def _draw_pareto_flux(self, n_samples=1) -> Tensor:
         # draw pareto conditioned on being less than f_max
