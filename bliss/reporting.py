@@ -70,7 +70,8 @@ class DetectionMetrics(Metric):
             if ntrue > 0 and nest > 0:
                 mtrue, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
                 tp = len(elocs[mest][dkeep])  # n_matches
-                tp_gal = true["galaxy_bools"][b][mtrue][dkeep].bool().sum()
+                true_galaxy_bools = true["galaxy_bools"][b][mtrue][dkeep]
+                tp_gal = true_galaxy_bools.bool().sum()
                 fp = nest - tp
                 assert fp >= 0
                 self.tp += tp
