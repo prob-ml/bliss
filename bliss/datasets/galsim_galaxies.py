@@ -153,12 +153,12 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
             assert self.alpha is not None
 
     @staticmethod
-    def _uniform(a, b, n_samples=1):
+    def _uniform(a, b, n_samples=1) -> Tensor:
         # uses pytorch to return a single float ~ U(a, b)
         unif = (a - b) * torch.rand(n_samples) + b
-        return unif.item()
+        return unif
 
-    def _draw_pareto_flux(self, n_samples=1):
+    def _draw_pareto_flux(self, n_samples=1) -> Tensor:
         # draw pareto conditioned on being less than f_max
         u_max = 1 - (self.min_flux / self.max_flux) ** self.alpha
         uniform_samples = torch.rand(n_samples) * u_max
@@ -167,13 +167,13 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
     def draw_galaxy_params(self, n_samples=1):
         # create galaxy as mixture of Exponential + DeVacauleurs
         if self.flux_sample == "uniform":
-            total_flux = self._uniform(self.min_flux, self.max_flux)
+            total_flux = self._uniform(self.min_flux, self.max_flux, n_samples=n_samples)
         elif self.flux_sample == "pareto":
-            total_flux = self._draw_pareto_flux()
+            total_flux = self._draw_pareto_flux(n_samples=n_samples)
         else:
             raise NotImplementedError()
         disk_frac = self._uniform(0, 1, n_samples=n_samples)
-        beta_radians = self._uniform(0, 2 * np.pi)
+        beta_radians = self._uniform(0, 2 * np.pi, n_samples=n_samples)
         disk_q = self._uniform(0, 1, n_samples=n_samples)
         disk_a = self._uniform(self.min_a_d, self.max_a_d, n_samples=n_samples)
 
@@ -223,7 +223,7 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
     def __getitem__(self, idx):
         galaxy_params = self.draw_galaxy_params()
-        return self.render_galaxy(galaxy_params)
+        return self.render_galaxy(galaxy_params[0])
 
     def __len__(self):
         return self.batch_size * self.n_batches
