@@ -113,20 +113,20 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         slen,
         min_flux,
         max_flux,
-        min_a_d,
-        max_a_d,
-        min_a_b,
-        max_a_b,
         background,
         pixel_scale,  # SDSS
-        flux_sample,
+        flux_sample: str,
+        a_sample: str,
         psf_image_file: str,
+        min_a_d: Optional[float] = None,
+        max_a_d: Optional[float] = None,
+        min_a_b: Optional[float] = None,
+        max_a_b: Optional[float] = None,
         alpha: Optional[float] = None,
-        a_sample="gamma",
-        a_concentration=0.39330758068481686,
-        a_loc=0.8371888967872619,
-        a_scale=4.432725319432478,
-        a_bulge_disk_ratio=2.0,
+        a_concentration: Optional[float] = None,
+        a_loc: Optional[float] = None,
+        a_scale: Optional[float] = None,
+        a_bulge_disk_ratio: Optional[float] = None,
     ):
         super().__init__()
         assert n_bands == 1, "Only 1 band is supported"
@@ -145,11 +145,6 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         self.max_flux = max_flux
         self.alpha = alpha
 
-        self.min_a_d = min_a_d
-        self.max_a_d = max_a_d
-        self.min_a_b = min_a_b
-        self.max_a_b = max_a_b
-
         self.flux_sample = flux_sample
 
         self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
@@ -158,6 +153,11 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
             assert self.alpha is not None
 
         self.a_sample = a_sample
+        self.min_a_d = min_a_d
+        self.max_a_d = max_a_d
+        self.min_a_b = min_a_b
+        self.max_a_b = max_a_b
+
         self.a_concentration = a_concentration
         self.a_loc = a_loc
         self.a_scale = a_scale

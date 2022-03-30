@@ -47,6 +47,7 @@ datasets:
         max_a_b: 3.6 # from catalog with mag < 22.2 cut.
         pixel_scale: 0.396
         flux_sample: "pareto"
+        a_sample: "uniform"
         psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
