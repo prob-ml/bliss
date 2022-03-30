@@ -441,6 +441,7 @@ class DetectionClassificationFigures(BlissFigures):
         h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
         coadd_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
+        # need to adjust by bp since relative to h = w = bp.
         coadd_params.plocs += bp - 0.5
 
         _, tile_est_params = reconstruct_scene_at_coordinates(
