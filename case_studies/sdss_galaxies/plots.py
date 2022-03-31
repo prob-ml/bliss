@@ -441,7 +441,6 @@ class DetectionClassificationFigures(BlissFigures):
         h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
         coadd_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
-        coadd_params.plocs += bp
 
         _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder,
@@ -454,7 +453,6 @@ class DetectionClassificationFigures(BlissFigures):
             device=device,
         )
         est_params = tile_est_params.to_full_params()
-        est_params.plocs += bp - 0.5
         est_params["fluxes"] = (
             est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
             + est_params["star_bools"] * est_params["fluxes"]
@@ -608,7 +606,6 @@ class SDSSReconstructionFigures(BlissFigures):
             resid = (true - recon) / recon.sqrt()
 
             recon_map = tile_map_recon.to_full_params()
-            recon_map.plocs = recon_map.plocs - 0.5
 
             true = true[0, 0].cpu().numpy()
             recon = recon[0, 0].cpu().numpy()
@@ -643,7 +640,7 @@ class SDSSReconstructionFigures(BlissFigures):
             reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1000))
             reporting.plot_image(fig, ax_res, res, vrange=(-5, 5))
 
-            locs_true = coadd_params.plocs.reshape(-1, 2)
+            locs_true = coadd_params.plocs.reshape(-1, 2) - 0.5  # adjust for plotting
             true_galaxy_bools = coadd_params["galaxy_bools"].reshape(-1).bool()
             locs_galaxies_true = locs_true[true_galaxy_bools]
             locs_stars_true = locs_true[~true_galaxy_bools]
@@ -669,7 +666,7 @@ class SDSSReconstructionFigures(BlissFigures):
             if recon_map is not None:
                 s *= 0.75
                 lw *= 0.75
-                locs_pred = recon_map.plocs.reshape(-1, 2)
+                locs_pred = recon_map.plocs.reshape(-1, 2) - 0.5  # adjust for plotting
                 star_bools = recon_map["star_bools"].reshape(-1).bool()
                 galaxy_bools = recon_map["galaxy_bools"].reshape(-1).bool()
                 locs_galaxies = locs_pred[galaxy_bools]
