@@ -111,7 +111,6 @@ class TestSourceEncoder:
             locs_var_indx_mat = star_encoder.loc_logvar_indx
             log_flux_mean_indx_mat = star_encoder.log_flux_mean_indx
             log_flux_var_indx_mat = star_encoder.log_flux_logvar_indx
-            prob_n_source_indx_mat = star_encoder.prob_n_source_indx
 
             for i in range(batch_size * n_tiles_h * n_tiles_w):
                 if n_star_per_tile[i] == 0:

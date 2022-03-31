@@ -221,7 +221,6 @@ class LocationEncoder(nn.Module):
 
         pred = self.encode_for_n_sources(var_params_flat, map_n_sources)
 
-        # map_n_sources_per_tile = torch.argmax(pred["n_source_log_probs"], dim=1)
         is_on_array = get_is_on_from_n_sources(map_n_sources, self.max_detections)
         is_on_array = is_on_array.unsqueeze(-1).float()
 
@@ -246,7 +245,7 @@ class LocationEncoder(nn.Module):
         }
         max_a_post = {}
         for k, v in max_a_post_flat.items():
-            if k in {"n_sources"}:
+            if k == "n_sources":
                 pattern = "(b nth ntw) -> b nth ntw"
             else:
                 pattern = "(b nth ntw) s k -> b nth ntw s k"
