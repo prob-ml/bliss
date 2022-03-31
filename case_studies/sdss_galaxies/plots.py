@@ -640,7 +640,7 @@ class SDSSReconstructionFigures(BlissFigures):
             reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1000))
             reporting.plot_image(fig, ax_res, res, vrange=(-5, 5))
 
-            locs_true = coadd_params.plocs.reshape(-1, 2)
+            locs_true = coadd_params.plocs.reshape(-1, 2) - 0.5  # adjust for plotting
             true_galaxy_bools = coadd_params["galaxy_bools"].reshape(-1).bool()
             locs_galaxies_true = locs_true[true_galaxy_bools]
             locs_stars_true = locs_true[~true_galaxy_bools]
@@ -666,7 +666,7 @@ class SDSSReconstructionFigures(BlissFigures):
             if recon_map is not None:
                 s *= 0.75
                 lw *= 0.75
-                locs_pred = recon_map.plocs.reshape(-1, 2)
+                locs_pred = recon_map.plocs.reshape(-1, 2) - 0.5  # adjust for plotting
                 star_bools = recon_map["star_bools"].reshape(-1).bool()
                 galaxy_bools = recon_map["galaxy_bools"].reshape(-1).bool()
                 locs_galaxies = locs_pred[galaxy_bools]
