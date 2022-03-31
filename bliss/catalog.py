@@ -254,6 +254,11 @@ class FullCatalog(UserDict):
             d[k] = v[:, keep]
         return type(self)(self.height - h_min - h_max, self.width - w_min - w_max, d)
 
+    def crop_at_coords(self, h_start, h_end, w_start, w_end):
+        h_max = self.height - h_end
+        w_max = self.width - w_end
+        return self.crop(h_start, h_max, w_start, w_max)
+
     def apply_mag_bin(self, mag_min: float, mag_max: float):
         """Apply magnitude bin to given parameters."""
         assert self.batch_size == 1
