@@ -41,6 +41,7 @@ class TestSourceEncoder:
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             n_bands=n_bands,
+            mean_detections=0.48,
             max_detections=max_detections,
         ).to(device)
 
@@ -111,7 +112,6 @@ class TestSourceEncoder:
             locs_var_indx_mat = star_encoder.loc_logvar_indx
             log_flux_mean_indx_mat = star_encoder.log_flux_mean_indx
             log_flux_var_indx_mat = star_encoder.log_flux_logvar_indx
-            prob_n_source_indx_mat = star_encoder.prob_n_source_indx
 
             for i in range(batch_size * n_tiles_h * n_tiles_w):
                 if n_star_per_tile[i] == 0:
@@ -154,11 +154,6 @@ class TestSourceEncoder:
                         ]
                     )
 
-                    assert torch.all(
-                        pred["n_source_log_probs"][i].flatten()
-                        == star_encoder.log_softmax(h_out[:, prob_n_source_indx_mat])[i]
-                    )
-
     def test_sample(self, devices):
         device = devices.device
 
@@ -186,6 +181,7 @@ class TestSourceEncoder:
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             n_bands=n_bands,
+            mean_detections=0.48,
             max_detections=max_detections,
         ).to(device)
         var_params = star_encoder.encode(images, background_tensor)

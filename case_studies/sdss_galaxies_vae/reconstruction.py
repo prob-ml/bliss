@@ -202,7 +202,9 @@ def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
     galaxy.load_state_dict(galaxy_state_dict)
     location = sleep.image_encoder.to(device).eval()
     dec = sleep.image_decoder.to(device).eval()
-    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
+    encoder = Encoder(
+        location.eval(), binary.eval(), galaxy.eval(), cfg.reconstruct.eval_mean_detections
+    ).to(device)
 
     prior = instantiate(cfg.models.prior).to(device).eval()
     return dec, encoder, prior
@@ -465,17 +467,19 @@ def create_scene_metrics_table(scene_metrics_by_mag):
 
 
 def expected_recall(tile_map: TileCatalog):
-    source_probs = tile_map.n_sources_log_prob.unsqueeze(-1).unsqueeze(-1).exp()
-    prob_if_on = source_probs * tile_map.is_on_array.unsqueeze(-1)
-    prob_if_off = (1 - source_probs) * (1 - tile_map.is_on_array.unsqueeze(-1))
-    recall = prob_if_on.sum() / (prob_if_on.sum() + prob_if_off.sum())
+    prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
+    is_on_array = rearrange(tile_map.is_on_array, "n nth ntw 1 -> n nth ntw")
+    prob_detected = prob_on * is_on_array
+    prob_not_detected = prob_on * (1 - is_on_array)
+    recall = prob_detected.sum() / (prob_detected.sum() + prob_not_detected.sum())
     return recall
 
 
 def expected_precision(tile_map: TileCatalog):
-    source_probs = tile_map.n_sources_log_prob.unsqueeze(-1).unsqueeze(-1).exp()
-    prob_if_on = source_probs * tile_map.is_on_array.unsqueeze(-1)
-    precision = prob_if_on.sum() / tile_map.is_on_array.unsqueeze(-1).sum()
+    prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
+    is_on_array = rearrange(tile_map.is_on_array, "n nth ntw 1 -> n nth ntw")
+    prob_detected = prob_on * is_on_array
+    precision = prob_detected.sum() / is_on_array.sum()
     return precision
 
 

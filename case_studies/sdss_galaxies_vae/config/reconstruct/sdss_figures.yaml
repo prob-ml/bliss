@@ -1,5 +1,6 @@
 outdir: ${paths.output}/sdss_figures
 real: false
+eval_mean_detections: 0.004
 frame:
     _target_: reconstruction.SDSSFrame
     sdss_dir: ${paths.sdss}
