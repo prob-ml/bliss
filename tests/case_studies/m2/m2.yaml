@@ -55,6 +55,7 @@ models:
     n_bands: ${models.decoder.n_bands}
     tile_slen: ${models.decoder.tile_slen}
     ptile_slen: 8
+    mean_detections: ${models.prior.mean_sources}
     max_detections: 2
     channel: 17
     spatial_dropout: 0.11399

@@ -32,6 +32,7 @@ class Encoder(nn.Module):
         location_encoder: LocationEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
+        eval_mean_detections: Optional[float] = None,
     ):
         """Initializes Encoder.
 
@@ -47,6 +48,8 @@ class Encoder(nn.Module):
                 returns a classification between stars and galaxies. Defaults to None.
             galaxy_encoder: Module that takes padded tiles and locations and returns the variational
                 distribution of the latent variable determining the galaxy shape. Defaults to None.
+            eval_mean_detections: Optional. Mean number of sources in each tile for test-time image.
+                If provided, probabilities in location_encoder are adjusted.
         """
         super().__init__()
         self._dummy_param = nn.Parameter(torch.empty(0))
@@ -54,6 +57,7 @@ class Encoder(nn.Module):
         self.location_encoder = location_encoder
         self.binary_encoder = binary_encoder
         self.galaxy_encoder = galaxy_encoder
+        self.eval_mean_detections = eval_mean_detections
 
     def forward(self, x):
         raise NotImplementedError(
@@ -87,7 +91,9 @@ class Encoder(nn.Module):
                 - 'galaxy_params' from GalaxyEncoder.
         """
         var_params = self.location_encoder.encode(image, background)
-        tile_map = self.location_encoder.max_a_post(var_params)
+        tile_map = self.location_encoder.max_a_post(
+            var_params, eval_mean_detections=self.eval_mean_detections
+        )
 
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
