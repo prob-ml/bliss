@@ -157,6 +157,9 @@ class LocationEncoder(nn.Module):
                 in matrix form. Has size `n_ptiles * n_bands`.
             n_samples:
                 The number of samples to draw
+            eval_mean_detections:
+                Optional. If specified, adjusts the probability of n_sources to match the given
+                rate.
 
         Returns:
             A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
@@ -216,6 +219,9 @@ class LocationEncoder(nn.Module):
         Args:
             var_params: The output of `self.encode(ptiles)` which is the variational parameters
                 in matrix form. Has size `n_ptiles * n_bands`.
+            eval_mean_detections:
+                Optional. If specified, adjusts the probability of n_sources to match the given
+                rate.
 
         Returns:
             The maximum a posteriori for each padded tile.
@@ -274,6 +280,9 @@ class LocationEncoder(nn.Module):
 
         Arguments:
             var_params_flat: Variational parameters
+        eval_mean_detections:
+            Optional. If specified, adjusts the probability of n_sources to match the given
+            rate.
 
         Returns:
             Log-probability of number of sources.
