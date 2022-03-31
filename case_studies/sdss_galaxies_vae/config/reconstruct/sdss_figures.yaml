@@ -2,7 +2,6 @@ outdir: ${paths.output}/sdss_figures
 real: false
 eval_mean_detections: 0.004
 photo_catalog:
-    # _target_: bliss.datasets.sdss.PhotoFullCatalog
     sdss_path: ${paths.sdss}
     run: 94
     camcol: 1

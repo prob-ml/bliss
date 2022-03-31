@@ -125,27 +125,19 @@ class SloanDigitalSkySurvey(Dataset):
 
 
 class PhotoFullCatalog(FullCatalog):
-    """_summary_
+    """Class for the SDSS PHOTO Catalog.
 
+    Some resources:
     - https://www.sdss.org/dr12/algorithms/classify/
     - https://www.sdss.org/dr12/algorithms/resolve/
     """
 
-    # @classmethod
-    # def from_file(cls, sdss_path, run, camcol, field):
-    #     sdss_path = Path(sdss_path)
-    #     camcol_dir = sdss_path / str(run) / str(camcol)
-    #     po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
-    #     po_fits = fits.getdata(po_path)
-    #     return cls(height, width, data)
     @classmethod
     def from_file(cls, sdss_path, run, camcol, field, band):
-        # def __init__(self, sdss_path, run, camcol, field, band):
         sdss_path = Path(sdss_path)
         camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
         po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
         po_fits = fits.getdata(po_path)
-        # return cls(height, width, data)
         objc_type = column_to_tensor(po_fits, "objc_type")
         thing_id = column_to_tensor(po_fits, "thing_id")
         ras = column_to_tensor(po_fits, "ra")
@@ -156,7 +148,6 @@ class PhotoFullCatalog(FullCatalog):
         star_bools = (objc_type == 6) & (thing_id != -1)
 
         keep = galaxy_bools | star_bools
-        # d = {
         galaxy_bools = galaxy_bools[keep]
         star_bools = star_bools[keep]
         ras = ras[keep]
@@ -190,7 +181,6 @@ class PhotoFullCatalog(FullCatalog):
         height = sdss[0]["image"].shape[1]
         width = sdss[0]["image"].shape[2]
 
-        # super().__init__(height, width, d)
         return cls(height, width, d)
 
 
