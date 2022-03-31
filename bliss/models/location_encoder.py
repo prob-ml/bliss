@@ -279,10 +279,11 @@ class LocationEncoder(nn.Module):
         probability of having 0,1,2 stars.
 
         Arguments:
-            var_params_flat: Variational parameters
-        eval_mean_detections:
-            Optional. If specified, adjusts the probability of n_sources to match the given
-            rate.
+            var_params_flat:
+                Variational parameters.
+            eval_mean_detections:
+                Optional. If specified, adjusts the probability of n_sources to match the given
+                rate.
 
         Returns:
             Log-probability of number of sources.
