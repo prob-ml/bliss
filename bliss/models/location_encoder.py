@@ -216,32 +216,34 @@ class LocationEncoder(nn.Module):
             `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        tile_n_sources = self.tile_map_n_sources(var_params_flat)
-        pred = self.encode_for_n_sources(var_params_flat, tile_n_sources)
+        log_probs_n_sources = self._get_logprob_n_from_var_params(var_params_flat)
+        map_n_sources_logprob, map_n_sources = torch.max(log_probs_n_sources, dim=1)
 
-        tile_n_sources = torch.argmax(pred["n_source_log_probs"], dim=1)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-        tile_n_sources_log_prob, _ = torch.max(pred["n_source_log_probs"], dim=1)
+        pred = self.encode_for_n_sources(var_params_flat, map_n_sources)
+
+        # map_n_sources_per_tile = torch.argmax(pred["n_source_log_probs"], dim=1)
+        is_on_array = get_is_on_from_n_sources(map_n_sources, self.max_detections)
+        is_on_array = is_on_array.unsqueeze(-1).float()
+        # tile_n_sources_log_prob, _ = torch.max(pred["n_source_log_probs"], dim=1)
 
         # set sd so we return map estimates.
         # first locs
         locs_sd = torch.zeros_like(pred["loc_logvar"])
-        tile_locs = self._get_normal_samples(pred["loc_mean"], locs_sd, tile_is_on_array)
+        tile_locs = self._get_normal_samples(pred["loc_mean"], locs_sd, is_on_array)
         tile_locs = tile_locs.clamp(0, 1)
 
         # then log_fluxes
         log_flux_mean = pred["log_flux_mean"]
         log_flux_sd = torch.zeros_like(pred["log_flux_logvar"])
-        tile_log_fluxes = self._get_normal_samples(log_flux_mean, log_flux_sd, tile_is_on_array)
-        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
+        tile_log_fluxes = self._get_normal_samples(log_flux_mean, log_flux_sd, is_on_array)
+        tile_fluxes = tile_log_fluxes.exp() * is_on_array
 
         max_a_post_flat = {
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
-            "n_sources": tile_n_sources,
-            "n_sources_log_prob": tile_n_sources_log_prob,
+            "n_sources": map_n_sources,
+            "n_sources_log_prob": map_n_sources_logprob,
         }
         max_a_post = {}
         for k, v in max_a_post_flat.items():
@@ -290,28 +292,11 @@ class LocationEncoder(nn.Module):
             var_params_flat, tile_n_sources
         )
 
-        # get probability of n_sources
-        # n_source_log_probs: shape = (n_ptiles x (max_detections+1))
-        n_source_log_probs = self._get_logprob_n_from_var_params(var_params_flat)
-        var_params_for_n_sources["n_source_log_probs"] = n_source_log_probs
         if squeeze:
             var_params_for_n_sources = {
                 key: value.squeeze(0) for key, value in var_params_for_n_sources.items()
             }
         return var_params_for_n_sources
-
-    def tile_map_n_sources(self, var_params):
-        """Get the maximum a posteriori of the number of soruces in each tile.
-
-        Args:
-            var_params: The output of `self.encode(ptiles)` which is the variational parameters
-                in matrix form. Has size `n_ptiles * n_bands`.
-
-        Returns:
-            A tensor of shape `n_ptiles` with the maximum number of sources in each tile.
-        """
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params)
-        return torch.argmax(log_probs_n_sources_per_tile, dim=1)
 
     @property
     def variational_params(self):
