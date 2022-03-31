@@ -3,10 +3,10 @@ from pathlib import Path
 import galsim
 import torch
 from astropy.table import Table
-from hydra.utils import instantiate
 
 from bliss import reporting
 from bliss.catalog import FullCatalog
+from bliss.datasets.galsim_galaxies import load_psf_from_file
 
 
 def test_scene_metrics():
@@ -43,11 +43,11 @@ def test_coadd(devices, get_sdss_galaxies_config):
 
     # get psf
     cfg = get_sdss_galaxies_config({}, devices)
-    ds = instantiate(cfg.datasets.sdss_galaxies)
-    psf = ds.psf
+    data_path = Path(cfg.paths.data)
+    psf = load_psf_from_file(data_path / "psField-000094-1-0012-PSF-image.npy", 0.396)
 
     # read file and get flux / hlr
-    coadd_cat_file = Path(cfg.paths.data).joinpath("coadd_catalog_94_1_12.fits")
+    coadd_cat_file = data_path / "coadd_catalog_94_1_12.fits"
     coadd_cat = Table.read(coadd_cat_file)
     coadd_cat.remove_column("hlr")
     reporting.get_flux_coadd(coadd_cat[:5])
