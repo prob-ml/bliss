@@ -3,7 +3,7 @@ from typing import Dict, Optional, Union
 import torch
 from einops import rearrange
 from torch import Tensor, nn
-from torch.distributions import categorical, Poisson
+from torch.distributions import Poisson, categorical
 from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
@@ -58,6 +58,7 @@ class LocationEncoder(nn.Module):
 
         Args:
             input_transform: Class which determines how input image and bg are transformed.
+            mean_detections: Poisson rate of detections in a single tile.
             max_detections: Number of maximum detections in a single tile.
             n_bands: number of bands
             tile_slen: dimension of full image, we assume its square for now

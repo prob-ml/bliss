@@ -48,6 +48,8 @@ class Encoder(nn.Module):
                 returns a classification between stars and galaxies. Defaults to None.
             galaxy_encoder: Module that takes padded tiles and locations and returns the variational
                 distribution of the latent variable determining the galaxy shape. Defaults to None.
+            eval_mean_detections: Optional. Mean number of sources in each tile for test-time image.
+                If provided, probabilities in location_encoder are adjusted.
         """
         super().__init__()
         self._dummy_param = nn.Parameter(torch.empty(0))
