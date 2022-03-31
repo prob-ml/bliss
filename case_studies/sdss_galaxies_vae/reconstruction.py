@@ -71,7 +71,6 @@ def reconstruct(cfg):
             + map_recon["star_bools"] * map_recon["fluxes"]
         )
         map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
-        map_recon.plocs = map_recon.plocs - 0.5
 
         tile_map_recon["fluxes"] = (
             tile_map_recon["galaxy_bools"] * tile_map_recon["galaxy_fluxes"]
@@ -272,7 +271,7 @@ def create_figure(
         reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
     if coadd_objects is not None:
-        locs_true = coadd_objects.plocs
+        locs_true = coadd_objects.plocs - 0.5
         true_galaxy_bools = coadd_objects["galaxy_bools"]
         locs_galaxies_true = locs_true[true_galaxy_bools.squeeze(-1) > 0.5]
         locs_stars_true = locs_true[true_galaxy_bools.squeeze(-1) < 0.5]
@@ -330,7 +329,7 @@ def create_figure(
                 )
 
     if map_recon is not None:
-        locs_pred = map_recon.plocs[0]
+        locs_pred = map_recon.plocs[0] - 0.5
         star_bools = map_recon["star_bools"][0]
         galaxy_bools = map_recon["galaxy_bools"][0]
         locs_galaxies = locs_pred[galaxy_bools[:, 0] > 0.5, :]

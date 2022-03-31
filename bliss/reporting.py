@@ -323,7 +323,9 @@ class CoaddFullCatalog(FullCatalog):
         data = {}
         h = torch.from_numpy(np.array(h).astype(np.float32)[keep])
         w = torch.from_numpy(np.array(w).astype(np.float32)[keep])
-        data["plocs"] = torch.stack((h - hlim[0], w - wlim[0]), dim=1).unsqueeze(0)
+
+        # shift by +0.5 so it is consistent with BLISS parameters.
+        data["plocs"] = torch.stack((h - hlim[0], w - wlim[0]), dim=1).unsqueeze(0) + 0.5
         data["n_sources"] = torch.tensor(data["plocs"].shape[1]).reshape(1)
 
         for bliss_name, coadd_name in cls.coadd_names.items():
