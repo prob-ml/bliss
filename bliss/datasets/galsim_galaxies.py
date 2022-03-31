@@ -171,6 +171,19 @@ class GalsimGalaxyPrior:
         self.a_scale = a_scale
         self.a_bulge_disk_ratio = a_bulge_disk_ratio
 
+        if self.a_sample == "uniform":
+            assert self.min_a_d is not None
+            assert self.max_a_d is not None
+            assert self.min_a_b is not None
+            assert self.max_a_b is not None
+        elif self.a_sample == "gamma":
+            assert self.a_concentration is not None
+            assert self.a_loc is not None
+            assert self.a_scale is not None
+            assert self.a_bulge_disk_ratio is not None
+        else:
+            raise NotImplementedError()
+
     def sample(self, total_latent, device):
         # create galaxy as mixture of Exponential + DeVacauleurs
         if self.flux_sample == "uniform":
