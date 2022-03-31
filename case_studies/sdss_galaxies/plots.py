@@ -441,8 +441,6 @@ class DetectionClassificationFigures(BlissFigures):
         h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
         coadd_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
-        # need to adjust by bp since relative to h = w = bp.
-        coadd_params.plocs += bp - 0.5
 
         _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder,
@@ -455,7 +453,6 @@ class DetectionClassificationFigures(BlissFigures):
             device=device,
         )
         est_params = tile_est_params.to_full_params()
-        est_params.plocs += bp - 0.5
         est_params["fluxes"] = (
             est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
             + est_params["star_bools"] * est_params["fluxes"]
@@ -595,7 +592,6 @@ class SDSSReconstructionFigures(BlissFigures):
             w_end = w + scene_size
             true = frame.image[:, :, h:h_end, w:w_end]
             coadd_params = frame.get_catalog((h, h_end), (w, w_end))
-            coadd_params.plocs -= 0.5
 
             recon, tile_map_recon = reconstruct_scene_at_coordinates(
                 encoder,
@@ -610,7 +606,6 @@ class SDSSReconstructionFigures(BlissFigures):
             resid = (true - recon) / recon.sqrt()
 
             recon_map = tile_map_recon.to_full_params()
-            recon_map.plocs -= 0.5
 
             true = true[0, 0].cpu().numpy()
             recon = recon[0, 0].cpu().numpy()
