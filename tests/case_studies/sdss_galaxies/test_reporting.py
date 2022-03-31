@@ -7,6 +7,7 @@ from hydra.utils import instantiate
 
 from bliss import reporting
 from bliss.catalog import FullCatalog
+from bliss.datasets.galsim_galaxies import load_psf_from_file
 
 
 def test_scene_metrics():
@@ -43,8 +44,7 @@ def test_coadd(devices, get_sdss_galaxies_config):
 
     # get psf
     cfg = get_sdss_galaxies_config({}, devices)
-    ds = instantiate(cfg.datasets.sdss_galaxies)
-    psf = ds.psf
+    psf = load_psf_from_file(cfg.paths.data + "/psField-000094-1-0012-PSF-image.npy", 0.396)
 
     # read file and get flux / hlr
     coadd_cat_file = Path(cfg.paths.data).joinpath("coadd_catalog_94_1_12.fits")
