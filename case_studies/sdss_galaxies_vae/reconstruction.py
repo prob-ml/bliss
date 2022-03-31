@@ -37,7 +37,10 @@ def reconstruct(cfg):
     frame: Union[SDSSFrame, SimulatedFrame] = instantiate(cfg.reconstruct.frame)
     device = torch.device(cfg.reconstruct.device)
     dec, encoder, prior = load_models(cfg, device)
-    photo_catalog = PhotoFullCatalog.from_file(**cfg.reconstruct.photo_catalog)
+    if cfg.reconstruct.photo_catalog is not None:
+        photo_catalog = PhotoFullCatalog.from_file(**cfg.reconstruct.photo_catalog)
+    else:
+        photo_catalog = None
 
     for scene_name, scene_coords in cfg.reconstruct.scenes.items():
         bp = encoder.border_padding
@@ -80,8 +83,10 @@ def reconstruct(cfg):
         tile_map_recon["mags"] = convert_flux_to_mag(tile_map_recon["fluxes"])
         scene_metrics_by_mag = {}
         ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
-        photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
-        catalogs = {"bliss": map_recon, "photo": photo_catalog_at_hw}
+        catalogs = {"bliss": map_recon}
+        if photo_catalog is not None:
+            photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
+            catalogs["photo"] = photo_catalog_at_hw
         for catalog_name, catalog in catalogs.items():
             scene_metrics_by_mag[catalog_name] = {}
             for mag in list(range(cfg.reconstruct.mag_min, cfg.reconstruct.mag_max + 1)) + [
