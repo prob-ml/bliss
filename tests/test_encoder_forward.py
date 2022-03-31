@@ -154,11 +154,6 @@ class TestSourceEncoder:
                         ]
                     )
 
-                    assert torch.all(
-                        pred["n_source_log_probs"][i].flatten()
-                        == star_encoder.log_softmax(h_out[:, prob_n_source_indx_mat])[i]
-                    )
-
     def test_sample(self, devices):
         device = devices.device
 

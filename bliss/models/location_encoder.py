@@ -159,7 +159,7 @@ class LocationEncoder(nn.Module):
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        log_probs_n_sources_per_tile = self._get_logprob_n_from_var_params(var_params_flat)
+        log_probs_n_sources_per_tile = self.get_n_source_log_prob(var_params_flat)
 
         # sample number of sources.
         # tile_n_sources shape = (n_samples x n_ptiles)
@@ -216,15 +216,14 @@ class LocationEncoder(nn.Module):
             `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        log_probs_n_sources = self._get_logprob_n_from_var_params(var_params_flat)
-        map_n_sources_logprob, map_n_sources = torch.max(log_probs_n_sources, dim=1)
+        n_source_log_probs = self.get_n_source_log_prob(var_params_flat)
+        map_n_sources = torch.argmax(n_source_log_probs, dim=1)
 
         pred = self.encode_for_n_sources(var_params_flat, map_n_sources)
 
         # map_n_sources_per_tile = torch.argmax(pred["n_source_log_probs"], dim=1)
         is_on_array = get_is_on_from_n_sources(map_n_sources, self.max_detections)
         is_on_array = is_on_array.unsqueeze(-1).float()
-        # tile_n_sources_log_prob, _ = torch.max(pred["n_source_log_probs"], dim=1)
 
         # set sd so we return map estimates.
         # first locs
@@ -243,11 +242,11 @@ class LocationEncoder(nn.Module):
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
             "n_sources": map_n_sources,
-            "n_sources_log_prob": map_n_sources_logprob,
+            "n_source_log_probs": n_source_log_probs[:, 1:].unsqueeze(-1),
         }
         max_a_post = {}
         for k, v in max_a_post_flat.items():
-            if k in {"n_sources", "n_sources_log_prob"}:
+            if k in {"n_sources"}:
                 pattern = "(b nth ntw) -> b nth ntw"
             else:
                 pattern = "(b nth ntw) s k -> b nth ntw s k"
@@ -255,6 +254,21 @@ class LocationEncoder(nn.Module):
                 v, pattern, b=var_params.shape[0], nth=var_params.shape[1], ntw=var_params.shape[2]
             )
         return TileCatalog(self.tile_slen, max_a_post)
+
+    def get_n_source_log_prob(self, var_params_flat):
+        """Obtains log probability of number of n_sources.
+
+        For example, if max_detections = 3, then Tensor will be (n_tiles x 3) since will return
+        probability of having 0,1,2 stars.
+
+        Arguments:
+            var_params_flat: Variational parameters
+
+        Returns:
+            Log-probability of number of sources.
+        """
+        free_probs = var_params_flat[:, self.prob_n_source_indx]
+        return self.log_softmax(free_probs)
 
     def encode_for_n_sources(self, var_params_flat, tile_n_sources):
         """Get variational parameters conditioned on number of sources in tile.
@@ -341,21 +355,6 @@ class LocationEncoder(nn.Module):
         # return shape = (n_samples x n_ptiles x max_detections x param_dim)
         assert tile_is_on_array.shape[-1] == 1
         return torch.normal(mean, sd) * tile_is_on_array
-
-    def _get_logprob_n_from_var_params(self, h):
-        """Obtains log probability of number of n_sources.
-
-        For example, if max_detections = 3, then Tensor will be (n_tiles x 3) since will return
-        probability of having 0,1,2 stars.
-
-        Arguments:
-            h: Variational parameters
-
-        Returns:
-            Log-probability of number of sources.
-        """
-        free_probs = h[:, self.prob_n_source_indx]
-        return self.log_softmax(free_probs)
 
     def _get_hidden_indices(self):
         """Setup the indices corresponding to entries in h, cached since same for all h."""

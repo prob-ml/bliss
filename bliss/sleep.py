@@ -238,12 +238,10 @@ class SleepPhase(pl.LightningModule):
         # extract image tiles
         var_params = self.image_encoder.encode(images, background)
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
+        n_source_log_probs = self.image_encoder.get_n_source_log_prob(var_params_flat)
         pred = self.image_encoder.encode_for_n_sources(var_params_flat, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
-        n_source_log_probs = rearrange(
-            pred["n_source_log_probs"], "nptiles s -> nptiles s", s=max_sources + 1
-        )
         nllloss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
         counter_loss = nllloss(n_source_log_probs, true_tile_n_sources)
 

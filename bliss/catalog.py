@@ -10,6 +10,7 @@ from torch.nn import functional as F
 
 class TileCatalog(UserDict):
     allowed_params = {
+        "n_source_log_probs",
         "fluxes",
         "log_fluxes",
         "mags",
@@ -29,8 +30,6 @@ class TileCatalog(UserDict):
         self.tile_slen = tile_slen
         self.locs = d.pop("locs")
         self.n_sources = d.pop("n_sources")
-        self.n_sources_log_prob = d.pop("n_sources_log_prob", None)
-
         self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
         assert self.n_sources.shape == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
         super().__init__(**d)
@@ -165,8 +164,6 @@ class TileCatalog(UserDict):
         out = {}
         out["locs"] = self.locs
         out["n_sources"] = self.n_sources
-        if self.n_sources_log_prob is not None:
-            out["n_sources_log_prob"] = self.n_sources_log_prob
         for k, v in self.items():
             out[k] = v
         return out
