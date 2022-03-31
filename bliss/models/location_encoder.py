@@ -1,9 +1,9 @@
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import torch
 from einops import rearrange
 from torch import Tensor, nn
-from torch.distributions import categorical
+from torch.distributions import categorical, Poisson
 from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
@@ -44,6 +44,7 @@ class LocationEncoder(nn.Module):
     def __init__(
         self,
         input_transform: Union[LogBackgroundTransform, ConcatBackgroundTransform],
+        mean_detections: float,
         max_detections: int,
         n_bands: int,
         tile_slen: int,
@@ -70,7 +71,7 @@ class LocationEncoder(nn.Module):
         super().__init__()
 
         self.input_transform = input_transform
-
+        self.mean_detections = mean_detections
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.tile_slen = tile_slen
@@ -145,7 +146,9 @@ class LocationEncoder(nn.Module):
             ntw=image_ptiles.shape[2],
         )
 
-    def sample(self, var_params: Tensor, n_samples: int) -> Dict[str, Tensor]:
+    def sample(
+        self, var_params: Tensor, n_samples: int, eval_mean_detections: Optional[float] = None
+    ) -> Dict[str, Tensor]:
         """Sample from encoded variational distribution.
 
         Args:
@@ -159,7 +162,9 @@ class LocationEncoder(nn.Module):
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        log_probs_n_sources_per_tile = self.get_n_source_log_prob(var_params_flat)
+        log_probs_n_sources_per_tile = self.get_n_source_log_prob(
+            var_params_flat, eval_mean_detections=eval_mean_detections
+        )
 
         # sample number of sources.
         # tile_n_sources shape = (n_samples x n_ptiles)
@@ -202,7 +207,9 @@ class LocationEncoder(nn.Module):
 
         return sample
 
-    def max_a_post(self, var_params: Tensor) -> TileCatalog:
+    def max_a_post(
+        self, var_params: Tensor, eval_mean_detections: Optional[float] = None
+    ) -> TileCatalog:
         """Derive maximum a posteriori from variational parameters.
 
         Args:
@@ -216,7 +223,9 @@ class LocationEncoder(nn.Module):
             `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        n_source_log_probs = self.get_n_source_log_prob(var_params_flat)
+        n_source_log_probs = self.get_n_source_log_prob(
+            var_params_flat, eval_mean_detections=eval_mean_detections
+        )
         map_n_sources = torch.argmax(n_source_log_probs, dim=1)
 
         pred = self.encode_for_n_sources(var_params_flat, map_n_sources)
@@ -254,7 +263,9 @@ class LocationEncoder(nn.Module):
             )
         return TileCatalog(self.tile_slen, max_a_post)
 
-    def get_n_source_log_prob(self, var_params_flat):
+    def get_n_source_log_prob(
+        self, var_params_flat: Tensor, eval_mean_detections: Optional[float] = None
+    ):
         """Obtains log probability of number of n_sources.
 
         For example, if max_detections = 3, then Tensor will be (n_tiles x 3) since will return
@@ -267,7 +278,20 @@ class LocationEncoder(nn.Module):
             Log-probability of number of sources.
         """
         free_probs = var_params_flat[:, self.prob_n_source_indx]
+        if eval_mean_detections is not None:
+            train_log_probs = self.get_n_source_prior_log_prob(self.mean_detections)
+            eval_log_probs = self.get_n_source_prior_log_prob(eval_mean_detections)
+            adj = eval_log_probs - train_log_probs
+            adj = rearrange(adj, "ns -> 1 ns")
+            adj = adj.to(free_probs.device)
+            free_probs += adj
         return self.log_softmax(free_probs)
+
+    def get_n_source_prior_log_prob(self, detection_rate):
+        possible_n_sources = torch.tensor(range(self.max_detections))
+        log_probs = Poisson(torch.tensor(detection_rate)).log_prob(possible_n_sources)
+        log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
+        return torch.cat((log_probs, log_probs_last.reshape(1)))
 
     def encode_for_n_sources(self, var_params_flat, tile_n_sources):
         """Get variational parameters conditioned on number of sources in tile.
