@@ -106,51 +106,114 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 class SDSSGalaxies(pl.LightningDataModule, Dataset):
     def __init__(
         self,
+        prior,
+        decoder,
         num_workers,
         batch_size,
         n_batches,
-        n_bands,
-        slen,
-        min_flux,
-        max_flux,
-        min_a_d,
-        max_a_d,
-        min_a_b,
-        max_a_b,
-        background,
-        pixel_scale,  # SDSS
-        flux_sample,
-        psf_image_file: str,
-        alpha: Optional[float] = None,
     ):
         super().__init__()
-        assert n_bands == 1, "Only 1 band is supported"
-
+        self.prior = prior
+        self.decoder = decoder
         self.n_batches = n_batches
         self.batch_size = batch_size
         self.num_workers = num_workers
 
-        self.n_bands = 1
-        self.slen = slen
-        self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
-        self.background[...] = background
-        self.pixel_scale = pixel_scale
+    def __getitem__(self, idx):
+        galaxy_params = self.prior.sample(1, "cpu")
+        return self.decoder.render_galaxy(galaxy_params[0])
 
+    def __len__(self):
+        return self.batch_size * self.n_batches
+
+    def train_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def val_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def test_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+
+class GalsimGalaxyPrior:
+    def __init__(
+        self,
+        flux_sample: str,
+        min_flux: float,
+        max_flux: float,
+        a_sample: str,
+        alpha: Optional[float] = None,
+        min_a_d: Optional[float] = None,
+        max_a_d: Optional[float] = None,
+        min_a_b: Optional[float] = None,
+        max_a_b: Optional[float] = None,
+        a_concentration: Optional[float] = None,
+        a_loc: Optional[float] = None,
+        a_scale: Optional[float] = None,
+        a_bulge_disk_ratio: Optional[float] = None,
+    ) -> None:
+        self.flux_sample = flux_sample
         self.min_flux = min_flux
         self.max_flux = max_flux
         self.alpha = alpha
+        if self.flux_sample == "pareto":
+            assert self.alpha is not None
 
+        self.a_sample = a_sample
         self.min_a_d = min_a_d
         self.max_a_d = max_a_d
         self.min_a_b = min_a_b
         self.max_a_b = max_a_b
 
-        self.flux_sample = flux_sample
+        self.a_concentration = a_concentration
+        self.a_loc = a_loc
+        self.a_scale = a_scale
+        self.a_bulge_disk_ratio = a_bulge_disk_ratio
 
-        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
+        if self.a_sample == "uniform":
+            assert self.min_a_d is not None
+            assert self.max_a_d is not None
+            assert self.min_a_b is not None
+            assert self.max_a_b is not None
+        elif self.a_sample == "gamma":
+            assert self.a_concentration is not None
+            assert self.a_loc is not None
+            assert self.a_scale is not None
+            assert self.a_bulge_disk_ratio is not None
+        else:
+            raise NotImplementedError()
 
-        if self.flux_sample == "pareto":
-            assert self.alpha is not None
+    def sample(self, total_latent, device):
+        # create galaxy as mixture of Exponential + DeVacauleurs
+        if self.flux_sample == "uniform":
+            total_flux = self._uniform(self.min_flux, self.max_flux, n_samples=total_latent)
+        elif self.flux_sample == "pareto":
+            total_flux = self._draw_pareto_flux(n_samples=total_latent)
+        else:
+            raise NotImplementedError()
+        disk_frac = self._uniform(0, 1, n_samples=total_latent)
+        beta_radians = self._uniform(0, 2 * np.pi, n_samples=total_latent)
+        disk_q = self._uniform(0, 1, n_samples=total_latent)
+        bulge_q = self._uniform(0, 1, n_samples=total_latent)
+        if self.a_sample == "uniform":
+            disk_a = self._uniform(self.min_a_d, self.max_a_d, n_samples=total_latent)
+            bulge_a = self._uniform(self.min_a_b, self.max_a_b, n_samples=total_latent)
+        elif self.a_sample == "gamma":
+            disk_a = self._gamma(
+                self.a_concentration, self.a_loc, self.a_scale, n_samples=total_latent
+            )
+            bulge_a = self._gamma(
+                self.a_concentration,
+                self.a_loc / self.a_bulge_disk_ratio,
+                self.a_scale / self.a_bulge_disk_ratio,
+                n_samples=total_latent,
+            )
+        else:
+            raise NotImplementedError()
+        return torch.stack(
+            [total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a], dim=1
+        )
 
     @staticmethod
     def _uniform(a, b, n_samples=1) -> Tensor:
@@ -163,24 +226,36 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         uniform_samples = torch.rand(n_samples) * u_max
         return self.min_flux / (1.0 - uniform_samples) ** (1 / self.alpha)
 
-    def draw_galaxy_params(self, n_samples=1):
-        # create galaxy as mixture of Exponential + DeVacauleurs
-        if self.flux_sample == "uniform":
-            total_flux = self._uniform(self.min_flux, self.max_flux, n_samples=n_samples)
-        elif self.flux_sample == "pareto":
-            total_flux = self._draw_pareto_flux(n_samples=n_samples)
-        else:
-            raise NotImplementedError()
-        disk_frac = self._uniform(0, 1, n_samples=n_samples)
-        beta_radians = self._uniform(0, 2 * np.pi, n_samples=n_samples)
-        disk_q = self._uniform(0, 1, n_samples=n_samples)
-        disk_a = self._uniform(self.min_a_d, self.max_a_d, n_samples=n_samples)
+    @staticmethod
+    def _gamma(concentration, loc, scale, n_samples=1):
+        x = torch.distributions.Gamma(concentration, rate=1.0).sample((n_samples,))
+        return x * scale + loc
 
-        bulge_q = self._uniform(0, 1, n_samples=n_samples)
-        bulge_a = self._uniform(self.min_a_b, self.max_a_b, n_samples=n_samples)
-        return torch.stack(
-            [total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a], dim=1
-        )
+
+class GalsimGalaxyDecoder:
+    def __init__(
+        self,
+        slen,
+        n_bands,
+        background,
+        pixel_scale,
+        psf_image_file: str,
+    ) -> None:
+
+        self.slen = slen
+        assert n_bands == 1, "Only 1 band is supported"
+        self.n_bands = 1
+        self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
+        self.background[...] = background
+        self.pixel_scale = pixel_scale
+        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
+
+    def __call__(self, z: Tensor):
+        images = []
+        for latent in z:
+            image = self.render_galaxy(latent)["noiseless"]
+            images.append(image)
+        return torch.stack(images, dim=0).to(z.device)
 
     def render_galaxy(self, galaxy_params):
         if isinstance(galaxy_params, Tensor):
@@ -219,39 +294,3 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         image += self.background.mean()
         image += image.sqrt() * torch.randn(*image.shape)
         return {"images": image, "background": self.background, "noiseless": noiseless}
-
-    def __getitem__(self, idx):
-        galaxy_params = self.draw_galaxy_params()
-        return self.render_galaxy(galaxy_params[0])
-
-    def __len__(self):
-        return self.batch_size * self.n_batches
-
-    def train_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-    def val_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-    def test_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-
-class GalsimGalaxyPrior:
-    def __init__(self, sdss_galaxies: SDSSGalaxies) -> None:
-        self.sdss_galaxies = sdss_galaxies
-
-    def sample(self, total_latent, device):
-        return self.sdss_galaxies.draw_galaxy_params(n_samples=total_latent)
-
-
-class GalsimGalaxyDecoder:
-    def __init__(self, sdss_galaxies: SDSSGalaxies) -> None:
-        self.sdss_galaxies = sdss_galaxies
-
-    def __call__(self, z: Tensor):
-        images = []
-        for latent in z:
-            image = self.sdss_galaxies.render_galaxy(latent)["noiseless"]
-            images.append(image)
-        return torch.stack(images, dim=0).to(z.device)
