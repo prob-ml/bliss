@@ -225,7 +225,7 @@ class GalsimGalaxyDecoder:
         slen,
         n_bands,
         background,
-        pixel_scale,  # SDSS
+        pixel_scale
         psf_image_file: str,
     ) -> None:
 
