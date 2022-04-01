@@ -18,7 +18,7 @@ from torchmetrics import Metric
 
 from bliss.catalog import FullCatalog
 from bliss.datasets.galsim_galaxies import load_psf_from_file
-from bliss.datasets.sdss import convert_flux_to_mag, convert_mag_to_flux
+from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
 
 
 class DetectionMetrics(Metric):
@@ -334,19 +334,6 @@ class CoaddFullCatalog(FullCatalog):
 
         data["galaxy_bools"] = data["galaxy_bools"].bool()
         return cls(height, width, data)
-
-
-def column_to_tensor(table, colname):
-    dtypes = {
-        np.dtype(">i8"): int,
-        np.dtype("bool"): bool,
-        np.dtype(">f8"): np.float32,
-        np.dtype("float64"): np.dtype("float64"),
-    }
-    x = np.array(table[colname])
-    dtype = dtypes[x.dtype]
-    x = x.astype(dtype)
-    return torch.from_numpy(x)
 
 
 def get_flux_coadd(coadd_cat, nelec_per_nmgy=987.31, band="r"):

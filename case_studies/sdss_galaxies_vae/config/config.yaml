@@ -224,6 +224,7 @@ reconstruct:
     slen: 300
     mag_min: 18
     mag_max: 23
+    photo_catalog:
     eval_mean_detections:
     frame:
         # _target_: bliss.inference.SDSSFrame

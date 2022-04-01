@@ -25,6 +25,11 @@ def test_reconstruct_sdss(vae_setup, reconstruct_overrides):
         "+reconstruct.scenes.sdss_recon1_test.h": 200 + 50,
         "+reconstruct.scenes.sdss_recon1_test.w": 1700 + 150,
         "+reconstruct.scenes.sdss_recon1_test.size": 100,
+        "+reconstruct.photo_catalog.sdss_path": "${paths.sdss}",
+        "+reconstruct.photo_catalog.run": 94,
+        "+reconstruct.photo_catalog.camcol": 1,
+        "+reconstruct.photo_catalog.field": 12,
+        "+reconstruct.photo_catalog.band": 2,
     }
 
     cfg = vae_setup.get_cfg(overrides)

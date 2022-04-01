@@ -1,6 +1,12 @@
 outdir: ${paths.output}/sdss_figures
 real: false
 eval_mean_detections: 0.004
+photo_catalog:
+    sdss_path: ${paths.sdss}
+    run: 94
+    camcol: 1
+    field: 12
+    band: 2
 frame:
     _target_: reconstruction.SDSSFrame
     sdss_dir: ${paths.sdss}
