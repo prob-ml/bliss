@@ -15,7 +15,7 @@ from torch.distributions import Normal
 
 from bliss import reporting
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
+from bliss.datasets.sdss import PhotoFullCatalog, SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.inference import (
     SDSSFrame,
@@ -37,6 +37,10 @@ def reconstruct(cfg):
     frame: Union[SDSSFrame, SimulatedFrame] = instantiate(cfg.reconstruct.frame)
     device = torch.device(cfg.reconstruct.device)
     dec, encoder, prior = load_models(cfg, device)
+    if cfg.reconstruct.photo_catalog is not None:
+        photo_catalog = PhotoFullCatalog.from_file(**cfg.reconstruct.photo_catalog)
+    else:
+        photo_catalog = None
 
     for scene_name, scene_coords in cfg.reconstruct.scenes.items():
         bp = encoder.border_padding
@@ -79,35 +83,48 @@ def reconstruct(cfg):
         tile_map_recon["mags"] = convert_flux_to_mag(tile_map_recon["fluxes"])
         scene_metrics_by_mag = {}
         ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
-        for mag in list(range(cfg.reconstruct.mag_min, cfg.reconstruct.mag_max + 1)) + ["overall"]:
-            if mag != "overall":
-                mag_min = float(mag) - 1.0
-                mag_max = float(mag)
-            else:
-                mag_min = -np.inf
-                mag_max = float(cfg.reconstruct.mag_max)
-            scene_metrics_map = reporting.scene_metrics(
-                ground_truth_catalog,
-                map_recon,
-                mag_min=mag_min,
-                mag_max=mag_max,
-                mag_slack=1.0,
-                mag_slack_accuracy=1.0,
-            )
-            scene_metrics_by_mag[mag] = scene_metrics_map
-            conf_matrix = scene_metrics_map["conf_matrix"]
-            scene_metrics_by_mag[mag]["galaxy_accuracy"] = conf_matrix[0, 0] / (
-                conf_matrix[0, 0] + conf_matrix[0, 1]
-            )
-            scene_metrics_by_mag[mag]["star_accuracy"] = conf_matrix[1, 1] / (
-                conf_matrix[1, 1] + conf_matrix[1, 0]
-            )
-            scene_metrics_by_mag[mag].update(
-                expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
-            )
-            if mag == "overall":
-                scene_metrics_by_mag[mag]["expected_recall"] = expected_recall(tile_map_recon)
-                scene_metrics_by_mag[mag]["expected_precision"] = expected_precision(tile_map_recon)
+        catalogs = {"bliss": map_recon}
+        if photo_catalog is not None:
+            photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
+            catalogs["photo"] = photo_catalog_at_hw
+        for catalog_name, catalog in catalogs.items():
+            scene_metrics_by_mag[catalog_name] = {}
+            for mag in list(range(cfg.reconstruct.mag_min, cfg.reconstruct.mag_max + 1)) + [
+                "overall"
+            ]:
+                if mag != "overall":
+                    mag_min = float(mag) - 1.0
+                    mag_max = float(mag)
+                else:
+                    mag_min = -np.inf
+                    mag_max = float(cfg.reconstruct.mag_max)
+                scene_metrics_map = reporting.scene_metrics(
+                    ground_truth_catalog,
+                    catalog,
+                    mag_min=mag_min,
+                    mag_max=mag_max,
+                    mag_slack=1.0,
+                    mag_slack_accuracy=1.0,
+                )
+                scene_metrics_by_mag[catalog_name][mag] = scene_metrics_map
+                conf_matrix = scene_metrics_map["conf_matrix"]
+                scene_metrics_by_mag[catalog_name][mag]["galaxy_accuracy"] = conf_matrix[0, 0] / (
+                    conf_matrix[0, 0] + conf_matrix[0, 1]
+                )
+                scene_metrics_by_mag[catalog_name][mag]["star_accuracy"] = conf_matrix[1, 1] / (
+                    conf_matrix[1, 1] + conf_matrix[1, 0]
+                )
+                if catalog_name == "bliss":
+                    scene_metrics_by_mag[catalog_name][mag].update(
+                        expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
+                    )
+                    if mag == "overall":
+                        scene_metrics_by_mag[catalog_name][mag][
+                            "expected_recall"
+                        ] = expected_recall(tile_map_recon)
+                        scene_metrics_by_mag[catalog_name][mag][
+                            "expected_precision"
+                        ] = expected_precision(tile_map_recon)
         if outdir is not None:
             fig = create_figure(
                 true[0, 0],
@@ -402,19 +419,35 @@ def create_figure(
     return fig
 
 
+def print_metrics_to_file(outdir):
+    outdir = Path(outdir)
+    out = collect_metrics(outdir)
+    with outdir.joinpath("results.txt").open("w") as fp:
+        for folder, folder_results in out.items():
+            fp.write(str(folder) + "\n")
+            for catalog, catalog_results in folder_results.items():
+                fp.write(catalog + "\n")
+                for metric, metric_results in catalog_results.items():
+                    fp.write(metric + "\n")
+                    fp.write(str(metric_results) + "\n")
+
+
 def collect_metrics(outdir):
     out = {}
     for run in Path(outdir).iterdir():
-        results = torch.load(run / "sdss_recon_all.pt")
-        out[run] = {
-            "detections": create_scene_metrics_table(results)[0],
-            "accuracy": create_scene_accuracy_table(results)[0],
-        }
+        if run.is_dir():
+            results = torch.load(run / "sdss_recon_all.pt")
+            out[run] = {}
+            for catalog in results:
+                out[run][catalog] = {
+                    "detections": create_scene_metrics_table(results[catalog])[0],
+                    "accuracy": create_scene_accuracy_table(results[catalog]),
+                }
     return out
 
 
 def create_scene_accuracy_table(scene_metrics_by_mag):
-    tex_lines = []
+    # tex_lines = []
     df = defaultdict(dict)
     cols = (
         "class_acc",
@@ -428,12 +461,14 @@ def create_scene_accuracy_table(scene_metrics_by_mag):
         "n_galaxies",
     )
     for k, v in scene_metrics_by_mag.items():
-        line = f"{k} & {v['class_acc'].item():.2f} ({v['expected_accuracy'].item():.2f}) & {v['galaxy_accuracy']:.2f} ({v['expected_galaxy_accuracy']:.2f}) & {v['star_accuracy']:.2f} ({v['expected_star_accuracy']:.2f})\\\\\n"
+        # line = f"{k} & {v['class_acc'].item():.2f} ({v['expected_accuracy'].item():.2f}) & {v['galaxy_accuracy']:.2f} ({v['expected_galaxy_accuracy']:.2f}) & {v['star_accuracy']:.2f} ({v['expected_star_accuracy']:.2f})\\\\\n"
         for metric in cols:
-            df[metric][k] = v[metric] if not isinstance(v[metric], Tensor) else v[metric].item()
-        tex_lines.append(line)
+            if metric in v:
+                df[metric][k] = v[metric] if not isinstance(v[metric], Tensor) else v[metric].item()
+        # tex_lines.append(line)
     df = pd.DataFrame(df)
-    return df, tex_lines
+    # return df, tex_lines
+    return df
 
 
 def create_scene_metrics_table(scene_metrics_by_mag):
