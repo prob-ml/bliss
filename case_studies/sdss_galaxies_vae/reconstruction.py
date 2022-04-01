@@ -419,16 +419,30 @@ def create_figure(
     return fig
 
 
+def print_metrics_to_file(outdir):
+    outdir = Path(outdir)
+    out = collect_metrics(outdir)
+    with outdir.joinpath("results.txt").open("w") as fp:
+        for folder, folder_results in out.items():
+            fp.write(str(folder) + "\n")
+            for catalog, catalog_results in folder_results.items():
+                fp.write(catalog + "\n")
+                for metric, metric_results in catalog_results.items():
+                    fp.write(metric + "\n")
+                    fp.write(str(metric_results) + "\n")
+
+
 def collect_metrics(outdir):
     out = {}
     for run in Path(outdir).iterdir():
-        results = torch.load(run / "sdss_recon_all.pt")
-        out[run] = {}
-        for catalog in results:
-            out[run][catalog] = {
-                "detections": create_scene_metrics_table(results[catalog])[0],
-                "accuracy": create_scene_accuracy_table(results[catalog]),
-            }
+        if run.is_dir():
+            results = torch.load(run / "sdss_recon_all.pt")
+            out[run] = {}
+            for catalog in results:
+                out[run][catalog] = {
+                    "detections": create_scene_metrics_table(results[catalog])[0],
+                    "accuracy": create_scene_accuracy_table(results[catalog]),
+                }
     return out
 
 
