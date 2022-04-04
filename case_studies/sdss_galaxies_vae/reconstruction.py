@@ -117,6 +117,38 @@ def reconstruct(cfg):
                 scene_metrics_by_mag[catalog_name][mag]["star_accuracy"] = conf_matrix[1, 1] / (
                     conf_matrix[1, 1] + conf_matrix[1, 0]
                 )
+
+                def get_recalls_and_precisions(
+                    true_cat: FullCatalog,
+                    est_tile_cat: TileCatalog,
+                    mag_min=-np.inf,
+                    mag_max=np.inf,
+                ):
+                    thresholds = np.linspace(0.0, 1.0, 100)
+                    log_probs = rearrange(
+                        est_tile_cat["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw"
+                    )
+                    recalls = []
+                    precisions = []
+                    for threshold in thresholds:
+                        est_tile_cat.n_sources = log_probs >= np.log(threshold)
+                        full_cat = est_tile_cat.to_full_params()
+                        if full_cat.plocs.shape[1] == 0:
+                            recall = 0.0
+                            precision = 1.0
+                        else:
+                            mtrue, mest, dkeep, avg_distance = reporting.match_by_locs(
+                                true_cat.plocs[0], full_cat.plocs[0], 2.0
+                            )
+                            # scene_metrics = reporting.scene_metrics(true_cat, full_cat, mag_min=mag_min, mag_max=mag_max, mag_slack=np.inf)
+                            # recall = scene_metrics["recall"].item()
+                            # precision = scene_metrics["precision"].item()
+                            recall = dkeep.float().sum() / true_cat.plocs.shape[1]
+                            precision = dkeep.float().sum() / full_cat.plocs.shape[1]
+                        recalls.append(recall)
+                        precisions.append(precision)
+                    return np.array(recalls), np.array(precisions)
+
                 if catalog_name == "bliss":
                     scene_metrics_by_mag[catalog_name][mag].update(
                         expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
@@ -128,10 +160,15 @@ def reconstruct(cfg):
                         scene_metrics_by_mag[catalog_name][mag][
                             "expected_precision"
                         ] = expected_precision(tile_map_recon)
+                        recalls, precisions = get_recalls_and_precisions(
+                            ground_truth_catalog, tile_map_recon, mag_min=mag_min, mag_max=mag_max
+                        )
         if outdir is not None:
             # Expected precision lpot
-            fig_exp_precision = expected_precision_plot(tile_map_recon)
-            fig_exp_precision.savefig(outdir / (scene_name + "_expected_precision.png"), format="png")
+            fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
+            fig_exp_precision.savefig(
+                outdir / (scene_name + "_expected_precision.png"), format="png"
+            )
             fig = create_figure(
                 true[0, 0],
                 recon[0, 0],
@@ -518,6 +555,7 @@ def expected_recall(tile_map: TileCatalog):
     recall = prob_detected.sum() / (prob_detected.sum() + prob_not_detected.sum())
     return recall
 
+
 def expected_recall_for_threshold(tile_map: TileCatalog, threshold: float):
     prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
     is_on_array = prob_on >= threshold
@@ -534,6 +572,7 @@ def expected_precision(tile_map: TileCatalog):
     precision = prob_detected.sum() / is_on_array.sum()
     return precision
 
+
 def expected_precision_for_threshold(tile_map: TileCatalog, threshold: float):
     prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
     is_on_array = prob_on >= threshold
@@ -541,10 +580,11 @@ def expected_precision_for_threshold(tile_map: TileCatalog, threshold: float):
     precision = prob_detected.sum() / is_on_array.sum()
     return precision
 
-def expected_precision_plot(tile_map: TileCatalog):
+
+def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions):
     base_size = 8
-    figsize=(2 * base_size, 2 * base_size)
-    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=figsize)
+    figsize = (3 * base_size, 2 * base_size)
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=figsize)
     thresholds = np.linspace(0.0, 1.0, 100)
     precisions = []
     recalls = []
@@ -555,16 +595,18 @@ def expected_precision_plot(tile_map: TileCatalog):
         recalls.append(recall)
     precisions = np.array(precisions)
     recalls = np.array(recalls)
-    axes[0,0].scatter(thresholds, precisions)
-    #axes[0,0].xlabel("Threshold")
-    #axes[0,0].ylabel("Expected Precision")
-    axes[0,1].scatter(thresholds, recalls)
-    #axes[0,1].xlabel("Threshold")
-    #axes[0,1].ylabel("Expected Recall")
+    axes[0, 0].scatter(thresholds, precisions)
+    # axes[0,0].xlabel("Threshold")
+    # axes[0,0].ylabel("Expected Precision")
+    axes[0, 1].scatter(thresholds, recalls)
+    # axes[0,1].xlabel("Threshold")
+    # axes[0,1].ylabel("Expected Recall")
 
-    axes[1,0].scatter(precisions, recalls)
-    #axes[1,0].xlabel("Expected Precision")
-    #axes[1,0].ylabel("Expected Recall")
+    axes[1, 0].scatter(precisions, recalls)
+    # axes[1,0].xlabel("Expected Precision")
+    # axes[1,0].ylabel("Expected Recall")
+    axes[2, 0].scatter(precisions, true_precisions)
+    axes[2, 1].scatter(precisions, true_recalls)
     return fig
 
 
