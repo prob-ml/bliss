@@ -38,11 +38,11 @@ datasets:
             min_flux: 1e3
             max_flux: 1e6
             alpha: 0.55
-            a_sample: "uniform"
-            min_a_d: 0.8
-            max_a_d: 6.5
-            min_a_b: 0.8
-            max_a_b: 3.6 # from catalog with mag < 22.2 cut.
+            a_sample: "gamma"
+            a_concentration: 0.39330758068481686
+            a_loc: 0.8371888967872619
+            a_scale: 4.432725319432478
+            a_bulge_disk_ratio: 2.0
         decoder:
             _target_: bliss.datasets.galsim_galaxies.GalsimGalaxyDecoder
             background: 865
@@ -223,6 +223,7 @@ plots:
     overwrite: false
     simulated_sdss_individual_galaxies: ${paths.project}/models/simulated_sdss_individual_galaxies.pt
     sdss_pixel_scale: 0.396
+    eval_mean_detections: 0.004
     device: "cuda:0"
     coadd_cat: ${paths.data}/coadd_catalog_94_1_12.fits
     psf_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy

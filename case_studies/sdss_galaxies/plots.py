@@ -712,6 +712,8 @@ class SDSSReconstructionFigures(BlissFigures):
 
 def load_models(cfg, device):
     # load models required for SDSS reconstructions.
+    eval_mean_detections = cfg.plots.eval_mean_detections  # adjust probability of n_sources
+
     sleep = instantiate(cfg.models.sleep)
     sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
     location = sleep.image_encoder.to(device).eval()
@@ -725,7 +727,8 @@ def load_models(cfg, device):
     galaxy = galaxy.to(device).eval()
 
     decoder = sleep.image_decoder.to(device).eval()
-    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
+    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval(), eval_mean_detections)
+    encoder = encoder.to(device)
 
     return encoder, decoder
 
