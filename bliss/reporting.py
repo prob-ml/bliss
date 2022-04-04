@@ -184,6 +184,9 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     locs_err = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
     locs_err = reduce(locs_err, "i j k -> i j", "sum")
 
+    # Penalize all pairs which are greater than slack apart to favor valid matches.
+    locs_err = locs_err + (locs_err >= slack) * locs_err.max()
+
     # find minimal permutation and return matches
     row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
 
