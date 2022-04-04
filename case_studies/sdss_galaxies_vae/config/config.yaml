@@ -150,9 +150,9 @@ models:
         max_sources: 1
         mean_sources: 0.03
         min_sources: 0
-        f_min: 1e3
+        f_min: 622.0
         f_max: 1e6
-        alpha: 0.5
+        alpha: 0.43
         prob_galaxy: 0.7
         galaxy_prior: ${datasets.sdss_galaxies.prior}
     sleep:
