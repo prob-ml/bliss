@@ -443,8 +443,10 @@ class DetectionClassificationFigures(BlissFigures):
     @property
     def fignames(self):
         return {
-            "detection": "sdss-precision-recall.png",
-            "classification": "sdss-classification-acc.png",
+            "detection_cuts": "sdss-precision-recall-cuts.png",
+            "classification_cuts": "sdss-classification-acc-cuts.png",
+            "detection_bins": "sdss-precision-recall-bins.png",
+            "classification_bins": "sdss-classification-acc-bins.png",
             "scatter": "sdss-mag-class-scatter.png",
             "flux_comparison": "flux-comparison.png",
         }
@@ -485,6 +487,7 @@ class DetectionClassificationFigures(BlissFigures):
         class_accs = []
         galaxy_accs = []
         star_accs = []
+        counts = []
 
         # compute data for precision/recall/classification accuracy as a function of magnitude.
         for mag in mag_cuts:
@@ -504,7 +507,9 @@ class DetectionClassificationFigures(BlissFigures):
             star_acc = res["conf_matrix"][1, 1] / res["conf_matrix"][1, :].sum()
             star_accs.append(star_acc)
 
-        cuts_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs)
+            counts.append(res["counts"])
+
+        cuts_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, counts)
 
         mag_bins = np.arange(18, 25, 1.0)
         precisions = []
@@ -532,7 +537,9 @@ class DetectionClassificationFigures(BlissFigures):
             star_acc = res["conf_matrix"][1, 1] / res["conf_matrix"][1, :].sum()
             star_accs.append(star_acc)
 
-        bins_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs)
+            counts.append(res["counts"])
+
+        bins_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, counts)
 
         # data for scatter plot of misclassifications.
         tplocs = coadd_params.plocs.reshape(-1, 2)
@@ -582,30 +589,31 @@ class DetectionClassificationFigures(BlissFigures):
 
         # (2) plots using bins
         mag_bins = data["mag_bins"] - 0.5
-        precisions, recalls, f1s, class_accs, galaxy_accs, star_accs = data["cuts_data"]
+        precisions, recalls, f1s, class_accs, galaxy_accs, star_accs = data["bins_data"]
 
         # precision / recall
         set_rc_params(tick_label_size=22, label_size=30)
-        f1, ax = plt.subplots(1, 1, figsize=(10, 10))
+        f3, ax = plt.subplots(1, 1, figsize=(10, 10))
         format_plot(ax, xlabel=r"\rm magnitude bin", ylabel="metric")
         ax.plot(mag_bins, recalls, "-o", label=r"\rm recall")
         ax.plot(mag_bins, precisions, "-o", label=r"\rm precision")
-        plt.xlim(18, 24)
+        ax.plot(mag_bins, f1s, "-o", label=r"\rm f1 score")
+        plt.xlim(17, 24)
         ax.legend(loc="best", prop={"size": 22})
 
         # classification accuracy
         set_rc_params(tick_label_size=22, label_size=30)
-        f2, ax = plt.subplots(1, 1, figsize=(10, 10))
+        f4, ax = plt.subplots(1, 1, figsize=(10, 10))
         format_plot(ax, xlabel=r"\rm magnitude bin", ylabel="accuracy")
         ax.plot(mag_bins, class_accs, "-o", label=r"\rm classification accuracy")
         ax.plot(mag_bins, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
         ax.plot(mag_bins, star_accs, "-o", label=r"\rm star classification accuracy")
-        plt.xlim(18, 24)
+        plt.xlim(17, 24)
         ax.legend(loc="best", prop={"size": 22})
 
         # (3) magnitude / classification scatter
         set_rc_params(tick_label_size=22, label_size=30)
-        f3, ax = plt.subplots(1, 1, figsize=(10, 10))
+        f5, ax = plt.subplots(1, 1, figsize=(10, 10))
         tgbool, egbool, egprob, tmag, emag = data["scatter_class"]
         tgbool, egbool = tgbool.numpy().astype(bool), egbool.numpy().astype(bool)
         egprob = egprob.numpy()
@@ -623,7 +631,7 @@ class DetectionClassificationFigures(BlissFigures):
         ax.legend(loc="best", prop={"size": 22})
 
         # (4) mag / mag scatter
-        f4, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
+        f6, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
         ax1.scatter(tmag[tgbool], emag[tgbool], marker="o", c="r", alpha=0.5)
         ax1.plot([15, 23], [15, 23], c="r", label="x=y line")
         ax2.scatter(tmag[~tgbool], emag[~tgbool], marker="o", c="b", alpha=0.5)
@@ -637,7 +645,14 @@ class DetectionClassificationFigures(BlissFigures):
         ax2.set_ylabel("Estimated Magnitude")
         ax1.set_title("Matched Coadd Galaxies")
         ax2.set_title("Matched Coadd Stars")
-        return {"detection": f1, "classification": f2, "scatter": f3, "flux_comparison": f4}
+        return {
+            "detection_cuts": f1,
+            "classification_cuts": f2,
+            "detection_bins": f3,
+            "classification_bins": f4,
+            "scatter": f5,
+            "flux_comparison": f6,
+        }
 
 
 class SDSSReconstructionFigures(BlissFigures):
