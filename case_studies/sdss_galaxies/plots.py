@@ -117,10 +117,12 @@ def remove_outliers(*args, level=0.99):
 
 
 class BlissFigures:
-    def __init__(self, outdir, cache="temp.pt", overwrite=False) -> None:
+    cache = "temp.pt"
 
-        self.outdir = Path(outdir)
-        self.cache = self.outdir / cache
+    def __init__(self, figdir, cachedir, overwrite=False) -> None:
+
+        self.figdir = Path(figdir)
+        self.cachefile = cachedir / self.cache
         self.overwrite = overwrite
 
     @property
@@ -130,11 +132,11 @@ class BlissFigures:
 
     def get_data(self, *args, **kwargs):
         """Return summary of data for producing plot, must be cachable w/ torch.save()."""
-        if self.cache.exists() and not self.overwrite:
-            return torch.load(self.cache)
+        if self.cachefile.exists() and not self.overwrite:
+            return torch.load(self.cachefile)
 
         data = self.compute_data(*args, **kwargs)
-        torch.save(data, self.cache)
+        torch.save(data, self.cachefile)
         return data
 
     @abstractmethod
@@ -146,7 +148,7 @@ class BlissFigures:
         data = self.get_data(*args, **kwargs)
         figs = self.create_figures(data)
         for k, fname in self.fignames.items():
-            figs[k].savefig(self.outdir / fname, format="png")
+            figs[k].savefig(self.figdir / fname, format="png")
 
     @abstractmethod
     def create_figures(self, data):
@@ -155,8 +157,10 @@ class BlissFigures:
 
 
 class AEReconstructionFigures(BlissFigures):
-    def __init__(self, outdir="", cache="ae_cache.pt", overwrite=False, n_examples=5) -> None:
-        super().__init__(outdir=outdir, cache=cache, overwrite=overwrite)
+    cache = "ae_cache.pt"
+
+    def __init__(self, figdir, cachedir, overwrite=False, n_examples=5) -> None:
+        super().__init__(figdir=figdir, cachedir=cachedir, overwrite=overwrite)
         self.n_examples = n_examples
 
     @property
@@ -311,11 +315,11 @@ class AEReconstructionFigures(BlissFigures):
         set_rc_params(
             fontsize=22, legend_fontsize="small", tick_label_size="small", label_size="medium"
         )
-        fig, axes = plt.subplots(2, 2, figsize=(12, 12))
-        ax1, ax2, ax3, ax4 = axes.flatten()
+        fig, axes = plt.subplots(1, 3, figsize=(15, 7))
+        ax1, ax2, ax3 = axes.flatten()
 
         # fluxes / magnitudes
-        x, y = remove_outliers(meas["true_mags"], meas["recon_mags"], level=0.95)
+        x, y = meas["true_mags"], meas["recon_mags"]
         mag_ticks = (16, 17, 18, 19)
         xlabel = r"$m^{\rm true}$"
         ylabel = r"$m^{\rm recon}$"
@@ -323,38 +327,34 @@ class AEReconstructionFigures(BlissFigures):
             ax1, x, y, xlabel=xlabel, ylabel=ylabel, xticks=mag_ticks, yticks=mag_ticks
         )
 
-        # hlrs
-        x, y = remove_outliers(meas["true_hlrs"], meas["recon_hlrs"], level=0.95)
-        self.make_scatter_contours(ax2, x, y, xlabel=r"$r^{\rm true}$", ylabel=r"$r^{\rm recon}$")
-
         # ellipticities 1
-        x, y = remove_outliers(meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0], level=0.95)
+        x, y = meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0]
         g_ticks = (-1.0, -0.5, 0.0, 0.5, 1.0)
         xlabel = r"$g_{1}^{\rm true}$"
         ylabel = r"$g_{1}^{\rm recon}$"
         self.make_scatter_contours(
-            ax3, x, y, xticks=g_ticks, yticks=g_ticks, xlabel=xlabel, ylabel=ylabel
+            ax2, x, y, xticks=g_ticks, yticks=g_ticks, xlabel=xlabel, ylabel=ylabel
         )
 
         # ellipticities 2
-        x, y = remove_outliers(meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1], level=0.95)
+        x, y = meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1]
         xlabel = r"$g_{2}^{\rm true}$"
         ylabel = r"$g_{2}^{\rm recon}$"
         self.make_scatter_contours(
-            ax4, x, y, xticks=g_ticks, yticks=g_ticks, xlabel=xlabel, ylabel=ylabel
+            ax3, x, y, xticks=g_ticks, yticks=g_ticks, xlabel=xlabel, ylabel=ylabel
         )
 
         plt.tight_layout()
         return fig
 
     def make_scatter_bin_plots(self, meas):
-        fig, axes = plt.subplots(2, 2, figsize=(16, 16))
-        ax1, ax2, ax3, ax4 = axes.flatten()
+        fig, axes = plt.subplots(1, 3, figsize=(16, 9))
+        ax1, ax2, ax3 = axes.flatten()
         set_rc_params(fontsize=24)
 
         # fluxes / magnitudes
         true_mags, recon_mags = meas["true_mags"], meas["recon_mags"]
-        x, y = remove_outliers(true_mags, (recon_mags - true_mags) / true_mags, level=0.99)
+        x, y = true_mags, recon_mags - true_mags
         self.scatter_bin_plot(
             ax1,
             x,
@@ -363,27 +363,14 @@ class AEReconstructionFigures(BlissFigures):
             delta=0.25,
             xlabel=r"\rm $m^{\rm true}$",
             ylabel=r"\rm $(m^{\rm recon} - m^{\rm true}) / m^{\rm true}$",
-            xticks=[16, 17, 18, 19, 20],
-        )
-
-        # hlrs
-        true_hlrs, recon_hlrs = meas["true_hlrs"], meas["recon_hlrs"]
-        x, y = remove_outliers(true_hlrs, (recon_hlrs - true_hlrs) / true_hlrs, level=0.99)
-        self.scatter_bin_plot(
-            ax2,
-            x,
-            y,
-            xlims=(x.min(), x.max()),
-            delta=0.5,
-            xlabel=r"$r^{\rm true}$",
-            ylabel=r"$(r^{\rm recon} - r^{\rm true}) / r^{\rm true}$",
+            xticks=[16, 17, 18, 19, 20, 21, 22, 23],
         )
 
         # ellipticities
         true_ellip1, recon_ellip1 = meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0]
-        x, y = remove_outliers(true_ellip1, recon_ellip1 - true_ellip1, level=0.99)
+        x, y = true_ellip1, recon_ellip1 - true_ellip1
         self.scatter_bin_plot(
-            ax3,
+            ax2,
             x,
             y,
             xlims=(-0.85, 0.85),
@@ -394,9 +381,9 @@ class AEReconstructionFigures(BlissFigures):
         )
 
         true_ellip2, recon_ellip2 = meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1]
-        x, y = remove_outliers(true_ellip2, recon_ellip2 - true_ellip2, level=0.99)
+        x, y = true_ellip2, recon_ellip2 - true_ellip2
         self.scatter_bin_plot(
-            ax4,
+            ax3,
             x,
             y,
             xlims=(-0.85, 0.85),
@@ -421,8 +408,10 @@ class AEReconstructionFigures(BlissFigures):
 
 
 class DetectionClassificationFigures(BlissFigures):
-    def __init__(self, outdir="", cache="detect_class.pt", overwrite=False) -> None:
-        super().__init__(outdir=outdir, cache=cache, overwrite=overwrite)
+    cache = "detect_class.pt"
+
+    def __init__(self, figdir, cachedir, overwrite=False) -> None:
+        super().__init__(figdir, cachedir, overwrite=overwrite)
 
     @property
     def fignames(self):
@@ -572,9 +561,11 @@ class DetectionClassificationFigures(BlissFigures):
 
 
 class SDSSReconstructionFigures(BlissFigures):
-    def __init__(self, scenes, outdir="", cache="recon_sdss.pt", overwrite=False) -> None:
+    cache = "recon_sdss.pt"
+
+    def __init__(self, scenes, figdir, cachedir, overwrite=False) -> None:
         self.scenes = scenes
-        super().__init__(outdir=outdir, cache=cache, overwrite=overwrite)
+        super().__init__(figdir, cachedir, overwrite=overwrite)
 
     @property
     def fignames(self):
@@ -737,13 +728,14 @@ def load_models(cfg, device):
 def plots(cfg):  # pylint: disable=too-many-statements
 
     figs = set(cfg.plots.figs)
-    outdir = cfg.plots.outdir
+    figdir = cfg.plots.figdir
+    cachedir = cfg.plots.cachedir
     overwrite = cfg.plots.overwrite
     device = torch.device(cfg.plots.device)
 
-    if not Path(outdir).exists():
-        warnings.warn("Specified output directory does not exist, will attempt to create it.")
-        Path(outdir).mkdir(exist_ok=True, parents=True)
+    if not Path(cachedir).exists():
+        warnings.warn("Specified cache directory does not exist, will attempt to create it.")
+        Path(cachedir).mkdir(exist_ok=True, parents=True)
 
     if figs.intersection({2, 3}):
         # load SDSS frame and models for prediction
@@ -770,7 +762,7 @@ def plots(cfg):  # pylint: disable=too-many-statements
             )
 
         # create figure classes and plot.
-        ae_figures = AEReconstructionFigures(outdir, overwrite=overwrite, n_examples=5)
+        ae_figures = AEReconstructionFigures(figdir, cachedir, overwrite=overwrite, n_examples=5)
         ae_figures.save_figures(
             autoencoder, galaxies_file, cfg.plots.psf_file, cfg.plots.sdss_pixel_scale
         )
@@ -779,14 +771,16 @@ def plots(cfg):  # pylint: disable=too-many-statements
     # FIGURE 2: Classification and Detection metrics
     if 2 in figs:
         print("INFO: Creating classification and detection metrics from SDSS frame figures...")
-        dc_fig = DetectionClassificationFigures(outdir, overwrite=overwrite)
+        dc_fig = DetectionClassificationFigures(figdir, cachedir, overwrite=overwrite)
         dc_fig.save_figures(frame, encoder, decoder)
         mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
     if 3 in figs:
         print("INFO: Creating reconstructions from SDSS figures...")
-        sdss_rec_fig = SDSSReconstructionFigures(cfg.plots.scenes, outdir, overwrite=overwrite)
+        sdss_rec_fig = SDSSReconstructionFigures(
+            cfg.plots.scenes, figdir, cachedir, overwrite=overwrite
+        )
         sdss_rec_fig.save_figures(frame, encoder, decoder)
         mpl.rc_file_defaults()
 
