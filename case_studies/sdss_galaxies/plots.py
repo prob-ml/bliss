@@ -122,7 +122,7 @@ class BlissFigures:
     def __init__(self, figdir, cachedir, overwrite=False) -> None:
 
         self.figdir = Path(figdir)
-        self.cachefile = cachedir / self.cache
+        self.cachefile = Path(cachedir) / self.cache
         self.overwrite = overwrite
 
     @property
@@ -285,6 +285,7 @@ class AEReconstructionFigures(BlissFigures):
         format_plot(g.ax_joint, **plot_kwargs)
 
     def scatter_bin_plot(self, ax, x, y, xlims, delta, capsize=5.0, **plot_kwargs):
+        # plot median and 25/75 quantiles on each bin decided by delta and xlims.
 
         xbins = np.arange(xlims[0], xlims[1], delta)
 
@@ -320,35 +321,61 @@ class AEReconstructionFigures(BlissFigures):
 
         # fluxes / magnitudes
         x, y = meas["true_mags"], meas["recon_mags"]
-        mag_ticks = (16, 17, 18, 19)
+        mag_ticks = (16, 17, 18, 19, 20, 21, 22, 23)
         xlabel = r"$m^{\rm true}$"
         ylabel = r"$m^{\rm recon}$"
         self.make_scatter_contours(
-            ax1, x, y, xlabel=xlabel, ylabel=ylabel, xticks=mag_ticks, yticks=mag_ticks
+            ax1,
+            x,
+            y,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            xticks=mag_ticks,
+            yticks=mag_ticks,
+            xlims=(16, 23),
+            ylims=(16, 23),
         )
 
         # ellipticities 1
-        x, y = meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0]
+        # NOTE: remove outliers for plotting purposes (contours get crazy)
+        x, y = remove_outliers(meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0], level=0.99)
         g_ticks = (-1.0, -0.5, 0.0, 0.5, 1.0)
         xlabel = r"$g_{1}^{\rm true}$"
         ylabel = r"$g_{1}^{\rm recon}$"
         self.make_scatter_contours(
-            ax2, x, y, xticks=g_ticks, yticks=g_ticks, xlabel=xlabel, ylabel=ylabel
+            ax2,
+            x,
+            y,
+            xticks=g_ticks,
+            yticks=g_ticks,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            xlims=(-1.0, 1.0),
+            ylims=(-1.0, 1.0),
         )
 
         # ellipticities 2
-        x, y = meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1]
+        # NOTE: remove outliers for plotting purposes (contours get crazy)
+        x, y = remove_outliers(meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1], level=0.99)
         xlabel = r"$g_{2}^{\rm true}$"
         ylabel = r"$g_{2}^{\rm recon}$"
         self.make_scatter_contours(
-            ax3, x, y, xticks=g_ticks, yticks=g_ticks, xlabel=xlabel, ylabel=ylabel
+            ax3,
+            x,
+            y,
+            xticks=g_ticks,
+            yticks=g_ticks,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            xlims=(-1.0, 1.0),
+            ylims=(-1.0, 1.0),
         )
 
         plt.tight_layout()
         return fig
 
     def make_scatter_bin_plots(self, meas):
-        fig, axes = plt.subplots(1, 3, figsize=(16, 9))
+        fig, axes = plt.subplots(1, 3, figsize=(21, 9))
         ax1, ax2, ax3 = axes.flatten()
         set_rc_params(fontsize=24)
 
