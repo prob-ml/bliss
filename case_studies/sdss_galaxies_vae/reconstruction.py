@@ -129,6 +129,9 @@ def reconstruct(cfg):
                             "expected_precision"
                         ] = expected_precision(tile_map_recon)
         if outdir is not None:
+            # Expected precision lpot
+            fig_exp_precision = expected_precision_plot(tile_map_recon)
+            fig_exp_precision.savefig(outdir / (scene_name + "_expected_precision.png"), format="png")
             fig = create_figure(
                 true[0, 0],
                 recon[0, 0],
@@ -515,6 +518,14 @@ def expected_recall(tile_map: TileCatalog):
     recall = prob_detected.sum() / (prob_detected.sum() + prob_not_detected.sum())
     return recall
 
+def expected_recall_for_threshold(tile_map: TileCatalog, threshold: float):
+    prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
+    is_on_array = prob_on >= threshold
+    prob_detected = prob_on * is_on_array
+    prob_not_detected = prob_on * (~is_on_array)
+    recall = prob_detected.sum() / (prob_detected.sum() + prob_not_detected.sum())
+    return recall
+
 
 def expected_precision(tile_map: TileCatalog):
     prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
@@ -522,6 +533,39 @@ def expected_precision(tile_map: TileCatalog):
     prob_detected = prob_on * is_on_array
     precision = prob_detected.sum() / is_on_array.sum()
     return precision
+
+def expected_precision_for_threshold(tile_map: TileCatalog, threshold: float):
+    prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
+    is_on_array = prob_on >= threshold
+    prob_detected = prob_on * is_on_array
+    precision = prob_detected.sum() / is_on_array.sum()
+    return precision
+
+def expected_precision_plot(tile_map: TileCatalog):
+    base_size = 8
+    figsize=(2 * base_size, 2 * base_size)
+    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=figsize)
+    thresholds = np.linspace(0.0, 1.0, 100)
+    precisions = []
+    recalls = []
+    for threshold in thresholds:
+        precision = expected_precision_for_threshold(tile_map, threshold).item()
+        recall = expected_recall_for_threshold(tile_map, threshold).item()
+        precisions.append(precision)
+        recalls.append(recall)
+    precisions = np.array(precisions)
+    recalls = np.array(recalls)
+    axes[0,0].scatter(thresholds, precisions)
+    #axes[0,0].xlabel("Threshold")
+    #axes[0,0].ylabel("Expected Precision")
+    axes[0,1].scatter(thresholds, recalls)
+    #axes[0,1].xlabel("Threshold")
+    #axes[0,1].ylabel("Expected Recall")
+
+    axes[1,0].scatter(precisions, recalls)
+    #axes[1,0].xlabel("Expected Precision")
+    #axes[1,0].ylabel("Expected Recall")
+    return fig
 
 
 def expected_accuracy(tile_map, mag_min, mag_max):
