@@ -449,7 +449,9 @@ class DetectionClassificationFigures(BlissFigures):
             "flux_comparison": "flux-comparison.png",
         }
 
-    def compute_data(self, frame: Union[SDSSFrame, SimulatedFrame], encoder, decoder):
+    def compute_data(
+        self, frame: Union[SDSSFrame, SimulatedFrame], encoder, decoder
+    ):  # pylint: disable=too-many-statements
         bp = encoder.border_padding
         device = encoder.device
         slen = 300  # chunk side-length for whole iamge.
@@ -476,20 +478,22 @@ class DetectionClassificationFigures(BlissFigures):
 
         est_params["mags"] = sdss.convert_flux_to_mag(est_params["fluxes"])
 
-        mag_bins = np.arange(18, 24.5, 0.25)
+        mag_cuts = np.arange(18, 24.5, 0.25)
         precisions = []
         recalls = []
+        f1s = []
         class_accs = []
         galaxy_accs = []
         star_accs = []
 
         # compute data for precision/recall/classification accuracy as a function of magnitude.
-        for mag in mag_bins:
+        for mag in mag_cuts:
             res = reporting.scene_metrics(
                 coadd_params, est_params, mag_max=mag, slack=1.0, mag_slack=1.0
             )
             precisions.append(res["precision"].item())
             recalls.append(res["recall"].item())
+            f1s.append(res["f1"].item())
             class_accs.append(res["class_acc"].item())
 
             # how many out of the matched galaxies are accurately classified?
@@ -499,6 +503,36 @@ class DetectionClassificationFigures(BlissFigures):
             # how many out of the matched stars are correctly classified?
             star_acc = res["conf_matrix"][1, 1] / res["conf_matrix"][1, :].sum()
             star_accs.append(star_acc)
+
+        cuts_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs)
+
+        mag_bins = np.arange(18, 25, 1.0)
+        precisions = []
+        recalls = []
+        f1s = []
+        class_accs = []
+        galaxy_accs = []
+        star_accs = []
+
+        # compute data for precision/recall/classification accuracy as a function of magnitude.
+        for mag in mag_bins:
+            res = reporting.scene_metrics(
+                coadd_params, est_params, mag_min=mag - 1.0, mag_max=mag, slack=1.0, mag_slack=1.0
+            )
+            precisions.append(res["precision"].item())
+            recalls.append(res["recall"].item())
+            f1s.append(res["f1"].item())
+            class_accs.append(res["class_acc"].item())
+
+            # how many out of the matched galaxies are accurately classified?
+            galaxy_acc = res["conf_matrix"][0, 0] / res["conf_matrix"][0, :].sum()
+            galaxy_accs.append(galaxy_acc)
+
+            # how many out of the matched stars are correctly classified?
+            star_acc = res["conf_matrix"][1, 1] / res["conf_matrix"][1, :].sum()
+            star_accs.append(star_acc)
+
+        bins_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs)
 
         # data for scatter plot of misclassifications.
         tplocs = coadd_params.plocs.reshape(-1, 2)
@@ -512,11 +546,9 @@ class DetectionClassificationFigures(BlissFigures):
 
         return {
             "mag_bins": mag_bins,
-            "precisions": precisions,
-            "recalls": recalls,
-            "class_accs": class_accs,
-            "star_accs": star_accs,
-            "galaxy_accs": galaxy_accs,
+            "mag_cuts": mag_cuts,
+            "cuts_data": cuts_data,
+            "bins_data": bins_data,
             "scatter_class": (tgbool, egbool, egprob, tmag, emag),
         }
 
@@ -524,17 +556,38 @@ class DetectionClassificationFigures(BlissFigures):
         """Make figures related to detection and classification in SDSS."""
         sns.set_theme(style="darkgrid")
 
-        mag_bins = data["mag_bins"]
-        recalls = data["recalls"]
-        precisions = data["precisions"]
-        class_accs = data["class_accs"]
-        galaxy_accs = data["galaxy_accs"]
-        star_accs = data["star_accs"]
+        # (1) plots using cuts
+        mag_cuts = data["mag_cuts"]
+        precisions, recalls, f1s, class_accs, galaxy_accs, star_accs = data["cuts_data"]
 
         # precision / recall
         set_rc_params(tick_label_size=22, label_size=30)
         f1, ax = plt.subplots(1, 1, figsize=(10, 10))
-        format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="value of metric")
+        format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="metric")
+        ax.plot(mag_cuts, recalls, "-o", label=r"\rm recall")
+        ax.plot(mag_cuts, precisions, "-o", label=r"\rm precision")
+        ax.plot(mag_cuts, f1s, "-o", label=r"\rm f1 score")
+        plt.xlim(18, 24)
+        ax.legend(loc="best", prop={"size": 22})
+
+        # classification accuracy
+        set_rc_params(tick_label_size=22, label_size=30)
+        f2, ax = plt.subplots(1, 1, figsize=(10, 10))
+        format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="accuracy")
+        ax.plot(mag_cuts, class_accs, "-o", label=r"\rm classification accuracy")
+        ax.plot(mag_cuts, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
+        ax.plot(mag_cuts, star_accs, "-o", label=r"\rm star classification accuracy")
+        plt.xlim(18, 24)
+        ax.legend(loc="best", prop={"size": 22})
+
+        # (2) plots using bins
+        mag_bins = data["mag_bins"] - 0.5
+        precisions, recalls, f1s, class_accs, galaxy_accs, star_accs = data["cuts_data"]
+
+        # precision / recall
+        set_rc_params(tick_label_size=22, label_size=30)
+        f1, ax = plt.subplots(1, 1, figsize=(10, 10))
+        format_plot(ax, xlabel=r"\rm magnitude bin", ylabel="metric")
         ax.plot(mag_bins, recalls, "-o", label=r"\rm recall")
         ax.plot(mag_bins, precisions, "-o", label=r"\rm precision")
         plt.xlim(18, 24)
@@ -543,14 +596,14 @@ class DetectionClassificationFigures(BlissFigures):
         # classification accuracy
         set_rc_params(tick_label_size=22, label_size=30)
         f2, ax = plt.subplots(1, 1, figsize=(10, 10))
-        format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="accuracy")
+        format_plot(ax, xlabel=r"\rm magnitude bin", ylabel="accuracy")
         ax.plot(mag_bins, class_accs, "-o", label=r"\rm classification accuracy")
         ax.plot(mag_bins, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
         ax.plot(mag_bins, star_accs, "-o", label=r"\rm star classification accuracy")
         plt.xlim(18, 24)
         ax.legend(loc="best", prop={"size": 22})
 
-        # magnitude / classification scatter
+        # (3) magnitude / classification scatter
         set_rc_params(tick_label_size=22, label_size=30)
         f3, ax = plt.subplots(1, 1, figsize=(10, 10))
         tgbool, egbool, egprob, tmag, emag = data["scatter_class"]
@@ -569,7 +622,7 @@ class DetectionClassificationFigures(BlissFigures):
         ax.set_ylabel("Estimated Probability of Galaxy")
         ax.legend(loc="best", prop={"size": 22})
 
-        # mag / mag scatter
+        # (4) mag / mag scatter
         f4, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
         ax1.scatter(tmag[tgbool], emag[tgbool], marker="o", c="r", alpha=0.5)
         ax1.plot([15, 23], [15, 23], c="r", label="x=y line")
