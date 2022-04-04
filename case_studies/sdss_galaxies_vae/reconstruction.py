@@ -562,7 +562,7 @@ def expected_recall_for_threshold(tile_map: TileCatalog, threshold: float):
     prob_detected = prob_on * is_on_array
     prob_not_detected = prob_on * (~is_on_array)
     recall = prob_detected.sum() / (prob_detected.sum() + prob_not_detected.sum())
-    return recall
+    return recall.item()
 
 
 def expected_precision(tile_map: TileCatalog):
@@ -576,9 +576,11 @@ def expected_precision(tile_map: TileCatalog):
 def expected_precision_for_threshold(tile_map: TileCatalog, threshold: float):
     prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
     is_on_array = prob_on >= threshold
+    if is_on_array.sum() == 0:
+        return 1.0
     prob_detected = prob_on * is_on_array
     precision = prob_detected.sum() / is_on_array.sum()
-    return precision
+    return precision.item()
 
 
 def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions):
@@ -589,8 +591,8 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     precisions = []
     recalls = []
     for threshold in thresholds:
-        precision = expected_precision_for_threshold(tile_map, threshold).item()
-        recall = expected_recall_for_threshold(tile_map, threshold).item()
+        precision = expected_precision_for_threshold(tile_map, threshold)
+        recall = expected_recall_for_threshold(tile_map, threshold)
         precisions.append(precision)
         recalls.append(recall)
     precisions = np.array(precisions)
@@ -602,11 +604,16 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     # axes[0,1].xlabel("Threshold")
     # axes[0,1].ylabel("Expected Recall")
 
+    # colors = precisions == precisions[optimal_point]
     axes[1, 0].scatter(precisions, recalls)
+    optimal_point = np.argmin(1/precisions + 1/recalls)
+    axes[1, 0].scatter(precisions[optimal_point], recalls[optimal_point], color="yellow", marker="+")
     # axes[1,0].xlabel("Expected Precision")
     # axes[1,0].ylabel("Expected Recall")
     axes[2, 0].scatter(precisions, true_precisions)
+    axes[2, 0].scatter(precisions[optimal_point], true_precisions[optimal_point], color="yellow", marker="+")
     axes[2, 1].scatter(precisions, true_recalls)
+    axes[2, 1].scatter(precisions[optimal_point], true_recalls[optimal_point], color="yellow", marker="+")
     return fig
 
 
