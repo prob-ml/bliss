@@ -144,7 +144,7 @@ class ClassificationMetrics(Metric):
     def compute(self):
         """Calculate misclassification accuracy, and confusion matrix."""
         return {
-            "acc_n_matches": self.total_n_matches,
+            "n_matches": self.total_n_matches,
             "class_acc": self.total_correct_class / self.total_n_matches,
             "conf_matrix": self.conf_matrix,
         }
@@ -272,13 +272,24 @@ def scene_metrics(
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
-    tgcount = tparams["galaxy_bools"].sum().item()
-    tscount = tparams.n_sources - tgcount
+    # use the ones without slack (classification) for reporting.
+    tcount = tparams.n_sources.int().item()
+    tgcount = tparams["galaxy_bools"].sum().int().item()
+    tscount = tcount - tgcount
 
-    egcount = eparams["galaxy_bools"].sum().item()
-    escount = eparams.n_sources - egcount
+    ecount = eparams.n_sources.int().item()
+    egcount = eparams["galaxy_bools"].sum().int().item()
+    escount = ecount - egcount
 
-    counts = (tparams.n_sources, tgcount, tscount, eparams.n_sources, egcount, escount)
+    n_matches = classification_result["n_matches"]
+
+    counts = {
+        "tgcount": tgcount,
+        "tscount": tscount,
+        "egcount": egcount,
+        "escount": escount,
+        "n_matches": n_matches,
+    }
 
     # compute and return results
     return {**detection_result, **classification_result, "counts": counts}
