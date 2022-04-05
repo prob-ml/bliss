@@ -149,12 +149,12 @@ class ChunkedScene:
             w=kernel_size[1],
         )
 
-    def reconstruct(self, encoder, decoder, device):
+    def reconstruct(self, encoder, decoder, device, mode: str):
         chunk_est_dict = {}
         for chunk_type, chunks in self.chunk_dict.items():
             bgs = self.bg_dict[chunk_type]
             chunk_est_dict[chunk_type] = self._reconstruct_chunks(
-                chunks, bgs, encoder, decoder, device
+                chunks, bgs, encoder, decoder, device, mode
             )
         reconstructions_dict = {k: v["reconstructions"] for k, v in chunk_est_dict.items()}
         scene_recon = self._combine_into_scene(reconstructions_dict)
@@ -162,12 +162,12 @@ class ChunkedScene:
         tile_map_recon = self._combine_tile_maps(chunk_tile_maps_dict)
         return scene_recon, tile_map_recon
 
-    def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device):
+    def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device, mode: str):
         reconstructions = []
         tile_maps = []
         for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
-            recon, tile_map = reconstruct_img(
-                encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device)
+            recon, tile_map = self.reconstruct_img(
+                encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device), mode
             )
             reconstructions.append(recon.cpu())
             tile_maps.append(tile_map.cpu())
@@ -253,18 +253,20 @@ class ChunkedScene:
             out[i] = tile_catalog
         return out
 
+    def reconstruct_img(
+        self, encoder: Encoder, decoder: ImageDecoder, img: Tensor, bg: Tensor, mode: str
+    ) -> Tuple[Tensor, TileCatalog]:
 
-def reconstruct_img(
-    encoder: Encoder, decoder: ImageDecoder, img: Tensor, bg: Tensor
-) -> Tuple[Tensor, TileCatalog]:
-
-    with torch.no_grad():
-        tile_map = encoder.max_a_post(img, bg)
-        recon_image = decoder.render_images(tile_map)
-        tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
-            tile_map["galaxy_bools"], tile_map["galaxy_params"]
-        )
-    return recon_image, tile_map
+        with torch.no_grad():
+            if mode == "max_a_post":
+                tile_map = encoder.max_a_post(img, bg)
+            elif mode == "sample":
+                tile_map = encoder.sample(img, bg, self.n_samples)
+            recon_image = decoder.render_images(tile_map)
+            tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
+                tile_map["galaxy_bools"], tile_map["galaxy_params"]
+            )
+        return recon_image, tile_map
 
 
 class SDSSFrame:

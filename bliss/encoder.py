@@ -74,45 +74,32 @@ class Encoder(nn.Module):
             ".forward() method for Encoder not available. Use .max_a_post() or .sample()."
         )
 
-    def sample(self, image_ptiles, n_samples):
-        raise NotImplementedError("Sampling from Encoder not yet available.")
-
-    def max_a_post(self, image: Tensor, background: Tensor) -> TileCatalog:
-        """Get maximum a posteriori of catalog from image padded tiles.
-
-        Note that, strictly speaking, this is not the true MAP of the variational
-        distribution of the catalog.
-        Rather, we use sequential estimation; the MAP of the locations is first estimated,
-        then plugged-in to the binary and galaxy encoders. Thus, the binary and galaxy
-        encoders are conditioned on the location MAP. The true MAP would require optimizing
-        over the entire catalog jointly, but this is not tractable.
-
-        Args:
-            image: An astronomical image,
-                with shape `n * n_bands * h * w`.
-            background: Background associated with image,
-                with shape `n * n_bands * h * w`.
-
-        Returns:
-            A dictionary of the maximum a posteriori
-            of the catalog in tiles. Specifically, this dictionary comprises:
-                - The output of LocationEncoder.max_a_post()
-                - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
-                - 'galaxy_params' from GalaxyEncoder.
-        """
-        assert isinstance(self.map_n_source_weights, Tensor)
+    def infer(
+        self, image: Tensor, background: Tensor, mode: str, n_samples: Optional[int] = None
+    ) -> TileCatalog:
+        assert mode in {"max_a_post", "sample"}
         var_params = self.location_encoder.encode(
             image, background, eval_mean_detections=self.eval_mean_detections
         )
-        tile_map = self.location_encoder.max_a_post(
-            var_params, n_source_weights=self.map_n_source_weights
-        )
-
+        if mode == "max_a_post":
+            assert isinstance(self.map_n_source_weights, Tensor)
+            tile_map = self.location_encoder.max_a_post(
+                var_params, n_source_weights=self.map_n_source_weights
+            )
+        elif mode == "sample":
+            tile_map = self.location_encoder.sample(
+                var_params, n_samples, eval_mean_detections=self.eval_mean_detections
+            )
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
             galaxy_probs = self.binary_encoder.forward(image, background, tile_map.locs)
             galaxy_probs *= tile_map.is_on_array.unsqueeze(-1)
-            galaxy_bools = (galaxy_probs > 0.5).float() * tile_map.is_on_array.unsqueeze(-1)
+            if mode == "max_a_post":
+                galaxy_bools = (galaxy_probs > 0.5).float() * tile_map.is_on_array.unsqueeze(-1)
+            elif mode == "sample":
+                galaxy_bools = (
+                    torch.rand_like(galaxy_probs) <= galaxy_probs
+                ) * tile_map.is_on_array.unsqueeze(-1)
             star_bools = get_star_bools(tile_map.n_sources, galaxy_bools)
             tile_map.update(
                 {
@@ -123,10 +110,16 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_params = self.galaxy_encoder.max_a_post(image, background, tile_map.locs)
+            if mode == "max_a_post":
+                galaxy_params = self.galaxy_encoder.max_a_post(image, background, tile_map.locs)
+            elif mode == "sample":
+                galaxy_params = self.galaxy_encoder.sample(image, background, tile_map.locs)
             galaxy_params *= tile_map.is_on_array.unsqueeze(-1) * tile_map["galaxy_bools"]
             tile_map.update({"galaxy_params": galaxy_params})
         return tile_map
+
+    def max_a_post(self, image: Tensor, background: Tensor) -> TileCatalog:
+        return self.infer(image, background, "max_a_post")
 
     def get_images_in_ptiles(self, images):
         """Run get_images_in_ptiles with correct tile_slen and ptile_slen."""
