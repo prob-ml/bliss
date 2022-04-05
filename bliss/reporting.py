@@ -138,7 +138,7 @@ class ClassificationMetrics(Metric):
                 tgbool = tgbool[mtrue][dkeep].reshape(-1)
                 egbool = egbool[mest][dkeep].reshape(-1)
                 self.total_n_matches += len(egbool)
-                self.total_coadd_gal_matches += tgbool.sum().item()
+                self.total_coadd_gal_matches += tgbool.sum().int().item()
                 self.total_correct_class += tgbool.eq(egbool).sum().int()
                 self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
 
