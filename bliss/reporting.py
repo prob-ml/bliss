@@ -119,6 +119,7 @@ class ClassificationMetrics(Metric):
         self.slack = slack
 
         self.add_state("total_n_matches", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total_coadd_gal_matches", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
@@ -137,6 +138,7 @@ class ClassificationMetrics(Metric):
                 tgbool = tgbool[mtrue][dkeep].reshape(-1)
                 egbool = egbool[mest][dkeep].reshape(-1)
                 self.total_n_matches += len(egbool)
+                self.total_coadd_gal_matches += tgbool.sum().item()
                 self.total_correct_class += tgbool.eq(egbool).sum().int()
                 self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
 
@@ -145,6 +147,7 @@ class ClassificationMetrics(Metric):
         """Calculate misclassification accuracy, and confusion matrix."""
         return {
             "n_matches": self.total_n_matches,
+            "n_matches_gal_coadd": self.total_coadd_gal_matches,
             "class_acc": self.total_correct_class / self.total_n_matches,
             "conf_matrix": self.conf_matrix,
         }
@@ -282,13 +285,15 @@ def scene_metrics(
     escount = ecount - egcount
 
     n_matches = classification_result["n_matches"]
+    n_matches_gal_coadd = classification_result["n_matches_gal_coadd"]
 
     counts = {
         "tgcount": tgcount,
         "tscount": tscount,
         "egcount": egcount,
         "escount": escount,
-        "n_matches": n_matches,
+        "n_matches_coadd_gal": n_matches_gal_coadd,
+        "n_matches_coadd_star": n_matches - n_matches_gal_coadd,
     }
 
     # compute and return results
