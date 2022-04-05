@@ -2,6 +2,7 @@
 """Produce all figures. Save to PNG format."""
 import warnings
 from abc import abstractmethod
+from collections import defaultdict
 from pathlib import Path
 from typing import Union
 
@@ -95,9 +96,9 @@ def format_plot(ax, xlims=None, ylims=None, xticks=None, yticks=None, xlabel="",
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
 
-    if xticks:
+    if xticks is not None:
         ax.set_xticks(xticks)
-    if yticks:
+    if yticks is not None:
         ax.set_yticks(yticks)
 
 
@@ -487,7 +488,7 @@ class DetectionClassificationFigures(BlissFigures):
         class_accs = []
         galaxy_accs = []
         star_accs = []
-        counts = []
+        counts = defaultdict(list)
 
         # compute data for precision/recall/classification accuracy as a function of magnitude.
         for mag in mag_cuts:
@@ -507,9 +508,10 @@ class DetectionClassificationFigures(BlissFigures):
             star_acc = res["conf_matrix"][1, 1] / res["conf_matrix"][1, :].sum()
             star_accs.append(star_acc)
 
-            counts.append(res["counts"])
+            for k, v in res["counts"].items():
+                counts[k].append(v)
 
-        cuts_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, counts)
+        cuts_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, dict(counts))
 
         mag_bins = np.arange(18, 25, 1.0)
         precisions = []
@@ -518,6 +520,7 @@ class DetectionClassificationFigures(BlissFigures):
         class_accs = []
         galaxy_accs = []
         star_accs = []
+        counts = defaultdict(list)
 
         # compute data for precision/recall/classification accuracy as a function of magnitude.
         for mag in mag_bins:
@@ -537,11 +540,12 @@ class DetectionClassificationFigures(BlissFigures):
             star_acc = res["conf_matrix"][1, 1] / res["conf_matrix"][1, :].sum()
             star_accs.append(star_acc)
 
-            counts.append(res["counts"])
+            for k, v in res["counts"].items():
+                counts[k].append(v)
 
-        bins_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, counts)
+        bins_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, dict(counts))
 
-        # data for scatter plot of misclassifications.
+        # data for scatter plot of misclassifications (over all magnitudes).
         tplocs = coadd_params.plocs.reshape(-1, 2)
         eplocs = est_params.plocs.reshape(-1, 2)
         tindx, eindx, dkeep, _ = reporting.match_by_locs(tplocs, eplocs, slack=1.0)
@@ -559,57 +563,80 @@ class DetectionClassificationFigures(BlissFigures):
             "scatter_class": (tgbool, egbool, egprob, tmag, emag),
         }
 
-    def create_figures(self, data):  # pylint: disable=too-many-statements
+    def make_detection_class_curves(
+        self, mags, data, cuts_or_bins="cuts", xlims=(18, 24), ratio=2, where_step="mid"
+    ):
+        assert cuts_or_bins in {"cuts", "bins"}
+        # (1) plots using cuts
+        precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, counts = data[
+            f"{cuts_or_bins}_data"
+        ]
+
+        # precision / recall
+        set_rc_params(tick_label_size=22, label_size=30)
+        f1, (ax1, ax2) = plt.subplots(
+            2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
+        )
+        ymin = min(min(precisions), min(recalls))
+        yticks = np.arange(np.round(ymin, 1), 1.1, 0.1)
+        format_plot(ax2, xlabel=r"\rm magnitude cut", ylabel="metric", yticks=yticks)
+        ax2.plot(mags, recalls, "-o", label=r"\rm recall")
+        ax2.plot(mags, precisions, "-o", label=r"\rm precision")
+        ax2.plot(mags, f1s, "-o", label=r"\rm f1 score")
+        ax2.legend(loc="lower left", prop={"size": 22})
+        ax2.set_xlim(xlims)
+
+        # setup step plot up top.
+        ax1.step(mags, counts["tgcount"], label="coadd galaxies", where=where_step)
+        ax1.step(mags, counts["tscount"], label="coadd stars", where=where_step)
+        ax1.step(mags, counts["egcount"], label="pred. galaxies", ls="--", where=where_step)
+        ax1.step(mags, counts["escount"], label="pred. stars", ls="--", where=where_step)
+        ymax = max(
+            max(counts["tgcount"]),
+            max(counts["tscount"]),
+            max(counts["egcount"]),
+            max(counts["escount"]),
+        )
+        ymax = np.ceil(ymax / 50) * 50
+        yticks = np.arange(0, ymax, 50)
+        format_plot(ax1, yticks=yticks, ylabel=r"\rm Counts")
+        ax1.legend(loc="best", prop={"size": 16})
+        plt.subplots_adjust(hspace=0)
+
+        # classification accuracy
+        set_rc_params(tick_label_size=22, label_size=30)
+        f2, (ax1, ax2) = plt.subplots(
+            2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
+        )
+        xlabel = r"\rm magnitude " + cuts_or_bins[:-1]
+        format_plot(ax2, xlabel=xlabel, ylabel="accuracy")
+        ax2.plot(mags, class_accs, "-o", label=r"\rm classification accuracy")
+        ax2.plot(mags, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
+        ax2.plot(mags, star_accs, "-o", label=r"\rm star classification accuracy")
+        ax2.set_xlim(xlims)
+        ax2.legend(loc="lower left", prop={"size": 18})
+
+        # setup step plot up top.
+        ax1.step(mags, counts["n_matches"], label=r"\rm \# of matches", where=where_step)
+        ymax = max(counts["n_matches"])
+        ymax = np.ceil(ymax / 50) * 50
+        yticks = np.arange(0, ymax, 50)
+        format_plot(ax1, yticks=yticks, ylabel=r"\rm Counts")
+        ax1.legend(loc="best", prop={"size": 16})
+        plt.subplots_adjust(hspace=0)
+
+        return f1, f2
+
+    def create_figures(self, data):
         """Make figures related to detection and classification in SDSS."""
         sns.set_theme(style="darkgrid")
 
-        # (1) plots using cuts
-        mag_cuts = data["mag_cuts"]
-        precisions, recalls, f1s, class_accs, galaxy_accs, star_accs = data["cuts_data"]
-
-        # precision / recall
-        set_rc_params(tick_label_size=22, label_size=30)
-        f1, ax = plt.subplots(1, 1, figsize=(10, 10))
-        format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="metric")
-        ax.plot(mag_cuts, recalls, "-o", label=r"\rm recall")
-        ax.plot(mag_cuts, precisions, "-o", label=r"\rm precision")
-        ax.plot(mag_cuts, f1s, "-o", label=r"\rm f1 score")
-        plt.xlim(18, 24)
-        ax.legend(loc="best", prop={"size": 22})
-
-        # classification accuracy
-        set_rc_params(tick_label_size=22, label_size=30)
-        f2, ax = plt.subplots(1, 1, figsize=(10, 10))
-        format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="accuracy")
-        ax.plot(mag_cuts, class_accs, "-o", label=r"\rm classification accuracy")
-        ax.plot(mag_cuts, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
-        ax.plot(mag_cuts, star_accs, "-o", label=r"\rm star classification accuracy")
-        plt.xlim(18, 24)
-        ax.legend(loc="best", prop={"size": 22})
+        # (1) plots with mag cuts
+        f1, f2 = self.make_detection_class_curves(data["mag_cuts"], data, "cuts")
 
         # (2) plots using bins
         mag_bins = data["mag_bins"] - 0.5
-        precisions, recalls, f1s, class_accs, galaxy_accs, star_accs = data["bins_data"]
-
-        # precision / recall
-        set_rc_params(tick_label_size=22, label_size=30)
-        f3, ax = plt.subplots(1, 1, figsize=(10, 10))
-        format_plot(ax, xlabel=r"\rm magnitude bin", ylabel="metric")
-        ax.plot(mag_bins, recalls, "-o", label=r"\rm recall")
-        ax.plot(mag_bins, precisions, "-o", label=r"\rm precision")
-        ax.plot(mag_bins, f1s, "-o", label=r"\rm f1 score")
-        plt.xlim(17, 24)
-        ax.legend(loc="best", prop={"size": 22})
-
-        # classification accuracy
-        set_rc_params(tick_label_size=22, label_size=30)
-        f4, ax = plt.subplots(1, 1, figsize=(10, 10))
-        format_plot(ax, xlabel=r"\rm magnitude bin", ylabel="accuracy")
-        ax.plot(mag_bins, class_accs, "-o", label=r"\rm classification accuracy")
-        ax.plot(mag_bins, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
-        ax.plot(mag_bins, star_accs, "-o", label=r"\rm star classification accuracy")
-        plt.xlim(17, 24)
-        ax.legend(loc="best", prop={"size": 22})
+        f3, f4 = self.make_detection_class_curves(mag_bins, data, "bins", xlims=(17, 24))
 
         # (3) magnitude / classification scatter
         set_rc_params(tick_label_size=22, label_size=30)
