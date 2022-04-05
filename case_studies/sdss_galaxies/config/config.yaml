@@ -221,6 +221,7 @@ plots:
         - 3
     cachedir: ${paths.project}/output/sdss_figures_cache
     figdir: ${paths.project}/figures
+    image_format: "png"
     overwrite: false
     simulated_sdss_individual_galaxies: ${paths.project}/models/simulated_sdss_individual_galaxies.pt
     sdss_pixel_scale: 0.396

@@ -119,6 +119,7 @@ class ClassificationMetrics(Metric):
         self.slack = slack
 
         self.add_state("total_n_matches", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total_coadd_gal_matches", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
@@ -137,6 +138,7 @@ class ClassificationMetrics(Metric):
                 tgbool = tgbool[mtrue][dkeep].reshape(-1)
                 egbool = egbool[mest][dkeep].reshape(-1)
                 self.total_n_matches += len(egbool)
+                self.total_coadd_gal_matches += tgbool.sum().int().item()
                 self.total_correct_class += tgbool.eq(egbool).sum().int()
                 self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
 
@@ -144,7 +146,8 @@ class ClassificationMetrics(Metric):
     def compute(self):
         """Calculate misclassification accuracy, and confusion matrix."""
         return {
-            "acc_n_matches": self.total_n_matches,
+            "n_matches": self.total_n_matches,
+            "n_matches_gal_coadd": self.total_coadd_gal_matches,
             "class_acc": self.total_correct_class / self.total_n_matches,
             "conf_matrix": self.conf_matrix,
         }
@@ -272,13 +275,29 @@ def scene_metrics(
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
+    # use the ones without slack (classification) for reporting.
+    tcount = tparams.n_sources.int().item()
+    tgcount = tparams["galaxy_bools"].sum().int().item()
+    tscount = tcount - tgcount
+
+    ecount = eparams.n_sources.int().item()
+    egcount = eparams["galaxy_bools"].sum().int().item()
+    escount = ecount - egcount
+
+    n_matches = classification_result["n_matches"]
+    n_matches_gal_coadd = classification_result["n_matches_gal_coadd"]
+
     counts = {
-        "n": tparams.n_sources,
-        "n_galaxies": tparams["galaxy_bools"].sum().item(),
+        "tgcount": tgcount,
+        "tscount": tscount,
+        "egcount": egcount,
+        "escount": escount,
+        "n_matches_coadd_gal": n_matches_gal_coadd,
+        "n_matches_coadd_star": n_matches - n_matches_gal_coadd,
     }
 
     # compute and return results
-    return {**detection_result, **classification_result, **counts}
+    return {**detection_result, **classification_result, "counts": counts}
 
 
 class CoaddFullCatalog(FullCatalog):
