@@ -272,17 +272,16 @@ def scene_metrics(
     classification_metrics.update(tparams, eparams)
     classification_result = classification_metrics.compute()
 
-    counts = (
-        tparams.n_sources,
-        tparams["galaxy_bools"].sum().item(),
-        tparams["star_bools"].sum().item(),
-        eparams.n_sources,
-        eparams["galaxy_bools"].sum().item(),
-        eparams["star_bools"].sum().item(),
-    )
+    tgcount = tparams["galaxy_bools"].sum().item()
+    tscount = tparams.n_sources - tgcount
+
+    egcount = eparams["galaxy_bools"].sum().item()
+    escount = eparams.n_sources - egcount
+
+    counts = (tparams.n_sources, tgcount, tscount, eparams.n_sources, egcount, escount)
 
     # compute and return results
-    return {**detection_result, **classification_result, **{"counts": counts}}
+    return {**detection_result, **classification_result, "counts": counts}
 
 
 class CoaddFullCatalog(FullCatalog):
