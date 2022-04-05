@@ -241,9 +241,10 @@ class ChunkedScene:
 
         tile_map_list = []
         for tile_map_row in main:
-            tile_map_row_combined = cat_tile_catalog(tile_map_row, 1)
+            tile_map_row_combined = TileCatalog.cat(tile_map_row, 1)
             tile_map_list.append(tile_map_row_combined)
-        return cat_tile_catalog(tile_map_list, 0)
+
+        return TileCatalog.cat(tile_map_list, 0)
 
     @staticmethod
     def _tile_catalog_array(tile_catalogs: List[TileCatalog]):
@@ -264,17 +265,6 @@ def reconstruct_img(
             tile_map["galaxy_bools"], tile_map["galaxy_params"]
         )
     return recon_image, tile_map
-
-
-def cat_tile_catalog(tile_catalogs: Sequence[TileCatalog], tile_dim: int = 0) -> TileCatalog:
-    assert tile_dim in {0, 1}
-    out = {}
-    tile_catalog_dicts = [tm.to_dict() for tm in tile_catalogs]
-    for k in tile_catalog_dicts[0].keys():
-        tensors = [tm[k] for tm in tile_catalog_dicts]
-        value = torch.cat(tensors, dim=(tile_dim + 1))
-        out[k] = value
-    return TileCatalog(tile_catalogs[0].tile_slen, out)
 
 
 class SDSSFrame:

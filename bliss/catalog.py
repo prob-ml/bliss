@@ -1,6 +1,7 @@
 import math
 from collections import UserDict
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Sequence, Tuple
+from typing_extensions import Self
 
 import torch
 from einops import rearrange, reduce, repeat
@@ -108,6 +109,17 @@ class TileCatalog(UserDict):
         params["n_sources"] = reduce(self.n_sources, "b nth ntw -> b", "sum")
         height, width = self.n_tiles_h * self.tile_slen, self.n_tiles_w * self.tile_slen
         return FullCatalog(height, width, params)
+
+    @classmethod
+    def cat(cls, tile_catalogs: Sequence[Self], tile_dim: int = 0):
+        assert tile_dim in {0, 1}
+        out = {}
+        tile_catalog_dicts = [tm.to_dict() for tm in tile_catalogs]
+        for k in tile_catalog_dicts[0].keys():
+            tensors = [tm[k] for tm in tile_catalog_dicts]
+            value = torch.cat(tensors, dim=(tile_dim + 1))
+            out[k] = value
+        return cls(tile_catalogs[0].tile_slen, out)
 
     def _get_full_locs_from_tiles(self) -> Tensor:
         """Get the full image locations from tile locations.
