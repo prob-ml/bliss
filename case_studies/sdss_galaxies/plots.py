@@ -564,15 +564,14 @@ class DetectionClassificationFigures(BlissFigures):
         }
 
     def make_detection_class_curves(
-        self, mags, data, cuts_or_bins="cuts", xlims=(18, 24), ratio=2, where_step="mid"
+        self, mags, data, cuts_or_bins="cuts", xlims=(18, 24), ratio=2, where_step="mid", n_gap=50
     ):
         assert cuts_or_bins in {"cuts", "bins"}
-        # (1) plots using cuts
         precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, counts = data[
             f"{cuts_or_bins}_data"
         ]
 
-        # precision / recall
+        # (1) precision / recall
         set_rc_params(tick_label_size=22, label_size=30)
         f1, (ax1, ax2) = plt.subplots(
             2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
@@ -586,19 +585,23 @@ class DetectionClassificationFigures(BlissFigures):
         ax2.legend(loc="lower left", prop={"size": 22})
         ax2.set_xlim(xlims)
 
-        # setup step plot up top.
-        ax1.step(mags, counts["tgcount"], label="coadd galaxies", where=where_step)
-        ax1.step(mags, counts["tscount"], label="coadd stars", where=where_step)
-        ax1.step(mags, counts["egcount"], label="pred. galaxies", ls="--", where=where_step)
-        ax1.step(mags, counts["escount"], label="pred. stars", ls="--", where=where_step)
+        # setup histogram plot up top.
+        c1 = CB_color_cycle[3]
+        c2 = CB_color_cycle[4]
+        ax1.step(mags, counts["tgcount"], label="coadd galaxies", where=where_step, color=c1)
+        ax1.step(mags, counts["tscount"], label="coadd stars", where=where_step, color=c2)
+        ax1.step(
+            mags, counts["egcount"], label="pred. galaxies", ls="--", where=where_step, color=c1
+        )
+        ax1.step(mags, counts["escount"], label="pred. stars", ls="--", where=where_step, color=c2)
         ymax = max(
             max(counts["tgcount"]),
             max(counts["tscount"]),
             max(counts["egcount"]),
             max(counts["escount"]),
         )
-        ymax = np.ceil(ymax / 50) * 50
-        yticks = np.arange(0, ymax, 50)
+        ymax = np.ceil(ymax / n_gap) * n_gap
+        yticks = np.arange(0, ymax, n_gap)
         format_plot(ax1, yticks=yticks, ylabel=r"\rm Counts")
         ax1.legend(loc="best", prop={"size": 16})
         plt.subplots_adjust(hspace=0)
@@ -610,17 +613,20 @@ class DetectionClassificationFigures(BlissFigures):
         )
         xlabel = r"\rm magnitude " + cuts_or_bins[:-1]
         format_plot(ax2, xlabel=xlabel, ylabel="accuracy")
-        ax2.plot(mags, class_accs, "-o", label=r"\rm classification accuracy")
         ax2.plot(mags, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
         ax2.plot(mags, star_accs, "-o", label=r"\rm star classification accuracy")
+        ax2.plot(mags, class_accs, "-o", label=r"\rm overall classification accuracy")
         ax2.set_xlim(xlims)
         ax2.legend(loc="lower left", prop={"size": 18})
 
-        # setup step plot up top.
-        ax1.step(mags, counts["n_matches"], label=r"\rm \# of matches", where=where_step)
-        ymax = max(counts["n_matches"])
-        ymax = np.ceil(ymax / 50) * 50
-        yticks = np.arange(0, ymax, 50)
+        # setup histogram up top.
+        gcounts = counts["n_matches_coadd_gal"]
+        scounts = counts["n_matches_coadd_star"]
+        ax1.step(mags, gcounts, label=r"\rm matched coadd galaxies", where=where_step)
+        ax1.step(mags, scounts, label=r"\rm matched coadd stars", where=where_step)
+        ymax = max(max(gcounts), max(scounts))
+        ymax = np.ceil(ymax / n_gap) * n_gap
+        yticks = np.arange(0, ymax, n_gap)
         format_plot(ax1, yticks=yticks, ylabel=r"\rm Counts")
         ax1.legend(loc="best", prop={"size": 16})
         plt.subplots_adjust(hspace=0)
@@ -632,11 +638,11 @@ class DetectionClassificationFigures(BlissFigures):
         sns.set_theme(style="darkgrid")
 
         # (1) plots with mag cuts
-        f1, f2 = self.make_detection_class_curves(data["mag_cuts"], data, "cuts")
+        f1, f2 = self.make_detection_class_curves(data["mag_cuts"], data, "cuts", n_gap=50)
 
         # (2) plots using bins
         mag_bins = data["mag_bins"] - 0.5
-        f3, f4 = self.make_detection_class_curves(mag_bins, data, "bins", xlims=(17, 24))
+        f3, f4 = self.make_detection_class_curves(mag_bins, data, "bins", xlims=(17, 24), n_gap=25)
 
         # (3) magnitude / classification scatter
         set_rc_params(tick_label_size=22, label_size=30)
