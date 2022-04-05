@@ -598,11 +598,11 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     precisions = np.array(precisions)
     recalls = np.array(recalls)
     axes[0, 0].scatter(thresholds, precisions)
-    # axes[0,0].xlabel("Threshold")
-    # axes[0,0].ylabel("Expected Precision")
+    axes[0, 0].set_xlabel("Threshold")
+    axes[0, 0].set_ylabel("Expected Precision")
     axes[0, 1].scatter(thresholds, recalls)
-    # axes[0,1].xlabel("Threshold")
-    # axes[0,1].ylabel("Expected Recall")
+    axes[0, 1].set_xlabel("Threshold")
+    axes[0, 1].set_ylabel("Expected Recall")
 
     # colors = precisions == precisions[optimal_point]
     axes[1, 0].scatter(precisions, recalls)
@@ -612,16 +612,22 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     axes[1, 0].annotate(
         f"Expected precision: {x:.2f}\nExpected Recall {y:.2f}", (x, y), fontsize=12
     )
+    axes[1, 0].set_xlabel("Expected Precision")
+    axes[1, 0].set_ylabel("Expected Recall")
     # axes[1,0].xlabel("Expected Precision")
     # axes[1,0].ylabel("Expected Recall")
     axes[2, 0].scatter(precisions, true_precisions)
     x, y = precisions[optimal_point], true_precisions[optimal_point]
     axes[2, 0].scatter(x, y, color="yellow", marker="+")
     axes[2, 0].annotate(f"Expected precision: {x:.2f}\nTrue precision {y:.2f}", (x, y), fontsize=12)
+    axes[2, 0].set_xlabel("Expected Precision")
+    axes[2, 0].set_ylabel("Actual Precision")
     axes[2, 1].scatter(precisions, true_recalls)
     x, y = precisions[optimal_point], true_recalls[optimal_point]
     axes[2, 1].scatter(x, y, color="yellow", marker="+")
     axes[2, 1].annotate(f"Expected precision: {x:.2f}\nTrue recall {y:.2f}", (x, y), fontsize=12)
+    axes[2, 1].set_xlabel("Expected Precision")
+    axes[2, 1].set_ylabel("Actual Recall")
     return fig
 
 
