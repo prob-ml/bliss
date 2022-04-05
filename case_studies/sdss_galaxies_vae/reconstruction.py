@@ -606,14 +606,22 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
 
     # colors = precisions == precisions[optimal_point]
     axes[1, 0].scatter(precisions, recalls)
-    optimal_point = np.argmin(1/precisions + 1/recalls)
-    axes[1, 0].scatter(precisions[optimal_point], recalls[optimal_point], color="yellow", marker="+")
+    optimal_point = np.argmin(1 / precisions + 1 / recalls)
+    x, y = precisions[optimal_point], recalls[optimal_point]
+    axes[1, 0].scatter(x, y, color="yellow", marker="+")
+    axes[1, 0].annotate(
+        f"Expected precision: {x:.2f}\nExpected Recall {y:.2f}", (x, y), fontsize=12
+    )
     # axes[1,0].xlabel("Expected Precision")
     # axes[1,0].ylabel("Expected Recall")
     axes[2, 0].scatter(precisions, true_precisions)
-    axes[2, 0].scatter(precisions[optimal_point], true_precisions[optimal_point], color="yellow", marker="+")
+    x, y = precisions[optimal_point], true_precisions[optimal_point]
+    axes[2, 0].scatter(x, y, color="yellow", marker="+")
+    axes[2, 0].annotate(f"Expected precision: {x:.2f}\nTrue precision {y:.2f}", (x, y), fontsize=12)
     axes[2, 1].scatter(precisions, true_recalls)
-    axes[2, 1].scatter(precisions[optimal_point], true_recalls[optimal_point], color="yellow", marker="+")
+    x, y = precisions[optimal_point], true_recalls[optimal_point]
+    axes[2, 1].scatter(x, y, color="yellow", marker="+")
+    axes[2, 1].annotate(f"Expected precision: {x:.2f}\nTrue recall {y:.2f}", (x, y), fontsize=12)
     return fig
 
 
