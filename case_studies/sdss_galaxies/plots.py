@@ -120,16 +120,12 @@ def remove_outliers(*args, level=0.99):
 class BlissFigures:
     cache = "temp.pt"
 
-    def __init__(self, figdir, cachedir, overwrite=False) -> None:
+    def __init__(self, figdir, cachedir, overwrite=False, img_format="png") -> None:
 
         self.figdir = Path(figdir)
         self.cachefile = Path(cachedir) / self.cache
         self.overwrite = overwrite
-
-    @property
-    @abstractmethod
-    def fignames(self):
-        """What figures will be produced with this class? What are their names?"""
+        self.img_format = img_format
 
     def get_data(self, *args, **kwargs):
         """Return summary of data for producing plot, must be cachable w/ torch.save()."""
@@ -148,30 +144,24 @@ class BlissFigures:
         """Create figures and save to output directory with names from `self.fignames`."""
         data = self.get_data(*args, **kwargs)
         figs = self.create_figures(data)
-        for k, fname in self.fignames.items():
-            figs[k].savefig(self.figdir / fname, format="png")
+        for figname, fig in figs.items():
+            figfile = self.figdir / f"{figname}.{self.img_format}"
+            fig.savefig(figfile, format=self.img_format)
 
     @abstractmethod
     def create_figures(self, data):
         """Return matplotlib figure instances to save based on data."""
-        return mpl.figure.Figure()
+        return {"temp_fig": mpl.figure.Figure()}
 
 
 class AEReconstructionFigures(BlissFigures):
     cache = "ae_cache.pt"
 
-    def __init__(self, figdir, cachedir, overwrite=False, n_examples=5) -> None:
-        super().__init__(figdir=figdir, cachedir=cachedir, overwrite=overwrite)
+    def __init__(self, figdir, cachedir, overwrite=False, n_examples=5, img_format="png") -> None:
+        super().__init__(
+            figdir=figdir, cachedir=cachedir, overwrite=overwrite, img_format=img_format
+        )
         self.n_examples = n_examples
-
-    @property
-    def fignames(self):
-        return {
-            "random_recon": "random_reconstructions.png",
-            "worst_recon": "worst_reconstructions.png",
-            "measure_contours": "single_galaxy_measurements_contours.png",
-            "measure_scatter_bins": "single_galaxy_scatter_bins.png",
-        }
 
     def compute_data(
         self, autoencoder: OneCenteredGalaxyAE, images_file, psf_file, sdss_pixel_scale
@@ -430,27 +420,13 @@ class AEReconstructionFigures(BlissFigures):
         return {
             "random_recon": self.reconstruction_figure(*data["random"]),
             "worst_recon": self.reconstruction_figure(*data["worst"]),
-            "measure_contours": self.make_scatter_contours_plot(data["measurements"]),
-            "measure_scatter_bins": self.make_scatter_bin_plots(data["measurements"]),
+            "single_galaxy_meas_contours": self.make_scatter_contours_plot(data["measurements"]),
+            "single_galaxy_meas_bins": self.make_scatter_bin_plots(data["measurements"]),
         }
 
 
 class DetectionClassificationFigures(BlissFigures):
     cache = "detect_class.pt"
-
-    def __init__(self, figdir, cachedir, overwrite=False) -> None:
-        super().__init__(figdir, cachedir, overwrite=overwrite)
-
-    @property
-    def fignames(self):
-        return {
-            "detection_cuts": "sdss-precision-recall-cuts.png",
-            "classification_cuts": "sdss-classification-acc-cuts.png",
-            "detection_bins": "sdss-precision-recall-bins.png",
-            "classification_bins": "sdss-classification-acc-bins.png",
-            "scatter": "sdss-mag-class-scatter.png",
-            "flux_comparison": "flux-comparison.png",
-        }
 
     def compute_data(
         self, frame: Union[SDSSFrame, SimulatedFrame], encoder, decoder
@@ -679,25 +655,21 @@ class DetectionClassificationFigures(BlissFigures):
         ax1.set_title("Matched Coadd Galaxies")
         ax2.set_title("Matched Coadd Stars")
         return {
-            "detection_cuts": f1,
-            "classification_cuts": f2,
-            "detection_bins": f3,
-            "classification_bins": f4,
-            "scatter": f5,
-            "flux_comparison": f6,
+            "sdss_detection_cuts": f1,
+            "sdss_classification_cuts": f2,
+            "sdss_detection_bins": f3,
+            "sdss_classification_bins": f4,
+            "sdss_scatter_class_prob": f5,
+            "sdss_mag_comparison": f6,
         }
 
 
 class SDSSReconstructionFigures(BlissFigures):
     cache = "recon_sdss.pt"
 
-    def __init__(self, scenes, figdir, cachedir, overwrite=False) -> None:
+    def __init__(self, scenes, figdir, cachedir, overwrite=False, img_format="png") -> None:
         self.scenes = scenes
-        super().__init__(figdir, cachedir, overwrite=overwrite)
-
-    @property
-    def fignames(self):
-        return {k: k + ".png" for k in self.scenes}
+        super().__init__(figdir, cachedir, overwrite=overwrite, img_format=img_format)
 
     def compute_data(self, frame: Union[SDSSFrame, SimulatedFrame], encoder, decoder):
 
@@ -856,10 +828,14 @@ def load_models(cfg, device):
 def plots(cfg):  # pylint: disable=too-many-statements
 
     figs = set(cfg.plots.figs)
-    figdir = cfg.plots.figdir
     cachedir = cfg.plots.cachedir
-    overwrite = cfg.plots.overwrite
     device = torch.device(cfg.plots.device)
+    bfig_kwargs = {
+        "figdir": cfg.plots.figdir,
+        "cachedir": cachedir,
+        "overwrite": cfg.plots.overwrite,
+        "img_format": cfg.plots.image_format,
+    }
 
     if not Path(cachedir).exists():
         warnings.warn("Specified cache directory does not exist, will attempt to create it.")
@@ -890,7 +866,7 @@ def plots(cfg):  # pylint: disable=too-many-statements
             )
 
         # create figure classes and plot.
-        ae_figures = AEReconstructionFigures(figdir, cachedir, overwrite=overwrite, n_examples=5)
+        ae_figures = AEReconstructionFigures(n_examples=5, **bfig_kwargs)
         ae_figures.save_figures(
             autoencoder, galaxies_file, cfg.plots.psf_file, cfg.plots.sdss_pixel_scale
         )
@@ -899,16 +875,14 @@ def plots(cfg):  # pylint: disable=too-many-statements
     # FIGURE 2: Classification and Detection metrics
     if 2 in figs:
         print("INFO: Creating classification and detection metrics from SDSS frame figures...")
-        dc_fig = DetectionClassificationFigures(figdir, cachedir, overwrite=overwrite)
+        dc_fig = DetectionClassificationFigures(**bfig_kwargs)
         dc_fig.save_figures(frame, encoder, decoder)
         mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
     if 3 in figs:
         print("INFO: Creating reconstructions from SDSS figures...")
-        sdss_rec_fig = SDSSReconstructionFigures(
-            cfg.plots.scenes, figdir, cachedir, overwrite=overwrite
-        )
+        sdss_rec_fig = SDSSReconstructionFigures(cfg.plots.scenes, **bfig_kwargs)
         sdss_rec_fig.save_figures(frame, encoder, decoder)
         mpl.rc_file_defaults()
 
