@@ -457,7 +457,7 @@ def create_scene_accuracy_table(scene_metrics_by_mag):
         "star_accuracy",
         "expected_star_accuracy",
         "n",
-        "acc_n_matches",
+        "n_matches",
         "n_galaxies",
     )
     for k, v in scene_metrics_by_mag.items():

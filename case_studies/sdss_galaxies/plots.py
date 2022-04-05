@@ -2,6 +2,7 @@
 """Produce all figures. Save to PNG format."""
 import warnings
 from abc import abstractmethod
+from collections import defaultdict
 from pathlib import Path
 from typing import Union
 
@@ -95,9 +96,9 @@ def format_plot(ax, xlims=None, ylims=None, xticks=None, yticks=None, xlabel="",
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
 
-    if xticks:
+    if xticks is not None:
         ax.set_xticks(xticks)
-    if yticks:
+    if yticks is not None:
         ax.set_yticks(yticks)
 
 
@@ -119,16 +120,12 @@ def remove_outliers(*args, level=0.99):
 class BlissFigures:
     cache = "temp.pt"
 
-    def __init__(self, figdir, cachedir, overwrite=False) -> None:
+    def __init__(self, figdir, cachedir, overwrite=False, img_format="png") -> None:
 
         self.figdir = Path(figdir)
         self.cachefile = Path(cachedir) / self.cache
         self.overwrite = overwrite
-
-    @property
-    @abstractmethod
-    def fignames(self):
-        """What figures will be produced with this class? What are their names?"""
+        self.img_format = img_format
 
     def get_data(self, *args, **kwargs):
         """Return summary of data for producing plot, must be cachable w/ torch.save()."""
@@ -147,30 +144,24 @@ class BlissFigures:
         """Create figures and save to output directory with names from `self.fignames`."""
         data = self.get_data(*args, **kwargs)
         figs = self.create_figures(data)
-        for k, fname in self.fignames.items():
-            figs[k].savefig(self.figdir / fname, format="png")
+        for figname, fig in figs.items():
+            figfile = self.figdir / f"{figname}.{self.img_format}"
+            fig.savefig(figfile, format=self.img_format)
 
     @abstractmethod
     def create_figures(self, data):
         """Return matplotlib figure instances to save based on data."""
-        return mpl.figure.Figure()
+        return {"temp_fig": mpl.figure.Figure()}
 
 
 class AEReconstructionFigures(BlissFigures):
     cache = "ae_cache.pt"
 
-    def __init__(self, figdir, cachedir, overwrite=False, n_examples=5) -> None:
-        super().__init__(figdir=figdir, cachedir=cachedir, overwrite=overwrite)
+    def __init__(self, figdir, cachedir, overwrite=False, n_examples=5, img_format="png") -> None:
+        super().__init__(
+            figdir=figdir, cachedir=cachedir, overwrite=overwrite, img_format=img_format
+        )
         self.n_examples = n_examples
-
-    @property
-    def fignames(self):
-        return {
-            "random_recon": "random_reconstructions.png",
-            "worst_recon": "worst_reconstructions.png",
-            "measure_contours": "single_galaxy_measurements_contours.png",
-            "measure_scatter_bins": "single_galaxy_scatter_bins.png",
-        }
 
     def compute_data(
         self, autoencoder: OneCenteredGalaxyAE, images_file, psf_file, sdss_pixel_scale
@@ -429,27 +420,17 @@ class AEReconstructionFigures(BlissFigures):
         return {
             "random_recon": self.reconstruction_figure(*data["random"]),
             "worst_recon": self.reconstruction_figure(*data["worst"]),
-            "measure_contours": self.make_scatter_contours_plot(data["measurements"]),
-            "measure_scatter_bins": self.make_scatter_bin_plots(data["measurements"]),
+            "single_galaxy_meas_contours": self.make_scatter_contours_plot(data["measurements"]),
+            "single_galaxy_meas_bins": self.make_scatter_bin_plots(data["measurements"]),
         }
 
 
 class DetectionClassificationFigures(BlissFigures):
     cache = "detect_class.pt"
 
-    def __init__(self, figdir, cachedir, overwrite=False) -> None:
-        super().__init__(figdir, cachedir, overwrite=overwrite)
-
-    @property
-    def fignames(self):
-        return {
-            "detection": "sdss-precision-recall.png",
-            "classification": "sdss-classification-acc.png",
-            "scatter": "sdss-mag-class-scatter.png",
-            "flux_comparison": "flux-comparison.png",
-        }
-
-    def compute_data(self, frame: Union[SDSSFrame, SimulatedFrame], encoder, decoder):
+    def compute_data(
+        self, frame: Union[SDSSFrame, SimulatedFrame], encoder, decoder
+    ):  # pylint: disable=too-many-statements
         bp = encoder.border_padding
         device = encoder.device
         slen = 300  # chunk side-length for whole iamge.
@@ -476,20 +457,23 @@ class DetectionClassificationFigures(BlissFigures):
 
         est_params["mags"] = sdss.convert_flux_to_mag(est_params["fluxes"])
 
-        mag_bins = np.arange(18, 24.5, 0.25)
+        mag_cuts = np.arange(18, 24.5, 0.25)
         precisions = []
         recalls = []
+        f1s = []
         class_accs = []
         galaxy_accs = []
         star_accs = []
+        counts = defaultdict(list)
 
         # compute data for precision/recall/classification accuracy as a function of magnitude.
-        for mag in mag_bins:
+        for mag in mag_cuts:
             res = reporting.scene_metrics(
                 coadd_params, est_params, mag_max=mag, slack=1.0, mag_slack=1.0
             )
             precisions.append(res["precision"].item())
             recalls.append(res["recall"].item())
+            f1s.append(res["f1"].item())
             class_accs.append(res["class_acc"].item())
 
             # how many out of the matched galaxies are accurately classified?
@@ -500,7 +484,44 @@ class DetectionClassificationFigures(BlissFigures):
             star_acc = res["conf_matrix"][1, 1] / res["conf_matrix"][1, :].sum()
             star_accs.append(star_acc)
 
-        # data for scatter plot of misclassifications.
+            for k, v in res["counts"].items():
+                counts[k].append(v)
+
+        cuts_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, dict(counts))
+
+        mag_bins = np.arange(18, 25, 1.0)
+        precisions = []
+        recalls = []
+        f1s = []
+        class_accs = []
+        galaxy_accs = []
+        star_accs = []
+        counts = defaultdict(list)
+
+        # compute data for precision/recall/classification accuracy as a function of magnitude.
+        for mag in mag_bins:
+            res = reporting.scene_metrics(
+                coadd_params, est_params, mag_min=mag - 1.0, mag_max=mag, slack=1.0, mag_slack=1.0
+            )
+            precisions.append(res["precision"].item())
+            recalls.append(res["recall"].item())
+            f1s.append(res["f1"].item())
+            class_accs.append(res["class_acc"].item())
+
+            # how many out of the matched galaxies are accurately classified?
+            galaxy_acc = res["conf_matrix"][0, 0] / res["conf_matrix"][0, :].sum()
+            galaxy_accs.append(galaxy_acc)
+
+            # how many out of the matched stars are correctly classified?
+            star_acc = res["conf_matrix"][1, 1] / res["conf_matrix"][1, :].sum()
+            star_accs.append(star_acc)
+
+            for k, v in res["counts"].items():
+                counts[k].append(v)
+
+        bins_data = (precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, dict(counts))
+
+        # data for scatter plot of misclassifications (over all magnitudes).
         tplocs = coadd_params.plocs.reshape(-1, 2)
         eplocs = est_params.plocs.reshape(-1, 2)
         tindx, eindx, dkeep, _ = reporting.match_by_locs(tplocs, eplocs, slack=1.0)
@@ -512,47 +533,96 @@ class DetectionClassificationFigures(BlissFigures):
 
         return {
             "mag_bins": mag_bins,
-            "precisions": precisions,
-            "recalls": recalls,
-            "class_accs": class_accs,
-            "star_accs": star_accs,
-            "galaxy_accs": galaxy_accs,
+            "mag_cuts": mag_cuts,
+            "cuts_data": cuts_data,
+            "bins_data": bins_data,
             "scatter_class": (tgbool, egbool, egprob, tmag, emag),
         }
 
-    def create_figures(self, data):  # pylint: disable=too-many-statements
-        """Make figures related to detection and classification in SDSS."""
-        sns.set_theme(style="darkgrid")
+    def make_detection_class_curves(
+        self, mags, data, cuts_or_bins="cuts", xlims=(18, 24), ratio=2, where_step="mid", n_gap=50
+    ):
+        assert cuts_or_bins in {"cuts", "bins"}
+        precisions, recalls, f1s, class_accs, galaxy_accs, star_accs, counts = data[
+            f"{cuts_or_bins}_data"
+        ]
 
-        mag_bins = data["mag_bins"]
-        recalls = data["recalls"]
-        precisions = data["precisions"]
-        class_accs = data["class_accs"]
-        galaxy_accs = data["galaxy_accs"]
-        star_accs = data["star_accs"]
-
-        # precision / recall
+        # (1) precision / recall
         set_rc_params(tick_label_size=22, label_size=30)
-        f1, ax = plt.subplots(1, 1, figsize=(10, 10))
-        format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="value of metric")
-        ax.plot(mag_bins, recalls, "-o", label=r"\rm recall")
-        ax.plot(mag_bins, precisions, "-o", label=r"\rm precision")
-        plt.xlim(18, 24)
-        ax.legend(loc="best", prop={"size": 22})
+        f1, (ax1, ax2) = plt.subplots(
+            2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
+        )
+        ymin = min(min(precisions), min(recalls))
+        yticks = np.arange(np.round(ymin, 1), 1.1, 0.1)
+        format_plot(ax2, xlabel=r"\rm magnitude cut", ylabel="metric", yticks=yticks)
+        ax2.plot(mags, recalls, "-o", label=r"\rm recall")
+        ax2.plot(mags, precisions, "-o", label=r"\rm precision")
+        ax2.plot(mags, f1s, "-o", label=r"\rm f1 score")
+        ax2.legend(loc="lower left", prop={"size": 22})
+        ax2.set_xlim(xlims)
+
+        # setup histogram plot up top.
+        c1 = CB_color_cycle[3]
+        c2 = CB_color_cycle[4]
+        ax1.step(mags, counts["tgcount"], label="coadd galaxies", where=where_step, color=c1)
+        ax1.step(mags, counts["tscount"], label="coadd stars", where=where_step, color=c2)
+        ax1.step(
+            mags, counts["egcount"], label="pred. galaxies", ls="--", where=where_step, color=c1
+        )
+        ax1.step(mags, counts["escount"], label="pred. stars", ls="--", where=where_step, color=c2)
+        ymax = max(
+            max(counts["tgcount"]),
+            max(counts["tscount"]),
+            max(counts["egcount"]),
+            max(counts["escount"]),
+        )
+        ymax = np.ceil(ymax / n_gap) * n_gap
+        yticks = np.arange(0, ymax, n_gap)
+        format_plot(ax1, yticks=yticks, ylabel=r"\rm Counts")
+        ax1.legend(loc="best", prop={"size": 16})
+        plt.subplots_adjust(hspace=0)
 
         # classification accuracy
         set_rc_params(tick_label_size=22, label_size=30)
-        f2, ax = plt.subplots(1, 1, figsize=(10, 10))
-        format_plot(ax, xlabel=r"\rm magnitude cut", ylabel="accuracy")
-        ax.plot(mag_bins, class_accs, "-o", label=r"\rm classification accuracy")
-        ax.plot(mag_bins, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
-        ax.plot(mag_bins, star_accs, "-o", label=r"\rm star classification accuracy")
-        plt.xlim(18, 24)
-        ax.legend(loc="best", prop={"size": 22})
+        f2, (ax1, ax2) = plt.subplots(
+            2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
+        )
+        xlabel = r"\rm magnitude " + cuts_or_bins[:-1]
+        format_plot(ax2, xlabel=xlabel, ylabel="accuracy")
+        ax2.plot(mags, galaxy_accs, "-o", label=r"\rm galaxy classification accuracy")
+        ax2.plot(mags, star_accs, "-o", label=r"\rm star classification accuracy")
+        ax2.plot(mags, class_accs, "-o", label=r"\rm overall classification accuracy")
+        ax2.set_xlim(xlims)
+        ax2.legend(loc="lower left", prop={"size": 18})
 
-        # magnitude / classification scatter
+        # setup histogram up top.
+        gcounts = counts["n_matches_coadd_gal"]
+        scounts = counts["n_matches_coadd_star"]
+        ax1.step(mags, gcounts, label=r"\rm matched coadd galaxies", where=where_step)
+        ax1.step(mags, scounts, label=r"\rm matched coadd stars", where=where_step)
+        ymax = max(max(gcounts), max(scounts))
+        ymax = np.ceil(ymax / n_gap) * n_gap
+        yticks = np.arange(0, ymax, n_gap)
+        format_plot(ax1, yticks=yticks, ylabel=r"\rm Counts")
+        ax1.legend(loc="best", prop={"size": 16})
+        plt.subplots_adjust(hspace=0)
+
+        return f1, f2
+
+    def create_figures(self, data):
+        """Make figures related to detection and classification in SDSS."""
+        sns.set_theme(style="darkgrid")
+
+        # (1) plots with mag cuts
+        f1, f2 = self.make_detection_class_curves(data["mag_cuts"], data, "cuts", n_gap=50)
+
+        # (2) plots using bins
+        mag_bins = data["mag_bins"] - 0.5
+        f3, f4 = self.make_detection_class_curves(mag_bins, data, "bins", xlims=(17, 24), n_gap=25)
+
+        # (3) magnitude / classification scatter
         set_rc_params(tick_label_size=22, label_size=30)
-        f3, ax = plt.subplots(1, 1, figsize=(10, 10))
+        f5, ax = plt.subplots(1, 1, figsize=(10, 10))
         tgbool, egbool, egprob, tmag, emag = data["scatter_class"]
         tgbool, egbool = tgbool.numpy().astype(bool), egbool.numpy().astype(bool)
         egprob = egprob.numpy()
@@ -569,8 +639,8 @@ class DetectionClassificationFigures(BlissFigures):
         ax.set_ylabel("Estimated Probability of Galaxy")
         ax.legend(loc="best", prop={"size": 22})
 
-        # mag / mag scatter
-        f4, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
+        # (4) mag / mag scatter
+        f6, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
         ax1.scatter(tmag[tgbool], emag[tgbool], marker="o", c="r", alpha=0.5)
         ax1.plot([15, 23], [15, 23], c="r", label="x=y line")
         ax2.scatter(tmag[~tgbool], emag[~tgbool], marker="o", c="b", alpha=0.5)
@@ -584,19 +654,22 @@ class DetectionClassificationFigures(BlissFigures):
         ax2.set_ylabel("Estimated Magnitude")
         ax1.set_title("Matched Coadd Galaxies")
         ax2.set_title("Matched Coadd Stars")
-        return {"detection": f1, "classification": f2, "scatter": f3, "flux_comparison": f4}
+        return {
+            "sdss_detection_cuts": f1,
+            "sdss_classification_cuts": f2,
+            "sdss_detection_bins": f3,
+            "sdss_classification_bins": f4,
+            "sdss_scatter_class_prob": f5,
+            "sdss_mag_comparison": f6,
+        }
 
 
 class SDSSReconstructionFigures(BlissFigures):
     cache = "recon_sdss.pt"
 
-    def __init__(self, scenes, figdir, cachedir, overwrite=False) -> None:
+    def __init__(self, scenes, figdir, cachedir, overwrite=False, img_format="png") -> None:
         self.scenes = scenes
-        super().__init__(figdir, cachedir, overwrite=overwrite)
-
-    @property
-    def fignames(self):
-        return {k: k + ".png" for k in self.scenes}
+        super().__init__(figdir, cachedir, overwrite=overwrite, img_format=img_format)
 
     def compute_data(self, frame: Union[SDSSFrame, SimulatedFrame], encoder, decoder):
 
@@ -755,10 +828,14 @@ def load_models(cfg, device):
 def plots(cfg):  # pylint: disable=too-many-statements
 
     figs = set(cfg.plots.figs)
-    figdir = cfg.plots.figdir
     cachedir = cfg.plots.cachedir
-    overwrite = cfg.plots.overwrite
     device = torch.device(cfg.plots.device)
+    bfig_kwargs = {
+        "figdir": cfg.plots.figdir,
+        "cachedir": cachedir,
+        "overwrite": cfg.plots.overwrite,
+        "img_format": cfg.plots.image_format,
+    }
 
     if not Path(cachedir).exists():
         warnings.warn("Specified cache directory does not exist, will attempt to create it.")
@@ -789,7 +866,7 @@ def plots(cfg):  # pylint: disable=too-many-statements
             )
 
         # create figure classes and plot.
-        ae_figures = AEReconstructionFigures(figdir, cachedir, overwrite=overwrite, n_examples=5)
+        ae_figures = AEReconstructionFigures(n_examples=5, **bfig_kwargs)
         ae_figures.save_figures(
             autoencoder, galaxies_file, cfg.plots.psf_file, cfg.plots.sdss_pixel_scale
         )
@@ -798,16 +875,14 @@ def plots(cfg):  # pylint: disable=too-many-statements
     # FIGURE 2: Classification and Detection metrics
     if 2 in figs:
         print("INFO: Creating classification and detection metrics from SDSS frame figures...")
-        dc_fig = DetectionClassificationFigures(figdir, cachedir, overwrite=overwrite)
+        dc_fig = DetectionClassificationFigures(**bfig_kwargs)
         dc_fig.save_figures(frame, encoder, decoder)
         mpl.rc_file_defaults()
 
     # FIGURE 3: Reconstructions on SDSS
     if 3 in figs:
         print("INFO: Creating reconstructions from SDSS figures...")
-        sdss_rec_fig = SDSSReconstructionFigures(
-            cfg.plots.scenes, figdir, cachedir, overwrite=overwrite
-        )
+        sdss_rec_fig = SDSSReconstructionFigures(cfg.plots.scenes, **bfig_kwargs)
         sdss_rec_fig.save_figures(frame, encoder, decoder)
         mpl.rc_file_defaults()
 
