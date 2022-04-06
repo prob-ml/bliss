@@ -255,13 +255,7 @@ class GalsimGalaxyDecoder:
         image = gal_conv.drawImage(
             nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
         )
-        image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
-        return image
-        # noiseless = image.clone()
-        # # add noise and background.
-        # image += self.background.mean()
-        # image += image.sqrt() * torch.randn(*image.shape)
-        # return {"images": image, "background": self.background, "noiseless": noiseless}
+        return torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
 
 
 class SDSSGalaxies(pl.LightningDataModule, Dataset):

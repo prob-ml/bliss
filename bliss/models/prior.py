@@ -26,7 +26,7 @@ class GalaxyPrior:
         """Class to sample galaxy latent variables.
 
         Args:
-            latents_file: Location of previously sampled galaxy latent variables.
+            latents_file_str: Location of previously sampled galaxy latent variables.
             n_latent_batches: Number of batches for galaxy latent samples.
             autoencoder: A OneCenteredGalaxyAE object used to generate galaxy latents.
             autoencoder_ckpt: Location of state_dict for autoencoder (optional).

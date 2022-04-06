@@ -156,7 +156,8 @@ class ChunkedScene:
             chunk_est_dict[chunk_type] = self._reconstruct_chunks(
                 chunks, bgs, encoder, decoder, device
             )
-        scene_recon = self._combine_into_scene(chunk_est_dict)
+        reconstructions_dict = {k: v["reconstructions"] for k, v in chunk_est_dict.items()}
+        scene_recon = self._combine_into_scene(reconstructions_dict)
         chunk_tile_maps_dict = {k: v["tile_maps"] for k, v in chunk_est_dict.items()}
         tile_map_recon = self._combine_tile_maps(chunk_tile_maps_dict)
         return scene_recon, tile_map_recon
@@ -175,38 +176,38 @@ class ChunkedScene:
             "tile_maps": tile_maps,
         }
 
-    def _combine_into_scene(self, chunk_est_dict: Dict[str, Dict[str, Tensor]]):
-        main = chunk_est_dict["main"]["reconstructions"]
-        main = rearrange(
+    def _combine_into_scene(self, reconstructions: Dict[str, Tensor]) -> Tensor:
+        main = reconstructions["main"]
+        main: Tensor = rearrange(
             main,
             "(nch ncw) c h w -> nch ncw c h w",
             nch=self.n_chunks_h_main,
             ncw=self.n_chunks_w_main,
         )
 
-        if "right" in chunk_est_dict:
-            right = chunk_est_dict["right"]["reconstructions"]
+        right = reconstructions.get("right")
+        if right is not None:
             right_padding = self.kernel_size - right.shape[-1]
             right = F.pad(right, (0, right_padding, 0, 0))
-            right = rearrange(right, "nch c h w -> nch 1 c h w")
+            right: Tensor = rearrange(right, "nch c h w -> nch 1 c h w")
             main = torch.cat((main, right), dim=1)
         else:
             right_padding = 0
 
-        if "bottom" in chunk_est_dict:
-            bottom = chunk_est_dict["bottom"]["reconstructions"]
+        bottom = reconstructions.get("bottom")
+        if bottom is not None:
             bottom_padding = self.kernel_size - bottom.shape[-2]
             bottom = F.pad(bottom, (0, 0, 0, bottom_padding))
 
-            if "bottom_right" in chunk_est_dict:
-                bottom_right = chunk_est_dict["bottom_right"]["reconstructions"]
+            bottom_right = reconstructions.get("bottom_right")
+            if bottom_right is not None:
                 bottom_right = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
                 bottom = torch.cat((bottom, bottom_right), dim=0)
-            bottom = rearrange(bottom, "ncw c h w -> 1 ncw c h w")
+            bottom: Tensor = rearrange(bottom, "ncw c h w -> 1 ncw c h w")
             main = torch.cat((main, bottom), dim=0)
         else:
             bottom_padding = 0
-        image_flat = rearrange(main, "nch ncw c h w -> 1 (c h w) (nch ncw)")
+        image_flat: Tensor = rearrange(main, "nch ncw c h w -> 1 (c h w) (nch ncw)")
         output_size = (self.output_size[0] + bottom_padding, self.output_size[1] + right_padding)
         image = F.fold(
             image_flat, output_size=output_size, kernel_size=self.kernel_size, stride=self.slen
