@@ -14,6 +14,7 @@ class ConstantBackground(nn.Module):
         self.register_buffer("background", background, persistent=False)
 
     def sample(self, shape) -> Tensor:
+        assert isinstance(self.background, Tensor)
         batch_size, c, hlen, wlen = shape
         return self.background.expand(batch_size, c, hlen, wlen)
 
@@ -34,6 +35,7 @@ class SimulatedSDSSBackground(nn.Module):
         self.height, self.width = self.background.shape[-2:]
 
     def sample(self, shape) -> Tensor:
+        assert isinstance(self.background, Tensor)
         batch_size, c, hlen, wlen = shape
         assert self.background.shape[1] == c
         h_diff, w_diff = self.height - hlen, self.width - wlen
