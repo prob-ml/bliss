@@ -242,16 +242,11 @@ class BinaryEncoder(pl.LightningModule):
         assert batch["images"].shape[-2] == batch["images"].shape[-1]
 
         for i in range(n_samples):
+            labels = None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star")
+            bp = self.border_padding
+            images = batch["images"]
             plot_image_and_locs(
-                fig,
-                axes[i],
-                i,
-                batch["images"],
-                bp=self.border_padding,
-                truth=true_params,
-                estimate=est,
-                labels=None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star"),
-                annotate_probs=True,
+                fig, axes[i], i, images, bp, true_params, est, labels=labels, annotate_probs=True
             )
 
         fig.tight_layout()

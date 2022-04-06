@@ -556,35 +556,35 @@ def plot_image_and_locs(
     fig: Figure,
     ax: Axes,
     idx: int,
-    image: Tensor,
+    images: Tensor,
     bp: int,
     truth: Optional[FullCatalog] = None,
     estimate: Optional[FullCatalog] = None,
-    labels: list = None,
     vrange: tuple = None,
+    s=20,
+    lw=1,
+    alpha=1.0,
+    labels: list = None,
+    cmap_image: str = "gray",
+    cmap_prob: str = "RdYlBu",
     annotate_axis: bool = False,
     annotate_probs: bool = False,
     add_border: bool = False,
-    cmap_image: str = "gray",
-    cmap_prob: str = "RdYlBu",
-    s=20,
-    alpha=1.0,
-    lw=1,
 ):
     # NOTE: labels must be a tuple/list of names with order (true star, true_gal, est_star, est_gal)
     # NOTE: true_plocs and est_plocs should be consistent both will be adjust with -0.5+bp
-    assert len(image.shape) == 4, "Image should be in batch form just like truth/estimate catalogs."
-    assert image.shape[0] == 1, "Only 1 band supported."
-    assert image.shape[-1] == image.shape[-2], "Only square images are supported."
+    assert len(images.shape) == 4, "Images should be batch form just like truth/estimate catalogs."
+    assert images.shape[0] == 1, "Only 1 band supported."
+    assert images.shape[-1] == images.shape[-2], "Only square images are supported."
     if annotate_probs:
         assert "galaxy_probs" in estimate, "Inconsistent inputs to plot_image_and_locs"
-    image = image[idx, 0].cpu().numpy()
-    slen = image.shape[-1]
+    images = images[idx, 0].cpu().numpy()
+    slen = images.shape[-1]
 
     # plot image first
-    vmin = image.min().item() if vrange is None else vrange[0]
-    vmax = image.max().item() if vrange is None else vrange[1]
-    plot_image(fig, ax, image, vrange=(vmin, vmax), cmap=cmap_image)
+    vmin = images.min().item() if vrange is None else vrange[0]
+    vmax = images.max().item() if vrange is None else vrange[1]
+    plot_image(fig, ax, images, vrange=(vmin, vmax), cmap=cmap_image)
 
     # (optionally) add white border showing where centers of stars and galaxies can be
     if add_border:
