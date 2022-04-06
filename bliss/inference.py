@@ -189,7 +189,7 @@ class ChunkedScene:
         if right is not None:
             right_padding = self.kernel_size - right.shape[-1]
             right_padded: Tensor = F.pad(right, (0, right_padding, 0, 0))
-            right_padded = rearrange(right, "nch c h w -> nch 1 c h w")
+            right_padded = rearrange(right_padded, "nch c h w -> nch 1 c h w")
             main = torch.cat((main, right_padded), dim=1)
         else:
             right_padding = 0

@@ -217,14 +217,14 @@ class GalsimGalaxyDecoder:
         self.pixel_scale = pixel_scale
         self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
 
-    def __call__(self, z: Tensor):
+    def __call__(self, z: Tensor) -> Tensor:
         images = []
         for latent in z:
-            image = self.render_galaxy(latent)["noiseless"]
+            image = self.render_galaxy(latent)
             images.append(image)
         return torch.stack(images, dim=0).to(z.device)
 
-    def render_galaxy(self, galaxy_params):
+    def render_galaxy(self, galaxy_params) -> Tensor:
         if isinstance(galaxy_params, Tensor):
             galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
