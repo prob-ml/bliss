@@ -594,15 +594,13 @@ def plot_image_and_locs(
     assert len(images.shape) == 4, "Images should be batch form just like truth/estimate catalogs."
     assert images.shape[1] == 1, "Only 1 band supported."
     assert images.shape[-1] == images.shape[-2], "Only square images are supported."
-    if annotate_probs:
-        assert "galaxy_probs" in estimate, "Inconsistent inputs to plot_image_and_locs"
-    images = images[idx, 0].cpu().numpy()
+    image = images[idx, 0].cpu().numpy()
     slen = images.shape[-1]
 
     # plot image first
-    vmin = images.min().item() if vrange is None else vrange[0]
-    vmax = images.max().item() if vrange is None else vrange[1]
-    plot_image(fig, ax, images, vrange=(vmin, vmax), cmap=cmap_image)
+    vmin = image.min().item() if vrange is None else vrange[0]
+    vmax = image.max().item() if vrange is None else vrange[1]
+    plot_image(fig, ax, image, vrange=(vmin, vmax), cmap=cmap_image)
 
     # (optionally) add white border showing where centers of stars and galaxies can be
     if add_border:
