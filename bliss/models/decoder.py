@@ -116,6 +116,7 @@ class ImageDecoder(pl.LightningModule):
         return reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
 
     def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
+        assert self.galaxy_tile_decoder is not None
         galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
         galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
         galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(
@@ -232,10 +233,10 @@ def reconstruct_image_from_ptiles(
     stride = (tile_slen, tile_slen)
     n_tiles_hw = (n_tiles_h, n_tiles_w)
 
-    output_size = []
+    output_size_list = []
     for i in (0, 1):
-        output_size.append(kernel_size[i] + (n_tiles_hw[i] - 1) * stride[i])
-    output_size = tuple(output_size)
+        output_size_list.append(kernel_size[i] + (n_tiles_hw[i] - 1) * stride[i])
+    output_size = tuple(output_size_list)
 
     folded_image = F.fold(image_ptiles_prefold, output_size, kernel_size, stride=stride)
 
@@ -308,6 +309,7 @@ class Tiler(nn.Module):
         Returns:
             Tensor with shape = (n_ptiles x n_bands x slen x slen)
         """
+        assert isinstance(self.swap, Tensor)
         assert source.shape[2] == source.shape[3]
         assert locs.shape[1] == 2
 
@@ -368,7 +370,9 @@ class Tiler(nn.Module):
 
 def get_mgrid(slen: int):
     offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+    # Currently type-checking with mypy doesn't work with np.mgrid
+    # See https://github.com/python/mypy/issues/11185.
+    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]  # type: ignore
     mgrid = torch.tensor(np.dstack((y, x))) / offset
     # mgrid is between -1 and 1
     # then scale slightly because of the way f.grid_sample

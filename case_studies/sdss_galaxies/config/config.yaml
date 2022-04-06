@@ -45,11 +45,14 @@ datasets:
             a_bulge_disk_ratio: 2.0
         decoder:
             _target_: bliss.datasets.galsim_galaxies.GalsimGalaxyDecoder
-            background: 865
             n_bands: 1
             slen: 53
             pixel_scale: 0.396
             psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+        background:
+            _target_: bliss.datasets.background.ConstantBackground
+            background:
+                - 865.0
         num_workers: 0
         batch_size: 64
         n_batches: 10
@@ -60,7 +63,7 @@ datasets:
         n_tiles_h: 10
         n_tiles_w: 10
         background:
-            _target_: bliss.datasets.simulated.SimulatedSDSSBackground
+            _target_: bliss.datasets.background.SimulatedSDSSBackground
             sdss_dir: ${paths.sdss}
             run: 94
             camcol: 1

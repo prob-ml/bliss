@@ -20,6 +20,7 @@ scipy = "^1.4.1"
 seaborn = "^0.11.2"
 torch = "~1.8"
 torchmetrics = "^0.5.1"
+pytest-mypy = "^0.9.1"
 
 [tool.poetry.dev-dependencies]
 Cython = "^0.29.21"

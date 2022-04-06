@@ -57,7 +57,7 @@ class DetectionMetrics(Metric):
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true: FullCatalog, est: FullCatalog):
+    def update(self, true, est):
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
         assert isinstance(true, FullCatalog)
         assert isinstance(est, FullCatalog)
@@ -124,7 +124,7 @@ class ClassificationMetrics(Metric):
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true: FullCatalog, est: FullCatalog):
+    def update(self, true, est):
         """Update the internal state of the metric including correct # of classifications."""
         assert isinstance(true, FullCatalog)
         assert isinstance(est, FullCatalog)
@@ -563,6 +563,7 @@ def plot_image_and_locs(
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
     if galaxy_probs is not None:
+        assert estimate is not None
         assert "galaxy_bools" in estimate, "Inconsistent inputs to plot_image_and_locs"
     use_galaxy_bools = "galaxy_bools" in estimate if estimate is not None else False
     bpad = int((images.shape[-1] - slen) / 2)

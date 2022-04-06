@@ -78,7 +78,10 @@ class BinaryEncoder(pl.LightningModule):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def forward(self, images: Tensor, background: Tensor, locs: Tensor):
+    def forward(self, images, background, locs):
+        return self.encode(images, background, locs)
+
+    def encode(self, images: Tensor, background: Tensor, locs: Tensor) -> Tensor:
         """Runs the binary encoder on centered_ptiles."""
         centered_tiles = self._get_images_in_centered_tiles(images, background, locs)
         assert centered_tiles.shape[-1] == centered_tiles.shape[-2] == self.slen

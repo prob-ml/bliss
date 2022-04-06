@@ -130,8 +130,8 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         chunks = make_image_into_chunks(image, self.kernel_size, self.stride)
         bg_chunks = make_image_into_chunks(background, self.kernel_size, self.stride)
         catalogs: List[TileCatalog] = []
-        chunks_with_galaxies = []
-        bgs_with_galaxies = []
+        chunks_with_galaxies_list: List[Tensor] = []
+        bgs_with_galaxies_list: List[Tensor] = []
         encoder = self.encoder.to(self.prerender_device)
         with torch.no_grad():
             for chunk, bg in tqdm(zip(chunks, bg_chunks)):
@@ -140,10 +140,10 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
                 tile_map = encoder.max_a_post(chunk_device, bg_device)
                 if tile_map["galaxy_bools"].sum() > 0:
                     catalogs.append(tile_map.cpu())
-                    chunks_with_galaxies.append(chunk.cpu())
-                    bgs_with_galaxies.append(bg.cpu())
-        chunks_with_galaxies = torch.stack(chunks_with_galaxies, dim=0)
-        bgs_with_galaxies = torch.stack(bgs_with_galaxies, dim=0)
+                    chunks_with_galaxies_list.append(chunk.cpu())
+                    bgs_with_galaxies_list.append(bg.cpu())
+        chunks_with_galaxies = torch.stack(chunks_with_galaxies_list, dim=0)
+        bgs_with_galaxies = torch.stack(bgs_with_galaxies_list, dim=0)
         # pylint: disable=consider-using-f-string
         msg = "INFO: Number of chunks with galaxies: {ng}/{g}".format(
             ng=chunks_with_galaxies.shape[0],

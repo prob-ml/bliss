@@ -107,7 +107,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
 
-    def forward(self, image: Tensor, background: Tensor) -> Tuple[Tensor, Tensor]:
+    def forward(self, image, background):
+        return self.reconstruct(image, background)
+
+    def reconstruct(self, image: Tensor, background: Tensor) -> Tuple[Tensor, Tensor]:
         """Gets reconstructed image from running through encoder and decoder."""
         z, pq_z = self.enc.forward(image - background)
         recon_mean = self.dec.forward(z)
