@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import numpy as np
 import torch
 from einops import rearrange
@@ -7,7 +9,7 @@ from bliss.datasets.sdss import SloanDigitalSkySurvey
 
 
 class ConstantBackground(nn.Module):
-    def __init__(self, background):
+    def __init__(self, background: Tuple[float, ...]):
         super().__init__()
         background = torch.tensor(background)
         background = rearrange(background, "c -> 1 c 1 1")

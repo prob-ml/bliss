@@ -369,7 +369,7 @@ class Tiler(nn.Module):
 
 
 def get_mgrid(slen: int):
-    offset = int((slen - 1) / 2)
+    offset = (slen - 1) / 2
     x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
     mgrid = torch.tensor(np.dstack((y, x))) / offset
     # mgrid is between -1 and 1
