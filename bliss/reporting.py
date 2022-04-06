@@ -531,7 +531,9 @@ def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="gray"):
         fig.colorbar(im, cax=cax, orientation="vertical")
 
 
-def plot_locs(ax, bpad, plocs, galaxy_probs, marker="x", s=20, annotate_probs=False, cmap="RdYlBu"):
+def plot_locs(
+    ax, bpad, plocs, galaxy_probs, m="x", s=20, lw=1, alpha=1, annotate=False, cmap="RdYlBu"
+):
     # NOTE: galaxy_probs can just be galaxy_bool.
     assert len(plocs.shape) == 2
     assert plocs.shape[1] == 2
@@ -545,8 +547,8 @@ def plot_locs(ax, bpad, plocs, galaxy_probs, marker="x", s=20, annotate_probs=Fa
         cmp = mpl.cm.get_cmap(cmap)
         color = cmp(prob)
         if xi > bpad and yi > bpad:
-            ax.scatter(xi, yi, c=color, marker=marker, s=s)
-            if annotate_probs:
+            ax.scatter(xi, yi, c=color, marker=m, s=s, lw=lw, alpha=alpha)
+            if annotate:
                 ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
 
 
@@ -564,6 +566,9 @@ def plot_image_and_locs(
     annotate_probs: bool = False,
     cmap_image: str = "gray",
     cmap_prob: str = "RdYlBu",
+    s=20,
+    alpha=1.0,
+    lw=1,
 ):
     # NOTE: labels must be a tuple/list of names with order (true star, true_gal, est_star, est_gal)
     assert len(image.shape) == 4, "Image should be in batch form just like truth/estimate catalogs."
@@ -586,12 +591,12 @@ def plot_image_and_locs(
 
     if truth:
         # true parameters on full image.
-        true_n_sources = truth.n_sources[idx].cpu().numpy()
-        true_plocs = truth.plocs[idx].cpu().numpy()
-        true_galaxy_bools = truth["galaxy_bools"][idx].cpu().numpy()
+        tplocs = truth.plocs[idx].cpu().numpy()
+        tgbools = truth["galaxy_bools"][idx].float().cpu().numpy()
 
         # plot true locations
-        plot_locs(ax, bpad, true_plocs, true_galaxy_bools, "x", s=20, cmap=cmap_prob)
+        sp = s * 1.5
+        plot_locs(ax, bpad, tplocs, tgbools, "+", s=sp, cmap=cmap_prob, alpha=alpha, lw=lw)
 
     if estimate is not None:
         assert "galaxy_bool" in estimate and "star_bool" in estimate, "Necessary for estimate use."
@@ -599,25 +604,29 @@ def plot_image_and_locs(
         plocs = estimate.plocs[idx].cpu().numpy()
 
         if annotate_axis is not None:
+            assert truth is not None
+            true_n_sources = truth.n_sources[idx].cpu().numpy()
             ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
 
-        gbools = estimate["galaxy_bools"].cpu().numpy()
+        gbools = estimate["galaxy_bools"].float().cpu().numpy()
         gprobs = estimate.get("galaxy_probs", None)
         if annotate_probs:
             assert gprobs is not None
         gprobs = gbools if gprobs is None else gprobs.cpu().numpy()
 
-        plot_locs(ax, bpad, plocs, gprobs, "+", s=30, annotate_probs=annotate_probs, cmap=cmap_prob)
+        plot_locs(
+            ax, bpad, plocs, gprobs, "x", s, lw, alpha, annotate=annotate_probs, cmap=cmap_prob
+        )
 
     if labels is not None:
         cmp = mpl.cm.get_cmap(cmap_prob)
-        colors = [cmp(0), cmp(1), cmp(0), cmp(1)]
-        markers = ["x", "+", "x", "+"]
-        sizes = [25, 35, 25, 35]
+        colors = (cmp(1), cmp(0), cmp(1), cmp(0))
+        markers = ("+", "+", "x", "x")
+        sizes = (s * 20, s * 20, s + 5, s + 5)
 
         if labels is not None:
-            for label, c, m, s in zip(labels, colors, markers, sizes):
-                ax.scatter([], [], c=c, marker=m, label=label, s=s)
+            for label, c, m, size in zip(labels, colors, markers, sizes):
+                ax.scatter([], [], c=c, marker=m, label=label, s=size)
             ax.legend(
                 bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
                 loc="lower left",

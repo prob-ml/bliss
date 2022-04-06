@@ -240,20 +240,16 @@ class BinaryEncoder(pl.LightningModule):
 
         # Currently, plots require square images
         assert batch["images"].shape[-2] == batch["images"].shape[-1]
-        slen = batch["images"].shape[-1] - 2 * self.border_padding
 
         for i in range(n_samples):
             plot_image_and_locs(
-                i,
                 fig,
                 axes[i],
+                i,
                 batch["images"],
-                slen,
-                true_params,
+                truth=true_params,
                 estimate=est,
                 labels=None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star"),
-                annotate_axis=False,
-                add_borders=True,
                 annotate_probs=True,
             )
 
