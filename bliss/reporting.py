@@ -532,6 +532,7 @@ def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="gray"):
 
 
 def plot_locs(ax, bpad, plocs, galaxy_probs, marker="x", s=20, annotate_probs=False, cmap="RdYlBu"):
+    # NOTE: galaxy_probs can just be galaxy_bool.
     assert len(plocs.shape) == 2
     assert plocs.shape[1] == 2
     assert isinstance(bpad, int)
@@ -550,38 +551,38 @@ def plot_locs(ax, bpad, plocs, galaxy_probs, marker="x", s=20, annotate_probs=Fa
 
 
 def plot_image_and_locs(
-    idx: int,
     fig: Figure,
     ax: Axes,
-    images: Tensor,
-    slen: int,
+    idx: int,
+    image: Tensor,
     truth: Optional[FullCatalog] = None,
     estimate: Optional[FullCatalog] = None,
     labels: list = None,
-    annotate_axis: bool = False,
-    add_borders: bool = False,
+    bpad: int = None,
     vrange: tuple = None,
+    annotate_axis: bool = False,
     annotate_probs: bool = False,
-    cmap: str = "gray",
+    cmap_image: str = "gray",
+    cmap_prob: str = "RdYlBu",
 ):
-    # collect all necessary parameters to plot
-    assert images.shape[1] == 1, "Only 1 band supported."
+    # NOTE: labels must be a tuple/list of names with order (true star, true_gal, est_star, est_gal)
+    assert len(image.shape) == 4, "Image should be in batch form just like truth/estimate catalogs."
+    assert image.shape[0] == 1, "Only 1 band supported."
     if annotate_probs:
         assert "galaxy_probs" in estimate, "Inconsistent inputs to plot_image_and_locs"
-    bpad = int((images.shape[-1] - slen) / 2)
-    image = images[idx, 0].cpu().numpy()
+    image = image[idx, 0].cpu().numpy()
 
     # plot image first
     vmin = image.min().item() if vrange is None else vrange[0]
     vmax = image.max().item() if vrange is None else vrange[1]
-    plot_image(fig, ax, image, vrange=(vmin, vmax), cmap=cmap)
+    plot_image(fig, ax, image, vrange=(vmin, vmax), cmap=cmap_image)
 
     # (optionally) add white border showing where centers of stars and galaxies can be
-    if add_borders:
+    if bpad is not None:
         ax.axvline(bpad, color="w")
-        ax.axvline(bpad + slen, color="w")
+        ax.axvline(image.shape[-1] - bpad, color="w")
         ax.axhline(bpad, color="w")
-        ax.axhline(bpad + slen, color="w")
+        ax.axhline(image.shape[-1] - bpad, color="w")
 
     if truth:
         # true parameters on full image.
@@ -590,7 +591,7 @@ def plot_image_and_locs(
         true_galaxy_bools = truth["galaxy_bools"][idx].cpu().numpy()
 
         # plot true locations
-        plot_locs(ax, bpad, true_plocs, true_galaxy_bools, "x", s=20)
+        plot_locs(ax, bpad, true_plocs, true_galaxy_bools, "x", s=20, cmap=cmap_prob)
 
     if estimate is not None:
         assert "galaxy_bool" in estimate and "star_bool" in estimate, "Necessary for estimate use."
@@ -606,19 +607,21 @@ def plot_image_and_locs(
             assert gprobs is not None
         gprobs = gbools if gprobs is None else gprobs.cpu().numpy()
 
-        plot_locs(ax, bpad, plocs, gprobs, "+", s=30, annotate_probs=annotate_probs)
+        plot_locs(ax, bpad, plocs, gprobs, "+", s=30, annotate_probs=annotate_probs, cmap=cmap_prob)
 
     if labels is not None:
-        colors = ["r", "b", "c", "m"]
+        cmp = mpl.cm.get_cmap(cmap_prob)
+        colors = [cmp(0), cmp(1), cmp(0), cmp(1)]
         markers = ["x", "+", "x", "+"]
         sizes = [25, 35, 25, 35]
-        for ell, c, m, s in zip(labels, colors, markers, sizes):
-            if ell is not None:
-                ax.scatter(0, 0, color=c, s=s, marker=m, label=ell)
-        ax.legend(
-            bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
-            loc="lower left",
-            ncol=2,
-            mode="expand",
-            borderaxespad=0.0,
-        )
+
+        if labels is not None:
+            for label, c, m, s in zip(labels, colors, markers, sizes):
+                ax.scatter([], [], c=c, marker=m, label=label, s=s)
+            ax.legend(
+                bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+                loc="lower left",
+                ncol=2,
+                mode="expand",
+                borderaxespad=0.0,
+            )
