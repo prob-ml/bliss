@@ -156,7 +156,8 @@ class ChunkedScene:
             chunk_est_dict[chunk_type] = self._reconstruct_chunks(
                 chunks, bgs, encoder, decoder, device
             )
-        scene_recon = self._combine_into_scene(chunk_est_dict)
+        reconstructions_dict = {k: v["reconstructions"] for k, v in chunk_est_dict.items()}
+        scene_recon = self._combine_into_scene(reconstructions_dict)
         chunk_tile_maps_dict = {k: v["tile_maps"] for k, v in chunk_est_dict.items()}
         tile_map_recon = self._combine_tile_maps(chunk_tile_maps_dict)
         return scene_recon, tile_map_recon
@@ -175,8 +176,8 @@ class ChunkedScene:
             "tile_maps": tile_maps,
         }
 
-    def _combine_into_scene(self, chunk_est_dict: Dict):
-        main = chunk_est_dict["main"]["reconstructions"]
+    def _combine_into_scene(self, reconstructions: Dict[str, Tensor]) -> Tensor:
+        main: Tensor = reconstructions["main"]
         main = rearrange(
             main,
             "(nch ncw) c h w -> nch ncw c h w",
@@ -184,32 +185,29 @@ class ChunkedScene:
             ncw=self.n_chunks_w_main,
         )
 
-        right = chunk_est_dict.get("right")
+        right = reconstructions.get("right")
         if right is not None:
-            right = right["reconstructions"]
             right_padding = self.kernel_size - right.shape[-1]
-            right = F.pad(right, (0, right_padding, 0, 0))
-            right = rearrange(right, "nch c h w -> nch 1 c h w")
-            main = torch.cat((main, right), dim=1)
+            right_padded: Tensor = F.pad(right, (0, right_padding, 0, 0))
+            right_padded = rearrange(right_padded, "nch c h w -> nch 1 c h w")
+            main = torch.cat((main, right_padded), dim=1)
         else:
             right_padding = 0
 
-        bottom = chunk_est_dict.get("bottom")
+        bottom = reconstructions.get("bottom")
         if bottom is not None:
-            bottom = bottom["reconstructions"]
             bottom_padding = self.kernel_size - bottom.shape[-2]
-            bottom = F.pad(bottom, (0, 0, 0, bottom_padding))
+            bottom_padded: Tensor = F.pad(bottom, (0, 0, 0, bottom_padding))
 
-            bottom_right = chunk_est_dict.get("bottom_right")
+            bottom_right = reconstructions.get("bottom_right")
             if bottom_right is not None:
-                bottom_right = bottom_right["reconstructions"]
-                bottom_right = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
-                bottom = torch.cat((bottom, bottom_right), dim=0)
-            bottom = rearrange(bottom, "ncw c h w -> 1 ncw c h w")
-            main = torch.cat((main, bottom), axis=0)
+                bottom_right_padded = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
+                bottom_padded = torch.cat((bottom_padded, bottom_right_padded), dim=0)
+            bottom_padded = rearrange(bottom_padded, "ncw c h w -> 1 ncw c h w")
+            main = torch.cat((main, bottom_padded), dim=0)
         else:
             bottom_padding = 0
-        image_flat = rearrange(main, "nch ncw c h w -> 1 (c h w) (nch ncw)")
+        image_flat: Tensor = rearrange(main, "nch ncw c h w -> 1 (c h w) (nch ncw)")
         output_size = (self.output_size[0] + bottom_padding, self.output_size[1] + right_padding)
         image = F.fold(
             image_flat, output_size=output_size, kernel_size=self.kernel_size, stride=self.slen
@@ -343,11 +341,11 @@ class SimulatedFrame:
         w, w_end = wlims[0] - self.bp, wlims[1] - self.bp
         hlims_tile = int(np.floor(h / self.tile_slen)), int(np.ceil(h_end / self.tile_slen))
         wlims_tile = int(np.floor(w / self.tile_slen)), int(np.ceil(w_end / self.tile_slen))
-        tile_cat_cropped = {}
+        tile_dict = {}
         for k, v in self.tile_catalog.to_dict().items():
-            tile_cat_cropped[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
-        tile_cat_cropped = TileCatalog(self.tile_slen, tile_cat_cropped)
-        full_cat = tile_cat_cropped.to_full_params()
+            tile_dict[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
+        tile_cat = TileCatalog(self.tile_slen, tile_dict)
+        full_cat = tile_cat.to_full_params()
         full_cat["fluxes"] = (
             full_cat["galaxy_bools"] * full_cat["galaxy_fluxes"]
             + full_cat["star_bools"] * full_cat["fluxes"]
@@ -373,9 +371,10 @@ class SemiSyntheticFrame:
             hlim = (self.bp, self.bp + n_tiles_h * self.tile_slen)
             wlim = (self.bp, self.bp + n_tiles_w * self.tile_slen)
             full_coadd_cat = CoaddFullCatalog.from_file(coadd, hlim, wlim)
-            full_coadd_cat["galaxy_params"] = dataset.image_prior.galaxy_prior.sample(
-                full_coadd_cat.n_sources, "cpu"
-            ).unsqueeze(0)
+            if dataset.image_prior.galaxy_prior is not None:
+                full_coadd_cat["galaxy_params"] = dataset.image_prior.galaxy_prior.sample(
+                    full_coadd_cat.n_sources, "cpu"
+                ).unsqueeze(0)
             full_coadd_cat.plocs = full_coadd_cat.plocs + 0.5
             max_sources = dataset.image_prior.max_sources
             tile_catalog = full_coadd_cat.to_tile_params(self.tile_slen, max_sources)

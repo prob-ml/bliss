@@ -1,7 +1,7 @@
 import datetime as dt
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
 import torch
@@ -17,6 +17,7 @@ def train(cfg: DictConfig):
 
     # setup paths and seed
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
+    assert isinstance(paths, dict)
     for key in paths.keys():
         path = Path(paths[key])
         if not path.exists():
@@ -54,7 +55,7 @@ def train(cfg: DictConfig):
         trainer.test(model, datamodule=dataset)
 
     # Load best weights from checkpoint
-    if cfg.training.weight_save_path is not None:
+    if cfg.training.weight_save_path is not None and (checkpoint_callback is not None):
         model_checkpoint = torch.load(checkpoint_callback.best_model_path, map_location="cpu")
         model_state_dict = model_checkpoint["state_dict"]
         torch.save(model_state_dict, cfg.training.weight_save_path)
@@ -63,7 +64,7 @@ def train(cfg: DictConfig):
             cp_data = model_checkpoint["callbacks"]
             key = list(cp_data.keys())[0]
             cp_data = cp_data[key]
-            data_to_write = {"timestamp": str(dt.datetime.today())}
+            data_to_write: Dict[str, Any] = {"timestamp": str(dt.datetime.today())}
             for k, v in cp_data.items():
                 if isinstance(v, torch.Tensor) and not v.shape:
                     data_to_write[k] = v.item()

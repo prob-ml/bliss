@@ -1,6 +1,6 @@
 import math
 from collections import UserDict
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import torch
 from einops import rearrange, reduce, repeat
@@ -34,7 +34,7 @@ class TileCatalog(UserDict):
         assert self.n_sources.shape == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
         super().__init__(**d)
 
-    def __setitem__(self, key: str, item: Tensor) -> Tensor:
+    def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
             raise ValueError(
                 f"The key '{key}' is not in the allowed parameters for TileCatalog"
@@ -136,7 +136,7 @@ class TileCatalog(UserDict):
             ntw=self.n_tiles_w,
         )
 
-    def _get_indices_of_on_sources(self) -> Tensor:
+    def _get_indices_of_on_sources(self) -> Tuple[Tensor, Tensor]:
         """Get the indices of detected sources from each tile.
 
         Returns:
@@ -196,7 +196,7 @@ class FullCatalog(UserDict):
         assert self.n_sources.shape == (self.batch_size,)
         super().__init__(**d)
 
-    def __setitem__(self, key: str, item: Tensor) -> Tensor:
+    def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
             raise ValueError(
                 f"The key '{key}' is not in the allowed parameters for FullCatalog"
@@ -237,14 +237,20 @@ class FullCatalog(UserDict):
     ):
         assert self.batch_size == 1
         keep = torch.ones(self.max_sources, dtype=torch.bool)
+        height_out = self.height
+        width_out = self.width
         if h_min is not None:
             keep *= self.plocs[0, :, 0] >= h_min
+            height_out -= h_min
         if h_max is not None:
             keep *= self.plocs[0, :, 0] <= (self.height - h_max)
+            height_out -= h_max
         if w_min is not None:
             keep *= self.plocs[0, :, 1] >= w_min
+            width_out -= w_min
         if w_max is not None:
             keep *= self.plocs[0, :, 1] <= (self.width - w_max)
+            width_out -= w_max
         d = {}
         d["plocs"] = self.plocs[:, keep] - torch.tensor(
             [h_min, w_min], dtype=self.plocs.dtype, device=self.plocs.device
@@ -252,7 +258,7 @@ class FullCatalog(UserDict):
         d["n_sources"] = keep.sum().reshape(1).to(self.n_sources.dtype).to(self.n_sources.device)
         for k, v in self.items():
             d[k] = v[:, keep]
-        return type(self)(self.height - h_min - h_max, self.width - w_min - w_max, d)
+        return type(self)(height_out, width_out, d)
 
     def crop_at_coords(self, h_start, h_end, w_start, w_end):
         h_max = self.height - h_end
@@ -286,7 +292,7 @@ class FullCatalog(UserDict):
         for k, v in self.items():
             size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
             tile_params[k] = torch.zeros(size, dtype=torch.float)
-        n_sources = self.n_sources[0]
+        n_sources = int(self.n_sources[0].item())
         for (idx, coords) in enumerate(tile_coords[:n_sources]):
             source_idx = tile_n_sources[0, coords[0], coords[1]]
             tile_is_on_array[0, coords[0], coords[1]] = 1

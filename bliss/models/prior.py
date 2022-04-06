@@ -33,24 +33,28 @@ class GalaxyPrior:
             psf_image_file: Path to psf image file for galaxy latent samples.
             galaxy_dataset: Galaxy dataset for generating galaxy images to encode.
         """
-        latents_file = Path(latents_file)
-        if latents_file.exists():
-            latents = torch.load(latents_file, "cpu")
+        latents_path = Path(latents_file)
+        if latents_path.exists():
+            latents = torch.load(latents_path, "cpu")
         else:
             assert galaxy_dataset is not None
             assert psf_image_file is not None
             assert autoencoder_ckpt is not None
+            assert autoencoder is not None
             autoencoder.load_state_dict(
                 torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
             )
             dataloader = galaxy_dataset.train_dataloader()
             autoencoder = autoencoder.cuda()
-            flux_sample = galaxy_dataset.prior.flux_sample
-            a_sample = galaxy_dataset.prior.a_sample
-            warn(f"Creating latents from Galsim galaxies with {flux_sample} flux distribution...")
-            warn(f"Creating latents from Galsim galaxies with {a_sample} size distribution...")
+            if isinstance(galaxy_dataset, SDSSGalaxies):
+                flux_sample = galaxy_dataset.prior.flux_sample
+                a_sample = galaxy_dataset.prior.a_sample
+                warn(
+                    f"Creating latents from Galsim galaxies with {flux_sample} flux distribution..."
+                )
+                warn(f"Creating latents from Galsim galaxies with {a_sample} size distribution...")
             latents = autoencoder.generate_latents(dataloader, n_latent_batches)
-            torch.save(latents, latents_file)
+            torch.save(latents, latents_path)
         self.latents = latents
 
     def sample(self, total_latent, device):
