@@ -353,21 +353,12 @@ class SleepPhase(pl.LightningModule):
 
         images = batch["images"]
         assert images.shape[-2] == images.shape[-1]
-        slen = images.shape[-2] - 2 * self.image_encoder.border_padding
 
         for i in range(n_samples):
-            plot_image_and_locs(
-                i,
-                fig,
-                axes[i],
-                batch["images"],
-                slen,
-                true_params,
-                estimate=est_params,
-                labels=None if i > 0 else ("t. gal", "p. source", "t. star"),
-                annotate_axis=True,
-                add_borders=True,
-            )
+            bp = self.image_encoder.border_padding
+            truth, est = true_params, est_params
+            labels = None if i > 0 else ("t. gal", "t. star", "p. source")
+            plot_image_and_locs(fig, axes[i], i, batch["images"], bp, truth, est, labels=labels)
 
         fig.tight_layout()
         if self.logger:
