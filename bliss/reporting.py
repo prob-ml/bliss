@@ -547,7 +547,7 @@ def plot_locs(
         cmp = mpl.cm.get_cmap(cmap)
         color = cmp(prob)
         if bp < xi < slen - bp and bp < yi < slen - bp:
-            ax.scatter(xi, yi, c=color, marker=m, s=s, lw=lw, alpha=alpha)
+            ax.scatter(xi, yi, color=color, marker=m, s=s, lw=lw, alpha=alpha)
             if annotate:
                 ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
 
@@ -595,28 +595,27 @@ def plot_image_and_locs(
 
     if truth:
         # true parameters on full image.
-        tplocs = truth.plocs[idx].cpu().numpy()
-        tgbools = truth["galaxy_bools"][idx].float().cpu().numpy()
+        tplocs = truth.plocs[idx].cpu().numpy().reshape(-1, 2)
+        tgbools = truth["galaxy_bools"][idx].float().cpu().numpy().reshape(-1)
 
         # plot true locations
         sp = s * 1.5
         plot_locs(ax, bp, slen, tplocs, tgbools, "+", s=sp, cmap=cmap_prob, alpha=alpha, lw=lw)
 
     if estimate is not None:
-        assert "galaxy_bool" in estimate and "star_bool" in estimate, "Necessary for estimate use."
-        n_sources = estimate.n_sources[idx].cpu().numpy()
-        plocs = estimate.plocs[idx].cpu().numpy()
+        n_sources = estimate.n_sources[idx].cpu().numpy().reshape(-1)
+        plocs = estimate.plocs[idx].cpu().numpy().reshape(-1, 2)
 
         if annotate_axis is not None:
             assert truth is not None
             true_n_sources = truth.n_sources[idx].cpu().numpy()
             ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
 
-        gbools = estimate["galaxy_bools"].float().cpu().numpy()
+        gbools = estimate["galaxy_bools"].float().cpu().numpy().reshape(-1)
         gprobs = estimate.get("galaxy_probs", None)
         if annotate_probs:
             assert gprobs is not None
-        gprobs = gbools if gprobs is None else gprobs.cpu().numpy()
+        gprobs = gbools if gprobs is None else gprobs.cpu().numpy().reshape(-1)
 
         plot_locs(
             ax, bp, slen, plocs, gprobs, "x", s, lw, alpha, annotate=annotate_probs, cmap=cmap_prob
@@ -630,7 +629,7 @@ def plot_image_and_locs(
 
         if labels is not None:
             for label, c, m, size in zip(labels, colors, markers, sizes):
-                ax.scatter([], [], c=c, marker=m, label=label, s=size)
+                ax.scatter([], [], color=c, marker=m, label=label, s=size)
             ax.legend(
                 bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
                 loc="lower left",

@@ -83,7 +83,7 @@ def set_rc_params(
         # colors
         "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
         # images
-        "images.cmap": "gray",
+        "image.cmap": "gray",
     }
     mpl.rcParams.update(rc_params)
     sns.set_context(rc=rc_params)
@@ -700,9 +700,9 @@ class SDSSReconstructionFigures(BlissFigures):
 
             recon_map = tile_map_recon.to_full_params()
 
-            true = true[0, 0].cpu().numpy()
-            recon = recon[0, 0].cpu().numpy()
-            resid = resid[0, 0].cpu().numpy()
+            true = true.cpu()
+            recon = recon.cpu()
+            resid = resid.cpu()
             data[figname] = (true, recon, resid, coadd_params, recon_map)
 
         return data
@@ -717,7 +717,6 @@ class SDSSReconstructionFigures(BlissFigures):
             scene_size = scene_coords["size"]
             true, recon, res, coadd_params, recon_map = data[figname]
             fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
-            assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
             ax_true = axes[0]
             ax_recon = axes[1]
@@ -740,7 +739,7 @@ class SDSSReconstructionFigures(BlissFigures):
                 fig, ax_recon, 0, recon, 0, coadd_params, recon_map, vrange1, s, lw, labels=labels
             )
             reporting.plot_image_and_locs(
-                fig, ax_res, 0, recon, 0, coadd_params, recon_map, vrange2, s, lw, 0.5
+                fig, ax_res, 0, res, 0, coadd_params, recon_map, vrange2, s, lw, 0.5
             )
             plt.subplots_adjust(hspace=-0.4)
             plt.tight_layout()
