@@ -16,7 +16,8 @@ from pytorch_lightning.utilities import rank_zero_only
 def train(cfg: DictConfig):
 
     # setup paths and seed
-    paths: Dict[str, Any] = OmegaConf.to_container(cfg.paths, resolve=True)
+    paths = OmegaConf.to_container(cfg.paths, resolve=True)
+    assert isinstance(paths, dict)
     for key in paths.keys():
         path = Path(paths[key])
         if not path.exists():
