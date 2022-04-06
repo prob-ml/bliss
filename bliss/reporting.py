@@ -2,6 +2,7 @@
 from typing import Optional, Tuple
 
 import galsim
+import matplotlib as mpl
 import numpy as np
 import torch
 import tqdm
@@ -518,7 +519,7 @@ def get_single_galaxy_measurements(
     }
 
 
-def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="viridis"):
+def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="gray"):
     vmin = image.min().item() if vrange is None else vrange[0]
     vmax = image.max().item() if vrange is None else vrange[1]
 
@@ -530,19 +531,21 @@ def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="viridis"):
         fig.colorbar(im, cax=cax, orientation="vertical")
 
 
-def plot_locs(ax, bpad, plocs, color="r", marker="x", s=20, galaxy_probs=None):
+def plot_locs(ax, bpad, plocs, galaxy_probs, marker="x", s=20, annotate_probs=False, cmap="RdYlBu"):
     assert len(plocs.shape) == 2
     assert plocs.shape[1] == 2
     assert isinstance(bpad, int)
-    if galaxy_probs is not None:
-        assert len(galaxy_probs.shape) == 1
+    assert len(galaxy_probs.shape) == 1
 
     x = plocs[:, 1] - 0.5 + bpad
     y = plocs[:, 0] - 0.5 + bpad
     for i, (xi, yi) in enumerate(zip(x, y)):
+        prob = galaxy_probs[i]
+        cmp = mpl.cm.get_cmap(cmap)
+        color = cmp(prob)
         if xi > bpad and yi > bpad:
-            ax.scatter(xi, yi, color=color, marker=marker, s=s)
-            if galaxy_probs is not None:
+            ax.scatter(xi, yi, c=color, marker=marker, s=s)
+            if annotate_probs:
                 ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
 
 
@@ -550,45 +553,28 @@ def plot_image_and_locs(
     idx: int,
     fig: Figure,
     ax: Axes,
-    images,
+    images: Tensor,
     slen: int,
-    true_params: FullCatalog,
+    truth: Optional[FullCatalog] = None,
     estimate: Optional[FullCatalog] = None,
     labels: list = None,
     annotate_axis: bool = False,
     add_borders: bool = False,
     vrange: tuple = None,
-    galaxy_probs: Optional[Tensor] = None,
+    annotate_probs: bool = False,
+    cmap: str = "gray",
 ):
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
-    if galaxy_probs is not None:
-        assert estimate is not None
-        assert "galaxy_bools" in estimate, "Inconsistent inputs to plot_image_and_locs"
-    use_galaxy_bools = "galaxy_bools" in estimate if estimate is not None else False
+    if annotate_probs:
+        assert "galaxy_probs" in estimate, "Inconsistent inputs to plot_image_and_locs"
     bpad = int((images.shape[-1] - slen) / 2)
-
     image = images[idx, 0].cpu().numpy()
 
-    # true parameters on full image.
-    true_n_sources = true_params.n_sources[idx].cpu().numpy()
-    true_plocs = true_params.plocs[idx].cpu().numpy()
-    true_galaxy_bools = true_params["galaxy_bools"][idx].cpu().numpy()
-    true_star_bools = true_params["star_bools"][idx].cpu().numpy()
-    true_galaxy_plocs = true_plocs * true_galaxy_bools
-    true_star_plocs = true_plocs * true_star_bools
-
-    # convert tile estimates to full parameterization for plotting
-    if estimate is not None:
-        n_sources = estimate.n_sources[idx].cpu().numpy()
-        plocs = estimate.plocs[idx].cpu().numpy()
-
-    if galaxy_probs is not None:
-        galaxy_probs = galaxy_probs[idx].cpu().numpy().reshape(-1)
-
-    # annotate useful information around the axis
-    if annotate_axis and estimate is not None:
-        ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
+    # plot image first
+    vmin = image.min().item() if vrange is None else vrange[0]
+    vmax = image.max().item() if vrange is None else vrange[1]
+    plot_image(fig, ax, image, vrange=(vmin, vmax), cmap=cmap)
 
     # (optionally) add white border showing where centers of stars and galaxies can be
     if add_borders:
@@ -597,25 +583,30 @@ def plot_image_and_locs(
         ax.axhline(bpad, color="w")
         ax.axhline(bpad + slen, color="w")
 
-    # plot image first
-    vmin = image.min().item() if vrange is None else vrange[0]
-    vmax = image.max().item() if vrange is None else vrange[1]
-    plot_image(fig, ax, image, vrange=(vmin, vmax))
+    if truth:
+        # true parameters on full image.
+        true_n_sources = truth.n_sources[idx].cpu().numpy()
+        true_plocs = truth.plocs[idx].cpu().numpy()
+        true_galaxy_bools = truth["galaxy_bools"][idx].cpu().numpy()
 
-    # plot locations
-    plot_locs(ax, bpad, true_galaxy_plocs, "r", "x", s=20, galaxy_probs=None)
-    plot_locs(ax, bpad, true_star_plocs, "c", "x", s=20, galaxy_probs=None)
+        # plot true locations
+        plot_locs(ax, bpad, true_plocs, true_galaxy_bools, "x", s=20)
 
     if estimate is not None:
-        if use_galaxy_bools:
-            galaxy_bools = estimate["galaxy_bools"][idx].cpu().numpy()
-            star_bools = estimate["star_bools"][idx].cpu().numpy()
-            galaxy_plocs = plocs * galaxy_bools
-            star_plocs = plocs * star_bools
-            plot_locs(ax, bpad, galaxy_plocs, "b", "+", s=30, galaxy_probs=galaxy_probs)
-            plot_locs(ax, bpad, star_plocs, "m", "+", s=30, galaxy_probs=galaxy_probs)
-        else:
-            plot_locs(ax, bpad, plocs, "b", "+", s=30, galaxy_probs=None)
+        assert "galaxy_bool" in estimate and "star_bool" in estimate, "Necessary for estimate use."
+        n_sources = estimate.n_sources[idx].cpu().numpy()
+        plocs = estimate.plocs[idx].cpu().numpy()
+
+        if annotate_axis is not None:
+            ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
+
+        gbools = estimate["galaxy_bools"].cpu().numpy()
+        gprobs = estimate.get("galaxy_probs", None)
+        if annotate_probs:
+            assert gprobs is not None
+        gprobs = gbools if gprobs is None else gprobs.cpu().numpy()
+
+        plot_locs(ax, bpad, plocs, gprobs, "+", s=30, annotate_probs=annotate_probs)
 
     if labels is not None:
         colors = ["r", "b", "c", "m"]

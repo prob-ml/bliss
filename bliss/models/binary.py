@@ -254,7 +254,7 @@ class BinaryEncoder(pl.LightningModule):
                 labels=None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star"),
                 annotate_axis=False,
                 add_borders=True,
-                galaxy_probs=est["galaxy_probs"],
+                annotate_probs=True,
             )
 
         fig.tight_layout()
