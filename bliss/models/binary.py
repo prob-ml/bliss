@@ -238,9 +238,6 @@ class BinaryEncoder(pl.LightningModule):
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()
 
-        # Currently, plots require square images
-        assert batch["images"].shape[-2] == batch["images"].shape[-1]
-
         for i in range(n_samples):
             labels = None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star")
             bp = self.border_padding

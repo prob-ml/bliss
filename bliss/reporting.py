@@ -574,7 +574,7 @@ def plot_image_and_locs(
     # NOTE: labels must be a tuple/list of names with order (true star, true_gal, est_star, est_gal)
     # NOTE: true_plocs and est_plocs should be consistent both will be adjust with -0.5+bp
     assert len(images.shape) == 4, "Images should be batch form just like truth/estimate catalogs."
-    assert images.shape[0] == 1, "Only 1 band supported."
+    assert images.shape[1] == 1, "Only 1 band supported."
     assert images.shape[-1] == images.shape[-2], "Only square images are supported."
     if annotate_probs:
         assert "galaxy_probs" in estimate, "Inconsistent inputs to plot_image_and_locs"
