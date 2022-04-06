@@ -82,6 +82,8 @@ def set_rc_params(
         "legend.fontsize": legend_fontsize,
         # colors
         "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
+        # images
+        "images.cmap": "gray",
     }
     mpl.rcParams.update(rc_params)
     sns.set_context(rc=rc_params)
@@ -253,9 +255,9 @@ class AEReconstructionFigures(BlissFigures):
             vmax = max(image.max().item(), recon.max().item())
 
             # plot images
-            reporting.plot_image(fig, ax_true, image, vrange=(vmin, vmax))
-            reporting.plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
-            reporting.plot_image(fig, ax_res, residual, vrange=(vmin_res, vmax_res))
+            reporting.plot_image(fig, ax_true, image, vrange=(vmin, vmax), cmap="gray")
+            reporting.plot_image(fig, ax_recon, recon, vrange=(vmin, vmax), cmap="gray")
+            reporting.plot_image(fig, ax_res, residual, vrange=(vmin_res, vmax_res), cmap="gray")
 
         plt.subplots_adjust(hspace=-0.4)
         plt.tight_layout()
@@ -710,7 +712,6 @@ class SDSSReconstructionFigures(BlissFigures):
         out_figures = {}
 
         pad = 6.0
-        sns.set_style("white")
         set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
         for figname, scene_coords in self.scenes.items():
             scene_size = scene_coords["size"]
@@ -727,9 +728,9 @@ class SDSSReconstructionFigures(BlissFigures):
             ax_res.set_title("Residual", pad=pad)
 
             # plot images
-            reporting.plot_image(fig, ax_true, true, vrange=(800, 1000))
-            reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1000))
-            reporting.plot_image(fig, ax_res, res, vrange=(-5, 5))
+            reporting.plot_image(fig, ax_true, true, vrange=(800, 1000), cmap="gray")
+            reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1000), cmap="gray")
+            reporting.plot_image(fig, ax_res, res, vrange=(-5, 5), cmap="gray")
 
             locs_true = coadd_params.plocs.reshape(-1, 2) - 0.5  # adjust for plotting
             true_galaxy_bools = coadd_params["galaxy_bools"].reshape(-1).bool()
