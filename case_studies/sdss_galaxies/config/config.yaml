@@ -249,20 +249,20 @@ plots:
         sdss_gal_blend1:
             h: 460
             w: 742
-            size: 48
+            size: 32
         sdss_gal_blend2:
-            h: 1400
-            w: 1710
-            size: 48
+            h: 1404
+            w: 1718
+            size: 32
         sdss_gal_blend3:
             h: 210
             w: 280
             size: 32
         sdss_gal_blend4:
-            h: 1240
+            h: 1250
             w: 240
-            size: 48
+            size: 32
         sdss_gal_blend5:
-            h: 450
-            w: 500
-            size: 64
+            h: 458
+            w: 508
+            size: 48

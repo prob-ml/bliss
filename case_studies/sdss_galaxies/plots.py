@@ -82,6 +82,8 @@ def set_rc_params(
         "legend.fontsize": legend_fontsize,
         # colors
         "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
+        # images
+        "image.cmap": "gray",
     }
     mpl.rcParams.update(rc_params)
     sns.set_context(rc=rc_params)
@@ -698,9 +700,9 @@ class SDSSReconstructionFigures(BlissFigures):
 
             recon_map = tile_map_recon.to_full_params()
 
-            true = true[0, 0].cpu().numpy()
-            recon = recon[0, 0].cpu().numpy()
-            resid = resid[0, 0].cpu().numpy()
+            true = true.cpu()
+            recon = recon.cpu()
+            resid = resid.cpu()
             data[figname] = (true, recon, resid, coadd_params, recon_map)
 
         return data
@@ -710,13 +712,11 @@ class SDSSReconstructionFigures(BlissFigures):
         out_figures = {}
 
         pad = 6.0
-        sns.set_style("white")
         set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
         for figname, scene_coords in self.scenes.items():
             scene_size = scene_coords["size"]
             true, recon, res, coadd_params, recon_map = data[figname]
             fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
-            assert len(true.shape) == len(recon.shape) == len(res.shape) == 2
 
             ax_true = axes[0]
             ax_recon = axes[1]
@@ -726,73 +726,21 @@ class SDSSReconstructionFigures(BlissFigures):
             ax_recon.set_title("Reconstruction", pad=pad)
             ax_res.set_title("Residual", pad=pad)
 
-            # plot images
-            reporting.plot_image(fig, ax_true, true, vrange=(800, 1000))
-            reporting.plot_image(fig, ax_recon, recon, vrange=(800, 1000))
-            reporting.plot_image(fig, ax_res, res, vrange=(-5, 5))
-
-            locs_true = coadd_params.plocs.reshape(-1, 2) - 0.5  # adjust for plotting
-            true_galaxy_bools = coadd_params["galaxy_bools"].reshape(-1).bool()
-            locs_galaxies_true = locs_true[true_galaxy_bools]
-            locs_stars_true = locs_true[~true_galaxy_bools]
-
             s = 55 * 300 / scene_size  # marker size
             lw = 2 * np.sqrt(300 / scene_size)
 
-            if locs_stars_true.shape[0] > 0:
-                x, y = locs_stars_true[:, 1], locs_stars_true[:, 0]
-                ax_true.scatter(x, y, color="blue", marker="+", s=s, linewidths=lw)
-                ax_recon.scatter(
-                    x, y, color="blue", marker="+", s=s, label="SDSS Stars", linewidths=lw
-                )
-                ax_res.scatter(x, y, color="blue", marker="+", s=s, linewidths=lw, alpha=0.5)
-            if locs_galaxies_true.shape[0] > 0:
-                x, y = locs_galaxies_true[:, 1], locs_galaxies_true[:, 0]
-                ax_true.scatter(x, y, color="red", marker="+", s=s, linewidths=lw)
-                ax_recon.scatter(
-                    x, y, color="red", marker="+", s=s, label="SDSS Galaxies", linewidths=lw
-                )
-                ax_res.scatter(x, y, color="red", marker="+", s=s, linewidths=lw, alpha=0.5)
-
-            if recon_map is not None:
-                s *= 0.75
-                lw *= 0.75
-                locs_pred = recon_map.plocs.reshape(-1, 2) - 0.5  # adjust for plotting
-                star_bools = recon_map["star_bools"].reshape(-1).bool()
-                galaxy_bools = recon_map["galaxy_bools"].reshape(-1).bool()
-                locs_galaxies = locs_pred[galaxy_bools]
-                locs_stars = locs_pred[star_bools]
-                if locs_stars.shape[0] > 0:
-                    label = "Predicted Star"
-                    in_bounds = torch.all((locs_stars > 0) & (locs_stars < scene_size), dim=-1)
-                    locs_stars = locs_stars[in_bounds]
-                    x, y = locs_stars[:, 1], locs_stars[:, 0]
-                    ax_true.scatter(x, y, color="aqua", marker="x", s=s, linewidths=lw)
-                    ax_recon.scatter(
-                        x, y, color="aqua", marker="x", s=s, label=label, linewidths=lw
-                    )
-                    ax_res.scatter(x, y, color="aqua", marker="x", s=s, linewidths=lw, alpha=0.5)
-
-                if locs_galaxies.shape[0] > 0:
-                    label = "Predicted Galaxy"
-                    in_bounds = torch.all(
-                        (locs_galaxies > 0) & (locs_galaxies < scene_size), dim=-1
-                    )
-                    locs_galaxies = locs_galaxies[in_bounds]
-                    x, y = locs_galaxies[:, 1], locs_galaxies[:, 0]
-                    ax_true.scatter(x, y, color="hotpink", marker="x", s=s, linewidths=lw)
-                    ax_recon.scatter(
-                        x, y, color="hotpink", marker="x", s=s, label=label, linewidths=lw
-                    )
-                    ax_res.scatter(x, y, color="hotpink", marker="x", s=s, linewidths=lw, alpha=0.5)
-                ax_recon.legend(
-                    bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
-                    loc="lower left",
-                    ncol=2,
-                    mode="expand",
-                    borderaxespad=0.0,
-                )
-
+            vrange1 = (800, 1100)
+            vrange2 = (-5, 5)
+            labels = ["Coadd Galaxies", "Coadd Stars", "BLISS Galaxies", "BLISS Stars"]
+            reporting.plot_image_and_locs(
+                fig, ax_true, 0, true, 0, coadd_params, recon_map, vrange1, s, lw
+            )
+            reporting.plot_image_and_locs(
+                fig, ax_recon, 0, recon, 0, coadd_params, recon_map, vrange1, s, lw, labels=labels
+            )
+            reporting.plot_image_and_locs(
+                fig, ax_res, 0, res, 0, coadd_params, recon_map, vrange2, s, lw, 0.5
+            )
             plt.subplots_adjust(hspace=-0.4)
             plt.tight_layout()
 
