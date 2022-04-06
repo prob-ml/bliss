@@ -255,11 +255,12 @@ class GalaxyEncoder(pl.LightningModule):
             # Plotting only works on square images
             assert images.shape[-2] == images.shape[-1]
             slen = images.shape[-1] - 2 * self.border_padding
+            bp = self.border_padding
             plot_image_and_locs(
-                fig, true_ax, idx, images, estimate=est, labels=labels, vrange=vrange
+                fig, true_ax, idx, images, bp, truth=est, labels=labels, vrange=vrange
             )
             plot_image_and_locs(
-                fig, recon_ax, idx, recon_images, estimate=est, labels=labels, vrange=vrange
+                fig, recon_ax, idx, recon_images, bp, truth=est, labels=labels, vrange=vrange
             )
             residuals_idx = residuals[idx, 0].cpu().numpy()
             res_vmax = np.ceil(residuals_idx.max())

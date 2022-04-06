@@ -247,6 +247,7 @@ class BinaryEncoder(pl.LightningModule):
                 axes[i],
                 i,
                 batch["images"],
+                bp=self.border_padding,
                 truth=true_params,
                 estimate=est,
                 labels=None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star"),

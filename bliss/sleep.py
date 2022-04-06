@@ -360,6 +360,7 @@ class SleepPhase(pl.LightningModule):
                 axes[i],
                 i,
                 batch["images"],
+                self.image_encoder.border_padding,
                 truth=true_params,
                 estimate=est_params,
                 labels=None if i > 0 else ("t. gal", "t. star", "p. source"),

@@ -532,21 +532,21 @@ def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="gray"):
 
 
 def plot_locs(
-    ax, bpad, plocs, galaxy_probs, m="x", s=20, lw=1, alpha=1, annotate=False, cmap="RdYlBu"
+    ax, bp, slen, plocs, galaxy_probs, m="x", s=20, lw=1, alpha=1, annotate=False, cmap="RdYlBu"
 ):
+    # NOTE: Only plot things inside border
     # NOTE: galaxy_probs can just be galaxy_bool.
     assert len(plocs.shape) == 2
     assert plocs.shape[1] == 2
-    assert isinstance(bpad, int)
     assert len(galaxy_probs.shape) == 1
 
-    x = plocs[:, 1] - 0.5 + bpad
-    y = plocs[:, 0] - 0.5 + bpad
+    x = plocs[:, 1] - 0.5 + bp
+    y = plocs[:, 0] - 0.5 + bp
     for i, (xi, yi) in enumerate(zip(x, y)):
         prob = galaxy_probs[i]
         cmp = mpl.cm.get_cmap(cmap)
         color = cmp(prob)
-        if xi > bpad and yi > bpad:
+        if bp < xi < slen - bp and bp < yi < slen - bp:
             ax.scatter(xi, yi, c=color, marker=m, s=s, lw=lw, alpha=alpha)
             if annotate:
                 ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
@@ -557,13 +557,14 @@ def plot_image_and_locs(
     ax: Axes,
     idx: int,
     image: Tensor,
+    bp: int,
     truth: Optional[FullCatalog] = None,
     estimate: Optional[FullCatalog] = None,
     labels: list = None,
-    bpad: int = None,
     vrange: tuple = None,
     annotate_axis: bool = False,
     annotate_probs: bool = False,
+    add_border: bool = False,
     cmap_image: str = "gray",
     cmap_prob: str = "RdYlBu",
     s=20,
@@ -571,11 +572,14 @@ def plot_image_and_locs(
     lw=1,
 ):
     # NOTE: labels must be a tuple/list of names with order (true star, true_gal, est_star, est_gal)
+    # NOTE: true_plocs and est_plocs should be consistent both will be adjust with -0.5+bp
     assert len(image.shape) == 4, "Image should be in batch form just like truth/estimate catalogs."
     assert image.shape[0] == 1, "Only 1 band supported."
+    assert image.shape[-1] == image.shape[-2], "Only square images are supported."
     if annotate_probs:
         assert "galaxy_probs" in estimate, "Inconsistent inputs to plot_image_and_locs"
     image = image[idx, 0].cpu().numpy()
+    slen = image.shape[-1]
 
     # plot image first
     vmin = image.min().item() if vrange is None else vrange[0]
@@ -583,11 +587,11 @@ def plot_image_and_locs(
     plot_image(fig, ax, image, vrange=(vmin, vmax), cmap=cmap_image)
 
     # (optionally) add white border showing where centers of stars and galaxies can be
-    if bpad is not None:
-        ax.axvline(bpad, color="w")
-        ax.axvline(image.shape[-1] - bpad, color="w")
-        ax.axhline(bpad, color="w")
-        ax.axhline(image.shape[-1] - bpad, color="w")
+    if add_border:
+        ax.axvline(bp, color="w")
+        ax.axvline(slen - bp, color="w")
+        ax.axhline(bp, color="w")
+        ax.axhline(slen - bp, color="w")
 
     if truth:
         # true parameters on full image.
@@ -596,7 +600,7 @@ def plot_image_and_locs(
 
         # plot true locations
         sp = s * 1.5
-        plot_locs(ax, bpad, tplocs, tgbools, "+", s=sp, cmap=cmap_prob, alpha=alpha, lw=lw)
+        plot_locs(ax, bp, slen, tplocs, tgbools, "+", s=sp, cmap=cmap_prob, alpha=alpha, lw=lw)
 
     if estimate is not None:
         assert "galaxy_bool" in estimate and "star_bool" in estimate, "Necessary for estimate use."
@@ -615,7 +619,7 @@ def plot_image_and_locs(
         gprobs = gbools if gprobs is None else gprobs.cpu().numpy()
 
         plot_locs(
-            ax, bpad, plocs, gprobs, "x", s, lw, alpha, annotate=annotate_probs, cmap=cmap_prob
+            ax, bp, slen, plocs, gprobs, "x", s, lw, alpha, annotate=annotate_probs, cmap=cmap_prob
         )
 
     if labels is not None:
