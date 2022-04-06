@@ -523,10 +523,10 @@ def plot_image(
     fig: mpl.figure.Figure,
     ax: mpl.axes.Axes,
     image: np.ndarray,
-    vrange=None,
-    colorbar=True,
+    vrange: tuple = None,
+    colorbar: bool = True,
     cmap="gray",
-):
+) -> None:
     assert len(image.shape) == 2
     vmin = image.min().item() if vrange is None else vrange[0]
     vmax = image.max().item() if vrange is None else vrange[1]
@@ -545,13 +545,13 @@ def plot_locs(
     slen: int,
     plocs: np.ndarray,
     galaxy_probs: np.ndarray,
-    m="x",
-    s=20,
-    lw=1,
-    alpha=1,
+    m: str = "x",
+    s: float = 20,
+    lw: float = 1,
+    alpha: float = 1,
     annotate=False,
-    cmap="RdYlBu",
-):
+    cmap: str = "RdYlBu",
+) -> None:
     # NOTE: Only plot things inside border
     # NOTE: galaxy_probs can just be galaxy_bool.
     assert len(plocs.shape) == 2
@@ -588,7 +588,7 @@ def plot_image_and_locs(
     annotate_axis: bool = False,
     annotate_probs: bool = False,
     add_border: bool = False,
-):
+) -> None:
     # NOTE: labels must be a tuple/list of names with order (true star, true_gal, est_star, est_gal)
     # NOTE: true_plocs and est_plocs should be consistent both will be adjust with -0.5+bp
     assert len(images.shape) == 4, "Images should be batch form just like truth/estimate catalogs."
