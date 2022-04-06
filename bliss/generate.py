@@ -1,4 +1,5 @@
 import math
+from typing import Any, Dict
 
 import torch
 from matplotlib import pyplot as plt
@@ -32,7 +33,7 @@ def generate(dataset, filepath, imagepath, n_plots: int, global_params=("backgro
     global_params = set(global_params)
 
     # get batches and combine them
-    fbatch = {}
+    fbatch: Dict[str, Any] = {}
     for batch in dataset.train_dataloader():
         if not bool(fbatch):  # dict is empty
             fbatch = batch
