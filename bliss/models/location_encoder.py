@@ -110,6 +110,7 @@ class LocationEncoder(nn.Module):
         indx_mats = self._get_hidden_indices()
         for k, v in indx_mats.items():
             self.register_buffer(k + "_indx", v, persistent=False)
+        assert isinstance(self.prob_n_source_indx, Tensor)
         assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
     def forward(self, image_ptiles, tile_n_sources):
