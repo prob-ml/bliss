@@ -566,7 +566,7 @@ def plot_image_and_locs(
     alpha=1.0,
     labels: list = None,
     cmap_image: str = "gray",
-    cmap_prob: str = "RdYlBu",
+    cmap_prob: str = "bwr",
     annotate_axis: bool = False,
     annotate_probs: bool = False,
     add_border: bool = False,
@@ -600,7 +600,7 @@ def plot_image_and_locs(
 
         # plot true locations
         sp = s * 1.5
-        plot_locs(ax, bp, slen, tplocs, tgbools, "+", s=sp, cmap=cmap_prob, alpha=alpha, lw=lw)
+        plot_locs(ax, bp, slen, tplocs, tgbools, "+", s=sp, cmap="cool", alpha=alpha, lw=lw)
 
     if estimate is not None:
         n_sources = estimate.n_sources[idx].cpu().numpy().reshape(-1)
@@ -622,10 +622,11 @@ def plot_image_and_locs(
         )
 
     if labels is not None:
-        cmp = mpl.cm.get_cmap(cmap_prob)
-        colors = (cmp(1), cmp(0), cmp(1), cmp(0))
+        cmp1 = mpl.cm.get_cmap("cool")
+        cmp2 = mpl.cm.get_cmap(cmap_prob)
+        colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
         markers = ("+", "+", "x", "x")
-        sizes = (s * 20, s * 20, s + 5, s + 5)
+        sizes = (s * 2, s * 2, s + 5, s + 5)
 
         if labels is not None:
             for label, c, m, size in zip(labels, colors, markers, sizes):
