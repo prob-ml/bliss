@@ -1,6 +1,6 @@
 import math
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 import torch
@@ -177,8 +177,8 @@ class ChunkedScene:
         }
 
     def _combine_into_scene(self, reconstructions: Dict[str, Tensor]) -> Tensor:
-        main = reconstructions["main"]
-        main: Tensor = rearrange(
+        main: Tensor = reconstructions["main"]
+        main = rearrange(
             main,
             "(nch ncw) c h w -> nch ncw c h w",
             nch=self.n_chunks_h_main,
@@ -188,23 +188,23 @@ class ChunkedScene:
         right = reconstructions.get("right")
         if right is not None:
             right_padding = self.kernel_size - right.shape[-1]
-            right = F.pad(right, (0, right_padding, 0, 0))
-            right: Tensor = rearrange(right, "nch c h w -> nch 1 c h w")
-            main = torch.cat((main, right), dim=1)
+            right_padded: Tensor = F.pad(right, (0, right_padding, 0, 0))
+            right_padded = rearrange(right, "nch c h w -> nch 1 c h w")
+            main = torch.cat((main, right_padded), dim=1)
         else:
             right_padding = 0
 
         bottom = reconstructions.get("bottom")
         if bottom is not None:
             bottom_padding = self.kernel_size - bottom.shape[-2]
-            bottom = F.pad(bottom, (0, 0, 0, bottom_padding))
+            bottom_padded: Tensor = F.pad(bottom, (0, 0, 0, bottom_padding))
 
             bottom_right = reconstructions.get("bottom_right")
             if bottom_right is not None:
-                bottom_right = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
-                bottom = torch.cat((bottom, bottom_right), dim=0)
-            bottom: Tensor = rearrange(bottom, "ncw c h w -> 1 ncw c h w")
-            main = torch.cat((main, bottom), dim=0)
+                bottom_right_padded = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
+                bottom_padded = torch.cat((bottom_padded, bottom_right_padded), dim=0)
+            bottom_padded = rearrange(bottom_padded, "ncw c h w -> 1 ncw c h w")
+            main = torch.cat((main, bottom_padded), dim=0)
         else:
             bottom_padding = 0
         image_flat: Tensor = rearrange(main, "nch ncw c h w -> 1 (c h w) (nch ncw)")

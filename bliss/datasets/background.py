@@ -11,9 +11,9 @@ from bliss.datasets.sdss import SloanDigitalSkySurvey
 class ConstantBackground(nn.Module):
     def __init__(self, background: Tuple[float, ...]):
         super().__init__()
-        background = torch.tensor(background)
-        background = rearrange(background, "c -> 1 c 1 1")
-        self.register_buffer("background", background, persistent=False)
+        bg: Tensor = torch.tensor(background)
+        bg = rearrange(bg, "c -> 1 c 1 1")
+        self.register_buffer("background", bg, persistent=False)
 
     def sample(self, shape) -> Tensor:
         assert isinstance(self.background, Tensor)

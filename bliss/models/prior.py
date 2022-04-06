@@ -16,7 +16,7 @@ from bliss.models.galaxy_net import OneCenteredGalaxyAE
 class GalaxyPrior:
     def __init__(
         self,
-        latents_file_str: str,
+        latents_file: str,
         n_latent_batches: Optional[int] = None,
         autoencoder: Optional[OneCenteredGalaxyAE] = None,
         autoencoder_ckpt: str = None,
@@ -26,16 +26,16 @@ class GalaxyPrior:
         """Class to sample galaxy latent variables.
 
         Args:
-            latents_file_str: Location of previously sampled galaxy latent variables.
+            latents_file: Location of previously sampled galaxy latent variables.
             n_latent_batches: Number of batches for galaxy latent samples.
             autoencoder: A OneCenteredGalaxyAE object used to generate galaxy latents.
             autoencoder_ckpt: Location of state_dict for autoencoder (optional).
             psf_image_file: Path to psf image file for galaxy latent samples.
             galaxy_dataset: Galaxy dataset for generating galaxy images to encode.
         """
-        latents_file = Path(latents_file_str)
-        if latents_file.exists():
-            latents = torch.load(latents_file, "cpu")
+        latents_path = Path(latents_file)
+        if latents_path.exists():
+            latents = torch.load(latents_path, "cpu")
         else:
             assert galaxy_dataset is not None
             assert psf_image_file is not None
@@ -54,7 +54,7 @@ class GalaxyPrior:
                 )
                 warn(f"Creating latents from Galsim galaxies with {a_sample} size distribution...")
             latents = autoencoder.generate_latents(dataloader, n_latent_batches)
-            torch.save(latents, latents_file)
+            torch.save(latents, latents_path)
         self.latents = latents
 
     def sample(self, total_latent, device):

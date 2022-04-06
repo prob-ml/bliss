@@ -370,7 +370,9 @@ class Tiler(nn.Module):
 
 def get_mgrid(slen: int):
     offset = (slen - 1) / 2
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
+    # Currently type-checking with mypy doesn't work with np.mgrid
+    # See https://github.com/python/mypy/issues/11185.
+    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]  # type: ignore
     mgrid = torch.tensor(np.dstack((y, x))) / offset
     # mgrid is between -1 and 1
     # then scale slightly because of the way f.grid_sample
