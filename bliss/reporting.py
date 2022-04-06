@@ -519,7 +519,15 @@ def get_single_galaxy_measurements(
     }
 
 
-def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="gray"):
+def plot_image(
+    fig: mpl.figure.Figure,
+    ax: mpl.axes.Axes,
+    image: np.ndarray,
+    vrange=None,
+    colorbar=True,
+    cmap="gray",
+):
+    assert len(image.shape) == 2
     vmin = image.min().item() if vrange is None else vrange[0]
     vmax = image.max().item() if vrange is None else vrange[1]
 
@@ -532,7 +540,17 @@ def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="gray"):
 
 
 def plot_locs(
-    ax, bp, slen, plocs, galaxy_probs, m="x", s=20, lw=1, alpha=1, annotate=False, cmap="RdYlBu"
+    ax: mpl.axes.Axes,
+    bp: int,
+    slen: int,
+    plocs: np.ndarray,
+    galaxy_probs: np.ndarray,
+    m="x",
+    s=20,
+    lw=1,
+    alpha=1,
+    annotate=False,
+    cmap="RdYlBu",
 ):
     # NOTE: Only plot things inside border
     # NOTE: galaxy_probs can just be galaxy_bool.
