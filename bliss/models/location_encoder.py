@@ -90,9 +90,14 @@ class LocationEncoder(nn.Module):
         # NOTE: the numerator here is always even
         n_total_detections = self.max_detections * (self.max_detections + 1) // 2
 
-        # For each param, for each possible number of detection d, there are d ways of assignment.
-        # NOTE: Dimensions correspond to the probabilities in ONE tile.
-        self.dim_out_all = n_total_detections * self.n_params_per_source + 1 + self.max_detections
+        # most of our parameters describe individual detections
+        n_source_params = n_total_detections * self.n_params_per_source
+
+        # we also have parameters indicating the distribution of the number of detections
+        count_simplex_dim = 1 + self.max_detections
+
+        # the total number of distributional parameters per tile
+        self.dim_out_all = n_source_params + count_simplex_dim
 
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
 
@@ -129,18 +134,18 @@ class LocationEncoder(nn.Module):
         """
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
-        image_ptiles = get_images_in_tiles(
-            self.input_transform(image, background), self.tile_slen, self.ptile_slen
-        )
+        image2 = self.input_transform(image, background)
+        image_ptiles = get_images_in_tiles(image2, self.tile_slen, self.ptile_slen)
         log_image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         var_params_conv = self.enc_conv(log_image_ptiles_flat)
         var_params_flat = self.enc_final(var_params_conv)
         return rearrange(
             var_params_flat,
             "(b nth ntw) d -> b nth ntw d",
-            b=image_ptiles.shape[0],
-            nth=image_ptiles.shape[1],
-            ntw=image_ptiles.shape[2],
+            b=image_ptiles.shape[0],  # number of bands
+            nth=image_ptiles.shape[1],  # number of horizontal tiles
+            ntw=image_ptiles.shape[2],  # number of vertical tiles
+            d=self.dim_out_all,  # number of dist params per tile
         )
 
     def sample(
@@ -359,6 +364,7 @@ class LocationEncoder(nn.Module):
         # what?!? why is sigmoid(0) = 0?
         loc_mean_func = lambda x: torch.sigmoid(x) * (x != 0).float()
         # and why does location mean need to be transformed?
+        # can't we stick with the original logistic-normal parameterization here?
         var_params_for_n_sources["loc_mean"] = loc_mean_func(var_params_for_n_sources["loc_mean"])
 
         return var_params_for_n_sources
@@ -382,19 +388,15 @@ class LocationEncoder(nn.Module):
     def _get_hidden_indices(self):
         """Setup the indices corresponding to entries in h, cached since same for all h."""
 
-        # initialize matrices containing the indices for each variational param.
+        # initialize matrices containing the indices for each distributional param.
         indx_mats = {}
         for k, param in self.variational_params.items():
             param_dim = param["dim"]
             shape = (self.max_detections + 1, param_dim * self.max_detections)
-            indx_mat = torch.full(
-                shape,
-                self.dim_out_all,
-                dtype=torch.long,
-            )
+            indx_mat = torch.full(shape, self.dim_out_all, dtype=torch.long)
             indx_mats[k] = indx_mat
 
-        # add corresponding indices to the index matrices of variational params
+        # add corresponding indices to the index matrices of distributional params
         # for a given n_detection.
         curr_indx = 0
         for n_detections in range(1, self.max_detections + 1):
@@ -444,11 +446,9 @@ class EncoderCNN(nn.Module):
         ]
         in_channel = channel
         for i in range(3):
-            downsample = True
-            if i == 0:
-                downsample = False
-            layers += [ConvBlock(in_channel, channel, dropout, downsample)]
+            downsample = i != 0
             layers += [
+                ConvBlock(in_channel, channel, dropout, downsample),
                 ConvBlock(channel, channel, dropout),
                 ConvBlock(channel, channel, dropout),
             ]
