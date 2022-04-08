@@ -117,8 +117,6 @@ class LocationEncoder(nn.Module):
         for k, v in indx_mats.items():
             self.register_buffer(k + "_indx", v, persistent=False)
 
-        assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
-
     def encode(self, image: Tensor, background: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
 
