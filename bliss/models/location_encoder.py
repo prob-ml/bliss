@@ -232,9 +232,10 @@ class LocationEncoder(nn.Module):
         n_source_log_probs = self.get_n_source_log_prob(
             var_params_flat, eval_mean_detections=eval_mean_detections
         )
-        map_n_sources = torch.argmax(n_source_log_probs, dim=1)
+        map_n_sources: Tensor = torch.argmax(n_source_log_probs, dim=1)
+        map_n_sources = rearrange(map_n_sources, "b_nth_ntw -> 1 b_nth_ntw")
 
-        pred = self.encode_for_n_sources_flat(var_params_flat, map_n_sources)
+        pred = self.encode_for_n_sources(var_params_flat, map_n_sources)
 
         is_on_array = get_is_on_from_n_sources(map_n_sources, self.max_detections)
         is_on_array = is_on_array.unsqueeze(-1).float()
@@ -256,14 +257,14 @@ class LocationEncoder(nn.Module):
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
             "n_sources": map_n_sources,
-            "n_source_log_probs": n_source_log_probs[:, 1:].unsqueeze(-1),
+            "n_source_log_probs": n_source_log_probs[:, 1:].unsqueeze(-1).unsqueeze(0),
         }
         max_a_post = {}
         for k, v in max_a_post_flat.items():
             if k == "n_sources":
-                pattern = "(b nth ntw) -> b nth ntw"
+                pattern = "1 (b nth ntw) -> b nth ntw"
             else:
-                pattern = "(b nth ntw) s k -> b nth ntw s k"
+                pattern = "1 (b nth ntw) s k -> b nth ntw s k"
             max_a_post[k] = rearrange(
                 v, pattern, b=var_params.shape[0], nth=var_params.shape[1], ntw=var_params.shape[2]
             )
@@ -302,28 +303,6 @@ class LocationEncoder(nn.Module):
         log_probs = Poisson(torch.tensor(detection_rate)).log_prob(possible_n_sources)
         log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
         return torch.cat((log_probs, log_probs_last.reshape(1)))
-
-    def encode_for_n_sources_flat(self, var_params_flat: Tensor, tile_n_sources: Tensor):
-        """A wrapper the calls encode_for_n_sources.
-        Deprecated: it's better to call encode_for_n_sources directly,
-        and to always store tiles as a 2D array (i.e., not flattened).
-
-        Args:
-            var_params_flat: The output of `self.encode(ptiles)`,
-                where the first three dimensions have been flattened.
-                These are the variational parameters in matrix form.
-                Has size `(batch_size x n_tiles_h x n_tiles_w) * d`.
-            tile_n_sources:
-                A 1d tensor of the number of sources in each tile.
-
-        Returns:
-            A dictionary where each member has shape
-            `n_ptiles x max_detections x ...`
-        """
-        assert len(tile_n_sources.shape) == 1
-        tile_n_sources = tile_n_sources.unsqueeze(0)
-        ret = self.encode_for_n_sources(var_params_flat, tile_n_sources)
-        return {key: value.squeeze(0) for key, value in ret.items()}
 
     def encode_for_n_sources(self, var_params_flat: Tensor, tile_n_sources: Tensor):
         """Get distributional parameters conditioned on number of sources in tile.
