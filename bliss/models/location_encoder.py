@@ -3,7 +3,7 @@ from typing import Dict, Optional, Union
 import torch
 from einops import rearrange
 from torch import Tensor, nn
-from torch.distributions import Poisson, categorical
+from torch.distributions import Categorical, Poisson
 from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
@@ -111,11 +111,8 @@ class LocationEncoder(nn.Module):
         indx_mats = self._get_hidden_indices()
         for k, v in indx_mats.items():
             self.register_buffer(k + "_indx", v, persistent=False)
-        assert isinstance(self.prob_n_source_indx, Tensor)
-        assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
-    def forward(self, image_ptiles, tile_n_sources):
-        raise NotImplementedError("The forward method has changed to encode_for_n_sources()")
+        assert self.prob_n_source_indx.shape[0] == self.max_detections + 1
 
     def encode(self, image: Tensor, background: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
@@ -173,7 +170,7 @@ class LocationEncoder(nn.Module):
         # tile_n_sources shape = (n_samples x n_ptiles)
         # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
         probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
-        tile_n_sources = _sample_class_weights(probs_n_sources_per_tile, n_samples)
+        tile_n_sources = Categorical(probs=probs_n_sources_per_tile).sample((n_samples,)).squeeze()
         tile_n_sources = tile_n_sources.view(n_samples, -1)
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
@@ -183,8 +180,8 @@ class LocationEncoder(nn.Module):
 
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
-        tile_locs = self._get_normal_samples(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
-        tile_log_fluxes = self._get_normal_samples(
+        tile_locs = self._sample_gated_normal(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
+        tile_log_fluxes = self._sample_gated_normal(
             pred["log_flux_mean"], pred["log_flux_sd"], tile_is_on_array
         )
         tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
@@ -242,13 +239,13 @@ class LocationEncoder(nn.Module):
         # set sd so we return map estimates.
         # first locs
         locs_sd = torch.zeros_like(pred["loc_logvar"])
-        tile_locs = self._get_normal_samples(pred["loc_mean"], locs_sd, is_on_array)
+        tile_locs = self._sample_gated_normal(pred["loc_mean"], locs_sd, is_on_array)
         tile_locs = tile_locs.clamp(0, 1)
 
         # then log_fluxes
         log_flux_mean = pred["log_flux_mean"]
         log_flux_sd = torch.zeros_like(pred["log_flux_logvar"])
-        tile_log_fluxes = self._get_normal_samples(log_flux_mean, log_flux_sd, is_on_array)
+        tile_log_fluxes = self._sample_gated_normal(log_flux_mean, log_flux_sd, is_on_array)
         tile_fluxes = tile_log_fluxes.exp() * is_on_array
 
         max_a_post_flat = {
@@ -303,7 +300,7 @@ class LocationEncoder(nn.Module):
         log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
         return torch.cat((log_probs, log_probs_last.reshape(1)))
 
-    def encode_for_n_sources_flat(self, var_params_flat, tile_n_sources):
+    def encode_for_n_sources_flat(self, var_params_flat: Tensor, tile_n_sources: Tensor):
         """A wrapper the calls encode_for_n_sources.
         Deprecated: it's better to call encode_for_n_sources directly,
         and to always store tiles as a 2D array (i.e., not flattened).
@@ -325,7 +322,7 @@ class LocationEncoder(nn.Module):
         ret = self.encode_for_n_sources(var_params_flat, tile_n_sources)
         return {key: value.squeeze(0) for key, value in ret.items()}
 
-    def encode_for_n_sources(self, var_params_flat, tile_n_sources):
+    def encode_for_n_sources(self, var_params_flat: Tensor, tile_n_sources: Tensor):
         """Get distributional parameters conditioned on number of sources in tile.
 
         Args:
@@ -376,7 +373,7 @@ class LocationEncoder(nn.Module):
         }
 
     @staticmethod
-    def _get_normal_samples(mean, sd, tile_is_on_array):
+    def _sample_gated_normal(mean, sd, tile_is_on_array):
         # tile_is_on_array can be either 'tile_is_on_array'/'tile_galaxy_bools'/'tile_star_bools'.
         # return shape = (n_samples x n_ptiles x max_detections x param_dim)
         assert tile_is_on_array.shape[-1] == 1
@@ -505,9 +502,3 @@ class ConvBlock(nn.Module):
 
         out = x + identity
         return F.relu(out, inplace=True)
-
-
-def _sample_class_weights(class_weights, n_samples=1):
-    """Draw a sample from Categorical variable with probabilities class_weights."""
-    cat_rv = categorical.Categorical(probs=class_weights)
-    return cat_rv.sample((n_samples,)).squeeze()
