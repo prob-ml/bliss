@@ -239,7 +239,7 @@ class SleepPhase(pl.LightningModule):
         var_params = self.image_encoder.encode(images, background)
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
         n_source_log_probs = self.image_encoder.get_n_source_log_prob(var_params_flat)
-        pred = self.image_encoder.encode_for_n_sources(var_params_flat, true_tile_n_sources)
+        pred = self.image_encoder.encode_for_n_sources_flat(var_params_flat, true_tile_n_sources)
 
         # the loss for estimating the true number of sources
         nllloss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)

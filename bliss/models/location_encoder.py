@@ -75,24 +75,25 @@ class LocationEncoder(nn.Module):
         self.mean_detections = mean_detections
         self.max_detections = max_detections
         self.n_bands = n_bands
+
+        assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-        border_padding = (ptile_slen - tile_slen) / 2
-        assert tile_slen <= ptile_slen
-        assert border_padding % 1 == 0, "amount of border padding should be an integer"
-        self.border_padding = int(border_padding)
 
-        # Number of variational parameters used to characterize each source in an image.
+        assert (ptile_slen - tile_slen) % 2 == 0
+        self.border_padding = (ptile_slen - tile_slen) // 2
+
+        # Number of distributional parameters used to characterize each source in an image.
         self.n_params_per_source = sum(param["dim"] for param in self.variational_params.values())
 
-        # There are self.max_detections * (self.max_detections + 1) total possible detections.
+        # the number of total detections for all source counts: 1 + 2 + ... + self.max_detections
+        # NOTE: the numerator here is always even
+        n_total_detections = self.max_detections * (self.max_detections + 1) // 2
+
         # For each param, for each possible number of detection d, there are d ways of assignment.
         # NOTE: Dimensions correspond to the probabilities in ONE tile.
-        self.dim_out_all = int(
-            0.5 * self.max_detections * (self.max_detections + 1) * self.n_params_per_source
-            + 1
-            + self.max_detections,
-        )
+        self.dim_out_all = n_total_detections * self.n_params_per_source + 1 + self.max_detections
+
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
 
         # networks to be trained
@@ -116,11 +117,6 @@ class LocationEncoder(nn.Module):
     def forward(self, image_ptiles, tile_n_sources):
         raise NotImplementedError("The forward method has changed to encode_for_n_sources()")
 
-    def _get_images_in_ptiles(self, image: Tensor, background: Tensor) -> Tensor:
-        return get_images_in_tiles(
-            self.input_transform(image, background), self.tile_slen, self.ptile_slen
-        )
-
     def encode(self, image: Tensor, background: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
 
@@ -136,7 +132,9 @@ class LocationEncoder(nn.Module):
         """
         # get h matrix.
         # Forward to the layer that is shared by all n_sources.
-        image_ptiles = self._get_images_in_ptiles(image, background)
+        image_ptiles = get_images_in_tiles(
+            self.input_transform(image, background), self.tile_slen, self.ptile_slen
+        )
         log_image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
         var_params_conv = self.enc_conv(log_image_ptiles_flat)
         var_params_flat = self.enc_final(var_params_conv)
@@ -236,7 +234,7 @@ class LocationEncoder(nn.Module):
         )
         map_n_sources = torch.argmax(n_source_log_probs, dim=1)
 
-        pred = self.encode_for_n_sources(var_params_flat, map_n_sources)
+        pred = self.encode_for_n_sources_flat(var_params_flat, map_n_sources)
 
         is_on_array = get_is_on_from_n_sources(map_n_sources, self.max_detections)
         is_on_array = is_on_array.unsqueeze(-1).float()
@@ -305,8 +303,30 @@ class LocationEncoder(nn.Module):
         log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
         return torch.cat((log_probs, log_probs_last.reshape(1)))
 
+    def encode_for_n_sources_flat(self, var_params_flat, tile_n_sources):
+        """A wrapper the calls encode_for_n_sources.
+        Deprecated: it's better to call encode_for_n_sources directly,
+        and to always store tiles as a 2D array (i.e., not flattened).
+
+        Args:
+            var_params_flat: The output of `self.encode(ptiles)`,
+                where the first three dimensions have been flattened.
+                These are the variational parameters in matrix form.
+                Has size `(batch_size x n_tiles_h x n_tiles_w) * d`.
+            tile_n_sources:
+                A 1d tensor of the number of sources in each tile.
+
+        Returns:
+            A dictionary where each member has shape
+            `n_ptiles x max_detections x ...`
+        """
+        assert len(tile_n_sources.shape) == 1
+        tile_n_sources = tile_n_sources.unsqueeze(0)
+        ret = self.encode_for_n_sources(var_params_flat, tile_n_sources)
+        return {key: value.squeeze(0) for key, value in ret.items()}
+
     def encode_for_n_sources(self, var_params_flat, tile_n_sources):
-        """Get variational parameters conditioned on number of sources in tile.
+        """Get distributional parameters conditioned on number of sources in tile.
 
         Args:
             var_params_flat: The output of `self.encode(ptiles)`,
@@ -316,73 +336,44 @@ class LocationEncoder(nn.Module):
             tile_n_sources:
                 A tensor of the number of sources in each tile.
 
-        Raises:
-            ValueError: If the shape of tile_n_sources is not 1 or 2.
-
         Returns:
-            A dictionary where each member has either shape
+            A dictionary where each member has shape
             `n_samples x n_ptiles x max_detections x ...`
-            or `n_ptiles x max_detections x ...` depending on the shape of `tile_n_sources`.
         """
-
         tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
-        if len(tile_n_sources.shape) == 1:
-            tile_n_sources = tile_n_sources.unsqueeze(0)
-            squeeze = True
-        elif len(tile_n_sources.shape) == 2:
-            squeeze = False
-        else:
-            raise ValueError("tile_n_sources must have shape size 1 or 2")
+        n_ptiles = var_params_flat.size(0)
+        vpf_padded = F.pad(var_params_flat, (0, len(self.variational_params), 0, 0))
 
-        assert var_params_flat.shape[0] == tile_n_sources.shape[1]
-        # get probability of params except n_sources
-        # e.g. loc_mean: shape = (n_samples x n_ptiles x max_detections x len(x,y))
-        var_params_for_n_sources = self._get_var_params_for_n_sources(
-            var_params_flat, tile_n_sources
-        )
+        var_params_for_n_sources = {}
+        for k, param in self.variational_params.items():
+            indx_mat = getattr(self, k + "_indx")
+            indices = indx_mat[tile_n_sources.transpose(0, 1)].reshape(n_ptiles, -1)
+            var_param = torch.gather(vpf_padded, 1, indices)
 
-        if squeeze:
-            var_params_for_n_sources = {
-                key: value.squeeze(0) for key, value in var_params_for_n_sources.items()
-            }
+            var_params_for_n_sources[k] = rearrange(
+                var_param,
+                "np (ns d pd) -> ns np d pd",
+                np=n_ptiles,
+                ns=tile_n_sources.size(0),
+                d=self.max_detections,
+                pd=param["dim"],
+            )
+
+        # what?!? why is sigmoid(0) = 0?
+        loc_mean_func = lambda x: torch.sigmoid(x) * (x != 0).float()
+        # and why does location mean need to be transformed?
+        var_params_for_n_sources["loc_mean"] = loc_mean_func(var_params_for_n_sources["loc_mean"])
+
         return var_params_for_n_sources
 
     @property
     def variational_params(self):
-        # transform is a function applied directly on NN output.
         return {
-            "loc_mean": {"dim": 2, "transform": _loc_mean_func},
-            "loc_logvar": {"dim": 2, "transform": _identity_func},
-            "log_flux_mean": {"dim": self.n_bands, "transform": _identity_func},
-            "log_flux_logvar": {"dim": self.n_bands, "transform": _identity_func},
+            "loc_mean": {"dim": 2},
+            "loc_logvar": {"dim": 2},
+            "log_flux_mean": {"dim": self.n_bands},
+            "log_flux_logvar": {"dim": self.n_bands},
         }
-
-    # These methods are only used in testing or case studies, Do we need them or can
-    # they be moved to the code that they test? ------------------------
-
-    # --------------------------------------------------------------
-    def _get_var_params_for_n_sources(self, h, n_sources):
-        """Gets variational parameters for n_sources.
-
-        Arguments:
-            h: shape = (n_ptiles x dim_out_all)
-            n_sources: Tensor with shape (n_samples x n_ptiles)
-
-        Returns:
-            loc_mean.shape = (n_sample x n_ptiles x max_detections x len(x,y))
-        """
-        assert len(n_sources.shape) == 2
-
-        est_params = {}
-        for k, param in self.variational_params.items():
-            indx_mat = getattr(self, k + "_indx")
-            param_dim = param["dim"]
-            transform = param["transform"]
-            param = self._indx_h_for_n_sources(h, n_sources, indx_mat, param_dim)
-            param = transform(param)
-            est_params[k] = param
-
-        return est_params
 
     @staticmethod
     def _get_normal_samples(mean, sd, tile_is_on_array):
@@ -422,41 +413,6 @@ class LocationEncoder(nn.Module):
         indx_mats["prob_n_source"] = torch.arange(curr_indx, self.dim_out_all)
 
         return indx_mats
-
-    def _indx_h_for_n_sources(self, h, n_sources, indx_mat, param_dim):
-        """Obtains variational parameters for n_sources.
-
-        Indexes into all possible combinations of variational parameters (h) to obtain actually
-        variational parameters for n_sources.
-
-        Arguments:
-            h: shape = (n_ptiles x dim_out_all)
-            n_sources: (n_samples x n_tiles)
-            indx_mat: TODO (to be documented)
-            param_dim: the dimension of the parameter you are indexing h.
-
-        Returns:
-            var_param: shape = (n_samples x n_ptiles x max_detections x dim_per_source)
-        """
-        assert len(n_sources.shape) == 2
-        assert h.size(0) == n_sources.size(1)
-        assert h.size(1) == self.dim_out_all
-        n_ptiles = h.size(0)
-        h = torch.cat((h, torch.zeros(n_ptiles, 1, device=h.device)), dim=1)
-
-        # select the indices from _h indicated by indx_mat.
-        indices = indx_mat[n_sources.transpose(0, 1)].reshape(n_ptiles, -1)
-        var_param = torch.gather(h, 1, indices)
-
-        # np: n_ptiles, ns: n_samples
-        return rearrange(
-            var_param,
-            "np (ns d pd) -> ns np d pd",
-            np=n_ptiles,
-            ns=n_sources.size(0),
-            d=self.max_detections,
-            pd=param_dim,
-        )
 
 
 def make_enc_final(in_size, hidden, out_size, dropout):
@@ -555,11 +511,3 @@ def _sample_class_weights(class_weights, n_samples=1):
     """Draw a sample from Categorical variable with probabilities class_weights."""
     cat_rv = categorical.Categorical(probs=class_weights)
     return cat_rv.sample((n_samples,)).squeeze()
-
-
-def _loc_mean_func(x):
-    return torch.sigmoid(x) * (x != 0).float()
-
-
-def _identity_func(x):
-    return x

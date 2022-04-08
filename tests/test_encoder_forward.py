@@ -77,7 +77,7 @@ class TestSourceEncoder:
                 var_params[:, :-h_tile_cutoff, :-w_tile_cutoff], var_params2, atol=1e-5
             )
             var_params_flat = var_params.reshape(-1, var_params.shape[-1])
-            pred = star_encoder.encode_for_n_sources(var_params_flat, n_star_per_tile)
+            pred = star_encoder.encode_for_n_sources_flat(var_params_flat, n_star_per_tile)
 
             assert torch.all(pred["loc_mean"] >= 0.0)
             assert torch.all(pred["loc_mean"] <= 1.0)
