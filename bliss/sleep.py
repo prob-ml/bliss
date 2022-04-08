@@ -232,27 +232,28 @@ class SleepPhase(pl.LightningModule):
             true_tile_log_fluxes, "b nth ntw s bands -> (b nth ntw) s bands"
         )
         true_tile_galaxy_bools = rearrange(true_tile_galaxy_bools, "b nth ntw s 1 -> (b nth ntw) s")
-        true_tile_n_sources = rearrange(true_tile_n_sources, "b nth ntw -> (b nth ntw)")
-        true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources)
+        true_tile_n_sources = rearrange(true_tile_n_sources, "b nth ntw -> 1 (b nth ntw)")
 
         # extract image tiles
         var_params = self.image_encoder.encode(images, background)
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
         n_source_log_probs = self.image_encoder.get_n_source_log_prob(var_params_flat)
         pred = self.image_encoder.encode_for_n_sources(var_params_flat, true_tile_n_sources)
-
         # the loss for estimating the true number of sources
         nllloss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
-        counter_loss = nllloss(n_source_log_probs, true_tile_n_sources)
+        counter_loss = nllloss(n_source_log_probs, true_tile_n_sources.squeeze(0))
 
         # the following two functions computes the log-probability of parameters when
         # each estimated source i is matched with true source j.
         # enforce large error if source is off
-        loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
+        true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources).squeeze(
+            0
+        )
+        loc_mean, loc_logvar = pred["loc_mean"][0], pred["loc_logvar"][0]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
         locs_log_probs_all = get_params_logprob_all_combs(true_tile_locs, loc_mean, loc_logvar)
         star_params_log_probs_all = get_params_logprob_all_combs(
-            true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
+            true_tile_log_fluxes, pred["log_flux_mean"][0], pred["log_flux_logvar"][0]
         )
 
         # inside _get_min_perm_loss is where the matching happens:
