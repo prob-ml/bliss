@@ -181,6 +181,22 @@ class TileCatalog(UserDict):
     def __eq__(self, other):
         return self.equals(other)
 
+    def get_tile_params_at_coord(self, plocs: torch.Tensor):
+        """Return the parameters of the tiles that contain each of the locations in plocs."""
+        assert len(plocs.shape) == 2 and plocs.shape[1] == 2
+        assert plocs.device == self.locs.device
+        n_total = len(plocs)
+        slen = self.n_tiles_h * self.tile_slen
+        wlen = self.n_tiles_w * self.tile_slen
+        # coordinates on tiles.
+        x_coords = torch.arange(0, slen, self.tile_slen, device=self.locs.device).long()
+        y_coords = torch.arange(0, wlen, self.tile_slen, device=self.locs.device).long()
+
+        x_indx = torch.searchsorted(x_coords.contiguous(), plocs[:, 0].contiguous()) - 1
+        y_indx = torch.searchsorted(y_coords.contiguous(), plocs[:, 1].contiguous()) - 1
+
+        return {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
+
 
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params
@@ -290,8 +306,9 @@ class FullCatalog(UserDict):
         )
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
+            dtype = torch.int64 if k == "objid" else torch.float
             size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
-            tile_params[k] = torch.zeros(size, dtype=torch.float)
+            tile_params[k] = torch.zeros(size, dtype=dtype)
         n_sources = int(self.n_sources[0].item())
         for (idx, coords) in enumerate(tile_coords[:n_sources]):
             source_idx = tile_n_sources[0, coords[0], coords[1]]

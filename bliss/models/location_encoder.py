@@ -275,7 +275,7 @@ class LocationEncoder(nn.Module):
     ):
         """Obtains log probability of number of n_sources.
 
-        For example, if max_detections = 3, then Tensor will be (n_tiles x 3) since will return
+        For example, if max_detections = 2, then Tensor will be (n_tiles x 3) since will return
         probability of having 0,1,2 stars.
 
         Arguments:
