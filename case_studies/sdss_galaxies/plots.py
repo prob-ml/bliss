@@ -58,6 +58,7 @@ def set_rc_params(
         "font.family": "serif",
         "font.sans-serif": "Helvetica",
         "text.usetex": True,
+        "text.latex.preamble": r"\usepackage{amsmath}",
         "mathtext.fontset": "cm",
         "font.size": fontsize,
         # figure
@@ -730,10 +731,15 @@ class SDSSReconstructionFigures(BlissFigures):
 
             recon_map = tile_map_recon.to_full_params()
 
+            # get BLISS probability of n_sources in coadd locations.
+            coplocs = coadd_params.plocs.reshape(-1, 2)
+            prob_n_sources = tile_map_recon.get_tile_params_at_coord(coplocs)["n_source_log_probs"]
+            prob_n_sources = prob_n_sources.exp()
+
             true = true.cpu()
             recon = recon.cpu()
             resid = resid.cpu()
-            data[figname] = (true, recon, resid, coadd_params, recon_map)
+            data[figname] = (true, recon, resid, coadd_params, recon_map, prob_n_sources)
 
         return data
 
@@ -745,7 +751,7 @@ class SDSSReconstructionFigures(BlissFigures):
         set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
         for figname, scene_coords in self.scenes.items():
             scene_size = scene_coords["size"]
-            true, recon, res, coadd_params, recon_map = data[figname]
+            true, recon, res, coadd_params, recon_map, prob_n_sources = data[figname]
             fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
 
             ax_true = axes[0]
@@ -773,6 +779,14 @@ class SDSSReconstructionFigures(BlissFigures):
             )
             plt.subplots_adjust(hspace=-0.4)
             plt.tight_layout()
+
+            # plot probability of detection in each true object for blends
+            if "blend" in figname:
+                for ii, ploc in enumerate(coadd_params.plocs.reshape(-1, 2)):
+                    prob = prob_n_sources[ii].item()
+                    x, y = ploc[1] + 0.5, ploc[0] + 0.5
+                    text = r"$\boldsymbol{" + f"{prob:.2f}" + "}$"
+                    ax_true.annotate(text, (x, y), color="limegreen")
 
             out_figures[figname] = fig
 
