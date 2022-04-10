@@ -527,7 +527,14 @@ class DetectionClassificationFigures(BlissFigures):
 
     @staticmethod
     def make_detection_figure(
-        mags, data, cuts_or_bins="cuts", xlims=(18, 24), ratio=2, where_step="mid", n_gap=50
+        mags,
+        data,
+        cuts_or_bins="cuts",
+        xlims=(18, 24),
+        ylims=(0.5, 1.05),
+        ratio=2,
+        where_step="mid",
+        n_gap=50,
     ):
         # precision / recall / f1 score
         assert cuts_or_bins in {"cuts", "bins"}
@@ -551,6 +558,7 @@ class DetectionClassificationFigures(BlissFigures):
         ax2.plot(mags, f1_score, "-o", label=r"\rm f1 score")
         ax2.legend(loc="lower left", prop={"size": 22})
         ax2.set_xlim(xlims)
+        ax2.set_ylim(ylims)
 
         # setup histogram plot up top.
         c1 = CB_color_cycle[3]
@@ -562,6 +570,7 @@ class DetectionClassificationFigures(BlissFigures):
         ymax = max(max(tgcount), max(tscount), max(egcount), max(escount))
         ymax = np.ceil(ymax / n_gap) * n_gap
         yticks = np.arange(0, ymax, n_gap)
+        ax1.set_ylim((0, ymax))
         format_plot(ax1, yticks=yticks, ylabel=r"\rm Counts")
         ax1.legend(loc="best", prop={"size": 16})
         plt.subplots_adjust(hspace=0)
@@ -570,7 +579,14 @@ class DetectionClassificationFigures(BlissFigures):
 
     @staticmethod
     def make_classification_figure(
-        mags, data, cuts_or_bins="cuts", xlims=(18, 24), ratio=2, where_step="mid", n_gap=50
+        mags,
+        data,
+        cuts_or_bins="cuts",
+        xlims=(18, 24),
+        ylims=(0.5, 1.05),
+        ratio=2,
+        where_step="mid",
+        n_gap=50,
     ):
         # classification accuracy
         class_acc = data["class_acc"]
@@ -581,11 +597,12 @@ class DetectionClassificationFigures(BlissFigures):
             2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
         )
         xlabel = r"\rm magnitude " + cuts_or_bins[:-1]
-        format_plot(ax2, xlabel=xlabel, ylabel="accuracy")
-        ax2.plot(mags, galaxy_acc, "-o", label=r"\rm galaxy classification accuracy")
-        ax2.plot(mags, star_acc, "-o", label=r"\rm star classification accuracy")
-        ax2.plot(mags, class_acc, "-o", label=r"\rm overall classification accuracy")
+        format_plot(ax2, xlabel=xlabel, ylabel="classification accuracy")
+        ax2.plot(mags, galaxy_acc, "-o", label=r"\rm galaxy")
+        ax2.plot(mags, star_acc, "-o", label=r"\rm star")
+        ax2.plot(mags, class_acc, "-o", label=r"\rm overall")
         ax2.set_xlim(xlims)
+        ax2.set_ylim(ylims)
         ax2.legend(loc="lower left", prop={"size": 18})
 
         # setup histogram up top.
@@ -598,6 +615,7 @@ class DetectionClassificationFigures(BlissFigures):
         yticks = np.arange(0, ymax, n_gap)
         format_plot(ax1, yticks=yticks, ylabel=r"\rm Counts")
         ax1.legend(loc="best", prop={"size": 16})
+        ax1.set_ylim((0, ymax))
         plt.subplots_adjust(hspace=0)
 
         return fig
@@ -650,10 +668,14 @@ class DetectionClassificationFigures(BlissFigures):
     def create_metrics_figures(
         self, mag_cuts, mag_bins, cuts_data, bins_data, full_metrics, name=""
     ):
-        f1 = self.make_detection_figure(mag_cuts, cuts_data, "cuts")
-        f2 = self.make_classification_figure(mag_cuts, cuts_data, "cuts")
-        f3 = self.make_detection_figure(mag_bins - 0.5, bins_data, "bins", (17, 24), n_gap=25)
-        f4 = self.make_classification_figure(mag_bins - 0.5, bins_data, "bins", (17, 24), n_gap=25)
+        f1 = self.make_detection_figure(mag_cuts, cuts_data, "cuts", ylims=(0.5, 1.03))
+        f2 = self.make_classification_figure(mag_cuts, cuts_data, "cuts", ylims=(0.8, 1.03))
+        f3 = self.make_detection_figure(
+            mag_bins - 0.5, bins_data, "bins", xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
+        )
+        f4 = self.make_classification_figure(
+            mag_bins - 0.5, bins_data, "bins", xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
+        )
         f5 = self.make_magnitude_prob_scatter_figure(full_metrics)
         f6 = self.make_mag_mag_scatter_figure(full_metrics)
 
