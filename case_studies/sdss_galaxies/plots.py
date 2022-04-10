@@ -786,7 +786,7 @@ class SDSSReconstructionFigures(BlissFigures):
                     prob = prob_n_sources[ii].item()
                     x, y = ploc[1] + 0.5, ploc[0] + 0.5
                     text = r"$\boldsymbol{" + f"{prob:.2f}" + "}$"
-                    ax_true.annotate(text, (x, y), color="limegreen")
+                    ax_true.annotate(text, (x, y), color="lime")
 
             out_figures[figname] = fig
 
