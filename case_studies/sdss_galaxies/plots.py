@@ -432,7 +432,7 @@ class DetectionClassificationFigures(BlissFigures):
 
     @staticmethod
     def compute_mag_bin_metrics(mag_bins: np.ndarray, truth: FullCatalog, pred: FullCatalog):
-        metrics_per_mag = defaultdict(lambda: np.zeros_like(mag_bins))
+        metrics_per_mag = defaultdict(lambda: np.zeros(len(mag_bins)))
 
         # compute data for precision/recall/classification accuracy as a function of magnitude.
         for ii, (mag1, mag2) in enumerate(mag_bins):
@@ -449,7 +449,7 @@ class DetectionClassificationFigures(BlissFigures):
             for k, v in res["counts"].items():
                 metrics_per_mag[k][ii] = v
 
-        return metrics_per_mag
+        return dict(metrics_per_mag)
 
     def compute_metrics(self, truth: FullCatalog, pred: FullCatalog):
 
@@ -470,10 +470,15 @@ class DetectionClassificationFigures(BlissFigures):
         tplocs = truth.plocs.reshape(-1, 2)
         eplocs = pred.plocs.reshape(-1, 2)
         tindx, eindx, dkeep, _ = reporting.match_by_locs(tplocs, eplocs, slack=1.0)
+
+        # compute egprob separately for PHOTO
+        egbool = pred["galaxy_bools"].reshape(-1)[eindx][dkeep]
+        egprob = pred.get("galaxy_probs", None)
+        egprob = egbool if egprob is None else egprob.reshape(-1)[eindx][dkeep]
         full_metrics = {
             "tgbool": truth["galaxy_bools"].reshape(-1)[tindx][dkeep],
-            "egbool": pred["galaxy_bools"].reshape(-1)[eindx][dkeep],
-            "egprob": pred["galaxy_probs"].reshape(-1)[eindx][dkeep],
+            "egbool": egbool,
+            "egprob": egprob,
             "tmag": truth["mags"].reshape(-1)[tindx][dkeep],
             "emag": pred["mags"].reshape(-1)[eindx][dkeep],
         }
@@ -494,6 +499,7 @@ class DetectionClassificationFigures(BlissFigures):
         h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
         coadd_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
+        photo_catalog_at_hw = photo_cat.crop_at_coords(h, h_end, w, w_end)
 
         # obtain predictions from BLISS.
         _, tile_est_params = reconstruct_scene_at_coordinates(
@@ -515,7 +521,7 @@ class DetectionClassificationFigures(BlissFigures):
 
         # compute metrics with bliss vs coadd and photo (frame) vs coadd
         bliss_metrics = self.compute_metrics(coadd_params, est_params)
-        photo_metrics = self.compute_metrics(coadd_params, photo_cat)
+        photo_metrics = self.compute_metrics(coadd_params, photo_catalog_at_hw)
 
         return {"bliss_metrics": bliss_metrics, "photo_metrics": photo_metrics}
 
@@ -664,7 +670,7 @@ class DetectionClassificationFigures(BlissFigures):
         """Make figures related to detection and classification in SDSS."""
         sns.set_theme(style="darkgrid")
         bliss_figs = self.create_metrics_figures(*data["bliss_metrics"], name="bliss_sdss")
-        photo_figs = self.create_metrics_figures(*data["photo"], name="photo_sdss")
+        photo_figs = self.create_metrics_figures(*data["photo_metrics"], name="photo_sdss")
         return {**bliss_figs, **photo_figs}
 
 
@@ -794,7 +800,8 @@ def plots(cfg):  # pylint: disable=too-many-statements
     if figs.intersection({2, 3}):
         # load SDSS frame and models for prediction
         frame: Union[SDSSFrame, SimulatedFrame] = instantiate(cfg.plots.frame)
-        photo_cat: sdss.PhotoFullCatalog = instantiate(cfg.plots.photo_catalog)
+        photo_cat = sdss.PhotoFullCatalog.from_file(**cfg.plots.photo_catalog)
+
         encoder, decoder = load_models(cfg, device)
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
