@@ -77,6 +77,9 @@ class LocationEncoder(pl.LightningModule):
             spatial_dropout: TODO (document this)
             dropout: TODO (document this)
             hidden: TODO (document this)
+            annotate_probs: Annotate probabilities on validation plots?
+            slack: Slack to use when matching locations for validation metrics.
+            optimizer_params: Optimizer for training.
         """
         super().__init__()
 
@@ -365,7 +368,7 @@ class LocationEncoder(pl.LightningModule):
 
         return var_params_for_n_sources
 
-    ## Pytorch Lightning methods
+    # Pytorch Lightning methods
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
@@ -430,12 +433,6 @@ class LocationEncoder(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         batch_size = len(batch["images"])
-        # (
-        #     detection_loss,
-        #     counter_loss,
-        #     locs_loss,
-        #     star_params_loss,
-        # ) = self._get_loss(batch)
         out = self._get_loss(batch)
 
         # log all losses
@@ -465,40 +462,40 @@ class LocationEncoder(pl.LightningModule):
         self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
         return batch
 
-    def validation_epoch_end(self, batch, kind="validation", n_samples=16):
+    def validation_epoch_end(self, outputs, kind="validation", n_samples=16):
         """Pytorch lightning method."""
         if self.current_epoch > 0 and self.n_bands == 1:
             assert n_samples ** (0.5) % 1 == 0
-            if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
+            if n_samples > len(outputs["n_sources"]):  # do nothing if low on samples.
                 return
             nrows = int(n_samples**0.5)  # for figure
 
             true_tile_catalog = TileCatalog(
                 self.tile_slen,
                 {
-                    "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-                    "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
-                    "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
-                    "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+                    "locs": outputs["locs"][:, :, :, 0 : self.max_detections],
+                    "log_fluxes": outputs["log_fluxes"][:, :, :, 0 : self.max_detections],
+                    "galaxy_bools": outputs["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                    "n_sources": outputs["n_sources"].clamp(max=self.max_detections),
                 },
             )
-            true_full_cat = true_tile_catalog.to_full_params()
-            var_params = self.encode(batch["images"], batch["background"])
+            true_cat = true_tile_catalog.to_full_params()
+            var_params = self.encode(outputs["images"], outputs["background"])
             est_tile_catalog = self.max_a_post(var_params)
-            est_full_cat = est_tile_catalog.to_full_params()
+            est_cat = est_tile_catalog.to_full_params()
 
             # setup figure and axes.
             fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
             axes = axes.flatten()
 
-            images = batch["images"]
+            images = outputs["images"]
             assert images.shape[-2] == images.shape[-1]
 
             for i in range(n_samples):
                 bp = self.image_encoder.border_padding
                 labels = None if i > 0 else ("t. gal", "t. star", "p. source")
                 plot_image_and_locs(
-                    fig, axes[i], i, batch["images"], bp, true_full_cat, est_full_cat, labels=labels
+                    fig, axes[i], i, outputs["images"], bp, true_cat, est_cat, labels=labels
                 )
 
             fig.tight_layout()

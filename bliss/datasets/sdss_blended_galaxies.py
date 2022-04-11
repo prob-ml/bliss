@@ -13,7 +13,6 @@ from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.encoder import Encoder
 from bliss.models.binary import BinaryEncoder
 from bliss.models.location_encoder import LocationEncoder
-from bliss.sleep import SleepPhase
 
 
 class SdssBlendedGalaxies(pl.LightningDataModule):
