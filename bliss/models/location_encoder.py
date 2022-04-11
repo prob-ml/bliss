@@ -1,5 +1,6 @@
 from typing import Dict, Optional, Union
 
+import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
@@ -36,7 +37,7 @@ class ConcatBackgroundTransform:
         return 2 * input_channels
 
 
-class LocationEncoder(nn.Module):
+class LocationEncoder(pl.LightningModule):
     """Encodes the distribution of a latent variable representing an astronomical image.
 
     This class implements the source encoder, which is supposed to take in
