@@ -2,11 +2,14 @@ from typing import Dict, Optional, Union
 
 import torch
 from einops import rearrange
+from matplotlib import pyplot as plt
 from torch import Tensor, nn
 from torch.distributions import Categorical, Poisson
 from torch.nn import functional as F
+from torch.optim import Adam
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
+from bliss.reporting import DetectionMetrics, plot_image_and_locs
 
 
 class LogBackgroundTransform:
@@ -53,6 +56,9 @@ class LocationEncoder(nn.Module):
         dropout,
         hidden: int,
         spatial_dropout: float,
+        annotate_probs: bool = False,
+        slack=1.0,
+        optimizer_params: dict = None,
     ):
         """Initializes LocationEncoder.
 
@@ -75,6 +81,7 @@ class LocationEncoder(nn.Module):
         self.mean_detections = mean_detections
         self.max_detections = max_detections
         self.n_bands = n_bands
+        self.optimizer_params = optimizer_params
 
         assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
@@ -116,6 +123,13 @@ class LocationEncoder(nn.Module):
         indx_mats = self._get_hidden_indices()
         for k, v in indx_mats.items():
             self.register_buffer(k + "_indx", v, persistent=False)
+
+        # plotting
+        self.annotate_probs = annotate_probs
+
+        # metrics
+        self.val_detection_metrics = DetectionMetrics(slack)
+        self.test_detection_metrics = DetectionMetrics(slack)
 
     def encode(self, image: Tensor, background: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
@@ -346,6 +360,157 @@ class LocationEncoder(nn.Module):
 
         return var_params_for_n_sources
 
+    ## Pytorch Lightning methods
+
+    def configure_optimizers(self):
+        """Configure optimizers for training (pytorch lightning)."""
+        return Adam(self.image_encoder.parameters(), **self.optimizer_params)
+
+    def training_step(self, batch, batch_idx, optimizer_idx=0):
+        """Training step (pytorch lightning)."""
+        batch_size = len(batch["n_sources"])
+        loss = self._get_loss(batch)["loss"]
+        self.log("train/loss", loss, batch_size=batch_size)
+        return loss
+
+    def _get_loss(self, batch: Dict[str, Tensor]):
+
+        true_catalog = TileCatalog(
+            self.tile_slen,
+            {
+                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+            },
+        )
+
+        var_params = self.encode(batch["images"], batch["backfround"])
+        var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
+        n_source_log_probs = self.get_n_source_log_prob(var_params_flat)
+        nll_loss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
+        counter_loss = nll_loss(n_source_log_probs, true_catalog.n_sources)
+
+        pred = self.encode_for_n_sources(var_params_flat, true_catalog.n_sources)
+        loc_mean, loc_logvar = pred["loc_mean"][0], pred["loc_logvar"][0]
+        locs_log_probs_all = get_params_logprob_all_combs(true_catalog.locs, loc_mean, loc_logvar)
+        star_params_log_probs_all = get_params_logprob_all_combs(
+            true_catalog["log_fluxes"], pred["log_flux_mean"][0], pred["log_flux_logvar"][0]
+        )
+
+        (locs_loss, star_params_loss) = get_min_perm_loss(
+            locs_log_probs_all,
+            star_params_log_probs_all,
+            true_catalog["galaxy_bools"],
+            true_catalog.is_on_array,
+        )
+
+        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss + star_params_loss
+        loss = loss_vec.mean()
+
+        return {
+            "loss": loss,
+            "counter_loss": counter_loss,
+            "locs_loss": locs_loss,
+            "star_params_loss": star_params_loss,
+        }
+
+    def validation_step(self, batch, batch_idx):
+        """Pytorch lightning method."""
+        batch_size = len(batch["images"])
+        # (
+        #     detection_loss,
+        #     counter_loss,
+        #     locs_loss,
+        #     star_params_loss,
+        # ) = self._get_loss(batch)
+        out = self._get_loss(batch)
+
+        # log all losses
+        self.log("val/loss", out["loss"], batch_size=batch_size)
+        self.log("val/counter_loss", out["counter_loss"].mean(), batch_size=batch_size)
+        self.log("val/locs_loss", out["locs_loss"].mean(), batch_size=batch_size)
+        self.log("val/star_params_loss", out["star_params_loss"].mean(), batch_size=batch_size)
+
+        true_tile_catalog = TileCatalog(
+            self.tile_slen,
+            {
+                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+            },
+        )
+        true_full_catalog = true_tile_catalog.to_full_params()
+        var_params = self.encode(batch["images"], batch["background"])
+        est_tile_catalog = self.max_a_post(var_params)
+        est_full_catalog = est_tile_catalog.to_full_params()
+
+        metrics = self.val_detection_metrics(true_full_catalog, est_full_catalog)
+        self.log("val/precision", metrics["precision"], batch_size=batch_size)
+        self.log("val/recall", metrics["recall"], batch_size=batch_size)
+        self.log("val/f1", metrics["f1"], batch_size=batch_size)
+        self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
+        return batch
+
+    def validation_epoch_end(self, batch, kind="validation", n_samples=16):
+        """Pytorch lightning method."""
+        if self.current_epoch > 0 and self.n_bands == 1:
+            assert n_samples ** (0.5) % 1 == 0
+            if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
+                return
+            nrows = int(n_samples**0.5)  # for figure
+
+            true_tile_catalog = TileCatalog(
+                self.tile_slen,
+                {
+                    "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+                    "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+                    "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                    "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+                },
+            )
+            true_full_catalog = true_tile_catalog.to_full_params()
+            var_params = self.encode(batch["images"], batch["background"])
+            est_tile_catalog = self.max_a_post(var_params)
+            est_full_catalog = est_tile_catalog.to_full_params()
+
+            # setup figure and axes.
+            fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
+            axes = axes.flatten()
+
+            images = batch["images"]
+            assert images.shape[-2] == images.shape[-1]
+
+            for i in range(n_samples):
+                bp = self.image_encoder.border_padding
+                truth, est = true_full_catalog, est_full_catalog
+                labels = None if i > 0 else ("t. gal", "t. star", "p. source")
+                plot_image_and_locs(fig, axes[i], i, batch["images"], bp, truth, est, labels=labels)
+
+            fig.tight_layout()
+            if self.logger:
+                if kind == "validation":
+                    title = f"Epoch:{self.current_epoch}/Validation Images"
+                    self.logger.experiment.add_figure(title, fig)
+                elif kind == "testing":
+                    self.logger.experiment.add_figure("Test Images", fig)
+                else:
+                    raise NotImplementedError()
+            plt.close(fig)
+
+    def test_step(self, batch, batch_idx):
+        """Pytorch lightning method."""
+        true_params, est_params = self._get_full_params(batch)
+        metrics = self.test_detection_metrics(true_params, est_params)
+        batch_size = len(batch["images"])
+        self.log("precision", metrics["precision"], batch_size=batch_size)
+        self.log("recall", metrics["recall"], batch_size=batch_size)
+        self.log("f1", metrics["f1"], batch_size=batch_size)
+        self.log("avg_distance", metrics["avg_distance"], batch_size=batch_size)
+
+        return batch
+
     @property
     def variational_params(self):
         return {
@@ -479,3 +644,77 @@ class ConvBlock(nn.Module):
 
         out = x + identity
         return F.relu(out, inplace=True)
+
+
+def _get_log_probs_all_perms(
+    locs_log_probs_all,
+    star_params_log_probs_all,
+    true_galaxy_bools,
+    is_on_array,
+):
+    # get log-probability under every possible matching of estimated source to true source
+    n_ptiles = star_params_log_probs_all.size(0)
+    max_detections = star_params_log_probs_all.size(-1)
+
+    n_permutations = math.factorial(max_detections)
+    locs_log_probs_all_perm = torch.zeros(
+        n_ptiles, n_permutations, device=locs_log_probs_all.device
+    )
+    star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
+
+    for i, perm in enumerate(permutations(range(max_detections))):
+        # note that we multiply is_on_array, we only evaluate the loss if the source is on.
+        locs_log_probs_all_perm[:, i] = (
+            locs_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array
+        ).sum(1)
+
+        # if star, evaluate the star parameters,
+        # hence the multiplication by (1 - true_galaxy_bools)
+        # the diagonal is a clever way of selecting the elements of each permutation (first index
+        # of mean/var with second index of true_param etc.)
+        star_params_log_probs_all_perm[:, i] = (
+            star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
+            * is_on_array
+            * (1 - true_galaxy_bools)
+        ).sum(1)
+
+    return locs_log_probs_all_perm, star_params_log_probs_all_perm
+
+
+def get_min_perm_loss(
+    locs_log_probs_all,
+    star_params_log_probs_all,
+    true_galaxy_bools,
+    is_on_array,
+):
+    # get log-probability under every possible matching of estimated star to true star
+    locs_log_probs_all_perm, star_params_log_probs_all_perm = _get_log_probs_all_perms(
+        locs_log_probs_all,
+        star_params_log_probs_all,
+        true_galaxy_bools,
+        is_on_array,
+    )
+
+    # find the permutation that minimizes the location losses
+    locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
+    indx = indx.unsqueeze(1)
+
+    # get the star losses according to the found permutation.
+    star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, indx).squeeze()
+    return locs_loss, star_params_loss
+
+
+def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+    # return shape (n_ptiles x max_detections x max_detections)
+    assert true_params.shape == param_mean.shape == param_logvar.shape
+
+    n_ptiles = true_params.size(0)
+    max_detections = true_params.size(1)
+
+    # view to evaluate all combinations of log_prob.
+    true_params = true_params.view(n_ptiles, 1, max_detections, -1)
+    param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
+    param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
+
+    sd = (param_logvar.exp() + 1e-5).sqrt()
+    return Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
