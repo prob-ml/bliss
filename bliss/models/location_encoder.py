@@ -509,7 +509,7 @@ class LocationEncoder(pl.LightningModule):
                     slen,
                     true_cat,
                     estimate=est_cat,
-                    labels=None if i > 0 else ("t. gal", "p. source", "t. star"),
+                    add_labels=(i == 0),
                 )
 
             fig.tight_layout()
@@ -764,12 +764,10 @@ def plot_image_and_locs(
     slen: int,
     true_params: FullCatalog,
     estimate: FullCatalog,
-    labels: Optional[list] = None,
+    add_labels: bool = False,
 ):
-    galaxy_probs = None
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
-    use_galaxy_bools = False
     bpad = int((images.shape[-1] - slen) / 2)
 
     image = images[idx, 0].cpu().numpy()
@@ -801,27 +799,15 @@ def plot_image_and_locs(
     plot_image(fig, ax, image, vrange=(vmin, vmax))
 
     # plot locations
-    plot_locs(ax, bpad, true_galaxy_plocs, "r", "x", s=20, galaxy_probs=None)
-    plot_locs(ax, bpad, true_star_plocs, "c", "x", s=20, galaxy_probs=None)
+    plot_locs(
+        ax, bpad, true_galaxy_plocs, "r", "x", s=20, label=None if not add_labels else "t.gal"
+    )
+    plot_locs(ax, bpad, true_star_plocs, "c", "x", s=20, label=None if not add_labels else "t.star")
 
-    if estimate is not None:
-        if use_galaxy_bools:
-            galaxy_bools = estimate["galaxy_bools"][idx].cpu().numpy()
-            star_bools = estimate["star_bools"][idx].cpu().numpy()
-            galaxy_plocs = plocs * galaxy_bools
-            star_plocs = plocs * star_bools
-            plot_locs(ax, bpad, galaxy_plocs, "b", "+", s=30, galaxy_probs=galaxy_probs)
-            plot_locs(ax, bpad, star_plocs, "m", "+", s=30, galaxy_probs=galaxy_probs)
-        else:
-            plot_locs(ax, bpad, plocs, "b", "+", s=30, galaxy_probs=None)
+    # Plot estimates
+    plot_locs(ax, bpad, plocs, "b", "+", s=30, label=None if not add_labels else "p.source")
 
-    if labels is not None:
-        colors = ["r", "b", "c", "m"]
-        markers = ["x", "+", "x", "+"]
-        sizes = [25, 35, 25, 35]
-        for ell, c, m, s in zip(labels, colors, markers, sizes):
-            if ell is not None:
-                ax.scatter(0, 0, color=c, s=s, marker=m, label=ell)
+    if add_labels:
         ax.legend(
             bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
             loc="lower left",
@@ -843,17 +829,13 @@ def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="viridis"):
         fig.colorbar(im, cax=cax, orientation="vertical")
 
 
-def plot_locs(ax, bpad, plocs, color="r", marker="x", s=20, galaxy_probs=None):
+def plot_locs(ax, bpad, plocs, color="r", marker="x", s=20, label=None):
     assert len(plocs.shape) == 2
     assert plocs.shape[1] == 2
     assert isinstance(bpad, int)
-    if galaxy_probs is not None:
-        assert len(galaxy_probs.shape) == 1
 
     x = plocs[:, 1] - 0.5 + bpad
     y = plocs[:, 0] - 0.5 + bpad
     for i, (xi, yi) in enumerate(zip(x, y)):
         if xi > bpad and yi > bpad:
-            ax.scatter(xi, yi, color=color, marker=marker, s=s)
-            if galaxy_probs is not None:
-                ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
+            ax.scatter(xi, yi, color=color, marker=marker, s=s, label=label)
