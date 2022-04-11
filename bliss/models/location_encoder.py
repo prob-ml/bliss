@@ -188,7 +188,7 @@ class LocationEncoder(pl.LightningModule):
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        log_probs_n_sources_per_tile = self.get_n_source_log_prob(
+        log_probs_n_sources_per_tile = self._get_n_source_log_prob(
             var_params_flat, eval_mean_detections=eval_mean_detections
         )
 
@@ -202,7 +202,7 @@ class LocationEncoder(pl.LightningModule):
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
         # get var_params conditioned on n_sources
-        pred = self.encode_for_n_sources(var_params_flat, tile_n_sources)
+        pred = self._encode_for_n_sources(var_params_flat, tile_n_sources)
 
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
@@ -252,13 +252,13 @@ class LocationEncoder(pl.LightningModule):
             `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        n_source_log_probs = self.get_n_source_log_prob(
+        n_source_log_probs = self._get_n_source_log_prob(
             var_params_flat, eval_mean_detections=eval_mean_detections
         )
         map_n_sources: Tensor = torch.argmax(n_source_log_probs, dim=1)
         map_n_sources = rearrange(map_n_sources, "b_nth_ntw -> 1 b_nth_ntw")
 
-        pred = self.encode_for_n_sources(var_params_flat, map_n_sources)
+        pred = self._encode_for_n_sources(var_params_flat, map_n_sources)
 
         is_on_array = get_is_on_from_n_sources(map_n_sources, self.max_detections)
         is_on_array = is_on_array.unsqueeze(-1).float()
@@ -293,7 +293,7 @@ class LocationEncoder(pl.LightningModule):
             )
         return TileCatalog(self.tile_slen, max_a_post)
 
-    def get_n_source_log_prob(
+    def _get_n_source_log_prob(
         self, var_params_flat: Tensor, eval_mean_detections: Optional[float] = None
     ):
         """Obtains log probability of number of n_sources.
@@ -313,21 +313,21 @@ class LocationEncoder(pl.LightningModule):
         """
         free_probs = var_params_flat[:, self.prob_n_source_indx]
         if eval_mean_detections is not None:
-            train_log_probs = self.get_n_source_prior_log_prob(self.mean_detections)
-            eval_log_probs = self.get_n_source_prior_log_prob(eval_mean_detections)
+            train_log_probs = self._get_n_source_prior_log_prob(self.mean_detections)
+            eval_log_probs = self._get_n_source_prior_log_prob(eval_mean_detections)
             adj = eval_log_probs - train_log_probs
             adj = rearrange(adj, "ns -> 1 ns")
             adj = adj.to(free_probs.device)
             free_probs += adj
         return self.log_softmax(free_probs)
 
-    def get_n_source_prior_log_prob(self, detection_rate):
+    def _get_n_source_prior_log_prob(self, detection_rate):
         possible_n_sources = torch.tensor(range(self.max_detections))
         log_probs = Poisson(torch.tensor(detection_rate)).log_prob(possible_n_sources)
         log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
         return torch.cat((log_probs, log_probs_last.reshape(1)))
 
-    def encode_for_n_sources(
+    def _encode_for_n_sources(
         self, var_params_flat: Tensor, tile_n_sources: Tensor
     ) -> Dict[str, Tensor]:
         """Get distributional parameters conditioned on number of sources in tile.
@@ -398,11 +398,11 @@ class LocationEncoder(pl.LightningModule):
 
         var_params = self.encode(batch["images"], batch["background"])
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        n_source_log_probs = self.get_n_source_log_prob(var_params_flat)
+        n_source_log_probs = self._get_n_source_log_prob(var_params_flat)
         nll_loss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
         counter_loss = nll_loss(n_source_log_probs, true_catalog.n_sources.reshape(-1))
 
-        pred = self.encode_for_n_sources(
+        pred = self._encode_for_n_sources(
             var_params_flat, rearrange(true_catalog.n_sources, "n nth ntw -> 1 (n nth ntw)")
         )
         locs_log_probs_all = get_params_logprob_all_combs(
