@@ -1,18 +1,21 @@
 import itertools
 import math
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.pyplot import Axes
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import Tensor, nn
 from torch.distributions import Categorical, Normal, Poisson
 from torch.nn import functional as F
 from torch.optim import Adam
 
-from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.reporting import DetectionMetrics, plot_image_and_locs
+from bliss.catalog import FullCatalog, TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
+from bliss.reporting import DetectionMetrics
 
 
 class LogBackgroundTransform:
@@ -462,40 +465,53 @@ class LocationEncoder(pl.LightningModule):
         self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
         return batch
 
-    def validation_epoch_end(self, outputs, kind="validation", n_samples=16):
+    def validation_epoch_end(
+        self, outputs: List[Dict[str, Tensor]], kind="validation", max_n_samples=16
+    ):
         """Pytorch lightning method."""
-        if self.current_epoch > 0 and self.n_bands == 1:
-            assert n_samples ** (0.5) % 1 == 0
-            if n_samples > len(outputs["n_sources"]):  # do nothing if low on samples.
-                return
+        batch = outputs[-1]
+        if self.n_bands == 1:
+            n_samples = min(int(math.sqrt(len(batch["n_sources"]))) ** 2, max_n_samples)
             nrows = int(n_samples**0.5)  # for figure
 
             true_tile_catalog = TileCatalog(
                 self.tile_slen,
                 {
-                    "locs": outputs["locs"][:, :, :, 0 : self.max_detections],
-                    "log_fluxes": outputs["log_fluxes"][:, :, :, 0 : self.max_detections],
-                    "galaxy_bools": outputs["galaxy_bools"][:, :, :, 0 : self.max_detections],
-                    "n_sources": outputs["n_sources"].clamp(max=self.max_detections),
+                    "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+                    "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+                    "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                    "star_bools": batch["star_bools"][:, :, :, 0 : self.max_detections],
+                    "n_sources": batch["n_sources"].clamp(max=self.max_detections),
                 },
             )
             true_cat = true_tile_catalog.to_full_params()
-            var_params = self.encode(outputs["images"], outputs["background"])
+            var_params = self.encode(batch["images"], batch["background"])
             est_tile_catalog = self.max_a_post(var_params)
             est_cat = est_tile_catalog.to_full_params()
 
             # setup figure and axes.
             fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
-            axes = axes.flatten()
+            if nrows > 1:
+                axes = axes.flatten()
+            else:
+                axes = [axes]
 
-            images = outputs["images"]
+            images = batch["images"]
             assert images.shape[-2] == images.shape[-1]
 
             for i in range(n_samples):
-                bp = self.image_encoder.border_padding
-                labels = None if i > 0 else ("t. gal", "t. star", "p. source")
+                slen = self.tile_slen * est_tile_catalog.locs.shape[1]
                 plot_image_and_locs(
-                    fig, axes[i], i, outputs["images"], bp, true_cat, est_cat, labels=labels
+                    i,
+                    fig,
+                    axes[i],
+                    batch["images"],
+                    slen,
+                    true_cat,
+                    estimate=est_cat,
+                    labels=None if i > 0 else ("t. gal", "p. source", "t. star"),
+                    annotate_axis=True,
+                    add_borders=True,
                 )
 
             fig.tight_layout()
@@ -740,3 +756,118 @@ def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
 
     sd = (param_logvar.exp() + 1e-5).sqrt()
     return Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
+
+
+def plot_image_and_locs(
+    idx: int,
+    fig: Figure,
+    ax: Axes,
+    images,
+    slen: int,
+    true_params: FullCatalog,
+    estimate: Optional[FullCatalog] = None,
+    labels: list = None,
+    annotate_axis: bool = False,
+    add_borders: bool = False,
+    vrange: tuple = None,
+    galaxy_probs: Optional[Tensor] = None,
+):
+    # collect all necessary parameters to plot
+    assert images.shape[1] == 1, "Only 1 band supported."
+    if galaxy_probs is not None:
+        assert estimate is not None
+        assert "galaxy_bools" in estimate, "Inconsistent inputs to plot_image_and_locs"
+    use_galaxy_bools = "galaxy_bools" in estimate if estimate is not None else False
+    bpad = int((images.shape[-1] - slen) / 2)
+
+    image = images[idx, 0].cpu().numpy()
+
+    # true parameters on full image.
+    true_n_sources = true_params.n_sources[idx].cpu().numpy()
+    true_plocs = true_params.plocs[idx].cpu().numpy()
+    true_galaxy_bools = true_params["galaxy_bools"][idx].cpu().numpy()
+    true_star_bools = true_params["star_bools"][idx].cpu().numpy()
+    true_galaxy_plocs = true_plocs * true_galaxy_bools
+    true_star_plocs = true_plocs * true_star_bools
+
+    # convert tile estimates to full parameterization for plotting
+    if estimate is not None:
+        n_sources = estimate.n_sources[idx].cpu().numpy()
+        plocs = estimate.plocs[idx].cpu().numpy()
+
+    if galaxy_probs is not None:
+        galaxy_probs = galaxy_probs[idx].cpu().numpy().reshape(-1)
+
+    # annotate useful information around the axis
+    if annotate_axis and estimate is not None:
+        ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
+
+    # (optionally) add white border showing where centers of stars and galaxies can be
+    if add_borders:
+        ax.axvline(bpad, color="w")
+        ax.axvline(bpad + slen, color="w")
+        ax.axhline(bpad, color="w")
+        ax.axhline(bpad + slen, color="w")
+
+    # plot image first
+    vmin = image.min().item() if vrange is None else vrange[0]
+    vmax = image.max().item() if vrange is None else vrange[1]
+    plot_image(fig, ax, image, vrange=(vmin, vmax))
+
+    # plot locations
+    plot_locs(ax, bpad, true_galaxy_plocs, "r", "x", s=20, galaxy_probs=None)
+    plot_locs(ax, bpad, true_star_plocs, "c", "x", s=20, galaxy_probs=None)
+
+    if estimate is not None:
+        if use_galaxy_bools:
+            galaxy_bools = estimate["galaxy_bools"][idx].cpu().numpy()
+            star_bools = estimate["star_bools"][idx].cpu().numpy()
+            galaxy_plocs = plocs * galaxy_bools
+            star_plocs = plocs * star_bools
+            plot_locs(ax, bpad, galaxy_plocs, "b", "+", s=30, galaxy_probs=galaxy_probs)
+            plot_locs(ax, bpad, star_plocs, "m", "+", s=30, galaxy_probs=galaxy_probs)
+        else:
+            plot_locs(ax, bpad, plocs, "b", "+", s=30, galaxy_probs=None)
+
+    if labels is not None:
+        colors = ["r", "b", "c", "m"]
+        markers = ["x", "+", "x", "+"]
+        sizes = [25, 35, 25, 35]
+        for ell, c, m, s in zip(labels, colors, markers, sizes):
+            if ell is not None:
+                ax.scatter(0, 0, color=c, s=s, marker=m, label=ell)
+        ax.legend(
+            bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+            loc="lower left",
+            ncol=2,
+            mode="expand",
+            borderaxespad=0.0,
+        )
+
+
+def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="viridis"):
+    vmin = image.min().item() if vrange is None else vrange[0]
+    vmax = image.max().item() if vrange is None else vrange[1]
+
+    if colorbar:
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+    im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap=cmap)
+    if colorbar:
+        fig.colorbar(im, cax=cax, orientation="vertical")
+
+
+def plot_locs(ax, bpad, plocs, color="r", marker="x", s=20, galaxy_probs=None):
+    assert len(plocs.shape) == 2
+    assert plocs.shape[1] == 2
+    assert isinstance(bpad, int)
+    if galaxy_probs is not None:
+        assert len(galaxy_probs.shape) == 1
+
+    x = plocs[:, 1] - 0.5 + bpad
+    y = plocs[:, 0] - 0.5 + bpad
+    for i, (xi, yi) in enumerate(zip(x, y)):
+        if xi > bpad and yi > bpad:
+            ax.scatter(xi, yi, color=color, marker=marker, s=s)
+            if galaxy_probs is not None:
+                ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
