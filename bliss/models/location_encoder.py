@@ -482,10 +482,10 @@ class LocationEncoder(pl.LightningModule):
                     "n_sources": batch["n_sources"].clamp(max=self.max_detections),
                 },
             )
-            true_full_catalog = true_tile_catalog.to_full_params()
+            true_full_cat = true_tile_catalog.to_full_params()
             var_params = self.encode(batch["images"], batch["background"])
             est_tile_catalog = self.max_a_post(var_params)
-            est_full_catalog = est_tile_catalog.to_full_params()
+            est_full_cat = est_tile_catalog.to_full_params()
 
             # setup figure and axes.
             fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
@@ -496,9 +496,10 @@ class LocationEncoder(pl.LightningModule):
 
             for i in range(n_samples):
                 bp = self.image_encoder.border_padding
-                truth, est = true_full_catalog, est_full_catalog
                 labels = None if i > 0 else ("t. gal", "t. star", "p. source")
-                plot_image_and_locs(fig, axes[i], i, batch["images"], bp, truth, est, labels=labels)
+                plot_image_and_locs(
+                    fig, axes[i], i, batch["images"], bp, true_full_cat, est_full_cat, labels=labels
+                )
 
             fig.tight_layout()
             if self.logger:
@@ -513,8 +514,20 @@ class LocationEncoder(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        true_params, est_params = self._get_full_params(batch)
-        metrics = self.test_detection_metrics(true_params, est_params)
+        true_tile_catalog = TileCatalog(
+            self.tile_slen,
+            {
+                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+            },
+        )
+        true_full_catalog = true_tile_catalog.to_full_params()
+        var_params = self.encode(batch["images"], batch["background"])
+        est_tile_catalog = self.max_a_post(var_params)
+        est_full_catalog = est_tile_catalog.to_full_params()
+        metrics = self.test_detection_metrics(true_full_catalog, est_full_catalog)
         batch_size = len(batch["images"])
         self.log("precision", metrics["precision"], batch_size=batch_size)
         self.log("recall", metrics["recall"], batch_size=batch_size)
