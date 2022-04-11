@@ -1,6 +1,6 @@
 import itertools
 import math
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -772,15 +772,9 @@ def plot_image_and_locs(
 
     # true parameters on full image.
     true_n_sources = true_params.n_sources[idx].cpu().numpy()
-    true_plocs = true_params.plocs[idx].cpu().numpy()
-    true_galaxy_bools = true_params["galaxy_bools"][idx].cpu().numpy()
-    true_star_bools = true_params["star_bools"][idx].cpu().numpy()
-    true_galaxy_plocs = true_plocs * true_galaxy_bools
-    true_star_plocs = true_plocs * true_star_bools
 
     # convert tile estimates to full parameterization for plotting
     n_sources = estimate.n_sources[idx].cpu().numpy()
-    plocs = estimate.plocs[idx].cpu().numpy()
 
     # annotate useful information around the axis
     ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
@@ -799,16 +793,14 @@ def plot_image_and_locs(
     im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
     fig.colorbar(im, cax=cax, orientation="vertical")
 
-    # plot locations
-    plot_locs(
-        ax, bpad, true_galaxy_plocs, "r", "x", s=20, label=None if not add_labels else "t.gal"
-    )
-    plot_locs(ax, bpad, true_star_plocs, "c", "x", s=20, label=None if not add_labels else "t.star")
-
-    # Plot estimates
-    plot_locs(ax, bpad, plocs, "b", "+", s=30, label=None if not add_labels else "p.source")
+    true_params.plot_plocs(ax, idx, "galaxy", bp=bpad, color="r", marker="x", s=20)
+    true_params.plot_plocs(ax, idx, "star", bp=bpad, color="c", marker="x", s=20)
+    estimate.plot_plocs(ax, idx, "all", bp=bpad, color="b", marker="+", s=30)
 
     if add_labels:
+        ax.scatter(None, None, color="r", marker="x", s=20, label="t.gal")
+        ax.scatter(None, None, color="c", marker="x", s=20, label="t.star")
+        ax.scatter(None, None, color="b", marker="+", s=30, label="p.source")
         ax.legend(
             bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
             loc="lower left",
@@ -816,17 +808,3 @@ def plot_image_and_locs(
             mode="expand",
             borderaxespad=0.0,
         )
-
-
-def plot_locs(ax, bpad, plocs, color="r", marker="x", s=20, label=None):
-    assert len(plocs.shape) == 2
-    assert plocs.shape[1] == 2
-    assert isinstance(bpad, int)
-
-    x = plocs[:, 1] - 0.5 + bpad
-    y = plocs[:, 0] - 0.5 + bpad
-
-    ax.scatter(None, None, color=color, marker=marker, s=s, label=label)
-    for xi, yi in zip(x, y):
-        if xi > bpad and yi > bpad:
-            ax.scatter(xi, yi, color=color, marker=marker, s=s, label=None)
