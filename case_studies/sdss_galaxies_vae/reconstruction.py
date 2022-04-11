@@ -209,7 +209,9 @@ def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
     # sleep = instantiate(cfg.models.sleep).to(device).eval()
     # sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint, map_location=sleep.device))
     location: LocationEncoder = instantiate(cfg.models.location_encoder).to(device).eval()
-    location.load_state_dict(torch.load(cfg.predict.location_checkpoint, map_location=location.device))
+    location.load_state_dict(
+        torch.load(cfg.predict.location_checkpoint, map_location=location.device)
+    )
 
     binary: BinaryEncoder = instantiate(cfg.models.binary).to(device).eval()
     binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint, map_location=binary.device))
