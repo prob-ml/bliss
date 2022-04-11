@@ -465,11 +465,9 @@ class LocationEncoder(pl.LightningModule):
         self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
         return batch
 
-    def validation_epoch_end(
-        self, outputs: List[Dict[str, Tensor]], kind="validation", max_n_samples=16
-    ):
+    def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
         """Pytorch lightning method."""
-        batch = outputs[-1]
+        batch: Dict[str, Tensor] = outputs[-1]
         if self.n_bands == 1:
             n_samples = min(int(math.sqrt(len(batch["n_sources"]))) ** 2, max_n_samples)
             nrows = int(n_samples**0.5)  # for figure
@@ -838,6 +836,6 @@ def plot_locs(ax, bpad, plocs, color="r", marker="x", s=20, label=None):
     y = plocs[:, 0] - 0.5 + bpad
 
     ax.scatter(None, None, color=color, marker=marker, s=s, label=label)
-    for i, (xi, yi) in enumerate(zip(x, y)):
+    for xi, yi in zip(x, y):
         if xi > bpad and yi > bpad:
             ax.scatter(xi, yi, color=color, marker=marker, s=s, label=None)
