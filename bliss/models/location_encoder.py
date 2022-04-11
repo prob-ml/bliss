@@ -468,57 +468,82 @@ class LocationEncoder(pl.LightningModule):
     def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
         """Pytorch lightning method."""
         batch: Dict[str, Tensor] = outputs[-1]
-        if self.n_bands == 1:
-            n_samples = min(int(math.sqrt(len(batch["n_sources"]))) ** 2, max_n_samples)
-            nrows = int(n_samples**0.5)  # for figure
+        if self.n_bands > 1:
+            return
+        n_samples = min(int(math.sqrt(len(batch["n_sources"]))) ** 2, max_n_samples)
+        nrows = int(n_samples**0.5)  # for figure
 
-            true_tile_catalog = TileCatalog(
-                self.tile_slen,
-                {
-                    "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-                    "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
-                    "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
-                    "star_bools": batch["star_bools"][:, :, :, 0 : self.max_detections],
-                    "n_sources": batch["n_sources"].clamp(max=self.max_detections),
-                },
-            )
-            true_cat = true_tile_catalog.to_full_params()
-            var_params = self.encode(batch["images"], batch["background"])
-            est_tile_catalog = self.max_a_post(var_params)
-            est_cat = est_tile_catalog.to_full_params()
+        true_tile_catalog = TileCatalog(
+            self.tile_slen,
+            {
+                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                "star_bools": batch["star_bools"][:, :, :, 0 : self.max_detections],
+                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+            },
+        )
+        true_cat = true_tile_catalog.to_full_params()
+        var_params = self.encode(batch["images"], batch["background"])
+        est_tile_catalog = self.max_a_post(var_params)
+        est_cat = est_tile_catalog.to_full_params()
 
-            # setup figure and axes.
-            fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
-            if nrows > 1:
-                axes = axes.flatten()
-            else:
-                axes = [axes]
+        # setup figure and axes.
+        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
+        if nrows > 1:
+            axes = axes.flatten()
+        else:
+            axes = [axes]
 
-            images = batch["images"]
-            assert images.shape[-2] == images.shape[-1]
+        images = batch["images"]
+        assert images.shape[-2] == images.shape[-1]
+        bp = self.border_padding
+        for idx, ax in enumerate(axes):
+            true_n_sources = true_cat.n_sources[idx].item()
+            n_sources = est_cat.n_sources[idx].item()
+            ax.set_xlabel(f"True num: {true_n_sources}; Est num: {n_sources}")
 
-            for i in range(n_samples):
-                plot_image_and_locs(
-                    i,
-                    fig,
-                    axes[i],
-                    batch["images"],
-                    self.border_padding,
-                    true_cat,
-                    estimate=est_cat,
-                    add_labels=(i == 0),
+            # add white border showing where centers of stars and galaxies can be
+            ax.axvline(bp, color="w")
+            ax.axvline(images.shape[-1] - bp, color="w")
+            ax.axhline(bp, color="w")
+            ax.axhline(images.shape[-2] - bp, color="w")
+
+            # plot image first
+            image = images[idx, 0].cpu().numpy()
+            vmin = image.min().item()
+            vmax = image.max().item()
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
+            fig.colorbar(im, cax=cax, orientation="vertical")
+
+            true_cat.plot_plocs(ax, idx, "galaxy", bp=bp, color="r", marker="x", s=20)
+            true_cat.plot_plocs(ax, idx, "star", bp=bp, color="c", marker="x", s=20)
+            est_cat.plot_plocs(ax, idx, "all", bp=bp, color="b", marker="+", s=30)
+
+            if idx == 0:
+                ax.scatter(None, None, color="r", marker="x", s=20, label="t.gal")
+                ax.scatter(None, None, color="c", marker="x", s=20, label="t.star")
+                ax.scatter(None, None, color="b", marker="+", s=30, label="p.source")
+                ax.legend(
+                    bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+                    loc="lower left",
+                    ncol=2,
+                    mode="expand",
+                    borderaxespad=0.0,
                 )
 
-            fig.tight_layout()
-            if self.logger:
-                if kind == "validation":
-                    title = f"Epoch:{self.current_epoch}/Validation Images"
-                    self.logger.experiment.add_figure(title, fig)
-                elif kind == "testing":
-                    self.logger.experiment.add_figure("Test Images", fig)
-                else:
-                    raise NotImplementedError()
-            plt.close(fig)
+        fig.tight_layout()
+        if self.logger:
+            if kind == "validation":
+                title = f"Epoch:{self.current_epoch}/Validation Images"
+                self.logger.experiment.add_figure(title, fig)
+            elif kind == "testing":
+                self.logger.experiment.add_figure("Test Images", fig)
+            else:
+                raise NotImplementedError()
+        plt.close(fig)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
@@ -765,38 +790,3 @@ def plot_image_and_locs(
 ):
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
-
-    true_n_sources = true_params.n_sources[idx].item()
-    n_sources = estimate.n_sources[idx].item()
-    ax.set_xlabel(f"True num: {true_n_sources}; Est num: {n_sources}")
-
-    # add white border showing where centers of stars and galaxies can be
-    ax.axvline(bpad, color="w")
-    ax.axvline(images.shape[-1] - bpad, color="w")
-    ax.axhline(bpad, color="w")
-    ax.axhline(images.shape[-2] - bpad, color="w")
-
-    # plot image first
-    image = images[idx, 0].cpu().numpy()
-    vmin = image.min().item()
-    vmax = image.max().item()
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.05)
-    im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
-    fig.colorbar(im, cax=cax, orientation="vertical")
-
-    true_params.plot_plocs(ax, idx, "galaxy", bp=bpad, color="r", marker="x", s=20)
-    true_params.plot_plocs(ax, idx, "star", bp=bpad, color="c", marker="x", s=20)
-    estimate.plot_plocs(ax, idx, "all", bp=bpad, color="b", marker="+", s=30)
-
-    if add_labels:
-        ax.scatter(None, None, color="r", marker="x", s=20, label="t.gal")
-        ax.scatter(None, None, color="c", marker="x", s=20, label="t.star")
-        ax.scatter(None, None, color="b", marker="+", s=30, label="p.source")
-        ax.legend(
-            bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
-            loc="lower left",
-            ncol=2,
-            mode="expand",
-            borderaxespad=0.0,
-        )
