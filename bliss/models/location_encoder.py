@@ -498,13 +498,12 @@ class LocationEncoder(pl.LightningModule):
             assert images.shape[-2] == images.shape[-1]
 
             for i in range(n_samples):
-                slen = self.tile_slen * est_tile_catalog.locs.shape[1]
                 plot_image_and_locs(
                     i,
                     fig,
                     axes[i],
                     batch["images"],
-                    slen,
+                    self.border_padding,
                     true_cat,
                     estimate=est_cat,
                     add_labels=(i == 0),
@@ -759,7 +758,7 @@ def plot_image_and_locs(
     fig: Figure,
     ax: Axes,
     images,
-    slen: int,
+    bpad: int,
     true_params: FullCatalog,
     estimate: FullCatalog,
     add_labels: bool = False,
@@ -772,11 +771,10 @@ def plot_image_and_locs(
     ax.set_xlabel(f"True num: {true_n_sources}; Est num: {n_sources}")
 
     # add white border showing where centers of stars and galaxies can be
-    bpad = int((images.shape[-1] - slen) / 2)
     ax.axvline(bpad, color="w")
-    ax.axvline(bpad + slen, color="w")
+    ax.axvline(images.shape[-1] - bpad, color="w")
     ax.axhline(bpad, color="w")
-    ax.axhline(bpad + slen, color="w")
+    ax.axhline(images.shape[-2] - bpad, color="w")
 
     # plot image first
     image = images[idx, 0].cpu().numpy()
