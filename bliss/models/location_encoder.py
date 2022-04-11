@@ -836,6 +836,8 @@ def plot_locs(ax, bpad, plocs, color="r", marker="x", s=20, label=None):
 
     x = plocs[:, 1] - 0.5 + bpad
     y = plocs[:, 0] - 0.5 + bpad
+
+    ax.scatter(None, None, color=color, marker=marker, s=s, label=label)
     for i, (xi, yi) in enumerate(zip(x, y)):
         if xi > bpad and yi > bpad:
-            ax.scatter(xi, yi, color=color, marker=marker, s=s, label=label)
+            ax.scatter(xi, yi, color=color, marker=marker, s=s, label=None)
