@@ -24,9 +24,9 @@ paths:
 datasets:
     sdss_blended_galaxies:
         _target_: bliss.datasets.sdss_blended_galaxies.SdssBlendedGalaxies
-        sleep: ${models.sleep}
+        location_encoder: ${models.location_encoder}
         binary_encoder: ${models.binary}
-        sleep_ckpt: ${paths.project}/models/sdss_sleep.pt
+        location_ckpt: ${paths.project}/models/sdss_location_encoder.pt
         binary_ckpt: ${paths.project}/models/sdss_binary.pt
         sdss_dir: ${paths.sdss}
         prerender_device: "cuda"
