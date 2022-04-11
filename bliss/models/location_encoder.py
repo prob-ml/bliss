@@ -794,7 +794,10 @@ def plot_image_and_locs(
     # plot image first
     vmin = image.min().item()
     vmax = image.max().item()
-    plot_image(fig, ax, image, vrange=(vmin, vmax))
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
+    fig.colorbar(im, cax=cax, orientation="vertical")
 
     # plot locations
     plot_locs(
@@ -813,18 +816,6 @@ def plot_image_and_locs(
             mode="expand",
             borderaxespad=0.0,
         )
-
-
-def plot_image(fig, ax, image, vrange=None, colorbar=True, cmap="viridis"):
-    vmin = image.min().item() if vrange is None else vrange[0]
-    vmax = image.max().item() if vrange is None else vrange[1]
-
-    if colorbar:
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-    im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap=cmap)
-    if colorbar:
-        fig.colorbar(im, cax=cax, orientation="vertical")
 
 
 def plot_locs(ax, bpad, plocs, color="r", marker="x", s=20, label=None):
