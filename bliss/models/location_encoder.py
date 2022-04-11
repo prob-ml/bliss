@@ -766,26 +766,20 @@ def plot_image_and_locs(
 ):
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
-    bpad = int((images.shape[-1] - slen) / 2)
 
-    image = images[idx, 0].cpu().numpy()
-
-    # true parameters on full image.
-    true_n_sources = true_params.n_sources[idx].cpu().numpy()
-
-    # convert tile estimates to full parameterization for plotting
-    n_sources = estimate.n_sources[idx].cpu().numpy()
-
-    # annotate useful information around the axis
-    ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
+    true_n_sources = true_params.n_sources[idx].item()
+    n_sources = estimate.n_sources[idx].item()
+    ax.set_xlabel(f"True num: {true_n_sources}; Est num: {n_sources}")
 
     # add white border showing where centers of stars and galaxies can be
+    bpad = int((images.shape[-1] - slen) / 2)
     ax.axvline(bpad, color="w")
     ax.axvline(bpad + slen, color="w")
     ax.axhline(bpad, color="w")
     ax.axhline(bpad + slen, color="w")
 
     # plot image first
+    image = images[idx, 0].cpu().numpy()
     vmin = image.min().item()
     vmax = image.max().item()
     divider = make_axes_locatable(ax)
