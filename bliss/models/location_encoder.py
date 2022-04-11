@@ -510,8 +510,6 @@ class LocationEncoder(pl.LightningModule):
                     true_cat,
                     estimate=est_cat,
                     labels=None if i > 0 else ("t. gal", "p. source", "t. star"),
-                    annotate_axis=True,
-                    add_borders=True,
                 )
 
             fig.tight_layout()
@@ -765,19 +763,13 @@ def plot_image_and_locs(
     images,
     slen: int,
     true_params: FullCatalog,
-    estimate: Optional[FullCatalog] = None,
-    labels: list = None,
-    annotate_axis: bool = False,
-    add_borders: bool = False,
-    vrange: tuple = None,
-    galaxy_probs: Optional[Tensor] = None,
+    estimate: FullCatalog,
+    labels: Optional[list] = None,
 ):
+    galaxy_probs = None
     # collect all necessary parameters to plot
     assert images.shape[1] == 1, "Only 1 band supported."
-    if galaxy_probs is not None:
-        assert estimate is not None
-        assert "galaxy_bools" in estimate, "Inconsistent inputs to plot_image_and_locs"
-    use_galaxy_bools = "galaxy_bools" in estimate if estimate is not None else False
+    use_galaxy_bools = False
     bpad = int((images.shape[-1] - slen) / 2)
 
     image = images[idx, 0].cpu().numpy()
@@ -791,27 +783,21 @@ def plot_image_and_locs(
     true_star_plocs = true_plocs * true_star_bools
 
     # convert tile estimates to full parameterization for plotting
-    if estimate is not None:
-        n_sources = estimate.n_sources[idx].cpu().numpy()
-        plocs = estimate.plocs[idx].cpu().numpy()
-
-    if galaxy_probs is not None:
-        galaxy_probs = galaxy_probs[idx].cpu().numpy().reshape(-1)
+    n_sources = estimate.n_sources[idx].cpu().numpy()
+    plocs = estimate.plocs[idx].cpu().numpy()
 
     # annotate useful information around the axis
-    if annotate_axis and estimate is not None:
-        ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
+    ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
 
-    # (optionally) add white border showing where centers of stars and galaxies can be
-    if add_borders:
-        ax.axvline(bpad, color="w")
-        ax.axvline(bpad + slen, color="w")
-        ax.axhline(bpad, color="w")
-        ax.axhline(bpad + slen, color="w")
+    # add white border showing where centers of stars and galaxies can be
+    ax.axvline(bpad, color="w")
+    ax.axvline(bpad + slen, color="w")
+    ax.axhline(bpad, color="w")
+    ax.axhline(bpad + slen, color="w")
 
     # plot image first
-    vmin = image.min().item() if vrange is None else vrange[0]
-    vmax = image.max().item() if vrange is None else vrange[1]
+    vmin = image.min().item()
+    vmax = image.max().item()
     plot_image(fig, ax, image, vrange=(vmin, vmax))
 
     # plot locations
