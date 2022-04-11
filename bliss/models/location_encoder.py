@@ -1,3 +1,5 @@
+import itertools
+import math
 from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
@@ -5,7 +7,7 @@ import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
 from torch import Tensor, nn
-from torch.distributions import Categorical, Poisson
+from torch.distributions import Categorical, Normal, Poisson
 from torch.nn import functional as F
 from torch.optim import Adam
 
@@ -319,7 +321,9 @@ class LocationEncoder(pl.LightningModule):
         log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
         return torch.cat((log_probs, log_probs_last.reshape(1)))
 
-    def encode_for_n_sources(self, var_params_flat: Tensor, tile_n_sources: Tensor):
+    def encode_for_n_sources(
+        self, var_params_flat: Tensor, tile_n_sources: Tensor
+    ) -> Dict[str, Tensor]:
         """Get distributional parameters conditioned on number of sources in tile.
 
         Args:
@@ -365,7 +369,7 @@ class LocationEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
-        return Adam(self.image_encoder.parameters(), **self.optimizer_params)
+        return Adam(self.parameters(), **self.optimizer_params)
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
@@ -386,24 +390,31 @@ class LocationEncoder(pl.LightningModule):
             },
         )
 
-        var_params = self.encode(batch["images"], batch["backfround"])
+        var_params = self.encode(batch["images"], batch["background"])
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
         n_source_log_probs = self.get_n_source_log_prob(var_params_flat)
         nll_loss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
-        counter_loss = nll_loss(n_source_log_probs, true_catalog.n_sources)
+        counter_loss = nll_loss(n_source_log_probs, true_catalog.n_sources.reshape(-1))
 
-        pred = self.encode_for_n_sources(var_params_flat, true_catalog.n_sources)
-        loc_mean, loc_logvar = pred["loc_mean"][0], pred["loc_logvar"][0]
-        locs_log_probs_all = get_params_logprob_all_combs(true_catalog.locs, loc_mean, loc_logvar)
+        pred = self.encode_for_n_sources(
+            var_params_flat, rearrange(true_catalog.n_sources, "n nth ntw -> 1 (n nth ntw)")
+        )
+        locs_log_probs_all = get_params_logprob_all_combs(
+            rearrange(true_catalog.locs, "n nth ntw ns hw -> (n nth ntw) ns hw"),
+            pred["loc_mean"].squeeze(0),
+            pred["loc_logvar"].squeeze(0),
+        )
         star_params_log_probs_all = get_params_logprob_all_combs(
-            true_catalog["log_fluxes"], pred["log_flux_mean"][0], pred["log_flux_logvar"][0]
+            rearrange(true_catalog["log_fluxes"], "n nth ntw ns nb -> (n nth ntw) ns nb"),
+            pred["log_flux_mean"].squeeze(0),
+            pred["log_flux_logvar"].squeeze(0),
         )
 
         (locs_loss, star_params_loss) = get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
-            true_catalog["galaxy_bools"],
-            true_catalog.is_on_array,
+            rearrange(true_catalog["galaxy_bools"], "n nth ntw ns 1 -> (n nth ntw) ns"),
+            rearrange(true_catalog.is_on_array, "n nth ntw ns -> (n nth ntw) ns"),
         )
 
         loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss + star_params_loss
@@ -663,7 +674,7 @@ def _get_log_probs_all_perms(
     )
     star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
 
-    for i, perm in enumerate(permutations(range(max_detections))):
+    for i, perm in enumerate(itertools.permutations(range(max_detections))):
         # note that we multiply is_on_array, we only evaluate the loss if the source is on.
         locs_log_probs_all_perm[:, i] = (
             locs_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array
