@@ -12,7 +12,7 @@ from bliss.catalog import TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.encoder import Encoder
 from bliss.models.binary import BinaryEncoder
-from bliss.sleep import SleepPhase
+from bliss.models.location_encoder import LocationEncoder
 
 
 class SdssBlendedGalaxies(pl.LightningDataModule):
@@ -26,9 +26,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
 
     def __init__(
         self,
-        sleep: SleepPhase,
+        location_encoder: LocationEncoder,
         binary_encoder: BinaryEncoder,
-        sleep_ckpt: str,
+        location_ckpt: str,
         binary_ckpt: str,
         sdss_dir: str = "data/sdss",
         run: int = 94,
@@ -46,9 +46,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         """Initializes SDSSBlendedGalaxies.
 
         Args:
-            sleep: A SleepPhase model for getting the locations of sources.
+            location_encoder: A LocationEncoder model.
             binary_encoder: A BinaryEncoder model.
-            sleep_ckpt: Path of saved state_dict for sleep-phase-trained encoder.
+            location_ckpt: Path of saved state_dict for location encoder.
             binary_ckpt: Path of saved state_dict for binary encoder.
             sdss_dir: Location of data storage for SDSS. Defaults to "data/sdss".
             run: SDSS run.
@@ -99,11 +99,11 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             (w_start - self.bp) : (w_start + scene_size + self.bp),
         ]
 
-        sleep.load_state_dict(torch.load(sleep_ckpt, map_location=torch.device("cpu")))
-        image_encoder = sleep.image_encoder
-
+        location_encoder.load_state_dict(
+            torch.load(location_ckpt, map_location=torch.device("cpu"))
+        )
         binary_encoder.load_state_dict(torch.load(binary_ckpt, map_location=torch.device("cpu")))
-        self.encoder = Encoder(image_encoder.eval(), binary_encoder.eval())
+        self.encoder = Encoder(location_encoder.eval(), binary_encoder.eval())
         self.chunks, self.bgs, self.catalogs = self._prerender_chunks(image, background)
 
     def __len__(self):

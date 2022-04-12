@@ -23,7 +23,10 @@ from bliss.inference import (
     infer_blends,
     reconstruct_scene_at_coordinates,
 )
+from bliss.models.binary import BinaryEncoder
 from bliss.models.decoder import ImageDecoder
+from bliss.models.galaxy_encoder import GalaxyEncoder
+from bliss.models.location_encoder import LocationEncoder
 from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
 
@@ -203,13 +206,17 @@ def get_sdss_data(sdss_dir, sdss_pixel_scale):
 
 
 def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
-    sleep = instantiate(cfg.models.sleep).to(device).eval()
-    sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint, map_location=sleep.device))
+    # sleep = instantiate(cfg.models.sleep).to(device).eval()
+    # sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint, map_location=sleep.device))
+    location: LocationEncoder = instantiate(cfg.models.location_encoder).to(device).eval()
+    location.load_state_dict(
+        torch.load(cfg.predict.location_checkpoint, map_location=location.device)
+    )
 
-    binary = instantiate(cfg.models.binary).to(device).eval()
+    binary: BinaryEncoder = instantiate(cfg.models.binary).to(device).eval()
     binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint, map_location=binary.device))
 
-    galaxy = instantiate(cfg.models.galaxy_encoder).to(device).eval()
+    galaxy: GalaxyEncoder = instantiate(cfg.models.galaxy_encoder).to(device).eval()
     if cfg.reconstruct.real:
         galaxy_state_dict = torch.load(
             cfg.predict.galaxy_checkpoint_real, map_location=galaxy.device
@@ -217,13 +224,12 @@ def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
     else:
         galaxy_state_dict = torch.load(cfg.predict.galaxy_checkpoint, map_location=galaxy.device)
     galaxy.load_state_dict(galaxy_state_dict)
-    location = sleep.image_encoder.to(device).eval()
-    dec = sleep.image_decoder.to(device).eval()
+    dec: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
     encoder = Encoder(
         location.eval(), binary.eval(), galaxy.eval(), cfg.reconstruct.eval_mean_detections
     ).to(device)
 
-    prior = instantiate(cfg.models.prior).to(device).eval()
+    prior: ImagePrior = instantiate(cfg.models.prior).to(device).eval()
     return dec, encoder, prior
 
 

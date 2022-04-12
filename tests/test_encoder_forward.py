@@ -1,14 +1,8 @@
-import numpy as np
 import torch
 
-from bliss.models.location_encoder import (
-    LocationEncoder,
-    LogBackgroundTransform,
-    get_is_on_from_n_sources,
-)
+from bliss.models.location_encoder import LocationEncoder, LogBackgroundTransform
 
 
-# pylint: disable=too-many-statements
 class TestSourceEncoder:
     def test_forward(self, devices):
         """Tests forward function of source encoder.
@@ -32,7 +26,7 @@ class TestSourceEncoder:
         background = (10.0, 20.0)
 
         # get encoder
-        star_encoder = LocationEncoder(
+        star_encoder: LocationEncoder = LocationEncoder(
             LogBackgroundTransform(),
             channel=8,
             dropout=0,
@@ -61,98 +55,8 @@ class TestSourceEncoder:
             )
             images *= background_tensor.sqrt()
             images += background_tensor
-            np_nspt = np.random.choice(max_detections, batch_size * n_tiles_h * n_tiles_w)
-            n_star_per_tile = torch.from_numpy(np_nspt).type(torch.LongTensor).to(device)
-
             var_params = star_encoder.encode(images, background_tensor)
-            h_tile_cutoff = 2
-            w_tile_cutoff = 3
-            h_cutoff = h_tile_cutoff * star_encoder.tile_slen
-            w_cutoff = w_tile_cutoff * star_encoder.tile_slen
-            var_params2 = star_encoder.encode(
-                images[:, :, :-h_cutoff, :-w_cutoff],
-                background_tensor[:, :, :-h_cutoff, :-w_cutoff],
-            )
-            assert torch.allclose(
-                var_params[:, :-h_tile_cutoff, :-w_tile_cutoff], var_params2, atol=1e-5
-            )
-            var_params_flat = var_params.reshape(-1, var_params.shape[-1])
-            pred = star_encoder.encode_for_n_sources(var_params_flat, n_star_per_tile.unsqueeze(0))
-
-            assert torch.all(pred["loc_mean"] >= 0.0)
-            assert torch.all(pred["loc_mean"] <= 1.0)
-
-            # test we have the correct pattern of zeros
-            assert ((pred["loc_mean"] != 0)[0].sum(1)[:, 0] == n_star_per_tile).all()
-            assert ((pred["loc_mean"] != 0)[0].sum(1)[:, 1] == n_star_per_tile).all()
-
-            assert ((pred["loc_logvar"] != 0)[0].sum(1)[:, 0] == n_star_per_tile).all()
-            assert ((pred["loc_logvar"] != 0)[0].sum(1)[:, 1] == n_star_per_tile).all()
-
-            for i in range(2):
-                assert ((pred["loc_mean"][0, :, :, i] != 0).sum(1) == n_star_per_tile).all()
-
-            for b in range(n_bands):
-                assert ((pred["log_flux_mean"][0, :, :, b] != 0).sum(1) == n_star_per_tile).all()
-
-            # check pattern of zeros
-            is_on_array = get_is_on_from_n_sources(n_star_per_tile, star_encoder.max_detections)
-            loc_mean = pred["loc_mean"][0] * is_on_array.unsqueeze(2).float()
-            log_flux_mean = pred["log_flux_mean"][0] * is_on_array.unsqueeze(2).float()
-            assert torch.all(loc_mean == pred["loc_mean"][0])
-            assert torch.all(log_flux_mean == pred["log_flux_mean"][0])
-
-            # we check the variational parameters against the hidden parameters
-            # one by one
-            h_out = star_encoder.encode(images, background_tensor)
-            h_out = h_out.reshape(-1, h_out.shape[-1])
-
-            # get index matrices
-            locs_mean_indx_mat = star_encoder.loc_mean_indx
-            locs_var_indx_mat = star_encoder.loc_logvar_indx
-            log_flux_mean_indx_mat = star_encoder.log_flux_mean_indx
-            log_flux_var_indx_mat = star_encoder.log_flux_logvar_indx
-
-            for i in range(batch_size * n_tiles_h * n_tiles_w):
-                if n_star_per_tile[i] == 0:
-                    assert torch.all(pred["loc_mean"][0, i] == 0)
-                    assert torch.all(pred["loc_logvar"][0, i] == 0)
-                    assert torch.all(pred["log_flux_mean"][0, i] == 0)
-                    assert torch.all(pred["log_flux_logvar"][0, i] == 0)
-                else:
-                    n_stars_i = int(n_star_per_tile[i])
-
-                    assert torch.all(
-                        pred["loc_mean"][0, i, :n_stars_i].flatten()
-                        == torch.sigmoid(h_out)[
-                            i,
-                            locs_mean_indx_mat[n_stars_i][: (2 * n_stars_i)],
-                        ]
-                    )
-
-                    assert torch.all(
-                        pred["loc_logvar"][0, i, :n_stars_i].flatten()
-                        == h_out[
-                            i,
-                            locs_var_indx_mat[n_stars_i][: (2 * n_stars_i)],
-                        ]
-                    )
-
-                    assert torch.all(
-                        pred["log_flux_mean"][0, i, :n_stars_i].flatten()
-                        == h_out[
-                            i,
-                            log_flux_mean_indx_mat[n_stars_i][: (n_bands * n_stars_i)],
-                        ]
-                    )
-
-                    assert torch.all(
-                        pred["log_flux_logvar"][0, i, :n_stars_i].flatten()
-                        == h_out[
-                            i,
-                            log_flux_var_indx_mat[n_stars_i][: (n_bands * n_stars_i)],
-                        ]
-                    )
+            star_encoder.max_a_post(var_params)
 
     def test_sample(self, devices):
         device = devices.device
@@ -172,7 +76,7 @@ class TestSourceEncoder:
         )
         background_tensor = background_tensor.expand(*images.shape)
 
-        star_encoder = LocationEncoder(
+        star_encoder: LocationEncoder = LocationEncoder(
             LogBackgroundTransform(),
             channel=8,
             dropout=0,
