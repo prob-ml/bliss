@@ -6,15 +6,13 @@ import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
-from matplotlib.figure import Figure
-from matplotlib.pyplot import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import Tensor, nn
 from torch.distributions import Categorical, Normal, Poisson
 from torch.nn import functional as F
 from torch.optim import Adam
 
-from bliss.catalog import FullCatalog, TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
+from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.reporting import DetectionMetrics
 
 
@@ -776,17 +774,3 @@ def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
 
     sd = (param_logvar.exp() + 1e-5).sqrt()
     return Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
-
-
-def plot_image_and_locs(
-    idx: int,
-    fig: Figure,
-    ax: Axes,
-    images,
-    bpad: int,
-    true_params: FullCatalog,
-    estimate: FullCatalog,
-    add_labels: bool = False,
-):
-    # collect all necessary parameters to plot
-    assert images.shape[1] == 1, "Only 1 band supported."
