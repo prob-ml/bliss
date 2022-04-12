@@ -142,12 +142,16 @@ def reconstruct(cfg):
                         mtrue, mest, dkeep, avg_distance = reporting.match_by_locs(
                             true_cat.plocs[0], est_cat.plocs[0], 2.0
                         )
+                        mtrue2, mest2 = reporting.match_by_locs_v2(
+                            true_cat.plocs[0], est_cat.plocs[0], 2.0
+                        )
                         # scene_metrics = reporting.scene_metrics(true_cat, full_cat, mag_min=mag_min, mag_max=mag_max, mag_slack=np.inf)
                         # recall = scene_metrics["recall"].item()
                         # precision = scene_metrics["precision"].item()
                         # recall = dkeep.float().sum() / true_cat.plocs.shape[1]
                         # precision = dkeep.float().sum() / full_cat.plocs.shape[1]
-                        tp = float(dkeep.sum().item())
+                        # tp = float(dkeep.sum().item())
+                        tp = len(mtrue2)
                         out["tp"].append(tp)
                         out["fp"].append(number_predicted - tp)
                         # out['fp'].append(float((~dkeep).sum().item()))

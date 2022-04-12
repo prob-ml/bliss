@@ -207,6 +207,41 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     return row_indx, col_indx, dist_keep, avg_distance
 
 
+def match_by_locs_v2(true_locs, est_locs, max_distance: float):
+    assert len(true_locs.shape) == len(est_locs.shape) == 2
+    assert true_locs.shape[-1] == est_locs.shape[-1] == 2
+    assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
+
+    locs1 = true_locs.view(-1, 2)
+    locs2 = est_locs.view(-1, 2)
+
+    # entry (i,j) is l1 distance between of ith loc in locs1 and the jth loc in locs2
+    locs_err = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
+    locs_err = reduce(locs_err, "i j k -> i j", "sum")
+
+    pairs = match_closest_pairs(locs_err, max_distance)
+
+    row_indx = [p[0] for p in pairs]
+    col_indx = [p[1] for p in pairs]
+    return row_indx, col_indx
+
+
+def match_closest_pairs(distances: np.ndarray, max_distance) -> list:
+    """Given matrix of distances, match by each closest pair below max_distance"""
+    dist_flat = distances.flatten()
+    best_pair = np.argmin(dist_flat).item()
+    if dist_flat[best_pair] > max_distance:
+        return []
+    best_row = best_pair // distances.shape[1]
+    best_col = best_pair % distances.shape[1]
+    pair = (best_row, best_col)
+    new_distances = np.delete(distances, best_row, 0)
+    new_distances = np.delete(distances, best_col, 1)
+    if new_distances.shape[0] == 0 or new_distances.shape[1] == 0:
+        return [pair]
+    return [pair] + match_closest_pairs(new_distances, max_distance)
+
+
 def scene_metrics(
     true_params: FullCatalog,
     est_params: FullCatalog,
