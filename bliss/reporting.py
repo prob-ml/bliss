@@ -209,9 +209,6 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     return row_indx, col_indx, dist_keep, avg_distance
 
 
-
-
-
 def scene_metrics(
     true_params: FullCatalog,
     est_params: FullCatalog,
