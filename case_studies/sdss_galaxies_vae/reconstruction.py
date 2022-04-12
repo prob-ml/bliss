@@ -581,6 +581,8 @@ def create_scene_metrics_table(scene_metrics_by_mag):
     for c in columns:
         x[c] = {}
         for k, v in scene_metrics_by_mag.items():
+            v["n"] = v["counts"]["tgcount"] + v["counts"]["tscount"]
+            v["n_galaxies"] = v["counts"]["tgcount"]
             if c in v:
                 x[c][k] = v[c] if not isinstance(v[c], Tensor) else v[c].item()
     scene_metrics_df = pd.DataFrame(x)
