@@ -2,7 +2,7 @@
 # pylint: skip-file
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -165,10 +165,8 @@ def reconstruct(cfg):
                         )
         if outdir is not None:
             # Expected precision lpot
-            fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
-            fig_exp_precision.savefig(
-                outdir / (scene_name + "_expected_precision.png"), format="png"
-            )
+            fig_exp_precision = expected_positives_plot(tile_map_recon, recalls, precisions)
+            fig_exp_precision.savefig(outdir / (scene_name + "_auroc.png"), format="png")
             fig = create_figure(
                 true[0, 0],
                 recon[0, 0],
@@ -583,11 +581,39 @@ def expected_precision_for_threshold(tile_map: TileCatalog, threshold: float):
     return precision.item()
 
 
+def expected_true_positives_for_threshold(tile_map: TileCatalog, threshold: float):
+    prob_on: Tensor = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
+    is_on_array = prob_on >= threshold
+    prob_detected = prob_on * is_on_array
+    return prob_detected.sum().item()
+
+
+def expected_false_positives_for_threshold(tile_map: TileCatalog, threshold: float):
+    prob_on: Tensor = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
+    is_on_array = prob_on >= threshold
+    prob_detected = prob_on * is_on_array
+    return (1.0 - prob_detected).sum().item()
+
+
+def expected_positives_and_negatives(tile_map: TileCatalog, threshold: float) -> Dict[str, float]:
+    prob_on: Tensor = rearrange(
+        tile_map["n_source_log_probs"], "n nth ntw 1 1 -> (n nth ntw)"
+    ).exp()
+    is_on_array = prob_on >= threshold
+    prob_detected = prob_on[is_on_array]
+    prob_not_detected = prob_on[~is_on_array]
+    tp = float(prob_detected.sum().item())
+    fp = float((1 - prob_detected).sum().item()) if is_on_array.sum() > 0 else 0.0
+    tn = float((1 - prob_not_detected).sum().item()) if (~is_on_array).sum() > 0 else 0.0
+    fn = float(prob_detected.sum().item())
+    return {"tp": tp, "fp": fp, "tn": tn, "fn": fn}
+
+
 def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions):
     base_size = 8
     figsize = (3 * base_size, 2 * base_size)
     fig, axes = plt.subplots(nrows=3, ncols=2, figsize=figsize)
-    thresholds = np.linspace(0.0, 1.0, 100)
+    thresholds = np.linspace(0.01, 0.99, 100)
     precisions = []
     recalls = []
     for threshold in thresholds:
@@ -628,6 +654,52 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     axes[2, 1].annotate(f"Expected precision: {x:.2f}\nTrue recall {y:.2f}", (x, y), fontsize=12)
     axes[2, 1].set_xlabel("Expected Precision")
     axes[2, 1].set_ylabel("Actual Recall")
+    return fig
+
+
+def expected_positives_plot(tile_map: TileCatalog, true_recalls, true_precisions):
+    base_size = 8
+    figsize = (3 * base_size, 2 * base_size)
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=figsize)
+    thresholds = np.linspace(0.01, 0.99, 100)
+    results = defaultdict(list)
+    for threshold in thresholds:
+        res = expected_positives_and_negatives(tile_map, threshold)
+        for k, v in res.items():
+            results[k].append(v)
+    for k in results:
+        results[k] = np.array(results[k])
+    axes[0, 0].scatter(thresholds, results["tp"])
+    axes[0, 0].set_xlabel("Threshold")
+    axes[0, 0].set_ylabel("Expected True Positives")
+    axes[0, 1].scatter(thresholds, results["fp"])
+    axes[0, 1].set_xlabel("Threshold")
+    axes[0, 1].set_ylabel("Expected False positives")
+
+    # colors = precisions == precisions[optimal_point]
+    axes[1, 0].scatter(results["fp"], results["tp"])
+    # optimal_point = np.argmin(1 / precisions + 1 / recalls)
+    # x, y = precisions[optimal_point], recalls[optimal_point]
+    # axes[1, 0].scatter(x, y, color="yellow", marker="+")
+    # axes[1, 0].annotate(
+    #     f"Expected precision: {x:.2f}\nExpected Recall {y:.2f}", (x, y), fontsize=12
+    # )
+    axes[1, 0].set_xlabel("Expected False Positives")
+    axes[1, 0].set_ylabel("Expected True Positives")
+    # axes[1,0].xlabel("Expected Precision")
+    # axes[1,0].ylabel("Expected Recall")
+    # axes[2, 0].scatter(precisions, true_precisions)
+    # x, y = precisions[optimal_point], true_precisions[optimal_point]
+    # axes[2, 0].scatter(x, y, color="yellow", marker="+")
+    # axes[2, 0].annotate(f"Expected precision: {x:.2f}\nTrue precision {y:.2f}", (x, y), fontsize=12)
+    # axes[2, 0].set_xlabel("Expected Precision")
+    # axes[2, 0].set_ylabel("Actual Precision")
+    # axes[2, 1].scatter(precisions, true_recalls)
+    # x, y = precisions[optimal_point], true_recalls[optimal_point]
+    # axes[2, 1].scatter(x, y, color="yellow", marker="+")
+    # axes[2, 1].annotate(f"Expected precision: {x:.2f}\nTrue recall {y:.2f}", (x, y), fontsize=12)
+    # axes[2, 1].set_xlabel("Expected Precision")
+    # axes[2, 1].set_ylabel("Actual Recall")
     return fig
 
 
