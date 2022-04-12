@@ -4,6 +4,7 @@ from typing import Dict, Optional, Tuple
 
 import torch
 from einops import rearrange, reduce, repeat
+from matplotlib.pyplot import Axes
 from torch import Tensor
 from torch.nn import functional as F
 
@@ -326,6 +327,19 @@ class FullCatalog(UserDict):
             }
         )
         return TileCatalog(tile_slen, tile_params)
+
+    def plot_plocs(self, ax: Axes, idx: int, object_type: str, bp: int = 0, **kwargs):
+        if object_type == "galaxy":
+            keep = self["galaxy_bools"][idx, :].squeeze(-1).bool()
+        elif object_type == "star":
+            keep = self["star_bools"][idx, :].squeeze(-1).bool()
+        elif object_type == "all":
+            keep = torch.ones(self.max_sources, dtype=torch.bool, device=self.plocs.device)
+        else:
+            raise NotImplementedError()
+        plocs = self.plocs[idx, keep] - 0.5 + bp
+        plocs = plocs.detach().cpu()
+        ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
 
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):

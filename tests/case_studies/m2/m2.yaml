@@ -48,7 +48,7 @@ models:
     sdss_bands:
       - 2
       - 3
-  encoder:
+  location_encoder:
     _target_: bliss.models.location_encoder.LocationEncoder
     input_transform:
       _target_: bliss.models.location_encoder.LogBackgroundTransform
@@ -71,13 +71,9 @@ models:
     f_max: 1e6
     alpha: 0.5
     prob_galaxy: 0.0
-  sleep:
-    _target_: bliss.sleep.SleepPhase
-    encoder: ${models.encoder}
-    decoder: ${models.decoder}
 
 training:
-  model: "${models.sleep}"
+  model: "${models.location_encoder}"
   dataset: "${datasets.simulated_m2}"
   optimizer_params:
     lr: 0.00098352

@@ -24,9 +24,9 @@ paths:
 datasets:
     sdss_blended_galaxies:
         _target_: bliss.datasets.sdss_blended_galaxies.SdssBlendedGalaxies
-        sleep: ${models.sleep}
+        location_encoder: ${models.location_encoder}
         binary_encoder: ${models.binary}
-        sleep_ckpt: ${paths.project}/models/sdss_sleep.pt
+        location_ckpt: ${paths.project}/models/sdss_location_encoder.pt
         binary_ckpt: ${paths.project}/models/sdss_binary.pt
         sdss_dir: ${paths.sdss}
         prerender_device: "cuda"
@@ -117,7 +117,7 @@ models:
         galsim_galaxy_decoder: ${datasets.sdss_galaxies.decoder}
         sdss_bands:
             - 2
-    encoder:
+    location_encoder:
         _target_: bliss.models.location_encoder.LocationEncoder
         input_transform:
             _target_: bliss.models.location_encoder.ConcatBackgroundTransform
@@ -130,6 +130,8 @@ models:
         spatial_dropout: 0.0
         dropout: 0.0
         hidden: 128
+        annotate_probs: True
+        slack: 1.
     galaxy_encoder:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         decoder: ${models.decoder}
@@ -158,12 +160,6 @@ models:
         alpha: 0.43
         prob_galaxy: 0.7
         galaxy_prior: ${datasets.sdss_galaxies.prior}
-    sleep:
-        _target_: bliss.sleep.SleepPhase
-        encoder: ${models.encoder}
-        decoder: ${models.decoder}
-        annotate_probs: True
-        slack: 1.0
 
 generate:
     dataset:
@@ -185,7 +181,7 @@ predict:
     clen: 300
 
     # i/o parameters
-    sleep_checkpoint: ${paths.project}/models/sdss_sleep.pt
+    location_checkpoint: ${paths.project}/models/sdss_location_encoder.pt
     galaxy_checkpoint: ${paths.project}/models/sdss_galaxy_encoder.pt
     galaxy_checkpoint_real: ${paths.project}/models/sdss_galaxy_encoder_real.pt
     binary_checkpoint: ${paths.project}/models/sdss_binary.pt

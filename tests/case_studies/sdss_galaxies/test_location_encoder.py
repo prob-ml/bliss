@@ -5,7 +5,7 @@ import pytest
 def overrides(devices):
     overrides = {
         "mode": "train",
-        "training": "sdss_sleep",
+        "training": "sdss_location_encoder",
     }
     if devices.use_cuda:
         overrides.update({"training.n_epochs": 201})
@@ -44,7 +44,7 @@ def test_location_encoder_plotting(sdss_galaxies_setup, overrides):
     overrides.update(
         {
             "datasets.simulated.batch_size": 16,
-            "models.sleep.annotate_probs": True,
+            "models.location_encoder.annotate_probs": True,
             "training.trainer.log_every_n_steps": 1,
         }
     )

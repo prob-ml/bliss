@@ -1,12 +1,19 @@
+import itertools
+import math
 from typing import Dict, Optional, Union
 
+import pytorch_lightning as pl
 import torch
 from einops import rearrange
+from matplotlib import pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import Tensor, nn
-from torch.distributions import Categorical, Poisson
+from torch.distributions import Categorical, Normal, Poisson
 from torch.nn import functional as F
+from torch.optim import Adam
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
+from bliss.reporting import DetectionMetrics
 
 
 class LogBackgroundTransform:
@@ -33,7 +40,7 @@ class ConcatBackgroundTransform:
         return 2 * input_channels
 
 
-class LocationEncoder(nn.Module):
+class LocationEncoder(pl.LightningModule):
     """Encodes the distribution of a latent variable representing an astronomical image.
 
     This class implements the source encoder, which is supposed to take in
@@ -53,6 +60,9 @@ class LocationEncoder(nn.Module):
         dropout,
         hidden: int,
         spatial_dropout: float,
+        annotate_probs: bool = False,
+        slack=1.0,
+        optimizer_params: dict = None,
     ):
         """Initializes LocationEncoder.
 
@@ -68,6 +78,9 @@ class LocationEncoder(nn.Module):
             spatial_dropout: TODO (document this)
             dropout: TODO (document this)
             hidden: TODO (document this)
+            annotate_probs: Annotate probabilities on validation plots?
+            slack: Slack to use when matching locations for validation metrics.
+            optimizer_params: Optimizer for training.
         """
         super().__init__()
 
@@ -75,6 +88,7 @@ class LocationEncoder(nn.Module):
         self.mean_detections = mean_detections
         self.max_detections = max_detections
         self.n_bands = n_bands
+        self.optimizer_params = optimizer_params
 
         assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
@@ -116,6 +130,13 @@ class LocationEncoder(nn.Module):
         indx_mats = self._get_hidden_indices()
         for k, v in indx_mats.items():
             self.register_buffer(k + "_indx", v, persistent=False)
+
+        # plotting
+        self.annotate_probs = annotate_probs
+
+        # metrics
+        self.val_detection_metrics = DetectionMetrics(slack)
+        self.test_detection_metrics = DetectionMetrics(slack)
 
     def encode(self, image: Tensor, background: Tensor) -> Tensor:
         """Encodes variational parameters from image padded tiles.
@@ -165,7 +186,7 @@ class LocationEncoder(nn.Module):
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        log_probs_n_sources_per_tile = self.get_n_source_log_prob(
+        log_probs_n_sources_per_tile = self._get_n_source_log_prob(
             var_params_flat, eval_mean_detections=eval_mean_detections
         )
 
@@ -179,7 +200,7 @@ class LocationEncoder(nn.Module):
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
         # get var_params conditioned on n_sources
-        pred = self.encode_for_n_sources(var_params_flat, tile_n_sources)
+        pred = self._encode_for_n_sources(var_params_flat, tile_n_sources)
 
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
@@ -229,13 +250,13 @@ class LocationEncoder(nn.Module):
             `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
         var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        n_source_log_probs = self.get_n_source_log_prob(
+        n_source_log_probs = self._get_n_source_log_prob(
             var_params_flat, eval_mean_detections=eval_mean_detections
         )
         map_n_sources: Tensor = torch.argmax(n_source_log_probs, dim=1)
         map_n_sources = rearrange(map_n_sources, "b_nth_ntw -> 1 b_nth_ntw")
 
-        pred = self.encode_for_n_sources(var_params_flat, map_n_sources)
+        pred = self._encode_for_n_sources(var_params_flat, map_n_sources)
 
         is_on_array = get_is_on_from_n_sources(map_n_sources, self.max_detections)
         is_on_array = is_on_array.unsqueeze(-1).float()
@@ -270,7 +291,7 @@ class LocationEncoder(nn.Module):
             )
         return TileCatalog(self.tile_slen, max_a_post)
 
-    def get_n_source_log_prob(
+    def _get_n_source_log_prob(
         self, var_params_flat: Tensor, eval_mean_detections: Optional[float] = None
     ):
         """Obtains log probability of number of n_sources.
@@ -290,21 +311,23 @@ class LocationEncoder(nn.Module):
         """
         free_probs = var_params_flat[:, self.prob_n_source_indx]
         if eval_mean_detections is not None:
-            train_log_probs = self.get_n_source_prior_log_prob(self.mean_detections)
-            eval_log_probs = self.get_n_source_prior_log_prob(eval_mean_detections)
+            train_log_probs = self._get_n_source_prior_log_prob(self.mean_detections)
+            eval_log_probs = self._get_n_source_prior_log_prob(eval_mean_detections)
             adj = eval_log_probs - train_log_probs
             adj = rearrange(adj, "ns -> 1 ns")
             adj = adj.to(free_probs.device)
             free_probs += adj
         return self.log_softmax(free_probs)
 
-    def get_n_source_prior_log_prob(self, detection_rate):
+    def _get_n_source_prior_log_prob(self, detection_rate):
         possible_n_sources = torch.tensor(range(self.max_detections))
         log_probs = Poisson(torch.tensor(detection_rate)).log_prob(possible_n_sources)
         log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
         return torch.cat((log_probs, log_probs_last.reshape(1)))
 
-    def encode_for_n_sources(self, var_params_flat: Tensor, tile_n_sources: Tensor):
+    def _encode_for_n_sources(
+        self, var_params_flat: Tensor, tile_n_sources: Tensor
+    ) -> Dict[str, Tensor]:
         """Get distributional parameters conditioned on number of sources in tile.
 
         Args:
@@ -345,6 +368,204 @@ class LocationEncoder(nn.Module):
         var_params_for_n_sources["loc_mean"] = loc_mean_func(var_params_for_n_sources["loc_mean"])
 
         return var_params_for_n_sources
+
+    # Pytorch Lightning methods
+
+    def configure_optimizers(self):
+        """Configure optimizers for training (pytorch lightning)."""
+        return Adam(self.parameters(), **self.optimizer_params)
+
+    def training_step(self, batch, batch_idx, optimizer_idx=0):
+        """Training step (pytorch lightning)."""
+        batch_size = len(batch["n_sources"])
+        loss = self._get_loss(batch)["loss"]
+        self.log("train/loss", loss, batch_size=batch_size)
+        return loss
+
+    def _get_loss(self, batch: Dict[str, Tensor]):
+
+        true_catalog = TileCatalog(
+            self.tile_slen,
+            {
+                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+            },
+        )
+
+        var_params = self.encode(batch["images"], batch["background"])
+        var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
+        n_source_log_probs = self._get_n_source_log_prob(var_params_flat)
+        nll_loss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
+        counter_loss = nll_loss(n_source_log_probs, true_catalog.n_sources.reshape(-1))
+
+        pred = self._encode_for_n_sources(
+            var_params_flat, rearrange(true_catalog.n_sources, "n nth ntw -> 1 (n nth ntw)")
+        )
+        locs_log_probs_all = _get_params_logprob_all_combs(
+            rearrange(true_catalog.locs, "n nth ntw ns hw -> (n nth ntw) ns hw"),
+            pred["loc_mean"].squeeze(0),
+            pred["loc_logvar"].squeeze(0),
+        )
+        star_params_log_probs_all = _get_params_logprob_all_combs(
+            rearrange(true_catalog["log_fluxes"], "n nth ntw ns nb -> (n nth ntw) ns nb"),
+            pred["log_flux_mean"].squeeze(0),
+            pred["log_flux_logvar"].squeeze(0),
+        )
+
+        (locs_loss, star_params_loss) = _get_min_perm_loss(
+            locs_log_probs_all,
+            star_params_log_probs_all,
+            rearrange(true_catalog["galaxy_bools"], "n nth ntw ns 1 -> (n nth ntw) ns"),
+            rearrange(true_catalog.is_on_array, "n nth ntw ns -> (n nth ntw) ns"),
+        )
+
+        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss + star_params_loss
+        loss = loss_vec.mean()
+
+        return {
+            "loss": loss,
+            "counter_loss": counter_loss,
+            "locs_loss": locs_loss,
+            "star_params_loss": star_params_loss,
+        }
+
+    def validation_step(self, batch, batch_idx):
+        """Pytorch lightning method."""
+        batch_size = len(batch["images"])
+        out = self._get_loss(batch)
+
+        # log all losses
+        self.log("val/loss", out["loss"], batch_size=batch_size)
+        self.log("val/counter_loss", out["counter_loss"].mean(), batch_size=batch_size)
+        self.log("val/locs_loss", out["locs_loss"].mean(), batch_size=batch_size)
+        self.log("val/star_params_loss", out["star_params_loss"].mean(), batch_size=batch_size)
+
+        true_tile_catalog = TileCatalog(
+            self.tile_slen,
+            {
+                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+            },
+        )
+        true_full_catalog = true_tile_catalog.to_full_params()
+        var_params = self.encode(batch["images"], batch["background"])
+        est_tile_catalog = self.max_a_post(var_params)
+        est_full_catalog = est_tile_catalog.to_full_params()
+
+        metrics = self.val_detection_metrics(true_full_catalog, est_full_catalog)
+        self.log("val/precision", metrics["precision"], batch_size=batch_size)
+        self.log("val/recall", metrics["recall"], batch_size=batch_size)
+        self.log("val/f1", metrics["f1"], batch_size=batch_size)
+        self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
+        return batch
+
+    def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
+        """Pytorch lightning method."""
+        batch: Dict[str, Tensor] = outputs[-1]
+        if self.n_bands > 1:
+            return
+        n_samples = min(int(math.sqrt(len(batch["n_sources"]))) ** 2, max_n_samples)
+        nrows = int(n_samples**0.5)  # for figure
+
+        true_tile_catalog = TileCatalog(
+            self.tile_slen,
+            {
+                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                "star_bools": batch["star_bools"][:, :, :, 0 : self.max_detections],
+                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+            },
+        )
+        true_cat = true_tile_catalog.to_full_params()
+        var_params = self.encode(batch["images"], batch["background"])
+        est_tile_catalog = self.max_a_post(var_params)
+        est_cat = est_tile_catalog.to_full_params()
+
+        # setup figure and axes.
+        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
+        if nrows > 1:
+            axes = axes.flatten()
+        else:
+            axes = [axes]
+
+        images = batch["images"]
+        assert images.shape[-2] == images.shape[-1]
+        bp = self.border_padding
+        for idx, ax in enumerate(axes):
+            true_n_sources = true_cat.n_sources[idx].item()
+            n_sources = est_cat.n_sources[idx].item()
+            ax.set_xlabel(f"True num: {true_n_sources}; Est num: {n_sources}")
+
+            # add white border showing where centers of stars and galaxies can be
+            ax.axvline(bp, color="w")
+            ax.axvline(images.shape[-1] - bp, color="w")
+            ax.axhline(bp, color="w")
+            ax.axhline(images.shape[-2] - bp, color="w")
+
+            # plot image first
+            image = images[idx, 0].cpu().numpy()
+            vmin = image.min().item()
+            vmax = image.max().item()
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
+            fig.colorbar(im, cax=cax, orientation="vertical")
+
+            true_cat.plot_plocs(ax, idx, "galaxy", bp=bp, color="r", marker="x", s=20)
+            true_cat.plot_plocs(ax, idx, "star", bp=bp, color="c", marker="x", s=20)
+            est_cat.plot_plocs(ax, idx, "all", bp=bp, color="b", marker="+", s=30)
+
+            if idx == 0:
+                ax.scatter(None, None, color="r", marker="x", s=20, label="t.gal")
+                ax.scatter(None, None, color="c", marker="x", s=20, label="t.star")
+                ax.scatter(None, None, color="b", marker="+", s=30, label="p.source")
+                ax.legend(
+                    bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+                    loc="lower left",
+                    ncol=2,
+                    mode="expand",
+                    borderaxespad=0.0,
+                )
+
+        fig.tight_layout()
+        if self.logger:
+            if kind == "validation":
+                title = f"Epoch:{self.current_epoch}/Validation Images"
+                self.logger.experiment.add_figure(title, fig)
+            elif kind == "testing":
+                self.logger.experiment.add_figure("Test Images", fig)
+            else:
+                raise NotImplementedError()
+        plt.close(fig)
+
+    def test_step(self, batch, batch_idx):
+        """Pytorch lightning method."""
+        true_tile_catalog = TileCatalog(
+            self.tile_slen,
+            {
+                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+            },
+        )
+        true_full_catalog = true_tile_catalog.to_full_params()
+        var_params = self.encode(batch["images"], batch["background"])
+        est_tile_catalog = self.max_a_post(var_params)
+        est_full_catalog = est_tile_catalog.to_full_params()
+        metrics = self.test_detection_metrics(true_full_catalog, est_full_catalog)
+        batch_size = len(batch["images"])
+        self.log("precision", metrics["precision"], batch_size=batch_size)
+        self.log("recall", metrics["recall"], batch_size=batch_size)
+        self.log("f1", metrics["f1"], batch_size=batch_size)
+        self.log("avg_distance", metrics["avg_distance"], batch_size=batch_size)
+
+        return batch
 
     @property
     def variational_params(self):
@@ -479,3 +700,77 @@ class ConvBlock(nn.Module):
 
         out = x + identity
         return F.relu(out, inplace=True)
+
+
+def _get_log_probs_all_perms(
+    locs_log_probs_all,
+    star_params_log_probs_all,
+    true_galaxy_bools,
+    is_on_array,
+):
+    # get log-probability under every possible matching of estimated source to true source
+    n_ptiles = star_params_log_probs_all.size(0)
+    max_detections = star_params_log_probs_all.size(-1)
+
+    n_permutations = math.factorial(max_detections)
+    locs_log_probs_all_perm = torch.zeros(
+        n_ptiles, n_permutations, device=locs_log_probs_all.device
+    )
+    star_params_log_probs_all_perm = locs_log_probs_all_perm.clone()
+
+    for i, perm in enumerate(itertools.permutations(range(max_detections))):
+        # note that we multiply is_on_array, we only evaluate the loss if the source is on.
+        locs_log_probs_all_perm[:, i] = (
+            locs_log_probs_all[:, perm].diagonal(dim1=1, dim2=2) * is_on_array
+        ).sum(1)
+
+        # if star, evaluate the star parameters,
+        # hence the multiplication by (1 - true_galaxy_bools)
+        # the diagonal is a clever way of selecting the elements of each permutation (first index
+        # of mean/var with second index of true_param etc.)
+        star_params_log_probs_all_perm[:, i] = (
+            star_params_log_probs_all[:, perm].diagonal(dim1=1, dim2=2)
+            * is_on_array
+            * (1 - true_galaxy_bools)
+        ).sum(1)
+
+    return locs_log_probs_all_perm, star_params_log_probs_all_perm
+
+
+def _get_min_perm_loss(
+    locs_log_probs_all,
+    star_params_log_probs_all,
+    true_galaxy_bools,
+    is_on_array,
+):
+    # get log-probability under every possible matching of estimated star to true star
+    locs_log_probs_all_perm, star_params_log_probs_all_perm = _get_log_probs_all_perms(
+        locs_log_probs_all,
+        star_params_log_probs_all,
+        true_galaxy_bools,
+        is_on_array,
+    )
+
+    # find the permutation that minimizes the location losses
+    locs_loss, indx = torch.min(-locs_log_probs_all_perm, dim=1)
+    indx = indx.unsqueeze(1)
+
+    # get the star losses according to the found permutation.
+    star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, indx).squeeze()
+    return locs_loss, star_params_loss
+
+
+def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+    # return shape (n_ptiles x max_detections x max_detections)
+    assert true_params.shape == param_mean.shape == param_logvar.shape
+
+    n_ptiles = true_params.size(0)
+    max_detections = true_params.size(1)
+
+    # view to evaluate all combinations of log_prob.
+    true_params = true_params.view(n_ptiles, 1, max_detections, -1)
+    param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
+    param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
+
+    sd = (param_logvar.exp() + 1e-5).sqrt()
+    return Normal(param_mean, sd).log_prob(true_params).sum(dim=3)

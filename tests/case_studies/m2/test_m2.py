@@ -42,8 +42,8 @@ def trained_star_encoder_m2(m2_model_setup, devices):
             }
         )
 
-    sleep_net = m2_model_setup.get_trained_model(overrides)
-    return sleep_net.image_encoder.to(devices.device)
+    location_encoder: LocationEncoder = m2_model_setup.get_trained_model(overrides)
+    return location_encoder.to(devices.device)
 
 
 def get_map_estimate(

@@ -100,7 +100,7 @@ priors:
 models:
     prior: ${priors.star_basic}
     decoder: ${decoders.star_basic}
-    encoder:
+    location_encoder:
         _target_: bliss.models.location_encoder.LocationEncoder
         input_transform:
             _target_: bliss.models.location_encoder.LogBackgroundTransform
@@ -113,14 +113,10 @@ models:
         spatial_dropout: 0.0
         dropout: 0.0
         hidden: 128
-    sleep:
-        _target_: bliss.sleep.SleepPhase
-        encoder: ${models.encoder}
-        decoder: ${models.decoder}
         annotate_probs: false
 
 training:
-    model: "${models.sleep}"
+    model: "${models.location_encoder}"
     dataset: "${datasets.simulated}"
     optimizer_params:
         lr: 1e-3
