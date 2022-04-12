@@ -2,13 +2,12 @@
 # pylint: skip-file
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Union
-from unicodedata import east_asian_width
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import torch
-from einops import rearrange, repeat
+from einops import rearrange, reduce, repeat
 from hydra.utils import instantiate
 from joblib import Parallel, delayed
 from matplotlib import pyplot as plt
@@ -817,6 +816,74 @@ def tile_map_prior(prior: ImagePrior, tile_map):
 
     # prob_normalized =
     return log_prob_source.sum() + log_prob_binary.sum() + galaxy_probs.sum()
+
+
+def match_by_locs_closest_pairs(
+    true_locs: Tensor, est_locs: Tensor, max_l_infty_dist: float
+) -> List[Tuple[int, int]]:
+    """Match true locations to estimated locations by closest pairs.
+
+    Arguments:
+        true_locs: Tensor of true locations (N_true x 2)
+        est_locs: Tensor of estimated locations (N_est x 2)
+        max_l_infty_dist: Maximim l-infinity distance allowed for matches.
+
+    Returns:
+        A list of tuples (i, j) indicating a match between the i-th row of true_locs
+        and the j-th row of est_locs.
+    """
+    assert len(true_locs.shape) == len(est_locs.shape) == 2
+    assert true_locs.shape[-1] == est_locs.shape[-1] == 2
+    assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
+
+    locs1 = true_locs.view(-1, 2)
+    locs2 = est_locs.view(-1, 2)
+
+    # entry (i,j) is l1 distance between of ith loc in locs1 and the jth loc in locs2
+    locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
+    locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
+    locs_err_inf = reduce(locs_abs_diff, "i j k -> i j", "max")
+    allowed_match = locs_err_inf <= max_l_infty_dist
+    disallowed_penalty = torch.zeros_like(allowed_match, dtype=torch.float)
+    disallowed_penalty[~allowed_match] = np.inf
+    locs_err += disallowed_penalty
+
+    return match_closest_pairs(locs_err)
+
+
+def match_closest_pairs(distances: Tensor) -> List[Tuple[int, int]]:
+    """Match pairs by closest distance.
+
+    Given a matrix of distances with rows and columns corresponding to two
+    sets of objects, this function matches them in the following way:
+    1) The pair (i, j) with the closest distance gets matched.
+    2) i and j are removed from consideration.
+    3) The next-closest pair of the remaining objects gets matched.
+    This process repeats until all remaining distances are infinite.
+    A distance of infinity indicates there is no edge between i and j,
+    and hence a match can never be made.
+
+    Arguments:
+        distances: A matrix of distances. Must be non-negative.
+
+    Returns:
+        A list of (i, j) pairs corresponding to row-column matches in the
+        input distance matrix.
+    """
+    pairs = []
+    dist_flat = distances.flatten()
+    best_pair = dist_flat.argmin().item()
+    dist = dist_flat[best_pair]
+    while dist < np.inf and (distances.shape[0] > 0) and (distances.shape[1] > 1):
+        best_row = best_pair // distances.shape[1]
+        best_col = best_pair % distances.shape[1]
+        pairs.append((best_row, best_col))
+        distances = np.delete(distances, best_row, 0)
+        distances = np.delete(distances, best_col, 1)
+        dist_flat = distances.flatten()
+        best_pair = dist_flat.argmin().item()
+        dist = dist_flat[best_pair]
+    return pairs
 
 
 if __name__ == "__main__":
