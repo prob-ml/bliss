@@ -3,6 +3,7 @@
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Union
+from unicodedata import east_asian_width
 
 import numpy as np
 import pandas as pd
@@ -130,6 +131,7 @@ def reconstruct(cfg):
                     log_probs = rearrange(
                         est_tile_cat["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw"
                     )
+                    est_tile_cat = est_tile_cat.copy()
 
                     def stats_for_threshold(threshold):
                         est_tile_cat.n_sources = log_probs >= np.log(threshold)
@@ -137,8 +139,11 @@ def reconstruct(cfg):
                         number_predicted = est_cat.plocs.shape[1]
                         if number_predicted == 0:
                             return {"tp": 0.0, "fp": 0.0}
-                        pairs = reporting.match_by_locs_closest_pairs(true_cat.plocs[0], est_cat.plocs[0], 2.0)
-                        tp = len(pairs)
+                        # pairs = reporting.match_by_locs_closest_pairs(true_cat.plocs[0], est_cat.plocs[0], 2.0)
+                        _, _, d, _ = reporting.match_by_locs(
+                            true_cat.plocs[0], est_cat.plocs[0], 2.0
+                        )
+                        tp = d.sum()
                         fp = number_predicted - tp
                         return {"tp": tp, "fp": fp}
 
@@ -148,6 +153,7 @@ def reconstruct(cfg):
                     out = {}
                     for k in res[0]:
                         out[k] = np.array([r[k] for r in res])
+                    out["n_obj"] = true_cat.plocs.shape[1]
                     return out
 
                 if catalog_name == "bliss":
@@ -216,6 +222,23 @@ def reconstruct(cfg):
             )
             fig_with_coadd.savefig(outdir / (scene_name + "_coadd.pdf"), format="pdf")
             fig_with_coadd.savefig(outdir / (scene_name + "_coadd.png"), format="png")
+            tc = tile_map_recon.copy()
+            log_probs = rearrange(tc["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
+            tc.n_sources = log_probs >= np.log(0.15)
+            fc = tc.to_full_params()
+            fig_with_coadd_lower_thresh = create_figure(
+                true[0, 0],
+                recon[0, 0],
+                resid[0, 0],
+                coadd_objects=ground_truth_catalog,
+                map_recon=fc,
+                include_residuals=False,
+                colorbar=False,
+                scatter_on_true=True,
+            )
+            fig_with_coadd_lower_thresh.savefig(
+                outdir / (scene_name + "_coadd_lower_thresh.png"), format="png"
+            )
             # scene_metrics_table = create_scene_metrics_table(scene_coords)
             # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
             torch.save(scene_metrics_by_mag, outdir / (scene_name + ".pt"))
@@ -395,10 +418,11 @@ def create_figure(
 
     if map_recon is not None:
         locs_pred = map_recon.plocs[0] - 0.5
-        star_bools = map_recon["star_bools"][0]
-        galaxy_bools = map_recon["galaxy_bools"][0]
-        locs_galaxies = locs_pred[galaxy_bools[:, 0] > 0.5, :]
-        locs_stars = locs_pred[star_bools[:, 0] > 0.5, :]
+        star_bools = map_recon["star_bools"][0, :, 0] > 0.5
+        galaxy_bools = map_recon["galaxy_bools"][0, :, 0] > 0.5
+        locs_galaxies = locs_pred[galaxy_bools, :]
+        locs_stars = locs_pred[star_bools, :]
+        locs_extra = locs_pred[(~galaxy_bools) & (~star_bools), :]
         if locs_galaxies.shape[0] > 0:
             in_bounds = torch.all((locs_galaxies > 0) & (locs_galaxies < scene_size), dim=-1)
             locs_galaxies = locs_galaxies[in_bounds]
@@ -449,6 +473,33 @@ def create_figure(
             if include_residuals:
                 ax_res.scatter(
                     locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=scatter_size
+                )
+
+        if locs_extra.shape[0] > 0.5:
+            in_bounds = torch.all((locs_extra > 0) & (locs_extra < scene_size), dim=-1)
+            locs_extra = locs_extra[in_bounds]
+            if scatter_on_true:
+                ax_true.scatter(
+                    locs_extra[:, 1],
+                    locs_extra[:, 0],
+                    color="w",
+                    marker="x",
+                    s=scatter_size,
+                    alpha=0.6,
+                    label="Predicted Object (below 0.5)",
+                )
+            ax_recon.scatter(
+                locs_extra[:, 1],
+                locs_extra[:, 0],
+                color="w",
+                marker="x",
+                s=scatter_size,
+                label="Predicted Object (below 0.5)",
+                alpha=0.6,
+            )
+            if include_residuals:
+                ax_res.scatter(
+                    locs_extra[:, 1], locs_extra[:, 0], color="w", marker="x", s=scatter_size
                 )
 
     ax_recon.legend(
@@ -704,8 +755,21 @@ def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, flo
 
     axes[3, 1].plot(results["fp"], results["tp"], label="Expected True Positives")
     axes[3, 1].plot(results["fp"], actual_results["tp"], label="Actual True Positives")
+    axes[3, 1].axhline(actual_results["n_obj"])
     axes[3, 1].set_xlabel("Expected False Positives")
     axes[3, 1].set_ylabel("True Positives")
+    xy = (results["fp"][15], results["tp"][15])
+    axes[3, 1].scatter(*xy)
+    axes[3, 1].annotate(
+        f"TPR: {actual_results['tp'][15] / actual_results['n_obj']}\nPPV: {actual_results['tp'][15]/ (actual_results['tp'][15] + actual_results['fp'][15])}",
+        xy,
+    )
+    xy = (results["fp"][10], results["tp"][10])
+    axes[3, 1].scatter(*xy)
+    axes[3, 1].annotate(
+        f"TPR: {actual_results['tp'][10] / actual_results['n_obj']}\nPPV: {actual_results['tp'][10]/ (actual_results['tp'][10] + actual_results['fp'][10])}",
+        xy,
+    )
     axes[3, 1].legend()
 
     return fig

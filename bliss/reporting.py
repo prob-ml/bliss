@@ -185,11 +185,12 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     locs2 = est_locs.view(-1, 2)
 
     # entry (i,j) is l1 distance between of ith loc in locs1 and the jth loc in locs2
-    locs_err = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
-    locs_err = reduce(locs_err, "i j k -> i j", "sum")
+    locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
+    locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
+    locs_err_l_infty = reduce(locs_abs_diff, "i j k -> i j", "max")
 
     # Penalize all pairs which are greater than slack apart to favor valid matches.
-    locs_err = locs_err + (locs_err >= slack) * locs_err.max()
+    locs_err = locs_err + (locs_err_l_infty > slack) * locs_err.max()
 
     # find minimal permutation and return matches
     row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
@@ -203,7 +204,8 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     cond2 = (origin_dist > 0).bool()
     dist_keep = torch.logical_and(cond1, cond2)
     avg_distance = dist[cond2].mean()  # average l-infinity distance over matched objects.
-
+    if dist_keep.sum() > 0:
+        assert dist[dist_keep].max() <= slack
     return row_indx, col_indx, dist_keep, avg_distance
 
 
@@ -249,7 +251,7 @@ def match_closest_pairs(distances: Tensor) -> List[Tuple[int, int]]:
     2) i and j are removed from consideration.
     3) The next-closest pair of the remaining objects gets matched.
     This process repeats until all remaining distances are infinite.
-    A distance of infinity indicates there is no connection between two objects,
+    A distance of infinity indicates there is no edge between i and j,
     and hence a match can never be made.
 
     Arguments:
