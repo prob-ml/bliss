@@ -759,18 +759,6 @@ def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, flo
     axes[3, 1].axhline(actual_results["n_obj"])
     axes[3, 1].set_xlabel("Expected False Positives")
     axes[3, 1].set_ylabel("True Positives")
-    xy = (results["fp"][15], results["tp"][15])
-    axes[3, 1].scatter(*xy)
-    axes[3, 1].annotate(
-        f"TPR: {actual_results['tp'][15] / actual_results['n_obj']}\nPPV: {actual_results['tp'][15]/ (actual_results['tp'][15] + actual_results['fp'][15])}",
-        xy,
-    )
-    xy = (results["fp"][10], results["tp"][10])
-    axes[3, 1].scatter(*xy)
-    axes[3, 1].annotate(
-        f"TPR: {actual_results['tp'][10] / actual_results['n_obj']}\nPPV: {actual_results['tp'][10]/ (actual_results['tp'][10] + actual_results['fp'][10])}",
-        xy,
-    )
     axes[3, 1].legend()
 
     return fig
