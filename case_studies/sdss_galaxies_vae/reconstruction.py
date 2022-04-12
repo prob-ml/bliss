@@ -137,10 +137,8 @@ def reconstruct(cfg):
                         number_predicted = est_cat.plocs.shape[1]
                         if number_predicted == 0:
                             return {"tp": 0.0, "fp": 0.0}
-                        mtrue2, mest2 = reporting.match_by_locs_v2(
-                            true_cat.plocs[0], est_cat.plocs[0], 4.0
-                        )
-                        tp = len(mtrue2)
+                        pairs = reporting.match_by_locs_closest_pairs(true_cat.plocs[0], est_cat.plocs[0], 2.0)
+                        tp = len(pairs)
                         fp = number_predicted - tp
                         return {"tp": tp, "fp": fp}
 
