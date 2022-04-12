@@ -1,6 +1,7 @@
 # flake8: noqa
 # pylint: skip-file
 from collections import defaultdict
+import json
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -48,6 +49,7 @@ def reconstruct(cfg):
         photo_catalog = None
 
     for scene_name, scene_coords in cfg.reconstruct.scenes.items():
+        assert isinstance(scene_name, str)
         bp = encoder.border_padding
         h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
         if scene_size == "all":
@@ -172,8 +174,10 @@ def reconstruct(cfg):
         if outdir is not None:
             # Expected precision lpot
             # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
-            fig_exp_precision = expected_positives_plot(tile_map_recon, positive_negative_stats)
+            fig_exp_precision, target_stats = expected_positives_plot(tile_map_recon, positive_negative_stats)
             fig_exp_precision.savefig(outdir / (scene_name + "_auroc.png"), format="png")
+            with(outdir / (scene_name + "_auroc_target.json")).open("w") as fp:
+                json.dump(target_stats, fp)
             fig = create_figure(
                 true[0, 0],
                 recon[0, 0],
@@ -666,8 +670,8 @@ def expected_positives_and_negatives(tile_map: TileCatalog, threshold: float) ->
     tp = float(prob_detected.sum().item())
     fp = float((1 - prob_detected).sum().item()) if is_on_array.sum() > 0 else 0.0
     tn = float((1 - prob_not_detected).sum().item()) if (~is_on_array).sum() > 0 else 0.0
-    fn = float(prob_detected.sum().item())
-    return {"tp": tp, "fp": fp, "tn": tn, "fn": fn}
+    fn = float(prob_not_detected.sum().item())
+    return {"tp": tp, "fp": fp, "tn": tn, "fn": fn, "n_selected": float(is_on_array.sum())}
 
 
 def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions):
@@ -761,7 +765,20 @@ def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, flo
     axes[3, 1].set_ylabel("True Positives")
     axes[3, 1].legend()
 
-    return fig
+    precision = results["tp"] / results["n_selected"]
+    target_idx = np.power(precision - 0.7, 2).argmin()
+    target_precision = precision[target_idx]
+    target_recall = (results["tp"] / (results["tp"] + results["fn"]))[target_idx]
+    actual_precision = (actual_results["tp"] / results["n_selected"])[target_idx]
+    actual_recall = (actual_results["tp"] / actual_results["n_obj"])[target_idx]
+    target_stats = {
+        "target_precision": target_precision,
+        "target_recall": target_recall,
+        "actual_precision": actual_precision,
+        "actual_recall": actual_recall,
+    }
+
+    return fig, target_stats
 
 
 def expected_accuracy(tile_map, mag_min, mag_max):
