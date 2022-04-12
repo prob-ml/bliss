@@ -9,9 +9,11 @@ import pandas as pd
 import torch
 from einops import rearrange, repeat
 from hydra.utils import instantiate
+from joblib import Parallel, delayed
 from matplotlib import pyplot as plt
 from torch import Tensor
 from torch.distributions import Normal
+from tqdm import tqdm
 
 from bliss import reporting
 from bliss.catalog import FullCatalog, TileCatalog
@@ -128,38 +130,26 @@ def reconstruct(cfg):
                     log_probs = rearrange(
                         est_tile_cat["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw"
                     )
-                    # recalls = []
-                    # precisions = []
-                    out = defaultdict(list)
-                    for threshold in thresholds:
+
+                    def stats_for_threshold(threshold):
                         est_tile_cat.n_sources = log_probs >= np.log(threshold)
                         est_cat = est_tile_cat.to_full_params()
                         number_predicted = est_cat.plocs.shape[1]
                         if number_predicted == 0:
-                            out["tp"].append(0.0)
-                            out["fp"].append(0.0)
-                            continue
-                        mtrue, mest, dkeep, avg_distance = reporting.match_by_locs(
-                            true_cat.plocs[0], est_cat.plocs[0], 2.0
-                        )
+                            return {"tp": 0.0, "fp": 0.0}
                         mtrue2, mest2 = reporting.match_by_locs_v2(
-                            true_cat.plocs[0], est_cat.plocs[0], 2.0
+                            true_cat.plocs[0], est_cat.plocs[0], 4.0
                         )
-                        # scene_metrics = reporting.scene_metrics(true_cat, full_cat, mag_min=mag_min, mag_max=mag_max, mag_slack=np.inf)
-                        # recall = scene_metrics["recall"].item()
-                        # precision = scene_metrics["precision"].item()
-                        # recall = dkeep.float().sum() / true_cat.plocs.shape[1]
-                        # precision = dkeep.float().sum() / full_cat.plocs.shape[1]
-                        # tp = float(dkeep.sum().item())
                         tp = len(mtrue2)
-                        out["tp"].append(tp)
-                        out["fp"].append(number_predicted - tp)
-                        # out['fp'].append(float((~dkeep).sum().item()))
+                        fp = number_predicted - tp
+                        return {"tp": tp, "fp": fp}
 
-                        # recalls.append(recall)
-                        # precisions.append(precision)
-                    for k in out:
-                        out[k] = np.array(out[k])
+                    res = Parallel(n_jobs=10)(
+                        delayed(stats_for_threshold)(t) for t in tqdm(thresholds)
+                    )
+                    out = {}
+                    for k in res[0]:
+                        out[k] = np.array([r[k] for r in res])
                     return out
 
                 if catalog_name == "bliss":

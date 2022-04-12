@@ -228,18 +228,21 @@ def match_by_locs_v2(true_locs, est_locs, max_distance: float):
 
 def match_closest_pairs(distances: np.ndarray, max_distance) -> list:
     """Given matrix of distances, match by each closest pair below max_distance"""
+    pairs = []
     dist_flat = distances.flatten()
-    best_pair = np.argmin(dist_flat).item()
-    if dist_flat[best_pair] > max_distance:
-        return []
-    best_row = best_pair // distances.shape[1]
-    best_col = best_pair % distances.shape[1]
-    pair = (best_row, best_col)
-    new_distances = np.delete(distances, best_row, 0)
-    new_distances = np.delete(distances, best_col, 1)
-    if new_distances.shape[0] == 0 or new_distances.shape[1] == 0:
-        return [pair]
-    return [pair] + match_closest_pairs(new_distances, max_distance)
+    best_pair = dist_flat.argmin().item()
+    dist = dist_flat[best_pair]
+    while dist < max_distance and (distances.shape[0] > 0) and (distances.shape[1] > 1):
+        best_row = best_pair // distances.shape[1]
+        best_col = best_pair % distances.shape[1]
+        pairs.append((best_row, best_col))
+        distances = np.delete(distances, best_row, 0)
+        distances = np.delete(distances, best_col, 1)
+        dist_flat = distances.flatten()
+        best_pair = dist_flat.argmin().item()
+        dist = dist_flat[best_pair]
+    return pairs
+
 
 
 def scene_metrics(
