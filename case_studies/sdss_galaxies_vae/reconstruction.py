@@ -676,8 +676,8 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
 
 def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, float]):
     base_size = 8
-    figsize = (3 * base_size, 2 * base_size)
-    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=figsize)
+    figsize = (4 * base_size, 2 * base_size)
+    fig, axes = plt.subplots(nrows=4, ncols=2, figsize=figsize)
     thresholds = np.linspace(0.01, 0.99, 100)
     results = defaultdict(list)
     for threshold in thresholds:
@@ -686,25 +686,35 @@ def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, flo
             results[k].append(v)
     for k in results:
         results[k] = np.array(results[k])
-    axes[0, 0].scatter(thresholds, results["tp"])
+    axes[0, 0].plot(thresholds, results["tp"])
     axes[0, 0].set_xlabel("Threshold")
     axes[0, 0].set_ylabel("Expected True Positives")
 
-    axes[0, 1].scatter(thresholds, results["fp"])
+    axes[0, 1].plot(thresholds, results["fp"])
     axes[0, 1].set_xlabel("Threshold")
-    axes[0, 1].set_ylabel("Expected False positives")
+    axes[0, 1].set_ylabel("Expected False Positives")
 
-    axes[1, 0].scatter(results["fp"], results["tp"])
+    axes[1, 0].plot(results["fp"], results["tp"])
     axes[1, 0].set_xlabel("Expected False Positives")
     axes[1, 0].set_ylabel("Expected True Positives")
 
-    axes[2, 0].scatter(results["fp"], actual_results["fp"])
-    axes[2, 0].set_xlabel("Expected False Positives")
-    axes[2, 0].set_ylabel("Actual False Positives")
+    axes[2, 0].plot(thresholds, actual_results["tp"])
+    axes[2, 0].set_xlabel("Threshold")
+    axes[2, 0].set_ylabel("Actual True Positives")
 
-    axes[2, 1].scatter(results["fp"], actual_results["tp"])
-    axes[2, 1].set_xlabel("Expected False Positives")
-    axes[2, 1].set_ylabel("Actual True Positives")
+    axes[2, 1].plot(thresholds, actual_results["fp"])
+    axes[2, 1].set_xlabel("Threshold")
+    axes[2, 1].set_ylabel("Actual False Positives")
+
+    axes[3, 0].plot(results["fp"], actual_results["fp"])
+    axes[3, 0].set_xlabel("Expected False Positives")
+    axes[3, 0].set_ylabel("Actual False Positives")
+
+    axes[3, 1].plot(results["fp"], results["tp"], label="Expected True Positives")
+    axes[3, 1].plot(results["fp"], actual_results["tp"], label="Actual True Positives")
+    axes[3, 1].set_xlabel("Expected False Positives")
+    axes[3, 1].set_ylabel("True Positives")
+    axes[3, 1].legend()
 
     return fig
 
