@@ -1,118 +1,118 @@
 output-with-photo/semisynthetic_figures
 bliss
 detections
-           recall  expected_recall  precision  expected_precision    n  n_galaxies  n_galaxies_detected
-18       0.971429              NaN   1.000000                 NaN   35        13.0                   13
-19       0.906250              NaN   1.000000                 NaN   64        37.0                   32
-20       0.756410              NaN   0.982143                 NaN   78        52.0                   36
-21       0.639098              NaN   0.962025                 NaN  133        89.0                   47
-22       0.448430              NaN   0.881481                 NaN  223       142.0                   42
-23       0.161850              NaN   0.672727                 NaN  173       107.0                   11
-overall  0.558108         0.621981   0.928090            0.883902  740       453.0                  204
+           recall  expected_recall  precision  expected_precision   n  n_galaxies  n_galaxies_detected
+18       0.942857              NaN   1.000000                 NaN NaN         NaN                   12
+19       0.843750              NaN   1.000000                 NaN NaN         NaN                   28
+20       0.717949              NaN   1.000000                 NaN NaN         NaN                   33
+21       0.654135              NaN   0.976744                 NaN NaN         NaN                   49
+22       0.448430              NaN   0.885246                 NaN NaN         NaN                   39
+23       0.150289              NaN   0.772727                 NaN NaN         NaN                    7
+overall  0.533784         0.736605   0.949519            0.891641 NaN         NaN                  186
 accuracy
-         class_acc  expected_accuracy  galaxy_accuracy  expected_galaxy_accuracy  star_accuracy  expected_star_accuracy    n  acc_n_matches  n_galaxies
-18        1.000000           0.999218         1.000000                  0.998427       1.000000                0.999733   35             34        13.0
-19        0.982759           0.993138         0.968750                  0.993048       1.000000                0.993219   64             58        37.0
-20        1.000000           0.992843         1.000000                  0.988628       1.000000                0.998890   78             59        52.0
-21        0.964706           0.969715         0.957447                  0.952048       0.973684                0.993099  133             85        89.0
-22        0.910000           0.867527         0.857143                  0.842973       0.948276                0.895590  223            100       142.0
-23        0.607143           0.753031         0.454545                  0.806632       0.705882                0.722402  173             28       107.0
-overall   0.941889           0.922040         0.926471                  0.918889       0.956938                0.925148  740            413       453.0
+         class_acc  expected_accuracy  galaxy_accuracy  expected_galaxy_accuracy  star_accuracy  expected_star_accuracy  n_matches
+18        1.000000           0.999306         1.000000                  0.998459       1.000000                0.999749         33
+19        0.981481           0.997099         0.964286                  0.994222       1.000000                0.999763         54
+20        1.000000           0.992287         1.000000                  0.994384       1.000000                0.989824         56
+21        0.977012           0.974968         0.979592                  0.960319       0.973684                0.992622         87
+22        0.930000           0.861111         0.871795                  0.827741       0.967213                0.895592        100
+23        0.692308           0.788928         0.571429                  0.868648       0.736842                0.738734         26
+overall   0.954430           0.930386         0.946237                  0.924859       0.961722                0.935552        395
 output-with-photo/sdss_figures_noadj
 bliss
 detections
-           recall  expected_recall  precision  expected_precision    n  n_galaxies  n_galaxies_detected
-18       0.968750              NaN   0.962963                 NaN   32          10                    9
-19       0.875000              NaN   0.947368                 NaN   56          29                   23
-20       0.870588              NaN   0.862069                 NaN   85          59                   49
-21       0.835227              NaN   0.795775                 NaN  176         132                  103
-22       0.711297              NaN   0.498801                 NaN  239         158                   91
-23       0.495575              NaN   0.221461                 NaN  113          47                    5
-overall  0.790123         0.305471   0.503930            0.802895  729         442                  309
+           recall  expected_recall  precision  expected_precision   n  n_galaxies  n_galaxies_detected
+18       0.968750              NaN   0.968750                 NaN NaN         NaN                    9
+19       0.875000              NaN   0.971429                 NaN NaN         NaN                   23
+20       0.858824              NaN   0.857143                 NaN NaN         NaN                   48
+21       0.840909              NaN   0.854962                 NaN NaN         NaN                  104
+22       0.682008              NaN   0.622419                 NaN NaN         NaN                   82
+23       0.469027              NaN   0.356000                 NaN NaN         NaN                    4
+overall  0.773663         0.407286   0.649022            0.836441 NaN         NaN                  297
 accuracy
-         class_acc  expected_accuracy  galaxy_accuracy  expected_galaxy_accuracy  star_accuracy  expected_star_accuracy    n  acc_n_matches  n_galaxies
-18        1.000000           0.993675         1.000000                  0.981406       1.000000                0.999809   32             31          10
-19        1.000000           0.996841         1.000000                  0.987180       1.000000                0.999840   56             49          29
-20        0.986486           0.998491         0.979592                  0.998022       1.000000                0.999110   85             74          59
-21        0.897959           0.948885         0.854369                  0.942650       1.000000                0.959356  176            147         132
-22        0.764706           0.830798         0.692308                  0.822327       0.848101                0.858006  239            170         158
-23        0.589286           0.746244         1.000000                  0.793716       0.549020                0.675575  113             56          47
-overall   0.859375           0.834636         0.854369                  0.838891       0.865169                0.827428  729            576         442
+         class_acc  expected_accuracy  galaxy_accuracy  expected_galaxy_accuracy  star_accuracy  expected_star_accuracy  n_matches
+18        1.000000           0.993512         1.000000                  0.977403       1.000000                0.999816         31
+19        1.000000           0.997645         1.000000                  0.990174       1.000000                0.999859         49
+20        0.986301           0.998642         0.979167                  0.998096       1.000000                0.999206         73
+21        0.891892           0.953706         0.855769                  0.946691       0.977273                0.965444        148
+22        0.766871           0.836480         0.682927                  0.824562       0.851852                0.864964        163
+23        0.622642           0.760004         1.000000                  0.806278       0.591837                0.709874         53
+overall   0.865248           0.859753         0.855219                  0.856344       0.876405                0.864373        564
 photo
 detections
-           recall  expected_recall  precision  expected_precision    n  n_galaxies  n_galaxies_detected
-18       0.531250              NaN   0.952381                 NaN   32          10                    1
-19       0.678571              NaN   0.828571                 NaN   56          29                   11
-20       0.705882              NaN   0.680851                 NaN   85          59                   39
-21       0.602273              NaN   0.761062                 NaN  176         132                   66
-22       0.510460              NaN   0.722772                 NaN  239         158                   48
-23       0.336283              NaN   0.328571                 NaN  113          47                    1
-overall  0.563786              NaN   0.664110                 NaN  729         442                  197
+           recall  expected_recall  precision  expected_precision   n  n_galaxies  n_galaxies_detected
+18       0.593750              NaN   0.952381                 NaN NaN         NaN                    1
+19       0.678571              NaN   0.828571                 NaN NaN         NaN                   11
+20       0.729412              NaN   0.680851                 NaN NaN         NaN                   40
+21       0.607955              NaN   0.778761                 NaN NaN         NaN                   66
+22       0.514644              NaN   0.732673                 NaN NaN         NaN                   49
+23       0.336283              NaN   0.328571                 NaN NaN         NaN                    1
+overall  0.633745              NaN   0.700920                 NaN NaN         NaN                  222
 accuracy
-         class_acc  galaxy_accuracy  star_accuracy    n  acc_n_matches  n_galaxies
-18        1.000000         1.000000       1.000000   32             17          10
-19        1.000000         1.000000       1.000000   56             38          29
-20        0.983333         0.974359       1.000000   85             60          59
-21        0.877358         0.818182       0.975000  176            106         132
-22        0.803279         0.708333       0.864865  239            122         158
-23        0.578947         0.000000       0.594595  113             38          47
-overall   0.871046         0.847716       0.892523  729            411         442
+         class_acc  galaxy_accuracy  star_accuracy  n_matches
+18        1.000000         1.000000       1.000000         19
+19        1.000000         1.000000       1.000000         38
+20        0.983871         0.975000       1.000000         62
+21        0.878505         0.818182       0.975610        107
+22        0.796748         0.693878       0.864865        123
+23        0.578947         0.000000       0.594595         38
+overall   0.870130         0.851351       0.887500        462
 output-with-photo/sdss_figures
 bliss
 detections
-           recall  expected_recall  precision  expected_precision    n  n_galaxies  n_galaxies_detected
-18       0.906250              NaN   1.000000                 NaN   32          10                    7
-19       0.750000              NaN   0.970588                 NaN   56          29                   18
-20       0.705882              NaN   0.854167                 NaN   85          59                   38
-21       0.625000              NaN   0.885714                 NaN  176         132                   72
-22       0.384937              NaN   0.823171                 NaN  239         158                   30
-23       0.318584              NaN   0.447619                 NaN  113          47                    3
-overall  0.562414         0.480363   0.811881            0.853561  729         442                  189
+           recall  expected_recall  precision  expected_precision   n  n_galaxies  n_galaxies_detected
+18       0.906250              NaN   1.000000                 NaN NaN         NaN                    7
+19       0.750000              NaN   0.968750                 NaN NaN         NaN                   18
+20       0.694118              NaN   0.865385                 NaN NaN         NaN                   37
+21       0.619318              NaN   0.881188                 NaN NaN         NaN                   70
+22       0.376569              NaN   0.818182                 NaN NaN         NaN                   29
+23       0.230089              NaN   0.522388                 NaN NaN         NaN                    1
+overall  0.539095         0.606598   0.845161            0.853408 NaN         NaN                  180
 accuracy
-         class_acc  expected_accuracy  galaxy_accuracy  expected_galaxy_accuracy  star_accuracy  expected_star_accuracy    n  acc_n_matches  n_galaxies
-18        1.000000           0.996234         1.000000                  0.985508       1.000000                0.999809   32             29          10
-19        1.000000           0.998904         1.000000                  0.995296       1.000000                0.999840   56             42          29
-20        0.983333           0.998730         0.973684                  0.998426       1.000000                0.999059   85             60          59
-21        0.881818           0.957825         0.819444                  0.946424       1.000000                0.973027  176            110         132
-22        0.739130           0.847594         0.533333                  0.827834       0.838710                0.875491  239             92         158
-23        0.583333           0.738374         1.000000                  0.780351       0.545455                0.717386  113             36          47
-overall   0.865854           0.886961         0.841270                  0.879522       0.886878                0.893133  729            410         442
+         class_acc  expected_accuracy  galaxy_accuracy  expected_galaxy_accuracy  star_accuracy  expected_star_accuracy  n_matches
+18        1.000000           0.996394         1.000000                  0.983275       1.000000                0.999816         29
+19        1.000000           0.998890         1.000000                  0.995408       1.000000                0.999865         42
+20        0.983051           0.998765         0.972973                  0.998347       1.000000                0.999152         59
+21        0.880734           0.949786         0.814286                  0.941209       1.000000                0.961355        109
+22        0.744444           0.843317         0.586207                  0.820601       0.819672                0.874147         90
+23        0.576923           0.738390         1.000000                  0.764135       0.560000                0.727435         26
+overall   0.875318           0.895359         0.850000                  0.879887       0.896714                0.908211        393
 photo
 detections
-           recall  expected_recall  precision  expected_precision    n  n_galaxies  n_galaxies_detected
-18       0.531250              NaN   0.952381                 NaN   32          10                    1
-19       0.678571              NaN   0.828571                 NaN   56          29                   11
-20       0.705882              NaN   0.680851                 NaN   85          59                   39
-21       0.602273              NaN   0.761062                 NaN  176         132                   66
-22       0.510460              NaN   0.722772                 NaN  239         158                   48
-23       0.336283              NaN   0.328571                 NaN  113          47                    1
-overall  0.563786              NaN   0.664110                 NaN  729         442                  197
+           recall  expected_recall  precision  expected_precision   n  n_galaxies  n_galaxies_detected
+18       0.593750              NaN   0.952381                 NaN NaN         NaN                    1
+19       0.678571              NaN   0.828571                 NaN NaN         NaN                   11
+20       0.729412              NaN   0.680851                 NaN NaN         NaN                   40
+21       0.607955              NaN   0.778761                 NaN NaN         NaN                   66
+22       0.514644              NaN   0.732673                 NaN NaN         NaN                   49
+23       0.336283              NaN   0.328571                 NaN NaN         NaN                    1
+overall  0.633745              NaN   0.700920                 NaN NaN         NaN                  222
 accuracy
-         class_acc  galaxy_accuracy  star_accuracy    n  acc_n_matches  n_galaxies
-18        1.000000         1.000000       1.000000   32             17          10
-19        1.000000         1.000000       1.000000   56             38          29
-20        0.983333         0.974359       1.000000   85             60          59
-21        0.877358         0.818182       0.975000  176            106         132
-22        0.803279         0.708333       0.864865  239            122         158
-23        0.578947         0.000000       0.594595  113             38          47
-overall   0.871046         0.847716       0.892523  729            411         442
+         class_acc  galaxy_accuracy  star_accuracy  n_matches
+18        1.000000         1.000000       1.000000         19
+19        1.000000         1.000000       1.000000         38
+20        0.983871         0.975000       1.000000         62
+21        0.878505         0.818182       0.975610        107
+22        0.796748         0.693878       0.864865        123
+23        0.578947         0.000000       0.594595         38
+overall   0.870130         0.851351       0.887500        462
 output-with-photo/simulated_figures
 bliss
 detections
-           recall  expected_recall  precision  expected_precision     n  n_galaxies  n_galaxies_detected
-18       0.985782              NaN   0.990566                 NaN   211       144.0                  141
-19       0.938416              NaN   0.986254                 NaN   341       235.0                  216
-20       0.881435              NaN   0.965587                 NaN   641       436.0                  367
-21       0.813253              NaN   0.912791                 NaN   996       702.0                  531
-22       0.629159              NaN   0.805252                 NaN  1653      1183.0                  627
-23       0.288412              NaN   0.708527                 NaN  1165       862.0                  134
-overall  0.685725         0.622497   0.875891            0.882887  5212      3682.0                 2213
+           recall  expected_recall  precision  expected_precision   n  n_galaxies  n_galaxies_detected
+18       0.990521              NaN   0.990291                 NaN NaN         NaN                  142
+19       0.947214              NaN   0.990228                 NaN NaN         NaN                  219
+20       0.886115              NaN   0.975952                 NaN NaN         NaN                  369
+21       0.809237              NaN   0.932349                 NaN NaN         NaN                  526
+22       0.606171              NaN   0.844937                 NaN NaN         NaN                  586
+23       0.254936              NaN   0.771375                 NaN NaN         NaN                  100
+overall  0.667498         0.666931   0.908853            0.886278 NaN         NaN                 2122
 accuracy
-         class_acc  expected_accuracy  galaxy_accuracy  expected_galaxy_accuracy  star_accuracy  expected_star_accuracy     n  acc_n_matches  n_galaxies
-18        1.000000           0.991457         1.000000                  0.987626       1.000000                0.999569   211            208       144.0
-19        0.993750           0.985847         0.995370                  0.979551       0.990385                0.998245   341            320       235.0
-20        0.984071           0.978532         0.983651                  0.970479       0.984848                0.992579   641            565       436.0
-21        0.960494           0.942790         0.964218                  0.929877       0.953405                0.967268   996            810       702.0
-22        0.852885           0.858656         0.866029                  0.854467       0.832930                0.868969  1653           1040      1183.0
-23        0.717262           0.788543         0.828358                  0.840215       0.643564                0.715389  1165            336       862.0
-overall   0.913542           0.902567         0.937641                  0.904065       0.874357                0.899669  5212           3574      3682.0
+         class_acc  expected_accuracy  galaxy_accuracy  expected_galaxy_accuracy  star_accuracy  expected_star_accuracy  n_matches
+18        1.000000           0.993063         1.000000                  0.990158       1.000000                0.999506        209
+19        0.993808           0.986321         0.990868                  0.982159       1.000000                0.994101        323
+20        0.985915           0.979743         0.986450                  0.972094       0.984925                0.992181        568
+21        0.954094           0.943212         0.956274                  0.931382       0.950000                0.966355        806
+22        0.853293           0.857463         0.866894                  0.853456       0.834135                0.866119       1002
+23        0.707071           0.789979         0.800000                  0.840080       0.659898                0.730061        297
+overall   0.916068           0.906865         0.938737                  0.908785       0.880619                0.903384       3479

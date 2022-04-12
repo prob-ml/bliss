@@ -1,5 +1,5 @@
 """Functions to evaluate the performance of BLISS predictions."""
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import galsim
 import matplotlib as mpl
