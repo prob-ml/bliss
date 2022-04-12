@@ -403,18 +403,18 @@ class LocationEncoder(pl.LightningModule):
         pred = self._encode_for_n_sources(
             var_params_flat, rearrange(true_catalog.n_sources, "n nth ntw -> 1 (n nth ntw)")
         )
-        locs_log_probs_all = get_params_logprob_all_combs(
+        locs_log_probs_all = _get_params_logprob_all_combs(
             rearrange(true_catalog.locs, "n nth ntw ns hw -> (n nth ntw) ns hw"),
             pred["loc_mean"].squeeze(0),
             pred["loc_logvar"].squeeze(0),
         )
-        star_params_log_probs_all = get_params_logprob_all_combs(
+        star_params_log_probs_all = _get_params_logprob_all_combs(
             rearrange(true_catalog["log_fluxes"], "n nth ntw ns nb -> (n nth ntw) ns nb"),
             pred["log_flux_mean"].squeeze(0),
             pred["log_flux_logvar"].squeeze(0),
         )
 
-        (locs_loss, star_params_loss) = get_min_perm_loss(
+        (locs_loss, star_params_loss) = _get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
             rearrange(true_catalog["galaxy_bools"], "n nth ntw ns 1 -> (n nth ntw) ns"),
@@ -737,7 +737,7 @@ def _get_log_probs_all_perms(
     return locs_log_probs_all_perm, star_params_log_probs_all_perm
 
 
-def get_min_perm_loss(
+def _get_min_perm_loss(
     locs_log_probs_all,
     star_params_log_probs_all,
     true_galaxy_bools,
@@ -760,7 +760,7 @@ def get_min_perm_loss(
     return locs_loss, star_params_loss
 
 
-def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     # return shape (n_ptiles x max_detections x max_detections)
     assert true_params.shape == param_mean.shape == param_logvar.shape
 
