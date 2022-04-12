@@ -118,36 +118,45 @@ def reconstruct(cfg):
                     conf_matrix[1, 1] + conf_matrix[1, 0]
                 )
 
-                def get_recalls_and_precisions(
+                def get_positive_negative_stats(
                     true_cat: FullCatalog,
                     est_tile_cat: TileCatalog,
                     mag_min=-np.inf,
                     mag_max=np.inf,
                 ):
-                    thresholds = np.linspace(0.0, 1.0, 100)
+                    thresholds = np.linspace(0.01, 0.99, 100)
                     log_probs = rearrange(
                         est_tile_cat["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw"
                     )
-                    recalls = []
-                    precisions = []
+                    # recalls = []
+                    # precisions = []
+                    out = defaultdict(list)
                     for threshold in thresholds:
                         est_tile_cat.n_sources = log_probs >= np.log(threshold)
-                        full_cat = est_tile_cat.to_full_params()
-                        if full_cat.plocs.shape[1] == 0:
-                            recall = 0.0
-                            precision = 1.0
-                        else:
-                            mtrue, mest, dkeep, avg_distance = reporting.match_by_locs(
-                                true_cat.plocs[0], full_cat.plocs[0], 2.0
-                            )
-                            # scene_metrics = reporting.scene_metrics(true_cat, full_cat, mag_min=mag_min, mag_max=mag_max, mag_slack=np.inf)
-                            # recall = scene_metrics["recall"].item()
-                            # precision = scene_metrics["precision"].item()
-                            recall = dkeep.float().sum() / true_cat.plocs.shape[1]
-                            precision = dkeep.float().sum() / full_cat.plocs.shape[1]
-                        recalls.append(recall)
-                        precisions.append(precision)
-                    return np.array(recalls), np.array(precisions)
+                        est_cat = est_tile_cat.to_full_params()
+                        number_predicted = est_cat.plocs.shape[1]
+                        if number_predicted == 0:
+                            out["tp"].append(0.0)
+                            out["fp"].append(0.0)
+                            continue
+                        mtrue, mest, dkeep, avg_distance = reporting.match_by_locs(
+                            true_cat.plocs[0], est_cat.plocs[0], 2.0
+                        )
+                        # scene_metrics = reporting.scene_metrics(true_cat, full_cat, mag_min=mag_min, mag_max=mag_max, mag_slack=np.inf)
+                        # recall = scene_metrics["recall"].item()
+                        # precision = scene_metrics["precision"].item()
+                        # recall = dkeep.float().sum() / true_cat.plocs.shape[1]
+                        # precision = dkeep.float().sum() / full_cat.plocs.shape[1]
+                        tp = float(dkeep.sum().item())
+                        out["tp"].append(tp)
+                        out["fp"].append(number_predicted - tp)
+                        # out['fp'].append(float((~dkeep).sum().item()))
+
+                        # recalls.append(recall)
+                        # precisions.append(precision)
+                    for k in out:
+                        out[k] = np.array(out[k])
+                    return out
 
                 if catalog_name == "bliss":
                     scene_metrics_by_mag[catalog_name][mag].update(
@@ -160,12 +169,13 @@ def reconstruct(cfg):
                         scene_metrics_by_mag[catalog_name][mag][
                             "expected_precision"
                         ] = expected_precision(tile_map_recon)
-                        recalls, precisions = get_recalls_and_precisions(
+                        positive_negative_stats = get_positive_negative_stats(
                             ground_truth_catalog, tile_map_recon, mag_min=mag_min, mag_max=mag_max
                         )
         if outdir is not None:
             # Expected precision lpot
-            fig_exp_precision = expected_positives_plot(tile_map_recon, recalls, precisions)
+            # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
+            fig_exp_precision = expected_positives_plot(tile_map_recon, positive_negative_stats)
             fig_exp_precision.savefig(outdir / (scene_name + "_auroc.png"), format="png")
             fig = create_figure(
                 true[0, 0],
@@ -600,6 +610,13 @@ def expected_positives_and_negatives(tile_map: TileCatalog, threshold: float) ->
         tile_map["n_source_log_probs"], "n nth ntw 1 1 -> (n nth ntw)"
     ).exp()
     is_on_array = prob_on >= threshold
+    # if is_on_array.sum() == 0:
+    #     return {
+    #         "tp": 0.0,
+    #         "fp": 0.0,
+    #         "tn": 0.0,
+    #         "fn":
+    #     }
     prob_detected = prob_on[is_on_array]
     prob_not_detected = prob_on[~is_on_array]
     tp = float(prob_detected.sum().item())
@@ -657,7 +674,7 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     return fig
 
 
-def expected_positives_plot(tile_map: TileCatalog, true_recalls, true_precisions):
+def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, float]):
     base_size = 8
     figsize = (3 * base_size, 2 * base_size)
     fig, axes = plt.subplots(nrows=3, ncols=2, figsize=figsize)
@@ -672,34 +689,23 @@ def expected_positives_plot(tile_map: TileCatalog, true_recalls, true_precisions
     axes[0, 0].scatter(thresholds, results["tp"])
     axes[0, 0].set_xlabel("Threshold")
     axes[0, 0].set_ylabel("Expected True Positives")
+
     axes[0, 1].scatter(thresholds, results["fp"])
     axes[0, 1].set_xlabel("Threshold")
     axes[0, 1].set_ylabel("Expected False positives")
 
-    # colors = precisions == precisions[optimal_point]
     axes[1, 0].scatter(results["fp"], results["tp"])
-    # optimal_point = np.argmin(1 / precisions + 1 / recalls)
-    # x, y = precisions[optimal_point], recalls[optimal_point]
-    # axes[1, 0].scatter(x, y, color="yellow", marker="+")
-    # axes[1, 0].annotate(
-    #     f"Expected precision: {x:.2f}\nExpected Recall {y:.2f}", (x, y), fontsize=12
-    # )
     axes[1, 0].set_xlabel("Expected False Positives")
     axes[1, 0].set_ylabel("Expected True Positives")
-    # axes[1,0].xlabel("Expected Precision")
-    # axes[1,0].ylabel("Expected Recall")
-    # axes[2, 0].scatter(precisions, true_precisions)
-    # x, y = precisions[optimal_point], true_precisions[optimal_point]
-    # axes[2, 0].scatter(x, y, color="yellow", marker="+")
-    # axes[2, 0].annotate(f"Expected precision: {x:.2f}\nTrue precision {y:.2f}", (x, y), fontsize=12)
-    # axes[2, 0].set_xlabel("Expected Precision")
-    # axes[2, 0].set_ylabel("Actual Precision")
-    # axes[2, 1].scatter(precisions, true_recalls)
-    # x, y = precisions[optimal_point], true_recalls[optimal_point]
-    # axes[2, 1].scatter(x, y, color="yellow", marker="+")
-    # axes[2, 1].annotate(f"Expected precision: {x:.2f}\nTrue recall {y:.2f}", (x, y), fontsize=12)
-    # axes[2, 1].set_xlabel("Expected Precision")
-    # axes[2, 1].set_ylabel("Actual Recall")
+
+    axes[2, 0].scatter(results["fp"], actual_results["fp"])
+    axes[2, 0].set_xlabel("Expected False Positives")
+    axes[2, 0].set_ylabel("Actual False Positives")
+
+    axes[2, 1].scatter(results["fp"], actual_results["tp"])
+    axes[2, 1].set_xlabel("Expected False Positives")
+    axes[2, 1].set_ylabel("Actual True Positives")
+
     return fig
 
 
