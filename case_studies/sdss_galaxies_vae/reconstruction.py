@@ -733,17 +733,24 @@ def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, flo
     axes[3, 1].legend()
 
     precision = results["tp"] / results["n_selected"]
-    target_idx = np.power(precision - 0.7, 2).argmin()
-    target_precision = precision[target_idx]
-    target_recall = (results["tp"] / (results["tp"] + results["fn"]))[target_idx]
-    actual_precision = (actual_results["tp"] / results["n_selected"])[target_idx]
-    actual_recall = (actual_results["tp"] / actual_results["n_obj"])[target_idx]
-    target_stats = {
-        "target_precision": target_precision,
-        "target_recall": target_recall,
-        "actual_precision": actual_precision,
-        "actual_recall": actual_recall,
-    }
+    target_idx_baseline = 15
+    target_idx_precision = int(np.power(precision - 0.7, 2).argmin())
+    target_stats = {}
+    for target_idx in (target_idx_baseline, target_idx_precision):
+        threshold = thresholds[target_idx]
+        target_precision = precision[target_idx]
+        target_recall = (results["tp"] / (results["tp"] + results["fn"]))[target_idx]
+        actual_precision = (actual_results["tp"] / (actual_results["tp"] + actual_results["fp"]))[
+            target_idx
+        ]
+        actual_recall = (actual_results["tp"] / actual_results["n_obj"])[target_idx]
+        target_stats[target_idx] = {
+            "threshold": threshold,
+            "target_precision": target_precision,
+            "target_recall": target_recall,
+            "actual_precision": actual_precision,
+            "actual_recall": actual_recall,
+        }
 
     return fig, target_stats
 
