@@ -818,7 +818,7 @@ def load_models(cfg, device):
 
 
 @hydra.main(config_path="./config", config_name="config")
-def plots(cfg):  # pylint: disable=too-many-statements
+def main(cfg):  # pylint: disable=too-many-statements
 
     figs = set(cfg.plots.figs)
     cachedir = cfg.plots.cachedir
@@ -888,4 +888,4 @@ def plots(cfg):  # pylint: disable=too-many-statements
 
 
 if __name__ == "__main__":
-    plots()  # pylint: disable=no-value-for-parameter
+    main()  # pylint: disable=no-value-for-parameter
