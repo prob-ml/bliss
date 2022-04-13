@@ -122,41 +122,6 @@ def reconstruct(cfg):
                     conf_matrix[1, 1] + conf_matrix[1, 0]
                 )
 
-                def get_positive_negative_stats(
-                    true_cat: FullCatalog,
-                    est_tile_cat: TileCatalog,
-                    mag_min=-np.inf,
-                    mag_max=np.inf,
-                ):
-                    thresholds = np.linspace(0.01, 0.99, 100)
-                    log_probs = rearrange(
-                        est_tile_cat["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw"
-                    )
-                    est_tile_cat = est_tile_cat.copy()
-
-                    def stats_for_threshold(threshold):
-                        est_tile_cat.n_sources = log_probs >= np.log(threshold)
-                        est_cat = est_tile_cat.to_full_params()
-                        number_predicted = est_cat.plocs.shape[1]
-                        if number_predicted == 0:
-                            return {"tp": 0.0, "fp": 0.0}
-                        # pairs = reporting.match_by_locs_closest_pairs(true_cat.plocs[0], est_cat.plocs[0], 2.0)
-                        _, _, d, _ = reporting.match_by_locs(
-                            true_cat.plocs[0], est_cat.plocs[0], 2.0
-                        )
-                        tp = d.sum()
-                        fp = number_predicted - tp
-                        return {"tp": tp, "fp": fp}
-
-                    res = Parallel(n_jobs=10)(
-                        delayed(stats_for_threshold)(t) for t in tqdm(thresholds)
-                    )
-                    out = {}
-                    for k in res[0]:
-                        out[k] = np.array([r[k] for r in res])
-                    out["n_obj"] = true_cat.plocs.shape[1]
-                    return out
-
                 if catalog_name == "bliss":
                     scene_metrics_by_mag[catalog_name][mag].update(
                         expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
@@ -169,14 +134,16 @@ def reconstruct(cfg):
                             "expected_precision"
                         ] = expected_precision(tile_map_recon)
                         positive_negative_stats = get_positive_negative_stats(
-                            ground_truth_catalog, tile_map_recon, mag_min=mag_min, mag_max=mag_max
+                            ground_truth_catalog, tile_map_recon, mag_max=mag_max
                         )
         if outdir is not None:
             # Expected precision lpot
             # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
-            fig_exp_precision, target_stats = expected_positives_plot(tile_map_recon, positive_negative_stats)
+            fig_exp_precision, target_stats = expected_positives_plot(
+                tile_map_recon, positive_negative_stats
+            )
             fig_exp_precision.savefig(outdir / (scene_name + "_auroc.png"), format="png")
-            with(outdir / (scene_name + "_auroc_target.json")).open("w") as fp:
+            with (outdir / (scene_name + "_auroc_target.json")).open("w") as fp:
                 json.dump(target_stats, fp)
             fig = create_figure(
                 true[0, 0],
@@ -678,7 +645,7 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     base_size = 8
     figsize = (3 * base_size, 2 * base_size)
     fig, axes = plt.subplots(nrows=3, ncols=2, figsize=figsize)
-    thresholds = np.linspace(0.01, 0.99, 100)
+    thresholds = np.linspace(0.01, 0.99, 99)
     precisions = []
     recalls = []
     for threshold in thresholds:
@@ -726,7 +693,7 @@ def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, flo
     base_size = 8
     figsize = (4 * base_size, 2 * base_size)
     fig, axes = plt.subplots(nrows=4, ncols=2, figsize=figsize)
-    thresholds = np.linspace(0.01, 0.99, 100)
+    thresholds = np.linspace(0.01, 0.99, 99)
     results = defaultdict(list)
     for threshold in thresholds:
         res = expected_positives_and_negatives(tile_map, threshold)
@@ -891,6 +858,35 @@ def match_closest_pairs(distances: Tensor) -> List[Tuple[int, int]]:
         best_pair = dist_flat.argmin().item()
         dist = dist_flat[best_pair]
     return pairs
+
+
+def get_positive_negative_stats(
+    true_cat: FullCatalog,
+    est_tile_cat: TileCatalog,
+    mag_max: float = np.inf,
+):
+    true_cat = true_cat.apply_mag_bin(-np.inf, mag_max)
+    thresholds = np.linspace(0.01, 0.99, 99)
+    log_probs = rearrange(est_tile_cat["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
+    est_tile_cat = est_tile_cat.copy()
+
+    def stats_for_threshold(threshold):
+        est_tile_cat.n_sources = log_probs >= np.log(threshold)
+        est_cat = est_tile_cat.to_full_params()
+        number_predicted = est_cat.plocs.shape[1]
+        if number_predicted == 0:
+            return {"tp": 0.0, "fp": 0.0}
+        _, _, d, _ = reporting.match_by_locs(true_cat.plocs[0], est_cat.plocs[0], 1.0)
+        tp = d.sum()
+        fp = number_predicted - tp
+        return {"tp": tp, "fp": fp}
+
+    res = Parallel(n_jobs=10)(delayed(stats_for_threshold)(t) for t in tqdm(thresholds))
+    out = {}
+    for k in res[0]:
+        out[k] = np.array([r[k] for r in res])
+    out["n_obj"] = true_cat.plocs.shape[1]
+    return out
 
 
 if __name__ == "__main__":
