@@ -21,6 +21,7 @@ from bliss.catalog import FullCatalog
 from bliss.datasets import sdss
 from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
+from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
 pl.seed_everything(42)
@@ -797,27 +798,27 @@ def load_models(cfg, device):
     # load models required for SDSS reconstructions.
     eval_mean_detections = cfg.plots.eval_mean_detections  # adjust probability of n_sources
 
-    sleep = instantiate(cfg.models.sleep)
-    sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
-    location = sleep.image_encoder.to(device).eval()
+    location = instantiate(cfg.models.location_encoder).to(device).eval()
+    location.load_state_dict(
+        torch.load(cfg.predict.location_checkpoint, map_location=location.device)
+    )
 
-    binary = instantiate(cfg.models.binary)
-    binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
-    binary = binary.to(device).eval()
+    binary = instantiate(cfg.models.binary).to(device).eval()
+    binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint, map_location=binary.device))
 
-    galaxy = instantiate(cfg.models.galaxy_encoder)
-    galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
-    galaxy = galaxy.to(device).eval()
+    galaxy = instantiate(cfg.models.galaxy_encoder).to(device).eval()
+    galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint, map_location=galaxy.device))
 
-    decoder = sleep.image_decoder.to(device).eval()
     encoder = Encoder(location.eval(), binary.eval(), galaxy.eval(), eval_mean_detections)
     encoder = encoder.to(device)
+
+    decoder: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
 
     return encoder, decoder
 
 
 @hydra.main(config_path="./config", config_name="config")
-def plots(cfg):  # pylint: disable=too-many-statements
+def main(cfg):  # pylint: disable=too-many-statements
 
     figs = set(cfg.plots.figs)
     cachedir = cfg.plots.cachedir
@@ -849,12 +850,12 @@ def plots(cfg):  # pylint: disable=too-many-statements
 
         # generate galsim simulated galaxies images if file does not exist.
         galaxies_file = Path(cfg.plots.simulated_sdss_individual_galaxies)
-        if not galaxies_file.exists():
+        if not galaxies_file.exists() or cfg.plots.overwrite:
             print(f"INFO: Generating individual galaxy images and saving to: {galaxies_file}")
             dataset = instantiate(
                 cfg.datasets.sdss_galaxies, batch_size=512, n_batches=20, num_workers=20
             )
-            imagepath = galaxies_file.parent / (galaxies_file.stem + "_images.jpg")
+            imagepath = galaxies_file.parent / (galaxies_file.stem + "_images.png")
             generate.generate(
                 dataset, galaxies_file, imagepath, n_plots=25, global_params=("background", "slen")
             )
@@ -887,4 +888,4 @@ def plots(cfg):  # pylint: disable=too-many-statements
 
 
 if __name__ == "__main__":
-    plots()  # pylint: disable=no-value-for-parameter
+    main()  # pylint: disable=no-value-for-parameter
