@@ -850,12 +850,12 @@ def main(cfg):  # pylint: disable=too-many-statements
 
         # generate galsim simulated galaxies images if file does not exist.
         galaxies_file = Path(cfg.plots.simulated_sdss_individual_galaxies)
-        if not galaxies_file.exists():
+        if not galaxies_file.exists() or cfg.plots.overwrite:
             print(f"INFO: Generating individual galaxy images and saving to: {galaxies_file}")
             dataset = instantiate(
                 cfg.datasets.sdss_galaxies, batch_size=512, n_batches=20, num_workers=20
             )
-            imagepath = galaxies_file.parent / (galaxies_file.stem + "_images.jpg")
+            imagepath = galaxies_file.parent / (galaxies_file.stem + "_images.png")
             generate.generate(
                 dataset, galaxies_file, imagepath, n_plots=25, global_params=("background", "slen")
             )
