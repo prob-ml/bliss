@@ -889,5 +889,25 @@ def get_positive_negative_stats(
     return out
 
 
+import math
+
+
+def _adj_log_probs(log_probs: Tensor, log_train_probs: Tensor, log_test_probs: Tensor):
+    assert torch.allclose(log_train_probs.exp().sum(), torch.tensor(1.0))
+    assert torch.allclose(log_test_probs.exp().sum(), torch.tensor(1.0))
+    log_adj_ratios = (log_test_probs - log_train_probs).reshape(1, 1, 1, 2)
+    # log_adj_ratio = math.log(adj_ratio)
+    log_1m_probs = torch.log1p(-torch.exp(log_probs))
+    log_probs_all = torch.stack((log_1m_probs, log_probs), dim=-1)
+    log_probs_all_adj = log_probs_all + log_adj_ratios
+    log_probs_all_adj_norm = torch.log_softmax(log_probs_all_adj, dim=-1)
+    log_probs_adj_norm = log_probs_all_adj_norm[:, :, :, 1]
+    return log_probs_adj_norm
+
+
+def adj_prob(prob, adj_ratio):
+    return prob * adj_ratio / (prob * adj_ratio + (1 - prob) / adj_ratio)
+
+
 if __name__ == "__main__":
     pass
