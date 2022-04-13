@@ -21,6 +21,7 @@ from bliss.catalog import FullCatalog
 from bliss.datasets import sdss
 from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
+from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
 pl.seed_everything(42)
@@ -797,21 +798,21 @@ def load_models(cfg, device):
     # load models required for SDSS reconstructions.
     eval_mean_detections = cfg.plots.eval_mean_detections  # adjust probability of n_sources
 
-    sleep = instantiate(cfg.models.sleep)
-    sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint))
-    location = sleep.image_encoder.to(device).eval()
+    location = instantiate(cfg.models.location_encoder).to(device).eval()
+    location.load_state_dict(
+        torch.load(cfg.predict.location_checkpoint, map_location=location.device)
+    )
 
-    binary = instantiate(cfg.models.binary)
-    binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint))
-    binary = binary.to(device).eval()
+    binary = instantiate(cfg.models.binary).to(device).eval()
+    binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint, map_location=binary.device))
 
-    galaxy = instantiate(cfg.models.galaxy_encoder)
-    galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint))
-    galaxy = galaxy.to(device).eval()
+    galaxy = instantiate(cfg.models.galaxy_encoder).to(device).eval()
+    galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint, map_location=galaxy.device))
 
-    decoder = sleep.image_decoder.to(device).eval()
     encoder = Encoder(location.eval(), binary.eval(), galaxy.eval(), eval_mean_detections)
     encoder = encoder.to(device)
+
+    decoder: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
 
     return encoder, decoder
 
