@@ -1,6 +1,7 @@
 import datetime as dt
 import json
 from pathlib import Path
+from time import time_ns
 from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
@@ -48,8 +49,10 @@ def train(cfg: DictConfig):
         log_hyperparameters(config=cfg, model=model, trainer=trainer)
 
     # train!
+    tic = time_ns()
     trainer.fit(model, datamodule=dataset)
-
+    toc = time_ns()
+    train_time_sec = (toc - tic) * 1e-9
     # test!
     if cfg.training.testing.file is not None:
         trainer.test(model, datamodule=dataset)
@@ -64,7 +67,10 @@ def train(cfg: DictConfig):
             cp_data = model_checkpoint["callbacks"]
             key = list(cp_data.keys())[0]
             cp_data = cp_data[key]
-            data_to_write: Dict[str, Any] = {"timestamp": str(dt.datetime.today())}
+            data_to_write: Dict[str, Any] = {
+                "timestamp": str(dt.datetime.today()),
+                "train_time_sec": train_time_sec,
+            }
             for k, v in cp_data.items():
                 if isinstance(v, torch.Tensor) and not v.shape:
                     data_to_write[k] = v.item()
