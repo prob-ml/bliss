@@ -244,10 +244,7 @@ def scene_metrics(
     # For calculating precision, we consider a wider bin for the 'true' objects, this way
     # we ensure that underestimating the magnitude of a true object close and above the
     # boundary does not mark this estimated object as FP, thus reducing our precision.
-    if mag_slack < np.inf:
-        tparams = true_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
-    else:
-        tparams = true_params
+    tparams = true_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
     eparams = est_params.apply_mag_bin(mag_min, mag_max)
 
     # update
@@ -260,10 +257,7 @@ def scene_metrics(
     # we ensure that overestimating the magnitude of a true object close and below the boundary
     # does not mean that we missed this object, reducing our TP, and reducing recall.
     tparams = true_params.apply_mag_bin(mag_min, mag_max)
-    if mag_slack < np.inf:
-        eparams = est_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
-    else:
-        eparams = est_params
+    eparams = est_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
     detection_metrics.update(tparams, eparams)
     recall = detection_metrics.compute()["recall"]
     n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"]
