@@ -259,7 +259,11 @@ def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
     galaxy.load_state_dict(galaxy_state_dict)
     dec: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
     encoder = Encoder(
-        location.eval(), binary.eval(), galaxy.eval(), cfg.reconstruct.eval_mean_detections
+        location.eval(),
+        binary.eval(),
+        galaxy.eval(),
+        cfg.reconstruct.eval_mean_detections,
+        cfg.reconstruct.map_n_source_weights,
     ).to(device)
 
     prior: ImagePrior = instantiate(cfg.models.prior).to(device).eval()
