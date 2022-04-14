@@ -235,7 +235,7 @@ class LocationEncoder(pl.LightningModule):
         self,
         var_params: Tensor,
         eval_mean_detections: Optional[float] = None,
-        map_n_source_weights: Optional[Tensor] = None,
+        n_source_weights: Optional[Tensor] = None,
     ) -> TileCatalog:
         """Derive maximum a posteriori from variational parameters.
 
@@ -259,10 +259,10 @@ class LocationEncoder(pl.LightningModule):
         n_source_log_probs = self._get_n_source_log_prob(
             var_params_flat, eval_mean_detections=eval_mean_detections
         )
-        if map_n_source_weights is None:
-            map_n_source_weights = torch.ones(self.max_detections + 1)
-        map_n_source_weights = map_n_source_weights.to(n_source_log_probs.device).reshape(1, -1)
-        map_n_sources: Tensor = torch.argmax(n_source_log_probs * map_n_source_weights, dim=1)
+        if n_source_weights is None:
+            n_source_weights = torch.ones(self.max_detections + 1)
+        n_source_weights = n_source_weights.to(n_source_log_probs.device).reshape(1, -1)
+        map_n_sources: Tensor = torch.argmax(n_source_log_probs * n_source_weights, dim=1)
         map_n_sources = rearrange(map_n_sources, "b_nth_ntw -> 1 b_nth_ntw")
 
         pred = self._encode_for_n_sources(var_params_flat, map_n_sources)
