@@ -139,12 +139,11 @@ def reconstruct(cfg):
         if outdir is not None:
             # Expected precision lpot
             # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
-            fig_exp_precision, target_stats = expected_positives_plot(
+            fig_exp_precision, detection_stats = expected_positives_plot(
                 tile_map_recon, positive_negative_stats
             )
             fig_exp_precision.savefig(outdir / (scene_name + "_auroc.png"), format="png")
-            with (outdir / (scene_name + "_auroc_target.json")).open("w") as fp:
-                json.dump(target_stats, fp)
+            detection_stats.to_csv(outdir / (scene_name + "_stats_by_threshold.csv"))
             fig = create_figure(
                 true[0, 0],
                 recon[0, 0],
@@ -693,27 +692,27 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     return fig
 
 
-def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, float]):
+def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict):
     base_size = 8
     figsize = (4 * base_size, 2 * base_size)
     fig, axes = plt.subplots(nrows=4, ncols=2, figsize=figsize)
     thresholds = np.linspace(0.01, 0.99, 99)
-    results = defaultdict(list)
+    expected_results = defaultdict(list)
     for threshold in thresholds:
         res = expected_positives_and_negatives(tile_map, threshold)
         for k, v in res.items():
-            results[k].append(v)
-    for k in results:
-        results[k] = np.array(results[k])
-    axes[0, 0].plot(thresholds, results["tp"])
+            expected_results[k].append(v)
+    for k in expected_results:
+        expected_results[k] = np.array(expected_results[k])
+    axes[0, 0].plot(thresholds, expected_results["tp"])
     axes[0, 0].set_xlabel("Threshold")
     axes[0, 0].set_ylabel("Expected True Positives")
 
-    axes[0, 1].plot(thresholds, results["fp"])
+    axes[0, 1].plot(thresholds, expected_results["fp"])
     axes[0, 1].set_xlabel("Threshold")
     axes[0, 1].set_ylabel("Expected False Positives")
 
-    axes[1, 0].plot(results["fp"], results["tp"])
+    axes[1, 0].plot(expected_results["fp"], expected_results["tp"])
     axes[1, 0].set_xlabel("Expected False Positives")
     axes[1, 0].set_ylabel("Expected True Positives")
 
@@ -725,38 +724,37 @@ def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, flo
     axes[2, 1].set_xlabel("Threshold")
     axes[2, 1].set_ylabel("Actual False Positives")
 
-    axes[3, 0].plot(results["fp"], actual_results["fp"])
+    axes[3, 0].plot(expected_results["fp"], actual_results["fp"])
     axes[3, 0].set_xlabel("Expected False Positives")
     axes[3, 0].set_ylabel("Actual False Positives")
 
-    axes[3, 1].plot(results["fp"], results["tp"], label="Expected True Positives")
-    axes[3, 1].plot(results["fp"], actual_results["tp"], label="Actual True Positives")
+    axes[3, 1].plot(expected_results["fp"], expected_results["tp"], label="Expected True Positives")
+    axes[3, 1].plot(expected_results["fp"], actual_results["tp"], label="Actual True Positives")
     axes[3, 1].axhline(actual_results["n_obj"])
     axes[3, 1].set_xlabel("Expected False Positives")
     axes[3, 1].set_ylabel("True Positives")
     axes[3, 1].legend()
 
-    precision = results["tp"] / results["n_selected"]
-    target_idx_baseline = 15
-    target_idx_precision = int(np.power(precision - 0.7, 2).argmin())
-    target_stats = {}
-    for target_idx in (target_idx_baseline, target_idx_precision):
-        threshold = thresholds[target_idx]
-        target_precision = precision[target_idx]
-        target_recall = (results["tp"] / (results["tp"] + results["fn"]))[target_idx]
-        actual_precision = (actual_results["tp"] / (actual_results["tp"] + actual_results["fp"]))[
-            target_idx
-        ]
-        actual_recall = (actual_results["tp"] / actual_results["n_obj"])[target_idx]
-        target_stats[target_idx] = {
-            "threshold": threshold,
-            "target_precision": target_precision,
-            "target_recall": target_recall,
-            "actual_precision": actual_precision,
-            "actual_recall": actual_recall,
-        }
+    detection_stats = get_detection_stats_for_thresholds(
+        thresholds, expected_results, actual_results
+    )
 
-    return fig, target_stats
+    return fig, detection_stats
+
+
+def get_detection_stats_for_thresholds(thresholds, expected_results, actual_results):
+    expected_precision = expected_results["tp"] / expected_results["n_selected"]
+    expected_recall = expected_results["tp"] / (expected_results["tp"] + expected_results["fn"])
+    actual_precision = actual_results["tp"] / (actual_results["tp"] + actual_results["fp"])
+    actual_recall = actual_results["tp"] / actual_results["n_obj"]
+    stats_dict = {
+        "thresholds": thresholds,
+        "expected_precision": expected_precision,
+        "expected_recall": expected_recall,
+        "actual_precision": actual_precision,
+        "actual_recall": actual_recall,
+    }
+    return pd.DataFrame(stats_dict)
 
 
 def expected_accuracy(tile_map, mag_min, mag_max):
