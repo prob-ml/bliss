@@ -260,7 +260,7 @@ class LocationEncoder(pl.LightningModule):
             var_params_flat, eval_mean_detections=eval_mean_detections
         )
         if map_n_source_weights is None:
-            map_n_source_weights = torch.ones(self.max_detections + 1) / (self.max_detections + 1)
+            map_n_source_weights = torch.ones(self.max_detections + 1)
         map_n_source_weights = map_n_source_weights.to(n_source_log_probs.device).reshape(1, -1)
         map_n_sources: Tensor = torch.argmax(n_source_log_probs * map_n_source_weights, dim=1)
         map_n_sources = rearrange(map_n_sources, "b_nth_ntw -> 1 b_nth_ntw")
