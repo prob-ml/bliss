@@ -138,7 +138,9 @@ class LocationEncoder(pl.LightningModule):
         self.val_detection_metrics = DetectionMetrics(slack)
         self.test_detection_metrics = DetectionMetrics(slack)
 
-    def encode(self, image: Tensor, background: Tensor) -> Tensor:
+    def encode(
+        self, image: Tensor, background: Tensor, eval_mean_detections: Optional[float] = None
+    ) -> Dict[str, Tensor]:
         """Encodes variational parameters from image padded tiles.
 
         Args:
@@ -156,19 +158,50 @@ class LocationEncoder(pl.LightningModule):
         image2 = self.input_transform(image, background)
         image_ptiles = get_images_in_tiles(image2, self.tile_slen, self.ptile_slen)
         log_image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
-        var_params_conv = self.enc_conv(log_image_ptiles_flat)
-        var_params_flat = self.enc_final(var_params_conv)
-        return rearrange(
-            var_params_flat,
-            "(b nth ntw) d -> b nth ntw d",
-            b=image_ptiles.shape[0],  # number of bands
-            nth=image_ptiles.shape[1],  # number of horizontal tiles
-            ntw=image_ptiles.shape[2],  # number of vertical tiles
-            d=self.dim_out_all,  # number of dist params per tile
+        enc_conv_output = self.enc_conv(log_image_ptiles_flat)
+        enc_final_output = self.enc_final(enc_conv_output)
+
+        # enc_final_output consists of two parts:
+        # - source-specific-parameters
+        # - Probabilities of number of sources
+
+        b = image_ptiles.shape[0]  # number of bands
+        nth = image_ptiles.shape[1]  # number of horizontal tiles
+        ntw = image_ptiles.shape[2]  # number of vertical tiles
+        dim_out_all = enc_final_output.shape[1]
+        dim_per_source_params = dim_out_all - (self.max_detections + 1)
+        assert torch.allclose(
+            torch.arange(dim_per_source_params, dim_out_all), self.prob_n_source_indx
+        )
+        per_source_params_flat, n_source_free_probs_flat = torch.split(
+            enc_final_output, (dim_per_source_params, self.max_detections + 1), dim=1
+        )
+        per_source_params = rearrange(
+            per_source_params_flat, "(b nth ntw) d -> b nth ntw d", b=b, nth=nth, ntw=ntw
         )
 
+        n_source_log_probs_flat = self.log_softmax(n_source_free_probs_flat)
+        if eval_mean_detections is not None:
+            train_log_probs = self._get_n_source_prior_log_prob(self.mean_detections)
+            eval_log_probs = self._get_n_source_prior_log_prob(eval_mean_detections)
+            adj = eval_log_probs - train_log_probs
+            adj = rearrange(adj, "ns -> 1 ns")
+            adj = adj.to(free_probs.device)
+            free_probs += adj
+        n_source_log_probs = rearrange(
+            n_source_log_probs_flat, "(b nth ntw) d -> b nth ntw d", b=b, nth=nth, ntw=ntw
+        )
+
+        return {
+            "per_source_params": per_source_params,
+            "n_source_log_probs": n_source_log_probs,
+        }
+
     def sample(
-        self, var_params: Tensor, n_samples: int, eval_mean_detections: Optional[float] = None
+        self,
+        var_params: Dict[str, Tensor],
+        n_samples: int,
+        eval_mean_detections: Optional[float] = None,
     ) -> Dict[str, Tensor]:
         """Sample from encoded variational distribution.
 
@@ -185,10 +218,7 @@ class LocationEncoder(pl.LightningModule):
             A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
-        var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        log_probs_n_sources_per_tile = self._get_n_source_log_prob(
-            var_params_flat, eval_mean_detections=eval_mean_detections
-        )
+        log_probs_n_sources_per_tile = var_params["n_source_log_probs"]
 
         # sample number of sources.
         # tile_n_sources shape = (n_samples x n_ptiles)
@@ -200,7 +230,7 @@ class LocationEncoder(pl.LightningModule):
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
 
         # get var_params conditioned on n_sources
-        pred = self._encode_for_n_sources(var_params_flat, tile_n_sources)
+        pred = self._encode_for_n_sources(var_params["per_source_params"], tile_n_sources)
 
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
@@ -233,7 +263,7 @@ class LocationEncoder(pl.LightningModule):
 
     def max_a_post(
         self,
-        var_params: Tensor,
+        var_params: Dict[str, Tensor],
         eval_mean_detections: Optional[float] = None,
         n_source_weights: Optional[Tensor] = None,
     ) -> TileCatalog:
@@ -255,18 +285,17 @@ class LocationEncoder(pl.LightningModule):
             The dictionary contains
             `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
-        var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        n_source_log_probs = self._get_n_source_log_prob(
-            var_params_flat, eval_mean_detections=eval_mean_detections
-        )
+        n_source_log_probs = var_params["n_source_log_probs"]
         if n_source_weights is None:
             n_source_weights = torch.ones(self.max_detections + 1)
-        n_source_weights = n_source_weights.to(n_source_log_probs.device).reshape(1, -1)
+        n_source_weights = n_source_weights.to(n_source_log_probs.device).reshape(1, 1, 1, -1)
         n_source_log_weights = n_source_weights.log()
-        map_n_sources: Tensor = torch.argmax(n_source_log_probs + n_source_log_weights, dim=1)
-        map_n_sources = rearrange(map_n_sources, "b_nth_ntw -> 1 b_nth_ntw")
+        map_n_sources: Tensor = torch.argmax(n_source_log_probs + n_source_log_weights, dim=-1)
 
-        pred = self._encode_for_n_sources(var_params_flat, map_n_sources)
+        pred = self._encode_for_n_sources(
+            rearrange(var_params["per_source_params"], "b nth ntw np -> (b nth ntw) np"),
+            rearrange(map_n_sources, "b nth ntw -> 1 (b nth ntw)"),
+        )
 
         is_on_array = get_is_on_from_n_sources(map_n_sources, self.max_detections)
         is_on_array = is_on_array.unsqueeze(-1).float()
@@ -274,31 +303,44 @@ class LocationEncoder(pl.LightningModule):
         # set sd so we return map estimates.
         # first locs
         locs_sd = torch.zeros_like(pred["loc_logvar"])
-        tile_locs = self._sample_gated_normal(pred["loc_mean"], locs_sd, is_on_array)
+        tile_locs = self._sample_gated_normal(
+            pred["loc_mean"],
+            locs_sd,
+            rearrange(is_on_array, "n nth ntw ns 1 -> (n nth ntw) ns 1"),
+        )
         tile_locs = tile_locs.clamp(0, 1)
 
         # then log_fluxes
         log_flux_mean = pred["log_flux_mean"]
         log_flux_sd = torch.zeros_like(pred["log_flux_logvar"])
-        tile_log_fluxes = self._sample_gated_normal(log_flux_mean, log_flux_sd, is_on_array)
-        tile_fluxes = tile_log_fluxes.exp() * is_on_array
+        tile_log_fluxes = self._sample_gated_normal(
+            log_flux_mean,
+            log_flux_sd,
+            rearrange(is_on_array, "n nth ntw ns 1 -> (n nth ntw) ns 1"),
+        )
+
+        # Why are we masking here?
+        tile_fluxes = tile_log_fluxes.exp() * rearrange(
+            is_on_array, "n nth ntw ns 1 -> (n nth ntw) ns 1"
+        )
 
         max_a_post_flat = {
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
-            "n_sources": map_n_sources,
-            "n_source_log_probs": n_source_log_probs[:, 1:].unsqueeze(-1).unsqueeze(0),
         }
         max_a_post = {}
+        b, nth, ntw, _ = var_params["per_source_params"].shape
         for k, v in max_a_post_flat.items():
-            if k == "n_sources":
-                pattern = "1 (b nth ntw) -> b nth ntw"
-            else:
-                pattern = "1 (b nth ntw) s k -> b nth ntw s k"
             max_a_post[k] = rearrange(
-                v, pattern, b=var_params.shape[0], nth=var_params.shape[1], ntw=var_params.shape[2]
+                v, "1 (b nth ntw) s k -> b nth ntw s k", b=b, nth=nth, ntw=ntw
             )
+        max_a_post.update(
+            {
+                "n_sources": map_n_sources,
+                "n_source_log_probs": n_source_log_probs[:, :, :, 1:].unsqueeze(-1),
+            }
+        )
         return TileCatalog(self.tile_slen, max_a_post)
 
     def _get_n_source_log_prob(
@@ -319,6 +361,7 @@ class LocationEncoder(pl.LightningModule):
         Returns:
             Log-probability of number of sources.
         """
+        raise NotImplementedError()
         free_probs = var_params_flat[:, self.prob_n_source_indx]
         if eval_mean_detections is not None:
             train_log_probs = self._get_n_source_prior_log_prob(self.mean_detections)
@@ -405,13 +448,14 @@ class LocationEncoder(pl.LightningModule):
         )
 
         var_params = self.encode(batch["images"], batch["background"])
-        var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
-        n_source_log_probs = self._get_n_source_log_prob(var_params_flat)
+        n_source_log_probs = var_params["n_source_log_probs"]
+        n_source_log_probs_flat = rearrange(n_source_log_probs, "n nth ntw ns -> (n nth ntw) ns")
         nll_loss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
-        counter_loss = nll_loss(n_source_log_probs, true_catalog.n_sources.reshape(-1))
+        counter_loss = nll_loss(n_source_log_probs_flat, true_catalog.n_sources.reshape(-1))
 
         pred = self._encode_for_n_sources(
-            var_params_flat, rearrange(true_catalog.n_sources, "n nth ntw -> 1 (n nth ntw)")
+            rearrange(var_params["per_source_params"], "n nth ntw np -> (n nth ntw) np"),
+            rearrange(true_catalog.n_sources, "n nth ntw -> 1 (n nth ntw)"),
         )
         locs_log_probs_all = _get_params_logprob_all_combs(
             rearrange(true_catalog.locs, "n nth ntw ns hw -> (n nth ntw) ns hw"),
