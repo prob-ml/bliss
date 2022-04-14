@@ -754,8 +754,8 @@ def get_detection_stats_for_thresholds(thresholds, expected_results, actual_resu
         "actual_precision": actual_precision,
         "actual_recall": actual_recall,
     }
-    stats_dict.update({f"expected_{k}":v for k, v in expected_results.items()})
-    stats_dict.update({f"actual_{k}":v for k, v in actual_results.items()})
+    stats_dict.update({f"expected_{k}": v for k, v in expected_results.items()})
+    stats_dict.update({f"actual_{k}": v for k, v in actual_results.items()})
     return pd.DataFrame(stats_dict)
 
 
