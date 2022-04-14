@@ -1,17 +1,20 @@
 # flake8: noqa
 # pylint: skip-file
 from collections import defaultdict
+import json
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import torch
-from einops import rearrange, repeat
+from einops import rearrange, reduce, repeat
 from hydra.utils import instantiate
+from joblib import Parallel, delayed
 from matplotlib import pyplot as plt
 from torch import Tensor
 from torch.distributions import Normal
+from tqdm import tqdm
 
 from bliss import reporting
 from bliss.catalog import FullCatalog, TileCatalog
@@ -46,6 +49,7 @@ def reconstruct(cfg):
         photo_catalog = None
 
     for scene_name, scene_coords in cfg.reconstruct.scenes.items():
+        assert isinstance(scene_name, str)
         bp = encoder.border_padding
         h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
         if scene_size == "all":
@@ -117,6 +121,7 @@ def reconstruct(cfg):
                 scene_metrics_by_mag[catalog_name][mag]["star_accuracy"] = conf_matrix[1, 1] / (
                     conf_matrix[1, 1] + conf_matrix[1, 0]
                 )
+
                 if catalog_name == "bliss":
                     scene_metrics_by_mag[catalog_name][mag].update(
                         expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
@@ -128,7 +133,18 @@ def reconstruct(cfg):
                         scene_metrics_by_mag[catalog_name][mag][
                             "expected_precision"
                         ] = expected_precision(tile_map_recon)
+                        positive_negative_stats = get_positive_negative_stats(
+                            ground_truth_catalog, tile_map_recon, mag_max=mag_max
+                        )
         if outdir is not None:
+            # Expected precision lpot
+            # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
+            fig_exp_precision, target_stats = expected_positives_plot(
+                tile_map_recon, positive_negative_stats
+            )
+            fig_exp_precision.savefig(outdir / (scene_name + "_auroc.png"), format="png")
+            with (outdir / (scene_name + "_auroc_target.json")).open("w") as fp:
+                json.dump(target_stats, fp)
             fig = create_figure(
                 true[0, 0],
                 recon[0, 0],
@@ -176,6 +192,23 @@ def reconstruct(cfg):
             )
             fig_with_coadd.savefig(outdir / (scene_name + "_coadd.pdf"), format="pdf")
             fig_with_coadd.savefig(outdir / (scene_name + "_coadd.png"), format="png")
+            tc = tile_map_recon.copy()
+            log_probs = rearrange(tc["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
+            tc.n_sources = log_probs >= np.log(0.15)
+            fc = tc.to_full_params()
+            fig_with_coadd_lower_thresh = create_figure(
+                true[0, 0],
+                recon[0, 0],
+                resid[0, 0],
+                coadd_objects=ground_truth_catalog,
+                map_recon=fc,
+                include_residuals=False,
+                colorbar=False,
+                scatter_on_true=True,
+            )
+            fig_with_coadd_lower_thresh.savefig(
+                outdir / (scene_name + "_coadd_lower_thresh.png"), format="png"
+            )
             # scene_metrics_table = create_scene_metrics_table(scene_coords)
             # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
             torch.save(scene_metrics_by_mag, outdir / (scene_name + ".pt"))
@@ -355,10 +388,11 @@ def create_figure(
 
     if map_recon is not None:
         locs_pred = map_recon.plocs[0] - 0.5
-        star_bools = map_recon["star_bools"][0]
-        galaxy_bools = map_recon["galaxy_bools"][0]
-        locs_galaxies = locs_pred[galaxy_bools[:, 0] > 0.5, :]
-        locs_stars = locs_pred[star_bools[:, 0] > 0.5, :]
+        star_bools = map_recon["star_bools"][0, :, 0] > 0.5
+        galaxy_bools = map_recon["galaxy_bools"][0, :, 0] > 0.5
+        locs_galaxies = locs_pred[galaxy_bools, :]
+        locs_stars = locs_pred[star_bools, :]
+        locs_extra = locs_pred[(~galaxy_bools) & (~star_bools), :]
         if locs_galaxies.shape[0] > 0:
             in_bounds = torch.all((locs_galaxies > 0) & (locs_galaxies < scene_size), dim=-1)
             locs_galaxies = locs_galaxies[in_bounds]
@@ -409,6 +443,33 @@ def create_figure(
             if include_residuals:
                 ax_res.scatter(
                     locs_stars[:, 1], locs_stars[:, 0], color="r", marker="x", s=scatter_size
+                )
+
+        if locs_extra.shape[0] > 0.5:
+            in_bounds = torch.all((locs_extra > 0) & (locs_extra < scene_size), dim=-1)
+            locs_extra = locs_extra[in_bounds]
+            if scatter_on_true:
+                ax_true.scatter(
+                    locs_extra[:, 1],
+                    locs_extra[:, 0],
+                    color="w",
+                    marker="x",
+                    s=scatter_size,
+                    alpha=0.6,
+                    label="Predicted Object (below 0.5)",
+                )
+            ax_recon.scatter(
+                locs_extra[:, 1],
+                locs_extra[:, 0],
+                color="w",
+                marker="x",
+                s=scatter_size,
+                label="Predicted Object (below 0.5)",
+                alpha=0.6,
+            )
+            if include_residuals:
+                ax_res.scatter(
+                    locs_extra[:, 1], locs_extra[:, 0], color="w", marker="x", s=scatter_size
                 )
 
     ax_recon.legend(
@@ -491,6 +552,8 @@ def create_scene_metrics_table(scene_metrics_by_mag):
     for c in columns:
         x[c] = {}
         for k, v in scene_metrics_by_mag.items():
+            v["n"] = v["counts"]["tgcount"] + v["counts"]["tscount"]
+            v["n_galaxies"] = v["counts"]["tgcount"]
             if c in v:
                 x[c][k] = v[c] if not isinstance(v[c], Tensor) else v[c].item()
     scene_metrics_df = pd.DataFrame(x)
@@ -516,12 +579,180 @@ def expected_recall(tile_map: TileCatalog):
     return recall
 
 
+def expected_recall_for_threshold(tile_map: TileCatalog, threshold: float):
+    prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
+    is_on_array = prob_on >= threshold
+    prob_detected = prob_on * is_on_array
+    prob_not_detected = prob_on * (~is_on_array)
+    recall = prob_detected.sum() / (prob_detected.sum() + prob_not_detected.sum())
+    return recall.item()
+
+
 def expected_precision(tile_map: TileCatalog):
     prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
     is_on_array = rearrange(tile_map.is_on_array, "n nth ntw 1 -> n nth ntw")
     prob_detected = prob_on * is_on_array
     precision = prob_detected.sum() / is_on_array.sum()
     return precision
+
+
+def expected_precision_for_threshold(tile_map: TileCatalog, threshold: float):
+    prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
+    is_on_array = prob_on >= threshold
+    if is_on_array.sum() == 0:
+        return 1.0
+    prob_detected = prob_on * is_on_array
+    precision = prob_detected.sum() / is_on_array.sum()
+    return precision.item()
+
+
+def expected_true_positives_for_threshold(tile_map: TileCatalog, threshold: float):
+    prob_on: Tensor = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
+    is_on_array = prob_on >= threshold
+    prob_detected = prob_on * is_on_array
+    return prob_detected.sum().item()
+
+
+def expected_false_positives_for_threshold(tile_map: TileCatalog, threshold: float):
+    prob_on: Tensor = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
+    is_on_array = prob_on >= threshold
+    prob_detected = prob_on * is_on_array
+    return (1.0 - prob_detected).sum().item()
+
+
+def expected_positives_and_negatives(tile_map: TileCatalog, threshold: float) -> Dict[str, float]:
+    prob_on: Tensor = rearrange(
+        tile_map["n_source_log_probs"], "n nth ntw 1 1 -> (n nth ntw)"
+    ).exp()
+    is_on_array = prob_on >= threshold
+    # if is_on_array.sum() == 0:
+    #     return {
+    #         "tp": 0.0,
+    #         "fp": 0.0,
+    #         "tn": 0.0,
+    #         "fn":
+    #     }
+    prob_detected = prob_on[is_on_array]
+    prob_not_detected = prob_on[~is_on_array]
+    tp = float(prob_detected.sum().item())
+    fp = float((1 - prob_detected).sum().item()) if is_on_array.sum() > 0 else 0.0
+    tn = float((1 - prob_not_detected).sum().item()) if (~is_on_array).sum() > 0 else 0.0
+    fn = float(prob_not_detected.sum().item())
+    return {"tp": tp, "fp": fp, "tn": tn, "fn": fn, "n_selected": float(is_on_array.sum())}
+
+
+def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions):
+    base_size = 8
+    figsize = (3 * base_size, 2 * base_size)
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=figsize)
+    thresholds = np.linspace(0.01, 0.99, 99)
+    precisions = []
+    recalls = []
+    for threshold in thresholds:
+        precision = expected_precision_for_threshold(tile_map, threshold)
+        recall = expected_recall_for_threshold(tile_map, threshold)
+        precisions.append(precision)
+        recalls.append(recall)
+    precisions = np.array(precisions)
+    recalls = np.array(recalls)
+    axes[0, 0].scatter(thresholds, precisions)
+    axes[0, 0].set_xlabel("Threshold")
+    axes[0, 0].set_ylabel("Expected Precision")
+    axes[0, 1].scatter(thresholds, recalls)
+    axes[0, 1].set_xlabel("Threshold")
+    axes[0, 1].set_ylabel("Expected Recall")
+
+    # colors = precisions == precisions[optimal_point]
+    axes[1, 0].scatter(precisions, recalls)
+    optimal_point = np.argmin(1 / precisions + 1 / recalls)
+    x, y = precisions[optimal_point], recalls[optimal_point]
+    axes[1, 0].scatter(x, y, color="yellow", marker="+")
+    axes[1, 0].annotate(
+        f"Expected precision: {x:.2f}\nExpected Recall {y:.2f}", (x, y), fontsize=12
+    )
+    axes[1, 0].set_xlabel("Expected Precision")
+    axes[1, 0].set_ylabel("Expected Recall")
+    # axes[1,0].xlabel("Expected Precision")
+    # axes[1,0].ylabel("Expected Recall")
+    axes[2, 0].scatter(precisions, true_precisions)
+    x, y = precisions[optimal_point], true_precisions[optimal_point]
+    axes[2, 0].scatter(x, y, color="yellow", marker="+")
+    axes[2, 0].annotate(f"Expected precision: {x:.2f}\nTrue precision {y:.2f}", (x, y), fontsize=12)
+    axes[2, 0].set_xlabel("Expected Precision")
+    axes[2, 0].set_ylabel("Actual Precision")
+    axes[2, 1].scatter(precisions, true_recalls)
+    x, y = precisions[optimal_point], true_recalls[optimal_point]
+    axes[2, 1].scatter(x, y, color="yellow", marker="+")
+    axes[2, 1].annotate(f"Expected precision: {x:.2f}\nTrue recall {y:.2f}", (x, y), fontsize=12)
+    axes[2, 1].set_xlabel("Expected Precision")
+    axes[2, 1].set_ylabel("Actual Recall")
+    return fig
+
+
+def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict[str, float]):
+    base_size = 8
+    figsize = (4 * base_size, 2 * base_size)
+    fig, axes = plt.subplots(nrows=4, ncols=2, figsize=figsize)
+    thresholds = np.linspace(0.01, 0.99, 99)
+    results = defaultdict(list)
+    for threshold in thresholds:
+        res = expected_positives_and_negatives(tile_map, threshold)
+        for k, v in res.items():
+            results[k].append(v)
+    for k in results:
+        results[k] = np.array(results[k])
+    axes[0, 0].plot(thresholds, results["tp"])
+    axes[0, 0].set_xlabel("Threshold")
+    axes[0, 0].set_ylabel("Expected True Positives")
+
+    axes[0, 1].plot(thresholds, results["fp"])
+    axes[0, 1].set_xlabel("Threshold")
+    axes[0, 1].set_ylabel("Expected False Positives")
+
+    axes[1, 0].plot(results["fp"], results["tp"])
+    axes[1, 0].set_xlabel("Expected False Positives")
+    axes[1, 0].set_ylabel("Expected True Positives")
+
+    axes[2, 0].plot(thresholds, actual_results["tp"])
+    axes[2, 0].set_xlabel("Threshold")
+    axes[2, 0].set_ylabel("Actual True Positives")
+
+    axes[2, 1].plot(thresholds, actual_results["fp"])
+    axes[2, 1].set_xlabel("Threshold")
+    axes[2, 1].set_ylabel("Actual False Positives")
+
+    axes[3, 0].plot(results["fp"], actual_results["fp"])
+    axes[3, 0].set_xlabel("Expected False Positives")
+    axes[3, 0].set_ylabel("Actual False Positives")
+
+    axes[3, 1].plot(results["fp"], results["tp"], label="Expected True Positives")
+    axes[3, 1].plot(results["fp"], actual_results["tp"], label="Actual True Positives")
+    axes[3, 1].axhline(actual_results["n_obj"])
+    axes[3, 1].set_xlabel("Expected False Positives")
+    axes[3, 1].set_ylabel("True Positives")
+    axes[3, 1].legend()
+
+    precision = results["tp"] / results["n_selected"]
+    target_idx_baseline = 15
+    target_idx_precision = int(np.power(precision - 0.7, 2).argmin())
+    target_stats = {}
+    for target_idx in (target_idx_baseline, target_idx_precision):
+        threshold = thresholds[target_idx]
+        target_precision = precision[target_idx]
+        target_recall = (results["tp"] / (results["tp"] + results["fn"]))[target_idx]
+        actual_precision = (actual_results["tp"] / (actual_results["tp"] + actual_results["fp"]))[
+            target_idx
+        ]
+        actual_recall = (actual_results["tp"] / actual_results["n_obj"])[target_idx]
+        target_stats[target_idx] = {
+            "threshold": threshold,
+            "target_precision": target_precision,
+            "target_recall": target_recall,
+            "actual_precision": actual_precision,
+            "actual_recall": actual_recall,
+        }
+
+    return fig, target_stats
 
 
 def expected_accuracy(tile_map, mag_min, mag_max):
@@ -566,6 +797,123 @@ def tile_map_prior(prior: ImagePrior, tile_map):
 
     # prob_normalized =
     return log_prob_source.sum() + log_prob_binary.sum() + galaxy_probs.sum()
+
+
+def match_by_locs_closest_pairs(
+    true_locs: Tensor, est_locs: Tensor, max_l_infty_dist: float
+) -> List[Tuple[int, int]]:
+    """Match true locations to estimated locations by closest pairs.
+
+    Arguments:
+        true_locs: Tensor of true locations (N_true x 2)
+        est_locs: Tensor of estimated locations (N_est x 2)
+        max_l_infty_dist: Maximim l-infinity distance allowed for matches.
+
+    Returns:
+        A list of tuples (i, j) indicating a match between the i-th row of true_locs
+        and the j-th row of est_locs.
+    """
+    assert len(true_locs.shape) == len(est_locs.shape) == 2
+    assert true_locs.shape[-1] == est_locs.shape[-1] == 2
+    assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
+
+    locs1 = true_locs.view(-1, 2)
+    locs2 = est_locs.view(-1, 2)
+
+    # entry (i,j) is l1 distance between of ith loc in locs1 and the jth loc in locs2
+    locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
+    locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
+    locs_err_inf = reduce(locs_abs_diff, "i j k -> i j", "max")
+    allowed_match = locs_err_inf <= max_l_infty_dist
+    disallowed_penalty = torch.zeros_like(allowed_match, dtype=torch.float)
+    disallowed_penalty[~allowed_match] = np.inf
+    locs_err += disallowed_penalty
+
+    return match_closest_pairs(locs_err)
+
+
+def match_closest_pairs(distances: Tensor) -> List[Tuple[int, int]]:
+    """Match pairs by closest distance.
+
+    Given a matrix of distances with rows and columns corresponding to two
+    sets of objects, this function matches them in the following way:
+    1) The pair (i, j) with the closest distance gets matched.
+    2) i and j are removed from consideration.
+    3) The next-closest pair of the remaining objects gets matched.
+    This process repeats until all remaining distances are infinite.
+    A distance of infinity indicates there is no edge between i and j,
+    and hence a match can never be made.
+
+    Arguments:
+        distances: A matrix of distances. Must be non-negative.
+
+    Returns:
+        A list of (i, j) pairs corresponding to row-column matches in the
+        input distance matrix.
+    """
+    pairs = []
+    dist_flat = distances.flatten()
+    best_pair = dist_flat.argmin().item()
+    dist = dist_flat[best_pair]
+    while dist < np.inf and (distances.shape[0] > 0) and (distances.shape[1] > 1):
+        best_row = best_pair // distances.shape[1]
+        best_col = best_pair % distances.shape[1]
+        pairs.append((best_row, best_col))
+        distances = np.delete(distances, best_row, 0)
+        distances = np.delete(distances, best_col, 1)
+        dist_flat = distances.flatten()
+        best_pair = dist_flat.argmin().item()
+        dist = dist_flat[best_pair]
+    return pairs
+
+
+def get_positive_negative_stats(
+    true_cat: FullCatalog,
+    est_tile_cat: TileCatalog,
+    mag_max: float = np.inf,
+):
+    true_cat = true_cat.apply_mag_bin(-np.inf, mag_max)
+    thresholds = np.linspace(0.01, 0.99, 99)
+    log_probs = rearrange(est_tile_cat["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
+    est_tile_cat = est_tile_cat.copy()
+
+    def stats_for_threshold(threshold):
+        est_tile_cat.n_sources = log_probs >= np.log(threshold)
+        est_cat = est_tile_cat.to_full_params()
+        number_predicted = est_cat.plocs.shape[1]
+        if number_predicted == 0:
+            return {"tp": 0.0, "fp": 0.0}
+        _, _, d, _ = reporting.match_by_locs(true_cat.plocs[0], est_cat.plocs[0], 1.0)
+        tp = d.sum()
+        fp = number_predicted - tp
+        return {"tp": tp, "fp": fp}
+
+    res = Parallel(n_jobs=10)(delayed(stats_for_threshold)(t) for t in tqdm(thresholds))
+    out = {}
+    for k in res[0]:
+        out[k] = np.array([r[k] for r in res])
+    out["n_obj"] = true_cat.plocs.shape[1]
+    return out
+
+
+import math
+
+
+def _adj_log_probs(log_probs: Tensor, log_train_probs: Tensor, log_test_probs: Tensor):
+    assert torch.allclose(log_train_probs.exp().sum(), torch.tensor(1.0))
+    assert torch.allclose(log_test_probs.exp().sum(), torch.tensor(1.0))
+    log_adj_ratios = (log_test_probs - log_train_probs).reshape(1, 1, 1, 2)
+    # log_adj_ratio = math.log(adj_ratio)
+    log_1m_probs = torch.log1p(-torch.exp(log_probs))
+    log_probs_all = torch.stack((log_1m_probs, log_probs), dim=-1)
+    log_probs_all_adj = log_probs_all + log_adj_ratios
+    log_probs_all_adj_norm = torch.log_softmax(log_probs_all_adj, dim=-1)
+    log_probs_adj_norm = log_probs_all_adj_norm[:, :, :, 1]
+    return log_probs_adj_norm
+
+
+def adj_prob(prob, adj_ratio):
+    return prob * adj_ratio / (prob * adj_ratio + (1 - prob) / adj_ratio)
 
 
 if __name__ == "__main__":
