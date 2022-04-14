@@ -218,46 +218,55 @@ class LocationEncoder(pl.LightningModule):
             A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
+        # var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
         log_probs_n_sources_per_tile = var_params["n_source_log_probs"]
+
+        #  self._free_probs_to_log_probs(
+        #     var_params_flat, eval_mean_detections=eval_mean_detections
+        # )
 
         # sample number of sources.
         # tile_n_sources shape = (n_samples x n_ptiles)
         # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
         probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
-        tile_n_sources = Categorical(probs=probs_n_sources_per_tile).sample((n_samples,)).squeeze()
-        tile_n_sources = tile_n_sources.view(n_samples, -1)
-        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
+        tile_n_sources = Categorical(probs=probs_n_sources_per_tile).sample((n_samples,))
+        # tile_n_sources = tile_n_sources.view(n_samples, -1)
 
         # get var_params conditioned on n_sources
-        pred = self._encode_for_n_sources(var_params["per_source_params"], tile_n_sources)
+        pred = self._encode_for_n_sources(
+            rearrange(var_params["per_source_params"], "b nth ntw np -> (b nth ntw) np"),
+            rearrange(tile_n_sources, "n b nth ntw -> n (b nth ntw)", n=n_samples),
+        )
 
+        tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
         pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
         pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
-        tile_locs = self._sample_gated_normal(pred["loc_mean"], pred["loc_sd"], tile_is_on_array)
-        tile_log_fluxes = self._sample_gated_normal(
-            pred["log_flux_mean"], pred["log_flux_sd"], tile_is_on_array
+        tile_locs = self._sample_gated_normal(
+            pred["loc_mean"],
+            pred["loc_sd"],
+            rearrange(tile_is_on_array, "n b nth ntw ns 1 -> n (b nth ntw) ns 1"),
         )
-        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
+        tile_log_fluxes = self._sample_gated_normal(
+            pred["log_flux_mean"],
+            pred["log_flux_sd"],
+            rearrange(tile_is_on_array, "n b nth ntw ns 1 -> n (b nth ntw) ns 1"),
+        )
+        # Why are we masking here?
+        tile_fluxes = tile_log_fluxes.exp() * rearrange(
+            tile_is_on_array, "n b nth ntw ns 1 -> n (b nth ntw) ns 1"
+        )
         sample_flat = {
-            "n_sources": tile_n_sources,
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
         }
+        b, nth, ntw, _ = log_probs_n_sources_per_tile.shape
         sample = {}
         for k, v in sample_flat.items():
-            if k == "n_sources":
-                pattern = "ns (b nth ntw) -> ns b nth ntw"
-            else:
-                pattern = "ns (b nth ntw) s k -> ns b nth ntw s k"
-            sample[k] = rearrange(
-                v,
-                pattern,
-                b=var_params.shape[0],
-                nth=var_params.shape[1],
-                ntw=var_params.shape[2],
-            )
+            pattern = "ns (b nth ntw) s k -> ns b nth ntw s k"
+            sample[k] = rearrange(v, pattern, b=b, nth=nth, ntw=ntw)
+        sample["n_sources"] = tile_n_sources
 
         return sample
 
@@ -397,7 +406,7 @@ class LocationEncoder(pl.LightningModule):
         """
         tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
         n_ptiles = var_params_flat.size(0)
-        vpf_padded = F.pad(var_params_flat, (0, len(self.variational_params), 0, 0))
+        vpf_padded = F.pad(var_params_flat, (0, self.dim_out_all, 0, 0))
 
         var_params_for_n_sources = {}
         for k, param in self.variational_params.items():
