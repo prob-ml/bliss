@@ -245,7 +245,7 @@ class LocationEncoder(pl.LightningModule):
             eval_mean_detections:
                 Optional. If specified, adjusts the probability of n_sources to match the given
                 rate.
-            map_n_source_weights:
+            n_source_weights:
                 If specified, adds adjustment to number of sources when taking the argmax. Useful
                 for raising/lowering the threshold for turning sources on and off.
 
