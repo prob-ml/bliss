@@ -1,6 +1,6 @@
 outdir: ${paths.output}/sdss_figures
 real: false
-eval_mean_detections: 0.006
+eval_mean_detections: 0.004
 photo_catalog:
     sdss_path: ${paths.sdss}
     run: 94

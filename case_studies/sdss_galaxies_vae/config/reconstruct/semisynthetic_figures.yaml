@@ -1,6 +1,6 @@
 outdir: ${paths.output}/semisynthetic_figures
 real: False
-eval_mean_detections: 0.006
+eval_mean_detections: 0.004
 frame:
     _target_: bliss.inference.SemiSyntheticFrame
     dataset: ${datasets.simulated}
