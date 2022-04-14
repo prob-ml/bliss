@@ -232,7 +232,10 @@ class LocationEncoder(pl.LightningModule):
         return sample
 
     def max_a_post(
-        self, var_params: Tensor, eval_mean_detections: Optional[float] = None
+        self,
+        var_params: Tensor,
+        eval_mean_detections: Optional[float] = None,
+        map_n_source_weights: Optional[Tensor] = None,
     ) -> TileCatalog:
         """Derive maximum a posteriori from variational parameters.
 
@@ -242,6 +245,9 @@ class LocationEncoder(pl.LightningModule):
             eval_mean_detections:
                 Optional. If specified, adjusts the probability of n_sources to match the given
                 rate.
+            map_n_source_weights:
+                If specified, adds adjustment to number of sources when taking the argmax. Useful
+                for raising/lowering the threshold for turning sources on and off.
 
         Returns:
             The maximum a posteriori for each padded tile.
@@ -253,7 +259,10 @@ class LocationEncoder(pl.LightningModule):
         n_source_log_probs = self._get_n_source_log_prob(
             var_params_flat, eval_mean_detections=eval_mean_detections
         )
-        map_n_sources: Tensor = torch.argmax(n_source_log_probs, dim=1)
+        if map_n_source_weights is None:
+            map_n_source_weights = torch.ones(self.max_detections + 1) / (self.max_detections + 1)
+        map_n_source_weights = map_n_source_weights.to(n_source_log_probs.device).reshape(1, -1)
+        map_n_sources: Tensor = torch.argmax(n_source_log_probs * map_n_source_weights, dim=1)
         map_n_sources = rearrange(map_n_sources, "b_nth_ntw -> 1 b_nth_ntw")
 
         pred = self._encode_for_n_sources(var_params_flat, map_n_sources)
