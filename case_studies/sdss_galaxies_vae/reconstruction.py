@@ -1,7 +1,7 @@
 # flake8: noqa
 # pylint: skip-file
-from collections import defaultdict
 import json
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -18,14 +18,10 @@ from tqdm import tqdm
 
 from bliss import reporting
 from bliss.catalog import FullCatalog, TileCatalog
+from bliss.datasets.frame import SDSSFrame, SimulatedFrame
 from bliss.datasets.sdss import PhotoFullCatalog, SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.encoder import Encoder
-from bliss.inference import (
-    SDSSFrame,
-    SimulatedFrame,
-    infer_blends,
-    reconstruct_scene_at_coordinates,
-)
+from bliss.inference import infer_blends, reconstruct_scene_at_coordinates
 from bliss.models.binary import BinaryEncoder
 from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_encoder import GalaxyEncoder

@@ -19,8 +19,9 @@ from matplotlib import pyplot as plt
 from bliss import generate, reporting
 from bliss.catalog import FullCatalog
 from bliss.datasets import sdss
+from bliss.datasets.frame import SDSSFrame, SimulatedFrame
 from bliss.encoder import Encoder
-from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
+from bliss.inference import reconstruct_scene_at_coordinates
 from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
