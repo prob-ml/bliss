@@ -40,7 +40,7 @@ def reconstruct(cfg):
         outdir.mkdir(exist_ok=True)
     else:
         outdir = None
-    frame: Union[SDSSFrame, SimulatedFrame] = instantiate(cfg.reconstruct.frame)
+    frame: Union[SDSSFrame, SimulatedFrame, SemiSyntheticFrame] = instantiate(cfg.reconstruct.frame)
     device = torch.device(cfg.reconstruct.device)
     dec, encoder, prior = load_models(cfg, device)
     if cfg.reconstruct.photo_catalog is not None:
@@ -60,6 +60,9 @@ def reconstruct(cfg):
         else:
             h_end = h + scene_size
             w_end = w + scene_size
+        h, h_end, w, w_end = get_scene_boundaries(
+            scene_coords, frame.image.shape[2], frame.image.shape[3], bp
+        )
         true = frame.image[:, :, h:h_end, w:w_end]
         recon, tile_map_recon = reconstruct_scene_at_coordinates(
             encoder,
@@ -141,7 +144,9 @@ def reconstruct(cfg):
             # Expected precision lpot
             # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
             fig_exp_precision, detection_stats = expected_positives_plot(
-                tile_map_recon, positive_negative_stats
+                tile_map_recon,
+                positive_negative_stats,
+                cfg.reconstruct.map_n_source_weights,
             )
             fig_exp_precision.savefig(outdir / (scene_name + "_auroc.png"), format="png")
             detection_stats.to_csv(outdir / (scene_name + "_stats_by_threshold.csv"))
@@ -267,6 +272,19 @@ def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
 
     prior: ImagePrior = instantiate(cfg.models.prior).to(device).eval()
     return dec, encoder, prior
+
+
+def get_scene_boundaries(scene_coords, frame_height, frame_width, bp) -> Tuple[int, int, int, int]:
+    h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
+    if scene_size == "all":
+        h = bp
+        w = bp
+        h_end = ((frame_height - 2 * bp) // 4) * 4 + bp
+        w_end = ((frame_width - 2 * bp) // 4) * 4 + bp
+    else:
+        h_end = h + scene_size
+        w_end = w + scene_size
+    return h, h_end, w, w_end
 
 
 def create_figure(
@@ -692,7 +710,9 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     return fig
 
 
-def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict):
+def expected_positives_plot(
+    tile_map: TileCatalog, actual_results: Dict, map_n_source_weights: Tuple[float, float]
+):
     base_size = 8
     figsize = (4 * base_size, 2 * base_size)
     fig, axes = plt.subplots(nrows=4, ncols=2, figsize=figsize)
@@ -704,34 +724,55 @@ def expected_positives_plot(tile_map: TileCatalog, actual_results: Dict):
             expected_results[k].append(v)
     for k in expected_results:
         expected_results[k] = np.array(expected_results[k])
+    min_viable_threshold = map_n_source_weights[0] / (
+        map_n_source_weights[0] + map_n_source_weights[1]
+    )
     axes[0, 0].plot(thresholds, expected_results["tp"])
+    axes[0, 0].axvline(min_viable_threshold)
     axes[0, 0].set_xlabel("Threshold")
     axes[0, 0].set_ylabel("Expected True Positives")
 
     axes[0, 1].plot(thresholds, expected_results["fp"])
+    axes[0, 1].axvline(min_viable_threshold)
     axes[0, 1].set_xlabel("Threshold")
     axes[0, 1].set_ylabel("Expected False Positives")
 
+    min_viable_idx = np.argmin(np.abs(thresholds - min_viable_threshold))
+    max_viable_fp = expected_results["fp"][min_viable_idx]
     axes[1, 0].plot(expected_results["fp"], expected_results["tp"])
     axes[1, 0].set_xlabel("Expected False Positives")
+    axes[1, 0].axvline(max_viable_fp)
     axes[1, 0].set_ylabel("Expected True Positives")
 
-    axes[2, 0].plot(thresholds, actual_results["tp"])
+    axes[2, 0].plot(thresholds, expected_results["tp"], label="Expected True Positives")
+    axes[2, 0].plot(thresholds, actual_results["tp"], label="Actual True Positives")
+    axes[2, 0].axvline(min_viable_threshold)
     axes[2, 0].set_xlabel("Threshold")
+    axes[2, 0].axvline(min_viable_threshold)
     axes[2, 0].set_ylabel("Actual True Positives")
+    axes[2, 0].legend()
 
-    axes[2, 1].plot(thresholds, actual_results["fp"])
+    axes[2, 1].plot(thresholds, expected_results["fp"], label="Expected False Positives")
+    axes[2, 1].plot(thresholds, actual_results["fp"], label="Actual False Positives")
+    axes[2, 1].axvline(min_viable_threshold)
     axes[2, 1].set_xlabel("Threshold")
     axes[2, 1].set_ylabel("Actual False Positives")
+    axes[2, 1].legend()
 
-    axes[3, 0].plot(expected_results["fp"], actual_results["fp"])
+    axes[3, 0].plot(
+        expected_results["fp"], expected_results["fp"], label="Expected False Positives"
+    )
+    axes[3, 0].plot(expected_results["fp"], actual_results["fp"], label="Actual False Positives")
     axes[3, 0].set_xlabel("Expected False Positives")
+    axes[3, 0].axvline(max_viable_fp)
     axes[3, 0].set_ylabel("Actual False Positives")
+    axes[3, 0].legend()
 
     axes[3, 1].plot(expected_results["fp"], expected_results["tp"], label="Expected True Positives")
     axes[3, 1].plot(expected_results["fp"], actual_results["tp"], label="Actual True Positives")
     axes[3, 1].axhline(actual_results["n_obj"])
     axes[3, 1].set_xlabel("Expected False Positives")
+    axes[3, 1].axvline(max_viable_fp)
     axes[3, 1].set_ylabel("True Positives")
     axes[3, 1].legend()
 
