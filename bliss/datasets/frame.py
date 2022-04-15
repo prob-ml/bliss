@@ -50,6 +50,9 @@ class SimulatedFrame:
             sim_frame_path = None
         if sim_frame_path and sim_frame_path.exists():
             tile_catalog, image, background = torch.load(sim_frame_path)
+            assert isinstance(tile_catalog, torch.Tensor)
+            assert isinstance(image, torch.Tensor)
+            assert isinstance(background, torch.Tensor)
         else:
             print("INFO: started generating frame")
             tile_catalog = dataset.sample_prior(1, n_tiles_h, n_tiles_w)
@@ -100,6 +103,8 @@ class SemiSyntheticFrame:
         if sim_frame_path and sim_frame_path.exists():
             tile_catalog_dict, image, background = torch.load(sim_frame_path)
             tile_catalog = TileCatalog(self.tile_slen, tile_catalog_dict)
+            assert isinstance(image, torch.Tensor)
+            assert isinstance(background, torch.Tensor)
         else:
             hlim = (self.bp, self.bp + n_tiles_h * self.tile_slen)
             wlim = (self.bp, self.bp + n_tiles_w * self.tile_slen)
