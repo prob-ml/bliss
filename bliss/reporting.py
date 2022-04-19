@@ -237,18 +237,15 @@ def scene_metrics(
     detection_metrics = DetectionMetrics(slack)
     classification_metrics = ClassificationMetrics(slack)
 
-    tparams = true_params.apply_mag_bin(mag_min - np.inf, mag_max + np.inf)
-    eparams = est_params.apply_mag_bin(mag_min, mag_max)
-
     # precision
-    detection_metrics.update(tparams, eparams)
+    eparams = est_params.apply_mag_bin(mag_min, mag_max)
+    detection_metrics.update(true_params, eparams)
     precision = detection_metrics.compute()["precision"]
     detection_metrics.reset()  # reset global state since recall and precision use different cuts.
 
     # recall
     tparams = true_params.apply_mag_bin(mag_min, mag_max)
-    eparams = est_params.apply_mag_bin(mag_min - np.inf, mag_max + np.inf)
-    detection_metrics.update(tparams, eparams)
+    detection_metrics.update(tparams, est_params)
     recall = detection_metrics.compute()["recall"]
     n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"]
     detection_metrics.reset()
@@ -264,8 +261,7 @@ def scene_metrics(
 
     # classification
     tparams = true_params.apply_mag_bin(mag_min, mag_max)
-    eparams = est_params.apply_mag_bin(mag_min - np.inf, mag_max + np.inf)
-    classification_metrics.update(tparams, eparams)
+    classification_metrics.update(tparams, est_params)
     classification_result = classification_metrics.compute()
 
     # report counts on each bin
