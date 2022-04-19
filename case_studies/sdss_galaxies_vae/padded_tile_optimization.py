@@ -57,7 +57,8 @@ def iterative_optimization(
             #bg = 900.0
             #bg = 865.0
             # bg = 870.0
-            bg = 887.0
+            # bg = 887.0
+            bg = 873.6922
 
             ll = Normal(rendered_ptile + bg, (rendered_ptile + bg).sqrt()).log_prob(img).sum()
 

@@ -124,14 +124,19 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         return len(self.catalogs)
 
     def __getitem__(self, idx):
-        chunk = self.chunks[idx]
-        bg = self.bgs[idx]
-        tile_map = self.catalogs[idx]
-        return {
-            **tile_map.to_dict(),
-            "images": chunk.unsqueeze(0),
-            "background": bg.unsqueeze(0),
-        }
+        if isinstance(idx, slice):
+            start = 0 if idx.start is None else idx.start
+            stop = len(self) if idx.stop is None else idx.stop
+            return [self[i] for i in range(start, stop)]
+        else:
+            chunk = self.chunks[idx]
+            bg = self.bgs[idx]
+            tile_map = self.catalogs[idx]
+            return {
+                **tile_map.to_dict(),
+                "images": chunk.unsqueeze(0),
+                "background": bg.unsqueeze(0),
+            }
 
     @staticmethod
     def _collate(tile_catalogs: List[Dict[str, Tensor]]):
@@ -175,10 +180,10 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         return chunks_with_galaxies, bgs_with_galaxies, catalogs
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=0, shuffle=True, collate_fn=self._collate)
+        return DataLoader(self[:16], batch_size=self.batch_size, num_workers=0, shuffle=True, collate_fn=self._collate)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=self.val_batch_size, num_workers=0, collate_fn=self._collate)
+        return DataLoader(self[-16:], batch_size=self.val_batch_size, num_workers=0, collate_fn=self._collate)
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.val_batch_size, num_workers=0, collate_fn=self._collate)
