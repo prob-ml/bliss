@@ -9,7 +9,16 @@ from bliss.inference import get_padded_scene
 from bliss.models.decoder import ImageDecoder
 
 
-def iterative_optimization(tile_catalog: TileCatalog, decoder: ImageDecoder, image, background, h_range, w_range, source_prob = 0.004, threshold = 0.99999999):
+def iterative_optimization(
+    tile_catalog: TileCatalog,
+    decoder: ImageDecoder,
+    image, background,
+    h_range, w_range,
+    source_prob = 0.004,
+    #threshold = 0.99,
+    #threshold = 0.5,
+    threshold = 0.5,
+    ):
     with torch.no_grad():
         device = decoder.device
         tile_catalog = tile_catalog.copy().to(device)
@@ -41,10 +50,15 @@ def iterative_optimization(tile_catalog: TileCatalog, decoder: ImageDecoder, ima
             rendered_ptiles = decoder._render_ptiles(subset)
             
             rendered_ptile = rendered_ptiles[0, h_idx_cropped, w_idx_cropped]
+
             ptile = padded_tiles[0, h_idx, w_idx]
-            ll = Normal(rendered_ptile + ptile[1], (rendered_ptile + ptile[1]).sqrt()).log_prob(
-                ptile[0]
-            ).sum()
+            img = ptile[0]
+            #bg = ptile[1]
+            #bg = 900.0
+            #bg = 865.0
+            bg = 870.0
+
+            ll = Normal(rendered_ptile + bg, (rendered_ptile + bg).sqrt()).log_prob(img).sum()
 
             tile_catalog_counterfact = tile_catalog.copy()
             n_sources_counterfact = tile_catalog_counterfact.n_sources.clone()
@@ -59,9 +73,7 @@ def iterative_optimization(tile_catalog: TileCatalog, decoder: ImageDecoder, ima
             subset_counterfact = tile_catalog_counterfact.crop(hlims, wlims).continguous()
             rendered_ptiles_ctft = decoder._render_ptiles(subset_counterfact)
             rendered_ptile_ctft = rendered_ptiles_ctft[0, h_idx_cropped, w_idx_cropped]
-            ll_counterfact = Normal(rendered_ptile_ctft + ptile[1], (rendered_ptile_ctft + ptile[1]).sqrt()).log_prob(
-                ptile[0]
-            ).sum()
+            ll_counterfact = Normal(rendered_ptile_ctft + bg, (rendered_ptile_ctft + bg).sqrt()).log_prob(img).sum()
 
             def debug_fig(img):
                 from matplotlib import pyplot as plt
