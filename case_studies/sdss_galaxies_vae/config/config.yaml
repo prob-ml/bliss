@@ -31,6 +31,20 @@ datasets:
         sdss_dir: ${paths.sdss}
         prerender_device: "cuda"
         stride_factor: 0.25
+    sdss_images:
+        _target_: bliss.datasets.sdss_blended_galaxies.SdssBlendedGalaxies
+        location_encoder: ${models.location_encoder}
+        binary_encoder: ${models.binary}
+        galaxy_encoder: ${models.galaxy_encoder}
+        location_ckpt: ${paths.project}/models/sdss_location_encoder.pt
+        binary_ckpt: ${paths.project}/models/sdss_binary.pt
+        galaxy_ckpt: ${paths.project}/models/sdss_galaxy_encoder.pt
+        sdss_dir: ${paths.sdss}
+        prerender_device: "cuda"
+        stride_factor: 1.0
+        filter_to_galaxies: False
+        batch_size: 16
+        val_batch_size: 16
     sdss_galaxies:
         _target_: bliss.datasets.galsim_galaxies.SDSSGalaxies
         prior:
@@ -93,6 +107,10 @@ datasets:
         max_e: 0.6
 
 models:
+    background:
+        _target_: bliss.models.background.LearnedBackground
+        decoder: ${models.decoder}
+        initial: 865.0
     binary:
         _target_: bliss.models.binary.BinaryEncoder
         input_transform:

@@ -30,6 +30,8 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         binary_encoder: BinaryEncoder,
         location_ckpt: str,
         binary_ckpt: str,
+        galaxy_encoder = None,
+        galaxy_ckpt = None,
         sdss_dir: str = "data/sdss",
         run: int = 94,
         camcol: int = 1,
@@ -42,6 +44,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         scene_size: Optional[int] = None,
         stride_factor: float = 0.5,
         prerender_device: str = "cpu",
+        filter_to_galaxies:bool = True,
+        batch_size: int = 2,
+        val_batch_size: int = 2,
     ) -> None:
         """Initializes SDSSBlendedGalaxies.
 
@@ -82,6 +87,9 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         self.stride = int(self.slen * stride_factor)
         assert self.stride > 0
         self.prerender_device = prerender_device
+        self.filter_to_galaxies = filter_to_galaxies
+        self.batch_size = batch_size
+        self.val_batch_size = val_batch_size
 
         if h_start is None:
             h_start = self.bp
@@ -103,7 +111,10 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             torch.load(location_ckpt, map_location=torch.device("cpu"))
         )
         binary_encoder.load_state_dict(torch.load(binary_ckpt, map_location=torch.device("cpu")))
-        self.encoder = Encoder(location_encoder.eval(), binary_encoder.eval())
+        if galaxy_encoder is not None:
+            galaxy_encoder.load_state_dict(torch.load(galaxy_ckpt, map_location=torch.device("cpu")))
+            galaxy_encoder = galaxy_encoder.eval()
+        self.encoder = Encoder(location_encoder.eval(), binary_encoder.eval(), galaxy_encoder)
         self.chunks, self.bgs, self.catalogs = self._prerender_chunks(image, background)
 
     def __len__(self):
@@ -123,7 +134,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
     def _collate(tile_catalogs: List[Dict[str, Tensor]]):
         out = {}
         for k in tile_catalogs[0]:
-            out[k] = torch.cat([x[k] for x in tile_catalogs], dim=0)
+            out[k] = torch.cat([x[k] for x in tile_catalogs], dim=0).contiguous()
         return out
 
     def _prerender_chunks(self, image, background) -> Tuple[Tensor, Tensor, List[TileCatalog]]:
@@ -138,7 +149,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
                 chunk_device = chunk.to(self.prerender_device).unsqueeze(0)
                 bg_device = bg.to(self.prerender_device).unsqueeze(0)
                 tile_map = encoder.max_a_post(chunk_device, bg_device)
-                if tile_map["galaxy_bools"].sum() > 0:
+                if (not self.filter_to_galaxies) or (tile_map["galaxy_bools"].sum() > 0):
                     catalogs.append(tile_map.cpu())
                     chunks_with_galaxies_list.append(chunk.cpu())
                     bgs_with_galaxies_list.append(bg.cpu())
@@ -153,13 +164,13 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         return chunks_with_galaxies, bgs_with_galaxies, catalogs
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=2, num_workers=0, shuffle=True, collate_fn=self._collate)
+        return DataLoader(self, batch_size=self.batch_size, num_workers=0, shuffle=True, collate_fn=self._collate)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=10, num_workers=0, collate_fn=self._collate)
+        return DataLoader(self, batch_size=self.val_batch_size, num_workers=0, collate_fn=self._collate)
 
     def test_dataloader(self):
-        return DataLoader(self, batch_size=1, num_workers=0, collate_fn=self._collate)
+        return DataLoader(self, batch_size=self.val_batch_size, num_workers=0, collate_fn=self._collate)
 
 
 def make_image_into_chunks(image, kernel_size, stride):
