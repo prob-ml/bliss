@@ -18,7 +18,7 @@ python = "^3.8"
 pytorch-lightning = "^1.5.1"
 scipy = "^1.4.1"
 seaborn = "^0.11.2"
-torch = "~1.8"
+torch = "^1.9"
 torchmetrics = "^0.5.1"
 pytest-mypy = "^0.9.1"
 
@@ -47,6 +47,7 @@ statsmodels = "^0.12.2"
 tox = "^3.20.1"
 tqdm = "^4.62.3"
 wemake-python-styleguide = "^0.16.1"
+mypy = "^0.942"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
@@ -67,6 +68,7 @@ filterwarnings = [
   "ignore:numpy.ndarray size changed:RuntimeWarning",
   "ignore:.*torch.meshgrid.*:UserWarning",
   "ignore:`training_step` returned `None`:UserWarning",
+  "ignore:.*torch.distributed._sharded_tensor will be deprecated.*",
 ]
 minversion = "6.0"
 testpaths = [
