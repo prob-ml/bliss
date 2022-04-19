@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from einops import rearrange
 from torch.distributions import Normal
@@ -8,7 +9,7 @@ from bliss.inference import get_padded_scene
 from bliss.models.decoder import ImageDecoder
 
 
-def iterative_optimization(tile_catalog: TileCatalog, decoder: ImageDecoder, image, background, h_range, w_range):
+def iterative_optimization(tile_catalog: TileCatalog, decoder: ImageDecoder, image, background, h_range, w_range, source_prob = 0.004, threshold = 0.99999999):
     with torch.no_grad():
         device = decoder.device
         tile_catalog = tile_catalog.copy().to(device)
@@ -67,11 +68,20 @@ def iterative_optimization(tile_catalog: TileCatalog, decoder: ImageDecoder, ima
                 plt.imshow(img)
                 plt.savefig("debug.png")
 
-            if h_idx == 42:
-                print("here")
-                pass
+            # if h_idx == 42:
+            #     print("here")
+            #     pass
 
-            if ll_counterfact > ll:
+            post = ll + torch.log(torch.tensor(source_prob))
+            post_counterfact = ll_counterfact + torch.log(torch.tensor(1 - source_prob))
+            log_prob = post.item() - np.logaddexp(post.item(), post_counterfact.item())
+
+            flux = rendered_ptile.sum()
+            if flux < 622:
+                print("here b/c flux")
+            if log_prob < np.log(threshold):
+                if log_prob > np.log(0.9):
+                    print("here")
                 tile_catalog = tile_catalog_counterfact
                 # tile_catalog.n_sources = n_sources_counterfact
                 # tile_cal
