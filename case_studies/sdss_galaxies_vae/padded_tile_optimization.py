@@ -22,14 +22,24 @@ def iterative_optimization(tile_catalog: TileCatalog, decoder: ImageDecoder, ima
         on_tiles = rearrange(indices_to_retrieve, "1 ns -> ns")
         n_changes = 0
         for source_idx in tqdm(on_tiles):
-            h_idx = int(source_idx) // n_tiles_h
-            w_idx = int(source_idx) % n_tiles_h
+            h_idx = int(source_idx) // n_tiles_w
+            w_idx = int(source_idx) % n_tiles_w
+            assert tile_catalog.is_on_array[0, h_idx, w_idx] > 0
             # Get subset of tile catalog to render
-            hlims = max(0, h_idx - 10), min(n_tiles_h, h_idx + 10)
-            wlims = max(0, w_idx - 10), min(n_tiles_w, w_idx + 10)
+            h_min = max(0, h_idx - 10)
+            h_max = min(n_tiles_h, h_idx + 11)
+            hlims = h_min, h_max
+            h_idx_cropped = min(10, h_idx - h_min)
+
+            w_min = max(0, w_idx - 10)
+            w_max = min(n_tiles_w, w_idx + 11)
+            wlims = w_min, w_max
+            w_idx_cropped = min(10, w_idx - w_min)
+
             subset = tile_catalog.crop(hlims, wlims).continguous()
             rendered_ptiles = decoder._render_ptiles(subset)
-            rendered_ptile = rendered_ptiles[0, min(10, h_idx), min(10, w_idx)]
+            
+            rendered_ptile = rendered_ptiles[0, h_idx_cropped, w_idx_cropped]
             ptile = padded_tiles[0, h_idx, w_idx]
             ll = Normal(rendered_ptile + ptile[1], (rendered_ptile + ptile[1]).sqrt()).log_prob(
                 ptile[0]
@@ -47,10 +57,15 @@ def iterative_optimization(tile_catalog: TileCatalog, decoder: ImageDecoder, ima
             tile_catalog_counterfact["star_bools"] = star_bools
             subset_counterfact = tile_catalog_counterfact.crop(hlims, wlims).continguous()
             rendered_ptiles_ctft = decoder._render_ptiles(subset_counterfact)
-            rendered_ptile_ctft = rendered_ptiles_ctft[0, min(10, h_idx), min(10, w_idx)]
+            rendered_ptile_ctft = rendered_ptiles_ctft[0, h_idx_cropped, w_idx_cropped]
             ll_counterfact = Normal(rendered_ptile_ctft + ptile[1], (rendered_ptile_ctft + ptile[1]).sqrt()).log_prob(
                 ptile[0]
             ).sum()
+
+            def debug_fig(img):
+                from matplotlib import pyplot as plt
+                plt.imshow(img)
+                plt.savefig("debug.png")
 
             if h_idx == 42:
                 print("here")
