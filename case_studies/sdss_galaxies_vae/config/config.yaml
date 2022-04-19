@@ -41,8 +41,10 @@ datasets:
         galaxy_ckpt: ${paths.project}/models/sdss_galaxy_encoder.pt
         sdss_dir: ${paths.sdss}
         prerender_device: "cuda"
+        slen: 20
         stride_factor: 1.0
         filter_to_galaxies: False
+        filter_to_background: True
         batch_size: 16
         val_batch_size: 16
     sdss_galaxies:

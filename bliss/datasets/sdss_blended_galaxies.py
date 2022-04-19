@@ -45,8 +45,10 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         stride_factor: float = 0.5,
         prerender_device: str = "cpu",
         filter_to_galaxies:bool = True,
+        filter_to_background:bool = False,
         batch_size: int = 2,
         val_batch_size: int = 2,
+        eval_mean_rate=0.004,
     ) -> None:
         """Initializes SDSSBlendedGalaxies.
 
@@ -88,6 +90,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         assert self.stride > 0
         self.prerender_device = prerender_device
         self.filter_to_galaxies = filter_to_galaxies
+        self.filter_to_background = filter_to_background
         self.batch_size = batch_size
         self.val_batch_size = val_batch_size
 
@@ -114,7 +117,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         if galaxy_encoder is not None:
             galaxy_encoder.load_state_dict(torch.load(galaxy_ckpt, map_location=torch.device("cpu")))
             galaxy_encoder = galaxy_encoder.eval()
-        self.encoder = Encoder(location_encoder.eval(), binary_encoder.eval(), galaxy_encoder)
+        self.encoder = Encoder(location_encoder.eval(), binary_encoder.eval(), galaxy_encoder, eval_mean_detections=eval_mean_rate)
         self.chunks, self.bgs, self.catalogs = self._prerender_chunks(image, background)
 
     def __len__(self):
@@ -149,7 +152,15 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
                 chunk_device = chunk.to(self.prerender_device).unsqueeze(0)
                 bg_device = bg.to(self.prerender_device).unsqueeze(0)
                 tile_map = encoder.max_a_post(chunk_device, bg_device)
-                if (not self.filter_to_galaxies) or (tile_map["galaxy_bools"].sum() > 0):
+                if self.filter_to_background:
+                    keep = tile_map.n_sources.sum() == 0
+                    # keep = torch.all(tile_map["n_source_log_probs"].exp().sum(-1) < 0.)
+
+                elif self.filter_to_galaxies:
+                    keep = tile_map["galaxy_bools"].sum() > 0
+                else:
+                    keep = True
+                if keep:
                     catalogs.append(tile_map.cpu())
                     chunks_with_galaxies_list.append(chunk.cpu())
                     bgs_with_galaxies_list.append(bg.cpu())
