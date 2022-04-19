@@ -28,6 +28,7 @@ from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.location_encoder import LocationEncoder
 from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
+from padded_tile_optimization import iterative_optimization
 
 
 def reconstruct(cfg):
@@ -67,6 +68,7 @@ def reconstruct(cfg):
             slen=cfg.reconstruct.slen,
             device=device,
         )
+        tile_map_recon = iterative_optimization(tile_map_recon, dec, frame.image, frame.background, (h, h_end), (w, w_end))
         resid = (true - recon) / recon.sqrt()
         tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
         print(

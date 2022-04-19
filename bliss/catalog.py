@@ -72,6 +72,12 @@ class TileCatalog(UserDict):
             out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         return type(self)(self.tile_slen, out)
 
+    def continguous(self):
+        out = {}
+        for k, v in self.to_dict().items():
+            out[k] = v.contiguous()
+        return type(self)(self.tile_slen, out)
+
     def to_full_params(self):
         """Converts image parameters in tiles to parameters of full image.
 

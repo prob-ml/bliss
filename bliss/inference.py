@@ -59,14 +59,7 @@ def reconstruct_scene_at_coordinates(
 
     """
     bp = encoder.border_padding
-    h_range_pad = (h_range[0] - bp, h_range[1] + bp)
-    w_range_pad = (w_range[0] - bp, w_range[1] + bp)
-
-    # First get the mininum coordinates to ensure everything is detected
-    scene = img[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
-    bg_scene = background[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
-    assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
-    assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
+    scene, bg_scene = get_padded_scene(img, background, h_range, w_range, bp)
     chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
     recon, tile_map_scene = chunked_scene.reconstruct(encoder, decoder, device)
     assert recon.shape == scene.shape
@@ -79,6 +72,19 @@ def reconstruct_scene_at_coordinates(
         bp:-bp,
     ]
     return recon_at_coords, tile_map_scene
+
+def get_padded_scene(
+    img: Tensor, bg: Tensor, h_range: Tuple[int, int], w_range: Tuple[int, int], bp: int
+    ):
+    h_range_pad = (h_range[0] - bp, h_range[1] + bp)
+    w_range_pad = (w_range[0] - bp, w_range[1] + bp)
+
+    # First get the mininum coordinates to ensure everything is detected
+    scene = img[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
+    bg_scene = bg[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
+    assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
+    assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
+    return scene, bg_scene
 
 
 class ChunkedScene:
