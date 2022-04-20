@@ -711,6 +711,7 @@ class SDSSReconstructionFigures(BlissFigures):
 
         for figname, scene_coords in self.scenes.items():
             h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
+            assert h % encoder.tile_slen == 0 and w % encoder.tile_slen == 0
             assert scene_size <= 300, "Scene too large, change slen."
             h_end = h + scene_size
             w_end = w + scene_size
