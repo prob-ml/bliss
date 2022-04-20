@@ -1,6 +1,6 @@
 import math
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Sequence, Optional, Tuple
 
 import numpy as np
 import torch
@@ -18,6 +18,7 @@ from bliss.reporting import CoaddFullCatalog
 
 
 def reconstruct_scene_at_coordinates(
+    n_samples: Optional[int],
     encoder: Encoder,
     decoder: ImageDecoder,
     img: Tensor,
@@ -38,9 +39,9 @@ def reconstruct_scene_at_coordinates(
         decoder:
             Trained ImageDecoder module.
         img:
-            A NxCxHxW tensor of N HxW images (with C bands).
+            A 1xCxHxW tensor representing an HxW image with C bands.
         background:
-            A NxCxHxW tensor of N HxW background values (with C bands).
+            A 1xCxHxW tensor representing an HxW image of background values with C bands.
         h_range:
             Range of height coordinates.
         w_range:
@@ -63,6 +64,8 @@ def reconstruct_scene_at_coordinates(
             they are to the left/above (h, w) or greater than scene_length.
 
     """
+    assert img.shape[0] == 1
+    assert background.shape[0] == 1
     bp = encoder.border_padding
     h_range_pad = (h_range[0] - bp, h_range[1] + bp)
     w_range_pad = (w_range[0] - bp, w_range[1] + bp)
@@ -73,7 +76,7 @@ def reconstruct_scene_at_coordinates(
     assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
     chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
-    recon, tile_map_scene = chunked_scene.reconstruct(encoder, decoder, device)
+    recon, tile_map_scene = chunked_scene.reconstruct(encoder, decoder, device, n_samples)
     assert recon.shape == scene.shape
     recon += bg_scene
     # Get reconstruction at coordinates
@@ -149,12 +152,12 @@ class ChunkedScene:
             w=kernel_size[1],
         )
 
-    def reconstruct(self, encoder, decoder, device, mode: str):
+    def reconstruct(self, encoder, decoder, device, n_samples: Optional[int]):
         chunk_est_dict = {}
         for chunk_type, chunks in self.chunk_dict.items():
             bgs = self.bg_dict[chunk_type]
             chunk_est_dict[chunk_type] = self._reconstruct_chunks(
-                chunks, bgs, encoder, decoder, device, mode
+                chunks, bgs, encoder, decoder, device, n_samples
             )
         reconstructions_dict = {k: v["reconstructions"] for k, v in chunk_est_dict.items()}
         scene_recon = self._combine_into_scene(reconstructions_dict)
@@ -162,12 +165,16 @@ class ChunkedScene:
         tile_map_recon = self._combine_tile_maps(chunk_tile_maps_dict)
         return scene_recon, tile_map_recon
 
-    def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device, mode: str):
+    def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device, n_samples: Optional[int]):
         reconstructions = []
         tile_maps = []
         for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
             recon, tile_map = self.reconstruct_img(
-                encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device), mode
+                encoder,
+                decoder,
+                chunk.unsqueeze(0).to(device),
+                bg.unsqueeze(0).to(device),
+                n_samples,
             )
             reconstructions.append(recon.cpu())
             tile_maps.append(tile_map.cpu())
@@ -254,14 +261,16 @@ class ChunkedScene:
         return out
 
     def reconstruct_img(
-        self, encoder: Encoder, decoder: ImageDecoder, img: Tensor, bg: Tensor, mode: str
+        self,
+        encoder: Encoder,
+        decoder: ImageDecoder,
+        img: Tensor,
+        bg: Tensor,
+        n_samples: Optional[int],
     ) -> Tuple[Tensor, TileCatalog]:
 
         with torch.no_grad():
-            if mode == "max_a_post":
-                tile_map = encoder.max_a_post(img, bg)
-            elif mode == "sample":
-                tile_map = encoder.sample(img, bg, self.n_samples)
+            tile_map = encoder.sample(img, bg, n_samples)
             recon_image = decoder.render_images(tile_map)
             tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
                 tile_map["galaxy_bools"], tile_map["galaxy_params"]

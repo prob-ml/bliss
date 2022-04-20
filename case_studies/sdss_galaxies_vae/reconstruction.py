@@ -62,6 +62,7 @@ def reconstruct(cfg):
             w_end = w + scene_size
         true = frame.image[:, :, h:h_end, w:w_end]
         recon, tile_map_recon = reconstruct_scene_at_coordinates(
+            None,
             encoder,
             dec,
             frame.image,
