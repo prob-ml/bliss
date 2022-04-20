@@ -31,8 +31,8 @@ class TileCatalog(UserDict):
         self.tile_slen = tile_slen
         self.locs = d.pop("locs")
         self.n_sources = d.pop("n_sources")
-        self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
-        assert self.n_sources.shape == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
+        self.shape = self.locs.shape[:-1]
+        assert self.n_sources.shape == self.shape[:-1]
         super().__init__(**d)
 
     def __setitem__(self, key: str, item: Tensor) -> None:
@@ -50,12 +50,12 @@ class TileCatalog(UserDict):
 
     def _validate(self, x: Tensor):
         assert isinstance(x, Tensor)
-        assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+        assert x.shape[:4] == self.shape
 
     @property
     def is_on_array(self) -> Tensor:
         """Returns a n x nth x ntw x n_sources tensor indicating whether source is on."""
-        return get_is_on_from_n_sources(self.n_sources, self.max_sources)
+        return get_is_on_from_n_sources(self.n_sources, self.shape[-1])
 
     def cpu(self):
         return self.to("cpu")
@@ -89,6 +89,7 @@ class TileCatalog(UserDict):
             NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
             pixel locations ("plocs") that are between 0 and slen.
         """
+        _, n_tiles_h, n_tiles_w, _ = self.shape
         plocs = self._get_full_locs_from_tiles()
         param_names_to_mask = {"plocs"}.union(set(self.keys()))
         tile_params_to_gather = {"plocs": plocs}
@@ -106,7 +107,7 @@ class TileCatalog(UserDict):
             params[param_name] = param
 
         params["n_sources"] = reduce(self.n_sources, "b nth ntw -> b", "sum")
-        height, width = self.n_tiles_h * self.tile_slen, self.n_tiles_w * self.tile_slen
+        height, width = n_tiles_h * self.tile_slen, n_tiles_w * self.tile_slen
         return FullCatalog(height, width, params)
 
     @classmethod
@@ -128,8 +129,9 @@ class TileCatalog(UserDict):
             "plocs" are the pixel coordinates of each source (between 0 and slen).
             "locs" are the scaled locations of each source (between 0 and 1).
         """
-        slen = self.n_tiles_h * self.tile_slen
-        wlen = self.n_tiles_w * self.tile_slen
+        batch_size, n_tiles_h, n_tiles_w, _ = self.shape
+        slen = n_tiles_h * self.tile_slen
+        wlen = n_tiles_w * self.tile_slen
         # coordinates on tiles.
         x_coords = torch.arange(0, slen, self.tile_slen, device=self.locs.device).long()
         y_coords = torch.arange(0, wlen, self.tile_slen, device=self.locs.device).long()
@@ -137,15 +139,15 @@ class TileCatalog(UserDict):
 
         # recenter and renormalize locations.
         locs = rearrange(self.locs, "b nth ntw d xy -> (b nth ntw) d xy", xy=2)
-        bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=self.batch_size).float()
+        bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=batch_size).float()
 
         plocs = locs * self.tile_slen + bias
         return rearrange(
             plocs,
             "(b nth ntw) d xy -> b nth ntw d xy",
-            b=self.batch_size,
-            nth=self.n_tiles_h,
-            ntw=self.n_tiles_w,
+            b=batch_size,
+            nth=n_tiles_h,
+            ntw=n_tiles_w,
         )
 
     def _get_indices_of_on_sources(self) -> Tuple[Tensor, Tensor]:
@@ -197,9 +199,10 @@ class TileCatalog(UserDict):
         """Return the parameters of the tiles that contain each of the locations in plocs."""
         assert len(plocs.shape) == 2 and plocs.shape[1] == 2
         assert plocs.device == self.locs.device
+        _, n_tiles_h, n_tiles_w, _ = self.shape
         n_total = len(plocs)
-        slen = self.n_tiles_h * self.tile_slen
-        wlen = self.n_tiles_w * self.tile_slen
+        slen = n_tiles_h * self.tile_slen
+        wlen = n_tiles_w * self.tile_slen
         # coordinates on tiles.
         x_coords = torch.arange(0, slen, self.tile_slen, device=self.locs.device).long()
         y_coords = torch.arange(0, wlen, self.tile_slen, device=self.locs.device).long()
