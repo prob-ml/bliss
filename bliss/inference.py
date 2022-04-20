@@ -153,36 +153,27 @@ class ChunkedScene:
         )
 
     def reconstruct(self, encoder, decoder, device, n_samples: Optional[int]):
-        chunk_est_dict = {}
+        reconstructions = {}
+        tile_maps = {}
         for chunk_type, chunks in self.chunk_dict.items():
             bgs = self.bg_dict[chunk_type]
-            chunk_est_dict[chunk_type] = self._reconstruct_chunks(
-                chunks, bgs, encoder, decoder, device, n_samples
-            )
-        reconstructions_dict = {k: v["reconstructions"] for k, v in chunk_est_dict.items()}
-        scene_recon = self._combine_reconstructions(reconstructions_dict)
-        chunk_tile_maps_dict = {k: v["tile_maps"] for k, v in chunk_est_dict.items()}
-        tile_map_recon = self._combine_tile_maps(chunk_tile_maps_dict)
+            reconstructions[chunk_type] = []
+            tile_maps[chunk_type] = []
+            for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
+                with torch.no_grad():
+                    tile_map = encoder.sample(
+                        chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device), n_samples
+                    )
+                    recon = decoder.render_images(tile_map)
+                    tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
+                        tile_map["galaxy_bools"], tile_map["galaxy_params"]
+                    )
+                    reconstructions[chunk_type].append(recon.cpu())
+                    tile_maps[chunk_type].append(tile_map.cpu())
+            reconstructions[chunk_type] = torch.cat(reconstructions[chunk_type], dim=0)
+        scene_recon = self._combine_reconstructions(reconstructions)
+        tile_map_recon = self._combine_tile_maps(tile_maps)
         return scene_recon, tile_map_recon
-
-    def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device, n_samples: Optional[int]):
-        reconstructions = []
-        tile_maps = []
-        for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
-            with torch.no_grad():
-                tile_map = encoder.sample(
-                    chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device), n_samples
-                )
-                recon = decoder.render_images(tile_map)
-                tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
-                    tile_map["galaxy_bools"], tile_map["galaxy_params"]
-                )
-                reconstructions.append(recon.cpu())
-                tile_maps.append(tile_map.cpu())
-        return {
-            "reconstructions": torch.cat(reconstructions, dim=0),
-            "tile_maps": tile_maps,
-        }
 
     def _combine_reconstructions(self, reconstructions: Dict[str, Tensor]) -> Tensor:
         main: Tensor = reconstructions["main"]
