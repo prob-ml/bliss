@@ -160,7 +160,7 @@ class ChunkedScene:
                 chunks, bgs, encoder, decoder, device, n_samples
             )
         reconstructions_dict = {k: v["reconstructions"] for k, v in chunk_est_dict.items()}
-        scene_recon = self._combine_into_scene(reconstructions_dict)
+        scene_recon = self._combine_reconstructions(reconstructions_dict)
         chunk_tile_maps_dict = {k: v["tile_maps"] for k, v in chunk_est_dict.items()}
         tile_map_recon = self._combine_tile_maps(chunk_tile_maps_dict)
         return scene_recon, tile_map_recon
@@ -184,7 +184,7 @@ class ChunkedScene:
             "tile_maps": tile_maps,
         }
 
-    def _combine_into_scene(self, reconstructions: Dict[str, Tensor]) -> Tensor:
+    def _combine_reconstructions(self, reconstructions: Dict[str, Tensor]) -> Tensor:
         main: Tensor = reconstructions["main"]
         main = rearrange(
             main,
