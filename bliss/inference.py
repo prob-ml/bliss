@@ -153,12 +153,12 @@ class ChunkedScene:
         )
 
     def reconstruct(self, encoder, decoder, device, n_samples: Optional[int]):
-        reconstructions = {}
-        tile_maps = {}
+        reconstructions: Dict[str, Tensor] = {}
+        tile_maps: Dict[str, List[TileCatalog]] = {}
         for chunk_type, chunks in self.chunk_dict.items():
             bgs = self.bg_dict[chunk_type]
-            reconstructions[chunk_type] = []
-            tile_maps[chunk_type] = []
+            recon_list: List[Tensor] = []
+            tile_map_list: List[TileCatalog] = []
             for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
                 with torch.no_grad():
                     tile_map = encoder.sample(
@@ -168,9 +168,10 @@ class ChunkedScene:
                     tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
                         tile_map["galaxy_bools"], tile_map["galaxy_params"]
                     )
-                    reconstructions[chunk_type].append(recon.cpu())
-                    tile_maps[chunk_type].append(tile_map.cpu())
-            reconstructions[chunk_type] = torch.cat(reconstructions[chunk_type], dim=0)
+                    recon_list.append(recon.cpu())
+                    tile_map_list.append(tile_map.cpu())
+            reconstructions[chunk_type] = torch.cat(recon_list, dim=0)
+            tile_maps[chunk_type] = tile_map_list
         scene_recon = self._combine_reconstructions(reconstructions)
         tile_map_recon = self._combine_tile_maps(tile_maps)
         return scene_recon, tile_map_recon
