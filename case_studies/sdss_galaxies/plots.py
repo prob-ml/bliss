@@ -389,7 +389,7 @@ class AEReconstructionFigures(BlissFigures):
             xlims=(x.min(), x.max()),
             delta=0.25,
             xlabel=r"\rm $m^{\rm true}$",
-            ylabel=r"\rm $(m^{\rm recon} - m^{\rm true}) / m^{\rm true}$",
+            ylabel=r"\rm $m^{\rm recon} - m^{\rm true}$",
             xticks=[16, 17, 18, 19, 20, 21, 22, 23],
         )
 
