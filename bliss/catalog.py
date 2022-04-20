@@ -1,7 +1,6 @@
 import math
 from collections import UserDict
 from typing import Dict, Optional, Sequence, Tuple
-from typing_extensions import Self
 
 import torch
 from einops import rearrange, reduce, repeat
@@ -111,7 +110,7 @@ class TileCatalog(UserDict):
         return FullCatalog(height, width, params)
 
     @classmethod
-    def cat(cls, tile_catalogs: Sequence[Self], tile_dim: int = 0):
+    def cat(cls, tile_catalogs: Sequence, tile_dim: int = 0):
         assert tile_dim in {0, 1}
         out = {}
         tile_catalog_dicts = [tm.to_dict() for tm in tile_catalogs]

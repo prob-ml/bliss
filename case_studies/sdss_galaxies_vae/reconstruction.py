@@ -72,6 +72,17 @@ def reconstruct(cfg):
             slen=cfg.reconstruct.slen,
             device=device,
         )
+        sampled_recons, tile_samples = reconstruct_scene_at_coordinates(
+            2,
+            encoder,
+            dec,
+            frame.image,
+            frame.background,
+            (h, h_end),
+            (w, w_end),
+            slen=cfg.reconstruct.slen,
+            device=device,
+        )
         resid = (true - recon) / recon.sqrt()
         tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
         print(
