@@ -74,19 +74,18 @@ class Encoder(nn.Module):
             ".forward() method for Encoder not available. Use .max_a_post() or .sample()."
         )
 
-    def infer(
-        self, image: Tensor, background: Tensor, mode: str, n_samples: Optional[int] = None
+    def sample(
+        self, image: Tensor, background: Tensor, n_samples: Optional[int] = None
     ) -> TileCatalog:
-        assert mode in {"max_a_post", "sample"}
         var_params = self.location_encoder.encode(
             image, background, eval_mean_detections=self.eval_mean_detections
         )
-        if mode == "max_a_post":
+        if n_samples is None:
             assert isinstance(self.map_n_source_weights, Tensor)
             tile_map = self.location_encoder.max_a_post(
                 var_params, n_source_weights=self.map_n_source_weights
             )
-        elif mode == "sample":
+        else:
             tile_map = self.location_encoder.sample(
                 var_params, n_samples, eval_mean_detections=self.eval_mean_detections
             )
@@ -94,9 +93,9 @@ class Encoder(nn.Module):
             assert not self.binary_encoder.training
             galaxy_probs = self.binary_encoder.forward(image, background, tile_map.locs)
             galaxy_probs *= tile_map.is_on_array.unsqueeze(-1)
-            if mode == "max_a_post":
+            if n_samples is None:
                 galaxy_bools = (galaxy_probs > 0.5).float() * tile_map.is_on_array.unsqueeze(-1)
-            elif mode == "sample":
+            else:
                 galaxy_bools = (
                     torch.rand_like(galaxy_probs) <= galaxy_probs
                 ) * tile_map.is_on_array.unsqueeze(-1)
@@ -110,16 +109,16 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            if mode == "max_a_post":
+            if n_samples is None:
                 galaxy_params = self.galaxy_encoder.max_a_post(image, background, tile_map.locs)
-            elif mode == "sample":
+            else:
                 galaxy_params = self.galaxy_encoder.sample(image, background, tile_map.locs)
             galaxy_params *= tile_map.is_on_array.unsqueeze(-1) * tile_map["galaxy_bools"]
             tile_map.update({"galaxy_params": galaxy_params})
         return tile_map
 
     def max_a_post(self, image: Tensor, background: Tensor) -> TileCatalog:
-        return self.infer(image, background, "max_a_post")
+        return self.sample(image, background, n_samples=None)
 
     def get_images_in_ptiles(self, images):
         """Run get_images_in_ptiles with correct tile_slen and ptile_slen."""
