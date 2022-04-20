@@ -169,15 +169,16 @@ class ChunkedScene:
         reconstructions = []
         tile_maps = []
         for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
-            recon, tile_map = self._reconstruct_img(
-                encoder,
-                decoder,
-                chunk.unsqueeze(0).to(device),
-                bg.unsqueeze(0).to(device),
-                n_samples,
-            )
-            reconstructions.append(recon.cpu())
-            tile_maps.append(tile_map.cpu())
+            with torch.no_grad():
+                tile_map = encoder.sample(
+                    chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device), n_samples
+                )
+                recon = decoder.render_images(tile_map)
+                tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
+                    tile_map["galaxy_bools"], tile_map["galaxy_params"]
+                )
+                reconstructions.append(recon.cpu())
+                tile_maps.append(tile_map.cpu())
         return {
             "reconstructions": torch.cat(reconstructions, dim=0),
             "tile_maps": tile_maps,
@@ -259,23 +260,6 @@ class ChunkedScene:
         for i, tile_catalog in enumerate(tile_catalogs):
             out[i] = tile_catalog
         return out
-
-    def _reconstruct_img(
-        self,
-        encoder: Encoder,
-        decoder: ImageDecoder,
-        img: Tensor,
-        bg: Tensor,
-        n_samples: Optional[int],
-    ) -> Tuple[Tensor, TileCatalog]:
-
-        with torch.no_grad():
-            tile_map = encoder.sample(img, bg, n_samples)
-            recon_image = decoder.render_images(tile_map)
-            tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
-                tile_map["galaxy_bools"], tile_map["galaxy_params"]
-            )
-        return recon_image, tile_map
 
 
 class SDSSFrame:
