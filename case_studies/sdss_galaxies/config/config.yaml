@@ -245,26 +245,26 @@ plots:
             w: 1700
             size: 300
         sdss_recon1:
-            h: 1150
+            h: 1152
             w: 1000
             size: 300
         sdss_gal_blend1:
             h: 460
-            w: 742
+            w: 744
             size: 32
         sdss_gal_blend2:
             h: 1404
-            w: 1718
+            w: 1720
             size: 32
         sdss_gal_blend3:
-            h: 210
+            h: 212
             w: 280
             size: 32
         sdss_gal_blend4:
-            h: 1250
+            h: 1252
             w: 240
             size: 32
         sdss_gal_blend5:
-            h: 458
+            h: 460
             w: 508
             size: 48
