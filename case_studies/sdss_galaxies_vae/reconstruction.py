@@ -1,7 +1,7 @@
 # flake8: noqa
 # pylint: skip-file
-from collections import defaultdict
 import json
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -110,8 +110,6 @@ def reconstruct(cfg):
                     catalog,
                     mag_min=mag_min,
                     mag_max=mag_max,
-                    mag_slack=1.0,
-                    mag_slack_accuracy=1.0,
                 )
                 scene_metrics_by_mag[catalog_name][mag] = scene_metrics_map
                 conf_matrix = scene_metrics_map["conf_matrix"]

@@ -20,7 +20,7 @@ def test_scene_metrics():
             "mags": torch.tensor([[[23.0]]]).float(),
         },
     )
-    reporting.scene_metrics(true_params, true_params, mag_max=25, slack=1.0, mag_slack=0.25)
+    reporting.scene_metrics(true_params, true_params, mag_max=25, slack=1.0)
 
 
 def test_catalog_conversion():
