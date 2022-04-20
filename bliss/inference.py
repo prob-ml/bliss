@@ -169,7 +169,7 @@ class ChunkedScene:
         reconstructions = []
         tile_maps = []
         for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
-            recon, tile_map = self.reconstruct_img(
+            recon, tile_map = self._reconstruct_img(
                 encoder,
                 decoder,
                 chunk.unsqueeze(0).to(device),
@@ -260,7 +260,7 @@ class ChunkedScene:
             out[i] = tile_catalog
         return out
 
-    def reconstruct_img(
+    def _reconstruct_img(
         self,
         encoder: Encoder,
         decoder: ImageDecoder,
