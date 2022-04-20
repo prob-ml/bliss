@@ -194,7 +194,7 @@ class LocationEncoder(pl.LightningModule):
             "n_source_log_probs": n_source_log_probs,
         }
 
-    def sample(self, var_params: Dict[str, Tensor], n_samples: int) -> Dict[str, Tensor]:
+    def sample(self, var_params: Dict[str, Tensor], n_samples: int) -> TileCatalog:
         """Sample from encoded variational distribution.
 
         Args:
@@ -250,7 +250,7 @@ class LocationEncoder(pl.LightningModule):
             sample[k] = rearrange(v, pattern, b=b, nth=nth, ntw=ntw)
         sample["n_sources"] = tile_n_sources
 
-        return sample
+        return TileCatalog(self.tile_slen, sample)
 
     def max_a_post(
         self, var_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None

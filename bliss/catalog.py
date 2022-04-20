@@ -50,7 +50,7 @@ class TileCatalog(UserDict):
 
     def _validate(self, x: Tensor):
         assert isinstance(x, Tensor)
-        assert x.shape[:4] == self.shape
+        assert x.shape[:len(self.shape)] == self.shape
 
     @property
     def is_on_array(self) -> Tensor:
