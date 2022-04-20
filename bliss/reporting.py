@@ -184,7 +184,6 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     locs1 = true_locs.view(-1, 2)
     locs2 = est_locs.view(-1, 2)
 
-    # entry (i,j) is l-infinity distance between of ith loc in locs1 and the jth loc in locs2
     locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
     locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
     locs_err_l_infty = reduce(locs_abs_diff, "i j k -> i j", "max")
@@ -222,7 +221,7 @@ def scene_metrics(
     bin `(mag_min, mag_max)` but are designed to be independent of the estimated magnitude.
     Hence, precision is computed by taking a cut in the estimated parameters based on the magnitude
     bin and matching them with *any* true objects. Similarly, recall is computed by taking a cut
-    on the true parameters and matching them with *any* predicted objects in `est_params`.
+    on the true parameters and matching them with *any* predicted objects.
 
     Args:
         true_params: True parameters of each source in the scene (e.g. from coadd catalog)
