@@ -184,7 +184,6 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     locs1 = true_locs.view(-1, 2)
     locs2 = est_locs.view(-1, 2)
 
-    # entry (i,j) is l1 distance between of ith loc in locs1 and the jth loc in locs2
     locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
     locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
     locs_err_l_infty = reduce(locs_abs_diff, "i j k -> i j", "max")
@@ -215,14 +214,14 @@ def scene_metrics(
     mag_min: float = -np.inf,
     mag_max: float = np.inf,
     slack: float = 1.0,
-    mag_slack: float = 1.0,
-    mag_slack_accuracy: float = 0.0,
 ):
-    """Metrics based on using the coadd catalog as truth.
+    """Return detection and classification metrics based on a given ground truth.
 
-    We apply the given magnitude cut to both the coadd and estimated objects, and only consider
-    objects brighter than a certain magnitude. Additionally a slack in the estimated magnitude
-    is used so that objects close to the magnitude boundary do not negatively affect performance.
+    These metrics are computed as a function of magnitude based on the specified
+    bin `(mag_min, mag_max)` but are designed to be independent of the estimated magnitude.
+    Hence, precision is computed by taking a cut in the estimated parameters based on the magnitude
+    bin and matching them with *any* true objects. Similarly, recall is computed by taking a cut
+    on the true parameters and matching them with *any* predicted objects.
 
     Args:
         true_params: True parameters of each source in the scene (e.g. from coadd catalog)
@@ -230,40 +229,27 @@ def scene_metrics(
         mag_min: Discard all objects with magnitude lower than this.
         mag_max: Discard all objects with magnitude higher than this.
         slack: Pixel L-infinity distance slack when doing matching for metrics.
-        mag_slack: Consider objects outside of mag min/max for precision/recall metric.
-        mag_slack_accuracy: Consider objects outside of mag min/max for accuracy metric.
 
     Returns:
         Dictionary with output from DetectionMetrics, ClassificationMetrics.
     """
-
-    # prepare metrics
     detection_metrics = DetectionMetrics(slack)
     classification_metrics = ClassificationMetrics(slack)
 
-    # For calculating precision, we consider a wider bin for the 'true' objects, this way
-    # we ensure that underestimating the magnitude of a true object close and above the
-    # boundary does not mark this estimated object as FP, thus reducing our precision.
-    tparams = true_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
+    # precision
     eparams = est_params.apply_mag_bin(mag_min, mag_max)
-
-    # update
-    detection_metrics.update(tparams, eparams)
+    detection_metrics.update(true_params, eparams)
     precision = detection_metrics.compute()["precision"]
-    detection_metrics.reset()  # reset global state.
-    assert detection_metrics.tp == 0  # pylint: disable=no-member
+    detection_metrics.reset()  # reset global state since recall and precision use different cuts.
 
-    # For calculating recall, we consider a wider bin for the 'estimated' objects, this way
-    # we ensure that overestimating the magnitude of a true object close and below the boundary
-    # does not mean that we missed this object, reducing our TP, and reducing recall.
+    # recall
     tparams = true_params.apply_mag_bin(mag_min, mag_max)
-    eparams = est_params.apply_mag_bin(mag_min - mag_slack, mag_max + mag_slack)
-    detection_metrics.update(tparams, eparams)
+    detection_metrics.update(tparams, est_params)
     recall = detection_metrics.compute()["recall"]
     n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"]
     detection_metrics.reset()
 
-    # combine into f1 score and into single dictionary
+    # f1-score
     f1 = 2 * precision * recall / (precision + recall)
     detection_result = {
         "precision": precision,
@@ -272,13 +258,14 @@ def scene_metrics(
         "n_galaxies_detected": n_galaxies_detected,
     }
 
-    # compute classification metrics, these are only computed on matches so ignore mag_slack.
+    # classification
     tparams = true_params.apply_mag_bin(mag_min, mag_max)
-    eparams = est_params.apply_mag_bin(mag_min - mag_slack_accuracy, mag_max + mag_slack_accuracy)
-    classification_metrics.update(tparams, eparams)
+    classification_metrics.update(tparams, est_params)
     classification_result = classification_metrics.compute()
 
-    # use the ones without slack (classification) for reporting.
+    # report counts on each bin
+    tparams = true_params.apply_mag_bin(mag_min, mag_max)
+    eparams = est_params.apply_mag_bin(mag_min, mag_max)
     tcount = tparams.n_sources.int().item()
     tgcount = tparams["galaxy_bools"].sum().int().item()
     tscount = tcount - tgcount
