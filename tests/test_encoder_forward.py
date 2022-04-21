@@ -4,15 +4,11 @@ from bliss.models.location_encoder import LocationEncoder, LogBackgroundTransfor
 
 
 class TestSourceEncoder:
-    def test_forward(self, devices):
+    def test_max_a_post(self, devices):
         """Tests forward function of source encoder.
 
         Arguments:
             devices: GPU device information.
-
-        Notes:
-            * Test that forward returns the correct pattern of zeros.
-            * Test that variational parameters inside h agree with those returned from forward.
         """
         device = devices.device
 
