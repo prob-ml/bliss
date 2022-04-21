@@ -170,9 +170,6 @@ class LocationEncoder(pl.LightningModule):
         ntw = image_ptiles.shape[2]  # number of vertical tiles
         dim_out_all = enc_final_output.shape[1]
         dim_per_source_params = dim_out_all - (self.max_detections + 1)
-        assert torch.allclose(
-            torch.arange(dim_per_source_params, dim_out_all), self.prob_n_source_indx
-        )
         per_source_params_flat, n_source_free_probs_flat = torch.split(
             enc_final_output, (dim_per_source_params, self.max_detections + 1), dim=1
         )
@@ -618,9 +615,6 @@ class LocationEncoder(pl.LightningModule):
                     curr_indx, new_indx
                 )
                 curr_indx = new_indx
-
-        # assigned indices that were not used to `prob_n_source`
-        indx_mats["prob_n_source"] = torch.arange(curr_indx, self.dim_out_all)
 
         return indx_mats
 
