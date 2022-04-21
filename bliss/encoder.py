@@ -81,7 +81,7 @@ class Encoder(nn.Module):
 
     def sample(
         self, image: Tensor, background: Tensor, n_samples: Optional[int] = None
-    ) -> TileCatalog:
+    ) -> TileCatalogSamples:
         var_params = self.location_encoder.encode(
             image, background, eval_mean_detections=self.eval_mean_detections
         )
@@ -132,7 +132,8 @@ class Encoder(nn.Module):
         return tile_catalog_samples
 
     def max_a_post(self, image: Tensor, background: Tensor) -> TileCatalog:
-        return self.sample(image, background, n_samples=None)
+        tile_samples = self.sample(image, background, n_samples=None)
+        return tile_samples.flatten_sample_and_batch_dim()
 
     def get_images_in_ptiles(self, images):
         """Run get_images_in_ptiles with correct tile_slen and ptile_slen."""
