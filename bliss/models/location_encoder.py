@@ -413,7 +413,7 @@ class LocationEncoder(pl.LightningModule):
         ts2 = rearrange(tile_n_sources, "ns b nth ntw -> ns (b nth ntw)")
         ts3 = self.n_detections_map[ts2]
         ts4 = rearrange(ts3, "ns np md -> np (ns md) 1")
-        ts5 = ts4.expand(ts4.size(0), ts4.size(1), 8)
+        ts5 = ts4.expand(ts4.size(0), ts4.size(1), self.n_params_per_source)
 
         # next, we pad `params_per_source` with a dummy column of zeros that will be looked up
         # (copied) whenever fewer the `max_detections` sources are present. `gather` does the copy.
