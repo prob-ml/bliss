@@ -26,12 +26,14 @@ class TileCatalog(UserDict):
         "ra",
         "dec",
     }
+    shape_names = ("batch_size", "n_tiles_h", "n_tiles_w", "max_sources")
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.tile_slen = tile_slen
         self.locs = d.pop("locs")
         self.n_sources = d.pop("n_sources")
         self.shape = self.locs.shape[:-1]
+        assert len(self.shape) == len(self.shape_names)
         assert self.n_sources.shape == self.shape[:-1]
         super().__init__(**d)
 
