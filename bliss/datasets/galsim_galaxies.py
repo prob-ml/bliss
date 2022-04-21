@@ -218,6 +218,8 @@ class GalsimGalaxyDecoder:
         self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
 
     def __call__(self, z: Tensor) -> Tensor:
+        if z.shape[0] == 0:
+            return torch.zeros(0, 1, self.slen, self.slen, device=z.device)
         images = []
         for latent in z:
             image = self.render_galaxy(latent)
