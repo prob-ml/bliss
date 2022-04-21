@@ -129,7 +129,7 @@ class LocationEncoder(pl.LightningModule):
         # the next block of code constructs `self.n_detections_map`, which is a 2d tensor with
         # size (self.max_detections + 1, self.max_detections).
         # Each row corresponds to a number of detections in a tile (including zero).
-        # The row contains the indices of the detections, padded by a dummy value.
+        # Each row contains the indices of the relevant detections, padded by a dummy value.
         md, ntd = self.max_detections, self.n_total_detections
         self.n_detections_map = torch.full((md + 1, md), ntd, device=self.device)
         tri = torch.tril_indices(md, md, device=self.device)
