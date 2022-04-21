@@ -4,7 +4,12 @@ from typing import Optional, Tuple
 import torch
 from torch import Tensor, nn
 
-from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
+from bliss.catalog import (
+    TileCatalog,
+    TileCatalogSamples,
+    get_images_in_tiles,
+    get_is_on_from_n_sources,
+)
 from bliss.models.binary import BinaryEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.location_encoder import LocationEncoder
@@ -82,29 +87,30 @@ class Encoder(nn.Module):
         )
         if n_samples is None:
             assert isinstance(self.map_n_source_weights, Tensor)
-            tile_catalogs = self.location_encoder.max_a_post(
+            tile_map = self.location_encoder.max_a_post(
                 var_params, n_source_weights=self.map_n_source_weights
             )
+            tile_catalog_samples = TileCatalogSamples.unflatten_sample_and_batch_dim(1, tile_map)
         else:
-            tile_catalogs = self.location_encoder.sample(var_params, n_samples)
+            tile_catalog_samples = self.location_encoder.sample(var_params, n_samples)
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
-            locs = tile_catalogs.locs.reshape(-1, *tile_catalogs.shape[-3:], 2)
+            locs = tile_catalog_samples.locs.reshape(-1, *tile_catalog_samples.shape[2:], 2)
             image = image.expand(locs.shape[0], -1, -1, -1)
             background = image.expand(locs.shape[0], -1, -1, -1)
             galaxy_probs = self.binary_encoder.forward(image, background, locs)
-            galaxy_probs = galaxy_probs.reshape(*tile_catalogs.shape, 1)
-            galaxy_probs *= tile_catalogs.is_on_array.unsqueeze(-1)
+            galaxy_probs = galaxy_probs.reshape(*tile_catalog_samples.shape, 1)
+            galaxy_probs *= tile_catalog_samples.is_on_array.unsqueeze(-1)
             if n_samples is None:
-                galaxy_bools = (galaxy_probs > 0.5).float() * tile_catalogs.is_on_array.unsqueeze(
-                    -1
-                )
+                galaxy_bools = (
+                    galaxy_probs > 0.5
+                ).float() * tile_catalog_samples.is_on_array.unsqueeze(-1)
             else:
                 galaxy_bools = (
                     torch.rand_like(galaxy_probs) <= galaxy_probs
-                ) * tile_catalogs.is_on_array.unsqueeze(-1)
-            star_bools = get_star_bools(tile_catalogs.n_sources, galaxy_bools)
-            tile_catalogs.update(
+                ) * tile_catalog_samples.is_on_array.unsqueeze(-1)
+            star_bools = get_star_bools(tile_catalog_samples.n_sources, galaxy_bools)
+            tile_catalog_samples.update(
                 {
                     "galaxy_bools": galaxy_bools,
                     "star_bools": star_bools,
@@ -117,10 +123,13 @@ class Encoder(nn.Module):
                 galaxy_params = self.galaxy_encoder.max_a_post(image, background, locs)
             else:
                 galaxy_params = self.galaxy_encoder.sample(image, background, locs)
-            galaxy_params = galaxy_params.reshape(*tile_catalogs.shape, -1)
-            galaxy_params *= tile_catalogs.is_on_array.unsqueeze(-1) * tile_catalogs["galaxy_bools"]
-            tile_catalogs.update({"galaxy_params": galaxy_params})
-        return tile_catalogs
+            galaxy_params = galaxy_params.reshape(*tile_catalog_samples.shape, -1)
+            galaxy_params *= (
+                tile_catalog_samples.is_on_array.unsqueeze(-1)
+                * tile_catalog_samples["galaxy_bools"]
+            )
+            tile_catalog_samples.update({"galaxy_params": galaxy_params})
+        return tile_catalog_samples
 
     def max_a_post(self, image: Tensor, background: Tensor) -> TileCatalog:
         return self.sample(image, background, n_samples=None)
