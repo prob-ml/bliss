@@ -81,7 +81,9 @@ def reconstruct_scene_at_coordinates(
     chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
     with torch.no_grad():
         recon, tile_cat = chunked_scene.reconstruct(encoder, decoder, device, n_samples)
-    assert recon.shape == scene.shape
+    assert recon.shape[1:] == scene.shape[1:]
+    output_batches = n_samples if n_samples is not None else 1
+    assert recon.shape[0] == output_batches
     recon += bg_scene
     # Get reconstruction at coordinates
     recon_at_coords = recon[
@@ -196,17 +198,18 @@ class ChunkedScene:
         main: Tensor = reconstructions["main"]
         main = rearrange(
             main,
-            "(nch ncw) c h w -> nch ncw c h w",
+            "(b nch ncw) c h w -> b nch ncw c h w",
             nch=self.n_chunks_h_main,
             ncw=self.n_chunks_w_main,
         )
+        batch_size = main.shape[0]
 
         right = reconstructions.get("right")
         if right is not None:
             right_padding = self.kernel_size - right.shape[-1]
             right_padded: Tensor = F.pad(right, (0, right_padding, 0, 0))
-            right_padded = rearrange(right_padded, "nch c h w -> nch 1 c h w")
-            main = torch.cat((main, right_padded), dim=1)
+            right_padded = rearrange(right_padded, "(b nch) c h w -> b nch 1 c h w", b=batch_size)
+            main = torch.cat((main, right_padded), dim=2)
         else:
             right_padding = 0
 
@@ -214,16 +217,16 @@ class ChunkedScene:
         if bottom is not None:
             bottom_padding = self.kernel_size - bottom.shape[-2]
             bottom_padded: Tensor = F.pad(bottom, (0, 0, 0, bottom_padding))
-
+            bottom_padded = rearrange(bottom_padded, "(b ncw) c h w -> b 1 ncw c h w", b=batch_size)
             bottom_right = reconstructions.get("bottom_right")
             if bottom_right is not None:
                 bottom_right_padded = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
-                bottom_padded = torch.cat((bottom_padded, bottom_right_padded), dim=0)
-            bottom_padded = rearrange(bottom_padded, "ncw c h w -> 1 ncw c h w")
-            main = torch.cat((main, bottom_padded), dim=0)
+                bottom_right_padded = rearrange(bottom_right_padded, "b c h w -> b 1 1 c h w")
+                bottom_padded = torch.cat((bottom_padded, bottom_right_padded), dim=2)
+            main = torch.cat((main, bottom_padded), dim=1)
         else:
             bottom_padding = 0
-        image_flat: Tensor = rearrange(main, "nch ncw c h w -> 1 (c h w) (nch ncw)")
+        image_flat: Tensor = rearrange(main, "b nch ncw c h w -> b (c h w) (nch ncw)")
         output_size = (self.output_size[0] + bottom_padding, self.output_size[1] + right_padding)
         image = F.fold(
             image_flat, output_size=output_size, kernel_size=self.kernel_size, stride=self.slen
