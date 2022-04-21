@@ -186,8 +186,8 @@ class LocationEncoder(pl.LightningModule):
             eval_log_probs = self._get_n_source_prior_log_prob(eval_mean_detections)
             adj = eval_log_probs - train_log_probs
             adj = rearrange(adj, "ns -> 1 ns")
-            adj = adj.to(free_probs.device)
-            free_probs += adj
+            adj = adj.to(n_source_log_probs_flat.device)
+            n_source_log_probs_flat += adj
         n_source_log_probs = rearrange(
             n_source_log_probs_flat, "(b nth ntw) d -> b nth ntw d", b=b, nth=nth, ntw=ntw
         )
@@ -218,19 +218,12 @@ class LocationEncoder(pl.LightningModule):
             A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
-        # var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
         log_probs_n_sources_per_tile = var_params["n_source_log_probs"]
-
-        #  self._free_probs_to_log_probs(
-        #     var_params_flat, eval_mean_detections=eval_mean_detections
-        # )
-
         # sample number of sources.
         # tile_n_sources shape = (n_samples x n_ptiles)
         # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
         probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
         tile_n_sources = Categorical(probs=probs_n_sources_per_tile).sample((n_samples,))
-        # tile_n_sources = tile_n_sources.view(n_samples, -1)
 
         # get var_params conditioned on n_sources
         pred = self._encode_for_n_sources(
@@ -351,35 +344,6 @@ class LocationEncoder(pl.LightningModule):
             }
         )
         return TileCatalog(self.tile_slen, max_a_post)
-
-    def _get_n_source_log_prob(
-        self, var_params_flat: Tensor, eval_mean_detections: Optional[float] = None
-    ):
-        """Obtains log probability of number of n_sources.
-
-        For example, if max_detections = 2, then Tensor will be (n_tiles x 3) since will return
-        probability of having 0,1,2 stars.
-
-        Arguments:
-            var_params_flat:
-                Variational parameters.
-            eval_mean_detections:
-                Optional. If specified, adjusts the probability of n_sources to match the given
-                rate.
-
-        Returns:
-            Log-probability of number of sources.
-        """
-        raise NotImplementedError()
-        free_probs = var_params_flat[:, self.prob_n_source_indx]
-        if eval_mean_detections is not None:
-            train_log_probs = self._get_n_source_prior_log_prob(self.mean_detections)
-            eval_log_probs = self._get_n_source_prior_log_prob(eval_mean_detections)
-            adj = eval_log_probs - train_log_probs
-            adj = rearrange(adj, "ns -> 1 ns")
-            adj = adj.to(free_probs.device)
-            free_probs += adj
-        return self.log_softmax(free_probs)
 
     def _get_n_source_prior_log_prob(self, detection_rate):
         possible_n_sources = torch.tensor(range(self.max_detections))
