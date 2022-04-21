@@ -363,7 +363,7 @@ class LocationEncoder(pl.LightningModule):
         # first, we transform `tile_n_sources` so that it can be used as an index
         # for looking up detections in `params_per_source`
         ts2 = rearrange(tile_n_sources, "ns b nth ntw -> ns (b nth ntw)")
-        ts3 = self.n_detections_map[ts2]
+        ts3 = self.n_detections_map[ts2]  # type: ignore
         ts4 = rearrange(ts3, "ns np md -> np (ns md) 1")
         ts5 = ts4.expand(ts4.size(0), ts4.size(1), self.n_params_per_source)
 
