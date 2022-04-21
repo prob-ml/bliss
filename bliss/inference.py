@@ -34,6 +34,9 @@ def reconstruct_scene_at_coordinates(
     via h, w, and scene_length, to ensure that all objects can be detected and reconstructed.
 
     Args:
+        n_samples:
+            Number of samples to draw from variational posterior. If None, evaluate the
+            maximum a posteriori (MAP) of the variational posterior.
         encoder:
             Trained Encoder module.
         decoder:
