@@ -86,9 +86,7 @@ class Encoder(nn.Module):
                 var_params, n_source_weights=self.map_n_source_weights
             )
         else:
-            tile_catalogs = self.location_encoder.sample(
-                var_params, n_samples, eval_mean_detections=self.eval_mean_detections
-            )
+            tile_catalogs = self.location_encoder.sample(var_params, n_samples)
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
             locs = tile_catalogs.locs.reshape(-1, *tile_catalogs.shape[-3:], 2)
