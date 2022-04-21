@@ -46,13 +46,18 @@ class TestSourceEncoder:
                 ptile_slen + (n_tiles_w - 1) * tile_slen,
                 device=device,
             )
-            background_tensor = (
-                torch.tensor(background).reshape(1, -1, 1, 1).expand(*images.shape).to(device)
-            )
+
+            background_tensor = torch.tensor(background, device=device)
+            background_tensor = background_tensor.reshape(1, -1, 1, 1).expand(*images.shape)
+
             images *= background_tensor.sqrt()
             images += background_tensor
             var_params = star_encoder.encode(images, background_tensor)
-            star_encoder.max_a_post(var_params)
+            catalog = star_encoder.max_a_post(var_params)
+
+            assert catalog.n_sources.size() == torch.Size([batch_size, n_tiles_h, n_tiles_w])
+            correct_locs_shape = torch.Size([batch_size, n_tiles_h, n_tiles_w, max_detections, 2])
+            assert catalog.locs.shape == correct_locs_shape
 
     def test_sample(self, devices):
         device = devices.device
