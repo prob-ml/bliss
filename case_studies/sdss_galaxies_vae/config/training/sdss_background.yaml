@@ -1,0 +1,10 @@
+name: "sdss_background"
+model: ${models.background}
+dataset: ${datasets.sdss_images}
+n_epochs: 1001
+save_top_k: 1
+trainer:
+  enable_checkpointing: True
+  check_val_every_n_epoch: 5
+optimizer_params:
+  lr: 1e-2
