@@ -246,7 +246,7 @@ class LocationEncoder(pl.LightningModule):
         b, nth, ntw, _ = log_probs_n_sources_per_tile.shape
         sample = {}
         for k, v in sample_flat.items():
-            pattern = "ns (b nth ntw) s k -> ns b nth ntw s k"
+            pattern = "n (b nth ntw) s k -> n b nth ntw ns k"
             sample[k] = rearrange(v, pattern, b=b, nth=nth, ntw=ntw)
         sample["n_sources"] = tile_n_sources
 
