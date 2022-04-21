@@ -71,12 +71,6 @@ class AbstractTileCatalog(UserDict):
             out[k] = v.to(device)
         return type(self)(self.tile_slen, out)
 
-    def crop(self, hlims_tile, wlims_tile):
-        out = {}
-        for k, v in self.to_dict().items():
-            out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
-        return type(self)(self.tile_slen, out)
-
     def to_dict(self) -> Dict[str, Tensor]:
         out = {}
         out["locs"] = self.locs
@@ -114,6 +108,12 @@ class TileCatalog(AbstractTileCatalog):
             value = torch.cat(tensors, dim=(tile_dim + 1))
             out[k] = value
         return cls(tile_catalogs[0].tile_slen, out)
+
+    def crop(self, hlims_tile, wlims_tile):
+        out = {}
+        for k, v in self.to_dict().items():
+            out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
+        return type(self)(self.tile_slen, out)
 
     def to_full_params(self):
         """Converts image parameters in tiles to parameters of full image.
