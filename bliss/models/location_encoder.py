@@ -146,15 +146,17 @@ class LocationEncoder(pl.LightningModule):
         Args:
             image: An astronomical image with shape `b * n_bands * h * w`.
             background: Background for `image` with the same shape as `image`.
+            eval_mean_detections: If specified, adjusts the prior rate of object arrivals.
 
         Returns:
-            A tensor of variational parameters in matrix form per-tile
-            (`n_ptiles * D`), where `D` is the total flattened dimension
-            of all variational parameters. This matrix is used as input to
-            other methods of this class (typically named `var_params`).
+            A dictionary of two components:
+            -  per_source_params:
+                Tensor of shape b x n_tiles_h x n_tiles_w x D of variational parameters
+                per tile.
+            -  n_source_log_probs:
+                Tensor of shape b x n_tiles_h x n_tiles_w x (max_sources + 1) indicating
+                the log-probabilities of the number of sources present in each tile.
         """
-        # get h matrix.
-        # Forward to the layer that is shared by all n_sources.
         image2 = self.input_transform(image, background)
         image_ptiles = get_images_in_tiles(image2, self.tile_slen, self.ptile_slen)
         log_image_ptiles_flat: Tensor = rearrange(
@@ -162,10 +164,6 @@ class LocationEncoder(pl.LightningModule):
         )
         enc_conv_output = self.enc_conv(log_image_ptiles_flat)
         enc_final_output = self.enc_final(enc_conv_output)
-
-        # enc_final_output consists of two parts:
-        # - source-specific-parameters
-        # - Probabilities of number of sources
 
         b = image_ptiles.shape[0]  # number of bands
         nth = image_ptiles.shape[1]  # number of horizontal tiles
@@ -191,7 +189,7 @@ class LocationEncoder(pl.LightningModule):
             adj = adj.to(n_source_log_probs_flat.device)
             n_source_log_probs_flat += adj
         n_source_log_probs = rearrange(
-            n_source_log_probs_flat, "(b nth ntw) d -> b nth ntw d", b=b, nth=nth, ntw=ntw
+            n_source_log_probs_flat, "(b nth ntw) ns -> b nth ntw ns", b=b, nth=nth, ntw=ntw
         )
 
         return {
