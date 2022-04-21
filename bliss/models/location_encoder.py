@@ -150,23 +150,24 @@ class LocationEncoder(pl.LightningModule):
         Args:
             image: An astronomical image with shape `b * n_bands * h * w`.
             background: Background for `image` with the same shape as `image`.
+            eval_mean_detections: If specified, adjusts the prior rate of object arrivals.
 
         Returns:
-            A tensor of variational parameters in matrix form per-tile
-            (`n_ptiles * D`), where `D` is the total flattened dimension
-            of all variational parameters. This matrix is used as input to
-            other methods of this class (typically named `var_params`).
+            A dictionary of two components:
+            -  per_source_params:
+                Tensor of shape b x n_tiles_h x n_tiles_w x D of variational parameters
+                per tile.
+            -  n_source_log_probs:
+                Tensor of shape b x n_tiles_h x n_tiles_w x (max_sources + 1) indicating
+                the log-probabilities of the number of sources present in each tile.
         """
-        # Forward to the layer that is shared by all n_sources.
         image2 = self.input_transform(image, background)
         image_ptiles = get_images_in_tiles(image2, self.tile_slen, self.ptile_slen)
-        log_image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        log_image_ptiles_flat: Tensor = rearrange(
+            image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w"
+        )
         enc_conv_output = self.enc_conv(log_image_ptiles_flat)
         enc_final_output = self.enc_final(enc_conv_output)
-
-        # enc_final_output consists of two parts:
-        # - source-specific-parameters
-        # - Probabilities of number of sources
 
         b = image_ptiles.shape[0]  # number of bands
         nth = image_ptiles.shape[1]  # number of horizontal tiles
@@ -192,10 +193,10 @@ class LocationEncoder(pl.LightningModule):
             eval_log_probs = self._get_n_source_prior_log_prob(eval_mean_detections)
             adj = eval_log_probs - train_log_probs
             adj = rearrange(adj, "ns -> 1 ns")
-            adj = adj.to(free_probs.device)
-            free_probs += adj
+            adj = adj.to(n_source_log_probs_flat.device)
+            n_source_log_probs_flat += adj
         n_source_log_probs = rearrange(
-            n_source_log_probs_flat, "(b nth ntw) d -> b nth ntw d", b=b, nth=nth, ntw=ntw
+            n_source_log_probs_flat, "(b nth ntw) ns -> b nth ntw ns", b=b, nth=nth, ntw=ntw
         )
 
         return {
@@ -203,12 +204,7 @@ class LocationEncoder(pl.LightningModule):
             "n_source_log_probs": n_source_log_probs,
         }
 
-    def sample(
-        self,
-        var_params: Dict[str, Tensor],
-        n_samples: int,
-        eval_mean_detections: Optional[float] = None,
-    ) -> Dict[str, Tensor]:
+    def sample(self, var_params: Dict[str, Tensor], n_samples: int) -> Dict[str, Tensor]:
         """Sample from encoded variational distribution.
 
         Args:
@@ -216,27 +212,17 @@ class LocationEncoder(pl.LightningModule):
                 in matrix form. Has size `n_ptiles * n_bands`.
             n_samples:
                 The number of samples to draw
-            eval_mean_detections:
-                Optional. If specified, adjusts the probability of n_sources to match the given
-                rate.
 
         Returns:
             A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
-        # var_params_flat = rearrange(var_params, "b nth ntw d -> (b nth ntw) d")
         log_probs_n_sources_per_tile = var_params["n_source_log_probs"]
-
-        #  self._free_probs_to_log_probs(
-        #     var_params_flat, eval_mean_detections=eval_mean_detections
-        # )
-
         # sample number of sources.
         # tile_n_sources shape = (n_samples x n_ptiles)
         # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
         probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
         tile_n_sources = Categorical(probs=probs_n_sources_per_tile).sample((n_samples,))
-        # tile_n_sources = tile_n_sources.view(n_samples, -1)
 
         # get var_params conditioned on n_sources
         pred = self._encode_for_n_sources(var_params["per_source_params"], tile_n_sources)
@@ -274,19 +260,13 @@ class LocationEncoder(pl.LightningModule):
         return sample
 
     def max_a_post(
-        self,
-        var_params: Dict[str, Tensor],
-        eval_mean_detections: Optional[float] = None,
-        n_source_weights: Optional[Tensor] = None,
+        self, var_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None
     ) -> TileCatalog:
         """Derive maximum a posteriori from variational parameters.
 
         Args:
             var_params: The output of `self.encode(ptiles)` which is the variational parameters
                 in matrix form. Has size `n_ptiles * n_bands`.
-            eval_mean_detections:
-                Optional. If specified, adjusts the probability of n_sources to match the given
-                rate.
             n_source_weights:
                 If specified, adds adjustment to number of sources when taking the argmax. Useful
                 for raising/lowering the threshold for turning sources on and off.
@@ -355,35 +335,6 @@ class LocationEncoder(pl.LightningModule):
             }
         )
         return TileCatalog(self.tile_slen, max_a_post)
-
-    def _get_n_source_log_prob(
-        self, var_params_flat: Tensor, eval_mean_detections: Optional[float] = None
-    ):
-        """Obtains log probability of number of n_sources.
-
-        For example, if max_detections = 2, then Tensor will be (n_tiles x 3) since will return
-        probability of having 0,1,2 stars.
-
-        Arguments:
-            var_params_flat:
-                Variational parameters.
-            eval_mean_detections:
-                Optional. If specified, adjusts the probability of n_sources to match the given
-                rate.
-
-        Returns:
-            Log-probability of number of sources.
-        """
-        raise NotImplementedError()
-        free_probs = var_params_flat[:, self.prob_n_source_indx]
-        if eval_mean_detections is not None:
-            train_log_probs = self._get_n_source_prior_log_prob(self.mean_detections)
-            eval_log_probs = self._get_n_source_prior_log_prob(eval_mean_detections)
-            adj = eval_log_probs - train_log_probs
-            adj = rearrange(adj, "ns -> 1 ns")
-            adj = adj.to(free_probs.device)
-            free_probs += adj
-        return self.log_softmax(free_probs)
 
     def _get_n_source_prior_log_prob(self, detection_rate):
         possible_n_sources = torch.tensor(range(self.max_detections))
@@ -652,7 +603,6 @@ class LocationEncoder(pl.LightningModule):
         assert tile_is_on_array.shape[-1] == 1
         return torch.normal(mean, sd) * tile_is_on_array
 
-
 def make_enc_final(in_size, hidden, out_size, dropout):
     return nn.Sequential(
         nn.Flatten(1),
@@ -673,7 +623,7 @@ class EncoderCNN(nn.Module):
         super().__init__()
         self.layer = self._make_layer(n_bands, channel, dropout)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         """Runs encoder CNN on inputs."""
         return self.layer(x)
 
@@ -724,7 +674,7 @@ class ConvBlock(nn.Module):
         self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(out_channel)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         """Runs convolutional block on inputs."""
         identity = x
 

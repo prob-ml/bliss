@@ -142,11 +142,14 @@ class PhotoFullCatalog(FullCatalog):
         thing_id = column_to_tensor(po_fits, "thing_id")
         ras = column_to_tensor(po_fits, "ra")
         decs = column_to_tensor(po_fits, "dec")
-        fluxes = column_to_tensor(po_fits, "psfflux")
-        mags = column_to_tensor(po_fits, "psfmag")
         galaxy_bools = (objc_type == 3) & (thing_id != -1)
         star_bools = (objc_type == 6) & (thing_id != -1)
-
+        star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
+        star_mags = column_to_tensor(po_fits, "psfmag") * star_bools.reshape(-1, 1)
+        galaxy_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
+        galaxy_mags = column_to_tensor(po_fits, "cmodelmag") * galaxy_bools.reshape(-1, 1)
+        fluxes = star_fluxes + galaxy_fluxes
+        mags = star_mags + galaxy_mags
         keep = galaxy_bools | star_bools
         galaxy_bools = galaxy_bools[keep]
         star_bools = star_bools[keep]

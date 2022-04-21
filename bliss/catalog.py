@@ -296,8 +296,8 @@ class FullCatalog(UserDict):
 
     def to_tile_params(self, tile_slen: int, max_sources_per_tile: int) -> TileCatalog:
         assert self.batch_size == 1, "Currently only supported for a single image"
-        tile_coords = (self.plocs // tile_slen).to(torch.int).squeeze(0)
-
+        tile_coords_fp = torch.div(self.plocs, tile_slen, rounding_mode="trunc")
+        tile_coords = tile_coords_fp.to(torch.int).squeeze(0)
         n_tiles_h, n_tiles_w = get_n_tiles_hw(self.height, self.width, tile_slen)
 
         tile_locs = torch.zeros((self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, 2))
@@ -342,7 +342,7 @@ class FullCatalog(UserDict):
         ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
 
 
-def get_images_in_tiles(images, tile_slen, ptile_slen):
+def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tensor:
     """Divides a batch of full images into padded tiles.
 
     This is similar to nn.conv2d, with a sliding window=ptile_slen and stride=tile_slen.

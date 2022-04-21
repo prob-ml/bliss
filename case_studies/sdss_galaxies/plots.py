@@ -151,6 +151,7 @@ class BlissFigures:
         for figname, fig in figs.items():
             figfile = self.figdir / f"{figname}.{self.img_format}"
             fig.savefig(figfile, format=self.img_format)
+            plt.close(fig)
 
     @abstractmethod
     def create_figures(self, data):
@@ -175,6 +176,7 @@ class AEReconstructionFigures(BlissFigures):
         device = autoencoder.device  # GPU is better otherwise slow.
 
         image_data = torch.load(images_file)
+        true_params = image_data["params"]
         images = image_data["images"]
         recon_means = torch.tensor([])
         background = image_data["background"].reshape(1, 1, 53, 53).to(device)
@@ -215,11 +217,11 @@ class AEReconstructionFigures(BlissFigures):
             psf_image=psf_image.reshape(-1, 53, 53),
             pixel_scale=sdss_pixel_scale,
         )
-
         return {
             "random": (images[rand_indices], recon_means[rand_indices], residuals[rand_indices]),
             "worst": (images[worst_indices], recon_means[worst_indices], residuals[worst_indices]),
             "measurements": measurements,
+            "true_params": true_params,
         }
 
     def reconstruction_figure(self, images, recons, residuals):
@@ -311,12 +313,12 @@ class AEReconstructionFigures(BlissFigures):
         set_rc_params(
             fontsize=22, legend_fontsize="small", tick_label_size="small", label_size="medium"
         )
-        fig, axes = plt.subplots(1, 3, figsize=(15, 7))
+        fig, axes = plt.subplots(1, 3, figsize=(21, 7))
         ax1, ax2, ax3 = axes.flatten()
 
         # fluxes / magnitudes
         x, y = meas["true_mags"], meas["recon_mags"]
-        mag_ticks = (16, 17, 18, 19, 20, 21, 22, 23)
+        mag_ticks = (15, 16, 17, 18, 19, 20, 21, 22, 23)
         xlabel = r"$m^{\rm true}$"
         ylabel = r"$m^{\rm recon}$"
         self.make_scatter_contours(
@@ -327,9 +329,10 @@ class AEReconstructionFigures(BlissFigures):
             ylabel=ylabel,
             xticks=mag_ticks,
             yticks=mag_ticks,
-            xlims=(16, 23),
-            ylims=(16, 23),
+            xlims=(15, 24),
+            ylims=(15, 24),
         )
+        ax1.plot([15, 24], [15, 24], color="r", lw=2)
 
         # ellipticities 1
         # NOTE: remove outliers for plotting purposes (contours get crazy)
@@ -348,6 +351,7 @@ class AEReconstructionFigures(BlissFigures):
             xlims=(-1.0, 1.0),
             ylims=(-1.0, 1.0),
         )
+        ax2.plot([-1, 1], [-1, 1], color="r", lw=2)
 
         # ellipticities 2
         # NOTE: remove outliers for plotting purposes (contours get crazy)
@@ -365,6 +369,7 @@ class AEReconstructionFigures(BlissFigures):
             xlims=(-1.0, 1.0),
             ylims=(-1.0, 1.0),
         )
+        ax3.plot([-1, 1], [-1, 1], color="r", lw=2)
 
         plt.tight_layout()
         return fig
@@ -384,7 +389,7 @@ class AEReconstructionFigures(BlissFigures):
             xlims=(x.min(), x.max()),
             delta=0.25,
             xlabel=r"\rm $m^{\rm true}$",
-            ylabel=r"\rm $(m^{\rm recon} - m^{\rm true}) / m^{\rm true}$",
+            ylabel=r"\rm $m^{\rm recon} - m^{\rm true}$",
             xticks=[16, 17, 18, 19, 20, 21, 22, 23],
         )
 
@@ -438,9 +443,7 @@ class DetectionClassificationFigures(BlissFigures):
 
         # compute data for precision/recall/classification accuracy as a function of magnitude.
         for ii, (mag1, mag2) in enumerate(mag_bins):
-            res = reporting.scene_metrics(
-                truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0, mag_slack=1.0
-            )
+            res = reporting.scene_metrics(truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0)
             metrics_per_mag["precision"][ii] = res["precision"].item()
             metrics_per_mag["recall"][ii] = res["recall"].item()
             metrics_per_mag["f1"][ii] = res["f1"].item()
@@ -712,6 +715,7 @@ class SDSSReconstructionFigures(BlissFigures):
 
         for figname, scene_coords in self.scenes.items():
             h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
+            assert h % encoder.tile_slen == 0 and w % encoder.tile_slen == 0
             assert scene_size <= 300, "Scene too large, change slen."
             h_end = h + scene_size
             w_end = w + scene_size
