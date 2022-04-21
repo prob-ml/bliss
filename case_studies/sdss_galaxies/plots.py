@@ -151,6 +151,7 @@ class BlissFigures:
         for figname, fig in figs.items():
             figfile = self.figdir / f"{figname}.{self.img_format}"
             fig.savefig(figfile, format=self.img_format)
+            plt.close(fig)
 
     @abstractmethod
     def create_figures(self, data):
@@ -438,9 +439,7 @@ class DetectionClassificationFigures(BlissFigures):
 
         # compute data for precision/recall/classification accuracy as a function of magnitude.
         for ii, (mag1, mag2) in enumerate(mag_bins):
-            res = reporting.scene_metrics(
-                truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0, mag_slack=1.0
-            )
+            res = reporting.scene_metrics(truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0)
             metrics_per_mag["precision"][ii] = res["precision"].item()
             metrics_per_mag["recall"][ii] = res["recall"].item()
             metrics_per_mag["f1"][ii] = res["f1"].item()
@@ -712,6 +711,7 @@ class SDSSReconstructionFigures(BlissFigures):
 
         for figname, scene_coords in self.scenes.items():
             h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
+            assert h % encoder.tile_slen == 0 and w % encoder.tile_slen == 0
             assert scene_size <= 300, "Scene too large, change slen."
             h_end = h + scene_size
             w_end = w + scene_size
