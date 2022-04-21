@@ -12,7 +12,7 @@ from torch.distributions import Categorical, Normal, Poisson
 from torch.nn import functional as F
 from torch.optim import Adam
 
-from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
+from bliss.catalog import TileCatalog, TileCatalogSamples, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.reporting import DetectionMetrics
 
 
@@ -250,7 +250,7 @@ class LocationEncoder(pl.LightningModule):
             sample[k] = rearrange(v, pattern, b=b, nth=nth, ntw=ntw)
         sample["n_sources"] = tile_n_sources
 
-        return TileCatalog(self.tile_slen, sample)
+        return TileCatalogSamples(self.tile_slen, sample)
 
     def max_a_post(
         self, var_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None

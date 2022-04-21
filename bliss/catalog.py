@@ -214,6 +214,8 @@ class TileCatalog(UserDict):
 
         return {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
 
+class TileCatalogSamples(TileCatalog):
+    shape_names = ("n_samples", "batch_size", "n_tiles_h", "n_tiles_w", "max_sources")
 
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params
