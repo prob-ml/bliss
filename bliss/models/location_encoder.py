@@ -131,9 +131,10 @@ class LocationEncoder(pl.LightningModule):
         # Each row corresponds to a number of detections in a tile (including zero).
         # Each row contains the indices of the relevant detections, padded by a dummy value.
         md, ntd = self.max_detections, self.n_total_detections
-        self.n_detections_map = torch.full((md + 1, md), ntd, device=self.device)
+        n_detections_map = torch.full((md + 1, md), ntd, device=self.device)
         tri = torch.tril_indices(md, md, device=self.device)
-        self.n_detections_map[tri[0] + 1, tri[1]] = torch.arange(ntd, device=self.device)
+        n_detections_map[tri[0] + 1, tri[1]] = torch.arange(ntd, device=self.device)
+        self.register_buffer("n_detections_map", n_detections_map)
 
         # plotting
         self.annotate_probs = annotate_probs
@@ -602,6 +603,7 @@ class LocationEncoder(pl.LightningModule):
         # return shape = (n_samples x n_ptiles x max_detections x param_dim)
         assert tile_is_on_array.shape[-1] == 1
         return torch.normal(mean, sd) * tile_is_on_array
+
 
 def make_enc_final(in_size, hidden, out_size, dropout):
     return nn.Sequential(
