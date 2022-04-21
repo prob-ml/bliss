@@ -26,7 +26,7 @@ class TileCatalog(UserDict):
         "ra",
         "dec",
     }
-    shape_names = ("batch_size", "n_tiles_h", "n_tiles_w", "max_sources")
+    shape_names: Tuple[str, ...] = ("batch_size", "n_tiles_h", "n_tiles_w", "max_sources")
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.tile_slen = tile_slen
@@ -214,8 +214,26 @@ class TileCatalog(UserDict):
 
         return {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
 
+
 class TileCatalogSamples(TileCatalog):
     shape_names = ("n_samples", "batch_size", "n_tiles_h", "n_tiles_w", "max_sources")
+
+    def flatten_sample_and_batch_dim(self):
+        d_flat = {
+            k: v.reshape(v.shape[0] * v.shape[1], *v.shape[2:]) for k, v in self.to_dict().items()
+        }
+        return TileCatalog(self.tile_slen, d_flat)
+
+    @classmethod
+    def unflatten_sample_and_batch_dim(cls, n_samples: int, tile_catalog: TileCatalog):
+        batch_size = tile_catalog.shape[0] // n_samples
+        assert n_samples * batch_size == tile_catalog.shape[0]
+        d = {
+            k: v.reshape(n_samples, batch_size, *v.shape[1:])
+            for k, v in tile_catalog.to_dict().items()
+        }
+        return cls(tile_catalog.tile_slen, d)
+
 
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params

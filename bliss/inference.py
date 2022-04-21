@@ -1,6 +1,6 @@
 import math
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog, TileCatalog, TileCatalogSamples
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
@@ -27,7 +27,7 @@ def reconstruct_scene_at_coordinates(
     w_range: Tuple[int, int],
     slen: int,
     device=None,
-) -> Tuple[Tensor, TileCatalog]:
+) -> Tuple[Tensor, Union[TileCatalog, TileCatalogSamples]]:
     """Reconstruct all objects contained within a scene, padding as needed.
 
     This function will run the encoder and decoder on a padded image containing the image specified
@@ -79,7 +79,8 @@ def reconstruct_scene_at_coordinates(
     assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
     chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
-    recon, tile_map_scene = chunked_scene.reconstruct(encoder, decoder, device, n_samples)
+    with torch.no_grad():
+        recon, tile_cat = chunked_scene.reconstruct(encoder, decoder, device, n_samples)
     assert recon.shape == scene.shape
     recon += bg_scene
     # Get reconstruction at coordinates
@@ -89,7 +90,10 @@ def reconstruct_scene_at_coordinates(
         bp:-bp,
         bp:-bp,
     ]
-    return recon_at_coords, tile_map_scene
+    if n_samples is not None:
+        tile_cat_samples = TileCatalogSamples.unflatten_sample_and_batch_dim(n_samples, tile_cat)
+        return recon_at_coords.unsqueeze(1), tile_cat_samples
+    return recon_at_coords, tile_cat
 
 
 class ChunkedScene:
@@ -100,8 +104,8 @@ class ChunkedScene:
         kernel_size = slen + bp * 2
         self.kernel_size = kernel_size
         self.output_size = (scene.shape[2], scene.shape[3])
-        self.chunk_dict = {}
-        self.bg_dict = {}
+        self.chunk_dict: Dict[str, Tensor] = {}
+        self.bg_dict: Dict[str, Tensor] = {}
 
         n_chunks_h = (scene.shape[2] - (bp * 2)) // slen
         n_chunks_w = (scene.shape[3] - (bp * 2)) // slen
@@ -145,7 +149,7 @@ class ChunkedScene:
             self.chunk_dict["bottom_right"] = bottom_right_border
             self.bg_dict["bottom_right"] = bg_bottom_right_border
 
-    def _chunk_image(self, image, kernel_size, stride):
+    def _chunk_image(self, image: Tensor, kernel_size, stride) -> Tensor:
         chunks = F.unfold(image, kernel_size=kernel_size, stride=stride)
         return rearrange(
             chunks,
@@ -155,7 +159,13 @@ class ChunkedScene:
             w=kernel_size[1],
         )
 
-    def reconstruct(self, encoder, decoder, device, n_samples: Optional[int]):
+    def reconstruct(
+        self,
+        encoder: Encoder,
+        decoder: ImageDecoder,
+        device: torch.device,
+        n_samples: Optional[int],
+    ):
         reconstructions: Dict[str, Tensor] = {}
         tile_maps: Dict[str, List[TileCatalog]] = {}
         for chunk_type, chunks in self.chunk_dict.items():
@@ -163,16 +173,19 @@ class ChunkedScene:
             recon_list: List[Tensor] = []
             tile_map_list: List[TileCatalog] = []
             for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
-                with torch.no_grad():
-                    tile_map = encoder.sample(
-                        chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device), n_samples
-                    )
-                    recon = decoder.render_images(tile_map)
-                    tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
-                        tile_map["galaxy_bools"], tile_map["galaxy_params"]
-                    )
-                    recon_list.append(recon.cpu())
-                    tile_map_list.append(tile_map.cpu())
+                tile_samples = encoder.sample(
+                    chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device), n_samples
+                )
+                if isinstance(tile_samples, TileCatalogSamples):
+                    tile_cat = tile_samples.flatten_sample_and_batch_dim()
+                else:
+                    tile_cat = tile_samples
+                recon = decoder.render_images(tile_cat)
+                tile_cat["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
+                    tile_cat["galaxy_bools"], tile_cat["galaxy_params"]
+                )
+                recon_list.append(recon.cpu())
+                tile_map_list.append(tile_cat.cpu())
             reconstructions[chunk_type] = torch.cat(recon_list, dim=0)
             tile_maps[chunk_type] = tile_map_list
         scene_recon = self._combine_reconstructions(reconstructions)

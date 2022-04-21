@@ -90,6 +90,8 @@ class Encoder(nn.Module):
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
             locs = tile_catalogs.locs.reshape(-1, *tile_catalogs.shape[-3:], 2)
+            image = image.expand(locs.shape[0], -1, -1, -1)
+            background = image.expand(locs.shape[0], -1, -1, -1)
             galaxy_probs = self.binary_encoder.forward(image, background, locs)
             galaxy_probs = galaxy_probs.reshape(*tile_catalogs.shape, 1)
             galaxy_probs *= tile_catalogs.is_on_array.unsqueeze(-1)
@@ -115,7 +117,7 @@ class Encoder(nn.Module):
                 galaxy_params = self.galaxy_encoder.max_a_post(image, background, locs)
             else:
                 galaxy_params = self.galaxy_encoder.sample(image, background, locs)
-            galaxy_params.reshape(*tile_catalogs.shape, -1)
+            galaxy_params = galaxy_params.reshape(*tile_catalogs.shape, -1)
             galaxy_params *= tile_catalogs.is_on_array.unsqueeze(-1) * tile_catalogs["galaxy_bools"]
             tile_catalogs.update({"galaxy_params": galaxy_params})
         return tile_catalogs
