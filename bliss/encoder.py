@@ -101,11 +101,11 @@ class Encoder(nn.Module):
                 - 'galaxy_params' from GalaxyEncoder.
         """
         assert isinstance(self.map_n_source_weights, Tensor)
-        var_params = self.location_encoder.encode(image, background)
+        var_params = self.location_encoder.encode(
+            image, background, eval_mean_detections=self.eval_mean_detections
+        )
         tile_map = self.location_encoder.max_a_post(
-            var_params,
-            eval_mean_detections=self.eval_mean_detections,
-            n_source_weights=self.map_n_source_weights,
+            var_params, n_source_weights=self.map_n_source_weights
         )
 
         if self.binary_encoder is not None:
