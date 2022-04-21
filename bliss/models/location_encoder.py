@@ -157,7 +157,9 @@ class LocationEncoder(pl.LightningModule):
         # Forward to the layer that is shared by all n_sources.
         image2 = self.input_transform(image, background)
         image_ptiles = get_images_in_tiles(image2, self.tile_slen, self.ptile_slen)
-        log_image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        log_image_ptiles_flat: Tensor = rearrange(
+            image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w"
+        )
         enc_conv_output = self.enc_conv(log_image_ptiles_flat)
         enc_final_output = self.enc_final(enc_conv_output)
 
@@ -659,7 +661,7 @@ class EncoderCNN(nn.Module):
         super().__init__()
         self.layer = self._make_layer(n_bands, channel, dropout)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         """Runs encoder CNN on inputs."""
         return self.layer(x)
 
@@ -710,7 +712,7 @@ class ConvBlock(nn.Module):
         self.conv2 = nn.Conv2d(out_channel, out_channel, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(out_channel)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         """Runs convolutional block on inputs."""
         identity = x
 

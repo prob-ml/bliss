@@ -342,7 +342,7 @@ class FullCatalog(UserDict):
         ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
 
 
-def get_images_in_tiles(images, tile_slen, ptile_slen):
+def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tensor:
     """Divides a batch of full images into padded tiles.
 
     This is similar to nn.conv2d, with a sliding window=ptile_slen and stride=tile_slen.
