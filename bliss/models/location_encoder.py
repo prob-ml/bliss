@@ -197,12 +197,7 @@ class LocationEncoder(pl.LightningModule):
             "n_source_log_probs": n_source_log_probs,
         }
 
-    def sample(
-        self,
-        var_params: Dict[str, Tensor],
-        n_samples: int,
-        eval_mean_detections: Optional[float] = None,
-    ) -> Dict[str, Tensor]:
+    def sample(self, var_params: Dict[str, Tensor], n_samples: int) -> Dict[str, Tensor]:
         """Sample from encoded variational distribution.
 
         Args:
@@ -210,9 +205,6 @@ class LocationEncoder(pl.LightningModule):
                 in matrix form. Has size `n_ptiles * n_bands`.
             n_samples:
                 The number of samples to draw
-            eval_mean_detections:
-                Optional. If specified, adjusts the probability of n_sources to match the given
-                rate.
 
         Returns:
             A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
@@ -264,19 +256,13 @@ class LocationEncoder(pl.LightningModule):
         return sample
 
     def max_a_post(
-        self,
-        var_params: Dict[str, Tensor],
-        eval_mean_detections: Optional[float] = None,
-        n_source_weights: Optional[Tensor] = None,
+        self, var_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None
     ) -> TileCatalog:
         """Derive maximum a posteriori from variational parameters.
 
         Args:
             var_params: The output of `self.encode(ptiles)` which is the variational parameters
                 in matrix form. Has size `n_ptiles * n_bands`.
-            eval_mean_detections:
-                Optional. If specified, adjusts the probability of n_sources to match the given
-                rate.
             n_source_weights:
                 If specified, adds adjustment to number of sources when taking the argmax. Useful
                 for raising/lowering the threshold for turning sources on and off.
