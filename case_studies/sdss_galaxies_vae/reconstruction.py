@@ -87,7 +87,10 @@ def reconstruct(cfg):
             tile_map_recon["galaxy_bools"] * tile_map_recon["galaxy_fluxes"]
             + tile_map_recon["star_bools"] * tile_map_recon["fluxes"]
         )
-        tile_map_recon["mags"] = convert_flux_to_mag(tile_map_recon["fluxes"])
+        tile_map_recon["mags"] = torch.zeros_like(tile_map_recon["fluxes"])
+        tile_map_recon["mags"][tile_map_recon.is_on_array > 0] = convert_flux_to_mag(
+            tile_map_recon["fluxes"][tile_map_recon.is_on_array > 0]
+        )
         scene_metrics_by_mag = {}
         ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
         catalogs = {"bliss": map_recon}
