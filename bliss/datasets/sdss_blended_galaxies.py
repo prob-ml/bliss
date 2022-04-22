@@ -2,7 +2,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pytorch_lightning as pl
 import torch
-from einops.einops import rearrange
+from einops import rearrange
 from torch import Tensor
 from torch.nn import functional as F
 from torch.utils.data.dataloader import DataLoader
