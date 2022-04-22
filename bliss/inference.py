@@ -382,7 +382,11 @@ class SemiSyntheticFrame:
                 tile_catalog["galaxy_bools"] * tile_catalog["galaxy_fluxes"]
                 + tile_catalog["star_bools"] * tile_catalog["fluxes"]
             )
-            tile_catalog["mags"] = convert_flux_to_mag(tile_catalog["fluxes"])
+            is_on_array = tile_catalog.is_on_array > 0
+            tile_catalog["mags"] = torch.zeros_like(tile_catalog["fluxes"])
+            tile_catalog["mags"][is_on_array] = convert_flux_to_mag(
+                tile_catalog["fluxes"][is_on_array]
+            )
             fc = tile_catalog.to_full_params()
             assert fc.equals(
                 full_coadd_cat, exclude=("galaxy_fluxes", "star_bools", "fluxes", "mags")

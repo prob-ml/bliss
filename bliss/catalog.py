@@ -56,6 +56,7 @@ class AbstractTileCatalog(UserDict):
     def _validate(self, x: Tensor):
         assert isinstance(x, Tensor)
         assert x.shape[: len(self.shape)] == self.shape
+        assert x.device == self.device
 
     @property
     def is_on_array(self) -> Tensor:
@@ -71,6 +72,10 @@ class AbstractTileCatalog(UserDict):
             out[k] = v.to(device)
         return type(self)(self.tile_slen, out)
 
+    @property
+    def device(self):
+        return self.locs.device
+
     def to_dict(self) -> Dict[str, Tensor]:
         out = {}
         out["locs"] = self.locs
@@ -79,13 +84,13 @@ class AbstractTileCatalog(UserDict):
             out[k] = v
         return out
 
-    def equals(self, other, exclude=None):
+    def equals(self, other, exclude=None, **kwargs):
         self_dict = self.to_dict()
         other_dict: Dict[str, Tensor] = other.to_dict()
         exclude = set() if exclude is None else set(exclude)
         keys = set(self_dict.keys()).union(other_dict.keys()).difference(exclude)
         for k in keys:
-            if not torch.allclose(self_dict[k], other_dict[k]):
+            if not torch.allclose(self_dict[k], other_dict[k], **kwargs):
                 return False
         return True
 
@@ -274,6 +279,11 @@ class FullCatalog(UserDict):
     def _validate(self, x: Tensor):
         assert isinstance(x, Tensor)
         assert x.shape[:-1] == (self.batch_size, self.max_sources)
+        assert x.device == self.device
+
+    @property
+    def device(self):
+        return self.plocs.device
 
     def equals(self, other, exclude=None):
         assert self.batch_size == other.batch_size == 1
@@ -344,17 +354,16 @@ class FullCatalog(UserDict):
         tile_coords_fp = torch.div(self.plocs, tile_slen, rounding_mode="trunc")
         tile_coords = tile_coords_fp.to(torch.int).squeeze(0)
         n_tiles_h, n_tiles_w = get_n_tiles_hw(self.height, self.width, tile_slen)
+        tile_cat_shape = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile)
 
-        tile_locs = torch.zeros((self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, 2))
-        tile_n_sources = torch.zeros((self.batch_size, n_tiles_h, n_tiles_w), dtype=torch.int64)
-        tile_is_on_array = torch.zeros(
-            (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, 1)
-        )
+        tile_locs = torch.zeros((*tile_cat_shape, 2), device=self.device)
+        tile_n_sources = torch.zeros(tile_cat_shape[:3], dtype=torch.int64, device=self.device)
+        tile_is_on_array = torch.zeros((*tile_cat_shape, 1), device=self.device)
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
             dtype = torch.int64 if k == "objid" else torch.float
             size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
-            tile_params[k] = torch.zeros(size, dtype=dtype)
+            tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
         n_sources = int(self.n_sources[0].item())
         for (idx, coords) in enumerate(tile_coords[:n_sources]):
             source_idx = tile_n_sources[0, coords[0], coords[1]]

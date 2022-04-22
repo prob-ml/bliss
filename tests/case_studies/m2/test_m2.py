@@ -83,7 +83,7 @@ def get_map_estimate(
     tile_map = image_encoder.max_a_post(var_params)
     full_map = tile_map.to_full_params()
     tile_map_tilde = full_map.to_tile_params(image_encoder.tile_slen, tile_map.shape[-1])
-    assert tile_map.equals(tile_map_tilde, exclude=("n_source_log_probs",))
+    assert tile_map.equals(tile_map_tilde, exclude=("n_source_log_probs",), atol=1e-5)
 
     return full_map
 
@@ -122,7 +122,7 @@ class TestStarSleepEncoderM2:
         sleep_tpr, sleep_ppv = _get_tpr_ppv(
             true_locs * slen,
             2.5 * torch.log10(true_fluxes[:, 0:1]),
-            estimate["locs"][0] * slen,
+            estimate.plocs[0],
             2.5 * torch.log10(estimate["fluxes"][0, :, 0:1]),
             slack=0.5,
         )
