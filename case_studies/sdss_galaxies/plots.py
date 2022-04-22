@@ -508,6 +508,7 @@ class DetectionClassificationFigures(BlissFigures):
 
         # obtain predictions from BLISS.
         _, tile_est_params = reconstruct_scene_at_coordinates(
+            None,
             encoder,
             decoder,
             frame.image,
@@ -723,6 +724,7 @@ class SDSSReconstructionFigures(BlissFigures):
             coadd_params = frame.get_catalog((h, h_end), (w, w_end))
 
             recon, tile_map_recon = reconstruct_scene_at_coordinates(
+                None,
                 encoder,
                 decoder,
                 frame.image,
