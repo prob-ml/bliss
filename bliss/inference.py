@@ -18,7 +18,7 @@ from bliss.reporting import CoaddFullCatalog
 
 
 def reconstruct_scene_at_coordinates(
-    n_samples: Optional[int],
+    n_samples: Union[int, None],
     encoder: Encoder,
     decoder: ImageDecoder,
     img: Tensor,
