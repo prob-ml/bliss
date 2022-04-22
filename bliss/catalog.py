@@ -174,13 +174,13 @@ class TileCatalog(UserDict):
             out[k] = v
         return out
 
-    def equals(self, other, exclude=None):
+    def equals(self, other, exclude=None, **kwargs):
         self_dict = self.to_dict()
         other_dict: Dict[str, Tensor] = other.to_dict()
         exclude = set() if exclude is None else set(exclude)
         keys = set(self_dict.keys()).union(other_dict.keys()).difference(exclude)
         for k in keys:
-            if not torch.allclose(self_dict[k], other_dict[k]):
+            if not torch.allclose(self_dict[k], other_dict[k], **kwargs):
                 return False
         return True
 
