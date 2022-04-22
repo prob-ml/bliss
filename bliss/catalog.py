@@ -198,7 +198,7 @@ class TileCatalog(AbstractTileCatalog):
         """
         tile_is_on_array_sampled = self.is_on_array
         n_sources = reduce(tile_is_on_array_sampled, "b nth ntw d -> b", "sum")
-        max_sources = n_sources.max().int().item()
+        max_sources = int(n_sources.max().int().item())
         tile_is_on_array = rearrange(tile_is_on_array_sampled, "b nth ntw d -> b (nth ntw d)")
         indices_sorted = tile_is_on_array.long().argsort(dim=1, descending=True)
         indices_sorted = indices_sorted[:, :max_sources]
