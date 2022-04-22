@@ -122,7 +122,7 @@ class TestStarSleepEncoderM2:
         sleep_tpr, sleep_ppv = _get_tpr_ppv(
             true_locs * slen,
             2.5 * torch.log10(true_fluxes[:, 0:1]),
-            estimate["locs"][0] * slen,
+            estimate.plocs[0],
             2.5 * torch.log10(estimate["fluxes"][0, :, 0:1]),
             slack=0.5,
         )
