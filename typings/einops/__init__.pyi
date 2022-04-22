@@ -1,0 +1,9 @@
+from typing import Any
+
+from torch import Tensor
+
+def rearrange(tensor: Tensor, pattern: str, **axes_lengths: int) -> Tensor: ...
+
+def reduce(tensor: Tensor, pattern: str, reduction: Any, **axes_lengths: int) -> Tensor: ...
+
+def repeat(tensor: Tensor, pattern: str, **axes_lengths: int) -> Tensor: ...
