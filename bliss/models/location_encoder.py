@@ -128,7 +128,7 @@ class LocationEncoder(pl.LightningModule):
 
         # the next block of code constructs `self.n_detections_map`, which is a 2d tensor with
         # size (self.max_detections + 1, self.max_detections).
-        # Each row corresponds to a number of detections in a tile (including zero).
+        # There is one row for each possible number of detections (including zero).
         # Each row contains the indices of the relevant detections, padded by a dummy value.
         md, ntd = self.max_detections, self.n_total_detections
         n_detections_map = torch.full((md + 1, md), ntd, device=self.device)
@@ -363,25 +363,23 @@ class LocationEncoder(pl.LightningModule):
         # first, we transform `tile_n_sources` so that it can be used as an index
         # for looking up detections in `params_per_source`
         ts2 = rearrange(tile_n_sources, "ns b nth ntw -> ns (b nth ntw)")
-        ts3 = self.n_detections_map[ts2]  # type: ignore
-        ts4 = rearrange(ts3, "ns np md -> np (ns md) 1")
-        ts5 = ts4.expand(ts4.size(0), ts4.size(1), self.n_params_per_source)
+        sindx1 = self.n_detections_map[ts2]  # type: ignore
+        sindx2 = rearrange(sindx1, "ns np md -> np (ns md) 1")
+        sindx3 = sindx2.expand(sindx2.size(0), sindx2.size(1), self.n_params_per_source)
 
         # next, we pad `params_per_source` with a dummy column of zeros that will be looked up
         # (copied) whenever fewer the `max_detections` sources are present. `gather` does the copy.
         pps2 = rearrange(params_per_source, "b nth ntw td pps -> (b nth ntw) td pps")
         pps3 = F.pad(pps2, (0, 0, 0, 1))
-        pps4 = torch.gather(pps3, 1, ts5)
+        pps4 = torch.gather(pps3, 1, sindx3)
         pps5 = rearrange(pps4, "np (ns md) pps -> ns np md pps", ns=tile_n_sources.size(0))
 
         # finally, we slice pps5 by parameter group because these groups are treated differently,
         # subsequently
-        var_params_for_n_sources = {}
-        start_dim = 0
-        for k, param in self.variational_params.items():
-            end_dim = start_dim + param["dim"]
-            var_params_for_n_sources[k] = pps5[:, :, :, start_dim:end_dim]
-            start_dim = end_dim
+        split_sizes = [v["dim"] for v in self.variational_params.values()]
+        var_params_split = torch.split(pps5, split_sizes, 3)
+        names = self.variational_params.keys()
+        var_params_for_n_sources = dict(zip(names, var_params_split))
 
         # what?!? why is sigmoid(0) = 0?
         loc_mean_func = lambda x: torch.sigmoid(x) * (x != 0).float()
