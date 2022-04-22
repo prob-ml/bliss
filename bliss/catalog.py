@@ -1,6 +1,6 @@
 import math
 from collections import UserDict
-from typing import Dict, Optional, Sequence, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 from einops import rearrange, reduce, repeat
@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.nn import functional as F
 
 
-class AbstractTileCatalog(UserDict):
+class TileCatalog(UserDict):
     allowed_params = {
         "n_source_log_probs",
         "fluxes",
@@ -27,17 +27,12 @@ class AbstractTileCatalog(UserDict):
         "dec",
     }
 
-    @property
-    def shape_names(self) -> Tuple[str, ...]:
-        return ("batch_size", "n_tiles_h", "n_tiles_w", "max_sources")
-
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.tile_slen = tile_slen
         self.locs = d.pop("locs")
         self.n_sources = d.pop("n_sources")
-        self.shape = self.locs.shape[:-1]
-        assert len(self.shape) == len(self.shape_names)
-        assert self.n_sources.shape == self.shape[:-1]
+        self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
+        assert self.n_sources.shape == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
         super().__init__(**d)
 
     def __setitem__(self, key: str, item: Tensor) -> None:
@@ -55,13 +50,13 @@ class AbstractTileCatalog(UserDict):
 
     def _validate(self, x: Tensor):
         assert isinstance(x, Tensor)
-        assert x.shape[: len(self.shape)] == self.shape
+        assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
         assert x.device == self.device
 
     @property
     def is_on_array(self) -> Tensor:
         """Returns a n x nth x ntw x n_sources tensor indicating whether source is on."""
-        return get_is_on_from_n_sources(self.n_sources, self.shape[-1])
+        return get_is_on_from_n_sources(self.n_sources, self.max_sources)
 
     def cpu(self):
         return self.to("cpu")
@@ -75,44 +70,6 @@ class AbstractTileCatalog(UserDict):
     @property
     def device(self):
         return self.locs.device
-
-    def to_dict(self) -> Dict[str, Tensor]:
-        out = {}
-        out["locs"] = self.locs
-        out["n_sources"] = self.n_sources
-        for k, v in self.items():
-            out[k] = v
-        return out
-
-    def equals(self, other, exclude=None, **kwargs):
-        self_dict = self.to_dict()
-        other_dict: Dict[str, Tensor] = other.to_dict()
-        exclude = set() if exclude is None else set(exclude)
-        keys = set(self_dict.keys()).union(other_dict.keys()).difference(exclude)
-        for k in keys:
-            if not torch.allclose(self_dict[k], other_dict[k], **kwargs):
-                return False
-        return True
-
-    def __eq__(self, other):
-        return self.equals(other)
-
-
-class TileCatalog(AbstractTileCatalog):
-    @property
-    def shape_names(self):
-        return ("batch_size", "n_tiles_h", "n_tiles_w", "max_sources")
-
-    @classmethod
-    def cat(cls, tile_catalogs: Sequence, tile_dim: int = 0):
-        assert tile_dim in {0, 1}
-        out = {}
-        tile_catalog_dicts = [tm.to_dict() for tm in tile_catalogs]
-        for k in tile_catalog_dicts[0].keys():
-            tensors = [tm[k] for tm in tile_catalog_dicts]
-            value = torch.cat(tensors, dim=(tile_dim + 1))
-            out[k] = value
-        return cls(tile_catalogs[0].tile_slen, out)
 
     def crop(self, hlims_tile, wlims_tile):
         out = {}
@@ -137,7 +94,6 @@ class TileCatalog(AbstractTileCatalog):
             NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
             pixel locations ("plocs") that are between 0 and slen.
         """
-        _, n_tiles_h, n_tiles_w, _ = self.shape
         plocs = self._get_full_locs_from_tiles()
         param_names_to_mask = {"plocs"}.union(set(self.keys()))
         tile_params_to_gather = {"plocs": plocs}
@@ -155,7 +111,7 @@ class TileCatalog(AbstractTileCatalog):
             params[param_name] = param
 
         params["n_sources"] = reduce(self.n_sources, "b nth ntw -> b", "sum")
-        height, width = n_tiles_h * self.tile_slen, n_tiles_w * self.tile_slen
+        height, width = self.n_tiles_h * self.tile_slen, self.n_tiles_w * self.tile_slen
         return FullCatalog(height, width, params)
 
     def _get_full_locs_from_tiles(self) -> Tensor:
@@ -166,9 +122,8 @@ class TileCatalog(AbstractTileCatalog):
             "plocs" are the pixel coordinates of each source (between 0 and slen).
             "locs" are the scaled locations of each source (between 0 and 1).
         """
-        batch_size, n_tiles_h, n_tiles_w, _ = self.shape
-        slen = n_tiles_h * self.tile_slen
-        wlen = n_tiles_w * self.tile_slen
+        slen = self.n_tiles_h * self.tile_slen
+        wlen = self.n_tiles_w * self.tile_slen
         # coordinates on tiles.
         x_coords = torch.arange(0, slen, self.tile_slen, device=self.locs.device).long()
         y_coords = torch.arange(0, wlen, self.tile_slen, device=self.locs.device).long()
@@ -176,15 +131,15 @@ class TileCatalog(AbstractTileCatalog):
 
         # recenter and renormalize locations.
         locs = rearrange(self.locs, "b nth ntw d xy -> (b nth ntw) d xy", xy=2)
-        bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=batch_size).float()
+        bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=self.batch_size).float()
 
         plocs = locs * self.tile_slen + bias
         return rearrange(
             plocs,
             "(b nth ntw) d xy -> b nth ntw d xy",
-            b=batch_size,
-            nth=n_tiles_h,
-            ntw=n_tiles_w,
+            b=self.batch_size,
+            nth=self.n_tiles_h,
+            ntw=self.n_tiles_w,
         )
 
     def _get_indices_of_on_sources(self) -> Tuple[Tensor, Tensor]:
@@ -211,14 +166,34 @@ class TileCatalog(AbstractTileCatalog):
         is_on_array = torch.gather(tile_is_on_array, dim=1, index=indices_sorted)
         return indices_sorted, is_on_array
 
+    def to_dict(self) -> Dict[str, Tensor]:
+        out = {}
+        out["locs"] = self.locs
+        out["n_sources"] = self.n_sources
+        for k, v in self.items():
+            out[k] = v
+        return out
+
+    def equals(self, other, exclude=None, **kwargs):
+        self_dict = self.to_dict()
+        other_dict: Dict[str, Tensor] = other.to_dict()
+        exclude = set() if exclude is None else set(exclude)
+        keys = set(self_dict.keys()).union(other_dict.keys()).difference(exclude)
+        for k in keys:
+            if not torch.allclose(self_dict[k], other_dict[k], **kwargs):
+                return False
+        return True
+
+    def __eq__(self, other):
+        return self.equals(other)
+
     def get_tile_params_at_coord(self, plocs: torch.Tensor):
         """Return the parameters of the tiles that contain each of the locations in plocs."""
         assert len(plocs.shape) == 2 and plocs.shape[1] == 2
         assert plocs.device == self.locs.device
-        _, n_tiles_h, n_tiles_w, _ = self.shape
         n_total = len(plocs)
-        slen = n_tiles_h * self.tile_slen
-        wlen = n_tiles_w * self.tile_slen
+        slen = self.n_tiles_h * self.tile_slen
+        wlen = self.n_tiles_w * self.tile_slen
         # coordinates on tiles.
         x_coords = torch.arange(0, slen, self.tile_slen, device=self.locs.device).long()
         y_coords = torch.arange(0, wlen, self.tile_slen, device=self.locs.device).long()
@@ -227,26 +202,6 @@ class TileCatalog(AbstractTileCatalog):
         y_indx = torch.searchsorted(y_coords.contiguous(), plocs[:, 1].contiguous()) - 1
 
         return {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
-
-
-class TileCatalogSamples(AbstractTileCatalog):
-    shape_names = ("n_samples", "batch_size", "n_tiles_h", "n_tiles_w", "max_sources")
-
-    def flatten_sample_and_batch_dim(self):
-        d_flat = {
-            k: v.reshape(v.shape[0] * v.shape[1], *v.shape[2:]) for k, v in self.to_dict().items()
-        }
-        return TileCatalog(self.tile_slen, d_flat)
-
-    @classmethod
-    def unflatten_sample_and_batch_dim(cls, n_samples: int, tile_catalog: TileCatalog):
-        batch_size = tile_catalog.shape[0] // n_samples
-        assert n_samples * batch_size == tile_catalog.shape[0]
-        d = {
-            k: v.reshape(n_samples, batch_size, *v.shape[1:])
-            for k, v in tile_catalog.to_dict().items()
-        }
-        return cls(tile_catalog.tile_slen, d)
 
 
 class FullCatalog(UserDict):
