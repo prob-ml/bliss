@@ -310,6 +310,7 @@ class Tiler(nn.Module):
             Tensor with shape = (n_ptiles x n_bands x slen x slen)
         """
         assert isinstance(self.swap, Tensor)
+        assert isinstance(self.cached_grid, Tensor)
         assert source.shape[2] == source.shape[3]
         assert locs.shape[1] == 2
 

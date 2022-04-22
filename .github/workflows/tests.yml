@@ -65,7 +65,7 @@ jobs:
 
       - name: Run mypy
         run: |
-          poetry run mypy --ignore-missing-imports bliss
+          env MYPYPATH=typings poetry run mypy --ignore-missing-imports bliss
 
       - name: Run pylint
         run: |
