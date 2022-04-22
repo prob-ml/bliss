@@ -82,7 +82,7 @@ def get_map_estimate(
     )
     tile_map = image_encoder.max_a_post(var_params)
     full_map = tile_map.to_full_params()
-    tile_map_tilde = full_map.to_tile_params(image_encoder.tile_slen, tile_map.max_sources)
+    tile_map_tilde = full_map.to_tile_params(image_encoder.tile_slen, tile_map.shape[-1])
     assert tile_map.equals(tile_map_tilde, exclude=("n_source_log_probs",), atol=1e-5)
 
     return full_map

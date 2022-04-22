@@ -86,7 +86,7 @@ class GalaxyEncoder(pl.LightningModule):
             galaxy_params_flat,
             "(b nth ntw s) d -> b nth ntw s d",
             b=batch_size,
-            nth=ntw,
+            nth=nth,
             ntw=ntw,
             s=max_sources,
         )

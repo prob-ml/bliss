@@ -12,7 +12,12 @@ from torch.distributions import Categorical, Normal, Poisson
 from torch.nn import functional as F
 from torch.optim import Adam
 
-from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
+from bliss.catalog import (
+    TileCatalog,
+    TileCatalogSamples,
+    get_images_in_tiles,
+    get_is_on_from_n_sources,
+)
 from bliss.reporting import DetectionMetrics
 
 
@@ -203,7 +208,7 @@ class LocationEncoder(pl.LightningModule):
             "n_source_log_probs": n_source_log_probs,
         }
 
-    def sample(self, var_params: Dict[str, Tensor], n_samples: int) -> Dict[str, Tensor]:
+    def sample(self, var_params: Dict[str, Tensor], n_samples: int) -> TileCatalogSamples:
         """Sample from encoded variational distribution.
 
         Args:
@@ -252,11 +257,11 @@ class LocationEncoder(pl.LightningModule):
         b, nth, ntw, _ = log_probs_n_sources_per_tile.shape
         sample = {}
         for k, v in sample_flat.items():
-            pattern = "ns (b nth ntw) s k -> ns b nth ntw s k"
+            pattern = "n (b nth ntw) ns k -> n b nth ntw ns k"
             sample[k] = rearrange(v, pattern, b=b, nth=nth, ntw=ntw)
         sample["n_sources"] = tile_n_sources
 
-        return sample
+        return TileCatalogSamples(self.tile_slen, sample)
 
     def max_a_post(
         self, var_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None
