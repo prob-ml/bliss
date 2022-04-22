@@ -164,7 +164,7 @@ class LocationEncoder(pl.LightningModule):
         """
         image2 = self.input_transform(image, background)
         image_ptiles = get_images_in_tiles(image2, self.tile_slen, self.ptile_slen)
-        log_image_ptiles_flat: Tensor = rearrange(
+        log_image_ptiles_flat = rearrange(
             image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w"
         )
         enc_conv_output = self.enc_conv(log_image_ptiles_flat)
