@@ -51,178 +51,157 @@ def reconstruct(cfg):
     else:
         photo_catalog = None
 
-    for scene_name, scene_coords in cfg.reconstruct.scenes.items():
-        assert isinstance(scene_name, str)
-        bp = encoder.border_padding
-        h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
-        if scene_size == "all":
-            h = bp
-            w = bp
-            h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
-            w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
-        else:
-            h_end = h + scene_size
-            w_end = w + scene_size
-        h, h_end, w, w_end = get_scene_boundaries(
-            scene_coords, frame.image.shape[2], frame.image.shape[3], bp
-        )
-        true = frame.image[:, :, h:h_end, w:w_end]
-        recon, tile_map_recon = reconstruct_scene_at_coordinates(
-            encoder,
-            dec,
-            frame.image,
-            frame.background,
-            (h, h_end),
-            (w, w_end),
-            slen=cfg.reconstruct.slen,
-            device=device,
-        )
-        resid = (true - recon) / recon.sqrt()
-        tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
-        print(
-            f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image."
-        )
-        map_recon = tile_map_recon.to_full_params()
-        map_recon["fluxes"] = (
-            map_recon["galaxy_bools"] * map_recon["galaxy_fluxes"]
-            + map_recon["star_bools"] * map_recon["fluxes"]
-        )
-        map_recon["mags"] = convert_flux_to_mag(map_recon["fluxes"])
+    bp = encoder.border_padding
+    h = bp
+    w = bp
+    h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
+    w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
 
-        tile_map_recon["fluxes"] = (
-            tile_map_recon["galaxy_bools"] * tile_map_recon["galaxy_fluxes"]
-            + tile_map_recon["star_bools"] * tile_map_recon["fluxes"]
-        )
-        tile_map_recon["mags"] = torch.zeros_like(tile_map_recon["fluxes"])
-        tile_map_recon["mags"][tile_map_recon.is_on_array > 0] = convert_flux_to_mag(
-            tile_map_recon["fluxes"][tile_map_recon.is_on_array > 0]
-        )
-        scene_metrics_by_mag = {}
-        ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
-        catalogs = {"bliss": map_recon}
-        if photo_catalog is not None:
-            photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
-            catalogs["photo"] = photo_catalog_at_hw
-        for catalog_name, catalog in catalogs.items():
-            scene_metrics_by_mag[catalog_name] = {}
-            for mag in list(range(cfg.reconstruct.mag_min, cfg.reconstruct.mag_max + 1)) + [
-                "overall"
-            ]:
-                if mag != "overall":
-                    mag_min = float(mag) - 1.0
-                    mag_max = float(mag)
-                else:
-                    mag_min = -np.inf
-                    mag_max = float(cfg.reconstruct.mag_max)
-                scene_metrics_map = reporting.scene_metrics(
-                    ground_truth_catalog,
-                    catalog,
-                    mag_min=mag_min,
-                    mag_max=mag_max,
-                )
-                scene_metrics_by_mag[catalog_name][mag] = scene_metrics_map
-                conf_matrix = scene_metrics_map["conf_matrix"]
-                scene_metrics_by_mag[catalog_name][mag]["galaxy_accuracy"] = conf_matrix[0, 0] / (
-                    conf_matrix[0, 0] + conf_matrix[0, 1]
-                )
-                scene_metrics_by_mag[catalog_name][mag]["star_accuracy"] = conf_matrix[1, 1] / (
-                    conf_matrix[1, 1] + conf_matrix[1, 0]
-                )
+    recon, tile_map_recon = reconstruct_scene_at_coordinates(
+        encoder,
+        dec,
+        frame.image,
+        frame.background,
+        (h, h_end),
+        (w, w_end),
+        slen=cfg.reconstruct.slen,
+        device=device,
+    )
+    true = frame.image[:, :, h:h_end, w:w_end]
+    resid = (true - recon) / recon.sqrt()
 
-                if catalog_name == "bliss":
-                    scene_metrics_by_mag[catalog_name][mag].update(
-                        expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
+    tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
+    print(f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image.")
+    tile_map_recon["fluxes"] = (
+        tile_map_recon["galaxy_bools"] * tile_map_recon["galaxy_fluxes"]
+        + tile_map_recon["star_bools"] * tile_map_recon["fluxes"]
+    )
+    tile_map_recon["mags"] = torch.zeros_like(tile_map_recon["fluxes"])
+    tile_map_recon["mags"][tile_map_recon.is_on_array > 0] = convert_flux_to_mag(
+        tile_map_recon["fluxes"][tile_map_recon.is_on_array > 0]
+    )
+
+    full_map_recon = tile_map_recon.to_full_params()
+    scene_metrics_by_mag = {}
+    ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
+    catalogs = {"bliss": full_map_recon}
+    if photo_catalog is not None:
+        photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
+        catalogs["photo"] = photo_catalog_at_hw
+    for catalog_name, catalog in catalogs.items():
+        scene_metrics_by_mag[catalog_name] = {}
+        for mag in list(range(cfg.reconstruct.mag_min, cfg.reconstruct.mag_max + 1)) + ["overall"]:
+            if mag != "overall":
+                mag_min = float(mag) - 1.0
+                mag_max = float(mag)
+            else:
+                mag_min = -np.inf
+                mag_max = float(cfg.reconstruct.mag_max)
+            scene_metrics_map = reporting.scene_metrics(
+                ground_truth_catalog,
+                catalog,
+                mag_min=mag_min,
+                mag_max=mag_max,
+            )
+            scene_metrics_by_mag[catalog_name][mag] = scene_metrics_map
+            conf_matrix = scene_metrics_map["conf_matrix"]
+            scene_metrics_by_mag[catalog_name][mag]["galaxy_accuracy"] = conf_matrix[0, 0] / (
+                conf_matrix[0, 0] + conf_matrix[0, 1]
+            )
+            scene_metrics_by_mag[catalog_name][mag]["star_accuracy"] = conf_matrix[1, 1] / (
+                conf_matrix[1, 1] + conf_matrix[1, 0]
+            )
+
+            if catalog_name == "bliss":
+                scene_metrics_by_mag[catalog_name][mag].update(
+                    expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
+                )
+                if mag == "overall":
+                    scene_metrics_by_mag[catalog_name][mag]["expected_recall"] = expected_recall(
+                        tile_map_recon
                     )
-                    if mag == "overall":
-                        scene_metrics_by_mag[catalog_name][mag][
-                            "expected_recall"
-                        ] = expected_recall(tile_map_recon)
-                        scene_metrics_by_mag[catalog_name][mag][
-                            "expected_precision"
-                        ] = expected_precision(tile_map_recon)
-                        positive_negative_stats = get_positive_negative_stats(
-                            ground_truth_catalog, tile_map_recon, mag_max=mag_max
-                        )
-        if outdir is not None:
-            # Expected precision lpot
-            # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
-            fig_exp_precision, detection_stats = expected_positives_plot(
-                tile_map_recon,
-                positive_negative_stats,
-                cfg.reconstruct.map_n_source_weights,
-            )
-            fig_exp_precision.savefig(outdir / (scene_name + "_auroc.png"), format="png")
-            detection_stats.to_csv(outdir / (scene_name + "_stats_by_threshold.csv"))
-            fig = create_figure(
-                true[0, 0],
-                recon[0, 0],
-                resid[0, 0],
-                # coadd_objects=coadd_data,
-                map_recon=map_recon,
-                include_residuals=False,
-                colorbar=False,
-                scatter_on_true=False,
-            )
-            fig.savefig(outdir / (scene_name + ".pdf"), format="pdf")
-            fig.savefig(outdir / (scene_name + ".png"), format="png")
-            fig_scatter_on_true = create_figure(
-                true[0, 0],
-                recon[0, 0],
-                resid[0, 0],
-                map_recon=map_recon,
-                include_residuals=False,
-                colorbar=False,
-                scatter_on_true=True,
-            )
-            fig_with_tile_map = create_figure(
-                true[0, 0],
-                recon[0, 0],
-                resid[0, 0],
-                map_recon=map_recon,
-                include_residuals=False,
-                colorbar=False,
-                scatter_on_true=True,
-                tile_map=tile_map_recon,
-            )
-            fig_with_tile_map.savefig(outdir / (scene_name + "_with_tile_map.pdf"), format="pdf")
-            fig_scatter_on_true.savefig(
-                outdir / (scene_name + "_scatter_on_true.pdf"), format="pdf"
-            )
-            fig_with_coadd = create_figure(
-                true[0, 0],
-                recon[0, 0],
-                resid[0, 0],
-                coadd_objects=ground_truth_catalog,
-                map_recon=map_recon,
-                include_residuals=False,
-                colorbar=False,
-                scatter_on_true=True,
-            )
-            fig_with_coadd.savefig(outdir / (scene_name + "_coadd.pdf"), format="pdf")
-            fig_with_coadd.savefig(outdir / (scene_name + "_coadd.png"), format="png")
-            tc = tile_map_recon.copy()
-            log_probs = rearrange(tc["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
-            tc.n_sources = log_probs >= np.log(0.15)
-            fc = tc.to_full_params()
-            fig_with_coadd_lower_thresh = create_figure(
-                true[0, 0],
-                recon[0, 0],
-                resid[0, 0],
-                coadd_objects=ground_truth_catalog,
-                map_recon=fc,
-                include_residuals=False,
-                colorbar=False,
-                scatter_on_true=True,
-            )
-            fig_with_coadd_lower_thresh.savefig(
-                outdir / (scene_name + "_coadd_lower_thresh.png"), format="png"
-            )
-            # scene_metrics_table = create_scene_metrics_table(scene_coords)
-            # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
-            torch.save(scene_metrics_by_mag, outdir / (scene_name + ".pt"))
-            torch.save(ground_truth_catalog, outdir / (scene_name + "_ground_truth_catalog.pt"))
-            torch.save(map_recon, outdir / (scene_name + "_map_recon.pt"))
-            torch.save(tile_map_recon, outdir / (scene_name + "_tile_map_recon.pt"))
+                    scene_metrics_by_mag[catalog_name][mag][
+                        "expected_precision"
+                    ] = expected_precision(tile_map_recon)
+                    positive_negative_stats = get_positive_negative_stats(
+                        ground_truth_catalog, tile_map_recon, mag_max=mag_max
+                    )
+    fig_exp_precision, detection_stats = expected_positives_plot(
+        tile_map_recon,
+        positive_negative_stats,
+        cfg.reconstruct.map_n_source_weights,
+    )
+    if outdir is not None:
+        # Expected precision lpot
+        # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
+        fig_exp_precision.savefig(outdir / "auroc.png", format="png")
+        detection_stats.to_csv(outdir / "stats_by_threshold.csv")
+        fig = create_figure(
+            true[0, 0],
+            recon[0, 0],
+            resid[0, 0],
+            # coadd_objects=coadd_data,
+            map_recon=full_map_recon,
+            include_residuals=False,
+            colorbar=False,
+            scatter_on_true=False,
+        )
+        fig.savefig(outdir / "recon.pdf", format="pdf")
+        fig.savefig(outdir / "recon.png", format="png")
+        fig_scatter_on_true = create_figure(
+            true[0, 0],
+            recon[0, 0],
+            resid[0, 0],
+            map_recon=full_map_recon,
+            include_residuals=False,
+            colorbar=False,
+            scatter_on_true=True,
+        )
+        fig_with_tile_map = create_figure(
+            true[0, 0],
+            recon[0, 0],
+            resid[0, 0],
+            map_recon=full_map_recon,
+            include_residuals=False,
+            colorbar=False,
+            scatter_on_true=True,
+            tile_map=tile_map_recon,
+        )
+        fig_with_tile_map.savefig(outdir / "recon_with_tile_map.pdf", format="pdf")
+        fig_scatter_on_true.savefig(outdir / "recon_scatter_on_true.pdf", format="pdf")
+        fig_with_coadd = create_figure(
+            true[0, 0],
+            recon[0, 0],
+            resid[0, 0],
+            coadd_objects=ground_truth_catalog,
+            map_recon=full_map_recon,
+            include_residuals=False,
+            colorbar=False,
+            scatter_on_true=True,
+        )
+        fig_with_coadd.savefig(outdir / "recon_coadd.pdf", format="pdf")
+        fig_with_coadd.savefig(outdir / "recon_coadd.png", format="png")
+        tc = tile_map_recon.copy()
+        log_probs = rearrange(tc["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
+        tc.n_sources = log_probs >= np.log(0.15)
+        fc = tc.to_full_params()
+        fig_with_coadd_lower_thresh = create_figure(
+            true[0, 0],
+            recon[0, 0],
+            resid[0, 0],
+            coadd_objects=ground_truth_catalog,
+            map_recon=fc,
+            include_residuals=False,
+            colorbar=False,
+            scatter_on_true=True,
+        )
+        fig_with_coadd_lower_thresh.savefig(outdir / "recon_coadd_lower_thresh.png", format="png")
+        # scene_metrics_table = create_scene_metrics_table(scene_coords)
+        # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
+        torch.save(scene_metrics_by_mag, outdir / "scene_metrics.pt")
+        torch.save(ground_truth_catalog, outdir / "ground_truth_catalog.pt")
+        torch.save(full_map_recon, outdir / "map_recon.pt")
+        torch.save(tile_map_recon, outdir / "tile_map_recon.pt")
 
 
 def get_sdss_data(sdss_dir, sdss_pixel_scale):
