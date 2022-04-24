@@ -22,6 +22,7 @@ from bliss.datasets.sdss import PhotoFullCatalog, SloanDigitalSkySurvey, convert
 from bliss.encoder import Encoder
 from bliss.inference import (
     SDSSFrame,
+    SemiSyntheticFrame,
     SimulatedFrame,
     infer_blends,
     reconstruct_scene_at_coordinates,
@@ -33,6 +34,8 @@ from bliss.models.location_encoder import LocationEncoder
 from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
 
+Frame = Union[SDSSFrame, SimulatedFrame, SemiSyntheticFrame]
+
 
 def reconstruct(cfg):
     if cfg.reconstruct.outdir is not None:
@@ -40,7 +43,7 @@ def reconstruct(cfg):
         outdir.mkdir(exist_ok=True)
     else:
         outdir = None
-    frame: Union[SDSSFrame, SimulatedFrame, SemiSyntheticFrame] = instantiate(cfg.reconstruct.frame)
+    frame: Frame = instantiate(cfg.reconstruct.frame)
     device = torch.device(cfg.reconstruct.device)
     dec, encoder, prior = load_models(cfg, device)
     if cfg.reconstruct.photo_catalog is not None:
