@@ -89,43 +89,9 @@ def reconstruct(cfg):
         photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
         catalogs["photo"] = photo_catalog_at_hw
     for catalog_name, catalog in catalogs.items():
-        scene_metrics_by_mag[catalog_name] = {}
-        for mag in list(range(cfg.reconstruct.mag_min, cfg.reconstruct.mag_max + 1)) + ["overall"]:
-            if mag != "overall":
-                mag_min = float(mag) - 1.0
-                mag_max = float(mag)
-            else:
-                mag_min = -np.inf
-                mag_max = float(cfg.reconstruct.mag_max)
-            scene_metrics_map = reporting.scene_metrics(
-                ground_truth_catalog,
-                catalog,
-                mag_min=mag_min,
-                mag_max=mag_max,
-            )
-            scene_metrics_by_mag[catalog_name][mag] = scene_metrics_map
-            conf_matrix = scene_metrics_map["conf_matrix"]
-            scene_metrics_by_mag[catalog_name][mag]["galaxy_accuracy"] = conf_matrix[0, 0] / (
-                conf_matrix[0, 0] + conf_matrix[0, 1]
-            )
-            scene_metrics_by_mag[catalog_name][mag]["star_accuracy"] = conf_matrix[1, 1] / (
-                conf_matrix[1, 1] + conf_matrix[1, 0]
-            )
+        scene_metrics_by_mag[catalog_name] = calc_scene_metrics_by_mag(catalog, ground_truth_catalog, cfg.reconstruct.mag_min, cfg.reconstruct.mag_max)
 
-            if catalog_name == "bliss":
-                scene_metrics_by_mag[catalog_name][mag].update(
-                    expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
-                )
-                if mag == "overall":
-                    scene_metrics_by_mag[catalog_name][mag]["expected_recall"] = expected_recall(
-                        tile_map_recon
-                    )
-                    scene_metrics_by_mag[catalog_name][mag][
-                        "expected_precision"
-                    ] = expected_precision(tile_map_recon)
-                    positive_negative_stats = get_positive_negative_stats(
-                        ground_truth_catalog, tile_map_recon, mag_max=mag_max
-                    )
+    positive_negative_stats = get_positive_negative_stats(ground_truth_catalog, tile_map_recon, mag_max=cfg.reconstruct.mag_max)
     fig_exp_precision, detection_stats = expected_positives_plot(
         tile_map_recon,
         positive_negative_stats,
@@ -267,6 +233,98 @@ def get_scene_boundaries(scene_coords, frame_height, frame_width, bp) -> Tuple[i
         h_end = h + scene_size
         w_end = w + scene_size
     return h, h_end, w, w_end
+
+    # scene_metrics_by_mag = {}
+    # ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
+    # catalogs = {"bliss": full_map_recon}
+    # if photo_catalog is not None:
+    #     photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
+    #     catalogs["photo"] = photo_catalog_at_hw
+    # for catalog_name, catalog in catalogs.items():
+def calc_scene_metrics_by_mag(est_cat: FullCatalog, true_cat: FullCatalog, mag_start: int, mag_end: int, loc_slack: float) -> Dict[str, Dict[str, Any]]:
+    scene_metrics_by_mag = {}
+    for mag in list(range(mag_start, mag_end + 1)) + ["overall"]:
+        if mag != "overall":
+            mag_min = float(mag) - 1.0
+            mag_max = float(mag)
+        else:
+            mag_min = -np.inf
+            mag_max = float(mag_end)
+        # scene_metrics_map = reporting.scene_metrics(true_cat, est_cat, mag_min=mag_min, mag_max=mag_max)
+        detection_metrics = reporting.DetectionMetrics(loc_slack)
+        classification_metrics = reporting.ClassificationMetrics(loc_slack)
+
+        # precision
+        est_cat_binned = est_cat.apply_mag_bin(mag_min, mag_max)
+        detection_metrics.update(true_cat, est_cat_binned)
+        precision = float(detection_metrics.compute()["precision"].item())
+        detection_metrics.reset()  # reset global state since recall and precision use different cuts.
+
+        # recall
+        true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
+        detection_metrics.update(true_cat_binned, est_cat)
+        recall = detection_metrics.compute()["recall"].item()
+        n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"].item()
+        detection_metrics.reset()
+
+        # classification
+        true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
+        classification_metrics.update(true_cat_binned, est_cat)
+        classification_result = classification_metrics.compute()
+
+        # report counts on each bin
+        true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
+        est_cat_binned = est_cat.apply_mag_bin(mag_min, mag_max)
+        tcount = true_cat_binned.n_sources.int().item()
+        tgcount = true_cat_binned["galaxy_bools"].sum().int().item()
+        tscount = tcount - tgcount
+
+        ecount = est_cat_binned.n_sources.int().item()
+        egcount = est_cat_binned["galaxy_bools"].sum().int().item()
+        escount = ecount - egcount
+
+        n_matches = classification_result["n_matches"]
+        n_matches_gal_coadd = classification_result["n_matches_gal_coadd"]
+
+        counts: Dict[str, Number] = {
+            "tgcount": tgcount,
+            "tscount": tscount,
+            "egcount": egcount,
+            "escount": escount,
+            "n_matches_coadd_gal": n_matches_gal_coadd,
+            "n_matches_coadd_star": n_matches - n_matches_gal_coadd,
+        }
+
+        # compute and return results
+        return {**detection_result, **classification_result, "counts": counts}
+        scene_metrics_by_mag[mag] = scene_metrics_map
+        conf_matrix = scene_metrics_map["conf_matrix"]
+        scene_metrics_by_mag[mag]["galaxy_accuracy"] = conf_matrix[0, 0] / (
+            conf_matrix[0, 0] + conf_matrix[0, 1]
+        )
+        scene_metrics_by_mag[mag]["star_accuracy"] = conf_matrix[1, 1] / (
+            conf_matrix[1, 1] + conf_matrix[1, 0]
+        )
+
+        for k in scene_metrics_by_mag[mag]:
+            scene_metrics_by_mag[mag][k] = scene_metrics_by_mag[mag][k].item()
+    return scene_metrics_by_mag
+
+        # if catalog_name == "bliss":
+        #     scene_metrics_by_mag[catalog_name][mag].update(
+        #         expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
+        #     )
+        #     if mag == "overall":
+        #         scene_metrics_by_mag[catalog_name][mag]["expected_recall"] = expected_recall(
+        #             tile_map_recon
+        #         )
+        #         scene_metrics_by_mag[catalog_name][mag][
+        #             "expected_precision"
+        #         ] = expected_precision(tile_map_recon)
+        #         positive_negative_stats = get_positive_negative_stats(
+        #             true_cat, tile_map_recon, mag_max=mag_max
+        #         )
+    # return positive_negative_stats
 
 
 def create_figure(
