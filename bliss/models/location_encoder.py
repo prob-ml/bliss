@@ -98,7 +98,7 @@ class LocationEncoder(pl.LightningModule):
         self.border_padding = (ptile_slen - tile_slen) // 2
 
         # Number of distributional parameters used to characterize each source in an image.
-        self.n_params_per_source = sum(param["dim"] for param in self.dist_params.values())
+        self.n_params_per_source = sum(param["dim"] for param in self.dist_param_groups.values())
 
         # the number of total detections for all source counts: 1 + 2 + ... + self.max_detections
         # NOTE: the numerator here is always even
@@ -337,19 +337,21 @@ class LocationEncoder(pl.LightningModule):
 
         # finally, we slice pps5 by parameter group because these groups are treated differently,
         # subsequently
-        split_sizes = [v["dim"] for v in self.dist_params.values()]
+        split_sizes = [v["dim"] for v in self.dist_param_groups.values()]
         dist_params_split = torch.split(pps5, split_sizes, 3)
-        names = self.dist_params.keys()
+        names = self.dist_param_groups.keys()
         pred = dict(zip(names, dist_params_split))
 
         # I don't think the special case for `x == 0` should be necessary
         loc_mean_func = lambda x: torch.sigmoid(x) * (x != 0).float()
         pred["loc_mean"] = loc_mean_func(pred["loc_mean"])
 
-        # should we add a small amount (e.g. 1e-6) to these stdevs so that they are
-        # always nonzero?  (If so, delete `loc_logvar` and `log_flux_logvar` here)
-        pred["loc_sd"] = (0.5 * pred["loc_logvar"]).exp()
-        pred["log_flux_sd"] = (0.5 * pred["log_flux_logvar"]).exp()
+        pred["loc_sd"] = (pred["loc_logvar"].exp() + 1e-5).sqrt()
+        pred["log_flux_sd"] = (pred["log_flux_logvar"].exp() + 1e-5).sqrt()
+
+        # delete these so we don't accidentally use them
+        del pred["loc_logvar"]
+        del pred["log_flux_logvar"]
 
         return pred
 
@@ -386,12 +388,12 @@ class LocationEncoder(pl.LightningModule):
         locs_log_probs_all = _get_params_logprob_all_combs(
             rearrange(true_catalog.locs, "n nth ntw ns hw -> (n nth ntw) ns hw"),
             pred["loc_mean"].squeeze(0),
-            pred["loc_logvar"].squeeze(0),
+            pred["loc_sd"].squeeze(0),
         )
         star_params_log_probs_all = _get_params_logprob_all_combs(
             rearrange(true_catalog["log_fluxes"], "n nth ntw ns nb -> (n nth ntw) ns nb"),
             pred["log_flux_mean"].squeeze(0),
-            pred["log_flux_logvar"].squeeze(0),
+            pred["log_flux_sd"].squeeze(0),
         )
 
         (locs_loss, star_params_loss) = _get_min_perm_loss(
@@ -539,7 +541,7 @@ class LocationEncoder(pl.LightningModule):
         return batch
 
     @property
-    def dist_params(self):
+    def dist_param_groups(self):
         return {
             "loc_mean": {"dim": 2},
             "loc_logvar": {"dim": 2},
@@ -696,9 +698,9 @@ def _get_min_perm_loss(
     return locs_loss, star_params_loss
 
 
-def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+def _get_params_logprob_all_combs(true_params, param_mean, param_sd):
     # return shape (n_ptiles x max_detections x max_detections)
-    assert true_params.shape == param_mean.shape == param_logvar.shape
+    assert true_params.shape == param_mean.shape == param_sd.shape
 
     n_ptiles = true_params.size(0)
     max_detections = true_params.size(1)
@@ -706,9 +708,6 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     # view to evaluate all combinations of log_prob.
     true_params = true_params.view(n_ptiles, 1, max_detections, -1)
     param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
-    param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
+    param_sd = param_sd.view(n_ptiles, max_detections, 1, -1)
 
-    # It'd be better to add the 1e-5 factor earlier (e.g., in _encode_n_sources) so
-    # that it's used consistently everywhere
-    sd = (param_logvar.exp() + 1e-5).sqrt()
-    return Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
+    return Normal(param_mean, param_sd).log_prob(true_params).sum(dim=3)
