@@ -280,6 +280,8 @@ class LocationEncoder(pl.LightningModule):
         tile_locs = pred["loc_mean"] * is_on_array
         tile_locs = tile_locs.clamp(0, 1)
 
+        # In the catalog, do we need to store both fluxes and log fluxes?
+        # Also, can we avoid gating log_flux_mean here is_on_array? Because log(0) != 0.
         tile_log_fluxes = pred["log_flux_mean"] * is_on_array
         tile_fluxes = tile_log_fluxes.exp() * is_on_array
 
