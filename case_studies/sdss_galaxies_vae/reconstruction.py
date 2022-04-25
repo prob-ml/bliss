@@ -14,6 +14,7 @@ from joblib import Parallel, delayed
 from matplotlib import pyplot as plt
 from torch import Tensor
 from torch.distributions import Normal
+from torch.types import Number
 from tqdm import tqdm
 
 from bliss import reporting
@@ -82,16 +83,24 @@ def reconstruct(cfg):
     )
 
     full_map_recon = tile_map_recon.to_full_params()
-    scene_metrics_by_mag = {}
+    scene_metrics_by_mag: Dict[str, pd.DataFrame] = {}
     ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
     catalogs = {"bliss": full_map_recon}
     if photo_catalog is not None:
         photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
         catalogs["photo"] = photo_catalog_at_hw
     for catalog_name, catalog in catalogs.items():
-        scene_metrics_by_mag[catalog_name] = calc_scene_metrics_by_mag(catalog, ground_truth_catalog, cfg.reconstruct.mag_min, cfg.reconstruct.mag_max)
+        scene_metrics_by_mag[catalog_name] = calc_scene_metrics_by_mag(
+            catalog,
+            ground_truth_catalog,
+            cfg.reconstruct.mag_min,
+            cfg.reconstruct.mag_max,
+            loc_slack=1.0,
+        )
 
-    positive_negative_stats = get_positive_negative_stats(ground_truth_catalog, tile_map_recon, mag_max=cfg.reconstruct.mag_max)
+    positive_negative_stats = get_positive_negative_stats(
+        ground_truth_catalog, tile_map_recon, mag_max=cfg.reconstruct.mag_max
+    )
     fig_exp_precision, detection_stats = expected_positives_plot(
         tile_map_recon,
         positive_negative_stats,
@@ -100,6 +109,8 @@ def reconstruct(cfg):
     if outdir is not None:
         # Expected precision lpot
         # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
+        for catalog_name, scene_metrics in scene_metrics_by_mag.items():
+            scene_metrics.to_csv(outdir / f"scene_metrics_{catalog_name}.csv")
         fig_exp_precision.savefig(outdir / "auroc.png", format="png")
         detection_stats.to_csv(outdir / "stats_by_threshold.csv")
         fig = create_figure(
@@ -164,7 +175,7 @@ def reconstruct(cfg):
         fig_with_coadd_lower_thresh.savefig(outdir / "recon_coadd_lower_thresh.png", format="png")
         # scene_metrics_table = create_scene_metrics_table(scene_coords)
         # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
-        torch.save(scene_metrics_by_mag, outdir / "scene_metrics.pt")
+        # torch.save(scene_metrics_by_mag, outdir / "scene_metrics.pt")
         torch.save(ground_truth_catalog, outdir / "ground_truth_catalog.pt")
         torch.save(full_map_recon, outdir / "map_recon.pt")
         torch.save(tile_map_recon, outdir / "tile_map_recon.pt")
@@ -241,36 +252,21 @@ def get_scene_boundaries(scene_coords, frame_height, frame_width, bp) -> Tuple[i
     #     photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
     #     catalogs["photo"] = photo_catalog_at_hw
     # for catalog_name, catalog in catalogs.items():
-def calc_scene_metrics_by_mag(est_cat: FullCatalog, true_cat: FullCatalog, mag_start: int, mag_end: int, loc_slack: float) -> Dict[str, Dict[str, Any]]:
-    scene_metrics_by_mag = {}
-    for mag in list(range(mag_start, mag_end + 1)) + ["overall"]:
+
+
+def calc_scene_metrics_by_mag(
+    est_cat: FullCatalog, true_cat: FullCatalog, mag_start: int, mag_end: int, loc_slack: float
+):
+    scene_metrics_by_mag: Dict[Union[int, str], Dict[str, Number]] = {}
+    mags: List[Union[int, str]] = list(range(mag_start, mag_end + 1)) + ["overall"]
+    for mag in mags:
         if mag != "overall":
+            assert isinstance(mag, int)
             mag_min = float(mag) - 1.0
             mag_max = float(mag)
         else:
             mag_min = -np.inf
             mag_max = float(mag_end)
-        # scene_metrics_map = reporting.scene_metrics(true_cat, est_cat, mag_min=mag_min, mag_max=mag_max)
-        detection_metrics = reporting.DetectionMetrics(loc_slack)
-        classification_metrics = reporting.ClassificationMetrics(loc_slack)
-
-        # precision
-        est_cat_binned = est_cat.apply_mag_bin(mag_min, mag_max)
-        detection_metrics.update(true_cat, est_cat_binned)
-        precision = float(detection_metrics.compute()["precision"].item())
-        detection_metrics.reset()  # reset global state since recall and precision use different cuts.
-
-        # recall
-        true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
-        detection_metrics.update(true_cat_binned, est_cat)
-        recall = detection_metrics.compute()["recall"].item()
-        n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"].item()
-        detection_metrics.reset()
-
-        # classification
-        true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
-        classification_metrics.update(true_cat_binned, est_cat)
-        classification_result = classification_metrics.compute()
 
         # report counts on each bin
         true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
@@ -283,47 +279,73 @@ def calc_scene_metrics_by_mag(est_cat: FullCatalog, true_cat: FullCatalog, mag_s
         egcount = est_cat_binned["galaxy_bools"].sum().int().item()
         escount = ecount - egcount
 
-        n_matches = classification_result["n_matches"]
+        # scene_metrics_map = reporting.scene_metrics(true_cat, est_cat, mag_min=mag_min, mag_max=mag_max)
+        detection_metrics = reporting.DetectionMetrics(loc_slack)
+        classification_metrics = reporting.ClassificationMetrics(loc_slack)
+
+        # precision
+        est_cat_binned = est_cat.apply_mag_bin(mag_min, mag_max)
+        detection_metrics.update(true_cat, est_cat_binned)
+        # fp = float(detection_metrics.compute()["precision"].item())
+        fp = detection_metrics.compute()["fp"].item()
+        detection_metrics.reset()  # reset global state since recall and precision use different cuts.
+
+        # recall
+        true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
+        detection_metrics.update(true_cat_binned, est_cat)
+        detection_dict = detection_metrics.compute()
+        tp = detection_dict["tp"].item()
+        tp_gal = detection_dict["n_galaxies_detected"].item()
+        fp_gal = est_cat["galaxy_bools"].sum().item() - tp_gal
+        detection_metrics.reset()
+
+        # classification
+        classification_metrics.update(true_cat_binned, est_cat)
+        classification_result = classification_metrics.compute()
+        n_matches = classification_result["n_matches"].item()
         n_matches_gal_coadd = classification_result["n_matches_gal_coadd"]
 
-        counts: Dict[str, Number] = {
+        conf_matrix = classification_result["conf_matrix"]
+        galaxy_acc = conf_matrix[0, 0] / (conf_matrix[0, 0] + conf_matrix[0, 1])
+        star_acc = conf_matrix[1, 1] / (conf_matrix[1, 1] + conf_matrix[1, 0])
+
+        scene_metrics_by_mag[mag] = {
+            "tcount": tcount,
             "tgcount": tgcount,
-            "tscount": tscount,
-            "egcount": egcount,
-            "escount": escount,
-            "n_matches_coadd_gal": n_matches_gal_coadd,
-            "n_matches_coadd_star": n_matches - n_matches_gal_coadd,
+            "tp": tp,
+            "fp": fp,
+            "recall": tp / tcount,
+            "precision": tp / (tp + fp),
+            "tp_gal": tp_gal,
+            "tpr_gal": tp_gal / tgcount,
+            "fp_gal": fp_gal,
+            "fpr_gal": fp_gal / (fp_gal + tp_gal),
+            "classif_n_matches": n_matches,
+            "classif_acc": classification_result["class_acc"].item(),
+            "classif_galaxy_acc": galaxy_acc.item(),
+            "classif_star_acc": star_acc.item(),
         }
 
-        # compute and return results
-        return {**detection_result, **classification_result, "counts": counts}
-        scene_metrics_by_mag[mag] = scene_metrics_map
-        conf_matrix = scene_metrics_map["conf_matrix"]
-        scene_metrics_by_mag[mag]["galaxy_accuracy"] = conf_matrix[0, 0] / (
-            conf_matrix[0, 0] + conf_matrix[0, 1]
-        )
-        scene_metrics_by_mag[mag]["star_accuracy"] = conf_matrix[1, 1] / (
-            conf_matrix[1, 1] + conf_matrix[1, 0]
-        )
+    d = defaultdict(dict)
+    for mag, scene_metrics_mag in scene_metrics_by_mag.items():
+        for measure, value in scene_metrics_mag.items():
+            d[measure][mag] = value
+    return pd.DataFrame(d)
 
-        for k in scene_metrics_by_mag[mag]:
-            scene_metrics_by_mag[mag][k] = scene_metrics_by_mag[mag][k].item()
-    return scene_metrics_by_mag
-
-        # if catalog_name == "bliss":
-        #     scene_metrics_by_mag[catalog_name][mag].update(
-        #         expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
-        #     )
-        #     if mag == "overall":
-        #         scene_metrics_by_mag[catalog_name][mag]["expected_recall"] = expected_recall(
-        #             tile_map_recon
-        #         )
-        #         scene_metrics_by_mag[catalog_name][mag][
-        #             "expected_precision"
-        #         ] = expected_precision(tile_map_recon)
-        #         positive_negative_stats = get_positive_negative_stats(
-        #             true_cat, tile_map_recon, mag_max=mag_max
-        #         )
+    # if catalog_name == "bliss":
+    #     scene_metrics_by_mag[catalog_name][mag].update(
+    #         expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
+    #     )
+    #     if mag == "overall":
+    #         scene_metrics_by_mag[catalog_name][mag]["expected_recall"] = expected_recall(
+    #             tile_map_recon
+    #         )
+    #         scene_metrics_by_mag[catalog_name][mag][
+    #             "expected_precision"
+    #         ] = expected_precision(tile_map_recon)
+    #         positive_negative_stats = get_positive_negative_stats(
+    #             true_cat, tile_map_recon, mag_max=mag_max
+    #         )
     # return positive_negative_stats
 
 
