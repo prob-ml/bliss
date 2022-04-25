@@ -146,6 +146,8 @@ def reconstruct(cfg):
         bright_mismatches = mismatches_at_map & bright_truths
         true_cat.allowed_params = true_cat.allowed_params.union({"mismatched"})
         true_cat["mismatched"] = bright_mismatches.reshape(1, -1, 1)
+        mismatch_dict = defaultdict(dict)
+        detection_threshold = positive_negative_stats["true_matches"].float().mean(dim=0)
         for i, ploc in enumerate(true_cat.plocs[0]):
             if bright_mismatches[i]:
                 h = max(int(ploc[0].item() - 100.0), 0) + 24
@@ -154,14 +156,25 @@ def reconstruct(cfg):
                 fig = create_figure_at_point(
                     h, w, size, bp, tile_map_recon, frame, dec, est_catalog=true_cat
                 )
-                fig.savefig(mismatch_dir / f"h{int(h)}_w{int(w)}.png")
+                filename = f"h{int(h)}_w{int(w)}.png"
+                fig.savefig(mismatch_dir / filename)
+                mismatch_dict["filename"][i] = filename
+                mismatch_dict["h"][i] = ploc[0].item() + 24
+                mismatch_dict["w"][i] = ploc[0].item() + 24
+                mismatch_dict["ra"][i] = true_cat["ra"][0, i, 0].item()
+                mismatch_dict["dec"][i] = true_cat["dec"][0, i, 0].item()
+                mismatch_dict["mag"][i] = true_cat["mags"][0, i, 0].item()
+                mismatch_dict["galaxy_bool"][i] = true_cat["galaxy_bools"][0, i, 0].item()
+                mismatch_dict["detection_threshold"][i] = detection_threshold[i].item()
+        mismatch_tbl = pd.DataFrame(mismatch_dict)
+        mismatch_tbl.sort_values("filename").to_csv(mismatch_dir / "mismatches.csv")
 
-            # full_map_cropped = full_map_recon.crop(
-            #     h - 24,
-            #     full_map_recon.height - (h - 24 + size),
-            #     w - 24,
-            #     full_map_recon.width - (w - 24 + size),
-            # )
+        # full_map_cropped = full_map_recon.crop(
+        #     h - 24,
+        #     full_map_recon.height - (h - 24 + size),
+        #     w - 24,
+        #     full_map_recon.width - (w - 24 + size),
+        # )
         # fig_exp_precision.savefig(outdir / "auroc.png", format="png")
         # fig = create_figure(
         #     true[0, 0],
