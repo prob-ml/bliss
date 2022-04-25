@@ -340,7 +340,7 @@ class LocationEncoder(pl.LightningModule):
         names = self.dist_params.keys()
         pred = dict(zip(names, dist_params_split))
 
-        # what?!? why is sigmoid(0) = 0?
+        # I don't think the special case for `x == 0` should be necessary
         loc_mean_func = lambda x: torch.sigmoid(x) * (x != 0).float()
         pred["loc_mean"] = loc_mean_func(pred["loc_mean"])
 
@@ -420,15 +420,13 @@ class LocationEncoder(pl.LightningModule):
         self.log("val/locs_loss", out["locs_loss"].mean(), batch_size=batch_size)
         self.log("val/star_params_loss", out["star_params_loss"].mean(), batch_size=batch_size)
 
-        true_tile_catalog = TileCatalog(
-            self.tile_slen,
-            {
-                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
-                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
-                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
-            },
-        )
+        catalog_dict = {
+            "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+            "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+            "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+            "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+        }
+        true_tile_catalog = TileCatalog(self.tile_slen, catalog_dict)
         true_full_catalog = true_tile_catalog.to_full_params()
         dist_params = self.encode(batch["images"], batch["background"])
         est_tile_catalog = self.max_a_post(dist_params)
@@ -449,16 +447,14 @@ class LocationEncoder(pl.LightningModule):
         n_samples = min(int(math.sqrt(len(batch["n_sources"]))) ** 2, max_n_samples)
         nrows = int(n_samples**0.5)  # for figure
 
-        true_tile_catalog = TileCatalog(
-            self.tile_slen,
-            {
-                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
-                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
-                "star_bools": batch["star_bools"][:, :, :, 0 : self.max_detections],
-                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
-            },
-        )
+        catalog_dict = {
+            "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+            "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+            "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+            "star_bools": batch["star_bools"][:, :, :, 0 : self.max_detections],
+            "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+        }
+        true_tile_catalog = TileCatalog(self.tile_slen, catalog_dict)
         true_cat = true_tile_catalog.to_full_params()
         dist_params = self.encode(batch["images"], batch["background"])
         est_tile_catalog = self.max_a_post(dist_params)
@@ -466,10 +462,7 @@ class LocationEncoder(pl.LightningModule):
 
         # setup figure and axes.
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
-        if nrows > 1:
-            axes = axes.flatten()
-        else:
-            axes = [axes]
+        axes = axes.flatten() if nrows > 1 else [axes]
 
         images = batch["images"]
         assert images.shape[-2] == images.shape[-1]
@@ -523,15 +516,13 @@ class LocationEncoder(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        true_tile_catalog = TileCatalog(
-            self.tile_slen,
-            {
-                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
-                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
-                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
-            },
-        )
+        catalog_dict = {
+            "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+            "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+            "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+            "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+        }
+        true_tile_catalog = TileCatalog(self.tile_slen, catalog_dict)
         true_full_catalog = true_tile_catalog.to_full_params()
         dist_params = self.encode(batch["images"], batch["background"])
         est_tile_catalog = self.max_a_post(dist_params)
