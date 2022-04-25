@@ -223,21 +223,14 @@ class LocationEncoder(pl.LightningModule):
         pred = self._encode_for_n_sources(dist_params["per_source_params"], tile_n_sources)
 
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
-        tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-        tile_is_on_array = rearrange(tile_is_on_array, "n b nth ntw ns 1 -> n (b nth ntw) ns 1")
+        tile_is_on_array = rearrange(tile_is_on_array, "n b nth ntw ns -> n (b nth ntw) ns 1")
 
-        tile_locs = self._sample_gated_normal(
-            pred["loc_mean"],
-            pred["loc_sd"],
-            tile_is_on_array,
-        )
-        tile_log_fluxes = self._sample_gated_normal(
-            pred["log_flux_mean"],
-            pred["log_flux_sd"],
-            tile_is_on_array,
-        )
-        # Why are we masking here?
-        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
+        tile_locs = Normal(pred["loc_mean"], pred["loc_sd"]).rsample()
+        tile_locs *= tile_is_on_array  # Is masking here helpful/necessary?
+
+        tile_log_fluxes = Normal(pred["log_flux_mean"], pred["log_flux_sd"]).rsample()
+        tile_fluxes = tile_log_fluxes.exp()
+        tile_fluxes *= tile_is_on_array
 
         sample_flat = {
             "locs": tile_locs,
