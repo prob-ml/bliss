@@ -566,13 +566,13 @@ def make_enc_final(in_size, hidden, out_size, dropout):
 class EncoderCNN(nn.Module):
     def __init__(self, n_bands, channel, dropout):
         super().__init__()
-        self.layers = self._make_layers(n_bands, channel, dropout)
+        self.layer = self._make_layer(n_bands, channel, dropout)
 
     def forward(self, x: Tensor) -> Tensor:
         """Runs encoder CNN on inputs."""
-        return self.layers(x)
+        return self.layer(x)
 
-    def _make_layers(self, n_bands, channel, dropout):
+    def _make_layer(self, n_bands, channel, dropout):
         layers = [
             nn.Conv2d(n_bands, channel, 3, padding=1),
             nn.BatchNorm2d(channel),
