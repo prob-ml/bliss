@@ -3,6 +3,7 @@
 import json
 from collections import defaultdict
 from pathlib import Path
+from queue import Full
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -143,12 +144,16 @@ def reconstruct(cfg):
         bright_truths = true_cat["mags"][0, :, 0] <= 20.0
 
         bright_mismatches = mismatches_at_map & bright_truths
+        true_cat.allowed_params = true_cat.allowed_params.union({"mismatched"})
+        true_cat["mismatched"] = bright_mismatches.reshape(1, -1, 1)
         for i, ploc in enumerate(true_cat.plocs[0]):
             if bright_mismatches[i]:
                 h = max(int(ploc[0].item() - 100.0), 0) + 24
                 w = max(int(ploc[1].item() - 100.0), 0) + 24
                 size = 200
-                fig = create_figure_at_point(h, w, size, bp, tile_map_recon, frame, dec)
+                fig = create_figure_at_point(
+                    h, w, size, bp, tile_map_recon, frame, dec, est_catalog=true_cat
+                )
                 fig.savefig(mismatch_dir / f"h{int(h)}_w{int(w)}.png")
 
             # full_map_cropped = full_map_recon.crop(
@@ -386,7 +391,14 @@ def calc_scene_metrics_by_mag(
 
 
 def create_figure_at_point(
-    h: int, w: int, size: int, bp: int, tile_map_recon: TileCatalog, frame: Frame, dec: ImageDecoder
+    h: int,
+    w: int,
+    size: int,
+    bp: int,
+    tile_map_recon: TileCatalog,
+    frame: Frame,
+    dec: ImageDecoder,
+    est_catalog: Optional[FullCatalog] = None,
 ):
     tile_slen = tile_map_recon.tile_slen
 
@@ -405,11 +417,23 @@ def create_figure_at_point(
         recon_cropped = dec.render_images(tile_map_cropped.to(dec.device))
         recon_cropped = recon_cropped.to("cpu")[0, 0, bp:-bp, bp:-bp] + bg_cropped
         resid_cropped = (img_cropped - recon_cropped) / recon_cropped.sqrt()
+
+    if est_catalog is not None:
+        tile_est_catalog = est_catalog.to_tile_params(
+            tile_map_cropped.tile_slen, tile_map_cropped.max_sources
+        )
+        tile_est_catalog_cropped = tile_est_catalog.crop(
+            (h_tile, h_tile + n_tiles), (w_tile, w_tile + n_tiles)
+        )
+        est_catalog_cropped = tile_est_catalog_cropped.to_full_params()
+    else:
+        est_catalog_cropped = None
     return create_figure(
         img_cropped,
         recon_cropped,
         resid_cropped,
         map_recon=full_map_cropped,
+        coadd_objects=est_catalog_cropped,
     )
 
 
@@ -480,6 +504,11 @@ def create_figure(
         true_galaxy_bools = coadd_objects["galaxy_bools"]
         locs_galaxies_true = locs_true[true_galaxy_bools.squeeze(-1) > 0.5]
         locs_stars_true = locs_true[true_galaxy_bools.squeeze(-1) < 0.5]
+
+        if "mismatched" in coadd_objects:
+            locs_mismatched_true = locs_true[coadd_objects["mismatched"].squeeze(-1) > 0.5]
+        else:
+            locs_mismatched_true = None
         if locs_galaxies_true.shape[0] > 0:
             if scatter_on_true:
                 ax_true.scatter(
@@ -493,7 +522,7 @@ def create_figure(
             ax_recon.scatter(
                 locs_galaxies_true[:, 1],
                 locs_galaxies_true[:, 0],
-                color="m",
+                color=true_gal_col,
                 marker="+",
                 s=scatter_size,
                 label="SDSS Galaxies",
@@ -511,27 +540,29 @@ def create_figure(
             ax_recon.scatter(
                 locs_stars_true[:, 1],
                 locs_stars_true[:, 0],
-                color="b",
+                color=true_star_col,
                 marker="+",
                 s=scatter_size,
                 label="SDSS Stars",
             )
-            if include_residuals:
-                ax_res.scatter(
-                    locs_galaxies_true[:, 1],
-                    locs_galaxies_true[:, 0],
-                    color="b",
+        if locs_mismatched_true is not None:
+            if scatter_on_true:
+                ax_true.scatter(
+                    locs_mismatched_true[:, 1],
+                    locs_mismatched_true[:, 0],
+                    color="orange",
                     marker="+",
                     s=scatter_size,
+                    label="Unmatched",
                 )
-            if include_residuals:
-                ax_res.scatter(
-                    locs_galaxies_true[:, 1],
-                    locs_galaxies_true[:, 0],
-                    color="m",
-                    marker="+",
-                    s=scatter_size,
-                )
+            ax_recon.scatter(
+                locs_mismatched_true[:, 1],
+                locs_mismatched_true[:, 0],
+                color="orange",
+                marker="+",
+                s=scatter_size,
+                label="Unmatched",
+            )
 
     if map_recon is not None:
         locs_pred = map_recon.plocs[0] - 0.5
@@ -581,7 +612,7 @@ def create_figure(
             ax_recon.scatter(
                 locs_stars[:, 1],
                 locs_stars[:, 0],
-                color="r",
+                color=pred_star_col,
                 marker="x",
                 s=scatter_size,
                 label="Predicted Star",
