@@ -120,76 +120,111 @@ def reconstruct(cfg):
     if outdir is not None:
         # Expected precision lpot
         # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
+        detection_stats.to_csv(outdir / "stats_by_threshold.csv")
         for catalog_name, scene_metrics in scene_metrics_by_mag.items():
             scene_metrics.to_csv(outdir / f"scene_metrics_{catalog_name}.csv")
-        fig_exp_precision.savefig(outdir / "auroc.png", format="png")
-        detection_stats.to_csv(outdir / "stats_by_threshold.csv")
-        fig = create_figure(
-            true[0, 0],
-            recon[0, 0],
-            resid[0, 0],
-            # coadd_objects=coadd_data,
-            map_recon=full_map_recon,
-            include_residuals=False,
-            colorbar=False,
-            scatter_on_true=False,
-        )
-        fig.savefig(outdir / "recon.pdf", format="pdf")
-        fig.savefig(outdir / "recon.png", format="png")
-        fig_scatter_on_true = create_figure(
-            true[0, 0],
-            recon[0, 0],
-            resid[0, 0],
-            map_recon=full_map_recon,
-            include_residuals=False,
-            colorbar=False,
-            scatter_on_true=True,
-        )
-        fig_with_tile_map = create_figure(
-            true[0, 0],
-            recon[0, 0],
-            resid[0, 0],
-            map_recon=full_map_recon,
-            include_residuals=False,
-            colorbar=False,
-            scatter_on_true=True,
-            tile_map=tile_map_recon,
-        )
-        fig_with_tile_map.savefig(outdir / "recon_with_tile_map.pdf", format="pdf")
-        fig_scatter_on_true.savefig(outdir / "recon_scatter_on_true.pdf", format="pdf")
-        fig_with_coadd = create_figure(
-            true[0, 0],
-            recon[0, 0],
-            resid[0, 0],
-            coadd_objects=ground_truth_catalog,
-            map_recon=full_map_recon,
-            include_residuals=False,
-            colorbar=False,
-            scatter_on_true=True,
-        )
-        fig_with_coadd.savefig(outdir / "recon_coadd.pdf", format="pdf")
-        fig_with_coadd.savefig(outdir / "recon_coadd.png", format="png")
-        tc = tile_map_recon.copy()
-        log_probs = rearrange(tc["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
-        tc.n_sources = log_probs >= np.log(0.15)
-        fc = tc.to_full_params()
-        fig_with_coadd_lower_thresh = create_figure(
-            true[0, 0],
-            recon[0, 0],
-            resid[0, 0],
-            coadd_objects=ground_truth_catalog,
-            map_recon=fc,
-            include_residuals=False,
-            colorbar=False,
-            scatter_on_true=True,
-        )
-        fig_with_coadd_lower_thresh.savefig(outdir / "recon_coadd_lower_thresh.png", format="png")
-        # scene_metrics_table = create_scene_metrics_table(scene_coords)
-        # scene_metrics_table.to_csv(outdir / (scene_name + "_scene_metrics_by_mag.csv"))
-        # torch.save(scene_metrics_by_mag, outdir / "scene_metrics.pt")
         torch.save(ground_truth_catalog, outdir / "ground_truth_catalog.pt")
         torch.save(full_map_recon, outdir / "map_recon.pt")
         torch.save(tile_map_recon, outdir / "tile_map_recon.pt")
+
+        scene_dir = outdir / "reconstructions" / "scenes"
+        scene_dir.mkdir(parents = True, exist_ok = True)
+        for scene_name, scene_locs in cfg.reconstruct.scenes.items():
+            h: int = scene_locs["h"]
+            w: int = scene_locs["w"]
+            size: int = scene_locs["size"]
+            tile_slen = tile_map_recon.tile_slen
+
+            h_tile = (h - bp) // tile_slen
+            w_tile = (w - bp) // tile_slen
+            n_tiles = size // tile_slen
+            hlims = bp + (h_tile * tile_slen), bp + ((h_tile + n_tiles) * tile_slen)
+            wlims = bp + (w_tile * tile_slen), bp + ((w_tile + n_tiles) * tile_slen)
+
+            tile_map_cropped = tile_map_recon.crop((h_tile, h_tile + n_tiles), (w_tile, w_tile + n_tiles))
+            full_map_cropped = tile_map_cropped.to_full_params()
+
+            img_cropped = frame.image[0, 0, hlims[0]:hlims[1], wlims[0]:wlims[1]]
+            bg_cropped = frame.background[0, 0, hlims[0]:hlims[1], wlims[0]:wlims[1]]
+            with torch.no_grad():
+                recon_cropped = dec.render_images(tile_map_cropped.to(dec.device))
+                recon_cropped = recon_cropped.to("cpu")[0, 0, bp:-bp, bp:-bp] + bg_cropped
+                resid_cropped = (img_cropped - recon_cropped) / recon_cropped.sqrt()
+            fig = create_figure(
+                img_cropped,
+                recon_cropped,
+                resid_cropped,
+                map_recon=full_map_cropped,
+            )
+            fig.savefig(scene_dir / f"{scene_name}.png")
+
+            # full_map_cropped = full_map_recon.crop(
+            #     h - 24,
+            #     full_map_recon.height - (h - 24 + size),
+            #     w - 24,
+            #     full_map_recon.width - (w - 24 + size),
+            # )
+        # fig_exp_precision.savefig(outdir / "auroc.png", format="png")
+        # fig = create_figure(
+        #     true[0, 0],
+        #     recon[0, 0],
+        #     resid[0, 0],
+        #     # coadd_objects=coadd_data,
+        #     map_recon=full_map_recon,
+        #     include_residuals=False,
+        #     colorbar=False,
+        #     scatter_on_true=False,
+        # )
+        # fig.savefig(outdir / "recon.pdf", format="pdf")
+        # fig.savefig(outdir / "recon.png", format="png")
+        # fig_scatter_on_true = create_figure(
+        #     true[0, 0],
+        #     recon[0, 0],
+        #     resid[0, 0],
+        #     map_recon=full_map_recon,
+        #     include_residuals=False,
+        #     colorbar=False,
+        #     scatter_on_true=True,
+        # )
+        # fig_with_tile_map = create_figure(
+        #     true[0, 0],
+        #     recon[0, 0],
+        #     resid[0, 0],
+        #     map_recon=full_map_recon,
+        #     include_residuals=False,
+        #     colorbar=False,
+        #     scatter_on_true=True,
+        #     tile_map=tile_map_recon,
+        # )
+        # fig_with_tile_map.savefig(outdir / "recon_with_tile_map.pdf", format="pdf")
+        # fig_scatter_on_true.savefig(outdir / "recon_scatter_on_true.pdf", format="pdf")
+        # fig_with_coadd = create_figure(
+        #     true[0, 0],
+        #     recon[0, 0],
+        #     resid[0, 0],
+        #     coadd_objects=ground_truth_catalog,
+        #     map_recon=full_map_recon,
+        #     include_residuals=False,
+        #     colorbar=False,
+        #     scatter_on_true=True,
+        # )
+        # fig_with_coadd.savefig(outdir / "recon_coadd.pdf", format="pdf")
+        # fig_with_coadd.savefig(outdir / "recon_coadd.png", format="png")
+        # tc = tile_map_recon.copy()
+        # log_probs = rearrange(tc["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
+        # tc.n_sources = log_probs >= np.log(0.15)
+        # fc = tc.to_full_params()
+        # fig_with_coadd_lower_thresh = create_figure(
+        #     true[0, 0],
+        #     recon[0, 0],
+        #     resid[0, 0],
+        #     coadd_objects=ground_truth_catalog,
+        #     map_recon=fc,
+        #     include_residuals=False,
+        #     colorbar=False,
+        #     scatter_on_true=True,
+        # )
+        # fig_with_coadd_lower_thresh.savefig(outdir / "recon_coadd_lower_thresh.png", format="png")
 
 
 def get_sdss_data(sdss_dir, sdss_pixel_scale):

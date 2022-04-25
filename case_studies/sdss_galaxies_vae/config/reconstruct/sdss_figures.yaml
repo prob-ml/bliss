@@ -35,7 +35,7 @@ scenes:
         h: 557 #1400
         w: 408
         size: 300
-    sdss_recon_all:
-        h: 24
-        w: 24
-        size: "all"
+    # sdss_recon_all:
+    #     h: 24
+    #     w: 24
+    #     size: "all"
