@@ -98,8 +98,19 @@ def reconstruct(cfg):
             loc_slack=1.0,
         )
 
+    encoder.map_n_source_weights = torch.tensor(cfg.reconstruct.map_n_source_weights)
+    _, tile_map_lower_threshold = reconstruct_scene_at_coordinates(
+        encoder,
+        dec,
+        frame.image,
+        frame.background,
+        (h, h_end),
+        (w, w_end),
+        slen=cfg.reconstruct.slen,
+        device=device,
+    )
     positive_negative_stats = get_positive_negative_stats(
-        ground_truth_catalog, tile_map_recon, mag_max=cfg.reconstruct.mag_max
+        ground_truth_catalog, tile_map_lower_threshold, mag_max=cfg.reconstruct.mag_max
     )
     fig_exp_precision, detection_stats = expected_positives_plot(
         tile_map_recon,
@@ -223,10 +234,7 @@ def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
     galaxy.load_state_dict(galaxy_state_dict)
     dec: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
     encoder = Encoder(
-        location.eval(),
-        binary.eval(),
-        galaxy.eval(),
-        cfg.reconstruct.map_n_source_weights,
+        location.eval(), binary.eval(), galaxy.eval(), cfg.reconstruct.map_n_source_weights
     ).to(device)
 
     prior: ImagePrior = instantiate(cfg.models.prior).to(device).eval()
