@@ -192,7 +192,7 @@ class LocationEncoder(pl.LightningModule):
             eval_log_probs = self._get_n_source_prior_log_prob(eval_mean_detections)
             adj = eval_log_probs - train_log_probs
             adj = rearrange(adj, "ns -> 1 ns")
-            adj = adj.to(n_source_log_probs_flat.device)
+            adj = adj.to(self.device)
             n_source_log_probs_flat += adj
         n_source_log_probs = rearrange(
             n_source_log_probs_flat, "(b nth ntw) ns -> b nth ntw ns", b=b, nth=nth, ntw=ntw
@@ -264,12 +264,12 @@ class LocationEncoder(pl.LightningModule):
             The dictionary contains
             `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
-        n_source_log_probs = dist_params["n_source_log_probs"]
         if n_source_weights is None:
             n_source_weights = torch.ones(self.max_detections + 1)
-        n_source_weights = n_source_weights.to(n_source_log_probs.device).reshape(1, 1, 1, -1)
+        n_source_weights = n_source_weights.to(self.device).reshape(1, 1, 1, -1)
         n_source_log_weights = n_source_weights.log()
-        map_n_sources: Tensor = torch.argmax(n_source_log_probs + n_source_log_weights, dim=-1)
+        log_joint = dist_params["n_source_log_probs"] + n_source_log_weights
+        map_n_sources: Tensor = torch.argmax(log_joint, dim=-1)
 
         # the first dimension is the number of samples (just one in this case)
         pred = self._encode_for_n_sources(
@@ -300,7 +300,7 @@ class LocationEncoder(pl.LightningModule):
         max_a_post.update(
             {
                 "n_sources": map_n_sources,
-                "n_source_log_probs": n_source_log_probs[:, :, :, 1:].unsqueeze(-1),
+                "n_source_log_probs": dist_params["n_source_log_probs"][:, :, :, 1:].unsqueeze(-1),
             }
         )
         return TileCatalog(self.tile_slen, max_a_post)
