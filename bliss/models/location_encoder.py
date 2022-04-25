@@ -232,19 +232,16 @@ class LocationEncoder(pl.LightningModule):
         tile_fluxes = tile_log_fluxes.exp()
         tile_fluxes *= tile_is_on_array
 
-        sample_flat = {
-            "locs": tile_locs,
-            "log_fluxes": tile_log_fluxes,
-            "fluxes": tile_fluxes,
-        }
+        # Given all the rearranging/unflattening below, I suspect we never should have
+        # flattened in the first place
         b, nth, ntw, _ = dist_params["n_source_log_probs"].shape
-        sample = {}
-        for k, v in sample_flat.items():
-            pattern = "ns (b nth ntw) s k -> ns b nth ntw s k"
-            sample[k] = rearrange(v, pattern, b=b, nth=nth, ntw=ntw)
-        sample["n_sources"] = tile_n_sources
-
-        return sample
+        unflatten = "ns (b nth ntw) s k -> ns b nth ntw s k"
+        return {
+            "locs": rearrange(tile_locs, unflatten, b=b, nth=nth, ntw=ntw),
+            "log_fluxes": rearrange(tile_log_fluxes, unflatten, b=b, nth=nth, ntw=ntw),
+            "fluxes": rearrange(tile_fluxes, unflatten, b=b, nth=nth, ntw=ntw),
+            "n_sources": tile_n_sources,
+        }
 
     def max_a_post(
         self, dist_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None
@@ -286,23 +283,17 @@ class LocationEncoder(pl.LightningModule):
         tile_log_fluxes = pred["log_flux_mean"] * is_on_array
         tile_fluxes = tile_log_fluxes.exp() * is_on_array
 
-        max_a_post_flat = {
-            "locs": tile_locs,
-            "log_fluxes": tile_log_fluxes,
-            "fluxes": tile_fluxes,
-        }
-        max_a_post = {}
+        # Given all the rearranging/unflattening below, perhaps we never should have
+        # flattened in the first place
         b, nth, ntw, _, _ = dist_params["per_source_params"].shape
-        for k, v in max_a_post_flat.items():
-            max_a_post[k] = rearrange(
-                v, "1 (b nth ntw) s k -> b nth ntw s k", b=b, nth=nth, ntw=ntw
-            )
-        max_a_post.update(
-            {
-                "n_sources": map_n_sources,
-                "n_source_log_probs": dist_params["n_source_log_probs"][:, :, :, 1:].unsqueeze(-1),
-            }
-        )
+        unflatten = "1 (b nth ntw) s k -> b nth ntw s k"
+        max_a_post = {
+            "locs": rearrange(tile_locs, unflatten, b=b, nth=nth, ntw=ntw),
+            "log_fluxes": rearrange(tile_log_fluxes, unflatten, b=b, nth=nth, ntw=ntw),
+            "fluxes": rearrange(tile_fluxes, unflatten, b=b, nth=nth, ntw=ntw),
+            "n_sources": map_n_sources,
+            "n_source_log_probs": dist_params["n_source_log_probs"][:, :, :, 1:].unsqueeze(-1),
+        }
         return TileCatalog(self.tile_slen, max_a_post)
 
     def _get_n_source_prior_log_prob(self, detection_rate):
