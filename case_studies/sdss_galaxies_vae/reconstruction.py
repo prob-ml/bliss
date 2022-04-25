@@ -128,35 +128,28 @@ def reconstruct(cfg):
         torch.save(tile_map_recon, outdir / "tile_map_recon.pt")
 
         scene_dir = outdir / "reconstructions" / "scenes"
-        scene_dir.mkdir(parents = True, exist_ok = True)
+        scene_dir.mkdir(parents=True, exist_ok=True)
         for scene_name, scene_locs in cfg.reconstruct.scenes.items():
             h: int = scene_locs["h"]
             w: int = scene_locs["w"]
             size: int = scene_locs["size"]
-            tile_slen = tile_map_recon.tile_slen
-
-            h_tile = (h - bp) // tile_slen
-            w_tile = (w - bp) // tile_slen
-            n_tiles = size // tile_slen
-            hlims = bp + (h_tile * tile_slen), bp + ((h_tile + n_tiles) * tile_slen)
-            wlims = bp + (w_tile * tile_slen), bp + ((w_tile + n_tiles) * tile_slen)
-
-            tile_map_cropped = tile_map_recon.crop((h_tile, h_tile + n_tiles), (w_tile, w_tile + n_tiles))
-            full_map_cropped = tile_map_cropped.to_full_params()
-
-            img_cropped = frame.image[0, 0, hlims[0]:hlims[1], wlims[0]:wlims[1]]
-            bg_cropped = frame.background[0, 0, hlims[0]:hlims[1], wlims[0]:wlims[1]]
-            with torch.no_grad():
-                recon_cropped = dec.render_images(tile_map_cropped.to(dec.device))
-                recon_cropped = recon_cropped.to("cpu")[0, 0, bp:-bp, bp:-bp] + bg_cropped
-                resid_cropped = (img_cropped - recon_cropped) / recon_cropped.sqrt()
-            fig = create_figure(
-                img_cropped,
-                recon_cropped,
-                resid_cropped,
-                map_recon=full_map_cropped,
-            )
+            fig = create_figure_at_point(h, w, size, bp, tile_map_recon, frame, dec)
             fig.savefig(scene_dir / f"{scene_name}.png")
+
+        mismatch_dir = outdir / "reconstructions" / "mismatches"
+        mismatch_dir.mkdir(exist_ok=True)
+        mismatches_at_map = positive_negative_stats["true_matches"][49] == 0
+        true_cat = ground_truth_catalog.apply_mag_bin(-np.inf, cfg.reconstruct.mag_max)
+        bright_truths = true_cat["mags"][0, :, 0] <= 20.0
+
+        bright_mismatches = mismatches_at_map & bright_truths
+        for i, ploc in enumerate(true_cat.plocs[0]):
+            if bright_mismatches[i]:
+                h = max(int(ploc[0].item() - 100.0), 0) + 24
+                w = max(int(ploc[1].item() - 100.0), 0) + 24
+                size = 200
+                fig = create_figure_at_point(h, w, size, bp, tile_map_recon, frame, dec)
+                fig.savefig(mismatch_dir / f"h{int(h)}_w{int(w)}.png")
 
             # full_map_cropped = full_map_recon.crop(
             #     h - 24,
@@ -390,6 +383,34 @@ def calc_scene_metrics_by_mag(
     #             true_cat, tile_map_recon, mag_max=mag_max
     #         )
     # return positive_negative_stats
+
+
+def create_figure_at_point(
+    h: int, w: int, size: int, bp: int, tile_map_recon: TileCatalog, frame: Frame, dec: ImageDecoder
+):
+    tile_slen = tile_map_recon.tile_slen
+
+    h_tile = (h - bp) // tile_slen
+    w_tile = (w - bp) // tile_slen
+    n_tiles = size // tile_slen
+    hlims = bp + (h_tile * tile_slen), bp + ((h_tile + n_tiles) * tile_slen)
+    wlims = bp + (w_tile * tile_slen), bp + ((w_tile + n_tiles) * tile_slen)
+
+    tile_map_cropped = tile_map_recon.crop((h_tile, h_tile + n_tiles), (w_tile, w_tile + n_tiles))
+    full_map_cropped = tile_map_cropped.to_full_params()
+
+    img_cropped = frame.image[0, 0, hlims[0] : hlims[1], wlims[0] : wlims[1]]
+    bg_cropped = frame.background[0, 0, hlims[0] : hlims[1], wlims[0] : wlims[1]]
+    with torch.no_grad():
+        recon_cropped = dec.render_images(tile_map_cropped.to(dec.device))
+        recon_cropped = recon_cropped.to("cpu")[0, 0, bp:-bp, bp:-bp] + bg_cropped
+        resid_cropped = (img_cropped - recon_cropped) / recon_cropped.sqrt()
+    return create_figure(
+        img_cropped,
+        recon_cropped,
+        resid_cropped,
+        map_recon=full_map_cropped,
+    )
 
 
 def create_figure(
@@ -901,7 +922,7 @@ def get_detection_stats_for_thresholds(thresholds, expected_results, actual_resu
         "actual_recall": actual_recall,
     }
     stats_dict.update({f"expected_{k}": v for k, v in expected_results.items()})
-    stats_dict.update({f"actual_{k}": v for k, v in actual_results.items()})
+    stats_dict.update({f"actual_{k}": v for k, v in actual_results.items() if k != "true_matches"})
     return pd.DataFrame(stats_dict)
 
 
@@ -1034,15 +1055,17 @@ def get_positive_negative_stats(
         number_est = est_cat.plocs.shape[1]
         if number_true == 0 or number_est == 0:
             return {"tp": 0.0, "fp": float(number_est)}
-        _, _, d, _ = reporting.match_by_locs(true_cat.plocs[0], est_cat.plocs[0], 1.0)
+        row_indx, col_indx, d, _ = reporting.match_by_locs(true_cat.plocs[0], est_cat.plocs[0], 1.0)
+        true_matches = torch.zeros(true_cat.plocs.shape[1], dtype=torch.bool)
+        true_matches[row_indx] = d
         tp = d.sum()
         fp = number_est - tp
-        return {"tp": tp, "fp": fp}
+        return {"tp": tp, "fp": fp, "true_matches": true_matches}
 
     res = Parallel(n_jobs=10)(delayed(stats_for_threshold)(t) for t in tqdm(thresholds))
     out = {}
     for k in res[0]:
-        out[k] = np.array([r[k] for r in res])
+        out[k] = torch.stack([r[k] for r in res])
     out["n_obj"] = true_cat.plocs.shape[1]
     return out
 
