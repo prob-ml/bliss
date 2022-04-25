@@ -98,7 +98,7 @@ class LocationEncoder(pl.LightningModule):
         self.border_padding = (ptile_slen - tile_slen) // 2
 
         # Number of distributional parameters used to characterize each source in an image.
-        self.n_params_per_source = sum(param["dim"] for param in self.variational_params.values())
+        self.n_params_per_source = sum(param["dim"] for param in self.dist_params.values())
 
         # the number of total detections for all source counts: 1 + 2 + ... + self.max_detections
         # NOTE: the numerator here is always even
@@ -146,7 +146,7 @@ class LocationEncoder(pl.LightningModule):
     def encode(
         self, image: Tensor, background: Tensor, eval_mean_detections: Optional[float] = None
     ) -> Dict[str, Tensor]:
-        """Encodes variational parameters from image padded tiles.
+        """Encodes distributional parameters from image padded tiles.
 
         Args:
             image: An astronomical image with shape `b * n_bands * h * w`.
@@ -156,7 +156,7 @@ class LocationEncoder(pl.LightningModule):
         Returns:
             A dictionary of two components:
             -  per_source_params:
-                Tensor of shape b x n_tiles_h x n_tiles_w x D of variational parameters
+                Tensor of shape b x n_tiles_h x n_tiles_w x D of distributional parameters
                 per tile.
             -  n_source_log_probs:
                 Tensor of shape b x n_tiles_h x n_tiles_w x (max_sources + 1) indicating
@@ -203,11 +203,11 @@ class LocationEncoder(pl.LightningModule):
             "n_source_log_probs": n_source_log_probs,
         }
 
-    def sample(self, var_params: Dict[str, Tensor], n_samples: int) -> Dict[str, Tensor]:
-        """Sample from encoded variational distribution.
+    def sample(self, dist_params: Dict[str, Tensor], n_samples: int) -> Dict[str, Tensor]:
+        """Sample from the encoded variational distribution.
 
         Args:
-            var_params: The output of `self.encode(ptiles)` which is the variational parameters
+            dist_params: The output of `self.encode(ptiles)` which is the distributional parameters
                 in matrix form. Has size `n_ptiles * n_bands`.
             n_samples:
                 The number of samples to draw
@@ -216,40 +216,35 @@ class LocationEncoder(pl.LightningModule):
             A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
-        log_probs_n_sources_per_tile = var_params["n_source_log_probs"]
-        # sample number of sources.
-        # tile_n_sources shape = (n_samples x n_ptiles)
-        # tile_is_on_array shape = (n_samples x n_ptiles x max_detections x 1)
-        probs_n_sources_per_tile = torch.exp(log_probs_n_sources_per_tile)
-        tile_n_sources = Categorical(probs=probs_n_sources_per_tile).sample((n_samples,))
+        n_source_probs = dist_params["n_source_log_probs"].exp()
+        tile_n_sources = Categorical(probs=n_source_probs).sample((n_samples,))
 
-        # get var_params conditioned on n_sources
-        pred = self._encode_for_n_sources(var_params["per_source_params"], tile_n_sources)
+        # get distributional parameters conditioned on the sampled numbers of light sources
+        pred = self._encode_for_n_sources(dist_params["per_source_params"], tile_n_sources)
 
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1).float()
-        pred["loc_sd"] = torch.exp(0.5 * pred["loc_logvar"])
-        pred["log_flux_sd"] = torch.exp(0.5 * pred["log_flux_logvar"])
+        tile_is_on_array = rearrange(tile_is_on_array, "n b nth ntw ns 1 -> n (b nth ntw) ns 1")
+
         tile_locs = self._sample_gated_normal(
             pred["loc_mean"],
             pred["loc_sd"],
-            rearrange(tile_is_on_array, "n b nth ntw ns 1 -> n (b nth ntw) ns 1"),
+            tile_is_on_array,
         )
         tile_log_fluxes = self._sample_gated_normal(
             pred["log_flux_mean"],
             pred["log_flux_sd"],
-            rearrange(tile_is_on_array, "n b nth ntw ns 1 -> n (b nth ntw) ns 1"),
+            tile_is_on_array,
         )
         # Why are we masking here?
-        tile_fluxes = tile_log_fluxes.exp() * rearrange(
-            tile_is_on_array, "n b nth ntw ns 1 -> n (b nth ntw) ns 1"
-        )
+        tile_fluxes = tile_log_fluxes.exp() * tile_is_on_array
+
         sample_flat = {
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
             "fluxes": tile_fluxes,
         }
-        b, nth, ntw, _ = log_probs_n_sources_per_tile.shape
+        b, nth, ntw, _ = dist_params["n_source_log_probs"].shape
         sample = {}
         for k, v in sample_flat.items():
             pattern = "ns (b nth ntw) s k -> ns b nth ntw s k"
@@ -259,12 +254,12 @@ class LocationEncoder(pl.LightningModule):
         return sample
 
     def max_a_post(
-        self, var_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None
+        self, dist_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None
     ) -> TileCatalog:
-        """Derive maximum a posteriori from variational parameters.
+        """Compute the mode of the variational distribution.
 
         Args:
-            var_params: The output of `self.encode(ptiles)` which is the variational parameters
+            dist_params: The output of `self.encode(ptiles)` which is the distribuitonal parameters
                 in matrix form. Has size `n_ptiles * n_bands`.
             n_source_weights:
                 If specified, adds adjustment to number of sources when taking the argmax. Useful
@@ -276,7 +271,7 @@ class LocationEncoder(pl.LightningModule):
             The dictionary contains
             `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
-        n_source_log_probs = var_params["n_source_log_probs"]
+        n_source_log_probs = dist_params["n_source_log_probs"]
         if n_source_weights is None:
             n_source_weights = torch.ones(self.max_detections + 1)
         n_source_weights = n_source_weights.to(n_source_log_probs.device).reshape(1, 1, 1, -1)
@@ -285,7 +280,7 @@ class LocationEncoder(pl.LightningModule):
 
         # the first dimension is the number of samples (just one in this case)
         pred = self._encode_for_n_sources(
-            var_params["per_source_params"],
+            dist_params["per_source_params"],
             map_n_sources.unsqueeze(0),
         )
 
@@ -322,7 +317,7 @@ class LocationEncoder(pl.LightningModule):
             "fluxes": tile_fluxes,
         }
         max_a_post = {}
-        b, nth, ntw, _, _ = var_params["per_source_params"].shape
+        b, nth, ntw, _, _ = dist_params["per_source_params"].shape
         for k, v in max_a_post_flat.items():
             max_a_post[k] = rearrange(
                 v, "1 (b nth ntw) s k -> b nth ntw s k", b=b, nth=nth, ntw=ntw
@@ -374,16 +369,19 @@ class LocationEncoder(pl.LightningModule):
 
         # finally, we slice pps5 by parameter group because these groups are treated differently,
         # subsequently
-        split_sizes = [v["dim"] for v in self.variational_params.values()]
-        var_params_split = torch.split(pps5, split_sizes, 3)
-        names = self.variational_params.keys()
-        var_params_for_n_sources = dict(zip(names, var_params_split))
+        split_sizes = [v["dim"] for v in self.dist_params.values()]
+        dist_params_split = torch.split(pps5, split_sizes, 3)
+        names = self.dist_params.keys()
+        pred = dict(zip(names, dist_params_split))
 
         # what?!? why is sigmoid(0) = 0?
         loc_mean_func = lambda x: torch.sigmoid(x) * (x != 0).float()
-        var_params_for_n_sources["loc_mean"] = loc_mean_func(var_params_for_n_sources["loc_mean"])
+        pred["loc_mean"] = loc_mean_func(pred["loc_mean"])
 
-        return var_params_for_n_sources
+        pred["loc_sd"] = (0.5 * pred["loc_logvar"]).exp()
+        pred["log_flux_sd"] = (0.5 * pred["log_flux_logvar"]).exp()
+
+        return pred
 
     # Pytorch Lightning methods
 
@@ -410,14 +408,14 @@ class LocationEncoder(pl.LightningModule):
             },
         )
 
-        var_params = self.encode(batch["images"], batch["background"])
-        n_source_log_probs = var_params["n_source_log_probs"]
+        dist_params = self.encode(batch["images"], batch["background"])
+        n_source_log_probs = dist_params["n_source_log_probs"]
         n_source_log_probs_flat = rearrange(n_source_log_probs, "n nth ntw ns -> (n nth ntw) ns")
         nll_loss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
         counter_loss = nll_loss(n_source_log_probs_flat, true_catalog.n_sources.reshape(-1))
 
         pred = self._encode_for_n_sources(
-            var_params["per_source_params"],
+            dist_params["per_source_params"],
             rearrange(true_catalog.n_sources, "n nth ntw -> 1 n nth ntw"),
         )
         locs_log_probs_all = _get_params_logprob_all_combs(
@@ -469,8 +467,8 @@ class LocationEncoder(pl.LightningModule):
             },
         )
         true_full_catalog = true_tile_catalog.to_full_params()
-        var_params = self.encode(batch["images"], batch["background"])
-        est_tile_catalog = self.max_a_post(var_params)
+        dist_params = self.encode(batch["images"], batch["background"])
+        est_tile_catalog = self.max_a_post(dist_params)
         est_full_catalog = est_tile_catalog.to_full_params()
 
         metrics = self.val_detection_metrics(true_full_catalog, est_full_catalog)
@@ -499,8 +497,8 @@ class LocationEncoder(pl.LightningModule):
             },
         )
         true_cat = true_tile_catalog.to_full_params()
-        var_params = self.encode(batch["images"], batch["background"])
-        est_tile_catalog = self.max_a_post(var_params)
+        dist_params = self.encode(batch["images"], batch["background"])
+        est_tile_catalog = self.max_a_post(dist_params)
         est_cat = est_tile_catalog.to_full_params()
 
         # setup figure and axes.
@@ -572,8 +570,8 @@ class LocationEncoder(pl.LightningModule):
             },
         )
         true_full_catalog = true_tile_catalog.to_full_params()
-        var_params = self.encode(batch["images"], batch["background"])
-        est_tile_catalog = self.max_a_post(var_params)
+        dist_params = self.encode(batch["images"], batch["background"])
+        est_tile_catalog = self.max_a_post(dist_params)
         est_full_catalog = est_tile_catalog.to_full_params()
         metrics = self.test_detection_metrics(true_full_catalog, est_full_catalog)
         batch_size = len(batch["images"])
@@ -585,7 +583,7 @@ class LocationEncoder(pl.LightningModule):
         return batch
 
     @property
-    def variational_params(self):
+    def dist_params(self):
         return {
             "loc_mean": {"dim": 2},
             "loc_logvar": {"dim": 2},
@@ -619,13 +617,13 @@ def make_enc_final(in_size, hidden, out_size, dropout):
 class EncoderCNN(nn.Module):
     def __init__(self, n_bands, channel, dropout):
         super().__init__()
-        self.layer = self._make_layer(n_bands, channel, dropout)
+        self.layers = self._make_layers(n_bands, channel, dropout)
 
     def forward(self, x: Tensor) -> Tensor:
         """Runs encoder CNN on inputs."""
-        return self.layer(x)
+        return self.layers(x)
 
-    def _make_layer(self, n_bands, channel, dropout):
+    def _make_layers(self, n_bands, channel, dropout):
         layers = [
             nn.Conv2d(n_bands, channel, 3, padding=1),
             nn.BatchNorm2d(channel),
