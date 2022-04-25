@@ -317,7 +317,7 @@ class LocationEncoder(pl.LightningModule):
             A dictionary where each member has shape
             `n_samples x n_ptiles x max_detections x ...`
         """
-        tile_n_sources = tile_n_sources.clamp(max=self.max_detections)
+        assert tile_n_sources.max() <= self.max_detections
 
         # first, we transform `tile_n_sources` so that it can be used as an index
         # for looking up detections in `params_per_source`
@@ -344,6 +344,8 @@ class LocationEncoder(pl.LightningModule):
         loc_mean_func = lambda x: torch.sigmoid(x) * (x != 0).float()
         pred["loc_mean"] = loc_mean_func(pred["loc_mean"])
 
+        # should we add a small amount (e.g. 1e-6) to these stdevs so that they are
+        # always nonzero?  (If so, delete `loc_logvar` and `log_flux_logvar` here)
         pred["loc_sd"] = (0.5 * pred["loc_logvar"]).exp()
         pred["log_flux_sd"] = (0.5 * pred["log_flux_logvar"]).exp()
 
@@ -363,22 +365,17 @@ class LocationEncoder(pl.LightningModule):
         return loss
 
     def _get_loss(self, batch: Dict[str, Tensor]):
-
-        true_catalog = TileCatalog(
-            self.tile_slen,
-            {
-                "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-                "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
-                "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
-                "n_sources": batch["n_sources"].clamp(max=self.max_detections),
-            },
-        )
+        catalog_dict = {
+            "locs": batch["locs"][:, :, :, 0 : self.max_detections],
+            "log_fluxes": batch["log_fluxes"][:, :, :, 0 : self.max_detections],
+            "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
+            "n_sources": batch["n_sources"].clamp(max=self.max_detections),
+        }
+        true_catalog = TileCatalog(self.tile_slen, catalog_dict)
 
         dist_params = self.encode(batch["images"], batch["background"])
-        n_source_log_probs = dist_params["n_source_log_probs"]
-        n_source_log_probs_flat = rearrange(n_source_log_probs, "n nth ntw ns -> (n nth ntw) ns")
-        nll_loss = torch.nn.NLLLoss(reduction="none").requires_grad_(False)
-        counter_loss = nll_loss(n_source_log_probs_flat, true_catalog.n_sources.reshape(-1))
+        nslp_flat = rearrange(dist_params["n_source_log_probs"], "n nth ntw ns -> (n nth ntw) ns")
+        counter_loss = F.nll_loss(nslp_flat, true_catalog.n_sources.reshape(-1), reduction="none")
 
         pred = self._encode_for_n_sources(
             dist_params["per_source_params"],
@@ -718,5 +715,7 @@ def _get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
     param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
 
+    # It'd be better to add the 1e-5 factor earlier (e.g., in _encode_n_sources) so
+    # that it's used consistently everywhere
     sd = (param_logvar.exp() + 1e-5).sqrt()
     return Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
