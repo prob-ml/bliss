@@ -278,31 +278,13 @@ class LocationEncoder(pl.LightningModule):
         )
 
         is_on_array = get_is_on_from_n_sources(map_n_sources, self.max_detections)
-        is_on_array = is_on_array.unsqueeze(-1).float()
+        is_on_array = rearrange(is_on_array, "n nth ntw ns -> (n nth ntw) ns 1")
 
-        # set sd so we return map estimates.
-        # first locs
-        locs_sd = torch.zeros_like(pred["loc_logvar"])
-        tile_locs = self._sample_gated_normal(
-            pred["loc_mean"],
-            locs_sd,
-            rearrange(is_on_array, "n nth ntw ns 1 -> (n nth ntw) ns 1"),
-        )
+        tile_locs = pred["loc_mean"] * is_on_array
         tile_locs = tile_locs.clamp(0, 1)
 
-        # then log_fluxes
-        log_flux_mean = pred["log_flux_mean"]
-        log_flux_sd = torch.zeros_like(pred["log_flux_logvar"])
-        tile_log_fluxes = self._sample_gated_normal(
-            log_flux_mean,
-            log_flux_sd,
-            rearrange(is_on_array, "n nth ntw ns 1 -> (n nth ntw) ns 1"),
-        )
-
-        # Why are we masking here?
-        tile_fluxes = tile_log_fluxes.exp() * rearrange(
-            is_on_array, "n nth ntw ns 1 -> (n nth ntw) ns 1"
-        )
+        tile_log_fluxes = pred["log_flux_mean"] * is_on_array
+        tile_fluxes = tile_log_fluxes.exp() * is_on_array
 
         max_a_post_flat = {
             "locs": tile_locs,
@@ -583,13 +565,6 @@ class LocationEncoder(pl.LightningModule):
             "log_flux_mean": {"dim": self.n_bands},
             "log_flux_logvar": {"dim": self.n_bands},
         }
-
-    @staticmethod
-    def _sample_gated_normal(mean, sd, tile_is_on_array):
-        # tile_is_on_array can be either 'tile_is_on_array'/'tile_galaxy_bools'/'tile_star_bools'.
-        # return shape = (n_samples x n_ptiles x max_detections x param_dim)
-        assert tile_is_on_array.shape[-1] == 1
-        return torch.normal(mean, sd) * tile_is_on_array
 
 
 def make_enc_final(in_size, hidden, out_size, dropout):
