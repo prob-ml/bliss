@@ -265,10 +265,10 @@ class LocationEncoder(pl.LightningModule):
             `"locs", "log_fluxes", "fluxes", and "n_sources".`.
         """
         if n_source_weights is None:
-            n_source_weights = torch.ones(self.max_detections + 1)
-        n_source_weights = n_source_weights.to(self.device).reshape(1, 1, 1, -1)
-        n_source_log_weights = n_source_weights.log()
-        log_joint = dist_params["n_source_log_probs"] + n_source_log_weights
+            n_source_weights = torch.ones(self.max_detections + 1, device=self.device)
+
+        n_source_weights = n_source_weights.reshape(1, 1, 1, -1)
+        log_joint = dist_params["n_source_log_probs"] + n_source_weights.log()
         map_n_sources: Tensor = torch.argmax(log_joint, dim=-1)
 
         # the first dimension is the number of samples (just one in this case)
