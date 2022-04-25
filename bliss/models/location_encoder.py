@@ -249,7 +249,7 @@ class LocationEncoder(pl.LightningModule):
         """Compute the mode of the variational distribution.
 
         Args:
-            dist_params: The output of `self.encode(ptiles)` which is the distribuitonal parameters
+            dist_params: The output of `self.encode(ptiles)` which is the distributional parameters
                 in matrix form. Has size `n_ptiles * n_bands`.
             n_source_weights:
                 If specified, adds adjustment to number of sources when taking the argmax. Useful
