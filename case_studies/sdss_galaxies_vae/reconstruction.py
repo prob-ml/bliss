@@ -148,6 +148,16 @@ def reconstruct(cfg):
         true_cat["mismatched"] = bright_mismatches.reshape(1, -1, 1)
         mismatch_dict = defaultdict(dict)
         detection_threshold = positive_negative_stats["true_matches"].float().mean(dim=0)
+
+        if photo_catalog is not None:
+            row_indx, _, d, _ = reporting.match_by_locs(
+                true_cat.plocs[0], photo_catalog.plocs[0], 1.0
+            )
+            photo_true_matches = torch.zeros(true_cat.plocs.shape[1], dtype=torch.bool)
+            photo_true_matches[row_indx] = d
+        else:
+            photo_true_matches = None
+
         for i, ploc in enumerate(true_cat.plocs[0]):
             if bright_mismatches[i]:
                 h = max(int(ploc[0].item() - 100.0), 0) + 24
@@ -170,6 +180,8 @@ def reconstruct(cfg):
                 mismatch_dict["mag"][i] = true_cat["mags"][0, i, 0].item()
                 mismatch_dict["galaxy_bool"][i] = true_cat["galaxy_bools"][0, i, 0].item()
                 mismatch_dict["detection_threshold"][i] = detection_threshold[i].item()
+                if photo_true_matches is not None:
+                    mismatch_dict["matched_by_photo"] = photo_true_matches[i].item()
         mismatch_tbl = pd.DataFrame(mismatch_dict)
         mismatch_tbl.sort_values("filename").to_csv(mismatch_dir / "mismatches.csv")
 
