@@ -99,9 +99,16 @@ def reconstruct(cfg):
             loc_slack=1.0,
         )
 
-    encoder.map_n_source_weights = torch.tensor(cfg.reconstruct.map_n_source_weights)
+    encoder_lower_threshold = Encoder(
+        encoder.location_encoder,
+        encoder.binary_encoder,
+        encoder.galaxy_encoder,
+        eval_mean_detections=encoder.eval_mean_detections,
+        map_n_source_weights=cfg.reconstruct.map_n_source_weights,
+    ).to(encoder.device)
+
     _, tile_map_lower_threshold = reconstruct_scene_at_coordinates(
-        encoder,
+        encoder_lower_threshold,
         dec,
         frame.image,
         frame.background,
