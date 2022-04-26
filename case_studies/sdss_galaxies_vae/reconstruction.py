@@ -422,7 +422,10 @@ def create_figure_at_point(
     est_catalog: Optional[FullCatalog] = None,
 ):
     tile_slen = tile_map_recon.tile_slen
-
+    if h + size + bp > frame.image.shape[2]:
+        h = frame.image.shape[2] - size - bp
+    if w + size + bp > frame.image.shape[3]:
+        w = frame.image.shape[3] - size - bp
     h_tile = (h - bp) // tile_slen
     w_tile = (w - bp) // tile_slen
     n_tiles = size // tile_slen
