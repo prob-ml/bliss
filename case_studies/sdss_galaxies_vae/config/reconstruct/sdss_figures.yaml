@@ -1,8 +1,5 @@
 outdir: ${paths.output}/sdss_figures
 real: false
-map_n_source_weights:
-    - 1.0
-    - 99.0
 photo_catalog:
     sdss_path: ${paths.sdss}
     run: 94

@@ -161,8 +161,8 @@ def reconstruct(cfg):
                 mismatch_dict["filename"][i] = filename
                 mismatch_dict["h"][i] = ploc[0].item() + 24
                 mismatch_dict["w"][i] = ploc[0].item() + 24
-                mismatch_dict["ra"][i] = true_cat["ra"][0, i, 0].item()
-                mismatch_dict["dec"][i] = true_cat["dec"][0, i, 0].item()
+                mismatch_dict["ra"][i] = true_cat["ra"][0, i, 0].item() if "ra" in true_cat else None
+                mismatch_dict["dec"][i] = true_cat["dec"][0, i, 0].item() if "dec" in true_cat else None
                 mismatch_dict["mag"][i] = true_cat["mags"][0, i, 0].item()
                 mismatch_dict["galaxy_bool"][i] = true_cat["galaxy_bools"][0, i, 0].item()
                 mismatch_dict["detection_threshold"][i] = detection_threshold[i].item()
