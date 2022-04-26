@@ -170,7 +170,7 @@ def reconstruct(cfg):
                 fig.savefig(mismatch_dir / filename)
                 mismatch_dict["filename"][i] = filename
                 mismatch_dict["h"][i] = ploc[0].item() + 24
-                mismatch_dict["w"][i] = ploc[0].item() + 24
+                mismatch_dict["w"][i] = ploc[1].item() + 24
                 mismatch_dict["ra"][i] = (
                     true_cat["ra"][0, i, 0].item() if "ra" in true_cat else None
                 )
