@@ -167,8 +167,8 @@ class PhotoFullCatalog(FullCatalog):
             pt, pr = wcs.wcs_world2pix(ra, dec, 0)
             pts.append(float(pt))
             prs.append(float(pr))
-        pts = torch.tensor(pts)
-        prs = torch.tensor(prs)
+        pts = torch.tensor(pts) + 0.5  # For consistency with BLISS
+        prs = torch.tensor(prs) + 0.5
         plocs = torch.stack((prs, pts), dim=-1)
         nobj = plocs.shape[0]
 
