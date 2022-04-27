@@ -18,7 +18,7 @@ from torch import Tensor
 from torchmetrics import Metric
 
 from bliss.catalog import FullCatalog
-from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag
+from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
 
 
 class DetectionMetrics(Metric):
@@ -295,7 +295,6 @@ class CoaddFullCatalog(FullCatalog):
         "galaxy_bools": "galaxy_bool",
         "fluxes": "flux",
         "mags": "mag",
-        "hlr": "hlr",
         "ra": "ra",
         "dec": "dec",
     }
@@ -314,7 +313,7 @@ class CoaddFullCatalog(FullCatalog):
     ):
         """Load coadd catalog from file, add extra useful information, convert to tensors."""
         # filter saturated objects
-        cat = cat[~cat["is_saturated"].data]
+        cat = cat[~cat["is_saturated"].data.astype(bool)]
 
         # add additional useful columns to coadd catalog
         x, y = wcs.all_world2pix(cat["ra"], cat["dec"], 0)
@@ -326,6 +325,7 @@ class CoaddFullCatalog(FullCatalog):
         cat["y"] = y
         cat["galaxy_bool"] = galaxy_bools
         cat["mag"] = mag
+        cat["flux"] = convert_mag_to_flux(mag)
         cat.replace_column("is_saturated", cat["is_saturated"].data.astype(bool))
 
         # misclassified bright galaxies in PHOTO as galaxies (obtaind by eye)

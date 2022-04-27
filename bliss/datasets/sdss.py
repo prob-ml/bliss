@@ -194,6 +194,7 @@ def column_to_tensor(table, colname):
         np.dtype("bool"): bool,
         np.dtype(">f4"): np.float32,
         np.dtype(">f8"): np.float32,
+        np.dtype("float32"): np.float32,
         np.dtype("float64"): np.dtype("float64"),
     }
     x = np.array(table[colname])
