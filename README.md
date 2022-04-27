@@ -22,9 +22,9 @@ BLISS uses state-of-the-art variational inference techniques including
 
 # Installation
 
-1. Install [poetry](https://python-poetry.org/docs/).
+1. To use and install `bliss` you first need to [install [poetry](https://python-poetry.org/docs/).
 
-2. Install the [fftw](http://www.fftw.org) library (which is used by `galsim`). With Ubuntu you can install it by running
+2. Then, install the [fftw](http://www.fftw.org) library (which is used by `galsim`). With Ubuntu you can install it by running
 ```
 sudo apt-get install libfftw3-dev
 ```
@@ -34,7 +34,7 @@ sudo apt-get install libfftw3-dev
 git-lfs install
 ```
 
-4. Download the bliss repo and fetch some pre-trained models and test data from git-lfs
+4. Now download the bliss repo and fetch some pre-trained models and test data from git-lfs
 ```
 git clone https://github.com/prob-ml/bliss.git
 ```
