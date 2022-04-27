@@ -39,11 +39,17 @@ git-lfs install
 git clone https://github.com/prob-ml/bliss.git
 ```
 
-5. Finally, to create a poetry environment with the `bliss` dependencies satisified, run
+5. To create a poetry environment with the `bliss` dependencies satisified, run
 ```
 cd bliss
 poetry install
 poetry shell
+```
+
+6. Finally, verify that bliss is installed correctly by running the tests both on your CPU (default) and on your GPU:
+```
+pytest
+pytest --gpu
 ```
 
 # Latest updates
