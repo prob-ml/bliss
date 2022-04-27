@@ -32,7 +32,6 @@ class Encoder(nn.Module):
         location_encoder: LocationEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
-        eval_mean_detections: Optional[float] = None,
         map_n_source_weights: Optional[Tuple[float, ...]] = None,
     ):
         """Initializes Encoder.
@@ -49,8 +48,6 @@ class Encoder(nn.Module):
                 returns a classification between stars and galaxies. Defaults to None.
             galaxy_encoder: Module that takes padded tiles and locations and returns the variational
                 distribution of the latent variable determining the galaxy shape. Defaults to None.
-            eval_mean_detections: Optional. See LocationEncoder. Mean number of sources in each tile
-                for test-time image. If provided, probabilities in location_encoder are adjusted.
             map_n_source_weights: Optional. See LocationEncoder. If specified, weights the argmax in
                 MAP estimation of locations. Useful for raising/lowering the threshold for turning
                 sources on/off.
@@ -61,7 +58,6 @@ class Encoder(nn.Module):
         self.location_encoder = location_encoder
         self.binary_encoder = binary_encoder
         self.galaxy_encoder = galaxy_encoder
-        self.eval_mean_detections = eval_mean_detections
 
         if map_n_source_weights is None:
             map_n_source_weights_tnsr = torch.ones(self.location_encoder.max_detections + 1)
@@ -101,9 +97,7 @@ class Encoder(nn.Module):
                 - 'galaxy_params' from GalaxyEncoder.
         """
         assert isinstance(self.map_n_source_weights, Tensor)
-        var_params = self.location_encoder.encode(
-            image, background, eval_mean_detections=self.eval_mean_detections
-        )
+        var_params = self.location_encoder.encode(image, background)
         tile_map = self.location_encoder.max_a_post(
             var_params, n_source_weights=self.map_n_source_weights
         )
