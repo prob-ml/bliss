@@ -22,7 +22,7 @@ BLISS uses state-of-the-art variational inference techniques including
 
 # Installation
 
-1. To use and install `bliss` you first need to [install [poetry](https://python-poetry.org/docs/).
+1. To use and install `bliss` you first need to install [poetry](https://python-poetry.org/docs/).
 
 2. Then, install the [fftw](http://www.fftw.org) library (which is used by `galsim`). With Ubuntu you can install it by running
 ```
