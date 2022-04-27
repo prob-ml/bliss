@@ -373,7 +373,7 @@ class SemiSyntheticFrame:
         field = 12
         bands = (2,)
         sdss_data = SloanDigitalSkySurvey(
-            sdss_dir=self.sdss_dir / "sdss",
+            sdss_dir=self.sdss_dir,
             run=run,
             camcol=camcol,
             fields=(field,),
