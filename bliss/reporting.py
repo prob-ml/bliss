@@ -359,12 +359,8 @@ def get_flux_coadd(coadd_cat, nelec_per_nmgy=987.31, band="r"):
             flux = convert_mag_to_flux(psfmag, nelec_per_nmgy)
             mag = psfmag
         else:  # is galaxy
-            devmag = entry[f"devmag_{band}"]
-            expmag = entry[f"expmag_{band}"]
-            devflux = convert_mag_to_flux(devmag, nelec_per_nmgy)
-            expflux = convert_mag_to_flux(expmag, nelec_per_nmgy)
-            flux = devflux + expflux
-            mag = convert_flux_to_mag(flux, nelec_per_nmgy)
+            mag = entry["modelMag_r"]
+            flux = convert_mag_to_flux(mag, nelec_per_nmgy)
 
         fluxes.append(flux)
         mags.append(mag)
@@ -420,7 +416,7 @@ def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: 
     psf = load_psf_from_file(psf_image_file, pixel_scale)
     x, y = wcs.all_world2pix(coadd_cat["ra"], coadd_cat["dec"], 0)
     galaxy_bools = ~coadd_cat["probpsf"].data.astype(bool)
-    flux, mag = get_flux_coadd(coadd_cat)
+    flux, mag = get_flux_coadd(coadd_cat, band="r")
     hlr = get_hlr_coadd(coadd_cat, psf)
 
     coadd_cat["x"] = x
