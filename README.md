@@ -29,9 +29,18 @@ BLISS uses state-of-the-art variational inference techniques including
 sudo apt-get install libfftw3-dev
 ```
 
-3. Now, to create a poetry environment with the `bliss` dependencies satisified, run
+3. Install git-lfs if you haven't already installed it for another project
+```
+git-lfs install
+```
+
+4. Now download the bliss repo and fetch some pre-trained models and test data from git-lfs
 ```
 git clone https://github.com/prob-ml/bliss.git
+```
+
+5. Finally, to create a poetry environment with the `bliss` dependencies satisified, run
+```
 cd bliss
 poetry install
 poetry shell
