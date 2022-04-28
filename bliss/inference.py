@@ -305,7 +305,7 @@ class SDSSFrame:
         self.coadd_file = coadd_file
 
     def get_catalog(self, hlims, wlims):
-        return CoaddFullCatalog.from_file(self.coadd_file, hlims, wlims)
+        return CoaddFullCatalog.from_file(self.coadd_file, self.wcs, hlims, wlims, band="r")
 
 
 class SimulatedFrame:
@@ -355,11 +355,31 @@ class SimulatedFrame:
 
 
 class SemiSyntheticFrame:
-    def __init__(self, dataset: SimulatedDataset, coadd: str, n_tiles_h, n_tiles_w, cache_dir=None):
+    def __init__(
+        self,
+        dataset: SimulatedDataset,
+        coadd: str,
+        n_tiles_h,
+        n_tiles_w,
+        cache_dir=None,
+    ):
         dataset.to("cpu")
         self.bp = dataset.image_decoder.border_padding
         self.tile_slen = dataset.tile_slen
-        self.coadd_file = coadd
+        self.coadd_file = Path(coadd)
+        self.sdss_dir = self.coadd_file.parent
+        run = 94
+        camcol = 1
+        field = 12
+        bands = (2,)
+        sdss_data = SloanDigitalSkySurvey(
+            sdss_dir=self.sdss_dir,
+            run=run,
+            camcol=camcol,
+            fields=(field,),
+            bands=bands,
+        )
+        wcs = sdss_data[0]["wcs"][0]
         if cache_dir is not None:
             sim_frame_path = Path(cache_dir) / "simulated_frame.pt"
         else:
@@ -370,7 +390,7 @@ class SemiSyntheticFrame:
         else:
             hlim = (self.bp, self.bp + n_tiles_h * self.tile_slen)
             wlim = (self.bp, self.bp + n_tiles_w * self.tile_slen)
-            full_coadd_cat = CoaddFullCatalog.from_file(coadd, hlim, wlim)
+            full_coadd_cat = CoaddFullCatalog.from_file(coadd, wcs, hlim, wlim, band="r")
             if dataset.image_prior.galaxy_prior is not None:
                 full_coadd_cat["galaxy_params"] = dataset.image_prior.galaxy_prior.sample(
                     full_coadd_cat.n_sources, "cpu"
