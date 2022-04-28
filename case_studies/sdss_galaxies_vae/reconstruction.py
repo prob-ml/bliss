@@ -11,7 +11,7 @@ from hydra.utils import instantiate
 from joblib import Parallel, delayed
 from matplotlib import pyplot as plt
 from torch import Tensor
-from torch.distributions import Normal
+from torch.distributions import Normal, Poisson
 from torch.types import Number
 from tqdm import tqdm
 
@@ -593,7 +593,6 @@ def create_figure(
                 )
 
     ax_recon.legend(
-        # bbox_to_anchor=(0.0, 0.0, 0.0, 0.0),
         bbox_to_anchor=(0.0, -0.1, 1.0, 0.5),
         loc="lower left",
         ncol=4,
@@ -697,8 +696,8 @@ def expected_positives_plot(
         res = expected_positives_and_negatives(tile_map, threshold)
         for k, v in res.items():
             expected_results[k].append(v)
-    for k in expected_results:
-        expected_results[k] = np.array(expected_results[k])
+    for k, v in expected_results.items():
+        expected_results[k] = np.array(v)
     min_viable_threshold = map_n_source_weights[0] / (
         map_n_source_weights[0] + map_n_source_weights[1]
     )
@@ -790,9 +789,6 @@ def expected_accuracy(tile_map, mag_min, mag_max):
         "expected_galaxy_accuracy": expected_galaxy_accuracy,
         "expected_star_accuracy": expected_star_accuracy,
     }
-
-
-from torch.distributions import Poisson
 
 
 def tile_map_prior(prior: ImagePrior, tile_map):
@@ -897,30 +893,36 @@ def get_positive_negative_stats(
     log_probs = rearrange(est_tile_cat["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
     est_tile_cat = est_tile_cat.copy()
 
-    def stats_for_threshold(threshold):
-        est_tile_cat.n_sources = log_probs >= np.log(threshold)
-        est_cat = est_tile_cat.to_full_params()
-        number_true = true_cat.plocs.shape[1]
-        number_est = est_cat.plocs.shape[1]
-        true_matches = torch.zeros(true_cat.plocs.shape[1], dtype=torch.bool)
-        if number_true == 0 or number_est == 0:
-            return {
-                "tp": torch.tensor(0.0),
-                "fp": torch.tensor(float(number_est)),
-                "true_matches": true_matches,
-            }
-        row_indx, col_indx, d, _ = reporting.match_by_locs(true_cat.plocs[0], est_cat.plocs[0], 1.0)
-        true_matches[row_indx] = d
-        tp = d.sum()
-        fp = number_est - tp
-        return {"tp": tp, "fp": fp, "true_matches": true_matches}
-
-    res = Parallel(n_jobs=10)(delayed(stats_for_threshold)(t) for t in tqdm(thresholds))
+    res = Parallel(n_jobs=10)(
+        delayed(stats_for_threshold)(true_cat.plocs, est_tile_cat, t, log_probs)
+        for t in tqdm(thresholds)
+    )
     out = {}
     for k in res[0]:
         out[k] = torch.stack([r[k] for r in res])
     out["n_obj"] = true_cat.plocs.shape[1]
     return out
+
+
+def stats_for_threshold(
+    true_plocs: Tensor, est_tile_cat: TileCatalog, threshold: float, log_probs: Tensor
+):
+    est_tile_cat.n_sources = log_probs >= np.log(threshold)
+    est_cat = est_tile_cat.to_full_params()
+    number_true = true_plocs.shape[1]
+    number_est = est_cat.plocs.shape[1]
+    true_matches = torch.zeros(true_plocs.shape[1], dtype=torch.bool)
+    if number_true == 0 or number_est == 0:
+        return {
+            "tp": torch.tensor(0.0),
+            "fp": torch.tensor(float(number_est)),
+            "true_matches": true_matches,
+        }
+    row_indx, col_indx, d, _ = reporting.match_by_locs(true_plocs[0], est_cat.plocs[0], 1.0)
+    true_matches[row_indx] = d
+    tp = d.sum()
+    fp = number_est - tp
+    return {"tp": tp, "fp": fp, "true_matches": true_matches}
 
 
 if __name__ == "__main__":
