@@ -225,6 +225,8 @@ reconstruct:
     mag_max: 23
     photo_catalog:
     map_n_source_weights:
+        - 1.0
+        - 99.0
     frame:
         # _target_: bliss.inference.SDSSFrame
         # sdss_dir: ${paths.sdss}

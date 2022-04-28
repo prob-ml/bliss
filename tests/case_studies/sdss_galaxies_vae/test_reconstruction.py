@@ -22,9 +22,9 @@ def test_reconstruct_sdss(vae_setup, reconstruct_overrides):
         "+reconstruct.frame.sdss_dir": "${paths.sdss}",
         "+reconstruct.frame.pixel_scale": 0.396,
         "+reconstruct.frame.coadd_file": "${paths.sdss}/coadd_catalog_94_1_12.fits",
-        "+reconstruct.scenes.sdss_recon1_test.h": 200 + 50,
-        "+reconstruct.scenes.sdss_recon1_test.w": 1700 + 150,
-        "+reconstruct.scenes.sdss_recon1_test.size": 100,
+        "+reconstruct.test.h": 200 + 50,
+        "+reconstruct.test.w": 1700 + 150,
+        "+reconstruct.test.size": 100,
         "+reconstruct.photo_catalog.sdss_path": "${paths.sdss}",
         "+reconstruct.photo_catalog.run": 94,
         "+reconstruct.photo_catalog.camcol": 1,
@@ -43,9 +43,9 @@ def test_reconstruct_simulated(vae_setup, reconstruct_overrides):
         "+reconstruct.frame.dataset": "${datasets.simulated}",
         "+reconstruct.frame.n_tiles_h": 30,
         "+reconstruct.frame.n_tiles_w": 30,
-        "+reconstruct.scenes.sdss_recon1_test.h": 24,
-        "+reconstruct.scenes.sdss_recon1_test.w": 24,
-        "+reconstruct.scenes.sdss_recon1_test.size": 100,
+        "+reconstruct.test.h": 24,
+        "+reconstruct.test.w": 24,
+        "+reconstruct.test.size": 100,
     }
     cfg = vae_setup.get_cfg(overrides)
     reconstruct(cfg)
@@ -59,9 +59,9 @@ def test_reconstruct_semisynthetic(vae_setup, reconstruct_overrides):
         "+reconstruct.frame.coadd": "${paths.sdss}/coadd_catalog_94_1_12.fits",
         "+reconstruct.frame.n_tiles_h": 30,
         "+reconstruct.frame.n_tiles_w": 30,
-        "+reconstruct.scenes.sdss_recon1_test.h": 24,
-        "+reconstruct.scenes.sdss_recon1_test.w": 24,
-        "+reconstruct.scenes.sdss_recon1_test.size": 100,
+        "+reconstruct.test.h": 24,
+        "+reconstruct.test.w": 24,
+        "+reconstruct.test.size": 100,
     }
     cfg = vae_setup.get_cfg(overrides)
     reconstruct(cfg)
