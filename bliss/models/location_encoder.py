@@ -143,15 +143,12 @@ class LocationEncoder(pl.LightningModule):
         self.val_detection_metrics = DetectionMetrics(slack)
         self.test_detection_metrics = DetectionMetrics(slack)
 
-    def encode(
-        self, image: Tensor, background: Tensor, eval_mean_detections: Optional[float] = None
-    ) -> Dict[str, Tensor]:
+    def encode(self, image: Tensor, background: Tensor) -> Dict[str, Tensor]:
         """Encodes distributional parameters from image padded tiles.
 
         Args:
             image: An astronomical image with shape `b * n_bands * h * w`.
             background: Background for `image` with the same shape as `image`.
-            eval_mean_detections: If specified, adjusts the prior rate of object arrivals.
 
         Returns:
             A dictionary of two components:
@@ -187,13 +184,6 @@ class LocationEncoder(pl.LightningModule):
         )
 
         n_source_log_probs_flat = self.log_softmax(n_source_free_probs_flat)
-        if eval_mean_detections is not None:
-            train_log_probs = self._get_n_source_prior_log_prob(self.mean_detections)
-            eval_log_probs = self._get_n_source_prior_log_prob(eval_mean_detections)
-            adj = eval_log_probs - train_log_probs
-            adj = rearrange(adj, "ns -> 1 ns")
-            adj = adj.to(self.device)
-            n_source_log_probs_flat += adj
         n_source_log_probs = rearrange(
             n_source_log_probs_flat, "(b nth ntw) ns -> b nth ntw ns", b=b, nth=nth, ntw=ntw
         )
