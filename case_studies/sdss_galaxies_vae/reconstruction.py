@@ -1,7 +1,7 @@
 # pylint: skip-file
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import DefaultDict, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -254,7 +254,7 @@ def get_scene_boundaries(scene_coords, frame_height, frame_width, bp) -> Tuple[i
 def calc_scene_metrics_by_mag(
     est_cat: FullCatalog, true_cat: FullCatalog, mag_start: int, mag_end: int, loc_slack: float
 ):
-    scene_metrics_by_mag: Dict[Union[int, str], Dict[str, Number]] = {}
+    scene_metrics_by_mag: Dict[str, Dict[str, Number]] = {}
     mag_mins = [float(m - 1) for m in range(mag_start, mag_end + 1)] + [-np.inf]
     mag_maxes = [float(m) for m in range(mag_start, mag_end + 1)] + [mag_end]
     for mag_min, mag_max in zip(mag_mins, mag_maxes):
@@ -300,7 +300,7 @@ def calc_scene_metrics_by_mag(
         if np.isinf(mag_min):
             mag = "overall"
         else:
-            mag = int(mag_max)
+            mag = str(int(mag_max))
 
         scene_metrics_by_mag[mag] = {
             "tcount": tcount,
@@ -323,7 +323,7 @@ def calc_scene_metrics_by_mag(
             "classif_star_acc": star_acc.item(),
         }
 
-    d = defaultdict(dict)
+    d: DefaultDict[str, Dict[str, Number]] = defaultdict(dict)
     for mag, scene_metrics_mag in scene_metrics_by_mag.items():
         for measure, value in scene_metrics_mag.items():
             d[measure][mag] = value
@@ -643,13 +643,14 @@ def expected_positives_plot(
     figsize = (4 * base_size, 2 * base_size)
     fig, axes = plt.subplots(nrows=4, ncols=2, figsize=figsize)
     thresholds = np.linspace(0.01, 0.99, 99)
-    expected_results = defaultdict(list)
+    expected_results_lists = defaultdict(list)
     for threshold in thresholds:
-        res = expected_positives_and_negatives(tile_map, threshold)
-        for k, v in res.items():
-            expected_results[k].append(v)
-    for k, v in expected_results.items():
-        expected_results[k] = np.array(v)
+        res_at_threshold = expected_positives_and_negatives(tile_map, threshold)
+        for measure, value_at_threshold in res_at_threshold.items():
+            expected_results_lists[measure].append(value_at_threshold)
+    expected_results: Dict[str, np.ndarray] = {}
+    for measure, values in expected_results_lists.items():
+        expected_results[measure] = np.array(values)
     min_viable_threshold = map_n_source_weights[0] / (
         map_n_source_weights[0] + map_n_source_weights[1]
     )
@@ -780,74 +781,6 @@ def tile_map_prior(prior: ImagePrior, tile_map):
     return log_prob_source.sum() + log_prob_binary.sum() + galaxy_probs.sum()
 
 
-def match_by_locs_closest_pairs(
-    true_locs: Tensor, est_locs: Tensor, max_l_infty_dist: float
-) -> List[Tuple[int, int]]:
-    """Match true locations to estimated locations by closest pairs.
-
-    Arguments:
-        true_locs: Tensor of true locations (N_true x 2)
-        est_locs: Tensor of estimated locations (N_est x 2)
-        max_l_infty_dist: Maximim l-infinity distance allowed for matches.
-
-    Returns:
-        A list of tuples (i, j) indicating a match between the i-th row of true_locs
-        and the j-th row of est_locs.
-    """
-    assert len(true_locs.shape) == len(est_locs.shape) == 2
-    assert true_locs.shape[-1] == est_locs.shape[-1] == 2
-    assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
-
-    locs1 = true_locs.view(-1, 2)
-    locs2 = est_locs.view(-1, 2)
-
-    # entry (i,j) is l1 distance between of ith loc in locs1 and the jth loc in locs2
-    locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
-    locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
-    locs_err_inf = reduce(locs_abs_diff, "i j k -> i j", "max")
-    allowed_match = locs_err_inf <= max_l_infty_dist
-    disallowed_penalty = torch.zeros_like(allowed_match, dtype=torch.float)
-    disallowed_penalty[~allowed_match] = np.inf
-    locs_err += disallowed_penalty
-
-    return match_closest_pairs(locs_err)
-
-
-def match_closest_pairs(distances: Tensor) -> List[Tuple[int, int]]:
-    """Match pairs by closest distance.
-
-    Given a matrix of distances with rows and columns corresponding to two
-    sets of objects, this function matches them in the following way:
-    1) The pair (i, j) with the closest distance gets matched.
-    2) i and j are removed from consideration.
-    3) The next-closest pair of the remaining objects gets matched.
-    This process repeats until all remaining distances are infinite.
-    A distance of infinity indicates there is no edge between i and j,
-    and hence a match can never be made.
-
-    Arguments:
-        distances: A matrix of distances. Must be non-negative.
-
-    Returns:
-        A list of (i, j) pairs corresponding to row-column matches in the
-        input distance matrix.
-    """
-    pairs = []
-    dist_flat = distances.flatten()
-    best_pair = dist_flat.argmin().item()
-    dist = dist_flat[best_pair]
-    while dist < np.inf and (distances.shape[0] > 0) and (distances.shape[1] > 1):
-        best_row = best_pair // distances.shape[1]
-        best_col = best_pair % distances.shape[1]
-        pairs.append((best_row, best_col))
-        distances = np.delete(distances, best_row, 0)
-        distances = np.delete(distances, best_col, 1)
-        dist_flat = distances.flatten()
-        best_pair = dist_flat.argmin().item()
-        dist = dist_flat[best_pair]
-    return pairs
-
-
 def get_positive_negative_stats(
     true_cat: FullCatalog,
     est_tile_cat: TileCatalog,
@@ -862,7 +795,7 @@ def get_positive_negative_stats(
         delayed(stats_for_threshold)(true_cat.plocs, est_tile_cat, t, log_probs)
         for t in tqdm(thresholds)
     )
-    out = {}
+    out: Dict[str, Union[int, Tensor]] = {}
     for k in res[0]:
         out[k] = torch.stack([r[k] for r in res])
     out["n_obj"] = true_cat.plocs.shape[1]
