@@ -638,52 +638,6 @@ def expected_positives_and_negatives(tile_map: TileCatalog, threshold: float) ->
     return {"tp": tp, "fp": fp, "tn": tn, "fn": fn, "n_selected": float(is_on_array.sum())}
 
 
-def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions):
-    base_size = 8
-    figsize = (3 * base_size, 2 * base_size)
-    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=figsize)
-    thresholds = np.linspace(0.01, 0.99, 99)
-    precisions = []
-    recalls = []
-    for threshold in thresholds:
-        precision = expected_precision_for_threshold(tile_map, threshold)
-        recall = expected_recall_for_threshold(tile_map, threshold)
-        precisions.append(precision)
-        recalls.append(recall)
-    precisions = np.array(precisions)
-    recalls = np.array(recalls)
-    axes[0, 0].scatter(thresholds, precisions)
-    axes[0, 0].set_xlabel("Threshold")
-    axes[0, 0].set_ylabel("Expected Precision")
-    axes[0, 1].scatter(thresholds, recalls)
-    axes[0, 1].set_xlabel("Threshold")
-    axes[0, 1].set_ylabel("Expected Recall")
-
-    axes[1, 0].scatter(precisions, recalls)
-    optimal_point = np.argmin(1 / precisions + 1 / recalls)
-    x, y = precisions[optimal_point], recalls[optimal_point]
-    axes[1, 0].scatter(x, y, color="yellow", marker="+")
-    axes[1, 0].annotate(
-        f"Expected precision: {x:.2f}\nExpected Recall {y:.2f}", (x, y), fontsize=12
-    )
-    axes[1, 0].set_xlabel("Expected Precision")
-    axes[1, 0].set_ylabel("Expected Recall")
-
-    axes[2, 0].scatter(precisions, true_precisions)
-    x, y = precisions[optimal_point], true_precisions[optimal_point]
-    axes[2, 0].scatter(x, y, color="yellow", marker="+")
-    axes[2, 0].annotate(f"Expected precision: {x:.2f}\nTrue precision {y:.2f}", (x, y), fontsize=12)
-    axes[2, 0].set_xlabel("Expected Precision")
-    axes[2, 0].set_ylabel("Actual Precision")
-    axes[2, 1].scatter(precisions, true_recalls)
-    x, y = precisions[optimal_point], true_recalls[optimal_point]
-    axes[2, 1].scatter(x, y, color="yellow", marker="+")
-    axes[2, 1].annotate(f"Expected precision: {x:.2f}\nTrue recall {y:.2f}", (x, y), fontsize=12)
-    axes[2, 1].set_xlabel("Expected Precision")
-    axes[2, 1].set_ylabel("Actual Recall")
-    return fig
-
-
 def expected_positives_plot(
     tile_map: TileCatalog, actual_results: Dict, map_n_source_weights: Tuple[float, float]
 ):
@@ -757,20 +711,33 @@ def expected_positives_plot(
     return fig, detection_stats
 
 
-def get_detection_stats_for_thresholds(thresholds, expected_results, actual_results):
-    expected_precision = expected_results["tp"] / expected_results["n_selected"]
-    expected_recall = expected_results["tp"] / (expected_results["tp"] + expected_results["fn"])
-    actual_precision = actual_results["tp"] / (actual_results["tp"] + actual_results["fp"])
-    actual_recall = actual_results["tp"] / actual_results["n_obj"]
+def get_detection_stats_for_thresholds(thresholds, pred, true):
+    pred_prec = np.ones_like(thresholds)
+    selected = pred["n_selected"] > 0
+    pred_prec[selected] = pred["tp"][selected] / pred["n_selected"][selected]
+
+    pred_rec = np.zeros_like(thresholds)
+    selected = (pred["tp"] + pred["fn"]) > 0
+    pred_rec[selected] = pred["tp"][selected] / (pred["tp"] + pred["fn"])[selected]
+
+    true_prec = np.ones_like(thresholds)
+    selected = pred["n_selected"] > 0
+    true_prec[selected] = true["tp"][selected] / pred["n_selected"][selected]
+
+    if true["n_obj"] > 0:
+        true_rec = true["tp"] / true["n_obj"]
+    else:
+        true_rec = np.zeros_like(thresholds)
+
     stats_dict = {
         "thresholds": thresholds,
-        "expected_precision": expected_precision,
-        "expected_recall": expected_recall,
-        "actual_precision": actual_precision,
-        "actual_recall": actual_recall,
+        "expected_precision": pred_prec,
+        "expected_recall": pred_rec,
+        "actual_precision": true_prec,
+        "actual_recall": true_rec,
     }
-    stats_dict.update({f"expected_{k}": v for k, v in expected_results.items()})
-    stats_dict.update({f"actual_{k}": v for k, v in actual_results.items() if k != "true_matches"})
+    stats_dict.update({f"expected_{k}": v for k, v in pred.items()})
+    stats_dict.update({f"actual_{k}": v for k, v in true.items() if k != "true_matches"})
     return pd.DataFrame(stats_dict)
 
 
