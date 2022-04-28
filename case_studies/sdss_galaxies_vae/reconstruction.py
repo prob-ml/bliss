@@ -884,12 +884,13 @@ def get_positive_negative_stats(
     def stats_for_threshold(threshold):
         est_tile_cat.n_sources = log_probs >= np.log(threshold)
         est_cat = est_tile_cat.to_full_params()
-        number_predicted = est_cat.plocs.shape[1]
-        if number_predicted == 0:
-            return {"tp": 0.0, "fp": 0.0}
+        number_true = true_cat.plocs.shape[1]
+        number_est = est_cat.plocs.shape[1]
+        if number_true == 0 or number_est == 0:
+            return {"tp": 0.0, "fp": float(number_est)}
         _, _, d, _ = reporting.match_by_locs(true_cat.plocs[0], est_cat.plocs[0], 1.0)
         tp = d.sum()
-        fp = number_predicted - tp
+        fp = number_est - tp
         return {"tp": tp, "fp": fp}
 
     res = Parallel(n_jobs=10)(delayed(stats_for_threshold)(t) for t in tqdm(thresholds))
