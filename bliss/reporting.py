@@ -15,7 +15,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import optimize as sp_optim
 from sklearn.metrics import confusion_matrix
 from torch import Tensor
-from torch.types import Number
 from torchmetrics import Metric
 
 from bliss.catalog import FullCatalog
@@ -227,7 +226,7 @@ def scene_metrics(
     mag_min: float = -np.inf,
     mag_max: float = np.inf,
     slack: float = 1.0,
-) -> Dict[str, Number]:
+):
     """Return detection and classification metrics based on a given ground truth.
 
     These metrics are computed as a function of magnitude based on the specified
@@ -252,19 +251,19 @@ def scene_metrics(
     # precision
     eparams = est_params.apply_mag_bin(mag_min, mag_max)
     detection_metrics.update(true_params, eparams)
-    precision = float(detection_metrics.compute()["precision"].item())
+    precision = detection_metrics.compute()["precision"]
     detection_metrics.reset()  # reset global state since recall and precision use different cuts.
 
     # recall
     tparams = true_params.apply_mag_bin(mag_min, mag_max)
     detection_metrics.update(tparams, est_params)
-    recall = detection_metrics.compute()["recall"].item()
-    n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"].item()
+    recall = detection_metrics.compute()["recall"]
+    n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"]
     detection_metrics.reset()
 
     # f1-score
     f1 = 2 * precision * recall / (precision + recall)
-    detection_result: Dict[str, Number] = {
+    detection_result = {
         "precision": precision,
         "recall": recall,
         "f1": f1,
@@ -290,7 +289,7 @@ def scene_metrics(
     n_matches = classification_result["n_matches"]
     n_matches_gal_coadd = classification_result["n_matches_gal_coadd"]
 
-    counts: Dict[str, Number] = {
+    counts = {
         "tgcount": tgcount,
         "tscount": tscount,
         "egcount": egcount,

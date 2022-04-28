@@ -1,12 +1,12 @@
 # pylint: skip-file
 from collections import defaultdict
 from pathlib import Path
-from typing import DefaultDict, Dict, List, Optional, Tuple, Union
+from typing import DefaultDict, Dict, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import torch
-from einops import rearrange, reduce, repeat
+from einops import rearrange, repeat
 from hydra.utils import instantiate
 from joblib import Parallel, delayed
 from matplotlib import pyplot as plt
