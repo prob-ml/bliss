@@ -306,9 +306,7 @@ def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
         galaxy_state_dict = torch.load(cfg.predict.galaxy_checkpoint, map_location=galaxy.device)
     galaxy.load_state_dict(galaxy_state_dict)
     dec: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
-    encoder = Encoder(
-        location.eval(), binary.eval(), galaxy.eval(), cfg.reconstruct.map_n_source_weights
-    ).to(device)
+    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval()).to(device)
 
     prior: ImagePrior = instantiate(cfg.models.prior).to(device).eval()
     return dec, encoder, prior
