@@ -1,9 +1,6 @@
-# flake8: noqa
 # pylint: skip-file
-import json
 from collections import defaultdict
 from pathlib import Path
-from queue import Full
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -64,19 +61,18 @@ def reconstruct(cfg):
         h_end = h + cfg.reconstruct.test.size
         w_end = w + cfg.reconstruct.test.size
 
-    recon, tile_map_recon = reconstruct_scene_at_coordinates(
+    hlims = (h, h_end)
+    wlims = (w, w_end)
+    _, tile_map_recon = reconstruct_scene_at_coordinates(
         encoder,
         dec,
         frame.image,
         frame.background,
-        (h, h_end),
-        (w, w_end),
+        hlims,
+        wlims,
         slen=cfg.reconstruct.slen,
         device=device,
     )
-    true = frame.image[:, :, h:h_end, w:w_end]
-    resid = (true - recon) / recon.sqrt()
-
     tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
     print(f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image.")
     tile_map_recon["fluxes"] = (
@@ -196,75 +192,6 @@ def reconstruct(cfg):
         mismatch_tbl = pd.DataFrame(mismatch_dict)
         mismatch_tbl.sort_values("filename").to_csv(mismatch_dir / "mismatches.csv")
 
-        # full_map_cropped = full_map_recon.crop(
-        #     h - 24,
-        #     full_map_recon.height - (h - 24 + size),
-        #     w - 24,
-        #     full_map_recon.width - (w - 24 + size),
-        # )
-        # fig_exp_precision.savefig(outdir / "auroc.png", format="png")
-        # fig = create_figure(
-        #     true[0, 0],
-        #     recon[0, 0],
-        #     resid[0, 0],
-        #     # coadd_objects=coadd_data,
-        #     map_recon=full_map_recon,
-        #     include_residuals=False,
-        #     colorbar=False,
-        #     scatter_on_true=False,
-        # )
-        # fig.savefig(outdir / "recon.pdf", format="pdf")
-        # fig.savefig(outdir / "recon.png", format="png")
-        # fig_scatter_on_true = create_figure(
-        #     true[0, 0],
-        #     recon[0, 0],
-        #     resid[0, 0],
-        #     map_recon=full_map_recon,
-        #     include_residuals=False,
-        #     colorbar=False,
-        #     scatter_on_true=True,
-        # )
-        # fig_with_tile_map = create_figure(
-        #     true[0, 0],
-        #     recon[0, 0],
-        #     resid[0, 0],
-        #     map_recon=full_map_recon,
-        #     include_residuals=False,
-        #     colorbar=False,
-        #     scatter_on_true=True,
-        #     tile_map=tile_map_recon,
-        # )
-        # fig_with_tile_map.savefig(outdir / "recon_with_tile_map.pdf", format="pdf")
-        # fig_scatter_on_true.savefig(outdir / "recon_scatter_on_true.pdf", format="pdf")
-        # fig_with_coadd = create_figure(
-        #     true[0, 0],
-        #     recon[0, 0],
-        #     resid[0, 0],
-        #     coadd_objects=ground_truth_catalog,
-        #     map_recon=full_map_recon,
-        #     include_residuals=False,
-        #     colorbar=False,
-        #     scatter_on_true=True,
-        # )
-        # fig_with_coadd.savefig(outdir / "recon_coadd.pdf", format="pdf")
-        # fig_with_coadd.savefig(outdir / "recon_coadd.png", format="png")
-        # tc = tile_map_recon.copy()
-        # log_probs = rearrange(tc["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
-        # tc.n_sources = log_probs >= np.log(0.15)
-        # fc = tc.to_full_params()
-        # fig_with_coadd_lower_thresh = create_figure(
-        #     true[0, 0],
-        #     recon[0, 0],
-        #     resid[0, 0],
-        #     coadd_objects=ground_truth_catalog,
-        #     map_recon=fc,
-        #     include_residuals=False,
-        #     colorbar=False,
-        #     scatter_on_true=True,
-        # )
-        # fig_with_coadd_lower_thresh.savefig(outdir / "recon_coadd_lower_thresh.png", format="png")
-
-
 def get_sdss_data(sdss_dir, sdss_pixel_scale):
     run = 94
     camcol = 1
@@ -287,8 +214,6 @@ def get_sdss_data(sdss_dir, sdss_pixel_scale):
 
 
 def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
-    # sleep = instantiate(cfg.models.sleep).to(device).eval()
-    # sleep.load_state_dict(torch.load(cfg.predict.sleep_checkpoint, map_location=sleep.device))
     location: LocationEncoder = instantiate(cfg.models.location_encoder).to(device).eval()
     location.load_state_dict(
         torch.load(cfg.predict.location_checkpoint, map_location=location.device)
@@ -324,14 +249,6 @@ def get_scene_boundaries(scene_coords, frame_height, frame_width, bp) -> Tuple[i
         w_end = w + scene_size
     return h, h_end, w, w_end
 
-    # scene_metrics_by_mag = {}
-    # ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
-    # catalogs = {"bliss": full_map_recon}
-    # if photo_catalog is not None:
-    #     photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
-    #     catalogs["photo"] = photo_catalog_at_hw
-    # for catalog_name, catalog in catalogs.items():
-
 
 def calc_scene_metrics_by_mag(
     est_cat: FullCatalog, true_cat: FullCatalog, mag_start: int, mag_end: int, loc_slack: float
@@ -358,14 +275,12 @@ def calc_scene_metrics_by_mag(
         egcount = est_cat_binned["galaxy_bools"].sum().int().item()
         escount = ecount - egcount
 
-        # scene_metrics_map = reporting.scene_metrics(true_cat, est_cat, mag_min=mag_min, mag_max=mag_max)
         detection_metrics = reporting.DetectionMetrics(loc_slack)
         classification_metrics = reporting.ClassificationMetrics(loc_slack)
 
         # precision
         est_cat_binned = est_cat.apply_mag_bin(mag_min, mag_max)
         detection_metrics.update(true_cat, est_cat_binned)
-        # fp = float(detection_metrics.compute()["precision"].item())
         precision_metrics = detection_metrics.compute()
         fp = precision_metrics["fp"].item()
         tp_gal_precision = precision_metrics["n_galaxies_detected"].item()
@@ -418,22 +333,6 @@ def calc_scene_metrics_by_mag(
         for measure, value in scene_metrics_mag.items():
             d[measure][mag] = value
     return pd.DataFrame(d)
-
-    # if catalog_name == "bliss":
-    #     scene_metrics_by_mag[catalog_name][mag].update(
-    #         expected_accuracy(tile_map_recon, mag_min=mag_min, mag_max=mag_max)
-    #     )
-    #     if mag == "overall":
-    #         scene_metrics_by_mag[catalog_name][mag]["expected_recall"] = expected_recall(
-    #             tile_map_recon
-    #         )
-    #         scene_metrics_by_mag[catalog_name][mag][
-    #             "expected_precision"
-    #         ] = expected_precision(tile_map_recon)
-    #         positive_negative_stats = get_positive_negative_stats(
-    #             true_cat, tile_map_recon, mag_max=mag_max
-    #         )
-    # return positive_negative_stats
 
 
 def create_figure_at_point(
@@ -505,10 +404,6 @@ def create_figure(
     true_star_col = "b"
     pred_gal_col = "c"
     pred_star_col = "r"
-    # true_gal_col = "#e78ac3"
-    # true_star_col = "#8da0cb"
-    # pred_gal_col = "#fbb4ae"`
-    # pred_star_col = "#66c2a5"
     pad = 6.0
     set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
     ncols = 2 + include_residuals
@@ -713,88 +608,7 @@ def create_figure(
     return fig
 
 
-def print_metrics_to_file(outdir):
-    outdir = Path(outdir)
-    out = collect_metrics(outdir)
-    with outdir.joinpath("results.txt").open("w") as fp:
-        for folder, folder_results in out.items():
-            fp.write(str(folder) + "\n")
-            for catalog, catalog_results in folder_results.items():
-                fp.write(catalog + "\n")
-                for metric, metric_results in catalog_results.items():
-                    fp.write(metric + "\n")
-                    fp.write(str(metric_results) + "\n")
 
-
-def collect_metrics(outdir):
-    out = {}
-    for run in Path(outdir).iterdir():
-        if run.is_dir():
-            results = torch.load(run / "sdss_recon_all.pt")
-            out[run] = {}
-            for catalog in results:
-                out[run][catalog] = {
-                    "detections": create_scene_metrics_table(results[catalog])[0],
-                    "accuracy": create_scene_accuracy_table(results[catalog]),
-                }
-    return out
-
-
-def create_scene_accuracy_table(scene_metrics_by_mag):
-    # tex_lines = []
-    df = defaultdict(dict)
-    cols = (
-        "class_acc",
-        "expected_accuracy",
-        "galaxy_accuracy",
-        "expected_galaxy_accuracy",
-        "star_accuracy",
-        "expected_star_accuracy",
-        "n",
-        "n_matches",
-        "n_galaxies",
-    )
-    for k, v in scene_metrics_by_mag.items():
-        # line = f"{k} & {v['class_acc'].item():.2f} ({v['expected_accuracy'].item():.2f}) & {v['galaxy_accuracy']:.2f} ({v['expected_galaxy_accuracy']:.2f}) & {v['star_accuracy']:.2f} ({v['expected_star_accuracy']:.2f})\\\\\n"
-        for metric in cols:
-            if metric in v:
-                df[metric][k] = v[metric] if not isinstance(v[metric], Tensor) else v[metric].item()
-        # tex_lines.append(line)
-    df = pd.DataFrame(df)
-    # return df, tex_lines
-    return df
-
-
-def create_scene_metrics_table(scene_metrics_by_mag):
-    x = {}
-    columns = (
-        "recall",
-        "expected_recall",
-        "precision",
-        "expected_precision",
-        "n",
-        "n_galaxies",
-        "n_galaxies_detected",
-    )
-    for c in columns:
-        x[c] = {}
-        for k, v in scene_metrics_by_mag.items():
-            v["n"] = v["counts"]["tgcount"] + v["counts"]["tscount"]
-            v["n_galaxies"] = v["counts"]["tgcount"]
-            if c in v:
-                x[c][k] = v[c] if not isinstance(v[c], Tensor) else v[c].item()
-    scene_metrics_df = pd.DataFrame(x)
-    tex_lines = []
-    for k, v in scene_metrics_df.iterrows():
-        line = f"{k} & {v['recall']:.2f}"
-        if not np.isnan(v["expected_recall"]):
-            line += f" ({v['expected_recall']:.2f})"
-        line += f" & {v['precision']:.2f}"
-        if not np.isnan(v["expected_precision"]):
-            line += f" ({v['expected_precision']:.2f})"
-        line += " \\\\\n"
-        tex_lines.append(line)
-    return scene_metrics_df, tex_lines
 
 
 def expected_recall(tile_map: TileCatalog):
@@ -852,13 +666,6 @@ def expected_positives_and_negatives(tile_map: TileCatalog, threshold: float) ->
         tile_map["n_source_log_probs"], "n nth ntw 1 1 -> (n nth ntw)"
     ).exp()
     is_on_array = prob_on >= threshold
-    # if is_on_array.sum() == 0:
-    #     return {
-    #         "tp": 0.0,
-    #         "fp": 0.0,
-    #         "tn": 0.0,
-    #         "fn":
-    #     }
     prob_detected = prob_on[is_on_array]
     prob_not_detected = prob_on[~is_on_array]
     tp = float(prob_detected.sum().item())
