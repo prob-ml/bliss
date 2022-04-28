@@ -58,8 +58,8 @@ def reconstruct(cfg):
     if "test" in cfg.reconstruct:
         h = cfg.reconstruct.test.h
         w = cfg.reconstruct.test.w
-        h_end = h + cfg.reconstruct.test.size
-        w_end = w + cfg.reconstruct.test.size
+        h_end = h + int(cfg.reconstruct.test.size)
+        w_end = w + int(cfg.reconstruct.test.size)
 
     hlims = (h, h_end)
     wlims = (w, w_end)
@@ -112,8 +112,8 @@ def reconstruct(cfg):
         dec,
         frame.image,
         frame.background,
-        (h, h_end),
-        (w, w_end),
+        hlims,
+        wlims,
         slen=cfg.reconstruct.slen,
         device=device,
     )
@@ -127,7 +127,6 @@ def reconstruct(cfg):
     )
     if outdir is not None:
         # Expected precision lpot
-        # fig_exp_precision = expected_precision_plot(tile_map_recon, recalls, precisions)
         detection_stats.to_csv(outdir / "stats_by_threshold.csv")
         for catalog_name, scene_metrics in scene_metrics_by_mag.items():
             scene_metrics.to_csv(outdir / f"scene_metrics_{catalog_name}.csv")
@@ -156,9 +155,10 @@ def reconstruct(cfg):
         mismatch_dict = defaultdict(dict)
         detection_threshold = positive_negative_stats["true_matches"].float().mean(dim=0)
 
-        if "photo" in catalogs:
+        photo_catalog = catalogs.get("photo")
+        if photo_catalog is not None:
             row_indx, _, d, _ = reporting.match_by_locs(
-                true_cat.plocs[0], catalogs["photo"].plocs[0], 1.0
+                true_cat.plocs[0], photo_catalog.plocs[0], 1.0
             )
             photo_true_matches = torch.zeros(true_cat.plocs.shape[1], dtype=torch.bool)
             photo_true_matches[row_indx] = d
@@ -191,6 +191,7 @@ def reconstruct(cfg):
                     mismatch_dict["matched_by_photo"][i] = photo_true_matches[i].item()
         mismatch_tbl = pd.DataFrame(mismatch_dict)
         mismatch_tbl.sort_values("filename").to_csv(mismatch_dir / "mismatches.csv")
+
 
 def get_sdss_data(sdss_dir, sdss_pixel_scale):
     run = 94
@@ -301,7 +302,6 @@ def calc_scene_metrics_by_mag(
         classification_metrics.update(true_cat_binned, est_cat)
         classification_result = classification_metrics.compute()
         n_matches = classification_result["n_matches"].item()
-        n_matches_gal_coadd = classification_result["n_matches_gal_coadd"]
 
         conf_matrix = classification_result["conf_matrix"]
         galaxy_acc = conf_matrix[0, 0] / (conf_matrix[0, 0] + conf_matrix[0, 1])
@@ -449,8 +449,9 @@ def create_figure(
         locs_galaxies_true = locs_true[true_galaxy_bools.squeeze(-1) > 0.5]
         locs_stars_true = locs_true[true_galaxy_bools.squeeze(-1) < 0.5]
 
-        if "mismatched" in coadd_objects:
-            locs_mismatched_true = locs_true[coadd_objects["mismatched"].squeeze(-1) > 0.5]
+        mismatched = coadd_objects.get("mismatched")
+        if mismatched is not None:
+            locs_mismatched_true = locs_true[mismatched.squeeze(-1) > 0.5]
         else:
             locs_mismatched_true = None
         if locs_galaxies_true.shape[0] > 0:
@@ -608,9 +609,6 @@ def create_figure(
     return fig
 
 
-
-
-
 def expected_recall(tile_map: TileCatalog):
     prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
     is_on_array = rearrange(tile_map.is_on_array, "n nth ntw 1 -> n nth ntw")
@@ -696,7 +694,6 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     axes[0, 1].set_xlabel("Threshold")
     axes[0, 1].set_ylabel("Expected Recall")
 
-    # colors = precisions == precisions[optimal_point]
     axes[1, 0].scatter(precisions, recalls)
     optimal_point = np.argmin(1 / precisions + 1 / recalls)
     x, y = precisions[optimal_point], recalls[optimal_point]
@@ -706,8 +703,7 @@ def expected_precision_plot(tile_map: TileCatalog, true_recalls, true_precisions
     )
     axes[1, 0].set_xlabel("Expected Precision")
     axes[1, 0].set_ylabel("Expected Recall")
-    # axes[1,0].xlabel("Expected Precision")
-    # axes[1,0].ylabel("Expected Recall")
+
     axes[2, 0].scatter(precisions, true_precisions)
     x, y = precisions[optimal_point], true_precisions[optimal_point]
     axes[2, 0].scatter(x, y, color="yellow", marker="+")
@@ -959,26 +955,6 @@ def get_positive_negative_stats(
         out[k] = torch.stack([r[k] for r in res])
     out["n_obj"] = true_cat.plocs.shape[1]
     return out
-
-
-import math
-
-
-def _adj_log_probs(log_probs: Tensor, log_train_probs: Tensor, log_test_probs: Tensor):
-    assert torch.allclose(log_train_probs.exp().sum(), torch.tensor(1.0))
-    assert torch.allclose(log_test_probs.exp().sum(), torch.tensor(1.0))
-    log_adj_ratios = (log_test_probs - log_train_probs).reshape(1, 1, 1, 2)
-    # log_adj_ratio = math.log(adj_ratio)
-    log_1m_probs = torch.log1p(-torch.exp(log_probs))
-    log_probs_all = torch.stack((log_1m_probs, log_probs), dim=-1)
-    log_probs_all_adj = log_probs_all + log_adj_ratios
-    log_probs_all_adj_norm = torch.log_softmax(log_probs_all_adj, dim=-1)
-    log_probs_adj_norm = log_probs_all_adj_norm[:, :, :, 1]
-    return log_probs_adj_norm
-
-
-def adj_prob(prob, adj_ratio):
-    return prob * adj_ratio / (prob * adj_ratio + (1 - prob) / adj_ratio)
 
 
 if __name__ == "__main__":
