@@ -272,10 +272,6 @@ def calc_scene_metrics_by_mag(
         tgcount = true_cat_binned["galaxy_bools"].sum().int().item()
         tscount = tcount - tgcount
 
-        ecount = est_cat_binned.n_sources.int().item()
-        egcount = est_cat_binned["galaxy_bools"].sum().int().item()
-        escount = ecount - egcount
-
         detection_metrics = reporting.DetectionMetrics(loc_slack)
         classification_metrics = reporting.ClassificationMetrics(loc_slack)
 
@@ -287,7 +283,8 @@ def calc_scene_metrics_by_mag(
         tp_gal_precision = precision_metrics["n_galaxies_detected"].item()
         fp_gal = est_cat_binned["galaxy_bools"].sum().item() - tp_gal_precision
         fp_star = fp - fp_gal
-        detection_metrics.reset()  # reset global state since recall and precision use different cuts.
+        # reset global state since recall and precision use different cuts.
+        detection_metrics.reset()
 
         # recall
         true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
@@ -609,15 +606,6 @@ def create_figure(
     return fig
 
 
-def expected_recall(tile_map: TileCatalog):
-    prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
-    is_on_array = rearrange(tile_map.is_on_array, "n nth ntw 1 -> n nth ntw")
-    prob_detected = prob_on * is_on_array
-    prob_not_detected = prob_on * (1 - is_on_array)
-    recall = prob_detected.sum() / (prob_detected.sum() + prob_not_detected.sum())
-    return recall
-
-
 def expected_recall_for_threshold(tile_map: TileCatalog, threshold: float):
     prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
     is_on_array = prob_on >= threshold
@@ -625,14 +613,6 @@ def expected_recall_for_threshold(tile_map: TileCatalog, threshold: float):
     prob_not_detected = prob_on * (~is_on_array)
     recall = prob_detected.sum() / (prob_detected.sum() + prob_not_detected.sum())
     return recall.item()
-
-
-def expected_precision(tile_map: TileCatalog):
-    prob_on = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
-    is_on_array = rearrange(tile_map.is_on_array, "n nth ntw 1 -> n nth ntw")
-    prob_detected = prob_on * is_on_array
-    precision = prob_detected.sum() / is_on_array.sum()
-    return precision
 
 
 def expected_precision_for_threshold(tile_map: TileCatalog, threshold: float):
@@ -643,20 +623,6 @@ def expected_precision_for_threshold(tile_map: TileCatalog, threshold: float):
     prob_detected = prob_on * is_on_array
     precision = prob_detected.sum() / is_on_array.sum()
     return precision.item()
-
-
-def expected_true_positives_for_threshold(tile_map: TileCatalog, threshold: float):
-    prob_on: Tensor = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
-    is_on_array = prob_on >= threshold
-    prob_detected = prob_on * is_on_array
-    return prob_detected.sum().item()
-
-
-def expected_false_positives_for_threshold(tile_map: TileCatalog, threshold: float):
-    prob_on: Tensor = rearrange(tile_map["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw").exp()
-    is_on_array = prob_on >= threshold
-    prob_detected = prob_on * is_on_array
-    return (1.0 - prob_detected).sum().item()
 
 
 def expected_positives_and_negatives(tile_map: TileCatalog, threshold: float) -> Dict[str, float]:
