@@ -58,6 +58,11 @@ def reconstruct(cfg):
     w = bp
     h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
     w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
+    if "test" in cfg.reconstruct:
+        h = cfg.reconstruct.test.h
+        w = cfg.reconstruct.test.w
+        h_end = h + cfg.reconstruct.test.size
+        w_end = w + cfg.reconstruct.test.size
 
     recon, tile_map_recon = reconstruct_scene_at_coordinates(
         encoder,
@@ -103,7 +108,6 @@ def reconstruct(cfg):
         encoder.location_encoder,
         encoder.binary_encoder,
         encoder.galaxy_encoder,
-        eval_mean_detections=encoder.eval_mean_detections,
         map_n_source_weights=cfg.reconstruct.map_n_source_weights,
     ).to(encoder.device)
 
@@ -395,16 +399,16 @@ def calc_scene_metrics_by_mag(
             "tgcount": tgcount,
             "tp": tp,
             "fp": fp,
-            "recall": tp / tcount,
-            "precision": tp / (tp + fp),
+            "recall": tp / tcount if tcount > 0 else 0.0,
+            "precision": tp / (tp + fp) if (tp + fp) > 0 else 1.0,
             "tp_gal": tp_gal,
             "fp_gal": fp_gal,
-            "recall_gal": tp_gal / tgcount,
-            "precision_gal": tp_gal / (fp_gal + tp_gal),
+            "recall_gal": tp_gal / tgcount if tgcount > 0 else 0.0,
+            "precision_gal": tp_gal / (fp_gal + tp_gal) if (fp_gal + tp_gal) > 0 else 1.0,
             "tp_star": tp_star,
             "fp_star": fp_star,
-            "recall_star": tp_star / tscount,
-            "precision_star": tp_star / (fp_star + tp_star),
+            "recall_star": tp_star / tscount if tscount > 0 else 0.0,
+            "precision_star": tp_star / (fp_star + tp_star) if (fp_star + tp_star) > 0 else 1.0,
             "classif_n_matches": n_matches,
             "classif_acc": classification_result["class_acc"].item(),
             "classif_galaxy_acc": galaxy_acc.item(),
@@ -1131,10 +1135,14 @@ def get_positive_negative_stats(
         est_cat = est_tile_cat.to_full_params()
         number_true = true_cat.plocs.shape[1]
         number_est = est_cat.plocs.shape[1]
-        if number_true == 0 or number_est == 0:
-            return {"tp": 0.0, "fp": float(number_est)}
-        row_indx, col_indx, d, _ = reporting.match_by_locs(true_cat.plocs[0], est_cat.plocs[0], 1.0)
         true_matches = torch.zeros(true_cat.plocs.shape[1], dtype=torch.bool)
+        if number_true == 0 or number_est == 0:
+            return {
+                "tp": torch.tensor(0.0),
+                "fp": torch.tensor(float(number_est)),
+                "true_matches": true_matches,
+            }
+        row_indx, col_indx, d, _ = reporting.match_by_locs(true_cat.plocs[0], est_cat.plocs[0], 1.0)
         true_matches[row_indx] = d
         tp = d.sum()
         fp = number_est - tp
