@@ -255,16 +255,9 @@ def calc_scene_metrics_by_mag(
     est_cat: FullCatalog, true_cat: FullCatalog, mag_start: int, mag_end: int, loc_slack: float
 ):
     scene_metrics_by_mag: Dict[Union[int, str], Dict[str, Number]] = {}
-    mags: List[Union[int, str]] = list(range(mag_start, mag_end + 1)) + ["overall"]
-    for mag in mags:
-        if mag != "overall":
-            assert isinstance(mag, int)
-            mag_min = float(mag) - 1.0
-            mag_max = float(mag)
-        else:
-            mag_min = -np.inf
-            mag_max = float(mag_end)
-
+    mag_mins = [float(m - 1) for m in range(mag_start, mag_end + 1)] + [-np.inf]
+    mag_maxes = [float(m) for m in range(mag_start, mag_end + 1)] + [mag_end]
+    for mag_min, mag_max in zip(mag_mins, mag_maxes):
         # report counts on each bin
         true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
         est_cat_binned = est_cat.apply_mag_bin(mag_min, mag_max)
@@ -303,6 +296,11 @@ def calc_scene_metrics_by_mag(
         conf_matrix = classification_result["conf_matrix"]
         galaxy_acc = conf_matrix[0, 0] / (conf_matrix[0, 0] + conf_matrix[0, 1])
         star_acc = conf_matrix[1, 1] / (conf_matrix[1, 1] + conf_matrix[1, 0])
+
+        if np.isinf(mag_min):
+            mag = "overall"
+        else:
+            mag = int(mag_max)
 
         scene_metrics_by_mag[mag] = {
             "tcount": tcount,
