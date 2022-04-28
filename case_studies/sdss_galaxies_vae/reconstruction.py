@@ -262,7 +262,6 @@ def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
         location.eval(),
         binary.eval(),
         galaxy.eval(),
-        cfg.reconstruct.eval_mean_detections,
         cfg.reconstruct.map_n_source_weights,
     ).to(device)
 
