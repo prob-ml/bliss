@@ -48,7 +48,7 @@ datasets:
             n_bands: 1
             slen: 53
             pixel_scale: 0.396
-            psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+            psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
         background:
             _target_: bliss.datasets.background.ConstantBackground
             background:
@@ -156,7 +156,7 @@ models:
             autoencoder: ${models.galaxy_net}
             autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
             latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
-            psf_image_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+            psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
             galaxy_dataset: ${datasets.sdss_galaxies}
 
 generate:
@@ -226,8 +226,8 @@ plots:
     sdss_pixel_scale: 0.396
     eval_mean_detections: 0.004
     device: "cuda:0"
-    coadd_cat: ${paths.data}/coadd_catalog_94_1_12.fits
-    psf_file: ${paths.data}/psField-000094-1-0012-PSF-image.npy
+    coadd_file: ${paths.sdss}/coadd_catalog_94_1_12.fits
+    psf_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
     photo_catalog:
         sdss_path: ${paths.sdss}
         run: 94
@@ -238,7 +238,7 @@ plots:
         _target_: bliss.inference.SDSSFrame
         sdss_dir: ${paths.sdss}
         pixel_scale: 0.396
-        coadd_file: ${paths.data}/coadd_catalog_94_1_12.fits
+        coadd_file: ${plots.coadd_file}
     scenes:
         sdss_recon0:
             h: 200

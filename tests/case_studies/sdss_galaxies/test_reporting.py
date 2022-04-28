@@ -6,7 +6,7 @@ from astropy.table import Table
 
 from bliss import reporting
 from bliss.catalog import FullCatalog
-from bliss.datasets.galsim_galaxies import load_psf_from_file
+from bliss.datasets import sdss
 
 
 def test_scene_metrics():
@@ -44,21 +44,29 @@ def test_coadd(devices, get_sdss_galaxies_config):
     # get psf
     cfg = get_sdss_galaxies_config({}, devices)
     data_path = Path(cfg.paths.data)
-    psf = load_psf_from_file(data_path / "psField-000094-1-0012-PSF-image.npy", 0.396)
 
     # read file and get flux / hlr
-    coadd_cat_file = data_path / "coadd_catalog_94_1_12.fits"
+    coadd_cat_file = data_path / "sdss/coadd_catalog_94_1_12.fits"
     coadd_cat = Table.read(coadd_cat_file)
-    coadd_cat.remove_column("hlr")
-    reporting.get_flux_coadd(coadd_cat[:5])
-    reporting.get_hlr_coadd(coadd_cat[:5], psf)
-    coadd_cat["hlr"] = 0.0
+
+    run = 94
+    camcol = 1
+    field = 12
+    bands = (2,)
+    sdss_data = sdss.SloanDigitalSkySurvey(
+        sdss_dir=data_path / "sdss",
+        run=run,
+        camcol=camcol,
+        fields=(field,),
+        bands=bands,
+    )
+    wcs = sdss_data[0]["wcs"][0]
 
     # params for calculating metrics
     h = 1489
     w = 2048
     bp = 24
-    reporting.CoaddFullCatalog.from_table(coadd_cat, (bp, h - bp), (bp, w - bp))
+    reporting.CoaddFullCatalog.from_table(coadd_cat, wcs, (bp, h - bp), (bp, w - bp), band="r")
 
 
 def test_measurements():

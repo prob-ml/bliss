@@ -18,7 +18,6 @@ from torch import Tensor
 from torchmetrics import Metric
 
 from bliss.catalog import FullCatalog
-from bliss.datasets.galsim_galaxies import load_psf_from_file
 from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
 
 
@@ -296,38 +295,48 @@ class CoaddFullCatalog(FullCatalog):
         "galaxy_bools": "galaxy_bool",
         "fluxes": "flux",
         "mags": "mag",
-        "hlr": "hlr",
         "ra": "ra",
         "dec": "dec",
     }
     allowed_params = FullCatalog.allowed_params.union(coadd_names.keys())
 
     @classmethod
-    def from_file(cls, coadd_file: str, hlim: Tuple[int, int], wlim: Tuple[int, int]):
+    def from_file(
+        cls, coadd_file: str, wcs: WCS, hlim: Tuple[int, int], wlim: Tuple[int, int], band="r"
+    ):
         coadd_table = Table.read(coadd_file, format="fits")
-        return cls.from_table(coadd_table, hlim, wlim)
+        return cls.from_table(coadd_table, wcs, hlim, wlim, band)
 
     @classmethod
     def from_table(
-        cls,
-        coadd_table,
-        hlim: Tuple[int, int],
-        wlim: Tuple[int, int],
+        cls, cat, wcs: WCS, hlim: Tuple[int, int], wlim: Tuple[int, int], band: str = "r"
     ):
         """Load coadd catalog from file, add extra useful information, convert to tensors."""
-        assert set(cls.coadd_names.values()).issubset(set(coadd_table.columns))
         # filter saturated objects
-        coadd_table = coadd_table[~coadd_table["is_saturated"].data]
+        cat = cat[~cat["is_saturated"].data.astype(bool)]
+
+        # add additional useful columns to coadd catalog
+        x, y = wcs.all_world2pix(cat["ra"], cat["dec"], 0)
+        galaxy_bools = ~cat["probpsf"].data.astype(bool)
+        psfmag = cat[f"psfmag_{band}"] * cat["probpsf"]
+        galmag = cat[f"modelMag_{band}"] * (1 - cat["probpsf"])
+        mag = psfmag + galmag
+        cat["x"] = x
+        cat["y"] = y
+        cat["galaxy_bool"] = galaxy_bools
+        cat["mag"] = mag
+        cat["flux"] = convert_mag_to_flux(mag)
+        cat.replace_column("is_saturated", cat["is_saturated"].data.astype(bool))
 
         # misclassified bright galaxies in PHOTO as galaxies (obtaind by eye)
         misclass_ids = (8647475119820964111, 8647475119820964100, 8647475119820964192)
         for iid in misclass_ids:
-            idx = np.where(coadd_table["objid"] == iid)[0].item()
-            coadd_table["galaxy_bool"][idx] = 0
+            idx = np.where(cat["objid"] == iid)[0].item()
+            cat["galaxy_bool"][idx] = 0
 
         # only return objects inside limits.
-        w, h = coadd_table["x"], coadd_table["y"]
-        keep = np.ones(len(coadd_table)).astype(bool)
+        w, h = cat["x"], cat["y"]
+        keep = np.ones(len(cat)).astype(bool)
         keep &= (h > hlim[0]) & (h < hlim[1])
         keep &= (w > wlim[0]) & (w < wlim[1])
         height = hlim[1] - hlim[0]
@@ -341,96 +350,11 @@ class CoaddFullCatalog(FullCatalog):
         data["n_sources"] = torch.tensor(data["plocs"].shape[1]).reshape(1)
 
         for bliss_name, coadd_name in cls.coadd_names.items():
-            arr = column_to_tensor(coadd_table, coadd_name)[keep]
+            arr = column_to_tensor(cat, coadd_name)[keep]
             data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
 
         data["galaxy_bools"] = data["galaxy_bools"].bool()
         return cls(height, width, data)
-
-
-def get_flux_coadd(coadd_cat, nelec_per_nmgy=987.31, band="r"):
-    """Get flux and magnitude measurements for a given SDSS Coadd catalog."""
-    fluxes = []
-    mags = []
-    for entry in coadd_cat:
-        is_star = bool(entry["probpsf"])
-        if is_star:
-            psfmag = entry[f"psfmag_{band}"]
-            flux = convert_mag_to_flux(psfmag, nelec_per_nmgy)
-            mag = psfmag
-        else:  # is galaxy
-            devmag = entry[f"devmag_{band}"]
-            expmag = entry[f"expmag_{band}"]
-            devflux = convert_mag_to_flux(devmag, nelec_per_nmgy)
-            expflux = convert_mag_to_flux(expmag, nelec_per_nmgy)
-            flux = devflux + expflux
-            mag = convert_flux_to_mag(flux, nelec_per_nmgy)
-
-        fluxes.append(flux)
-        mags.append(mag)
-
-    return np.array(fluxes), np.array(mags)
-
-
-def get_hlr_coadd(coadd_cat: Table, psf: galsim.GSObject, nelec_per_nmgy: float = 987.31):
-    if "hlr" in coadd_cat.colnames:
-        return coadd_cat["hlr"]
-
-    hlrs = []
-    psf_hlr = psf.calculateHLR()
-    for entry in tqdm.tqdm(coadd_cat, desc="Calculating HLR"):
-
-        is_star = bool(entry["probpsf"])
-        if is_star:
-            hlrs.append(psf_hlr)
-        else:
-            components = []
-            disk_flux = convert_mag_to_flux(entry["expmag_r"], nelec_per_nmgy)
-            bulge_flux = convert_mag_to_flux(entry["devmag_r"], nelec_per_nmgy)
-
-            if disk_flux > 0:
-                disk_beta = np.radians(entry["expphi_r"])  # radians
-                disk_hlr = entry["exprad_r"]  # arcsecs
-                disk_q = entry["expab_r"]
-                disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr)
-                disk = disk.shear(q=disk_q, beta=disk_beta * galsim.radians)
-                components.append(disk)
-
-            if bulge_flux > 0:
-                bulge_beta = np.radians(entry["devphi_r"])
-                bulge_hlr = entry["devrad_r"]
-                bulge_q = entry["devab_r"]
-                bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr)
-                bulge = bulge.shear(q=bulge_q, beta=bulge_beta * galsim.radians)
-                components.append(bulge)
-            gal = galsim.Add(components)
-            gal = galsim.Convolution(gal, psf)
-            try:
-                hlr = gal.calculateHLR()
-            except galsim.errors.GalSimFFTSizeError:
-                hlr = np.nan
-            hlrs.append(hlr)
-    return np.array(hlrs)
-
-
-def add_extra_coadd_info(coadd_cat_file: str, psf_image_file: str, pixel_scale: float, wcs: WCS):
-    """Add additional useful information to coadd catalog."""
-    coadd_cat = Table.read(coadd_cat_file)
-
-    psf = load_psf_from_file(psf_image_file, pixel_scale)
-    x, y = wcs.all_world2pix(coadd_cat["ra"], coadd_cat["dec"], 0)
-    galaxy_bools = ~coadd_cat["probpsf"].data.astype(bool)
-    flux, mag = get_flux_coadd(coadd_cat)
-    hlr = get_hlr_coadd(coadd_cat, psf)
-
-    coadd_cat["x"] = x
-    coadd_cat["y"] = y
-    coadd_cat["galaxy_bool"] = galaxy_bools
-    coadd_cat["flux"] = flux
-    coadd_cat["mag"] = mag
-    coadd_cat["hlr"] = hlr
-    coadd_cat.replace_column("is_saturated", coadd_cat["is_saturated"].data.astype(bool))
-    coadd_cat.write(coadd_cat_file, overwrite=True)  # overwrite with additional info.
 
 
 def get_single_galaxy_measurements(
