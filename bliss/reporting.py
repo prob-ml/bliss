@@ -1,5 +1,5 @@
 """Functions to evaluate the performance of BLISS predictions."""
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import galsim
 import matplotlib as mpl
@@ -23,6 +23,11 @@ from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_m
 
 class DetectionMetrics(Metric):
     """Calculates aggregate detection metrics on batches over full images (not tiles)."""
+
+    tp: Tensor
+    fp: Tensor
+    avg_distance: Tensor
+    tp_gal: Tensor
 
     def __init__(
         self,
@@ -82,11 +87,13 @@ class DetectionMetrics(Metric):
                 count += 1
         self.avg_distance /= count
 
-    def compute(self):
+    def compute(self) -> Dict[str, Tensor]:
         precision = self.tp / (self.tp + self.fp)  # = PPV = positive predictive value
         recall = self.tp / self.total_true_n_sources  # = TPR = true positive rate
         f1 = (2 * precision * recall) / (precision + recall)
         return {
+            "tp": self.tp,
+            "fp": self.fp,
             "precision": precision,
             "recall": recall,
             "f1": f1,
@@ -97,6 +104,12 @@ class DetectionMetrics(Metric):
 
 class ClassificationMetrics(Metric):
     """Calculates aggregate classification metrics on batches over full images (not tiles)."""
+
+    total_n_matches: Tensor
+    total_coadd_n_matches: Tensor
+    total_coadd_gal_matches: Tensor
+    total_correct_class: Tensor
+    conf_matrix: Tensor
 
     def __init__(
         self,
@@ -143,7 +156,7 @@ class ClassificationMetrics(Metric):
                 self.conf_matrix += confusion_matrix(tgbool, egbool, labels=[1, 0])
 
     # pylint: disable=no-member
-    def compute(self):
+    def compute(self) -> Dict[str, Tensor]:
         """Calculate misclassification accuracy, and confusion matrix."""
         return {
             "n_matches": self.total_n_matches,
