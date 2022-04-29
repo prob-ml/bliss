@@ -1,10 +1,11 @@
 import warnings
-from typing import Dict, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import pytorch_lightning as pl
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset
+from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.datasets.background import ConstantBackground, SimulatedSDSSBackground
@@ -26,11 +27,13 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         background: Union[ConstantBackground, SimulatedSDSSBackground],
         n_tiles_h: int,
         n_tiles_w: int,
-        n_batches,
-        batch_size,
-        generate_device,
-        testing_file=None,
+        n_batches: int,
+        batch_size: int,
+        generate_device: str,
+        testing_file: Optional[str] = None,
         num_workers: int = 0,
+        fix_validation_set: bool = False,
+        valid_n_batches: Optional[int] = None,
     ):
         super().__init__()
 
@@ -50,6 +53,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.background.requires_grad_(False)
         self.to(generate_device)
         self.num_workers = num_workers
+        self.fix_validation_set = fix_validation_set
+        self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
 
         # check training will work.
         total_ptiles = self.batch_size * self.n_tiles_h * self.n_tiles_w
@@ -93,9 +98,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return self.image_decoder.tile_slen
 
     def __iter__(self):
-        return self.batch_generator()
-
-    def batch_generator(self):
         for _ in range(self.n_batches):
             yield self.get_batch()
 
@@ -109,22 +111,37 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=self.num_workers)
+        if self.fix_validation_set:
+            valid: List[Dict[str, Tensor]] = []
+            for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
+                valid.append(self.get_batch())
+            num_workers = 0
+        else:
+            valid = self
+            num_workers = self.num_workers
+        return DataLoader(valid, batch_size=None, num_workers=num_workers)
 
     def test_dataloader(self):
         dl = DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
-        if self.testing_file:
+        if self.testing_file is not None:
             test_dataset = BlissDataset(self.testing_file)
             dl = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
 
         return dl
 
 
+def cpu(d: Dict[str, Tensor]):
+    out: Dict[str, Tensor] = {}
+    for k, v in d.items():
+        out[k] = v.cpu()
+    return out
+
+
 class BlissDataset(Dataset):
     """A dataset created from simulated batches saved as a single dict by bin/generate.py."""
 
-    def __init__(self, pt_file="example.pt"):
+    def __init__(self, pt_file: str = "example.pt"):
         super().__init__()
 
         data = torch.load(pt_file)
