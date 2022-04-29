@@ -273,9 +273,6 @@ def calc_scene_metrics_by_mag(
         detection_metrics.update(true_cat, est_cat_binned)
         precision_metrics = detection_metrics.compute()
         fp = precision_metrics["fp"].item()
-        tp_gal_precision = precision_metrics["n_galaxies_detected"].item()
-        fp_gal = est_cat_binned["galaxy_bools"].sum().item() - tp_gal_precision
-        fp_star = fp - fp_gal
         # reset global state since recall and precision use different cuts.
         detection_metrics.reset()
 
@@ -310,13 +307,9 @@ def calc_scene_metrics_by_mag(
             "recall": tp / tcount if tcount > 0 else 0.0,
             "precision": tp / (tp + fp) if (tp + fp) > 0 else 1.0,
             "tp_gal": tp_gal,
-            "fp_gal": fp_gal,
             "recall_gal": tp_gal / tgcount if tgcount > 0 else 0.0,
-            "precision_gal": tp_gal / (fp_gal + tp_gal) if (fp_gal + tp_gal) > 0 else 1.0,
             "tp_star": tp_star,
-            "fp_star": fp_star,
             "recall_star": tp_star / tscount if tscount > 0 else 0.0,
-            "precision_star": tp_star / (fp_star + tp_star) if (fp_star + tp_star) > 0 else 1.0,
             "classif_n_matches": n_matches,
             "classif_acc": classification_result["class_acc"].item(),
             "classif_galaxy_acc": galaxy_acc.item(),
