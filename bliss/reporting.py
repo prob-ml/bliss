@@ -199,7 +199,8 @@ def kdtree_match(locs1,locs2,slack=1,method_id=1):
     Match points of locs1 and locs2 and return indices to match
     
     Args:
-        locs1, locs2: Tensor of shape `(n1 x 2)`
+        locs1: Tensor of shape `(n1 x 2)`
+        locs2: Tensor of shape `(n2 x 2)`
         slack: Threshold for matching objects
         method_id: 0 or 1, corresponding two different match methods:
             - radius search(method_id=0):
@@ -209,7 +210,7 @@ def kdtree_match(locs1,locs2,slack=1,method_id=1):
             
     Returne:
         - row_indx: Indicies of locs1 matched to locs2.
-        - col_indx: Indicies of locs2 matched to locs1, with value -1 indicating no match
+        - col_indx: Indicies of locs2 matched to locs1.
     
     """
     
@@ -302,7 +303,7 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     Automatically discards matches where at least one location has coordinates **exactly** (0, 0).
 
     Args:
-        slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
+        slack: Threshold for matching objects a `slack` l2 distance away (in pixels).
         true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
             The centroids should be in units of PIXELS.
         est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
@@ -312,8 +313,8 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
         A tuple of the following objects:
         - row_indx: Indicies of true objects matched to estimated objects.
         - col_indx: Indicies of estimated objects matched to true objects.
-        - dist_keep: Matched objects to keep based on l1 distances.
-        - avg_distance: Average l-infinity distance over matched objects.
+        - dist_keep: Matched objects to keep based on l2 distances.
+        - avg_distance: Average l2 distance over matched objects.
     """
     assert len(true_locs.shape) == len(est_locs.shape) == 2
     assert true_locs.shape[-1] == est_locs.shape[-1] == 2
@@ -325,14 +326,14 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     row_indx, col_indx = kdtree_match(locs1,locs2,slack,method_id=1)
 
     # we match objects based on distance too.
-    # only match objects that satisfy threshold on l-infinity distance.
+    # only match objects that satisfy threshold on l2 distance.
     # do not match fake objects with locs = (0, 0)
     dist = (locs1[row_indx] - locs2[col_indx]).pow(2).sum(1)
     origin_dist = torch.min(locs1[row_indx].pow(2).sum(1), locs2[col_indx].pow(2).sum(1))
     cond1 = (dist < slack).bool()
     cond2 = (origin_dist > 0).bool()
     dist_keep = torch.logical_and(cond1, cond2)
-    avg_distance = dist[cond2].float().mean()  # average l-infinity distance over matched objects.
+    avg_distance = dist[cond2].float().mean()  # average l2 distance over matched objects.
 
     return row_indx, col_indx, dist_keep, avg_distance
 
