@@ -49,4 +49,5 @@ def test_metrics():
     assert recall == 2 / 3
     assert class_acc == 1 / 2
     assert conf_matrix.eq(torch.tensor([[1, 1], [0, 0]])).all()
-    assert avg_distance.item() == 50 * (0.01 + (0.01 + 0.09) / 2) / 2
+    assert avg_distance.item() == 50 * 0.01
+    #assert avg_distance.item() == 50 * (0.01 + (0.01 + 0.09) / 2) / 2
