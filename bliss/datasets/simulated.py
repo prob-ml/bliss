@@ -1,5 +1,5 @@
 import warnings
-from typing import Dict, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import pytorch_lightning as pl
 import torch
@@ -26,11 +26,12 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         background: Union[ConstantBackground, SimulatedSDSSBackground],
         n_tiles_h: int,
         n_tiles_w: int,
-        n_batches,
-        batch_size,
-        generate_device,
-        testing_file=None,
+        n_batches: int,
+        batch_size: int,
+        generate_device: str,
+        testing_file: Optional[str] = None,
         num_workers: int = 0,
+        fix_validation_set: bool = False,
     ):
         super().__init__()
 
@@ -50,6 +51,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.background.requires_grad_(False)
         self.to(generate_device)
         self.num_workers = num_workers
+        self.fix_validation_set = fix_validation_set
 
         # check training will work.
         total_ptiles = self.batch_size * self.n_tiles_h * self.n_tiles_w
@@ -106,22 +108,35 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=self.num_workers)
+        print("INFO: val_dataloader() was called")
+        if self.fix_validation_set:
+            valid = [cpu(x) for x in self]
+            print("INFO: fixed validation set was generated")
+        else:
+            valid = self
+        return DataLoader(valid, batch_size=None, num_workers=self.num_workers)
 
     def test_dataloader(self):
         dl = DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
-        if self.testing_file:
+        if self.testing_file is not None:
             test_dataset = BlissDataset(self.testing_file)
             dl = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
 
         return dl
 
 
+def cpu(d: Dict[str, Tensor]):
+    out: Dict[str, Tensor] = {}
+    for k, v in d.items():
+        out[k] = v.cpu()
+    return out
+
+
 class BlissDataset(Dataset):
     """A dataset created from simulated batches saved as a single dict by bin/generate.py."""
 
-    def __init__(self, pt_file="example.pt"):
+    def __init__(self, pt_file: str = "example.pt"):
         super().__init__()
 
         data = torch.load(pt_file)
