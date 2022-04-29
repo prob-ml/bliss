@@ -16,6 +16,7 @@ from scipy import optimize as sp_optim
 from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
+from sklearn.neighbors import NearestNeighbors
 
 from bliss.catalog import FullCatalog
 from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
@@ -166,6 +167,131 @@ class ClassificationMetrics(Metric):
         }
 
 
+def find_match(idx, mdic):
+    """recursion function to find matches"""
+    
+    #no match, pass
+    if len(idx)<1:
+        return None
+    
+    dic_key=idx[0][1]
+    
+    #if there is no match, fill it
+    if mdic[dic_key] is None:
+        mdic[dic_key]=idx
+        
+    
+    #if new match has larger distance, check the next match
+    elif idx[0][0]>=mdic[dic_key][0][0]:
+        del idx[0]
+        find_match(idx,mdic)
+    
+    #if new match has smaller distance, replace the former match
+    #then find a new match for replaced point
+    else:
+        new_idx=mdic[dic_key]
+        mdic[dic_key]=idx
+        del new_idx[0]
+        find_match(new_idx,mdic)
+    
+def kdtree_match(locs1,locs2,slack=1,method_id=0):
+    """
+    Match points of locs1 and locs2 and return indices to match
+    
+    Args:
+        locs1, locs2: Tensor of shape `(n1 x 2)`
+        slack: Threshold for matching objects
+        method_id: 0 or 1, corresponding two different match methods:
+            - radius search(method_id=0):
+                Find neighbors in a given radius and return optimal permutation result
+            - nearest neighbor research(method_id=1): 
+                Find nearest neighbor for each point in locs2 and return match with cloest distance of None for each point in locs1
+            
+    Returne:
+        - row_indx: Indicies of locs1 matched to locs2.
+        - col_indx: Indicies of locs2 matched to locs1, with value -1 indicating no match
+    
+    """
+    
+    n1=len(locs1)
+    n2=len(locs2)
+    
+    #dict for permutation test
+    #the elements of tuple correspond to index, k-th neighbor and distance
+    mdic={k:None for k in range(n1)}
+
+    row_idx=np.array([],dtype="int")
+    col_idx=np.array([],dtype="int")
+        
+    if method_id==0:
+        
+    
+        #set up kdtree
+        neigh=NearestNeighbors(algorithm="kd_tree",radius=slack)
+        neigh.fit(locs1)
+    
+        for i in range(n2):
+            id_point=i
+            result=neigh.radius_neighbors(locs2[id_point][None,:],sort_results=True)
+        
+            #no matching, pass
+            if len(result[0][0])<1:
+                continue
+            
+            #a list match of (distance, locs1, locs2) ordered by distance
+            idx=list(zip(result[0][0],result[1][0],[id_point]*len(result[0][0])))
+        
+            #find a proper match
+            find_match(idx, mdic)
+    
+        for s in mdic.keys():
+            if mdic[s]:
+                row_idx=np.append(row_idx,s)
+                col_idx=np.append(col_idx,mdic[s][0][2])
+
+    
+    
+    if method_id==1:
+    
+        #set up kdtree
+        neigh=NearestNeighbors(algorithm="kd_tree")
+        neigh.fit(locs1)
+    
+        for i in range(n2):
+            id_point=i
+            result=neigh.kneighbors(locs2[id_point][None,:],1)
+        
+            #no matching, pass
+            if len(result[0][0])<1:
+                continue
+            
+            #match distance larger than threshold, pass
+            if result[0][0][0]>slack:
+                continue
+            
+            #nearest point and distance
+            idx=[result[0][0][0],result[1][0][0],id_point]
+            
+            #if no match, fill it
+            if mdic[idx[1]] is None:
+                mdic[idx[1]]=idx
+            #if the match has lower distance than former one, replace it
+            elif mdic[idx[1]][0]>idx[0]:
+                mdic[idx[1]]=idx
+            #otherwise, invalid match
+            else:
+                continue
+
+        for s in mdic.keys():
+            if mdic[s]:
+                row_idx=np.append(row_idx,s)
+                col_idx=np.append(col_idx,mdic[s][2])
+    
+    
+        
+    return row_idx, col_idx
+
+
 def match_by_locs(true_locs, est_locs, slack=1.0):
     """Match true and estimated locations and returned indices to match.
 
@@ -196,28 +322,20 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     locs1 = true_locs.view(-1, 2)
     locs2 = est_locs.view(-1, 2)
 
-    locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
-    locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
-    locs_err_l_infty = reduce(locs_abs_diff, "i j k -> i j", "max")
-
-    # Penalize all pairs which are greater than slack apart to favor valid matches.
-    locs_err = locs_err + (locs_err_l_infty > slack) * locs_err.max()
-
-    # find minimal permutation and return matches
-    row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
+    row_indx, col_indx = kdtree_match(locs1,locs2,slack,method_id=1)
 
     # we match objects based on distance too.
     # only match objects that satisfy threshold on l-infinity distance.
     # do not match fake objects with locs = (0, 0)
-    dist = (locs1[row_indx] - locs2[col_indx]).abs().max(1)[0]
+    dist = (locs1[row_indx] - locs2[col_indx]).pow(2).sum(1)
     origin_dist = torch.min(locs1[row_indx].pow(2).sum(1), locs2[col_indx].pow(2).sum(1))
     cond1 = (dist < slack).bool()
     cond2 = (origin_dist > 0).bool()
     dist_keep = torch.logical_and(cond1, cond2)
-    avg_distance = dist[cond2].mean()  # average l-infinity distance over matched objects.
-    if dist_keep.sum() > 0:
-        assert dist[dist_keep].max() <= slack
+    avg_distance = dist[cond2].float().mean()  # average l-infinity distance over matched objects.
+
     return row_indx, col_indx, dist_keep, avg_distance
+
 
 
 def scene_metrics(
