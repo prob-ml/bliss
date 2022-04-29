@@ -167,6 +167,59 @@ class ClassificationMetrics(Metric):
         }
 
 
+def match_by_locs(true_locs, est_locs, slack=1.0):
+    """Match true and estimated locations and returned indices to match.
+
+    Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
+    The matching is done with `scipy.optimize.linear_sum_assignment`, which implements
+    the Hungarian algorithm.
+
+    Automatically discards matches where at least one location has coordinates **exactly** (0, 0).
+
+    Args:
+        slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
+        true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
+            The centroids should be in units of PIXELS.
+        est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
+            number of sources. The centroids should be in units of PIXELS.
+
+    Returns:
+        A tuple of the following objects:
+        - row_indx: Indicies of true objects matched to estimated objects.
+        - col_indx: Indicies of estimated objects matched to true objects.
+        - dist_keep: Matched objects to keep based on l1 distances.
+        - avg_distance: Average l-infinity distance over matched objects.
+    """
+    assert len(true_locs.shape) == len(est_locs.shape) == 2
+    assert true_locs.shape[-1] == est_locs.shape[-1] == 2
+    assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
+
+    locs1 = true_locs.view(-1, 2)
+    locs2 = est_locs.view(-1, 2)
+
+    locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
+    locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
+    locs_err_l_infty = reduce(locs_abs_diff, "i j k -> i j", "max")
+
+    # Penalize all pairs which are greater than slack apart to favor valid matches.
+    locs_err = locs_err + (locs_err_l_infty > slack) * locs_err.max()
+
+    # find minimal permutation and return matches
+    row_indx, col_indx = sp_optim.linear_sum_assignment(locs_err.detach().cpu())
+
+    # we match objects based on distance too.
+    # only match objects that satisfy threshold on l-infinity distance.
+    # do not match fake objects with locs = (0, 0)
+    dist = (locs1[row_indx] - locs2[col_indx]).abs().max(1)[0]
+    origin_dist = torch.min(locs1[row_indx].pow(2).sum(1), locs2[col_indx].pow(2).sum(1))
+    cond1 = (dist < slack).bool()
+    cond2 = (origin_dist > 0).bool()
+    dist_keep = torch.logical_and(cond1, cond2)
+    avg_distance = dist[cond2].mean()  # average l-infinity distance over matched objects.
+    if dist_keep.sum() > 0:
+        assert dist[dist_keep].max() <= slack
+    return row_indx, col_indx, dist_keep, avg_distance
+
 def find_match(idx, mdic):
     """recursion function to find matches"""
     
@@ -293,7 +346,7 @@ def kdtree_match(locs1,locs2,slack=1,method_id=1):
     return row_idx, col_idx
 
 
-def match_by_locs(true_locs, est_locs, slack=1.0):
+def match_by_locs_kdtree(true_locs, est_locs, slack=1.0):
     """Match true and estimated locations and returned indices to match.
 
     Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
@@ -323,7 +376,7 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     locs1 = true_locs.view(-1, 2)
     locs2 = est_locs.view(-1, 2)
 
-    row_indx, col_indx = kdtree_match(locs1,locs2,slack,method_id=1)
+    row_indx, col_indx = kdtree_match(locs1,locs2,slack,method_id=0)
 
     # we match objects based on distance too.
     # only match objects that satisfy threshold on l2 distance.
