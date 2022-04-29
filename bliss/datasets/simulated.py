@@ -93,9 +93,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return self.image_decoder.tile_slen
 
     def __iter__(self):
-        return self.batch_generator()
-
-    def batch_generator(self):
         for _ in range(self.n_batches):
             yield self.get_batch()
 
