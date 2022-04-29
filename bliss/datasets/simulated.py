@@ -1,10 +1,11 @@
 import warnings
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import pytorch_lightning as pl
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset
+from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.datasets.background import ConstantBackground, SimulatedSDSSBackground
@@ -32,6 +33,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         testing_file: Optional[str] = None,
         num_workers: int = 0,
         fix_validation_set: bool = False,
+        valid_n_batches: Optional[int] = None,
     ):
         super().__init__()
 
@@ -52,6 +54,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.to(generate_device)
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
+        self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
 
         # check training will work.
         total_ptiles = self.batch_size * self.n_tiles_h * self.n_tiles_w
@@ -110,11 +113,15 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def val_dataloader(self):
         print("INFO: val_dataloader() was called")
         if self.fix_validation_set:
-            valid = [cpu(x) for x in self]
+            valid: List[Dict[str, Tensor]] = []
+            for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
+                valid.append(self.get_batch())
             print("INFO: fixed validation set was generated")
+            num_workers = 0
         else:
             valid = self
-        return DataLoader(valid, batch_size=None, num_workers=self.num_workers)
+            num_workers = self.num_workers
+        return DataLoader(valid, batch_size=None, num_workers=num_workers)
 
     def test_dataloader(self):
         dl = DataLoader(self, batch_size=None, num_workers=self.num_workers)

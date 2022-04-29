@@ -73,6 +73,7 @@ datasets:
         n_tiles_w: 10
         n_batches: 10
         batch_size: 32
+        valid_n_batches: 50
         generate_device: "cpu"
         testing_file: null
         num_workers: 5
