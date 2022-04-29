@@ -111,12 +111,10 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        print("INFO: val_dataloader() was called")
         if self.fix_validation_set:
             valid: List[Dict[str, Tensor]] = []
             for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
                 valid.append(self.get_batch())
-            print("INFO: fixed validation set was generated")
             num_workers = 0
         else:
             valid = self
