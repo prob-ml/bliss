@@ -376,7 +376,7 @@ def match_by_locs_kdtree(true_locs, est_locs, slack=1.0):
     locs1 = true_locs.view(-1, 2)
     locs2 = est_locs.view(-1, 2)
 
-    row_indx, col_indx = kdtree_match(locs1,locs2,slack,method_id=0)
+    row_indx, col_indx = kdtree_match(locs1,locs2,slack,method_id=1)
 
     # we match objects based on distance too.
     # only match objects that satisfy threshold on l2 distance.
