@@ -194,7 +194,7 @@ def find_match(idx, mdic):
         del new_idx[0]
         find_match(new_idx,mdic)
     
-def kdtree_match(locs1,locs2,slack=1,method_id=0):
+def kdtree_match(locs1,locs2,slack=1,method_id=1):
     """
     Match points of locs1 and locs2 and return indices to match
     
