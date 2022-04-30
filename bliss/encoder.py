@@ -66,14 +66,12 @@ class Encoder(nn.Module):
         self.register_buffer("map_n_source_weights", map_n_source_weights_tnsr, persistent=False)
 
     def forward(self, x):
-        raise NotImplementedError(
-            ".forward() method for Encoder not available. Use .max_a_post() or .sample()."
-        )
+        raise NotImplementedError("Unavailable. Use .variational_mode() or .sample() instead.")
 
     def sample(self, image_ptiles, n_samples):
         raise NotImplementedError("Sampling from Encoder not yet available.")
 
-    def max_a_post(self, image: Tensor, background: Tensor) -> TileCatalog:
+    def variational_mode(self, image: Tensor, background: Tensor) -> TileCatalog:
         """Get maximum a posteriori of catalog from image padded tiles.
 
         Note that, strictly speaking, this is not the true MAP of the variational
@@ -92,13 +90,13 @@ class Encoder(nn.Module):
         Returns:
             A dictionary of the maximum a posteriori
             of the catalog in tiles. Specifically, this dictionary comprises:
-                - The output of LocationEncoder.max_a_post()
+                - The output of LocationEncoder.variational_mode()
                 - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
                 - 'galaxy_params' from GalaxyEncoder.
         """
         assert isinstance(self.map_n_source_weights, Tensor)
         var_params = self.location_encoder.encode(image, background)
-        tile_map = self.location_encoder.max_a_post(
+        tile_map = self.location_encoder.variational_mode(
             var_params, n_source_weights=self.map_n_source_weights
         )
 
@@ -117,7 +115,7 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_params = self.galaxy_encoder.max_a_post(image, background, tile_map.locs)
+            galaxy_params = self.galaxy_encoder.variational_mode(image, background, tile_map.locs)
             galaxy_params *= tile_map.is_on_array.unsqueeze(-1) * tile_map["galaxy_bools"]
             tile_map.update({"galaxy_params": galaxy_params})
         return tile_map
