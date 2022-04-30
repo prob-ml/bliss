@@ -137,7 +137,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             for chunk, bg in tqdm(zip(chunks, bg_chunks)):
                 chunk_device = chunk.to(self.prerender_device).unsqueeze(0)
                 bg_device = bg.to(self.prerender_device).unsqueeze(0)
-                tile_map = encoder.max_a_post(chunk_device, bg_device)
+                tile_map = encoder.variational_mode(chunk_device, bg_device)
                 if tile_map["galaxy_bools"].sum() > 0:
                     catalogs.append(tile_map.cpu())
                     chunks_with_galaxies_list.append(chunk.cpu())

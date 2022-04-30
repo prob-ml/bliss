@@ -107,10 +107,10 @@ class GalaxyEncoder(pl.LightningModule):
         galaxy_params, _ = self.encode(images, background, tile_locs)
         return galaxy_params
 
-    def max_a_post(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
+    def variational_mode(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
         batch_size, nth, ntw, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
-        galaxy_params_flat = self.enc.max_a_post(centered_ptiles)
+        galaxy_params_flat = self.enc.variational_mode(centered_ptiles)
         return rearrange(
             galaxy_params_flat,
             "(b nth ntw s) d -> b nth ntw s d",

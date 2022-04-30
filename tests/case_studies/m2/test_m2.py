@@ -80,7 +80,7 @@ def get_map_estimate(
         var_params2["per_source_params"],
         atol=1e-5,
     )
-    tile_map = image_encoder.max_a_post(var_params)
+    tile_map = image_encoder.variational_mode(var_params)
     full_map = tile_map.to_full_params()
     tile_map_tilde = full_map.to_tile_params(image_encoder.tile_slen, tile_map.max_sources)
     assert tile_map.equals(tile_map_tilde, exclude=("n_source_log_probs",), atol=1e-5)
