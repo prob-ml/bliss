@@ -29,12 +29,12 @@ BLISS uses state-of-the-art variational inference techniques including
 sudo apt-get install libfftw3-dev
 ```
 
-3. Install git-lfs if you haven't already installed it for another project
+3. Install git-lfs if you haven't already installed it for another project:
 ```
 git-lfs install
 ```
 
-4. Now download the bliss repo and fetch some pre-trained models and test data from git-lfs
+4. Now download the bliss repo and fetch some pre-trained models and test data from git-lfs:
 ```
 git clone https://github.com/prob-ml/bliss.git
 ```
@@ -46,10 +46,15 @@ poetry install
 poetry shell
 ```
 
-6. Finally, verify that bliss is installed correctly by running the tests both on your CPU (default) and on your GPU:
+6. Verify that bliss is installed correctly by running the tests both on your CPU (default) and on your GPU:
 ```
 pytest
 pytest --gpu
+```
+
+7. Finally, if you are planning to contribute code to this repository, consider installing our pre-commit hooks so that your code commits will be checked locally for compliance with our coding conventions:
+```
+pre-commit --install
 ```
 
 # Latest updates
