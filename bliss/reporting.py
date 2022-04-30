@@ -225,7 +225,7 @@ def find_match(idx, mdic):
     """Recursion function to find matches."""
 
     num_match = len(idx)
-    # no match, pass
+
     if num_match > 0:
         dic_key = idx[0][1]
 
@@ -233,13 +233,13 @@ def find_match(idx, mdic):
         if mdic[dic_key] is None:
             mdic[dic_key] = idx
 
-        # if new match has larger distance, check the next match
+        # if first match has larger distance, check the second match
         elif idx[0][0] >= mdic[dic_key][0][0]:
             del idx[0]
             mdic = find_match(idx, mdic)
 
         # if new match has smaller distance, replace the former match
-        # then find a new match for replaced point
+        # then check the second match for replaced point
         else:
             new_idx = mdic[dic_key]
             mdic[dic_key] = idx
@@ -259,7 +259,7 @@ def kdtree_match(locs1, locs2, slack=1, method_id=1):
         method_id: 0 or 1, corresponding two different match methods:
             - radius search(method_id=0):
                 Find neighbors in a given radius and return optimal permutation result
-            - nearest neighbor research(method_id=1):
+            - nearest neighbor research(method_id=1): Default
                 Find nearest neighbor for each point in locs2
                 Return match with cloest distance of None for each point in locs1
 
@@ -275,9 +275,11 @@ def kdtree_match(locs1, locs2, slack=1, method_id=1):
     # the elements of tuple correspond to index, k-th neighbor and distance
     mdic = {k : None for k in range(n1)}
 
+    # Indicies of match
     row_idx = np.array([], dtype="int")
     col_idx = np.array([], dtype="int")
 
+    # radius search
     if method_id == 0:
 
         # set up kdtree
@@ -307,6 +309,7 @@ def kdtree_match(locs1, locs2, slack=1, method_id=1):
                 row_idx = np.append(row_idx, s)
                 col_idx = np.append(col_idx, mdic[s][0][2])
 
+    # nearest neighbor search
     if method_id == 1:
 
         # set up kdtree
@@ -358,7 +361,7 @@ def match_by_locs_kdtree(true_locs, est_locs, slack=1.0):
         A tuple of the following objects:
         - row_indx: Indicies of true objects matched to estimated objects.
         - col_indx: Indicies of estimated objects matched to true objects.
-        - dist_keep: Matched objects to keep based on l2 distances.
+        - dist_keep: Matched objects to keep based on l2 distances (All True).
         - avg_distance: Average l2 distance over matched objects.
     """
     assert len(true_locs.shape) == len(est_locs.shape) == 2
