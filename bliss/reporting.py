@@ -14,9 +14,9 @@ from matplotlib.pyplot import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import optimize as sp_optim
 from sklearn.metrics import confusion_matrix
+from sklearn.neighbors import NearestNeighbors
 from torch import Tensor
 from torchmetrics import Metric
-from sklearn.neighbors import NearestNeighbors
 
 from bliss.catalog import FullCatalog
 from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
@@ -220,37 +220,38 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
         assert dist[dist_keep].max() <= slack
     return row_indx, col_indx, dist_keep, avg_distance
 
+
 def find_match(idx, mdic):
-    """recursion function to find matches"""
-    
-    #no match, pass
-    if len(idx)<1:
-        return None
-    
-    dic_key=idx[0][1]
-    
-    #if there is no match, fill it
-    if mdic[dic_key] is None:
-        mdic[dic_key]=idx
-        
-    
-    #if new match has larger distance, check the next match
-    elif idx[0][0]>=mdic[dic_key][0][0]:
-        del idx[0]
-        find_match(idx,mdic)
-    
-    #if new match has smaller distance, replace the former match
-    #then find a new match for replaced point
-    else:
-        new_idx=mdic[dic_key]
-        mdic[dic_key]=idx
-        del new_idx[0]
-        find_match(new_idx,mdic)
-    
-def kdtree_match(locs1,locs2,slack=1,method_id=1):
-    """
-    Match points of locs1 and locs2 and return indices to match
-    
+    """Recursion function to find matches."""
+
+    num_match = len(idx)
+    # no match, pass
+    if num_match > 0:
+        dic_key = idx[0][1]
+
+        # if there is no match, fill it
+        if mdic[dic_key] is None:
+            mdic[dic_key] = idx
+
+        # if new match has larger distance, check the next match
+        elif idx[0][0] >= mdic[dic_key][0][0]:
+            del idx[0]
+            mdic = find_match(idx, mdic)
+
+        # if new match has smaller distance, replace the former match
+        # then find a new match for replaced point
+        else:
+            new_idx = mdic[dic_key]
+            mdic[dic_key] = idx
+            del new_idx[0]
+            mdic = find_match(new_idx, mdic)
+
+    return mdic
+
+
+def kdtree_match(locs1, locs2, slack=1, method_id=1):
+    """Match points of locs1 and locs2 and return indices to match.
+
     Args:
         locs1: Tensor of shape `(n1 x 2)`
         locs2: Tensor of shape `(n2 x 2)`
@@ -258,91 +259,82 @@ def kdtree_match(locs1,locs2,slack=1,method_id=1):
         method_id: 0 or 1, corresponding two different match methods:
             - radius search(method_id=0):
                 Find neighbors in a given radius and return optimal permutation result
-            - nearest neighbor research(method_id=1): 
-                Find nearest neighbor for each point in locs2 and return match with cloest distance of None for each point in locs1
-            
+            - nearest neighbor research(method_id=1):
+                Find nearest neighbor for each point in locs2
+                Return match with cloest distance of None for each point in locs1
+
     Returne:
         - row_indx: Indicies of locs1 matched to locs2.
         - col_indx: Indicies of locs2 matched to locs1.
-    
     """
-    
-    n1=len(locs1)
-    n2=len(locs2)
-    
-    #dict for permutation test
-    #the elements of tuple correspond to index, k-th neighbor and distance
-    mdic={k:None for k in range(n1)}
 
-    row_idx=np.array([],dtype="int")
-    col_idx=np.array([],dtype="int")
-        
-    if method_id==0:
-        
-    
-        #set up kdtree
-        neigh=NearestNeighbors(algorithm="kd_tree",radius=slack)
-        neigh.fit(locs1)
-    
-        for i in range(n2):
-            id_point=i
-            result=neigh.radius_neighbors(locs2[id_point][None,:],sort_results=True)
-        
-            #no matching, pass
-            if len(result[0][0])<1:
-                continue
-            
-            #a list match of (distance, locs1, locs2) ordered by distance
-            idx=list(zip(result[0][0],result[1][0],[id_point]*len(result[0][0])))
-        
-            #find a proper match
-            find_match(idx, mdic)
-    
-        for s in mdic.keys():
-            if mdic[s]:
-                row_idx=np.append(row_idx,s)
-                col_idx=np.append(col_idx,mdic[s][0][2])
+    n1 = len(locs1)
+    n2 = len(locs2)
 
-    
-    
-    if method_id==1:
-    
-        #set up kdtree
-        neigh=NearestNeighbors(algorithm="kd_tree")
+    # dict for permutation test
+    # the elements of tuple correspond to index, k-th neighbor and distance
+    mdic = {k : None for k in range(n1)}
+
+    row_idx = np.array([], dtype="int")
+    col_idx = np.array([], dtype="int")
+
+    if method_id == 0:
+
+        # set up kdtree
+        neigh = NearestNeighbors(algorithm="kd_tree", radius=slack)
         neigh.fit(locs1)
-    
+
         for i in range(n2):
-            id_point=i
-            result=neigh.kneighbors(locs2[id_point][None,:],1)
-        
-            #no matching, pass
-            if len(result[0][0])<1:
+            id_point = i
+            result = neigh.radius_neighbors(locs2[id_point][None, :], sort_results=True)
+            num_match = len(result[0][0])
+
+            # no matching, pass
+            if num_match < 1:
                 continue
-            
-            #match distance larger than threshold, pass
-            if result[0][0][0]>slack:
-                continue
-            
-            #nearest point and distance
-            idx=[result[0][0][0],result[1][0][0],id_point]
-            
-            #if no match, fill it
-            if mdic[idx[1]] is None:
-                mdic[idx[1]]=idx
-            #if the match has lower distance than former one, replace it
-            elif mdic[idx[1]][0]>idx[0]:
-                mdic[idx[1]]=idx
-            #otherwise, invalid match
-            else:
-                continue
+
+            # a list match of (distance, locs1, locs2) ordered by distance
+            id_list = []
+            for _ in range(num_match):
+                id_list.append(id_point)
+            idx = list(zip(result[0][0], result[1][0], id_list))
+
+            # find a proper match
+            mdic = find_match(idx, mdic)
 
         for s in mdic.keys():
             if mdic[s]:
-                row_idx=np.append(row_idx,s)
-                col_idx=np.append(col_idx,mdic[s][2])
-    
-    
-        
+                row_idx = np.append(row_idx, s)
+                col_idx = np.append(col_idx, mdic[s][0][2])
+
+    if method_id == 1:
+
+        # set up kdtree
+        neigh = NearestNeighbors(algorithm="kd_tree")
+        neigh.fit(locs1)
+
+        for i in range(n2):
+            id_point = i
+            result = neigh.kneighbors(locs2[id_point][None, :], 1)
+            num_match = len(result[0][0])
+
+            # no match or distance larger than threshold, pass
+            if num_match < 1 or result[0][0][0] > slack:
+                continue
+
+            # nearest point and distance
+            idx = [result[0][0][0], result[1][0][0], id_point]
+
+            # if no match or the match has lower distance, fill it
+            if mdic[idx[1]] is None or mdic[idx[1]][0] > idx[0]:
+                mdic[idx[1]] = idx
+            # otherwise, invalid match
+
+        for s in mdic.keys():
+            if mdic[s]:
+                row_idx = np.append(row_idx, s)
+                col_idx = np.append(col_idx, mdic[s][2])
+
     return row_idx, col_idx
 
 
@@ -376,7 +368,7 @@ def match_by_locs_kdtree(true_locs, est_locs, slack=1.0):
     locs1 = true_locs.view(-1, 2)
     locs2 = est_locs.view(-1, 2)
 
-    row_indx, col_indx = kdtree_match(locs1,locs2,slack,method_id=1)
+    row_indx, col_indx = kdtree_match(locs1, locs2, slack, method_id=1)
 
     # we match objects based on distance too.
     # only match objects that satisfy threshold on l2 distance.
@@ -389,7 +381,6 @@ def match_by_locs_kdtree(true_locs, est_locs, slack=1.0):
     avg_distance = dist[cond2].float().mean()  # average l2 distance over matched objects.
 
     return row_indx, col_indx, dist_keep, avg_distance
-
 
 
 def scene_metrics(
