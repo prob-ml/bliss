@@ -263,7 +263,7 @@ def kdtree_match(locs1, locs2, slack=1, method_id=1):
                 Find nearest neighbor for each point in locs2
                 Return match with cloest distance of None for each point in locs1
 
-    Returne:
+    Returns:
         - row_indx: Indicies of locs1 matched to locs2.
         - col_indx: Indicies of locs2 matched to locs1.
     """
@@ -273,7 +273,7 @@ def kdtree_match(locs1, locs2, slack=1, method_id=1):
 
     # dict for permutation test
     # the elements of tuple correspond to index, k-th neighbor and distance
-    mdic = {k : None for k in range(n1)}
+    mdic = {k: None for k in range(n1)}
 
     # Indicies of match
     row_idx = np.array([], dtype="int")
