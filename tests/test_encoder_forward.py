@@ -4,7 +4,7 @@ from bliss.models.location_encoder import LocationEncoder, LogBackgroundTransfor
 
 
 class TestSourceEncoder:
-    def test_max_a_post(self, devices):
+    def test_variational_mode(self, devices):
         """Tests forward function of source encoder.
 
         Arguments:
@@ -53,7 +53,7 @@ class TestSourceEncoder:
             images *= background_tensor.sqrt()
             images += background_tensor
             var_params = star_encoder.encode(images, background_tensor)
-            catalog = star_encoder.max_a_post(var_params)
+            catalog = star_encoder.variational_mode(var_params)
 
             assert catalog.n_sources.size() == torch.Size([batch_size, n_tiles_h, n_tiles_w])
             correct_locs_shape = torch.Size([batch_size, n_tiles_h, n_tiles_w, max_detections, 2])

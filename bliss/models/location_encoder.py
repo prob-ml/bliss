@@ -233,7 +233,7 @@ class LocationEncoder(pl.LightningModule):
             "n_sources": tile_n_sources,
         }
 
-    def max_a_post(
+    def variational_mode(
         self, dist_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None
     ) -> TileCatalog:
         """Compute the mode of the variational distribution.
@@ -279,14 +279,14 @@ class LocationEncoder(pl.LightningModule):
         # flattened in the first place
         b, nth, ntw, _, _ = dist_params["per_source_params"].shape
         unflatten = "1 (b nth ntw) s k -> b nth ntw s k"
-        max_a_post = {
+        catalog_dict = {
             "locs": rearrange(tile_locs, unflatten, b=b, nth=nth, ntw=ntw),
             "log_fluxes": rearrange(tile_log_fluxes, unflatten, b=b, nth=nth, ntw=ntw),
             "fluxes": rearrange(tile_fluxes, unflatten, b=b, nth=nth, ntw=ntw),
             "n_sources": map_n_sources,
             "n_source_log_probs": dist_params["n_source_log_probs"][:, :, :, 1:].unsqueeze(-1),
         }
-        return TileCatalog(self.tile_slen, max_a_post)
+        return TileCatalog(self.tile_slen, catalog_dict)
 
     def _get_n_source_prior_log_prob(self, detection_rate):
         possible_n_sources = torch.tensor(range(self.max_detections))
@@ -423,7 +423,7 @@ class LocationEncoder(pl.LightningModule):
         true_tile_catalog = TileCatalog(self.tile_slen, catalog_dict)
         true_full_catalog = true_tile_catalog.to_full_params()
         dist_params = self.encode(batch["images"], batch["background"])
-        est_tile_catalog = self.max_a_post(dist_params)
+        est_tile_catalog = self.variational_mode(dist_params)
         est_full_catalog = est_tile_catalog.to_full_params()
 
         metrics = self.val_detection_metrics(true_full_catalog, est_full_catalog)
@@ -451,7 +451,7 @@ class LocationEncoder(pl.LightningModule):
         true_tile_catalog = TileCatalog(self.tile_slen, catalog_dict)
         true_cat = true_tile_catalog.to_full_params()
         dist_params = self.encode(batch["images"], batch["background"])
-        est_tile_catalog = self.max_a_post(dist_params)
+        est_tile_catalog = self.variational_mode(dist_params)
         est_cat = est_tile_catalog.to_full_params()
 
         # setup figure and axes.
@@ -519,7 +519,7 @@ class LocationEncoder(pl.LightningModule):
         true_tile_catalog = TileCatalog(self.tile_slen, catalog_dict)
         true_full_catalog = true_tile_catalog.to_full_params()
         dist_params = self.encode(batch["images"], batch["background"])
-        est_tile_catalog = self.max_a_post(dist_params)
+        est_tile_catalog = self.variational_mode(dist_params)
         est_full_catalog = est_tile_catalog.to_full_params()
         metrics = self.test_detection_metrics(true_full_catalog, est_full_catalog)
         batch_size = len(batch["images"])
