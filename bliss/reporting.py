@@ -341,7 +341,7 @@ def kdtree_match(locs1, locs2, slack=1, method_id=1):
     return row_idx, col_idx
 
 
-def match_by_locs_kdtree(true_locs, est_locs, slack=1.0):
+def match_by_locs_kdtree(true_locs, est_locs, slack=1.0, method_id=1):
     """Match true and estimated locations and returned indices to match.
 
     Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
@@ -356,6 +356,8 @@ def match_by_locs_kdtree(true_locs, est_locs, slack=1.0):
             The centroids should be in units of PIXELS.
         est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
             number of sources. The centroids should be in units of PIXELS.
+        method_id: 0 corresponds to radius neighbor search
+            and 1 corresponds to nearest neighbor search.
 
     Returns:
         A tuple of the following objects:
@@ -371,7 +373,7 @@ def match_by_locs_kdtree(true_locs, est_locs, slack=1.0):
     locs1 = true_locs.view(-1, 2)
     locs2 = est_locs.view(-1, 2)
 
-    row_indx, col_indx = kdtree_match(locs1, locs2, slack, method_id=1)
+    row_indx, col_indx = kdtree_match(locs1, locs2, slack, method_id)
 
     # we match objects based on distance too.
     # only match objects that satisfy threshold on l2 distance.

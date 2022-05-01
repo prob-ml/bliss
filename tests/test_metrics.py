@@ -5,7 +5,7 @@ from bliss.catalog import FullCatalog
 from bliss.reporting import ClassificationMetrics, DetectionMetrics, match_by_locs_kdtree
 
 
-def kdtree_test(true_loc, est_loc, true_bool, est_bool, slen, slack):
+def kdtree_test(true_loc, est_loc, true_bool, est_bool, slen, slack, method_id):
 
     tp_kdtree = torch.tensor(0)
     fp_kdtree = torch.tensor(0)
@@ -25,7 +25,7 @@ def kdtree_test(true_loc, est_loc, true_bool, est_bool, slen, slack):
         tlocs, elocs = plocs_tru[b], plocs_est[b]
         tgbool, egbool = true_bool[b].reshape(-1), est_bool[b].reshape(-1)
         if ntrue > 0 and nest > 0:
-            mtrue, mest, dkeep, avg_distance = match_by_locs_kdtree(tlocs, elocs, slack)
+            mtrue, mest, dkeep, avg_distance = match_by_locs_kdtree(tlocs, elocs, slack, method_id)
             tp = len(elocs[mest][dkeep])
             fp = nest - tp
             assert fp >= 0
@@ -95,9 +95,9 @@ def test_metrics():
     assert conf_matrix.eq(torch.tensor([[1, 1], [0, 0]])).all()
     assert avg_distance.item() == 50 * (0.01 + (0.01 + 0.09) / 2) / 2
 
-    # test new methods, test 1
+    # test 1 redius search
     precision_kdtree, recall, class_acc, avg_distance_kdtree, conf_matrix = kdtree_test(
-        true_locs, est_locs, true_galaxy_bools, est_galaxy_bools, slen, slack
+        true_locs, est_locs, true_galaxy_bools, est_galaxy_bools, slen, slack, 0
     )
 
     assert precision_kdtree == 2 / (2 + 2)
@@ -106,7 +106,17 @@ def test_metrics():
     assert conf_matrix.eq(torch.tensor([[1, 1], [0, 0]])).all()
     assert torch.round(avg_distance_kdtree, decimals=3) == 0.707
 
-    # test 2
+    # test 1 nearest search
+    precision_kdtree, recall, class_acc, avg_distance_kdtree, conf_matrix = kdtree_test(
+        true_locs, est_locs, true_galaxy_bools, est_galaxy_bools, slen, slack, 1
+    )
+
+    assert precision_kdtree == 2 / (2 + 2)
+    assert recall == 2 / 3
+    assert class_acc == 1 / 2
+    assert torch.round(avg_distance_kdtree, decimals=3) == 0.707
+
+    # test 2 radius search
     true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]]).reshape(2, 2, 2)
     est_locs = torch.tensor([[[0.5, 0.45], [0.1, 0.1]], [[0.25, 0.2], [0.1, 0.05]]]).reshape(
         2, 2, 2
@@ -115,11 +125,21 @@ def test_metrics():
     est_galaxy_bools = torch.tensor([[1, 1], [1, 0]]).reshape(2, 2, 1)
 
     precision_kdtree, recall, class_acc, avg_distance_kdtree, conf_matrix = kdtree_test(
-        true_locs, est_locs, true_galaxy_bools, est_galaxy_bools, 1, slack
+        true_locs, est_locs, true_galaxy_bools, est_galaxy_bools, 1, slack, 0
     )
 
     assert precision_kdtree == 3 / (2 + 2)
     assert recall == 3 / 3
     assert class_acc == 2 / 3
     assert conf_matrix.eq(torch.tensor([[2, 1], [0, 0]])).all()
+    assert torch.round(avg_distance_kdtree, decimals=3) == 0.05
+
+    # test 2 nearest search
+    precision_kdtree, recall, class_acc, avg_distance_kdtree, conf_matrix = kdtree_test(
+        true_locs, est_locs, true_galaxy_bools, est_galaxy_bools, 1, slack, 1
+    )
+
+    assert precision_kdtree == 3 / (2 + 2)
+    assert recall == 3 / 3
+    assert class_acc == 2 / 3
     assert torch.round(avg_distance_kdtree, decimals=3) == 0.05
