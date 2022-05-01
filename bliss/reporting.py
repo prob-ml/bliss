@@ -376,7 +376,7 @@ def match_by_locs_kdtree(true_locs, est_locs, slack=1.0):
     # we match objects based on distance too.
     # only match objects that satisfy threshold on l2 distance.
     # do not match fake objects with locs = (0, 0)
-    dist = (locs1[row_indx] - locs2[col_indx]).pow(2).sum(1)
+    dist = (locs1[row_indx] - locs2[col_indx]).pow(2).sum(1).pow(0.5)
     origin_dist = torch.min(locs1[row_indx].pow(2).sum(1), locs2[col_indx].pow(2).sum(1))
     cond1 = (dist < slack).bool()
     cond2 = (origin_dist > 0).bool()
