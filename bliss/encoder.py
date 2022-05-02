@@ -1,9 +1,10 @@
 """Scripts to produce BLISS estimates on astronomical images."""
-from typing import Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from einops import rearrange
 from torch import Tensor, nn
+from torch.utils.data import DataLoader
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.binary import BinaryEncoder
@@ -34,6 +35,7 @@ class Encoder(nn.Module):
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
         map_n_source_weights: Optional[Tuple[float, ...]] = None,
+        batch_size: Optional[int] = None,
     ):
         """Initializes Encoder.
 
@@ -64,6 +66,8 @@ class Encoder(nn.Module):
             map_n_source_weights_tnsr = torch.ones(self.location_encoder.max_detections + 1)
         else:
             map_n_source_weights_tnsr = torch.tensor(map_n_source_weights)
+
+        self.batch_size = batch_size if batch_size is not None else 75**2
         self.register_buffer("map_n_source_weights", map_n_source_weights_tnsr, persistent=False)
 
     def forward(self, x):
@@ -103,7 +107,20 @@ class Encoder(nn.Module):
         )
         _, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
         image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-        tile_map_dict = self._encode_ptiles(image_ptiles)
+        pin_memory = image_ptiles.device == torch.device("cpu")
+        if pin_memory:
+            image_ptiles = image_ptiles.pin_memory()
+        ptile_loader = DataLoader(
+            image_ptiles, batch_size=self.batch_size, shuffle=False, pin_memory=pin_memory
+        )
+        tile_map_list: List[Dict[str, Tensor]] = []
+        for ptiles in ptile_loader:
+            assert isinstance(ptiles, Tensor)
+            out_ptiles = self._encode_ptiles(ptiles.to(self.device))
+            tile_map_list.append(out_ptiles)
+
+        # tile_map_dict = self._encode_ptiles(image_ptiles)
+        tile_map_dict = self._collate(tile_map_list)
         return TileCatalog.from_flat_dict(
             self.location_encoder.tile_slen, n_tiles_h, n_tiles_w, tile_map_dict
         )
@@ -136,6 +153,13 @@ class Encoder(nn.Module):
             tile_map_dict.update({"galaxy_params": galaxy_params})
 
         return tile_map_dict
+
+    @staticmethod
+    def _collate(tile_map_list: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
+        out: Dict[str, Tensor] = {}
+        for k in tile_map_list[0]:
+            out[k] = torch.cat([d[k].cpu() for d in tile_map_list], dim=0)
+        return out
 
     def get_images_in_ptiles(self, images):
         """Run get_images_in_ptiles with correct tile_slen and ptile_slen."""

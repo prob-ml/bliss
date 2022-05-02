@@ -259,6 +259,7 @@ def reconstruct_img(
 
     with torch.no_grad():
         tile_map = encoder.variational_mode(img, bg)
+        tile_map = tile_map.to(decoder.device)
         recon_image = decoder.render_images(tile_map)
         tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
             tile_map["galaxy_bools"], tile_map["galaxy_params"]
