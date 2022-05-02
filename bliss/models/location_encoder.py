@@ -216,12 +216,10 @@ class LocationEncoder(pl.LightningModule):
 
         # Given all the rearranging/unflattening below, I suspect we never should have
         # flattened in the first place
-        b, nth, ntw, _ = dist_params["n_source_log_probs"].shape
-        unflatten = "ns n_ptiles s k -> ns n_ptiles s k"
         return {
-            "locs": rearrange(tile_locs, unflatten, b=b, nth=nth, ntw=ntw),
-            "log_fluxes": rearrange(tile_log_fluxes, unflatten, b=b, nth=nth, ntw=ntw),
-            "fluxes": rearrange(tile_fluxes, unflatten, b=b, nth=nth, ntw=ntw),
+            "locs": tile_locs,
+            "log_fluxes": tile_log_fluxes,
+            "fluxes": tile_fluxes,
             "n_sources": tile_n_sources,
         }
 
@@ -303,22 +301,22 @@ class LocationEncoder(pl.LightningModule):
 
         # first, we transform `tile_n_sources` so that it can be used as an index
         # for looking up detections in `params_per_source`
-        ts2 = rearrange(tile_n_sources, "ns n_ptiles -> ns n_ptiles")
-        sindx1 = self.n_detections_map[ts2]  # type: ignore
+        sindx1 = self.n_detections_map[tile_n_sources]  # type: ignore
         sindx2 = rearrange(sindx1, "ns np md -> np (ns md) 1")
         sindx3 = sindx2.expand(sindx2.size(0), sindx2.size(1), self.n_params_per_source)
 
         # next, we pad `params_per_source` with a dummy column of zeros that will be looked up
         # (copied) whenever fewer the `max_detections` sources are present. `gather` does the copy.
-        pps2 = rearrange(params_per_source, "n_ptiles td pps -> n_ptiles td pps")
-        pps3 = F.pad(pps2, (0, 0, 0, 1))
-        pps4 = torch.gather(pps3, 1, sindx3)
-        pps5 = rearrange(pps4, "np (ns md) pps -> ns np md pps", ns=tile_n_sources.size(0))
+        pps_padded = F.pad(params_per_source, (0, 0, 0, 1))
+        pps_gathered = torch.gather(pps_padded, 1, sindx3)
+        params_n_srcs_combined = rearrange(
+            pps_gathered, "np (ns md) pps -> ns np md pps", ns=tile_n_sources.size(0)
+        )
 
         # finally, we slice pps5 by parameter group because these groups are treated differently,
         # subsequently
         split_sizes = [v["dim"] for v in self.dist_param_groups.values()]
-        dist_params_split = torch.split(pps5, split_sizes, 3)
+        dist_params_split = torch.split(params_n_srcs_combined, split_sizes, 3)
         names = self.dist_param_groups.keys()
         params_n_srcs = dict(zip(names, dist_params_split))
 
@@ -386,12 +384,12 @@ class LocationEncoder(pl.LightningModule):
             rearrange(true_catalog["n_sources"], "n_ptiles -> 1 n_ptiles"),
         )
         locs_log_probs_all = _get_params_logprob_all_combs(
-            rearrange(true_catalog["locs"], "n_ptiles ns hw -> (n_ptiles) ns hw"),
+            true_catalog["locs"],
             pred["loc_mean"].squeeze(0),
             pred["loc_sd"].squeeze(0),
         )
         star_params_log_probs_all = _get_params_logprob_all_combs(
-            rearrange(true_catalog["log_fluxes"], "n_ptiles ns nb -> n_ptiles ns nb"),
+            true_catalog["log_fluxes"],
             pred["log_flux_mean"].squeeze(0),
             pred["log_flux_sd"].squeeze(0),
         )
@@ -400,7 +398,7 @@ class LocationEncoder(pl.LightningModule):
             locs_log_probs_all,
             star_params_log_probs_all,
             rearrange(true_catalog["galaxy_bools"], "n_ptiles ns 1 -> n_ptiles ns"),
-            rearrange(true_catalog["is_on_array"], "n_ptiles ns -> n_ptiles ns"),
+            true_catalog["is_on_array"],
         )
 
         loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss + star_params_loss
