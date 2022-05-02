@@ -21,7 +21,8 @@ class LogBackgroundTransform:
         self.z_threshold = z_threshold
 
     def __call__(self, image_and_background: Tensor) -> Tensor:
-        image, background = torch.split(image_and_background, 2, 1)
+        n_bands = image_and_background.shape[1] // 2
+        image, background = torch.split(image_and_background, (n_bands, n_bands), 1)
         return torch.log1p(
             F.relu(image - background + self.z_threshold * background.sqrt(), inplace=True)
         )

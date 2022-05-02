@@ -74,51 +74,36 @@ class GalaxyEncoder(pl.LightningModule):
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
 
-    def encode(
-        self, images: Tensor, background: Tensor, tile_locs: Tensor
-    ) -> Tuple[Tensor, Tensor]:
+    def encode(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tuple[Tensor, Tensor]:
         """Runs galaxy encoder on input image ptiles (with bg substracted)."""
-        batch_size, nth, ntw, max_sources, _ = tile_locs.shape
-        centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
+        max_sources = tile_locs.shape[1]
+        centered_ptiles = self._get_images_in_centered_tiles(image_ptiles, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
         galaxy_params_flat, pq_divergence_flat = self.enc(centered_ptiles)
         galaxy_params = rearrange(
             galaxy_params_flat,
-            "(b nth ntw s) d -> b nth ntw s d",
-            b=batch_size,
-            nth=ntw,
-            ntw=ntw,
-            s=max_sources,
+            "(n_ptiles ns) d -> n_ptiles ns d",
+            ns=max_sources,
         )
         if pq_divergence_flat.shape:
             pq_divergence = rearrange(
                 pq_divergence_flat,
-                "(b nth ntw s) -> b nth ntw s",
-                b=batch_size,
-                nth=nth,
-                ntw=ntw,
+                "(n_ptiles s) -> n_ptiles s",
                 s=max_sources,
             )
         else:
             pq_divergence = pq_divergence_flat
         return galaxy_params, pq_divergence
 
-    def sample(self, images, background, tile_locs):
-        galaxy_params, _ = self.encode(images, background, tile_locs)
+    def sample(self, image_ptiles: Tensor, tile_locs: Tensor):
+        galaxy_params, _ = self.encode(image_ptiles, tile_locs)
         return galaxy_params
 
-    def variational_mode(self, images: Tensor, background: Tensor, tile_locs: Tensor) -> Tensor:
-        batch_size, nth, ntw, max_sources, _ = tile_locs.shape
-        centered_ptiles = self._get_images_in_centered_tiles(images, background, tile_locs)
+    def variational_mode(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
+        max_sources = tile_locs.shape[1]
+        centered_ptiles = self._get_images_in_centered_tiles(image_ptiles, tile_locs)
         galaxy_params_flat = self.enc.variational_mode(centered_ptiles)
-        return rearrange(
-            galaxy_params_flat,
-            "(b nth ntw s) d -> b nth ntw s d",
-            b=batch_size,
-            nth=nth,
-            ntw=ntw,
-            s=max_sources,
-        )
+        return rearrange(galaxy_params_flat, "(n_ptiles ns) d -> n_ptiles ns d", ns=max_sources)
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
@@ -288,20 +273,12 @@ class GalaxyEncoder(pl.LightningModule):
             )
         plt.close(fig)
 
-    def _get_images_in_centered_tiles(
-        self, images: Tensor, background: Tensor, tile_locs: Tensor
-    ) -> Tensor:
-        image_ptiles = get_images_in_tiles(
-            images - background, tile_slen=self.tile_slen, ptile_slen=self.ptile_slen
-        )
-        return self._flatten_and_center_ptiles(image_ptiles, tile_locs)
-
-    def _flatten_and_center_ptiles(self, image_ptiles, tile_locs):
-        image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
-        tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
+    def _get_images_in_centered_tiles(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
+        n_bands = image_ptiles.shape[1] // 2
+        img, bg = torch.split(image_ptiles, (n_bands, n_bands), dim=1)
         return center_ptiles(
-            image_ptiles_flat,
-            tile_locs_flat,
+            img - bg,
+            tile_locs,
             self.tile_slen,
             self.ptile_slen,
             self.border_padding,

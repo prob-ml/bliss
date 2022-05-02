@@ -125,14 +125,7 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_params = self.galaxy_encoder.variational_mode(
-                image,
-                background,
-                rearrange(
-                    locs, "(n nth ntw) ns hw -> n nth ntw ns hw", nth=n_tiles_h, ntw=n_tiles_w
-                ),
-            )
-            galaxy_params = rearrange(galaxy_params, "n nth ntw ns d -> (n nth ntw) ns d")
+            galaxy_params = self.galaxy_encoder.variational_mode(image_ptiles, locs)
             galaxy_params *= is_on_array.unsqueeze(-1) * galaxy_bools
             tile_map_dict.update({"galaxy_params": galaxy_params})
 
