@@ -103,6 +103,12 @@ class Encoder(nn.Module):
         )
         _, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
         image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
+        tile_map_dict = self._encode_ptiles(image_ptiles)
+        return TileCatalog.from_flat_dict(
+            self.location_encoder.tile_slen, n_tiles_h, n_tiles_w, tile_map_dict
+        )
+
+    def _encode_ptiles(self, image_ptiles: Tensor):
         dist_params = self.location_encoder.encode(image_ptiles)
         tile_map_dict = self.location_encoder.variational_mode(
             dist_params, n_source_weights=self.map_n_source_weights
@@ -129,9 +135,7 @@ class Encoder(nn.Module):
             galaxy_params *= is_on_array.unsqueeze(-1) * galaxy_bools
             tile_map_dict.update({"galaxy_params": galaxy_params})
 
-        return TileCatalog.from_flat_dict(
-            self.location_encoder.tile_slen, n_tiles_h, n_tiles_w, tile_map_dict
-        )
+        return tile_map_dict
 
     def get_images_in_ptiles(self, images):
         """Run get_images_in_ptiles with correct tile_slen and ptile_slen."""
