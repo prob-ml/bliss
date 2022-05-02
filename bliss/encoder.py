@@ -116,20 +116,18 @@ class Encoder(nn.Module):
         )
 
     def _make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int, n_tiles_w: int):
-        img_background = torch.cat((image, background), dim=1)
+        img_bg = torch.cat((image, background), dim=1).to(self.device)
         n_rows_per_batch = self.batch_size // n_tiles_w
         for row in range(0, n_tiles_h, n_rows_per_batch):
-            yield self._ptiles_at_point(img_background, row, row + n_rows_per_batch)
-
-    def _ptiles_at_point(self, img_bg: Tensor, start_row, end_row):
-        start_h = start_row * self.location_encoder.tile_slen
-        end_h = end_row * self.location_encoder.tile_slen + 2 * self.border_padding
-        img_bg_cropped = img_bg[:, :, start_h:end_h, :].to(self.device)
-        image_ptiles = get_images_in_tiles(
-            img_bg_cropped, self.location_encoder.tile_slen, self.location_encoder.ptile_slen
-        )
-        image_ptiles = image_ptiles.view(-1, *image_ptiles.shape[-3:])
-        return image_ptiles
+            end_row = row + n_rows_per_batch
+            start_h = row * self.location_encoder.tile_slen
+            end_h = end_row * self.location_encoder.tile_slen + 2 * self.border_padding
+            img_bg_cropped = img_bg[:, :, start_h:end_h, :]
+            image_ptiles = get_images_in_tiles(
+                img_bg_cropped, self.location_encoder.tile_slen, self.location_encoder.ptile_slen
+            )
+            image_ptiles = image_ptiles.view(-1, *image_ptiles.shape[-3:])
+            yield image_ptiles
 
     def _encode_ptiles(self, image_ptiles: Tensor):
         dist_params = self.location_encoder.encode(image_ptiles)
