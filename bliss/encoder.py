@@ -2,6 +2,7 @@
 from typing import Optional, Tuple
 
 import torch
+from einops import rearrange
 from torch import Tensor, nn
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
@@ -95,11 +96,20 @@ class Encoder(nn.Module):
                 - 'galaxy_params' from GalaxyEncoder.
         """
         assert isinstance(self.map_n_source_weights, Tensor)
-        var_params = self.location_encoder.encode(image, background)
-        tile_map = self.location_encoder.variational_mode(
-            var_params, n_source_weights=self.map_n_source_weights
+        image_ptiles = get_images_in_tiles(
+            torch.cat((image, background), dim=1),
+            self.location_encoder.tile_slen,
+            self.location_encoder.ptile_slen,
         )
-
+        _, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
+        image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
+        dist_params = self.location_encoder.encode(image_ptiles)
+        tile_map_dict = self.location_encoder.variational_mode(
+            dist_params, n_source_weights=self.map_n_source_weights
+        )
+        tile_map = TileCatalog.from_flat_dict(
+            self.location_encoder.tile_slen, n_tiles_h, n_tiles_w, tile_map_dict
+        )
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
             galaxy_probs = self.binary_encoder.forward(image, background, tile_map.locs)
@@ -129,10 +139,6 @@ class Encoder(nn.Module):
     @property
     def border_padding(self) -> int:
         return self.location_encoder.border_padding
-
-    @property
-    def tile_slen(self) -> int:
-        return self.location_encoder.tile_slen
 
     @property
     def device(self):

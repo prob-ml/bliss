@@ -152,10 +152,11 @@ class BinaryEncoder(pl.LightningModule):
     ) -> Tensor:
         """Divide a batch of full images into padded tiles similar to nn.conv2d."""
         log_image_ptiles = get_images_in_tiles(
-            self.input_transform(images, background),
+            torch.cat((images, background), dim=1),
             self.tile_slen,
             self.ptile_slen,
         )
+        log_image_ptiles = self.input_transform(log_image_ptiles)
         assert log_image_ptiles.shape[-1] == log_image_ptiles.shape[-2] == self.ptile_slen
         # in each padded tile we need to center the corresponding galaxy/star
         return self._flatten_and_center_ptiles(log_image_ptiles, tile_locs)
