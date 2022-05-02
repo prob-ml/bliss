@@ -1,6 +1,7 @@
 # pylint: skip-file
 from collections import defaultdict
 from pathlib import Path
+from time import time_ns
 from typing import DefaultDict, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -63,6 +64,10 @@ def reconstruct(cfg):
 
     hlims = (h, h_end)
     wlims = (w, w_end)
+    tic1 = time_ns()
+    tile_map_recon_new = encoder.variational_mode(frame.image, frame.background)
+    toc1 = time_ns()
+    tic2 = time_ns()
     _, tile_map_recon = reconstruct_scene_at_coordinates(
         encoder,
         dec,
@@ -73,6 +78,9 @@ def reconstruct(cfg):
         slen=cfg.reconstruct.slen,
         device=device,
     )
+    toc2 = time_ns()
+    time1 = (toc1 - tic1) / 1e9
+    time2 = (toc2 - tic2) / 1e9
     tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
     print(f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image.")
     tile_map_recon["fluxes"] = (
