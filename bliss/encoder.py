@@ -2,9 +2,7 @@
 from typing import Dict, List, Optional, Tuple
 
 import torch
-from einops import rearrange
 from torch import Tensor, nn
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
@@ -55,6 +53,8 @@ class Encoder(nn.Module):
             map_n_source_weights: Optional. See LocationEncoder. If specified, weights the argmax in
                 MAP estimation of locations. Useful for raising/lowering the threshold for turning
                 sources on/off.
+            batch_size:
+                How many padded tiles can be rendered at a time on the GPU?
         """
         super().__init__()
         self._dummy_param = nn.Parameter(torch.empty(0))
