@@ -2,6 +2,7 @@
 from typing import Optional, Tuple
 
 import torch
+from einops import rearrange
 from torch import Tensor, nn
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
@@ -95,18 +96,27 @@ class Encoder(nn.Module):
                 - 'galaxy_params' from GalaxyEncoder.
         """
         assert isinstance(self.map_n_source_weights, Tensor)
-        var_params = self.location_encoder.encode(image, background)
-        tile_map = self.location_encoder.variational_mode(
-            var_params, n_source_weights=self.map_n_source_weights
+        image_ptiles = get_images_in_tiles(
+            torch.cat((image, background), dim=1),
+            self.location_encoder.tile_slen,
+            self.location_encoder.ptile_slen,
         )
-
+        _, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
+        image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
+        dist_params = self.location_encoder.encode(image_ptiles)
+        tile_map_dict = self.location_encoder.variational_mode(
+            dist_params, n_source_weights=self.map_n_source_weights
+        )
+        locs = tile_map_dict["locs"]
+        n_sources = tile_map_dict["n_sources"]
+        is_on_array = get_is_on_from_n_sources(n_sources, self.location_encoder.max_detections)
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
-            galaxy_probs = self.binary_encoder.forward(image, background, tile_map.locs)
-            galaxy_probs *= tile_map.is_on_array.unsqueeze(-1)
-            galaxy_bools = (galaxy_probs > 0.5).float() * tile_map.is_on_array.unsqueeze(-1)
-            star_bools = get_star_bools(tile_map.n_sources, galaxy_bools)
-            tile_map.update(
+            galaxy_probs = self.binary_encoder.forward(image_ptiles, locs)
+            galaxy_probs *= is_on_array.unsqueeze(-1)
+            galaxy_bools = (galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
+            star_bools = get_star_bools(n_sources, galaxy_bools)
+            tile_map_dict.update(
                 {
                     "galaxy_bools": galaxy_bools,
                     "star_bools": star_bools,
@@ -115,10 +125,13 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_params = self.galaxy_encoder.variational_mode(image, background, tile_map.locs)
-            galaxy_params *= tile_map.is_on_array.unsqueeze(-1) * tile_map["galaxy_bools"]
-            tile_map.update({"galaxy_params": galaxy_params})
-        return tile_map
+            galaxy_params = self.galaxy_encoder.variational_mode(image_ptiles, locs)
+            galaxy_params *= is_on_array.unsqueeze(-1) * galaxy_bools
+            tile_map_dict.update({"galaxy_params": galaxy_params})
+
+        return TileCatalog.from_flat_dict(
+            self.location_encoder.tile_slen, n_tiles_h, n_tiles_w, tile_map_dict
+        )
 
     def get_images_in_ptiles(self, images):
         """Run get_images_in_ptiles with correct tile_slen and ptile_slen."""
@@ -129,10 +142,6 @@ class Encoder(nn.Module):
     @property
     def border_padding(self) -> int:
         return self.location_encoder.border_padding
-
-    @property
-    def tile_slen(self) -> int:
-        return self.location_encoder.tile_slen
 
     @property
     def device(self):
