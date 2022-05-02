@@ -54,6 +54,13 @@ class TileCatalog(UserDict):
         assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
         assert x.device == self.device
 
+    @classmethod
+    def from_flat_dict(cls, tile_slen: int, n_tiles_h: int, n_tiles_w: int, d: Dict[str, Tensor]):
+        catalog_dict: Dict[str, Tensor] = {}
+        for k, v in d.items():
+            catalog_dict[k] = v.reshape(-1, n_tiles_h, n_tiles_w, *v.shape[1:])
+        return cls(tile_slen, catalog_dict)
+
     @property
     def is_on_array(self) -> Tensor:
         """Returns a n x nth x ntw x n_sources tensor indicating whether source is on."""

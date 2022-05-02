@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Dict, Union
 
 import pytorch_lightning as pl
 import torch
@@ -78,37 +78,32 @@ class BinaryEncoder(pl.LightningModule):
         self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def forward(self, images, background, locs):
-        return self.encode(images, background, locs)
+    def forward(self, image_ptiles, locs):
+        return self.encode(image_ptiles, locs)
 
-    def encode(self, images: Tensor, background: Tensor, locs: Tensor) -> Tensor:
+    def encode(self, image_ptiles: Tensor, locs: Tensor) -> Tensor:
         """Runs the binary encoder on centered_ptiles."""
-        centered_tiles = self._get_images_in_centered_tiles(images, background, locs)
+        centered_tiles = self._get_images_in_centered_tiles(image_ptiles, locs)
         assert centered_tiles.shape[-1] == centered_tiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
         h = self.enc_conv(centered_tiles)
         h2 = self.enc_final(h)
         galaxy_probs = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
-        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
-        return rearrange(
-            galaxy_probs,
-            "(b nth ntw s) 1 -> b nth ntw s 1",
-            b=batch_size,
-            nth=n_tiles_h,
-            ntw=n_tiles_w,
-            s=max_sources,
-        )
+        return rearrange(galaxy_probs, "(npt ns) 1 -> npt ns 1", ns=self.max_sources)
 
-    def get_prediction(self, batch):
+    def get_prediction(self, batch: Dict[str, Tensor]):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
 
-        images = batch["images"]
-        background = batch["background"]
         galaxy_bools = batch["galaxy_bools"].reshape(-1)
-        locs = batch["locs"]
-        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = locs.shape
-        galaxy_probs = self.forward(images, background, locs)
+        locs = rearrange(batch["locs"], "n nth ntw ns hw -> (n nth ntw) ns hw")
+        image_ptiles = get_images_in_tiles(
+            torch.cat((batch["images"], batch["background"]), dim=1),
+            self.tile_slen,
+            self.ptile_slen,
+        )
+        image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
+        galaxy_probs = self.forward(image_ptiles, locs)
         galaxy_probs = galaxy_probs.reshape(-1)
 
         tile_is_on_array = get_is_on_from_n_sources(batch["n_sources"], self.max_sources)
@@ -127,7 +122,7 @@ class BinaryEncoder(pl.LightningModule):
         # finally organize quantities and return as a dictionary
         pred_star_bools = (1 - pred_galaxy_bools) * tile_is_on_array
 
-        ret = {
+        return {
             "loss": loss,
             "acc": acc,
             "galaxy_bools": pred_galaxy_bools,
@@ -135,38 +130,13 @@ class BinaryEncoder(pl.LightningModule):
             "galaxy_probs": galaxy_probs,
         }
 
-        for k in ("galaxy_bools", "star_bools", "galaxy_probs"):
-            ret[k] = rearrange(
-                ret[k],
-                "(b nth ntw s) -> b nth ntw s 1",
-                b=batch_size,
-                nth=n_tiles_h,
-                ntw=n_tiles_w,
-                s=max_sources,
-            )
-
-        return ret
-
-    def _get_images_in_centered_tiles(
-        self, images: Tensor, background: Tensor, tile_locs: Tensor
-    ) -> Tensor:
-        """Divide a batch of full images into padded tiles similar to nn.conv2d."""
-        log_image_ptiles = get_images_in_tiles(
-            self.input_transform(images, background),
-            self.tile_slen,
-            self.ptile_slen,
-        )
+    def _get_images_in_centered_tiles(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
+        log_image_ptiles = self.input_transform(image_ptiles)
         assert log_image_ptiles.shape[-1] == log_image_ptiles.shape[-2] == self.ptile_slen
         # in each padded tile we need to center the corresponding galaxy/star
-        return self._flatten_and_center_ptiles(log_image_ptiles, tile_locs)
-
-    def _flatten_and_center_ptiles(self, log_image_ptiles, tile_locs):
-        """Return padded tiles centered on each corresponding source."""
-        log_image_ptiles_flat = rearrange(log_image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
-        tile_locs_flat = rearrange(tile_locs, "b nth ntw s xy -> (b nth ntw) s xy")
         return center_ptiles(
-            log_image_ptiles_flat,
-            tile_locs_flat,
+            log_image_ptiles,
+            tile_locs,
             self.tile_slen,
             self.ptile_slen,
             self.border_padding,
@@ -192,7 +162,8 @@ class BinaryEncoder(pl.LightningModule):
         pred = self.get_prediction(batch)
         self.log("val/loss", pred["loss"], batch_size=batch_size)
         self.log("val/acc", pred["acc"], batch_size=batch_size)
-        return {**batch, **pred}
+        pred_out = {f"pred_{k}": v for k, v in pred.items()}
+        return {**batch, **pred_out}
 
     def validation_epoch_end(self, outputs):
         """Pytorch lightning method."""
@@ -223,16 +194,17 @@ class BinaryEncoder(pl.LightningModule):
         nrows = int(n_samples**0.5)  # for figure
 
         # extract non-params entries so that 'get_full_params' to works.
-        exclude = {"images", "background", "loss", "acc"}
+        true_param_names = {"locs", "n_sources", "galaxy_bools", "star_bools"}
         true_tile_params = TileCatalog(
-            self.tile_slen, {k: v for k, v in batch.items() if k not in exclude}
+            self.tile_slen, {k: v for k, v in batch.items() if k in true_param_names}
         )
         true_params = true_tile_params.to_full_params()
         # prediction
         tile_est = true_tile_params.copy()
-        tile_est["galaxy_bools"] = batch["galaxy_bools"]
-        tile_est["star_bools"] = batch["star_bools"]
-        tile_est["galaxy_probs"] = batch["galaxy_probs"]
+        shape = tile_est["galaxy_bools"].shape
+        tile_est["galaxy_bools"] = batch["pred_galaxy_bools"].reshape(*shape)
+        tile_est["star_bools"] = batch["pred_star_bools"].reshape(*shape)
+        tile_est["galaxy_probs"] = batch["pred_galaxy_probs"].reshape(*shape)
         est = tile_est.to_full_params()
         # setup figure and axes
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
