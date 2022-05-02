@@ -204,6 +204,7 @@ class LocationEncoder(pl.LightningModule):
         )
 
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
+        tile_is_on_array = tile_is_on_array.unsqueeze(-1)
 
         tile_locs = Normal(dist_params_n_src["loc_mean"], dist_params_n_src["loc_sd"]).rsample()
         tile_locs *= tile_is_on_array  # Is masking here helpful/necessary?

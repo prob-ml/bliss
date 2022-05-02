@@ -3,8 +3,9 @@ import os
 import numpy as np
 import pytest
 import torch
-from einops import reduce
+from einops import rearrange, reduce
 
+from bliss.catalog import TileCatalog, get_images_in_tiles
 from bliss.models.location_encoder import LocationEncoder
 
 
@@ -64,23 +65,32 @@ def get_map_estimate(
     assert border1 == image_encoder.border_padding, "incompatible border"
 
     # obtained estimates per tile, then on full image.
-    var_params = image_encoder.encode(images, background)
-    tile_cutoff = 25
-    cutoff = (tile_cutoff - 1) * image_encoder.tile_slen + image_encoder.ptile_slen
-    var_params2 = image_encoder.encode(
-        images[:, :, :cutoff, :cutoff], background[:, :, :cutoff, :cutoff]
+    image_ptiles = get_images_in_tiles(
+        torch.cat((images, background), dim=1),
+        image_encoder.tile_slen,
+        image_encoder.ptile_slen,
     )
+    _, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
+    image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
+    var_params = image_encoder.encode(image_ptiles)
+    tile_cutoff = 25**2
+    var_params2 = image_encoder.encode(image_ptiles[:tile_cutoff])
+
     assert torch.allclose(
-        var_params["n_source_log_probs"][0, :tile_cutoff, :tile_cutoff],
+        var_params["n_source_log_probs"][:tile_cutoff],
         var_params2["n_source_log_probs"],
         atol=1e-5,
     )
     assert torch.allclose(
-        var_params["per_source_params"][0, :tile_cutoff, :tile_cutoff],
+        var_params["per_source_params"][:tile_cutoff],
         var_params2["per_source_params"],
         atol=1e-5,
     )
-    tile_map = image_encoder.variational_mode(var_params)
+
+    tile_map_dict = image_encoder.variational_mode(var_params)
+    tile_map = TileCatalog.from_flat_dict(
+        image_encoder.tile_slen, n_tiles_h, n_tiles_w, tile_map_dict
+    )
     full_map = tile_map.to_full_params()
     tile_map_tilde = full_map.to_tile_params(image_encoder.tile_slen, tile_map.max_sources)
     assert tile_map.equals(tile_map_tilde, exclude=("n_source_log_probs",), atol=1e-5)
@@ -108,6 +118,7 @@ class TestStarSleepEncoderM2:
 
         # Estimated background
         background = reduce(test_image, "n c h w -> 1 c 1 1", "min")
+        background = background.expand(-1, -1, *test_image.shape[2:])
 
         # get estimated parameters
         estimate = get_map_estimate(

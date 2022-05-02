@@ -1,5 +1,7 @@
 import torch
+from einops import rearrange
 
+from bliss.catalog import get_images_in_tiles
 from bliss.models.location_encoder import LocationEncoder, LogBackgroundTransform
 
 
@@ -52,12 +54,18 @@ class TestSourceEncoder:
 
             images *= background_tensor.sqrt()
             images += background_tensor
-            var_params = star_encoder.encode(images, background_tensor)
+            image_ptiles = get_images_in_tiles(
+                torch.cat((images, background_tensor), dim=1),
+                star_encoder.tile_slen,
+                star_encoder.ptile_slen,
+            )
+            image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
+            var_params = star_encoder.encode(image_ptiles)
             catalog = star_encoder.variational_mode(var_params)
 
-            assert catalog.n_sources.size() == torch.Size([batch_size, n_tiles_h, n_tiles_w])
-            correct_locs_shape = torch.Size([batch_size, n_tiles_h, n_tiles_w, max_detections, 2])
-            assert catalog.locs.shape == correct_locs_shape
+            assert catalog["n_sources"].size() == torch.Size([batch_size * n_tiles_h * n_tiles_w])
+            correct_locs_shape = torch.Size([batch_size * n_tiles_h * n_tiles_w, max_detections, 2])
+            assert catalog["locs"].shape == correct_locs_shape
 
     def test_sample(self, devices):
         device = devices.device
@@ -89,5 +97,12 @@ class TestSourceEncoder:
             mean_detections=0.48,
             max_detections=max_detections,
         ).to(device)
-        var_params = star_encoder.encode(images, background_tensor)
+
+        image_ptiles = get_images_in_tiles(
+            torch.cat((images, background_tensor), dim=1),
+            star_encoder.tile_slen,
+            star_encoder.ptile_slen,
+        )
+        image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
+        var_params = star_encoder.encode(image_ptiles)
         star_encoder.sample(var_params, n_samples)
