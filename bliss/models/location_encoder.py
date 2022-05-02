@@ -454,8 +454,9 @@ class LocationEncoder(pl.LightningModule):
         self.log("val/f1", metrics["f1"], batch_size=batch_size)
         self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
         return batch
+
     def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
-    # pylint: disable=too-many-statements
+        # pylint: disable=too-many-statements
         """Pytorch lightning method."""
         batch: Dict[str, Tensor] = outputs[-1]
         if self.n_bands > 1:
