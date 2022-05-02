@@ -53,8 +53,8 @@ class Encoder(nn.Module):
             map_n_source_weights: Optional. See LocationEncoder. If specified, weights the argmax in
                 MAP estimation of locations. Useful for raising/lowering the threshold for turning
                 sources on/off.
-            batch_size:
-                How many padded tiles can be rendered at a time on the GPU?
+            batch_size: How many padded tiles can be rendered at a time on the GPU?
+                If not specified, defaults to an amount known to fit on my GPU.
         """
         super().__init__()
         self._dummy_param = nn.Parameter(torch.empty(0))
@@ -100,7 +100,6 @@ class Encoder(nn.Module):
                 - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
                 - 'galaxy_params' from GalaxyEncoder.
         """
-        assert isinstance(self.map_n_source_weights, Tensor)
         n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.location_encoder.tile_slen
         n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.location_encoder.tile_slen
         ptile_loader = self._make_ptile_loader(image, background, n_tiles_h, n_tiles_w)
@@ -130,6 +129,7 @@ class Encoder(nn.Module):
             yield image_ptiles
 
     def _encode_ptiles(self, image_ptiles: Tensor):
+        assert isinstance(self.map_n_source_weights, Tensor)
         dist_params = self.location_encoder.encode(image_ptiles)
         tile_map_dict = self.location_encoder.variational_mode(
             dist_params, n_source_weights=self.map_n_source_weights
