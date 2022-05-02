@@ -68,7 +68,7 @@ class Encoder(nn.Module):
         else:
             map_n_source_weights_tnsr = torch.tensor(map_n_source_weights)
 
-        self.batch_size = batch_size if batch_size is not None else 75**2
+        self.batch_size = batch_size if batch_size is not None else 75**2 + 500 * 5
         self.register_buffer("map_n_source_weights", map_n_source_weights_tnsr, persistent=False)
 
     def forward(self, x):
@@ -101,38 +101,21 @@ class Encoder(nn.Module):
                 - 'galaxy_params' from GalaxyEncoder.
         """
         assert isinstance(self.map_n_source_weights, Tensor)
-        # image_ptiles = get_images_in_tiles(
-        #     torch.cat((image, background), dim=1),
-        #     self.location_encoder.tile_slen,
-        #     self.location_encoder.ptile_slen,
-        # )
-        # _, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
-        # image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-        # pin_memory = image_ptiles.device == torch.device("cpu")
-        # if pin_memory:
-        #     image_ptiles = image_ptiles.pin_memory()
-        # ptile_loader = DataLoader(
-        #     image_ptiles, batch_size=self.batch_size, shuffle=False, pin_memory=False,
-        # )
         n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.location_encoder.tile_slen
         n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.location_encoder.tile_slen
-        ptile_loader = self._make_ptile_loader(image, background)
+        ptile_loader = self._make_ptile_loader(image, background, n_tiles_h, n_tiles_w)
         tile_map_list: List[Dict[str, Tensor]] = []
         with torch.no_grad():
             for ptiles in tqdm(ptile_loader, desc="Encoding ptiles"):
                 assert isinstance(ptiles, Tensor)
-                out_ptiles = self._encode_ptiles(ptiles.to(self.device))
+                out_ptiles = self._encode_ptiles(ptiles)
                 tile_map_list.append(out_ptiles)
-
-        # tile_map_dict = self._encode_ptiles(image_ptiles)
         tile_map_dict = self._collate(tile_map_list)
         return TileCatalog.from_flat_dict(
             self.location_encoder.tile_slen, n_tiles_h, n_tiles_w, tile_map_dict
         )
 
-    def _make_ptile_loader(self, image: Tensor, background: Tensor):
-        n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.location_encoder.tile_slen
-        n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.location_encoder.tile_slen
+    def _make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int, n_tiles_w: int):
         img_background = torch.cat((image, background), dim=1)
         n_rows_per_batch = self.batch_size // n_tiles_w
         for row in range(0, n_tiles_h, n_rows_per_batch):
