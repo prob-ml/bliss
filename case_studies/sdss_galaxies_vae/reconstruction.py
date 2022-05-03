@@ -106,7 +106,6 @@ def reconstruct(cfg):
         encoder.galaxy_encoder,
         map_n_source_weights=cfg.reconstruct.map_n_source_weights,
     ).to(encoder.device)
-
     _, tile_map_lower_threshold = reconstruct_scene_at_coordinates(
         encoder_lower_threshold,
         dec,

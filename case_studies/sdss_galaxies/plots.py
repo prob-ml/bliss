@@ -517,7 +517,7 @@ class DetectionClassificationFigures(BlissFigures):
             slen=slen,
             device=device,
         )
-        est_params = tile_est_params.to_full_params()
+        est_params = tile_est_params.cpu().to_full_params()
         est_params["fluxes"] = (
             est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
             + est_params["star_bools"] * est_params["fluxes"]
@@ -708,14 +708,15 @@ class SDSSReconstructionFigures(BlissFigures):
         self.scenes = scenes
         super().__init__(figdir, cachedir, overwrite=overwrite, img_format=img_format)
 
-    def compute_data(self, frame: Union[SDSSFrame, SimulatedFrame], encoder, decoder):
+    def compute_data(self, frame: Union[SDSSFrame, SimulatedFrame], encoder: Encoder, decoder):
 
+        tile_slen = encoder.location_encoder.tile_slen
         device = encoder.device
         data = {}
 
         for figname, scene_coords in self.scenes.items():
             h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
-            assert h % encoder.tile_slen == 0 and w % encoder.tile_slen == 0
+            assert h % tile_slen == 0 and w % tile_slen == 0
             assert scene_size <= 300, "Scene too large, change slen."
             h_end = h + scene_size
             w_end = w + scene_size
@@ -734,6 +735,7 @@ class SDSSReconstructionFigures(BlissFigures):
             )
             resid = (true - recon) / recon.sqrt()
 
+            tile_map_recon = tile_map_recon.cpu()
             recon_map = tile_map_recon.to_full_params()
 
             # get BLISS probability of n_sources in coadd locations.
