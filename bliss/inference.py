@@ -1,13 +1,12 @@
 import math
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
+from typing import Tuple
 
 import numpy as np
 import torch
 from einops import rearrange, reduce
 from torch import Tensor
 from torch.nn import functional as F
-from tqdm import tqdm
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
@@ -72,8 +71,12 @@ def reconstruct_scene_at_coordinates(
     bg_scene = background[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
     assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
-    chunked_scene = ChunkedScene(scene, bg_scene, slen, bp)
-    recon, tile_map_scene = chunked_scene.reconstruct(encoder, decoder, device)
+    with torch.no_grad():
+        tile_map_scene = encoder.variational_mode(scene, bg_scene)
+        tile_map_scene["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
+            tile_map_scene["galaxy_bools"], tile_map_scene["galaxy_params"]
+        )
+        recon = render_scene(decoder, tile_map_scene)
     assert recon.shape == scene.shape
     recon += bg_scene
     # Get reconstruction at coordinates
@@ -86,195 +89,26 @@ def reconstruct_scene_at_coordinates(
     return recon_at_coords, tile_map_scene
 
 
-class ChunkedScene:
-    def __init__(self, scene: Tensor, bg_scene: Tensor, slen: int, bp: int):
-        """Split scenes into square chunks of side length `slen+bp*2` using `F.unfold`."""
-        self.slen = slen
-        self.bp = bp
-        kernel_size = slen + bp * 2
-        self.kernel_size = kernel_size
-        self.output_size = (scene.shape[2], scene.shape[3])
-        self.chunk_dict = {}
-        self.bg_dict = {}
-
-        n_chunks_h = (scene.shape[2] - (bp * 2)) // slen
-        n_chunks_w = (scene.shape[3] - (bp * 2)) // slen
-        self.n_chunks_h_main = n_chunks_h
-        self.n_chunks_w_main = n_chunks_w
-        self.chunk_dict["main"] = self._chunk_image(scene, (kernel_size, kernel_size), slen)
-        self.bg_dict["main"] = self._chunk_image(bg_scene, (kernel_size, kernel_size), slen)
-
-        # Get leftover chunks
-        bottom_border_start = bp + slen * n_chunks_h - bp
-        bottom_chunk_height = scene.shape[2] - bottom_border_start
-        assert bottom_chunk_height >= bp * 2
-
-        right_border_start = bp + slen * n_chunks_w - bp
-        right_chunk_width = scene.shape[3] - right_border_start
-        assert right_chunk_width >= bp * 2
-
-        if bottom_chunk_height > bp * 2:
-            bottom_border = scene[:, :, bottom_border_start:, : (right_border_start + 2 * bp)]
-            bg_bottom_border = bg_scene[:, :, bottom_border_start:, : (right_border_start + 2 * bp)]
-            self.chunk_dict["bottom"] = self._chunk_image(
-                bottom_border, (bottom_chunk_height, kernel_size), slen
-            )
-            self.bg_dict["bottom"] = self._chunk_image(
-                bg_bottom_border, (bottom_chunk_height, kernel_size), slen
-            )
-
-        if right_chunk_width > bp * 2:
-            right_border = scene[:, :, : (bottom_border_start + 2 * bp), right_border_start:]
-            bg_right_border = bg_scene[:, :, : (bottom_border_start + 2 * bp), right_border_start:]
-            self.chunk_dict["right"] = self._chunk_image(
-                right_border, (kernel_size, right_chunk_width), slen
-            )
-            self.bg_dict["right"] = self._chunk_image(
-                bg_right_border, (kernel_size, right_chunk_width), slen
-            )
-
-        if (bottom_chunk_height > bp * 2) and (right_chunk_width > bp * 2):
-            bottom_right_border = scene[:, :, bottom_border_start:, right_border_start:]
-            bg_bottom_right_border = bg_scene[:, :, bottom_border_start:, right_border_start:]
-            self.chunk_dict["bottom_right"] = bottom_right_border
-            self.bg_dict["bottom_right"] = bg_bottom_right_border
-
-    def _chunk_image(self, image, kernel_size, stride):
-        chunks = F.unfold(image, kernel_size=kernel_size, stride=stride)
-        return rearrange(
-            chunks,
-            "b (c h w) n -> (b n) c h w",
-            c=image.shape[1],
-            h=kernel_size[0],
-            w=kernel_size[1],
-        )
-
-    def reconstruct(self, encoder, decoder, device):
-        chunk_est_dict = {}
-        for chunk_type, chunks in self.chunk_dict.items():
-            bgs = self.bg_dict[chunk_type]
-            chunk_est_dict[chunk_type] = self._reconstruct_chunks(
-                chunks, bgs, encoder, decoder, device
-            )
-        reconstructions_dict = {k: v["reconstructions"] for k, v in chunk_est_dict.items()}
-        scene_recon = self._combine_into_scene(reconstructions_dict)
-        chunk_tile_maps_dict = {k: v["tile_maps"] for k, v in chunk_est_dict.items()}
-        tile_map_recon = self._combine_tile_maps(chunk_tile_maps_dict)
-        return scene_recon, tile_map_recon
-
-    def _reconstruct_chunks(self, chunks, bgs, encoder, decoder, device):
-        reconstructions = []
-        tile_maps = []
-        for chunk, bg in tqdm(zip(chunks, bgs), desc="Reconstructing chunks"):
-            recon, tile_map = reconstruct_img(
-                encoder, decoder, chunk.unsqueeze(0).to(device), bg.unsqueeze(0).to(device)
-            )
-            reconstructions.append(recon.cpu())
-            tile_maps.append(tile_map.cpu())
-        return {
-            "reconstructions": torch.cat(reconstructions, dim=0),
-            "tile_maps": tile_maps,
-        }
-
-    def _combine_into_scene(self, reconstructions: Dict[str, Tensor]) -> Tensor:
-        main: Tensor = reconstructions["main"]
-        main = rearrange(
-            main,
-            "(nch ncw) c h w -> nch ncw c h w",
-            nch=self.n_chunks_h_main,
-            ncw=self.n_chunks_w_main,
-        )
-
-        right = reconstructions.get("right")
-        if right is not None:
-            right_padding = self.kernel_size - right.shape[-1]
-            right_padded: Tensor = F.pad(right, (0, right_padding, 0, 0))
-            right_padded = rearrange(right_padded, "nch c h w -> nch 1 c h w")
-            main = torch.cat((main, right_padded), dim=1)
-        else:
-            right_padding = 0
-
-        bottom = reconstructions.get("bottom")
-        if bottom is not None:
-            bottom_padding = self.kernel_size - bottom.shape[-2]
-            bottom_padded: Tensor = F.pad(bottom, (0, 0, 0, bottom_padding))
-
-            bottom_right = reconstructions.get("bottom_right")
-            if bottom_right is not None:
-                bottom_right_padded = F.pad(bottom_right, (0, right_padding, 0, bottom_padding))
-                bottom_padded = torch.cat((bottom_padded, bottom_right_padded), dim=0)
-            bottom_padded = rearrange(bottom_padded, "ncw c h w -> 1 ncw c h w")
-            main = torch.cat((main, bottom_padded), dim=0)
-        else:
-            bottom_padding = 0
-        image_flat: Tensor = rearrange(main, "nch ncw c h w -> 1 (c h w) (nch ncw)")
-        output_size = (self.output_size[0] + bottom_padding, self.output_size[1] + right_padding)
-        image = F.fold(
-            image_flat, output_size=output_size, kernel_size=self.kernel_size, stride=self.slen
-        )
-        return image[
-            :,
-            :,
-            : (-bottom_padding if bottom_padding else None),
-            : (-right_padding if right_padding else None),
-        ]
-
-    def _combine_tile_maps(self, chunk_tile_maps_dict: Dict[str, List[TileCatalog]]):
-        main = self._tile_catalog_array(chunk_tile_maps_dict["main"])
-        n_chunks_h_main = self.n_chunks_h_main
-        n_chunks_w_main = self.n_chunks_w_main
-
-        main = main.reshape(n_chunks_h_main, n_chunks_w_main)
-
-        right = chunk_tile_maps_dict.get("right")
-        if right is not None:
-            right = self._tile_catalog_array(right).reshape(-1, 1)
-            main = np.concatenate((main, right), axis=1)
-
-        bottom = chunk_tile_maps_dict.get("bottom")
-        if bottom is not None:
-            bottom_right = chunk_tile_maps_dict.get("bottom_right")
-            if bottom_right is not None:
-                bottom += bottom_right
-            bottom = self._tile_catalog_array(bottom).reshape(1, -1)
-            main = np.concatenate((main, bottom), axis=0)
-
-        tile_map_list = []
-        for tile_map_row in main:
-            tile_map_row_combined = cat_tile_catalog(tile_map_row, 1)
-            tile_map_list.append(tile_map_row_combined)
-        return cat_tile_catalog(tile_map_list, 0)
-
-    @staticmethod
-    def _tile_catalog_array(tile_catalogs: List[TileCatalog]):
-        out = np.zeros(len(tile_catalogs), dtype=TileCatalog)
-        for i, tile_catalog in enumerate(tile_catalogs):
-            out[i] = tile_catalog
-        return out
-
-
-def reconstruct_img(
-    encoder: Encoder, decoder: ImageDecoder, img: Tensor, bg: Tensor
-) -> Tuple[Tensor, TileCatalog]:
-
+def render_scene(
+    decoder: ImageDecoder, tile_map_scene: TileCatalog, batch_size: int = None
+) -> Tensor:
     with torch.no_grad():
-        tile_map = encoder.variational_mode(img, bg)
-        recon_image = decoder.render_images(tile_map)
-        tile_map["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
-            tile_map["galaxy_bools"], tile_map["galaxy_params"]
-        )
-    return recon_image, tile_map
+        if batch_size is None:
+            batch_size = 75**2 + 500 * 2
 
-
-def cat_tile_catalog(tile_catalogs: Sequence[TileCatalog], tile_dim: int = 0) -> TileCatalog:
-    assert tile_dim in {0, 1}
-    out = {}
-    tile_catalog_dicts = [tm.to_dict() for tm in tile_catalogs]
-    for k in tile_catalog_dicts[0].keys():
-        tensors = [tm[k] for tm in tile_catalog_dicts]
-        value = torch.cat(tensors, dim=(tile_dim + 1))
-        out[k] = value
-    return TileCatalog(tile_catalogs[0].tile_slen, out)
+        _, n_tiles_h, n_tiles_w, _, _ = tile_map_scene.locs.shape
+        n_rows_per_batch = batch_size // n_tiles_w
+        h = tile_map_scene.locs.shape[1] * tile_map_scene.tile_slen + 2 * decoder.border_padding
+        w = tile_map_scene.locs.shape[2] * tile_map_scene.tile_slen + 2 * decoder.border_padding
+        scene = torch.zeros(1, 1, h, w)
+        for row in range(0, n_tiles_h, n_rows_per_batch):
+            end_row = row + n_rows_per_batch
+            start_h = row * tile_map_scene.tile_slen
+            end_h = end_row * tile_map_scene.tile_slen + 2 * decoder.border_padding
+            tile_map_row = tile_map_scene.crop((row, end_row), (0, None))
+            img_row = decoder.render_images(tile_map_row)
+            scene[:, :, start_h:end_h] += img_row.cpu()
+        return scene
 
 
 class SDSSFrame:
