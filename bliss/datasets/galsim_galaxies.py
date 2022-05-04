@@ -282,13 +282,16 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         galaxy_params = self.prior.sample(1, "cpu")
         galaxy_image = self.decoder.render_galaxy(galaxy_params[0])
         background = self.background.sample((1, *galaxy_image.shape)).squeeze(1)
-        galaxy_with_noise = galaxy_image + background
-        galaxy_with_noise += galaxy_with_noise.sqrt() * torch.randn_like(galaxy_with_noise)
+        galaxy_with_background = galaxy_image + background
+        noise = galaxy_with_background.sqrt() * torch.randn_like(galaxy_with_background)
+        galaxy_with_noise = galaxy_with_background + noise
+        snr = torch.sqrt(torch.sum(galaxy_image**2 / galaxy_with_background)).reshape(1)
         return {
             "images": galaxy_with_noise,
             "background": background,
             "noiseless": galaxy_image,
             "params": galaxy_params[0],
+            "snr": snr,
         }
 
     def __len__(self):
