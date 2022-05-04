@@ -251,19 +251,34 @@ plots:
             h: 460
             w: 744
             size: 32
+            ra: 336.6350
+            dec: -0.9611
+            comment: "Mild blend with two medium-sized galaxies of comparable size. In DECals, they appear to be well separated elliptical monochromatic galaxies with no striking features."
         sdss_gal_blend2:
             h: 1404
             w: 1720
             size: 32
+            ra: 336.7383
+            dec: -0.8536
+            comment: "Relatively mild blend with two small-sized galxies of comparable size. In DECals, they appear to have slightly different color but each galaxy is monochromatic. One important note is that they are surrounded by two saturated objects on each side (one outside the frame but diffraction spike is visible, other one masked out)."
         sdss_gal_blend3:
             h: 212
             w: 280
             size: 32
+            ra: 336.6068
+            dec: -1.0110
+            comment: "Drastic blend in frame that by eye could easily be mistaken as one object. The objects are relatively faint (~20 mag) and small. In DECals it looks like a more severe blend than the previous one, but each galaxy has a different color and its clearly noticeable here. Galaxies are elliptical with no significant features. BLISS should predict >5% for second object in blend."
         sdss_gal_blend4:
             h: 1252
             w: 240
             size: 32
+            ra: 336.7208
+            dec: -1.0159
+            comment: "In the frame it looks like a very mild blend, with one small bright galaxy and a larger relatively bright galaxy. In DECals we see that the larger galaxy has spiral arms features and one of the arms is blended with the smaller galaxy. This model misfit might be problematic for BLISS. Both galaxies have different colors."
         sdss_gal_blend5:
             h: 460
             w: 508
             size: 48
+            ra: 336.6349
+            dec: -0.9858
+            comment: "This three-way blend with 2 galaxies and a star is complicated. In DECals it appears that there are actually more like 7 objects with different colors that are blended so this is a very complicated case for BLISS to handle. The undetectable objects make it look like the detectable are nothing that our model could generate. If we want to get this one right, we'd need to have our model generate faint/undetectable objects too, so that the encoder is robust to this type of variation. Increasing the number of detections per tile from 1 to 2 might also be necessary."
