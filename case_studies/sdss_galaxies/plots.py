@@ -24,7 +24,7 @@ from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coor
 from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
-pl.seed_everything(42)
+pl.seed_everything(40)
 
 
 CB_color_cycle = [
@@ -391,7 +391,7 @@ class AEReconstructionFigures(BlissFigures):
             ax1,
             x,
             y,
-            delta=0.25,
+            delta=0.2,
             xlims=xlims,
             xlabel=xlabel,
             ylabel=r"\rm $m^{\rm recon} - m^{\rm true}$",
@@ -405,7 +405,7 @@ class AEReconstructionFigures(BlissFigures):
             ax2,
             x,
             y,
-            delta=0.25,
+            delta=0.2,
             xlims=xlims,
             xticks=xticks,
             xlabel=xlabel,
@@ -418,7 +418,7 @@ class AEReconstructionFigures(BlissFigures):
             ax3,
             x,
             y,
-            delta=0.25,
+            delta=0.2,
             xlims=xlims,
             xticks=xticks,
             xlabel=xlabel,
