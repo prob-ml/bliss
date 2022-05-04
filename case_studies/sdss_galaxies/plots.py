@@ -208,12 +208,11 @@ class AEReconstructionFigures(BlissFigures):
         psf_image = psf.drawImage(nx=53, ny=53, scale=sdss_pixel_scale).array
 
         recon_no_background = recon_means.numpy() - background.cpu().numpy()
-        # a small percentage of low magnitude objects end up predicted with negative flux.
-        good_bool = recon_no_background.sum(axis=(1, 2, 3)) > 0
+        assert np.all(recon_no_background.sum(axis=(1, 2, 3)) > 0)
         measurements = reporting.get_single_galaxy_measurements(
             slen=53,
-            true_images=noiseless_images[good_bool],
-            recon_images=recon_no_background[good_bool],
+            true_images=noiseless_images,
+            recon_images=recon_no_background,
             psf_image=psf_image.reshape(-1, 53, 53),
             pixel_scale=sdss_pixel_scale,
         )
