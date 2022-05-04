@@ -95,6 +95,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         hidden: int,
         n_bands: int,
         optimizer_params: dict = None,
+        ckpt: str = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -106,6 +107,9 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
         self.register_buffer("zero", torch.zeros(1))
         self.register_buffer("one", torch.ones(1))
+
+        if ckpt is not None:
+            self.load_state_dict(torch.load(ckpt, map_location=self.device))
 
     def forward(self, image, background):
         return self.reconstruct(image, background)
