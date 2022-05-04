@@ -135,6 +135,25 @@ def reconstruct(cfg):
         torch.save(full_map_recon, outdir / "map_recon.pt")
         torch.save(tile_map_recon, outdir / "tile_map_recon.pt")
 
+        if "photo" in scene_metrics_by_mag:
+            tex_dir = outdir / "tex"
+            tex_dir.mkdir(parents=True, exist_ok=True)
+
+            detection_tex_file = tex_dir / "detections.tex"
+            for i in range(0, len(scene_metrics_by_mag["bliss"])):
+                mag = scene_metrics_by_mag["bliss"].iloc[i].index
+                if mag == "overall":
+                    magstr = "Overall"
+                else:
+                    magstr = f"{mag - 1} - {mag}"
+                tcount = str(scene_metrics_by_mag["bliss"].iloc[i]["tcount"])
+                bliss_tp = str(scene_metrics_by_mag["bliss"].iloc[i]["tp"])
+                bliss_fp = str(scene_metrics_by_mag["bliss"].iloc[i]["fp"])
+                photo_tp = str(scene_metrics_by_mag["photo"].iloc[i]["tp"])
+                photo_fp = str(scene_metrics_by_mag["photo"].iloc[i]["fp"])
+                line = f"{tcount} & {bliss_tp} & {bliss_fp} & {photo_tp} & {photo_fp}"
+                lines += line
+
         scene_dir = outdir / "reconstructions" / "scenes"
         scene_dir.mkdir(parents=True, exist_ok=True)
         for scene_name, scene_locs in cfg.reconstruct.scenes.items():
