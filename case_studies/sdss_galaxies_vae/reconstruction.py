@@ -140,19 +140,24 @@ def reconstruct(cfg):
             tex_dir.mkdir(parents=True, exist_ok=True)
 
             detection_tex_file = tex_dir / "detections.tex"
-            for i in range(0, len(scene_metrics_by_mag["bliss"])):
-                mag = scene_metrics_by_mag["bliss"].iloc[i].index
-                if mag == "overall":
-                    magstr = "Overall"
-                else:
-                    magstr = f"{mag - 1} - {mag}"
-                tcount = str(scene_metrics_by_mag["bliss"].iloc[i]["tcount"])
-                bliss_tp = str(scene_metrics_by_mag["bliss"].iloc[i]["tp"])
-                bliss_fp = str(scene_metrics_by_mag["bliss"].iloc[i]["fp"])
-                photo_tp = str(scene_metrics_by_mag["photo"].iloc[i]["tp"])
-                photo_fp = str(scene_metrics_by_mag["photo"].iloc[i]["fp"])
-                line = f"{tcount} & {bliss_tp} & {bliss_fp} & {photo_tp} & {photo_fp}"
-                lines += line
+            with detection_tex_file.open("w") as fp:
+                for i in range(0, len(scene_metrics_by_mag["bliss"])):
+                    mag = scene_metrics_by_mag["bliss"].index.values[i]
+                    if mag == "overall":
+                        magstr = "Overall"
+                    else:
+                        magstr = f"{int(mag) - 1} - {int(mag)}"
+                    tcount = str(int(scene_metrics_by_mag["bliss"].iloc[i]["tcount"]))
+                    bliss_tp = int(scene_metrics_by_mag["bliss"].iloc[i]["tp"])
+                    bliss_fp = int(scene_metrics_by_mag["bliss"].iloc[i]["fp"])
+                    photo_tp = int(scene_metrics_by_mag["photo"].iloc[i]["tp"])
+                    photo_fp = int(scene_metrics_by_mag["photo"].iloc[i]["fp"])
+                    # if bliss_tp > photo_tp:
+                    #     bliss_tp = bold(bliss_tp)
+                    # elif photo_tp < bliss_tp:
+                    #     photo_tp = bold(photo_tp)
+                    line = f"{magstr} & {tcount} & {bliss_tp} & {bliss_fp} & {photo_tp} & {photo_fp} \\\\"
+                    fp.write(line + "\n")
 
         scene_dir = outdir / "reconstructions" / "scenes"
         scene_dir.mkdir(parents=True, exist_ok=True)
@@ -341,6 +346,10 @@ def calc_scene_metrics_by_mag(
         for measure, value in scene_metrics_mag.items():
             d[measure][mag] = value
     return pd.DataFrame(d)
+
+
+def bold(x):
+    return f"\\textbf{{{x}}}"
 
 
 def create_figure_at_point(
