@@ -501,6 +501,8 @@ class GalaxyTileDecoder(nn.Module):
             galaxy_decoder = galaxy_model.get_decoder()
         elif isinstance(galaxy_model, GalsimGalaxyDecoder):
             galaxy_decoder = galaxy_model
+        else:
+            raise TypeError("galaxy_model is not a valid type.")
         self.galaxy_decoder = galaxy_decoder
 
     def forward(self, locs, galaxy_params, galaxy_bools):
