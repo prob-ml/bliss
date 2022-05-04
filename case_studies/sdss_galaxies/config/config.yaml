@@ -109,8 +109,13 @@ models:
         ptile_slen: 52
         border_padding: 24
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
-        galaxy_ae: ${models.galaxy_net}
-        galaxy_ae_ckpt: ${paths.project}/models/sdss_autoencoder.pt
+        galaxy_model:
+            _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
+            slen: ${models.galaxy_net.slen}
+            latent_dim: ${models.galaxy_net.latent_dim}
+            hidden: ${models.galaxy_net.hidden}
+            n_bands: ${models.galaxy_net.n_bands}
+            ckpt: ${paths.project}/models/sdss_autoencoder.pt
         psf_slen: 25
         sdss_bands:
             - 2

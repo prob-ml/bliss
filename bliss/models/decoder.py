@@ -17,7 +17,7 @@ GalaxyModel = Union[OneCenteredGalaxyAE, GalsimGalaxyDecoder]
 
 
 class ImageDecoder(pl.LightningModule):
-    """Decodes latent variances into reconstructed astronomical image.
+    """Decodes latent variables into reconstructed astronomical image.
 
     Attributes:
         n_bands: Number of bands (colors) in the image
