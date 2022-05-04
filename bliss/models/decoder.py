@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -11,11 +11,13 @@ from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.datasets.galsim_galaxies import GalsimGalaxyDecoder
-from bliss.models import galaxy_net
+from bliss.models.galaxy_net import OneCenteredGalaxyAE
+
+GalaxyModel = Union[OneCenteredGalaxyAE, GalsimGalaxyDecoder]
 
 
 class ImageDecoder(pl.LightningModule):
-    """Decodes latent variances into reconstructed astronomical image.
+    """Decodes latent variables into reconstructed astronomical image.
 
     Attributes:
         n_bands: Number of bands (colors) in the image
@@ -35,9 +37,7 @@ class ImageDecoder(pl.LightningModule):
         sdss_bands: Tuple[int, ...],
         psf_params_file: str,
         border_padding: Optional[int] = None,
-        galaxy_ae: Optional[galaxy_net.OneCenteredGalaxyAE] = None,
-        galaxy_ae_ckpt: Optional[str] = None,
-        galsim_galaxy_decoder: Optional[GalsimGalaxyDecoder] = None,
+        galaxy_model: Optional[GalaxyModel] = None,
     ):
         """Initializes ImageDecoder.
 
@@ -49,9 +49,7 @@ class ImageDecoder(pl.LightningModule):
             sdss_bands: Bands to retrieve from PSF.
             psf_params_file: Path where point-spread-function (PSF) data is located.
             border_padding: Size of border around the final image where sources will not be present.
-            galaxy_ae: An autoencoder object for images of single galaxies.
-            galaxy_ae_ckpt: Path where state_dict of trained galaxy autoencoder is located.
-            galsim_galaxy_decoder: Object to decode Galsim representation of galaxies.
+            galaxy_model: Specifies how galaxy shapes are decoded from latent representation.
         """
         super().__init__()
         self.n_bands = n_bands
@@ -69,31 +67,15 @@ class ImageDecoder(pl.LightningModule):
             psf_params_file=psf_params_file,
         )
 
-        self.galaxy_tile_decoder = None
-        self.galsim_galaxy_decoder = galsim_galaxy_decoder
-        if galaxy_ae is not None:
-            assert galaxy_ae_ckpt is not None
-            galaxy_ae.load_state_dict(torch.load(galaxy_ae_ckpt, map_location=torch.device("cpu")))
-            galaxy_ae.eval().requires_grad_(False)
-            self.autodecoder = galaxy_ae.get_decoder()
+        if galaxy_model is None:
+            self.galaxy_tile_decoder: Optional[GalaxyTileDecoder] = None
         else:
-            self.autodecoder = None
-        self.set_decoder_type("autoencoder")
-
-    def set_decoder_type(self, mode):
-        if mode == "galsim":
-            galaxy_decoder = self.galsim_galaxy_decoder
-        elif mode == "autoencoder":
-            galaxy_decoder = self.autodecoder
-        if galaxy_decoder is not None:
             self.galaxy_tile_decoder = GalaxyTileDecoder(
                 self.tile_slen,
                 self.ptile_slen,
                 self.n_bands,
-                galaxy_decoder,
+                galaxy_model,
             )
-        else:
-            self.galaxy_tile_decoder = None
 
     @property
     def galaxy_decoder(self):
@@ -509,13 +491,18 @@ class StarTileDecoder(nn.Module):
 
 
 class GalaxyTileDecoder(nn.Module):
-    def __init__(
-        self, tile_slen, ptile_slen, n_bands, galaxy_decoder: galaxy_net.CenteredGalaxyDecoder
-    ):
+    def __init__(self, tile_slen, ptile_slen, n_bands, galaxy_model: GalaxyModel):
         super().__init__()
         self.n_bands = n_bands
         self.tiler = Tiler(tile_slen, ptile_slen)
         self.ptile_slen = ptile_slen
+
+        if isinstance(galaxy_model, OneCenteredGalaxyAE):
+            galaxy_decoder = galaxy_model.get_decoder()
+        elif isinstance(galaxy_model, GalsimGalaxyDecoder):
+            galaxy_decoder = galaxy_model
+        else:
+            raise TypeError("galaxy_model is not a valid type.")
         self.galaxy_decoder = galaxy_decoder
 
     def forward(self, locs, galaxy_params, galaxy_bools):
