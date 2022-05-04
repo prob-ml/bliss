@@ -226,7 +226,7 @@ class GalsimGalaxyDecoder:
             images.append(image)
         return torch.stack(images, dim=0).to(z.device)
 
-    def render_galaxy(self, galaxy_params) -> Tensor:
+    def render_galaxy(self, galaxy_params: Tensor) -> Tensor:
         if isinstance(galaxy_params, Tensor):
             galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
@@ -260,7 +260,7 @@ class GalsimGalaxyDecoder:
         return torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
 
 
-class SDSSGalaxies(pl.LightningDataModule, Dataset):
+class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
     def __init__(
         self,
         prior: GalsimGalaxyPrior,

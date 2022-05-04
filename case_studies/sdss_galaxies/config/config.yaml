@@ -31,7 +31,7 @@ datasets:
         sdss_dir: ${paths.sdss}
         prerender_device: "cuda"
     sdss_galaxies:
-        _target_: bliss.datasets.galsim_galaxies.SDSSGalaxies
+        _target_: bliss.datasets.galsim_galaxies.SingleGalsimGalaxies
         prior:
             _target_: bliss.datasets.galsim_galaxies.GalsimGalaxyPrior
             flux_sample: "pareto"
