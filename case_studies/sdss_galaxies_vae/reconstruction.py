@@ -73,6 +73,7 @@ def reconstruct(cfg):
         slen=cfg.reconstruct.slen,
         device=device,
     )
+    tile_map_recon = tile_map_recon.cpu()
     tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
     print(f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image.")
     tile_map_recon["fluxes"] = (
@@ -116,6 +117,7 @@ def reconstruct(cfg):
         slen=cfg.reconstruct.slen,
         device=device,
     )
+    tile_map_lower_threshold = tile_map_lower_threshold.cpu()
     positive_negative_stats = get_positive_negative_stats(
         ground_truth_catalog, tile_map_lower_threshold, mag_max=cfg.reconstruct.mag_max
     )
