@@ -249,7 +249,7 @@ class LocationEncoder(pl.LightningModule):
     def variational_mode(
         self, dist_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None
     ) -> Dict[str, Tensor]:
-        """Compute the mode of the variational distribution. Special case of sample()."""
+        """Compute the variational mode. Special case of sample() where first dim is squeezed."""
         detection_params = self.sample(dist_params, None, n_source_weights=n_source_weights)
         return {k: v.squeeze(0) for k, v in detection_params.items()}
 
