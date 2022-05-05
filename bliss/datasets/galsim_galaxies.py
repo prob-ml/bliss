@@ -231,8 +231,8 @@ class GalsimGalaxyDecoder:
             images.append(image)
         return torch.stack(images, dim=0).to(z.device)
 
-    def render_galaxy(self, galaxy_params: Tensor, offset: Tensor = None) -> Tensor:
-        assert offset.shape == (2,)
+    def render_galaxy(self, galaxy_params: Tensor, offset: Optional[Tensor] = None) -> Tensor:
+        assert offset is None or offset.shape == (2,)
         if isinstance(galaxy_params, Tensor):
             galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
@@ -260,8 +260,9 @@ class GalsimGalaxyDecoder:
         galaxy = galsim.Add(components)
         # convolve with PSF
         gal_conv = galsim.Convolution(galaxy, self.psf)
+        offset = offset if offset is None else offset.numpy()
         image = gal_conv.drawImage(
-            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale, offset=offset.numpy()
+            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale, offset=offset
         )
         return torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
 
@@ -341,33 +342,52 @@ class GalsimBlend(SingleGalsimGalaxies):
         assert self.max_n_sources >= 1
 
     def __getitem__(self, idx):
-        offset = self._sample_distance()
         n_sources = self._sample_n_sources()
-        galaxy_params = self.prior.sample(n_sources, "cpu")
+        slen = self.decoder.slen
+
+        # sample galaxy params and ensure tensor returned is of theh same size always.
+        params = self.prior.sample(n_sources, "cpu")
+        galaxy_params = torch.zeros(self.max_n_sources, params.shape[-1])
+        galaxy_params[:n_sources, :] = params
+
+        # draw center galaxy
         center_galaxy_image = self.decoder.render_galaxy(galaxy_params[0])
-        noiseless_centered_galaxy_images = [center_galaxy_image]  # for metrics
+
+        # prepare tensor containing all centered, noiseless galaxies
+        individual_noiseless = torch.zeros(self.max_n_sources, 1, slen, slen)
+        individual_noiseless[0] = center_galaxy_image
+
+        # add rest of galaxies in blend
         galaxies_image = center_galaxy_image.clone()
-        for ii in range(n_sources - 1):
+        plocs = torch.zeros(self.max_n_sources, 2)
+        plocs[0, :] = slen / 2
+        for ii in range(1, n_sources):
+            offset = self._sample_distance()
             centered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii])
             uncentered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii], offset)
             galaxies_image += uncentered_galaxy_image
-            noiseless_centered_galaxy_images.append(centered_galaxy_image)
+            individual_noiseless[ii] = centered_galaxy_image
+            plocs[ii, 0] = slen / 2 + offset[1]
+            plocs[ii, 1] = slen / 2 + offset[0]
 
+        # finally, add background and noise
         background = self.background.sample((1, *galaxies_image.shape)).squeeze(1)
-        snrs = torch.tensor([_get_snr(x, background) for x in noiseless_centered_galaxy_images])
-        individual_noiseless = torch.vstack(noiseless_centered_galaxy_images)
+        noisy_image = _add_noise_and_background(galaxies_image, background)
+        snrs = torch.tensor([_get_snr(x, background) for x in individual_noiseless]).reshape(-1)
 
         return {
-            "images": _add_noise_and_background(galaxies_image, background),
-            "background": background,
+            "images": noisy_image,
             "noiseless": galaxies_image,
+            "background": background,
             "individual_noiseless": individual_noiseless,
             "params": galaxy_params,
             "snr": snrs,
+            "n_sources": torch.tensor([n_sources]),
+            "plocs": plocs,
         }
 
     def _sample_distance(self):
-        return torch.rand(2) * self.max_shift
+        return (torch.rand(2) - 0.5) * 2 * self.max_shift
 
     def _sample_n_sources(self):
-        return torch.randint(1, self.max_n_sources, (1,)).item()
+        return torch.randint(1, self.max_n_sources + 1, (1,)).item()
