@@ -266,7 +266,7 @@ class GalsimGalaxyDecoder:
         return torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
 
 
-def _add_noise(image, background):
+def _add_noise_and_background(image, background):
     image_with_background = image + background
     noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
     return image_with_background + noise
@@ -300,7 +300,7 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         galaxy_image = self.decoder.render_galaxy(galaxy_params[0])
         background = self.background.sample((1, *galaxy_image.shape)).squeeze(1)
         return {
-            "images": _add_noise(galaxy_image, background),
+            "images": _add_noise_and_background(galaxy_image, background),
             "background": background,
             "noiseless": galaxy_image,
             "params": galaxy_params[0],
@@ -335,33 +335,39 @@ class GalsimBlend(SingleGalsimGalaxies):
         max_n_sources: int,
     ):
         super().__init__(prior, decoder, background, num_workers, batch_size, n_batches)
-        self.max_shift = max_shift
-        self.max_n_sources = self.max_n_sources
-        assert self.max_shift >= 0 and self.max_shift <= decoder.slen // 2
+        self.max_shift = max_shift  # in pixels
+        self.max_n_sources = max_n_sources
+        assert 0 <= self.max_shift <= decoder.slen // 2
         assert self.max_n_sources >= 1
 
     def __getitem__(self, idx):
         offset = self._sample_distance()
-        galaxy_params = self.prior.sample(2, "cpu")
-        galaxy_image1 = self.decoder.render_galaxy(galaxy_params[0])
-        galaxy_image2 = self.decoder.render_galaxy(galaxy_params[1], offset)
-        galaxy_image = galaxy_image1 + galaxy_image2
-        background = self.background.sample((1, *galaxy_image1.shape)).squeeze(1)
-        snr1 = _get_snr(galaxy_image1, background).item()
-        snr2 = _get_snr(galaxy_image2, background).item()
-        snr = torch.tensor([snr1, snr2])
+        n_sources = self._sample_n_sources()
+        galaxy_params = self.prior.sample(n_sources, "cpu")
+        center_galaxy_image = self.decoder.render_galaxy(galaxy_params[0])
+        noiseless_centered_galaxy_images = [center_galaxy_image]  # for metrics
+        galaxies_image = center_galaxy_image.clone()
+        for ii in range(n_sources - 1):
+            centered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii])
+            uncentered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii], offset)
+            galaxies_image += uncentered_galaxy_image
+            noiseless_centered_galaxy_images.append(centered_galaxy_image)
+
+        background = self.background.sample((1, *galaxies_image.shape)).squeeze(1)
+        snrs = torch.tensor([_get_snr(x, background) for x in noiseless_centered_galaxy_images])
+        individual_noiseless = torch.vstack(noiseless_centered_galaxy_images)
 
         return {
-            "images": _add_noise(galaxy_image, background),
+            "images": _add_noise_and_background(galaxies_image, background),
             "background": background,
-            "noiseless": galaxy_image,
-            "individual_noiseless": torch.vstack([galaxy_image1, galaxy_image2]),
+            "noiseless": galaxies_image,
+            "individual_noiseless": individual_noiseless,
             "params": galaxy_params,
-            "snr": snr,
+            "snr": snrs,
         }
 
     def _sample_distance(self):
         return torch.rand(2) * self.max_shift
 
     def _sample_n_sources(self):
-        return torch.randint(1, self.max_n_sources, (1,))
+        return torch.randint(1, self.max_n_sources, (1,)).item()
