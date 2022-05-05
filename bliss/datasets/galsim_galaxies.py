@@ -362,7 +362,7 @@ class GalsimBlend(SingleGalsimGalaxies):
         plocs = torch.zeros(self.max_n_sources, 2)
         plocs[0, :] = slen / 2
         for ii in range(1, n_sources):
-            offset = self._sample_distance()
+            offset = self._sample_distance_from_center()
             centered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii])
             uncentered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii], offset)
             galaxies_image += uncentered_galaxy_image
@@ -386,7 +386,7 @@ class GalsimBlend(SingleGalsimGalaxies):
             "plocs": plocs,
         }
 
-    def _sample_distance(self):
+    def _sample_distance_from_center(self):
         return (torch.rand(2) - 0.5) * 2 * self.max_shift
 
     def _sample_n_sources(self):
