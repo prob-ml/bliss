@@ -224,21 +224,16 @@ class LocationEncoder(pl.LightningModule):
 
         if n_samples is not None:
             tile_locs = Normal(dist_params_n_src["loc_mean"], dist_params_n_src["loc_sd"]).rsample()
-        else:
-            tile_locs = dist_params_n_src["loc_mean"]
-        tile_locs *= tile_is_on_array  # Is masking here helpful/necessary?
-
-        if n_samples is not None:
             tile_log_fluxes = Normal(
                 dist_params_n_src["log_flux_mean"], dist_params_n_src["log_flux_sd"]
             ).rsample()
         else:
+            tile_locs = dist_params_n_src["loc_mean"]
             tile_log_fluxes = dist_params_n_src["log_flux_mean"]
+        tile_locs *= tile_is_on_array  # Is masking here helpful/necessary?
         tile_fluxes = tile_log_fluxes.exp()
         tile_fluxes *= tile_is_on_array
 
-        # Given all the rearranging/unflattening below, I suspect we never should have
-        # flattened in the first place
         return {
             "locs": tile_locs,
             "log_fluxes": tile_log_fluxes,
