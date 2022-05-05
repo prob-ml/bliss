@@ -196,24 +196,24 @@ class LocationEncoder(pl.LightningModule):
                 which is the distributional parameters in matrix form.
             n_samples:
                 The number of samples to draw. If None, the variational mode is taken instead.
-            n_source_weights: Applies to variational mode estimation. If specified, adjusts the
-                probabilities of n_sources to allow for different detection thresholds.
+            n_source_weights:
+                If specified, adjusts the sampling probabilities of n_sources.
 
         Returns:
             A dictionary of tensors with shape `n_samples * n_ptiles * max_sources * ...`.
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
+        if n_source_weights is None:
+            n_source_weights = torch.ones(self.max_detections + 1, device=self.device)
+        n_source_weights = n_source_weights.reshape(1, -1)
+        ns_log_probs_adj = dist_params["n_source_log_probs"] + n_source_weights.log()
+        ns_log_probs_adj -= ns_log_probs_adj.logsumexp(dim=-1)
+
         if n_samples is not None:
-            n_source_probs = dist_params["n_source_log_probs"].exp()
+            n_source_probs = ns_log_probs_adj.exp()
             tile_n_sources = Categorical(probs=n_source_probs).sample((n_samples,))
         else:
-            if n_source_weights is None:
-                n_source_weights = torch.ones(self.max_detections + 1, device=self.device)
-
-            n_source_weights = n_source_weights.reshape(1, -1)
-            log_joint = dist_params["n_source_log_probs"] + n_source_weights.log()
-            tile_n_sources = torch.argmax(log_joint, dim=-1).unsqueeze(0)
-
+            tile_n_sources = torch.argmax(ns_log_probs_adj, dim=-1).unsqueeze(0)
         # get distributional parameters conditioned on the sampled numbers of light sources
         dist_params_n_src = self._encode_for_n_sources(
             dist_params["per_source_params"], tile_n_sources
