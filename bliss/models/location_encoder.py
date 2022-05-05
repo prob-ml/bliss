@@ -207,7 +207,7 @@ class LocationEncoder(pl.LightningModule):
             n_source_weights = torch.ones(self.max_detections + 1, device=self.device)
         n_source_weights = n_source_weights.reshape(1, -1)
         ns_log_probs_adj = dist_params["n_source_log_probs"] + n_source_weights.log()
-        ns_log_probs_adj -= ns_log_probs_adj.logsumexp(dim=-1)
+        ns_log_probs_adj -= ns_log_probs_adj.logsumexp(dim=-1, keepdim=True)
 
         if n_samples is not None:
             n_source_probs = ns_log_probs_adj.exp()
