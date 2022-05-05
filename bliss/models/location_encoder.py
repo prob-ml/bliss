@@ -183,21 +183,36 @@ class LocationEncoder(pl.LightningModule):
             "n_source_log_probs": n_source_log_probs,
         }
 
-    def sample(self, dist_params: Dict[str, Tensor], n_samples: int) -> Dict[str, Tensor]:
+    def sample(
+        self,
+        dist_params: Dict[str, Tensor],
+        n_samples: Union[int, None],
+        n_source_weights: Optional[Tensor] = None,
+    ) -> Dict[str, Tensor]:
         """Sample from the encoded variational distribution.
 
         Args:
             dist_params: The output of `self.encode(image_ptiles)`,
                 which is the distributional parameters in matrix form.
             n_samples:
-                The number of samples to draw
+                The number of samples to draw. If None, the variational mode is taken instead.
+            n_source_weights: Applies to variational mode estimation. If specified, adjusts the
+                probabilities of n_sources to allow for different detection thresholds.
 
         Returns:
-            A dictionary of tensors with shape `n_samples * n_ptiles * max_sources* ...`.
+            A dictionary of tensors with shape `n_samples * n_ptiles * max_sources * ...`.
             Consists of `"n_sources", "locs", "log_fluxes", and "fluxes"`.
         """
-        n_source_probs = dist_params["n_source_log_probs"].exp()
-        tile_n_sources = Categorical(probs=n_source_probs).sample((n_samples,))
+        if n_samples is not None:
+            n_source_probs = dist_params["n_source_log_probs"].exp()
+            tile_n_sources = Categorical(probs=n_source_probs).sample((n_samples,))
+        else:
+            if n_source_weights is None:
+                n_source_weights = torch.ones(self.max_detections + 1, device=self.device)
+
+            n_source_weights = n_source_weights.reshape(1, -1)
+            log_joint = dist_params["n_source_log_probs"] + n_source_weights.log()
+            tile_n_sources = torch.argmax(log_joint, dim=-1).unsqueeze(0)
 
         # get distributional parameters conditioned on the sampled numbers of light sources
         dist_params_n_src = self._encode_for_n_sources(
@@ -207,12 +222,18 @@ class LocationEncoder(pl.LightningModule):
         tile_is_on_array = get_is_on_from_n_sources(tile_n_sources, self.max_detections)
         tile_is_on_array = tile_is_on_array.unsqueeze(-1)
 
-        tile_locs = Normal(dist_params_n_src["loc_mean"], dist_params_n_src["loc_sd"]).rsample()
+        if n_samples is not None:
+            tile_locs = Normal(dist_params_n_src["loc_mean"], dist_params_n_src["loc_sd"]).rsample()
+        else:
+            tile_locs = dist_params_n_src["loc_mean"]
         tile_locs *= tile_is_on_array  # Is masking here helpful/necessary?
 
-        tile_log_fluxes = Normal(
-            dist_params_n_src["log_flux_mean"], dist_params_n_src["log_flux_sd"]
-        ).rsample()
+        if n_samples is not None:
+            tile_log_fluxes = Normal(
+                dist_params_n_src["log_flux_mean"], dist_params_n_src["log_flux_sd"]
+            ).rsample()
+        else:
+            tile_log_fluxes = dist_params_n_src["log_flux_mean"]
         tile_fluxes = tile_log_fluxes.exp()
         tile_fluxes *= tile_is_on_array
 
@@ -228,55 +249,9 @@ class LocationEncoder(pl.LightningModule):
     def variational_mode(
         self, dist_params: Dict[str, Tensor], n_source_weights: Optional[Tensor] = None
     ) -> Dict[str, Tensor]:
-        """Compute the mode of the variational distribution.
-
-        Args:
-            dist_params: The output of `self.encode(ptiles)` which is the distributional parameters
-                in matrix form.
-            n_source_weights:
-                If specified, adds adjustment to number of sources when taking the argmax. Useful
-                for raising/lowering the threshold for turning sources on and off.
-
-        Returns:
-            The maximum a posteriori for each padded tile.
-            Has shape `n_ptiles * max_detections * ...`.
-            The dictionary contains
-            `"locs", "log_fluxes", "fluxes", and "n_sources".`.
-        """
-        if n_source_weights is None:
-            n_source_weights = torch.ones(self.max_detections + 1, device=self.device)
-
-        n_source_weights = n_source_weights.reshape(1, -1)
-        log_joint = dist_params["n_source_log_probs"] + n_source_weights.log()
-        map_n_sources: Tensor = torch.argmax(log_joint, dim=-1)
-
-        # the first dimension is the number of samples (just one in this case)
-        dist_params_n_src = self._encode_for_n_sources(
-            dist_params["per_source_params"],
-            map_n_sources.unsqueeze(0),
-        )
-
-        is_on_array = get_is_on_from_n_sources(map_n_sources, self.max_detections)
-        is_on_array = rearrange(is_on_array, "n_ptiles ns -> n_ptiles ns 1")
-
-        tile_locs = dist_params_n_src["loc_mean"] * is_on_array
-        tile_locs = tile_locs.clamp(0, 1)
-
-        # In the catalog, do we need to store both fluxes and log fluxes?
-        # Also, can we avoid gating log_flux_mean here is_on_array? Because log(0) != 0.
-        tile_log_fluxes = dist_params_n_src["log_flux_mean"] * is_on_array
-        tile_fluxes = tile_log_fluxes.exp() * is_on_array
-
-        # Given all the rearranging/unflattening below, perhaps we never should have
-        # flattened in the first place
-        unflatten = "1 n_ptiles s k -> n_ptiles s k"
-        return {
-            "locs": rearrange(tile_locs, unflatten),
-            "log_fluxes": rearrange(tile_log_fluxes, unflatten),
-            "fluxes": rearrange(tile_fluxes, unflatten),
-            "n_sources": map_n_sources,
-            "n_source_log_probs": dist_params["n_source_log_probs"][:, 1:].unsqueeze(-1),
-        }
+        """Compute the mode of the variational distribution. Special case of sample()."""
+        detection_params = self.sample(dist_params, None, n_source_weights=n_source_weights)
+        return {k: v.squeeze(0) for k, v in detection_params.items()}
 
     def _get_n_source_prior_log_prob(self, detection_rate):
         possible_n_sources = torch.tensor(range(self.max_detections))
