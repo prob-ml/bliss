@@ -367,7 +367,7 @@ class GalsimBlend(SingleGalsimGalaxies):
             uncentered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii], offset)
             galaxies_image += uncentered_galaxy_image
             individual_noiseless[ii] = centered_galaxy_image
-            plocs[ii, 0] = slen / 2 + offset[1]
+            plocs[ii, 0] = slen / 2 + offset[1]  # adjust to correspond to BLISS locations.
             plocs[ii, 1] = slen / 2 + offset[0]
 
         # finally, add background and noise

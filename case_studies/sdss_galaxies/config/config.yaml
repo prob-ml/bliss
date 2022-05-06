@@ -56,6 +56,21 @@ datasets:
         num_workers: 0
         batch_size: 64
         n_batches: 10
+    galsim_blended_galaxies:
+        _target_: bliss.datasets.galsim_galaxies.GalsimBlend
+        prior: ${datasets.sdss_galaxies.prior}
+        decoder:
+            _target_: bliss.datasets.galsim_galaxies.GalsimGalaxyDecoder
+            n_bands: 1
+            slen: 81
+            pixel_scale: 0.396
+            psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
+        background: ${datasets.sdss_galaxies.background}
+        num_workers: 0
+        batch_size: 64
+        n_batches: 10
+        max_shift: 10
+        max_n_sources: 3
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
