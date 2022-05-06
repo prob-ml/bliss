@@ -382,10 +382,13 @@ class GalsimBlend(SingleGalsimGalaxies):
         # finally, add background and noise
         background = self.background.sample((1, *galaxies_image.shape)).squeeze(1)
         noisy_image = _add_noise_and_background(galaxies_image, background)
-        snrs = torch.tensor([_get_snr(x, background) for x in individual_noiseless_centered])
-        blendedness = torch.tensor(
-            [_get_blendedness(x, galaxies_image) for x in individual_noiseless_uncentered]
-        )
+
+        # get snr and blendedness
+        snr = torch.zeros(self.max_n_sources)
+        blendedness = torch.zeros(self.max_n_sources)
+        for ii in range(n_sources):
+            snr[ii] = _get_snr(individual_noiseless_centered[ii], background)
+            blendedness[ii] = _get_blendedness(individual_noiseless_uncentered[ii], galaxies_image)
 
         return {
             "images": noisy_image,
@@ -394,14 +397,14 @@ class GalsimBlend(SingleGalsimGalaxies):
             "individual_noiseless_centered": individual_noiseless_centered,
             "individual_noiseless_uncentered": individual_noiseless_uncentered,
             "params": galaxy_params,
-            "snr": snrs.reshape(-1),
-            "blendedness": blendedness.reshape(-1),
+            "snr": snr,
+            "blendedness": blendedness,
             "n_sources": torch.tensor([n_sources]),
             "plocs": plocs,
         }
 
-    def _sample_distance_from_center(self):
+    def _sample_distance_from_center(self) -> Tensor:
         return (torch.rand(2) - 0.5) * 2 * self.max_shift
 
-    def _sample_n_sources(self):
+    def _sample_n_sources(self) -> int:
         return torch.randint(1, self.max_n_sources + 1, (1,)).item()
