@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.distributions import Poisson
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.datasets.galsim_galaxies import SDSSGalaxies, ToyGaussian
+from bliss.datasets.galsim_galaxies import SingleGalsimGalaxies, ToyGaussian
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
 
@@ -21,7 +21,7 @@ class GalaxyPrior:
         autoencoder: Optional[OneCenteredGalaxyAE] = None,
         autoencoder_ckpt: str = None,
         psf_image_file: Optional[str] = None,
-        galaxy_dataset: Optional[Union[SDSSGalaxies, ToyGaussian]] = None,
+        galaxy_dataset: Optional[Union[SingleGalsimGalaxies, ToyGaussian]] = None,
     ):
         """Class to sample galaxy latent variables.
 
@@ -46,7 +46,7 @@ class GalaxyPrior:
             )
             dataloader = galaxy_dataset.train_dataloader()
             autoencoder = autoencoder.cuda()
-            if isinstance(galaxy_dataset, SDSSGalaxies):
+            if isinstance(galaxy_dataset, SingleGalsimGalaxies):
                 flux_sample = galaxy_dataset.prior.flux_sample
                 a_sample = galaxy_dataset.prior.a_sample
                 warn(
