@@ -267,15 +267,21 @@ class GalsimGalaxyDecoder:
         return torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
 
 
-def _add_noise_and_background(image, background):
+def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
     image_with_background = image + background
     noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
     return image_with_background + noise
 
 
-def _get_snr(image, background):
+def _get_snr(image: Tensor, background: Tensor) -> float:
     image_with_background = image + background
-    return torch.sqrt(torch.sum(image**2 / image_with_background)).reshape(1)
+    return torch.sqrt(torch.sum(image**2 / image_with_background)).item()
+
+
+def _get_blendedness(single_galaxy: Tensor, all_galaxies: Tensor) -> float:
+    num = torch.sum(single_galaxy * single_galaxy).item()
+    denom = torch.sum(single_galaxy * all_galaxies).item()
+    return 1 - num / denom
 
 
 class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
@@ -353,9 +359,11 @@ class GalsimBlend(SingleGalsimGalaxies):
         # draw center galaxy
         center_galaxy_image = self.decoder.render_galaxy(galaxy_params[0])
 
-        # prepare tensor containing all centered, noiseless galaxies
-        individual_noiseless = torch.zeros(self.max_n_sources, 1, slen, slen)
-        individual_noiseless[0] = center_galaxy_image
+        # prepare tensors containing single noiseless galaxies
+        individual_noiseless_centered = torch.zeros(self.max_n_sources, 1, slen, slen)
+        individual_noiseless_uncentered = torch.zeros(self.max_n_sources, 1, slen, slen)
+        individual_noiseless_centered[0] = center_galaxy_image
+        individual_noiseless_uncentered[0] = center_galaxy_image
 
         # add rest of galaxies in blend
         galaxies_image = center_galaxy_image.clone()
@@ -365,23 +373,29 @@ class GalsimBlend(SingleGalsimGalaxies):
             offset = self._sample_distance_from_center()
             centered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii])
             uncentered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii], offset)
-            galaxies_image += uncentered_galaxy_image
-            individual_noiseless[ii] = centered_galaxy_image
+            individual_noiseless_centered[ii] = centered_galaxy_image
+            individual_noiseless_uncentered[ii] = uncentered_galaxy_image
             plocs[ii, 0] = slen / 2 + offset[1]  # adjust to correspond to BLISS locations.
             plocs[ii, 1] = slen / 2 + offset[0]
+            galaxies_image += uncentered_galaxy_image
 
         # finally, add background and noise
         background = self.background.sample((1, *galaxies_image.shape)).squeeze(1)
         noisy_image = _add_noise_and_background(galaxies_image, background)
-        snrs = torch.tensor([_get_snr(x, background) for x in individual_noiseless]).reshape(-1)
+        snrs = torch.tensor([_get_snr(x, background) for x in individual_noiseless_centered])
+        blendedness = torch.tensor(
+            [_get_blendedness(x, galaxies_image) for x in individual_noiseless_uncentered]
+        )
 
         return {
             "images": noisy_image,
             "noiseless": galaxies_image,
             "background": background,
-            "individual_noiseless": individual_noiseless,
+            "individual_noiseless_centered": individual_noiseless_centered,
+            "individual_noiseless_uncentered": individual_noiseless_uncentered,
             "params": galaxy_params,
-            "snr": snrs,
+            "snr": snrs.reshape(-1),
+            "blendedness": blendedness.reshape(-1),
             "n_sources": torch.tensor([n_sources]),
             "plocs": plocs,
         }
