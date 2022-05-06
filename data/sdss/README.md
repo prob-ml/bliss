@@ -1,7 +1,7 @@
-# Coadd Catalog 
+# Coadd Catalog
 
 To obtain the coadd catalog that is used as ground truth for some studies, the CASJobs [website](https://skyserver.sdss.org/CasJobs/SubmitJob.aspx)
-must be used. This requires the creation of a (free) account. For example, the coadd catalog `coadd_catalog_94_1_12.fits` which corresponds to the 
+must be used. This requires the creation of a (free) account. For example, the coadd catalog `coadd_catalog_94_1_12.fits` which corresponds to the
 (run, camcol, field) = (94, 1, 12) was created using the following query.
 
 
@@ -26,14 +26,14 @@ from (
     dec between -1.044 and -0.8189
 ) as tmp
 where
-  ((psfmag_r < 23 and probpsf = 1) 
+  ((psfmag_r < 23 and probpsf = 1)
    or (probpsf = 0 and (modelMag_r < 23)))
   and (flags & @bad_flags) = 0
-  and (type = 3 or type = 6) 
+  and (type = 3 or type = 6)
   and mode = 1
 ```
 
-where the `ra` and `dec` limits correspond to the limits of the frame. They can be obtained: 
+where the `ra` and `dec` limits correspond to the limits of the frame. They can be obtained:
 
 ```python
 from bliss.datasets.sdss import SloanDigitalSkySurvey
@@ -44,4 +44,4 @@ print(wcs.all_pix2world([0, w], [0, h], 0))
 ```
 
 The cut on magnitude is `23`, which can be adjusted depending on how dim of objects you want to consider.
-For more details take a look at this [wiki page](https://github.com/jeff-regier/Celeste.jl/wiki/About-SDSS-and-Stripe-82#how-to-get-ground-truth-data-for-stripe-82). 
+For more details take a look at this [wiki page](https://github.com/jeff-regier/Celeste.jl/wiki/About-SDSS-and-Stripe-82#how-to-get-ground-truth-data-for-stripe-82).

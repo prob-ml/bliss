@@ -157,6 +157,11 @@ class GalsimGalaxyPrior:
         # create galaxy as mixture of Exponential + DeVacauleurs
         if self.flux_sample == "uniform":
             total_flux = self._uniform(self.min_flux, self.max_flux, n_samples=total_latent)
+        elif self.flux_sample == "log_uniform":
+            log_flux = self._uniform(
+                torch.log10(self.min_flux), torch.log10(self.max_flux), n_samples=total_latent
+            )
+            total_flux = 10**log_flux
         elif self.flux_sample == "pareto":
             total_flux = self._draw_pareto_flux(n_samples=total_latent)
         else:
@@ -226,7 +231,8 @@ class GalsimGalaxyDecoder:
             images.append(image)
         return torch.stack(images, dim=0).to(z.device)
 
-    def render_galaxy(self, galaxy_params) -> Tensor:
+    def render_galaxy(self, galaxy_params: Tensor, offset: Optional[Tensor] = None) -> Tensor:
+        assert offset is None or offset.shape == (2,)
         if isinstance(galaxy_params, Tensor):
             galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
@@ -254,13 +260,25 @@ class GalsimGalaxyDecoder:
         galaxy = galsim.Add(components)
         # convolve with PSF
         gal_conv = galsim.Convolution(galaxy, self.psf)
+        offset = offset if offset is None else offset.numpy()
         image = gal_conv.drawImage(
-            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
+            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale, offset=offset
         )
         return torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
 
 
-class SDSSGalaxies(pl.LightningDataModule, Dataset):
+def _add_noise_and_background(image, background):
+    image_with_background = image + background
+    noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
+    return image_with_background + noise
+
+
+def _get_snr(image, background):
+    image_with_background = image + background
+    return torch.sqrt(torch.sum(image**2 / image_with_background)).reshape(1)
+
+
+class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
     def __init__(
         self,
         prior: GalsimGalaxyPrior,
@@ -282,16 +300,12 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
         galaxy_params = self.prior.sample(1, "cpu")
         galaxy_image = self.decoder.render_galaxy(galaxy_params[0])
         background = self.background.sample((1, *galaxy_image.shape)).squeeze(1)
-        galaxy_with_background = galaxy_image + background
-        noise = galaxy_with_background.sqrt() * torch.randn_like(galaxy_with_background)
-        galaxy_with_noise = galaxy_with_background + noise
-        snr = torch.sqrt(torch.sum(galaxy_image**2 / galaxy_with_background)).reshape(1)
         return {
-            "images": galaxy_with_noise,
+            "images": _add_noise_and_background(galaxy_image, background),
             "background": background,
             "noiseless": galaxy_image,
             "params": galaxy_params[0],
-            "snr": snr,
+            "snr": _get_snr(galaxy_image, background),
         }
 
     def __len__(self):
@@ -305,3 +319,75 @@ class SDSSGalaxies(pl.LightningDataModule, Dataset):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+
+class GalsimBlend(SingleGalsimGalaxies):
+    """Blend where one galaxy is always centered."""
+
+    def __init__(
+        self,
+        prior: GalsimGalaxyPrior,
+        decoder: GalsimGalaxyDecoder,
+        background: ConstantBackground,
+        num_workers: int,
+        batch_size: int,
+        n_batches: int,
+        max_shift: int,
+        max_n_sources: int,
+    ):
+        super().__init__(prior, decoder, background, num_workers, batch_size, n_batches)
+        self.max_shift = max_shift  # in pixels
+        self.max_n_sources = max_n_sources
+        assert 0 <= self.max_shift <= decoder.slen // 2
+        assert self.max_n_sources >= 1
+
+    def __getitem__(self, idx):
+        n_sources = self._sample_n_sources()
+        slen = self.decoder.slen
+
+        # sample galaxy params and ensure tensor returned is of theh same size always.
+        params = self.prior.sample(n_sources, "cpu")
+        galaxy_params = torch.zeros(self.max_n_sources, params.shape[-1])
+        galaxy_params[:n_sources, :] = params
+
+        # draw center galaxy
+        center_galaxy_image = self.decoder.render_galaxy(galaxy_params[0])
+
+        # prepare tensor containing all centered, noiseless galaxies
+        individual_noiseless = torch.zeros(self.max_n_sources, 1, slen, slen)
+        individual_noiseless[0] = center_galaxy_image
+
+        # add rest of galaxies in blend
+        galaxies_image = center_galaxy_image.clone()
+        plocs = torch.zeros(self.max_n_sources, 2)
+        plocs[0, :] = slen / 2
+        for ii in range(1, n_sources):
+            offset = self._sample_distance_from_center()
+            centered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii])
+            uncentered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii], offset)
+            galaxies_image += uncentered_galaxy_image
+            individual_noiseless[ii] = centered_galaxy_image
+            plocs[ii, 0] = slen / 2 + offset[1]  # adjust to correspond to BLISS locations.
+            plocs[ii, 1] = slen / 2 + offset[0]
+
+        # finally, add background and noise
+        background = self.background.sample((1, *galaxies_image.shape)).squeeze(1)
+        noisy_image = _add_noise_and_background(galaxies_image, background)
+        snrs = torch.tensor([_get_snr(x, background) for x in individual_noiseless]).reshape(-1)
+
+        return {
+            "images": noisy_image,
+            "noiseless": galaxies_image,
+            "background": background,
+            "individual_noiseless": individual_noiseless,
+            "params": galaxy_params,
+            "snr": snrs,
+            "n_sources": torch.tensor([n_sources]),
+            "plocs": plocs,
+        }
+
+    def _sample_distance_from_center(self):
+        return (torch.rand(2) - 0.5) * 2 * self.max_shift
+
+    def _sample_n_sources(self):
+        return torch.randint(1, self.max_n_sources + 1, (1,)).item()

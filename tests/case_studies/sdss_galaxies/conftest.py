@@ -14,14 +14,14 @@ def get_sdss_galaxies_cfg(overrides, devices):
     return cfg
 
 
-class SDSSGalaxiesSetup(ModelSetup):
+class SingleGalsimGalaxiesSetup(ModelSetup):
     def get_cfg(self, overrides):
         return get_sdss_galaxies_cfg(overrides, self.devices)
 
 
 @pytest.fixture(scope="session")
 def sdss_galaxies_setup(devices):
-    return SDSSGalaxiesSetup(devices)
+    return SingleGalsimGalaxiesSetup(devices)
 
 
 @pytest.fixture(scope="session")
