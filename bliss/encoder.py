@@ -134,6 +134,8 @@ class Encoder(nn.Module):
         tile_map_dict = self.location_encoder.variational_mode(
             dist_params, n_source_weights=self.map_n_source_weights
         )
+        n_source_log_probs = dist_params["n_source_log_probs"][:, 1:]
+        tile_map_dict["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1)
         locs = tile_map_dict["locs"]
         n_sources = tile_map_dict["n_sources"]
         is_on_array = get_is_on_from_n_sources(n_sources, self.location_encoder.max_detections)
