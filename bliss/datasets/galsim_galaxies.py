@@ -407,4 +407,4 @@ class GalsimBlend(SingleGalsimGalaxies):
         return (torch.rand(2) - 0.5) * 2 * self.max_shift
 
     def _sample_n_sources(self) -> int:
-        return torch.randint(1, self.max_n_sources + 1, (1,)).item()
+        return torch.randint(1, self.max_n_sources + 1, (1,)).int().item()
