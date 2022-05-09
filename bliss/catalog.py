@@ -25,7 +25,9 @@ class TileCatalog(UserDict):
         "hlr",
         "ra",
         "dec",
+        "matched",
         "mismatched",
+        "detection_thresholds",
     }
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
