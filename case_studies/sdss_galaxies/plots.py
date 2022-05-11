@@ -13,6 +13,7 @@ import numpy as np
 import pytorch_lightning as pl
 import seaborn as sns
 import torch
+from tqdm import tqdm
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 
@@ -23,7 +24,6 @@ from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
 from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.datasets.galsim_galaxies import GalsimBlends
 
 pl.seed_everything(40)
 
@@ -493,29 +493,80 @@ class AEReconstructionFigures(BlissFigures):
         }
 
 
+def compute_mag_bin_metrics(mag_bins: np.ndarray, truth: FullCatalog, pred: FullCatalog) -> dict:
+    metrics_per_mag = defaultdict(lambda: np.zeros(len(mag_bins)))
+
+    # compute data for precision/recall/classification accuracy as a function of magnitude.
+    for ii, (mag1, mag2) in enumerate(mag_bins):
+        res = reporting.scene_metrics(truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0)
+        metrics_per_mag["precision"][ii] = res["precision"].item()
+        metrics_per_mag["recall"][ii] = res["recall"].item()
+        metrics_per_mag["f1"][ii] = res["f1"].item()
+        metrics_per_mag["class_acc"][ii] = res["class_acc"].item()
+        conf_matrix = res["conf_matrix"]
+        metrics_per_mag["galaxy_acc"][ii] = conf_matrix[0, 0] / conf_matrix[0, :].sum().item()
+        metrics_per_mag["star_acc"][ii] = conf_matrix[1, 1] / conf_matrix[1, :].sum().item()
+        for k, v in res["counts"].items():
+            metrics_per_mag[k][ii] = v
+
+    return dict(metrics_per_mag)
+
+
+def make_detection_figure(
+    mags,
+    data,
+    xlims=(18, 24),
+    ylims=(0.5, 1.05),
+    ratio=2,
+    where_step="mid",
+    n_gap=50,
+):
+    # precision / recall / f1 score
+    precision = data["precision"]
+    recall = data["recall"]
+    f1_score = data["f1"]
+    tgcount = data["tgcount"]
+    tscount = data["tscount"]
+    egcount = data["egcount"]
+    escount = data["escount"]
+    # (1) precision / recall
+    set_rc_params(tick_label_size=22, label_size=30)
+    fig, (ax1, ax2) = plt.subplots(
+        2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
+    )
+    ymin = min(min(precision), min(recall))
+    yticks = np.arange(np.round(ymin, 1), 1.1, 0.1)
+    format_plot(ax2, xlabel=r"\rm magnitude cut", ylabel="metric", yticks=yticks)
+    ax2.plot(mags, recall, "-o", label=r"\rm recall")
+    ax2.plot(mags, precision, "-o", label=r"\rm precision")
+    ax2.plot(mags, f1_score, "-o", label=r"\rm f1 score")
+    ax2.legend(loc="lower left", prop={"size": 22})
+    ax2.set_xlim(xlims)
+    ax2.set_ylim(ylims)
+
+    # setup histogram plot up top.
+    c1 = CB_color_cycle[3]
+    c2 = CB_color_cycle[4]
+    ax1.step(mags, tgcount, label="coadd galaxies", where=where_step, color=c1)
+    ax1.step(mags, tscount, label="coadd stars", where=where_step, color=c2)
+    ax1.step(mags, egcount, label="pred. galaxies", ls="--", where=where_step, color=c1)
+    ax1.step(mags, escount, label="pred. stars", ls="--", where=where_step, color=c2)
+    ymax = max(max(tgcount), max(tscount), max(egcount), max(escount))
+    ymax = np.ceil(ymax / n_gap) * n_gap
+    yticks = np.arange(0, ymax, n_gap)
+    ax1.set_ylim((0, ymax))
+    format_plot(ax1, yticks=yticks, ylabel=r"\rm Counts")
+    ax1.legend(loc="best", prop={"size": 16})
+    plt.subplots_adjust(hspace=0)
+
+    return fig
+
+
 class DetectionClassificationFigures(BlissFigures):
     cache = "detect_class.pt"
 
     @staticmethod
-    def compute_mag_bin_metrics(mag_bins: np.ndarray, truth: FullCatalog, pred: FullCatalog):
-        metrics_per_mag = defaultdict(lambda: np.zeros(len(mag_bins)))
-
-        # compute data for precision/recall/classification accuracy as a function of magnitude.
-        for ii, (mag1, mag2) in enumerate(mag_bins):
-            res = reporting.scene_metrics(truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0)
-            metrics_per_mag["precision"][ii] = res["precision"].item()
-            metrics_per_mag["recall"][ii] = res["recall"].item()
-            metrics_per_mag["f1"][ii] = res["f1"].item()
-            metrics_per_mag["class_acc"][ii] = res["class_acc"].item()
-            conf_matrix = res["conf_matrix"]
-            metrics_per_mag["galaxy_acc"][ii] = conf_matrix[0, 0] / conf_matrix[0, :].sum().item()
-            metrics_per_mag["star_acc"][ii] = conf_matrix[1, 1] / conf_matrix[1, :].sum().item()
-            for k, v in res["counts"].items():
-                metrics_per_mag[k][ii] = v
-
-        return dict(metrics_per_mag)
-
-    def compute_metrics(self, truth: FullCatalog, pred: FullCatalog):
+    def compute_metrics(truth: FullCatalog, pred: FullCatalog):
 
         # prepare magnitude bins
         mag_cuts2 = np.arange(18, 24.5, 0.25)
@@ -527,8 +578,8 @@ class DetectionClassificationFigures(BlissFigures):
         mag_bins = np.column_stack((mag_bins1, mag_bins2))
 
         # compute metrics
-        cuts_data = self.compute_mag_bin_metrics(mag_cuts, truth, pred)
-        bins_data = self.compute_mag_bin_metrics(mag_bins, truth, pred)
+        cuts_data = compute_mag_bin_metrics(mag_cuts, truth, pred)
+        bins_data = compute_mag_bin_metrics(mag_bins, truth, pred)
 
         # data for scatter plot of misclassifications (over all magnitudes).
         tplocs = truth.plocs.reshape(-1, 2)
@@ -567,14 +618,7 @@ class DetectionClassificationFigures(BlissFigures):
 
         # obtain predictions from BLISS.
         _, tile_est_params = reconstruct_scene_at_coordinates(
-            encoder,
-            decoder,
-            frame.image,
-            frame.background,
-            h_range=(h, h_end),
-            w_range=(w, w_end),
-            slen=slen,
-            device=device,
+            encoder, decoder, frame.image, frame.background, h_range=(h, h_end), w_range=(w, w_end)
         )
         est_params = tile_est_params.cpu().to_full_params()
         est_params["fluxes"] = (
@@ -588,58 +632,6 @@ class DetectionClassificationFigures(BlissFigures):
         photo_metrics = self.compute_metrics(coadd_params, photo_catalog_at_hw)
 
         return {"bliss_metrics": bliss_metrics, "photo_metrics": photo_metrics}
-
-    @staticmethod
-    def make_detection_figure(
-        mags,
-        data,
-        cuts_or_bins="cuts",
-        xlims=(18, 24),
-        ylims=(0.5, 1.05),
-        ratio=2,
-        where_step="mid",
-        n_gap=50,
-    ):
-        # precision / recall / f1 score
-        assert cuts_or_bins in {"cuts", "bins"}
-        precision = data["precision"]
-        recall = data["recall"]
-        f1_score = data["f1"]
-        tgcount = data["tgcount"]
-        tscount = data["tscount"]
-        egcount = data["egcount"]
-        escount = data["escount"]
-        # (1) precision / recall
-        set_rc_params(tick_label_size=22, label_size=30)
-        fig, (ax1, ax2) = plt.subplots(
-            2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
-        )
-        ymin = min(min(precision), min(recall))
-        yticks = np.arange(np.round(ymin, 1), 1.1, 0.1)
-        format_plot(ax2, xlabel=r"\rm magnitude cut", ylabel="metric", yticks=yticks)
-        ax2.plot(mags, recall, "-o", label=r"\rm recall")
-        ax2.plot(mags, precision, "-o", label=r"\rm precision")
-        ax2.plot(mags, f1_score, "-o", label=r"\rm f1 score")
-        ax2.legend(loc="lower left", prop={"size": 22})
-        ax2.set_xlim(xlims)
-        ax2.set_ylim(ylims)
-
-        # setup histogram plot up top.
-        c1 = CB_color_cycle[3]
-        c2 = CB_color_cycle[4]
-        ax1.step(mags, tgcount, label="coadd galaxies", where=where_step, color=c1)
-        ax1.step(mags, tscount, label="coadd stars", where=where_step, color=c2)
-        ax1.step(mags, egcount, label="pred. galaxies", ls="--", where=where_step, color=c1)
-        ax1.step(mags, escount, label="pred. stars", ls="--", where=where_step, color=c2)
-        ymax = max(max(tgcount), max(tscount), max(egcount), max(escount))
-        ymax = np.ceil(ymax / n_gap) * n_gap
-        yticks = np.arange(0, ymax, n_gap)
-        ax1.set_ylim((0, ymax))
-        format_plot(ax1, yticks=yticks, ylabel=r"\rm Counts")
-        ax1.legend(loc="best", prop={"size": 16})
-        plt.subplots_adjust(hspace=0)
-
-        return fig
 
     @staticmethod
     def make_classification_figure(
@@ -732,10 +724,10 @@ class DetectionClassificationFigures(BlissFigures):
     def create_metrics_figures(
         self, mag_cuts, mag_bins, cuts_data, bins_data, full_metrics, name=""
     ):
-        f1 = self.make_detection_figure(mag_cuts, cuts_data, "cuts", ylims=(0.5, 1.03))
+        f1 = make_detection_figure(mag_cuts, cuts_data, ylims=(0.5, 1.03))
         f2 = self.make_classification_figure(mag_cuts, cuts_data, "cuts", ylims=(0.8, 1.03))
-        f3 = self.make_detection_figure(
-            mag_bins - 0.5, bins_data, "bins", xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
+        f3 = make_detection_figure(
+            mag_bins - 0.5, bins_data, xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
         )
         f4 = self.make_classification_figure(
             mag_bins - 0.5, bins_data, "bins", xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
@@ -791,8 +783,6 @@ class SDSSReconstructionFigures(BlissFigures):
                 frame.background,
                 h_range=(h, h_end),
                 w_range=(w, w_end),
-                slen=scene_size,
-                device=device,
             )
             resid = (true - recon) / recon.sqrt()
 
@@ -891,11 +881,76 @@ class BlendSimFigures(BlissFigures):
             figdir=figdir, cachedir=cachedir, overwrite=overwrite, img_format=img_format
         )
 
-    def compute_data(self, blend_ds: GalsimBlends, encoder: Encoder, decoder: ImageDecoder):
-        return super().compute_data(*args, **kwargs)
+    def compute_data(self, blend_file: Path, encoder: Encoder, decoder: ImageDecoder):
+        blend_data = torch.load(blend_file)
+        images = blend_data["images"]
+        background = blend_data["background"]
+        # snr = blend_data["snr"]
+        slen = blend_data["slen"].item()
+        n_batches = images.shape[0]
+        assert images.shape == (n_batches, 1, slen, slen)
+        assert background.shape == (1, slen, slen)
+
+        # prepare background
+        background = background.unsqueeze(0)
+        background = background.expand(n_batches, 1, slen, slen)
+
+        # first create FullCatalog from simulated data
+        print("INFO: Preparing full catalog from simulated blended sources.")
+        n_sources = blend_data["n_sources"].reshape(-1)
+        plocs = blend_data["plocs"]
+        fluxes = blend_data["params"][:, :, 0].reshape(n_batches, -1, 1)
+        mags = sdss.convert_flux_to_mag(fluxes)
+        full_catalog_dict = {"n_sources": n_sources, "plocs": plocs, "fluxes": fluxes, "mags": mags}
+        full_truth = FullCatalog(slen, slen, full_catalog_dict)
+
+        print("INFO: BLISS posterior inference on images.")
+
+        batch_size = 128
+        tile_est = None
+        for jj in range(batch_size):
+            images_jj = images[jj * batch_size : (jj + 1) * batch_size]
+            background_jj = background[jj * batch_size : (jj + 1) * batch_size]
+            tile_est_jj = encoder.variational_mode(images_jj, background_jj).cpu()
+
+            if tile_est is None:
+                tile_est = tile_est_jj
+            else:
+                tile_est = tile_est.cat
+        tile_est["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
+            tile_est["galaxy_bools"], tile_est["galaxy_params"]
+        )
+        full_est = tile_est.to_full_params()
+        full_est["mags"] = sdss.convert_flux_to_mag(full_est["fluxes"])
+
+        print("INFO: Computing metrics")
+        mag_cuts2 = np.arange(18, 24.5, 0.25)
+        mag_cuts1 = np.full_like(mag_cuts2, fill_value=-np.inf)
+        mag_cuts = np.column_stack((mag_cuts1, mag_cuts2))
+        metrics = compute_mag_bin_metrics(mag_cuts, full_truth, full_est)
+
+        # for ii in tqdm(range(n_batches), desc="Calculating metrics for each blend"):
+        #     n_sources_i = n_sources[ii]
+        #     snr_i = snr[ii]
+        #     plocs_i = plocs[ii]
+        #     mags_i = mags[ii]
+
+        #     n_sources_est_i = full_est.n_sources[ii]
+        #     plocs_est_i = full_est.plocs[ii]
+        #     mags_est_i = full_est["mags"][ii]
+
+        #     tindx, eindx, dkeep = match_by_locs(plocs_i, plocs_est_i)
+
+        #     mags_i_matched = mags_i[tindx][dkeep]
+        #     mags_est_i_matched = mags_est_i[eindx][dkeep]
+
+        return {"mag_bins": mag_cuts, "detection_metrics": metrics}
 
     def create_figures(self, data):
-        return super().create_figures(data)
+        mags = data["mag_bins"]
+        detection_metrics = data["detection_metrics"]
+        fig = make_detection_figure(mags, detection_metrics, xlims=(18, 24), ylims=(0, 1))
+        return {"blend_detection_metrics": fig}
 
 
 @hydra.main(config_path="./config", config_name="config")
@@ -915,7 +970,7 @@ def main(cfg):  # pylint: disable=too-many-statements
         warnings.warn("Specified cache directory does not exist, will attempt to create it.")
         Path(cachedir).mkdir(exist_ok=True, parents=True)
 
-    if figs.intersection({2, 3}):
+    if figs.intersection({2, 3, 4}):
         # load SDSS frame and models for prediction
         frame: Union[SDSSFrame, SimulatedFrame] = instantiate(cfg.plots.frame)
         photo_cat = sdss.PhotoFullCatalog.from_file(**cfg.plots.photo_catalog)
@@ -962,9 +1017,27 @@ def main(cfg):  # pylint: disable=too-many-statements
         sdss_rec_fig.save_figures(frame, encoder, decoder)
         mpl.rc_file_defaults()
 
-    if not figs.intersection({1, 2, 3}):
+    if 4 in figs:
+        print("INFO: Creating figures for metrics on simulated blended galaxies.")
+        blend_file = Path(cfg.plots.simulated_blended_galaxies)
+
+        # create dataset of blends if not existant.
+        if not blend_file.exists():  # or cfg.plots.overwrite:
+            dataset = instantiate(
+                cfg.datasets.galsim_blended_galaxies, batch_size=512, n_batches=20, num_workers=20
+            )
+            imagepath = blend_file.parent / (blend_file.stem + "_images.png")
+            global_params = ("background", "slen")
+            generate.generate(
+                dataset, blend_file, imagepath, n_plots=25, global_params=global_params
+            )
+
+        blend_fig = BlendSimFigures(**bfig_kwargs)
+        blend_fig.save_figures(blend_file, encoder, decoder)
+
+    if not figs.intersection({1, 2, 3, 4}):
         raise NotImplementedError(
-            "No figures were created, `cfg.plots.figs` should be a subset of [1,2,3]."
+            "No figures were created, `cfg.plots.figs` should be a subset of [1,2,3,4]."
         )
 
 
