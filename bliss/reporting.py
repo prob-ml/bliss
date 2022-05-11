@@ -62,7 +62,7 @@ class DetectionMetrics(Metric):
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true, est):
+    def update(self, true: FullCatalog, est: FullCatalog):
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
         assert isinstance(true, FullCatalog)
         assert isinstance(est, FullCatalog)
