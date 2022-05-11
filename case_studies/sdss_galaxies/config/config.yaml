@@ -71,8 +71,8 @@ datasets:
         num_workers: 0
         batch_size: 64
         n_batches: 10
-        max_shift: 10
-        max_n_sources: 3
+        max_shift: 15
+        max_n_sources: 5
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
@@ -227,6 +227,7 @@ plots:
     image_format: "png"
     overwrite: false
     simulated_sdss_individual_galaxies: ${paths.project}/models/simulated_sdss_individual_galaxies.pt
+    simulated_blended_galaxies: ${paths.project}/models/simulated_blended_galaxies.pt
     sdss_pixel_scale: 0.396
     device: "cuda:0"
     coadd_file: ${paths.sdss}/coadd_catalog_94_1_12.fits
