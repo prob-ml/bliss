@@ -23,6 +23,7 @@ from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
 from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.datasets.galsim_galaxies import GalsimBlends
 
 pl.seed_everything(40)
 
@@ -766,7 +767,9 @@ class SDSSReconstructionFigures(BlissFigures):
         self.scenes = scenes
         super().__init__(figdir, cachedir, overwrite=overwrite, img_format=img_format)
 
-    def compute_data(self, frame: Union[SDSSFrame, SimulatedFrame], encoder: Encoder, decoder):
+    def compute_data(
+        self, frame: Union[SDSSFrame, SimulatedFrame], encoder: Encoder, decoder: ImageDecoder
+    ):
 
         tile_slen = encoder.detection_encoder.tile_slen
         device = encoder.device
@@ -878,6 +881,21 @@ def load_models(cfg, device):
     decoder: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
 
     return encoder, decoder
+
+
+class BlendSimFigures(BlissFigures):
+    cache = "blendsim_cache.pt"
+
+    def __init__(self, figdir, cachedir, overwrite=False, n_examples=5, img_format="png") -> None:
+        super().__init__(
+            figdir=figdir, cachedir=cachedir, overwrite=overwrite, img_format=img_format
+        )
+
+    def compute_data(self, blend_ds: GalsimBlends, encoder: Encoder, decoder: ImageDecoder):
+        return super().compute_data(*args, **kwargs)
+
+    def create_figures(self, data):
+        return super().create_figures(data)
 
 
 @hydra.main(config_path="./config", config_name="config")
