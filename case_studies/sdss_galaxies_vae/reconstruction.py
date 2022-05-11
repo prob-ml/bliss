@@ -98,6 +98,7 @@ def reconstruct(cfg):
         encoder_lower_threshold, decoder, frame.image, frame.background, hlims, wlims
     )
     tile_map_lower_threshold = tile_map_lower_threshold.cpu()
+    detections_at_mode = stats_for_threshold(ground_truth_catalog.plocs, tile_map_recon)
     positive_negative_stats = get_positive_negative_stats(
         ground_truth_catalog, tile_map_lower_threshold, mag_max=cfg.reconstruct.mag_max
     )
@@ -131,7 +132,7 @@ def reconstruct(cfg):
 
         mismatch_dir = outdir / "reconstructions" / "mismatches"
         mismatch_dir.mkdir(exist_ok=True)
-        mismatches_at_map = positive_negative_stats["true_matches"][49] == 0
+        mismatches_at_map = detections_at_mode["true_matches"] == 0
         true_cat = ground_truth_catalog.apply_mag_bin(-np.inf, cfg.reconstruct.mag_max)
         bright_truths = true_cat["mags"][0, :, 0] <= 20.0
 
@@ -185,7 +186,7 @@ def reconstruct(cfg):
         est_tile_matches = positive_negative_stats["est_tile_matches"]
         detection_threshold_fp = est_tile_matches.float().mean(dim=0)
         tile_map_recon["detection_thresholds"] = detection_threshold_fp
-        tile_map_recon["matched"] = est_tile_matches[49]
+        tile_map_recon["matched"] = detections_at_mode["est_tile_matches"]
         full_map_recon_detections = tile_map_recon.to_full_params()
         detection_threshold_fp = full_map_recon_detections["detection_thresholds"]
 
@@ -848,11 +849,13 @@ def get_positive_negative_stats(
 
 
 def stats_for_threshold(
-    true_plocs: Tensor, est_tile_cat: TileCatalog, threshold: float, log_probs: Tensor
+    true_plocs: Tensor, est_tile_cat: TileCatalog, threshold: Optional[float] = None,
 ):
     tile_slen = est_tile_cat.tile_slen
     max_sources = est_tile_cat.max_sources
-    est_tile_cat.n_sources = log_probs >= math.log(threshold)
+    if threshold is not None:
+        log_probs = rearrange(est_tile_cat["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
+        est_tile_cat.n_sources = log_probs >= math.log(threshold)
     est_cat = est_tile_cat.to_full_params()
     number_true = true_plocs.shape[1]
     number_est = int(est_cat.plocs.shape[1])
