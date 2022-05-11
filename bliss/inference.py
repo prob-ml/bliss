@@ -23,8 +23,6 @@ def reconstruct_scene_at_coordinates(
     background: Tensor,
     h_range: Tuple[int, int],
     w_range: Tuple[int, int],
-    slen: int = 300,
-    device=None,
 ) -> Tuple[Tensor, TileCatalog]:
     """Reconstruct all objects contained within a scene, padding as needed.
 
