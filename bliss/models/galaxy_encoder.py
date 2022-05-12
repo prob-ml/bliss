@@ -313,7 +313,10 @@ class GalaxyEncoder(pl.LightningModule):
 
 
 class CenterPaddedTilesTransform(nn.Module):
-    def __init__(self, tile_slen, ptile_slen) -> None:
+    cached_grid: Tensor
+    swap: Tensor
+
+    def __init__(self, tile_slen: int, ptile_slen: int) -> None:
         super().__init__()
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
@@ -321,29 +324,17 @@ class CenterPaddedTilesTransform(nn.Module):
         self.register_buffer("cached_grid", get_mgrid(ptile_slen), persistent=False)
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    def forward(self, image_ptiles: Tensor, tile_locs: Tensor):
+    def forward(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
         n_ptiles, _, _, ptile_slen_img = image_ptiles.shape
-        # assert len(image_ptiles.shape) == 4
         n_ptiles_locs, max_sources, _ = tile_locs.shape
-        # assert len(tile_locs.shape) == 3
         assert max_sources == 1
-        # assert tile_locs.shape[1] == 1
         assert ptile_slen_img == self.ptile_slen
-        # n_ptiles = image_ptiles.shape[0]
         assert n_ptiles_locs == n_ptiles
 
         # get new locs to do the shift
         ptile_locs = (tile_locs * self.tile_slen + self.bp) / self.ptile_slen
-        offsets_hw = 1 - 2 * ptile_locs
+        offsets_hw = torch.tensor(1.0) - 2 * ptile_locs
         offsets_xy = offsets_hw.index_select(2, self.swap)
-        # locs0 = torch.tensor([self.ptile_slen - 1, self.ptile_slen - 1]) / 2
-        # locs0 /= self.ptile_slen - 1
-        # locs0 = locs0.view(1, 1, 2).to(image_ptiles.device)
-        # locs = 2 * locs0 - ptile_locs
-
-        # # center tiles on the corresponding source given by locs.
-        # locs = (locs - 0.5) * 2
-        # locs = locs.index_select(2, self.swap)  # transpose (x,y) coords
         grid_loc = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2) - offsets_xy.view(
             -1, 1, 1, 2
         )
