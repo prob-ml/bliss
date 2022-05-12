@@ -3,7 +3,7 @@ name: case studies
 on:
   schedule:
     # run daily at 3:20 pm
-    - cron: '46 15 * * *'
+    - cron: '47 15 * * *'
 
 jobs:
   build:
