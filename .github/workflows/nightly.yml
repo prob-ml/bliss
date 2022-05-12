@@ -1,4 +1,4 @@
-name: nightly
+name: case studies
 
 on:
   schedule:

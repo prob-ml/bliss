@@ -6,7 +6,7 @@ Bayesian Light Source Separator (BLISS)
 [![](https://img.shields.io/badge/docs-master-blue.svg)](https://prob-ml.github.io/bliss/)
 ![tests](https://github.com/prob-ml/bliss/workflows/tests/badge.svg)
 [![codecov.io](https://codecov.io/gh/prob-ml/bliss/branch/master/graphs/badge.svg?branch=master&token=Jgzv0gn3rA)](http://codecov.io/github/prob-ml/bliss?branch=master)
-![nightly](https://github.com/prob-ml/bliss/actions/workflows/nightly.yml/badge.svg)
+![case studies](https://github.com/prob-ml/bliss/actions/workflows/nightly.yml/badge.svg)
 
 # Introduction
 
