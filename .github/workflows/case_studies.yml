@@ -1,18 +1,19 @@
-name: Nightly check of case studies
+name: case studies
 
 on:
   schedule:
-    - cron: '13 57 * * *'
+    # run daily at 8 am UTC = 4 am EDT
+    - cron: '0 8 * * *'
 
 jobs:
   build:
-    name: 'Nightly check of case studies'
     runs-on: self-hosted
 
     strategy:
       matrix:
         python-version: [3.8]
 
+    steps:
       - name: Checkout github repo (+ download lfs dependencies)
         uses: actions/checkout@v2
         with:
@@ -34,10 +35,6 @@ jobs:
           pip install --upgrade pip
           pip install "poetry-core>=1.0.0"
           pip install "poetry==1.1.11"
-
-      - name: Install fftw3
-        run: |
-          sudo apt-get install libfftw3-dev
 
       - name: Poetry cache
         uses: actions/cache@v2
