@@ -36,10 +36,6 @@ jobs:
           pip install "poetry-core>=1.0.0"
           pip install "poetry==1.1.11"
 
-      - name: Install fftw3
-        run: |
-          sudo apt-get install libfftw3-dev
-
       - name: Poetry cache
         uses: actions/cache@v2
         with:
