@@ -322,12 +322,15 @@ class CenterPaddedTilesTransform(nn.Module):
         self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
     def forward(self, image_ptiles, tile_locs):
-        assert len(image_ptiles.shape) == 4
-        assert len(tile_locs.shape) == 3
-        assert tile_locs.shape[1] == 1
-        assert image_ptiles.shape[-1] == self.ptile_slen
-        n_ptiles = image_ptiles.shape[0]
-        assert tile_locs.shape[0] == n_ptiles
+        n_ptiles, _, _, ptile_slen_img = image_ptiles.shape
+        # assert len(image_ptiles.shape) == 4
+        n_ptiles_locs, max_sources, _ = tile_locs.shape
+        # assert len(tile_locs.shape) == 3
+        assert max_sources == 1
+        # assert tile_locs.shape[1] == 1
+        assert ptile_slen_img == self.ptile_slen
+        # n_ptiles = image_ptiles.shape[0]
+        assert n_ptiles_locs == n_ptiles
 
         # get new locs to do the shift
         ptile_locs = tile_locs * self.tile_slen + self.bp
