@@ -9,8 +9,8 @@ from torch.nn import BCELoss
 from torch.optim import Adam
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.models.decoder import get_mgrid
-from bliss.models.galaxy_encoder import center_ptiles
+
+from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
 from bliss.models.location_encoder import (
     ConcatBackgroundTransform,
     EncoderCNN,
@@ -75,8 +75,7 @@ class BinaryEncoder(pl.LightningModule):
         self.enc_final = make_enc_final(channel * 4 * dim_enc_conv_out**2, hidden, 1, dropout)
 
         # grid for center cropped tiles
-        self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
-        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
+        self.center_ptiles = CenterPaddedTilesTransform(self.tile_slen, self.ptile_slen)
 
     def forward(self, image_ptiles, locs):
         return self.encode(image_ptiles, locs)
@@ -134,14 +133,9 @@ class BinaryEncoder(pl.LightningModule):
         log_image_ptiles = self.input_transform(image_ptiles)
         assert log_image_ptiles.shape[-1] == log_image_ptiles.shape[-2] == self.ptile_slen
         # in each padded tile we need to center the corresponding galaxy/star
-        return center_ptiles(
+        return self.center_ptiles(
             log_image_ptiles,
             tile_locs,
-            self.tile_slen,
-            self.ptile_slen,
-            self.border_padding,
-            self.swap,
-            self.cached_grid,
         )
 
     def configure_optimizers(self):
