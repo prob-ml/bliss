@@ -1,4 +1,4 @@
-name: Nightly check of case studies
+name: nightly
 
 on:
   schedule:
@@ -7,7 +7,6 @@ on:
 
 jobs:
   build:
-    name: 'Nightly check of case studies'
     runs-on: self-hosted
 
     strategy:
