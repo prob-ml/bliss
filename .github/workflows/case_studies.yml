@@ -3,7 +3,7 @@ name: case studies
 on:
   schedule:
     # run daily
-    - cron: '7 * * * *'
+    - cron: '* * * * *'
 
 jobs:
   build:
