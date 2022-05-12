@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '* * * * *'
 
+
 jobs:
   build:
     name: 'Nightly check of case studies'
