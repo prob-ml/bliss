@@ -1,12 +1,12 @@
-name: Nightly check of case studies
+name: case studies
 
 on:
   schedule:
-    - cron: '* * * * *'
+    # run daily at 4:00 pm
+    - cron: '0 16 * * *'
 
 jobs:
   build:
-    name: 'Nightly check of case studies'
     runs-on: self-hosted
 
     strategy:
