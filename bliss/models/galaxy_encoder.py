@@ -299,10 +299,7 @@ class GalaxyEncoder(pl.LightningModule):
     def _get_images_in_centered_tiles(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
         n_bands = image_ptiles.shape[1] // 2
         img, bg = torch.split(image_ptiles, (n_bands, n_bands), dim=1)
-        return self.center_ptiles(
-            img - bg,
-            tile_locs,
-        )
+        return self.center_ptiles(img - bg, tile_locs)
 
     def configure_optimizers(self):
         """Set up optimizers (pytorch-lightning method)."""

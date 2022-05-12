@@ -132,10 +132,7 @@ class BinaryEncoder(pl.LightningModule):
         log_image_ptiles = self.input_transform(image_ptiles)
         assert log_image_ptiles.shape[-1] == log_image_ptiles.shape[-2] == self.ptile_slen
         # in each padded tile we need to center the corresponding galaxy/star
-        return self.center_ptiles(
-            log_image_ptiles,
-            tile_locs,
-        )
+        return self.center_ptiles(log_image_ptiles, tile_locs)
 
     def configure_optimizers(self):
         """Pytorch lightning method."""
