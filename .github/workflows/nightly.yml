@@ -2,7 +2,7 @@ name: Nightly check of case studies
 
 on:
   schedule:
-    - cron: '30 14 * * *'
+    - cron: '34 * * * *'
 
 jobs:
   build:
