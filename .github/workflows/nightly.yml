@@ -2,8 +2,8 @@ name: Nightly check of case studies
 
 on:
   schedule:
-    - cron: '* * * * *'
-
+    # run daily at 3:00 am
+    - cron: '0 3 * * *'
 
 jobs:
   build:
