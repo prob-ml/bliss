@@ -2,8 +2,8 @@ name: case studies
 
 on:
   schedule:
-    # run daily at 4:00 pm
-    - cron: '0 16 * * *'
+    # run daily
+    - cron: '7 * * * *'
 
 jobs:
   build:
