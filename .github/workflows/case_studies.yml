@@ -2,8 +2,8 @@ name: case studies
 
 on:
   schedule:
-    # run daily
-    - cron: '* * * * *'
+    # run daily at 8 am UTC = 4 am EDT
+    - cron: '0 8 * * *'
 
 jobs:
   build:
