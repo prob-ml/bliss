@@ -21,5 +21,8 @@ COPY case_studies ./case_studies/
 COPY tests ./tests/
 COPY data ./data/
 COPY typings ./typings/
+COPY .darglint ./
+COPY .flake8 ./
+COPY .pylintrc ./
 RUN find -name "*.pyc" -exec rm {} \;
 CMD ["bash"]
