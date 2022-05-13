@@ -38,12 +38,14 @@ class CenteredGalaxyEncoder(nn.Module):
             wn(nn.Linear(hidden, latent_dim)),
         )
 
+    def sample(self, image: Tensor, deterministic=True):
+        assert deterministic, "CenteredGalaxyEncoder is deterministic"
+        return self.features(image)
+
     def forward(self, image):
         """Encodes galaxy from image."""
-        return self.features(image), torch.tensor(0.0, device=image.device)
-
-    def variational_mode(self, image):
-        return self.features(image)
+        z = self.sample(image)
+        return z, torch.tensor(0.0, device=image.device)
 
 
 class CenteredGalaxyDecoder(nn.Module):

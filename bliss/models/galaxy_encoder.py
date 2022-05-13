@@ -13,7 +13,7 @@ from torch.optim import Adam
 
 from bliss.catalog import TileCatalog, get_images_in_tiles
 from bliss.models.decoder import ImageDecoder, get_mgrid
-from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.models.galaxy_net import CenteredGalaxyEncoder, OneCenteredGalaxyAE
 from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
 from bliss.models.vae.galaxy_vae import OneCenteredGalaxyVAE
 from bliss.reporting import plot_image, plot_image_and_locs
@@ -73,41 +73,16 @@ class GalaxyEncoder(pl.LightningModule):
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
 
-    def encode(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tuple[Tensor, Tensor]:
-        """Runs galaxy encoder on input image ptiles (with bg substracted)."""
+    def sample(
+        self, image_ptiles: Tensor, tile_locs: Tensor, deterministic: Optional[bool]
+    ) -> Tensor:
         n_samples, n_ptiles, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(image_ptiles, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
         x = rearrange(centered_ptiles, "ns np c h w -> (ns np) c h w")
-        galaxy_params_flat, pq_divergence_flat = self.enc(x)
-        galaxy_params = rearrange(
-            galaxy_params_flat,
-            "(ns np ms) d -> ns np ms d",
-            ns=n_samples,
-            np=n_ptiles,
-            ms=max_sources,
-        )
-        if pq_divergence_flat.shape:
-            pq_divergence = rearrange(
-                pq_divergence_flat,
-                "(ns np ms) -> ns np ms",
-                ns=n_samples,
-                np=n_ptiles,
-                ms=max_sources,
-            )
-        else:
-            pq_divergence = pq_divergence_flat
-        return galaxy_params, pq_divergence
-
-    def sample(self, image_ptiles: Tensor, tile_locs: Tensor):
-        galaxy_params, _ = self.encode(image_ptiles, tile_locs)
-        return galaxy_params
-
-    def variational_mode(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
-        n_samples, n_ptiles, max_sources, _ = tile_locs.shape
-        centered_ptiles = self._get_images_in_centered_tiles(image_ptiles, tile_locs)
-        x = rearrange(centered_ptiles, "ns np h c w -> (ns np) h c w", ns=1)
-        galaxy_params_flat = self.enc.variational_mode(x)
+        if deterministic is None:
+            deterministic = isinstance(self.enc, CenteredGalaxyEncoder)
+        galaxy_params_flat = self.enc.sample(x, deterministic=deterministic)
         return rearrange(
             galaxy_params_flat,
             "(ns np ms) d -> ns np ms d",
@@ -144,7 +119,7 @@ class GalaxyEncoder(pl.LightningModule):
         )
         image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
         locs = rearrange(tile_catalog.locs, "n nth ntw ns hw -> 1 (n nth ntw) ns hw")
-        galaxy_params, pq_divergence = self.encode(image_ptiles, locs)
+        galaxy_params, pq_divergence = self._encode(image_ptiles, locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
         tile_catalog["galaxy_params"] = rearrange(
@@ -170,6 +145,32 @@ class GalaxyEncoder(pl.LightningModule):
         galaxy_bools = rearrange(tile_catalog["galaxy_bools"], "n nth ntw ms 1 -> 1 (n nth ntw) ms")
         divergence_loss = (pq_divergence * galaxy_bools).sum()
         return recon_losses.sum() - divergence_loss
+
+    def _encode(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tuple[Tensor, Tensor]:
+        """Runs galaxy encoder on input image ptiles (with bg substracted)."""
+        n_samples, n_ptiles, max_sources, _ = tile_locs.shape
+        centered_ptiles = self._get_images_in_centered_tiles(image_ptiles, tile_locs)
+        assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
+        x = rearrange(centered_ptiles, "ns np c h w -> (ns np) c h w")
+        galaxy_params_flat, pq_divergence_flat = self.enc(x)
+        galaxy_params = rearrange(
+            galaxy_params_flat,
+            "(ns np ms) d -> ns np ms d",
+            ns=n_samples,
+            np=n_ptiles,
+            ms=max_sources,
+        )
+        if pq_divergence_flat.shape:
+            pq_divergence = rearrange(
+                pq_divergence_flat,
+                "(ns np ms) -> ns np ms",
+                ns=n_samples,
+                np=n_ptiles,
+                ms=max_sources,
+            )
+        else:
+            pq_divergence = pq_divergence_flat
+        return galaxy_params, pq_divergence
 
     def validation_epoch_end(self, outputs):
         """Pytorch lightning method run at end of validation epoch."""
@@ -214,7 +215,7 @@ class GalaxyEncoder(pl.LightningModule):
         _, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
         image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
         locs = rearrange(tile_locs, "n nth ntw ns hw -> 1 (n nth ntw) ns hw")
-        z, _ = self.encode(image_ptiles, locs)
+        z, _ = self._encode(image_ptiles, locs)
         galaxy_params = rearrange(
             z,
             "ns (n nth ntw) ms d -> (ns n) nth ntw ms d",

@@ -164,9 +164,11 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            if n_samples is None:
-                galaxy_params = self.galaxy_encoder.variational_mode(image_ptiles, locs)
-            else:
+            deterministic = n_samples is None
+            galaxy_params = self.galaxy_encoder.sample(
+                image_ptiles, locs, deterministic=deterministic
+            )
+            if not deterministic:
                 raise NotImplementedError()
             galaxy_params *= is_on_array.unsqueeze(-1) * galaxy_bools
             tile_samples.update({"galaxy_params": galaxy_params})
