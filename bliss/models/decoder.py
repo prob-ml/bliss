@@ -95,7 +95,7 @@ class ImageDecoder(pl.LightningModule):
             The **full** image in shape (batch_size x n_bands x slen x slen).
         """
         image_ptiles = self._render_ptiles(tile_catalog)
-        return reconstruct_image_from_ptiles(image_ptiles, self.tile_slen, self.border_padding)
+        return self._reconstruct_image_from_ptiles(image_ptiles)
 
     def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
         assert self.galaxy_tile_decoder is not None
@@ -185,50 +185,43 @@ class ImageDecoder(pl.LightningModule):
         assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
         return int(border_padding)
 
+    def _reconstruct_image_from_ptiles(self, image_ptiles: Tensor) -> Tensor:
+        """Reconstruct an image from a tensor of padded tiles.
 
-def reconstruct_image_from_ptiles(
-    image_ptiles: Tensor, tile_slen: int, border_padding: int
-) -> Tensor:
-    """Reconstruct an image from a tensor of padded tiles.
+        Given a tensor of padded tiles and the size of the original tiles, this function
+        combines them into a full image with overlap.
 
-    Given a tensor of padded tiles and the size of the original tiles, this function
-    combines them into a full image with overlap.
+        For now, the reconstructed image is assumed to be square. However, this function
+        can easily be refactored to allow for different numbers of horizontal or vertical
+        tiles.
 
-    For now, the reconstructed image is assumed to be square. However, this function
-    can easily be refactored to allow for different numbers of horizontal or vertical
-    tiles.
+        Args:
+            image_ptiles: Tensor of size
+                (batch_size x n_tiles_h x n_tiles_w x n_bands x ptile_slen x ptile_slen)
 
-    Args:
-        image_ptiles: Tensor of size
-            (batch_size x n_tiles_h x n_tiles_w x n_bands x ptile_slen x ptile_slen)
-        tile_slen:
-            Size of the original (non-overlapping) tiles.
-        border_padding:
-            Amount of border padding to keep beyond the original tiles.
+        Returns:
+            Reconstructed image of size (batch_size x n_bands x height x width)
+        """
+        _, n_tiles_h, n_tiles_w, _, ptile_slen, _ = image_ptiles.shape
+        image_ptiles_prefold = rearrange(image_ptiles, "b nth ntw c h w -> b (c h w) (nth ntw)")
+        kernel_size = (ptile_slen, ptile_slen)
+        stride = (self.tile_slen, self.tile_slen)
+        n_tiles_hw = (n_tiles_h, n_tiles_w)
 
-    Returns:
-        Reconstructed image of size (batch_size x n_bands x height x width)
-    """
-    _, n_tiles_h, n_tiles_w, _, ptile_slen, _ = image_ptiles.shape
-    image_ptiles_prefold = rearrange(image_ptiles, "b nth ntw c h w -> b (c h w) (nth ntw)")
-    kernel_size = (ptile_slen, ptile_slen)
-    stride = (tile_slen, tile_slen)
-    n_tiles_hw = (n_tiles_h, n_tiles_w)
+        output_size_list = []
+        for i in (0, 1):
+            output_size_list.append(kernel_size[i] + (n_tiles_hw[i] - 1) * stride[i])
+        output_size = tuple(output_size_list)
 
-    output_size_list = []
-    for i in (0, 1):
-        output_size_list.append(kernel_size[i] + (n_tiles_hw[i] - 1) * stride[i])
-    output_size = tuple(output_size_list)
+        folded_image = F.fold(image_ptiles_prefold, output_size, kernel_size, stride=stride)
 
-    folded_image = F.fold(image_ptiles_prefold, output_size, kernel_size, stride=stride)
-
-    # In default settings of ImageDecoder, no borders are cropped from
-    # output image. However, we may want to crop
-    max_padding = (ptile_slen - tile_slen) / 2
-    assert max_padding % 1 == 0
-    max_padding = int(max_padding)
-    crop_idx = max_padding - border_padding
-    return folded_image[:, :, crop_idx : (-crop_idx or None), crop_idx : (-crop_idx or None)]
+        # In default settings of ImageDecoder, no borders are cropped from
+        # output image. However, we may want to crop
+        max_padding = (ptile_slen - self.tile_slen) / 2
+        assert max_padding % 1 == 0
+        max_padding = int(max_padding)
+        crop_idx = max_padding - self.border_padding
+        return folded_image[:, :, crop_idx : (-crop_idx or None), crop_idx : (-crop_idx or None)]
 
 
 class Tiler(nn.Module):
