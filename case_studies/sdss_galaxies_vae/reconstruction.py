@@ -878,7 +878,7 @@ def stats_for_threshold(
     number_true = true_plocs.shape[1]
     number_est = int(est_cat.plocs.shape[1])
     true_matches = torch.zeros(true_plocs.shape[1], dtype=torch.bool)
-    est_tile_matches = torch.zeros(est_tile_cat.n_sources.shape, dtype=torch.bool)
+    est_tile_matches = torch.zeros(*est_tile_cat.n_sources.shape, 1, 1, dtype=torch.bool)
     if number_true == 0 or number_est == 0:
         return {
             "tp": torch.tensor(0.0),
