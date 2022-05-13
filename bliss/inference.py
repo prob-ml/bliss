@@ -76,7 +76,7 @@ def reconstruct_scene_at_coordinates(
         tile_map_scene["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
             tile_map_scene["galaxy_bools"], tile_map_scene["galaxy_params"]
         )
-        recon = render_scene(decoder, tile_map_scene)
+        recon = decoder.render_large_scene(tile_map_scene)
     assert recon.shape == scene.shape
     recon += bg_scene
     # Get reconstruction at coordinates
@@ -87,28 +87,6 @@ def reconstruct_scene_at_coordinates(
         bp:-bp,
     ]
     return recon_at_coords, tile_map_scene
-
-
-def render_scene(
-    decoder: ImageDecoder, tile_map_scene: TileCatalog, batch_size: int = None
-) -> Tensor:
-    with torch.no_grad():
-        if batch_size is None:
-            batch_size = 75**2 + 500 * 2
-
-        _, n_tiles_h, n_tiles_w, _, _ = tile_map_scene.locs.shape
-        n_rows_per_batch = batch_size // n_tiles_w
-        h = tile_map_scene.locs.shape[1] * tile_map_scene.tile_slen + 2 * decoder.border_padding
-        w = tile_map_scene.locs.shape[2] * tile_map_scene.tile_slen + 2 * decoder.border_padding
-        scene = torch.zeros(1, 1, h, w)
-        for row in range(0, n_tiles_h, n_rows_per_batch):
-            end_row = row + n_rows_per_batch
-            start_h = row * tile_map_scene.tile_slen
-            end_h = end_row * tile_map_scene.tile_slen + 2 * decoder.border_padding
-            tile_map_row = tile_map_scene.crop((row, end_row), (0, None))
-            img_row = decoder.render_images(tile_map_row)
-            scene[:, :, start_h:end_h] += img_row.cpu()
-        return scene
 
 
 class SDSSFrame:

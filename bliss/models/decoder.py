@@ -97,6 +97,26 @@ class ImageDecoder(pl.LightningModule):
         image_ptiles = self._render_ptiles(tile_catalog)
         return self._reconstruct_image_from_ptiles(image_ptiles)
 
+    def render_large_scene(
+        self, tile_catalog: TileCatalog, batch_size: Optional[int] = None
+    ) -> Tensor:
+        if batch_size is None:
+            batch_size = 75**2 + 500 * 2
+
+        _, n_tiles_h, n_tiles_w, _, _ = tile_catalog.locs.shape
+        n_rows_per_batch = batch_size // n_tiles_w
+        h = tile_catalog.locs.shape[1] * tile_catalog.tile_slen + 2 * self.border_padding
+        w = tile_catalog.locs.shape[2] * tile_catalog.tile_slen + 2 * self.border_padding
+        scene = torch.zeros(1, 1, h, w)
+        for row in range(0, n_tiles_h, n_rows_per_batch):
+            end_row = row + n_rows_per_batch
+            start_h = row * tile_catalog.tile_slen
+            end_h = end_row * tile_catalog.tile_slen + 2 * self.border_padding
+            tile_cat_row = tile_catalog.crop((row, end_row), (0, None))
+            img_row = self.render_images(tile_cat_row)
+            scene[:, :, start_h:end_h] += img_row.cpu()
+        return scene
+
     def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
         assert self.galaxy_tile_decoder is not None
         galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
