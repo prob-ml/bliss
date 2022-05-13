@@ -13,11 +13,13 @@ RUN python -m pip install poetry
 ENV BLISS_HOME=/workspaces/bliss
 WORKDIR /workspaces/bliss
 COPY pyproject.toml poetry.lock ./
+RUN mkdir ./bliss && touch ./bliss/__init__.py
+RUN mkdir ./case_studies && touch ./case_studies/__init__.py
+RUN poetry install --no-interaction --ansi
 COPY bliss ./bliss/
 COPY case_studies ./case_studies/
 COPY tests ./tests/
 COPY data ./data/
 COPY typings ./typings/
 RUN find -name "*.pyc" -exec rm {} \;
-RUN poetry install --no-interaction --ansi
 CMD ["bash"]
