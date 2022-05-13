@@ -75,20 +75,25 @@ class GalaxyEncoder(pl.LightningModule):
 
     def encode(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tuple[Tensor, Tensor]:
         """Runs galaxy encoder on input image ptiles (with bg substracted)."""
-        max_sources = tile_locs.shape[1]
+        n_samples, n_ptiles, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(image_ptiles, tile_locs)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.slen
-        galaxy_params_flat, pq_divergence_flat = self.enc(centered_ptiles)
+        x = rearrange(centered_ptiles, "ns np c h w -> (ns np) c h w")
+        galaxy_params_flat, pq_divergence_flat = self.enc(x)
         galaxy_params = rearrange(
             galaxy_params_flat,
-            "(n_ptiles ns) d -> n_ptiles ns d",
-            ns=max_sources,
+            "(ns np ms) d -> ns np ms d",
+            ns=n_samples,
+            np=n_ptiles,
+            ms=max_sources,
         )
         if pq_divergence_flat.shape:
             pq_divergence = rearrange(
                 pq_divergence_flat,
-                "(n_ptiles s) -> n_ptiles s",
-                s=max_sources,
+                "(ns np ms) -> ns np ms",
+                ns=n_samples,
+                np=n_ptiles,
+                ms=max_sources,
             )
         else:
             pq_divergence = pq_divergence_flat
@@ -101,7 +106,7 @@ class GalaxyEncoder(pl.LightningModule):
     def variational_mode(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
         n_samples, n_ptiles, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(image_ptiles, tile_locs)
-        x = rearrange(centered_ptiles, "ns np h c w -> (ns np) h c w")
+        x = rearrange(centered_ptiles, "ns np h c w -> (ns np) h c w", ns=1)
         galaxy_params_flat = self.enc.variational_mode(x)
         return rearrange(
             galaxy_params_flat,
@@ -138,30 +143,31 @@ class GalaxyEncoder(pl.LightningModule):
             self.ptile_slen,
         )
         image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-        locs = rearrange(tile_catalog.locs, "n nth ntw ns hw -> (n nth ntw) ns hw")
+        locs = rearrange(tile_catalog.locs, "n nth ntw ns hw -> 1 (n nth ntw) ns hw")
         galaxy_params, pq_divergence = self.encode(image_ptiles, locs)
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
         tile_catalog["galaxy_params"] = rearrange(
             galaxy_params,
-            "(n nth ntw) ns d -> n nth ntw ns d",
+            "ns (n nth ntw) ms d -> (ns n) nth ntw ms d",
             nth=tile_catalog.n_tiles_h,
             ntw=tile_catalog.n_tiles_w,
         )
         recon_mean = self.image_decoder.render_images(tile_catalog)
-        recon_mean += background
+        recon_mean = rearrange(recon_mean, "(ns n) c h w -> ns n c h w", ns=1)
+        recon_mean += background.unsqueeze(0)
 
         assert not torch.any(torch.isnan(recon_mean))
         assert not torch.any(torch.isinf(recon_mean))
-        recon_losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
+        recon_losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images.unsqueeze(0))
         if self.crop_loss_at_border:
             bp = self.border_padding * 2
-            recon_losses = recon_losses[:, :, bp:(-bp), bp:(-bp)]
+            recon_losses = recon_losses[:, :, :, bp:(-bp), bp:(-bp)]
         assert not torch.any(torch.isnan(recon_losses))
         assert not torch.any(torch.isinf(recon_losses))
 
         # For divergence loss, we only evaluate tiles with a galaxy in them
-        galaxy_bools = rearrange(tile_catalog["galaxy_bools"], "n nth ntw ns 1 -> (n nth ntw) ns")
+        galaxy_bools = rearrange(tile_catalog["galaxy_bools"], "n nth ntw ms 1 -> 1 (n nth ntw) ms")
         divergence_loss = (pq_divergence * galaxy_bools).sum()
         return recon_losses.sum() - divergence_loss
 
@@ -207,8 +213,15 @@ class GalaxyEncoder(pl.LightningModule):
         )
         _, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
         image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-        locs = rearrange(tile_locs, "n nth ntw ns hw -> (n nth ntw) ns hw")
+        locs = rearrange(tile_locs, "n nth ntw ns hw -> 1 (n nth ntw) ns hw")
         z, _ = self.encode(image_ptiles, locs)
+        galaxy_params = rearrange(
+            z,
+            "ns (n nth ntw) ms d -> (ns n) nth ntw ms d",
+            ns=1,
+            nth=n_tiles_h,
+            ntw=n_tiles_w,
+        )
 
         tile_est = TileCatalog(
             self.tile_slen,
@@ -219,9 +232,7 @@ class GalaxyEncoder(pl.LightningModule):
                 "star_bools": batch["star_bools"],
                 "fluxes": batch["fluxes"],
                 "log_fluxes": batch["log_fluxes"],
-                "galaxy_params": rearrange(
-                    z, "(n nth ntw) ns d -> n nth ntw ns d", nth=n_tiles_h, ntw=n_tiles_w
-                ),
+                "galaxy_params": galaxy_params,
             },
         )
         est = tile_est.to_full_params()

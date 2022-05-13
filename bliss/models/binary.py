@@ -100,7 +100,7 @@ class BinaryEncoder(pl.LightningModule):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
 
         galaxy_bools = batch["galaxy_bools"].reshape(-1)
-        locs = rearrange(batch["locs"], "n nth ntw ns hw -> (n nth ntw) 1 ns hw")
+        locs = rearrange(batch["locs"], "n nth ntw ms hw -> 1 (n nth ntw) ms hw")
         image_ptiles = get_images_in_tiles(
             torch.cat((batch["images"], batch["background"]), dim=1),
             self.tile_slen,
