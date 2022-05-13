@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
-from torch import Tensor
+from torch import Tensor, nn
 from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.optim import Adam
@@ -63,8 +63,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.latent_dim = autoencoder.latent_dim
 
         # grid for center cropped tiles
-        self.register_buffer("cached_grid", get_mgrid(self.ptile_slen), persistent=False)
-        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
+        self.center_ptiles = CenterPaddedTilesTransform(self.tile_slen, self.ptile_slen)
 
         # consistency
         assert self.slen >= 20, "Cropped slen is not reasonable for average sized galaxies."
@@ -300,15 +299,7 @@ class GalaxyEncoder(pl.LightningModule):
     def _get_images_in_centered_tiles(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
         n_bands = image_ptiles.shape[1] // 2
         img, bg = torch.split(image_ptiles, (n_bands, n_bands), dim=1)
-        return center_ptiles(
-            img - bg,
-            tile_locs,
-            self.tile_slen,
-            self.ptile_slen,
-            self.border_padding,
-            self.swap,
-            self.cached_grid,
-        )
+        return self.center_ptiles(img - bg, tile_locs)
 
     def configure_optimizers(self):
         """Set up optimizers (pytorch-lightning method)."""
@@ -318,36 +309,38 @@ class GalaxyEncoder(pl.LightningModule):
         raise NotImplementedError("Please use encode()")
 
 
-def center_ptiles(
-    image_ptiles, tile_locs, tile_slen, ptile_slen, border_padding, swap, cached_grid
-):
-    # assume there is at most one source per tile
-    # return a centered version of sources in tiles using their true locations in tiles.
-    # also we crop them to avoid sharp borders with no bacgkround/noise.
+class CenterPaddedTilesTransform(nn.Module):
+    cached_grid: Tensor
+    swap: Tensor
 
-    # round up necessary variables and paramters
-    assert len(image_ptiles.shape) == 4
-    assert len(tile_locs.shape) == 3
-    assert tile_locs.shape[1] == 1
-    assert image_ptiles.shape[-1] == ptile_slen
-    n_ptiles = image_ptiles.shape[0]
-    assert tile_locs.shape[0] == n_ptiles
+    def __init__(self, tile_slen: int, ptile_slen: int) -> None:
+        super().__init__()
+        self.tile_slen = tile_slen
+        self.ptile_slen = ptile_slen
+        self.bp = (self.ptile_slen - self.tile_slen) // 2
+        self.register_buffer("cached_grid", get_mgrid(ptile_slen), persistent=False)
+        self.register_buffer("swap", torch.tensor([1, 0]), persistent=False)
 
-    # get new locs to do the shift
-    ptile_locs = tile_locs * tile_slen + border_padding
-    ptile_locs /= ptile_slen
-    locs0 = torch.tensor([ptile_slen - 1, ptile_slen - 1]) / 2
-    locs0 /= ptile_slen - 1
-    locs0 = locs0.view(1, 1, 2).to(image_ptiles.device)
-    locs = 2 * locs0 - ptile_locs
+    def forward(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
+        n_ptiles, _, _, ptile_slen_img = image_ptiles.shape
+        n_ptiles_locs, max_sources, _ = tile_locs.shape
+        assert max_sources == 1
+        assert ptile_slen_img == self.ptile_slen
+        assert n_ptiles_locs == n_ptiles
 
-    # center tiles on the corresponding source given by locs.
-    locs = (locs - 0.5) * 2
-    locs = locs.index_select(2, swap)  # transpose (x,y) coords
-    grid_loc = cached_grid.view(1, ptile_slen, ptile_slen, 2) - locs.view(-1, 1, 1, 2)
-    shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
+        # get new locs to do the shift
+        ptile_locs = (tile_locs * self.tile_slen + self.bp) / self.ptile_slen
+        offsets_hw = torch.tensor(1.0) - 2 * ptile_locs
+        offsets_xy = offsets_hw.index_select(2, self.swap)
+        grid_loc = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2) - offsets_xy.view(
+            -1, 1, 1, 2
+        )
+        shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
 
-    # now that everything is center we can crop easily
-    return shifted_tiles[
-        :, :, tile_slen : (ptile_slen - tile_slen), tile_slen : (ptile_slen - tile_slen)
-    ]
+        # now that everything is center we can crop easily
+        return shifted_tiles[
+            :,
+            :,
+            self.tile_slen : (self.ptile_slen - self.tile_slen),
+            self.tile_slen : (self.ptile_slen - self.tile_slen),
+        ]
