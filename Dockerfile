@@ -10,15 +10,14 @@ RUN apt install -y \
     curl \
     vim
 RUN python -m pip install poetry
+ENV BLISS_HOME=/workspaces/bliss
 WORKDIR /workspaces/bliss
 COPY pyproject.toml poetry.lock ./
 COPY bliss ./bliss/
 COPY case_studies ./case_studies/
 COPY tests ./tests/
-RUN poetry install --no-interaction --ansi
-USER root
-RUN find | grep .pyc$ | xargs rm
 COPY data ./data/
 COPY typings ./typings/
-ENV BLISS_HOME=/workspaces/bliss
+RUN find -name "*.pyc" -exec rm {} \;
+RUN poetry install --no-interaction --ansi
 CMD ["bash"]
