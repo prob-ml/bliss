@@ -99,10 +99,17 @@ class GalaxyEncoder(pl.LightningModule):
         return galaxy_params
 
     def variational_mode(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
-        max_sources = tile_locs.shape[1]
+        n_samples, n_ptiles, max_sources, _ = tile_locs.shape
         centered_ptiles = self._get_images_in_centered_tiles(image_ptiles, tile_locs)
-        galaxy_params_flat = self.enc.variational_mode(centered_ptiles)
-        return rearrange(galaxy_params_flat, "(n_ptiles ns) d -> n_ptiles ns d", ns=max_sources)
+        x = rearrange(centered_ptiles, "ns np h c w -> (ns np) h c w")
+        galaxy_params_flat = self.enc.variational_mode(x)
+        return rearrange(
+            galaxy_params_flat,
+            "(ns np ms) d -> ns np ms d",
+            ns=n_samples,
+            np=n_ptiles,
+            ms=max_sources,
+        )
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
@@ -323,7 +330,7 @@ class CenterPaddedTilesTransform(nn.Module):
 
     def forward(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
         n_ptiles, _, _, ptile_slen_img = image_ptiles.shape
-        n_ptiles_locs, max_sources, _ = tile_locs.shape
+        n_samples, n_ptiles_locs, max_sources, _ = tile_locs.shape
         assert max_sources == 1
         assert ptile_slen_img == self.ptile_slen
         assert n_ptiles_locs == n_ptiles
@@ -331,16 +338,17 @@ class CenterPaddedTilesTransform(nn.Module):
         # get new locs to do the shift
         ptile_locs = (tile_locs * self.tile_slen + self.bp) / self.ptile_slen
         offsets_hw = torch.tensor(1.0) - 2 * ptile_locs
-        offsets_xy = offsets_hw.index_select(2, self.swap)
+        offsets_xy = offsets_hw.index_select(dim=-1, index=self.swap)
         grid_loc = self.cached_grid.view(1, self.ptile_slen, self.ptile_slen, 2) - offsets_xy.view(
             -1, 1, 1, 2
         )
         shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
 
         # now that everything is center we can crop easily
-        return shifted_tiles[
+        shifted_tiles = shifted_tiles[
             :,
             :,
             self.tile_slen : (self.ptile_slen - self.tile_slen),
             self.tile_slen : (self.ptile_slen - self.tile_slen),
         ]
+        return rearrange(shifted_tiles, "(ns np) c h w -> ns np c h w", ns=n_samples, np=n_ptiles)

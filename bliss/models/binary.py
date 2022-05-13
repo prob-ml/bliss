@@ -81,20 +81,26 @@ class BinaryEncoder(pl.LightningModule):
 
     def encode(self, image_ptiles: Tensor, locs: Tensor) -> Tensor:
         """Runs the binary encoder on centered_ptiles."""
+        n_samples, n_ptiles, max_sources, _ = locs.shape
+        assert max_sources == self.max_sources
+
         centered_tiles = self._get_images_in_centered_tiles(image_ptiles, locs)
         assert centered_tiles.shape[-1] == centered_tiles.shape[-2] == self.slen
 
         # forward to layer shared by all n_sources
-        h = self.enc_conv(centered_tiles)
+        x = rearrange(centered_tiles, "ns np h c w -> (ns np) h c w")
+        h = self.enc_conv(x)
         h2 = self.enc_final(h)
         galaxy_probs = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
-        return rearrange(galaxy_probs, "(npt ns) 1 -> npt ns 1", ns=self.max_sources)
+        return rearrange(
+            galaxy_probs, "(ns npt ms) 1 -> ns npt ms 1", ns=n_samples, npt=n_ptiles, ms=max_sources
+        )
 
     def get_prediction(self, batch: Dict[str, Tensor]):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
 
         galaxy_bools = batch["galaxy_bools"].reshape(-1)
-        locs = rearrange(batch["locs"], "n nth ntw ns hw -> (n nth ntw) ns hw")
+        locs = rearrange(batch["locs"], "n nth ntw ns hw -> (n nth ntw) 1 ns hw")
         image_ptiles = get_images_in_tiles(
             torch.cat((batch["images"], batch["background"]), dim=1),
             self.tile_slen,

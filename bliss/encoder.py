@@ -74,9 +74,6 @@ class Encoder(nn.Module):
     def forward(self, x):
         raise NotImplementedError("Unavailable. Use .variational_mode() or .sample() instead.")
 
-    def sample(self, image_ptiles, n_samples):
-        raise NotImplementedError("Sampling from Encoder not yet available.")
-
     def variational_mode(self, image: Tensor, background: Tensor) -> TileCatalog:
         """Get maximum a posteriori of catalog from image padded tiles.
 
@@ -100,6 +97,19 @@ class Encoder(nn.Module):
                 - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
                 - 'galaxy_params' from GalaxyEncoder.
         """
+        tile_map_dict = self.sample(image, background, None)
+        n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.location_encoder.tile_slen
+        n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.location_encoder.tile_slen
+        return TileCatalog.from_flat_dict(
+            self.location_encoder.tile_slen,
+            n_tiles_h,
+            n_tiles_w,
+            {k: v.squeeze(0) for k, v in tile_map_dict.items()},
+        )
+
+    def sample(
+        self, image: Tensor, background: Tensor, n_samples: Optional[int]
+    ) -> Dict[str, Tensor]:
         n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.location_encoder.tile_slen
         n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.location_encoder.tile_slen
         ptile_loader = self._make_ptile_loader(image, background, n_tiles_h, n_tiles_w)
@@ -107,12 +117,9 @@ class Encoder(nn.Module):
         with torch.no_grad():
             for ptiles in tqdm(ptile_loader, desc="Encoding ptiles"):
                 assert isinstance(ptiles, Tensor)
-                out_ptiles = self._encode_ptiles(ptiles)
+                out_ptiles = self._encode_ptiles(ptiles, n_samples)
                 tile_map_list.append(out_ptiles)
-        tile_map_dict = self._collate(tile_map_list)
-        return TileCatalog.from_flat_dict(
-            self.location_encoder.tile_slen, n_tiles_h, n_tiles_w, tile_map_dict
-        )
+        return self._collate(tile_map_list)
 
     def _make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int, n_tiles_w: int):
         img_bg = torch.cat((image, background), dim=1).to(self.device)
@@ -128,24 +135,27 @@ class Encoder(nn.Module):
             image_ptiles = image_ptiles.view(-1, *image_ptiles.shape[-3:])
             yield image_ptiles
 
-    def _encode_ptiles(self, image_ptiles: Tensor):
+    def _encode_ptiles(self, image_ptiles: Tensor, n_samples: Optional[int]):
         assert isinstance(self.map_n_source_weights, Tensor)
         dist_params = self.location_encoder.encode(image_ptiles)
-        tile_map_dict = self.location_encoder.variational_mode(
-            dist_params, n_source_weights=self.map_n_source_weights
+        tile_samples = self.location_encoder.sample(
+            dist_params, n_samples, n_source_weights=self.map_n_source_weights
         )
         n_source_log_probs = dist_params["n_source_log_probs"][:, 1:]
-        tile_map_dict["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1)
-        locs = tile_map_dict["locs"]
-        n_sources = tile_map_dict["n_sources"]
+        tile_samples["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1).unsqueeze(0)
+        locs = tile_samples["locs"]
+        n_sources = tile_samples["n_sources"]
         is_on_array = get_is_on_from_n_sources(n_sources, self.location_encoder.max_detections)
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
             galaxy_probs = self.binary_encoder.forward(image_ptiles, locs)
             galaxy_probs *= is_on_array.unsqueeze(-1)
-            galaxy_bools = (galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
+            if n_samples is None:
+                galaxy_bools = (galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
+            else:
+                raise NotImplementedError()
             star_bools = get_star_bools(n_sources, galaxy_bools)
-            tile_map_dict.update(
+            tile_samples.update(
                 {
                     "galaxy_bools": galaxy_bools,
                     "star_bools": star_bools,
@@ -154,17 +164,20 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            galaxy_params = self.galaxy_encoder.variational_mode(image_ptiles, locs)
+            if n_samples is None:
+                galaxy_params = self.galaxy_encoder.variational_mode(image_ptiles, locs)
+            else:
+                raise NotImplementedError()
             galaxy_params *= is_on_array.unsqueeze(-1) * galaxy_bools
-            tile_map_dict.update({"galaxy_params": galaxy_params})
+            tile_samples.update({"galaxy_params": galaxy_params})
 
-        return tile_map_dict
+        return tile_samples
 
     @staticmethod
     def _collate(tile_map_list: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
         out: Dict[str, Tensor] = {}
         for k in tile_map_list[0]:
-            out[k] = torch.cat([d[k] for d in tile_map_list], dim=0)
+            out[k] = torch.cat([d[k] for d in tile_map_list], dim=1)
         return out
 
     def get_images_in_ptiles(self, images):
