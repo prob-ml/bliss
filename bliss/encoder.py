@@ -137,6 +137,7 @@ class Encoder(nn.Module):
 
     def _encode_ptiles(self, image_ptiles: Tensor, n_samples: Optional[int]):
         assert isinstance(self.map_n_source_weights, Tensor)
+        deterministic = n_samples is None
         dist_params = self.location_encoder.encode(image_ptiles)
         tile_samples = self.location_encoder.sample(
             dist_params, n_samples, n_source_weights=self.map_n_source_weights
@@ -150,7 +151,7 @@ class Encoder(nn.Module):
             assert not self.binary_encoder.training
             galaxy_probs = self.binary_encoder.forward(image_ptiles, locs)
             galaxy_probs *= is_on_array.unsqueeze(-1)
-            if n_samples is None:
+            if deterministic:
                 galaxy_bools = (galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
             else:
                 raise NotImplementedError()
@@ -164,7 +165,6 @@ class Encoder(nn.Module):
             )
 
         if self.galaxy_encoder is not None:
-            deterministic = n_samples is None
             galaxy_params = self.galaxy_encoder.sample(
                 image_ptiles, locs, deterministic=deterministic
             )
