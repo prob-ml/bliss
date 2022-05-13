@@ -1,4 +1,5 @@
 # pylint: skip-file
+import math
 from collections import defaultdict
 from pathlib import Path
 from typing import DefaultDict, Dict, Optional, Tuple, Union
@@ -138,26 +139,7 @@ def reconstruct(cfg):
         if "photo" in scene_metrics_by_mag:
             tex_dir = outdir / "tex"
             tex_dir.mkdir(parents=True, exist_ok=True)
-
-            detection_tex_file = tex_dir / "detections.tex"
-            with detection_tex_file.open("w") as fp:
-                for i in range(0, len(scene_metrics_by_mag["bliss"])):
-                    mag = scene_metrics_by_mag["bliss"].index.values[i]
-                    if mag == "overall":
-                        magstr = "Overall"
-                    else:
-                        magstr = f"{int(mag) - 1} - {int(mag)}"
-                    tcount = str(int(scene_metrics_by_mag["bliss"].iloc[i]["tcount"]))
-                    bliss_tp = int(scene_metrics_by_mag["bliss"].iloc[i]["tp"])
-                    bliss_fp = int(scene_metrics_by_mag["bliss"].iloc[i]["fp"])
-                    photo_tp = int(scene_metrics_by_mag["photo"].iloc[i]["tp"])
-                    photo_fp = int(scene_metrics_by_mag["photo"].iloc[i]["fp"])
-                    # if bliss_tp > photo_tp:
-                    #     bliss_tp = bold(bliss_tp)
-                    # elif photo_tp < bliss_tp:
-                    #     photo_tp = bold(photo_tp)
-                    line = f"{magstr} & {tcount} & {bliss_tp} & {bliss_fp} & {photo_tp} & {photo_fp} \\\\"
-                    fp.write(line + "\n")
+            write_bliss_photo_tex_file(tex_dir, scene_metrics_by_mag)
 
         scene_dir = outdir / "reconstructions" / "scenes"
         scene_dir.mkdir(parents=True, exist_ok=True)
@@ -391,8 +373,26 @@ def calc_scene_metrics_by_mag(
     return pd.DataFrame(d)
 
 
+def write_bliss_photo_tex_file(tex_dir: Path, scene_metrics_by_mag: Dict[str, pd.DataFrame]):
+    detection_tex_file = tex_dir / "detections.tex"
+    with detection_tex_file.open("w") as fp:
+        for i, _ in enumerate(scene_metrics_by_mag["bliss"]):
+            mag = scene_metrics_by_mag["bliss"].index.values[i]
+            if mag == "overall":
+                magstr = "Overall"
+            else:
+                magstr = f"{int(mag) - 1} - {int(mag)}"
+            tcount = str(int(scene_metrics_by_mag["bliss"].iloc[i]["tcount"]))
+            bliss_tp = int(scene_metrics_by_mag["bliss"].iloc[i]["tp"])
+            bliss_fp = int(scene_metrics_by_mag["bliss"].iloc[i]["fp"])
+            photo_tp = int(scene_metrics_by_mag["photo"].iloc[i]["tp"])
+            photo_fp = int(scene_metrics_by_mag["photo"].iloc[i]["fp"])
+            line = rf"{magstr} & {tcount} & {bliss_tp} & {bliss_fp} & {photo_tp} & {photo_fp} \\"
+            fp.write(line + "\n")
+
+
 def bold(x):
-    return f"\\textbf{{{x}}}"
+    return rf"\textbf{{{x}}}"
 
 
 def create_figure_at_point(
@@ -866,9 +866,6 @@ def get_positive_negative_stats(
         out[k] = torch.stack([r[k] for r in res])
     out["n_obj"] = true_cat.plocs.shape[1]
     return out
-
-
-import math
 
 
 def stats_for_threshold(
