@@ -186,30 +186,6 @@ generate:
     file:
     n_plots:
 
-predict:
-    sdss:
-        _target_: bliss.datasets.sdss.SloanDigitalSkySurvey
-        sdss_dir: ${paths.sdss}
-        run: 94
-        camcol: 1
-        fields:
-            - 12
-    bands:
-        - 2
-
-    # chunk properties
-    clen: 300
-
-    # i/o parameters
-    location_checkpoint: ${paths.project}/models/sdss_location_encoder.pt
-    galaxy_checkpoint: ${paths.project}/models/sdss_galaxy_encoder.pt
-    binary_checkpoint: ${paths.project}/models/sdss_binary.pt
-    device: "cuda:0"
-    output_file: null
-
-    # coverage for tests
-    testing: False
-
 training:
     n_epochs: 121
     experiment: default
