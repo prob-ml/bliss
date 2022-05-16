@@ -54,7 +54,7 @@ datasets:
             background:
                 - 865.0
         num_workers: 0
-        batch_size: 64
+        batch_size: 256
         n_batches: 10
         fix_validation_set: True
         valid_n_batches: 200
@@ -87,10 +87,13 @@ datasets:
             field: 12
             bands:
                 - 2
-        n_batches: 10
-        batch_size: 32
+        n_batches: 20
+        batch_size: 128
         generate_device: "cuda:0"
         testing_file: null
+        fix_validation_set: true
+        valid_n_batches: 60
+
     toy_gaussian:
         _target_: bliss.datasets.galsim_galaxies.ToyGaussian
         num_workers: 0
