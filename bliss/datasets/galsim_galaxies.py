@@ -326,17 +326,14 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        if self.fix_validation_set:
+        dl = DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+        if not self.fix_validation_set:
+            return dl
+        else:
             valid: List[Dict[str, Tensor]] = []
             for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
-                valid.append(self.get_batch())
-            num_workers = 0
-            batch_size = None
-        else:
-            valid = self
-            batch_size = self.batch_size
-            num_workers = self.num_workers
-        return DataLoader(valid, batch_size=batch_size, num_workers=num_workers)
+                valid.append(next(iter(dl)))
+            return DataLoader(valid, batch_size=None, num_workers=0)
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
