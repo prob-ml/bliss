@@ -810,14 +810,14 @@ def load_models(cfg, device):
 
     location = instantiate(cfg.models.location_encoder).to(device).eval()
     location.load_state_dict(
-        torch.load(cfg.predict.location_checkpoint, map_location=location.device)
+        torch.load(cfg.plots.location_checkpoint, map_location=location.device)
     )
 
     binary = instantiate(cfg.models.binary).to(device).eval()
-    binary.load_state_dict(torch.load(cfg.predict.binary_checkpoint, map_location=binary.device))
+    binary.load_state_dict(torch.load(cfg.plots.binary_checkpoint, map_location=binary.device))
 
     galaxy = instantiate(cfg.models.galaxy_encoder).to(device).eval()
-    galaxy.load_state_dict(torch.load(cfg.predict.galaxy_checkpoint, map_location=galaxy.device))
+    galaxy.load_state_dict(torch.load(cfg.plots.galaxy_checkpoint, map_location=galaxy.device))
 
     encoder = Encoder(location.eval(), binary.eval(), galaxy.eval())
     encoder = encoder.to(device)
