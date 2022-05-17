@@ -1,6 +1,5 @@
 from pathlib import Path
-from typing import Optional, List, Dict
-from tqdm import tqdm
+from typing import Dict, List, Optional
 
 import galsim
 import numpy as np
@@ -8,6 +7,7 @@ import pytorch_lightning as pl
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 from bliss.datasets.background import ConstantBackground
 
@@ -329,11 +329,10 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         dl = DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
         if not self.fix_validation_set:
             return dl
-        else:
-            valid: List[Dict[str, Tensor]] = []
-            for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
-                valid.append(next(iter(dl)))
-            return DataLoader(valid, batch_size=None, num_workers=0)
+        valid: List[Dict[str, Tensor]] = []
+        for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
+            valid.append(next(iter(dl)))
+        return DataLoader(valid, batch_size=None, num_workers=0)
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
