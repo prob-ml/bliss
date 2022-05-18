@@ -314,10 +314,10 @@ class AEReconstructionFigures(BlissFigures):
         set_rc_params(
             fontsize=22, legend_fontsize="small", tick_label_size="small", label_size="medium"
         )
-        fig, axes = plt.subplots(1, 3, figsize=(21, 7))
-        ax1, ax2, ax3 = axes.flatten()
+        fig, axes = plt.subplots(2, 2, figsize=(15, 15))
+        ax1, ax2, ax3, ax4 = axes.flatten()
 
-        # fluxes / magnitudes
+        # magnitudes
         x, y = meas["true_mags"], meas["recon_mags"]
         mag_ticks = (15, 16, 17, 18, 19, 20, 21, 22, 23)
         xlabel = r"$m^{\rm true}$"
@@ -335,30 +335,31 @@ class AEReconstructionFigures(BlissFigures):
         )
         ax1.plot([15, 24], [15, 24], color="r", lw=2)
 
+        # magnitudes
+        x = np.log10(meas["true_fluxes"])
+        y = (meas["recon_fluxes"] - meas["true_fluxes"]) / meas["recon_fluxes"]
+        flux_ticks = (1, 2, 3, 4, 5, 6)
+        xlabel = r"$f^{\rm true}$"
+        ylabel = r"$(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$"
+        self.make_scatter_contours(
+            ax2,
+            x,
+            y,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            xticks=flux_ticks,
+            yticks=(-2, -1, 0, 1),
+            xlims=(0, 7),
+            ylims=(-2, 1),
+        )
+        ax2.plot([0, 7], [0, 0], color="r", lw=2)
+
         # ellipticities 1
         # NOTE: remove outliers for plotting purposes (contours get crazy)
         x, y = remove_outliers(meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0], level=0.99)
         g_ticks = (-1.0, -0.5, 0.0, 0.5, 1.0)
         xlabel = r"$g_{1}^{\rm true}$"
         ylabel = r"$g_{1}^{\rm recon}$"
-        self.make_scatter_contours(
-            ax2,
-            x,
-            y,
-            xticks=g_ticks,
-            yticks=g_ticks,
-            xlabel=xlabel,
-            ylabel=ylabel,
-            xlims=(-1.0, 1.0),
-            ylims=(-1.0, 1.0),
-        )
-        ax2.plot([-1, 1], [-1, 1], color="r", lw=2)
-
-        # ellipticities 2
-        # NOTE: remove outliers for plotting purposes (contours get crazy)
-        x, y = remove_outliers(meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1], level=0.99)
-        xlabel = r"$g_{2}^{\rm true}$"
-        ylabel = r"$g_{2}^{\rm recon}$"
         self.make_scatter_contours(
             ax3,
             x,
@@ -372,19 +373,37 @@ class AEReconstructionFigures(BlissFigures):
         )
         ax3.plot([-1, 1], [-1, 1], color="r", lw=2)
 
+        # ellipticities 2
+        # NOTE: remove outliers for plotting purposes (contours get crazy)
+        x, y = remove_outliers(meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1], level=0.99)
+        xlabel = r"$g_{2}^{\rm true}$"
+        ylabel = r"$g_{2}^{\rm recon}$"
+        self.make_scatter_contours(
+            ax4,
+            x,
+            y,
+            xticks=g_ticks,
+            yticks=g_ticks,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            xlims=(-1.0, 1.0),
+            ylims=(-1.0, 1.0),
+        )
+        ax4.plot([-1, 1], [-1, 1], color="r", lw=2)
+
         plt.tight_layout()
         return fig
 
     def make_scatter_bin_plots(self, meas):
-        fig, axes = plt.subplots(1, 3, figsize=(21, 9))
-        ax1, ax2, ax3 = axes.flatten()
+        fig, axes = plt.subplots(2, 2, figsize=(16, 16))
+        ax1, ax2, ax3, ax4 = axes.flatten()
         set_rc_params(fontsize=24)
         snr = meas["snr"]
         xticks = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0, 3)
         xlabel = r"$\log_{10} \text{SNR}$"
 
-        # fluxes / magnitudes
+        # magnitudes
         true_mags, recon_mags = meas["true_mags"], meas["recon_mags"]
         x, y = np.log10(snr), recon_mags - true_mags
         self.scatter_bin_plot(
@@ -398,11 +417,25 @@ class AEReconstructionFigures(BlissFigures):
             xticks=xticks,
         )
 
+        # fluxes
+        true_fluxes, recon_fluxes = meas["true_fluxes"], meas["recon_fluxes"]
+        x, y = np.log10(snr), (recon_fluxes - true_fluxes) / recon_fluxes
+        self.scatter_bin_plot(
+            ax2,
+            x,
+            y,
+            delta=0.2,
+            xlims=xlims,
+            xlabel=xlabel,
+            ylabel=r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm recon}$",
+            xticks=xticks,
+        )
+
         # ellipticities
         true_ellip1, recon_ellip1 = meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0]
         x, y = np.log10(snr), recon_ellip1 - true_ellip1
         self.scatter_bin_plot(
-            ax2,
+            ax3,
             x,
             y,
             delta=0.2,
@@ -415,7 +448,7 @@ class AEReconstructionFigures(BlissFigures):
         true_ellip2, recon_ellip2 = meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1]
         x, y = np.log10(snr), recon_ellip2 - true_ellip2
         self.scatter_bin_plot(
-            ax3,
+            ax4,
             x,
             y,
             delta=0.2,
@@ -429,13 +462,33 @@ class AEReconstructionFigures(BlissFigures):
 
         return fig
 
+    def create_flux_vs_snr_plot(self, meas):
+        xticks = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+        xlims = (0, 3)
+        snr, fluxes = meas["snr"], meas["true_fluxes"]
+        x, y = np.log10(snr), np.log10(fluxes)
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+        self.make_scatter_contours(
+            ax,
+            x,
+            y,
+            xticks=xticks,
+            xlims=xlims,
+            ylims=(0, 7),
+            xlabel=r"$\log_{10} \rm SNR$",
+            ylabel=r"$\log_{10} f^{\rm true}$",
+        )
+        return fig
+
     def create_figures(self, data):
+        # flux vs magnitude
 
         return {
             "random_recon": self.reconstruction_figure(*data["random"]),
             "worst_recon": self.reconstruction_figure(*data["worst"]),
             "single_galaxy_meas_contours": self.make_scatter_contours_plot(data["measurements"]),
             "single_galaxy_meas_bins": self.make_scatter_bin_plots(data["measurements"]),
+            "flux_vs_snr": self.create_flux_vs_snr_plot(data["measurements"]),
         }
 
 
