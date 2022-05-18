@@ -1,3 +1,8 @@
+# @package _global_
+models:
+  prior:
+    mean_sources: 0.03
+
 name: "sdss_binary"
 model: ${models.binary}
 dataset: ${datasets.simulated}
