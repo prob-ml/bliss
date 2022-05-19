@@ -1,9 +1,15 @@
-name: "sdss_binary"
-model: ${models.binary}
-dataset: ${datasets.simulated}
-optimizer_params:
-  lr: 1e-4
-n_epochs: 501
-save_top_k: 5
-trainer:
-  enable_checkpointing: True
+# @package _global_
+models:
+  prior:
+    mean_sources: 0.03
+
+training:
+  name: "sdss_binary"
+  model: ${models.binary}
+  dataset: ${datasets.simulated}
+  optimizer_params:
+    lr: 1e-4
+  n_epochs: 501
+  save_top_k: 5
+  trainer:
+    enable_checkpointing: True
