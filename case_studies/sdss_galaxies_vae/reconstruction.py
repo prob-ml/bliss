@@ -127,7 +127,9 @@ def reconstruct(cfg):
             h_topleft: int = scene_locs["h"]
             w_topleft: int = scene_locs["w"]
             size: int = scene_locs["size"]
-            fig = create_figure_at_point(h_topleft, w_topleft, size, bp, tile_map_recon, frame, decoder)
+            fig = create_figure_at_point(
+                h_topleft, w_topleft, size, bp, tile_map_recon, frame, decoder
+            )
             fig.savefig(scene_dir / f"{scene_name}.png")
 
         mismatch_dir = outdir / "reconstructions" / "mismatches"
@@ -158,7 +160,14 @@ def reconstruct(cfg):
                 w_topleft = max(int(ploc[1].item() - 100.0), 0) + 24
                 size = 200
                 fig = create_figure_at_point(
-                    h_topleft, w_topleft, size, bp, tile_map_recon, frame, decoder, est_catalog=true_cat
+                    h_topleft,
+                    w_topleft,
+                    size,
+                    bp,
+                    tile_map_recon,
+                    frame,
+                    decoder,
+                    est_catalog=true_cat,
                 )
                 filename = f"h{int(h_topleft)}_w{int(w_topleft)}.png"
                 fig.savefig(mismatch_dir / filename)
@@ -202,7 +211,14 @@ def reconstruct(cfg):
                 w_topleft = max(int(w - 100.0), 0) + 24
                 size = 200
                 fig = create_figure_at_point(
-                    h_topleft, w_topleft, size, bp, tile_map_recon, frame, decoder, est_catalog=true_cat
+                    h_topleft,
+                    w_topleft,
+                    size,
+                    bp,
+                    tile_map_recon,
+                    frame,
+                    decoder,
+                    est_catalog=true_cat,
                 )
                 filename = f"h{int(h_topleft)}_w{int(w_topleft)}.png"
                 fig.savefig(bliss_fp_dir / filename)
@@ -360,8 +376,7 @@ def calc_scene_metrics_by_mag(
 def write_bliss_photo_tex_file(tex_dir: Path, scene_metrics_by_mag: Dict[str, pd.DataFrame]):
     detection_tex_file = tex_dir / "detections.tex"
     with detection_tex_file.open("w") as fp:
-        for i, _ in enumerate(scene_metrics_by_mag["bliss"]):
-            mag = scene_metrics_by_mag["bliss"].index.values[i]
+        for i, mag in enumerate(scene_metrics_by_mag["bliss"].index.values):
             if mag == "overall":
                 magstr = "Overall"
             else:
@@ -372,6 +387,26 @@ def write_bliss_photo_tex_file(tex_dir: Path, scene_metrics_by_mag: Dict[str, pd
             photo_tp = int(scene_metrics_by_mag["photo"].iloc[i]["tp"])
             photo_fp = int(scene_metrics_by_mag["photo"].iloc[i]["fp"])
             line = rf"{magstr} & {tcount} & {bliss_tp} & {bliss_fp} & {photo_tp} & {photo_fp} \\"
+            fp.write(line + "\n")
+
+    accuracy_tex_file = tex_dir / "accuracy.tex"
+    with accuracy_tex_file.open("w") as fp:
+        for i, mag in enumerate(scene_metrics_by_mag["bliss"].index.values):
+            if mag == "overall":
+                magstr = "Overall"
+            else:
+                magstr = f"{int(mag) - 1} - {int(mag)}"
+            bliss_matched = int(scene_metrics_by_mag["bliss"].iloc[i]["classif_n_matches"])
+            bliss_tot = float(scene_metrics_by_mag["bliss"].iloc[i]["classif_acc"])
+            bliss_gal = float(scene_metrics_by_mag["bliss"].iloc[i]["classif_galaxy_acc"])
+            bliss_star = float(scene_metrics_by_mag["bliss"].iloc[i]["classif_star_acc"])
+
+            photo_matched = int(scene_metrics_by_mag["photo"].iloc[i]["classif_n_matches"])
+            photo_tot = float(scene_metrics_by_mag["photo"].iloc[i]["classif_acc"])
+            photo_gal = float(scene_metrics_by_mag["photo"].iloc[i]["classif_galaxy_acc"])
+            photo_star = float(scene_metrics_by_mag["photo"].iloc[i]["classif_star_acc"])
+
+            line = rf"{magstr} & {bliss_matched} & {bliss_tot:.2f} & {bliss_gal:.2f} & {bliss_star:.2f} & {photo_matched} & {photo_tot:.2f} & {photo_gal:.2f} & {photo_star:.2f} \\"
             fp.write(line + "\n")
 
 
@@ -842,8 +877,7 @@ def get_positive_negative_stats(
     est_tile_cat = est_tile_cat.copy()
 
     res = Parallel(n_jobs=10)(
-        delayed(stats_for_threshold)(true_cat.plocs, est_tile_cat, t)
-        for t in tqdm(thresholds)
+        delayed(stats_for_threshold)(true_cat.plocs, est_tile_cat, t) for t in tqdm(thresholds)
     )
     out: Dict[str, Union[int, Tensor]] = {}
     for k in res[0]:
@@ -853,7 +887,9 @@ def get_positive_negative_stats(
 
 
 def stats_for_threshold(
-    true_plocs: Tensor, est_tile_cat: TileCatalog, threshold: Optional[float] = None,
+    true_plocs: Tensor,
+    est_tile_cat: TileCatalog,
+    threshold: Optional[float] = None,
 ):
     tile_slen = est_tile_cat.tile_slen
     max_sources = est_tile_cat.max_sources
