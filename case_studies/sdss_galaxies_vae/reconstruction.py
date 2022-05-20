@@ -52,18 +52,18 @@ def reconstruct(cfg):
         photo_catalog = None
 
     bp = encoder.border_padding
-    h = bp
-    w = bp
+    h_topleft = bp
+    w_topleft = bp
     h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
     w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
     if "test" in cfg.reconstruct:
-        h = cfg.reconstruct.test.h
-        w = cfg.reconstruct.test.w
-        h_end = h + int(cfg.reconstruct.test.size)
-        w_end = w + int(cfg.reconstruct.test.size)
+        h_topleft = cfg.reconstruct.test.h
+        w_topleft = cfg.reconstruct.test.w
+        h_end = h_topleft + int(cfg.reconstruct.test.size)
+        w_end = w_topleft + int(cfg.reconstruct.test.size)
 
-    hlims = (h, h_end)
-    wlims = (w, w_end)
+    hlims = (h_topleft, h_end)
+    wlims = (w_topleft, w_end)
     _, tile_map_recon = reconstruct_scene_at_coordinates(
         encoder, decoder, frame.image, frame.background, hlims, wlims
     )
@@ -74,10 +74,10 @@ def reconstruct(cfg):
 
     full_map_recon = tile_map_recon.to_full_params()
     scene_metrics_by_mag: Dict[str, pd.DataFrame] = {}
-    ground_truth_catalog = frame.get_catalog((h, h_end), (w, w_end))
+    ground_truth_catalog = frame.get_catalog((h_topleft, h_end), (w_topleft, w_end))
     catalogs = {"bliss": full_map_recon}
     if photo_catalog is not None:
-        photo_catalog_at_hw = photo_catalog.crop_at_coords(h, h_end, w, w_end)
+        photo_catalog_at_hw = photo_catalog.crop_at_coords(h_topleft, h_end, w_topleft, w_end)
         catalogs["photo"] = photo_catalog_at_hw
     for catalog_name, catalog in catalogs.items():
         scene_metrics_by_mag[catalog_name] = calc_scene_metrics_by_mag(
@@ -124,10 +124,10 @@ def reconstruct(cfg):
         scene_dir = outdir / "reconstructions" / "scenes"
         scene_dir.mkdir(parents=True, exist_ok=True)
         for scene_name, scene_locs in cfg.reconstruct.scenes.items():
-            h: int = scene_locs["h"]
-            w: int = scene_locs["w"]
+            h_topleft: int = scene_locs["h"]
+            w_topleft: int = scene_locs["w"]
             size: int = scene_locs["size"]
-            fig = create_figure_at_point(h, w, size, bp, tile_map_recon, frame, decoder)
+            fig = create_figure_at_point(h_topleft, w_topleft, size, bp, tile_map_recon, frame, decoder)
             fig.savefig(scene_dir / f"{scene_name}.png")
 
         mismatch_dir = outdir / "reconstructions" / "mismatches"
@@ -154,13 +154,13 @@ def reconstruct(cfg):
 
         for i, ploc in enumerate(true_cat.plocs[0]):
             if bright_mismatches[i]:
-                h = max(int(ploc[0].item() - 100.0), 0) + 24
-                w = max(int(ploc[1].item() - 100.0), 0) + 24
+                h_topleft = max(int(ploc[0].item() - 100.0), 0) + 24
+                w_topleft = max(int(ploc[1].item() - 100.0), 0) + 24
                 size = 200
                 fig = create_figure_at_point(
-                    h, w, size, bp, tile_map_recon, frame, decoder, est_catalog=true_cat
+                    h_topleft, w_topleft, size, bp, tile_map_recon, frame, decoder, est_catalog=true_cat
                 )
-                filename = f"h{int(h)}_w{int(w)}.png"
+                filename = f"h{int(h_topleft)}_w{int(w_topleft)}.png"
                 fig.savefig(mismatch_dir / filename)
                 mismatch_dict["filename"][i] = filename
                 mismatch_dict["h"][i] = ploc[0].item() + 24
@@ -196,20 +196,24 @@ def reconstruct(cfg):
 
         for i, ploc in enumerate(full_map_recon.plocs[0]):
             if is_fp_and_bright[i]:
-                h = max(int(ploc[0].item() - 100.0), 0) + 24
-                w = max(int(ploc[1].item() - 100.0), 0) + 24
+                h = ploc[0].item()
+                w = ploc[1].item()
+                h_topleft = max(int(h - 100.0), 0) + 24
+                w_topleft = max(int(w - 100.0), 0) + 24
                 size = 200
                 fig = create_figure_at_point(
-                    h, w, size, bp, tile_map_recon, frame, decoder, est_catalog=true_cat
+                    h_topleft, w_topleft, size, bp, tile_map_recon, frame, decoder, est_catalog=true_cat
                 )
-                filename = f"h{int(h)}_w{int(w)}.png"
+                filename = f"h{int(h_topleft)}_w{int(w_topleft)}.png"
                 fig.savefig(bliss_fp_dir / filename)
                 bliss_fp_dict["filename"][i] = filename
-                bliss_fp_dict["h"][i] = h
-                bliss_fp_dict["w"][i] = w
+                bliss_fp_dict["h_topleft"][i] = h_topleft
+                bliss_fp_dict["w_topleft"][i] = w_topleft
+                bliss_fp_dict["h"][i] = h + 24
+                bliss_fp_dict["w"][i] = w + 24
 
                 if isinstance(frame, SDSSFrame):
-                    ra, dec = frame.wcs.wcs_pix2world(w, h, 0)
+                    ra, dec = frame.wcs.wcs_pix2world(w + 24, h + 24, 0)
                 else:
                     ra, dec = None, None
 
@@ -838,7 +842,7 @@ def get_positive_negative_stats(
     est_tile_cat = est_tile_cat.copy()
 
     res = Parallel(n_jobs=10)(
-        delayed(stats_for_threshold)(true_cat.plocs, est_tile_cat, t, log_probs)
+        delayed(stats_for_threshold)(true_cat.plocs, est_tile_cat, t)
         for t in tqdm(thresholds)
     )
     out: Dict[str, Union[int, Tensor]] = {}
