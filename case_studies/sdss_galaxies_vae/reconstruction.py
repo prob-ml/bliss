@@ -1,7 +1,9 @@
 # pylint: skip-file
+import json
 import math
 from collections import defaultdict
 from pathlib import Path
+from time import time_ns
 from typing import DefaultDict, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -64,9 +66,12 @@ def reconstruct(cfg):
 
     hlims = (h_topleft, h_end)
     wlims = (w_topleft, w_end)
+    tic = time_ns()
     _, tile_map_recon = reconstruct_scene_at_coordinates(
         encoder, decoder, frame.image, frame.background, hlims, wlims
     )
+    toc = time_ns()
+    inference_sec = (toc - tic) / 1e9
     tile_map_recon: TileCatalog = tile_map_recon.cpu()
     tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
     print(f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image.")
@@ -116,6 +121,9 @@ def reconstruct(cfg):
         torch.save(full_map_recon, outdir / "map_recon.pt")
         torch.save(tile_map_recon, outdir / "tile_map_recon.pt")
 
+        with (outdir / "stats.json").open("w") as fp:
+            json.dump({"inference_time_sec": inference_sec}, fp)
+
         if "photo" in scene_metrics_by_mag:
             tex_dir = outdir / "tex"
             tex_dir.mkdir(parents=True, exist_ok=True)
@@ -131,6 +139,26 @@ def reconstruct(cfg):
                 h_topleft, w_topleft, size, bp, tile_map_recon, frame, decoder
             )
             fig.savefig(scene_dir / f"{scene_name}.png")
+
+        blend_dir = outdir / "reconstructions" / "blends"
+        blend_dir.mkdir(exist_ok=True)
+        make_images_of_example_blend(blend_dir, encoder, decoder, frame)
+
+        tile_dir = outdir / "reconstructions" / "tile"
+        tile_dir.mkdir(exist_ok=True)
+        make_images_of_example_tile(tile_dir, encoder, decoder, frame, tile_map_recon)
+
+        marginal_detect_dir = outdir / "reconstructions" / "marginal_detect"
+        marginal_detect_dir.mkdir(exist_ok=True)
+        make_plots_of_marginal_detections(
+            marginal_detect_dir, encoder, decoder, frame, tile_map_recon, detections_at_mode
+        )
+
+        marginal_class_dir = outdir / "reconstructions" / "marginal_class"
+        marginal_class_dir.mkdir(exist_ok=True)
+        make_plots_of_marginal_class(
+            marginal_class_dir, encoder, decoder, frame, tile_map_recon, detections_at_mode
+        )
 
         mismatch_dir = outdir / "reconstructions" / "mismatches"
         mismatch_dir.mkdir(exist_ok=True)
@@ -406,7 +434,7 @@ def write_bliss_photo_tex_file(tex_dir: Path, scene_metrics_by_mag: Dict[str, pd
             photo_gal = float(scene_metrics_by_mag["photo"].iloc[i]["classif_galaxy_acc"])
             photo_star = float(scene_metrics_by_mag["photo"].iloc[i]["classif_star_acc"])
 
-            line = rf"{magstr} & {bliss_matched} & {bliss_tot:.2f} & {bliss_gal:.2f} & {bliss_star:.2f} & {photo_matched} & {photo_tot:.2f} & {photo_gal:.2f} & {photo_star:.2f} \\"
+            line = rf"{magstr} & {bliss_tot:.2f} & {bliss_gal:.2f} & {bliss_star:.2f} & {photo_tot:.2f} & {photo_gal:.2f} & {photo_star:.2f} \\"
             fp.write(line + "\n")
 
 
@@ -423,6 +451,9 @@ def create_figure_at_point(
     frame: Frame,
     dec: ImageDecoder,
     est_catalog: Optional[FullCatalog] = None,
+    show_tiles=False,
+    use_image_bounds=False,
+    **kwargs,
 ):
     tile_slen = tile_map_recon.tile_slen
     if h + size + bp > frame.image.shape[2]:
@@ -455,12 +486,26 @@ def create_figure_at_point(
         est_catalog_cropped = tile_est_catalog_cropped.to_full_params()
     else:
         est_catalog_cropped = None
+    if show_tiles:
+        tile_map = tile_map_cropped
+    else:
+        tile_map = None
+    if use_image_bounds:
+        vmin = img_cropped.min().item()
+        vmax = img_cropped.max().item()
+    else:
+        vmin = 800
+        vmax = 1200
     return create_figure(
         img_cropped,
         recon_cropped,
         resid_cropped,
         map_recon=full_map_cropped,
         coadd_objects=est_catalog_cropped,
+        tile_map=tile_map,
+        vmin=vmin,
+        vmax=vmax,
+        **kwargs,
     )
 
 
@@ -475,6 +520,8 @@ def create_figure(
     scatter_size: int = 100,
     scatter_on_true: bool = True,
     tile_map=None,
+    vmin=800,
+    vmax=1200,
 ):
     """Make figures related to detection and classification in SDSS."""
     plt.style.use("seaborn-colorblind")
@@ -501,11 +548,11 @@ def create_figure(
 
     # plot images
     reporting.plot_image(
-        fig, ax_true, true, vrange=(800, 1200), colorbar=colorbar, cmap="gist_gray"
+        fig, ax_true, true, vrange=(vmin, vmax), colorbar=colorbar, cmap="gist_gray"
     )
     if not tile_map:
         reporting.plot_image(
-            fig, ax_recon, recon, vrange=(800, 1200), colorbar=colorbar, cmap="gist_gray"
+            fig, ax_recon, recon, vrange=(vmin, vmax), colorbar=colorbar, cmap="gist_gray"
         )
     else:
         is_on_array = rearrange(tile_map.is_on_array, "1 nth ntw 1 -> nth ntw 1 1")
@@ -917,6 +964,167 @@ def stats_for_threshold(
     tp = d.sum()
     fp = torch.tensor(number_est) - tp
     return {"tp": tp, "fp": fp, "true_matches": true_matches, "est_tile_matches": est_tile_matches}
+
+
+def make_images_of_example_blend(
+    blend_dir: Path, encoder: Encoder, decoder: ImageDecoder, frame: Frame
+):
+    slen = 40
+    h = 1400
+    h_end = h + slen
+    w = 1710
+    w_end = w + slen
+    recon, tile_map_recon = reconstruct_scene_at_coordinates(
+        encoder,
+        decoder,
+        frame.image,
+        frame.background,
+        (h, h_end),
+        (w, w_end),
+    )
+    bp = encoder.border_padding
+    img = frame.image[:, :, h:h_end, w:w_end]
+    bg = frame.background[:, :, h:h_end, w:w_end]
+    resid = (img - recon) / recon.sqrt()
+    plt.imsave(blend_dir / "img.png", img[0, 0])
+    plt.imsave(blend_dir / "recon.png", recon[0, 0])
+    plt.imsave(blend_dir / "resid.png", resid[0, 0])
+
+    masks = ((4, 5), (3, 7))
+
+    for (i, (h_mask, w_mask)) in enumerate(masks):
+        tile_map_1gal_dict = tile_map_recon.to_dict()
+        tile_map_1gal_dict["n_sources"] = tile_map_1gal_dict["n_sources"].clone()
+        tile_map_1gal_dict["galaxy_bools"] = tile_map_1gal_dict["galaxy_bools"].clone()
+        tile_map_1gal_dict["galaxy_bools"][:, h_mask, w_mask] = 0.0
+        tile_map_1gal_dict["n_sources"][0, h_mask, w_mask] = 0
+        tile_map_one_galaxy = TileCatalog(tile_map_recon.tile_slen, tile_map_1gal_dict)
+        recon_one_galaxy = decoder.render_images(tile_map_one_galaxy).detach().cpu()
+        recon_one_galaxy = recon_one_galaxy[:, :, bp:-bp, bp:-bp] + bg
+        plt.imsave(blend_dir / f"galaxy_{i}.png", recon_one_galaxy[0, 0, :, :], vmax=recon.max())
+
+
+def make_images_of_example_tile(
+    tile_dir: Path,
+    encoder: Encoder,
+    decoder: ImageDecoder,
+    frame: Frame,
+    tile_map_recon: TileCatalog,
+):
+    # slen = 100
+    slen = 60
+    h = 200 + 50 + 2
+    h_end = h + slen
+    w = 1700 + 210 + 12
+    w_end = w + slen
+
+    # recon, tile_map_recon = reconstruct_scene_at_coordinates(
+    #     encoder,
+    #     decoder,
+    #     frame.image,
+    #     frame.background,
+    #     (h, h_end),
+    #     (w, w_end),
+    # )
+    img = frame.image[:, :, h:h_end, w:w_end]
+    plt.imsave(tile_dir / "img.png", img[0, 0])
+    fig_tiles = create_figure_at_point(
+        h, w, slen, encoder.border_padding, tile_map_recon, frame, decoder, show_tiles=True
+    )
+    fig_tiles.savefig(tile_dir / "tiles.pdf")
+    fig_recon = create_figure_at_point(
+        h, w, slen, encoder.border_padding, tile_map_recon, frame, decoder, show_tiles=False
+    )
+    fig_recon.savefig(tile_dir / "recon.pdf")
+
+
+def make_plots_of_marginal_detections(
+    outdir: Path,
+    encoder: Encoder,
+    decoder: ImageDecoder,
+    frame: Frame,
+    tile_map_recon: TileCatalog,
+    detections_at_mode: Dict[str, Tensor],
+):
+    tile_map_recon["matched"] = detections_at_mode["est_tile_matches"]
+    bp = encoder.border_padding
+    full_map = tile_map_recon.to_full_params()
+    marginal = full_map["n_source_log_probs"][0, :, 0].exp() <= 0.6
+    csv_lines = ["fname,in_coadd,ra,dec,prob"]
+    for i, ploc in tqdm(enumerate(full_map.plocs[0]), desc="marginal detections"):
+        if marginal[i]:
+            size = 20
+            h = ploc[0].item()
+            w = ploc[1].item()
+            h_topleft = max(int(h - (size / 2.0)), 0) + 24
+            w_topleft = max(int(w - (size / 2.0)), 0) + 24
+            fig = create_figure_at_point(
+                h_topleft,
+                w_topleft,
+                size,
+                bp,
+                tile_map_recon,
+                frame,
+                decoder,
+                use_image_bounds=True,
+            )
+            fname = f"h{h_topleft}_w{w_topleft}.png"
+            fig.savefig(outdir / fname)
+            matched = full_map["matched"][0, i, 0]
+
+            if isinstance(frame, SDSSFrame):
+                ra, dec = frame.wcs.wcs_pix2world(w + 24, h + 24, 0)
+            else:
+                ra, dec = None, None
+            prob = full_map["n_source_log_probs"][0, i, 0].exp().item()
+            csv_lines.append(f"{fname},{matched},{ra},{dec},{prob}")
+    out_csv = outdir / "marginal_detections.csv"
+    out_csv.write_text("\n".join(csv_lines))
+
+
+def make_plots_of_marginal_class(
+    outdir: Path,
+    encoder: Encoder,
+    decoder: ImageDecoder,
+    frame: Frame,
+    tile_map_recon: TileCatalog,
+    detections_at_mode,
+):
+    tile_map_recon["matched"] = detections_at_mode["est_tile_matches"]
+    bp = encoder.border_padding
+    full_map = tile_map_recon.to_full_params()
+    marginal_galaxy = full_map["galaxy_probs"][0, :, 0].exp() <= 0.6
+    marginal_star = full_map["galaxy_probs"][0, :, 0].exp() >= 0.4
+    marginal = marginal_galaxy & marginal_star
+    csv_lines = ["fname,in_coadd,ra,dec,prob"]
+    for i, ploc in tqdm(enumerate(full_map.plocs[0]), desc="marginal classifications"):
+        if marginal[i] and full_map["matched"][0, i, 0].item():
+            size = 40
+            h = ploc[0].item()
+            w = ploc[1].item()
+            h_topleft = max(int(h - (size / 2.0)), 0) + 24
+            w_topleft = max(int(w - (size / 2.0)), 0) + 24
+            fig = create_figure_at_point(
+                h_topleft,
+                w_topleft,
+                size,
+                bp,
+                tile_map_recon,
+                frame,
+                decoder,
+            )
+            fname = f"h{h_topleft}_w{w_topleft}.png"
+            fig.savefig(outdir / fname)
+            matched = full_map["matched"][0, i, 0]
+
+            if isinstance(frame, SDSSFrame):
+                ra, dec = frame.wcs.wcs_pix2world(w + 24, h + 24, 0)
+            else:
+                ra, dec = None, None
+            prob = full_map["galaxy_probs"][0, i, 0].exp().item()
+            csv_lines.append(f"{fname},{matched},{ra},{dec},{prob}")
+    out_csv = outdir / "marginal_detections.csv"
+    out_csv.write_text("\n".join(csv_lines))
 
 
 if __name__ == "__main__":
