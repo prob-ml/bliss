@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 import galsim
 import numpy as np
@@ -7,6 +7,7 @@ import pytorch_lightning as pl
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 from bliss.datasets.background import ConstantBackground
 
@@ -293,6 +294,8 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         num_workers: int,
         batch_size: int,
         n_batches: int,
+        fix_validation_set: bool = False,
+        valid_n_batches: Optional[int] = None,
     ):
         super().__init__()
         self.prior = prior
@@ -301,6 +304,8 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.background = background
+        self.fix_validation_set = fix_validation_set
+        self.valid_n_batches = valid_n_batches
 
     def __getitem__(self, idx):
         galaxy_params = self.prior.sample(1, "cpu")
@@ -321,7 +326,13 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+        dl = DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+        if not self.fix_validation_set:
+            return dl
+        valid: List[Dict[str, Tensor]] = []
+        for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
+            valid.append(next(iter(dl)))
+        return DataLoader(valid, batch_size=None, num_workers=0)
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
