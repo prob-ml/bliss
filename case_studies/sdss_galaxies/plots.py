@@ -879,7 +879,6 @@ class BlendSimFigures(BlissFigures):
         blend_data = torch.load(blend_file)
         images = blend_data["images"]
         background = blend_data["background"]
-        # snr = blend_data["snr"]
         slen = blend_data["slen"].item()
         n_batches = images.shape[0]
         assert images.shape == (n_batches, 1, slen, slen)
@@ -919,21 +918,6 @@ class BlendSimFigures(BlissFigures):
         mag_cuts1 = np.full_like(mag_cuts2, fill_value=-np.inf)
         mag_cuts = np.column_stack((mag_cuts1, mag_cuts2))
         metrics = compute_mag_bin_metrics(mag_cuts, full_truth, full_est)
-
-        # for ii in tqdm(range(n_batches), desc="Calculating metrics for each blend"):
-        #     n_sources_i = n_sources[ii]
-        #     snr_i = snr[ii]
-        #     plocs_i = plocs[ii]
-        #     mags_i = mags[ii]
-
-        #     n_sources_est_i = full_est.n_sources[ii]
-        #     plocs_est_i = full_est.plocs[ii]
-        #     mags_est_i = full_est["mags"][ii]
-
-        #     tindx, eindx, dkeep = match_by_locs(plocs_i, plocs_est_i)
-
-        #     mags_i_matched = mags_i[tindx][dkeep]
-        #     mags_est_i_matched = mags_est_i[eindx][dkeep]
 
         return {"mag_bins": mag_cuts, "detection_metrics": metrics}
 
