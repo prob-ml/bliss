@@ -1,6 +1,7 @@
+from pathlib import Path
+
 import pytest
 from hydra import compose, initialize
-from pathlib import Path
 
 from tests.conftest import ModelSetup
 
