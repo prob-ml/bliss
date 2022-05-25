@@ -144,11 +144,9 @@ class Encoder(nn.Module):
             galaxy_probs = self.binary_encoder.forward(image_ptiles, locs)
             galaxy_probs *= is_on_array.unsqueeze(-1)
             galaxy_bools = (galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
-            star_bools = get_star_bools(n_sources, galaxy_bools)
             tile_map_dict.update(
                 {
                     "galaxy_bools": galaxy_bools,
-                    "star_bools": star_bools,
                     "galaxy_probs": galaxy_probs,
                 }
             )
@@ -180,13 +178,3 @@ class Encoder(nn.Module):
     @property
     def device(self):
         return self._dummy_param.device
-
-
-def get_star_bools(n_sources, galaxy_bools):
-    assert n_sources.shape[0] == galaxy_bools.shape[0]
-    assert galaxy_bools.shape[-1] == 1
-    max_sources = galaxy_bools.shape[-2]
-    assert n_sources.le(max_sources).all()
-    is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
-    is_on_array = is_on_array.view(*galaxy_bools.shape)
-    return (1 - galaxy_bools) * is_on_array
