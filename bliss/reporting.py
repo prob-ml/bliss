@@ -62,7 +62,7 @@ class DetectionMetrics(Metric):
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true: FullCatalog, est: FullCatalog):
+    def update(self, true: FullCatalog, est: FullCatalog) -> None:  # type: ignore
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
         assert isinstance(true, FullCatalog)
         assert isinstance(est, FullCatalog)
@@ -83,7 +83,7 @@ class DetectionMetrics(Metric):
                 self.tp_gal += tp_gal
                 self.fp += fp
                 self.avg_distance += avg_distance
-                self.total_true_n_sources += ntrue
+                self.total_true_n_sources += ntrue  # type: ignore
                 count += 1
         self.avg_distance /= count
 
@@ -371,77 +371,43 @@ class CoaddFullCatalog(FullCatalog):
 
 
 def get_single_galaxy_measurements(
-    slen: int,
-    true_images: np.ndarray,
-    recon_images: np.ndarray,
-    psf_image: np.ndarray,
-    pixel_scale: float = 0.396,
+    images: np.ndarray, psf_image: np.ndarray, pixel_scale: float = 0.396
 ):
     """Compute individual galaxy measurements comparing true images with reconstructed images.
 
     Args:
-        slen: Side-length of square input images.
         pixel_scale: Conversion from arcseconds to pixel.
-        true_images: Array of shape (n_samples, n_bands, slen, slen) containing images of
+        images: Array of shape (n_samples, n_bands, slen, slen) containing images of
             single-centered galaxies without noise or background.
-        recon_images: Array of shape (n_samples, n_bands, slen, slen) containing
-            reconstructions of `true_images` without noise or background.
         psf_image: Array of shape (n_bands, slen, slen) containing PSF image used for
             convolving the galaxies in `true_images`.
 
     Returns:
         Dictionary containing second-moment measurements for `true_images` and `recon_images`.
     """
-    # TODO: Consider multiprocessing? (if necessary)
-    assert true_images.shape == recon_images.shape
-    assert len(true_images.shape) == len(recon_images.shape) == 4, "Incorrect array format."
-    assert true_images.shape[1] == recon_images.shape[1] == psf_image.shape[0] == 1  # one band
-    n_samples = true_images.shape[0]
-    true_images = true_images.reshape(-1, slen, slen)
-    recon_images = recon_images.reshape(-1, slen, slen)
-    psf_image = psf_image.reshape(slen, slen)
-
-    true_fluxes = true_images.sum(axis=(1, 2))
-    recon_fluxes = recon_images.sum(axis=(1, 2))
-
-    true_hlrs = np.zeros((n_samples))
-    recon_hlrs = np.zeros((n_samples))
-    true_ellip = np.zeros((n_samples, 2))  # 2nd shape: e1, e2
-    recon_ellip = np.zeros((n_samples, 2))
+    n_samples, c, slen, w = images.shape
+    assert slen == w and c == 1 and psf_image.shape == (c, slen, w)
+    images = rearrange(images, "n c s s -> (n c) s s")
+    psf_image = rearrange(psf_image, "c s s -> (c s) s")
+    fluxes = images.sum(axis=(1, 2))
+    ellip = np.zeros((n_samples, 2))  # 2nd shape: e1, e2
 
     # get galsim PSF
     galsim_psf_image = galsim.Image(psf_image, scale=pixel_scale)
 
     # Now we use galsim to measure size and ellipticity
     for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies"):
-        true_image = true_images[i]
-        recon_image = recon_images[i]
-
-        galsim_true_image = galsim.Image(true_image, scale=pixel_scale)
-        galsim_recon_image = galsim.Image(recon_image, scale=pixel_scale)
-
-        true_hlrs[i] = galsim_true_image.calculateHLR()  # PSF-convolved.
-        recon_hlrs[i] = galsim_recon_image.calculateHLR()
-
+        image = images[i]
+        galsim_image = galsim.Image(image, scale=pixel_scale)
         res_true = galsim.hsm.EstimateShear(
-            galsim_true_image, galsim_psf_image, shear_est="KSB", strict=False
+            galsim_image, galsim_psf_image, shear_est="KSB", strict=False
         )
-        res_recon = galsim.hsm.EstimateShear(
-            galsim_recon_image, galsim_psf_image, shear_est="KSB", strict=False
-        )
-
-        true_ellip[i, :] = (res_true.corrected_g1, res_true.corrected_g2)
-        recon_ellip[i, :] = (res_recon.corrected_g1, res_recon.corrected_g2)
+        ellip[i, :] = (res_true.corrected_g1, res_true.corrected_g2)
 
     return {
-        "true_fluxes": true_fluxes,
-        "recon_fluxes": recon_fluxes,
-        "true_ellip": true_ellip,
-        "recon_ellip": recon_ellip,
-        "true_hlrs": true_hlrs,
-        "recon_hlrs": recon_hlrs,
-        "true_mags": convert_flux_to_mag(true_fluxes),
-        "recon_mags": convert_flux_to_mag(recon_fluxes),
+        "fluxes": fluxes,
+        "ellip": ellip,
+        "mags": convert_flux_to_mag(fluxes),
     }
 
 
