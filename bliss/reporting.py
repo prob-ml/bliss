@@ -387,8 +387,8 @@ def get_single_galaxy_measurements(
     """
     n_samples, c, slen, w = images.shape
     assert slen == w and c == 1 and psf_image.shape == (c, slen, w)
-    images = rearrange(images, "n c s s -> (n c) s s")
-    psf_image = rearrange(psf_image, "c s s -> (c s) s")
+    images = rearrange(images, "n c h w -> (n c) h w")
+    psf_image = rearrange(psf_image, "c h w -> (c h) w")
     fluxes = images.sum(axis=(1, 2))
     ellip = np.zeros((n_samples, 2))  # 2nd shape: e1, e2
 

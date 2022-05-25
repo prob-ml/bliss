@@ -77,5 +77,4 @@ def test_measurements():
     gal_conv = galsim.Convolution(gal, psf)
     psf_image = psf.drawImage(nx=slen, ny=slen, scale=pixel_scale).array.reshape(1, slen, slen)
     image = gal_conv.drawImage(nx=slen, ny=slen, scale=pixel_scale).array.reshape(1, 1, slen, slen)
-
-    reporting.get_single_galaxy_measurements(slen, image, image, psf_image, pixel_scale)
+    reporting.get_single_galaxy_measurements(image, psf_image, pixel_scale)

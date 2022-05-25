@@ -65,14 +65,7 @@ def reconstruct(cfg):
     hlims = (h, h_end)
     wlims = (w, w_end)
     _, tile_map_recon = reconstruct_scene_at_coordinates(
-        encoder,
-        decoder,
-        frame.image,
-        frame.background,
-        hlims,
-        wlims,
-        slen=cfg.reconstruct.slen,
-        device=device,
+        encoder, decoder, frame.image, frame.background, hlims, wlims
     )
     tile_map_recon: TileCatalog = tile_map_recon.cpu()
     tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
@@ -102,14 +95,7 @@ def reconstruct(cfg):
         map_n_source_weights=cfg.reconstruct.map_n_source_weights,
     ).to(encoder.device)
     _, tile_map_lower_threshold = reconstruct_scene_at_coordinates(
-        encoder_lower_threshold,
-        decoder,
-        frame.image,
-        frame.background,
-        hlims,
-        wlims,
-        slen=cfg.reconstruct.slen,
-        device=device,
+        encoder_lower_threshold, decoder, frame.image, frame.background, hlims, wlims
     )
     tile_map_lower_threshold = tile_map_lower_threshold.cpu()
     positive_negative_stats = get_positive_negative_stats(

@@ -127,17 +127,20 @@ class ImageDecoder(pl.LightningModule):
         # first get galaxy fluxes
         assert "galaxy_bools" in tile_cat and "galaxy_params" in tile_cat and "fluxes" in tile_cat
         galaxy_bools, galaxy_params = tile_cat["galaxy_bools"], tile_cat["galaxy_params"]
-        galaxy_fluxes = self.get_galaxy_fluxes(galaxy_bools, galaxy_params)
+        with torch.no_grad():
+            galaxy_fluxes = self.get_galaxy_fluxes(galaxy_bools, galaxy_params)
         tile_cat["galaxy_fluxes"] = galaxy_fluxes
 
         # update default fluxes
-        fluxes = self["galaxy_bools"] * self["galaxy_fluxes"] + self["star_bools"] * self["fluxes"]
-        self["fluxes"] = fluxes
+        star_bools = tile_cat["star_bools"]
+        star_fluxes = tile_cat["fluxes"]
+        fluxes = galaxy_bools * galaxy_fluxes + star_bools * star_fluxes
+        tile_cat["fluxes"] = fluxes
 
         # mags (careful with 0s)
-        is_on_array = self.is_on_array > 0
-        self["mags"] = torch.zeros_like(self["fluxes"])
-        self["mags"][is_on_array] = convert_flux_to_mag(self["fluxes"][is_on_array])
+        is_on_array = tile_cat.is_on_array > 0
+        tile_cat["mags"] = torch.zeros_like(tile_cat["fluxes"])
+        tile_cat["mags"][is_on_array] = convert_flux_to_mag(tile_cat["fluxes"][is_on_array])
 
     def forward(self):
         """Decodes latent representation into an image."""
