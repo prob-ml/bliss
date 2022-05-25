@@ -17,7 +17,7 @@ from torch.types import Number
 from tqdm import tqdm
 
 from bliss import reporting
-from bliss.catalog import FullCatalog, TileCatalog, PhotoFullCatalog
+from bliss.catalog import FullCatalog, PhotoFullCatalog, TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.encoder import Encoder
 from bliss.inference import (
