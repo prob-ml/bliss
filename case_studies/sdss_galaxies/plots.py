@@ -13,12 +13,11 @@ import numpy as np
 import pytorch_lightning as pl
 import seaborn as sns
 import torch
-from tqdm import tqdm
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 
 from bliss import generate, reporting
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, PhotoFullCatalog
 from bliss.datasets import sdss
 from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
@@ -211,14 +210,16 @@ class AEReconstructionFigures(BlissFigures):
 
         recon_no_background = recon_means.numpy() - background.cpu().numpy()
         assert np.all(recon_no_background.sum(axis=(1, 2, 3)) > 0)
-        measurements = reporting.get_single_galaxy_measurements(
-            slen=53,
-            true_images=noiseless_images,
-            recon_images=recon_no_background,
-            psf_image=psf_image.reshape(-1, 53, 53),
-            pixel_scale=sdss_pixel_scale,
+        true_meas = reporting.get_single_galaxy_measurements(
+            noiseless_images, psf_image.reshape(-1, 53, 53), sdss_pixel_scale
         )
-        measurements["snr"] = snr
+        true_meas = {f"true_{k}": v for k, v in true_meas.items()}
+        recon_meas = reporting.get_single_galaxy_measurements(
+            recon_no_background, psf_image.reshape(-1, 53, 53), sdss_pixel_scale
+        )
+        recon_meas = {f"recon_{k}": v for k, v in recon_meas.items()}
+        measurements = {**true_meas, **recon_meas, "snr": snr}
+
         return {
             "random": (images[rand_indices], recon_means[rand_indices], residuals[rand_indices]),
             "worst": (images[worst_indices], recon_means[worst_indices], residuals[worst_indices]),
@@ -603,13 +604,11 @@ class DetectionClassificationFigures(BlissFigures):
     def compute_data(
         self,
         frame: Union[SDSSFrame, SimulatedFrame],
-        photo_cat: sdss.PhotoFullCatalog,
-        encoder,
-        decoder,
+        photo_cat: PhotoFullCatalog,
+        encoder: Encoder,
+        decoder: ImageDecoder,
     ):
-        slen = 300  # chunk side-length for whole iamge.
         bp = encoder.border_padding
-        device = encoder.device
         h, w = bp, bp
         h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
@@ -620,12 +619,8 @@ class DetectionClassificationFigures(BlissFigures):
         _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder, decoder, frame.image, frame.background, h_range=(h, h_end), w_range=(w, w_end)
         )
+        decoder.set_all_fluxes_and_mags(tile_est_params)
         est_params = tile_est_params.cpu().to_full_params()
-        est_params["fluxes"] = (
-            est_params["galaxy_bools"] * est_params["galaxy_fluxes"]
-            + est_params["star_bools"] * est_params["fluxes"]
-        )
-        est_params["mags"] = sdss.convert_flux_to_mag(est_params["fluxes"])
 
         # compute metrics with bliss vs coadd and photo (frame) vs coadd
         bliss_metrics = self.compute_metrics(coadd_params, est_params)
@@ -763,8 +758,7 @@ class SDSSReconstructionFigures(BlissFigures):
         self, frame: Union[SDSSFrame, SimulatedFrame], encoder: Encoder, decoder: ImageDecoder
     ):
 
-        tile_slen = encoder.detection_encoder.tile_slen
-        device = encoder.device
+        tile_slen = encoder.location_encoder.tile_slen
         data = {}
 
         for figname, scene_coords in self.scenes.items():
@@ -917,11 +911,8 @@ class BlendSimFigures(BlissFigures):
                 tile_est = tile_est_jj
             else:
                 tile_est = tile_est.cat
-        tile_est["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
-            tile_est["galaxy_bools"], tile_est["galaxy_params"]
-        )
+        decoder.set_all_fluxes_and_mags(tile_est)
         full_est = tile_est.to_full_params()
-        full_est["mags"] = sdss.convert_flux_to_mag(full_est["fluxes"])
 
         print("INFO: Computing metrics")
         mag_cuts2 = np.arange(18, 24.5, 0.25)
@@ -973,7 +964,7 @@ def main(cfg):  # pylint: disable=too-many-statements
     if figs.intersection({2, 3, 4}):
         # load SDSS frame and models for prediction
         frame: Union[SDSSFrame, SimulatedFrame] = instantiate(cfg.plots.frame)
-        photo_cat = sdss.PhotoFullCatalog.from_file(**cfg.plots.photo_catalog)
+        photo_cat = PhotoFullCatalog.from_file(**cfg.plots.photo_catalog)
 
         encoder, decoder = load_models(cfg, device)
 
