@@ -12,7 +12,7 @@ from bliss.catalog import TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.encoder import Encoder
 from bliss.models.binary import BinaryEncoder
-from bliss.models.location_encoder import LocationEncoder
+from bliss.models.detection_encoder import DetectionEncoder
 
 
 class SdssBlendedGalaxies(pl.LightningDataModule):
@@ -26,7 +26,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
 
     def __init__(
         self,
-        location_encoder: LocationEncoder,
+        detection_encoder: DetectionEncoder,
         binary_encoder: BinaryEncoder,
         location_ckpt: str,
         binary_ckpt: str,
@@ -46,7 +46,7 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
         """Initializes SDSSBlendedGalaxies.
 
         Args:
-            location_encoder: A LocationEncoder model.
+            detection_encoder: A DetectionEncoder model.
             binary_encoder: A BinaryEncoder model.
             location_ckpt: Path of saved state_dict for location encoder.
             binary_ckpt: Path of saved state_dict for binary encoder.
@@ -99,11 +99,11 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
             (w_start - self.bp) : (w_start + scene_size + self.bp),
         ]
 
-        location_encoder.load_state_dict(
+        detection_encoder.load_state_dict(
             torch.load(location_ckpt, map_location=torch.device("cpu"))
         )
         binary_encoder.load_state_dict(torch.load(binary_ckpt, map_location=torch.device("cpu")))
-        self.encoder = Encoder(location_encoder.eval(), binary_encoder.eval())
+        self.encoder = Encoder(detection_encoder.eval(), binary_encoder.eval())
         self.chunks, self.bgs, self.catalogs = self._prerender_chunks(image, background)
 
     def __len__(self):
