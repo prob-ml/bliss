@@ -29,8 +29,8 @@ from bliss.inference import (
 )
 from bliss.models.binary import BinaryEncoder
 from bliss.models.decoder import ImageDecoder
+from bliss.models.detection_encoder import DetectionEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
-from bliss.models.location_encoder import LocationEncoder
 from bliss.models.prior import ImagePrior
 from case_studies.sdss_galaxies.plots import set_rc_params
 
@@ -103,7 +103,7 @@ def reconstruct(cfg):
         )
 
     encoder_lower_threshold = Encoder(
-        encoder.location_encoder,
+        encoder.detection_encoder,
         encoder.binary_encoder,
         encoder.galaxy_encoder,
         map_n_source_weights=cfg.reconstruct.map_n_source_weights,
@@ -265,7 +265,7 @@ def get_sdss_data(sdss_dir, sdss_pixel_scale):
 
 
 def load_models(cfg, device) -> Tuple[ImageDecoder, Encoder, ImagePrior]:
-    location: LocationEncoder = instantiate(cfg.models.location_encoder).to(device).eval()
+    location: DetectionEncoder = instantiate(cfg.models.detection_encoder).to(device).eval()
     location.load_state_dict(
         torch.load(cfg.predict.location_checkpoint, map_location=location.device)
     )

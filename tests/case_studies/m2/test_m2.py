@@ -6,7 +6,7 @@ import torch
 from einops import rearrange, reduce
 
 from bliss.catalog import TileCatalog, get_images_in_tiles
-from bliss.models.location_encoder import LocationEncoder
+from bliss.models.detection_encoder import DetectionEncoder
 
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
@@ -43,12 +43,12 @@ def trained_star_encoder_m2(m2_model_setup, devices):
             }
         )
 
-    location_encoder: LocationEncoder = m2_model_setup.get_trained_model(overrides)
-    return location_encoder.to(devices.device)
+    detection_encoder: DetectionEncoder = m2_model_setup.get_trained_model(overrides)
+    return detection_encoder.to(devices.device)
 
 
 def get_map_estimate(
-    image_encoder: LocationEncoder, images, background, slen: int, wlen: int = None
+    image_encoder: DetectionEncoder, images, background, slen: int, wlen: int = None
 ):
     # return full estimate of parameters in full image.
     # NOTE: slen*wlen is size of the image without border padding
