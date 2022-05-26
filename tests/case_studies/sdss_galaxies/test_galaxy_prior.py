@@ -6,13 +6,13 @@ def test_galaxy_prior(sdss_galaxies_setup):
     cfg_unif = sdss_galaxies_setup.get_cfg(
         {
             "datasets.sdss_galaxies.prior.flux_sample": "uniform",
-            "training": "sdss_location_encoder",
+            "training": "sdss_detection_encoder",
         }
     )
     cfg_par = sdss_galaxies_setup.get_cfg(
         {
             "datasets.sdss_galaxies.prior.flux_sample": "pareto",
-            "training": "sdss_location_encoder",
+            "training": "sdss_detection_encoder",
         }
     )
 

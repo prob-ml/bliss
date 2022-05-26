@@ -42,7 +42,7 @@ class ConcatBackgroundTransform:
         return 2 * input_channels
 
 
-class LocationEncoder(pl.LightningModule):
+class DetectionEncoder(pl.LightningModule):
     """Encodes the distribution of a latent variable representing an astronomical image.
 
     This class implements the source encoder, which is supposed to take in
@@ -66,7 +66,7 @@ class LocationEncoder(pl.LightningModule):
         slack=1.0,
         optimizer_params: dict = None,
     ):
-        """Initializes LocationEncoder.
+        """Initializes DetectionEncoder.
 
         Args:
             input_transform: Class which determines how input image and bg are transformed.
