@@ -11,7 +11,7 @@ frame = SDSSFrame(sdss_dir, pixel_scale, coadd_file)
 background = frame.background
 image = frame.image
 
-psf = image[447:460, 1157:1170]
+psf = image[0][0][447:460, 1157:1170]
 psf = psf - psf.min()
 psf /= psf.sum()
 
