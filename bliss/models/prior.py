@@ -49,9 +49,7 @@ class GalaxyPrior:
             if isinstance(galaxy_dataset, SingleGalsimGalaxies):
                 flux_sample = galaxy_dataset.prior.flux_sample
                 a_sample = galaxy_dataset.prior.a_sample
-                warn(
-                    f"Creating latents from Galsim galaxies with {flux_sample} flux distribution..."
-                )
+                warn(f"Creating latents of Galsim galaxies with {flux_sample} flux distribution...")
                 warn(f"Creating latents from Galsim galaxies with {a_sample} size distribution...")
             latents = autoencoder.generate_latents(dataloader, n_latent_batches)
             torch.save(latents, latents_path)
