@@ -9,13 +9,13 @@ from torch.nn import BCELoss
 from torch.optim import Adam
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
-from bliss.models.location_encoder import (
+from bliss.models.detection_encoder import (
     ConcatBackgroundTransform,
     EncoderCNN,
     LogBackgroundTransform,
     make_enc_final,
 )
+from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
 from bliss.reporting import plot_image_and_locs
 
 

@@ -768,7 +768,7 @@ class SDSSReconstructionFigures(BlissFigures):
 
     def compute_data(self, frame: Union[SDSSFrame, SimulatedFrame], encoder: Encoder, decoder):
 
-        tile_slen = encoder.location_encoder.tile_slen
+        tile_slen = encoder.detection_encoder.tile_slen
         device = encoder.device
         data = {}
 
@@ -861,7 +861,7 @@ class SDSSReconstructionFigures(BlissFigures):
 def load_models(cfg, device):
     # load models required for SDSS reconstructions.
 
-    location = instantiate(cfg.models.location_encoder).to(device).eval()
+    location = instantiate(cfg.models.detection_encoder).to(device).eval()
     location.load_state_dict(
         torch.load(cfg.plots.location_checkpoint, map_location=location.device)
     )

@@ -48,10 +48,10 @@ models:
     sdss_bands:
       - 2
       - 3
-  location_encoder:
-    _target_: bliss.models.location_encoder.LocationEncoder
+  detection_encoder:
+    _target_: bliss.models.detection_encoder.DetectionEncoder
     input_transform:
-      _target_: bliss.models.location_encoder.LogBackgroundTransform
+      _target_: bliss.models.detection_encoder.LogBackgroundTransform
     n_bands: ${models.decoder.n_bands}
     tile_slen: ${models.decoder.tile_slen}
     ptile_slen: 8
@@ -73,7 +73,7 @@ models:
     prob_galaxy: 0.0
 
 training:
-  model: "${models.location_encoder}"
+  model: "${models.detection_encoder}"
   dataset: "${datasets.simulated_m2}"
   optimizer_params:
     lr: 0.00098352

@@ -3,7 +3,7 @@ GPU_BINARY:=$(GPU)
 GPU_GALAXY_ENCODER:=$(GPU)
 GPU_LOCATION_ENCODER:=$(GPU)
 
-all: models/sdss_autoencoder.pt models/sdss_binary.pt models/sdss_galaxy_encoder.pt models/sdss_location_encoder.pt
+all: models/sdss_autoencoder.pt models/sdss_binary.pt models/sdss_galaxy_encoder.pt models/sdss_detection_encoder.pt
 
 models/sdss_autoencoder.pt:
 	./run_experiment.sh sdss_autoencoder $(GPU)
@@ -15,8 +15,8 @@ models/sdss_binary.pt: models/sdss_autoencoder.pt
 models/sdss_galaxy_encoder.pt: models/sdss_autoencoder.pt
 	./run_experiment.sh sdss_galaxy_encoder $(GPU_GALAXY_ENCODER)
 
-models/sdss_location_encoder.pt: models/sdss_autoencoder.pt
-	./run_experiment.sh sdss_location_encoder $(GPU_LOCATION_ENCODER)
+models/sdss_detection_encoder.pt: models/sdss_autoencoder.pt
+	./run_experiment.sh sdss_detection_encoder $(GPU_LOCATION_ENCODER)
 
 clean:
-	rm models/sdss_autoencoder.pt models/sdss_binary.pt models/sdss_galaxy_encoder.pt models/sdss_location_encoder.pt models/latents_simulated_sdss_galaxies.pt
+	rm models/sdss_autoencoder.pt models/sdss_binary.pt models/sdss_galaxy_encoder.pt models/sdss_detection_encoder.pt models/latents_simulated_sdss_galaxies.pt

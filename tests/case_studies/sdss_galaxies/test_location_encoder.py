@@ -5,7 +5,7 @@ import pytest
 def overrides(devices):
     overrides = {
         "mode": "train",
-        "training": "sdss_location_encoder",
+        "training": "sdss_detection_encoder",
     }
     if devices.use_cuda:
         overrides.update({"training.n_epochs": 201})
@@ -21,7 +21,7 @@ def overrides(devices):
     return overrides
 
 
-def test_sdss_location_encoder(sdss_galaxies_setup, overrides, devices):
+def test_sdss_detection_encoder(sdss_galaxies_setup, overrides, devices):
     trained_location = sdss_galaxies_setup.get_trained_model(overrides)
     results = sdss_galaxies_setup.test_model(overrides, trained_location)
 
@@ -39,12 +39,12 @@ def test_sdss_location_encoder(sdss_galaxies_setup, overrides, devices):
     assert results["f1"] > 0.8
 
 
-def test_location_encoder_plotting(sdss_galaxies_setup, overrides):
+def test_detection_encoder_plotting(sdss_galaxies_setup, overrides):
     # just to test `make_validation_plots` works.
     overrides.update(
         {
             "datasets.simulated.batch_size": 16,
-            "models.location_encoder.annotate_probs": True,
+            "models.detection_encoder.annotate_probs": True,
             "training.trainer.log_every_n_steps": 1,
         }
     )

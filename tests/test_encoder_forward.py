@@ -2,7 +2,7 @@ import torch
 from einops import rearrange
 
 from bliss.catalog import get_images_in_tiles
-from bliss.models.location_encoder import LocationEncoder, LogBackgroundTransform
+from bliss.models.detection_encoder import DetectionEncoder, LogBackgroundTransform
 
 
 class TestSourceEncoder:
@@ -24,7 +24,7 @@ class TestSourceEncoder:
         background = (10.0, 20.0)
 
         # get encoder
-        star_encoder: LocationEncoder = LocationEncoder(
+        star_encoder: DetectionEncoder = DetectionEncoder(
             LogBackgroundTransform(),
             channel=8,
             dropout=0,
@@ -85,7 +85,7 @@ class TestSourceEncoder:
         )
         background_tensor = background_tensor.expand(*images.shape)
 
-        star_encoder: LocationEncoder = LocationEncoder(
+        star_encoder: DetectionEncoder = DetectionEncoder(
             LogBackgroundTransform(),
             channel=8,
             dropout=0,

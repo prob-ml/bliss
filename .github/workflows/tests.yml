@@ -70,7 +70,7 @@ jobs:
 
       - name: Run pylint
         run: |
-          poetry run pylint bliss/ tests/
+          poetry run pylint bliss/ tests/ case_studies/
 
       - name: Run darglint
         run: |
