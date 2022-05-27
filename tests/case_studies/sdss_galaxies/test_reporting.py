@@ -15,7 +15,7 @@ def test_scene_metrics():
         100,
         {
             "plocs": torch.tensor([[[50.0, 50.0]]]).float(),
-            "galaxy_bools": torch.tensor([[[1]]]).bool(),
+            "galaxy_bools": torch.tensor([[[1]]]).float(),
             "n_sources": torch.tensor([1]).long(),
             "mags": torch.tensor([[[23.0]]]).float(),
         },
@@ -29,7 +29,7 @@ def test_catalog_conversion():
         100,
         {
             "plocs": torch.tensor([[[51.8, 49.6]]]).float(),
-            "galaxy_bools": torch.tensor([[[1]]]).bool(),
+            "galaxy_bools": torch.tensor([[[1]]]).float(),
             "n_sources": torch.tensor([1]).long(),
             "mags": torch.tensor([[[23.0]]]).float(),
         },
@@ -77,4 +77,5 @@ def test_measurements():
     gal_conv = galsim.Convolution(gal, psf)
     psf_image = psf.drawImage(nx=slen, ny=slen, scale=pixel_scale).array.reshape(1, slen, slen)
     image = gal_conv.drawImage(nx=slen, ny=slen, scale=pixel_scale).array.reshape(1, 1, slen, slen)
+    image, psf_image = torch.from_numpy(image), torch.from_numpy(psf_image)
     reporting.get_single_galaxy_measurements(image, psf_image, pixel_scale)

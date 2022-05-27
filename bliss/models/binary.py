@@ -205,10 +205,10 @@ class BinaryEncoder(pl.LightningModule):
             labels = None if ii > 0 else ("t. gal", "p. gal", "t. star", "p. star")
             bp = self.border_padding
             image = batch["images"][ii, 0].numpy()
-            true_plocs = true_params.plocs[ii].numpy()
-            true_gbools = true_params["galaxy_bools"][ii].numpy()
-            est_plocs = est.plocs[ii].numpy()
-            est_gprobs = est["galaxy_probs"][ii].numpy()
+            true_plocs = true_params.plocs[ii].numpy().reshape(-1, 2)
+            true_gbools = true_params["galaxy_bools"][ii].numpy().reshape(-1)
+            est_plocs = est.plocs[ii].numpy().reshape(-1, 2)
+            est_gprobs = est["galaxy_probs"][ii].numpy().reshape(-1)
             slen, _ = image.shape
             plot_image(fig, ax, image, colorbar=False)
             plot_locs(ax, bp, slen, true_plocs, true_gbools, m="+", s=30, cmap="cool")

@@ -249,12 +249,9 @@ class FullCatalog(UserDict):
 
         # provide star_bools automatically if galaxy_bools is set.
         if key == "galaxy_bools" and "star_bools" not in self:
+            assert item.dtype != torch.bool, "galaxy_bools should be float for consistency."
             is_on_array = get_is_on_from_n_sources(self.n_sources, self.max_sources)
-            if item.dtype == torch.bool:
-                star_bools = ~item * is_on_array.unsqueeze(-1)
-                star_bools = star_bools.bool()
-            else:
-                star_bools = (1 - item) * is_on_array.unsqueeze(-1)
+            star_bools = (1 - item) * is_on_array.unsqueeze(-1)
             super().__setitem__("star_bools", star_bools)
 
     def __getitem__(self, key: str) -> Tensor:
@@ -432,8 +429,8 @@ class PhotoFullCatalog(FullCatalog):
         d = {
             "plocs": plocs.reshape(1, nobj, 2),
             "n_sources": torch.tensor((nobj,)),
-            "galaxy_bools": galaxy_bools.reshape(1, nobj, 1),
-            "star_bools": star_bools.reshape(1, nobj, 1),
+            "galaxy_bools": galaxy_bools.reshape(1, nobj, 1).float(),
+            "star_bools": star_bools.reshape(1, nobj, 1).float(),
             "fluxes": fluxes.reshape(1, nobj, 1),
             "mags": mags.reshape(1, nobj, 1),
         }

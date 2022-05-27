@@ -366,7 +366,7 @@ class CoaddFullCatalog(FullCatalog):
             arr = column_to_tensor(cat, coadd_name)[keep]
             data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
 
-        data["galaxy_bools"] = data["galaxy_bools"].bool()
+        data["galaxy_bools"] = data["galaxy_bools"].float()
         return cls(height, width, data)
 
 

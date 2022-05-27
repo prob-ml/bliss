@@ -265,8 +265,8 @@ class GalaxyEncoder(pl.LightningModule):
             slen = images.shape[-1] - 2 * self.border_padding
             bp = self.border_padding
             image = images[i, 0].numpy()
-            plocs = est.plocs[i].numpy()
-            probs = est["galaxy_bools"][i].numpy()
+            plocs = est.plocs[i].numpy().reshape(-1, 2)
+            probs = est["galaxy_bools"][i].numpy().reshape(-1)
             plot_image(fig, true_ax, image, vrange=vrange, colorbar=True)
             plot_locs(true_ax, bp, slen, plocs, probs, cmap="cool")
             plot_image(fig, recon_ax, image, vrange=vrange, colorbar=True)

@@ -790,7 +790,7 @@ class SDSSReconstructionFigures(BlissFigures):
         self, frame: Union[SDSSFrame, SimulatedFrame], encoder: Encoder, decoder: ImageDecoder
     ):
 
-        tile_slen = encoder.location_encoder.tile_slen
+        tile_slen = encoder.detection_encoder.tile_slen
         data = {}
 
         for figname, scene_coords in self.scenes.items():
@@ -828,7 +828,7 @@ class SDSSReconstructionFigures(BlissFigures):
                 "recon": recon[0, 0],
                 "resid": resid[0, 0],
                 "coplocs": coplocs,
-                "cogbools": coadd_params["galaxy_bools"].reshape(-1).float(),
+                "cogbools": coadd_params["galaxy_bools"].reshape(-1),
                 "plocs": recon_map.plocs.reshape(-1, 2),
                 "gprobs": recon_map["galaxy_probs"].reshape(-1),
                 "prob_n_sources": prob_n_sources,
@@ -847,7 +847,6 @@ class SDSSReconstructionFigures(BlissFigures):
             dvalues = data[figname].values()
             true, recon, res, coplocs, cogbools, plocs, gprobs, prob_n_sources = dvalues
             assert slen == true.shape[-1] == recon.shape[-1] == res.shape[-1]
-            assert cogbools.dtype == np.float32
             fig, (ax_true, ax_recon, ax_res) = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
 
             ax_true.set_title("Original Image", pad=pad)
