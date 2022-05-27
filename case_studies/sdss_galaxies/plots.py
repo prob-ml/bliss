@@ -824,13 +824,13 @@ class SDSSReconstructionFigures(BlissFigures):
             recon = recon.cpu()
             resid = resid.cpu()
             data[figname] = {
-                "true": true,
-                "recon": recon,
-                "resid": resid,
+                "true": true[0, 0],
+                "recon": recon[0, 0],
+                "resid": resid[0, 0],
                 "coplocs": coplocs,
-                "cogbools": coadd_params["galaxy_bools"].reshape(-1),
+                "cogbools": coadd_params["galaxy_bools"].reshape(-1).float(),
                 "plocs": recon_map.plocs.reshape(-1, 2),
-                "gprobs": recon_map["galaxy_probs"].reshape(-1, 2),
+                "gprobs": recon_map["galaxy_probs"].reshape(-1),
                 "prob_n_sources": prob_n_sources,
             }
 
@@ -847,6 +847,7 @@ class SDSSReconstructionFigures(BlissFigures):
             dvalues = data[figname].values()
             true, recon, res, coplocs, cogbools, plocs, gprobs, prob_n_sources = dvalues
             assert slen == true.shape[-1] == recon.shape[-1] == res.shape[-1]
+            assert cogbools.dtype == np.float32
             fig, (ax_true, ax_recon, ax_res) = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
 
             ax_true.set_title("Original Image", pad=pad)
@@ -854,23 +855,24 @@ class SDSSReconstructionFigures(BlissFigures):
             ax_res.set_title("Residual", pad=pad)
 
             s = 55 * 300 / slen  # marker size
+            sp = s * 1.5
             lw = 2 * np.sqrt(300 / slen)
 
             vrange1 = (800, 1100)
             vrange2 = (-5, 5)
             labels = ["Coadd Galaxies", "Coadd Stars", "BLISS Galaxies", "BLISS Stars"]
             reporting.plot_image(fig, ax_true, true, vrange1)
-            reporting.plot_locs(ax_true, 0, slen, coplocs, cogbools, "+", s * 1.5, lw, cmap="cool")
+            reporting.plot_locs(ax_true, 0, slen, coplocs, cogbools, "+", sp, lw, cmap="cool")
             reporting.plot_locs(ax_true, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr")
 
             reporting.plot_image(fig, ax_recon, recon, vrange1)
-            reporting.plot_locs(ax_recon, 0, slen, coplocs, cogbools, "+", s * 1.5, lw, cmap="cool")
+            reporting.plot_locs(ax_recon, 0, slen, coplocs, cogbools, "+", sp, lw, cmap="cool")
             reporting.plot_locs(ax_recon, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr")
             reporting.add_legend(ax_recon, labels, s=s)
 
             reporting.plot_image(fig, ax_res, res, vrange2)
             reporting.plot_locs(
-                ax_res, 0, slen, coplocs, cogbools, "+", s * 1.5, lw, cmap="cool", alpha=0.5
+                ax_res, 0, slen, coplocs, cogbools, "+", sp, lw, cmap="cool", alpha=0.5
             )
             reporting.plot_locs(ax_res, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr", alpha=0.5)
             plt.subplots_adjust(hspace=-0.4)
