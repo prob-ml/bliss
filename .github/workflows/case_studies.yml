@@ -67,6 +67,10 @@ jobs:
         run: |
           poetry install
 
+      - name: Run tests on a GPU
+        run: |
+          poetry run pytest --gpu
+
       - name: Run case studies
         run: |
           poetry run make -B -C case_studies/sdss_galaxies_vae/
