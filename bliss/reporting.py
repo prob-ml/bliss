@@ -226,7 +226,7 @@ def scene_metrics(
     mag_min: float = -np.inf,
     mag_max: float = np.inf,
     slack: float = 1.0,
-) -> Dict[str, float]:
+) -> dict:
     """Return detection and classification metrics based on a given ground truth.
 
     These metrics are computed as a function of magnitude based on the specified
@@ -264,10 +264,10 @@ def scene_metrics(
     # f1-score
     f1 = 2 * precision * recall / (precision + recall)
     detection_result = {
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "n_galaxies_detected": n_galaxies_detected,
+        "precision": precision.item(),
+        "recall": recall.item(),
+        "f1": f1.item(),
+        "n_galaxies_detected": n_galaxies_detected.item(),
     }
 
     # classification
@@ -294,8 +294,8 @@ def scene_metrics(
         "tscount": tscount,
         "egcount": egcount,
         "escount": escount,
-        "n_matches_coadd_gal": n_matches_gal_coadd,
-        "n_matches_coadd_star": n_matches - n_matches_gal_coadd,
+        "n_matches_coadd_gal": n_matches_gal_coadd.item(),
+        "n_matches_coadd_star": n_matches.item() - n_matches_gal_coadd.item(),
     }
 
     # compute and return results
@@ -389,8 +389,8 @@ def get_single_galaxy_measurements(
     assert slen == w and c == 1 and psf_image.shape == (c, slen, w)
     images = rearrange(images, "n c h w -> (n c) h w")
     psf_image = rearrange(psf_image, "c h w -> (c h) w")
-    fluxes = images.sum(axis=(1, 2))
-    ellip = np.zeros((n_samples, 2))  # 2nd shape: e1, e2
+    fluxes = torch.sum(images, (1, 2))
+    ellip = torch.zeros((n_samples, 2))  # 2nd shape: e1, e2
 
     # get galsim PSF
     images_np = images.numpy()
@@ -404,11 +404,12 @@ def get_single_galaxy_measurements(
         res_true = galsim.hsm.EstimateShear(
             galsim_image, galsim_psf_image, shear_est="KSB", strict=False
         )
-        ellip[i, :] = (res_true.corrected_g1, res_true.corrected_g2)
+        g1, g2 = float(res_true.corrected_g1), float(res_true.corrected_g2)
+        ellip[i, :] = torch.tensor([g1, g2])
 
     return {
         "fluxes": fluxes,
-        "ellip": torch.tensor(ellip),
+        "ellip": ellip,
         "mags": convert_flux_to_mag(fluxes),
     }
 
