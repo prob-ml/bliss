@@ -4,7 +4,7 @@ import warnings
 from abc import abstractmethod
 from collections import defaultdict
 from pathlib import Path
-from typing import Union
+from typing import Union, Dict
 
 import galsim
 import hydra
@@ -15,6 +15,7 @@ import seaborn as sns
 import torch
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
+from torch import Tensor
 
 from bliss import generate, reporting
 from bliss.catalog import FullCatalog, PhotoFullCatalog
@@ -121,6 +122,21 @@ def remove_outliers(*args, level=0.99):
     return (arg[keep] for arg in args)
 
 
+def to_numpy(d: dict):
+    for k, v in d.items():
+        if isinstance(v, Tensor):
+            d[k] = v.numpy()
+        elif isinstance(v, (float, int, np.ndarray)):
+            d[k] = v
+        elif isinstance(v, dict):
+            v = to_numpy(v)
+            d[k] = v
+        else:
+            msg = f"Data returned can only be dict, tensor, array, or float but got {type(v)}"
+            raise TypeError(msg)
+    return d
+
+
 class BlissFigures:
     cache = "temp.pt"
 
@@ -141,13 +157,15 @@ class BlissFigures:
         return data
 
     @abstractmethod
-    def compute_data(self, *args, **kwargs):
+    def compute_data(self, *args, **kwargs) -> dict:
+        """Should only return tensors that can be casted to numpy."""
         return {}
 
     def save_figures(self, *args, **kwargs):
         """Create figures and save to output directory with names from `self.fignames`."""
         data = self.get_data(*args, **kwargs)
-        figs = self.create_figures(data)
+        data_np = to_numpy(data)
+        figs = self.create_figures(data_np)  # data for figures is all numpy arrays or floats.
         for figname, fig in figs.items():
             figfile = self.figdir / f"{figname}.{self.img_format}"
             fig.savefig(figfile, format=self.img_format)
@@ -176,12 +194,12 @@ class AEReconstructionFigures(BlissFigures):
         device = autoencoder.device  # GPU is better otherwise slow.
 
         image_data = torch.load(images_file)
-        true_params = image_data["params"]
-        images = image_data["images"]
+        true_params: Tensor = image_data["params"]
+        images: Tensor = image_data["images"]
         recon_means = torch.tensor([])
-        background = image_data["background"].reshape(1, 1, 53, 53).to(device)
-        noiseless_images = image_data["noiseless"].numpy()  # no background or noise.
-        snr = image_data["snr"].reshape(-1).numpy()
+        background: Tensor = image_data["background"].reshape(1, 1, 53, 53).to(device)
+        noiseless_images: Tensor = image_data["noiseless"]
+        snr: Tensor = image_data["snr"].reshape(-1)
 
         print("INFO: Computing reconstructions from saved autoencoder model...")
         n_images = images.shape[0]
@@ -206,10 +224,10 @@ class AEReconstructionFigures(BlissFigures):
         psf_array = np.load(psf_file)
         galsim_psf_image = galsim.Image(psf_array[0], scale=sdss_pixel_scale)  # sdss scale
         psf = galsim.InterpolatedImage(galsim_psf_image).withFlux(1.0)
-        psf_image = psf.drawImage(nx=53, ny=53, scale=sdss_pixel_scale).array
+        psf_image = torch.tensor(psf.drawImage(nx=53, ny=53, scale=sdss_pixel_scale).array)
 
-        recon_no_background = recon_means.numpy() - background.cpu().numpy()
-        assert np.all(recon_no_background.sum(axis=(1, 2, 3)) > 0)
+        recon_no_background = recon_means - background.cpu()
+        assert torch.all(recon_no_background.sum(axis=(1, 2, 3)) > 0)
         true_meas = reporting.get_single_galaxy_measurements(
             noiseless_images, psf_image.reshape(-1, 53, 53), sdss_pixel_scale
         )
@@ -221,8 +239,16 @@ class AEReconstructionFigures(BlissFigures):
         measurements = {**true_meas, **recon_meas, "snr": snr}
 
         return {
-            "random": (images[rand_indices], recon_means[rand_indices], residuals[rand_indices]),
-            "worst": (images[worst_indices], recon_means[worst_indices], residuals[worst_indices]),
+            "random": {
+                "true": images[rand_indices],
+                "recon": recon_means[rand_indices],
+                "res": residuals[rand_indices],
+            },
+            "worst": {
+                "true": images[worst_indices],
+                "recon": recon_means[worst_indices],
+                "res": residuals[worst_indices],
+            },
             "measurements": measurements,
             "true_params": true_params,
         }
@@ -254,9 +280,9 @@ class AEReconstructionFigures(BlissFigures):
                 )
 
             # standarize ranges of true and reconstruction
-            image = images[i, 0].detach().cpu().numpy()
-            recon = recons[i, 0].detach().cpu().numpy()
-            residual = residuals[i, 0].detach().cpu().numpy()
+            image = images[i, 0]
+            recon = recons[i, 0]
+            residual = residuals[i, 0]
 
             vmin = min(image.min().item(), recon.min().item())
             vmax = max(image.max().item(), recon.max().item())
@@ -483,19 +509,19 @@ class AEReconstructionFigures(BlissFigures):
         return fig
 
     def create_figures(self, data):
-        # flux vs magnitude
-
         return {
-            "random_recon": self.reconstruction_figure(*data["random"]),
-            "worst_recon": self.reconstruction_figure(*data["worst"]),
+            "random_recon": self.reconstruction_figure(*data["random"].values()),
+            "worst_recon": self.reconstruction_figure(*data["worst"].values()),
             "single_galaxy_meas_contours": self.make_scatter_contours_plot(data["measurements"]),
             "single_galaxy_meas_bins": self.make_scatter_bin_plots(data["measurements"]),
             "flux_vs_snr": self.create_flux_vs_snr_plot(data["measurements"]),
         }
 
 
-def compute_mag_bin_metrics(mag_bins: np.ndarray, truth: FullCatalog, pred: FullCatalog) -> dict:
-    metrics_per_mag = defaultdict(lambda: np.zeros(len(mag_bins)))
+def compute_mag_bin_metrics(
+    mag_bins: Tensor, truth: FullCatalog, pred: FullCatalog
+) -> Dict[str, Tensor]:
+    metrics_per_mag = defaultdict(lambda: torch.zeros(len(mag_bins)))
 
     # compute data for precision/recall/classification accuracy as a function of magnitude.
     for ii, (mag1, mag2) in enumerate(mag_bins):
@@ -570,13 +596,13 @@ class DetectionClassificationFigures(BlissFigures):
     def compute_metrics(truth: FullCatalog, pred: FullCatalog):
 
         # prepare magnitude bins
-        mag_cuts2 = np.arange(18, 24.5, 0.25)
-        mag_cuts1 = np.full_like(mag_cuts2, fill_value=-np.inf)
-        mag_cuts = np.column_stack((mag_cuts1, mag_cuts2))
+        mag_cuts2 = torch.arange(18, 24.5, 0.25)
+        mag_cuts1 = torch.full_like(mag_cuts2, fill_value=-np.inf)
+        mag_cuts = torch.column_stack((mag_cuts1, mag_cuts2))
 
-        mag_bins2 = np.arange(18, 25, 1.0)
+        mag_bins2 = torch.arange(18, 25, 1.0)
         mag_bins1 = mag_bins2 - 1
-        mag_bins = np.column_stack((mag_bins1, mag_bins2))
+        mag_bins = torch.column_stack((mag_bins1, mag_bins2))
 
         # compute metrics
         cuts_data = compute_mag_bin_metrics(mag_cuts, truth, pred)
@@ -599,7 +625,13 @@ class DetectionClassificationFigures(BlissFigures):
             "emag": pred["mags"].reshape(-1)[eindx][dkeep],
         }
 
-        return mag_cuts2, mag_bins2, cuts_data, bins_data, full_metrics
+        return {
+            "mag_cuts": mag_cuts2,
+            "mag_bins": mag_bins2,
+            "cuts_data": cuts_data,
+            "bins_data": bins_data,
+            "full_metrics": full_metrics,
+        }
 
     def compute_data(
         self,
@@ -676,9 +708,9 @@ class DetectionClassificationFigures(BlissFigures):
         # scatter of matched objects magnitude vs classification probability.
         set_rc_params(tick_label_size=22, label_size=30)
         fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-        tgbool = data["tgbool"].numpy().astype(bool)
-        egbool = data["egbool"].numpy().astype(bool)
-        tmag, egprob = data["tmag"].numpy(), data["egprob"].numpy()
+        tgbool = data["tgbool"].astype(bool)
+        egbool = data["egbool"].astype(bool)
+        tmag, egprob = data["tmag"], data["egprob"]
         correct = np.equal(tgbool, egbool)
 
         ax.scatter(tmag[correct], egprob[correct], marker="+", c="b", label="correct", alpha=0.5)
@@ -696,8 +728,8 @@ class DetectionClassificationFigures(BlissFigures):
 
     @staticmethod
     def make_mag_mag_scatter_figure(data):
-        tgbool = data["tgbool"].numpy().astype(bool)
-        tmag, emag = data["tmag"].numpy(), data["emag"].numpy()
+        tgbool = data["tgbool"].astype(bool)
+        tmag, emag = data["tmag"], data["emag"]
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
         ax1.scatter(tmag[tgbool], emag[tgbool], marker="o", c="r", alpha=0.5)
@@ -742,8 +774,8 @@ class DetectionClassificationFigures(BlissFigures):
     def create_figures(self, data):
         """Make figures related to detection and classification in SDSS."""
         sns.set_theme(style="darkgrid")
-        bliss_figs = self.create_metrics_figures(*data["bliss_metrics"], name="bliss_sdss")
-        photo_figs = self.create_metrics_figures(*data["photo_metrics"], name="photo_sdss")
+        bliss_figs = self.create_metrics_figures(**data["bliss_metrics"], name="bliss_sdss")
+        photo_figs = self.create_metrics_figures(**data["photo_metrics"], name="photo_sdss")
         return {**bliss_figs, **photo_figs}
 
 
@@ -791,7 +823,14 @@ class SDSSReconstructionFigures(BlissFigures):
             true = true.cpu()
             recon = recon.cpu()
             resid = resid.cpu()
-            data[figname] = (true, recon, resid, coadd_params, recon_map, prob_n_sources)
+            data[figname] = {
+                "true": true,
+                "recon": recon,
+                "resid": resid,
+                "plocs": coadd_params,
+                "recon_map": recon_map,
+                "prob_n_sources": prob_n_sources,
+            }
 
         return data
 
@@ -803,7 +842,7 @@ class SDSSReconstructionFigures(BlissFigures):
         set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
         for figname, scene_coords in self.scenes.items():
             scene_size = scene_coords["size"]
-            true, recon, res, coadd_params, recon_map, prob_n_sources = data[figname]
+            true, recon, res, coadd_params, recon_map, prob_n_sources = data[figname].values()
             fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
 
             ax_true = axes[0]
