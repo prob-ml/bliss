@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.nn import functional as F
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.datasets.sdss import SloanDigitalSkySurvey, convert_flux_to_mag
+from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
@@ -23,8 +23,6 @@ def reconstruct_scene_at_coordinates(
     background: Tensor,
     h_range: Tuple[int, int],
     w_range: Tuple[int, int],
-    slen: int = 300,
-    device=None,
 ) -> Tuple[Tensor, TileCatalog]:
     """Reconstruct all objects contained within a scene, padding as needed.
 
@@ -44,12 +42,6 @@ def reconstruct_scene_at_coordinates(
             Range of height coordinates.
         w_range:
             Range of width coordinates.
-        slen:
-            The side-lengths of smaller chunks to create. Defaults to 80.
-        device:
-            Device used for rendering each chunk (i.e. a torch.device). Note
-            that chunks are moved onto and off the device to allow for rendering
-            larger images.
 
     Returns:
         A tuple of two items:
@@ -73,9 +65,6 @@ def reconstruct_scene_at_coordinates(
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
     with torch.no_grad():
         tile_map_scene = encoder.variational_mode(scene, bg_scene)
-        tile_map_scene["galaxy_fluxes"] = decoder.get_galaxy_fluxes(
-            tile_map_scene["galaxy_bools"], tile_map_scene["galaxy_params"]
-        )
         recon = render_scene(decoder, tile_map_scene)
     assert recon.shape == scene.shape
     recon += bg_scene
@@ -154,9 +143,7 @@ class SimulatedFrame:
         else:
             print("INFO: started generating frame")
             tile_catalog = dataset.sample_prior(1, n_tiles_h, n_tiles_w)
-            tile_catalog["galaxy_fluxes"] = dataset.image_decoder.get_galaxy_fluxes(
-                tile_catalog["galaxy_bools"], tile_catalog["galaxy_params"]
-            )
+            dataset.image_decoder.set_all_fluxes_and_mags(tile_catalog)
             image, background = dataset.simulate_image_from_catalog(tile_catalog)
             print("INFO: done generating frame")
             if sim_frame_path:
@@ -179,13 +166,7 @@ class SimulatedFrame:
         for k, v in self.tile_catalog.to_dict().items():
             tile_dict[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         tile_cat = TileCatalog(self.tile_slen, tile_dict)
-        full_cat = tile_cat.to_full_params()
-        full_cat["fluxes"] = (
-            full_cat["galaxy_bools"] * full_cat["galaxy_fluxes"]
-            + full_cat["star_bools"] * full_cat["fluxes"]
-        )
-        full_cat["mags"] = convert_flux_to_mag(full_cat["fluxes"])
-        return full_cat
+        return tile_cat.to_full_params()
 
 
 class SemiSyntheticFrame:
@@ -232,19 +213,7 @@ class SemiSyntheticFrame:
             full_coadd_cat.plocs = full_coadd_cat.plocs + 0.5
             max_sources = dataset.image_prior.max_sources
             tile_catalog = full_coadd_cat.to_tile_params(self.tile_slen, max_sources)
-            tile_catalog["galaxy_fluxes"] = dataset.image_decoder.get_galaxy_fluxes(
-                tile_catalog["galaxy_bools"], tile_catalog["galaxy_params"]
-            )
-            tile_catalog["star_bools"] = 1 - tile_catalog["galaxy_bools"]
-            tile_catalog["fluxes"] = (
-                tile_catalog["galaxy_bools"] * tile_catalog["galaxy_fluxes"]
-                + tile_catalog["star_bools"] * tile_catalog["fluxes"]
-            )
-            is_on_array = tile_catalog.is_on_array > 0
-            tile_catalog["mags"] = torch.zeros_like(tile_catalog["fluxes"])
-            tile_catalog["mags"][is_on_array] = convert_flux_to_mag(
-                tile_catalog["fluxes"][is_on_array]
-            )
+            dataset.image_decoder.set_all_fluxes_and_mags(tile_catalog)
             fc = tile_catalog.to_full_params()
             assert fc.equals(
                 full_coadd_cat, exclude=("galaxy_fluxes", "star_bools", "fluxes", "mags")

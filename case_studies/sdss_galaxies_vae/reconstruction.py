@@ -17,8 +17,8 @@ from torch.types import Number
 from tqdm import tqdm
 
 from bliss import reporting
-from bliss.catalog import FullCatalog, TileCatalog
-from bliss.datasets.sdss import PhotoFullCatalog, SloanDigitalSkySurvey, convert_flux_to_mag
+from bliss.catalog import FullCatalog, PhotoFullCatalog, TileCatalog
+from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.encoder import Encoder
 from bliss.inference import (
     SDSSFrame,
@@ -45,7 +45,7 @@ def reconstruct(cfg):
         outdir = None
     frame: Frame = instantiate(cfg.reconstruct.frame)
     device = torch.device(cfg.reconstruct.device)
-    decoder, encoder, prior = load_models(cfg, device)
+    decoder, encoder, _ = load_models(cfg, device)
     if cfg.reconstruct.photo_catalog is not None:
         photo_catalog = PhotoFullCatalog.from_file(**cfg.reconstruct.photo_catalog)
     else:
@@ -65,26 +65,12 @@ def reconstruct(cfg):
     hlims = (h, h_end)
     wlims = (w, w_end)
     _, tile_map_recon = reconstruct_scene_at_coordinates(
-        encoder,
-        decoder,
-        frame.image,
-        frame.background,
-        hlims,
-        wlims,
-        slen=cfg.reconstruct.slen,
-        device=device,
+        encoder, decoder, frame.image, frame.background, hlims, wlims
     )
-    tile_map_recon = tile_map_recon.cpu()
+    tile_map_recon: TileCatalog = tile_map_recon.cpu()
     tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
     print(f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image.")
-    tile_map_recon["fluxes"] = (
-        tile_map_recon["galaxy_bools"] * tile_map_recon["galaxy_fluxes"]
-        + tile_map_recon["star_bools"] * tile_map_recon["fluxes"]
-    )
-    tile_map_recon["mags"] = torch.zeros_like(tile_map_recon["fluxes"])
-    tile_map_recon["mags"][tile_map_recon.is_on_array > 0] = convert_flux_to_mag(
-        tile_map_recon["fluxes"][tile_map_recon.is_on_array > 0]
-    )
+    decoder.set_all_fluxes_and_mags(tile_map_recon)
 
     full_map_recon = tile_map_recon.to_full_params()
     scene_metrics_by_mag: Dict[str, pd.DataFrame] = {}
@@ -109,14 +95,7 @@ def reconstruct(cfg):
         map_n_source_weights=cfg.reconstruct.map_n_source_weights,
     ).to(encoder.device)
     _, tile_map_lower_threshold = reconstruct_scene_at_coordinates(
-        encoder_lower_threshold,
-        decoder,
-        frame.image,
-        frame.background,
-        hlims,
-        wlims,
-        slen=cfg.reconstruct.slen,
-        device=device,
+        encoder_lower_threshold, decoder, frame.image, frame.background, hlims, wlims
     )
     tile_map_lower_threshold = tile_map_lower_threshold.cpu()
     positive_negative_stats = get_positive_negative_stats(

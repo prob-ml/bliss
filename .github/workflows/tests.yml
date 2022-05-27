@@ -62,7 +62,7 @@ jobs:
 
       - name: Run flake8
         run: |
-          poetry run flake8 .
+          poetry run flake8 bliss/ tests/
 
       - name: Run mypy
         run: |
@@ -70,7 +70,7 @@ jobs:
 
       - name: Run pylint
         run: |
-          poetry run pylint bliss/ tests/ case_studies/
+          poetry run pylint bliss/ tests/
 
       - name: Run darglint
         run: |
