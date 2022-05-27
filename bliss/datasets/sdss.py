@@ -7,17 +7,18 @@ from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
 from einops import rearrange
 from scipy.interpolate import RegularGridInterpolator
+from torch import Tensor
 from torch.utils.data import Dataset
 
 
-def convert_mag_to_flux(mag, nelec_per_nmgy=987.31):
+def convert_mag_to_flux(mag: Tensor, nelec_per_nmgy=987.31) -> Tensor:
     # default corresponds to average value of columns for run 94, camcol 1, field 12
     return 10 ** ((22.5 - mag) / 2.5) * nelec_per_nmgy
 
 
-def convert_flux_to_mag(flux, nelec_per_nmgy=987.31):
+def convert_flux_to_mag(flux: Tensor, nelec_per_nmgy=987.31) -> Tensor:
     # default corresponds to average value of columns for run 94, camcol 1, field 12
-    return 22.5 - 2.5 * np.log10(flux / nelec_per_nmgy)
+    return 22.5 - 2.5 * torch.log10(flux / nelec_per_nmgy)
 
 
 class SloanDigitalSkySurvey(Dataset):
