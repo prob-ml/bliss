@@ -8,7 +8,7 @@ def overrides(devices):
         "training": "sdss_detection_encoder",
     }
     if devices.use_cuda:
-        overrides.update({"training.n_epochs": 201})
+        overrides.update({"training.n_epochs": 51})
     else:
         overrides.update(
             {
@@ -36,7 +36,7 @@ def test_sdss_detection_encoder(sdss_galaxies_setup, overrides, devices):
     # check testing results are sensible.
     assert results["avg_distance"] < 1.5
     assert results["precision"] > 0.8
-    assert results["f1"] > 0.8
+    assert results["f1"] > 0.6
 
 
 def test_detection_encoder_plotting(sdss_galaxies_setup, overrides):

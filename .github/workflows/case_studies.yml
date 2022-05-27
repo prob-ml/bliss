@@ -6,7 +6,27 @@ on:
     - cron: '0 8 * * *'
 
 jobs:
+# from https://stackoverflow.com/questions/63014786/how-to-schedule-a-github-actions-nightly-build-but-run-it-only-when-there-where
+  check_date:
+    runs-on: self-hosted
+    name: Check latest commit
+    outputs:
+      should_run: ${{ steps.should_run.outputs.should_run }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: print latest_commit
+        run: echo ${{ github.sha }}
+
+      - id: should_run
+        continue-on-error: true
+        name: check latest commit is less than a day
+        if: ${{ github.event_name == 'schedule' }}
+        run: test -z $(git rev-list  --after="24 hours"  ${{ github.sha }}) && echo "::set-output name=should_run::false"
+
   build:
+    needs: check_date
+    if: ${{ needs.check_date.outputs.should_run != 'false' }}
+
     runs-on: self-hosted
 
     strategy:
@@ -47,6 +67,10 @@ jobs:
         run: |
           poetry install
 
+      - name: Run tests on a GPU
+        run: |
+          poetry run pytest --gpu
+
       - name: Run case studies
         run: |
-          poetry run make -C case_studies/sdss_galaxies_vae/
+          poetry run make -B -C case_studies/sdss_galaxies_vae/

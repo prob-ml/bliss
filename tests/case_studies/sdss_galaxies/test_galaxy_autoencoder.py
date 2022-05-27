@@ -53,4 +53,4 @@ def test_galaxy_autoencoder_bulge_disk(sdss_galaxies_setup, devices):
     if not devices.use_cuda:
         return
 
-    assert results["max_residual"] < 30
+    assert results["max_residual"] < 50
