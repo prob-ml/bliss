@@ -1,5 +1,5 @@
 """Functions to evaluate the performance of BLISS predictions."""
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import galsim
 import matplotlib as mpl
@@ -226,7 +226,7 @@ def scene_metrics(
     mag_min: float = -np.inf,
     mag_max: float = np.inf,
     slack: float = 1.0,
-):
+) -> Dict[str, float]:
     """Return detection and classification metrics based on a given ground truth.
 
     These metrics are computed as a function of magnitude based on the specified
@@ -371,8 +371,8 @@ class CoaddFullCatalog(FullCatalog):
 
 
 def get_single_galaxy_measurements(
-    images: np.ndarray, psf_image: np.ndarray, pixel_scale: float = 0.396
-):
+    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396
+) -> Dict[str, Tensor]:
     """Compute individual galaxy measurements comparing true images with reconstructed images.
 
     Args:
@@ -393,11 +393,13 @@ def get_single_galaxy_measurements(
     ellip = np.zeros((n_samples, 2))  # 2nd shape: e1, e2
 
     # get galsim PSF
-    galsim_psf_image = galsim.Image(psf_image, scale=pixel_scale)
+    images_np = images.numpy()
+    psf_np = psf_image.numpy()
+    galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
 
     # Now we use galsim to measure size and ellipticity
     for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies"):
-        image = images[i]
+        image = images_np[i]
         galsim_image = galsim.Image(image, scale=pixel_scale)
         res_true = galsim.hsm.EstimateShear(
             galsim_image, galsim_psf_image, shear_est="KSB", strict=False
@@ -406,20 +408,21 @@ def get_single_galaxy_measurements(
 
     return {
         "fluxes": fluxes,
-        "ellip": ellip,
+        "ellip": torch.tensor(ellip),
         "mags": convert_flux_to_mag(fluxes),
     }
 
 
 def plot_image(
-    fig: mpl.figure.Figure,
-    ax: mpl.axes.Axes,
+    fig: Figure,
+    ax: Axes,
     image: np.ndarray,
     vrange: tuple = None,
     colorbar: bool = True,
     cmap="gray",
 ) -> None:
-    assert len(image.shape) == 2
+    h, w = image.shape
+    assert h == w
     vmin = image.min().item() if vrange is None else vrange[0]
     vmax = image.max().item() if vrange is None else vrange[1]
 
@@ -432,7 +435,7 @@ def plot_image(
 
 
 def plot_locs(
-    ax: mpl.axes.Axes,
+    ax: Axes,
     bp: int,
     slen: int,
     plocs: np.ndarray,
@@ -442,13 +445,10 @@ def plot_locs(
     lw: float = 1,
     alpha: float = 1,
     annotate=False,
-    cmap: str = "RdYlBu",
+    cmap: str = "bwr",
 ) -> None:
-    # NOTE: Only plot things inside border
-    # NOTE: galaxy_probs can just be galaxy_bool.
-    assert len(plocs.shape) == 2
-    assert plocs.shape[1] == 2
-    assert len(galaxy_probs.shape) == 1
+    n_samples, xy = plocs.shape
+    assert galaxy_probs.shape == (n_samples,) and xy == 2
 
     x = plocs[:, 1] - 0.5 + bp
     y = plocs[:, 0] - 0.5 + bp
@@ -462,87 +462,18 @@ def plot_locs(
                 ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
 
 
-def plot_image_and_locs(
-    fig: Figure,
-    ax: Axes,
-    idx: int,
-    images: Tensor,
-    bp: int,
-    truth: Optional[FullCatalog] = None,
-    estimate: Optional[FullCatalog] = None,
-    vrange: tuple = None,
-    s: float = 20,
-    lw: float = 1,
-    alpha: float = 1.0,
-    labels: list = None,
-    cmap_image: str = "gray",
-    cmap_prob: str = "bwr",
-    annotate_axis: bool = False,
-    annotate_probs: bool = False,
-    add_border: bool = False,
-) -> None:
-    # NOTE: labels must be a tuple/list of names with order (true star, true_gal, est_star, est_gal)
-    # NOTE: true_plocs and est_plocs should be consistent both will be adjust with -0.5+bp
-    assert len(images.shape) == 4, "Images should be batch form just like truth/estimate catalogs."
-    assert images.shape[1] == 1, "Only 1 band supported."
-    assert images.shape[-1] == images.shape[-2], "Only square images are supported."
-    image = images[idx, 0].cpu().numpy()
-    slen = images.shape[-1]
-
-    # plot image first
-    vmin = image.min().item() if vrange is None else vrange[0]
-    vmax = image.max().item() if vrange is None else vrange[1]
-    plot_image(fig, ax, image, vrange=(vmin, vmax), cmap=cmap_image)
-
-    # (optionally) add white border showing where centers of stars and galaxies can be
-    if add_border:
-        ax.axvline(bp, color="w")
-        ax.axvline(slen - bp, color="w")
-        ax.axhline(bp, color="w")
-        ax.axhline(slen - bp, color="w")
-
-    if truth:
-        # true parameters on full image.
-        tplocs = truth.plocs[idx].cpu().numpy().reshape(-1, 2)
-        tgbools = truth["galaxy_bools"][idx].float().cpu().numpy().reshape(-1)
-
-        # plot true locations
-        sp = s * 1.5
-        plot_locs(ax, bp, slen, tplocs, tgbools, "+", s=sp, cmap="cool", alpha=alpha, lw=lw)
-
-    if estimate is not None:
-        n_sources = estimate.n_sources[idx].cpu().numpy().reshape(-1)
-        plocs = estimate.plocs[idx].cpu().numpy().reshape(-1, 2)
-
-        if annotate_axis is not None:
-            assert truth is not None
-            true_n_sources = truth.n_sources[idx].cpu().numpy()
-            ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
-
-        gbools = estimate["galaxy_bools"].float().cpu().numpy().reshape(-1)
-        gprobs = estimate.get("galaxy_probs", None)
-        if annotate_probs:
-            assert gprobs is not None
-        gprobs = gbools if gprobs is None else gprobs.cpu().numpy().reshape(-1)
-
-        plot_locs(
-            ax, bp, slen, plocs, gprobs, "x", s, lw, alpha, annotate=annotate_probs, cmap=cmap_prob
-        )
-
-    if labels is not None:
-        cmp1 = mpl.cm.get_cmap("cool")
-        cmp2 = mpl.cm.get_cmap(cmap_prob)
-        colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
-        markers = ("+", "+", "x", "x")
-        sizes = (s * 2, s * 2, s + 5, s + 5)
-
-        if labels is not None:
-            for label, c, m, size in zip(labels, colors, markers, sizes):
-                ax.scatter([], [], color=c, marker=m, label=label, s=size)
-            ax.legend(
-                bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
-                loc="lower left",
-                ncol=2,
-                mode="expand",
-                borderaxespad=0.0,
-            )
+def add_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s=20):
+    cmp1 = mpl.cm.get_cmap(cmap1)
+    cmp2 = mpl.cm.get_cmap(cmap2)
+    colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
+    markers = ("+", "+", "x", "x")
+    sizes = (s * 2, s * 2, s + 5, s + 5)
+    for label, c, m, size in zip(labels, colors, markers, sizes):
+        ax.scatter([], [], color=c, marker=m, label=label, s=size)
+    ax.legend(
+        bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+        loc="lower left",
+        ncol=2,
+        mode="expand",
+        borderaxespad=0.0,
+    )
