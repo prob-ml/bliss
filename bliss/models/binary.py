@@ -8,6 +8,7 @@ from torch import Tensor
 from torch.nn import BCELoss
 from torch.optim import Adam
 
+from bliss import reporting
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.detection_encoder import (
     ConcatBackgroundTransform,
@@ -16,7 +17,6 @@ from bliss.models.detection_encoder import (
     make_enc_final,
 )
 from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
-from bliss.reporting import plot_image, plot_locs, add_legend
 
 
 class BinaryEncoder(pl.LightningModule):
@@ -210,11 +210,11 @@ class BinaryEncoder(pl.LightningModule):
             est_plocs = est.plocs[ii].numpy().reshape(-1, 2)
             est_gprobs = est["galaxy_probs"][ii].numpy().reshape(-1)
             slen, _ = image.shape
-            plot_image(fig, ax, image, colorbar=False)
-            plot_locs(ax, bp, slen, true_plocs, true_gbools, m="+", s=30, cmap="cool")
-            plot_locs(ax, bp, slen, est_plocs, est_gprobs, m="x", s=20, cmap="bwr")
+            reporting.plot_image(fig, ax, image, colorbar=False)
+            reporting.plot_locs(ax, bp, slen, true_plocs, true_gbools, m="+", s=30, cmap="cool")
+            reporting.plot_locs(ax, bp, slen, est_plocs, est_gprobs, m="x", s=20, cmap="bwr")
             if ii == 0:
-                add_legend(ax, labels)
+                reporting.add_legend(ax, labels)
         fig.tight_layout()
 
         title = f"Epoch:{self.current_epoch}/Validation Images"
