@@ -827,8 +827,10 @@ class SDSSReconstructionFigures(BlissFigures):
                 "true": true,
                 "recon": recon,
                 "resid": resid,
-                "plocs": coadd_params,
-                "recon_map": recon_map,
+                "coplocs": coplocs,
+                "cogbools": coadd_params["galaxy_bools"].reshape(-1),
+                "plocs": recon_map.plocs.reshape(-1, 2),
+                "gprobs": recon_map["galaxy_probs"].reshape(-1, 2),
                 "prob_n_sources": prob_n_sources,
             }
 
@@ -841,39 +843,42 @@ class SDSSReconstructionFigures(BlissFigures):
         pad = 6.0
         set_rc_params(fontsize=22, tick_label_size="small", legend_fontsize="small")
         for figname, scene_coords in self.scenes.items():
-            scene_size = scene_coords["size"]
-            true, recon, res, coadd_params, recon_map, prob_n_sources = data[figname].values()
-            fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
-
-            ax_true = axes[0]
-            ax_recon = axes[1]
-            ax_res = axes[2]
+            slen = scene_coords["size"]
+            dvalues = data[figname].values()
+            true, recon, res, coplocs, cogbools, plocs, gprobs, prob_n_sources = dvalues
+            assert slen == true.shape[-1] == recon.shape[-1] == res.shape[-1]
+            fig, (ax_true, ax_recon, ax_res) = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
 
             ax_true.set_title("Original Image", pad=pad)
             ax_recon.set_title("Reconstruction", pad=pad)
             ax_res.set_title("Residual", pad=pad)
 
-            s = 55 * 300 / scene_size  # marker size
-            lw = 2 * np.sqrt(300 / scene_size)
+            s = 55 * 300 / slen  # marker size
+            lw = 2 * np.sqrt(300 / slen)
 
             vrange1 = (800, 1100)
             vrange2 = (-5, 5)
             labels = ["Coadd Galaxies", "Coadd Stars", "BLISS Galaxies", "BLISS Stars"]
-            reporting.plot_image_and_locs(
-                fig, ax_true, 0, true, 0, coadd_params, recon_map, vrange1, s, lw
+            reporting.plot_image(fig, ax_true, true, vrange1)
+            reporting.plot_locs(ax_true, 0, slen, coplocs, cogbools, "+", s * 1.5, lw, cmap="cool")
+            reporting.plot_locs(ax_true, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr")
+
+            reporting.plot_image(fig, ax_recon, recon, vrange1)
+            reporting.plot_locs(ax_recon, 0, slen, coplocs, cogbools, "+", s * 1.5, lw, cmap="cool")
+            reporting.plot_locs(ax_recon, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr")
+            reporting.add_legend(ax_recon, labels, s=s)
+
+            reporting.plot_image(fig, ax_res, res, vrange2)
+            reporting.plot_locs(
+                ax_res, 0, slen, coplocs, cogbools, "+", s * 1.5, lw, cmap="cool", alpha=0.5
             )
-            reporting.plot_image_and_locs(
-                fig, ax_recon, 0, recon, 0, coadd_params, recon_map, vrange1, s, lw, labels=labels
-            )
-            reporting.plot_image_and_locs(
-                fig, ax_res, 0, res, 0, coadd_params, recon_map, vrange2, s, lw, 0.5
-            )
+            reporting.plot_locs(ax_res, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr", alpha=0.5)
             plt.subplots_adjust(hspace=-0.4)
             plt.tight_layout()
 
             # plot probability of detection in each true object for blends
             if "blend" in figname:
-                for ii, ploc in enumerate(coadd_params.plocs.reshape(-1, 2)):
+                for ii, ploc in enumerate(coplocs.reshape(-1, 2)):
                     prob = prob_n_sources[ii].item()
                     x, y = ploc[1] + 0.5, ploc[0] + 0.5
                     text = r"$\boldsymbol{" + f"{prob:.2f}" + "}$"
