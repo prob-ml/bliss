@@ -11,7 +11,6 @@ from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.datasets.galsim_galaxies import GalsimGalaxyDecoder
-from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
 GalaxyModel = Union[OneCenteredGalaxyAE, GalsimGalaxyDecoder]
@@ -121,26 +120,6 @@ class ImageDecoder(pl.LightningModule):
         )
         galaxy_fluxes *= galaxy_bools
         return galaxy_fluxes
-
-    def set_all_fluxes_and_mags(self, tile_cat: TileCatalog):
-        """Set all fluxes (galaxy and star) for tile_cat."""
-        # first get galaxy fluxes
-        assert "galaxy_bools" in tile_cat and "galaxy_params" in tile_cat and "fluxes" in tile_cat
-        galaxy_bools, galaxy_params = tile_cat["galaxy_bools"], tile_cat["galaxy_params"]
-        with torch.no_grad():
-            galaxy_fluxes = self.get_galaxy_fluxes(galaxy_bools, galaxy_params)
-        tile_cat["galaxy_fluxes"] = galaxy_fluxes
-
-        # update default fluxes
-        star_bools = tile_cat["star_bools"]
-        star_fluxes = tile_cat["fluxes"]
-        fluxes = galaxy_bools * galaxy_fluxes + star_bools * star_fluxes
-        tile_cat["fluxes"] = fluxes
-
-        # mags (careful with 0s)
-        is_on_array = tile_cat.is_on_array > 0
-        tile_cat["mags"] = torch.zeros_like(tile_cat["fluxes"])
-        tile_cat["mags"][is_on_array] = convert_flux_to_mag(tile_cat["fluxes"][is_on_array])
 
     def forward(self):
         """Decodes latent representation into an image."""

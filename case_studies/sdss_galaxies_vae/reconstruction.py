@@ -70,7 +70,7 @@ def reconstruct(cfg):
     tile_map_recon: TileCatalog = tile_map_recon.cpu()
     tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
     print(f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image.")
-    decoder.set_all_fluxes_and_mags(tile_map_recon)
+    tile_map_recon.set_all_fluxes_and_mags(decoder)
 
     full_map_recon = tile_map_recon.to_full_params()
     scene_metrics_by_mag: Dict[str, pd.DataFrame] = {}
