@@ -651,7 +651,7 @@ class DetectionClassificationFigures(BlissFigures):
         _, tile_est_params = reconstruct_scene_at_coordinates(
             encoder, decoder, frame.image, frame.background, h_range=(h, h_end), w_range=(w, w_end)
         )
-        decoder.set_all_fluxes_and_mags(tile_est_params)
+        tile_est_params.set_all_fluxes_and_mags(decoder)
         est_params = tile_est_params.cpu().to_full_params()
 
         # compute metrics with bliss vs coadd and photo (frame) vs coadd
@@ -955,7 +955,7 @@ class BlendSimFigures(BlissFigures):
                 tile_est = tile_est_jj
             else:
                 tile_est = tile_est.cat
-        decoder.set_all_fluxes_and_mags(tile_est)
+        tile_est.set_all_fluxes_and_mags(decoder)
         full_est = tile_est.to_full_params()
 
         print("INFO: Computing metrics")

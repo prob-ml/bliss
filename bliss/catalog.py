@@ -11,7 +11,7 @@ from matplotlib.pyplot import Axes
 from torch import Tensor
 from torch.nn import functional as F
 
-from bliss.datasets.sdss import SloanDigitalSkySurvey, column_to_tensor
+from bliss.datasets.sdss import SloanDigitalSkySurvey, column_to_tensor, convert_flux_to_mag
 
 
 class TileCatalog(UserDict):
@@ -222,6 +222,26 @@ class TileCatalog(UserDict):
         y_indx = torch.searchsorted(y_coords.contiguous(), plocs[:, 1].contiguous()) - 1
 
         return {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
+
+    def set_all_fluxes_and_mags(self, decoder):
+        """Set all fluxes (galaxy and star) for tile_cat given an ImageDecoder instance."""
+        # first get galaxy fluxes
+        assert "galaxy_bools" in self and "galaxy_params" in self and "fluxes" in self
+        galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
+        with torch.no_grad():
+            galaxy_fluxes = decoder.get_galaxy_fluxes(galaxy_bools, galaxy_params)
+        self["galaxy_fluxes"] = galaxy_fluxes
+
+        # update default fluxes
+        star_bools = self["star_bools"]
+        star_fluxes = self["fluxes"]
+        fluxes = galaxy_bools * galaxy_fluxes + star_bools * star_fluxes
+        self["fluxes"] = fluxes
+
+        # mags (careful with 0s)
+        is_on_array = self.is_on_array > 0
+        self["mags"] = torch.zeros_like(self["fluxes"])
+        self["mags"][is_on_array] = convert_flux_to_mag(self["fluxes"][is_on_array])
 
 
 class FullCatalog(UserDict):
