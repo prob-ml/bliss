@@ -26,7 +26,7 @@ def test_binary(sdss_galaxies_setup, devices, overrides):
     results = sdss_galaxies_setup.test_model(overrides, trained_binary)
 
     if devices.use_cuda:
-        assert results["acc"] > 0.85
+        assert results["acc"] > 0.75
 
 
 def test_binary_plotting(sdss_galaxies_setup, overrides):
