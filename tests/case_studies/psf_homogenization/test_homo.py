@@ -16,8 +16,8 @@ def test_and_check_flux(img, psf, new_psf, background):
     conv_sum1 = m[0][0].sum()
     conv_sum2 = m[1][0].sum()
 
-    assert torch.abs(orig_sum - conv_sum1) < 0.05 * orig_sum
-    assert torch.abs(orig_sum - conv_sum2) < 0.05 * orig_sum
+    assert torch.abs(orig_sum - conv_sum1) < 0.01 * orig_sum
+    assert torch.abs(orig_sum - conv_sum2) < 0.01 * orig_sum
 
 
 def test_homo_sdssframe():
