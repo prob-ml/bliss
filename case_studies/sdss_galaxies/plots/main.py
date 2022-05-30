@@ -33,7 +33,11 @@ def load_models(cfg, device):
     galaxy = instantiate(cfg.models.galaxy_encoder).to(device).eval()
     galaxy.load_state_dict(torch.load(cfg.plots.galaxy_checkpoint, map_location=galaxy.device))
 
-    encoder = Encoder(location.eval(), binary.eval(), galaxy.eval())
+    n_images_per_batch = cfg.plots.encoder.n_images_per_batch
+    n_rows_per_batch = cfg.plots.encoder.n_rows_per_batch
+    encoder = Encoder(
+        location.eval(), binary.eval(), galaxy.eval(), n_images_per_batch, n_rows_per_batch
+    )
     encoder = encoder.to(device)
 
     decoder: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
