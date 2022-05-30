@@ -33,8 +33,9 @@ class Encoder(nn.Module):
         detection_encoder: DetectionEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
+        n_images_per_batch: Optional[int] = None,
+        n_rows_per_batch: Optional[int] = None,
         map_n_source_weights: Optional[Tuple[float, ...]] = None,
-        batch_size: Optional[int] = None,
     ):
         """Initializes Encoder.
 
@@ -53,7 +54,9 @@ class Encoder(nn.Module):
             map_n_source_weights: Optional. See DetectionEncoder. If specified, weights the argmax
                 in MAP estimation of locations. Useful for raising/lowering the threshold for
                 turning sources on/off.
-            batch_size: How many padded tiles can be rendered at a time on the GPU?
+            n_images_per_batch: How many images can be processed at a time on the GPU?
+                If not specified, defaults to an amount known to fit on my GPU.
+            n_rows_per_batch: How many vertical padded tiles can be processed at a time on the GPU?
                 If not specified, defaults to an amount known to fit on my GPU.
         """
         super().__init__()
@@ -68,7 +71,8 @@ class Encoder(nn.Module):
         else:
             map_n_source_weights_tnsr = torch.tensor(map_n_source_weights)
 
-        self.batch_size = batch_size if batch_size is not None else 75**2 + 500 * 5
+        self.n_images_per_batch = n_images_per_batch if n_images_per_batch is not None else 10
+        self.n_rows_per_batch = n_rows_per_batch if n_rows_per_batch is not None else 15
         self.register_buffer("map_n_source_weights", map_n_source_weights_tnsr, persistent=False)
 
     def forward(self, x):
@@ -102,7 +106,7 @@ class Encoder(nn.Module):
         """
         n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.detection_encoder.tile_slen
         n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.detection_encoder.tile_slen
-        ptile_loader = self._make_ptile_loader(image, background, n_tiles_h, n_tiles_w)
+        ptile_loader = self._make_ptile_loader(image, background, n_tiles_h)
         tile_map_list: List[Dict[str, Tensor]] = []
         with torch.no_grad():
             for ptiles in tqdm(ptile_loader, desc="Encoding ptiles"):
@@ -114,19 +118,22 @@ class Encoder(nn.Module):
             self.detection_encoder.tile_slen, n_tiles_h, n_tiles_w, tile_map_dict
         )
 
-    def _make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int, n_tiles_w: int):
+    def _make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int):
         img_bg = torch.cat((image, background), dim=1).to(self.device)
-        n_rows_per_batch = self.batch_size // n_tiles_w
-        for row in range(0, n_tiles_h, n_rows_per_batch):
-            end_row = row + n_rows_per_batch
-            start_h = row * self.detection_encoder.tile_slen
-            end_h = end_row * self.detection_encoder.tile_slen + 2 * self.border_padding
-            img_bg_cropped = img_bg[:, :, start_h:end_h, :]
-            image_ptiles = get_images_in_tiles(
-                img_bg_cropped, self.detection_encoder.tile_slen, self.detection_encoder.ptile_slen
-            )
-            image_ptiles = image_ptiles.view(-1, *image_ptiles.shape[-3:])
-            yield image_ptiles
+        n_images = image.shape[0]
+        for start_b in range(0, n_images, self.n_images_per_batch):
+            for row in range(0, n_tiles_h, self.n_rows_per_batch):
+                end_b = start_b + self.n_images_per_batch
+                end_row = row + self.n_rows_per_batch
+                start_h = row * self.detection_encoder.tile_slen
+                end_h = end_row * self.detection_encoder.tile_slen + 2 * self.border_padding
+                img_bg_cropped = img_bg[start_b:end_b, :, start_h:end_h, :]
+                image_ptiles = get_images_in_tiles(
+                    img_bg_cropped,
+                    self.detection_encoder.tile_slen,
+                    self.detection_encoder.ptile_slen,
+                )
+                yield image_ptiles.reshape(-1, *image_ptiles.shape[-3:])
 
     def _encode_ptiles(self, image_ptiles: Tensor):
         assert isinstance(self.map_n_source_weights, Tensor)

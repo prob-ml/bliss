@@ -46,17 +46,7 @@ class BlendSimFigures(BlissFigures):
 
         print("INFO: BLISS posterior inference on images.")
 
-        batch_size = 128
-        tile_est = None
-        for jj in range(batch_size):
-            images_jj = images[jj * batch_size : (jj + 1) * batch_size]
-            background_jj = background[jj * batch_size : (jj + 1) * batch_size]
-            tile_est_jj = encoder.variational_mode(images_jj, background_jj).cpu()
-
-            if tile_est is None:
-                tile_est = tile_est_jj
-            else:
-                tile_est = tile_est.cat
+        tile_est = encoder.variational_mode(images, background).cpu()
         tile_est.set_all_fluxes_and_mags(decoder)
         full_est = tile_est.to_full_params()
 

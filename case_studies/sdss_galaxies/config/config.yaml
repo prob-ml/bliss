@@ -243,6 +243,9 @@ plots:
         sdss_dir: ${paths.sdss}
         pixel_scale: 0.396
         coadd_file: ${plots.coadd_file}
+    encoder:
+        n_images_per_batch: 10
+        n_rows_per_batch: 15
     scenes:
         sdss_recon0:
             h: 200

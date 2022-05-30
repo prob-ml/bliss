@@ -472,7 +472,7 @@ def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tens
         ptile_slen: Side length of padded tile
 
     Returns:
-        A batchsize x n_tiles_h x n_tiles_w x n_bands x tile_weight x tile_width image
+        A batchsize x n_tiles_h x n_tiles_w x n_bands x tile_height x tile_width image
     """
     assert len(images.shape) == 4
     n_bands = images.shape[1]
