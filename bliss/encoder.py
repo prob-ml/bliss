@@ -72,7 +72,7 @@ class Encoder(nn.Module):
             map_n_source_weights_tnsr = torch.tensor(map_n_source_weights)
 
         self.n_images_per_batch = n_images_per_batch if n_images_per_batch is not None else 10
-        self.n_rows_per_batch = n_rows_per_batch if n_rows_per_batch is not None else 10
+        self.n_rows_per_batch = n_rows_per_batch if n_rows_per_batch is not None else 15
         self.register_buffer("map_n_source_weights", map_n_source_weights_tnsr, persistent=False)
 
     def forward(self, x):
