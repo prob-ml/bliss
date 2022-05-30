@@ -69,6 +69,7 @@ def test_homo_one_galaxy():
     small_psf = torch.from_numpy(small_psf)
     background = torch.from_numpy(background)
 
+    image = image.reshape(1, 1, 101, 101)
     psf = psf.reshape(1, 1, 101, 101)
     big_psf = big_psf.reshape(1, 1, 101, 101)
     small_psf = small_psf.reshape(1, 1, 101, 101)
