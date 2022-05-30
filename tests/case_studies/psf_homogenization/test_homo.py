@@ -8,7 +8,7 @@ from bliss.inference import SDSSFrame
 from case_studies.psf_homogenization.homogenization import psf_homo
 
 
-def check_flux(img, psf, new_psf, background):
+def _check_flux(img, psf, new_psf, background):
     m, m_or = psf_homo(img, psf, new_psf, background)
 
     assert m.shape == img.shape
@@ -49,7 +49,7 @@ def test_homo_sdssframe(get_config, devices):
     new_psf = torch.cat((big_psf, small_psf), 0)
     background = torch.cat((background, background), 0)
 
-    check_flux(img, psf, new_psf, background)
+    _check_flux(img, psf, new_psf, background)
 
 
 def test_homo_one_galaxy():
@@ -83,4 +83,4 @@ def test_homo_one_galaxy():
     new_psf = torch.cat((big_psf, small_psf), 0)
     background = torch.cat((background, background), 0)
 
-    check_flux(img, psf, new_psf, background)
+    _check_flux(img, psf, new_psf, background)
