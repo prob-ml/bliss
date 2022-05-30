@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import galsim
 import numpy as np
 import torch
@@ -6,7 +8,7 @@ from bliss.inference import SDSSFrame
 from case_studies.psf_homogenization.homogenization import psf_homo
 
 
-def test_and_check_flux(img, psf, new_psf, background):
+def check_flux(img, psf, new_psf, background):
     m, m_or = psf_homo(img, psf, new_psf, background)
 
     assert m.shape == img.shape
@@ -20,10 +22,11 @@ def test_and_check_flux(img, psf, new_psf, background):
     assert torch.abs(orig_sum - conv_sum2) < 0.01 * orig_sum
 
 
-def test_homo_sdssframe():
-    sdss_dir = "bliss/data/sdss/"
+def test_homo_sdssframe(get_config, devices):
     pixel_scale = 0.393
-    coadd_file = "bliss/data/coadd_catalog_94_1_12.fits"
+    cfg = get_config({}, devices)
+    sdss_dir = Path(cfg.paths.sdss)
+    coadd_file = Path(cfg.paths.data).joinpath("coadd_catalog_94_1_12.fits")
     frame = SDSSFrame(sdss_dir, pixel_scale, coadd_file)
     background = frame.background
     image = frame.image
@@ -46,7 +49,7 @@ def test_homo_sdssframe():
     new_psf = torch.cat((big_psf, small_psf), 0)
     background = torch.cat((background, background), 0)
 
-    test_and_check_flux(img, psf, new_psf, background)
+    check_flux(img, psf, new_psf, background)
 
 
 def test_homo_one_galaxy():
@@ -80,4 +83,4 @@ def test_homo_one_galaxy():
     new_psf = torch.cat((big_psf, small_psf), 0)
     background = torch.cat((background, background), 0)
 
-    test_and_check_flux(img, psf, new_psf, background)
+    check_flux(img, psf, new_psf, background)
