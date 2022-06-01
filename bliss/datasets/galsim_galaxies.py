@@ -364,6 +364,12 @@ class GalsimBlends(SingleGalsimGalaxies):
 
         # sample galaxy params and ensure tensor returned is of theh same size always.
         params = self.prior.sample(n_sources, "cpu")
+
+        # order galaxy params based on flux so centered (first one) is the brightest
+        indx_order = np.argsort(-params[:, 0])
+        params = params[indx_order, :]
+
+        # account for max sources
         galaxy_params = torch.zeros(self.max_n_sources, params.shape[-1])
         galaxy_params[:n_sources, :] = params
 
