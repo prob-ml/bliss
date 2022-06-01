@@ -409,7 +409,7 @@ class StarTileDecoder(nn.Module):
             psf_params = psf_params[list(range(n_bands))]
         elif ext == ".fits":
             assert len(sdss_bands) == n_bands
-            psf_params = self.get_fit_file_psf_params(psf_params_file, sdss_bands)
+            psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
         else:
             raise NotImplementedError(
                 "Only .npy and .fits extensions are supported for PSF params files."
@@ -462,7 +462,7 @@ class StarTileDecoder(nn.Module):
         return psf
 
     @staticmethod
-    def get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
+    def _get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
         data = fits.open(psf_fit_file, ignore_missing_end=True).pop(6).data
         psf_params = torch.zeros(len(bands), 6)
         for i, band in enumerate(bands):
