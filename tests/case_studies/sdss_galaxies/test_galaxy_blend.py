@@ -23,6 +23,8 @@ def test_galaxy_blend(get_sdss_galaxies_config, devices):
         snr = b["snr"]
         blendedness = b["blendedness"]
         ellips = b["ellips"]
+        mags = b["mags"]
+        fluxes = b["fluxes"]
         assert images.shape == (4, 1, 81, 81)
         assert noiseless.shape == (4, 1, 81, 81)
         assert single_images_center.shape == (4, 3, 1, 81, 81)
@@ -33,6 +35,8 @@ def test_galaxy_blend(get_sdss_galaxies_config, devices):
         assert blendedness.shape == (4, 3)
         assert n_sources.shape == (4, 1)
         assert ellips.shape == (4, 3, 2)
+        assert mags.shape == (4, 3)
+        assert fluxes.shape == (4, 3)
 
         # check empty if no sources
         for ii, n in enumerate(n_sources):

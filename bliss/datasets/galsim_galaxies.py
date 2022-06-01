@@ -406,7 +406,8 @@ class GalsimBlends(SingleGalsimGalaxies):
         single_galaxy_tensor = individual_noiseless_centered[:n_sources].reshape(
             n_sources, 1, slen, slen
         )
-        mags = convert_flux_to_mag(galaxy_params[:, 0])
+        mags = torch.zeros(self.max_n_sources)
+        mags[:n_sources] = convert_flux_to_mag(galaxy_params[:n_sources, 0])
         ellips = torch.zeros(self.max_n_sources, 2)
         meas = get_single_galaxy_measurements(single_galaxy_tensor, psf_tensor, scale)
         ellips[:n_sources, :] = meas["ellips"]
