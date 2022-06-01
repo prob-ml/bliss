@@ -370,6 +370,40 @@ class CoaddFullCatalog(FullCatalog):
         return cls(height, width, data)
 
 
+def get_single_galaxy_ellipticities(
+    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396
+) -> Tensor:
+    """Returns ellipticities of (noiseless, single-band) individual galaxy images.
+
+    Args:
+        pixel_scale: Conversion from arcseconds to pixel.
+        images: Array of shape (n_samples, slen, slen) containing images of
+            single-centered galaxies without noise or background.
+        psf_image: Array of shape (slen, slen) containing PSF image used for
+            convolving the galaxies in `true_images`.
+
+    Returns:
+        Tensor containing ellipticity measurements for each galaxy in `images`.
+    """
+    n_samples, _, _ = images.shape
+    ellips = torch.zeros((n_samples, 2))  # 2nd shape: e1, e2
+    images_np = images.numpy()
+    psf_np = psf_image.numpy()
+    galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
+
+    # Now we use galsim to measure size and ellipticity
+    for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies"):
+        image = images_np[i]
+        galsim_image = galsim.Image(image, scale=pixel_scale)
+        res_true = galsim.hsm.EstimateShear(
+            galsim_image, galsim_psf_image, shear_est="KSB", strict=False
+        )
+        g1, g2 = float(res_true.corrected_g1), float(res_true.corrected_g2)
+        ellips[i, :] = torch.tensor([g1, g2])
+
+    return ellips
+
+
 def get_single_galaxy_measurements(
     images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396
 ) -> Dict[str, Tensor]:
@@ -383,33 +417,18 @@ def get_single_galaxy_measurements(
             convolving the galaxies in `true_images`.
 
     Returns:
-        Dictionary containing second-moment measurements for `true_images` and `recon_images`.
+        Dictionary containing fluxes, magnitudes, and ellipticities of `images`.
     """
-    n_samples, c, slen, w = images.shape
+    _, c, slen, w = images.shape
     assert slen == w and c == 1 and psf_image.shape == (c, slen, w)
     images = rearrange(images, "n c h w -> (n c) h w")
     psf_image = rearrange(psf_image, "c h w -> (c h) w")
     fluxes = torch.sum(images, (1, 2))
-    ellip = torch.zeros((n_samples, 2))  # 2nd shape: e1, e2
-
-    # get galsim PSF
-    images_np = images.numpy()
-    psf_np = psf_image.numpy()
-    galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
-
-    # Now we use galsim to measure size and ellipticity
-    for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies"):
-        image = images_np[i]
-        galsim_image = galsim.Image(image, scale=pixel_scale)
-        res_true = galsim.hsm.EstimateShear(
-            galsim_image, galsim_psf_image, shear_est="KSB", strict=False
-        )
-        g1, g2 = float(res_true.corrected_g1), float(res_true.corrected_g2)
-        ellip[i, :] = torch.tensor([g1, g2])
+    ellips = get_single_galaxy_ellipticities(images, psf_image, pixel_scale)
 
     return {
         "fluxes": fluxes,
-        "ellip": ellip,
+        "ellips": ellips,
         "mags": convert_flux_to_mag(fluxes),
     }
 

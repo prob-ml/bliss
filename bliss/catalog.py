@@ -20,6 +20,7 @@ class TileCatalog(UserDict):
         "fluxes",
         "log_fluxes",
         "mags",
+        "ellips",
         "galaxy_bools",
         "galaxy_params",
         "galaxy_fluxes",
@@ -224,7 +225,7 @@ class TileCatalog(UserDict):
         return {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
 
     def set_all_fluxes_and_mags(self, decoder):
-        """Set all fluxes (galaxy and star) for tile_cat given an ImageDecoder instance."""
+        """Set all fluxes (galaxy and star) of tile catalog given an ImageDecoder instance."""
         # first get galaxy fluxes
         assert "galaxy_bools" in self and "galaxy_params" in self and "fluxes" in self
         galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
@@ -242,6 +243,12 @@ class TileCatalog(UserDict):
         is_on_array = self.is_on_array > 0
         self["mags"] = torch.zeros_like(self["fluxes"])
         self["mags"][is_on_array] = convert_flux_to_mag(self["fluxes"][is_on_array])
+
+    def set_galaxy_ellips(self, decoder, scale: float = 0.393):
+        """Sets galaxy ellipticities of tile catalog given an ImageDecoder instance."""
+        galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
+        ellips = decoder.get_galaxy_ellips(galaxy_bools, galaxy_params, scale=scale)
+        self["ellips"] = ellips
 
 
 class FullCatalog(UserDict):
