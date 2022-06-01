@@ -386,7 +386,7 @@ def get_single_galaxy_ellipticities(
         Tensor containing ellipticity measurements for each galaxy in `images`.
     """
     n_samples, _, _ = images.shape
-    ellip = torch.zeros((n_samples, 2))  # 2nd shape: e1, e2
+    ellips = torch.zeros((n_samples, 2))  # 2nd shape: e1, e2
     images_np = images.numpy()
     psf_np = psf_image.numpy()
     galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
@@ -399,9 +399,9 @@ def get_single_galaxy_ellipticities(
             galsim_image, galsim_psf_image, shear_est="KSB", strict=False
         )
         g1, g2 = float(res_true.corrected_g1), float(res_true.corrected_g2)
-        ellip[i, :] = torch.tensor([g1, g2])
+        ellips[i, :] = torch.tensor([g1, g2])
 
-    return ellip
+    return ellips
 
 
 def get_single_galaxy_measurements(
@@ -424,11 +424,11 @@ def get_single_galaxy_measurements(
     images = rearrange(images, "n c h w -> (n c) h w")
     psf_image = rearrange(psf_image, "c h w -> (c h) w")
     fluxes = torch.sum(images, (1, 2))
-    ellip = get_single_galaxy_ellipticities(images, psf_image, pixel_scale)
+    ellips = get_single_galaxy_ellipticities(images, psf_image, pixel_scale)
 
     return {
         "fluxes": fluxes,
-        "ellip": ellip,
+        "ellips": ellips,
         "mags": convert_flux_to_mag(fluxes),
     }
 

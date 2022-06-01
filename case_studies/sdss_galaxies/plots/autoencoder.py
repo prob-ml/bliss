@@ -230,7 +230,7 @@ class AEReconstructionFigures(BlissFigures):
         )
 
         # ellipticities
-        true_ellip1, recon_ellip1 = meas["true_ellip"][:, 0], meas["recon_ellip"][:, 0]
+        true_ellip1, recon_ellip1 = meas["true_ellips"][:, 0], meas["recon_ellips"][:, 0]
         x, y = np.log10(snr), recon_ellip1 - true_ellip1
         scatter_bin_plot(
             ax3,
@@ -243,7 +243,7 @@ class AEReconstructionFigures(BlissFigures):
             ylabel=r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$",
         )
 
-        true_ellip2, recon_ellip2 = meas["true_ellip"][:, 1], meas["recon_ellip"][:, 1]
+        true_ellip2, recon_ellip2 = meas["true_ellips"][:, 1], meas["recon_ellips"][:, 1]
         x, y = np.log10(snr), recon_ellip2 - true_ellip2
         scatter_bin_plot(
             ax4,

@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from bliss.datasets.background import ConstantBackground
+from bliss.datasets.sdss import convert_flux_to_mag
+from bliss.reporting import get_single_galaxy_measurements
 
 
 def load_psf_from_file(psf_image_file: str, pixel_scale: float):
@@ -396,6 +398,19 @@ class GalsimBlends(SingleGalsimGalaxies):
             plocs[ii, 1] = slen / 2 + offset[0]
             galaxies_image += uncentered_galaxy_image
 
+        # get ellipticities and fluxes
+        scale = self.decoder.pixel_scale
+        psf_tensor = torch.from_numpy(
+            self.decoder.psf.drawImage(nx=slen, ny=slen, scale=scale).array
+        ).reshape(1, slen, slen)
+        single_galaxy_tensor = individual_noiseless_centered[:n_sources].reshape(
+            n_sources, 1, slen, slen
+        )
+        mags = convert_flux_to_mag(galaxy_params[:, 0])
+        ellips = torch.zeros(self.max_n_sources, 2)
+        meas = get_single_galaxy_measurements(single_galaxy_tensor, psf_tensor, scale)
+        ellips[:n_sources, :] = meas["ellips"]
+
         # finally, add background and noise
         background = self.background.sample((1, *galaxies_image.shape)).squeeze(1)
         noisy_image = _add_noise_and_background(galaxies_image, background)
@@ -419,6 +434,9 @@ class GalsimBlends(SingleGalsimGalaxies):
             "n_sources": torch.tensor([n_sources]),
             "plocs": plocs,
             "slen": slen,
+            "ellips": ellips,
+            "fluxes": galaxy_params[:, 0],
+            "mags": mags,
         }
 
     def _sample_distance_from_center(self) -> Tensor:
