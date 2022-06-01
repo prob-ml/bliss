@@ -426,31 +426,6 @@ def get_single_galaxy_measurements(
     fluxes = torch.sum(images, (1, 2))
     ellips = get_single_galaxy_ellipticities(images, psf_image, pixel_scale)
 
-    return ellip
-
-
-def get_single_galaxy_measurements(
-    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396
-) -> Dict[str, Tensor]:
-    """Compute individual galaxy measurements comparing true images with reconstructed images.
-
-    Args:
-        pixel_scale: Conversion from arcseconds to pixel.
-        images: Array of shape (n_samples, n_bands, slen, slen) containing images of
-            single-centered galaxies without noise or background.
-        psf_image: Array of shape (n_bands, slen, slen) containing PSF image used for
-            convolving the galaxies in `true_images`.
-
-    Returns:
-        Dictionary containing fluxes, magnitudes, and ellipticities of `images`.
-    """
-    _, c, slen, w = images.shape
-    assert slen == w and c == 1 and psf_image.shape == (c, slen, w)
-    images = rearrange(images, "n c h w -> (n c) h w")
-    psf_image = rearrange(psf_image, "c h w -> (c h) w")
-    fluxes = torch.sum(images, (1, 2))
-    ellip = get_single_galaxy_ellipticities(images, psf_image, pixel_scale)
-
     return {
         "fluxes": fluxes,
         "ellips": ellips,
