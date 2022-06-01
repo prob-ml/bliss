@@ -38,22 +38,28 @@ class BlendSimFigures(BlissFigures):
         # first create FullCatalog from simulated data
         print("INFO: Preparing full catalog from simulated blended sources.")
         n_sources = blend_data["n_sources"].reshape(-1)
-        plocs = blend_data["plocs"]
-        fluxes = blend_data["params"][:, :, 0].reshape(n_batches, -1, 1)
-        mags = sdss.convert_flux_to_mag(fluxes)
-        full_catalog_dict = {"n_sources": n_sources, "plocs": plocs, "fluxes": fluxes, "mags": mags}
+        plocs = blend_data["plocs"].reshape(n_batches, -1, 2)
+        fluxes = blend_data["fluxes"].reshape(n_batches, -1, 1)
+        mags = blend_data["mags"].reshape(n_batches, -1, 1)
+        ellips = blend_data["ellips"].reshape(n_batches, -1, 2)
+        full_catalog_dict = {
+            "n_sources": n_sources,
+            "plocs": plocs,
+            "fluxes": fluxes,
+            "mags": mags,
+            "ellips": ellips,
+        }
         full_truth = FullCatalog(slen, slen, full_catalog_dict)
 
         print("INFO: BLISS posterior inference on images.")
         tile_est = encoder.variational_mode(images, background).cpu()
         tile_est.set_all_fluxes_and_mags(decoder)
+        tile_est.set_galaxy_ellips(decoder, scale=0.393)
         full_est = tile_est.to_full_params()
 
-        print("INFO: Computing metrics")
-        mag_cuts2 = np.arange(18, 24.5, 0.25)
-        mag_cuts1 = np.full_like(mag_cuts2, fill_value=-np.inf)
-        mag_cuts = np.column_stack((mag_cuts1, mag_cuts2))
-        metrics = compute_mag_bin_metrics(mag_cuts, full_truth, full_est)
+        mag_err = []
+        for ii in range(n_batches):
+            print(ii)
 
         return {"mag_bins": mag_cuts, "detection_metrics": metrics}
 
