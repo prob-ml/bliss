@@ -12,6 +12,7 @@ from torch.nn import functional as F
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.datasets.galsim_galaxies import GalsimGalaxyDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.reporting import get_single_galaxy_ellipticities
 
 GalaxyModel = Union[OneCenteredGalaxyAE, GalsimGalaxyDecoder]
 
@@ -120,6 +121,36 @@ class ImageDecoder(pl.LightningModule):
         )
         galaxy_fluxes *= galaxy_bools
         return galaxy_fluxes
+
+    def get_galaxy_ellips(
+        self, galaxy_bools: Tensor, galaxy_params_in: Tensor, scale: float = 0.393
+    ) -> Tensor:
+        assert self.galaxy_tile_decoder is not None
+        b, nth, ntw, s, _ = galaxy_bools.shape
+        b_flat = b * nth * ntw * s
+        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+
+        psf = self.star_tile_decoder.forward_adjusted_psf()
+        psf_image = rearrange(psf, "1 h w -> h w", h=slen, w=slen)
+
+        galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
+        galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
+        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(
+            galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5]
+        )
+        galaxy_shapes = self.galaxy_tile_decoder.size_galaxy(galaxy_shapes)
+        single_galaxies = rearrange(galaxy_shapes, "n 1 h w -> n h w", h=slen, w=slen)
+
+        with torch.no_grad():
+            ellips = get_single_galaxy_ellipticities(single_galaxies, psf_image, scale)
+
+        ellips_all = torch.zeros(b_flat, 2, dtype=ellips.dtype)
+        ellips_all[galaxy_bools_flat.squeeze(-1) > 0.5] = ellips
+        ellips = rearrange(
+            ellips_all, "(b nth ntw s) g -> b nth ntw s g", b=b, nth=nth, ntw=ntw, s=s, g=2
+        )
+        ellips *= galaxy_bools
+        return ellips
 
     def forward(self):
         """Decodes latent representation into an image."""
@@ -405,7 +436,7 @@ class StarTileDecoder(nn.Module):
         # star_bools: Is (n_ptiles x max_stars x 1)
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
-        psf = self._adjust_psf()
+        psf = self.forward_adjusted_psf()
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
 
@@ -476,7 +507,7 @@ class StarTileDecoder(nn.Module):
             psf_params[5],
         )
 
-    def _adjust_psf(self):
+    def forward_adjusted_psf(self):
         # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
         # first dimension of psf is number of bands
         # dimension of the psf/slen should be odd
@@ -525,7 +556,6 @@ class GalaxyTileDecoder(nn.Module):
         )
 
     def _render_single_galaxies(self, galaxy_params, galaxy_bools):
-
         # flatten parameters
         n_galaxy_params = galaxy_params.shape[-1]
         z = galaxy_params.view(-1, n_galaxy_params)
@@ -540,7 +570,7 @@ class GalaxyTileDecoder(nn.Module):
         gal_on = self.galaxy_decoder(z[b == 1])
 
         # size the galaxy (either trims or crops to the size of ptile)
-        gal_on = self._size_galaxy(gal_on)
+        gal_on = self.size_galaxy(gal_on)
 
         # set galaxies
         gal[b == 1] = gal_on
@@ -549,18 +579,12 @@ class GalaxyTileDecoder(nn.Module):
         gal_shape = (batchsize, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
         return gal.view(gal_shape)
 
-    def _size_galaxy(self, galaxy):
-        # galaxy should be shape n_galaxies x n_bands x galaxy_slen x galaxy_slen
-        assert len(galaxy.shape) == 4
-        assert galaxy.shape[2] == galaxy.shape[3]
-        assert (galaxy.shape[3] % 2) == 1, "dimension of galaxy image should be odd"
-        assert galaxy.shape[1] == self.n_bands
-
-        n_galaxies = galaxy.shape[0]
-        galaxy_slen = galaxy.shape[3]
-        galaxy = galaxy.view(n_galaxies * self.n_bands, galaxy_slen, galaxy_slen)
-
+    def size_galaxy(self, galaxy: Tensor):
+        n_galaxies, n_bands, h, w = galaxy.shape
+        assert h == w
+        assert (h % 2) == 1, "dimension of galaxy image should be odd"
+        assert n_bands == self.n_bands
+        galaxy = rearrange(galaxy, "n c h w -> (n c) h w")
         sized_galaxy = self.tiler.fit_source_to_ptile(galaxy)
-
         outsize = sized_galaxy.shape[-1]
         return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
