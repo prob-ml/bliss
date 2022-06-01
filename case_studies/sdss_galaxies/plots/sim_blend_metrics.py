@@ -45,7 +45,6 @@ class BlendSimFigures(BlissFigures):
         full_truth = FullCatalog(slen, slen, full_catalog_dict)
 
         print("INFO: BLISS posterior inference on images.")
-
         tile_est = encoder.variational_mode(images, background).cpu()
         tile_est.set_all_fluxes_and_mags(decoder)
         full_est = tile_est.to_full_params()
