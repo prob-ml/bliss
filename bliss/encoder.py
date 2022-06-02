@@ -160,7 +160,9 @@ class Encoder(nn.Module):
             if deterministic:
                 galaxy_bools = (galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
             else:
-                raise NotImplementedError()
+                galaxy_bools = (
+                    torch.rand_like(galaxy_probs) > 0.5
+                ).float() * is_on_array.unsqueeze(-1)
             tile_samples.update(
                 {
                     "galaxy_bools": galaxy_bools,
@@ -172,8 +174,6 @@ class Encoder(nn.Module):
             galaxy_params = self.galaxy_encoder.sample(
                 image_ptiles, locs, deterministic=deterministic
             )
-            if not deterministic:
-                raise NotImplementedError()
             galaxy_params *= is_on_array.unsqueeze(-1) * galaxy_bools
             tile_samples.update({"galaxy_params": galaxy_params})
 

@@ -77,6 +77,7 @@ def reconstruct_scene_at_coordinates(
     ]
     return recon_at_coords, tile_map_scene
 
+
 def sample_at_coordinates(
     n_samples: int,
     encoder: Encoder,
