@@ -1,6 +1,6 @@
 import math
 from pathlib import Path
-from typing import Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import torch
@@ -76,6 +76,25 @@ def reconstruct_scene_at_coordinates(
         bp:-bp,
     ]
     return recon_at_coords, tile_map_scene
+
+def sample_at_coordinates(
+    n_samples: int,
+    encoder: Encoder,
+    img: Tensor,
+    background: Tensor,
+    h_range: Tuple[int, int],
+    w_range: Tuple[int, int],
+) -> Dict[str, Tensor]:
+    bp = encoder.border_padding
+    h_range_pad = (h_range[0] - bp, h_range[1] + bp)
+    w_range_pad = (w_range[0] - bp, w_range[1] + bp)
+    scene = img[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
+    bg_scene = background[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
+    assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
+    assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
+    with torch.no_grad():
+        tile_samples = encoder.sample(scene, bg_scene, n_samples)
+    return tile_samples
 
 
 class SDSSFrame:

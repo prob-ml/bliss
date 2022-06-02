@@ -28,6 +28,7 @@ from bliss.inference import (
     SimulatedFrame,
     infer_blends,
     reconstruct_scene_at_coordinates,
+    sample_at_coordinates,
 )
 from bliss.models.binary import BinaryEncoder
 from bliss.models.decoder import ImageDecoder
@@ -77,6 +78,8 @@ def reconstruct(cfg):
     tile_map_recon = tile_map_recon.cpu()
     tile_map_recon["galaxy_blends"] = infer_blends(tile_map_recon, 2)
     print(f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image.")
+
+    tile_samples = sample_at_coordinates(2, encoder, frame.image, frame.background, hlims, wlims)
 
     full_map_recon = tile_map_recon.to_full_params()
     scene_metrics_by_mag: Dict[str, pd.DataFrame] = {}
