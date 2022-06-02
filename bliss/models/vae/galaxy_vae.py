@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import torch
 from torch import Tensor
 from torch.distributions import Normal
@@ -29,22 +31,32 @@ class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
         self.register_buffer("one", torch.tensor(1.0))
         self.p_z = Normal(self.zero, self.one)
 
-    def encode(self, image: Tensor):
-        encoded = self.features(image)
-        mean, logvar = torch.split(encoded, (self.latent_dim, self.latent_dim), -1)
-        return Normal(mean, F.softplus(logvar) + 1e-3)
+    def sample(self, image: Tensor, deterministic=False) -> Tensor:
+        q_z = self._encode(image)
+        if not deterministic:
+            z = q_z.rsample()
+        else:
+            z = q_z.loc
+        return z
 
-    def forward(self, image: Tensor):
-        q_z = self.encode(image)
+    def forward(self, image: Tensor) -> Tuple[Tensor, Tensor]:
+        q_z = self._encode(image)
         z = q_z.rsample()
         p_z = Normal(self.p_z.loc, self.p_z.scale)
         log_pz = p_z.log_prob(z).sum(-1)
+        assert isinstance(log_pz, Tensor)
         assert not torch.any(torch.isnan(log_pz))
         assert not torch.any(torch.isinf(log_pz))
+
         log_qz = q_z.log_prob(z).sum(-1)
+        assert isinstance(log_qz, Tensor)
         assert not torch.any(torch.isnan(log_qz))
         assert not torch.any(torch.isinf(log_qz))
-        return z, log_pz - log_qz
 
-    def variational_mode(self, image):
-        return self.encode(image).loc
+        pq_divergence = log_pz - log_qz
+        return z, pq_divergence
+
+    def _encode(self, image: Tensor) -> Normal:
+        encoded = self.features(image)
+        mean, logvar = torch.split(encoded, (self.latent_dim, self.latent_dim), -1)
+        return Normal(mean, F.softplus(logvar) + 1e-3)
