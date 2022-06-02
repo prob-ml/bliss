@@ -1,6 +1,6 @@
 import math
 from pathlib import Path
-from typing import Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import torch
@@ -65,7 +65,7 @@ def reconstruct_scene_at_coordinates(
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
     with torch.no_grad():
         tile_map_scene = encoder.variational_mode(scene, bg_scene)
-        recon = render_scene(decoder, tile_map_scene)
+        recon = decoder.render_large_scene(tile_map_scene)
     assert recon.shape == scene.shape
     recon += bg_scene
     # Get reconstruction at coordinates
@@ -78,26 +78,24 @@ def reconstruct_scene_at_coordinates(
     return recon_at_coords, tile_map_scene
 
 
-def render_scene(
-    decoder: ImageDecoder, tile_map_scene: TileCatalog, batch_size: int = None
-) -> Tensor:
+def sample_at_coordinates(
+    n_samples: int,
+    encoder: Encoder,
+    img: Tensor,
+    background: Tensor,
+    h_range: Tuple[int, int],
+    w_range: Tuple[int, int],
+) -> Dict[str, Tensor]:
+    bp = encoder.border_padding
+    h_range_pad = (h_range[0] - bp, h_range[1] + bp)
+    w_range_pad = (w_range[0] - bp, w_range[1] + bp)
+    scene = img[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
+    bg_scene = background[:, :, h_range_pad[0] : h_range_pad[1], w_range_pad[0] : w_range_pad[1]]
+    assert scene.shape[2] == h_range_pad[1] - h_range_pad[0]
+    assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
     with torch.no_grad():
-        if batch_size is None:
-            batch_size = 75**2 + 500 * 2
-
-        _, n_tiles_h, n_tiles_w, _, _ = tile_map_scene.locs.shape
-        n_rows_per_batch = batch_size // n_tiles_w
-        h = tile_map_scene.locs.shape[1] * tile_map_scene.tile_slen + 2 * decoder.border_padding
-        w = tile_map_scene.locs.shape[2] * tile_map_scene.tile_slen + 2 * decoder.border_padding
-        scene = torch.zeros(1, 1, h, w)
-        for row in range(0, n_tiles_h, n_rows_per_batch):
-            end_row = row + n_rows_per_batch
-            start_h = row * tile_map_scene.tile_slen
-            end_h = end_row * tile_map_scene.tile_slen + 2 * decoder.border_padding
-            tile_map_row = tile_map_scene.crop((row, end_row), (0, None))
-            img_row = decoder.render_images(tile_map_row)
-            scene[:, :, start_h:end_h] += img_row.cpu()
-        return scene
+        tile_samples = encoder.sample(scene, bg_scene, n_samples)
+    return tile_samples
 
 
 class SDSSFrame:
