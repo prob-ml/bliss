@@ -156,115 +156,34 @@ def reconstruct(cfg):
             tile_dir.mkdir(exist_ok=True)
             make_images_of_example_tile(tile_dir, encoder, decoder, frame, tile_map_recon)
 
+            true_cat = ground_truth_catalog.apply_mag_bin(-np.inf, cfg.reconstruct.mag_max)
             mismatch_dir = outdir / "reconstructions" / "mismatches"
             mismatch_dir.mkdir(exist_ok=True)
-            mismatches_at_map = detections_at_mode["true_matches"] == 0
-            true_cat = ground_truth_catalog.apply_mag_bin(-np.inf, cfg.reconstruct.mag_max)
-            bright_truths = true_cat["mags"][0, :, 0] <= 20.0
-
-            bright_mismatches = mismatches_at_map & bright_truths
-            true_cat.allowed_params = true_cat.allowed_params.union({"mismatched"})
-            true_cat["mismatched"] = bright_mismatches.reshape(1, -1, 1)
-            mismatch_dict = defaultdict(dict)
-            detection_threshold = positive_negative_stats["true_matches"].float().mean(dim=0)
-
-            photo_catalog = catalogs.get("photo")
-            if photo_catalog is not None:
-                row_indx, _, d, _ = reporting.match_by_locs(
-                    true_cat.plocs[0], photo_catalog.plocs[0], 1.0
-                )
-                photo_true_matches = torch.zeros(true_cat.plocs.shape[1], dtype=torch.bool)
-                photo_true_matches[row_indx] = d
-            else:
-                photo_true_matches = None
-
-            for i, ploc in enumerate(true_cat.plocs[0]):
-                if bright_mismatches[i]:
-                    h_topleft = max(int(ploc[0].item() - 100.0), 0) + 24
-                    w_topleft = max(int(ploc[1].item() - 100.0), 0) + 24
-                    size = 200
-                    fig = create_figure_at_point(
-                        h_topleft,
-                        w_topleft,
-                        size,
-                        bp,
-                        tile_map_recon,
-                        frame,
-                        decoder,
-                        est_catalog=true_cat,
-                    )
-                    filename = f"h{int(h_topleft)}_w{int(w_topleft)}.png"
-                    fig.savefig(mismatch_dir / filename)
-                    mismatch_dict["filename"][i] = filename
-                    mismatch_dict["h"][i] = ploc[0].item() + 24
-                    mismatch_dict["w"][i] = ploc[1].item() + 24
-                    mismatch_dict["ra"][i] = (
-                        true_cat["ra"][0, i, 0].item() if "ra" in true_cat else None
-                    )
-                    mismatch_dict["dec"][i] = (
-                        true_cat["dec"][0, i, 0].item() if "dec" in true_cat else None
-                    )
-                    mismatch_dict["mag"][i] = true_cat["mags"][0, i, 0].item()
-                    mismatch_dict["galaxy_bool"][i] = true_cat["galaxy_bools"][0, i, 0].item()
-                    mismatch_dict["detection_threshold"][i] = detection_threshold[i].item()
-                    if photo_true_matches is not None:
-                        mismatch_dict["matched_by_photo"][i] = photo_true_matches[i].item()
-            mismatch_tbl = pd.DataFrame(mismatch_dict)
-            mismatch_tbl.sort_values("filename").to_csv(mismatch_dir / "mismatches.csv")
+            plot_mismatches(
+                mismatch_dir,
+                encoder,
+                decoder,
+                frame,
+                tile_map_recon,
+                catalogs,
+                true_cat,
+                detections_at_mode,
+                positive_negative_stats,
+            )
 
             bliss_fp_dir = outdir / "reconstructions" / "bliss_fp"
             bliss_fp_dir.mkdir(exist_ok=True)
-            bliss_fp_dict = defaultdict(dict)
-
-            est_tile_matches = positive_negative_stats["est_tile_matches"]
-            detection_threshold_fp = est_tile_matches.float().mean(dim=0)
-            tile_map_recon["detection_thresholds"] = detection_threshold_fp
-            tile_map_recon["matched"] = detections_at_mode["est_tile_matches"]
-            full_map_recon_detections = tile_map_recon.to_full_params()
-            detection_threshold_fp = full_map_recon_detections["detection_thresholds"]
-
-            is_fp = full_map_recon_detections["matched"][0, :, 0] == 0.0
-            is_est_bright = full_map_recon["mags"][0, :, 0] <= 20.0
-            is_fp_and_bright = is_fp & is_est_bright
-
-            for i, ploc in enumerate(full_map_recon.plocs[0]):
-                if is_fp_and_bright[i]:
-                    h = ploc[0].item()
-                    w = ploc[1].item()
-                    h_topleft = max(int(h - 100.0), 0) + 24
-                    w_topleft = max(int(w - 100.0), 0) + 24
-                    size = 200
-                    fig = create_figure_at_point(
-                        h_topleft,
-                        w_topleft,
-                        size,
-                        bp,
-                        tile_map_recon,
-                        frame,
-                        decoder,
-                        est_catalog=true_cat,
-                    )
-                    filename = f"h{int(h_topleft)}_w{int(w_topleft)}.png"
-                    fig.savefig(bliss_fp_dir / filename)
-                    bliss_fp_dict["filename"][i] = filename
-                    bliss_fp_dict["h_topleft"][i] = h_topleft
-                    bliss_fp_dict["w_topleft"][i] = w_topleft
-                    bliss_fp_dict["h"][i] = h + 24
-                    bliss_fp_dict["w"][i] = w + 24
-
-                    if isinstance(frame, SDSSFrame):
-                        ra, dec = frame.wcs.wcs_pix2world(w + 24, h + 24, 0)
-                    else:
-                        ra, dec = None, None
-
-                    bliss_fp_dict["ra"][i] = ra
-                    bliss_fp_dict["dec"][i] = dec
-
-                    bliss_fp_dict["mag"][i] = full_map_recon["mags"][0, i, 0].item()
-                    bliss_fp_dict["galaxy_bool"][i] = full_map_recon["galaxy_bools"][0, i, 0].item()
-                    bliss_fp_dict["detection_threshold"][i] = detection_threshold_fp[0, i, 0].item()
-            bliss_fp_tbl = pd.DataFrame(bliss_fp_dict)
-            bliss_fp_tbl.sort_values("filename").to_csv(bliss_fp_dir / "bliss_fp.csv")
+            plot_false_positives(
+                bliss_fp_dir,
+                encoder,
+                decoder,
+                frame,
+                tile_map_recon,
+                full_map_recon,
+                true_cat,
+                detections_at_mode,
+                positive_negative_stats,
+            )
 
 
 def get_sdss_data(sdss_dir, sdss_pixel_scale):
@@ -1114,6 +1033,131 @@ def make_plots_of_marginal_class(
             csv_lines.append(f"{fname},{matched},{ra},{dec},{prob}")
     out_csv = outdir / "marginal_detections.csv"
     out_csv.write_text("\n".join(csv_lines))
+
+
+def plot_mismatches(
+    mismatch_dir: Path,
+    encoder: Encoder,
+    decoder: ImageDecoder,
+    frame,
+    tile_map_recon,
+    catalogs,
+    true_cat,
+    detections_at_mode,
+    positive_negative_stats,
+):
+    bp = encoder.border_padding
+    mismatches_at_map = detections_at_mode["true_matches"] == 0
+    bright_truths = true_cat["mags"][0, :, 0] <= 20.0
+
+    bright_mismatches = mismatches_at_map & bright_truths
+    true_cat.allowed_params = true_cat.allowed_params.union({"mismatched"})
+    true_cat["mismatched"] = bright_mismatches.reshape(1, -1, 1)
+    mismatch_dict = defaultdict(dict)
+    detection_threshold = positive_negative_stats["true_matches"].float().mean(dim=0)
+
+    photo_catalog = catalogs.get("photo")
+    if photo_catalog is not None:
+        row_indx, _, d, _ = reporting.match_by_locs(true_cat.plocs[0], photo_catalog.plocs[0], 1.0)
+        photo_true_matches = torch.zeros(true_cat.plocs.shape[1], dtype=torch.bool)
+        photo_true_matches[row_indx] = d
+    else:
+        photo_true_matches = None
+
+    for i, ploc in enumerate(true_cat.plocs[0]):
+        if bright_mismatches[i]:
+            h_topleft = max(int(ploc[0].item() - 100.0), 0) + 24
+            w_topleft = max(int(ploc[1].item() - 100.0), 0) + 24
+            size = 200
+            fig = create_figure_at_point(
+                h_topleft,
+                w_topleft,
+                size,
+                bp,
+                tile_map_recon,
+                frame,
+                decoder,
+                est_catalog=true_cat,
+            )
+            filename = f"h{int(h_topleft)}_w{int(w_topleft)}.png"
+            fig.savefig(mismatch_dir / filename)
+            mismatch_dict["filename"][i] = filename
+            mismatch_dict["h"][i] = ploc[0].item() + 24
+            mismatch_dict["w"][i] = ploc[1].item() + 24
+            mismatch_dict["ra"][i] = true_cat["ra"][0, i, 0].item() if "ra" in true_cat else None
+            mismatch_dict["dec"][i] = true_cat["dec"][0, i, 0].item() if "dec" in true_cat else None
+            mismatch_dict["mag"][i] = true_cat["mags"][0, i, 0].item()
+            mismatch_dict["galaxy_bool"][i] = true_cat["galaxy_bools"][0, i, 0].item()
+            mismatch_dict["detection_threshold"][i] = detection_threshold[i].item()
+            if photo_true_matches is not None:
+                mismatch_dict["matched_by_photo"][i] = photo_true_matches[i].item()
+    mismatch_tbl = pd.DataFrame(mismatch_dict)
+    mismatch_tbl.sort_values("filename").to_csv(mismatch_dir / "mismatches.csv")
+
+
+def plot_false_positives(
+    bliss_fp_dir: Path,
+    encoder: Encoder,
+    decoder: ImageDecoder,
+    frame,
+    tile_map_recon,
+    full_map_recon,
+    true_cat,
+    detections_at_mode,
+    positive_negative_stats,
+):
+    bp = encoder.border_padding
+    bliss_fp_dict = defaultdict(dict)
+
+    est_tile_matches = positive_negative_stats["est_tile_matches"]
+    detection_threshold_fp = est_tile_matches.float().mean(dim=0)
+    tile_map_recon["detection_thresholds"] = detection_threshold_fp
+    tile_map_recon["matched"] = detections_at_mode["est_tile_matches"]
+    full_map_recon_detections = tile_map_recon.to_full_params()
+    detection_threshold_fp = full_map_recon_detections["detection_thresholds"]
+
+    is_fp = full_map_recon_detections["matched"][0, :, 0] == 0.0
+    is_est_bright = full_map_recon["mags"][0, :, 0] <= 20.0
+    is_fp_and_bright = is_fp & is_est_bright
+
+    for i, ploc in enumerate(full_map_recon.plocs[0]):
+        if is_fp_and_bright[i]:
+            h = ploc[0].item()
+            w = ploc[1].item()
+            h_topleft = max(int(h - 100.0), 0) + 24
+            w_topleft = max(int(w - 100.0), 0) + 24
+            size = 200
+            fig = create_figure_at_point(
+                h_topleft,
+                w_topleft,
+                size,
+                bp,
+                tile_map_recon,
+                frame,
+                decoder,
+                est_catalog=true_cat,
+            )
+            filename = f"h{int(h_topleft)}_w{int(w_topleft)}.png"
+            fig.savefig(bliss_fp_dir / filename)
+            bliss_fp_dict["filename"][i] = filename
+            bliss_fp_dict["h_topleft"][i] = h_topleft
+            bliss_fp_dict["w_topleft"][i] = w_topleft
+            bliss_fp_dict["h"][i] = h + 24
+            bliss_fp_dict["w"][i] = w + 24
+
+            if isinstance(frame, SDSSFrame):
+                ra, dec = frame.wcs.wcs_pix2world(w + 24, h + 24, 0)
+            else:
+                ra, dec = None, None
+
+            bliss_fp_dict["ra"][i] = ra
+            bliss_fp_dict["dec"][i] = dec
+
+            bliss_fp_dict["mag"][i] = full_map_recon["mags"][0, i, 0].item()
+            bliss_fp_dict["galaxy_bool"][i] = full_map_recon["galaxy_bools"][0, i, 0].item()
+            bliss_fp_dict["detection_threshold"][i] = detection_threshold_fp[0, i, 0].item()
+    bliss_fp_tbl = pd.DataFrame(bliss_fp_dict)
+    bliss_fp_tbl.sort_values("filename").to_csv(bliss_fp_dir / "bliss_fp.csv")
 
 
 if __name__ == "__main__":
