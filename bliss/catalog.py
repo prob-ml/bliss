@@ -228,6 +228,9 @@ class TileCatalog(UserDict):
         """Set all fluxes (galaxy and star) of tile catalog given an ImageDecoder instance."""
         # first get galaxy fluxes
         assert "galaxy_bools" in self and "galaxy_params" in self and "fluxes" in self
+        assert (
+            self.device == decoder.device
+        ), f"TileCatalog on {self.device} but decoder on {decoder.device}"
         galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
         with torch.no_grad():
             galaxy_fluxes = decoder.get_galaxy_fluxes(galaxy_bools, galaxy_params)

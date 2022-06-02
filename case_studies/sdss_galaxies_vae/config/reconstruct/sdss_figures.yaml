@@ -32,6 +32,10 @@ scenes:
         h: 557 #1400
         w: 408
         size: 300
+    sdss_recon5:
+        h: 1400
+        w: 1710
+        size: 300
     blend1:
         h: 117 #217
         w: 201 #301
