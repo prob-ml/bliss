@@ -60,8 +60,6 @@ def setup(cfg):
         warnings.warn("Specified cache directory does not exist, will attempt to create it.")
         Path(cachedir).mkdir(exist_ok=True, parents=True)
 
-    encoder, decoder = load_models(cfg, device)
-
     return figs, device, bfig_kwargs
 
 
@@ -103,6 +101,7 @@ def make_blend_sim_figure(cfg, encoder, decoder, bfig_kwargs):
 
     # create dataset of blends if not existant.
     if not blend_file.exists():  # or cfg.plots.overwrite:
+        print(f"INFO: Creating dataset of simulated galsim blends and saving to {blend_file}")
         dataset = instantiate(
             cfg.datasets.galsim_blended_galaxies, batch_size=512, n_batches=20, num_workers=20
         )

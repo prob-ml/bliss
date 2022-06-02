@@ -51,21 +51,25 @@ class BlendSimFigures(BlissFigures):
         full_truth = FullCatalog(slen, slen, full_catalog_dict)
 
         print("INFO: BLISS posterior inference on images.")
-        tile_est = encoder.variational_mode(images, background).cpu()
+        tile_est = encoder.variational_mode(images, background)
         tile_est.set_all_fluxes_and_mags(decoder)
         tile_est.set_galaxy_ellips(decoder, scale=0.393)
+        tile_est = tile_est.cpu()
         full_est = tile_est.to_full_params()
+        est_plocs = full_est.plocs + encoder.border_padding
 
         snr = []
         blendedness = []
         true_mags = []
-        true_ellips = []
+        true_ellips1 = []
+        true_ellips2 = []
         est_mags = []
-        est_ellips = []
+        est_ellips1 = []
+        est_ellips2 = []
         for ii in tqdm(range(n_batches), desc="Matching batches"):
-            true_plocs, est_plocs = full_truth.plocs[ii], full_est.plocs[ii]
+            true_plocs_ii, est_plocs_ii = full_truth.plocs[ii], est_plocs[ii]
 
-            tindx, eindx, dkeep = match_by_locs(true_plocs, est_plocs)
+            tindx, eindx, dkeep, _ = match_by_locs(true_plocs_ii, est_plocs_ii)
             n_matches = len(tindx[dkeep])
 
             snr_ii = blend_data["snr"][ii][tindx][dkeep]
@@ -79,32 +83,36 @@ class BlendSimFigures(BlissFigures):
                 snr.append(snr_ii[jj])
                 blendedness.append(blendedness_ii[jj])
                 true_mags.append(true_mag_ii[jj])
-                true_ellips.append(true_ellips_ii[jj])
                 est_mags.append(est_mag_ii[jj])
-                est_ellips.append(est_ellips_ii[jj])
+                true_ellips1.append(true_ellips_ii[jj][0])
+                true_ellips2.append(true_ellips_ii[jj][1])
+                est_ellips1.append(est_ellips_ii[jj][0])
+                est_ellips2.append(est_ellips_ii[jj][1])
 
-        # tensors
-        snr = torch.tensor(snr)
-        true_mags = torch.tensor(true_mags)
+        true_ellips = torch.vstack([torch.tensor(true_ellips1), torch.tensor(true_ellips2)])
+        true_ellips = true_ellips.T.reshape(-1, 2)
+
+        est_ellips = torch.vstack([torch.tensor(est_ellips1), torch.tensor(est_ellips2)])
+        est_ellips = est_ellips.T.reshape(-1, 2)
 
         return {
             "snr": torch.tensor(snr),
             "blendedness": torch.tensor(blendedness),
             "true_mags": torch.tensor(true_mags),
             "est_mags": torch.tensor(est_mags),
-            "true_ellips": torch.tensor(true_ellips).reshape(-1, 2),
-            "est_ellips": torch.tensor(est_ellips),
+            "true_ellips": true_ellips,
+            "est_ellips": est_ellips,
         }
 
     def make_snr_blendedness_bin_figure(self, data):
+        set_rc_params(fontsize=24)
         snr, blendedness, true_mags, est_mags, true_ellips, est_ellips = data.values()
         fig, axes = plt.subplots(3, 2, figsize=(12, 18))
         ax1, ax2, ax3, ax4, ax5, ax6 = axes.flatten()
-        set_rc_params(fontsize=24)
 
         xticks = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0, 3)
-        xlabel = r"$\log_{10} \text{SNR}$"
+        xlabel = r"$\log_{10} \rm SNR$"
         ylabel = r"\rm $m^{\rm recon} - m^{\rm true}$"
 
         x, y = np.log10(snr), est_mags - true_mags
@@ -128,7 +136,7 @@ class BlendSimFigures(BlissFigures):
             ax2,
             x,
             y,
-            delta=0.2,
+            delta=0.1,
             xlims=xlims,
             xlabel=xlabel,
             ylabel=ylabel,
@@ -137,7 +145,7 @@ class BlendSimFigures(BlissFigures):
 
         xticks = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0, 3)
-        xlabel = r"$\log_{10} \text{SNR}$"
+        xlabel = r"$\log_{10} \rm SNR$"
         ylabel = r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$"
         x, y = np.log10(snr), est_ellips[:, 0] - true_ellips[:, 0]
         scatter_bin_plot(
@@ -160,7 +168,7 @@ class BlendSimFigures(BlissFigures):
             ax4,
             x,
             y,
-            delta=0.2,
+            delta=0.1,
             xlims=xlims,
             xlabel=xlabel,
             ylabel=ylabel,
@@ -169,7 +177,7 @@ class BlendSimFigures(BlissFigures):
 
         xticks = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0, 3)
-        xlabel = r"$\log_{10} \text{SNR}$"
+        xlabel = r"$\log_{10} \rm SNR$"
         ylabel = r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$"
         x, y = np.log10(snr), est_ellips[:, 1] - true_ellips[:, 1]
         scatter_bin_plot(
@@ -192,16 +200,17 @@ class BlendSimFigures(BlissFigures):
             ax6,
             x,
             y,
-            delta=0.2,
+            delta=0.1,
             xlims=xlims,
             xlabel=xlabel,
             ylabel=ylabel,
             xticks=xticks,
         )
 
+        plt.tight_layout()
+
         return fig
 
     def create_figures(self, data):
-        return
-        # fig = self.make_snr_blended_bin_figure(data)
-        # return {"blend_detection_metrics": fig}
+        fig = self.make_snr_blendedness_bin_figure(data)
+        return {"blend_detection_metrics": fig}
