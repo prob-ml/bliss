@@ -424,17 +424,18 @@ def write_bliss_photo_tex_file(tex_dir: Path, scene_metrics_by_mag: Dict[str, pd
                 magstr = "Overall"
             else:
                 magstr = f"{int(mag) - 1} - {int(mag)}"
-            bliss_matched = int(scene_metrics_by_mag["bliss"].iloc[i]["classif_n_matches"])
             bliss_tot = float(scene_metrics_by_mag["bliss"].iloc[i]["classif_acc"])
             bliss_gal = float(scene_metrics_by_mag["bliss"].iloc[i]["classif_galaxy_acc"])
             bliss_star = float(scene_metrics_by_mag["bliss"].iloc[i]["classif_star_acc"])
 
-            photo_matched = int(scene_metrics_by_mag["photo"].iloc[i]["classif_n_matches"])
             photo_tot = float(scene_metrics_by_mag["photo"].iloc[i]["classif_acc"])
             photo_gal = float(scene_metrics_by_mag["photo"].iloc[i]["classif_galaxy_acc"])
             photo_star = float(scene_metrics_by_mag["photo"].iloc[i]["classif_star_acc"])
 
-            line = rf"{magstr} & {bliss_tot:.2f} & {bliss_gal:.2f} & {bliss_star:.2f} & {photo_tot:.2f} & {photo_gal:.2f} & {photo_star:.2f} \\"
+            line = (
+                f"{magstr} & {bliss_tot:.2f} & {bliss_gal:.2f} & {bliss_star:.2f}"
+                + rf"& {photo_tot:.2f} & {photo_gal:.2f} & {photo_star:.2f} \\"
+            )
             fp.write(line + "\n")
 
 
@@ -920,7 +921,6 @@ def get_positive_negative_stats(
 ):
     true_cat = true_cat.apply_mag_bin(-np.inf, mag_max)
     thresholds = np.linspace(0.01, 0.99, 99)
-    log_probs = rearrange(est_tile_cat["n_source_log_probs"], "n nth ntw 1 1 -> n nth ntw")
     est_tile_cat = est_tile_cat.copy()
 
     res = Parallel(n_jobs=10)(
@@ -974,13 +974,15 @@ def make_images_of_example_blend(
     h_end = h + slen
     w = 1710
     w_end = w + slen
+    hlims = (h, h_end)
+    wlims = (w, w_end)
     recon, tile_map_recon = reconstruct_scene_at_coordinates(
         encoder,
         decoder,
         frame.image,
         frame.background,
-        (h, h_end),
-        (w, w_end),
+        hlims,
+        wlims,
     )
     bp = encoder.border_padding
     img = frame.image[:, :, h:h_end, w:w_end]
@@ -993,12 +995,12 @@ def make_images_of_example_blend(
     masks = ((4, 5), (3, 7))
 
     for (i, (h_mask, w_mask)) in enumerate(masks):
-        tile_map_1gal_dict = tile_map_recon.to_dict()
-        tile_map_1gal_dict["n_sources"] = tile_map_1gal_dict["n_sources"].clone()
-        tile_map_1gal_dict["galaxy_bools"] = tile_map_1gal_dict["galaxy_bools"].clone()
-        tile_map_1gal_dict["galaxy_bools"][:, h_mask, w_mask] = 0.0
-        tile_map_1gal_dict["n_sources"][0, h_mask, w_mask] = 0
-        tile_map_one_galaxy = TileCatalog(tile_map_recon.tile_slen, tile_map_1gal_dict)
+        tile_onegal_dict = tile_map_recon.to_dict()
+        tile_onegal_dict["n_sources"] = tile_onegal_dict["n_sources"].clone()
+        tile_onegal_dict["galaxy_bools"] = tile_onegal_dict["galaxy_bools"].clone()
+        tile_onegal_dict["galaxy_bools"][:, h_mask, w_mask] = 0.0
+        tile_onegal_dict["n_sources"][0, h_mask, w_mask] = 0
+        tile_map_one_galaxy = TileCatalog(tile_map_recon.tile_slen, tile_onegal_dict)
         recon_one_galaxy = decoder.render_images(tile_map_one_galaxy).detach().cpu()
         recon_one_galaxy = recon_one_galaxy[:, :, bp:-bp, bp:-bp] + bg
         plt.imsave(blend_dir / f"galaxy_{i}.png", recon_one_galaxy[0, 0, :, :], vmax=recon.max())
@@ -1011,21 +1013,12 @@ def make_images_of_example_tile(
     frame: Frame,
     tile_map_recon: TileCatalog,
 ):
-    # slen = 100
     slen = 60
     h = 200 + 50 + 2
     h_end = h + slen
     w = 1700 + 210 + 12
     w_end = w + slen
 
-    # recon, tile_map_recon = reconstruct_scene_at_coordinates(
-    #     encoder,
-    #     decoder,
-    #     frame.image,
-    #     frame.background,
-    #     (h, h_end),
-    #     (w, w_end),
-    # )
     img = frame.image[:, :, h:h_end, w:w_end]
     plt.imsave(tile_dir / "img.png", img[0, 0])
     fig_tiles = create_figure_at_point(
