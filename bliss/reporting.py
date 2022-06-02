@@ -385,10 +385,11 @@ def get_single_galaxy_ellipticities(
     Returns:
         Tensor containing ellipticity measurements for each galaxy in `images`.
     """
+    device = images.device
     n_samples, _, _ = images.shape
     ellips = torch.zeros((n_samples, 2))  # 2nd shape: e1, e2
-    images_np = images.numpy()
-    psf_np = psf_image.numpy()
+    images_np = images.detach().cpu().numpy()
+    psf_np = psf_image.detach().cpu().numpy()
     galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
 
     # Now we use galsim to measure size and ellipticity
@@ -401,7 +402,7 @@ def get_single_galaxy_ellipticities(
         g1, g2 = float(res_true.corrected_g1), float(res_true.corrected_g2)
         ellips[i, :] = torch.tensor([g1, g2])
 
-    return ellips
+    return ellips.to(device)
 
 
 def get_single_galaxy_measurements(

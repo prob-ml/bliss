@@ -160,11 +160,9 @@ class ImageDecoder(pl.LightningModule):
         )
         galaxy_shapes = self.galaxy_tile_decoder.size_galaxy(galaxy_shapes)
         single_galaxies = rearrange(galaxy_shapes, "n 1 h w -> n h w", h=slen, w=slen)
+        ellips = get_single_galaxy_ellipticities(single_galaxies, psf_image, scale)
 
-        with torch.no_grad():
-            ellips = get_single_galaxy_ellipticities(single_galaxies, psf_image, scale)
-
-        ellips_all = torch.zeros(b_flat, 2, dtype=ellips.dtype)
+        ellips_all = torch.zeros(b_flat, 2, dtype=ellips.dtype, device=ellips.device)
         ellips_all[galaxy_bools_flat.squeeze(-1) > 0.5] = ellips
         ellips = rearrange(
             ellips_all, "(b nth ntw s) g -> b nth ntw s g", b=b, nth=nth, ntw=ntw, s=s, g=2
