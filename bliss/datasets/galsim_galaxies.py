@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Dict, List, Optional
 
 import galsim
 import numpy as np
@@ -7,8 +7,11 @@ import pytorch_lightning as pl
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
+from tqdm import tqdm
 
 from bliss.datasets.background import ConstantBackground
+from bliss.datasets.sdss import convert_flux_to_mag
+from bliss.reporting import get_single_galaxy_measurements
 
 
 def load_psf_from_file(psf_image_file: str, pixel_scale: float):
@@ -293,6 +296,8 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         num_workers: int,
         batch_size: int,
         n_batches: int,
+        fix_validation_set: bool = False,
+        valid_n_batches: Optional[int] = None,
     ):
         super().__init__()
         self.prior = prior
@@ -301,6 +306,8 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.background = background
+        self.fix_validation_set = fix_validation_set
+        self.valid_n_batches = valid_n_batches
 
     def __getitem__(self, idx):
         galaxy_params = self.prior.sample(1, "cpu")
@@ -321,13 +328,19 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+        dl = DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+        if not self.fix_validation_set:
+            return dl
+        valid: List[Dict[str, Tensor]] = []
+        for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
+            valid.append(next(iter(dl)))
+        return DataLoader(valid, batch_size=None, num_workers=0)
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
 
-class GalsimBlend(SingleGalsimGalaxies):
+class GalsimBlends(SingleGalsimGalaxies):
     """Blend where one galaxy is always centered."""
 
     def __init__(
@@ -353,6 +366,12 @@ class GalsimBlend(SingleGalsimGalaxies):
 
         # sample galaxy params and ensure tensor returned is of theh same size always.
         params = self.prior.sample(n_sources, "cpu")
+
+        # order galaxy params based on flux so centered (first one) is the brightest
+        indx_order = np.argsort(-params[:, 0])
+        params = params[indx_order, :]
+
+        # account for max sources
         galaxy_params = torch.zeros(self.max_n_sources, params.shape[-1])
         galaxy_params[:n_sources, :] = params
 
@@ -379,6 +398,21 @@ class GalsimBlend(SingleGalsimGalaxies):
             plocs[ii, 1] = slen / 2 + offset[0]
             galaxies_image += uncentered_galaxy_image
 
+        # get ellipticities and fluxes
+        scale = self.decoder.pixel_scale
+        psf_tensor = torch.from_numpy(
+            self.decoder.psf.drawImage(nx=slen, ny=slen, scale=scale).array
+        ).reshape(1, slen, slen)
+        single_galaxy_tensor = individual_noiseless_centered[:n_sources].reshape(
+            n_sources, 1, slen, slen
+        )
+        mags = torch.zeros(self.max_n_sources)
+        for ii in range(n_sources):
+            mags[ii] = convert_flux_to_mag(galaxy_params[ii, 0])
+        ellips = torch.zeros(self.max_n_sources, 2)
+        meas = get_single_galaxy_measurements(single_galaxy_tensor, psf_tensor, scale)
+        ellips[:n_sources, :] = meas["ellips"]
+
         # finally, add background and noise
         background = self.background.sample((1, *galaxies_image.shape)).squeeze(1)
         noisy_image = _add_noise_and_background(galaxies_image, background)
@@ -401,6 +435,10 @@ class GalsimBlend(SingleGalsimGalaxies):
             "blendedness": blendedness,
             "n_sources": torch.tensor([n_sources]),
             "plocs": plocs,
+            "slen": slen,
+            "ellips": ellips,
+            "fluxes": galaxy_params[:, 0],
+            "mags": mags,
         }
 
     def _sample_distance_from_center(self) -> Tensor:

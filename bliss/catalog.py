@@ -1,12 +1,17 @@
 import math
 from collections import UserDict
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import torch
+from astropy.io import fits
+from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from matplotlib.pyplot import Axes
 from torch import Tensor
 from torch.nn import functional as F
+
+from bliss.datasets.sdss import SloanDigitalSkySurvey, column_to_tensor, convert_flux_to_mag
 
 
 class TileCatalog(UserDict):
@@ -15,6 +20,7 @@ class TileCatalog(UserDict):
         "fluxes",
         "log_fluxes",
         "mags",
+        "ellips",
         "galaxy_bools",
         "galaxy_params",
         "galaxy_fluxes",
@@ -46,6 +52,11 @@ class TileCatalog(UserDict):
             )
         self._validate(item)
         super().__setitem__(key, item)
+
+        # provide star_bools automatically if galaxy_bools is set.
+        if key == "galaxy_bools" and "star_bools" not in self:
+            star_bools = self.is_on_array.unsqueeze(-1) * (1 - item)
+            super().__setitem__("star_bools", star_bools)
 
     def __getitem__(self, key: str) -> Tensor:
         assert isinstance(key, str)
@@ -213,6 +224,35 @@ class TileCatalog(UserDict):
 
         return {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
 
+    def set_all_fluxes_and_mags(self, decoder):
+        """Set all fluxes (galaxy and star) of tile catalog given an ImageDecoder instance."""
+        # first get galaxy fluxes
+        assert "galaxy_bools" in self and "galaxy_params" in self and "fluxes" in self
+        assert (
+            self.device == decoder.device
+        ), f"TileCatalog on {self.device} but decoder on {decoder.device}"
+        galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
+        with torch.no_grad():
+            galaxy_fluxes = decoder.get_galaxy_fluxes(galaxy_bools, galaxy_params)
+        self["galaxy_fluxes"] = galaxy_fluxes
+
+        # update default fluxes
+        star_bools = self["star_bools"]
+        star_fluxes = self["fluxes"]
+        fluxes = galaxy_bools * galaxy_fluxes + star_bools * star_fluxes
+        self["fluxes"] = fluxes
+
+        # mags (careful with 0s)
+        is_on_array = self.is_on_array > 0
+        self["mags"] = torch.zeros_like(self["fluxes"])
+        self["mags"][is_on_array] = convert_flux_to_mag(self["fluxes"][is_on_array])
+
+    def set_galaxy_ellips(self, decoder, scale: float = 0.393):
+        """Sets galaxy ellipticities of tile catalog given an ImageDecoder instance."""
+        galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
+        ellips = decoder.get_galaxy_ellips(galaxy_bools, galaxy_params, scale=scale)
+        self["ellips"] = ellips
+
 
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params
@@ -236,6 +276,13 @@ class FullCatalog(UserDict):
             )
         self._validate(item)
         super().__setitem__(key, item)
+
+        # provide star_bools automatically if galaxy_bools is set.
+        if key == "galaxy_bools" and "star_bools" not in self:
+            assert item.dtype != torch.bool, "galaxy_bools should be float for consistency."
+            is_on_array = get_is_on_from_n_sources(self.n_sources, self.max_sources)
+            star_bools = (1 - item) * is_on_array.unsqueeze(-1)
+            super().__setitem__("star_bools", star_bools)
 
     def __getitem__(self, key: str) -> Tensor:
         assert isinstance(key, str)
@@ -361,6 +408,69 @@ class FullCatalog(UserDict):
         ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
 
 
+class PhotoFullCatalog(FullCatalog):
+    """Class for the SDSS PHOTO Catalog.
+
+    Some resources:
+    - https://www.sdss.org/dr12/algorithms/classify/
+    - https://www.sdss.org/dr12/algorithms/resolve/
+    """
+
+    @classmethod
+    def from_file(cls, sdss_path, run, camcol, field, band):
+        sdss_path = Path(sdss_path)
+        camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
+        po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+        po_fits = fits.getdata(po_path)
+        objc_type = column_to_tensor(po_fits, "objc_type")
+        thing_id = column_to_tensor(po_fits, "thing_id")
+        ras = column_to_tensor(po_fits, "ra")
+        decs = column_to_tensor(po_fits, "dec")
+        galaxy_bools = (objc_type == 3) & (thing_id != -1)
+        star_bools = (objc_type == 6) & (thing_id != -1)
+        star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
+        star_mags = column_to_tensor(po_fits, "psfmag") * star_bools.reshape(-1, 1)
+        galaxy_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
+        galaxy_mags = column_to_tensor(po_fits, "cmodelmag") * galaxy_bools.reshape(-1, 1)
+        fluxes = star_fluxes + galaxy_fluxes
+        mags = star_mags + galaxy_mags
+        keep = galaxy_bools | star_bools
+        galaxy_bools = galaxy_bools[keep]
+        star_bools = star_bools[keep]
+        ras = ras[keep]
+        decs = decs[keep]
+        fluxes = fluxes[keep][:, band]
+        mags = mags[keep][:, band]
+
+        sdss = SloanDigitalSkySurvey(sdss_path, run, camcol, fields=(field,), bands=(band,))
+        wcs: WCS = sdss[0]["wcs"][0]
+
+        pts = []
+        prs = []
+        for ra, dec in zip(ras, decs):
+            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
+            pts.append(float(pt))
+            prs.append(float(pr))
+        pts = torch.tensor(pts) + 0.5  # For consistency with BLISS
+        prs = torch.tensor(prs) + 0.5
+        plocs = torch.stack((prs, pts), dim=-1)
+        nobj = plocs.shape[0]
+
+        d = {
+            "plocs": plocs.reshape(1, nobj, 2),
+            "n_sources": torch.tensor((nobj,)),
+            "galaxy_bools": galaxy_bools.reshape(1, nobj, 1).float(),
+            "star_bools": star_bools.reshape(1, nobj, 1).float(),
+            "fluxes": fluxes.reshape(1, nobj, 1),
+            "mags": mags.reshape(1, nobj, 1),
+        }
+
+        height = sdss[0]["image"].shape[1]
+        width = sdss[0]["image"].shape[2]
+
+        return cls(height, width, d)
+
+
 def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tensor:
     """Divides a batch of full images into padded tiles.
 
@@ -372,7 +482,7 @@ def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tens
         ptile_slen: Side length of padded tile
 
     Returns:
-        A batchsize x n_tiles_h x n_tiles_w x n_bands x tile_weight x tile_width image
+        A batchsize x n_tiles_h x n_tiles_w x n_bands x tile_height x tile_width image
     """
     assert len(images.shape) == 4
     n_bands = images.shape[1]

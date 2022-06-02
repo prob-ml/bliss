@@ -7,8 +7,8 @@ from tqdm import tqdm
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.binary import BinaryEncoder
+from bliss.models.detection_encoder import DetectionEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
-from bliss.models.location_encoder import LocationEncoder
 
 
 class Encoder(nn.Module):
@@ -30,45 +30,49 @@ class Encoder(nn.Module):
 
     def __init__(
         self,
-        location_encoder: LocationEncoder,
+        detection_encoder: DetectionEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
         galaxy_encoder: Optional[GalaxyEncoder] = None,
+        n_images_per_batch: Optional[int] = None,
+        n_rows_per_batch: Optional[int] = None,
         map_n_source_weights: Optional[Tuple[float, ...]] = None,
-        batch_size: Optional[int] = None,
     ):
         """Initializes Encoder.
 
-        This module requires at least the `location_encoder`. Other
+        This module requires at least the `detection_encoder`. Other
         modules can be incorporated to add more information about the catalog,
         specifically whether an object is a galaxy or star (`binary_encoder`), or
         the latent parameter describing the shape of the galaxy `galaxy_encoder`.
 
         Args:
-            location_encoder: Module that takes padded tiles and returns the number
+            detection_encoder: Module that takes padded tiles and returns the number
                 of sources and locations per-tile.
             binary_encoder: Module that takes padded tiles and locations and
                 returns a classification between stars and galaxies. Defaults to None.
             galaxy_encoder: Module that takes padded tiles and locations and returns the variational
                 distribution of the latent variable determining the galaxy shape. Defaults to None.
-            map_n_source_weights: Optional. See LocationEncoder. If specified, weights the argmax in
-                MAP estimation of locations. Useful for raising/lowering the threshold for turning
-                sources on/off.
-            batch_size: How many padded tiles can be rendered at a time on the GPU?
+            map_n_source_weights: Optional. See DetectionEncoder. If specified, weights the argmax
+                in MAP estimation of locations. Useful for raising/lowering the threshold for
+                turning sources on/off.
+            n_images_per_batch: How many images can be processed at a time on the GPU?
+                If not specified, defaults to an amount known to fit on my GPU.
+            n_rows_per_batch: How many vertical padded tiles can be processed at a time on the GPU?
                 If not specified, defaults to an amount known to fit on my GPU.
         """
         super().__init__()
         self._dummy_param = nn.Parameter(torch.empty(0))
 
-        self.location_encoder = location_encoder
+        self.detection_encoder = detection_encoder
         self.binary_encoder = binary_encoder
         self.galaxy_encoder = galaxy_encoder
 
         if map_n_source_weights is None:
-            map_n_source_weights_tnsr = torch.ones(self.location_encoder.max_detections + 1)
+            map_n_source_weights_tnsr = torch.ones(self.detection_encoder.max_detections + 1)
         else:
             map_n_source_weights_tnsr = torch.tensor(map_n_source_weights)
 
-        self.batch_size = batch_size if batch_size is not None else 75**2 + 500 * 5
+        self.n_images_per_batch = n_images_per_batch if n_images_per_batch is not None else 10
+        self.n_rows_per_batch = n_rows_per_batch if n_rows_per_batch is not None else 15
         self.register_buffer("map_n_source_weights", map_n_source_weights_tnsr, persistent=False)
 
     def forward(self, x):
@@ -93,15 +97,15 @@ class Encoder(nn.Module):
         Returns:
             A dictionary of the maximum a posteriori
             of the catalog in tiles. Specifically, this dictionary comprises:
-                - The output of LocationEncoder.variational_mode()
+                - The output of DetectionEncoder.variational_mode()
                 - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
                 - 'galaxy_params' from GalaxyEncoder.
         """
         tile_map_dict = self.sample(image, background, None)
-        n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.location_encoder.tile_slen
-        n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.location_encoder.tile_slen
+        n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.detection_encoder.tile_slen
+        n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.detection_encoder.tile_slen
         return TileCatalog.from_flat_dict(
-            self.location_encoder.tile_slen,
+            self.detection_encoder.tile_slen,
             n_tiles_h,
             n_tiles_w,
             {k: v.squeeze(0) for k, v in tile_map_dict.items()},
@@ -110,9 +114,8 @@ class Encoder(nn.Module):
     def sample(
         self, image: Tensor, background: Tensor, n_samples: Optional[int]
     ) -> Dict[str, Tensor]:
-        n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.location_encoder.tile_slen
-        n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.location_encoder.tile_slen
-        ptile_loader = self._make_ptile_loader(image, background, n_tiles_h, n_tiles_w)
+        n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.detection_encoder.tile_slen
+        ptile_loader = self._make_ptile_loader(image, background, n_tiles_h)
         tile_map_list: List[Dict[str, Tensor]] = []
         with torch.no_grad():
             for ptiles in tqdm(ptile_loader, desc="Encoding ptiles"):
@@ -121,32 +124,35 @@ class Encoder(nn.Module):
                 tile_map_list.append(out_ptiles)
         return self._collate(tile_map_list)
 
-    def _make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int, n_tiles_w: int):
+    def _make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int):
         img_bg = torch.cat((image, background), dim=1).to(self.device)
-        n_rows_per_batch = self.batch_size // n_tiles_w
-        for row in range(0, n_tiles_h, n_rows_per_batch):
-            end_row = row + n_rows_per_batch
-            start_h = row * self.location_encoder.tile_slen
-            end_h = end_row * self.location_encoder.tile_slen + 2 * self.border_padding
-            img_bg_cropped = img_bg[:, :, start_h:end_h, :]
-            image_ptiles = get_images_in_tiles(
-                img_bg_cropped, self.location_encoder.tile_slen, self.location_encoder.ptile_slen
-            )
-            image_ptiles = image_ptiles.view(-1, *image_ptiles.shape[-3:])
-            yield image_ptiles
+        n_images = image.shape[0]
+        for start_b in range(0, n_images, self.n_images_per_batch):
+            for row in range(0, n_tiles_h, self.n_rows_per_batch):
+                end_b = start_b + self.n_images_per_batch
+                end_row = row + self.n_rows_per_batch
+                start_h = row * self.detection_encoder.tile_slen
+                end_h = end_row * self.detection_encoder.tile_slen + 2 * self.border_padding
+                img_bg_cropped = img_bg[start_b:end_b, :, start_h:end_h, :]
+                image_ptiles = get_images_in_tiles(
+                    img_bg_cropped,
+                    self.detection_encoder.tile_slen,
+                    self.detection_encoder.ptile_slen,
+                )
+                yield image_ptiles.reshape(-1, *image_ptiles.shape[-3:])
 
     def _encode_ptiles(self, image_ptiles: Tensor, n_samples: Optional[int]):
         assert isinstance(self.map_n_source_weights, Tensor)
         deterministic = n_samples is None
-        dist_params = self.location_encoder.encode(image_ptiles)
-        tile_samples = self.location_encoder.sample(
+        dist_params = self.detection_encoder.encode(image_ptiles)
+        tile_samples = self.detection_encoder.sample(
             dist_params, n_samples, n_source_weights=self.map_n_source_weights
         )
         n_source_log_probs = dist_params["n_source_log_probs"][:, 1:]
         tile_samples["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1).unsqueeze(0)
         locs = tile_samples["locs"]
         n_sources = tile_samples["n_sources"]
-        is_on_array = get_is_on_from_n_sources(n_sources, self.location_encoder.max_detections)
+        is_on_array = get_is_on_from_n_sources(n_sources, self.detection_encoder.max_detections)
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
             galaxy_probs = self.binary_encoder.forward(image_ptiles, locs)
@@ -155,11 +161,9 @@ class Encoder(nn.Module):
                 galaxy_bools = (galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
             else:
                 raise NotImplementedError()
-            star_bools = get_star_bools(n_sources, galaxy_bools)
             tile_samples.update(
                 {
                     "galaxy_bools": galaxy_bools,
-                    "star_bools": star_bools,
                     "galaxy_probs": galaxy_probs,
                 }
             )
@@ -185,23 +189,13 @@ class Encoder(nn.Module):
     def get_images_in_ptiles(self, images):
         """Run get_images_in_ptiles with correct tile_slen and ptile_slen."""
         return get_images_in_tiles(
-            images, self.location_encoder.tile_slen, self.location_encoder.ptile_slen
+            images, self.detection_encoder.tile_slen, self.detection_encoder.ptile_slen
         )
 
     @property
     def border_padding(self) -> int:
-        return self.location_encoder.border_padding
+        return self.detection_encoder.border_padding
 
     @property
     def device(self):
         return self._dummy_param.device
-
-
-def get_star_bools(n_sources, galaxy_bools):
-    assert n_sources.shape[0] == galaxy_bools.shape[0]
-    assert galaxy_bools.shape[-1] == 1
-    max_sources = galaxy_bools.shape[-2]
-    assert n_sources.le(max_sources).all()
-    is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
-    is_on_array = is_on_array.view(*galaxy_bools.shape)
-    return (1 - galaxy_bools) * is_on_array

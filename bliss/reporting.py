@@ -1,5 +1,5 @@
 """Functions to evaluate the performance of BLISS predictions."""
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import galsim
 import matplotlib as mpl
@@ -62,7 +62,7 @@ class DetectionMetrics(Metric):
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
 
     # pylint: disable=no-member
-    def update(self, true, est):
+    def update(self, true: FullCatalog, est: FullCatalog) -> None:  # type: ignore
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
         assert isinstance(true, FullCatalog)
         assert isinstance(est, FullCatalog)
@@ -83,7 +83,7 @@ class DetectionMetrics(Metric):
                 self.tp_gal += tp_gal
                 self.fp += fp
                 self.avg_distance += avg_distance
-                self.total_true_n_sources += ntrue
+                self.total_true_n_sources += ntrue  # type: ignore
                 count += 1
         self.avg_distance /= count
 
@@ -226,7 +226,7 @@ def scene_metrics(
     mag_min: float = -np.inf,
     mag_max: float = np.inf,
     slack: float = 1.0,
-):
+) -> dict:
     """Return detection and classification metrics based on a given ground truth.
 
     These metrics are computed as a function of magnitude based on the specified
@@ -264,10 +264,10 @@ def scene_metrics(
     # f1-score
     f1 = 2 * precision * recall / (precision + recall)
     detection_result = {
-        "precision": precision,
-        "recall": recall,
-        "f1": f1,
-        "n_galaxies_detected": n_galaxies_detected,
+        "precision": precision.item(),
+        "recall": recall.item(),
+        "f1": f1.item(),
+        "n_galaxies_detected": n_galaxies_detected.item(),
     }
 
     # classification
@@ -294,8 +294,8 @@ def scene_metrics(
         "tscount": tscount,
         "egcount": egcount,
         "escount": escount,
-        "n_matches_coadd_gal": n_matches_gal_coadd,
-        "n_matches_coadd_star": n_matches - n_matches_gal_coadd,
+        "n_matches_coadd_gal": n_matches_gal_coadd.item(),
+        "n_matches_coadd_star": n_matches.item() - n_matches_gal_coadd.item(),
     }
 
     # compute and return results
@@ -366,94 +366,83 @@ class CoaddFullCatalog(FullCatalog):
             arr = column_to_tensor(cat, coadd_name)[keep]
             data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
 
-        data["galaxy_bools"] = data["galaxy_bools"].bool()
+        data["galaxy_bools"] = data["galaxy_bools"].float()
         return cls(height, width, data)
 
 
+def get_single_galaxy_ellipticities(
+    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396
+) -> Tensor:
+    """Returns ellipticities of (noiseless, single-band) individual galaxy images.
+
+    Args:
+        pixel_scale: Conversion from arcseconds to pixel.
+        images: Array of shape (n_samples, slen, slen) containing images of
+            single-centered galaxies without noise or background.
+        psf_image: Array of shape (slen, slen) containing PSF image used for
+            convolving the galaxies in `true_images`.
+
+    Returns:
+        Tensor containing ellipticity measurements for each galaxy in `images`.
+    """
+    n_samples, _, _ = images.shape
+    ellips = torch.zeros((n_samples, 2))  # 2nd shape: e1, e2
+    images_np = images.numpy()
+    psf_np = psf_image.numpy()
+    galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
+
+    # Now we use galsim to measure size and ellipticity
+    for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies"):
+        image = images_np[i]
+        galsim_image = galsim.Image(image, scale=pixel_scale)
+        res_true = galsim.hsm.EstimateShear(
+            galsim_image, galsim_psf_image, shear_est="KSB", strict=False
+        )
+        g1, g2 = float(res_true.corrected_g1), float(res_true.corrected_g2)
+        ellips[i, :] = torch.tensor([g1, g2])
+
+    return ellips
+
+
 def get_single_galaxy_measurements(
-    slen: int,
-    true_images: np.ndarray,
-    recon_images: np.ndarray,
-    psf_image: np.ndarray,
-    pixel_scale: float = 0.396,
-):
+    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396
+) -> Dict[str, Tensor]:
     """Compute individual galaxy measurements comparing true images with reconstructed images.
 
     Args:
-        slen: Side-length of square input images.
         pixel_scale: Conversion from arcseconds to pixel.
-        true_images: Array of shape (n_samples, n_bands, slen, slen) containing images of
+        images: Array of shape (n_samples, n_bands, slen, slen) containing images of
             single-centered galaxies without noise or background.
-        recon_images: Array of shape (n_samples, n_bands, slen, slen) containing
-            reconstructions of `true_images` without noise or background.
         psf_image: Array of shape (n_bands, slen, slen) containing PSF image used for
             convolving the galaxies in `true_images`.
 
     Returns:
-        Dictionary containing second-moment measurements for `true_images` and `recon_images`.
+        Dictionary containing fluxes, magnitudes, and ellipticities of `images`.
     """
-    # TODO: Consider multiprocessing? (if necessary)
-    assert true_images.shape == recon_images.shape
-    assert len(true_images.shape) == len(recon_images.shape) == 4, "Incorrect array format."
-    assert true_images.shape[1] == recon_images.shape[1] == psf_image.shape[0] == 1  # one band
-    n_samples = true_images.shape[0]
-    true_images = true_images.reshape(-1, slen, slen)
-    recon_images = recon_images.reshape(-1, slen, slen)
-    psf_image = psf_image.reshape(slen, slen)
-
-    true_fluxes = true_images.sum(axis=(1, 2))
-    recon_fluxes = recon_images.sum(axis=(1, 2))
-
-    true_hlrs = np.zeros((n_samples))
-    recon_hlrs = np.zeros((n_samples))
-    true_ellip = np.zeros((n_samples, 2))  # 2nd shape: e1, e2
-    recon_ellip = np.zeros((n_samples, 2))
-
-    # get galsim PSF
-    galsim_psf_image = galsim.Image(psf_image, scale=pixel_scale)
-
-    # Now we use galsim to measure size and ellipticity
-    for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies"):
-        true_image = true_images[i]
-        recon_image = recon_images[i]
-
-        galsim_true_image = galsim.Image(true_image, scale=pixel_scale)
-        galsim_recon_image = galsim.Image(recon_image, scale=pixel_scale)
-
-        true_hlrs[i] = galsim_true_image.calculateHLR()  # PSF-convolved.
-        recon_hlrs[i] = galsim_recon_image.calculateHLR()
-
-        res_true = galsim.hsm.EstimateShear(
-            galsim_true_image, galsim_psf_image, shear_est="KSB", strict=False
-        )
-        res_recon = galsim.hsm.EstimateShear(
-            galsim_recon_image, galsim_psf_image, shear_est="KSB", strict=False
-        )
-
-        true_ellip[i, :] = (res_true.corrected_g1, res_true.corrected_g2)
-        recon_ellip[i, :] = (res_recon.corrected_g1, res_recon.corrected_g2)
+    _, c, slen, w = images.shape
+    assert slen == w and c == 1 and psf_image.shape == (c, slen, w)
+    images = rearrange(images, "n c h w -> (n c) h w")
+    psf_image = rearrange(psf_image, "c h w -> (c h) w")
+    fluxes = torch.sum(images, (1, 2))
+    ellips = get_single_galaxy_ellipticities(images, psf_image, pixel_scale)
 
     return {
-        "true_fluxes": true_fluxes,
-        "recon_fluxes": recon_fluxes,
-        "true_ellip": true_ellip,
-        "recon_ellip": recon_ellip,
-        "true_hlrs": true_hlrs,
-        "recon_hlrs": recon_hlrs,
-        "true_mags": convert_flux_to_mag(true_fluxes),
-        "recon_mags": convert_flux_to_mag(recon_fluxes),
+        "fluxes": fluxes,
+        "ellips": ellips,
+        "mags": convert_flux_to_mag(fluxes),
     }
 
 
 def plot_image(
-    fig: mpl.figure.Figure,
-    ax: mpl.axes.Axes,
+    fig: Figure,
+    ax: Axes,
     image: np.ndarray,
     vrange: tuple = None,
     colorbar: bool = True,
     cmap="gray",
 ) -> None:
-    assert len(image.shape) == 2
+    h, w = image.shape
+    assert h == w
     vmin = image.min().item() if vrange is None else vrange[0]
     vmax = image.max().item() if vrange is None else vrange[1]
 
@@ -466,7 +455,7 @@ def plot_image(
 
 
 def plot_locs(
-    ax: mpl.axes.Axes,
+    ax: Axes,
     bp: int,
     slen: int,
     plocs: np.ndarray,
@@ -476,13 +465,10 @@ def plot_locs(
     lw: float = 1,
     alpha: float = 1,
     annotate=False,
-    cmap: str = "RdYlBu",
+    cmap: str = "bwr",
 ) -> None:
-    # NOTE: Only plot things inside border
-    # NOTE: galaxy_probs can just be galaxy_bool.
-    assert len(plocs.shape) == 2
-    assert plocs.shape[1] == 2
-    assert len(galaxy_probs.shape) == 1
+    n_samples, xy = plocs.shape
+    assert galaxy_probs.shape == (n_samples,) and xy == 2
 
     x = plocs[:, 1] - 0.5 + bp
     y = plocs[:, 0] - 0.5 + bp
@@ -496,87 +482,18 @@ def plot_locs(
                 ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
 
 
-def plot_image_and_locs(
-    fig: Figure,
-    ax: Axes,
-    idx: int,
-    images: Tensor,
-    bp: int,
-    truth: Optional[FullCatalog] = None,
-    estimate: Optional[FullCatalog] = None,
-    vrange: tuple = None,
-    s: float = 20,
-    lw: float = 1,
-    alpha: float = 1.0,
-    labels: list = None,
-    cmap_image: str = "gray",
-    cmap_prob: str = "bwr",
-    annotate_axis: bool = False,
-    annotate_probs: bool = False,
-    add_border: bool = False,
-) -> None:
-    # NOTE: labels must be a tuple/list of names with order (true star, true_gal, est_star, est_gal)
-    # NOTE: true_plocs and est_plocs should be consistent both will be adjust with -0.5+bp
-    assert len(images.shape) == 4, "Images should be batch form just like truth/estimate catalogs."
-    assert images.shape[1] == 1, "Only 1 band supported."
-    assert images.shape[-1] == images.shape[-2], "Only square images are supported."
-    image = images[idx, 0].cpu().numpy()
-    slen = images.shape[-1]
-
-    # plot image first
-    vmin = image.min().item() if vrange is None else vrange[0]
-    vmax = image.max().item() if vrange is None else vrange[1]
-    plot_image(fig, ax, image, vrange=(vmin, vmax), cmap=cmap_image)
-
-    # (optionally) add white border showing where centers of stars and galaxies can be
-    if add_border:
-        ax.axvline(bp, color="w")
-        ax.axvline(slen - bp, color="w")
-        ax.axhline(bp, color="w")
-        ax.axhline(slen - bp, color="w")
-
-    if truth:
-        # true parameters on full image.
-        tplocs = truth.plocs[idx].cpu().numpy().reshape(-1, 2)
-        tgbools = truth["galaxy_bools"][idx].float().cpu().numpy().reshape(-1)
-
-        # plot true locations
-        sp = s * 1.5
-        plot_locs(ax, bp, slen, tplocs, tgbools, "+", s=sp, cmap="cool", alpha=alpha, lw=lw)
-
-    if estimate is not None:
-        n_sources = estimate.n_sources[idx].cpu().numpy().reshape(-1)
-        plocs = estimate.plocs[idx].cpu().numpy().reshape(-1, 2)
-
-        if annotate_axis is not None:
-            assert truth is not None
-            true_n_sources = truth.n_sources[idx].cpu().numpy()
-            ax.set_xlabel(f"True num: {true_n_sources.item()}; Est num: {n_sources.item()}")
-
-        gbools = estimate["galaxy_bools"].float().cpu().numpy().reshape(-1)
-        gprobs = estimate.get("galaxy_probs", None)
-        if annotate_probs:
-            assert gprobs is not None
-        gprobs = gbools if gprobs is None else gprobs.cpu().numpy().reshape(-1)
-
-        plot_locs(
-            ax, bp, slen, plocs, gprobs, "x", s, lw, alpha, annotate=annotate_probs, cmap=cmap_prob
-        )
-
-    if labels is not None:
-        cmp1 = mpl.cm.get_cmap("cool")
-        cmp2 = mpl.cm.get_cmap(cmap_prob)
-        colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
-        markers = ("+", "+", "x", "x")
-        sizes = (s * 2, s * 2, s + 5, s + 5)
-
-        if labels is not None:
-            for label, c, m, size in zip(labels, colors, markers, sizes):
-                ax.scatter([], [], color=c, marker=m, label=label, s=size)
-            ax.legend(
-                bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
-                loc="lower left",
-                ncol=2,
-                mode="expand",
-                borderaxespad=0.0,
-            )
+def add_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s=20):
+    cmp1 = mpl.cm.get_cmap(cmap1)
+    cmp2 = mpl.cm.get_cmap(cmap2)
+    colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
+    markers = ("+", "+", "x", "x")
+    sizes = (s * 2, s * 2, s + 5, s + 5)
+    for label, c, m, size in zip(labels, colors, markers, sizes):
+        ax.scatter([], [], color=c, marker=m, label=label, s=size)
+    ax.legend(
+        bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+        loc="lower left",
+        ncol=2,
+        mode="expand",
+        borderaxespad=0.0,
+    )

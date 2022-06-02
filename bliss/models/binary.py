@@ -8,15 +8,15 @@ from torch import Tensor
 from torch.nn import BCELoss
 from torch.optim import Adam
 
+from bliss import reporting
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
-from bliss.models.location_encoder import (
+from bliss.models.detection_encoder import (
     ConcatBackgroundTransform,
     EncoderCNN,
     LogBackgroundTransform,
     make_enc_final,
 )
-from bliss.reporting import plot_image_and_locs
+from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
 
 
 class BinaryEncoder(pl.LightningModule):
@@ -206,14 +206,21 @@ class BinaryEncoder(pl.LightningModule):
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
         axes = axes.flatten()
 
-        for i in range(n_samples):
-            labels = None if i > 0 else ("t. gal", "p. gal", "t. star", "p. star")
+        for ii in range(n_samples):
+            ax = axes[ii]
+            labels = None if ii > 0 else ("t. gal", "p. gal", "t. star", "p. star")
             bp = self.border_padding
-            images = batch["images"]
-            plot_image_and_locs(
-                fig, axes[i], i, images, bp, true_params, est, labels=labels, annotate_probs=True
-            )
-
+            image = batch["images"][ii, 0].cpu().numpy()
+            true_plocs = true_params.plocs[ii].cpu().numpy().reshape(-1, 2)
+            true_gbools = true_params["galaxy_bools"][ii].cpu().numpy().reshape(-1)
+            est_plocs = est.plocs[ii].cpu().numpy().reshape(-1, 2)
+            est_gprobs = est["galaxy_probs"][ii].cpu().numpy().reshape(-1)
+            slen, _ = image.shape
+            reporting.plot_image(fig, ax, image, colorbar=False)
+            reporting.plot_locs(ax, bp, slen, true_plocs, true_gbools, m="+", s=30, cmap="cool")
+            reporting.plot_locs(ax, bp, slen, est_plocs, est_gprobs, m="x", s=20, cmap="bwr")
+            if ii == 0:
+                reporting.add_legend(ax, labels)
         fig.tight_layout()
 
         title = f"Epoch:{self.current_epoch}/Validation Images"

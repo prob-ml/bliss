@@ -16,7 +16,7 @@ from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.galaxy_net import CenteredGalaxyEncoder, OneCenteredGalaxyAE
 from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
 from bliss.models.vae.galaxy_vae import OneCenteredGalaxyVAE
-from bliss.reporting import plot_image, plot_image_and_locs
+from bliss.reporting import add_legend, plot_image, plot_locs
 
 
 class GalaxyEncoder(pl.LightningModule):
@@ -278,17 +278,18 @@ class GalaxyEncoder(pl.LightningModule):
             vrange = (vmin, vmax)
 
             # plot!
-            labels = None if i > 0 else ("t. gal", None, "t. star", None)
+            labels = ("t. gal", None, "t. star", None)
             # Plotting only works on square images
             assert images.shape[-2] == images.shape[-1]
             slen = images.shape[-1] - 2 * self.border_padding
             bp = self.border_padding
-            plot_image_and_locs(
-                fig, true_ax, idx, images, bp, truth=est, labels=labels, vrange=vrange
-            )
-            plot_image_and_locs(
-                fig, recon_ax, idx, recon_images, bp, truth=est, labels=labels, vrange=vrange
-            )
+            image = images[i, 0].cpu().numpy()
+            plocs = est.plocs[i].cpu().numpy().reshape(-1, 2)
+            probs = est["galaxy_bools"][i].cpu().numpy().reshape(-1)
+            plot_image(fig, true_ax, image, vrange=vrange, colorbar=True)
+            plot_locs(true_ax, bp, slen, plocs, probs, cmap="cool")
+            plot_image(fig, recon_ax, image, vrange=vrange, colorbar=True)
+            plot_locs(recon_ax, bp, slen, plocs, probs, cmap="cool")
             residuals_idx = residuals[idx, 0].cpu().numpy()
             res_vmax = np.ceil(residuals_idx.max())
             res_vmin = np.floor(residuals_idx.min())
@@ -307,6 +308,8 @@ class GalaxyEncoder(pl.LightningModule):
                     res_ax.axvline(b + eff_slen, color="w")
                     res_ax.axhline(b, color="w")
                     res_ax.axhline(b + eff_slen, color="w")
+            if i == 0:
+                add_legend(true_ax, labels)
 
         fig.tight_layout()
         if self.logger:
