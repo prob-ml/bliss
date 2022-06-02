@@ -361,7 +361,10 @@ class CenterPaddedTilesTransform(nn.Module):
         # Expand image_ptiles to match number of samples
         image_ptiles = image_ptiles.unsqueeze(0).expand(n_samples, -1, -1, -1, -1)
         image_ptiles = image_ptiles.reshape(
-            n_samples * n_ptiles, -1, self.ptile_slen, self.ptile_slen
+            n_samples * n_ptiles,
+            -1,
+            self.ptile_slen,
+            self.ptile_slen,
         )
         shifted_tiles = F.grid_sample(image_ptiles, grid_loc, align_corners=True)
 

@@ -80,6 +80,7 @@ def reconstruct(cfg):
     print(f"{(tile_map_recon['galaxy_blends'] > 1).sum()} galaxies are part of blends in image.")
 
     tile_samples = sample_at_coordinates(2, encoder, frame.image, frame.background, hlims, wlims)
+    assert isinstance(tile_samples, dict)
 
     full_map_recon = tile_map_recon.to_full_params()
     scene_metrics_by_mag: Dict[str, pd.DataFrame] = {}
