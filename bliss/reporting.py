@@ -371,12 +371,13 @@ class CoaddFullCatalog(FullCatalog):
 
 
 def get_single_galaxy_ellipticities(
-    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396
+    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396, use_bar: bool = False
 ) -> Tensor:
     """Returns ellipticities of (noiseless, single-band) individual galaxy images.
 
     Args:
         pixel_scale: Conversion from arcseconds to pixel.
+        use_bar: Whether to use a progress bar.
         images: Array of shape (n_samples, slen, slen) containing images of
             single-centered galaxies without noise or background.
         psf_image: Array of shape (slen, slen) containing PSF image used for
@@ -393,7 +394,7 @@ def get_single_galaxy_ellipticities(
     galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
 
     # Now we use galsim to measure size and ellipticity
-    for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies"):
+    for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies", disable=use_bar):
         image = images_np[i]
         galsim_image = galsim.Image(image, scale=pixel_scale)
         res_true = galsim.hsm.EstimateShear(
@@ -429,8 +430,8 @@ def get_single_galaxy_measurements(
 
     return {
         "fluxes": fluxes,
-        "ellips": ellips,
         "mags": convert_flux_to_mag(fluxes),
+        "ellips": ellips,
     }
 
 
