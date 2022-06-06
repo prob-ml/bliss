@@ -21,6 +21,8 @@ class TileCatalog(UserDict):
         "log_fluxes",
         "mags",
         "ellips",
+        "snr",
+        "blendedness",
         "galaxy_bools",
         "galaxy_params",
         "galaxy_fluxes",
@@ -76,7 +78,7 @@ class TileCatalog(UserDict):
 
     @property
     def is_on_array(self) -> Tensor:
-        """Returns a n x nth x ntw x n_sources tensor indicating whether source is on."""
+        """Returns a (n x nth x ntw x n_sources) tensor indicating whether source is on."""
         return get_is_on_from_n_sources(self.n_sources, self.max_sources)
 
     def cpu(self):
