@@ -108,8 +108,9 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         self.slen = self.decoder.slen
         self.pixel_scale = self.decoder.pixel_scale
 
-    def _compute_metrics(
+    def _add_metrics(
         self,
+        full_cat: FullCatalog,
         n_sources: int,
         galaxy_params: Tensor,
         noiseless: Tensor,
@@ -138,37 +139,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
             snr[ii] = _get_snr(noiseless_centered[ii], background)
             blendedness[ii] = _get_blendedness(noiseless_uncentered[ii], noiseless)
 
-        return mags, galaxy_params[:, 0], ellips, snr, blendedness
-
-    def __getitem__(self, idx):
-        # prepare parameters
-        params_dict = self.prior.sample()
-        params_dict["plocs"] = params_dict["locs"] * self.slen
-        params_dict.pop("locs")
-        params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
-        full_cat = FullCatalog(self.slen, self.slen, params_dict)  # TODO: check if slen or size?
-        n_sources = full_cat.n_sources.item()
-        galaxy_params = full_cat["galaxy_params"][0]
-
-        # forward images
-        size = self.slen + 2 * self.bp
-        noiseless, noiseless_centered, noiseless_uncentered = self.decoder(full_cat)
-        noiseless = rearrange(noiseless, "1 c h w -> c h w", c=1, h=size)
-        noiseless_centered = rearrange(noiseless_centered, "1 n c h w -> n c h w", c=1)
-        noiseless_uncentered = rearrange(noiseless_uncentered, "1 n c h w -> n c h w", c=1)
-
-        # get background and noisy image.
-        background = self.background.sample((1, *noiseless.shape)).squeeze(0)
-        noisy_image = _add_noise_and_background(noiseless, background)
-
-        mags, gal_fluxes, ellips, snr, blendedness = self._compute_metrics(
-            n_sources,
-            galaxy_params,
-            noiseless,
-            noiseless_centered,
-            noiseless_uncentered,
-            background,
-        )
+        gal_fluxes = galaxy_params[:, 0]
 
         # add to full catalog (needs to be in batches)
         full_cat["mags"] = rearrange(mags, "n -> 1 n 1", n=self.max_n_sources)
@@ -180,11 +151,44 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         full_cat["snr"] = rearrange(snr, "n -> 1 n 1", n=self.max_n_sources)
         full_cat["blendedness"] = rearrange(blendedness, "n -> 1 n 1", n=self.max_n_sources)
 
-        # finally get corresponding tile catalog from full catalog for training encoders.
+        return full_cat
+
+    def __getitem__(self, idx):
+        # get full catalog
+        params_dict = self.prior.sample()
+        params_dict["plocs"] = params_dict["locs"] * self.slen
+        params_dict.pop("locs")
+        params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
+        full_cat = FullCatalog(self.slen, self.slen, params_dict)
+
+        # extract some parameters needed.
+        n_sources = full_cat.n_sources.item()
+        galaxy_params = full_cat["galaxy_params"][0]
+
+        # forward images
+        noiseless, noiseless_centered, noiseless_uncentered = self.decoder(full_cat)
+
+        # get background and noisy image.
+        background = self.background.sample((1, *noiseless.shape)).squeeze(0)
+        noisy_image = _add_noise_and_background(noiseless, background)
+
+        # set additional metrics
+        full_cat = self._add_metrics(
+            full_cat,
+            n_sources,
+            galaxy_params,
+            noiseless,
+            noiseless_centered,
+            noiseless_uncentered,
+            background,
+        )
+
+        # finally get corresponding tile catalog from full catalog.
         tile_cat = full_cat.to_tile_params(self.tile_slen, self.max_sources_per_tile)
         tile_dict = tile_cat.to_dict()
         n_sources = tile_dict.pop("n_sources")
         n_sources = rearrange(n_sources, "1 nth ntw -> nth ntw")
+
         return {
             "images": noisy_image,
             "background": background,
