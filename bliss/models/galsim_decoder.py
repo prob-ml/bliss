@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict, Optional
 
 import galsim
@@ -6,7 +7,6 @@ import torch
 from torch import Tensor
 
 from bliss.catalog import FullCatalog
-from bliss.datasets.galsim_galaxies import load_psf_from_file
 
 
 class SingleGalsimGalaxyPrior:
@@ -115,17 +115,24 @@ class SingleGalsimGalaxyDecoder:
         if z.shape[0] == 0:
             return torch.zeros(0, 1, self.slen, self.slen, device=z.device)
 
-        if z.shape == (7,) and offset.shape == (2,):
-            return self.render_galaxy(z, self.psf, offset)
+        if z.shape == (7,):
+            assert offset is None or offset.shape == (2,)
+            return self.render_galaxy(z, self.psf, self.slen, offset)
 
         images = []
-        for (latent, off) in zip(z, offset):
-            image = self.render_galaxy(latent, self.psf, off)
+        for ii, latent in enumerate(z):
+            off = offset if not offset else offset[ii]
+            assert off is None or off.shape == (2,)
+            image = self.render_galaxy(latent, self.psf, self.slen, off)
             images.append(image)
         return torch.stack(images, dim=0).to(z.device)
 
     def render_galaxy(
-        self, galaxy_params: Tensor, psf: galsim.GSObject, offset: Optional[Tensor] = None
+        self,
+        galaxy_params: Tensor,
+        psf: galsim.GSObject,
+        slen: int,
+        offset: Optional[Tensor] = None,
     ) -> Tensor:
         assert offset is None or offset.shape == (2,)
         if isinstance(galaxy_params, Tensor):
@@ -153,13 +160,12 @@ class SingleGalsimGalaxyDecoder:
             ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
             components.append(bulge)
         galaxy = galsim.Add(components)
-        # convolve with PSF
         gal_conv = galsim.Convolution(galaxy, psf)
         offset = offset if offset is None else offset.numpy()
         image = gal_conv.drawImage(
-            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale, offset=offset
+            nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
         )
-        return torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
+        return torch.from_numpy(image.array).reshape(1, slen, slen)
 
 
 # TODO: Separate prior can enforce centered galaxy brightest example.
@@ -171,15 +177,11 @@ class UniformGalsimGalaxiesPrior:
         max_shift: float,
     ):
         self.single_galaxy_prior = single_galaxy_prior
-        self.max_shift = max_shift  # between 0 and 1
+        self.max_shift = max_shift  # between 0 and 0.5, from center.
         self.max_n_sources = max_n_sources
         self.dim_latents = self.single_galaxy_prior.dim_latents
-        assert 0 <= self.max_shift <= 1
+        assert 0 <= self.max_shift <= 0.5
 
-    # assumption of TileCatalog is that all given params are inside border.
-    # TODO: could create dataset that returns params in tiles directly -> automatic batches and
-    # parallelization. Still need FullCatalog (batch_size=1) to get TileCatalog
-    # and then do **tile_catalog.to_dict() I think.
     def sample(self) -> Dict[str, Tensor]:
         """Returns a single batch of source parameters."""
         n_sources = _sample_n_sources(self.max_n_sources)
@@ -188,15 +190,16 @@ class UniformGalsimGalaxiesPrior:
         params[:n_sources, :] = self.single_galaxy_prior.sample(n_sources)
 
         locs = torch.zeros(self.max_n_sources, 2)
-        locs[:n_sources, 0] = _uniform(0, self.max_shift, n_sources)
-        locs[:n_sources, 1] = _uniform(0, self.max_shift, n_sources)
+        locs[:n_sources, 0] = _uniform(-self.max_shift, self.max_shift, n_sources) + 0.5
+        locs[:n_sources, 1] = _uniform(-self.max_shift, self.max_shift, n_sources) + 0.5
 
         # for now, galaxies only
-        galaxy_bools = torch.ones(self.max_n_sources, 1)
+        galaxy_bools = torch.zeros(self.max_n_sources, 1)
+        galaxy_bools[:n_sources, :] = 1
         star_bools = torch.zeros(self.max_n_sources, 1)
 
         return {
-            "n_sources": n_sources,
+            "n_sources": torch.tensor(n_sources),
             "galaxy_params": params,
             "locs": locs,
             "galaxy_bools": galaxy_bools,
@@ -206,37 +209,48 @@ class UniformGalsimGalaxiesPrior:
 
 class GalsimGalaxiesDecoder:
     def __init__(
-        self, slen: int, bp: int, single_galaxy_decoder: SingleGalsimGalaxyDecoder
+        self, single_galaxy_decoder: SingleGalsimGalaxyDecoder, slen: int, bp: int
     ) -> None:
+        self.decoder = single_galaxy_decoder
         self.slen = slen
         self.bp = bp
         self.pixel_scale = single_galaxy_decoder.pixel_scale
-        self.decoder = single_galaxy_decoder
+        assert self.slen + 2 * self.bp >= self.decoder.slen
 
     def __call__(self, full_cat: FullCatalog):
+        psf = self.decoder.psf
         size = self.slen + 2 * self.bp
         full_plocs = full_cat.plocs
         b, max_n_sources, _ = full_plocs.shape
 
-        individual_noiseless_centered = torch.zeros(b, max_n_sources, 1, size, size)
-        individual_noiseless_uncentered = torch.zeros(b, max_n_sources, 1, size, size)
         images = torch.zeros(b, 1, size, size)
+        noiseless_centered = torch.zeros(b, max_n_sources, 1, size, size)
+        noiseless_uncentered = torch.zeros(b, max_n_sources, 1, size, size)
 
         for ii in range(b):
-            n_sources = full_cat.n_sources[b].item()
-            galaxy_params = full_cat["galaxy_params"][b]
-            plocs = full_plocs[b]
-            for ii in range(1, n_sources):
-                offset_x = plocs[ii][1] + self.bp - size / 2
-                offset_y = plocs[ii][0] + self.bp - size / 2
-                offset = (offset_x, offset_y)
-                centered_galaxy_image = self.decoder(galaxy_params[ii])
-                uncentered_galaxy_image = self.decoder(galaxy_params[ii], offset)
-                individual_noiseless_centered[b][ii] = centered_galaxy_image
-                individual_noiseless_uncentered[b][ii] = uncentered_galaxy_image
-                images[b] += uncentered_galaxy_image
+            n_sources = full_cat.n_sources[ii].item()
+            galaxy_params = full_cat["galaxy_params"][ii]
+            plocs = full_plocs[ii]
+            for jj in range(n_sources):
+                offset_x = plocs[jj][1] + self.bp - size / 2
+                offset_y = plocs[jj][0] + self.bp - size / 2
+                offset = torch.tensor([offset_x, offset_y])
+                centered = self.decoder.render_galaxy(galaxy_params[jj], psf, size)
+                uncentered = self.decoder.render_galaxy(galaxy_params[jj], psf, size, offset)
+                noiseless_centered[ii][jj][0] = centered
+                noiseless_uncentered[ii][jj][0] = uncentered
+                images[ii] += uncentered
 
-        return images, individual_noiseless_centered, individual_noiseless_uncentered
+        return images, noiseless_centered, noiseless_uncentered
+
+
+def load_psf_from_file(psf_image_file: str, pixel_scale: float):
+    """Return normalized PSF galsim.GSObject from numpy psf_file."""
+    assert Path(psf_image_file).suffix == ".npy"
+    psf_image = np.load(psf_image_file)
+    assert len(psf_image.shape) == 3 and psf_image.shape[0] == 1
+    psf_image = galsim.Image(psf_image[0], scale=pixel_scale)
+    return galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
 
 def _sample_n_sources(max_n_sources) -> int:
