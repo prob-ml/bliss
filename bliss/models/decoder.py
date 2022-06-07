@@ -10,11 +10,11 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.datasets.galsim_galaxies import GalsimGalaxyDecoder
+from bliss.datasets.galsim_galaxies import SingleGalsimGalaxyDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.reporting import get_single_galaxy_ellipticities
 
-GalaxyModel = Union[OneCenteredGalaxyAE, GalsimGalaxyDecoder]
+GalaxyModel = Union[OneCenteredGalaxyAE, SingleGalsimGalaxyDecoder]
 
 
 class ImageDecoder(pl.LightningModule):
@@ -541,7 +541,7 @@ class GalaxyTileDecoder(nn.Module):
 
         if isinstance(galaxy_model, OneCenteredGalaxyAE):
             galaxy_decoder = galaxy_model.get_decoder()
-        elif isinstance(galaxy_model, GalsimGalaxyDecoder):
+        elif isinstance(galaxy_model, SingleGalsimGalaxyDecoder):
             galaxy_decoder = galaxy_model
         else:
             raise TypeError("galaxy_model is not a valid type.")
