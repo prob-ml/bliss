@@ -222,26 +222,26 @@ class GalsimGalaxiesDecoder:
         size = self.slen + 2 * self.bp
         full_plocs = full_cat.plocs
         b, max_n_sources, _ = full_plocs.shape
+        assert b == 1, "Only one batch supported for now."
 
-        images = torch.zeros(b, 1, size, size)
-        noiseless_centered = torch.zeros(b, max_n_sources, 1, size, size)
-        noiseless_uncentered = torch.zeros(b, max_n_sources, 1, size, size)
+        image = torch.zeros(1, size, size)
+        noiseless_centered = torch.zeros(max_n_sources, 1, size, size)
+        noiseless_uncentered = torch.zeros(max_n_sources, 1, size, size)
 
-        for ii in range(b):
-            n_sources = full_cat.n_sources[ii].item()
-            galaxy_params = full_cat["galaxy_params"][ii]
-            plocs = full_plocs[ii]
-            for jj in range(n_sources):
-                offset_x = plocs[jj][1] + self.bp - size / 2
-                offset_y = plocs[jj][0] + self.bp - size / 2
-                offset = torch.tensor([offset_x, offset_y])
-                centered = self.decoder.render_galaxy(galaxy_params[jj], psf, size)
-                uncentered = self.decoder.render_galaxy(galaxy_params[jj], psf, size, offset)
-                noiseless_centered[ii][jj][0] = centered
-                noiseless_uncentered[ii][jj][0] = uncentered
-                images[ii] += uncentered
+        n_sources = full_cat.n_sources[0].item()
+        galaxy_params = full_cat["galaxy_params"][0]
+        plocs = full_plocs[0]
+        for ii in range(n_sources):
+            offset_x = plocs[ii][1] + self.bp - size / 2
+            offset_y = plocs[ii][0] + self.bp - size / 2
+            offset = torch.tensor([offset_x, offset_y])
+            centered = self.decoder.render_galaxy(galaxy_params[ii], psf, size)
+            uncentered = self.decoder.render_galaxy(galaxy_params[ii], psf, size, offset)
+            noiseless_centered[ii] = centered
+            noiseless_uncentered[ii] = uncentered
+            image += uncentered
 
-        return images, noiseless_centered, noiseless_uncentered
+        return image, noiseless_centered, noiseless_uncentered
 
 
 def load_psf_from_file(psf_image_file: str, pixel_scale: float):
