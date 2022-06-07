@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import galsim
@@ -75,7 +74,7 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
 
-class GalsimBlends(SingleGalsimGalaxies):
+class GalsimBlends(pl.LightningDataModule, Dataset):
     """Dataset of galsim blends."""
 
     def __init__(
@@ -91,16 +90,15 @@ class GalsimBlends(SingleGalsimGalaxies):
         fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
     ):
-        super().__init__(
-            prior,
-            decoder,
-            background,
-            num_workers,
-            batch_size,
-            n_batches,
-            fix_validation_set,
-            valid_n_batches,
-        )
+        super().__init__()
+        self.prior = prior
+        self.decoder = decoder
+        self.n_batches = n_batches
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.background = background
+        self.fix_validation_set = fix_validation_set
+        self.valid_n_batches = valid_n_batches
 
         # images
         self.max_n_sources = self.prior.max_n_sources
@@ -121,7 +119,7 @@ class GalsimBlends(SingleGalsimGalaxies):
     ):
         scale = self.pixel_scale
         size = self.slen + 2 * self.bp
-        psf = self.decoder.psf
+        psf = self.decoder.decoder.psf  # psf from single galaxy decoder.
         psf_tensor = torch.from_numpy(psf.drawImage(nx=size, ny=size, scale=scale).array)
 
         single_galaxy_tensor = noiseless_centered[:n_sources]
@@ -130,8 +128,8 @@ class GalsimBlends(SingleGalsimGalaxies):
         for ii in range(n_sources):
             mags[ii] = convert_flux_to_mag(galaxy_params[ii, 0])
         ellips = torch.zeros(self.max_n_sources, 2)
-        meas = get_single_galaxy_ellipticities(single_galaxy_tensor, psf_tensor, scale)
-        ellips[:n_sources, :] = meas["ellips"]
+        e12 = get_single_galaxy_ellipticities(single_galaxy_tensor, psf_tensor, scale)
+        ellips[:n_sources, :] = e12
 
         # get snr and blendedness
         snr = torch.zeros(self.max_n_sources)
@@ -146,15 +144,18 @@ class GalsimBlends(SingleGalsimGalaxies):
         # prepare parameters
         params_dict = self.prior.sample()
         params_dict["plocs"] = params_dict["locs"] * self.slen
-        full_cat = FullCatalog(self.slen, self.slen, params_dict)
+        params_dict.pop("locs")
+        params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
+        full_cat = FullCatalog(self.slen, self.slen, params_dict)  # TODO: check if slen or size?
         n_sources = full_cat.n_sources.item()
-        galaxy_params = full_cat["galaxy_params"]
+        galaxy_params = full_cat["galaxy_params"][0]
 
         # forward images
-        noiseless, noiseless_centered, noiseless_uncentered = self.decoder.forward(full_cat)
-        noiseless = rearrange(noiseless, "b c h w -> c h w", b=1, c=1, h=self.slen + 2 * self.bp)
-        noiseless_centered = rearrange(noiseless_centered, "b n c h w -> n c h w", b=1, c=1)
-        noiseless_uncentered = rearrange(noiseless_uncentered, "b n c h w -> n c h w", b=1, c=1)
+        size = self.slen + 2 * self.bp
+        noiseless, noiseless_centered, noiseless_uncentered = self.decoder(full_cat)
+        noiseless = rearrange(noiseless, "1 c h w -> c h w", c=1, h=size)
+        noiseless_centered = rearrange(noiseless_centered, "1 n c h w -> n c h w", c=1)
+        noiseless_uncentered = rearrange(noiseless_uncentered, "1 n c h w -> n c h w", c=1)
 
         # get background and noisy image.
         background = self.background.sample((1, *noiseless.shape)).squeeze(0)
@@ -170,23 +171,44 @@ class GalsimBlends(SingleGalsimGalaxies):
         )
 
         # add to full catalog (needs to be in batches)
-        full_cat["mags"] = rearrange(mags, "n 1 -> 1 n 1", n=self.max_n_sources)
+        full_cat["mags"] = rearrange(mags, "n -> 1 n 1", n=self.max_n_sources)
         full_cat["fluxes"] = torch.zeros(1, self.max_n_sources, 1)  # stars
         full_cat["log_fluxes"] = torch.zeros(1, self.max_n_sources, 1)  # stars
-        full_cat["galaxy_fluxes"] = rearrange(gal_fluxes, "n 1 -> 1 n 1", n=self.max_n_sources)
+        full_cat["galaxy_fluxes"] = rearrange(gal_fluxes, "n -> 1 n 1", n=self.max_n_sources)
 
         full_cat["ellips"] = rearrange(ellips, "n g -> 1 n g", n=self.max_n_sources, g=2)
-        full_cat["snr"] = snr.reshape(1, self.max_n_sources, 1)
-        full_cat["blendedness"] = blendedness.reshape(1, self.max_n_sources, 1)
+        full_cat["snr"] = rearrange(snr, "n -> 1 n 1", n=self.max_n_sources)
+        full_cat["blendedness"] = rearrange(blendedness, "n -> 1 n 1", n=self.max_n_sources)
 
-        # finally get corresponding tile catalog.
+        # finally get corresponding tile catalog from full catalog for training encoders.
         tile_cat = full_cat.to_tile_params(self.tile_slen, self.max_sources_per_tile)
-
+        tile_dict = tile_cat.to_dict()
+        n_sources = tile_dict.pop("n_sources")
+        n_sources = rearrange(n_sources, "1 nth ntw -> nth ntw")
         return {
             "images": noisy_image,
             "background": background,
-            **{k: v.reshape(self.max_n_sources, -1) for k, v in tile_cat.to_dict()},
+            "n_sources": n_sources,
+            **{k: rearrange(v, "1 nth ntw n d -> nth ntw n d") for k, v in tile_dict.items()},
         }
+
+    def __len__(self):
+        return self.batch_size * self.n_batches
+
+    def train_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def val_dataloader(self):
+        dl = DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+        if not self.fix_validation_set:
+            return dl
+        valid: List[Dict[str, Tensor]] = []
+        for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
+            valid.append(next(iter(dl)))
+        return DataLoader(valid, batch_size=None, num_workers=0)
+
+    def test_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
 
 class ToyGaussian(pl.LightningDataModule, Dataset):
@@ -272,15 +294,6 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-
-def load_psf_from_file(psf_image_file: str, pixel_scale: float):
-    """Return normalized PSF galsim.GSObject from numpy psf_file."""
-    assert Path(psf_image_file).suffix == ".npy"
-    psf_image = np.load(psf_image_file)
-    assert len(psf_image.shape) == 3 and psf_image.shape[0] == 1
-    psf_image = galsim.Image(psf_image[0], scale=pixel_scale)
-    return galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
 
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
