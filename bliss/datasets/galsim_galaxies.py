@@ -106,21 +106,23 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         self.max_sources_per_tile = max_sources_per_tile
         self.bp = self.decoder.bp
         self.slen = self.decoder.slen
-        self.pixel_scale = self.decoder.pixel_scale
+        self.pixel_scale = self.decoder.single_decoder.pixel_scale
 
     def _add_metrics(
         self,
         full_cat: FullCatalog,
-        n_sources: int,
-        galaxy_params: Tensor,
         noiseless: Tensor,
         noiseless_centered: Tensor,
         noiseless_uncentered: Tensor,
         background: Tensor,
     ):
+        n_sources = full_cat.n_sources.item()
+        galaxy_params = full_cat["galaxy_params"][0]
+
+        # add important metrics to full catalog
         scale = self.pixel_scale
         size = self.slen + 2 * self.bp
-        psf = self.decoder.decoder.psf  # psf from single galaxy decoder.
+        psf = self.decoder.single_decoder.psf  # psf from single galaxy decoder.
         psf_tensor = torch.from_numpy(psf.drawImage(nx=size, ny=size, scale=scale).array)
 
         single_galaxy_tensor = noiseless_centered[:n_sources]
@@ -153,48 +155,39 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
 
         return full_cat
 
-    def __getitem__(self, idx):
-        # get full catalog
+    def _sample_full_catalog(self):
         params_dict = self.prior.sample()
         params_dict["plocs"] = params_dict["locs"] * self.slen
         params_dict.pop("locs")
         params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
-        full_cat = FullCatalog(self.slen, self.slen, params_dict)
+        return FullCatalog(self.slen, self.slen, params_dict)
 
-        # extract some parameters needed.
-        n_sources = full_cat.n_sources.item()
-        galaxy_params = full_cat["galaxy_params"][0]
-
-        # forward images
+    def _get_images(self, full_cat):
         noiseless, noiseless_centered, noiseless_uncentered = self.decoder(full_cat)
 
         # get background and noisy image.
         background = self.background.sample((1, *noiseless.shape)).squeeze(0)
         noisy_image = _add_noise_and_background(noiseless, background)
 
-        # set additional metrics
-        full_cat = self._add_metrics(
-            full_cat,
-            n_sources,
-            galaxy_params,
-            noiseless,
-            noiseless_centered,
-            noiseless_uncentered,
-            background,
-        )
+        return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background
 
-        # finally get corresponding tile catalog from full catalog.
+    def _get_tile_params(self, full_cat):
         tile_cat = full_cat.to_tile_params(self.tile_slen, self.max_sources_per_tile)
         tile_dict = tile_cat.to_dict()
         n_sources = tile_dict.pop("n_sources")
         n_sources = rearrange(n_sources, "1 nth ntw -> nth ntw")
 
         return {
-            "images": noisy_image,
-            "background": background,
             "n_sources": n_sources,
             **{k: rearrange(v, "1 nth ntw n d -> nth ntw n d") for k, v in tile_dict.items()},
         }
+
+    def __getitem__(self, idx):
+        full_cat = self._sample_full_catalog()
+        images, *metric_images, background = self._get_images(full_cat)
+        full_cat = self._add_metrics(full_cat, *metric_images, background)
+        tile_params = self._get_tile_params(full_cat)
+        return {"images": images, "background": background, **tile_params}
 
     def __len__(self):
         return self.batch_size * self.n_batches

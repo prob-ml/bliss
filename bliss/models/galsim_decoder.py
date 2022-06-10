@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, TileCatalog
 
 
 class SingleGalsimGalaxyPrior:
@@ -99,14 +99,13 @@ class SingleGalsimGalaxyPrior:
 class SingleGalsimGalaxyDecoder:
     def __init__(
         self,
-        slen,
-        n_bands,
-        pixel_scale,
+        slen: int,
+        n_bands: int,
+        pixel_scale: float,
         psf_image_file: str,
     ) -> None:
-
-        self.slen = slen
         assert n_bands == 1, "Only 1 band is supported"
+        self.slen = slen
         self.n_bands = 1
         self.pixel_scale = pixel_scale
         self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
@@ -211,18 +210,20 @@ class GalsimGalaxiesDecoder:
     def __init__(
         self, single_galaxy_decoder: SingleGalsimGalaxyDecoder, slen: int, bp: int
     ) -> None:
-        self.decoder = single_galaxy_decoder
+        self.single_decoder = single_galaxy_decoder
         self.slen = slen
         self.bp = bp
-        self.pixel_scale = single_galaxy_decoder.pixel_scale
-        assert self.slen + 2 * self.bp >= self.decoder.slen
+        assert self.slen + 2 * self.bp >= self.single_decoder.slen
+
+    def _get_psf(self):
+        return self.single_decoder.psf
 
     def __call__(self, full_cat: FullCatalog):
-        psf = self.decoder.psf
         size = self.slen + 2 * self.bp
         full_plocs = full_cat.plocs
         b, max_n_sources, _ = full_plocs.shape
         assert b == 1, "Only one batch supported for now."
+        assert self.single_decoder.n_bands == 1, "Only 1 band supported for now"
 
         image = torch.zeros(1, size, size)
         noiseless_centered = torch.zeros(max_n_sources, 1, size, size)
@@ -231,20 +232,25 @@ class GalsimGalaxiesDecoder:
         n_sources = full_cat.n_sources[0].item()
         galaxy_params = full_cat["galaxy_params"][0]
         plocs = full_plocs[0]
+        psf = self._get_psf()
         for ii in range(n_sources):
             offset_x = plocs[ii][1] + self.bp - size / 2
             offset_y = plocs[ii][0] + self.bp - size / 2
             offset = torch.tensor([offset_x, offset_y])
-            centered = self.decoder.render_galaxy(galaxy_params[ii], psf, size)
-            uncentered = self.decoder.render_galaxy(galaxy_params[ii], psf, size, offset)
+            centered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size)
+            uncentered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, offset)
             noiseless_centered[ii] = centered
             noiseless_uncentered[ii] = uncentered
             image += uncentered
 
         return image, noiseless_centered, noiseless_uncentered
 
+    def forward_tile(self, tile_cat: TileCatalog):
+        full_cat = tile_cat.to_full_params()
+        return self(full_cat)
 
-def load_psf_from_file(psf_image_file: str, pixel_scale: float):
+
+def load_psf_from_file(psf_image_file: str, pixel_scale: float) -> galsim.GSObject:
     """Return normalized PSF galsim.GSObject from numpy psf_file."""
     assert Path(psf_image_file).suffix == ".npy"
     psf_image = np.load(psf_image_file)
