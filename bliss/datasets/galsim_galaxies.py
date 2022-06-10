@@ -108,6 +108,22 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         self.slen = self.decoder.slen
         self.pixel_scale = self.decoder.single_decoder.pixel_scale
 
+    def _sample_full_catalog(self):
+        params_dict = self.prior.sample()
+        params_dict["plocs"] = params_dict["locs"] * self.slen
+        params_dict.pop("locs")
+        params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
+        return FullCatalog(self.slen, self.slen, params_dict)
+
+    def _get_images(self, full_cat):
+        noiseless, noiseless_centered, noiseless_uncentered = self.decoder(full_cat)
+
+        # get background and noisy image.
+        background = self.background.sample((1, *noiseless.shape)).squeeze(0)
+        noisy_image = _add_noise_and_background(noiseless, background)
+
+        return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background
+
     def _add_metrics(
         self,
         full_cat: FullCatalog,
@@ -154,22 +170,6 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         full_cat["blendedness"] = rearrange(blendedness, "n -> 1 n 1", n=self.max_n_sources)
 
         return full_cat
-
-    def _sample_full_catalog(self):
-        params_dict = self.prior.sample()
-        params_dict["plocs"] = params_dict["locs"] * self.slen
-        params_dict.pop("locs")
-        params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
-        return FullCatalog(self.slen, self.slen, params_dict)
-
-    def _get_images(self, full_cat):
-        noiseless, noiseless_centered, noiseless_uncentered = self.decoder(full_cat)
-
-        # get background and noisy image.
-        background = self.background.sample((1, *noiseless.shape)).squeeze(0)
-        noisy_image = _add_noise_and_background(noiseless, background)
-
-        return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background
 
     def _get_tile_params(self, full_cat):
         tile_cat = full_cat.to_tile_params(self.tile_slen, self.max_sources_per_tile)
