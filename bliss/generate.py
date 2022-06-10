@@ -2,6 +2,7 @@ import math
 from typing import Any, Dict
 
 import torch
+import tqdm
 from matplotlib import pyplot as plt
 
 from bliss.reporting import plot_image
@@ -34,7 +35,7 @@ def generate(dataset, filepath, imagepath, n_plots: int, global_params=("backgro
 
     # get batches and combine them
     fbatch: Dict[str, Any] = {}
-    for batch in dataset.train_dataloader():
+    for batch in tqdm.tqdm(dataset.train_dataloader(), desc="Generating dataset"):
         if not bool(fbatch):  # dict is empty
             fbatch = batch
             for key, val in fbatch.items():
