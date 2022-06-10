@@ -59,7 +59,7 @@ class SingleGalsimGalaxyPrior:
         else:
             raise NotImplementedError()
 
-    def sample(self, total_latent):
+    def sample(self, total_latent, device="cpu"):
         # create galaxy as mixture of Exponential + DeVacauleurs
         if self.flux_sample == "uniform":
             total_flux = _uniform(self.min_flux, self.max_flux, n_samples=total_latent)
@@ -93,7 +93,7 @@ class SingleGalsimGalaxyPrior:
             raise NotImplementedError()
         return torch.stack(
             [total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a], dim=1
-        )
+        ).to(device)
 
 
 class SingleGalsimGalaxyDecoder:

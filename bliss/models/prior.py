@@ -260,7 +260,7 @@ class ImagePrior(pl.LightningModule):
         batch_size, n_tiles_h, n_tiles_w, max_sources, _ = galaxy_bools.shape
         total_latent = batch_size * n_tiles_h * n_tiles_w * max_sources
         if self.prob_galaxy > 0.0:
-            samples = self.galaxy_prior.sample(total_latent).to(galaxy_bools.device)
+            samples = self.galaxy_prior.sample(total_latent, galaxy_bools.device)
         else:
             samples = torch.zeros((total_latent, 1), device=galaxy_bools.device)
         galaxy_params = rearrange(
