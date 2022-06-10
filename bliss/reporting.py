@@ -377,7 +377,7 @@ def get_single_galaxy_ellipticities(
 
     Args:
         pixel_scale: Conversion from arcseconds to pixel.
-        use_bar: Whether to use a progress bar.
+        no_bar: Whether to use a progress bar.
         images: Array of shape (n_samples, slen, slen) containing images of
             single-centered galaxies without noise or background.
         psf_image: Array of shape (slen, slen) containing PSF image used for

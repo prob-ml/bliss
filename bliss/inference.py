@@ -206,7 +206,7 @@ class SemiSyntheticFrame:
             full_coadd_cat = CoaddFullCatalog.from_file(coadd, wcs, hlim, wlim, band="r")
             if dataset.image_prior.galaxy_prior is not None:
                 full_coadd_cat["galaxy_params"] = dataset.image_prior.galaxy_prior.sample(
-                    full_coadd_cat.n_sources
+                    full_coadd_cat.n_sources, "cpu"
                 ).unsqueeze(0)
             full_coadd_cat.plocs = full_coadd_cat.plocs + 0.5
             max_sources = dataset.image_prior.max_sources

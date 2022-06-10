@@ -167,7 +167,6 @@ class SingleGalsimGalaxyDecoder:
         return torch.from_numpy(image.array).reshape(1, slen, slen)
 
 
-# TODO: Separate prior can enforce centered galaxy brightest example.
 class UniformGalsimGalaxiesPrior:
     def __init__(
         self,
@@ -204,6 +203,18 @@ class UniformGalsimGalaxiesPrior:
             "galaxy_bools": galaxy_bools,
             "star_bools": star_bools,
         }
+
+
+class UniformBrightestCenterGalsimGalaxy(UniformGalsimGalaxiesPrior):
+    def sample(self) -> Dict[str, Tensor]:
+        """Returns a single batch of source parameters where brightest galaxy is centered."""
+        sample = super().sample()
+        n_sources = sample.pop("n_sources")
+        flux = sample["galaxy_params"][:, 0].reshape(-1)
+        idx_order = torch.argsort(-flux)
+        reordered_sample = {k: v[idx_order] for k, v in sample.items()}
+        reordered_sample["locs"][0, :] = 0.5  # centered
+        return {"n_sources": n_sources, **reordered_sample}
 
 
 class GalsimGalaxiesDecoder:
