@@ -44,8 +44,8 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
         self.valid_n_batches = valid_n_batches
 
     def __getitem__(self, idx):
-        galaxy_params = self.prior.sample(1, "cpu")
-        galaxy_image = self.decoder.render_galaxy(galaxy_params[0])
+        galaxy_params = self.prior.sample(1)
+        galaxy_image = self.decoder(galaxy_params[0])
         background = self.background.sample((1, *galaxy_image.shape)).squeeze(1)
         return {
             "images": _add_noise_and_background(galaxy_image, background),
