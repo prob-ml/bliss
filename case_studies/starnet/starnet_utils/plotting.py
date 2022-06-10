@@ -49,8 +49,8 @@ def plot_image(axarr, image, x0=0, x1=0, slen0=None, slen1=None):
     vmax = subimage.max()
 
     im = axarr.matshow(image.cpu(), cmap=plt.cm.get_cmap("gray"), vmin=vmin, vmax=vmax)
-    axarr.set_ylim(x0 + slen0, x0)
-    axarr.set_xlim(x1, x1 + slen1)
+    axarr.set_ylim(x0 + slen0 - 0.5, x0 - 0.5)
+    axarr.set_xlim(x1 - 0.5, x1 + slen1 - 0.5)
 
     return im
 

@@ -80,6 +80,7 @@ class ImagePrior(pl.LightningModule):
         min_sources: int = 0,
         max_sources: int = 2,
         mean_sources: int = 0.4,
+        poisson_nsources: bool = True,
         loc_min: float = 0.0,
         loc_max: float = 1.0,
         f_min: float = 1e4,
@@ -117,6 +118,8 @@ class ImagePrior(pl.LightningModule):
         self.min_sources = min_sources
         self.max_sources = max_sources
         self.mean_sources = mean_sources
+        self.poisson_nsources = poisson_nsources
+        
         self.loc_min = loc_min
         self.loc_max = loc_max
         self.f_min = f_min
@@ -171,10 +174,15 @@ class ImagePrior(pl.LightningModule):
         # returns number of sources for each batch x tile
         # output dimension is batch_size x n_tiles_h x n_tiles_w
 
-        # always poisson distributed.
-        p = torch.full((1,), self.mean_sources, device=self.device, dtype=torch.float)
-        m = Poisson(p)
-        n_sources = m.sample([batch_size, self.n_tiles_h, self.n_tiles_w])
+        if self.poisson_nsources: 
+            p = torch.full((1,), self.mean_sources, device=self.device, dtype=torch.float)
+            m = Poisson(p)
+            n_sources = m.sample([batch_size, self.n_tiles_h, self.n_tiles_w])
+        else: 
+            n_sources = torch.randint(self.min_sources, 
+                                      self.max_sources + 1, 
+                                      size = [batch_size, self.n_tiles_h, self.n_tiles_w, 1], 
+                                      device = self.device)
 
         # long() here is necessary because used for indexing and one_hot encoding.
         n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)

@@ -26,41 +26,39 @@ datasets:
     decoder: ${models.decoder}
     background:
       - 667.0
-      - 496.0
     n_batches: 40
-    batch_size: 4
-    generate_device: "cuda:0"
+    batch_size: 64
+    generate_device: "cuda:7"
     testing_file: null
 
 models:
   decoder:
     _target_: bliss.models.decoder.ImageDecoder
-    n_bands: 2
+    n_bands: 1
     tile_slen: 10
     ptile_slen: 30
     border_padding: 5
-    psf_params_file: ./../../../data/sdss/2583/2/136/psField-002583-2-0136.fits
+    psf_params_file: ../decaps/psf/iband_psf_gauss.npy
     sdss_bands:
       - 2
-      - 3
   encoder:
     _target_: bliss.models.location_encoder.LocationEncoder
     n_bands: ${models.decoder.n_bands}
     tile_slen: ${models.decoder.tile_slen}
     ptile_slen: 20
-    max_detections: 3
+    max_detections: 2
     channel: 17
     spatial_dropout: 0.11399
     dropout: 0.013123
     hidden: 185
   prior:
     _target_: bliss.models.prior.ImagePrior
-    n_bands: 2
-    slen: 300
+    n_bands: 1
+    slen: 10
     tile_slen: 10
-    max_sources: 3
-    mean_sources: 0.48
+    max_sources: 2
     min_sources: 0
+    poisson_nsources: False
     f_min: 1e3
     f_max: 1e6
     alpha: 0.5
@@ -86,7 +84,7 @@ training:
     enable_checkpointing: False
     profiler: null
     reload_dataloaders_every_epoch: False
-    check_val_every_n_epoch: 50
+    check_val_every_n_epoch: 200
     max_epochs: ${training.n_epochs}
     min_epochs: ${training.n_epochs}
     gpus: ${gpus}
