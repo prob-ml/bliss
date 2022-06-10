@@ -240,7 +240,7 @@ class GalsimGalaxiesDecoder:
         noiseless_centered = torch.zeros(max_n_sources, 1, size, size)
         noiseless_uncentered = torch.zeros(max_n_sources, 1, size, size)
 
-        n_sources = full_cat.n_sources[0].item()
+        n_sources = int(full_cat.n_sources[0].item())
         galaxy_params = full_cat["galaxy_params"][0]
         plocs = full_plocs[0]
         psf = self._get_psf()

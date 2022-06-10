@@ -116,7 +116,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         noiseless_uncentered: Tensor,
         background: Tensor,
     ):
-        n_sources = full_cat.n_sources.item()
+        n_sources = int(full_cat.n_sources.item())
         galaxy_params = full_cat["galaxy_params"][0]
 
         # add important metrics to full catalog
