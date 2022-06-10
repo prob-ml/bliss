@@ -380,7 +380,7 @@ class FullCatalog(UserDict):
             tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
         n_sources = int(self.n_sources[0].item())
         for (idx, coords) in enumerate(tile_coords[:n_sources]):
-            # NOTE: if more sources than allowed per tile, picks the last source in that tile.
+            # NOTE: if more sources than allowed per tile, picks last source in that tile.
             source_idx = tile_n_sources[0, coords[0], coords[1]].item()
             source_idx = min(source_idx, max_sources_per_tile - 1)
             tile_is_on_array[0, coords[0], coords[1]] = 1
