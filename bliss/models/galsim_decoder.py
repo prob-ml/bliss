@@ -226,10 +226,10 @@ class GalsimGalaxiesDecoder:
         self.bp = bp
         assert self.slen + 2 * self.bp >= self.single_decoder.slen
 
-    def _get_psf(self):
-        return self.single_decoder.psf
-
     def __call__(self, full_cat: FullCatalog):
+        return self.render_galaxies(full_cat, self.single_decoder.psf)
+
+    def render_galaxies(self, full_cat: FullCatalog, psf: galsim.GSObject):
         size = self.slen + 2 * self.bp
         full_plocs = full_cat.plocs
         b, max_n_sources, _ = full_plocs.shape
@@ -243,7 +243,6 @@ class GalsimGalaxiesDecoder:
         n_sources = int(full_cat.n_sources[0].item())
         galaxy_params = full_cat["galaxy_params"][0]
         plocs = full_plocs[0]
-        psf = self._get_psf()
         for ii in range(n_sources):
             offset_x = plocs[ii][1] + self.bp - size / 2
             offset_y = plocs[ii][0] + self.bp - size / 2
