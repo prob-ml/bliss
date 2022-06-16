@@ -21,7 +21,6 @@ class SdssBlendedGalaxies(pl.LightningDataModule):
     This dataset takes an SDSS image, splits it into chunks, finds the locations,
     classifies each object as a star or galaxy, and only keeps chunks with at least one galaxy.
     The intended purpose is for learning a distribution of galaxies from real images.
-
     """
 
     def __init__(

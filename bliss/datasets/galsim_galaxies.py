@@ -1,26 +1,211 @@
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import galsim
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from einops import rearrange
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
+from bliss.catalog import FullCatalog
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.sdss import convert_flux_to_mag
-from bliss.reporting import get_single_galaxy_measurements
+from bliss.models.galsim_decoder import (
+    FullCatalogDecoder,
+    SingleGalsimGalaxyDecoder,
+    SingleGalsimGalaxyPrior,
+    UniformGalsimGalaxiesPrior,
+)
+from bliss.reporting import get_single_galaxy_ellipticities
 
 
-def load_psf_from_file(psf_image_file: str, pixel_scale: float):
-    """Return normalized PSF galsim.GSObject from numpy psf_file."""
-    assert Path(psf_image_file).suffix == ".npy"
-    psf_image = np.load(psf_image_file)
-    assert len(psf_image.shape) == 3 and psf_image.shape[0] == 1
-    psf_image = galsim.Image(psf_image[0], scale=pixel_scale)
-    return galsim.InterpolatedImage(psf_image).withFlux(1.0)
+class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
+    def __init__(
+        self,
+        prior: SingleGalsimGalaxyPrior,
+        decoder: SingleGalsimGalaxyDecoder,
+        background: ConstantBackground,
+        num_workers: int,
+        batch_size: int,
+        n_batches: int,
+        fix_validation_set: bool = False,
+        valid_n_batches: Optional[int] = None,
+    ):
+        super().__init__()
+        self.prior = prior
+        self.decoder = decoder
+        self.n_batches = n_batches
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.background = background
+        self.fix_validation_set = fix_validation_set
+        self.valid_n_batches = valid_n_batches
+
+    def __getitem__(self, idx):
+        galaxy_params = self.prior.sample(1)
+        galaxy_image = self.decoder(galaxy_params[0])
+        background = self.background.sample((1, *galaxy_image.shape)).squeeze(1)
+        return {
+            "images": _add_noise_and_background(galaxy_image, background),
+            "background": background,
+            "noiseless": galaxy_image,
+            "params": galaxy_params[0],
+            "snr": _get_snr(galaxy_image, background),
+        }
+
+    def __len__(self):
+        return self.batch_size * self.n_batches
+
+    def train_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def val_dataloader(self):
+        dl = DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+        if not self.fix_validation_set:
+            return dl
+        valid: List[Dict[str, Tensor]] = []
+        for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
+            valid.append(next(iter(dl)))
+        return DataLoader(valid, batch_size=None, num_workers=0)
+
+    def test_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+
+class GalsimBlends(pl.LightningDataModule, Dataset):
+    """Dataset of galsim blends."""
+
+    def __init__(
+        self,
+        prior: UniformGalsimGalaxiesPrior,
+        decoder: FullCatalogDecoder,
+        background: ConstantBackground,
+        tile_slen: int,
+        max_sources_per_tile: int,
+        num_workers: int,
+        batch_size: int,
+        n_batches: int,
+        fix_validation_set: bool = False,
+        valid_n_batches: Optional[int] = None,
+    ):
+        super().__init__()
+        self.prior = prior
+        self.decoder = decoder
+        self.n_batches = n_batches
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.background = background
+        self.fix_validation_set = fix_validation_set
+        self.valid_n_batches = valid_n_batches
+
+        # images
+        self.max_n_sources = self.prior.max_n_sources
+        self.tile_slen = tile_slen
+        self.max_sources_per_tile = max_sources_per_tile
+        self.bp = self.decoder.bp
+        self.slen = self.decoder.slen
+        self.pixel_scale = self.decoder.single_decoder.pixel_scale
+
+    def _sample_full_catalog(self):
+        params_dict = self.prior.sample()
+        params_dict["plocs"] = params_dict["locs"] * self.slen
+        params_dict.pop("locs")
+        params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
+        return FullCatalog(self.slen, self.slen, params_dict)
+
+    def _get_images(self, full_cat):
+        noiseless, noiseless_centered, noiseless_uncentered = self.decoder(full_cat)
+
+        # get background and noisy image.
+        background = self.background.sample((1, *noiseless.shape)).squeeze(0)
+        noisy_image = _add_noise_and_background(noiseless, background)
+
+        return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background
+
+    def _add_metrics(
+        self,
+        full_cat: FullCatalog,
+        noiseless: Tensor,
+        noiseless_centered: Tensor,
+        noiseless_uncentered: Tensor,
+        background: Tensor,
+    ):
+        n_sources = int(full_cat.n_sources.item())
+        galaxy_params = full_cat["galaxy_params"][0]
+
+        # add important metrics to full catalog
+        scale = self.pixel_scale
+        size = self.slen + 2 * self.bp
+        psf = self.decoder.single_decoder.psf  # psf from single galaxy decoder.
+        psf_tensor = torch.from_numpy(psf.drawImage(nx=size, ny=size, scale=scale).array)
+
+        single_galaxy_tensor = noiseless_centered[:n_sources]
+        single_galaxy_tensor = rearrange(single_galaxy_tensor, "n 1 h w -> n h w", n=n_sources)
+        mags = torch.zeros(self.max_n_sources)
+        for ii in range(n_sources):
+            mags[ii] = convert_flux_to_mag(galaxy_params[ii, 0])
+        ellips = torch.zeros(self.max_n_sources, 2)
+        e12 = get_single_galaxy_ellipticities(single_galaxy_tensor, psf_tensor, scale)
+        ellips[:n_sources, :] = e12
+
+        # get snr and blendedness
+        snr = torch.zeros(self.max_n_sources)
+        blendedness = torch.zeros(self.max_n_sources)
+        for ii in range(n_sources):
+            snr[ii] = _get_snr(noiseless_centered[ii], background)
+            blendedness[ii] = _get_blendedness(noiseless_uncentered[ii], noiseless)
+
+        gal_fluxes = galaxy_params[:, 0]
+
+        # add to full catalog (needs to be in batches)
+        full_cat["mags"] = rearrange(mags, "n -> 1 n 1", n=self.max_n_sources)
+        full_cat["fluxes"] = torch.zeros(1, self.max_n_sources, 1)  # stars
+        full_cat["log_fluxes"] = torch.zeros(1, self.max_n_sources, 1)  # stars
+        full_cat["galaxy_fluxes"] = rearrange(gal_fluxes, "n -> 1 n 1", n=self.max_n_sources)
+
+        full_cat["ellips"] = rearrange(ellips, "n g -> 1 n g", n=self.max_n_sources, g=2)
+        full_cat["snr"] = rearrange(snr, "n -> 1 n 1", n=self.max_n_sources)
+        full_cat["blendedness"] = rearrange(blendedness, "n -> 1 n 1", n=self.max_n_sources)
+
+        return full_cat
+
+    def _get_tile_params(self, full_cat):
+        tile_cat = full_cat.to_tile_params(self.tile_slen, self.max_sources_per_tile)
+        tile_dict = tile_cat.to_dict()
+        n_sources = tile_dict.pop("n_sources")
+        n_sources = rearrange(n_sources, "1 nth ntw -> nth ntw")
+
+        return {
+            "n_sources": n_sources,
+            **{k: rearrange(v, "1 nth ntw n d -> nth ntw n d") for k, v in tile_dict.items()},
+        }
+
+    def __getitem__(self, idx):
+        full_cat = self._sample_full_catalog()
+        images, *metric_images, background = self._get_images(full_cat)
+        full_cat = self._add_metrics(full_cat, *metric_images, background)
+        tile_params = self._get_tile_params(full_cat)
+        return {"images": images, "background": background, **tile_params}
+
+    def __len__(self):
+        return self.batch_size * self.n_batches
+
+    def train_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+
+    def val_dataloader(self):
+        dl = DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+        if not self.fix_validation_set:
+            return dl
+        valid: List[Dict[str, Tensor]] = []
+        for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
+            valid.append(next(iter(dl)))
+        return DataLoader(valid, batch_size=None, num_workers=0)
+
+    def test_dataloader(self):
+        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
 
 class ToyGaussian(pl.LightningDataModule, Dataset):
@@ -108,168 +293,6 @@ class ToyGaussian(pl.LightningDataModule, Dataset):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
 
-class GalsimGalaxyPrior:
-    def __init__(
-        self,
-        flux_sample: str,
-        min_flux: float,
-        max_flux: float,
-        a_sample: str,
-        alpha: Optional[float] = None,
-        min_a_d: Optional[float] = None,
-        max_a_d: Optional[float] = None,
-        min_a_b: Optional[float] = None,
-        max_a_b: Optional[float] = None,
-        a_concentration: Optional[float] = None,
-        a_loc: Optional[float] = None,
-        a_scale: Optional[float] = None,
-        a_bulge_disk_ratio: Optional[float] = None,
-    ) -> None:
-        self.flux_sample = flux_sample
-        self.min_flux = min_flux
-        self.max_flux = max_flux
-        self.alpha = alpha
-        if self.flux_sample == "pareto":
-            assert self.alpha is not None
-
-        self.a_sample = a_sample
-        self.min_a_d = min_a_d
-        self.max_a_d = max_a_d
-        self.min_a_b = min_a_b
-        self.max_a_b = max_a_b
-
-        self.a_concentration = a_concentration
-        self.a_loc = a_loc
-        self.a_scale = a_scale
-        self.a_bulge_disk_ratio = a_bulge_disk_ratio
-
-        if self.a_sample == "uniform":
-            assert self.min_a_d is not None
-            assert self.max_a_d is not None
-            assert self.min_a_b is not None
-            assert self.max_a_b is not None
-        elif self.a_sample == "gamma":
-            assert self.a_concentration is not None
-            assert self.a_loc is not None
-            assert self.a_scale is not None
-            assert self.a_bulge_disk_ratio is not None
-        else:
-            raise NotImplementedError()
-
-    def sample(self, total_latent, device):
-        # create galaxy as mixture of Exponential + DeVacauleurs
-        if self.flux_sample == "uniform":
-            total_flux = self._uniform(self.min_flux, self.max_flux, n_samples=total_latent)
-        elif self.flux_sample == "log_uniform":
-            log_flux = self._uniform(
-                torch.log10(self.min_flux), torch.log10(self.max_flux), n_samples=total_latent
-            )
-            total_flux = 10**log_flux
-        elif self.flux_sample == "pareto":
-            total_flux = self._draw_pareto_flux(n_samples=total_latent)
-        else:
-            raise NotImplementedError()
-        disk_frac = self._uniform(0, 1, n_samples=total_latent)
-        beta_radians = self._uniform(0, 2 * np.pi, n_samples=total_latent)
-        disk_q = self._uniform(0, 1, n_samples=total_latent)
-        bulge_q = self._uniform(0, 1, n_samples=total_latent)
-        if self.a_sample == "uniform":
-            disk_a = self._uniform(self.min_a_d, self.max_a_d, n_samples=total_latent)
-            bulge_a = self._uniform(self.min_a_b, self.max_a_b, n_samples=total_latent)
-        elif self.a_sample == "gamma":
-            disk_a = self._gamma(
-                self.a_concentration, self.a_loc, self.a_scale, n_samples=total_latent
-            )
-            bulge_a = self._gamma(
-                self.a_concentration,
-                self.a_loc / self.a_bulge_disk_ratio,
-                self.a_scale / self.a_bulge_disk_ratio,
-                n_samples=total_latent,
-            )
-        else:
-            raise NotImplementedError()
-        return torch.stack(
-            [total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a], dim=1
-        )
-
-    @staticmethod
-    def _uniform(a, b, n_samples=1) -> Tensor:
-        # uses pytorch to return a single float ~ U(a, b)
-        return (a - b) * torch.rand(n_samples) + b
-
-    def _draw_pareto_flux(self, n_samples=1) -> Tensor:
-        # draw pareto conditioned on being less than f_max
-        assert self.alpha is not None
-        u_max = 1 - (self.min_flux / self.max_flux) ** self.alpha
-        uniform_samples = torch.rand(n_samples) * u_max
-        return self.min_flux / (1.0 - uniform_samples) ** (1 / self.alpha)
-
-    @staticmethod
-    def _gamma(concentration, loc, scale, n_samples=1):
-        x = torch.distributions.Gamma(concentration, rate=1.0).sample((n_samples,))
-        return x * scale + loc
-
-
-class GalsimGalaxyDecoder:
-    def __init__(
-        self,
-        slen,
-        n_bands,
-        pixel_scale,
-        psf_image_file: str,
-    ) -> None:
-
-        self.slen = slen
-        assert n_bands == 1, "Only 1 band is supported"
-        self.n_bands = 1
-        self.pixel_scale = pixel_scale
-        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
-
-    def __call__(self, z: Tensor) -> Tensor:
-        if z.shape[0] == 0:
-            return torch.zeros(0, 1, self.slen, self.slen, device=z.device)
-        images = []
-        for latent in z:
-            image = self.render_galaxy(latent)
-            images.append(image)
-        return torch.stack(images, dim=0).to(z.device)
-
-    def render_galaxy(self, galaxy_params: Tensor, offset: Optional[Tensor] = None) -> Tensor:
-        assert offset is None or offset.shape == (2,)
-        if isinstance(galaxy_params, Tensor):
-            galaxy_params = galaxy_params.cpu().detach()
-        total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
-        bulge_frac = 1 - disk_frac
-
-        disk_flux = total_flux * disk_frac
-        bulge_flux = total_flux * bulge_frac
-
-        components = []
-        if disk_flux > 0:
-            b_d = a_d * disk_q
-            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
-            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
-                q=disk_q,
-                beta=beta_radians * galsim.radians,
-            )
-            components.append(disk)
-        if bulge_flux > 0:
-            b_b = bulge_q * a_b
-            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
-            bulge = galsim.DeVaucouleurs(
-                flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
-            ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
-            components.append(bulge)
-        galaxy = galsim.Add(components)
-        # convolve with PSF
-        gal_conv = galsim.Convolution(galaxy, self.psf)
-        offset = offset if offset is None else offset.numpy()
-        image = gal_conv.drawImage(
-            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale, offset=offset
-        )
-        return torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
-
-
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
     image_with_background = image + background
     noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
@@ -285,164 +308,3 @@ def _get_blendedness(single_galaxy: Tensor, all_galaxies: Tensor) -> float:
     num = torch.sum(single_galaxy * single_galaxy).item()
     denom = torch.sum(single_galaxy * all_galaxies).item()
     return 1 - num / denom
-
-
-class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
-    def __init__(
-        self,
-        prior: GalsimGalaxyPrior,
-        decoder: GalsimGalaxyDecoder,
-        background: ConstantBackground,
-        num_workers: int,
-        batch_size: int,
-        n_batches: int,
-        fix_validation_set: bool = False,
-        valid_n_batches: Optional[int] = None,
-    ):
-        super().__init__()
-        self.prior = prior
-        self.decoder = decoder
-        self.n_batches = n_batches
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.background = background
-        self.fix_validation_set = fix_validation_set
-        self.valid_n_batches = valid_n_batches
-
-    def __getitem__(self, idx):
-        galaxy_params = self.prior.sample(1, "cpu")
-        galaxy_image = self.decoder.render_galaxy(galaxy_params[0])
-        background = self.background.sample((1, *galaxy_image.shape)).squeeze(1)
-        return {
-            "images": _add_noise_and_background(galaxy_image, background),
-            "background": background,
-            "noiseless": galaxy_image,
-            "params": galaxy_params[0],
-            "snr": _get_snr(galaxy_image, background),
-        }
-
-    def __len__(self):
-        return self.batch_size * self.n_batches
-
-    def train_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-    def val_dataloader(self):
-        dl = DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-        if not self.fix_validation_set:
-            return dl
-        valid: List[Dict[str, Tensor]] = []
-        for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
-            valid.append(next(iter(dl)))
-        return DataLoader(valid, batch_size=None, num_workers=0)
-
-    def test_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-
-class GalsimBlends(SingleGalsimGalaxies):
-    """Blend where one galaxy is always centered."""
-
-    def __init__(
-        self,
-        prior: GalsimGalaxyPrior,
-        decoder: GalsimGalaxyDecoder,
-        background: ConstantBackground,
-        num_workers: int,
-        batch_size: int,
-        n_batches: int,
-        max_shift: int,
-        max_n_sources: int,
-    ):
-        super().__init__(prior, decoder, background, num_workers, batch_size, n_batches)
-        self.max_shift = max_shift  # in pixels
-        self.max_n_sources = max_n_sources
-        assert 0 <= self.max_shift <= decoder.slen // 2
-        assert self.max_n_sources >= 1
-
-    def __getitem__(self, idx):
-        n_sources = self._sample_n_sources()
-        slen = self.decoder.slen
-
-        # sample galaxy params and ensure tensor returned is of theh same size always.
-        params = self.prior.sample(n_sources, "cpu")
-
-        # order galaxy params based on flux so centered (first one) is the brightest
-        indx_order = np.argsort(-params[:, 0])
-        params = params[indx_order, :]
-
-        # account for max sources
-        galaxy_params = torch.zeros(self.max_n_sources, params.shape[-1])
-        galaxy_params[:n_sources, :] = params
-
-        # draw center galaxy
-        center_galaxy_image = self.decoder.render_galaxy(galaxy_params[0])
-
-        # prepare tensors containing single noiseless galaxies
-        individual_noiseless_centered = torch.zeros(self.max_n_sources, 1, slen, slen)
-        individual_noiseless_uncentered = torch.zeros(self.max_n_sources, 1, slen, slen)
-        individual_noiseless_centered[0] = center_galaxy_image
-        individual_noiseless_uncentered[0] = center_galaxy_image
-
-        # add rest of galaxies in blend
-        galaxies_image = center_galaxy_image.clone()
-        plocs = torch.zeros(self.max_n_sources, 2)
-        plocs[0, :] = slen / 2
-        for ii in range(1, n_sources):
-            offset = self._sample_distance_from_center()
-            centered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii])
-            uncentered_galaxy_image = self.decoder.render_galaxy(galaxy_params[ii], offset)
-            individual_noiseless_centered[ii] = centered_galaxy_image
-            individual_noiseless_uncentered[ii] = uncentered_galaxy_image
-            plocs[ii, 0] = slen / 2 + offset[1]  # adjust to correspond to BLISS locations.
-            plocs[ii, 1] = slen / 2 + offset[0]
-            galaxies_image += uncentered_galaxy_image
-
-        # get ellipticities and fluxes
-        scale = self.decoder.pixel_scale
-        psf_tensor = torch.from_numpy(
-            self.decoder.psf.drawImage(nx=slen, ny=slen, scale=scale).array
-        ).reshape(1, slen, slen)
-        single_galaxy_tensor = individual_noiseless_centered[:n_sources].reshape(
-            n_sources, 1, slen, slen
-        )
-        mags = torch.zeros(self.max_n_sources)
-        for ii in range(n_sources):
-            mags[ii] = convert_flux_to_mag(galaxy_params[ii, 0])
-        ellips = torch.zeros(self.max_n_sources, 2)
-        meas = get_single_galaxy_measurements(single_galaxy_tensor, psf_tensor, scale)
-        ellips[:n_sources, :] = meas["ellips"]
-
-        # finally, add background and noise
-        background = self.background.sample((1, *galaxies_image.shape)).squeeze(1)
-        noisy_image = _add_noise_and_background(galaxies_image, background)
-
-        # get snr and blendedness
-        snr = torch.zeros(self.max_n_sources)
-        blendedness = torch.zeros(self.max_n_sources)
-        for ii in range(n_sources):
-            snr[ii] = _get_snr(individual_noiseless_centered[ii], background)
-            blendedness[ii] = _get_blendedness(individual_noiseless_uncentered[ii], galaxies_image)
-
-        return {
-            "images": noisy_image,
-            "noiseless": galaxies_image,
-            "background": background,
-            "individual_noiseless_centered": individual_noiseless_centered,
-            "individual_noiseless_uncentered": individual_noiseless_uncentered,
-            "params": galaxy_params,
-            "snr": snr,
-            "blendedness": blendedness,
-            "n_sources": torch.tensor([n_sources]),
-            "plocs": plocs,
-            "slen": slen,
-            "ellips": ellips,
-            "fluxes": galaxy_params[:, 0],
-            "mags": mags,
-        }
-
-    def _sample_distance_from_center(self) -> Tensor:
-        return (torch.rand(2) - 0.5) * 2 * self.max_shift
-
-    def _sample_n_sources(self) -> int:
-        return int(torch.randint(1, self.max_n_sources + 1, (1,)).int().item())
