@@ -213,7 +213,7 @@ class UniformBrightestCenterGalsimGalaxy(UniformGalsimGalaxiesPrior):
         flux = sample["galaxy_params"][:, 0].reshape(-1)
         idx_order = torch.argsort(-flux)
         reordered_sample = {k: v[idx_order] for k, v in sample.items()}
-        reordered_sample["locs"][0, :] = 0.5  # centered
+        reordered_sample["locs"][0, :] = 0.5 + _uniform(0.015, 0.03, 2)  # slight off-center.
         return {"n_sources": n_sources, **reordered_sample}
 
 
