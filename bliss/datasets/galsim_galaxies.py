@@ -13,7 +13,7 @@ from bliss.catalog import FullCatalog
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.models.galsim_decoder import (
-    GalsimGalaxiesDecoder,
+    FullCatalogDecoder,
     SingleGalsimGalaxyDecoder,
     SingleGalsimGalaxyPrior,
     UniformGalsimGalaxiesPrior,
@@ -80,7 +80,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
     def __init__(
         self,
         prior: UniformGalsimGalaxiesPrior,
-        decoder: GalsimGalaxiesDecoder,
+        decoder: FullCatalogDecoder,
         background: ConstantBackground,
         tile_slen: int,
         max_sources_per_tile: int,

@@ -66,7 +66,7 @@ datasets:
             max_n_sources: 6
             max_shift: 0.5
         decoder:
-            _target_: bliss.models.galsim_decoder.GalsimGalaxiesDecoder
+            _target_: bliss.models.galsim_decoder.FullCatalogDecoder
             single_galaxy_decoder: ${datasets.sdss_galaxies.decoder}
             slen: 40
             bp: 24
@@ -241,7 +241,7 @@ plots:
             max_n_sources: 5
             max_shift: 0.375
         decoder:
-            _target_: bliss.models.galsim_decoder.GalsimGalaxiesDecoder
+            _target_: bliss.models.galsim_decoder.FullCatalogDecoder
             single_galaxy_decoder: ${datasets.sdss_galaxies.decoder}
             slen: 40
             bp: 24

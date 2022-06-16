@@ -217,7 +217,7 @@ class UniformBrightestCenterGalsimGalaxy(UniformGalsimGalaxiesPrior):
         return {"n_sources": n_sources, **reordered_sample}
 
 
-class GalsimGalaxiesDecoder:
+class FullCatalogDecoder:
     def __init__(
         self, single_galaxy_decoder: SingleGalsimGalaxyDecoder, slen: int, bp: int
     ) -> None:
@@ -227,9 +227,9 @@ class GalsimGalaxiesDecoder:
         assert self.slen + 2 * self.bp >= self.single_decoder.slen
 
     def __call__(self, full_cat: FullCatalog):
-        return self.render_galaxies(full_cat, self.single_decoder.psf)
+        return self.render_catalog(full_cat, self.single_decoder.psf)
 
-    def render_galaxies(self, full_cat: FullCatalog, psf: galsim.GSObject):
+    def render_catalog(self, full_cat: FullCatalog, psf: galsim.GSObject):
         size = self.slen + 2 * self.bp
         full_plocs = full_cat.plocs
         b, max_n_sources, _ = full_plocs.shape
