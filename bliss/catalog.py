@@ -21,6 +21,8 @@ class TileCatalog(UserDict):
         "log_fluxes",
         "mags",
         "ellips",
+        "snr",
+        "blendedness",
         "galaxy_bools",
         "galaxy_params",
         "galaxy_fluxes",
@@ -76,7 +78,7 @@ class TileCatalog(UserDict):
 
     @property
     def is_on_array(self) -> Tensor:
-        """Returns a n x nth x ntw x n_sources tensor indicating whether source is on."""
+        """Returns a (n x nth x ntw x n_sources) tensor indicating whether source is on."""
         return get_is_on_from_n_sources(self.n_sources, self.max_sources)
 
     def cpu(self):
@@ -264,7 +266,7 @@ class FullCatalog(UserDict):
         self.n_sources = d.pop("n_sources")
         self.batch_size, self.max_sources, hw = self.plocs.shape
         assert hw == 2
-        assert self.n_sources.max().int().item() == self.max_sources
+        assert self.n_sources.max().int().item() <= self.max_sources
         assert self.n_sources.shape == (self.batch_size,)
         super().__init__(**d)
 
@@ -378,20 +380,16 @@ class FullCatalog(UserDict):
             tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
         n_sources = int(self.n_sources[0].item())
         for (idx, coords) in enumerate(tile_coords[:n_sources]):
-            source_idx = tile_n_sources[0, coords[0], coords[1]]
+            # NOTE: if more sources than allowed per tile, picks last source in that tile.
+            source_idx = tile_n_sources[0, coords[0], coords[1]].item()
+            source_idx = min(source_idx, max_sources_per_tile - 1)
             tile_is_on_array[0, coords[0], coords[1]] = 1
-            tile_locs[0, coords[0], coords[1], source_idx] = (
-                self.plocs[0, idx] - coords * tile_slen
-            ) / tile_slen
+            tile_loc = (self.plocs[0, idx] - coords * tile_slen) / tile_slen
+            tile_locs[0, coords[0], coords[1], source_idx] = tile_loc
             for k, v in tile_params.items():
                 v[0, coords[0], coords[1], source_idx] = self[k][0, idx]
             tile_n_sources[0, coords[0], coords[1]] = source_idx + 1
-        tile_params.update(
-            {
-                "locs": tile_locs,
-                "n_sources": tile_n_sources,
-            }
-        )
+        tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
 
     def plot_plocs(self, ax: Axes, idx: int, object_type: str, bp: int = 0, **kwargs):

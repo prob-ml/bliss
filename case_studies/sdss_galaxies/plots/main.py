@@ -100,11 +100,9 @@ def make_blend_sim_figure(cfg, encoder, decoder, bfig_kwargs):
     blend_file = Path(cfg.plots.simulated_blended_galaxies)
 
     # create dataset of blends if not existant.
-    if not blend_file.exists():  # or cfg.plots.overwrite:
+    if not blend_file.exists() or cfg.plots.overwrite:
         print(f"INFO: Creating dataset of simulated galsim blends and saving to {blend_file}")
-        dataset = instantiate(
-            cfg.datasets.galsim_blended_galaxies, batch_size=512, n_batches=20, num_workers=20
-        )
+        dataset = instantiate(cfg.plots.galsim_blended_galaxies)
         imagepath = blend_file.parent / (blend_file.stem + "_images.png")
         global_params = ("background", "slen")
         generate.generate(dataset, blend_file, imagepath, n_plots=25, global_params=global_params)

@@ -5,7 +5,7 @@ import torch
 from matplotlib import pyplot as plt
 from tqdm import tqdm
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import TileCatalog
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
 from bliss.reporting import match_by_locs
@@ -23,11 +23,9 @@ class BlendSimFigures(BlissFigures):
 
     def compute_data(self, blend_file: Path, encoder: Encoder, decoder: ImageDecoder):
         blend_data = torch.load(blend_file)
-        images = blend_data["images"]
-        background = blend_data["background"]
-        slen = blend_data["slen"].item()
-        n_batches = images.shape[0]
-        assert images.shape == (n_batches, 1, slen, slen)
+        images = blend_data.pop("images")
+        background = blend_data.pop("background")
+        n_batches, _, slen, _ = images.shape
         assert background.shape == (1, slen, slen)
 
         # prepare background
@@ -35,20 +33,8 @@ class BlendSimFigures(BlissFigures):
         background = background.expand(n_batches, 1, slen, slen)
 
         # first create FullCatalog from simulated data
-        print("INFO: Preparing full catalog from simulated blended sources.")
-        n_sources = blend_data["n_sources"].reshape(-1)
-        plocs = blend_data["plocs"].reshape(n_batches, -1, 2)
-        fluxes = blend_data["fluxes"].reshape(n_batches, -1, 1)
-        mags = blend_data["mags"].reshape(n_batches, -1, 1)
-        ellips = blend_data["ellips"].reshape(n_batches, -1, 2)
-        full_catalog_dict = {
-            "n_sources": n_sources,
-            "plocs": plocs,
-            "fluxes": fluxes,
-            "mags": mags,
-            "ellips": ellips,
-        }
-        full_truth = FullCatalog(slen, slen, full_catalog_dict)
+        tile_cat = TileCatalog(decoder.tile_slen, blend_data).cpu()
+        full_truth = tile_cat.to_full_params()
 
         print("INFO: BLISS posterior inference on images.")
         tile_est = encoder.variational_mode(images, background)
@@ -56,7 +42,6 @@ class BlendSimFigures(BlissFigures):
         tile_est.set_galaxy_ellips(decoder, scale=0.393)
         tile_est = tile_est.cpu()
         full_est = tile_est.to_full_params()
-        est_plocs = full_est.plocs + encoder.border_padding
 
         snr = []
         blendedness = []
@@ -67,27 +52,27 @@ class BlendSimFigures(BlissFigures):
         est_ellips1 = []
         est_ellips2 = []
         for ii in tqdm(range(n_batches), desc="Matching batches"):
-            true_plocs_ii, est_plocs_ii = full_truth.plocs[ii], est_plocs[ii]
+            true_plocs_ii, est_plocs_ii = full_truth.plocs[ii], full_est.plocs[ii]
 
             tindx, eindx, dkeep, _ = match_by_locs(true_plocs_ii, est_plocs_ii)
             n_matches = len(tindx[dkeep])
 
-            snr_ii = blend_data["snr"][ii][tindx][dkeep]
-            blendedness_ii = blend_data["blendedness"][ii][tindx][dkeep]
+            snr_ii = full_truth["snr"][ii][tindx][dkeep]
+            blendedness_ii = full_truth["blendedness"][ii][tindx][dkeep]
             true_mag_ii = full_truth["mags"][ii][tindx][dkeep]
             est_mag_ii = full_est["mags"][ii][eindx][dkeep]
             true_ellips_ii = full_truth["ellips"][ii][tindx][dkeep]
             est_ellips_ii = full_est["ellips"][ii][eindx][dkeep]
             n_matches = len(snr_ii)
             for jj in range(n_matches):
-                snr.append(snr_ii[jj])
-                blendedness.append(blendedness_ii[jj])
-                true_mags.append(true_mag_ii[jj])
-                est_mags.append(est_mag_ii[jj])
-                true_ellips1.append(true_ellips_ii[jj][0])
-                true_ellips2.append(true_ellips_ii[jj][1])
-                est_ellips1.append(est_ellips_ii[jj][0])
-                est_ellips2.append(est_ellips_ii[jj][1])
+                snr.append(snr_ii[jj].item())
+                blendedness.append(blendedness_ii[jj].item())
+                true_mags.append(true_mag_ii[jj].item())
+                est_mags.append(est_mag_ii[jj].item())
+                true_ellips1.append(true_ellips_ii[jj][0].item())
+                true_ellips2.append(true_ellips_ii[jj][1].item())
+                est_ellips1.append(est_ellips_ii[jj][0].item())
+                est_ellips2.append(est_ellips_ii[jj][1].item())
 
         true_ellips = torch.vstack([torch.tensor(true_ellips1), torch.tensor(true_ellips2)])
         true_ellips = true_ellips.T.reshape(-1, 2)

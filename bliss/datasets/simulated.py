@@ -128,13 +128,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return dl
 
 
-def cpu(d: Dict[str, Tensor]):
-    out: Dict[str, Tensor] = {}
-    for k, v in d.items():
-        out[k] = v.cpu()
-    return out
-
-
 class BlissDataset(Dataset):
     """A dataset created from simulated batches saved as a single dict by bin/generate.py."""
 

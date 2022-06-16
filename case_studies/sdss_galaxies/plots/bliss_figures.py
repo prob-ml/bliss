@@ -4,14 +4,10 @@ from pathlib import Path
 
 import matplotlib as mpl
 import numpy as np
-import pytorch_lightning as pl
 import seaborn as sns
 import torch
 from matplotlib import pyplot as plt
 from torch import Tensor
-
-pl.seed_everything(40)
-
 
 CB_color_cycle = [
     "#377eb8",
