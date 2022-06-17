@@ -1,5 +1,3 @@
-from distutils.log import error
-
 import pytest
 import torch
 
