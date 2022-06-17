@@ -363,7 +363,21 @@ class FullCatalog(UserDict):
         d["n_sources"] = keep.sum(dim=-1)
         return type(self)(self.height, self.width, d)
 
-    def to_tile_params(self, tile_slen: int, max_sources_per_tile: int) -> TileCatalog:
+    def to_tile_params(
+        self, tile_slen: int, max_sources_per_tile: int, ignore_extra_sources=False
+    ) -> TileCatalog:
+        """Returns the TileCatalog corresponding to this FullCatalog
+
+        Args:
+            tile_slen: The side length of the tiles.
+            max_sources_per_tile: The maximum number of sources in one tile.
+            ignore_extra_sources: If False (default), raises an error if the number of sources
+                in one tile exceeds the `max_sources_per_tile`. If True, only adds the tile
+                parameters of the first `max_sources_per_tile` sources to the new TileCatalog.
+
+        Returns:
+            TileCatalog correspond to the each source in the FullCatalog.
+        """
         assert self.batch_size == 1, "Currently only supported for a single image"
         tile_coords_fp = torch.div(self.plocs, tile_slen, rounding_mode="trunc")
         tile_coords = tile_coords_fp.to(torch.int).squeeze(0)
@@ -380,9 +394,11 @@ class FullCatalog(UserDict):
             tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
         n_sources = int(self.n_sources[0].item())
         for (idx, coords) in enumerate(tile_coords[:n_sources]):
-            # NOTE: if more sources than allowed per tile, picks last source in that tile.
             source_idx = tile_n_sources[0, coords[0], coords[1]].item()
-            source_idx = min(source_idx, max_sources_per_tile - 1)
+            if source_idx >= max_sources_per_tile:
+                if not ignore_extra_sources:
+                    raise ValueError("Number of sources per tile exceeds `max_sources_per_tile`.")
+                continue  # ignore extra sources in this tile.
             tile_is_on_array[0, coords[0], coords[1]] = 1
             tile_loc = (self.plocs[0, idx] - coords * tile_slen) / tile_slen
             tile_locs[0, coords[0], coords[1], source_idx] = tile_loc
