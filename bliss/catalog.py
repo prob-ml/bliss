@@ -366,7 +366,7 @@ class FullCatalog(UserDict):
     def to_tile_params(
         self, tile_slen: int, max_sources_per_tile: int, ignore_extra_sources=False
     ) -> TileCatalog:
-        """Returns the TileCatalog corresponding to this FullCatalog
+        """Returns the TileCatalog corresponding to this FullCatalog.
 
         Args:
             tile_slen: The side length of the tiles.
@@ -377,6 +377,10 @@ class FullCatalog(UserDict):
 
         Returns:
             TileCatalog correspond to the each source in the FullCatalog.
+
+        Raises:
+            ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
+                `ignore_extra_sources` is False.
         """
         assert self.batch_size == 1, "Currently only supported for a single image"
         tile_coords_fp = torch.div(self.plocs, tile_slen, rounding_mode="trunc")
