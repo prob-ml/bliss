@@ -114,3 +114,47 @@ class GalsimBlenswithPSF(GalsimBlends):
             "std_psf": self.std_psf,
             **tile_params,
         }
+
+class GalsimBlensRand(GalsimBlends):
+    def __init__(
+        self,
+        prior: UniformGalsimGalaxiesPrior,
+        decoder: FullCatalogDecoder,
+        background: ConstantBackground,
+        tile_slen: int,
+        max_sources_per_tile: int,
+        num_workers: int,
+        batch_size: int,
+        n_batches: int,
+        psf_sampler: PsfSampler,
+        fix_validation_set: bool = False,
+        valid_n_batches: Optional[int] = None,
+    ):
+        super().__init__(
+            prior,
+            decoder,
+            background,
+            tile_slen,
+            max_sources_per_tile,
+            num_workers,
+            batch_size,
+            n_batches,
+            fix_validation_set,
+            valid_n_batches,
+        )
+        self.slen = self.decoder.slen
+        self.pixel_scale = self.decoder.single_decoder.pixel_scale
+        self.psf = psf_sampler
+    
+    def _get_images(self, full_cat):
+        psf_obj = self.psf.sample()
+        noiseless, noiseless_centered, noiseless_uncentered = self.decoder.render_catalog(
+            full_cat, psf_obj
+            )
+
+        # get background and noisy image.
+        background = self.background.sample((1, *noiseless.shape)).squeeze(0)
+        noisy_image = _add_noise_and_background(noiseless, background)
+
+        return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background
+

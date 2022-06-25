@@ -79,6 +79,20 @@ datasets:
         fix_validation_set: True
         valid_n_batches: 50
 
+    galsim_blended_galaxies_rand:
+        _target_: case_studies.psf_homogenization.psf_decoder.GalsimBlensRand
+        prior: ${datasets.galsim_blended_galaxies_psf.prior}
+        decoder: ${datasets.galsim_blended_galaxies_psf.decoder}
+        background: ${datasets.galsim_blended_galaxies_psf.background}
+        tile_slen: 4
+        max_sources_per_tile: 1
+        num_workers: 10
+        batch_size: 32
+        n_batches: 10
+        psf_sampler: ${datasets.galsim_blended_galaxies_psf.psf_sampler}
+        fix_validation_set: True
+        valid_n_batches: 50
+
 models:
     detection_encoder:
         _target_: bliss.models.detection_encoder.DetectionEncoder
