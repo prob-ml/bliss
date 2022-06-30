@@ -107,9 +107,9 @@ class GalsimBlenswithPSF(GalsimBlends):
         full_cat = self._add_metrics(full_cat, *metric_images, background)
         tile_params = self._get_tile_params(full_cat)
         return {
-            "images": images,
+            "images": homo_image,
             "background": background,
-            "homogenized": homo_image,
+            "noisy_image": images,
             "psf": psf,
             "std_psf": self.std_psf,
             **tile_params,
