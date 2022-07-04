@@ -1,6 +1,6 @@
 defaults:
     - _self_
-    - training: sdss_autoencoder
+    - training: sdss_detection_encoder_full_decoder_homo
     - override hydra/job_logging: stdout
 
 # completely disable hydra logging
@@ -62,7 +62,7 @@ datasets:
             _target_: case_studies.psf_homogenization.psf_decoder.PsfSampler
             psf_rmin: 0.7
             psf_rmax: 0.9
-        std_psf_fwhm: 1.0
+        std_psf_fwhm: 0.5
         fix_validation_set: True
         valid_n_batches: 50
 
@@ -89,7 +89,10 @@ datasets:
         num_workers: 10
         batch_size: 32
         n_batches: 10
-        psf_sampler: ${datasets.galsim_blended_galaxies_psf.psf_sampler}
+        psf_sampler:
+            _target_: case_studies.psf_homogenization.psf_decoder.PsfSampler
+            psf_rmin: 1.0
+            psf_rmax: 1.0
         fix_validation_set: True
         valid_n_batches: 50
 

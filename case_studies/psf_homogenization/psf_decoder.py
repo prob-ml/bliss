@@ -27,7 +27,13 @@ class PsfSampler:
 
     def sample(self) -> galsim.GSObject:
         # sample psf from galsim Gaussian distribution
-        fwhm = torch.distributions.uniform.Uniform(self.rmin, self.rmax).sample([1]).item()
+        if self.rmin == self.rmax:
+            fwhm = self.rmin
+        elif self.rmin > self.rmax:
+            raise ValueError("invalid argument!!!")
+        else:
+            fwhm = torch.distributions.uniform.Uniform(self.rmin, self.rmax).sample([1]).item()
+        
         return galsim.Gaussian(fwhm=fwhm)
 
 
