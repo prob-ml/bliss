@@ -1,25 +1,87 @@
-from typing import Dict, List, Optional
-
-import galsim
+# galsim_decoder changes for coadds
 import numpy as np
-import pytorch_lightning as pl
+import matplotlib.pyplot as plt 
+from pathlib import Path
+from typing import Dict, Optional
+import galsim
 import torch
-from einops import rearrange
-from torch import Tensor
+import torch.nn.functional as F
+import pytorch_lightning as pl
 from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
-
+from torch import Tensor
+from hydra import compose, initialize
+from hydra.utils import instantiate
+from einops import rearrange, reduce
 from bliss.catalog import FullCatalog
-from bliss.datasets.background import ConstantBackground
-from bliss.datasets.sdss import convert_flux_to_mag
-from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder,SingleGalsimGalaxyPrior,UniformGalsimGalaxiesPrior
+from bliss.catalog import TileCatalog, get_is_on_from_n_sources
+from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.encoder import Encoder
+from bliss.datasets.galsim_galaxies import SingleGalsimGalaxies
+from bliss.models.decoder import GalaxyTileDecoder
 from bliss.datasets.galsim_galaxies import GalsimBlends
-from bliss.reporting import get_single_galaxy_ellipticities
+from bliss.models.galsim_decoder import SingleGalsimGalaxyPrior, UniformGalsimGalaxiesPrior, FullCatalogDecoder
+from bliss.catalog import FullCatalog, TileCatalog
+from bliss.models.decoder import get_mgrid
+from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder, load_psf_from_file
 
-def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
-    image_with_background = image + background
-    noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
-    return image_with_background + noise
+class CoaddSingleGalaxyDecoder(SingleGalsimGalaxyDecoder):
+    def __init__(
+        self,
+        slen: int,
+        n_bands: int,
+        pixel_scale: float,
+        psf_image_file: str,
+    ) -> None:
+        assert n_bands == 1, "Only 1 band is supported"
+        self.slen = slen
+        self.n_bands = 1
+        self.pixel_scale = pixel_scale
+        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
+    
+    def render_galaxy(
+        self,
+        galaxy_params: Tensor,
+        psf: galsim.GSObject,
+        slen: int,
+        offset: Optional[Tensor] = None,
+        dithers: Optional[Tensor] = None,
+    ) -> Tensor:
+        assert offset is None or offset.shape == (2,)
+        if isinstance(galaxy_params, Tensor):
+            galaxy_params = galaxy_params.cpu().detach()
+        total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
+        bulge_frac = 1 - disk_frac
+
+        disk_flux = total_flux * disk_frac
+        bulge_flux = total_flux * bulge_frac
+
+        components = []
+        if disk_flux > 0:
+            b_d = a_d * disk_q
+            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
+            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
+                q=disk_q,
+                beta=beta_radians * galsim.radians,
+            )
+            components.append(disk)
+        if bulge_flux > 0:
+            b_b = bulge_q * a_b
+            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
+            bulge = galsim.DeVaucouleurs(
+                flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
+            ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
+            components.append(bulge)
+        galaxy = galsim.Add(components)
+        gal_conv = galsim.Convolution(galaxy, psf)
+        offset = offset if offset is None else offset.numpy()
+        shift = torch.add(torch.Tensor(dither), torch.Tensor(offset))
+        images = []
+        for i in shift:
+            image = gal_conv.drawImage(
+                nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=shift[i]
+            )
+            images.append(image)
+        return torch.from_numpy(images.array).reshape(len(dithers), 1, slen, slen)
 
 class FullCatalogDecoder:
     def __init__(
