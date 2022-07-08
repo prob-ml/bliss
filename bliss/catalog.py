@@ -500,6 +500,7 @@ class DecalsFullCatalog(FullCatalog):
     - https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/south/sweep/9.0/
     - https://www.legacysurvey.org/dr9/files/#sweep-catalogs-region-sweep
     - https://www.legacysurvey.org/dr5/description/#photometry
+    - https://www.legacysurvey.org/dr9/bitmasks/
     """
 
     @staticmethod
@@ -520,9 +521,7 @@ class DecalsFullCatalog(FullCatalog):
         band = band.capitalize()
 
         ra_lim, dec_lim = wcs.all_pix2world(wlim, hlim, 0)
-        bitmask = 0b0011010000000001  # https://www.legacysurvey.org/dr9/bitmasks/
-        # bitmask = 0
-        # bitmask = 0b1111111111111111
+        bitmask = 0b0011010000000001  # noqa: WPS339
 
         objc_type = table["TYPE"].data.astype(str)
         bits = table["MASKBITS"].data.astype(int)
