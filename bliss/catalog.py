@@ -483,6 +483,8 @@ class PhotoFullCatalog(FullCatalog):
             "star_bools": star_bools.reshape(1, nobj, 1).float(),
             "fluxes": fluxes.reshape(1, nobj, 1),
             "mags": mags.reshape(1, nobj, 1),
+            "ra": ras.reshape(1, nobj, 1),
+            "dec": decs.reshape(1, nobj, 1),
         }
 
         height = sdss[0]["image"].shape[1]
@@ -518,8 +520,12 @@ class DecalsFullCatalog(FullCatalog):
         band = band.capitalize()
 
         ra_lim, dec_lim = wcs.all_pix2world(wlim, hlim, 0)
+        bitmask = 0b0011010000000001  # https://www.legacysurvey.org/dr9/bitmasks/
+        # bitmask = 0
+        # bitmask = 0b1111111111111111
 
         objc_type = table["TYPE"].data.astype(str)
+        bits = table["MASKBITS"].data.astype(int)
         is_galaxy = torch.from_numpy(
             (objc_type == "DEV")
             | (objc_type == "REX")
@@ -527,23 +533,30 @@ class DecalsFullCatalog(FullCatalog):
             | (objc_type == "SER")
         )
         is_star = torch.from_numpy(objc_type == "PSF")
-        mask = column_to_tensor(table, f"ANYMASK_{band}")
         ra = column_to_tensor(table, "RA")
         dec = column_to_tensor(table, "DEC")
         flux = column_to_tensor(table, f"FLUX_{band}")
+        mask = torch.from_numpy((bits & bitmask) == 0).bool()
 
-        galaxy_bool = is_galaxy & (mask == 0) & (flux > 0)
-        star_bool = is_star & (mask == 0) & (flux > 0)
-
-        # filter on locations
-        keep_coord = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec > dec_lim[0]) & (dec < dec_lim[1])
-        keep = (galaxy_bool | star_bool) & keep_coord
+        galaxy_bool = is_galaxy & mask & (flux > 0)
+        star_bool = is_star & mask & (flux > 0)
 
         # get pixel coordinates
         pt, pr = wcs.all_world2pix(ra, dec, 0)  # pixels
-        pt = torch.tensor(pt) + 0.5  # For consistency with BLISS
-        pr = torch.tensor(pr) + 0.5
+        pt = torch.tensor(pt)
+        pr = torch.tensor(pr)
         ploc = torch.stack((pr, pt), dim=-1)
+
+        # filter on locations
+        # first lims imposed on frame
+        keep_coord = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec > dec_lim[0]) & (dec < dec_lim[1])
+        # then, SDSS saturation
+        regions = [(1200, 1360, 1700, 1900), (280, 400, 1220, 1320)]
+        keep_sat = torch.ones(len(ra)).bool()
+        for lim in regions:
+            keep_sat = keep_sat & ((pr < lim[0]) | (pr > lim[1]) | (pt < lim[2]) | (pt > lim[3]))
+
+        keep = (galaxy_bool | star_bool) & keep_coord & keep_sat
 
         # filter quantities
         galaxy_bool = galaxy_bool[keep]
