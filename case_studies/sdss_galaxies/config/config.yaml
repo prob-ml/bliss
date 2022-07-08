@@ -265,7 +265,8 @@ plots:
         _target_: bliss.inference.SDSSFrame
         sdss_dir: ${paths.sdss}
         pixel_scale: 0.396
-        cat_file: ${plots.coadd_file}
+        cat_file: ${paths.data}/sweep-330m005-340p000.fits
+        cat_type: "decals"
     encoder:
         n_images_per_batch: 10
         n_rows_per_batch: 15
