@@ -5,6 +5,7 @@ from typing import Dict, Optional, Tuple
 
 import torch
 from astropy.io import fits
+from astropy.table import Table
 from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from matplotlib.pyplot import Axes
@@ -463,6 +464,7 @@ class PhotoFullCatalog(FullCatalog):
         sdss = SloanDigitalSkySurvey(sdss_path, run, camcol, fields=(field,), bands=(band,))
         wcs: WCS = sdss[0]["wcs"][0]
 
+        # get pixel coordinates
         pts = []
         prs = []
         for ra, dec in zip(ras, decs):
@@ -485,6 +487,87 @@ class PhotoFullCatalog(FullCatalog):
 
         height = sdss[0]["image"].shape[1]
         width = sdss[0]["image"].shape[2]
+
+        return cls(height, width, d)
+
+
+class DecalsFullCatalog(FullCatalog):
+    """Class for the Decals Sweep Tractor Catalog.
+
+    Some resources:
+    - https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/south/sweep/9.0/
+    - https://www.legacysurvey.org/dr9/files/#sweep-catalogs-region-sweep
+    - https://www.legacysurvey.org/dr5/description/#photometry
+    """
+
+    @staticmethod
+    def _flux_to_mag(flux):
+        return 22.5 - 2.5 * torch.log10(flux)
+
+    @classmethod
+    def from_file(
+        cls,
+        decals_cat_path,
+        wcs: WCS,
+        hlim: Tuple[int, int],  # in degrees
+        wlim: Tuple[int, int],  # in degrees
+        band: str = "r",
+    ):
+        catalog_path = Path(decals_cat_path)
+        table = Table.read(catalog_path, format="fits")
+        band = band.capitalize()
+
+        ra_lim, dec_lim = wcs.all_pix2world(wlim, hlim, 0)
+
+        objc_type = table["TYPE"].data.astype(str)
+        is_galaxy = torch.from_numpy(
+            (objc_type == "DEV")
+            | (objc_type == "REX")
+            | (objc_type == "EXP")
+            | (objc_type == "SER")
+        )
+        is_star = torch.from_numpy(objc_type == "PSF")
+        mask = column_to_tensor(table, f"ANYMASK_{band}")
+        ra = column_to_tensor(table, "RA")
+        dec = column_to_tensor(table, "DEC")
+        flux = column_to_tensor(table, f"FLUX_{band}")
+
+        galaxy_bool = is_galaxy & (mask == 0) & (flux > 0)
+        star_bool = is_star & (mask == 0) & (flux > 0)
+
+        # filter on locations
+        keep_coord = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec > dec_lim[0]) & (dec < dec_lim[1])
+        keep = (galaxy_bool | star_bool) & keep_coord
+
+        # get pixel coordinates
+        pt, pr = wcs.all_world2pix(ra, dec, 0)  # pixels
+        pt = torch.tensor(pt) + 0.5  # For consistency with BLISS
+        pr = torch.tensor(pr) + 0.5
+        ploc = torch.stack((pr, pt), dim=-1)
+
+        # filter quantities
+        galaxy_bool = galaxy_bool[keep]
+        star_bool = star_bool[keep]
+        ra = ra[keep]
+        dec = dec[keep]
+        flux = flux[keep]
+        mag = cls._flux_to_mag(flux)
+        ploc = ploc[keep, :]
+        nobj = ploc.shape[0]
+
+        d = {
+            "ra": ra.reshape(1, nobj, 1),
+            "dec": dec.reshape(1, nobj, 1),
+            "plocs": ploc.reshape(1, nobj, 2),
+            "n_sources": torch.tensor((nobj,)),
+            "galaxy_bools": galaxy_bool.reshape(1, nobj, 1).float(),
+            "star_bools": star_bool.reshape(1, nobj, 1).float(),
+            "fluxes": flux.reshape(1, nobj, 1),
+            "mags": mag.reshape(1, nobj, 1),
+        }
+
+        height = hlim[1] - hlim[0]
+        width = wlim[1] - wlim[0]
 
         return cls(height, width, d)
 
