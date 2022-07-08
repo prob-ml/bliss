@@ -517,6 +517,7 @@ class DecalsFullCatalog(FullCatalog):
         band: str = "r",
         mag_max=23,
     ):
+        assert hlim[0] == wlim[0]
         catalog_path = Path(decals_cat_path)
         table = Table.read(catalog_path, format="fits")
         band = band.capitalize()
@@ -555,7 +556,6 @@ class DecalsFullCatalog(FullCatalog):
         keep_sat = torch.ones(len(ra)).bool()
         for lim in regions:
             keep_sat = keep_sat & ((pr < lim[0]) | (pr > lim[1]) | (pt < lim[2]) | (pt > lim[3]))
-
         keep = (galaxy_bool | star_bool) & keep_coord & keep_sat
 
         # filter quantities
@@ -571,7 +571,7 @@ class DecalsFullCatalog(FullCatalog):
         d = {
             "ra": ra.reshape(1, nobj, 1),
             "dec": dec.reshape(1, nobj, 1),
-            "plocs": ploc.reshape(1, nobj, 2),
+            "plocs": ploc.reshape(1, nobj, 2) - hlim[0] + 0.5,  # BLISS consistency
             "n_sources": torch.tensor((nobj,)),
             "galaxy_bools": galaxy_bool.reshape(1, nobj, 1).float(),
             "star_bools": star_bool.reshape(1, nobj, 1).float(),
