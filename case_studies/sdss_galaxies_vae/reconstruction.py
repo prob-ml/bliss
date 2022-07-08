@@ -398,7 +398,7 @@ def create_figure_at_point(
 
     if est_catalog is not None:
         tile_est_catalog = est_catalog.to_tile_params(
-            tile_map_cropped.tile_slen, tile_map_cropped.max_sources
+            tile_map_cropped.tile_slen, tile_map_cropped.max_sources, ignore_extra_sources=True
         )
         tile_est_catalog_cropped = tile_est_catalog.crop(
             (h_tile, h_tile + n_tiles), (w_tile, w_tile + n_tiles)
