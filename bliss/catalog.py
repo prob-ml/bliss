@@ -515,6 +515,7 @@ class DecalsFullCatalog(FullCatalog):
         hlim: Tuple[int, int],  # in degrees
         wlim: Tuple[int, int],  # in degrees
         band: str = "r",
+        mag_max=23,
     ):
         catalog_path = Path(decals_cat_path)
         table = Table.read(catalog_path, format="fits")
@@ -580,8 +581,8 @@ class DecalsFullCatalog(FullCatalog):
 
         height = hlim[1] - hlim[0]
         width = wlim[1] - wlim[0]
-
-        return cls(height, width, d)
+        full_cat = cls(height, width, d)
+        return full_cat.apply_mag_bin(0, mag_max)
 
 
 def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tensor:
