@@ -62,7 +62,7 @@ datasets:
             _target_: case_studies.psf_homogenization.psf_decoder.PsfSampler
             psf_rmin: 0.7
             psf_rmax: 0.9
-        std_psf_fwhm: 5.0
+        std_psf_fwhm: 1.0
         fix_validation_set: True
         valid_n_batches: 50
 
@@ -91,8 +91,8 @@ datasets:
         n_batches: 10
         psf_sampler:
             _target_: case_studies.psf_homogenization.psf_decoder.PsfSampler
-            psf_rmin: 0.7
-            psf_rmax: 0.9
+            psf_rmin: 1.0
+            psf_rmax: 1.0
         fix_validation_set: True
         valid_n_batches: 50
 
