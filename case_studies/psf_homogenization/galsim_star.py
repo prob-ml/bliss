@@ -10,7 +10,7 @@ from bliss.catalog import FullCatalog, TileCatalog
 from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder, SingleGalsimGalaxyPrior
 
 class SingleGalsimStarPrior:
-    dim_latents = 7 # should be 1???
+    dim_latents = 1 # should be 1???
 
     def __init__(
         self,
@@ -61,7 +61,7 @@ class SingleGalsimStarDecoder:
         if z.shape[0] == 0:
             return torch.zeros(0, 1, self.slen, self.slen, device=z.device)
 
-        if z.shape == (7,): #equal to dim_latents???
+        if z.shape == (1,): #equal to dim_latents???
             assert offset is None or offset.shape == (2,)
             return self.render_star(z, self.psf, self.slen, offset)
         
@@ -88,10 +88,10 @@ class SingleGalsimStarDecoder:
         components = []
         # what should we do next???
         # galsim.Gaussian(half_light_radius=None, sigma=None, fwhm=None, flux=1.0, gsparams=None)
-        star = galsim.Add(components)
-        gal_conv = galsim.Convolution(star, psf)
+        # star = galsim.Add(components)
+        # gal_conv = galsim.Convolution(star, psf)
         offset = offset if offset is None else offset.numpy()
-        image = gal_conv.drawImage(
+        image = psf.drawImage(
             nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
         )
         return torch.from_numpy(image.array).reshape(1, slen, slen)
@@ -198,6 +198,8 @@ class FullCatelogDecoderSG:
     def forward_tile(self, tile_cat: TileCatalog):
         full_cat = tile_cat.to_full_params()
         return self(full_cat)
+
+
 
 
 def load_psf_from_file(psf_image_file: str, pixel_scale: float) -> galsim.GSObject:
