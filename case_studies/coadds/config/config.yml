@@ -22,10 +22,10 @@ paths:
     output: ${paths.project}/output
 
 datasets:
-    galsim_blended_galaxies_psf:
+    galsim_blended_galaxies_coadd:
         _target_: case_studies.coadds.coadd_decoder.CoaddGalsimBlends
         prior:
-            _target_: bliss.models.galsim_decoder.UniformGalsimGalaxiesPrior
+            _target_: bliss.models.galsim_decoder.SingleGalsimGalaxyPrior
             single_galaxy_prior:
                 _target_: bliss.models.galsim_decoder.SingleGalsimGalaxyPrior
                 flux_sample: "pareto"
