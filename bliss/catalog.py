@@ -525,6 +525,7 @@ class DecalsFullCatalog(FullCatalog):
         ra_lim, dec_lim = wcs.all_pix2world(wlim, hlim, 0)
         bitmask = 0b0011010000000001  # noqa: WPS339
 
+        objid = column_to_tensor(table, "OBJID")
         objc_type = table["TYPE"].data.astype(str)
         bits = table["MASKBITS"].data.astype(int)
         is_galaxy = torch.from_numpy(
@@ -559,6 +560,7 @@ class DecalsFullCatalog(FullCatalog):
         keep = (galaxy_bool | star_bool) & keep_coord & keep_sat
 
         # filter quantities
+        objid = objid[keep]
         galaxy_bool = galaxy_bool[keep]
         star_bool = star_bool[keep]
         ra = ra[keep]
@@ -569,6 +571,7 @@ class DecalsFullCatalog(FullCatalog):
         nobj = ploc.shape[0]
 
         d = {
+            "objid": objid.reshape(1, nobj, 1),
             "ra": ra.reshape(1, nobj, 1),
             "dec": dec.reshape(1, nobj, 1),
             "plocs": ploc.reshape(1, nobj, 2) - hlim[0] + 0.5,  # BLISS consistency
