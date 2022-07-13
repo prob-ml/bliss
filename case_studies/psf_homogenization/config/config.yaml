@@ -80,7 +80,7 @@ datasets:
         valid_n_batches: 50
 
     galsim_blended_galaxies_rand:
-        _target_: case_studies.psf_homogenization.psf_decoder.GalsimBlensRand
+        _target_: case_studies.psf_homogenization.psf_decoder.GalsimBlendsRand
         prior: ${datasets.galsim_blended_galaxies_psf.prior}
         decoder: ${datasets.galsim_blended_galaxies_psf.decoder}
         background: ${datasets.galsim_blended_galaxies_psf.background}
@@ -119,6 +119,7 @@ datasets:
                 alpha: 0.47
             max_n_sources: 6
             max_shift: 0.5
+            galaxy_prob: 0.7
         decoder:
             _target_: case_studies.psf_homogenization.galsim_star.FullCatelogDecoderSG
             single_galaxy_decoder:

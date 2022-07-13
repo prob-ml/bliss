@@ -28,6 +28,7 @@ class TileCatalog(UserDict):
         "galaxy_fluxes",
         "galaxy_probs",
         "galaxy_blends",
+        "star_params",
         "star_bools",
         "objid",
         "hlr",

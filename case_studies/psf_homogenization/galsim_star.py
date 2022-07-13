@@ -10,7 +10,7 @@ from bliss.catalog import FullCatalog, TileCatalog
 from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder, SingleGalsimGalaxyPrior
 
 class SingleGalsimStarPrior:
-    dim_latents = 1 # should be 1???
+    dim_latents = 1
 
     def __init__(
         self,
@@ -85,31 +85,28 @@ class SingleGalsimStarDecoder:
             star_params = star_params.cpu().detach()
         total_flux = star_params
 
-        components = []
-        # what should we do next???
-        # galsim.Gaussian(half_light_radius=None, sigma=None, fwhm=None, flux=1.0, gsparams=None)
-        # star = galsim.Add(components)
-        # gal_conv = galsim.Convolution(star, psf)
+        star_withflux = psf.withFlux(total_flux)
         offset = offset if offset is None else offset.numpy()
-        image = psf.drawImage(
+        image = star_withflux.drawImage(
             nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
         )
         return torch.from_numpy(image.array).reshape(1, slen, slen)
 
 
 class UniformGalsimPrior:
-    # merge galaxy and star into one class
     def __init__(
         self,
         single_galaxy_prior: SingleGalsimGalaxyPrior,
         single_star_prior: SingleGalsimStarPrior,
         max_n_sources: int,
         max_shift: float,
+        galaxy_prob: float,
     ):
         self.single_galaxy_prior = single_galaxy_prior
         self.single_star_prior = single_star_prior
         self.max_shift = max_shift
         self.max_n_sources = max_n_sources
+        self.galaxy_prob = galaxy_prob
         self.galaxy_dim_latents = self.single_galaxy_prior.dim_latents
         self.star_dim_latents= self.single_star_prior.dim_latents
         assert 0 <= self.max_shift <= 0.5
@@ -126,10 +123,10 @@ class UniformGalsimPrior:
         locs[:n_sources, 0] = _uniform(-self.max_shift, self.max_shift)
         locs[:n_sources, 1] = _uniform(-self.max_shift, self.max_shift)
 
-        # use both bools???
         galaxy_bools = torch.zeros(self.max_n_sources, 1)
-        galaxy_bools[:n_sources, :] = 1
+        galaxy_bools[:n_sources, :] = _bernoulli(self.galaxy_prob, n_sources)[:, None]
         star_bools = torch.zeros(self.max_n_sources, 1)
+        star_bools[:n_sources, :] = 1 - galaxy_bools[:n_sources, :]
 
         return{
             "n_sources": torch.tensor(n_sources),
@@ -172,11 +169,10 @@ class FullCatelogDecoderSG:
         noiseless_uncentered = torch.zeros(max_n_sources, 1, size, size)
 
         n_sources = int(full_cat.n_sources[0].item())
-        # why [0]???
         galaxy_params = full_cat["galaxy_params"][0]
         star_params = full_cat["star_params"][0]
-        galaxy_bools = full_cat["galaxy_bools"]
-        star_bools = full_cat["star_bools"]
+        galaxy_bools = full_cat["galaxy_bools"][0]
+        star_bools = full_cat["star_bools"][0]
         plocs = full_plocs[0]
         for ii in range(n_sources):
             offset_x = plocs[ii][1] + self.bp - size / 2
@@ -226,3 +222,7 @@ def _draw_pareto(alpha, min_x, max_x, n_samples=1) -> Tensor:
     u_max = 1 - (min_x / max_x) ** alpha
     uniform_samples = torch.rand(n_samples) * u_max
     return min_x / (1.0 - uniform_samples) ** (1 / alpha)
+
+def _bernoulli(prob, n_samples=1) -> Tensor:
+    # return Bernoulli(prob)
+    return torch.bernoulli(torch.tensor([float(prob)] * n_samples))
