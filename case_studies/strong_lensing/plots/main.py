@@ -34,7 +34,9 @@ def load_models(cfg, device):
     galaxy.load_state_dict(torch.load(cfg.plots.galaxy_checkpoint, map_location=galaxy.device))
 
     lensing_binary = instantiate(cfg.models.lensing_binary).to(device).eval()
-    lensing_binary.load_state_dict(torch.load(cfg.plots.lensing_binary_checkpoint, map_location=lensing_binary.device))
+    lensing_binary.load_state_dict(
+        torch.load(cfg.plots.lensing_binary_checkpoint, map_location=lensing_binary.device)
+    )
 
     lens = instantiate(cfg.models.lens_encoder).to(device).eval()
     lens.load_state_dict(torch.load(cfg.plots.lens_checkpoint, map_location=lens.device))
@@ -42,7 +44,13 @@ def load_models(cfg, device):
     n_images_per_batch = cfg.plots.encoder.n_images_per_batch
     n_rows_per_batch = cfg.plots.encoder.n_rows_per_batch
     encoder = Encoder(
-        location.eval(), binary.eval(), galaxy.eval(), lensing_binary.eval(), lens.eval(), n_images_per_batch, n_rows_per_batch
+        location.eval(),
+        binary.eval(),
+        galaxy.eval(),
+        lensing_binary.eval(),
+        lens.eval(),
+        n_images_per_batch,
+        n_rows_per_batch,
     )
     encoder = encoder.to(device)
 
