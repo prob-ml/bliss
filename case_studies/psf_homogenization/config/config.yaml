@@ -96,8 +96,8 @@ datasets:
         fix_validation_set: True
         valid_n_batches: 50
     
-    galsim_blended_psf:
-        _target_: case_studies.psf_homogenization.psf_decoder.GalsimBlendsSGwithPSF
+    galsim_blended_rand_psf:
+        _target_: case_studies.psf_homogenization.galsim_blends_sg.GalsimBlendsSGRand
         prior:
             _target_: case_studies.psf_homogenization.galsim_star.UniformGalsimPrior
             single_galaxy_prior:
@@ -147,11 +147,28 @@ datasets:
         n_batches: 10
         psf_sampler:
             _target_: case_studies.psf_homogenization.psf_decoder.PsfSampler
+            psf_rmin: 1.0
+            psf_rmax: 1.0
+        fix_validation_set: True
+        valid_n_batches: 50 
+
+    galsim_blended_std_psf:
+        _target_: case_studies.psf_homogenization.galsim_blends_sg.GalsimBlendsSGwithPSF
+        prior: ${datasets.galsim_blended_rand_psf.prior}
+        decoder: ${datasets.galsim_blended_rand_psf.decoder}
+        background: ${datasets.galsim_blended_rand_psf.background}
+        tile_slen: 4
+        max_sources_per_tile: 1
+        num_workers: 32
+        batch_size: 32
+        n_batches: 10
+        psf_sampler:
+            _target_: case_studies.psf_homogenization.psf_decoder.PsfSampler
             psf_rmin: 0.7
             psf_rmax: 0.9
         std_psf_fwhm: 1.0
         fix_validation_set: True
-        valid_n_batches: 50        
+        valid_n_batches: 50
 
 models:
     detection_encoder:

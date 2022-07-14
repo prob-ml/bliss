@@ -184,6 +184,8 @@ class FullCatelogDecoderSG:
             elif star_bools[ii] == 1:
                 centered = self.single_star_decoder.render_star(star_params[ii], psf, size)
                 uncentered = self.single_star_decoder.render_star(star_params[ii], psf, size, offset)
+            else:
+                continue
             
             noiseless_centered[ii] = centered
             noiseless_uncentered[ii] = uncentered
