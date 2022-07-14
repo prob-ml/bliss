@@ -1,0 +1,9 @@
+name: "lensing_binary_encoder"
+model: ${models.lensing_binary}
+dataset: ${datasets.simulated}
+optimizer_params:
+  lr: 1e-4
+n_epochs: 2001
+save_top_k: 5
+trainer:
+  enable_checkpointing: True
