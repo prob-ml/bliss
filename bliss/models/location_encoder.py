@@ -21,9 +21,9 @@ def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold
     Returns:
         A Tensor of the transformed images (n x c x h x w).
     """
-    return torch.log1p(F.relu(image - background + z_threshold * background.sqrt(), inplace=True))
+#     return torch.log1p(F.relu(image - background + z_threshold * background.sqrt(), inplace=True))
 
-#     return torch.log(image - image.min() + 1.0)
+    return torch.log(image - image.min() + 1.0)
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
     """Divides a batch of full images into padded tiles.
