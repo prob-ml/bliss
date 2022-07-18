@@ -43,6 +43,7 @@ class CoaddUniformGalsimGalaxiesPrior(UniformGalsimGalaxiesPrior):
             max_n_sources,
             max_shift,
         )
+
     def sample(self) -> Dict[str, Tensor]:
         """Returns a single batch of source parameters."""
         n_sources = _sample_n_sources(self.max_n_sources)
@@ -125,8 +126,10 @@ class CoaddSingleGalaxyDecoder(SingleGalsimGalaxyDecoder):
             components.append(bulge)
         galaxy = galsim.Add(components)
         gal_conv = galsim.Convolution(galaxy, psf)
-        offset = offset if offset is None else offset.numpy()
+        offset = (0,0) if offset is None else offset
+        dithers = (0,0) if dithers is None else dithers
         shift = torch.add(torch.Tensor(dithers), torch.Tensor(offset))
+        shift = shift.reshape(1,2) if len(shift) == 2 else shift
         images = []
         for i in shift:
             image = gal_conv.drawImage(
@@ -166,7 +169,7 @@ class FullCatalogDecoder:
             offset_x = plocs[ii][1] + self.bp - size / 2
             offset_y = plocs[ii][0] + self.bp - size / 2
             offset = torch.tensor([offset_x, offset_y])
-            centered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size)
+            centered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, dithers)
             uncentered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, offset, dithers)
             noiseless_centered[ii] = centered
             noiseless_uncentered[ii] = uncentered
@@ -212,6 +215,8 @@ class CoaddGalsimBlends(GalsimBlends):
         # get background and noisy image.
         background = self.background.sample((1, *noiseless.shape)).squeeze(0)
         noisy_image = _add_noise_and_background(noiseless, background)
+
+
 
         return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background
 
