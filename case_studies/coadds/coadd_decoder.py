@@ -158,21 +158,22 @@ class FullCatalogDecoder:
         assert b == 1, "Only one batch supported for now."
         assert self.single_decoder.n_bands == 1, "Only 1 band supported for now"
 
-        image = torch.zeros(1, size, size)
-        noiseless_centered = torch.zeros(max_n_sources, 1, size, size)
-        noiseless_uncentered = torch.zeros(max_n_sources, 1, size, size)
+        image = torch.zeros(len(dithers), 1, size, size)
+        noiseless_centered = torch.zeros(max_n_sources, len(dithers), size, size)
+        noiseless_uncentered = torch.zeros(max_n_sources, len(dithers), size, size)
 
-        n_sources = int(full_cat.n_sources[0].item())
-        galaxy_params = full_cat["galaxy_params"][0]
+        n_sources = int(full_catalog.n_sources[0].item())
+        galaxy_params = full_catalog["galaxy_params"][0]
         plocs = full_plocs[0]
+
         for ii in range(n_sources):
-            offset_x = plocs[ii][1] + self.bp - size / 2
-            offset_y = plocs[ii][0] + self.bp - size / 2
+            offset_x = plocs[ii][1] + bp - size / 2
+            offset_y = plocs[ii][0] + bp - size / 2
             offset = torch.tensor([offset_x, offset_y])
-            centered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, dithers)
-            uncentered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, offset, dithers)
-            noiseless_centered[ii] = centered
-            noiseless_uncentered[ii] = uncentered
+            centered = csgd.render_galaxy(galaxy_params[ii], psf, size, dithers = dithers)
+            uncentered = csgd.render_galaxy(galaxy_params[ii], psf, size, offset, dithers)
+            noiseless_centered[ii] = centered.reshape(centered.shape[0], size, size)
+            noiseless_uncentered[ii] = uncentered.reshape(uncentered.shape[0], size, size)
             image += uncentered
         return image, noiseless_centered, noiseless_uncentered
 
