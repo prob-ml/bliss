@@ -164,6 +164,7 @@ class FullCatalogDecoder:
         assert self.single_decoder.n_bands == 1, "Only 1 band supported for now"
 
         image = torch.zeros(len(dithers), 1, size, size)
+        image0 = torch.zeros(1, size, size)
         noiseless_centered = torch.zeros(max_n_sources, len(dithers), size, size)
         noiseless_uncentered = torch.zeros(max_n_sources, len(dithers), size, size)
 
@@ -176,10 +177,12 @@ class FullCatalogDecoder:
             offset_y = plocs[ii][0] + bp - size / 2
             offset = torch.tensor([offset_x, offset_y])
             centered = csgd.render_galaxy(galaxy_params[ii], psf, size, dithers = dithers)
-            uncentered = csgd.render_galaxy(galaxy_params[ii], psf, size, offset, dithers)
+            uncentered = csgd.render_galaxy(galaxy_params[ii], psf, size, offset)
+            uncentered_dithered = csgd.render_galaxy(galaxy_params[ii], psf, size, offset, dithers)
             noiseless_centered[ii] = centered.reshape(centered.shape[0], size, size)
             noiseless_uncentered[ii] = uncentered.reshape(uncentered.shape[0], size, size)
-            image += uncentered
+            image0 += uncentered
+            image += uncentered_dithered
         return image, noiseless_centered, noiseless_uncentered
 
 class CoaddGalsimBlends(GalsimBlends):
