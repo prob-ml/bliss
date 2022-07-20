@@ -119,7 +119,7 @@ datasets:
                 alpha: 0.47
             max_n_sources: 6
             max_shift: 0.5
-            galaxy_prob: 0.7
+            galaxy_prob: 0.0
         decoder:
             _target_: case_studies.psf_homogenization.galsim_star.FullCatelogDecoderSG
             single_galaxy_decoder:
@@ -147,8 +147,8 @@ datasets:
         n_batches: 10
         psf_sampler:
             _target_: case_studies.psf_homogenization.psf_decoder.PsfSampler
-            psf_rmin: 1.0
-            psf_rmax: 1.0
+            psf_rmin: 0.7
+            psf_rmax: 0.7
         fix_validation_set: True
         valid_n_batches: 50 
 
@@ -165,8 +165,8 @@ datasets:
         psf_sampler:
             _target_: case_studies.psf_homogenization.psf_decoder.PsfSampler
             psf_rmin: 0.7
-            psf_rmax: 0.9
-        std_psf_fwhm: 1.0
+            psf_rmax: 0.7
+        std_psf_fwhm: 0.8
         fix_validation_set: True
         valid_n_batches: 50
 

@@ -118,10 +118,10 @@ class UniformGalsimPrior:
         star_params = torch.zeros(self.max_n_sources, self.star_dim_latents)
         galaxy_params[:n_sources, :] = self.single_galaxy_prior.sample(n_sources)
         star_params[:n_sources, :] = self.single_star_prior.sample(n_sources)
-
+        
         locs = torch.zeros(self.max_n_sources, 2)
-        locs[:n_sources, 0] = _uniform(-self.max_shift, self.max_shift)
-        locs[:n_sources, 1] = _uniform(-self.max_shift, self.max_shift)
+        locs[:n_sources, 0] = _uniform(-self.max_shift, self.max_shift, n_sources) + 0.5
+        locs[:n_sources, 1] = _uniform(-self.max_shift, self.max_shift, n_sources) + 0.5
 
         galaxy_bools = torch.zeros(self.max_n_sources, 1)
         galaxy_bools[:n_sources, :] = _bernoulli(self.galaxy_prob, n_sources)[:, None]
