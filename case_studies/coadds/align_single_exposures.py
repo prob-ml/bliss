@@ -24,7 +24,7 @@ def align_single_exposures(img, slen, dithers):
         x_grid = (x/slen) * (1-(-1)) + (-1)
         y_grid = (y/slen) * (1-(-1)) + (-1)
         grid = torch.cat([grid, torch.stack((torch.tensor(x_grid),torch.tensor(y_grid)),-1)], dim=0)
-    
+        
         im = im.array
         images.append(im)
 
@@ -32,5 +32,11 @@ def align_single_exposures(img, slen, dithers):
     input = torch.tensor(images[:]).reshape(len(dithers),1,slen,slen).float()
     grids = grid.reshape(len(dithers),1,slen*slen,2).float()
     iplots.append(F.grid_sample(input, grids, align_corners = False))
-    return iplots
-
+    
+    tenplot = torch.tensor(iplots[:][0])
+    crop_images = []
+    for i in range(tenplot.shape[0]):
+        im = np.array(tenplot[i].reshape(slen,slen))
+        crop_im = im[1:slen-1, 1:slen-1]
+        crop_images.append(crop_im)
+    return crop_images
