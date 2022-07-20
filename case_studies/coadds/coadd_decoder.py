@@ -30,6 +30,11 @@ def _uniform(a, b, n_samples=1) -> Tensor:
     # uses pytorch to return a single float ~ U(a, b)
     return (a - b) * torch.rand(n_samples) + b
 
+def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
+    image_with_background = image + background
+    noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
+    return image_with_background + noise
+
 class CoaddUniformGalsimGalaxiesPrior(UniformGalsimGalaxiesPrior):
     def __init__(
         self,
