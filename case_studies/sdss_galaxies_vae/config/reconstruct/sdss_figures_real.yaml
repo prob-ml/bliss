@@ -4,7 +4,8 @@ frame:
     _target_: reconstruction.SDSSFrame
     sdss_dir: ${paths.sdss}
     pixel_scale: 0.396
-    coadd_file: ${paths.sdss}/coadd_catalog_94_1_12.fits
+    cat_file: ${paths.sdss}/coadd_catalog_94_1_12.fits
+    cat_type: "coadd"
 scenes:
     sdss_recon0:
         h: 200

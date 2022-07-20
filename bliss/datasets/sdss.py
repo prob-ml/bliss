@@ -125,6 +125,7 @@ class SloanDigitalSkySurvey(Dataset):
 
 def column_to_tensor(table, colname):
     dtypes = {
+        np.dtype(">i2"): int,
         np.dtype(">i4"): int,
         np.dtype(">i8"): int,
         np.dtype("bool"): bool,
