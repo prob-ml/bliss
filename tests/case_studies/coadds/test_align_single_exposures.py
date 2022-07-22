@@ -11,7 +11,6 @@ def test_galsim_align():
     dithers = [((-0.5 - 0.5) * torch.rand((2,)) + 0.5).numpy() for x in range(10)]
     img = []
     for i in dithers:
-        wcs1 = galsim.OffsetWCS(scale = 0.393, origin = galsim.PositionD(i))
         im = g0.drawImage(nx=slen, ny=slen, scale=pixel_scale, offset = i)
         im = im.array
         img.append(im)
