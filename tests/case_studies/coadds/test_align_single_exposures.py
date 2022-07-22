@@ -15,4 +15,4 @@ def test_galsim_align():
         im = g0.drawImage(nx=slen, ny=slen, scale=pixel_scale, offset = i)
         im = im.array
         img.append(im)
-    align_single_exposures(img0, img, slen, dithers)
+    case_studies.coadds.align_single_exposures.align_single_exposures(img0, img, slen, pixel_scale, dithers)

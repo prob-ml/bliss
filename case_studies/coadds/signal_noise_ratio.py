@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 
-def n_s_ratio(img, background):
+def snr(img, background):
     """Calculate Signal-to-Noise Ratio.
     Args:
         img: Tensor of shape `(N x C x H x W)` where N is the batch_size, C is the \

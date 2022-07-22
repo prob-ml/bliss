@@ -7,8 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 from bliss.models.decoder import get_mgrid
 
-
-def align_single_exposures(img0, img1, slen, dithers):
+def align_single_exposures(img0, img1, slen, pixel_scale, dithers):
     img0 = galsim.Image(np.array(img0), wcs=galsim.PixelScale(pixel_scale)) if type(img0) is not galsim.image.Image else img0
     wcs0 = img0.wcs
     images = img1
@@ -36,4 +35,4 @@ def align_single_exposures(img0, img1, slen, dithers):
         im = np.array(tenplot[i].reshape(slen,slen))
         crop_im = im[1:slen-1, 1:slen-1]
         crop_images.append(crop_im)
-    return crop_images
+    return torch.tensor(crop_images)

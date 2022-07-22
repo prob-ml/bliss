@@ -1,4 +1,3 @@
-# galsim_decoder changes for coadds
 import numpy as np
 import matplotlib.pyplot as plt 
 from pathlib import Path
@@ -22,6 +21,7 @@ from bliss.models.galsim_decoder import SingleGalsimGalaxyPrior, UniformGalsimGa
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.models.decoder import get_mgrid
 from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder, load_psf_from_file
+from case_studies.coadds.align_single_exposures import align_single_exposures
 
 def _sample_n_sources(max_n_sources) -> int:
     return int(torch.randint(1, max_n_sources + 1, (1,)).int().item())
@@ -34,6 +34,14 @@ def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
     image_with_background = image + background
     noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
     return image_with_background + noise
+
+def linear_coadd(aligned_images, cropped_background):
+    assert torch.tensor(aligned_images).shape == torch.tensor(cropped_background).shape
+
+    id = torch.tensor(aligned_images) - cropped_background 
+    weight = 1 / torch.tensor(aligned_images)
+    num = torch.sum(id / torch.tensor(aligned_images), dim = 0)
+    return num / (torch.sum(weight, dim = 0))
 
 class CoaddUniformGalsimGalaxiesPrior(UniformGalsimGalaxiesPrior):
     def __init__(
@@ -165,25 +173,25 @@ class FullCatalogDecoder:
 
         image = torch.zeros(len(dithers), 1, size, size)
         image0 = torch.zeros(1, size, size)
-        noiseless_centered = torch.zeros(max_n_sources, len(dithers), size, size)
-        noiseless_uncentered = torch.zeros(max_n_sources, len(dithers), size, size)
+        noiseless_centered = torch.zeros(len(dithers), max_n_sources, 1, size, size)
+        noiseless_uncentered = torch.zeros(len(dithers), max_n_sources, 1, size, size)
 
-        n_sources = int(full_catalog.n_sources[0].item())
-        galaxy_params = full_catalog["galaxy_params"][0]
+        n_sources = int(full_cat.n_sources[0].item())
+        galaxy_params = full_cat["galaxy_params"][0]
         plocs = full_plocs[0]
 
         for ii in range(n_sources):
             offset_x = plocs[ii][1] + bp - size / 2
             offset_y = plocs[ii][0] + bp - size / 2
             offset = torch.tensor([offset_x, offset_y])
-            centered = csgd.render_galaxy(galaxy_params[ii], psf, size, dithers = dithers)
-            uncentered = csgd.render_galaxy(galaxy_params[ii], psf, size, offset)
-            uncentered_dithered = csgd.render_galaxy(galaxy_params[ii], psf, size, offset, dithers)
-            noiseless_centered[ii] = centered.reshape(centered.shape[0], size, size)
-            noiseless_uncentered[ii] = uncentered.reshape(uncentered.shape[0], size, size)
+            centered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, dithers = dithers)
+            uncentered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, offset)
+            uncentered_dithered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, offset, dithers)
+            noiseless_centered[:,ii] = centered.reshape(centered.shape[0], 1, size, size)
+            noiseless_uncentered[:,ii] = uncentered.reshape(uncentered.shape[0], 1, size, size)
             image0 += uncentered
             image += uncentered_dithered
-        return image, noiseless_centered, noiseless_uncentered
+        return image, noiseless_centered, noiseless_uncentered, image0
 
 class CoaddGalsimBlends(GalsimBlends):
     """Dataset of coadd galsim blends."""
@@ -216,18 +224,33 @@ class CoaddGalsimBlends(GalsimBlends):
         self.pixel_scale = self.decoder.single_decoder.pixel_scale
         
     def _get_images(self, full_cat, dithers):
+        size = self.slen + 2 * self.bp # check bp gets passed through
         psf_obj = self.psf.sample()
-        noiseless, noiseless_centered, noiseless_uncentered = FullCatalogDecoder.render_catalog(
+        noiseless, noiseless_centered, noiseless_uncentered, image0 = FullCatalogDecoder.render_catalog(
             full_cat, psf_obj, dithers
         )
 
         # get background and noisy image.
-        background = self.background.sample((1, *noiseless.shape)).squeeze(0)
+        background = background.sample((1, *noiseless.reshape(len(dithers),size,size).shape)).squeeze(0).reshape(len(dithers),1,size,size)
         noisy_image = _add_noise_and_background(noiseless, background)
 
+        # align single exposures
+        aligned_images = align_single_exposures(image0[:].reshape(size,size), noisy_image, size, dithers)
+        
+        # get snr
+        bg = background[:,:, 1:size-1, 1:size-1]
+        img = aligned_images.reshape(len(dithers),1,size-2,size-2)
+        snr_images = snr(img, bg)
 
+        # coadd images
+        cropped_background = background.reshape(len(dithers),size,size)[:,1:size-1, 1:size-1] 
+        coadded_image = linear_coadd(aligned_images, cropped_background)
 
-        return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background
+        return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background, snr_images, coadded_image
 
-
+    def _add_metrics(
+        self,
+        full_cat: FullCatalog,
+    ):
+        return full_cat
 
