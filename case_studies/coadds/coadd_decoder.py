@@ -22,6 +22,7 @@ from bliss.catalog import FullCatalog, TileCatalog
 from bliss.models.decoder import get_mgrid
 from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder, load_psf_from_file
 from case_studies.coadds.align_single_exposures import align_single_exposures
+from case_studies.coadds.signal_noise_ratio  import snr
 
 def _sample_n_sources(max_n_sources) -> int:
     return int(torch.randint(1, max_n_sources + 1, (1,)).int().item())
@@ -181,8 +182,8 @@ class FullCatalogDecoder:
         plocs = full_plocs[0]
 
         for ii in range(n_sources):
-            offset_x = plocs[ii][1] + bp - size / 2
-            offset_y = plocs[ii][0] + bp - size / 2
+            offset_x = plocs[ii][1] + self.bp - size / 2
+            offset_y = plocs[ii][0] + self.bp - size / 2
             offset = torch.tensor([offset_x, offset_y])
             centered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, dithers = dithers)
             uncentered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, offset)
@@ -225,7 +226,6 @@ class CoaddGalsimBlends(GalsimBlends):
         
     def _get_images(self, full_cat, dithers):
         size = self.slen + 2 * self.bp # check bp gets passed through
-        psf_obj = self.psf.sample()
         noiseless, noiseless_centered, noiseless_uncentered, image0 = FullCatalogDecoder.render_catalog(
             full_cat, psf_obj, dithers
         )

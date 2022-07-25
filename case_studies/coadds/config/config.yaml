@@ -122,6 +122,30 @@ models:
         hidden: 128
         annotate_probs: True
         slack: 1.0
+    galaxy_net:
+        _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
+        slen: 53
+        latent_dim: 8
+        hidden: 256
+        n_bands: 1
+    prior:
+        _target_: bliss.models.prior.ImagePrior
+        n_bands: 1
+        max_sources: 1
+        mean_sources: 0.03
+        min_sources: 0
+        f_min: 622.0
+        f_max: 1e6
+        alpha: 0.43
+        prob_galaxy: 0.7
+        galaxy_prior:
+            _target_: bliss.models.prior.GalaxyPrior
+            n_latent_batches: 160
+            autoencoder: ${models.galaxy_net}
+            autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
+            latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
+            psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
+            galaxy_dataset: ${datasets.sdss_galaxies}
 
 generate:
     dataset:
