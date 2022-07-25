@@ -1,6 +1,6 @@
-import case_studies.coadds.align_single_exposures
 import galsim
 import torch
+import case_studies.coadds.align_single_exposures
 
 
 def test_galsim_align():
