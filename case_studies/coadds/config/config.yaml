@@ -1,6 +1,6 @@
 defaults:
     - _self_
-    - training: sdss_detection_encoder_full_decoder
+    - training: sdss_detection_encoder_full_decoder_coadd
     - override hydra/job_logging: stdout
 
 # completely disable hydra logging
