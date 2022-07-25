@@ -1,7 +1,7 @@
 import galsim
 import torch
 
-from case_studies.coadds import align_single_exposures
+from case_studies.coadds.align_single_exposures import align_single_exposures
 
 
 def test_galsim_align():
@@ -16,4 +16,4 @@ def test_galsim_align():
         im = g0.drawImage(nx=slen, ny=slen, scale=pixel_scale, offset=i)
         im = im.array
         img.append(im)
-    align_single_exposures.align_single_exposures(img0, img, slen, pixel_scale, dithers)
+    align_single_exposures(img0, img, slen, pixel_scale, dithers)
