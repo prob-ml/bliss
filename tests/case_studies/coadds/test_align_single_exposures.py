@@ -13,7 +13,7 @@ def test_galsim_align():
     dithers = [((-0.5 - 0.5) * torch.rand((2,)) + 0.5).numpy() for x in range(10)]
     img = []
     for i in dithers:
-        im = g0.drawImage(nx=slen, ny=slen, scale=pixel_scale, offset=i)
+        im = g0.drawImage(nx=slen, ny=slen, scale=pixel_scale, offset=i, bandpass=None)
         im = im.array
         img.append(im)
     align_single_exposures(img0, img, slen, pixel_scale, dithers)
