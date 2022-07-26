@@ -17,4 +17,6 @@ def test_galsim_align():
         im = g0.drawImage(nx=slen, ny=slen, scale=pixel_scale, offset=i, bandpass=None)
         im = im.array
         img.append(im)
-    align_single_exposures(img0, img, slen, dithers)
+    assert align_single_exposures(img0, img, slen, dithers).shape == torch.Size([len(dithers), slen - 2, slen - 2])
+
+
