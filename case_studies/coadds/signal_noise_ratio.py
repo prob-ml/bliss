@@ -12,6 +12,6 @@ def snr(img):
     """
 
     # sn = torch.sqrt(torch.sum((img)**2 / (img), dim=(3, 2, 1)))
-    sn = torch.mean(img, dim = (3,2,1)) / torch.std(img, dim = (3,2,1))
+    sn = torch.mean(img, dim=(3, 2, 1)) / torch.std(img, dim=(3, 2, 1))
 
     return sn
