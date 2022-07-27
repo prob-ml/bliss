@@ -12,6 +12,6 @@ def snr(img, background):
     """
     assert img.shape == background.shape
 
-    sn = torch.sqrt(torch.sum((img - background)**2 / (img), dim=(3, 2, 1)))
+    sn = torch.sqrt(torch.sum((img - background) ** 2 / (img), dim=(3, 2, 1)))
 
     return 1 / sn
