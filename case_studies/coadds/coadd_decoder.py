@@ -254,7 +254,7 @@ class CoaddGalsimBlends(GalsimBlends):
             noiseless_centered,
             noiseless_uncentered,
             image0,
-        ) = FullCatalogDecoder.render_catalog(full_cat, psf_obj, dithers)
+        ) = self.decoder.render_catalog(full_cat = full_cat, psf = self.decoder.single_decoder.psf, dithers = dithers)
 
         # align single exposures
         aligned_images = align_single_exposures(
@@ -266,22 +266,18 @@ class CoaddGalsimBlends(GalsimBlends):
 
         # get background and noisy image.
         background = (
-            background.sample((1, *aligned_images.reshape(len(dithers), size, size).shape))
+            self.background.sample((len(dithers), *aligned_images.reshape(len(dithers), aligned_images.shape[1], aligned_images.shape[2]).shape))
             .squeeze(0)
-            .reshape(len(dithers), 1, size, size)
+            .reshape(len(dithers), len(dithers), aligned_images.shape[1], aligned_images.shape[2])
         )
         noisy_aligned_image = _add_noise_and_background(aligned_images, background)
 
         # get snr
-        bg = background[:, :, 1 : size - 1, 1 : size - 1]
-        img = noisy_aligned_image.reshape(len(dithers), 1, size - 2, size - 2)
-        snr_images = snr(img, bg)
+        img = noisy_aligned_image.reshape(len(dithers), len(dithers), noisy_aligned_image.shape[2], noisy_aligned_image.shape[3])
+        snr_images = snr(img)
 
         # coadd images
-        cropped_background = background.reshape(len(dithers), size, size)[
-            :, 1 : size - 1, 1 : size - 1
-        ]
-        coadded_image = linear_coadd(noisy_aligned_image, cropped_background, weight)
+        coadded_image = linear_coadd(noisy_aligned_image, background, weight)
 
         return (
             noiseless,
@@ -306,3 +302,9 @@ class CoaddGalsimBlends(GalsimBlends):
         full_cat["background"] = background
 
         return full_cat
+
+    def __getitem__(self, idx):
+        full_cat = self._sample_full_catalog()
+        noiseless, noiseless_centered, noiseless_uncentered, background, snr_images, coadded_image = self._get_images(full_cat)
+        full_cat = self._add_metrics(full_cat, noiseless, background, snr_images, coadded_image)
+        return {"noiseless": noiseless, "background": background, "snr_images": snr_images, "coadded_image": coadded_image}
