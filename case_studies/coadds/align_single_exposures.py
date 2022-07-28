@@ -1,22 +1,23 @@
-import numpy as np
 import galsim
+import numpy as np
 import torch
-import torch.nn.functional as F
+from torch.nn import functional as F
+
 from bliss.models.decoder import get_mgrid
 
 
 def align_single_exposures(img0, images, slen, dithers, scale=0.393):
     """Aligns multiple single exposure images that are dithered by some sub-pixel amount.
-    
+
     Args:
-        img0: Tensor of shape `(1 x C x H x W)` C is the number of band, H is height and W is weight,
-            containing image data.
-        images: Tensor of shape `(N x C x H x W)` where N is the number of dithers (len(dithers)),
-            C is the number of band, H is height and W is weight, containing image data.
         slen: size of images (H and W)
         dithers: List of pairs of sub-pixel amounts that img0 is shifted by in x and y directions
         scale: pixel_scale
-        
+        img0: Tensor of shape `(1 x C x H x W)` C is the number of band, H is height and W is
+            weight, containing image data.
+        images: Tensor of shape `(N x C x H x W)` where N is the number of dithers (len(dithers)),
+            C is the number of band, H is height and W is weight, containing image data.
+
     Returns:
         Tensor of shape `(N x H-2 x W-2)`. Aligned images with 1 pixel cropped from from each
             direction of height and width.
