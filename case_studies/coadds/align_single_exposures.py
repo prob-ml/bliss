@@ -7,6 +7,7 @@ from bliss.models.decoder import get_mgrid
 
 def align_single_exposures(img0, images, slen, dithers, scale=0.393):
     """Aligns multiple single exposure images that are dithered by some sub-pixel amount.
+    
     Args:
         img0: Tensor of shape `(1 x C x H x W)` C is the number of band, H is height and W is weight,
             containing image data.
