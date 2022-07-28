@@ -16,6 +16,7 @@ def align_single_exposures(img0, images, slen, dithers, scale=0.393):
         slen: size of images (H and W)
         dithers: List of pairs of sub-pixel amounts that img0 is shifted by in x and y directions
         scale: pixel_scale
+        
     Returns:
         Tensor of shape `(N x H-2 x W-2)`. Aligned images with 1 pixel cropped from from each
             direction of height and width.
