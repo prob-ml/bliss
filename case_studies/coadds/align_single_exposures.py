@@ -40,7 +40,7 @@ def align_single_exposures(img0, images, slen, dithers, scale=0.393):
 
     interped_images = []
     input = torch.tensor(images[:]).reshape(len(dithers), 1, slen, slen).float()
-    grids = grid.reshape(len(dithers), 1, slen * slen, 2).float()
+    grids = grid.reshape(len(dithers), slen, slen, 2).float()
     interped_images.append(F.grid_sample(input, grids, align_corners=False))
 
     # reshape and crop 1 pixel on each side
