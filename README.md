@@ -68,4 +68,6 @@ pre-commit --install
 
 # References
 
-Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and The LSST Dark Energy Science Collaboration. *Variational Inference for Deblending Crowded Starfields.* [arXiv:2102.02409](https://arxiv.org/abs/2102.02409), 2021.
+Derek Hansen, Ismael Mendoza, Runjing Liu, Ziteng Pang, Zhe Zhao, Camille Avestruz, and Jeffrey Regier. [*Scalable Bayesian Inference for Detection and Deblending in Astronomical Images*](https://arxiv.org/pdf/2207.05642.pdf). ICML Workshop on Machine Learning for Astrophysics, 2022.
+
+Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and The LSST Dark Energy Science Collaboration. [*Variational Inference for Deblending Crowded Starfields.*](https://arxiv.org/abs/2102.02409), In revision, 2021.
