@@ -254,7 +254,9 @@ class CoaddGalsimBlends(GalsimBlends):
             noiseless_centered,
             noiseless_uncentered,
             image0,
-        ) = self.decoder.render_catalog(full_cat = full_cat, psf = self.decoder.single_decoder.psf, dithers = dithers)
+        ) = self.decoder.render_catalog(
+            full_cat=full_cat, psf=self.decoder.single_decoder.psf, dithers=dithers
+        )
 
         # align single exposures
         aligned_images = align_single_exposures(
@@ -265,10 +267,16 @@ class CoaddGalsimBlends(GalsimBlends):
         weight = 1 / torch.tensor(aligned_images)
 
         # get background and noisy image.
-        background = self.background.sample(aligned_images.reshape(aligned_images.shape[0], 1,aligned_images.shape[1], aligned_images.shape[2]).shape)
+        background = self.background.sample(
+            aligned_images.reshape(
+                aligned_images.shape[0], 1, aligned_images.shape[1], aligned_images.shape[2]
+            ).shape
+        )
 
         # get snr
-        aligned_images_nobackground = aligned_images.reshape(len(dithers), 1, aligned_images.shape[1], aligned_images.shape[2]) 
+        aligned_images_nobackground = aligned_images.reshape(
+            len(dithers), 1, aligned_images.shape[1], aligned_images.shape[2]
+        )
         snr_images = get_snr(aligned_images_nobackground, background)
         noisy_aligned_image = _add_noise_and_background(aligned_images_nobackground, background)
 
@@ -301,6 +309,18 @@ class CoaddGalsimBlends(GalsimBlends):
 
     def __getitem__(self, idx):
         full_cat = self._sample_full_catalog()
-        noiseless, noiseless_centered, noiseless_uncentered, background, snr_images, coadded_image = self._get_images(full_cat)
+        (
+            noiseless,
+            noiseless_centered,
+            noiseless_uncentered,
+            background,
+            snr_images,
+            coadded_image,
+        ) = self._get_images(full_cat)
         full_cat = self._add_metrics(full_cat, noiseless, background, snr_images, coadded_image)
-        return {"noiseless": noiseless, "background": background, "snr_images": snr_images, "coadded_image": coadded_image}
+        return {
+            "noiseless": noiseless,
+            "background": background,
+            "snr_images": snr_images,
+            "coadded_image": coadded_image,
+        }
