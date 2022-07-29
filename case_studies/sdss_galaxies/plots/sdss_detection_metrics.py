@@ -146,7 +146,7 @@ class DetectionClassificationFigures(BlissFigures):
         h, w = bp, bp
         h_end = ((frame.image.shape[2] - 2 * bp) // 4) * 4 + bp
         w_end = ((frame.image.shape[3] - 2 * bp) // 4) * 4 + bp
-        coadd_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
+        truth_params: FullCatalog = frame.get_catalog((h, h_end), (w, w_end))
         photo_catalog_at_hw = photo_cat.crop_at_coords(h, h_end, w, w_end)
 
         # obtain predictions from BLISS.
@@ -157,8 +157,8 @@ class DetectionClassificationFigures(BlissFigures):
         est_params = tile_est_params.cpu().to_full_params()
 
         # compute metrics with bliss vs coadd and photo (frame) vs coadd
-        bliss_metrics = self.compute_metrics(coadd_params, est_params)
-        photo_metrics = self.compute_metrics(coadd_params, photo_catalog_at_hw)
+        bliss_metrics = self.compute_metrics(truth_params, est_params)
+        photo_metrics = self.compute_metrics(truth_params, photo_catalog_at_hw)
 
         return {"bliss_metrics": bliss_metrics, "photo_metrics": photo_metrics}
 

@@ -398,7 +398,7 @@ def create_figure_at_point(
 
     if est_catalog is not None:
         tile_est_catalog = est_catalog.to_tile_params(
-            tile_map_cropped.tile_slen, tile_map_cropped.max_sources
+            tile_map_cropped.tile_slen, tile_map_cropped.max_sources, ignore_extra_sources=False
         )
         tile_est_catalog_cropped = tile_est_catalog.crop(
             (h_tile, h_tile + n_tiles), (w_tile, w_tile + n_tiles)
@@ -1057,7 +1057,7 @@ def plot_mismatches(
     bright_mismatches = mismatches_at_map & bright_truths
     true_cat.allowed_params = true_cat.allowed_params.union({"mismatched"})
     true_cat["mismatched"] = bright_mismatches.reshape(1, -1, 1)
-    mismatch_dict = defaultdict(dict)
+    mismatch_dict = defaultdict(dict)  # type: ignore
     detection_threshold = positive_negative_stats["true_matches"].float().mean(dim=0)
 
     photo_catalog = catalogs.get("photo")
@@ -1111,7 +1111,7 @@ def plot_false_positives(
     positive_negative_stats,
 ):
     bp = encoder.border_padding
-    bliss_fp_dict = defaultdict(dict)
+    bliss_fp_dict = defaultdict(dict)  # type: ignore
 
     est_tile_matches = positive_negative_stats["est_tile_matches"]
     detection_threshold_fp = est_tile_matches.float().mean(dim=0)

@@ -8,7 +8,7 @@ from einops import rearrange, reduce
 from torch import Tensor
 from torch.nn import functional as F
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import DecalsFullCatalog, FullCatalog, TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
@@ -99,7 +99,7 @@ def sample_at_coordinates(
 
 
 class SDSSFrame:
-    def __init__(self, sdss_dir: str, pixel_scale: float, coadd_file: str):
+    def __init__(self, sdss_dir: str, pixel_scale: float, cat_file: str, cat_type="coadd"):
         run = 94
         camcol = 1
         field = 12
@@ -123,10 +123,17 @@ class SDSSFrame:
             regions=((1200, 1360, 1700, 1900), (280, 400, 1220, 1320)),
             mask_bg_val=865.0,
         )
-        self.coadd_file = coadd_file
+        self.cat_file = cat_file
+        self.cat_type = cat_type
 
     def get_catalog(self, hlims, wlims):
-        return CoaddFullCatalog.from_file(self.coadd_file, self.wcs, hlims, wlims, band="r")
+        if self.cat_type == "coadd":
+            return CoaddFullCatalog.from_file(self.cat_file, self.wcs, hlims, wlims, band="r")
+
+        if self.cat_type == "decals":
+            return DecalsFullCatalog.from_file(self.cat_file, self.wcs, hlims, wlims, band="r")
+
+        raise NotImplementedError("Catalog type not supported")
 
 
 class SimulatedFrame:
