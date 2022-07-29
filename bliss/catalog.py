@@ -19,7 +19,8 @@ class TileCatalog(UserDict):
     allowed_params = {
         "n_source_log_probs",
         "fluxes",
-        "log_fluxes",
+        "star_fluxes",
+        "log_star_fluxes",
         "mags",
         "ellips",
         "snr",
@@ -230,7 +231,7 @@ class TileCatalog(UserDict):
     def set_all_fluxes_and_mags(self, decoder):
         """Set all fluxes (galaxy and star) of tile catalog given an ImageDecoder instance."""
         # first get galaxy fluxes
-        assert "galaxy_bools" in self and "galaxy_params" in self and "fluxes" in self
+        assert "galaxy_bools" in self and "galaxy_params" in self and "star_fluxes" in self
         assert (
             self.device == decoder.device
         ), f"TileCatalog on {self.device} but decoder on {decoder.device}"
@@ -241,7 +242,7 @@ class TileCatalog(UserDict):
 
         # update default fluxes
         star_bools = self["star_bools"]
-        star_fluxes = self["fluxes"]
+        star_fluxes = self["star_fluxes"]
         fluxes = galaxy_bools * galaxy_fluxes + star_bools * star_fluxes
         self["fluxes"] = fluxes
 

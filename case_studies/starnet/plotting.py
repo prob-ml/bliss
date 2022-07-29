@@ -51,9 +51,8 @@ def get_params_in_tiles(tile_coords, locs, fluxes, slen, subimage_slen, edge_pad
     tile_locs = (
         which_locs_array.unsqueeze(3) * locs.unsqueeze(1) - (tile_coords + edge_padding - 0.5)
     ).view(subimage_batchsize, max_stars, 2) / (subimage_slen - 2 * edge_padding)
-    tile_locs = torch.relu(
-        tile_locs
-    )  # by subtracting off, some are negative now; just set these to 0
+    # by subtracting off, some are negative now; just set these to 0
+    tile_locs = torch.relu(tile_locs)
     if fluxes is not None:
         assert fullimage_batchsize == fluxes.shape[0]
         assert max_stars == fluxes.shape[1]

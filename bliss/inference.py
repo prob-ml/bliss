@@ -221,7 +221,7 @@ class SemiSyntheticFrame:
             tile_catalog.set_all_fluxes_and_mags(dataset.image_decoder)
             fc = tile_catalog.to_full_params()
             assert fc.equals(
-                full_coadd_cat, exclude=("galaxy_fluxes", "star_bools", "fluxes", "mags")
+                full_coadd_cat, exclude=("galaxy_fluxes", "star_bools", "star_fluxes", "mags")
             )
             print("INFO: started generating frame")
             image, background = dataset.simulate_image_from_catalog(tile_catalog)
