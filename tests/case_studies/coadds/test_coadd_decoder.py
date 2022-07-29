@@ -2,7 +2,12 @@ from hydra.utils import instantiate
 
 import torch
 
-from case_studies.coadds.coadd_decoder import CoaddUniformGalsimGalaxiesPrior, CoaddSingleGalaxyDecoder, FullCatalogDecoder, CoaddGalsimBlends
+from case_studies.coadds.coadd_decoder import (
+    CoaddUniformGalsimGalaxiesPrior,
+    CoaddSingleGalaxyDecoder,
+    FullCatalogDecoder,
+    CoaddGalsimBlends,
+)
 
 
 def test_coadd_prior(get_config, devices):
@@ -13,19 +18,34 @@ def test_coadd_prior(get_config, devices):
     cfg = get_config({}, devices)
     prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
 
-    CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(num_dithers)
+    CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(
+        num_dithers
+    )
+
 
 def test_coadd_single_decoder(get_config, devices):
     sampled_cuggp = test_coadd_prior(get_config, devices)
     galaxy_params = sampled_cuggp["galaxy_params"]
     dithers = sampled_cuggp["dithers"]
-    offset = None   
+    offset = None
 
     cfg = get_config({}, devices)
     decoder = instantiate(cfg.datasets.sdss_galaxies_coadd.decoder)
 
-    csgd = CoaddSingleGalaxyDecoder(decoder, decoder.n_bands, decoder.pixel_scale, "./data/sdss/psField-000094-1-0012-PSF-image.npy")
-    csgd.render_galaxy(galaxy_params=galaxy_params[0], slen=decoder.slen, psf=decoder.psf, offset=offset, dithers=dithers,)
+    csgd = CoaddSingleGalaxyDecoder(
+        decoder,
+        decoder.n_bands,
+        decoder.pixel_scale,
+        "./data/sdss/psField-000094-1-0012-PSF-image.npy",
+    )
+    csgd.render_galaxy(
+        galaxy_params=galaxy_params[0],
+        slen=decoder.slen,
+        psf=decoder.psf,
+        offset=offset,
+        dithers=dithers,
+    )
+
 
 def test_full_catalog_decoder(get_config, devices):
     cfg = get_config({}, devices)
@@ -40,7 +60,7 @@ def test_full_catalog_decoder(get_config, devices):
     max_tile_n_sources = 1
     num_workers = 5
     batch_size = 1000
-    n_batches = 1   
+    n_batches = 1
     dithers = [((-0.5 - 0.5) * torch.rand((2,)) + 0.5).numpy() for x in range(3)]
 
     full_catalog = CoaddGalsimBlends(
@@ -56,6 +76,7 @@ def test_full_catalog_decoder(get_config, devices):
 
     decoder.render_catalog(full_catalog, decoder.single_decoder.psf, dithers)
 
+
 def test_coadd_galsim_blend(get_config, devices):
     cfg = get_config({}, devices)
     decoder = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.decoder)
@@ -67,7 +88,7 @@ def test_coadd_galsim_blend(get_config, devices):
     max_tile_n_sources = 1
     num_workers = 5
     batch_size = 1000
-    n_batches = 1   
+    n_batches = 1
     dithers = [((-0.5 - 0.5) * torch.rand((2,)) + 0.5).numpy() for x in range(3)]
 
     full_catalog = CoaddGalsimBlends(
