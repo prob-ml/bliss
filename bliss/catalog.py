@@ -20,7 +20,7 @@ class TileCatalog(UserDict):
         "n_source_log_probs",
         "fluxes",
         "star_fluxes",
-        "log_star_fluxes",
+        "star_log_fluxes",
         "mags",
         "ellips",
         "snr",
