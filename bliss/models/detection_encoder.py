@@ -324,8 +324,8 @@ class DetectionEncoder(pl.LightningModule):
                 batch["locs"][:, :, :, 0 : self.max_detections],
                 "n nth ntw ns hw -> (n nth ntw) ns hw",
             ),
-            ""star_log_fluxes"": rearrange(
-                batch[""star_log_fluxes""][:, :, :, 0 : self.max_detections],
+            "star_log_fluxes": rearrange(
+                batch["star_log_fluxes"][:, :, :, 0 : self.max_detections],
                 "n nth ntw ns b -> (n nth ntw) ns b",
             ),
             "galaxy_bools": rearrange(
@@ -361,7 +361,7 @@ class DetectionEncoder(pl.LightningModule):
             pred["loc_sd"].squeeze(0),
         )
         star_params_log_probs_all = _get_params_logprob_all_combs(
-            true_catalog[""star_log_fluxes""],
+            true_catalog["star_log_fluxes"],
             pred["log_flux_mean"].squeeze(0),
             pred["log_flux_sd"].squeeze(0),
         )
@@ -396,7 +396,7 @@ class DetectionEncoder(pl.LightningModule):
 
         catalog_dict = {
             "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-            ""star_log_fluxes"": batch[""star_log_fluxes""][:, :, :, 0 : self.max_detections],
+            "star_log_fluxes": batch["star_log_fluxes"][:, :, :, 0 : self.max_detections],
             "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
             "n_sources": batch["n_sources"].clamp(max=self.max_detections),
         }
@@ -436,7 +436,7 @@ class DetectionEncoder(pl.LightningModule):
 
         catalog_dict = {
             "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-            ""star_log_fluxes"": batch[""star_log_fluxes""][:, :, :, 0 : self.max_detections],
+            "star_log_fluxes": batch["star_log_fluxes"][:, :, :, 0 : self.max_detections],
             "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
             "star_bools": batch["star_bools"][:, :, :, 0 : self.max_detections],
             "n_sources": batch["n_sources"].clamp(max=self.max_detections),
@@ -519,7 +519,7 @@ class DetectionEncoder(pl.LightningModule):
         """Pytorch lightning method."""
         catalog_dict = {
             "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-            ""star_log_fluxes"": batch[""star_log_fluxes""][:, :, :, 0 : self.max_detections],
+            "star_log_fluxes": batch["star_log_fluxes"][:, :, :, 0 : self.max_detections],
             "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
             "n_sources": batch["n_sources"].clamp(max=self.max_detections),
         }
