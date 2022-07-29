@@ -95,7 +95,7 @@ datasets:
             psf_rmax: 1.0
         fix_validation_set: True
         valid_n_batches: 50
-    
+
     galsim_blended_rand_psf:
         _target_: case_studies.psf_homogenization.galsim_blends_sg.GalsimBlendsSGRand
         prior:
@@ -128,7 +128,7 @@ datasets:
                 slen: 53
                 pixel_scale: 0.396
                 psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
-            single_star_decoder: 
+            single_star_decoder:
                 _target_: case_studies.psf_homogenization.galsim_star.SingleGalsimStarDecoder
                 slen: 53
                 n_bands: 1
@@ -150,7 +150,7 @@ datasets:
             psf_rmin: 0.7
             psf_rmax: 0.7
         fix_validation_set: True
-        valid_n_batches: 50 
+        valid_n_batches: 50
 
     galsim_blended_std_psf:
         _target_: case_studies.psf_homogenization.galsim_blends_sg.GalsimBlendsSGwithPSF
@@ -218,4 +218,3 @@ training:
     seed: 42
 
 plots:
-    

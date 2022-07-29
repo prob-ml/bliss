@@ -1,29 +1,27 @@
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
 
 import galsim
-import torch
-from torch import Tensor
-from einops import rearrange
-from torch.utils.data import DataLoader, Dataset
 import pytorch_lightning as pl
+import torch
+from einops import rearrange
+from torch import Tensor
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from bliss.catalog import FullCatalog
-from bliss.datasets.sdss import convert_flux_to_mag
-from bliss.reporting import get_single_galaxy_ellipticities
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.galsim_galaxies import GalsimBlends
-from bliss.models.galsim_decoder import UniformGalsimGalaxiesPrior, FullCatalogDecoder
+from bliss.datasets.sdss import convert_flux_to_mag
+from bliss.models.galsim_decoder import FullCatalogDecoder, UniformGalsimGalaxiesPrior
+from bliss.reporting import get_single_galaxy_ellipticities
+from case_studies.psf_homogenization.galsim_star import FullCatelogDecoderSG, UniformGalsimPrior
 from case_studies.psf_homogenization.homogenization import psf_homo
-from case_studies.psf_homogenization.galsim_star import UniformGalsimPrior, FullCatelogDecoderSG
 
 
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
     image_with_background = image + background
     noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
     return image_with_background + noise
-
-
 
 
 class PsfSampler:
@@ -43,7 +41,7 @@ class PsfSampler:
             raise ValueError("invalid argument!!!")
         else:
             fwhm = torch.distributions.uniform.Uniform(self.rmin, self.rmax).sample([1]).item()
-        
+
         return galsim.Gaussian(fwhm=fwhm)
 
 
@@ -131,6 +129,7 @@ class GalsimBlendswithPSF(GalsimBlends):
             **tile_params,
         }
 
+
 class GalsimBlendsRand(GalsimBlends):
     def __init__(
         self,
@@ -161,23 +160,15 @@ class GalsimBlendsRand(GalsimBlends):
         self.slen = self.decoder.slen
         self.pixel_scale = self.decoder.single_decoder.pixel_scale
         self.psf = psf_sampler
-    
+
     def _get_images(self, full_cat):
         psf_obj = self.psf.sample()
         noiseless, noiseless_centered, noiseless_uncentered = self.decoder.render_catalog(
             full_cat, psf_obj
-            )
+        )
 
         # get background and noisy image.
         background = self.background.sample((1, *noiseless.shape)).squeeze(0)
         noisy_image = _add_noise_and_background(noiseless, background)
 
         return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background
-
-
-
-
-
-
-
-

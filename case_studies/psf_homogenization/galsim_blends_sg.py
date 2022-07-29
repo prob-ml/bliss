@@ -1,19 +1,19 @@
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
 
 import galsim
-import torch
-from torch import Tensor
-from einops import rearrange
-from torch.utils.data import DataLoader, Dataset
 import pytorch_lightning as pl
+import torch
+from einops import rearrange
+from torch import Tensor
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from bliss.catalog import FullCatalog
+from bliss.datasets.background import ConstantBackground
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.reporting import get_single_galaxy_ellipticities
-from bliss.datasets.background import ConstantBackground
+from case_studies.psf_homogenization.galsim_star import FullCatelogDecoderSG, UniformGalsimPrior
 from case_studies.psf_homogenization.homogenization import psf_homo
-from case_studies.psf_homogenization.galsim_star import UniformGalsimPrior, FullCatelogDecoderSG
 from case_studies.psf_homogenization.psf_decoder import PsfSampler
 
 
@@ -22,14 +22,17 @@ def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
     noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
     return image_with_background + noise
 
+
 def _get_snr(image: Tensor, background: Tensor) -> float:
     image_with_background = image + background
     return torch.sqrt(torch.sum(image**2 / image_with_background)).item()
+
 
 def _get_blendedness(single_galaxy: Tensor, all_galaxies: Tensor) -> float:
     num = torch.sum(single_galaxy * single_galaxy).item()
     denom = torch.sum(single_galaxy * all_galaxies).item()
     return 1 - num / denom
+
 
 class GalsimBlendsSGRand(pl.LightningDataModule, Dataset):
     def __init__(
@@ -92,14 +95,14 @@ class GalsimBlendsSGRand(pl.LightningDataModule, Dataset):
             "background": background,
             **tile_params,
         }
-    
+
     def _sample_full_catalog(self):
         params_dict = self.prior.sample()
         params_dict["plocs"] = params_dict["locs"] * self.slen
         params_dict.pop("locs")
         params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
         return FullCatalog(self.slen, self.slen, params_dict)
-    
+
     def _add_metrics(
         self,
         full_cat: FullCatalog,
@@ -146,7 +149,7 @@ class GalsimBlendsSGRand(pl.LightningDataModule, Dataset):
         full_cat["blendedness"] = rearrange(blendedness, "n -> 1 n 1", n=self.max_n_sources)
 
         return full_cat
-    
+
     def _get_tile_params(self, full_cat):
         tile_cat = full_cat.to_tile_params(
             self.tile_slen, self.max_sources_per_tile, ignore_extra_sources=True
@@ -159,7 +162,7 @@ class GalsimBlendsSGRand(pl.LightningDataModule, Dataset):
             "n_sources": n_sources,
             **{k: rearrange(v, "1 nth ntw n d -> nth ntw n d") for k, v in tile_dict.items()},
         }
-    
+
     def train_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
@@ -206,7 +209,7 @@ class GalsimBlendsSGwithPSF(GalsimBlendsSGRand):
             n_batches,
             psf_sampler,
             fix_validation_set,
-            valid_n_batches
+            valid_n_batches,
         )
         self.std_psf = torch.from_numpy(
             galsim.Gaussian(fwhm=std_psf_fwhm)
