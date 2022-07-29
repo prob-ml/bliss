@@ -1,17 +1,17 @@
-import numpy as np
 import torch
 
 
-def snr(img):
+def get_snr(img_no_background, background):
     """Calculate Signal-to-Noise Ratio.
+
     Args:
-        img: Tensor of shape `(N x C x H x W)` where N is the batch_size, C is the
+        background: Tensor of shape `(N x C x H x W)` containing the background for the image.
+        img_no_background: Tensor of shape `(N x C x H x W)` where N is the batch_size, C is the
             number of band, H is height and W is weight, containing image data.
+
     Returns:
-        Tensor of shape `(N x 1)`. The Signal-to-Noise Ratio.
+        Tensor of shape `(N,)`. The Signal-to-Noise Ratio.
     """
-
-    # sn = torch.sqrt(torch.sum((img)**2 / (img), dim=(3, 2, 1)))
-    sn = torch.mean(img, dim=(3, 2, 1)) / torch.std(img, dim=(3, 2, 1))
-
-    return sn
+    assert img_no_background.shape == background.shape
+    image = img_no_background + background
+    return torch.sqrt(torch.sum(img_no_background**2 / image, dim=(3, 2, 1)))

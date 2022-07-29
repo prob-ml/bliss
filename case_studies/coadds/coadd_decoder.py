@@ -265,16 +265,12 @@ class CoaddGalsimBlends(GalsimBlends):
         weight = 1 / torch.tensor(aligned_images)
 
         # get background and noisy image.
-        background = (
-            self.background.sample((len(dithers), *aligned_images.reshape(len(dithers), aligned_images.shape[1], aligned_images.shape[2]).shape))
-            .squeeze(0)
-            .reshape(len(dithers), len(dithers), aligned_images.shape[1], aligned_images.shape[2])
-        )
-        noisy_aligned_image = _add_noise_and_background(aligned_images, background)
+        background = self.background.sample(aligned_images.reshape(aligned_images.shape[0], 1,aligned_images.shape[1], aligned_images.shape[2]).shape)
 
         # get snr
-        img = noisy_aligned_image.reshape(len(dithers), len(dithers), noisy_aligned_image.shape[2], noisy_aligned_image.shape[3])
-        snr_images = snr(img)
+        aligned_images_nobackground = aligned_images.reshape(len(dithers), 1, aligned_images.shape[1], aligned_images.shape[2]) 
+        snr_images = get_snr(aligned_images_nobackground, background)
+        noisy_aligned_image = _add_noise_and_background(aligned_images_nobackground, background)
 
         # coadd images
         coadded_image = linear_coadd(noisy_aligned_image, background, weight)
