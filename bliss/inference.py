@@ -218,7 +218,6 @@ class SemiSyntheticFrame:
             full_coadd_cat.plocs = full_coadd_cat.plocs + 0.5
             max_sources = dataset.image_prior.max_sources
             tile_catalog = full_coadd_cat.to_tile_params(self.tile_slen, max_sources)
-            tile_catalog.set_all_fluxes_and_mags(dataset.image_decoder)
             fc = tile_catalog.to_full_params()
             assert fc.equals(
                 full_coadd_cat, exclude=("galaxy_fluxes", "star_bools", "fluxes", "mags")
