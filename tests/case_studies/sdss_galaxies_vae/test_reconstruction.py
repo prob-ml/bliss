@@ -21,7 +21,7 @@ def test_reconstruct_sdss(vae_setup, reconstruct_overrides):
         "+reconstruct.frame._target_": "bliss.inference.SDSSFrame",
         "+reconstruct.frame.sdss_dir": "${paths.sdss}",
         "+reconstruct.frame.pixel_scale": 0.396,
-        "+reconstruct.frame.coadd_file": "${paths.sdss}/coadd_catalog_94_1_12.fits",
+        "+reconstruct.frame.cat_file": "${paths.sdss}/coadd_catalog_94_1_12.fits",
         "+reconstruct.test.h": 200 + 50,
         "+reconstruct.test.w": 1700 + 150,
         "+reconstruct.test.size": 100,
