@@ -24,9 +24,9 @@ def test_coadd_single_decoder(get_config, devices):
     num_dithers = 4
     cfg = get_config({}, devices)
     prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
-    sampled_cuggp = CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(
-        num_dithers
-    )
+    sampled_cuggp = CoaddUniformGalsimGalaxiesPrior(
+        prior, max_n_sources, max_shift, num_dithers
+    ).sample(num_dithers)
     galaxy_params = sampled_cuggp["galaxy_params"]
     dithers = sampled_cuggp["dithers"]
     offset = None
