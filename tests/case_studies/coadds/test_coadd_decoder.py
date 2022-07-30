@@ -1,5 +1,6 @@
-from hydra.utils import instantiate
 import torch
+from hydra.utils import instantiate
+
 from case_studies.coadds.coadd_decoder import (
     CoaddGalsimBlends,
     CoaddSingleGalaxyDecoder,
