@@ -15,10 +15,11 @@ def test_coadd_prior(get_config, devices):
     num_dithers = 4
     cfg = get_config({}, devices)
     prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
-
-    CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(
+    cuggp = CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(
         num_dithers
     )
+
+    return cuggp
 
 
 def test_coadd_single_decoder(get_config, devices):
@@ -43,15 +44,6 @@ def test_coadd_single_decoder(get_config, devices):
         offset=offset,
         dithers=dithers,
     )
-
-
-def test_full_catalog_decoder(get_config, devices):
-    cfg = get_config({}, devices)
-    decoder = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.decoder)
-    slen = 40
-    bp = 24
-    dithers = [((-0.5 - 0.5) * torch.rand((2,)) + 0.5).numpy() for x in range(3)]
-    FullCatalogDecoder(decoder, slen, bp, dithers)
 
 
 def test_coadd_galsim_blend(get_config, devices):
