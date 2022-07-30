@@ -1,17 +1,15 @@
 from hydra.utils import instantiate
 
 import torch
-
 from case_studies.coadds.coadd_decoder import (
-    CoaddUniformGalsimGalaxiesPrior,
-    CoaddSingleGalaxyDecoder,
-    FullCatalogDecoder,
     CoaddGalsimBlends,
+    FullCatalogDecoder,
+    CoaddSingleGalaxyDecoder,
+    CoaddUniformGalsimGalaxiesPrior,
 )
 
 
 def test_coadd_prior(get_config, devices):
-    pixel_scale = 0.393
     max_n_sources = 1
     max_shift = 0.5
     num_dithers = 4
@@ -50,32 +48,10 @@ def test_coadd_single_decoder(get_config, devices):
 def test_full_catalog_decoder(get_config, devices):
     cfg = get_config({}, devices)
     decoder = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.decoder)
-    prior = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.prior)
-    decoder = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.decoder)
-    background = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.background)
-
     slen = 40
     bp = 24
-    tile_slen = 4
-    max_tile_n_sources = 1
-    num_workers = 5
-    batch_size = 1000
-    n_batches = 1
     dithers = [((-0.5 - 0.5) * torch.rand((2,)) + 0.5).numpy() for x in range(3)]
-
-    full_catalog = CoaddGalsimBlends(
-        prior=prior,
-        decoder=decoder,
-        background=background,
-        tile_slen=tile_slen,
-        max_sources_per_tile=max_tile_n_sources,
-        num_workers=num_workers,
-        batch_size=batch_size,
-        n_batches=n_batches,
-    )._sample_full_catalog()
-
-    decoder.render_catalog(full_catalog, decoder.single_decoder.psf, dithers)
-
+    FullCatalogDecoder(decoder, slen, bp, dithers)
 
 def test_coadd_galsim_blend(get_config, devices):
     cfg = get_config({}, devices)
@@ -89,18 +65,6 @@ def test_coadd_galsim_blend(get_config, devices):
     num_workers = 5
     batch_size = 1000
     n_batches = 1
-    dithers = [((-0.5 - 0.5) * torch.rand((2,)) + 0.5).numpy() for x in range(3)]
-
-    full_catalog = CoaddGalsimBlends(
-        prior=prior,
-        decoder=decoder,
-        background=background,
-        tile_slen=tile_slen,
-        max_sources_per_tile=max_tile_n_sources,
-        num_workers=num_workers,
-        batch_size=batch_size,
-        n_batches=n_batches,
-    )._sample_full_catalog()
 
     CoaddGalsimBlends(
         prior=prior,
@@ -111,4 +75,4 @@ def test_coadd_galsim_blend(get_config, devices):
         num_workers=num_workers,
         batch_size=batch_size,
         n_batches=n_batches,
-    )._get_images(full_catalog, dithers)
+    )
