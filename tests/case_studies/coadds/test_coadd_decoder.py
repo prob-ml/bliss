@@ -1,11 +1,9 @@
-import torch
 from hydra.utils import instantiate
 
 from case_studies.coadds.coadd_decoder import (
     CoaddGalsimBlends,
     CoaddSingleGalaxyDecoder,
     CoaddUniformGalsimGalaxiesPrior,
-    FullCatalogDecoder,
 )
 
 
@@ -15,15 +13,20 @@ def test_coadd_prior(get_config, devices):
     num_dithers = 4
     cfg = get_config({}, devices)
     prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
-    cuggp = CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(
+    CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(
         num_dithers
     )
 
-    return cuggp
-
 
 def test_coadd_single_decoder(get_config, devices):
-    sampled_cuggp = test_coadd_prior(get_config, devices)
+    max_n_sources = 1
+    max_shift = 0.5
+    num_dithers = 4
+    cfg = get_config({}, devices)
+    prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
+    sampled_cuggp = CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(
+        num_dithers
+    )
     galaxy_params = sampled_cuggp["galaxy_params"]
     dithers = sampled_cuggp["dithers"]
     offset = None
