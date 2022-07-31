@@ -12,7 +12,7 @@ hydra:
 
 mode: train
 
-gpus: 1 # use a single gpu by default.
+gpus: 6 # use a single gpu by default.
 
 paths:
     root: ${oc.env:BLISS_HOME}

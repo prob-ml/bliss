@@ -10,8 +10,16 @@ from bliss.datasets import sdss
 from bliss.inference import reconstruct_scene_at_coordinates
 from case_studies.strong_lensing.plots.main import load_models
 
+import seaborn as sns
 import matplotlib.pyplot as plt
-plt.style.use('ggplot')
+sns.set_style("whitegrid")
+plt.rcParams['text.usetex'] = True
+plt.rcParams['mathtext.fontset'] = 'stix'
+plt.rcParams['font.family'] = 'STIXGeneral'
+# plt.pyplot.title(r'ABC123 vs $\mathrm{ABC123}^{123}$')
+
+blue, = sns.color_palette("muted", 1)
+
 import torch
 
 from astropy.table import Table
@@ -43,13 +51,16 @@ galaxies = np.zeros(increments.shape)
 counts = np.zeros(increments.shape)
 
 batch_size = 8
-trials = 1000
+trials = 2000
 for _ in range(trials):
     tile_catalog = dataset.sample_prior(batch_size, cfg.datasets.simulated.n_tiles_h, cfg.datasets.simulated.n_tiles_w)
     tile_catalog.set_all_fluxes_and_mags(dataset.image_decoder)
     images, backgrounds = dataset.simulate_image_from_catalog(tile_catalog)
 
     tile_map = enc.variational_mode(images, backgrounds, tile_catalog)
+    tile_map.locs = tile_catalog.locs
+    tile_map.n_sources = tile_catalog.n_sources
+    
     full_map = tile_map.cpu().to_full_params()
     full_true = tile_catalog.cpu().to_full_params()
 
@@ -69,10 +80,12 @@ for _ in range(trials):
 x = []
 y = []
 for i, (galaxy, count) in enumerate(zip(galaxies, counts)):
-    if count > 0:
+    if count > 5:
         x.append(increments[i])
         y.append(galaxy / count)
 
 plt.plot(increments, increments, color="b")
+plt.ylabel("Empirical Coverage")
+plt.xlabel("$a_s$")
 plt.scatter(x, y)
-plt.savefig("lensing_posterior.png")
+plt.savefig("lens_posterior.png")

@@ -65,6 +65,7 @@ def reconstruct_scene_at_coordinates(
     assert scene.shape[3] == w_range_pad[1] - w_range_pad[0]
     with torch.no_grad():
         tile_map_scene = encoder.variational_mode(scene, bg_scene)
+        return tile_map_scene
         recon = decoder.render_large_scene(tile_map_scene)
     assert recon.shape == scene.shape
     recon += bg_scene

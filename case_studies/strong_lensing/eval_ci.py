@@ -37,7 +37,7 @@ dataset = instantiate(
     generate_device="cuda:0",
 )
 
-total_contained = np.zeros(7)
+total_contained = np.zeros(12)
 
 total_lenses = 0
 batch_size = 1
@@ -50,9 +50,9 @@ for _ in range(trials):
     images, backgrounds = dataset.simulate_image_from_catalog(tile_catalog)
 
     full_true = tile_catalog.cpu().to_full_params()
-
-    true_gal_bool = full_true["galaxy_bools"].cpu().numpy()[0,:,0].astype("bool")
-    true_lens = full_true["galaxy_params"].cpu().numpy()[0,...][true_gal_bool]
+    
+    true_gal_bool = full_true["lensed_galaxy_bools"].cpu().numpy()[0,:,0].astype("bool")
+    true_lens = full_true["lens_params"].cpu().numpy()[0,...][true_gal_bool]
 
     samples = []
     for _ in range(num_samples):
@@ -63,8 +63,11 @@ for _ in range(trials):
             cfg.datasets.simulated.n_tiles_w,
             {k: v.squeeze(0) for k, v in tile_sample_dict.items()},
         )
+        tile_sample.locs = tile_catalog.locs
+        tile_sample.n_sources = tile_catalog.n_sources
+
         full_sample = tile_sample.cpu().to_full_params()
-        lens_sample = full_sample["galaxy_params"].cpu().numpy()[0,...][true_gal_bool]
+        lens_sample = full_sample["lens_params"].cpu().numpy()[0,...][true_gal_bool]
         samples.append(lens_sample)
     
     samples = np.array(samples)

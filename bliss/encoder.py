@@ -93,7 +93,7 @@ class Encoder(nn.Module):
     def forward(self, x):
         raise NotImplementedError("Unavailable. Use .variational_mode() or .sample() instead.")
 
-    def variational_mode(self, image: Tensor, background: Tensor) -> TileCatalog:
+    def variational_mode(self, image: Tensor, background: Tensor, true_tile_catalog: Optional[TileCatalog] = None) -> TileCatalog:
         """Get maximum a posteriori of catalog from image padded tiles.
 
         Note that, strictly speaking, this is not the true MAP of the variational
@@ -117,7 +117,7 @@ class Encoder(nn.Module):
                 - 'galaxy_params' from GalaxyEncoder.
                 - 'lens_params' from LensEncoder.
         """
-        tile_map_dict = self.sample(image, background, None)
+        tile_map_dict = self.sample(image, background, None, true_tile_catalog)
         n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.detection_encoder.tile_slen
         n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.detection_encoder.tile_slen
         return TileCatalog.from_flat_dict(
@@ -128,7 +128,7 @@ class Encoder(nn.Module):
         )
 
     def sample(
-        self, image: Tensor, background: Tensor, n_samples: Optional[int]
+        self, image: Tensor, background: Tensor, n_samples: Optional[int], true_tile_catalog: TileCatalog
     ) -> Dict[str, Tensor]:
         n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.detection_encoder.tile_slen
         ptile_loader = self._make_ptile_loader(image, background, n_tiles_h)
@@ -136,7 +136,7 @@ class Encoder(nn.Module):
         with torch.no_grad():
             for ptiles in tqdm(ptile_loader, desc="Encoding ptiles"):
                 assert isinstance(ptiles, Tensor)
-                out_ptiles = self._encode_ptiles(ptiles, n_samples)
+                out_ptiles = self._encode_ptiles(ptiles, n_samples, true_tile_catalog)
                 tile_map_list.append(out_ptiles)
         return self._collate(tile_map_list)
 
@@ -157,7 +157,7 @@ class Encoder(nn.Module):
                 )
                 yield image_ptiles.reshape(-1, *image_ptiles.shape[-3:])
 
-    def _encode_ptiles(self, image_ptiles: Tensor, n_samples: Optional[int]):
+    def _encode_ptiles(self, image_ptiles: Tensor, n_samples: Optional[int], true_tile_catalog: TileCatalog):
         assert isinstance(self.map_n_source_weights, Tensor)
         deterministic = n_samples is None
         dist_params = self.detection_encoder.encode(image_ptiles)
@@ -169,6 +169,11 @@ class Encoder(nn.Module):
         tile_samples["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1).unsqueeze(0)
         locs = tile_samples["locs"]
         n_sources = tile_samples["n_sources"]
+
+        if true_tile_catalog is not None:
+            locs = true_tile_catalog.locs.reshape(locs.shape)
+            n_sources = true_tile_catalog.n_sources.reshape(n_sources.shape)
+
         is_on_array = get_is_on_from_n_sources(n_sources, self.detection_encoder.max_detections)
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
@@ -180,7 +185,8 @@ class Encoder(nn.Module):
                 galaxy_bools = (
                     torch.rand_like(galaxy_probs) > 0.5
                 ).float() * is_on_array.unsqueeze(-1)
-            
+            if true_tile_catalog is not None:
+                galaxy_bools = true_tile_catalog["galaxy_bools"].reshape(galaxy_bools.shape)
             tile_samples.update(
                 {
                     "galaxy_bools": galaxy_bools,
@@ -201,6 +207,8 @@ class Encoder(nn.Module):
                     ).float() * is_on_array.unsqueeze(-1)
 
                 lensed_galaxy_bools *= galaxy_bools # currently only support lensing where galaxy is present
+                if true_tile_catalog is not None:
+                    lensed_galaxy_bools = true_tile_catalog["lensed_galaxy_bools"].reshape(lensed_galaxy_bools.shape)
                 
                 tile_samples.update(
                     {
