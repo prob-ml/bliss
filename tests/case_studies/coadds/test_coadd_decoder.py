@@ -5,7 +5,7 @@ from case_studies.coadds.coadd_decoder import CoaddUniformGalsimGalaxiesPrior
 
 
 def get_coadds_cfg(get_config, devices):
-    with initialize(config_path="../case_studies/coadds/config"):
+    with initialize(config_path="../coadds/config"):
         cfg = compose("config")
     return cfg
 
