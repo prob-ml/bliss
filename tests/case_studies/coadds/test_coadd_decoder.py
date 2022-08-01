@@ -1,8 +1,9 @@
 from pathlib import Path
+
+from hydra import compose, initialize
 from hydra.utils import instantiate
 
 from case_studies.coadds.coadd_decoder import (
-    CoaddSingleGalaxyDecoder,
     CoaddUniformGalsimGalaxiesPrior,
 )
 
@@ -16,7 +17,6 @@ def get_coadds_cfg(overrides, devices):
 
 
 def test_coadd_prior(get_coadds_cfg, devices):
-    pixel_scale = 0.393
     max_n_sources = 1
     max_shift = 0.5
     num_dithers = 4
