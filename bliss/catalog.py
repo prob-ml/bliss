@@ -403,7 +403,7 @@ class FullCatalog(UserDict):
             if source_idx >= max_sources_per_tile:
                 if not ignore_extra_sources:
                     raise ValueError("Number of sources per tile exceeds `max_sources_per_tile`.")
-                source_idx = min(source_idx, max_sources_per_tile - 1)
+                continue  # ignore extra sources in this tile.
             tile_is_on_array[0, coords[0], coords[1]] = 1
             tile_loc = (self.plocs[0, idx] - coords * tile_slen) / tile_slen
             tile_locs[0, coords[0], coords[1], source_idx] = tile_loc

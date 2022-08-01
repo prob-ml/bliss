@@ -236,9 +236,9 @@ plots:
     galsim_blended_galaxies:
         _target_: bliss.datasets.galsim_galaxies.GalsimBlends
         prior:
-            _target_: bliss.models.galsim_decoder.UniformBrightestCenterGalsimGalaxy
+            _target_: bliss.models.galsim_decoder.UniformGalsimGalaxiesPrior
             single_galaxy_prior: ${datasets.sdss_galaxies.prior}
-            max_n_sources: 5
+            max_n_sources: 6
             max_shift: 0.375
         decoder:
             _target_: bliss.models.galsim_decoder.FullCatalogDecoder

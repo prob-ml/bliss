@@ -172,9 +172,10 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         return full_cat
 
     def _get_tile_params(self, full_cat):
+        # since uniformly place galaxies in image, no hard upper limit on n_sources per tile.
         tile_cat = full_cat.to_tile_params(
             self.tile_slen, self.max_sources_per_tile, ignore_extra_sources=True
-        )  # since uniformly place galaxies in image, no hard upper limit on n_sources per tile.
+        )
         tile_dict = tile_cat.to_dict()
         n_sources = tile_dict.pop("n_sources")
         n_sources = rearrange(n_sources, "1 nth ntw -> nth ntw")
