@@ -23,4 +23,6 @@ def test_coadd_prior(get_coadds_cfg, devices):
     cfg = get_coadds_cfg({}, devices)
     prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
 
-    CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(num_dithers)
+    CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(
+        num_dithers
+    )
