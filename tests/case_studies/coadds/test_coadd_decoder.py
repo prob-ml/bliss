@@ -19,7 +19,7 @@ def test_coadd_prior(get_coadds_config, devices):
 
 
 def test_coadd_single_decoder(get_config, devices):
-    cfg = get_config({}, devices)
+    cfg = get_coadds_config({}, devices)
     decoder = instantiate(cfg.datasets.sdss_galaxies_coadd.decoder)
 
     CoaddSingleGalaxyDecoder(
