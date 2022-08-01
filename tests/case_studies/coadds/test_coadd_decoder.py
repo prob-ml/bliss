@@ -10,7 +10,7 @@ def get_coadds_cfg(get_config, devices):
     return cfg
 
 
-def test_coadd_prior(overrides, devices):
+def test_coadd_prior(devices):
     max_n_sources = 1
     max_shift = 0.5
     num_dithers = 4
