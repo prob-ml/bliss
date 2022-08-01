@@ -1,6 +1,4 @@
-import os
-
-from hydra import compose, initialize
+from pathlib import Path
 from hydra.utils import instantiate
 
 from case_studies.coadds.coadd_decoder import (
@@ -8,43 +6,21 @@ from case_studies.coadds.coadd_decoder import (
     CoaddUniformGalsimGalaxiesPrior,
 )
 
-os.chdir("/bliss")
-with initialize(config_path="./case_studies/coadds/config"):
-    cfg = compose("config", overrides=[])
-prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
-decoder = instantiate(cfg.datasets.sdss_galaxies_coadd.decoder)
+
+def get_coadds_cfg(overrides, devices):
+    overrides.update({"gpus": devices.gpus, "paths.root": Path(__file__).parents[3].as_posix()})
+    overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
+    with initialize(config_path="../../../case_studies/coadds/config"):
+        cfg = compose("config", overrides=overrides)
+    return cfg
 
 
-def test_coadd_prior(prior):
+def test_coadd_prior(get_coadds_cfg, devices):
+    pixel_scale = 0.393
     max_n_sources = 1
     max_shift = 0.5
     num_dithers = 4
-    CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(
-        num_dithers
-    )
+    cfg = get_coadds_cfg({}, devices)
+    prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
 
-
-def test_coadd_single_decoder(prior):
-    max_n_sources = 1
-    max_shift = 0.5
-    num_dithers = 4
-    sampled_cuggp = CoaddUniformGalsimGalaxiesPrior(
-        prior, max_n_sources, max_shift, num_dithers
-    ).sample(num_dithers)
-    galaxy_params = sampled_cuggp["galaxy_params"]
-    dithers = sampled_cuggp["dithers"]
-    offset = None
-
-    csgd = CoaddSingleGalaxyDecoder(
-        decoder,
-        decoder.n_bands,
-        decoder.pixel_scale,
-        "./data/sdss/psField-000094-1-0012-PSF-image.npy",
-    )
-    csgd.render_galaxy(
-        galaxy_params=galaxy_params[0],
-        slen=decoder.slen,
-        psf=decoder.psf,
-        offset=offset,
-        dithers=dithers,
-    )
+    CoaddUniformGalsimGalaxiesPrior(prior, max_n_sources, max_shift, num_dithers).sample(num_dithers)
