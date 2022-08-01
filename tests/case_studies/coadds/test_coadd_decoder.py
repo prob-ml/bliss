@@ -8,7 +8,7 @@ from case_studies.coadds.coadd_decoder import (
     CoaddUniformGalsimGalaxiesPrior,
 )
 
-os.chdir("/home/wmallory/bliss")
+os.chdir("/bliss")
 with initialize(config_path="./case_studies/coadds/config"):
     cfg = compose("config", overrides=[])
 prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
