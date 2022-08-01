@@ -1,10 +1,10 @@
 from hydra.utils import instantiate
+from hydra import compose, initialize
 
 from case_studies.coadds.coadd_decoder import (
     CoaddSingleGalaxyDecoder,
     CoaddUniformGalsimGalaxiesPrior,
 )
-
 
 with initialize(config_path="./case_studies/sdss_galaxies/config"):
     cfg = compose("config", overrides=[])
