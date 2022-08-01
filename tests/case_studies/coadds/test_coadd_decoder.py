@@ -1,3 +1,4 @@
+import os
 from hydra import compose, initialize
 from hydra.utils import instantiate
 
@@ -5,7 +6,6 @@ from case_studies.coadds.coadd_decoder import (
     CoaddSingleGalaxyDecoder,
     CoaddUniformGalsimGalaxiesPrior,
 )
-
 
 os.chdir("/home/wmallory/bliss")
 with initialize(config_path="./case_studies/coadds/config"):
