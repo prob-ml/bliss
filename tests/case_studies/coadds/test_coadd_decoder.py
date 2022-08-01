@@ -42,7 +42,6 @@ def test_coadd_galsim_blend(get_coadds_config, devices):
     num_workers = 5
     batch_size = 1000
     n_batches = 1
-    dithers = [((-0.5 - 0.5) * torch.rand((2,)) + 0.5).numpy() for x in range(3)]
 
     CoaddGalsimBlends(
         prior=prior,
