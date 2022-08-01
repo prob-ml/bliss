@@ -33,8 +33,8 @@ def test_coadd_single_decoder(get_coadds_config, devices):
 
 def test_coadd_galsim_blend(get_coadds_config, devices):
     cfg = get_coadds_config({}, devices)
-    prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
-    decoder = instantiate(cfg.datasets.sdss_galaxies_coadd.decoder)
+    prior = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.prior)
+    decoder = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.decoder)
     background = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.background)
 
     max_tile_n_sources = 1
