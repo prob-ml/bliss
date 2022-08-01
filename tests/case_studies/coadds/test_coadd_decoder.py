@@ -9,7 +9,7 @@ from case_studies.coadds.coadd_decoder import CoaddUniformGalsimGalaxiesPrior
 def get_coadds_cfg(overrides, devices):
     overrides.update({"gpus": devices.gpus, "paths.root": Path(__file__).parents[3].as_posix()})
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
-    with initialize(config_path="../../../case_studies/coadds/config"):
+    with initialize(config_path="../case_studies/coadds/config"):
         cfg = compose("config", overrides=overrides)
     return cfg
 
