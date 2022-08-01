@@ -3,9 +3,7 @@ from pathlib import Path
 from hydra import compose, initialize
 from hydra.utils import instantiate
 
-from case_studies.coadds.coadd_decoder import (
-    CoaddUniformGalsimGalaxiesPrior,
-)
+from case_studies.coadds.coadd_decoder import CoaddUniformGalsimGalaxiesPrior
 
 
 def get_coadds_cfg(overrides, devices):
