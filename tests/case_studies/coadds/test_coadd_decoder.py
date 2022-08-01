@@ -6,7 +6,7 @@ from case_studies.coadds.coadd_decoder import (
     CoaddUniformGalsimGalaxiesPrior,
 )
 
-with initialize(config_path="./case_studies/sdss_galaxies/config"):
+with initialize(config_path="./case_studies/coadds/config"):
     cfg = compose("config", overrides=[])
 prior = instantiate(cfg.datasets.sdss_galaxies_coadd.prior)
 decoder = instantiate(cfg.datasets.sdss_galaxies_coadd.decoder)
