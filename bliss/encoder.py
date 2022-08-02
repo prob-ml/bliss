@@ -1,5 +1,5 @@
 """Scripts to produce BLISS estimates on astronomical images."""
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
@@ -9,6 +9,9 @@ from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sou
 from bliss.models.binary import BinaryEncoder
 from bliss.models.detection_encoder import DetectionEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
+from bliss.models.galsim_encoder import GalsimEncoder
+from bliss.models.lens_encoder import LensEncoder
+from bliss.models.lensing_binary_encoder import LensingBinaryEncoder
 
 
 class Encoder(nn.Module):
@@ -32,7 +35,9 @@ class Encoder(nn.Module):
         self,
         detection_encoder: DetectionEncoder,
         binary_encoder: Optional[BinaryEncoder] = None,
-        galaxy_encoder: Optional[GalaxyEncoder] = None,
+        galaxy_encoder: Optional[Union[GalaxyEncoder, GalsimEncoder]] = None,
+        lensing_binary_encoder: Optional[LensingBinaryEncoder] = None,
+        lens_encoder: Optional[LensEncoder] = None,
         n_images_per_batch: Optional[int] = None,
         n_rows_per_batch: Optional[int] = None,
         map_n_source_weights: Optional[Tuple[float, ...]] = None,
@@ -49,23 +54,33 @@ class Encoder(nn.Module):
                 of sources and locations per-tile.
             binary_encoder: Module that takes padded tiles and locations and
                 returns a classification between stars and galaxies. Defaults to None.
+            lensing_binary_encoder: Module that takes padded tiles and locations and
+                returns a classification between lensed and unlensed galaxies. Defaults to None.
             galaxy_encoder: Module that takes padded tiles and locations and returns the variational
                 distribution of the latent variable determining the galaxy shape. Defaults to None.
-            map_n_source_weights: Optional. See DetectionEncoder. If specified, weights the argmax
-                in MAP estimation of locations. Useful for raising/lowering the threshold for
-                turning sources on/off.
+            lens_encoder: Module that takes padded tiles and locations and returns the variational
+                distribution of the latent variable determining the galaxy lens shape. Defaults to None.
             n_images_per_batch: How many images can be processed at a time on the GPU?
                 If not specified, defaults to an amount known to fit on my GPU.
             n_rows_per_batch: How many vertical padded tiles can be processed at a time on the GPU?
                 If not specified, defaults to an amount known to fit on my GPU.
+            map_n_source_weights: Optional. See DetectionEncoder. If specified, weights the argmax
+                in MAP estimation of locations. Useful for raising/lowering the threshold for
+                turning sources on/off.
         """
         super().__init__()
         self._dummy_param = nn.Parameter(torch.empty(0))
 
         self.detection_encoder = detection_encoder
         self.binary_encoder = binary_encoder
+        self.lensing_binary_encoder = lensing_binary_encoder
         self.galaxy_encoder = galaxy_encoder
+        self.lens_encoder = lens_encoder
 
+        if self.lens_encoder is not None:
+            # need to have lensing classifier and source galaxy encoder if lensing is desired
+            assert self.lensing_binary_encoder is not None
+            
         if map_n_source_weights is None:
             map_n_source_weights_tnsr = torch.ones(self.detection_encoder.max_detections + 1)
         else:
@@ -100,6 +115,7 @@ class Encoder(nn.Module):
                 - The output of DetectionEncoder.variational_mode()
                 - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
                 - 'galaxy_params' from GalaxyEncoder.
+                - 'lens_params' from LensEncoder.
         """
         tile_map_dict = self.sample(image, background, None)
         n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.detection_encoder.tile_slen
@@ -148,6 +164,7 @@ class Encoder(nn.Module):
         tile_samples = self.detection_encoder.sample(
             dist_params, n_samples, n_source_weights=self.map_n_source_weights
         )
+
         n_source_log_probs = dist_params["n_source_log_probs"][:, 1:]
         tile_samples["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1).unsqueeze(0)
         locs = tile_samples["locs"]
@@ -163,6 +180,7 @@ class Encoder(nn.Module):
                 galaxy_bools = (
                     torch.rand_like(galaxy_probs) > 0.5
                 ).float() * is_on_array.unsqueeze(-1)
+            
             tile_samples.update(
                 {
                     "galaxy_bools": galaxy_bools,
@@ -170,12 +188,38 @@ class Encoder(nn.Module):
                 }
             )
 
+            if self.lensing_binary_encoder is not None:
+                assert not self.lensing_binary_encoder.training
+                lensed_galaxy_probs = self.lensing_binary_encoder.forward(image_ptiles, locs)
+                lensed_galaxy_probs *= is_on_array.unsqueeze(-1)
+
+                if deterministic:
+                    lensed_galaxy_bools = (lensed_galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
+                else:
+                    lensed_galaxy_bools = (
+                        torch.rand_like(lensed_galaxy_probs) > 0.5
+                    ).float() * is_on_array.unsqueeze(-1)
+
+                lensed_galaxy_bools *= galaxy_bools # currently only support lensing where galaxy is present
+                
+                tile_samples.update(
+                    {
+                        "lensed_galaxy_bools": lensed_galaxy_bools,
+                        "lensed_galaxy_probs": lensed_galaxy_probs,
+                    }
+                )
+
         if self.galaxy_encoder is not None:
             galaxy_params = self.galaxy_encoder.sample(
                 image_ptiles, locs, deterministic=deterministic
             )
             galaxy_params *= is_on_array.unsqueeze(-1) * galaxy_bools
             tile_samples.update({"galaxy_params": galaxy_params})
+
+        if self.lens_encoder is not None:
+            lens_params = self.lens_encoder.sample(image_ptiles, locs)
+            lens_params *= is_on_array.unsqueeze(-1) * lensed_galaxy_bools
+            tile_samples.update({"lens_params": lens_params})
 
         return tile_samples
 
