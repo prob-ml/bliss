@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Optional, Union
 from warnings import warn
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
@@ -77,6 +78,7 @@ class ImagePrior(pl.LightningModule):
         f_max: Prior parameter on fluxes
         alpha: Prior parameter on fluxes
         prob_galaxy: Prior probability a source is a galaxy
+        prob_lensed_galaxy: Prior probability a galaxy is lensed
     """
 
     def __init__(
@@ -89,7 +91,9 @@ class ImagePrior(pl.LightningModule):
         f_max: float,
         alpha: float,
         prob_galaxy: float,
+        prob_lensed_galaxy: float = 0.0,
         galaxy_prior: Optional[GalaxyPrior] = None,
+        lensed_galaxy_prior: Optional[GalaxyPrior] = None,
     ):
         """Initializes ImagePrior.
 
@@ -101,8 +105,10 @@ class ImagePrior(pl.LightningModule):
             f_min: Prior parameter on fluxes
             f_max: Prior parameter on fluxes
             alpha: Prior parameter on fluxes (pareto parameter)
+            prob_lensed_galaxy: Prior probability a galaxy is lensed
             prob_galaxy: Prior probability a source is a galaxy
             galaxy_prior: Object from which galaxy latents are sampled
+            lensed_galaxy_prior: Object from which lens galaxy latents are sampled
         """
         super().__init__()
         self.n_bands = n_bands
@@ -118,6 +124,11 @@ class ImagePrior(pl.LightningModule):
         self.galaxy_prior = galaxy_prior
         if self.prob_galaxy > 0.0:
             assert self.galaxy_prior is not None
+
+        self.prob_lensed_galaxy = prob_lensed_galaxy
+        self.lensed_galaxy_prior = lensed_galaxy_prior
+        if self.prob_lensed_galaxy > 0.0:
+            assert self.lensed_galaxy_prior is not None
 
     def sample_prior(
         self, tile_slen: int, batch_size: int, n_tiles_h: int, n_tiles_w: int
@@ -142,23 +153,38 @@ class ImagePrior(pl.LightningModule):
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
         locs = self._sample_locs(is_on_array)
 
-        galaxy_bools, star_bools = self._sample_n_galaxies_and_stars(is_on_array)
-        galaxy_params = self._sample_galaxy_params(galaxy_bools)
+        galaxy_bools, star_bools, lensed_galaxy_bools = self._sample_n_galaxies_and_stars(
+            is_on_array
+        )
+        galaxy_params = self._sample_galaxy_params(self.galaxy_prior, galaxy_bools)
         star_fluxes = self._sample_star_fluxes(star_bools)
         star_log_fluxes = self._get_log_fluxes(star_fluxes)
 
-        return TileCatalog(
-            tile_slen,
-            {
-                "n_sources": n_sources,
-                "locs": locs,
-                "galaxy_bools": galaxy_bools,
-                "star_bools": star_bools,
-                "galaxy_params": galaxy_params,
-                "star_fluxes": star_fluxes,
-                "star_log_fluxes": star_log_fluxes,
-            },
-        )
+        catalog_params = {
+            "n_sources": n_sources,
+            "locs": locs,
+            "galaxy_bools": galaxy_bools,
+            "star_bools": star_bools,
+            "galaxy_params": galaxy_params,
+            "star_fluxes": star_fluxes,
+            "star_log_fluxes": star_log_fluxes,
+        }
+
+        if self.lensed_galaxy_prior is not None:
+            lensed_galaxy_params = self._sample_galaxy_params(
+                self.lensed_galaxy_prior, lensed_galaxy_bools
+            )
+            pure_lens_params = self._sample_lens_params(lensed_galaxy_bools)
+            lens_params = torch.cat((lensed_galaxy_params, pure_lens_params), dim=-1)
+
+            catalog_params.update(
+                {
+                    "lensed_galaxy_bools": lensed_galaxy_bools,
+                    "lens_params": lens_params,
+                }
+            )
+
+        return TileCatalog(tile_slen, catalog_params)
 
     @staticmethod
     def _get_log_fluxes(fluxes):
@@ -209,7 +235,13 @@ class ImagePrior(pl.LightningModule):
         galaxy_bools = uniform < self.prob_galaxy
         galaxy_bools = (galaxy_bools * is_on_array.unsqueeze(-1)).float()
         star_bools = (1 - galaxy_bools) * is_on_array.unsqueeze(-1)
-        return galaxy_bools, star_bools
+
+        # currently only support lensing where galaxy is present
+        lensed_galaxy_bools = uniform < self.prob_lensed_galaxy
+        lensed_galaxy_bools = (
+            lensed_galaxy_bools * galaxy_bools * is_on_array.unsqueeze(-1)
+        ).float()
+        return galaxy_bools, star_bools, lensed_galaxy_bools
 
     def _sample_star_fluxes(self, star_bools: Tensor):
         """Samples star fluxes.
@@ -254,12 +286,12 @@ class ImagePrior(pl.LightningModule):
     def _pareto_cdf(self, x):
         return 1 - (self.f_min / x) ** self.alpha
 
-    def _sample_galaxy_params(self, galaxy_bools):
+    def _sample_galaxy_params(self, galaxy_prior, galaxy_bools):
         """Sample latent galaxy params from GalaxyPrior object."""
         batch_size, n_tiles_h, n_tiles_w, max_sources, _ = galaxy_bools.shape
         total_latent = batch_size * n_tiles_h * n_tiles_w * max_sources
         if self.prob_galaxy > 0.0:
-            samples = self.galaxy_prior.sample(total_latent, galaxy_bools.device)
+            samples = galaxy_prior.sample(total_latent, galaxy_bools.device)
         else:
             samples = torch.zeros((total_latent, 1), device=galaxy_bools.device)
         galaxy_params = rearrange(
@@ -271,3 +303,35 @@ class ImagePrior(pl.LightningModule):
             s=max_sources,
         )
         return galaxy_params * galaxy_bools
+
+    def _sample_lens_params(self, lensed_galaxy_bools):
+        """Sample latent galaxy params from GalaxyPrior object."""
+        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = lensed_galaxy_bools.shape
+        generate_lens_shape_tensor = lambda n, dist: dist(
+            batch_size,
+            n_tiles_h,
+            n_tiles_w,
+            max_sources,
+            n,
+            device=lensed_galaxy_bools.device,
+        )
+
+        lens_params = generate_lens_shape_tensor(5, torch.rand)
+        if self.prob_lensed_galaxy > 0.0:
+            # latents are: theta_E, center_x/y, e_1/2
+            lens_params[..., 0:1] = (
+                generate_lens_shape_tensor(1, torch.rand) * 25.0 + 5.0
+            )  # avoid degenerate small lenses
+            lens_params[..., 1:3] = generate_lens_shape_tensor(
+                2, torch.randn
+            )  # centers are likely in (-0.5,0.5)
+
+            # ellipticities must satisfy some angle relationships
+            qs = generate_lens_shape_tensor(1, torch.rand)
+            beta_radians = (generate_lens_shape_tensor(1, torch.rand) - 0.5) * (
+                np.pi / 2
+            )  # in [-pi / 4, pi / 4]
+            ell_factors = (1 - qs) / (1 + qs)
+            lens_params[..., 3:4] = ell_factors * torch.cos(beta_radians)
+            lens_params[..., 4:5] = ell_factors * torch.sin(beta_radians)
+        return lens_params * lensed_galaxy_bools

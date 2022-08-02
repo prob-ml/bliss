@@ -190,7 +190,7 @@ class GalsimEncoder(pl.LightningModule):
             ms=max_sources,
         )
 
-    def sample(self, image_ptiles: Tensor, tile_locs: Tensor):
+    def sample(self, image_ptiles: Tensor, tile_locs: Tensor, deterministic: Optional[bool]):
         var_dist_params = self.encode(image_ptiles, tile_locs)
         galaxy_params = sample_galsim_encoder(var_dist_params)
         return galaxy_params.to(device=var_dist_params.device)
