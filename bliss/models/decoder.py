@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional, Tuple, Union
 
+import galsim
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -10,9 +11,9 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.datasets.galsim_galaxies import SingleGalsimGalaxyDecoder
+from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder
+from bliss.models.psf_decoder import PSFDecoder, get_mgrid
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.models.psf_decoder import get_mgrid, PSFDecoder
 from bliss.reporting import get_single_galaxy_ellipticities
 
 GalaxyModel = Union[OneCenteredGalaxyAE, SingleGalsimGalaxyDecoder]
@@ -52,6 +53,7 @@ class ImageDecoder(pl.LightningModule):
             psf_params_file: Path where point-spread-function (PSF) data is located.
             border_padding: Size of border around the final image where sources will not be present.
             galaxy_model: Specifies how galaxy shapes are decoded from latent representation.
+            lens_decoder: Specifies how gravitational lenses are decoded from latent representation.
         """
         super().__init__()
         self.n_bands = n_bands
@@ -195,7 +197,8 @@ class ImageDecoder(pl.LightningModule):
         star_fluxes = rearrange(
             tile_catalog["star_fluxes"], "b nth ntw s band -> (b nth ntw) s band"
         )
-
+        lensed_galaxy_bools = rearrange(tile_catalog["lensed_galaxy_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
+        
         # draw stars and galaxies
         is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
         is_on_array = rearrange(is_on_array, "b_nth_ntw s -> b_nth_ntw s 1")
@@ -214,8 +217,9 @@ class ImageDecoder(pl.LightningModule):
         # draw stars and galaxies
         stars = self.star_tile_decoder(locs, star_fluxes, star_bools)
         galaxies = torch.zeros(img_shape, device=locs.device)
+            
         if self.galaxy_tile_decoder is not None:
-            galaxies = self.galaxy_tile_decoder(locs, tile_catalog["galaxy_params"], galaxy_bools)
+            galaxies = self.galaxy_tile_decoder(locs, tile_catalog["galaxy_params"], galaxy_bools, tile_catalog["lens_params"], lensed_galaxy_bools)
 
         return galaxies.view(img_shape) + stars.view(img_shape)
 
@@ -395,7 +399,6 @@ class Tiler(nn.Module):
 
         return source[:, l_indx:u_indx, l_indx:u_indx]
 
-
 class StarTileDecoder(PSFDecoder):
     def __init__(
         self, tile_slen, ptile_slen, n_bands, psf_slen, sdss_bands=(2,), psf_params_file=None
@@ -428,7 +431,6 @@ class StarTileDecoder(PSFDecoder):
 
         return self.tiler(locs, sources)
 
-
 class GalaxyTileDecoder(nn.Module):
     def __init__(self, tile_slen, ptile_slen, n_bands, galaxy_model: GalaxyModel):
         super().__init__()
@@ -444,7 +446,7 @@ class GalaxyTileDecoder(nn.Module):
             raise TypeError("galaxy_model is not a valid type.")
         self.galaxy_decoder = galaxy_decoder
 
-    def forward(self, locs, galaxy_params, galaxy_bools):
+    def forward(self, locs, galaxy_params, galaxy_bools, lens_params = None, lensed_galaxy_bools = None):
         """Renders galaxy tile from locations and galaxy parameters."""
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles = locs.shape[0]
@@ -456,18 +458,29 @@ class GalaxyTileDecoder(nn.Module):
         assert galaxy_params.shape[1] == galaxy_bools.shape[1] == max_sources
         assert galaxy_bools.shape[2] == 1
 
-        single_galaxies = self._render_single_galaxies(galaxy_params, galaxy_bools)
+        if lens_params is not None:
+            n_lens_params = lens_params.shape[-1]
+            lens_params = lens_params.view(n_ptiles, max_sources, n_lens_params)
+            assert lens_params.shape[0] == lensed_galaxy_bools.shape[0] == n_ptiles
+            assert lens_params.shape[1] == lensed_galaxy_bools.shape[1] == max_sources
+            assert lensed_galaxy_bools.shape[2] == 1
+
+        single_galaxies = self._render_single_galaxies(galaxy_params, galaxy_bools, lens_params, lensed_galaxy_bools)
 
         return self.tiler(
             locs,
             single_galaxies * galaxy_bools.unsqueeze(-1).unsqueeze(-1),
         )
 
-    def _render_single_galaxies(self, galaxy_params, galaxy_bools):
+    def _render_single_galaxies(self, galaxy_params, galaxy_bools, lens_params = None, lensed_galaxy_bools = None):
         # flatten parameters
         n_galaxy_params = galaxy_params.shape[-1]
         z = galaxy_params.view(-1, n_galaxy_params)
         b = galaxy_bools.flatten()
+
+        n_lens_params = lens_params.shape[-1]
+        z_lens = lens_params.view(-1, n_lens_params)
+        b_lens = lensed_galaxy_bools.flatten()
 
         # allocate memory
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
@@ -475,7 +488,7 @@ class GalaxyTileDecoder(nn.Module):
 
         # forward only galaxies that are on!
         # no background
-        gal_on = self.galaxy_decoder(z[b == 1])
+        gal_on = self.galaxy_decoder(z[b == 1], z_lens=z_lens[b == 1], lensed_galaxy_bools=b_lens[b == 1])
 
         # size the galaxy (either trims or crops to the size of ptile)
         gal_on = self.size_galaxy(gal_on)

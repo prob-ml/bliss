@@ -3,11 +3,13 @@ from typing import Dict, Optional
 
 import galsim
 import numpy as np
+from einops import rearrange, reduce
 import torch
-from torch import Tensor
+from torch import Tensor, nn
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.models.psf_decoder import PSFDecoder
+from astropy.io import fits
 
 
 class SingleGalsimGalaxyPrior:
@@ -118,7 +120,12 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
             psf_image = galsim.Image(psf_image[0], scale=pixel_scale)
             self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
-    def __call__(self, z: Tensor, offset: Optional[Tensor] = None) -> Tensor:
+        assert n_bands == 1, "Only 1 band is supported"
+        self.slen = slen
+        self.n_bands = 1
+        self.pixel_scale = pixel_scale
+        
+    def __call__(self, z: Tensor, offset: Optional[Tensor] = None, z_lens: Optional[Tensor] = None, lensed_galaxy_bools: Optional[Tensor] = None) -> Tensor:
         if z.shape[0] == 0:
             return torch.zeros(0, 1, self.slen, self.slen, device=z.device)
 
@@ -130,11 +137,92 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
         for ii, latent in enumerate(z):
             off = offset if not offset else offset[ii]
             assert off is None or off.shape == (2,)
-            image = self.render_galaxy(latent, self.psf, self.slen, off)
+
+            lens_params = None
+            if lensed_galaxy_bools is not None and lensed_galaxy_bools[ii]:
+                lens_params = z_lens[ii]
+
+            image = self.render_galaxy(latent, self.psf, self.slen, off, lens_params)
             images.append(image)
         return torch.stack(images, dim=0).to(z.device)
 
-    def render_galaxy(
+    def sie_deflection(self, x, y, lens_params):
+        """
+        args:
+        x, y: vectors or images of coordinates;
+        par: vector of parameters with 1 to 5 elements, defined as follows:
+            par[0]: lens strength, or 'Einstein radius'
+            par[1]: (optional) x-center
+            par[2]: (optional) y-center
+            par[3]: (optional) e1 ellipticity
+            par[4]: (optional) e2 ellipticity
+
+        RETURNS: tuple (xg, yg) of gradients at the positions (x, y)
+
+        Adopted from: Adam S. Bolton, U of Utah, 2009
+        """
+        b, center_x, center_y, e1, e2 = lens_params.cpu().numpy()
+        ell = np.sqrt(e1 ** 2 + e2 ** 2)
+        q = (1 - ell) / (1 + ell)
+        phirad = np.arctan(e2 / e1)
+
+        # Go into shifted coordinats of the potential:
+        xsie = (x-center_x) * np.cos(phirad) + (y-center_y) * np.sin(phirad)
+        ysie = (y-center_y) * np.cos(phirad) - (x-center_x) * np.sin(phirad)
+        
+        # Compute potential gradient in the transformed system:
+        r_ell = np.sqrt(q * xsie ** 2 + ysie ** 2 / q)
+        qfact = np.sqrt(1./q - q)
+
+        # (r_ell == 0) terms prevent divide-by-zero problems
+        eps = 0.001
+        if (qfact >= eps):
+            xtg = (b/qfact) * np.arctan(qfact * xsie / (r_ell + (r_ell == 0)))
+            ytg = (b/qfact) * np.arctanh(qfact * ysie / (r_ell + (r_ell == 0)))
+        else:
+            xtg = b * xsie / (r_ell + (r_ell == 0))
+            ytg = b * ysie / (r_ell + (r_ell == 0))
+
+        # Transform back to un-rotated system:
+        xg = xtg * np.cos(phirad) - ytg * np.sin(phirad)
+        yg = ytg * np.cos(phirad) + xtg * np.sin(phirad)
+        return (xg, yg)
+
+    def bilinear_interpolate_numpy(self, im, x, y):
+        x0 = np.floor(x).astype(int)
+        x1 = x0 + 1
+        y0 = np.floor(y).astype(int)
+        y1 = y0 + 1
+
+        x0 = np.clip(x0, 0, im.shape[1]-1)
+        x1 = np.clip(x1, 0, im.shape[1]-1)
+        y0 = np.clip(y0, 0, im.shape[0]-1)
+        y1 = np.clip(y1, 0, im.shape[0]-1)
+
+        Ia = im[ y0, x0 ]
+        Ib = im[ y1, x0 ]
+        Ic = im[ y0, x1 ]
+        Id = im[ y1, x1 ]
+
+        wa = (x1-x) * (y1-y)
+        wb = (x1-x) * (y-y0)
+        wc = (x-x0) * (y1-y)
+        wd = (x-x0) * (y-y0)
+
+        return (Ia.T*wa).T + (Ib.T*wb).T + (Ic.T*wc).T + (Id.T*wd).T
+
+    def lens_galsim(self, unlensed_image, lens_params):
+        nx, ny = unlensed_image.shape
+        x_range = [-nx // 2, nx // 2]
+        y_range = [-ny // 2, ny // 2]
+        x = (x_range[1] - x_range[0]) * np.outer(np.ones(ny), np.arange(nx)) / float(nx-1) + x_range[0]
+        y = (y_range[1] - y_range[0]) * np.outer(np.arange(ny), np.ones(nx)) / float(ny-1) + y_range[0]
+
+        (xg, yg) = self.sie_deflection(x, y, lens_params)
+        lensed_image = self.bilinear_interpolate_numpy(unlensed_image, (x-xg) + nx // 2, (y-yg) + ny // 2)
+        return lensed_image.astype(unlensed_image.dtype)
+
+    def _render_galaxy(
         self,
         galaxy_params: Tensor,
         psf: galsim.GSObject,
@@ -171,8 +259,26 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
         offset = offset if offset is None else offset.numpy()
         image = gal_conv.drawImage(
             nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
-        )
-        return torch.from_numpy(image.array).reshape(1, slen, slen)
+        ).array
+        return image
+
+    def render_galaxy(
+        self,
+        galaxy_params: Tensor,
+        psf: galsim.GSObject,
+        slen: int,
+        offset: Optional[Tensor] = None,
+        lens_params: Optional[Tensor] = None,
+    ) -> Tensor:
+        image = self._render_galaxy(galaxy_params, psf, slen, offset)
+
+        if lens_params is not None:
+            lensed_galaxy_params, pure_lens_params = lens_params[:7], lens_params[7:]
+            unlensed_src = self._render_galaxy(lensed_galaxy_params, psf, slen, offset)
+            lensed_src = self.lens_galsim(unlensed_src, pure_lens_params) 
+            image += lensed_src
+
+        return torch.from_numpy(image).reshape(1, slen, slen)
 
 
 class UniformGalsimGalaxiesPrior:
