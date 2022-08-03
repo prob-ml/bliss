@@ -143,9 +143,6 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
 
         single_galaxy_tensor = noiseless_centered[:n_sources]
         single_galaxy_tensor = rearrange(single_galaxy_tensor, "n 1 h w -> n h w", n=n_sources)
-        mags = torch.zeros(self.max_n_sources)
-        for ii in range(n_sources):
-            mags[ii] = convert_flux_to_mag(galaxy_params[ii, 0])
         ellips = torch.zeros(self.max_n_sources, 2)
         e12 = get_single_galaxy_ellipticities(single_galaxy_tensor, psf_tensor, scale)
         ellips[:n_sources, :] = e12
@@ -159,11 +156,17 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
 
         gal_fluxes = galaxy_params[:, 0]
 
+        # get magnitudes
+        galaxy_mags = torch.zeros(self.max_n_sources)
+        for ii in range(n_sources):
+            galaxy_mags[ii] = convert_flux_to_mag(galaxy_params[ii, 0])
+
         # add to full catalog (needs to be in batches)
-        full_cat["mags"] = rearrange(mags, "n -> 1 n 1", n=self.max_n_sources)
+        full_cat["mags"] = rearrange(galaxy_mags, "n -> 1 n 1", n=self.max_n_sources)
         full_cat["star_fluxes"] = torch.zeros(1, self.max_n_sources, 1)
         full_cat["star_log_fluxes"] = torch.zeros(1, self.max_n_sources, 1)
         full_cat["galaxy_fluxes"] = rearrange(gal_fluxes, "n -> 1 n 1", n=self.max_n_sources)
+        full_cat["fluxes"] = full_cat["galaxy_fluxes"]
 
         full_cat["ellips"] = rearrange(ellips, "n g -> 1 n g", n=self.max_n_sources, g=2)
         full_cat["snr"] = rearrange(snr, "n -> 1 n 1", n=self.max_n_sources)
