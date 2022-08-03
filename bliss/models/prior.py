@@ -144,10 +144,9 @@ class ImagePrior(pl.LightningModule):
 
         galaxy_bools, star_bools = self._sample_n_galaxies_and_stars(is_on_array)
         galaxy_params = self._sample_galaxy_params(galaxy_bools)
-        fluxes = self._sample_fluxes(star_bools)
-        log_fluxes = self._get_log_fluxes(fluxes)
+        star_fluxes = self._sample_star_fluxes(star_bools)
+        star_log_fluxes = self._get_log_fluxes(star_fluxes)
 
-        # per tile quantities.
         return TileCatalog(
             tile_slen,
             {
@@ -156,8 +155,8 @@ class ImagePrior(pl.LightningModule):
                 "galaxy_bools": galaxy_bools,
                 "star_bools": star_bools,
                 "galaxy_params": galaxy_params,
-                "fluxes": fluxes,
-                "log_fluxes": log_fluxes,
+                "star_fluxes": star_fluxes,
+                "star_log_fluxes": star_log_fluxes,
             },
         )
 
@@ -212,8 +211,8 @@ class ImagePrior(pl.LightningModule):
         star_bools = (1 - galaxy_bools) * is_on_array.unsqueeze(-1)
         return galaxy_bools, star_bools
 
-    def _sample_fluxes(self, star_bools: Tensor):
-        """Samples fluxes.
+    def _sample_star_fluxes(self, star_bools: Tensor):
+        """Samples star fluxes.
 
         Arguments:
             star_bools: Tensor indicating whether each object is a star or not.

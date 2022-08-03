@@ -194,8 +194,8 @@ class GalaxyEncoder(pl.LightningModule):
             "locs",
             "galaxy_bools",
             "star_bools",
-            "fluxes",
-            "log_fluxes",
+            "star_fluxes",
+            "star_log_fluxes",
             "n_sources",
         ]
         for k in keys:
@@ -231,8 +231,8 @@ class GalaxyEncoder(pl.LightningModule):
                 "locs": batch["locs"],
                 "galaxy_bools": batch["galaxy_bools"],
                 "star_bools": batch["star_bools"],
-                "fluxes": batch["fluxes"],
-                "log_fluxes": batch["log_fluxes"],
+                "star_fluxes": batch["star_fluxes"],
+                "star_log_fluxes": batch["star_log_fluxes"],
                 "galaxy_params": galaxy_params,
             },
         )
