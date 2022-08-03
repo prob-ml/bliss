@@ -367,6 +367,7 @@ class CoaddFullCatalog(FullCatalog):
             data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
 
         data["galaxy_bools"] = data["galaxy_bools"].float()
+        data["star_fluxes"] = data["fluxes"] * (1 - data["galaxy_bools"])
         return cls(height, width, data)
 
 
