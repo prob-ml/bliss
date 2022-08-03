@@ -134,7 +134,7 @@ class TestStarSleepEncoderM2:
             true_locs * slen,
             2.5 * torch.log10(true_fluxes[:, 0:1]),
             estimate.plocs[0],
-            2.5 * torch.log10(estimate["fluxes"][0, :, 0:1]),
+            2.5 * torch.log10(estimate["star_fluxes"][0, :, 0:1]),
             slack=0.5,
         )
 

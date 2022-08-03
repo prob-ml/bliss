@@ -191,7 +191,9 @@ class ImageDecoder(pl.LightningModule):
         assert (n_sources <= max_sources).all()
         locs = rearrange(tile_catalog.locs, "b nth ntw s xy -> (b nth ntw) s xy", xy=2)
         galaxy_bools = rearrange(tile_catalog["galaxy_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
-        fluxes = rearrange(tile_catalog["fluxes"], "b nth ntw s band -> (b nth ntw) s band")
+        star_fluxes = rearrange(
+            tile_catalog["star_fluxes"], "b nth ntw s band -> (b nth ntw) s band"
+        )
 
         # draw stars and galaxies
         is_on_array = get_is_on_from_n_sources(n_sources, max_sources)
@@ -209,7 +211,7 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # draw stars and galaxies
-        stars = self.star_tile_decoder(locs, fluxes, star_bools)
+        stars = self.star_tile_decoder(locs, star_fluxes, star_bools)
         galaxies = torch.zeros(img_shape, device=locs.device)
         if self.galaxy_tile_decoder is not None:
             galaxies = self.galaxy_tile_decoder(locs, tile_catalog["galaxy_params"], galaxy_bools)
