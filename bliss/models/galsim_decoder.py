@@ -7,6 +7,7 @@ import torch
 from torch import Tensor
 
 from bliss.catalog import FullCatalog, TileCatalog
+from bliss.models.psf_decoder import PSFDecoder
 
 
 class SingleGalsimGalaxyPrior:
@@ -96,19 +97,32 @@ class SingleGalsimGalaxyPrior:
         ).to(device)
 
 
-class SingleGalsimGalaxyDecoder:
+class SingleGalsimGalaxyDecoder(PSFDecoder):
     def __init__(
         self,
         slen: int,
         n_bands: int,
         pixel_scale: float,
-        psf_image_file: str,
+        psf_image_file: Optional[str] = None,
+        psf_params_file: Optional[str] = None,
+        psf_slen: Optional[int] = None,
+        sdss_bands: Optional[str] = None,
     ) -> None:
+        super().__init__(
+            psf_image_file=psf_image_file,
+            psf_params_file=psf_params_file,
+            psf_slen=psf_slen,
+            sdss_bands=sdss_bands,
+            n_bands=n_bands,
+        )
+        assert len(self.psf.shape) == 3 and self.psf.shape[0] == 1
+        psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
+        self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
+
         assert n_bands == 1, "Only 1 band is supported"
         self.slen = slen
         self.n_bands = 1
         self.pixel_scale = pixel_scale
-        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
 
     def __call__(self, z: Tensor, offset: Optional[Tensor] = None) -> Tensor:
         if z.shape[0] == 0:
@@ -258,15 +272,6 @@ class FullCatalogDecoder:
     def forward_tile(self, tile_cat: TileCatalog):
         full_cat = tile_cat.to_full_params()
         return self(full_cat)
-
-
-def load_psf_from_file(psf_image_file: str, pixel_scale: float) -> galsim.GSObject:
-    """Return normalized PSF galsim.GSObject from numpy psf_file."""
-    assert Path(psf_image_file).suffix == ".npy"
-    psf_image = np.load(psf_image_file)
-    assert len(psf_image.shape) == 3 and psf_image.shape[0] == 1
-    psf_image = galsim.Image(psf_image[0], scale=pixel_scale)
-    return galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
 
 def _sample_n_sources(max_n_sources) -> int:

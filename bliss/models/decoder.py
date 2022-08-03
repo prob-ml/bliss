@@ -12,6 +12,7 @@ from torch.nn import functional as F
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.datasets.galsim_galaxies import SingleGalsimGalaxyDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.models.psf_decoder import get_mgrid, PSFDecoder
 from bliss.reporting import get_single_galaxy_ellipticities
 
 GalaxyModel = Union[OneCenteredGalaxyAE, SingleGalsimGalaxyDecoder]
@@ -150,7 +151,8 @@ class ImageDecoder(pl.LightningModule):
         b_flat = b * nth * ntw * s
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
 
-        psf = self.star_tile_decoder.forward_adjusted_psf()
+        unfit_psf = self.star_tile_decoder.forward_adjusted_psf()
+        psf = self.star_tile_decoder.tiler.fit_source_to_ptile(unfit_psf)
         psf_image = rearrange(psf, "1 h w -> h w", h=slen, w=slen)
 
         galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
@@ -395,52 +397,17 @@ class Tiler(nn.Module):
         return source[:, l_indx:u_indx, l_indx:u_indx]
 
 
-def get_mgrid(slen: int):
-    offset = (slen - 1) / 2
-    # Currently type-checking with mypy doesn't work with np.mgrid
-    # See https://github.com/python/mypy/issues/11185.
-    x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]  # type: ignore
-    mgrid = torch.tensor(np.dstack((y, x))) / offset
-    # mgrid is between -1 and 1
-    # then scale slightly because of the way f.grid_sample
-    # parameterizes the edges: (0, 0) is center of edge pixel
-    return mgrid.float() * (slen - 1) / slen
-
-
-class StarTileDecoder(nn.Module):
+class StarTileDecoder(PSFDecoder):
     def __init__(
         self, tile_slen, ptile_slen, n_bands, psf_slen, sdss_bands=(2,), psf_params_file=None
     ):
-        super().__init__()
+        super().__init__(
+            psf_params_file=psf_params_file,
+            psf_slen=psf_slen,
+            sdss_bands=sdss_bands,
+            n_bands=n_bands,
+        )
         self.tiler = Tiler(tile_slen, ptile_slen)
-        self.n_bands = n_bands
-        self.psf_slen = psf_slen
-
-        ext = Path(psf_params_file).suffix
-        if ext == ".npy":
-            psf_params = torch.from_numpy(np.load(psf_params_file))
-            psf_params = psf_params[list(range(n_bands))]
-        elif ext == ".fits":
-            assert len(sdss_bands) == n_bands
-            psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
-        else:
-            raise NotImplementedError(
-                "Only .npy and .fits extensions are supported for PSF params files."
-            )
-        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
-        self.psf_image = None
-        grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-        # extra factor to be consistent with old repo
-        # but probably doesn't matter ...
-        grid *= self.psf_slen / (self.psf_slen - 1)
-        self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
-
-        # get psf normalization_constant
-        self.normalization_constant = torch.zeros(self.n_bands)
-        for i in range(self.n_bands):
-            psf_i = self._get_psf_single_band(i)
-            self.normalization_constant[i] = 1 / psf_i.sum()
-        self.normalization_constant = self.normalization_constant.detach()
 
     def forward(self, locs, fluxes, star_bools):
         """Renders star tile from locations and fluxes."""
@@ -449,10 +416,10 @@ class StarTileDecoder(nn.Module):
         # star_bools: Is (n_ptiles x max_stars x 1)
         # max_sources obtained from locs, allows for more flexibility when rendering.
 
-        psf = self.forward_adjusted_psf()
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
 
+        psf = self.forward_adjusted_psf()
         assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
         assert psf.shape[0] == self.n_bands
         assert fluxes.shape[0] == star_bools.shape[0] == n_ptiles
@@ -466,72 +433,6 @@ class StarTileDecoder(nn.Module):
         sources *= rearrange(star_bools, "np ms 1 -> np ms 1 1 1")
 
         return self.tiler(locs, sources)
-
-    def psf_forward(self):
-        psf = self._get_psf()
-        init_psf_sum = reduce(psf, "n m k -> n", "sum").detach()
-        norm = reduce(psf, "n m k -> n", "sum")
-        psf *= rearrange(init_psf_sum / norm, "n -> n 1 1")
-        return psf
-
-    @staticmethod
-    def _get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
-        data = fits.open(psf_fit_file, ignore_missing_end=True).pop(6).data
-        psf_params = torch.zeros(len(bands), 6)
-        for i, band in enumerate(bands):
-            sigma1 = data["psf_sigma1"][0][band] ** 2
-            sigma2 = data["psf_sigma2"][0][band] ** 2
-            sigmap = data["psf_sigmap"][0][band] ** 2
-            beta = data["psf_beta"][0][band]
-            b = data["psf_b"][0][band]
-            p0 = data["psf_p0"][0][band]
-
-            psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
-
-        return psf_params
-
-    def _get_psf(self):
-        psf_list = []
-        for i in range(self.n_bands):
-            band_psf = self._get_psf_single_band(i)
-            band_psf *= self.normalization_constant[i]
-            psf_list.append(band_psf.unsqueeze(0))
-        psf = torch.cat(psf_list)
-
-        assert (psf > 0).all()
-        return psf
-
-    @staticmethod
-    def _psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
-        term1 = torch.exp(-(r**2) / (2 * sigma1))
-        term2 = b * torch.exp(-(r**2) / (2 * sigma2))
-        term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
-        return (term1 + term2 + term3) / (1 + b + p0)
-
-    def _get_psf_single_band(self, band_idx):
-        psf_params = torch.exp(self.params[band_idx])
-        return self._psf_fun(
-            self.cached_radii_grid,
-            psf_params[0],
-            psf_params[1],
-            psf_params[2],
-            psf_params[3],
-            psf_params[4],
-            psf_params[5],
-        )
-
-    def forward_adjusted_psf(self):
-        # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
-        # first dimension of psf is number of bands
-        # dimension of the psf/slen should be odd
-        psf = self.psf_forward()
-        psf_slen = psf.shape[2]
-        assert len(psf.shape) == 3
-        assert psf.shape[0] == self.n_bands
-        assert psf.shape[1] == psf_slen
-        assert (psf_slen % 2) == 1
-
-        return self.tiler.fit_source_to_ptile(psf)
 
 
 class GalaxyTileDecoder(nn.Module):
