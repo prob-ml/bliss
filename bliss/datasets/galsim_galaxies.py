@@ -154,12 +154,11 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
             snr[ii] = _get_snr(noiseless_centered[ii], background)
             blendedness[ii] = _get_blendedness(noiseless_uncentered[ii], noiseless)
 
-        gal_fluxes = galaxy_params[:, 0]
-
         # get magnitudes
+        gal_fluxes = galaxy_params[:, 0]
         galaxy_mags = torch.zeros(self.max_n_sources)
         for ii in range(n_sources):
-            galaxy_mags[ii] = convert_flux_to_mag(galaxy_params[ii, 0])
+            galaxy_mags[ii] = convert_flux_to_mag(gal_fluxes[ii])
 
         # add to full catalog (needs to be in batches)
         full_cat["mags"] = rearrange(galaxy_mags, "n -> 1 n 1", n=self.max_n_sources)
