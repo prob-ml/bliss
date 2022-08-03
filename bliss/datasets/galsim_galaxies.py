@@ -161,8 +161,8 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
 
         # add to full catalog (needs to be in batches)
         full_cat["mags"] = rearrange(mags, "n -> 1 n 1", n=self.max_n_sources)
-        full_cat["star_fluxes"] = torch.zeros(1, self.max_n_sources, 1)  # stars
-        full_cat["star_log_fluxes"] = torch.zeros(1, self.max_n_sources, 1)  # stars
+        full_cat["star_fluxes"] = torch.zeros(1, self.max_n_sources, 1)
+        full_cat["star_log_fluxes"] = torch.zeros(1, self.max_n_sources, 1)
         full_cat["galaxy_fluxes"] = rearrange(gal_fluxes, "n -> 1 n 1", n=self.max_n_sources)
 
         full_cat["ellips"] = rearrange(ellips, "n g -> 1 n g", n=self.max_n_sources, g=2)
