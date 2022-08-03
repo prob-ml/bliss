@@ -7,6 +7,7 @@ import torch
 from torch import Tensor
 
 from bliss.catalog import FullCatalog, TileCatalog
+from bliss.models.psf_decoder import PSFDecoder
 
 
 class SingleGalsimGalaxyPrior:
@@ -96,19 +97,26 @@ class SingleGalsimGalaxyPrior:
         ).to(device)
 
 
-class SingleGalsimGalaxyDecoder:
+class SingleGalsimGalaxyDecoder(PSFDecoder):
     def __init__(
         self,
         slen: int,
         n_bands: int,
         pixel_scale: float,
-        psf_image_file: str,
+        psf_image_file: Optional[str] = None,
+        psf_params_file: Optional[str] = None,
+        psf_slen: Optional[str] = None,
+        sdss_bands: Optional[str] = None,
     ) -> None:
-        assert n_bands == 1, "Only 1 band is supported"
-        self.slen = slen
-        self.n_bands = 1
-        self.pixel_scale = pixel_scale
-        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
+        assert(psf_image_file is not None or psf_params_file is not None)
+        if psf_image_file is not None:
+            self.psf = load_psf_from_file(psf_image_file, pixel_scale)
+        else:
+            super().__init__(n_bands, psf_slen, sdss_bands, psf_params_file)
+            psf_image = self.forward_adjusted_psf().detach().numpy()
+            assert len(psf_image.shape) == 3 and psf_image.shape[0] == 1
+            psf_image = galsim.Image(psf_image[0], scale=pixel_scale)
+            self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
     def __call__(self, z: Tensor, offset: Optional[Tensor] = None) -> Tensor:
         if z.shape[0] == 0:
