@@ -144,7 +144,7 @@ class ImagePrior(pl.LightningModule):
 
         galaxy_bools, star_bools = self._sample_n_galaxies_and_stars(is_on_array)
         galaxy_params = self._sample_galaxy_params(galaxy_bools)
-        star_fluxes = self._sample_fluxes(star_bools)
+        star_fluxes = self._sample_star_fluxes(star_bools)
         star_log_fluxes = self._get_log_fluxes(star_fluxes)
 
         return TileCatalog(
