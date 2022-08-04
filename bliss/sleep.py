@@ -89,6 +89,7 @@ def get_min_perm_loss(
 
 def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     # return shape (n_ptiles x max_detections x max_detections)
+        
     assert true_params.shape == param_mean.shape == param_logvar.shape
 
     n_ptiles = true_params.size(0)

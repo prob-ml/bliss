@@ -28,6 +28,8 @@ case_studies/starnet/fits/*
 case_studies/starnet/decaps/data/*
 case_studies/starnet/sandbox/*
 case_studies/starnet/decaps/fits/*
+case_studies/starnet/coverage_tests/fits/*
+
 *.zpt
 *.npz
 *.npy

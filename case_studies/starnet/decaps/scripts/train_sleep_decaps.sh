@@ -1,9 +1,8 @@
 #!/bin/bash
 
 outfolder='../fits/'
-encoder_name='starnet-manysources-padded2'
-# encoder_name='tmp'
+encoder_name='starnet-tmp'
 
-python train_sleep.py \
+python train_sleep_decaps.py \
   --outfolder $outfolder \
   --outfilename $encoder_name

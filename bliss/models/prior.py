@@ -199,6 +199,7 @@ class ImagePrior(pl.LightningModule):
             self.max_sources,
             2,
         )
+
         locs = torch.rand(*shape, device=is_on_array.device)
         locs *= self.loc_max - self.loc_min
         locs += self.loc_min
