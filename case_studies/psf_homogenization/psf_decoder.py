@@ -1,48 +1,24 @@
-from typing import Dict, List, Optional
+from typing import Optional
 
 import galsim
-import pytorch_lightning as pl
 import torch
-from einops import rearrange
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
 
-from bliss.catalog import FullCatalog
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.galsim_galaxies import GalsimBlends
-from bliss.datasets.sdss import convert_flux_to_mag
-from bliss.models.galsim_decoder import FullCatalogDecoder, UniformGalsimGalaxiesPrior
-from bliss.reporting import get_single_galaxy_ellipticities
-from case_studies.psf_homogenization.galsim_star import FullCatelogDecoderSG, UniformGalsimPrior
+from bliss.models.galsim_decoder import (
+    FullCatalogDecoder,
+    UniformGalsimGalaxiesPrior,
+    UniformGalsimPrior,
+)
 from case_studies.psf_homogenization.homogenization import psf_homo
+from case_studies.psf_homogenization.psf_sampler import PsfSampler
 
 
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
     image_with_background = image + background
     noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
     return image_with_background + noise
-
-
-class PsfSampler:
-    def __init__(
-        self,
-        psf_rmin: float = 0.7,
-        psf_rmax: float = 0.9,
-    ) -> None:
-        self.rmin = psf_rmin
-        self.rmax = psf_rmax
-
-    def sample(self) -> galsim.GSObject:
-        # sample psf from galsim Gaussian distribution
-        if self.rmin == self.rmax:
-            fwhm = self.rmin
-        elif self.rmin > self.rmax:
-            raise ValueError("invalid argument!!!")
-        else:
-            fwhm = torch.distributions.uniform.Uniform(self.rmin, self.rmax).sample([1]).item()
-
-        return galsim.Gaussian(fwhm=fwhm)
 
 
 class GalsimBlendswithPSF(GalsimBlends):
