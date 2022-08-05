@@ -6,6 +6,7 @@ from torch import Tensor, nn
 from torch.distributions import categorical
 from torch.nn import functional as F
 
+USE_LEGACY_BG = False
 
 def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold: float = 4.0):
     """Transforms image before encoder network.
@@ -21,9 +22,10 @@ def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold
     Returns:
         A Tensor of the transformed images (n x c x h x w).
     """
-    return torch.log1p(F.relu(image - background + z_threshold * background.sqrt(), inplace=True))
-
-#     return torch.log(image - image.min() + 1.0)
+    if USE_LEGACY_BG: 
+        return torch.log(image - image.min() + 1.0)
+    else:
+        return torch.log1p(F.relu(image - background + z_threshold * background.sqrt(), inplace=True))
 
 def get_images_in_tiles(images, tile_slen, ptile_slen):
     """Divides a batch of full images into padded tiles.
@@ -259,6 +261,7 @@ class LocationEncoder(nn.Module):
         spatial_dropout=0,
         dropout=0,
         hidden: int = 128,
+        one_hot_tile = False
     ):
         """Initializes LocationEncoder.
 
@@ -286,7 +289,7 @@ class LocationEncoder(nn.Module):
 
         # Number of variational parameters used to characterize each source in an image.
         self.n_params_per_source = sum(param["dim"] for param in self.variational_params.values())
-
+        
         # There are self.max_detections * (self.max_detections + 1) total possible detections.
         # For each param, for each possible number of detection d, there are d ways of assignment.
         # NOTE: Dimensions correspond to the probabilities in ONE tile.
@@ -298,7 +301,13 @@ class LocationEncoder(nn.Module):
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
 
         # networks to be trained
-        self.enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
+        self.one_hot_tile = one_hot_tile
+        if one_hot_tile: 
+            _n_bands = n_bands + 1
+        else: 
+            _n_bands = n_bands
+            
+        self.enc_conv = EncoderCNN(_n_bands, channel, spatial_dropout)
         self.enc_final = nn.Sequential(
             nn.Flatten(1),
             nn.Linear(channel * 4 * dim_enc_conv_out ** 2, hidden),
@@ -338,8 +347,20 @@ class LocationEncoder(nn.Module):
             other methods of this class (typically named `var_params`).
         """
         # get h matrix.
-        # Forward to the layer that is shared by all n_sources.
+        # Forward to the layer that is shared by all n_sources.        
         log_image_ptiles_flat = rearrange(log_image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
+        
+        if self.one_hot_tile: 
+            b = log_image_ptiles_flat.shape[0]
+            
+            band_n1 = torch.ones((b, 1, self.tile_slen, self.tile_slen), 
+                                 device = log_image_ptiles_flat.device)
+            band_n1 = F.pad(band_n1,
+                            (self.border_padding, ) * 4, 
+                            value = 0.)
+
+            log_image_ptiles_flat = torch.hstack((log_image_ptiles_flat, band_n1))
+        
         var_params_conv = self.enc_conv(log_image_ptiles_flat)
         var_params_flat = self.enc_final(var_params_conv)
         return rearrange(
