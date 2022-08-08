@@ -153,9 +153,8 @@ class ImagePrior(pl.LightningModule):
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
         locs = self._sample_locs(is_on_array)
 
-        galaxy_bools, star_bools, lensed_galaxy_bools = self._sample_n_galaxies_and_stars(
-            is_on_array
-        )
+        galaxy_bools, star_bools = self._sample_n_galaxies_and_stars(is_on_array)
+        lensed_galaxy_bools = self._sample_n_lenses(is_on_array, galaxy_bools)
         galaxy_params = self._sample_galaxy_params(self.galaxy_prior, galaxy_bools)
         star_fluxes = self._sample_star_fluxes(star_bools)
         star_log_fluxes = self._get_log_fluxes(star_fluxes)
@@ -177,12 +176,8 @@ class ImagePrior(pl.LightningModule):
             pure_lens_params = self._sample_lens_params(lensed_galaxy_bools)
             lens_params = torch.cat((lensed_galaxy_params, pure_lens_params), dim=-1)
 
-            catalog_params.update(
-                {
-                    "lensed_galaxy_bools": lensed_galaxy_bools,
-                    "lens_params": lens_params,
-                }
-            )
+            catalog_params["lensed_galaxy_bools"] = lensed_galaxy_bools
+            catalog_params["lens_params"] = lens_params
 
         return TileCatalog(tile_slen, catalog_params)
 
@@ -236,12 +231,22 @@ class ImagePrior(pl.LightningModule):
         galaxy_bools = (galaxy_bools * is_on_array.unsqueeze(-1)).float()
         star_bools = (1 - galaxy_bools) * is_on_array.unsqueeze(-1)
 
+        return galaxy_bools, star_bools
+
+    def _sample_n_lenses(self, is_on_array, galaxy_bools):
+        batch_size, n_tiles_h, n_tiles_w, max_sources = is_on_array.shape
+        uniform = torch.rand(
+            batch_size,
+            n_tiles_h,
+            n_tiles_w,
+            max_sources,
+            1,
+            device=is_on_array.device,
+        )
         # currently only support lensing where galaxy is present
         lensed_galaxy_bools = uniform < self.prob_lensed_galaxy
-        lensed_galaxy_bools = (
-            lensed_galaxy_bools * galaxy_bools * is_on_array.unsqueeze(-1)
-        ).float()
-        return galaxy_bools, star_bools, lensed_galaxy_bools
+        lensed_galaxy_bools = lensed_galaxy_bools * galaxy_bools * is_on_array.unsqueeze(-1)
+        return lensed_galaxy_bools.float()
 
     def _sample_star_fluxes(self, star_bools: Tensor):
         """Samples star fluxes.
@@ -304,34 +309,35 @@ class ImagePrior(pl.LightningModule):
         )
         return galaxy_params * galaxy_bools
 
-    def _sample_lens_params(self, lensed_galaxy_bools):
-        """Sample latent galaxy params from GalaxyPrior object."""
-        batch_size, n_tiles_h, n_tiles_w, max_sources, _ = lensed_galaxy_bools.shape
-        generate_lens_shape_tensor = lambda n, dist: dist(
+    def _sample_param_from_dist(self, shape, n, dist, device):
+        batch_size, n_tiles_h, n_tiles_w, max_sources = shape
+        return dist(
             batch_size,
             n_tiles_h,
             n_tiles_w,
             max_sources,
             n,
-            device=lensed_galaxy_bools.device,
+            device=device,
         )
 
-        lens_params = generate_lens_shape_tensor(5, torch.rand)
+    def _sample_lens_params(self, lensed_galaxy_bools):
+        """Sample latent galaxy params from GalaxyPrior object."""
+        base_shape = list(lensed_galaxy_bools.shape)[:-1]
+        device = lensed_galaxy_bools.device
+        lens_params = self._sample_param_from_dist(base_shape, 5, torch.rand, device)
         if self.prob_lensed_galaxy > 0.0:
             # latents are: theta_E, center_x/y, e_1/2
-            lens_params[..., 0:1] = (
-                generate_lens_shape_tensor(1, torch.rand) * 25.0 + 5.0
-            )  # avoid degenerate small lenses
-            lens_params[..., 1:3] = generate_lens_shape_tensor(
-                2, torch.randn
-            )  # centers are likely in (-0.5,0.5)
+            base_radii = self._sample_param_from_dist(base_shape, 1, torch.rand, device)
+            base_centers = self._sample_param_from_dist(base_shape, 2, torch.randn, device)
+            base_qs = self._sample_param_from_dist(base_shape, 1, torch.rand, device)
+            base_betas = self._sample_param_from_dist(base_shape, 1, torch.rand, device)
+
+            lens_params[..., 0:1] = base_radii * 25.0 + 5.0
+            lens_params[..., 1:3] = base_centers * 1.0
 
             # ellipticities must satisfy some angle relationships
-            qs = generate_lens_shape_tensor(1, torch.rand)
-            beta_radians = (generate_lens_shape_tensor(1, torch.rand) - 0.5) * (
-                np.pi / 2
-            )  # in [-pi / 4, pi / 4]
-            ell_factors = (1 - qs) / (1 + qs)
+            beta_radians = (base_betas - 0.5) * (np.pi / 2)  # [-pi / 4, pi / 4]
+            ell_factors = (1 - base_qs) / (1 + base_qs)
             lens_params[..., 3:4] = ell_factors * torch.cos(beta_radians)
             lens_params[..., 4:5] = ell_factors * torch.sin(beta_radians)
         return lens_params * lensed_galaxy_bools

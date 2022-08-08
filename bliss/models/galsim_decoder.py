@@ -127,8 +127,6 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
         self,
         z: Tensor,
         offset: Optional[Tensor] = None,
-        z_lens: Optional[Tensor] = None,
-        lensed_galaxy_bools: Optional[Tensor] = None,
     ) -> Tensor:
         if z.shape[0] == 0:
             return torch.zeros(0, 1, self.slen, self.slen, device=z.device)
@@ -141,13 +139,100 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
         for ii, latent in enumerate(z):
             off = offset if not offset else offset[ii]
             assert off is None or off.shape == (2,)
-            lens_params = None
-            if lensed_galaxy_bools is not None and z_lens is not None and lensed_galaxy_bools[ii]:
-                lens_params = z_lens[ii]
-
-            image = self.render_galaxy(latent, self.psf, self.slen, off, lens_params)
+            image = self.render_galaxy(latent, self.psf, self.slen, off)
             images.append(image)
         return torch.stack(images, dim=0).to(z.device)
+
+    def _render_galaxy_np(
+        self,
+        galaxy_params: Tensor,
+        psf: galsim.GSObject,
+        slen: int,
+        offset: Optional[Tensor] = None,
+    ) -> Tensor:
+        assert offset is None or offset.shape == (2,)
+        if isinstance(galaxy_params, Tensor):
+            galaxy_params = galaxy_params.cpu().detach()
+        total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
+        bulge_frac = 1 - disk_frac
+
+        disk_flux = total_flux * disk_frac
+        bulge_flux = total_flux * bulge_frac
+
+        components = []
+        if disk_flux > 0:
+            b_d = a_d * disk_q
+            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
+            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
+                q=disk_q,
+                beta=beta_radians * galsim.radians,
+            )
+            components.append(disk)
+        if bulge_flux > 0:
+            b_b = bulge_q * a_b
+            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
+            bulge = galsim.DeVaucouleurs(
+                flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
+            ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
+            components.append(bulge)
+        galaxy = galsim.Add(components)
+        gal_conv = galsim.Convolution(galaxy, psf)
+        offset = offset if offset is None else offset.numpy()
+        return gal_conv.drawImage(
+            nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
+        ).array
+
+    def render_galaxy(
+        self,
+        galaxy_params: Tensor,
+        psf: galsim.GSObject,
+        slen: int,
+        offset: Optional[Tensor] = None,
+    ) -> Tensor:
+        image = self._render_galaxy_np(galaxy_params, psf, slen, offset)
+        return torch.from_numpy(image).reshape(1, slen, slen)
+
+
+class SingleLensedGalsimGalaxyDecoder(SingleGalsimGalaxyDecoder):
+    def __init__(
+        self,
+        slen: int,
+        n_bands: int,
+        pixel_scale: float,
+        psf_image_file: Optional[str] = None,
+        psf_params_file: Optional[str] = None,
+        psf_slen: Optional[int] = None,
+        sdss_bands: Optional[str] = None,
+    ) -> None:
+        super().__init__(
+            slen=slen,
+            n_bands=n_bands,
+            pixel_scale=pixel_scale,
+            psf_image_file=psf_image_file,
+            psf_params_file=psf_params_file,
+            psf_slen=psf_slen,
+            sdss_bands=sdss_bands,
+        )
+
+    def __call__(
+        self,
+        z_lens: Tensor,
+        offset: Optional[Tensor] = None,
+    ) -> Tensor:
+        if z_lens.shape[0] == 0:
+            return torch.zeros(0, 1, self.slen, self.slen, device=z_lens.device)
+
+        if z_lens.shape == (12,):
+            assert offset is None or offset.shape == (2,)
+            return self.render_lensed_galaxy(z_lens, self.psf, self.slen, offset)
+
+        images = []
+        for ii, lens_params in enumerate(z_lens):
+            off = offset if not offset else offset[ii]
+            assert off is None or off.shape == (2,)
+            image = self.render_lensed_galaxy(lens_params, self.psf, self.slen, off)
+            images.append(image)
+        return torch.stack(images, dim=0).to(z_lens.device)
 
     def sie_deflection(self, x, y, lens_params):
         """Get deflection for grid_sample (in pixels) due to a gravitational lens.
@@ -234,62 +319,17 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
         )
         return lensed_image.astype(unlensed_image.dtype)
 
-    def _render_galaxy(
+    def render_lensed_galaxy(
         self,
-        galaxy_params: Tensor,
+        lens_params: Tensor,
         psf: galsim.GSObject,
         slen: int,
         offset: Optional[Tensor] = None,
     ) -> Tensor:
-        assert offset is None or offset.shape == (2,)
-        if isinstance(galaxy_params, Tensor):
-            galaxy_params = galaxy_params.cpu().detach()
-        total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
-        bulge_frac = 1 - disk_frac
-
-        disk_flux = total_flux * disk_frac
-        bulge_flux = total_flux * bulge_frac
-
-        components = []
-        if disk_flux > 0:
-            b_d = a_d * disk_q
-            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
-            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
-                q=disk_q,
-                beta=beta_radians * galsim.radians,
-            )
-            components.append(disk)
-        if bulge_flux > 0:
-            b_b = bulge_q * a_b
-            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
-            bulge = galsim.DeVaucouleurs(
-                flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
-            ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
-            components.append(bulge)
-        galaxy = galsim.Add(components)
-        gal_conv = galsim.Convolution(galaxy, psf)
-        offset = offset if offset is None else offset.numpy()
-        return gal_conv.drawImage(
-            nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
-        ).array
-
-    def render_galaxy(
-        self,
-        galaxy_params: Tensor,
-        psf: galsim.GSObject,
-        slen: int,
-        offset: Optional[Tensor] = None,
-        lens_params: Optional[Tensor] = None,
-    ) -> Tensor:
-        image = self._render_galaxy(galaxy_params, psf, slen, offset)
-
-        if lens_params is not None:
-            lensed_galaxy_params, pure_lens_params = lens_params[:7], lens_params[7:]
-            unlensed_src = self._render_galaxy(lensed_galaxy_params, psf, slen, offset)
-            lensed_src = self.lens_galsim(unlensed_src, pure_lens_params)
-            image += lensed_src
-
-        return torch.from_numpy(image).reshape(1, slen, slen)
+        lensed_galaxy_params, pure_lens_params = lens_params[:7], lens_params[7:]
+        unlensed_src = self._render_galaxy_np(lensed_galaxy_params, psf, slen, offset)
+        lensed_src = self.lens_galsim(unlensed_src, pure_lens_params)
+        return torch.from_numpy(lensed_src).reshape(1, slen, slen)
 
 
 class UniformGalsimGalaxiesPrior:

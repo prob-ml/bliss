@@ -194,24 +194,17 @@ class Encoder(nn.Module):
                 lensed_galaxy_probs *= is_on_array.unsqueeze(-1)
 
                 if deterministic:
-                    lensed_galaxy_bools = (
-                        lensed_galaxy_probs > 0.5
-                    ).float() * is_on_array.unsqueeze(-1)
+                    lensed_galaxy_bools = (lensed_galaxy_probs > 0.5).float()
+                    lensed_galaxy_bools *= is_on_array.unsqueeze(-1)
                 else:
-                    lensed_galaxy_bools = (
-                        torch.rand_like(lensed_galaxy_probs) > 0.5
-                    ).float() * is_on_array.unsqueeze(-1)
+                    lensed_galaxy_bools = (torch.rand_like(lensed_galaxy_probs) > 0.5).float()
+                    lensed_galaxy_bools *= is_on_array.unsqueeze(-1)
 
-                lensed_galaxy_bools *= (
-                    galaxy_bools  # currently only support lensing where galaxy is present
-                )
+                # currently only support lensing where galaxy is present
+                lensed_galaxy_bools *= galaxy_bools
 
-                tile_samples.update(
-                    {
-                        "lensed_galaxy_bools": lensed_galaxy_bools,
-                        "lensed_galaxy_probs": lensed_galaxy_probs,
-                    }
-                )
+                tile_samples["lensed_galaxy_bools"] = lensed_galaxy_bools
+                tile_samples["lensed_galaxy_probs"] = lensed_galaxy_probs
 
         if self.galaxy_encoder is not None:
             galaxy_params = self.galaxy_encoder.sample(
