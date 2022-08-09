@@ -55,10 +55,11 @@ datasets:
     galsim_blended_galaxies_coadd:
         _target_: case_studies.coadds.coadd_decoder.CoaddGalsimBlends
         prior:
-            _target_: bliss.models.galsim_decoder.UniformGalsimGalaxiesPrior
+            _target_: case_studies.coadds.coadd_decoder.CoaddUniformGalsimGalaxiesPrior
             single_galaxy_prior: ${datasets.sdss_galaxies_coadd.prior}
             max_n_sources: 6
             max_shift: 0.5
+            num_dithers: 5
         decoder:
             _target_: case_studies.coadds.coadd_decoder.FullCatalogDecoder
             single_galaxy_decoder: ${datasets.sdss_galaxies_coadd.decoder}

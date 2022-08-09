@@ -1,31 +1,20 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from pathlib import Path
 from typing import Dict, Optional
 import galsim
 import torch
-import torch.nn.functional as F
-import pytorch_lightning as pl
-from torch.utils.data import DataLoader, Dataset
 from torch import Tensor
-from einops import rearrange, reduce
+from einops import rearrange
 from bliss.catalog import FullCatalog
-from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.encoder import Encoder
 from bliss.datasets.background import ConstantBackground
-from bliss.datasets.galsim_galaxies import SingleGalsimGalaxies
-from bliss.models.decoder import GalaxyTileDecoder
 from bliss.datasets.galsim_galaxies import GalsimBlends
 from bliss.models.galsim_decoder import (
     SingleGalsimGalaxyPrior,
     UniformGalsimGalaxiesPrior,
     FullCatalogDecoder,
 )
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog
 from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder, load_psf_from_file
 from case_studies.coadds.align_single_exposures import align_single_exposures
-from case_studies.coadds.signal_noise_ratio import get_snr
 
 
 def _sample_n_sources(max_n_sources) -> int:
@@ -41,6 +30,14 @@ def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
     image_with_background = image + background
     noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
     return image_with_background + noise
+
+
+def _sample_full_catalog(self, num_dithers: int):
+        params_dict = self.prior.sample(num_dithers)
+        params_dict["plocs"] = params_dict["locs"] * self.slen
+        params_dict.pop("locs")
+        params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
+        return FullCatalog(self.slen, self.slen, params_dict)
 
 
 def _linear_coadd(aligned_images, weight):
@@ -218,7 +215,7 @@ class CoaddGalsimBlends(GalsimBlends):
 
     def __init__(
         self,
-        prior: UniformGalsimGalaxiesPrior,
+        prior: CoaddUniformGalsimGalaxiesPrior,
         decoder: FullCatalogDecoder,
         background: ConstantBackground,
         tile_slen: int,
@@ -280,13 +277,14 @@ class CoaddGalsimBlends(GalsimBlends):
 
     def __getitem__(self, idx):
         full_cat = self._sample_full_catalog()
+        dithers = full_cat["dithers"]
         (
             noiseless,
             noiseless_centered,
             noiseless_uncentered,
             background,
             coadded_image,
-        ) = self._get_images(full_cat)
+        ) = self._get_images(full_cat, dithers)
         full_cat = self._add_metrics(full_cat, noiseless, background, coadded_image)
         return {
             "noiseless": noiseless,
