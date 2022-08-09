@@ -167,17 +167,69 @@ class SingleGalsimGalaxyDecoder:
         return torch.from_numpy(image.array).reshape(1, slen, slen)
 
 
-class UniformGalsimGalaxiesPrior:
+class SingleGalsimStarDecoder:
     def __init__(
         self,
-        single_galaxy_prior: SingleGalsimGalaxyPrior,
+        slen: int,
+        n_bands: int,
+        pixel_scale: float,
+        psf_image_file: str,
+    ) -> None:
+        assert n_bands == 1
+        self.slen = slen
+        self.n_bands = n_bands
+        self.pixel_scale = pixel_scale
+        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
+
+    def __call__(self, z: Tensor, offset: Optional[Tensor] = None) -> Tensor:
+        if z.shape[0] == 0:
+            return torch.zeros(0, 1, self.slen, self.slen, device=z.device)
+
+        if z.shape == (1,):  # equal to dim_latents
+            assert offset is None or offset.shape == (2,)
+            return self.render_star(z, self.psf, self.slen, offset)
+
+        images = []
+        for ii, latent in enumerate(z):
+            off = offset if not offset else offset[ii]
+            assert off is None or off.shape == (2,)
+            image = self.render_star(latent, self.psf, self.slen, offset)
+            images.append(image)
+        return torch.stack(images, dim=0).to(z.device)
+
+    def render_star(
+        self,
+        star_params: Tensor,
+        psf: galsim.GSObject,
+        slen: int,
+        offset: Optional[Tensor] = None,
+    ) -> Tensor:
+        assert offset is None or offset.shape == (2,)
+        if isinstance(star_params, Tensor):
+            star_params = star_params.cpu().detach()
+        total_flux = star_params
+
+        star_withflux = psf.withFlux(total_flux)
+        offset = offset if offset is None else offset.numpy()
+        image = star_withflux.drawImage(
+            nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
+        )
+        return torch.from_numpy(image.array).reshape(1, slen, slen)
+
+
+class UniformGalsimPrior:
+    def __init__(
+        self,
+        single_prior: SingleGalsimGalaxyPrior,
         max_n_sources: int,
         max_shift: float,
+        galaxy_prob: float,
     ):
-        self.single_galaxy_prior = single_galaxy_prior
+        self.single_prior = single_prior
         self.max_shift = max_shift  # between 0 and 0.5, from center.
         self.max_n_sources = max_n_sources
-        self.dim_latents = self.single_galaxy_prior.dim_latents
+        self.dim_latents = self.single_prior.dim_latents
+        self.galaxy_prob = galaxy_prob
         assert 0 <= self.max_shift <= 0.5
 
     def sample(self) -> Dict[str, Tensor]:
@@ -185,16 +237,16 @@ class UniformGalsimGalaxiesPrior:
         n_sources = _sample_n_sources(self.max_n_sources)
 
         params = torch.zeros(self.max_n_sources, self.dim_latents)
-        params[:n_sources, :] = self.single_galaxy_prior.sample(n_sources)
+        params[:n_sources, :] = self.single_prior.sample(n_sources)
 
         locs = torch.zeros(self.max_n_sources, 2)
         locs[:n_sources, 0] = _uniform(-self.max_shift, self.max_shift, n_sources) + 0.5
         locs[:n_sources, 1] = _uniform(-self.max_shift, self.max_shift, n_sources) + 0.5
 
-        # for now, galaxies only
         galaxy_bools = torch.zeros(self.max_n_sources, 1)
-        galaxy_bools[:n_sources, :] = 1
+        galaxy_bools[:n_sources, :] = _bernoulli(self.galaxy_prob, n_sources)[:, None]
         star_bools = torch.zeros(self.max_n_sources, 1)
+        star_bools[:n_sources, :] = 1 - galaxy_bools[:n_sources, :]
 
         return {
             "n_sources": torch.tensor(n_sources),
@@ -205,7 +257,7 @@ class UniformGalsimGalaxiesPrior:
         }
 
 
-class UniformBrightestCenterGalsimGalaxy(UniformGalsimGalaxiesPrior):
+class UniformBrightestCenterGalsimGalaxy(UniformGalsimPrior):
     def sample(self) -> Dict[str, Tensor]:
         """Returns a single batch of source parameters where brightest galaxy is centered."""
         sample = super().sample()
@@ -219,22 +271,29 @@ class UniformBrightestCenterGalsimGalaxy(UniformGalsimGalaxiesPrior):
 
 class FullCatalogDecoder:
     def __init__(
-        self, single_galaxy_decoder: SingleGalsimGalaxyDecoder, slen: int, bp: int
+        self,
+        single_galaxy_decoder: SingleGalsimGalaxyDecoder,
+        single_star_decoder: SingleGalsimStarDecoder,
+        slen: int,
+        bp: int,
     ) -> None:
-        self.single_decoder = single_galaxy_decoder
+        self.single_galaxy_decoder = single_galaxy_decoder
+        self.single_star_decoder = single_star_decoder
         self.slen = slen
         self.bp = bp
-        assert self.slen + 2 * self.bp >= self.single_decoder.slen
+        assert self.slen + 2 * self.bp >= self.single_galaxy_decoder.slen
+        assert self.slen + 2 * self.bp >= self.single_star_decoder.slen
 
     def __call__(self, full_cat: FullCatalog):
-        return self.render_catalog(full_cat, self.single_decoder.psf)
+        return self.render_catalog(full_cat, self.single_galaxy_decoder.psf)
 
     def render_catalog(self, full_cat: FullCatalog, psf: galsim.GSObject):
         size = self.slen + 2 * self.bp
         full_plocs = full_cat.plocs
         b, max_n_sources, _ = full_plocs.shape
-        assert b == 1, "Only one batch supported for now."
-        assert self.single_decoder.n_bands == 1, "Only 1 band supported for now"
+        assert b == 1
+        assert self.single_galaxy_decoder.n_bands == 1
+        assert self.single_star_decoder.n_bands == 1
 
         image = torch.zeros(1, size, size)
         noiseless_centered = torch.zeros(max_n_sources, 1, size, size)
@@ -242,13 +301,26 @@ class FullCatalogDecoder:
 
         n_sources = int(full_cat.n_sources[0].item())
         galaxy_params = full_cat["galaxy_params"][0]
+        galaxy_bools = full_cat["galaxy_bools"][0]
+        star_bools = full_cat["star_bools"][0]
         plocs = full_plocs[0]
         for ii in range(n_sources):
             offset_x = plocs[ii][1] + self.bp - size / 2
             offset_y = plocs[ii][0] + self.bp - size / 2
             offset = torch.tensor([offset_x, offset_y])
-            centered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size)
-            uncentered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, offset)
+            if galaxy_bools[ii] == 1:
+                centered = self.single_galaxy_decoder.render_galaxy(galaxy_params[ii], psf, size)
+                uncentered = self.single_galaxy_decoder.render_galaxy(
+                    galaxy_params[ii], psf, size, offset
+                )
+            elif star_bools[ii] == 1:
+                centered = self.single_star_decoder.render_star(galaxy_params[ii][0], psf, size)
+                uncentered = self.single_star_decoder.render_star(
+                    galaxy_params[ii][0], psf, size, offset
+                )
+            else:
+                continue
+
             noiseless_centered[ii] = centered
             noiseless_uncentered[ii] = uncentered
             image += uncentered
@@ -289,3 +361,7 @@ def _draw_pareto(alpha, min_x, max_x, n_samples=1) -> Tensor:
 def _gamma(concentration, loc, scale, n_samples=1):
     x = torch.distributions.Gamma(concentration, rate=1.0).sample((n_samples,))
     return x * scale + loc
+
+
+def _bernoulli(prob, n_samples=1) -> Tensor:
+    return torch.bernoulli(torch.tensor([float(prob)] * n_samples))  # noqa: WPS435

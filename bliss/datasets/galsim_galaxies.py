@@ -16,9 +16,10 @@ from bliss.models.galsim_decoder import (
     FullCatalogDecoder,
     SingleGalsimGalaxyDecoder,
     SingleGalsimGalaxyPrior,
-    UniformGalsimGalaxiesPrior,
+    UniformGalsimPrior,
 )
 from bliss.reporting import get_single_galaxy_ellipticities
+from case_studies.psf_homogenization.psf_sampler import PsfSampler
 
 
 class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
@@ -79,7 +80,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
 
     def __init__(
         self,
-        prior: UniformGalsimGalaxiesPrior,
+        prior: UniformGalsimPrior,
         decoder: FullCatalogDecoder,
         background: ConstantBackground,
         tile_slen: int,
@@ -87,6 +88,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         num_workers: int,
         batch_size: int,
         n_batches: int,
+        psf_sampler: PsfSampler,
         fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
     ):
@@ -106,7 +108,8 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         self.max_sources_per_tile = max_sources_per_tile
         self.bp = self.decoder.bp
         self.slen = self.decoder.slen
-        self.pixel_scale = self.decoder.single_decoder.pixel_scale
+        self.pixel_scale = self.decoder.single_galaxy_decoder.pixel_scale
+        self.psf = psf_sampler
 
     def _sample_full_catalog(self):
         params_dict = self.prior.sample()
@@ -116,13 +119,22 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         return FullCatalog(self.slen, self.slen, params_dict)
 
     def _get_images(self, full_cat):
-        noiseless, noiseless_centered, noiseless_uncentered = self.decoder(full_cat)
+        psf_obj = self.psf.sample()
+        noiseless, noiseless_centered, noiseless_uncentered = self.decoder.render_catalog(
+            full_cat, psf_obj
+        )
 
-        # get background and noisy image.
+        # get background and noisy image
         background = self.background.sample((1, *noiseless.shape)).squeeze(0)
         noisy_image = _add_noise_and_background(noiseless, background)
 
-        return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background
+        return (  # noqa: WPS227
+            noisy_image,
+            noiseless,
+            noiseless_centered,
+            noiseless_uncentered,
+            background,
+        )
 
     def _add_metrics(
         self,
@@ -138,7 +150,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         # add important metrics to full catalog
         scale = self.pixel_scale
         size = self.slen + 2 * self.bp
-        psf = self.decoder.single_decoder.psf  # psf from single galaxy decoder.
+        psf = self.decoder.single_galaxy_decoder.psf
         psf_tensor = torch.from_numpy(psf.drawImage(nx=size, ny=size, scale=scale).array)
 
         single_galaxy_tensor = noiseless_centered[:n_sources]
