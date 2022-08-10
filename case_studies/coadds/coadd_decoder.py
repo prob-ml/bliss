@@ -67,7 +67,7 @@ class CoaddUniformGalsimGalaxiesPrior(UniformGalsimGalaxiesPrior):
         galaxy_bools[:n_sources, :] = 1
         star_bools = torch.zeros(self.max_n_sources, 1)
 
-        dithers = torch.distributions.uniform.Uniform(-0.5,0.5).sample([num_dithers*2])
+        dithers = torch.distributions.uniform.Uniform(-0.5, 0.5).sample([num_dithers * 2])
         dithers = dithers.reshape(num_dithers, 2)
 
         return {
@@ -245,14 +245,17 @@ class CoaddGalsimBlends(GalsimBlends):
         return FullCatalog(self.slen, self.slen, params_dict), dithers
 
     def _get_images(self, full_cat, dithers):
-        size = self.slen + 2 * self.bp 
+        size = self.slen + 2 * self.bp
         noiseless, noiseless_centered, noiseless_uncentered, image0 = self.decoder.render_catalog(
-            full_cat=full_cat, psf=self.decoder.single_decoder.psf, dithers=dithers)
-#        image0 = rearrange(image0, "1 1 h w -> h w")
+            full_cat=full_cat, psf=self.decoder.single_decoder.psf, dithers=dithers
+        )
+        #        image0 = rearrange(image0, "1 1 h w -> h w")
 
-        aligned_images = align_single_exposures(image0.reshape(size, size), noiseless, size, dithers) 
+        aligned_images = align_single_exposures(
+            image0.reshape(size, size), noiseless, size, dithers
+        )
 
-        background = self.background.sample(rearrange(aligned_images, "d h w -> d 1 h w").shape) 
+        background = self.background.sample(rearrange(aligned_images, "d h w -> d 1 h w").shape)
 
         aligned_images = rearrange(aligned_images, "d h w -> d 1 h w")
 
@@ -281,7 +284,13 @@ class CoaddGalsimBlends(GalsimBlends):
 
     def __getitem__(self, idx):
         full_cat, dithers = self._sample_full_catalog()
-        noiseless, noiseless_centered, noiseless_uncentered, background, coadded_image, = self._get_images(full_cat, dithers)
+        (
+            noiseless,
+            noiseless_centered,
+            noiseless_uncentered,
+            background,
+            coadded_image,
+        ) = self._get_images(full_cat, dithers)
         full_cat = self._add_metrics(full_cat, noiseless, background, coadded_image)
         return {
             "noiseless": noiseless,

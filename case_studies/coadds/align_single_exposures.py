@@ -44,6 +44,6 @@ def align_single_exposures(img0, images, slen, dithers, scale=0.393):
     interped_images.append(F.grid_sample(input, grids, align_corners=False))
 
     # reshape and crop 1 pixel on each side
-    interped_images = rearrange(interped_images[:][0].clone().detach(),"d 1 h w -> d h w")
+    interped_images = rearrange(interped_images[:][0].clone().detach(), "d 1 h w -> d h w")
     interped_images_cropped = interped_images[:, 1 : slen - 1, 1 : slen - 1]
     return interped_images_cropped

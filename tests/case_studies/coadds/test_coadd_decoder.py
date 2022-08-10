@@ -30,12 +30,11 @@ def test_coadd_galsim_blend(get_coadds_config, devices):
         num_workers=num_workers,
         batch_size=batch_size,
         n_batches=n_batches,
-        num_dithers=num_dithers
+        num_dithers=num_dithers,
     )
     ds = cgb[0]
-    size = cgb.slen + 2 * cgb.bp 
+    size = cgb.slen + 2 * cgb.bp
 
     assert ds["noiseless"].shape == torch.Size([num_dithers, 1, size, size])
-    assert ds["background"].shape == torch.Size([num_dithers, 1, size-2, size-2])
-    assert ds["images"].shape == torch.Size([1, size-2, size-2])
-
+    assert ds["background"].shape == torch.Size([num_dithers, 1, size - 2, size - 2])
+    assert ds["images"].shape == torch.Size([1, size - 2, size - 2])
