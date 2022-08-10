@@ -74,15 +74,10 @@ class GalsimBlendswithPSF(GalsimBlends):
             background.reshape(1, *noisy_image.shape),
         )
 
-        return (  # noqa: WPS227
-            noisy_image,
-            noiseless,
-            noiseless_centered,
-            noiseless_uncentered,
-            background,
-            homo_image.reshape(*noisy_image.shape),
-            psf,
-        )
+        noiseless_images = noiseless, noiseless_centered, noiseless_uncentered
+        homo_image = homo_image.reshape(*noisy_image.shape)
+
+        return noisy_image, *noiseless_images, background, homo_image, psf
 
     def __getitem__(self, idx):
         full_cat = self._sample_full_catalog()

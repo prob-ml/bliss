@@ -128,13 +128,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         background = self.background.sample((1, *noiseless.shape)).squeeze(0)
         noisy_image = _add_noise_and_background(noiseless, background)
 
-        return (  # noqa: WPS227
-            noisy_image,
-            noiseless,
-            noiseless_centered,
-            noiseless_uncentered,
-            background,
-        )
+        return noisy_image, noiseless, noiseless_centered, noiseless_uncentered, background
 
     def _add_metrics(
         self,

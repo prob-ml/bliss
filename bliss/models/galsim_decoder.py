@@ -364,4 +364,5 @@ def _gamma(concentration, loc, scale, n_samples=1):
 
 
 def _bernoulli(prob, n_samples=1) -> Tensor:
-    return torch.bernoulli(torch.tensor([float(prob)] * n_samples))  # noqa: WPS435
+    prob_list = [float(prob) for _ in range(n_samples)]
+    return torch.bernoulli(torch.tensor(prob_list))
