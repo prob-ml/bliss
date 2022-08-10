@@ -3,7 +3,7 @@ from hydra.utils import instantiate
 
 
 def test_coadd_galsim_blend(get_coadds_config, devices):
-    cfg = get_config({}, devices)
+    cfg = get_coadds_config({}, devices)
     cgb = instantiate(cfg.datasets.galsim_blended_galaxies_coadd)
     ds = cgb[0]
     size = cgb.slen + 2 * cgb.bp
