@@ -1,33 +1,9 @@
 import torch
 from hydra.utils import instantiate
 
-from case_studies.coadds.coadd_decoder import CoaddGalsimBlends
-
 
 def test_coadd_galsim_blend(get_coadds_config, devices):
-    cfg = get_coadds_config({}, devices)
-    prior = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.prior)
-    decoder = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.decoder)
-    background = instantiate(cfg.datasets.galsim_blended_galaxies_coadd.background)
-
-    max_tile_n_sources = 1
-    tile_slen = 4
-    num_workers = 5
-    batch_size = 1000
-    n_batches = 1
-    num_dithers = 3
-
-    cgb = CoaddGalsimBlends(
-        prior=prior,
-        decoder=decoder,
-        background=background,
-        tile_slen=tile_slen,
-        max_sources_per_tile=max_tile_n_sources,
-        num_workers=num_workers,
-        batch_size=batch_size,
-        n_batches=n_batches,
-        num_dithers=num_dithers,
-    )
+    cgb = instantiate(cfg.datasets.galsim_blended_galaxies_coadd)
     ds = cgb[0]
     size = cgb.slen + 2 * cgb.bp
 

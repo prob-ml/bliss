@@ -74,6 +74,7 @@ datasets:
         n_batches: 10
         fix_validation_set: True
         valid_n_batches: 50
+        num_dithers : 400
 models:
     detection_encoder:
         _target_: bliss.models.detection_encoder.DetectionEncoder
