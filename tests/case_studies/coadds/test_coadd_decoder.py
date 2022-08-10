@@ -1,11 +1,7 @@
-from hydra.utils import instantiate
 import torch
+from hydra.utils import instantiate
 
-from case_studies.coadds.coadd_decoder import (
-    CoaddGalsimBlends,
-    CoaddSingleGalaxyDecoder,
-    CoaddUniformGalsimGalaxiesPrior,
-)
+from case_studies.coadds.coadd_decoder import CoaddGalsimBlends
 
 
 def test_coadd_galsim_blend(get_coadds_config, devices):
