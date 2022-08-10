@@ -32,14 +32,6 @@ def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
     return image_with_background + noise
 
 
-def _sample_full_catalog(self, num_dithers: int):
-        params_dict = self.prior.sample(num_dithers)
-        params_dict["plocs"] = params_dict["locs"] * self.slen
-        params_dict.pop("locs")
-        params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
-        return FullCatalog(self.slen, self.slen, params_dict)
-
-
 def _linear_coadd(aligned_images, weight):
     num = torch.sum(torch.mul(weight, aligned_images), dim=0)
     return num / torch.sum(weight, dim=0)
@@ -223,6 +215,7 @@ class CoaddGalsimBlends(GalsimBlends):
         num_workers: int,
         batch_size: int,
         n_batches: int,
+        num_dithers: int,
         fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
     ):
@@ -238,21 +231,32 @@ class CoaddGalsimBlends(GalsimBlends):
             fix_validation_set,
             valid_n_batches,
         )
+        self.num_dithers = num_dithers
         self.slen = self.decoder.slen
         self.pixel_scale = self.decoder.single_decoder.pixel_scale
+
+    def _sample_full_catalog(self):
+        params_dict = self.prior.sample(self.num_dithers)
+        dithers = params_dict["dithers"]
+        params_dict.pop("dithers")
+        params_dict["plocs"] = params_dict["locs"] * self.slen
+        params_dict.pop("locs")
+        params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
+        return FullCatalog(self.slen, self.slen, params_dict), dithers
 
     def _get_images(self, full_cat, dithers):
         size = self.slen + 2 * self.bp 
         noiseless, noiseless_centered, noiseless_uncentered, image0 = self.decoder.render_catalog(
             full_cat=full_cat, psf=self.decoder.single_decoder.psf, dithers=dithers)
+#        image0 = rearrange(image0, "1 1 h w -> h w")
 
         aligned_images = align_single_exposures(image0.reshape(size, size), noiseless, size, dithers) 
 
-        background = background.sample(rearrange(aligned_images, "d h w -> d 1 h w").shape) 
+        background = self.background.sample(rearrange(aligned_images, "d h w -> d 1 h w").shape) 
 
         aligned_images = rearrange(aligned_images, "d h w -> d 1 h w")
 
-        weight = 1 / (torch.tensor(aligned_images) + torch.tensor(background))
+        weight = 1 / (aligned_images + background.clone().detach())
 
         noisy_aligned_image = _add_noise_and_background(aligned_images, background)
 
@@ -276,15 +280,8 @@ class CoaddGalsimBlends(GalsimBlends):
         return full_cat
 
     def __getitem__(self, idx):
-        full_cat = self._sample_full_catalog()
-        dithers = full_cat["dithers"]
-        (
-            noiseless,
-            noiseless_centered,
-            noiseless_uncentered,
-            background,
-            coadded_image,
-        ) = self._get_images(full_cat, dithers)
+        full_cat, dithers = self._sample_full_catalog()
+        noiseless, noiseless_centered, noiseless_uncentered, background, coadded_image, = self._get_images(full_cat, dithers)
         full_cat = self._add_metrics(full_cat, noiseless, background, coadded_image)
         return {
             "noiseless": noiseless,
