@@ -167,56 +167,6 @@ class SingleGalsimGalaxyDecoder:
         return torch.from_numpy(image.array).reshape(1, slen, slen)
 
 
-class SingleGalsimStarDecoder:
-    def __init__(
-        self,
-        slen: int,
-        n_bands: int,
-        pixel_scale: float,
-        psf_image_file: str,
-    ) -> None:
-        assert n_bands == 1
-        self.slen = slen
-        self.n_bands = n_bands
-        self.pixel_scale = pixel_scale
-        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
-
-    def __call__(self, z: Tensor, offset: Optional[Tensor] = None) -> Tensor:
-        if z.shape[0] == 0:
-            return torch.zeros(0, 1, self.slen, self.slen, device=z.device)
-
-        if z.shape == (1,):  # equal to dim_latents
-            assert offset is None or offset.shape == (2,)
-            return self.render_star(z, self.psf, self.slen, offset)
-
-        images = []
-        for ii, latent in enumerate(z):
-            off = offset if not offset else offset[ii]
-            assert off is None or off.shape == (2,)
-            image = self.render_star(latent, self.psf, self.slen, offset)
-            images.append(image)
-        return torch.stack(images, dim=0).to(z.device)
-
-    def render_star(
-        self,
-        star_params: Tensor,
-        psf: galsim.GSObject,
-        slen: int,
-        offset: Optional[Tensor] = None,
-    ) -> Tensor:
-        assert offset is None or offset.shape == (2,)
-        if isinstance(star_params, Tensor):
-            star_params = star_params.cpu().detach()
-        total_flux = star_params
-
-        star_withflux = psf.withFlux(total_flux)
-        offset = offset if offset is None else offset.numpy()
-        image = star_withflux.drawImage(
-            nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
-        )
-        return torch.from_numpy(image.array).reshape(1, slen, slen)
-
-
 class UniformGalsimPrior:
     def __init__(
         self,
@@ -273,19 +223,29 @@ class FullCatalogDecoder:
     def __init__(
         self,
         single_galaxy_decoder: SingleGalsimGalaxyDecoder,
-        single_star_decoder: SingleGalsimStarDecoder,
         slen: int,
         bp: int,
     ) -> None:
         self.single_galaxy_decoder = single_galaxy_decoder
-        self.single_star_decoder = single_star_decoder
         self.slen = slen
         self.bp = bp
+        self.pixel_scale = self.single_galaxy_decoder.pixel_scale
         assert self.slen + 2 * self.bp >= self.single_galaxy_decoder.slen
-        assert self.slen + 2 * self.bp >= self.single_star_decoder.slen
 
     def __call__(self, full_cat: FullCatalog):
         return self.render_catalog(full_cat, self.single_galaxy_decoder.psf)
+
+    def _render_star(
+        self, psf: galsim.GSObject, flux: float, slen: int, offset: Optional[Tensor] = None
+    ) -> Tensor:
+        assert offset is None or offset.shape == (2,)
+
+        star = psf.withFlux(flux)
+        offset = offset if offset is None else offset.numpy()
+        image = star.drawImage(
+            nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
+        )
+        return torch.from_numpy(image.array).reshape(1, slen, slen)
 
     def render_catalog(self, full_cat: FullCatalog, psf: galsim.GSObject):
         size = self.slen + 2 * self.bp
@@ -293,7 +253,6 @@ class FullCatalogDecoder:
         b, max_n_sources, _ = full_plocs.shape
         assert b == 1
         assert self.single_galaxy_decoder.n_bands == 1
-        assert self.single_star_decoder.n_bands == 1
 
         image = torch.zeros(1, size, size)
         noiseless_centered = torch.zeros(max_n_sources, 1, size, size)
@@ -314,10 +273,8 @@ class FullCatalogDecoder:
                     galaxy_params[ii], psf, size, offset
                 )
             elif star_bools[ii] == 1:
-                centered = self.single_star_decoder.render_star(galaxy_params[ii][0], psf, size)
-                uncentered = self.single_star_decoder.render_star(
-                    galaxy_params[ii][0], psf, size, offset
-                )
+                centered = self._render_star(psf, galaxy_params[ii][0].item(), size)
+                uncentered = self._render_star(psf, galaxy_params[ii][0].item(), size, offset)
             else:
                 continue
 
@@ -330,6 +287,40 @@ class FullCatalogDecoder:
     def forward_tile(self, tile_cat: TileCatalog):
         full_cat = tile_cat.to_full_params()
         return self(full_cat)
+
+
+class PsfSampler:
+    def __init__(
+        self,
+        pixel_scale: float,
+        psf_type="gaussian",
+        psf_rmin: float = None,
+        psf_rmax: float = None,
+        psf_file: float = None,
+    ) -> None:
+        self.rmin = psf_rmin
+        self.rmax = psf_rmax
+        self.psf_file = psf_file
+        self.psf_type = psf_type
+        self.pixel_scale = pixel_scale
+
+    def _sample_gaussian(self) -> galsim.GSObject:
+        # sample psf from galsim Gaussian distribution
+        if self.rmin == self.rmax:
+            fwhm = self.rmin
+        elif self.rmin > self.rmax:
+            raise ValueError("invalid argument!!!")
+        else:
+            fwhm = torch.distributions.uniform.Uniform(self.rmin, self.rmax).sample([1]).item()
+
+        return galsim.Gaussian(fwhm=fwhm)
+
+    def get_galsim_psf(self) -> galsim.GSObject:
+        if self.psf_type == "gaussian":
+            return self._sample_gaussian()
+        if self.psf_type == "file":
+            return load_psf_from_file(self.psf_file, self.pixel_scale)
+        raise NotImplementedError("Psf type provided is not supported.")
 
 
 def load_psf_from_file(psf_image_file: str, pixel_scale: float) -> galsim.GSObject:
