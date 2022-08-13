@@ -53,31 +53,9 @@ class CoaddUniformGalsimGalaxiesPrior(UniformGalsimGalaxiesPrior):
 
     def sample(self, num_dithers: int) -> Dict[str, Tensor]:
         """Returns a single batch of source parameters."""
-        n_sources = _sample_n_sources(self.max_n_sources)
-
-        params = torch.zeros(self.max_n_sources, self.dim_latents)
-        params[:n_sources, :] = self.single_galaxy_prior.sample(n_sources)
-
-        locs = torch.zeros(self.max_n_sources, 2)
-        locs[:n_sources, 0] = _uniform(-self.max_shift, self.max_shift, n_sources) + 0.5
-        locs[:n_sources, 1] = _uniform(-self.max_shift, self.max_shift, n_sources) + 0.5
-
-        # for now, galaxies only
-        galaxy_bools = torch.zeros(self.max_n_sources, 1)
-        galaxy_bools[:n_sources, :] = 1
-        star_bools = torch.zeros(self.max_n_sources, 1)
-
-        dithers = torch.distributions.uniform.Uniform(-0.5, 0.5).sample([num_dithers * 2])
-        dithers = dithers.reshape(num_dithers, 2)
-
-        return {
-            "n_sources": torch.tensor(n_sources),
-            "galaxy_params": params,
-            "locs": locs,
-            "galaxy_bools": galaxy_bools,
-            "star_bools": star_bools,
-            "dithers": dithers,
-        }
+        d = super().sample()
+        d['dithers'] = torch.distributions.uniform.Uniform(-0.5, 0.5).sample([num_dithers,2])
+        return d
 
 
 class CoaddSingleGalaxyDecoder(SingleGalsimGalaxyDecoder):
@@ -284,16 +262,12 @@ class CoaddGalsimBlends(GalsimBlends):
 
     def __getitem__(self, idx):
         full_cat, dithers = self._sample_full_catalog()
-        (
-            noiseless,
-            noiseless_centered,
-            noiseless_uncentered,
-            background,
-            coadded_image,
-        ) = self._get_images(full_cat, dithers)
+        noiseless, _, _, background, coadded_image = self._get_images(full_cat, dithers)
         full_cat = self._add_metrics(full_cat, noiseless, background, coadded_image)
+        tile_params = self._get_tile_params(full_cat)
         return {
             "noiseless": noiseless,
             "background": background,
             "images": coadded_image,
+            **tile_params
         }

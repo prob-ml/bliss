@@ -14,7 +14,7 @@ def align_single_exposures(img0, images, slen, dithers, scale=0.393):
         slen: size of images (H and W)
         dithers: List of pairs of sub-pixel amounts that img0 is shifted by in x and y directions
         scale: pixel_scale
-        img0: Tensor of shape `(H x W)` H is height and W is weight, containing image data.
+        img0: Tensor of shape `(H x W)` H is height and W is weight, containing the reference image data.
         images: Tensor of shape `(N x C x H x W)` where N is the number of dithers (len(dithers)),
             C is the number of band, H is height and W is weight, containing image data.
 
@@ -44,6 +44,6 @@ def align_single_exposures(img0, images, slen, dithers, scale=0.393):
     interped_images.append(F.grid_sample(input, grids, align_corners=False))
 
     # reshape and crop 1 pixel on each side
-    interped_images = rearrange(interped_images[:][0].clone().detach(), "d 1 h w -> d h w")
+    interped_images = rearrange(interped_images[:][0], "d 1 h w -> d h w")
     interped_images_cropped = interped_images[:, 1 : slen - 1, 1 : slen - 1]
     return interped_images_cropped
