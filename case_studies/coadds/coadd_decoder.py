@@ -54,7 +54,7 @@ class CoaddUniformGalsimGalaxiesPrior(UniformGalsimGalaxiesPrior):
     def sample(self, num_dithers: int) -> Dict[str, Tensor]:
         """Returns a single batch of source parameters."""
         d = super().sample()
-        d['dithers'] = torch.distributions.uniform.Uniform(-0.5, 0.5).sample([num_dithers,2])
+        d["dithers"] = torch.distributions.uniform.Uniform(-0.5, 0.5).sample([num_dithers, 2])
         return d
 
 
@@ -269,5 +269,5 @@ class CoaddGalsimBlends(GalsimBlends):
             "noiseless": noiseless,
             "background": background,
             "images": coadded_image,
-            **tile_params
+            **tile_params,
         }
