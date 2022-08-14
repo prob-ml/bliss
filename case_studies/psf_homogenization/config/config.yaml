@@ -48,12 +48,6 @@ datasets:
                 slen: 53
                 pixel_scale: 0.396
                 psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
-            single_star_decoder:
-                _target_: bliss.models.galsim_decoder.SingleGalsimStarDecoder
-                slen: 53
-                n_bands: 1
-                pixel_scale: 0.396
-                psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
             slen: 40
             bp: 24
         background:
@@ -66,7 +60,9 @@ datasets:
         batch_size: 32
         n_batches: 10
         psf_sampler:
-            _target_: case_studies.psf_homogenization.psf_sampler.PsfSampler
+            _target_: bliss.models.galsim_decoder.PsfSampler
+            pixel_scale: 0.396
+            psf_type: "gaussian"
             psf_rmin: 0.7
             psf_rmax: 0.7
         fix_validation_set: True
@@ -83,7 +79,9 @@ datasets:
         batch_size: 32
         n_batches: 10
         psf_sampler:
-            _target_: case_studies.psf_homogenization.psf_sampler.PsfSampler
+            _target_: bliss.models.galsim_decoder.PsfSampler
+            pixel_scale: 0.396
+            psf_type: "gaussian"
             psf_rmin: 0.7
             psf_rmax: 0.7
         std_psf_fwhm: 0.8
