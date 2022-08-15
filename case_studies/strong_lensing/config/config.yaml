@@ -143,6 +143,15 @@ models:
             psf_slen: 25
             sdss_bands:
                 - 2
+        lens_model:
+            _target_: bliss.models.galsim_decoder.SingleLensedGalsimGalaxyDecoder
+            n_bands: 1
+            slen: 53
+            pixel_scale: 0.396
+            psf_params_file: ${paths.data}/sdss/5313/3/117/psField-005313-3-0117.fits
+            psf_slen: 25
+            sdss_bands:
+                - 2
         psf_slen: 25
         sdss_bands:
             - 2
