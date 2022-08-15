@@ -227,7 +227,6 @@ class CoaddGalsimBlends(GalsimBlends):
         noiseless, noiseless_centered, noiseless_uncentered, image0 = self.decoder.render_catalog(
             full_cat=full_cat, psf=self.decoder.single_decoder.psf, dithers=dithers
         )
-        #        image0 = rearrange(image0, "1 1 h w -> h w")
 
         aligned_images = align_single_exposures(
             image0.reshape(size, size), noiseless, size, dithers
