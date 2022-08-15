@@ -38,6 +38,9 @@ class TileCatalog(UserDict):
         "matched",
         "mismatched",
         "detection_thresholds",
+        "lensed_galaxy_bools",
+        "lensed_galaxy_probs",
+        "lens_params",
     }
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
