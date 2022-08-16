@@ -1,6 +1,6 @@
 defaults:
     - _self_
-    - training: sdss_detection_encoder_full_decoder_coadd
+    - training: 
     - override hydra/job_logging: stdout
 
 # completely disable hydra logging
@@ -22,8 +22,8 @@ paths:
     output: ${paths.project}/output
 
 datasets:
-    sdss_galaxies:
-        _target_: bliss.datasets.galsim_galaxies.SingleGalsimGalaxies
+    sdss_galaxies_coadd:
+        _target_: case_studies.coadds.coadd_decoder.CoaddGalsimBlends
         prior:
             _target_: bliss.models.galsim_decoder.SingleGalsimGalaxyPrior
             flux_sample: "pareto"
@@ -36,7 +36,7 @@ datasets:
             a_scale: 4.432725319432478
             a_bulge_disk_ratio: 2.0
         decoder:
-            _target_: bliss.models.galsim_decoder.SingleGalsimGalaxyDecoder
+            _target_: case_studies.coadds.coadd_decoder.CoaddSingleGalaxyDecoder
             n_bands: 1
             slen: 53
             pixel_scale: 0.396
@@ -45,24 +45,28 @@ datasets:
             _target_: bliss.datasets.background.ConstantBackground
             background:
                 - 865.0
-        num_workers: 0
-        batch_size: 256
+        tile_slen: 4
+        max_sources_per_tile: 1
+        num_workers: 32
+        batch_size: 32
         n_batches: 10
         fix_validation_set: True
-        valid_n_batches: 200
-    galsim_blended_galaxies:
+        valid_n_batches: 50
+    galsim_blended_galaxies_coadd:
         _target_: case_studies.coadds.coadd_decoder.CoaddGalsimBlends
         prior:
-            _target_: bliss.models.galsim_decoder.UniformGalsimGalaxiesPrior
-            single_galaxy_prior: ${datasets.sdss_galaxies.prior}
+            _target_: case_studies.coadds.coadd_decoder.CoaddUniformGalsimGalaxiesPrior
+            single_galaxy_prior: ${datasets.sdss_galaxies_coadd.prior}
             max_n_sources: 6
             max_shift: 0.5
+            num_dithers: 5
         decoder:
             _target_: case_studies.coadds.coadd_decoder.FullCatalogDecoder
-            single_galaxy_decoder: ${datasets.sdss_galaxies.decoder}
+            single_galaxy_decoder: ${datasets.sdss_galaxies_coadd.decoder}
             slen: 40
             bp: 24
-        background: ${datasets.sdss_galaxies.background}
+            dithers: 5
+        background: ${datasets.sdss_galaxies_coadd.background}
         tile_slen: 4
         max_sources_per_tile: 1
         num_workers: 10
@@ -70,6 +74,7 @@ datasets:
         n_batches: 10
         fix_validation_set: True
         valid_n_batches: 50
+        num_dithers : 400
 models:
     detection_encoder:
         _target_: bliss.models.detection_encoder.DetectionEncoder
@@ -86,36 +91,27 @@ models:
         hidden: 128
         annotate_probs: True
         slack: 1.0
-
-generate:
-    dataset:
-    file:
-    n_plots:
-
-training:
-    n_epochs: 121
-    experiment: default
-    version: null
-    save_top_k: 1
-    trainer:
-        _target_: pytorch_lightning.Trainer
-        logger: True
-        enable_checkpointing: False
-        profiler: null
-        reload_dataloaders_every_n_epochs: 0
-        max_epochs: ${training.n_epochs}
-        min_epochs: ${training.n_epochs}
-        gpus: ${gpus}
-        limit_train_batches: 1.0
-        limit_val_batches: 1.0
-        check_val_every_n_epoch: 10
-        log_every_n_steps: 10 # correspond to n_batches
-    testing:
-        file: null
-        batch_size: 32
-        num_workers: 0
-    weight_save_path: ${paths.project}/models/${training.name}.pt
-    seed: 42
-
-plots:
-    
+    galaxy_net:
+        _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
+        slen: 53
+        latent_dim: 8
+        hidden: 256
+        n_bands: 1
+    prior:
+        _target_: bliss.models.prior.ImagePrior
+        n_bands: 1
+        max_sources: 1
+        mean_sources: 0.03
+        min_sources: 0
+        f_min: 622.0
+        f_max: 1e6
+        alpha: 0.43
+        prob_galaxy: 0.7
+        galaxy_prior:
+            _target_: bliss.models.prior.GalaxyPrior
+            n_latent_batches: 160
+            autoencoder: ${models.galaxy_net}
+            autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
+            latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
+            psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
+            galaxy_dataset: ${datasets.sdss_galaxies}
