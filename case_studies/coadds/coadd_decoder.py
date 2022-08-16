@@ -1,29 +1,22 @@
-import numpy as np
+from pathlib import Path
 from typing import Dict, Optional
+
 import galsim
+import numpy as np
 import torch
-from torch import Tensor
 from einops import rearrange
+from torch import Tensor
+
 from bliss.catalog import FullCatalog
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.galsim_galaxies import GalsimBlends
 from bliss.models.galsim_decoder import (
+    FullCatalogDecoder,
+    SingleGalsimGalaxyDecoder,
     SingleGalsimGalaxyPrior,
     UniformGalsimGalaxiesPrior,
-    FullCatalogDecoder,
 )
-from bliss.catalog import FullCatalog
-from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder, load_psf_from_file
 from case_studies.coadds.align_single_exposures import align_single_exposures
-
-
-def _sample_n_sources(max_n_sources) -> int:
-    return int(torch.randint(1, max_n_sources + 1, (1,)).int().item())
-
-
-def _uniform(a, b, n_samples=1) -> Tensor:
-    # uses pytorch to return a single float ~ U(a, b)
-    return (a - b) * torch.rand(n_samples) + b
 
 
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
@@ -35,6 +28,15 @@ def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
 def _linear_coadd(aligned_images, weight):
     num = torch.sum(torch.mul(weight, aligned_images), dim=0)
     return num / torch.sum(weight, dim=0)
+
+
+def _load_psf_from_file(psf_image_file: str, pixel_scale: float) -> galsim.GSObject:
+    """Return normalized PSF galsim.GSObject from numpy psf_file."""
+    assert Path(psf_image_file).suffix == ".npy"
+    psf_image = np.load(psf_image_file)
+    assert len(psf_image.shape) == 3 and psf_image.shape[0] == 1
+    psf_image = galsim.Image(psf_image[0], scale=pixel_scale)
+    return galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
 
 class CoaddUniformGalsimGalaxiesPrior(UniformGalsimGalaxiesPrior):
@@ -76,7 +78,7 @@ class CoaddSingleGalaxyDecoder(SingleGalsimGalaxyDecoder):
         self.slen = slen
         self.n_bands = 1
         self.pixel_scale = pixel_scale
-        self.psf = load_psf_from_file(psf_image_file, self.pixel_scale)
+        self.psf = _load_psf_from_file(psf_image_file, self.pixel_scale)
 
     def render_galaxy(
         self,
