@@ -39,7 +39,7 @@ datasets:
                 a_bulge_disk_ratio: 2.0
             max_n_sources: 6
             max_shift: 0.5
-            galaxy_prob: 0.0
+            galaxy_prob: 0.5
         decoder:
             _target_: bliss.models.galsim_decoder.FullCatalogDecoder
             single_galaxy_decoder:
