@@ -11,7 +11,6 @@ from bliss.catalog import FullCatalog
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.galsim_galaxies import GalsimBlends
 from bliss.models.galsim_decoder import (
-    FullCatalogDecoder,
     SingleGalsimGalaxyDecoder,
     SingleGalsimGalaxyPrior,
     UniformGalsimGalaxiesPrior,
@@ -45,18 +44,19 @@ class CoaddUniformGalsimGalaxiesPrior(UniformGalsimGalaxiesPrior):
         single_galaxy_prior: SingleGalsimGalaxyPrior,
         max_n_sources: int,
         max_shift: float,
-        num_dithers: int,
+        n_dithers: int,
     ):
         super().__init__(
             single_galaxy_prior,
             max_n_sources,
             max_shift,
         )
+        self.n_dithers = n_dithers
 
-    def sample(self, num_dithers: int) -> Dict[str, Tensor]:
+    def sample(self) -> Dict[str, Tensor]:
         """Returns a single batch of source parameters."""
         d = super().sample()
-        d["dithers"] = torch.distributions.uniform.Uniform(-0.5, 0.5).sample([num_dithers, 2])
+        d["dithers"] = torch.distributions.uniform.Uniform(-0.5, 0.5).sample([self.n_dithers, 2])
         return d
 
 
@@ -129,7 +129,7 @@ class CoaddSingleGalaxyDecoder(SingleGalsimGalaxyDecoder):
         return torch.tensor(images[:]).reshape(len(shift), 1, slen, slen)
 
 
-class FullCatalogDecoder:
+class CoaddFullCatalogDecoder:
     def __init__(
         self,
         single_galaxy_decoder: CoaddSingleGalaxyDecoder,
@@ -188,14 +188,13 @@ class CoaddGalsimBlends(GalsimBlends):
     def __init__(
         self,
         prior: CoaddUniformGalsimGalaxiesPrior,
-        decoder: FullCatalogDecoder,
+        decoder: CoaddFullCatalogDecoder,
         background: ConstantBackground,
         tile_slen: int,
         max_sources_per_tile: int,
         num_workers: int,
         batch_size: int,
         n_batches: int,
-        num_dithers: int,
         fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
     ):
@@ -211,12 +210,11 @@ class CoaddGalsimBlends(GalsimBlends):
             fix_validation_set,
             valid_n_batches,
         )
-        self.num_dithers = num_dithers
         self.slen = self.decoder.slen
         self.pixel_scale = self.decoder.single_decoder.pixel_scale
 
     def _sample_full_catalog(self):
-        params_dict = self.prior.sample(self.num_dithers)
+        params_dict = self.prior.sample()
         dithers = params_dict["dithers"]
         params_dict.pop("dithers")
         params_dict["plocs"] = params_dict["locs"] * self.slen
@@ -229,36 +227,17 @@ class CoaddGalsimBlends(GalsimBlends):
         noiseless, noiseless_centered, noiseless_uncentered, image0 = self.decoder.render_catalog(
             full_cat=full_cat, psf=self.decoder.single_decoder.psf, dithers=dithers
         )
-
         aligned_images = align_single_exposures(
             image0.reshape(size, size), noiseless, size, dithers
         )
-
         background = self.background.sample(rearrange(aligned_images, "d h w -> d 1 h w").shape)
-
         aligned_images = rearrange(aligned_images, "d h w -> d 1 h w")
-
         weight = 1 / (aligned_images + background.clone().detach())
-
         noisy_aligned_image = _add_noise_and_background(aligned_images, background)
-
         coadded_image = _linear_coadd(noisy_aligned_image, weight)
+        return noiseless, noiseless_centered, noiseless_uncentered, background, coadded_image
 
-        return (
-            noiseless,
-            noiseless_centered,
-            noiseless_uncentered,
-            background,
-            coadded_image,
-        )
-
-    def _add_metrics(
-        self,
-        full_cat: FullCatalog,
-        noiseless: Tensor,
-        background: Tensor,
-        coadded_image: Tensor,
-    ):
+    def _add_metrics(self, full_cat: FullCatalog, *args):
         return full_cat
 
     def __getitem__(self, idx):
