@@ -135,12 +135,10 @@ class CoaddFullCatalogDecoder:
         single_galaxy_decoder: CoaddSingleGalaxyDecoder,
         slen: int,
         bp: int,
-        dithers: Optional[Tensor],
     ) -> None:
         self.single_decoder = single_galaxy_decoder
         self.slen = slen
         self.bp = bp
-        self.dithers = dithers
         assert self.slen + 2 * self.bp >= self.single_decoder.slen
 
     def __call__(self, full_cat: FullCatalog):
