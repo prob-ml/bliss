@@ -1,6 +1,6 @@
 defaults:
     - _self_
-    - training: 
+    - training:
     - override hydra/job_logging: stdout
 
 # completely disable hydra logging
@@ -61,7 +61,7 @@ datasets:
             max_shift: 0.5
             num_dithers: 5
         decoder:
-            _target_: case_studies.coadds.coadd_decoder.FullCatalogDecoder
+            _target_: case_studies.coadds.coadd_decoder.CoaddFullCatalogDecoder
             single_galaxy_decoder: ${datasets.sdss_galaxies_coadd.decoder}
             slen: 40
             bp: 24
@@ -74,7 +74,7 @@ datasets:
         n_batches: 10
         fix_validation_set: True
         valid_n_batches: 50
-        num_dithers : 400
+        num_dithers: 400
 models:
     detection_encoder:
         _target_: bliss.models.detection_encoder.DetectionEncoder
