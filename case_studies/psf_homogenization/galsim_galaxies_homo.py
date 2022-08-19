@@ -16,7 +16,7 @@ def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
     return image_with_background + noise
 
 
-class GalsimBlendswithPSF(GalsimBlends):
+class HomoGalsimBlends(GalsimBlends):
     def __init__(
         self,
         prior: UniformGalsimPrior,
