@@ -43,7 +43,7 @@ class PSFDecoder(nn.Module):
     def __init__(
         self,
         n_bands: int = 1,
-        pixel_scale=0.393,
+        pixel_scale: float = 0.393,
         psf_gauss_fwhm: Optional[float] = None,
         psf_image_file: Optional[str] = None,
         psf_params_file: Optional[str] = None,
