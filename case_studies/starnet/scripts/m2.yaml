@@ -53,6 +53,7 @@ models:
     spatial_dropout: 0.11399
     dropout: 0.013123
     hidden: 185
+    one_hot_tile: True
   prior:
     _target_: bliss.models.prior.ImagePrior
     n_bands: 2

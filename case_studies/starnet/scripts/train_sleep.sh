@@ -1,7 +1,7 @@
 #!/bin/bash
 
 outfolder='../fits/'
-encoder_name='starnet-m2'
+encoder_name='starnet-m2-one_hot_tile'
 # encoder_name='tmp'
 
 python train_sleep.py \

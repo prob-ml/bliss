@@ -6,7 +6,7 @@ from torch import Tensor, nn
 from torch.distributions import categorical
 from torch.nn import functional as F
 
-USE_LEGACY_BG = False
+USE_LEGACY_BG = True
 
 def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold: float = 4.0):
     """Transforms image before encoder network.
@@ -360,7 +360,7 @@ class LocationEncoder(nn.Module):
                             value = 0.)
 
             log_image_ptiles_flat = torch.hstack((log_image_ptiles_flat, band_n1))
-        
+
         var_params_conv = self.enc_conv(log_image_ptiles_flat)
         var_params_flat = self.enc_final(var_params_conv)
         return rearrange(
