@@ -64,10 +64,10 @@ class HomoGalsimBlends(GalsimBlends):
         psf = torch.from_numpy(psf).reshape(1, 1, self._size, self._size)
 
         noisy_image = noisy_image.reshape(1, *noisy_image.shape)
-        background = noisy_image.reshape(1, *noisy_image.shape)
+        background = background.reshape(1, *background.shape)
         homo_image, _ = psf_homo(noisy_image, psf, self.std_psf, background)
-        homo_image = homo_image.reshape(*noisy_image.shape)
 
+        homo_image = homo_image.reshape(*noisy_image.shape)
         return noisy_image, background, homo_image
 
     def __getitem__(self, idx):
@@ -75,8 +75,8 @@ class HomoGalsimBlends(GalsimBlends):
         images, background, homo_image = self._get_images(full_cat)
         tile_params = self._get_tile_params(full_cat)
         return {
-            "images": homo_image,
-            "background": background,
-            "noisy_image": images,
+            "images": homo_image.reshape(1, self._size, self._size),
+            "background": background.reshape(1, self._size, self._size),
+            "noisy_image": images.reshape(1, self._size, self._size),
             **tile_params,
         }
