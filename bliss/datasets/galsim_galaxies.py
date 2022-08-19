@@ -16,7 +16,7 @@ from bliss.models.galsim_decoder import (
     FullCatalogDecoder,
     SingleGalsimGalaxyDecoder,
     SingleGalsimGalaxyPrior,
-    UniformGalsimGalaxiesPrior,
+    UniformGalsimPrior,
 )
 from bliss.reporting import get_single_galaxy_ellipticities
 
@@ -79,7 +79,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
 
     def __init__(
         self,
-        prior: UniformGalsimGalaxiesPrior,
+        prior: UniformGalsimPrior,
         decoder: FullCatalogDecoder,
         background: ConstantBackground,
         tile_slen: int,
