@@ -73,7 +73,7 @@ datasets:
     num_workers: 32
     batch_size: 32
     n_batches: 10
-    std_psf_fwhm: 1.0
+    std_psf_fwhm: 1.4
     fix_validation_set: True
     valid_n_batches: 50
 
