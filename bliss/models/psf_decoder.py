@@ -63,7 +63,7 @@ class PSFDecoder(nn.Module):
             self.psf = psf_obj.drawImage(nx=psf_slen, ny=psf_slen, scale=pixel_scale).array
             self.psf = self.psf.reshape(1, psf_slen, psf_slen)
 
-        if psf_image_file is not None:
+        elif psf_image_file is not None:
             self.psf = np.load(psf_image_file)
 
         else:
