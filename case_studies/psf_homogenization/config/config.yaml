@@ -48,6 +48,7 @@ datasets:
         slen: 53
         pixel_scale: 0.396
         psf_gauss_fwhm: 0.7
+        psf_slen: 53
       slen: 40
       bp: 24
     background:
