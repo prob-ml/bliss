@@ -26,7 +26,7 @@ datasets:
     _target_: bliss.datasets.galsim_galaxies.GalsimBlends
     prior:
       _target_: bliss.models.galsim_decoder.UniformGalsimPrior
-      single_prior:
+      single_galaxy_prior:
         _target_: bliss.models.galsim_decoder.SingleGalsimGalaxyPrior
         flux_sample: "pareto"
         min_flux: 622.0
