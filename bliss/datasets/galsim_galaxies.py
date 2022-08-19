@@ -106,7 +106,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         self.max_sources_per_tile = max_sources_per_tile
         self.bp = self.decoder.bp
         self.slen = self.decoder.slen
-        self.pixel_scale = self.decoder.single_decoder.pixel_scale
+        self.pixel_scale = self.decoder.pixel_scale
 
     def _sample_full_catalog(self):
         params_dict = self.prior.sample()

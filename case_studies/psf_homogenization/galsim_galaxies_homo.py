@@ -43,8 +43,8 @@ class HomoGalsimBlends(GalsimBlends):
             fix_validation_set,
             valid_n_batches,
         )
-        self.std_psf = self._get_gauss_psf(std_psf_fwhm)
         self._size = self.slen + 2 * self.bp
+        self.std_psf = self._get_gauss_psf(std_psf_fwhm)
 
     def _get_gauss_psf(self, fwhm):
         psf_obj = galsim.Gaussian(fwhm=fwhm)
