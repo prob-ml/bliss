@@ -1,6 +1,6 @@
-efaults:
+defaults:
   - _self_
-  - training: sdss_detection_encoder_full_decoder_rand
+  - training: sdss_detection_encoder_homo
   - override hydra/job_logging: stdout
 
 # completely disable hydra logging
@@ -63,7 +63,7 @@ datasets:
     fix_validation_set: True
     valid_n_batches: 50
 
-  galsim_blended_std_psf:
+  galsim_blends_std_psf:
     _target_: case_studies.psf_homogenization.galsim_galaxies_homo.HomoGalsimBlends
     prior: ${datasets.galsim_blends.prior}
     decoder: ${datasets.galsim_blends.decoder}
