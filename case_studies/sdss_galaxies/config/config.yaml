@@ -61,10 +61,11 @@ datasets:
     galsim_blended_galaxies:
         _target_: bliss.datasets.galsim_galaxies.GalsimBlends
         prior:
-            _target_: bliss.models.galsim_decoder.UniformGalsimGalaxiesPrior
+            _target_: bliss.models.galsim_decoder.UniformGalsimPrior
             single_galaxy_prior: ${datasets.sdss_galaxies.prior}
             max_n_sources: 6
             max_shift: 0.5
+            galaxy_prob: 1.0
         decoder:
             _target_: bliss.models.galsim_decoder.FullCatalogDecoder
             single_galaxy_decoder: ${datasets.sdss_galaxies.decoder}
@@ -236,10 +237,11 @@ plots:
     galsim_blended_galaxies:
         _target_: bliss.datasets.galsim_galaxies.GalsimBlends
         prior:
-            _target_: bliss.models.galsim_decoder.UniformGalsimGalaxiesPrior
+            _target_: bliss.models.galsim_decoder.UniformGalsimPrior
             single_galaxy_prior: ${datasets.sdss_galaxies.prior}
             max_n_sources: 6
             max_shift: 0.375
+            galaxy_prob: 1.0
         decoder:
             _target_: bliss.models.galsim_decoder.FullCatalogDecoder
             single_galaxy_decoder: ${datasets.sdss_galaxies.decoder}
