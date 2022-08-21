@@ -361,12 +361,19 @@ class UniformGalsimPrior:
         star_bools = torch.zeros(self.max_n_sources, 1)
         star_bools[:n_sources, :] = 1 - galaxy_bools[:n_sources, :]
 
+        star_fluxes = torch.zeros(self.max_n_sources, 1)
+        star_log_fluxes = torch.zeros(self.max_n_sources, 1)
+        star_fluxes[:n_sources, 0] = params[:n_sources, 0]
+        star_log_fluxes[:n_sources, 0] = torch.log(star_fluxes[:n_sources, 0])
+
         return {
             "n_sources": torch.tensor(n_sources),
             "galaxy_params": params,
             "locs": locs,
             "galaxy_bools": galaxy_bools,
             "star_bools": star_bools,
+            "star_fluxes": star_fluxes,
+            "star_log_fluxes": star_log_fluxes,
         }
 
 
@@ -420,6 +427,7 @@ class FullCatalogDecoder:
 
         n_sources = int(full_cat.n_sources[0].item())
         galaxy_params = full_cat["galaxy_params"][0]
+        star_fluxes = full_cat["star_fluxes"][0]
         galaxy_bools = full_cat["galaxy_bools"][0]
         star_bools = full_cat["star_bools"][0]
         plocs = full_plocs[0]
@@ -433,8 +441,8 @@ class FullCatalogDecoder:
                     galaxy_params[ii], size, offset
                 )
             elif star_bools[ii] == 1:
-                centered = self._render_star(galaxy_params[ii][0].item(), size)
-                uncentered = self._render_star(galaxy_params[ii][0].item(), size, offset)
+                centered = self._render_star(star_fluxes[ii][0].item(), size)
+                uncentered = self._render_star(star_fluxes[ii][0].item(), size, offset)
             else:
                 continue
             noiseless_centered[ii] = centered
