@@ -368,12 +368,12 @@ class UniformGalsimPrior:
 
         return {
             "n_sources": torch.tensor(n_sources),
-            "galaxy_params": params,
             "locs": locs,
             "galaxy_bools": galaxy_bools,
             "star_bools": star_bools,
-            "star_fluxes": star_fluxes,
-            "star_log_fluxes": star_log_fluxes,
+            "galaxy_params": params * galaxy_bools,
+            "star_fluxes": star_fluxes * star_bools,
+            "star_log_fluxes": star_log_fluxes * star_bools,
         }
 
 
