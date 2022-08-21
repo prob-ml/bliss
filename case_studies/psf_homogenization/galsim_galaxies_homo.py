@@ -69,7 +69,7 @@ class HomoGalsimBlends(GalsimBlends):
 
         homo_image = homo_image.reshape(*noisy_image.shape)
         metric_images = noiseless, noiseless_centered, noiseless_uncentered
-        return noisy_image, *metric_images,background, homo_image
+        return noisy_image, *metric_images, background, homo_image
 
     def __getitem__(self, idx):
         full_cat = self._sample_full_catalog()
