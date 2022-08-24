@@ -48,7 +48,10 @@ datasets:
             n_bands: 1
             slen: 53
             pixel_scale: 0.396
-            psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
+            psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
+            psf_slen: 25
+            sdss_bands:
+                - 2
         background:
             _target_: bliss.datasets.background.ConstantBackground
             background:
