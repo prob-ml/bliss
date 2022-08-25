@@ -101,7 +101,12 @@ def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
 
     sd = (param_logvar.exp() + 1e-5).sqrt()
-    return Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
+    normal = Normal(param_mean, sd)
+    
+    zeros = true_params * 0
+    norm_const = normal.cdf(zeros + 1) - normal.cdf(zeros - 1)
+    
+    return (normal.log_prob(true_params) - torch.log(norm_const + 1e-5)).sum(dim=3)
 
 
 class SleepPhase(pl.LightningModule):
