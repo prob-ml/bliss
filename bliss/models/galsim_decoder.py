@@ -118,8 +118,7 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
             pixel_scale=pixel_scale,
         )
         assert len(self.psf.shape) == 3 and self.psf.shape[0] == 1
-        psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
-        self.psf = galsim.InterpolatedImage(psf_image).withFlux(1.0)
+        self.psf = self.psf_galsim
 
         assert n_bands == 1, "Only 1 band is supported"
         self.slen = slen
@@ -177,9 +176,7 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
         galaxy = galsim.Add(components)
         gal_conv = galsim.Convolution(galaxy, psf)
         offset = offset if offset is None else offset.numpy()
-        return gal_conv.drawImage(
-            nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
-        ).array
+        return gal_conv.drawImage(nx=slen, ny=slen, scale=self.pixel_scale, offset=offset).array
 
     def render_galaxy(
         self,
@@ -404,14 +401,9 @@ class FullCatalogDecoder:
 
     def _render_star(self, flux: float, slen: int, offset: Optional[Tensor] = None) -> Tensor:
         assert offset is None or offset.shape == (2,)
-
-        psf = self.single_galaxy_decoder.psf
-
-        star = psf.withFlux(flux)
+        star = self.single_galaxy_decoder.psf.withFlux(flux)  # creates a copy
         offset = offset if offset is None else offset.numpy()
-        image = star.drawImage(
-            nx=slen, ny=slen, method="auto", scale=self.pixel_scale, offset=offset
-        )
+        image = star.drawImage(nx=slen, ny=slen, scale=self.pixel_scale, offset=offset)
         return torch.from_numpy(image.array).reshape(1, slen, slen)
 
     def render_catalog(self, full_cat: FullCatalog):

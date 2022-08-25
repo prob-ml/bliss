@@ -59,12 +59,14 @@ class PSFDecoder(nn.Module):
         )
         if psf_gauss_fwhm is not None:
             assert psf_slen is not None
-            psf_obj = galsim.Gaussian(fwhm=psf_gauss_fwhm, flux=1.0)
-            self.psf = psf_obj.drawImage(nx=psf_slen, ny=psf_slen, scale=pixel_scale).array
+            self.psf_galsim = galsim.Gaussian(fwhm=psf_gauss_fwhm, flux=1.0)
+            self.psf = self.psf_galsim.drawImage(nx=psf_slen, ny=psf_slen, scale=pixel_scale).array
             self.psf = self.psf.reshape(1, psf_slen, psf_slen)
 
         elif psf_image_file is not None:
             self.psf = np.load(psf_image_file)
+            psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
+            self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
         else:
             assert psf_params_file is not None and psf_slen is not None and sdss_bands is not None
@@ -95,6 +97,8 @@ class PSFDecoder(nn.Module):
                 self.normalization_constant[i] = 1 / psf_i.sum()
             self.normalization_constant = self.normalization_constant.detach()
             self.psf = self.forward_adjusted_psf().detach().numpy()
+            psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
+            self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
     def forward(self, x):
         raise NotImplementedError("Please extend this class and implement forward()")
