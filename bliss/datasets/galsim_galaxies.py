@@ -182,11 +182,16 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
             **{k: rearrange(v, "1 nth ntw n d -> nth ntw n d") for k, v in tile_dict.items()},
         }
 
+    def _run_nan_check(self, *tensors):
+        for t in tensors:
+            assert not torch.any(torch.isnan(t))
+
     def __getitem__(self, idx):
         full_cat = self._sample_full_catalog()
         images, *metric_images, background = self._get_images(full_cat)
         full_cat = self._add_metrics(full_cat, *metric_images, background)
         tile_params = self._get_tile_params(full_cat)
+        self._run_nan_check(images, background, *tile_params.values())
         return {"images": images, "background": background, **tile_params}
 
     def __len__(self):
