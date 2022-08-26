@@ -462,7 +462,7 @@ class DetectionEncoder(pl.LightningModule):
         est_cat = est_tile_catalog.to_full_params()
 
         # setup figure and axes.
-        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(12, 12))
+        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(20, 20))
         axes = axes.flatten() if nrows > 1 else [axes]
 
         images = batch["images"]
