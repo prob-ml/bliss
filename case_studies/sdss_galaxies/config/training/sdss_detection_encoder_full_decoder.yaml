@@ -2,7 +2,7 @@
 training:
   name: "sdss_detection_encoder"
   model: ${models.detection_encoder}
-  dataset: ${datasets.galsim_blended_galaxies}
+  dataset: ${datasets.galsim_blends}
   optimizer_params:
     lr: 1e-4
   n_epochs: 1501
