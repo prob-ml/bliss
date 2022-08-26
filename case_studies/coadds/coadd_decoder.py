@@ -31,8 +31,8 @@ class CoaddUniformGalsimPrior(UniformGalsimPrior):
         single_galaxy_prior: SingleGalsimGalaxyPrior,
         max_n_sources: int,
         max_shift: float,
-        n_dithers: int,
         galaxy_prob: float,
+        n_dithers: int,
     ):
         super().__init__(
             single_galaxy_prior,
