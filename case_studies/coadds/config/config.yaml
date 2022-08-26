@@ -54,7 +54,10 @@ datasets:
                     - 2
             slen: 40
             bp: 24
-        background: ${datasets.sdss_galaxies.background}
+        background:
+            _target_: bliss.datasets.background.ConstantBackground
+            background:
+                - 865.0
         tile_slen: 4
         max_sources_per_tile: 1
         num_workers: 10
@@ -62,27 +65,27 @@ datasets:
         n_batches: 10
         fix_validation_set: True
         valid_n_batches: 50
-    galsim_blended_galaxies_coadd:
+    galsim_blends_coadds:
         _target_: case_studies.coadds.coadd_decoder.CoaddGalsimBlends
         prior:
             _target_: case_studies.coadds.coadd_decoder.CoaddUniformGalsimPrior
-            single_galaxy_prior: ${datasets.galsim_blends.single_galaxy_prior}
+            single_galaxy_prior: ${datasets.galsim_blends.prior.single_galaxy_prior}
             max_n_sources: 6
             max_shift: 0.5
             galaxy_prob: 1.0
             n_dithers: 10
         decoder:
             _target_: case_studies.coadds.coadd_decoder.CoaddFullCatalogDecoder
-            single_galaxy_decoder: ${datasets.galsim_blends.decoder}
+            single_galaxy_decoder: ${datasets.galsim_blends.decoder.single_galaxy_decoder}
             slen: 40
-            bp: 24
+            bp: 25 # needs to be 24+1 to account for padding
         background: ${datasets.galsim_blends.background}
         tile_slen: 4
         max_sources_per_tile: 1
         num_workers: 10
         batch_size: 32
         n_batches: 10
-        fix_validation_set: True
+        fix_validation_set: False
         valid_n_batches: 50
 models:
     detection_encoder:
@@ -127,6 +130,6 @@ training:
     weight_save_path: ${paths.project}/output/${training.name}.pt
     seed: 42
     model: ${models.detection_encoder}
-    dataset: ${datasets.galsim_blended_galaxies_coadd}
+    dataset: ${datasets.galsim_blends_coadds}
     optimizer_params:
         lr: 1e-3
