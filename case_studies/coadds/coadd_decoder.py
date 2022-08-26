@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Tuple
 
 import torch
 from einops import rearrange
@@ -50,15 +50,16 @@ class CoaddUniformGalsimPrior(UniformGalsimPrior):
 
 
 class CoaddFullCatalogDecoder(FullCatalogDecoder):
-    def render_catalog(self, full_cat: FullCatalog, dithers: Tensor):
+    def render_catalog(self, full_cat: FullCatalog, dithers: Tensor) -> Tuple[Tensor, Tensor]:
         size = self.slen + 2 * self.bp
         images = torch.zeros(len(dithers), 1, size, size)
-        plocs = full_cat.plocs.clone()
+        plocs0 = full_cat.plocs.clone()
         image0, _, _ = super().render_catalog(full_cat)
         for ii, dth in enumerate(dithers):
-            full_cat.plocs = plocs[0, :] + dth.reshape(1, 2)
+            full_cat.plocs = plocs0 + dth.reshape(1, 1, 2)
             image, _, _ = super().render_catalog(full_cat)
             images[ii] = image
+        full_cat.plocs = plocs0
         return images, image0
 
 
@@ -77,23 +78,26 @@ class CoaddGalsimBlends(GalsimBlends):
     def _get_images(self, full_cat, dithers):
         size = self.slen + 2 * self.bp
         noiseless, image0 = self.decoder.render_catalog(full_cat, dithers)
-        aligned_images = align_single_exposures(
-            image0.reshape(size, size), noiseless, size, dithers
-        )
+        image0 = image0.reshape(size, size)
+        aligned_images = align_single_exposures(image0, noiseless, size, dithers)
         background = self.background.sample(rearrange(aligned_images, "d h w -> d 1 h w").shape)
         aligned_images = rearrange(aligned_images, "d h w -> d 1 h w")
         weight = 1 / (aligned_images + background.clone().detach())
         noisy_aligned_image = _add_noise_and_background(aligned_images, background)
         coadded_image = _linear_coadd(noisy_aligned_image, weight)
-        return noiseless, coadded_image, background
+
+        image0 = image0.reshape(1, 1, size, size)
+        full_background = self.background.sample(image0.shape)
+        single_exposure = _add_noise_and_background(image0, full_background)
+        return noiseless, coadded_image, single_exposure[0, :, 1:-1, 1:-1], background[0]
 
     def __getitem__(self, idx):
         full_cat, dithers = self._sample_full_catalog()
-        noiseless, coadded_image, background = self._get_images(full_cat, dithers)
+        _, coadded_image, single_exposure, background = self._get_images(full_cat, dithers)
         tile_params = self._get_tile_params(full_cat)
         return {
             "images": coadded_image,
-            "noiseless": noiseless,
+            "noisy": single_exposure,
             "background": background,
             **tile_params,
         }
