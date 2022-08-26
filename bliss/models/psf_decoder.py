@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional
 
+import galsim
 import numpy as np
 import torch
 from astropy.io import fits
@@ -42,6 +43,8 @@ class PSFDecoder(nn.Module):
     def __init__(
         self,
         n_bands: int = 1,
+        pixel_scale: float = 0.393,
+        psf_gauss_fwhm: Optional[float] = None,
         psf_image_file: Optional[str] = None,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
@@ -51,9 +54,20 @@ class PSFDecoder(nn.Module):
 
         self.n_bands = n_bands
 
-        assert psf_image_file is not None or psf_params_file is not None
-        if psf_image_file is not None:
+        assert (
+            psf_image_file is not None or psf_params_file is not None or psf_gauss_fwhm is not None
+        )
+        if psf_gauss_fwhm is not None:
+            assert psf_slen is not None
+            self.psf_galsim = galsim.Gaussian(fwhm=psf_gauss_fwhm, flux=1.0)
+            self.psf = self.psf_galsim.drawImage(nx=psf_slen, ny=psf_slen, scale=pixel_scale).array
+            self.psf = self.psf.reshape(1, psf_slen, psf_slen)
+
+        elif psf_image_file is not None:
             self.psf = np.load(psf_image_file)
+            psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
+            self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
+
         else:
             assert psf_params_file is not None and psf_slen is not None and sdss_bands is not None
             ext = Path(psf_params_file).suffix
@@ -83,6 +97,8 @@ class PSFDecoder(nn.Module):
                 self.normalization_constant[i] = 1 / psf_i.sum()
             self.normalization_constant = self.normalization_constant.detach()
             self.psf = self.forward_adjusted_psf().detach().numpy()
+            psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
+            self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
     def forward(self, x):
         raise NotImplementedError("Please extend this class and implement forward()")

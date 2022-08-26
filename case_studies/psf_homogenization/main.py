@@ -1,33 +1,28 @@
-import galsim
-import torch
+from os import environ, getenv
+from pathlib import Path
 
-from bliss.inference import SDSSFrame
-from case_studies.psf_homogenization.homogenization import psf_homo
+import hydra
 
-sdss_dir = "bliss/data/sdss/"
-pixel_scale = 0.393
-coadd_file = "bliss/data/coadd_catalog_94_1_12.fits"
-frame = SDSSFrame(sdss_dir, pixel_scale, coadd_file)
-background = frame.background
-image = frame.image
+from bliss.generate import generate
+from bliss.train import train
 
-psf = image[0][0][447:460, 1157:1170]
-psf = psf - psf.min()
-psf /= psf.sum()
+if not getenv("BLISS_HOME"):
+    project_path = Path(__file__).resolve()
+    bliss_home = project_path.parents[2]
+    environ["BLISS_HOME"] = bliss_home.as_posix()
 
-big_psf = galsim.Gaussian(fwhm=7.0).drawImage(nx=50, ny=50, scale=pixel_scale).array
-small_psf = galsim.Gaussian(fwhm=2.0).drawImage(nx=50, ny=50, scale=pixel_scale).array
-big_psf = torch.from_numpy(big_psf)
-small_psf = torch.from_numpy(small_psf)
 
-psf = psf.reshape(1, 1, 13, 13)
-big_psf = big_psf.reshape(1, 1, 50, 50)
-small_psf = small_psf.reshape(1, 1, 50, 50)
+@hydra.main(config_path="./config", config_name="config")
+def main(cfg):
+    if cfg.mode == "train":
+        train(cfg)
+    elif cfg.mode == "generate":
+        filepath = cfg.generate.file + ".pt"
+        imagepath = cfg.generate.file + ".png"
+        generate(cfg.generate.dataset, filepath, imagepath, cfg.generate.n_plots)
+    else:
+        raise KeyError
 
-img = torch.cat((image, image), 0)
-psf = torch.cat((psf, psf), 0)
-new_psf = torch.cat((big_psf, small_psf), 0)
-background = torch.cat((background, background), 0)
 
-m, m_or = psf_homo(img, psf, new_psf, background)
-print(m.shape)
+if __name__ == "__main__":
+    main()  # pylint: disable=no-value-for-parameter
