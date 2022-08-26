@@ -7,13 +7,13 @@ from bliss.datasets.galsim_galaxies import GalsimBlends
 
 def test_galaxy_blend(get_sdss_galaxies_config, devices):
     overrides = {
-        "datasets.galsim_blended_galaxies.num_workers": 0,
-        "datasets.galsim_blended_galaxies.batch_size": 4,
-        "datasets.galsim_blended_galaxies.n_batches": 1,
-        "datasets.galsim_blended_galaxies.prior.max_n_sources": 3,
+        "datasets.galsim_blends.num_workers": 0,
+        "datasets.galsim_blends.batch_size": 4,
+        "datasets.galsim_blends.n_batches": 1,
+        "datasets.galsim_blends.prior.max_n_sources": 3,
     }
     cfg = get_sdss_galaxies_config(overrides, devices)
-    blend_ds: GalsimBlends = instantiate(cfg.datasets.galsim_blended_galaxies)
+    blend_ds: GalsimBlends = instantiate(cfg.datasets.galsim_blends)
 
     for b in blend_ds.train_dataloader():
         images, _ = b.pop("images"), b.pop("background")
@@ -26,7 +26,6 @@ def test_galaxy_blend(get_sdss_galaxies_config, devices):
         snr = full_cat["snr"]
         blendedness = full_cat["blendedness"]
         ellips = full_cat["ellips"]
-        mags = full_cat["mags"]
         fluxes = full_cat["galaxy_fluxes"]
         assert images.shape == (4, 1, 88, 88)  # 40 + 24 * 2
         assert params.shape == (4, max_n_sources, 7)
@@ -35,7 +34,6 @@ def test_galaxy_blend(get_sdss_galaxies_config, devices):
         assert blendedness.shape == (4, max_n_sources, 1)
         assert n_sources.shape == (4,)
         assert ellips.shape == (4, max_n_sources, 2)
-        assert mags.shape == (4, max_n_sources, 1)
         assert fluxes.shape == (4, max_n_sources, 1)
 
         # check empty if no sources

@@ -16,7 +16,7 @@ from bliss.models.galsim_decoder import (
     FullCatalogDecoder,
     SingleGalsimGalaxyDecoder,
     SingleGalsimGalaxyPrior,
-    UniformGalsimGalaxiesPrior,
+    UniformGalsimPrior,
 )
 from bliss.reporting import get_single_galaxy_ellipticities
 
@@ -79,7 +79,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
 
     def __init__(
         self,
-        prior: UniformGalsimGalaxiesPrior,
+        prior: UniformGalsimPrior,
         decoder: FullCatalogDecoder,
         background: ConstantBackground,
         tile_slen: int,
@@ -106,7 +106,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         self.max_sources_per_tile = max_sources_per_tile
         self.bp = self.decoder.bp
         self.slen = self.decoder.slen
-        self.pixel_scale = self.decoder.single_decoder.pixel_scale
+        self.pixel_scale = self.decoder.pixel_scale
 
     def _sample_full_catalog(self):
         params_dict = self.prior.sample()
@@ -138,7 +138,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         # add important metrics to full catalog
         scale = self.pixel_scale
         size = self.slen + 2 * self.bp
-        psf = self.decoder.single_decoder.psf  # psf from single galaxy decoder.
+        psf = self.decoder.single_galaxy_decoder.psf  # psf from single galaxy decoder.
         psf_tensor = torch.from_numpy(psf.drawImage(nx=size, ny=size, scale=scale).array)
 
         single_galaxy_tensor = noiseless_centered[:n_sources]
@@ -161,12 +161,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
             galaxy_mags[ii] = convert_flux_to_mag(gal_fluxes[ii])
 
         # add to full catalog (needs to be in batches)
-        full_cat["mags"] = rearrange(galaxy_mags, "n -> 1 n 1", n=self.max_n_sources)
-        full_cat["star_fluxes"] = torch.zeros(1, self.max_n_sources, 1)
-        full_cat["star_log_fluxes"] = torch.zeros(1, self.max_n_sources, 1)
         full_cat["galaxy_fluxes"] = rearrange(gal_fluxes, "n -> 1 n 1", n=self.max_n_sources)
-        full_cat["fluxes"] = full_cat["galaxy_fluxes"]
-
         full_cat["ellips"] = rearrange(ellips, "n g -> 1 n g", n=self.max_n_sources, g=2)
         full_cat["snr"] = rearrange(snr, "n -> 1 n 1", n=self.max_n_sources)
         full_cat["blendedness"] = rearrange(blendedness, "n -> 1 n 1", n=self.max_n_sources)
@@ -187,11 +182,16 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
             **{k: rearrange(v, "1 nth ntw n d -> nth ntw n d") for k, v in tile_dict.items()},
         }
 
+    def _run_nan_check(self, *tensors):
+        for t in tensors:
+            assert not torch.any(torch.isnan(t))
+
     def __getitem__(self, idx):
         full_cat = self._sample_full_catalog()
         images, *metric_images, background = self._get_images(full_cat)
         full_cat = self._add_metrics(full_cat, *metric_images, background)
         tile_params = self._get_tile_params(full_cat)
+        self._run_nan_check(images, background, *tile_params.values())
         return {"images": images, "background": background, **tile_params}
 
     def __len__(self):

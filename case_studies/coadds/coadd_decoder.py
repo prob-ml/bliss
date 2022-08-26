@@ -13,7 +13,7 @@ from bliss.datasets.galsim_galaxies import GalsimBlends
 from bliss.models.galsim_decoder import (
     SingleGalsimGalaxyDecoder,
     SingleGalsimGalaxyPrior,
-    UniformGalsimGalaxiesPrior,
+    UniformGalsimPrior,
 )
 from case_studies.coadds.align_single_exposures import align_single_exposures
 
@@ -38,18 +38,20 @@ def _load_psf_from_file(psf_image_file: str, pixel_scale: float) -> galsim.GSObj
     return galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
 
-class CoaddUniformGalsimGalaxiesPrior(UniformGalsimGalaxiesPrior):
+class CoaddUniformGalsimPrior(UniformGalsimPrior):
     def __init__(
         self,
         single_galaxy_prior: SingleGalsimGalaxyPrior,
         max_n_sources: int,
         max_shift: float,
         n_dithers: int,
+        galaxy_prob: float,
     ):
         super().__init__(
             single_galaxy_prior,
             max_n_sources,
             max_shift,
+            galaxy_prob,
         )
         self.n_dithers = n_dithers
 
@@ -83,7 +85,6 @@ class CoaddSingleGalaxyDecoder(SingleGalsimGalaxyDecoder):
     def render_galaxy(
         self,
         galaxy_params: Tensor,
-        psf: galsim.GSObject,
         slen: int,
         offset: Optional[Tensor] = None,
         dithers: Optional[Tensor] = None,
@@ -114,7 +115,7 @@ class CoaddSingleGalaxyDecoder(SingleGalsimGalaxyDecoder):
             ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
             components.append(bulge)
         galaxy = galsim.Add(components)
-        gal_conv = galsim.Convolution(galaxy, psf)
+        gal_conv = galsim.Convolution(galaxy, self.psf)
         offset = (0, 0) if offset is None else offset
         dithers = (0, 0) if dithers is None else dithers
         shift = torch.add(torch.Tensor(dithers), torch.Tensor(offset))
@@ -141,14 +142,13 @@ class CoaddFullCatalogDecoder:
         self.slen = slen
         self.bp = bp
         self.dithers = dithers
+        self.pixel_scale = self.single_decoder.pixel_scale
         assert self.slen + 2 * self.bp >= self.single_decoder.slen
 
     def __call__(self, full_cat: FullCatalog):
-        return self.render_catalog(full_cat, self.single_decoder.psf, self.dithers)
+        return self.render_catalog(full_cat, self.dithers)
 
-    def render_catalog(
-        self, full_cat: FullCatalog, psf: galsim.GSObject, dithers: Optional[Tensor]
-    ):
+    def render_catalog(self, full_cat: FullCatalog, dithers: Optional[Tensor]):
         size = self.slen + 2 * self.bp
         full_plocs = full_cat.plocs
         b, max_n_sources, _ = full_plocs.shape
@@ -168,12 +168,10 @@ class CoaddFullCatalogDecoder:
             offset_x = plocs[ii][1] + self.bp - size / 2
             offset_y = plocs[ii][0] + self.bp - size / 2
             offset = torch.tensor([offset_x, offset_y])
-            centered = self.single_decoder.render_galaxy(
-                galaxy_params[ii], psf, size, dithers=dithers
-            )
-            uncentered = self.single_decoder.render_galaxy(galaxy_params[ii], psf, size, offset)
+            centered = self.single_decoder.render_galaxy(galaxy_params[ii], size, dithers=dithers)
+            uncentered = self.single_decoder.render_galaxy(galaxy_params[ii], size, offset)
             uncentered_dithered = self.single_decoder.render_galaxy(
-                galaxy_params[ii], psf, size, offset, dithers
+                galaxy_params[ii], size, offset, dithers
             )
             noiseless_centered[:, ii] = centered.reshape(centered.shape[0], 1, size, size)
             noiseless_uncentered[:, ii] = uncentered.reshape(uncentered.shape[0], 1, size, size)
@@ -187,7 +185,7 @@ class CoaddGalsimBlends(GalsimBlends):
 
     def __init__(
         self,
-        prior: CoaddUniformGalsimGalaxiesPrior,
+        prior: CoaddUniformGalsimPrior,
         decoder: CoaddFullCatalogDecoder,
         background: ConstantBackground,
         tile_slen: int,
@@ -224,9 +222,7 @@ class CoaddGalsimBlends(GalsimBlends):
 
     def _get_images(self, full_cat, dithers):
         size = self.slen + 2 * self.bp
-        noiseless, noiseless_centered, noiseless_uncentered, image0 = self.decoder.render_catalog(
-            full_cat=full_cat, psf=self.decoder.single_decoder.psf, dithers=dithers
-        )
+        noiseless, _, _, image0 = self.decoder.render_catalog(full_cat, dithers)
         aligned_images = align_single_exposures(
             image0.reshape(size, size), noiseless, size, dithers
         )
@@ -235,14 +231,14 @@ class CoaddGalsimBlends(GalsimBlends):
         weight = 1 / (aligned_images + background.clone().detach())
         noisy_aligned_image = _add_noise_and_background(aligned_images, background)
         coadded_image = _linear_coadd(noisy_aligned_image, weight)
-        return noiseless, noiseless_centered, noiseless_uncentered, background, coadded_image
+        return noiseless, coadded_image, background
 
     def _add_metrics(self, full_cat: FullCatalog, *args):
         return full_cat
 
     def __getitem__(self, idx):
         full_cat, dithers = self._sample_full_catalog()
-        noiseless, _, _, background, coadded_image = self._get_images(full_cat, dithers)
+        noiseless, coadded_image, background = self._get_images(full_cat, dithers)
         full_cat = self._add_metrics(full_cat, noiseless, background, coadded_image)
         tile_params = self._get_tile_params(full_cat)
         return {
