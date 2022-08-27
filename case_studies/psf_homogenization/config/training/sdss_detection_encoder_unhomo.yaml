@@ -5,7 +5,7 @@ training:
   dataset: ${datasets.galsim_blends}
   optimizer_params:
     lr: 1e-4
-  n_epochs: 1501
+  n_epochs: 1001
   save_top_k: 10
   trainer:
     enable_checkpointing: True
