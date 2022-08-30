@@ -64,8 +64,6 @@ class DetectionMetrics(Metric):
     # pylint: disable=no-member
     def update(self, true: FullCatalog, est: FullCatalog) -> None:  # type: ignore
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
-        assert isinstance(true, FullCatalog)
-        assert isinstance(est, FullCatalog)
         assert true.batch_size == est.batch_size
 
         count = 0
