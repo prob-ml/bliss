@@ -22,23 +22,6 @@ paths:
     output: ${paths.project}/output
 
 datasets:
-<<<<<<< HEAD
-    galsim_blended_galaxies_coadd:
-        _target_: case_studies.coadds.coadd_decoder.CoaddGalsimBlends
-        prior:
-            _target_: case_studies.coadds.coadd_decoder.CoaddUniformGalsimGalaxiesPrior
-            single_galaxy_prior:
-                _target_: bliss.models.galsim_decoder.SingleGalsimGalaxyPrior
-                flux_sample: "pareto"
-                min_flux: 622.0
-                max_flux: 1e6
-                alpha: 0.47
-                a_sample: "gamma"
-                a_concentration: 0.39330758068481686
-                a_loc: 0.8371888967872619
-                a_scale: 4.432725319432478
-                a_bulge_disk_ratio: 2.0
-=======
     galsim_blends:
         _target_: bliss.datasets.galsim_galaxies.GalsimBlends
         prior:
@@ -87,32 +70,16 @@ datasets:
         prior:
             _target_: case_studies.coadds.coadd_decoder.CoaddUniformGalsimPrior
             single_galaxy_prior: ${datasets.galsim_blends.prior.single_galaxy_prior}
->>>>>>> 8b7e27cb02660d15f134289fd6501afa0a04be24
             max_n_sources: 6
             max_shift: 0.5
             galaxy_prob: 1.0
-            n_dithers: 10
+            n_dithers: 50
         decoder:
             _target_: case_studies.coadds.coadd_decoder.CoaddFullCatalogDecoder
-<<<<<<< HEAD
-            single_galaxy_decoder:
-                _target_: case_studies.coadds.coadd_decoder.CoaddSingleGalaxyDecoder
-                n_bands: 1
-                slen: 53
-                pixel_scale: 0.396
-                psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
-            slen: 40
-            bp: 24
-        background:
-            _target_: bliss.datasets.background.ConstantBackground
-            background:
-                - 865.0
-=======
             single_galaxy_decoder: ${datasets.galsim_blends.decoder.single_galaxy_decoder}
             slen: 40
             bp: 25 # needs to be 24+1 to account for padding
         background: ${datasets.galsim_blends.background}
->>>>>>> 8b7e27cb02660d15f134289fd6501afa0a04be24
         tile_slen: 4
         max_sources_per_tile: 1
         num_workers: 10
@@ -163,10 +130,6 @@ training:
     weight_save_path: ${paths.project}/output/${training.name}.pt
     seed: 42
     model: ${models.detection_encoder}
-<<<<<<< HEAD
-    dataset: ${datasets.galsim_blended_galaxies_coadd}
-=======
     dataset: ${datasets.galsim_blends_coadds}
->>>>>>> 8b7e27cb02660d15f134289fd6501afa0a04be24
     optimizer_params:
         lr: 1e-3
