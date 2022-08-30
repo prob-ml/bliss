@@ -388,7 +388,7 @@ class FullCatalog(UserDict):
         tags = self._make_tags(keep.shape)
         keep = rearrange(keep, "n s 1 -> n s")
         d = self._collect_from_keep(keep, tags)
-        d["n_sources"] = keep.sum(dim=-1)
+        d["n_sources"] = (d["mags"] > 0).sum(dim=(-1, -2))
         return type(self)(self.height, self.width, d)
 
     def to_tile_params(
