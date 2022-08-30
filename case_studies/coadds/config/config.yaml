@@ -60,11 +60,11 @@ datasets:
                 - 865.0
         tile_slen: 4
         max_sources_per_tile: 1
-        num_workers: 10
+        num_workers: 20
         batch_size: 32
-        n_batches: 10
+        n_batches: 20
         fix_validation_set: True
-        valid_n_batches: 50
+        valid_n_batches: 200
     galsim_blends_coadds:
         _target_: case_studies.coadds.coadd_decoder.CoaddGalsimBlends
         prior:
@@ -73,7 +73,7 @@ datasets:
             max_n_sources: 6
             max_shift: 0.5
             galaxy_prob: 0.0
-            n_dithers: 50
+            n_dithers: 10
         decoder:
             _target_: case_studies.coadds.coadd_decoder.CoaddFullCatalogDecoder
             single_galaxy_decoder: ${datasets.galsim_blends.decoder.single_galaxy_decoder}
@@ -86,7 +86,7 @@ datasets:
         batch_size: 32
         n_batches: 10
         fix_validation_set: False
-        valid_n_batches: 50
+        valid_n_batches: 200
 models:
     detection_encoder:
         _target_: bliss.models.detection_encoder.DetectionEncoder
@@ -105,7 +105,7 @@ models:
 
 training:
     n_epochs: 1001
-    experiment: coadd_decoder
+    experiment: encoder
     name: null
     version: null
     save_top_k: 1
@@ -129,6 +129,6 @@ training:
     weight_save_path: ${paths.project}/output/${training.name}.pt
     seed: 42
     model: ${models.detection_encoder}
-    dataset: ${datasets.galsim_blends_coadds}
+    dataset: ${datasets.galsim_blends}
     optimizer_params:
-        lr: 1e-3
+        lr: 1e-4
