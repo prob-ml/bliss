@@ -83,7 +83,11 @@ def get_min_perm_loss(
     indx = indx.unsqueeze(1)
 
     # get the star losses according to the found permutation.
-    star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, indx).squeeze()
+#     star_params_loss = -torch.gather(star_params_log_probs_all_perm, 1, indx).squeeze()
+    
+    locs_loss = -torch.logsumexp(locs_log_probs_all_perm, dim = 1)
+    star_params_loss = -torch.logsumexp(star_params_log_probs_all_perm, dim = 1)
+    
     return locs_loss, star_params_loss
 
 

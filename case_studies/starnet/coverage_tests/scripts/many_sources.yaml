@@ -26,7 +26,6 @@ datasets:
     decoder: ${models.decoder}
     background:
       - 686.0
-      - 1123.0
     n_batches: 10
     batch_size: 20
     generate_device: "cuda:3"
@@ -35,14 +34,13 @@ datasets:
 models:
   decoder:
     _target_: bliss.models.decoder.ImageDecoder
-    n_bands: 2
+    n_bands: 1
     tile_slen: 2
     ptile_slen: 26
     border_padding: 3
-    psf_params_file: ../../../data/sdss/2583/2/136/psField-002583-2-0136.fits
+    psf_params_file: /home/runingli/astronomy/bliss/data/sdss/2583/2/136/psField-002583-2-0136.fits
     sdss_bands:
       - 2
-      - 3
   encoder:
     _target_: bliss.models.location_encoder.LocationEncoder
     n_bands: ${models.decoder.n_bands}
@@ -56,11 +54,11 @@ models:
     one_hot_tile: True
   prior:
     _target_: bliss.models.prior.ImagePrior
-    n_bands: 2
+    n_bands: 1
     slen: 100
     tile_slen: 2
     max_sources: 5
-    mean_sources: 0.48
+    mean_sources: 0.25
     min_sources: 0
     f_min: 1e3
     f_max: 1e6

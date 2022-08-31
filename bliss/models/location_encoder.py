@@ -6,7 +6,7 @@ from torch import Tensor, nn
 from torch.distributions import categorical
 from torch.nn import functional as F
 
-USE_LEGACY_BG = True
+USE_LEGACY_BG = False
 
 def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold: float = 4.0):
     """Transforms image before encoder network.
