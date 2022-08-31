@@ -64,8 +64,6 @@ class DetectionMetrics(Metric):
     # pylint: disable=no-member
     def update(self, true: FullCatalog, est: FullCatalog) -> None:  # type: ignore
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
-        assert isinstance(true, FullCatalog)
-        assert isinstance(est, FullCatalog)
         assert true.batch_size == est.batch_size
 
         count = 0
@@ -139,8 +137,6 @@ class ClassificationMetrics(Metric):
     # pylint: disable=no-member
     def update(self, true, est):
         """Update the internal state of the metric including correct # of classifications."""
-        assert isinstance(true, FullCatalog)
-        assert isinstance(est, FullCatalog)
         assert true.batch_size == est.batch_size
         for b in range(true.batch_size):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
@@ -278,11 +274,11 @@ def scene_metrics(
     # report counts on each bin
     tparams = true_params.apply_mag_bin(mag_min, mag_max)
     eparams = est_params.apply_mag_bin(mag_min, mag_max)
-    tcount = tparams.n_sources.int().item()
+    tcount = tparams.n_sources.sum().item()
     tgcount = tparams["galaxy_bools"].sum().int().item()
     tscount = tcount - tgcount
 
-    ecount = eparams.n_sources.int().item()
+    ecount = eparams.n_sources.sum().item()
     egcount = eparams["galaxy_bools"].sum().int().item()
     escount = ecount - egcount
 
