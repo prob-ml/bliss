@@ -40,7 +40,6 @@ datasets:
             n_bands: 1
             slen: 53
             pixel_scale: 0.396
-            psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
         background:
             _target_: bliss.datasets.background.ConstantBackground
             background:
@@ -112,5 +111,4 @@ models:
             autoencoder: ${models.galaxy_net}
             autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
             latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
-            psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
             galaxy_dataset: ${datasets.sdss_galaxies}
