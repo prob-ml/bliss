@@ -14,7 +14,7 @@ from torch.distributions import LogNormal, Normal
 from torch.optim import Adam
 
 from bliss.catalog import TileCatalog, get_images_in_tiles
-from bliss.models.detection_encoder import EncoderCNN, make_enc_final
+from bliss.models.encoder_layers import EncoderCNN, make_enc_final
 from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
 from bliss.models.galsim_encoder import get_galsim_params_nll, sample_galsim_encoder
 

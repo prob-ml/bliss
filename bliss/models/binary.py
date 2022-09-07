@@ -10,7 +10,7 @@ from torch.optim import Adam
 
 from bliss import reporting
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.models.detection_encoder import (
+from bliss.models.encoder_layers import (
     ConcatBackgroundTransform,
     EncoderCNN,
     LogBackgroundTransform,
