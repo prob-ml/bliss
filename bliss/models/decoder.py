@@ -502,7 +502,7 @@ class GalaxyDecoder(nn.Module):
         gal_shape = (batchsize, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
         return gal.view(gal_shape)
 
-    def size_gacentered_laxlaxy(self, galaxy: Tensor):
+    def size_galaxy(self, galaxy: Tensor):
         n_galaxies, n_bands, h, w = galaxy.shape
         assert h == w
         assert (h % 2) == 1, "dimension of galaxy image should be odd"

@@ -1,12 +1,12 @@
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional, Tuple
 
 import galsim
 import numpy as np
 import torch
 from astropy.io import fits
 from einops import rearrange, reduce
-from torch import nn
+from torch import nn, Tensor
 
 
 def get_mgrid(slen: int):
@@ -40,6 +40,8 @@ class PSFDecoder(nn.Module):
         n_bands: Number of bands to retrieve from PSF.
     """
 
+    forward: Callable[..., Tensor]
+
     def __init__(
         self,
         n_bands: int = 1,
@@ -48,7 +50,7 @@ class PSFDecoder(nn.Module):
         psf_image_file: Optional[str] = None,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
-        sdss_bands: Optional[str] = None,
+        sdss_bands: Optional[Tuple[int, ...]] = None,
     ):
         super().__init__()
 
@@ -100,7 +102,7 @@ class PSFDecoder(nn.Module):
             psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
             self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
-    def forward(self, x):
+    def forward(self, x):  # type: ignore
         raise NotImplementedError("Please extend this class and implement forward()")
 
     def psf_forward(self):

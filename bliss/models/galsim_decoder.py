@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import galsim
 import numpy as np
@@ -105,7 +105,7 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
         psf_image_file: Optional[str] = None,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
-        sdss_bands: Optional[str] = None,
+        sdss_bands: Optional[Tuple[int, ...]] = None,
         psf_gauss_fwhm: Optional[float] = None,
     ) -> None:
         super().__init__(
@@ -197,7 +197,7 @@ class SingleLensedGalsimGalaxyDecoder(SingleGalsimGalaxyDecoder):
         psf_image_file: Optional[str] = None,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
-        sdss_bands: Optional[str] = None,
+        sdss_bands: Optional[Tuple[int, ...]] = None,
     ) -> None:
         super().__init__(
             slen=slen,
