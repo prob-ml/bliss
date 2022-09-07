@@ -59,13 +59,12 @@ class ImageDecoder(pl.LightningModule):
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
         self.border_padding = self._validate_border_padding(border_padding)
+        self.tiler = Tiler(tile_slen, ptile_slen)
 
-        self.star_tile_decoder = StarTileDecoder(
-            tile_slen,
-            ptile_slen,
-            self.n_bands,
-            psf_slen,
-            tuple(sdss_bands),
+        self.star_tile_decoder = StarPSFDecoder(
+            n_bands=self.n_bands,
+            psf_slen=psf_slen,
+            sdss_bands=tuple(sdss_bands),
             psf_params_file=psf_params_file,
         )
 
@@ -162,7 +161,7 @@ class ImageDecoder(pl.LightningModule):
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
 
         unfit_psf = self.star_tile_decoder.forward_adjusted_psf()
-        psf = self.star_tile_decoder.tiler.fit_source_to_ptile(unfit_psf)
+        psf = self.tiler.fit_source_to_ptile(unfit_psf)
         psf_image = rearrange(psf, "1 h w -> h w", h=slen, w=slen)
 
         galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
@@ -223,7 +222,8 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # draw stars and galaxies
-        stars = self.star_tile_decoder(locs, star_fluxes, star_bools)
+        star_locs, star_imgs = self.star_tile_decoder.forward(locs, star_fluxes, star_bools)
+        stars = self.tiler.forward(star_locs, star_imgs)
         galaxies = torch.zeros(img_shape, device=locs.device)
         lensed_galaxies = torch.zeros(img_shape, device=locs.device)
 
@@ -417,19 +417,8 @@ class Tiler(nn.Module):
         return source[:, l_indx:u_indx, l_indx:u_indx]
 
 
-class StarTileDecoder(PSFDecoder):
-    def __init__(
-        self, tile_slen, ptile_slen, n_bands, psf_slen, sdss_bands=(2,), psf_params_file=None
-    ):
-        super().__init__(
-            psf_params_file=psf_params_file,
-            psf_slen=psf_slen,
-            sdss_bands=sdss_bands,
-            n_bands=n_bands,
-        )
-        self.tiler = Tiler(tile_slen, ptile_slen)
-
-    def forward(self, locs, fluxes, star_bools):
+class StarPSFDecoder(PSFDecoder):
+    def forward(self, locs: Tensor, fluxes: Tensor, star_bools: Tensor):
         """Renders star tile from locations and fluxes."""
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x max_stars x n_bands)
@@ -452,7 +441,7 @@ class StarTileDecoder(PSFDecoder):
         sources = expanded_psf * rearrange(fluxes, "np ms nb -> np ms nb 1 1")
         sources *= rearrange(star_bools, "np ms 1 -> np ms 1 1 1")
 
-        return self.tiler(locs, sources)
+        return locs, sources
 
 
 class GalaxyTileDecoder(nn.Module):
