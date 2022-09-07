@@ -59,7 +59,7 @@ class ImageDecoder(pl.LightningModule):
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
         self.border_padding = self._validate_border_padding(border_padding)
-        self.tiler = Tiler(tile_slen, ptile_slen)
+        self.tiler = TileRenderer(tile_slen, ptile_slen)
 
         self.star_tile_decoder = StarPSFDecoder(
             n_bands=self.n_bands,
@@ -161,7 +161,7 @@ class ImageDecoder(pl.LightningModule):
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
 
         unfit_psf = self.star_tile_decoder.forward_adjusted_psf()
-        psf = self.tiler.fit_source_to_ptile(unfit_psf)
+        psf = fit_source_to_ptile(unfit_psf, self.ptile_slen)
         psf_image = rearrange(psf, "1 h w -> h w", h=slen, w=slen)
 
         galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
@@ -300,7 +300,7 @@ class ImageDecoder(pl.LightningModule):
         return folded_image[:, :, crop_idx : (-crop_idx or None), crop_idx : (-crop_idx or None)]
 
 
-class Tiler(nn.Module):
+class TileRenderer(nn.Module):
     """This class creates an image tile from multiple sources."""
 
     def __init__(self, tile_slen: int, ptile_slen: int):
@@ -341,13 +341,6 @@ class Tiler(nn.Module):
 
         return ptile
 
-    def fit_source_to_ptile(self, source: Tensor):
-        if self.ptile_slen >= source.shape[-1]:
-            fitted_source = self._expand_source(source)
-        else:
-            fitted_source = self._trim_source(source)
-        return fitted_source
-
     def _render_one_source(self, locs: Tensor, source: Tensor):
         """Renders one source at a location from shape.
 
@@ -380,44 +373,52 @@ class Tiler(nn.Module):
         grid_loc = local_grid - locs_swapped
         return F.grid_sample(source, grid_loc, align_corners=True)
 
-    def _expand_source(self, source: Tensor):
-        """Pad the source with zeros so that it is size ptile_slen."""
-        assert len(source.shape) == 3
 
-        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        assert len(source.shape) == 3
+def fit_source_to_ptile(source: Tensor, ptile_slen: int):
+    if ptile_slen >= source.shape[-1]:
+        fitted_source = expand_source(source, ptile_slen)
+    else:
+        fitted_source = trim_source(source, ptile_slen)
+    return fitted_source
 
-        source_slen = source.shape[2]
 
-        assert source_slen <= slen, "Should be using trim source."
+def expand_source(source: Tensor, ptile_slen: int):
+    """Pad the source with zeros so that it is size ptile_slen."""
+    assert len(source.shape) == 3
 
-        source_expanded = torch.zeros(source.shape[0], slen, slen, device=source.device)
-        offset = int((slen - source_slen) / 2)
+    slen = ptile_slen + ((ptile_slen % 2) == 0) * 1
+    assert len(source.shape) == 3
 
-        source_expanded[
-            :, offset : (offset + source_slen), offset : (offset + source_slen)
-        ] = source
+    source_slen = source.shape[2]
 
-        return source_expanded
+    assert source_slen <= slen, "Should be using trim source."
 
-    def _trim_source(self, source: Tensor):
-        """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
-        assert len(source.shape) == 3
+    source_expanded = torch.zeros(source.shape[0], slen, slen, device=source.device)
+    offset = int((slen - source_slen) / 2)
 
-        # if self.ptile_slen is even, we still make source dimension odd.
-        # otherwise, the source won't have a peak in the center pixel.
-        local_slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+    source_expanded[:, offset : (offset + source_slen), offset : (offset + source_slen)] = source
 
-        source_slen = source.shape[2]
-        source_center = (source_slen - 1) / 2
+    return source_expanded
 
-        assert source_slen >= local_slen
 
-        r = np.floor(local_slen / 2)
-        l_indx = int(source_center - r)
-        u_indx = int(source_center + r + 1)
+def trim_source(source: Tensor, ptile_slen: int):
+    """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
+    assert len(source.shape) == 3
 
-        return source[:, l_indx:u_indx, l_indx:u_indx]
+    # if self.ptile_slen is even, we still make source dimension odd.
+    # otherwise, the source won't have a peak in the center pixel.
+    local_slen = ptile_slen + ((ptile_slen % 2) == 0) * 1
+
+    source_slen = source.shape[2]
+    source_center = (source_slen - 1) / 2
+
+    assert source_slen >= local_slen
+
+    r = np.floor(local_slen / 2)
+    l_indx = int(source_center - r)
+    u_indx = int(source_center + r + 1)
+
+    return source[:, l_indx:u_indx, l_indx:u_indx]
 
 
 class StarPSFDecoder(PSFDecoder):
@@ -450,7 +451,7 @@ class GalaxyDecoder(nn.Module):
     def __init__(self, tile_slen, ptile_slen, n_bands, galaxy_model: GalaxyModel):
         super().__init__()
         self.n_bands = n_bands
-        self.tiler = Tiler(tile_slen, ptile_slen)
+        self.tiler = TileRenderer(tile_slen, ptile_slen)
         self.ptile_slen = ptile_slen
 
         if isinstance(galaxy_model, OneCenteredGalaxyAE):
@@ -506,7 +507,7 @@ class GalaxyDecoder(nn.Module):
         assert (h % 2) == 1, "dimension of galaxy image should be odd"
         assert n_bands == self.n_bands
         galaxy = rearrange(galaxy, "n c h w -> (n c) h w")
-        sized_galaxy = self.tiler.fit_source_to_ptile(galaxy)
+        sized_galaxy = fit_source_to_ptile(galaxy, self.ptile_slen)
         outsize = sized_galaxy.shape[-1]
         return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
 
@@ -515,7 +516,7 @@ class LensedGalaxyTileDecoder(nn.Module):
     def __init__(self, tile_slen, ptile_slen, n_bands, lens_model: SingleLensedGalsimGalaxyDecoder):
         super().__init__()
         self.n_bands = n_bands
-        self.tiler = Tiler(tile_slen, ptile_slen)
+        self.tiler = TileRenderer(tile_slen, ptile_slen)
         self.ptile_slen = ptile_slen
         self.lens_decoder = lens_model
 
@@ -572,6 +573,6 @@ class LensedGalaxyTileDecoder(nn.Module):
         assert (h % 2) == 1, "dimension of galaxy image should be odd"
         assert n_bands == self.n_bands
         galaxy = rearrange(galaxy, "n c h w -> (n c) h w")
-        sized_galaxy = self.tiler.fit_source_to_ptile(galaxy)
+        sized_galaxy = fit_source_to_ptile(galaxy, self.ptile_slen)
         outsize = sized_galaxy.shape[-1]
         return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
