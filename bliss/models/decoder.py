@@ -222,25 +222,26 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # draw stars and galaxies
-        star_imgs = self.star_tile_decoder.forward(star_fluxes, star_bools)
-        stars = self.tiler.forward(locs, star_imgs)
+        centered_stars = self.star_tile_decoder.forward(star_fluxes, star_bools)
+        stars = self.tiler.forward(locs, centered_stars)
         galaxies = torch.zeros(img_shape, device=locs.device)
         lensed_galaxies = torch.zeros(img_shape, device=locs.device)
 
         if self.galaxy_tile_decoder is not None:
-            single_galaxies = self.galaxy_tile_decoder.forward(
+            centered_galaxies = self.galaxy_tile_decoder.forward(
                 tile_catalog["galaxy_params"], galaxy_bools
             )
-            galaxies = self.tiler.forward(locs, single_galaxies)
+            galaxies = self.tiler.forward(locs, centered_galaxies)
 
         if self.lensed_galaxy_tile_decoder is not None:
             lensed_galaxy_bools = rearrange(
                 tile_catalog["lensed_galaxy_bools"], "b nth ntw s 1 -> (b nth ntw) s 1"
             )
             lensed_galaxy_bools *= galaxy_bools * is_on_array
-            lensed_galaxies = self.lensed_galaxy_tile_decoder(
-                locs, tile_catalog["lens_params"], lensed_galaxy_bools
+            centered_lensed_galaxies = self.lensed_galaxy_tile_decoder.forward(
+                tile_catalog["lens_params"], lensed_galaxy_bools
             )
+            lensed_galaxies = self.tiler.forward(locs, centered_lensed_galaxies)
 
         return lensed_galaxies.view(img_shape) + galaxies.view(img_shape) + stars.view(img_shape)
 
@@ -501,7 +502,7 @@ class GalaxyDecoder(nn.Module):
         gal_shape = (batchsize, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
         return gal.view(gal_shape)
 
-    def size_galaxy(self, galaxy: Tensor):
+    def size_gacentered_laxlaxy(self, galaxy: Tensor):
         n_galaxies, n_bands, h, w = galaxy.shape
         assert h == w
         assert (h % 2) == 1, "dimension of galaxy image should be odd"
@@ -520,11 +521,11 @@ class LensedGalaxyTileDecoder(nn.Module):
         self.ptile_slen = ptile_slen
         self.lens_decoder = lens_model
 
-    def forward(self, locs, lens_params, lensed_galaxy_bools):
+    def forward(self, lens_params, lensed_galaxy_bools):
         """Renders galaxy tile from locations and galaxy parameters."""
         # max_sources obtained from locs, allows for more flexibility when rendering.
-        n_ptiles = locs.shape[0]
-        max_sources = locs.shape[1]
+        n_ptiles = lensed_galaxy_bools.shape[0]
+        max_sources = lensed_galaxy_bools.shape[1]
 
         n_lens_params = lens_params.shape[-1]
         lens_params = lens_params.view(n_ptiles, max_sources, n_lens_params)
@@ -535,11 +536,8 @@ class LensedGalaxyTileDecoder(nn.Module):
         single_lensed_galaxies = self._render_single_lensed_galaxies(
             lens_params, lensed_galaxy_bools
         )
-
-        return self.tiler(
-            locs,
-            single_lensed_galaxies * lensed_galaxy_bools.unsqueeze(-1).unsqueeze(-1),
-        )
+        single_lensed_galaxies *= lensed_galaxy_bools.unsqueeze(-1).unsqueeze(-1)
+        return single_lensed_galaxies
 
     def _render_single_lensed_galaxies(self, lens_params, lensed_galaxy_bools):
         # flatten parameters
