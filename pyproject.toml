@@ -8,7 +8,7 @@ version = "0.1.0"
 
 [tool.poetry.dependencies]
 astropy = "~4.2.1"
-einops = "^0.3.0"
+einops = ">=0.3.0"
 galsim = "^2.2.4"
 hydra-core = "^1.0.4"
 matplotlib = "^3.3.3"
