@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from astropy.io import fits
 from einops import rearrange, reduce
-from torch import nn, Tensor
+from torch import Tensor, nn
 
 
 def get_mgrid(slen: int):
