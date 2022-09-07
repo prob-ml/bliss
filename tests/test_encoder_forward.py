@@ -33,7 +33,6 @@ class TestSourceEncoder:
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             n_bands=n_bands,
-            mean_detections=0.48,
             max_detections=max_detections,
         ).to(device)
 
@@ -94,7 +93,6 @@ class TestSourceEncoder:
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             n_bands=n_bands,
-            mean_detections=0.48,
             max_detections=max_detections,
         ).to(device)
 

@@ -53,7 +53,6 @@ class DetectionEncoder(pl.LightningModule):
     def __init__(
         self,
         input_transform: Union[LogBackgroundTransform, ConcatBackgroundTransform],
-        mean_detections: float,
         max_detections: int,
         n_bands: int,
         tile_slen: int,
@@ -70,7 +69,6 @@ class DetectionEncoder(pl.LightningModule):
 
         Args:
             input_transform: Class which determines how input image and bg are transformed.
-            mean_detections: Poisson rate of detections in a single tile.
             max_detections: Number of maximum detections in a single tile.
             n_bands: number of bands
             tile_slen: dimension of full image, we assume its square for now
@@ -87,7 +85,6 @@ class DetectionEncoder(pl.LightningModule):
         super().__init__()
 
         self.input_transform = input_transform
-        self.mean_detections = mean_detections
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.optimizer_params = optimizer_params
