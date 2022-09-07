@@ -440,6 +440,7 @@ class StarTileDecoder(PSFDecoder):
         max_sources = locs.shape[1]
 
         psf = self.forward_adjusted_psf()
+        psf = self.tiler.fit_source_to_ptile(psf)
         assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
         assert psf.shape[0] == self.n_bands
         assert fluxes.shape[0] == star_bools.shape[0] == n_ptiles
