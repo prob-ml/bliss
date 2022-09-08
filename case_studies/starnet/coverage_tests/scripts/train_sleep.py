@@ -42,7 +42,7 @@ print("Training sleep phase")
 # load config parameters 
 ###################
 with initialize(config_path=args.config_path):
-    cfg = compose("many_sources_padded3")
+    cfg = compose("many_sources")
 
 print('config: ')
 print(cfg)

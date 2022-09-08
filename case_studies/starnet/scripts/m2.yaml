@@ -75,9 +75,9 @@ training:
   model: "${models.sleep}"
   dataset: "${datasets.simulated_m2}"
   optimizer_params:
-    lr: 0.00098352
+    lr: 0.0004
     weight_decay: 0.000080410
-  n_epochs: 400
+  n_epochs: 1000
   experiment: default
   version: null
   save_top_k: 1
