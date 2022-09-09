@@ -190,7 +190,6 @@ models:
             autoencoder: ${models.galaxy_net}
             autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
             latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
-            psf_image_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
             galaxy_dataset: ${datasets.sdss_galaxies}
 
 generate:
@@ -259,7 +258,6 @@ plots:
     sdss_pixel_scale: 0.396
     device: "cuda:0"
     coadd_file: ${paths.sdss}/coadd_catalog_94_1_12.fits
-    psf_file: ${paths.sdss}/psField-000094-1-0012-PSF-image.npy
     photo_catalog:
         sdss_path: ${paths.sdss}
         run: 94

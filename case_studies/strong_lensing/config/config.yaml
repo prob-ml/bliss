@@ -22,54 +22,6 @@ paths:
     output: ${paths.project}/output
 
 datasets:
-    sdss_blended_galaxies:
-        _target_: bliss.datasets.sdss_blended_galaxies.SdssBlendedGalaxies
-        detection_encoder: ${models.detection_encoder}
-        binary_encoder: ${models.binary}
-        location_ckpt: ${paths.project}/models/detection_encoder.pt
-        binary_ckpt: ${paths.project}/models/binary.pt
-        sdss_dir: ${paths.sdss}
-        prerender_device: "cuda"
-    sdss_galaxies:
-        _target_: bliss.datasets.galsim_galaxies.SingleGalsimGalaxies
-        prior:
-            _target_: bliss.models.galsim_decoder.SingleGalsimGalaxyPrior
-            flux_sample: "pareto"
-            min_flux: 622.0
-            max_flux: 1e6
-            alpha: 0.47
-            a_sample: "gamma"
-            a_concentration: 0.39330758068481686
-            a_loc: 0.8371888967872619
-            a_scale: 4.432725319432478
-            a_bulge_disk_ratio: 2.0
-        decoder:
-            _target_: bliss.models.galsim_decoder.SingleGalsimGalaxyDecoder
-            n_bands: 1
-            slen: 53
-            pixel_scale: 0.396
-            psf_image_file: ${paths.data}/sdss/5313/3/117/psField-005313-3-0117.fits
-        background:
-            _target_: bliss.datasets.background.ConstantBackground
-            background:
-                - 865.0
-        num_workers: 0
-        batch_size: 64
-        n_batches: 10
-    galsim_blended_galaxies:
-        _target_: bliss.datasets.galsim_galaxies.GalsimBlend
-        prior: ${datasets.sdss_galaxies.prior}
-        decoder:
-            _target_: bliss.models.galsim_decoder.FullCatalogDecoder
-            single_galaxy_decoder: ${datasets.sdss_galaxies.decoder}
-            slen: 40
-            bp: 24
-        background: ${datasets.sdss_galaxies.background}
-        num_workers: 0
-        batch_size: 64
-        n_batches: 10
-        max_shift: 10
-        max_n_sources: 3
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}

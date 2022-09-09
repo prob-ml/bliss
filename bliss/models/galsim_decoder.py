@@ -102,7 +102,6 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
         slen: int,
         n_bands: int,
         pixel_scale: float,
-        psf_image_file: Optional[str] = None,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
         sdss_bands: Optional[str] = None,
@@ -110,7 +109,6 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
     ) -> None:
         super().__init__(
             psf_gauss_fwhm=psf_gauss_fwhm,
-            psf_image_file=psf_image_file,
             psf_params_file=psf_params_file,
             psf_slen=psf_slen,
             sdss_bands=sdss_bands,
@@ -194,7 +192,6 @@ class SingleLensedGalsimGalaxyDecoder(SingleGalsimGalaxyDecoder):
         slen: int,
         n_bands: int,
         pixel_scale: float,
-        psf_image_file: Optional[str] = None,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
         sdss_bands: Optional[str] = None,
@@ -203,7 +200,6 @@ class SingleLensedGalsimGalaxyDecoder(SingleGalsimGalaxyDecoder):
             slen=slen,
             n_bands=n_bands,
             pixel_scale=pixel_scale,
-            psf_image_file=psf_image_file,
             psf_params_file=psf_params_file,
             psf_slen=psf_slen,
             sdss_bands=sdss_bands,

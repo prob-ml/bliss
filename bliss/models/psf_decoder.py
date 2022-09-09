@@ -28,12 +28,10 @@ class PSFDecoder(nn.Module):
     image to account for sensor lens effects. PSF loading is suppported as a direct image (npy)
     or through attributes (npy or fits) file.
 
-    For image loading, a psf_image_file for the PSF should be passed in along with the pixel_scale
-    for the values in the saved pickled file. For parameter loading, a psf_params_file should
-    be indicated, with the corresponding psf_slen and sdss_bands.
+    For parameter loading, a psf_params_file should be indicated, with the corresponding
+    psf_slen and sdss_bands.
 
     Attributes:
-        psf_image_file: Path to pickled .npy file image file
         psf_params_file: PSF parameters (saved either in a numpy file or fits file from SDSS)
         psf_slen: Side-length of the PSF.
         sdss_bands: Bands to retrieve from PSF.
@@ -45,7 +43,6 @@ class PSFDecoder(nn.Module):
         n_bands: int = 1,
         pixel_scale: float = 0.393,
         psf_gauss_fwhm: Optional[float] = None,
-        psf_image_file: Optional[str] = None,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
         sdss_bands: Optional[str] = None,
@@ -54,19 +51,12 @@ class PSFDecoder(nn.Module):
 
         self.n_bands = n_bands
 
-        assert (
-            psf_image_file is not None or psf_params_file is not None or psf_gauss_fwhm is not None
-        )
+        assert psf_params_file is not None or psf_gauss_fwhm is not None
         if psf_gauss_fwhm is not None:
             assert psf_slen is not None
             self.psf_galsim = galsim.Gaussian(fwhm=psf_gauss_fwhm, flux=1.0)
             self.psf = self.psf_galsim.drawImage(nx=psf_slen, ny=psf_slen, scale=pixel_scale).array
             self.psf = self.psf.reshape(1, psf_slen, psf_slen)
-
-        elif psf_image_file is not None:
-            self.psf = np.load(psf_image_file)
-            psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
-            self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
         else:
             assert psf_params_file is not None and psf_slen is not None and sdss_bands is not None
