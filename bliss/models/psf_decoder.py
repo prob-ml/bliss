@@ -86,9 +86,8 @@ class PSFDecoder(nn.Module):
         assert (psf > 0).all()
 
         # ensure it's normalized
-        init_psf_sum = reduce(psf, "n m k -> n", "sum").detach()
-        norm = reduce(psf, "n m k -> n", "sum")
-        psf *= rearrange(init_psf_sum / norm, "n -> n 1 1")
+        norm = reduce(psf, "b m k -> b", "sum")
+        psf *= rearrange(1 / norm, "b -> b 1 1")
 
         # check format
         n_bands, psf_slen, _ = psf.shape
