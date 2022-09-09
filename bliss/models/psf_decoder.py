@@ -59,17 +59,9 @@ class PSFDecoder(nn.Module):
 
         else:
             assert psf_params_file is not None and psf_slen is not None and sdss_bands is not None
-            ext = Path(psf_params_file).suffix
-            if ext == ".npy":
-                psf_params = torch.from_numpy(np.load(psf_params_file))
-                psf_params = psf_params[list(range(n_bands))]
-            elif ext == ".fits":
-                assert len(sdss_bands) == n_bands
-                psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
-            else:
-                raise NotImplementedError(
-                    "Only .npy and .fits extensions are supported for PSF params files."
-                )
+            assert Path(psf_params_file).suffix == ".fits"
+            assert len(sdss_bands) == n_bands
+            psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
             self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
             self.psf_slen = psf_slen
             grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
