@@ -184,7 +184,7 @@ class ImageDecoder(pl.LightningModule):
 
     def forward(self):
         """Decodes latent representation into an image."""
-        return self.star_tile_decoder.psf_forward()
+        raise NotImplementedError("Please use `render_images` instead.")
 
     def _render_ptiles(self, tile_catalog: TileCatalog) -> Tensor:
         # n_sources: is (batch_size x n_tiles_h x n_tiles_w)
