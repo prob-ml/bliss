@@ -21,7 +21,6 @@ class GalaxyPrior:
         n_latent_batches: Optional[int] = None,
         autoencoder: Optional[OneCenteredGalaxyAE] = None,
         autoencoder_ckpt: str = None,
-        psf_image_file: Optional[str] = None,
         galaxy_dataset: Optional[Union[SingleGalsimGalaxies, ToyGaussian]] = None,
     ):
         """Class to sample galaxy latent variables.
@@ -31,7 +30,6 @@ class GalaxyPrior:
             n_latent_batches: Number of batches for galaxy latent samples.
             autoencoder: A OneCenteredGalaxyAE object used to generate galaxy latents.
             autoencoder_ckpt: Location of state_dict for autoencoder (optional).
-            psf_image_file: Path to psf image file for galaxy latent samples.
             galaxy_dataset: Galaxy dataset for generating galaxy images to encode.
         """
         latents_path = Path(latents_file)
@@ -39,7 +37,6 @@ class GalaxyPrior:
             latents = torch.load(latents_path, "cpu")
         else:
             assert galaxy_dataset is not None
-            assert psf_image_file is not None
             assert autoencoder_ckpt is not None
             assert autoencoder is not None
             autoencoder.load_state_dict(
