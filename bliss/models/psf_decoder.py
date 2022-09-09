@@ -45,7 +45,7 @@ class PSFDecoder(nn.Module):
         psf_gauss_fwhm: Optional[float] = None,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
-        sdss_bands: Optional[str] = None,
+        sdss_bands: Optional[Tuple[int]] = None,
     ):
         super().__init__()
         self.n_bands = n_bands
