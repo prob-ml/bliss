@@ -69,14 +69,14 @@ class PSFDecoder(nn.Module):
             grid *= self.psf_slen / (self.psf_slen - 1)
             self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
 
-            self.psf = self._get_psf_from_params().detach().numpy()
+            self.psf = self.forward_psf_from_params().detach().numpy()
             psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
             self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
     def forward(self, x):
         raise NotImplementedError("Please extend this class and implement forward()")
 
-    def _get_psf_from_params(self):
+    def forward_psf_from_params(self):
         # get psf in each band
         psf_list = []
         for i in range(self.n_bands):
