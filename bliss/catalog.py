@@ -15,6 +15,36 @@ from torch.nn import functional as F
 from bliss.datasets.sdss import SloanDigitalSkySurvey, column_to_tensor, convert_flux_to_mag
 
 
+def get_is_on_from_n_sources(n_sources, max_sources):
+    """Provides tensor which indicates how many sources are present for each batch.
+
+    Return a boolean array of `shape=(*n_sources.shape, max_sources)` whose `(*,l)th` entry
+    indicates whether there are more than l sources on the `*th` index.
+
+    Arguments:
+        n_sources: Tensor with number of sources per tile.
+        max_sources: Maximum number of sources allowed per tile.
+
+    Returns:
+        Tensor indicating how many sources are present for each batch.
+    """
+    assert not torch.any(torch.isnan(n_sources))
+    assert torch.all(n_sources >= 0)
+    assert torch.all(n_sources.le(max_sources))
+
+    is_on_array = torch.zeros(
+        *n_sources.shape,
+        max_sources,
+        device=n_sources.device,
+        dtype=torch.float,
+    )
+
+    for i in range(max_sources):
+        is_on_array[..., i] = n_sources > i
+
+    return is_on_array
+
+
 class TileCatalog(UserDict):
     allowed_params = {
         "n_source_log_probs",
@@ -356,40 +386,26 @@ class FullCatalog(UserDict):
         w_max = self.width - w_end
         return self.crop(h_start, h_max, w_start, w_max)
 
-    @staticmethod
-    def _make_tags(shape):
-        tags = torch.zeros(shape, dtype=int)
-        for i in range(shape[0]):
-            for j in range(shape[1]):
-                tags[i, j, :] = int(i)
-        return tags
-
-    def _collect_from_keep(self, keep: Tensor, tags: Tensor):
-        new_d = {}
-        d = {k: v[keep].unsqueeze(0) for k, v in self.items()}
-        d["plocs"] = self.plocs[keep].unsqueeze(0)
-        tags = tags[keep].squeeze()
-        for k, v in d.items():
-            counts_t = defaultdict(int)
-            shape = self[k].shape if k in self else self.plocs.shape
-            new_v = torch.zeros(shape)
-            for ii, t in enumerate(tags):
-                t = t.item()
-                new_v[t, counts_t[t], :] = v.squeeze()[ii]
-                counts_t[t] += 1
-            new_d[k] = new_v
-        return new_d
-
-    def apply_mag_bin(self, mag_min: float, mag_max: float):
+    def apply_param_bin(self, pname: str, p_min: float, p_max: float):
         """Apply magnitude bin to given parameters."""
-        assert "mags" in self, "Parameter 'mags' required to apply mag cut."
-        keep = self["mags"] < mag_max
-        keep = keep & (self["mags"] > mag_min)
-        tags = self._make_tags(keep.shape)
-        keep = rearrange(keep, "n s 1 -> n s")
-        d = self._collect_from_keep(keep, tags)
-        d["n_sources"] = (d["mags"] > 0).sum(dim=(-1, -2))
-        return type(self)(self.height, self.width, d)
+        assert pname in self, f"Parameter '{pname}' required to apply mag cut."
+        assert self[pname].shape[-1] == 1, "Can only be applied to scalar parameters."
+        keep = self[pname] < p_max
+        keep = keep & (self["mags"] > p_min)
+        indices_to_keep = keep.nonzero()
+        d = dict(self.items())  # need temporary dictionary for plocs
+        d["plocs"] = self.plocs
+        new_d = {k: torch.zeros(v.shape) for k, v in d.items()}
+        count_b = defaultdict(int)  # count occurences in batch
+        for inds in indices_to_keep:
+            b, s, z = inds.long()  # batch_idx, max_source_idx, 0
+            b, s, z = b.item(), s.item(), z.item()
+            assert z == 0
+            for k, v in d.items():
+                new_d[k][b, count_b[b]] = v[b, s]
+            count_b[b] += 1
+        new_d["n_sources"] = torch.tensor([count_b[b] for b in range(self.batch_size)])
+        return type(self)(self.height, self.width, new_d)
 
     def to_tile_params(
         self, tile_slen: int, max_sources_per_tile: int, ignore_extra_sources=False
@@ -612,7 +628,7 @@ class DecalsFullCatalog(FullCatalog):
         height = hlim[1] - hlim[0]
         width = wlim[1] - wlim[0]
         full_cat = cls(height, width, d)
-        return full_cat.apply_mag_bin(0, mag_max)
+        return full_cat.apply_param_bin("mags", 0, mag_max)
 
 
 def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tensor:
@@ -655,33 +671,3 @@ def get_n_padded_tiles_hw(height, width, window, tile_slen):
     nh = ((height - window) // tile_slen) + 1
     nw = ((width - window) // tile_slen) + 1
     return nh, nw
-
-
-def get_is_on_from_n_sources(n_sources, max_sources):
-    """Provides tensor which indicates how many sources are present for each batch.
-
-    Return a boolean array of `shape=(*n_sources.shape, max_sources)` whose `(*,l)th` entry
-    indicates whether there are more than l sources on the `*th` index.
-
-    Arguments:
-        n_sources: Tensor with number of sources per tile.
-        max_sources: Maximum number of sources allowed per tile.
-
-    Returns:
-        Tensor indicating how many sources are present for each batch.
-    """
-    assert not torch.any(torch.isnan(n_sources))
-    assert torch.all(n_sources >= 0)
-    assert torch.all(n_sources.le(max_sources))
-
-    is_on_array = torch.zeros(
-        *n_sources.shape,
-        max_sources,
-        device=n_sources.device,
-        dtype=torch.float,
-    )
-
-    for i in range(max_sources):
-        is_on_array[..., i] = n_sources > i
-
-    return is_on_array
