@@ -245,13 +245,13 @@ def scene_metrics(
     classification_metrics = ClassificationMetrics(slack)
 
     # precision
-    eparams = est_params.apply_mag_bin(mag_min, mag_max)
+    eparams = est_params.apply_param_bin("mags", mag_min, mag_max)
     detection_metrics.update(true_params, eparams)
     precision = detection_metrics.compute()["precision"]
     detection_metrics.reset()  # reset global state since recall and precision use different cuts.
 
     # recall
-    tparams = true_params.apply_mag_bin(mag_min, mag_max)
+    tparams = true_params.apply_param_bin("mags", mag_min, mag_max)
     detection_metrics.update(tparams, est_params)
     recall = detection_metrics.compute()["recall"]
     n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"]
@@ -267,13 +267,13 @@ def scene_metrics(
     }
 
     # classification
-    tparams = true_params.apply_mag_bin(mag_min, mag_max)
+    tparams = true_params.apply_param_bin("mags", mag_min, mag_max)
     classification_metrics.update(tparams, est_params)
     classification_result = classification_metrics.compute()
 
     # report counts on each bin
-    tparams = true_params.apply_mag_bin(mag_min, mag_max)
-    eparams = est_params.apply_mag_bin(mag_min, mag_max)
+    tparams = true_params.apply_param_bin("mags", mag_min, mag_max)
+    eparams = est_params.apply_param_bin("mags", mag_min, mag_max)
     tcount = tparams.n_sources.sum().item()
     tgcount = tparams["galaxy_bools"].sum().int().item()
     tscount = tcount - tgcount
