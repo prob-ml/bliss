@@ -396,7 +396,7 @@ class FullCatalog(UserDict):
         d = dict(self.items())  # need temporary dictionary for plocs
         d["plocs"] = self.plocs
         new_d = {k: torch.zeros(v.shape) for k, v in d.items()}
-        count_b = defaultdict(int)  # count occurences in batch
+        count_b: dict = defaultdict(int)  # count occurences in batch
         for inds in indices_to_keep:
             b, s, z = inds.long()  # batch_idx, max_source_idx, 0
             b, s, z = b.item(), s.item(), z.item()
