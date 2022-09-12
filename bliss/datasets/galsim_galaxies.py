@@ -133,12 +133,13 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         background: Tensor,
     ):
         n_sources = int(full_cat.n_sources.item())
-        galaxy_params = full_cat["galaxy_params"][0]
+        galaxy_params = full_cat["galaxy_params"]
+        galaxy_bools = full_cat["galaxy_bools"]
 
         # add important metrics to full catalog
         scale = self.pixel_scale
         size = self.slen + 2 * self.bp
-        psf = self.decoder.single_galaxy_decoder.psf  # psf from single galaxy decoder.
+        psf = self.decoder.single_galaxy_decoder.psf
         psf_tensor = torch.from_numpy(psf.drawImage(nx=size, ny=size, scale=scale).array)
 
         single_galaxy_tensor = noiseless_centered[:n_sources]
@@ -146,6 +147,8 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         ellips = torch.zeros(self.max_n_sources, 2)
         e12 = get_single_galaxy_ellipticities(single_galaxy_tensor, psf_tensor, scale)
         ellips[:n_sources, :] = e12
+        ellips = rearrange(ellips, "n g -> 1 n g", n=self.max_n_sources, g=2)
+        ellips *= galaxy_bools
 
         # get snr and blendedness
         snr = torch.zeros(self.max_n_sources)
@@ -153,19 +156,25 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         for ii in range(n_sources):
             snr[ii] = _get_snr(noiseless_centered[ii], background)
             blendedness[ii] = _get_blendedness(noiseless_uncentered[ii], noiseless)
+        snr = rearrange(snr, "n -> 1 n 1", n=self.max_n_sources)
+        blendedness = rearrange(blendedness, "n -> 1 n 1", n=self.max_n_sources)
 
         # get magnitudes
-        gal_fluxes = galaxy_params[:, 0]
-        galaxy_mags = torch.zeros(self.max_n_sources)
+        gal_fluxes = galaxy_params[0, :, 0]
+        star_fluxes = full_cat["star_fluxes"][0, :, 0]
+        mags = torch.zeros(self.max_n_sources)
         for ii in range(n_sources):
-            galaxy_mags[ii] = convert_flux_to_mag(gal_fluxes[ii])
+            if galaxy_bools[0, ii, 0].item() == 1:
+                mags[ii] = convert_flux_to_mag(gal_fluxes[ii]).item()
+            else:
+                mags[ii] = convert_flux_to_mag(star_fluxes[ii]).item()
+        mags = rearrange(mags, "n -> 1 n 1", n=self.max_n_sources)
 
         # add to full catalog (needs to be in batches)
-        full_cat["galaxy_fluxes"] = rearrange(gal_fluxes, "n -> 1 n 1", n=self.max_n_sources)
-        full_cat["ellips"] = rearrange(ellips, "n g -> 1 n g", n=self.max_n_sources, g=2)
-        full_cat["snr"] = rearrange(snr, "n -> 1 n 1", n=self.max_n_sources)
-        full_cat["blendedness"] = rearrange(blendedness, "n -> 1 n 1", n=self.max_n_sources)
-
+        full_cat["mags"] = mags
+        full_cat["ellips"] = ellips
+        full_cat["snr"] = snr
+        full_cat["blendedness"] = blendedness
         return full_cat
 
     def _get_tile_params(self, full_cat):
