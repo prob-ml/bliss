@@ -139,7 +139,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         # add important metrics to full catalog
         scale = self.pixel_scale
         size = self.slen + 2 * self.bp
-        psf = self.decoder.single_galaxy_decoder.psf
+        psf = self.decoder.single_galaxy_decoder.psf_galsim
         psf_tensor = torch.from_numpy(psf.drawImage(nx=size, ny=size, scale=scale).array)
 
         single_galaxy_tensor = noiseless_centered[:n_sources]
