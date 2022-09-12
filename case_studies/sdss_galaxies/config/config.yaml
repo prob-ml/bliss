@@ -234,6 +234,7 @@ plots:
     figdir: ${paths.project}/figures
     image_format: "png"
     overwrite: false
+    psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
     simulated_sdss_individual_galaxies: ${paths.project}/models/simulated_sdss_individual_galaxies.pt
     simulated_blended_galaxies: ${paths.project}/models/simulated_blended_galaxies.pt
     galsim_blended_galaxies:

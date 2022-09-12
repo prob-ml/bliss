@@ -7,6 +7,7 @@ from torch import Tensor
 
 from bliss import reporting
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.models.psf_decoder import PSFDecoder
 from case_studies.sdss_galaxies.plots.bliss_figures import BlissFigures, format_plot, set_rc_params
 
 
@@ -55,7 +56,7 @@ class AEReconstructionFigures(BlissFigures):
         self.n_examples = n_examples
 
     def compute_data(
-        self, autoencoder: OneCenteredGalaxyAE, images_file, psf_file, sdss_pixel_scale
+        self, autoencoder: OneCenteredGalaxyAE, images_file, psf_params_file, sdss_pixel_scale
     ):
         # NOTE: For very dim objects (max_pixel < 6, flux ~ 1000), autoencoder can return
         # 0.1% objects with negative flux. This objects are discarded.
@@ -89,10 +90,8 @@ class AEReconstructionFigures(BlissFigures):
         worst_indices = absolute_residual.argsort()[-self.n_examples :]
 
         # measurements
-        psf_array = np.load(psf_file)
-        galsim_psf_image = galsim.Image(psf_array[0], scale=sdss_pixel_scale)  # sdss scale
-        psf = galsim.InterpolatedImage(galsim_psf_image).withFlux(1.0)
-        psf_image = torch.tensor(psf.drawImage(nx=53, ny=53, scale=sdss_pixel_scale).array)
+        psf_decoder = PSFDecoder(psf_params_file=psf_params_file, psf_slen=53, sdss_bands=[2])
+        psf_image = psf_decoder.forward_psf_from_params()
 
         recon_no_background = recon_means - background.cpu()
         assert torch.all(recon_no_background.sum(axis=(1, 2, 3)) > 0)
