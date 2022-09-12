@@ -292,7 +292,7 @@ plots:
             comment: "Mild blend with two medium-sized galaxies of comparable size. In DECals, they appear to be well separated elliptical monochromatic galaxies with no striking features."
         sdss_gal_blend2:
             h: 1404
-            w: 1720
+            w: 1718
             size: 32
             ra: 336.7383
             dec: -0.8536
@@ -313,7 +313,7 @@ plots:
             comment: "In the frame it looks like a very mild blend, with one small bright galaxy and a larger relatively bright galaxy. In DECals we see that the larger galaxy has spiral arms features and one of the arms is blended with the smaller galaxy. This model misfit might be problematic for BLISS. Both galaxies have different colors."
         sdss_gal_blend5:
             h: 460
-            w: 508
+            w: 506
             size: 48
             ra: 336.6349
             dec: -0.9858

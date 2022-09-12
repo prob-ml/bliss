@@ -21,12 +21,10 @@ class SDSSReconstructionFigures(BlissFigures):
         self, frame: Union[SDSSFrame, SimulatedFrame], encoder: Encoder, decoder: ImageDecoder
     ):
 
-        tile_slen = encoder.detection_encoder.tile_slen
         data = {}
 
         for figname, scene_coords in self.scenes.items():
             h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
-            assert h % tile_slen == 0 and w % tile_slen == 0
             assert scene_size <= 300, "Scene too large, change slen."
             h_end = h + scene_size
             w_end = w + scene_size
