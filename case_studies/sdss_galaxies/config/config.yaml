@@ -234,6 +234,7 @@ plots:
     figdir: ${paths.project}/figures
     image_format: "png"
     overwrite: false
+    psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
     simulated_sdss_individual_galaxies: ${paths.project}/models/simulated_sdss_individual_galaxies.pt
     simulated_blended_galaxies: ${paths.project}/models/simulated_blended_galaxies.pt
     galsim_blended_galaxies:
@@ -275,12 +276,12 @@ plots:
         n_rows_per_batch: 15
     scenes:
         sdss_recon0:
-            h: 200
+            h: 198
             w: 1700
             size: 300
         sdss_recon1:
-            h: 1152
-            w: 1000
+            h: 1154
+            w: 997
             size: 300
         sdss_gal_blend1:
             h: 460
@@ -291,7 +292,7 @@ plots:
             comment: "Mild blend with two medium-sized galaxies of comparable size. In DECals, they appear to be well separated elliptical monochromatic galaxies with no striking features."
         sdss_gal_blend2:
             h: 1404
-            w: 1720
+            w: 1718
             size: 32
             ra: 336.7383
             dec: -0.8536
@@ -312,7 +313,7 @@ plots:
             comment: "In the frame it looks like a very mild blend, with one small bright galaxy and a larger relatively bright galaxy. In DECals we see that the larger galaxy has spiral arms features and one of the arms is blended with the smaller galaxy. This model misfit might be problematic for BLISS. Both galaxies have different colors."
         sdss_gal_blend5:
             h: 460
-            w: 508
+            w: 506
             size: 48
             ra: 336.6349
             dec: -0.9858
