@@ -59,7 +59,7 @@ class HomoGalsimBlends(GalsimBlends):
         noisy_image = _add_noise_and_background(noiseless, background)
 
         # homogenization
-        psf_obj = self.decoder.single_galaxy_decoder.psf
+        psf_obj = self.decoder.single_galaxy_decoder.psf_galsim
         psf = psf_obj.drawImage(nx=self._size, ny=self._size, scale=self.pixel_scale).array
         psf = torch.from_numpy(psf).reshape(1, 1, self._size, self._size)
 

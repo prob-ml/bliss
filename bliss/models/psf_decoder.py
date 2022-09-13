@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 import galsim
 import numpy as np
@@ -45,11 +45,11 @@ class PSFDecoder(nn.Module):
         psf_gauss_fwhm: Optional[float] = None,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
-        sdss_bands: Optional[str] = None,
+        sdss_bands: Optional[Tuple[int]] = None,
     ):
         super().__init__()
-
         self.n_bands = n_bands
+        self.params = None  # psf params from fits file
 
         assert psf_params_file is not None or psf_gauss_fwhm is not None
         if psf_gauss_fwhm is not None:
@@ -60,48 +60,44 @@ class PSFDecoder(nn.Module):
 
         else:
             assert psf_params_file is not None and psf_slen is not None and sdss_bands is not None
-            ext = Path(psf_params_file).suffix
-            if ext == ".npy":
-                psf_params = torch.from_numpy(np.load(psf_params_file))
-                psf_params = psf_params[list(range(n_bands))]
-            elif ext == ".fits":
-                assert len(sdss_bands) == n_bands
-                psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
-            else:
-                raise NotImplementedError(
-                    "Only .npy and .fits extensions are supported for PSF params files."
-                )
+            assert Path(psf_params_file).suffix == ".fits"
+            assert len(sdss_bands) == n_bands
+            psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
             self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
-            self.psf_image = None
             self.psf_slen = psf_slen
             grid = get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-            # extra factor to be consistent with old repo
-            # but probably doesn't matter ...
+            # Bryan: extra factor to be consistent with old repo, probably unimportant...
             grid *= self.psf_slen / (self.psf_slen - 1)
             self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
 
-            # get psf normalization_constant
-            self.normalization_constant = torch.zeros(self.n_bands)
-            for i in range(self.n_bands):
-                psf_i = self._get_psf_single_band(i)
-                self.normalization_constant[i] = 1 / psf_i.sum()
-            self.normalization_constant = self.normalization_constant.detach()
-            self.psf = self.forward_adjusted_psf().detach().numpy()
+            self.psf = self.forward_psf_from_params().detach().numpy()
             psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
             self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
     def forward(self, x):
         raise NotImplementedError("Please extend this class and implement forward()")
 
-    def psf_forward(self):
-        psf = self._get_psf()
-        init_psf_sum = reduce(psf, "n m k -> n", "sum").detach()
-        norm = reduce(psf, "n m k -> n", "sum")
-        psf *= rearrange(init_psf_sum / norm, "n -> n 1 1")
+    def forward_psf_from_params(self):
+        assert self.params is not None, "Can only be used when `psf_params_file` is given."
+        # get psf in each band
+        psf_list = []
+        for i in range(self.n_bands):
+            band_psf = self._psf_fun(self.cached_radii_grid, *self.params[i])
+            psf_list.append(band_psf.unsqueeze(0))
+        psf = torch.cat(psf_list)
+        assert (psf > 0).all()
+
+        # ensure it's normalized
+        norm = reduce(psf, "b m k -> b", "sum")
+        psf *= rearrange(1 / norm, "b -> b 1 1")
+
+        # check format
+        n_bands, psf_slen, _ = psf.shape
+        assert n_bands == self.n_bands and (psf_slen % 2) == 1 and psf_slen == psf.shape[2]
         return psf
 
     @staticmethod
-    def _get_fit_file_psf_params(psf_fit_file, bands=(2, 3)):
+    def _get_fit_file_psf_params(psf_fit_file: str, bands: Tuple[int]):
         data = fits.open(psf_fit_file, ignore_missing_end=True).pop(6).data
         psf_params = torch.zeros(len(bands), 6)
         for i, band in enumerate(bands):
@@ -112,20 +108,9 @@ class PSFDecoder(nn.Module):
             b = data["psf_b"][0][band]
             p0 = data["psf_p0"][0][band]
 
-            psf_params[i] = torch.log(torch.tensor([sigma1, sigma2, sigmap, beta, b, p0]))
+            psf_params[i] = torch.tensor([sigma1, sigma2, sigmap, beta, b, p0])
 
         return psf_params
-
-    def _get_psf(self):
-        psf_list = []
-        for i in range(self.n_bands):
-            band_psf = self._get_psf_single_band(i)
-            band_psf *= self.normalization_constant[i]
-            psf_list.append(band_psf.unsqueeze(0))
-        psf = torch.cat(psf_list)
-
-        assert (psf > 0).all()
-        return psf
 
     @staticmethod
     def _psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
@@ -133,27 +118,3 @@ class PSFDecoder(nn.Module):
         term2 = b * torch.exp(-(r**2) / (2 * sigma2))
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
-
-    def _get_psf_single_band(self, band_idx):
-        psf_params = torch.exp(self.params[band_idx])
-        return self._psf_fun(
-            self.cached_radii_grid,
-            psf_params[0],
-            psf_params[1],
-            psf_params[2],
-            psf_params[3],
-            psf_params[4],
-            psf_params[5],
-        )
-
-    def forward_adjusted_psf(self):
-        # use power_law_psf and current psf parameters to forward and obtain fresh psf model.
-        # first dimension of psf is number of bands
-        # dimension of the psf/slen should be odd
-        psf = self.psf_forward()
-        psf_slen = psf.shape[2]
-        assert len(psf.shape) == 3
-        assert psf.shape[0] == self.n_bands
-        assert psf.shape[1] == psf_slen
-        assert (psf_slen % 2) == 1
-        return psf

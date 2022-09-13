@@ -161,7 +161,7 @@ class ImageDecoder(pl.LightningModule):
         b_flat = b * nth * ntw * s
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
 
-        unfit_psf = self.star_tile_decoder.forward_adjusted_psf()
+        unfit_psf = self.star_tile_decoder.forward_psf_from_params()
         psf = self.star_tile_decoder.tiler.fit_source_to_ptile(unfit_psf)
         psf_image = rearrange(psf, "1 h w -> h w", h=slen, w=slen)
 
@@ -184,7 +184,7 @@ class ImageDecoder(pl.LightningModule):
 
     def forward(self):
         """Decodes latent representation into an image."""
-        return self.star_tile_decoder.psf_forward()
+        raise NotImplementedError("Please use `render_images` instead.")
 
     def _render_ptiles(self, tile_catalog: TileCatalog) -> Tensor:
         # n_sources: is (batch_size x n_tiles_h x n_tiles_w)
@@ -439,13 +439,12 @@ class StarTileDecoder(PSFDecoder):
         n_ptiles = locs.shape[0]
         max_sources = locs.shape[1]
 
-        psf = self.forward_adjusted_psf()
+        psf = self.forward_psf_from_params()
         psf = self.tiler.fit_source_to_ptile(psf)
-        assert len(psf.shape) == 3  # the shape is (n_bands, ptile_slen, ptile_slen)
-        assert psf.shape[0] == self.n_bands
+        n_bands, _, _ = psf.shape
         assert fluxes.shape[0] == star_bools.shape[0] == n_ptiles
         assert fluxes.shape[1] == star_bools.shape[1] == max_sources
-        assert fluxes.shape[2] == psf.shape[0] == self.n_bands
+        assert fluxes.shape[2] == self.n_bands == n_bands
         assert star_bools.shape[2] == 1
 
         # all stars are just the PSF so we copy it.

@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import galsim
 import numpy as np
@@ -104,7 +104,7 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
         pixel_scale: float,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
-        sdss_bands: Optional[str] = None,
+        sdss_bands: Optional[Tuple[int]] = None,
         psf_gauss_fwhm: Optional[float] = None,
     ) -> None:
         super().__init__(
@@ -116,7 +116,6 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
             pixel_scale=pixel_scale,
         )
         assert len(self.psf.shape) == 3 and self.psf.shape[0] == 1
-        self.psf = self.psf_galsim
 
         assert n_bands == 1, "Only 1 band is supported"
         self.slen = slen
@@ -182,7 +181,7 @@ class SingleGalsimGalaxyDecoder(PSFDecoder):
         slen: int,
         offset: Optional[Tensor] = None,
     ) -> Tensor:
-        image = self._render_galaxy_np(galaxy_params, self.psf, slen, offset)
+        image = self._render_galaxy_np(galaxy_params, self.psf_galsim, slen, offset)
         return torch.from_numpy(image).reshape(1, slen, slen)
 
 
@@ -194,7 +193,7 @@ class SingleLensedGalsimGalaxyDecoder(SingleGalsimGalaxyDecoder):
         pixel_scale: float,
         psf_params_file: Optional[str] = None,
         psf_slen: Optional[int] = None,
-        sdss_bands: Optional[str] = None,
+        sdss_bands: Optional[Tuple[int]] = None,
     ) -> None:
         super().__init__(
             slen=slen,
@@ -215,13 +214,13 @@ class SingleLensedGalsimGalaxyDecoder(SingleGalsimGalaxyDecoder):
 
         if z_lens.shape == (12,):
             assert offset is None or offset.shape == (2,)
-            return self.render_lensed_galaxy(z_lens, self.psf, self.slen, offset)
+            return self.render_lensed_galaxy(z_lens, self.psf_galsim, self.slen, offset)
 
         images = []
         for ii, lens_params in enumerate(z_lens):
             off = offset if not offset else offset[ii]
             assert off is None or off.shape == (2,)
-            image = self.render_lensed_galaxy(lens_params, self.psf, self.slen, off)
+            image = self.render_lensed_galaxy(lens_params, self.psf_galsim, self.slen, off)
             images.append(image)
         return torch.stack(images, dim=0).to(z_lens.device)
 
@@ -397,7 +396,7 @@ class FullCatalogDecoder:
 
     def _render_star(self, flux: float, slen: int, offset: Optional[Tensor] = None) -> Tensor:
         assert offset is None or offset.shape == (2,)
-        star = self.single_galaxy_decoder.psf.withFlux(flux)  # creates a copy
+        star = self.single_galaxy_decoder.psf_galsim.withFlux(flux)  # creates a copy
         offset = offset if offset is None else offset.numpy()
         image = star.drawImage(nx=slen, ny=slen, scale=self.pixel_scale, offset=offset)
         return torch.from_numpy(image.array).reshape(1, slen, slen)
