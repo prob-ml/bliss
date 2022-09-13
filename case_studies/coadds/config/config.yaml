@@ -73,7 +73,7 @@ datasets:
             max_n_sources: 6
             max_shift: 0.5
             galaxy_prob: 0.0
-            n_dithers: 25
+            n_dithers: 50
         decoder:
             _target_: case_studies.coadds.coadd_decoder.CoaddFullCatalogDecoder
             single_galaxy_decoder: ${datasets.galsim_blends.decoder.single_galaxy_decoder}
