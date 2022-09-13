@@ -161,7 +161,7 @@ class ImageDecoder(pl.LightningModule):
         b_flat = b * nth * ntw * s
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
 
-        unfit_psf = torch.from_numpy(self.star_tile_decoder.psf.copy()).to(galaxy_bools.device)
+        unfit_psf = self.star_tile_decoder.forward_psf_from_params()
         psf = self.star_tile_decoder.tiler.fit_source_to_ptile(unfit_psf)
         psf_image = rearrange(psf, "1 h w -> h w", h=slen, w=slen)
 
