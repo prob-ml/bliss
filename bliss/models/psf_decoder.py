@@ -49,6 +49,7 @@ class PSFDecoder(nn.Module):
     ):
         super().__init__()
         self.n_bands = n_bands
+        self.params = None  # psf params from fits file
 
         assert psf_params_file is not None or psf_gauss_fwhm is not None
         if psf_gauss_fwhm is not None:
@@ -77,6 +78,7 @@ class PSFDecoder(nn.Module):
         raise NotImplementedError("Please extend this class and implement forward()")
 
     def forward_psf_from_params(self):
+        assert self.params is not None, "Can only be used when `psf_params_file` is given."
         # get psf in each band
         psf_list = []
         for i in range(self.n_bands):
