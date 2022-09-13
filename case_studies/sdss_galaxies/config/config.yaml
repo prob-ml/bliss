@@ -276,12 +276,12 @@ plots:
         n_rows_per_batch: 15
     scenes:
         sdss_recon0:
-            h: 200
+            h: 198
             w: 1700
             size: 300
         sdss_recon1:
             h: 1152
-            w: 1000
+            w: 998
             size: 300
         sdss_gal_blend1:
             h: 460
