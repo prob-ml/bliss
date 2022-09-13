@@ -280,8 +280,8 @@ plots:
             w: 1700
             size: 300
         sdss_recon1:
-            h: 1152
-            w: 998
+            h: 1154
+            w: 997
             size: 300
         sdss_gal_blend1:
             h: 460
