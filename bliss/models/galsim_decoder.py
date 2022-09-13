@@ -214,13 +214,13 @@ class SingleLensedGalsimGalaxyDecoder(SingleGalsimGalaxyDecoder):
 
         if z_lens.shape == (12,):
             assert offset is None or offset.shape == (2,)
-            return self.render_lensed_galaxy(z_lens, self.psf, self.slen, offset)
+            return self.render_lensed_galaxy(z_lens, self.psf_galsim, self.slen, offset)
 
         images = []
         for ii, lens_params in enumerate(z_lens):
             off = offset if not offset else offset[ii]
             assert off is None or off.shape == (2,)
-            image = self.render_lensed_galaxy(lens_params, self.psf, self.slen, off)
+            image = self.render_lensed_galaxy(lens_params, self.psf_galsim, self.slen, off)
             images.append(image)
         return torch.stack(images, dim=0).to(z_lens.device)
 
