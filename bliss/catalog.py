@@ -15,36 +15,6 @@ from torch.nn import functional as F
 from bliss.datasets.sdss import SloanDigitalSkySurvey, column_to_tensor, convert_flux_to_mag
 
 
-def get_is_on_from_n_sources(n_sources, max_sources):
-    """Provides tensor which indicates how many sources are present for each batch.
-
-    Return a boolean array of `shape=(*n_sources.shape, max_sources)` whose `(*,l)th` entry
-    indicates whether there are more than l sources on the `*th` index.
-
-    Arguments:
-        n_sources: Tensor with number of sources per tile.
-        max_sources: Maximum number of sources allowed per tile.
-
-    Returns:
-        Tensor indicating how many sources are present for each batch.
-    """
-    assert not torch.any(torch.isnan(n_sources))
-    assert torch.all(n_sources >= 0)
-    assert torch.all(n_sources.le(max_sources))
-
-    is_on_array = torch.zeros(
-        *n_sources.shape,
-        max_sources,
-        device=n_sources.device,
-        dtype=torch.float,
-    )
-
-    for i in range(max_sources):
-        is_on_array[..., i] = n_sources > i
-
-    return is_on_array
-
-
 class TileCatalog(UserDict):
     allowed_params = {
         "n_source_log_probs",
@@ -661,6 +631,36 @@ def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tens
         h=window,
         w=window,
     )
+
+
+def get_is_on_from_n_sources(n_sources, max_sources):
+    """Provides tensor which indicates how many sources are present for each batch.
+
+    Return a boolean array of `shape=(*n_sources.shape, max_sources)` whose `(*,l)th` entry
+    indicates whether there are more than l sources on the `*th` index.
+
+    Arguments:
+        n_sources: Tensor with number of sources per tile.
+        max_sources: Maximum number of sources allowed per tile.
+
+    Returns:
+        Tensor indicating how many sources are present for each batch.
+    """
+    assert not torch.any(torch.isnan(n_sources))
+    assert torch.all(n_sources >= 0)
+    assert torch.all(n_sources.le(max_sources))
+
+    is_on_array = torch.zeros(
+        *n_sources.shape,
+        max_sources,
+        device=n_sources.device,
+        dtype=torch.float,
+    )
+
+    for i in range(max_sources):
+        is_on_array[..., i] = n_sources > i
+
+    return is_on_array
 
 
 def get_n_tiles_hw(height: int, width: int, tile_slen: int):
