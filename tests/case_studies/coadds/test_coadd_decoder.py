@@ -9,5 +9,5 @@ def test_coadd_galsim_blend(get_coadds_config, devices):
     size = cgb.slen + 2 * cgb.bp
 
     assert ds["noisy"].shape == torch.Size([1, size - 2, size - 2])
-    assert ds["background"].shape == torch.Size([cgb.prior.n_dithers, 1, size - 2, size - 2])
+    assert ds["background"].shape == torch.Size([1, size - 2, size - 2])
     assert ds["images"].shape == torch.Size([1, size - 2, size - 2])
