@@ -633,6 +633,16 @@ def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tens
     )
 
 
+def get_n_tiles_hw(height: int, width: int, tile_slen: int):
+    return math.ceil(height / tile_slen), math.ceil(width / tile_slen)
+
+
+def get_n_padded_tiles_hw(height, width, window, tile_slen):
+    nh = ((height - window) // tile_slen) + 1
+    nw = ((width - window) // tile_slen) + 1
+    return nh, nw
+
+
 def get_is_on_from_n_sources(n_sources, max_sources):
     """Provides tensor which indicates how many sources are present for each batch.
 
@@ -661,13 +671,3 @@ def get_is_on_from_n_sources(n_sources, max_sources):
         is_on_array[..., i] = n_sources > i
 
     return is_on_array
-
-
-def get_n_tiles_hw(height: int, width: int, tile_slen: int):
-    return math.ceil(height / tile_slen), math.ceil(width / tile_slen)
-
-
-def get_n_padded_tiles_hw(height, width, window, tile_slen):
-    nh = ((height - window) // tile_slen) + 1
-    nw = ((width - window) // tile_slen) + 1
-    return nh, nw
