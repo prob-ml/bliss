@@ -1,5 +1,5 @@
 import math
-from collections import UserDict
+from collections import UserDict, defaultdict
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -356,17 +356,26 @@ class FullCatalog(UserDict):
         w_max = self.width - w_end
         return self.crop(h_start, h_max, w_start, w_max)
 
-    def apply_mag_bin(self, mag_min: float, mag_max: float):
+    def apply_param_bin(self, pname: str, p_min: float, p_max: float):
         """Apply magnitude bin to given parameters."""
-        assert self.batch_size == 1
-        assert "mags" in self, "Parameter 'mags' required to apply mag cut."
-        keep = self["mags"] < mag_max
-        keep = keep & (self["mags"] > mag_min)
-        keep = rearrange(keep, "n s 1 -> n s")
-        d = {k: v[keep].unsqueeze(0) for k, v in self.items()}
-        d["plocs"] = self.plocs[keep].unsqueeze(0)
-        d["n_sources"] = keep.sum(dim=-1)
-        return type(self)(self.height, self.width, d)
+        assert pname in self, f"Parameter '{pname}' required to apply mag cut."
+        assert self[pname].shape[-1] == 1, "Can only be applied to scalar parameters."
+        keep = self[pname] < p_max
+        keep = keep & (self["mags"] > p_min)
+        indices_to_keep = keep.nonzero()
+        d = dict(self.items())  # need temporary dictionary for plocs
+        d["plocs"] = self.plocs
+        new_d = {k: torch.zeros(v.shape) for k, v in d.items()}
+        count_b: dict = defaultdict(int)  # count occurences in batch
+        for inds in indices_to_keep:
+            b, s, z = inds.long()  # batch_idx, max_source_idx, 0
+            b, s, z = b.item(), s.item(), z.item()
+            assert z == 0
+            for k, v in d.items():
+                new_d[k][b, count_b[b]] = v[b, s]
+            count_b[b] += 1
+        new_d["n_sources"] = torch.tensor([count_b[b] for b in range(self.batch_size)])
+        return type(self)(self.height, self.width, new_d)
 
     def to_tile_params(
         self, tile_slen: int, max_sources_per_tile: int, ignore_extra_sources=False
@@ -589,7 +598,7 @@ class DecalsFullCatalog(FullCatalog):
         height = hlim[1] - hlim[0]
         width = wlim[1] - wlim[0]
         full_cat = cls(height, width, d)
-        return full_cat.apply_mag_bin(0, mag_max)
+        return full_cat.apply_param_bin("mags", 0, mag_max)
 
 
 def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tensor:

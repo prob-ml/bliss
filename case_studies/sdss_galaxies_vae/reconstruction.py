@@ -160,7 +160,8 @@ def reconstruct(cfg):
             tile_dir.mkdir(exist_ok=True)
             make_images_of_example_tile(tile_dir, encoder, decoder, frame, tile_map_recon)
 
-            true_cat = ground_truth_catalog.apply_mag_bin(-np.inf, cfg.reconstruct.mag_max)
+            mag_max = cfg.reconstruct.mag_max
+            true_cat = ground_truth_catalog.apply_param_bin("mags", -np.inf, mag_max)
             mismatch_dir = outdir / "reconstructions" / "mismatches"
             mismatch_dir.mkdir(exist_ok=True)
             plot_mismatches(
@@ -256,8 +257,8 @@ def calc_scene_metrics_by_mag(
     mag_maxes = [float(m) for m in range(mag_start, mag_end + 1)] + [mag_end]
     for mag_min, mag_max in zip(mag_mins, mag_maxes):
         # report counts on each bin
-        true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
-        est_cat_binned = est_cat.apply_mag_bin(mag_min, mag_max)
+        true_cat_binned = true_cat.apply_param_bin("mags", mag_min, mag_max)
+        est_cat_binned = est_cat.apply_param_bin("mags", mag_min, mag_max)
         tcount = true_cat_binned.n_sources.int().item()
         tgcount = true_cat_binned["galaxy_bools"].sum().int().item()
         tscount = tcount - tgcount
@@ -266,7 +267,7 @@ def calc_scene_metrics_by_mag(
         classification_metrics = reporting.ClassificationMetrics(loc_slack)
 
         # precision
-        est_cat_binned = est_cat.apply_mag_bin(mag_min, mag_max)
+        est_cat_binned = est_cat.apply_param_bin("mags", mag_min, mag_max)
         detection_metrics.update(true_cat, est_cat_binned)
         precision_metrics = detection_metrics.compute()
         fp = precision_metrics["fp"].item()
@@ -274,7 +275,7 @@ def calc_scene_metrics_by_mag(
         detection_metrics.reset()
 
         # recall
-        true_cat_binned = true_cat.apply_mag_bin(mag_min, mag_max)
+        true_cat_binned = true_cat.apply_param_bin("mags", mag_min, mag_max)
         detection_metrics.update(true_cat_binned, est_cat)
         detection_dict = detection_metrics.compute()
         tp = detection_dict["tp"].item()
@@ -838,7 +839,7 @@ def get_positive_negative_stats(
     est_tile_cat: TileCatalog,
     mag_max: float = np.inf,
 ):
-    true_cat = true_cat.apply_mag_bin(-np.inf, mag_max)
+    true_cat = true_cat.apply_param_bin("mags", -np.inf, mag_max)
     thresholds = np.linspace(0.01, 0.99, 99)
     est_tile_cat = est_tile_cat.copy()
 
