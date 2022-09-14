@@ -3,6 +3,7 @@ import hydra
 import torch
 from hydra.utils import instantiate
 from joblib import Parallel, delayed
+from tqdm import tqdm
 
 from case_studies.coadds.coadd_decoder import CoaddGalsimBlends
 
@@ -30,7 +31,7 @@ def main(cfg):
     ds: CoaddGalsimBlends = instantiate(cfg.datasets.galsim_blends_coadds, prior={"n_dithers": 50})
     output = {f"coadd_{d}": torch.zeros(n_samples, 1, size, size) for d in n_dithers}
     output["single"] = torch.zeros(n_samples, 1, size, size)
-    results = Parallel(n_jobs=10)(delayed(task)(ds, n_dithers) for _ in range(10))
+    results = Parallel(n_jobs=10)(delayed(task)(ds, n_dithers) for _ in tqdm(range(n_samples)))
     for ii, res in enumerate(results):
         output["single"][ii] = res["single"]
         for d in n_dithers:
@@ -41,7 +42,7 @@ def main(cfg):
             else:
                 output[k] = torch.vstack([v, output[k]])
 
-    print(output["coadd_10"].shape)
+    torch.save(output, "output/test_dataset.pt")
 
 
 if __name__ == "__main__":
