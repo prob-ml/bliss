@@ -462,8 +462,6 @@ class GalaxyDecoder(nn.Module):
         # max_sources obtained from locs, allows for more flexibility when rendering.
         n_ptiles, max_sources, _ = galaxy_bools.shape
         assert galaxy_bools.shape[2] == 1
-        assert galaxy_params.shape[0] == n_ptiles
-        assert galaxy_params.shape[1] == max_sources
         n_galaxy_params = galaxy_params.shape[-1]
         galaxy_params = galaxy_params.view(n_ptiles, max_sources, n_galaxy_params)
         single_galaxies = self._render_single_galaxies(galaxy_params, galaxy_bools)
