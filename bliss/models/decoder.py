@@ -222,7 +222,7 @@ class ImageDecoder(pl.LightningModule):
         )
 
         # draw stars and galaxies
-        centered_stars = self.star_tile_decoder.forward(star_fluxes, star_bools)
+        centered_stars = self.star_tile_decoder.forward(star_fluxes, star_bools, self.ptile_slen)
         stars = self.tiler.forward(locs, centered_stars)
         galaxies = torch.zeros(img_shape, device=locs.device)
         lensed_galaxies = torch.zeros(img_shape, device=locs.device)
@@ -423,7 +423,7 @@ def trim_source(source: Tensor, ptile_slen: int):
 
 
 class StarPSFDecoder(PSFDecoder):
-    def forward(self, fluxes: Tensor, star_bools: Tensor):
+    def forward(self, fluxes: Tensor, star_bools: Tensor, ptile_slen: int):
         """Renders star tile from locations and fluxes."""
         # locs: is (n_ptiles x max_num_stars x 2)
         # fluxes: Is (n_ptiles x max_stars x n_bands)
@@ -433,7 +433,7 @@ class StarPSFDecoder(PSFDecoder):
         n_ptiles, max_sources, n_bands = fluxes.shape
 
         psf = self.forward_psf_from_params()
-        psf = self.tiler.fit_source_to_ptile(psf)
+        psf = fit_source_to_ptile(psf, ptile_slen)
         n_bands, _, _ = psf.shape
         assert fluxes.shape[0] == star_bools.shape[0] == n_ptiles
         assert fluxes.shape[1] == star_bools.shape[1] == max_sources
