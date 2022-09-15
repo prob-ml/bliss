@@ -36,12 +36,14 @@ def load_models(cfg, device):
     n_images_per_batch = cfg.plots.encoder.n_images_per_batch
     n_rows_per_batch = cfg.plots.encoder.n_rows_per_batch
     encoder = Encoder(
-        location.eval(), binary.eval(), galaxy.eval(), n_images_per_batch, n_rows_per_batch
+        location.eval(),
+        binary.eval(),
+        galaxy.eval(),
+        n_images_per_batch=n_images_per_batch,
+        n_rows_per_batch=n_rows_per_batch,
     )
     encoder = encoder.to(device)
-
     decoder: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
-
     return encoder, decoder
 
 
@@ -90,7 +92,7 @@ def make_autoencoder_figure(cfg, bfig_kwargs, device):
     # create figure classes and plot.
     ae_figures = AEReconstructionFigures(n_examples=5, **bfig_kwargs)
     ae_figures.save_figures(
-        autoencoder, galaxies_file, cfg.plots.psf_file, cfg.plots.sdss_pixel_scale
+        autoencoder, galaxies_file, cfg.plots.psf_params_file, cfg.plots.sdss_pixel_scale
     )
     mpl.rc_file_defaults()
 
