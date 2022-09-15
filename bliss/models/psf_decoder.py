@@ -99,7 +99,7 @@ class PSFDecoder(nn.Module):
         return psf
 
     @staticmethod
-    def _get_fit_file_psf_params(psf_fit_file: str, bands: Tuple[int]):
+    def _get_fit_file_psf_params(psf_fit_file: str, bands: Tuple[int, ...]):
         data = fits.open(psf_fit_file, ignore_missing_end=True).pop(6).data
         psf_params = torch.zeros(len(bands), 6)
         for i, band in enumerate(bands):
