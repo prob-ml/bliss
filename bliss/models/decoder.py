@@ -69,9 +69,9 @@ class ImageDecoder(pl.LightningModule):
         )
 
         if galaxy_model is None:
-            self.galaxy_tile_decoder: Optional[GalaxyDecoder] = None
+            self.galaxy_decoder: Optional[GalaxyDecoder] = None
         else:
-            self.galaxy_tile_decoder = GalaxyDecoder(
+            self.galaxy_decoder = GalaxyDecoder(
                 self.tile_slen,
                 self.ptile_slen,
                 self.n_bands,
@@ -90,9 +90,9 @@ class ImageDecoder(pl.LightningModule):
 
     @property
     def galaxy_decoder(self):
-        if self.galaxy_tile_decoder is None:
+        if self.galaxy_decoder is None:
             return None
-        return self.galaxy_tile_decoder.galaxy_decoder
+        return self.galaxy_decoder.galaxy_decoder
 
     def render_images(self, tile_catalog: TileCatalog) -> Tensor:
         """Renders tile catalog latent variables into a full astronomical image.
@@ -129,10 +129,10 @@ class ImageDecoder(pl.LightningModule):
         return scene
 
     def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
-        assert self.galaxy_tile_decoder is not None
+        assert self.galaxy_decoder is not None
         galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
         galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(
+        galaxy_shapes = self.galaxy_decoder.galaxy_decoder(
             galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5]
         )
         galaxy_fluxes = reduce(galaxy_shapes, "n 1 h w -> n", "sum")
@@ -155,7 +155,7 @@ class ImageDecoder(pl.LightningModule):
     def get_galaxy_ellips(
         self, galaxy_bools: Tensor, galaxy_params_in: Tensor, scale: float = 0.393
     ) -> Tensor:
-        assert self.galaxy_tile_decoder is not None
+        assert self.galaxy_decoder is not None
         b, nth, ntw, s, _ = galaxy_bools.shape
         b_flat = b * nth * ntw * s
         slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
@@ -166,10 +166,10 @@ class ImageDecoder(pl.LightningModule):
 
         galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
         galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(
+        galaxy_shapes = self.galaxy_decoder.galaxy_decoder(
             galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5]
         )
-        galaxy_shapes = self.galaxy_tile_decoder.size_galaxy(galaxy_shapes)
+        galaxy_shapes = self.galaxy_decoder.size_galaxy(galaxy_shapes)
         single_galaxies = rearrange(galaxy_shapes, "n 1 h w -> n h w", h=slen, w=slen)
         ellips = get_single_galaxy_ellipticities(single_galaxies, psf_image, scale)
 
@@ -227,8 +227,8 @@ class ImageDecoder(pl.LightningModule):
         galaxies = torch.zeros(img_shape, device=locs.device)
         lensed_galaxies = torch.zeros(img_shape, device=locs.device)
 
-        if self.galaxy_tile_decoder is not None:
-            centered_galaxies = self.galaxy_tile_decoder.forward(
+        if self.galaxy_decoder is not None:
+            centered_galaxies = self.galaxy_decoder.forward(
                 tile_catalog["galaxy_params"], galaxy_bools
             )
             galaxies = self.tiler.forward(locs, centered_galaxies)
