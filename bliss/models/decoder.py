@@ -88,12 +88,6 @@ class ImageDecoder(pl.LightningModule):
                 lens_model,
             )
 
-    @property
-    def galaxy_decoder(self):
-        if self.galaxy_tile_decoder is None:
-            return None
-        return self.galaxy_tile_decoder.galaxy_decoder
-
     def render_images(self, tile_catalog: TileCatalog) -> Tensor:
         """Renders tile catalog latent variables into a full astronomical image.
 
