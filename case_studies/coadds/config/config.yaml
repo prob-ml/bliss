@@ -132,3 +132,12 @@ training:
     dataset: ${datasets.galsim_blends}
     optimizer_params:
         lr: 1e-4
+
+evaluation:
+    overwrite: False
+    test_path: ${paths.project}/output/test_dataset.pt
+    models:
+        - "single"
+        - "coadd_10"
+        - "coadd_25"
+        - "coadd_50"
