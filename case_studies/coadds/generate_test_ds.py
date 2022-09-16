@@ -40,7 +40,8 @@ def main(cfg):
             if output.get(k, None) is None:
                 output[k] = v
             else:
-                output[k] = torch.vstack([v, output[k]])
+                output[k] = torch.vstack([output[k], v])
+    output["n_sources"] = output["n_sources"][:, 0]
 
     torch.save(output, "output/test_dataset.pt")
 
