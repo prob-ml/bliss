@@ -360,22 +360,26 @@ class FullCatalog(UserDict):
         """Apply magnitude bin to given parameters."""
         assert pname in self, f"Parameter '{pname}' required to apply mag cut."
         assert self[pname].shape[-1] == 1, "Can only be applied to scalar parameters."
+
+        # get indices to collect
         keep = self[pname] < p_max
-        keep = keep & (self["mags"] > p_min)
-        indices_to_keep = keep.nonzero()
-        d = dict(self.items())  # need temporary dictionary for plocs
+        keep = keep & (self[pname] > p_min)
+        n_batches, max_sources, _ = keep.shape
+        as_indices = torch.arange(0, max_sources).expand(n_batches, max_sources).unsqueeze(-1)
+        to_collect = torch.where(keep, as_indices, torch.ones_like(keep) * max_sources)
+        to_collect = to_collect.sort(axis=1)[0]
+
+        # get dictionary with all params (including plocs)
+        d = dict(self.items())
+        d_new = {}
         d["plocs"] = self.plocs
-        new_d = {k: torch.zeros(v.shape) for k, v in d.items()}
-        count_b: dict = defaultdict(int)  # count occurences in batch
-        for inds in indices_to_keep:
-            b, s, z = inds.long()  # batch_idx, max_source_idx, 0
-            b, s, z = b.item(), s.item(), z.item()
-            assert z == 0
-            for k, v in d.items():
-                new_d[k][b, count_b[b]] = v[b, s]
-            count_b[b] += 1
-        new_d["n_sources"] = torch.tensor([count_b[b] for b in range(self.batch_size)])
-        return type(self)(self.height, self.width, new_d)
+        for k, v in d.items():
+            pdim = v.shape[-1]
+            to_collect_v = to_collect.expand(n_batches, max_sources, pdim)
+            v_expand = torch.hstack([v, torch.zeros(v.shape[0], 1, v.shape[-1])])
+            d_new[k] = torch.gather(v_expand, 1, to_collect_v)
+        d_new["n_sources"] = keep.sum(axis=(-2, -1)).long()
+        return type(self)(self.height, self.width, d_new)
 
     def to_tile_params(
         self, tile_slen: int, max_sources_per_tile: int, ignore_extra_sources=False
