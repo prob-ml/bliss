@@ -11,7 +11,7 @@ from bliss.models.galsim_decoder import (
     SingleGalsimGalaxyPrior,
     UniformGalsimPrior,
 )
-from case_studies.coadds.align_single_exposures import align_single_exposures
+from case_studies.coadds.align import align_single_exposures
 
 
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
