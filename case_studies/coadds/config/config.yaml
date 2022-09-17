@@ -139,7 +139,6 @@ results:
     cache_results: ${paths.project}/output/metric_results.pt
     figs:
         - money
-        - money_bins
     models:
         - "single"
         - "coadd_10"
