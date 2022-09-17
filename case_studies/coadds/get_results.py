@@ -56,7 +56,7 @@ def _compute_mag_bin_metrics(
     return dict(metrics_per_mag)
 
 
-def load_test_dataset(path) -> Tuple[dict, FullCatalog]:
+def _load_test_dataset(path) -> Tuple[dict, FullCatalog]:
     test_ds = torch.load(path)
     image_keys = {"coadd_10", "coadd_25", "coadd_50", "single"}
     all_keys = list(test_ds.keys())
@@ -66,18 +66,18 @@ def load_test_dataset(path) -> Tuple[dict, FullCatalog]:
     return test_ds, truth_cat
 
 
-def load_encoder(cfg, model_path) -> Encoder:
+def _load_encoder(cfg, model_path) -> Encoder:
     model = instantiate(cfg.models.detection_encoder).to(device).eval()
     model.load_state_dict(torch.load(model_path, map_location=device))
     return Encoder(model.eval(), n_images_per_batch=10, n_rows_per_batch=15).to(device).eval()
 
 
-def running_model_on_images(encoder, images, background) -> FullCatalog:
+def _running_model_on_images(encoder, images, background) -> FullCatalog:
     tile_est = encoder.variational_mode(images, background)
     return tile_est.cpu().to_full_params()
 
 
-def add_mags_to_catalog(cat: FullCatalog) -> FullCatalog:
+def _add_mags_to_catalog(cat: FullCatalog) -> FullCatalog:
     batch_size = cat.n_sources.shape[0]
     cat["mags"] = torch.zeros_like(cat["star_fluxes"])
     for ii in range(batch_size):
@@ -119,7 +119,7 @@ def bootstrap_fn(
     return metrics
 
 
-def create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
+def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 7))
 
@@ -153,7 +153,7 @@ def main(cfg):
 
     if cfg.evaluation.overwrite:
         test_path = cfg.evaluation.test_path
-        all_test_images, truth = load_test_dataset(test_path)
+        all_test_images, truth = _load_test_dataset(test_path)
         background_obj = instantiate(cfg.datasets.galsim_blends.background)
 
         outputs = {}
@@ -162,13 +162,12 @@ def main(cfg):
             model_path = f"output/{model_name}_encoder.pt"
             test_images = all_test_images[model_name]
             background = background_obj.sample(test_images.shape)
-            encoder = load_encoder(cfg, model_path)
-            est = running_model_on_images(encoder, test_images, background)
+            encoder = _load_encoder(cfg, model_path)
+            est = _running_model_on_images(encoder, test_images, background)
             est["galaxy_bools"] = torch.zeros(est.batch_size, est.max_sources, 1)
 
-            truth = add_mags_to_catalog(truth)
-            est = add_mags_to_catalog(est)
-
+            truth = _add_mags_to_catalog(truth)
+            est = _add_mags_to_catalog(est)
             bin_metrics = _compute_mag_bin_metrics(mag_bins, truth, est)
 
             outputs[model_name] = {"mag_bin_metrics": bin_metrics}
@@ -183,7 +182,7 @@ def main(cfg):
 
         # create all figures
         figs = []
-        figs.append(create_money_plot(mag_bins, model_names, data))
+        figs.append(_create_money_plot(mag_bins, model_names, data))
 
         for fig in figs:
             fig.savefig(fig_path / "money.png", format="png")
