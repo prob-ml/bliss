@@ -8,12 +8,13 @@ import torch
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 from torch import Tensor
+from tqdm import tqdm
 
 from bliss.catalog import FullCatalog
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.reporting import DetectionMetrics
-from case_studies.sdss_galaxies.plots.bliss_figures import CB_color_cycle
+from case_studies.sdss_galaxies.plots.bliss_figures import CB_color_cycle, set_rc_params
 
 device = torch.device("cuda:0")
 
@@ -24,6 +25,8 @@ latex_names = {
     "coadd_50": r"\rm Coadd $d=50$",
 }
 
+set_rc_params()
+
 
 def _compute_mag_bin_metrics(
     mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
@@ -31,8 +34,8 @@ def _compute_mag_bin_metrics(
     metrics_per_mag = defaultdict(lambda: torch.zeros(len(mag_bins)))
 
     # compute data for precision/recall/classification accuracy as a function of magnitude.
-    for ii, (mag1, mag2) in enumerate(mag_bins):
-        detection_metrics = DetectionMetrics()
+    for ii, (mag1, mag2) in tqdm(enumerate(mag_bins), desc="Metrics per bin", total=len(mag_bins)):
+        detection_metrics = DetectionMetrics(disable_bar=True)
 
         # precision
         eparams = est.apply_param_bin("mags", mag1, mag2)
@@ -130,10 +133,10 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
         ax1.plot(mag_bins[:, 1], precision, "-o", label=latex_names[mname], color=color)
         ax2.plot(mag_bins[:, 1], recall, "-o", label=latex_names[mname], color=color)
 
-    ax1.xlabel(r"\rm Magnitude")
-    ax2.xlabel(r"\rm Magnitude")
-    ax1.ylabel(r"\rm Precision")
-    ax2.ylabel(r"\rm Recall")
+    ax1.set_xlabel(r"\rm Magnitude")
+    ax2.set_xlabel(r"\rm Magnitude")
+    ax1.set_ylabel(r"\rm Precision")
+    ax2.set_ylabel(r"\rm Recall")
     ax1.legend(loc="best", prop={"size": 14})
     ax2.legend(loc="best", prop={"size": 14})
     ax1.minorticks_on()
@@ -146,13 +149,13 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
 def main(cfg):
 
     mag_cuts2 = torch.arange(17.0, 23.5, 0.5)
-    mag_cuts1 = torch.full_like(mag_cuts2, fill_value=-torch.inf)
+    mag_cuts1 = torch.full_like(mag_cuts2, fill_value=0)
     mag_bins = torch.column_stack((mag_cuts1, mag_cuts2))
 
-    model_names = cfg.evaluation.models  # e.g. 'coadd50', 'single'
+    model_names = cfg.results.models  # e.g. 'coadd50', 'single'
 
-    if cfg.evaluation.overwrite:
-        test_path = cfg.evaluation.test_path
+    if cfg.results.overwrite:
+        test_path = cfg.results.test_path
         all_test_images, truth = _load_test_dataset(test_path)
         background_obj = instantiate(cfg.datasets.galsim_blends.background)
 
@@ -175,17 +178,20 @@ def main(cfg):
         torch.save(outputs, "output/metric_results.pt")
 
     else:
+        assert Path("output/metric_results.pt").exists()
+
         fig_path = Path("output/figs")
         fig_path.mkdir(exist_ok=True)
 
-        data = torch.load("output/metrics_results.pt")
+        data = torch.load("output/metric_results.pt")
 
         # create all figures
         figs = []
         figs.append(_create_money_plot(mag_bins, model_names, data))
 
-        for fig in figs:
-            fig.savefig(fig_path / "money.png", format="png")
+        names = ["money"]
+        for fig, name in zip(figs, names):
+            fig.savefig(fig_path / f"{name}.png", format="png")
 
 
 if __name__ == "__main__":
