@@ -122,16 +122,21 @@ def bootstrap_fn(
     return metrics
 
 
-def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
+def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict, cut_or_bin="cut"):
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 7))
 
+    if cut_or_bin == "cut":
+        x = mag_bins[:, 1]
+    else:
+        x = (mag_bins[:, 1] + mag_bins[:, 0]) / 2
+
     for ii, mname in enumerate(model_names):
         color = CB_color_cycle[ii]
-        precision = data[mname]["mag_bin_metrics"]["precision"]
-        recall = data[mname]["mag_bin_metrics"]["recall"]
-        ax1.plot(mag_bins[:, 1], precision, "-o", label=latex_names[mname], color=color)
-        ax2.plot(mag_bins[:, 1], recall, "-o", label=latex_names[mname], color=color)
+        precision = data[mname][f"mag_{cut_or_bin}_metrics"]["precision"]
+        recall = data[mname][f"mag_{cut_or_bin}_metrics"]["recall"]
+        ax1.plot(x, precision, "-o", label=latex_names[mname], color=color)
+        ax2.plot(x, recall, "-o", label=latex_names[mname], color=color)
 
     ax1.set_xlabel(r"\rm Magnitude")
     ax2.set_xlabel(r"\rm Magnitude")
@@ -150,7 +155,11 @@ def main(cfg):
 
     mag_cuts2 = torch.arange(17.0, 23.5, 0.5)
     mag_cuts1 = torch.full_like(mag_cuts2, fill_value=0)
-    mag_bins = torch.column_stack((mag_cuts1, mag_cuts2))
+    mag_cuts = torch.column_stack((mag_cuts1, mag_cuts2))
+
+    mag_bins2 = torch.arange(17.5, 23.5, 0.5)
+    mag_bins1 = mag_bins2 - 0.5
+    mag_bins = torch.column_stack((mag_bins1, mag_bins2))
 
     model_names = cfg.results.models  # e.g. 'coadd50', 'single'
 
@@ -171,26 +180,27 @@ def main(cfg):
 
             truth = _add_mags_to_catalog(truth)
             est = _add_mags_to_catalog(est)
+            cut_metrics = _compute_mag_bin_metrics(mag_cuts, truth, est)
             bin_metrics = _compute_mag_bin_metrics(mag_bins, truth, est)
 
-            outputs[model_name] = {"mag_bin_metrics": bin_metrics}
+            outputs[model_name] = {"mag_cut_metrics": cut_metrics, "mag_bin_metrics": bin_metrics}
 
-        torch.save(outputs, "output/metric_results.pt")
+        torch.save(outputs, cfg.results.cache_results)
 
     else:
-        assert Path("output/metric_results.pt").exists()
+        assert Path(cfg.results.cache_results).exists()
 
         fig_path = Path("output/figs")
         fig_path.mkdir(exist_ok=True)
 
-        data = torch.load("output/metric_results.pt")
+        data = torch.load(cfg.results.cache_results)
 
         # create all figures
         figs = []
-        figs.append(_create_money_plot(mag_bins, model_names, data))
+        figs.append(_create_money_plot(mag_cuts, model_names, data, cut_or_bin="cut"))
+        figs.append(_create_money_plot(mag_bins, model_names, data, cut_or_bin="bin"))
 
-        names = ["money"]
-        for fig, name in zip(figs, names):
+        for fig, name in zip(figs, cfg.results.figs):
             fig.savefig(fig_path / f"{name}.png", format="png")
 
 

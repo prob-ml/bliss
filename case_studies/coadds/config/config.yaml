@@ -136,6 +136,10 @@ training:
 results:
     overwrite: False
     test_path: ${paths.project}/output/test_dataset.pt
+    cache_results: ${paths.project}/output/metric_results.pt
+    figs:
+        - money
+        - money_bins
     models:
         - "single"
         - "coadd_10"
