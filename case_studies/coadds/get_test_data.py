@@ -31,7 +31,7 @@ def main(cfg):
     ds: CoaddGalsimBlends = instantiate(cfg.datasets.galsim_blends_coadds, prior={"n_dithers": 50})
     output = {f"coadd_{d}": torch.zeros(n_samples, 1, size, size) for d in n_dithers}
     output["single"] = torch.zeros(n_samples, 1, size, size)
-    results = Parallel(n_jobs=10)(delayed(task)(ds, n_dithers) for _ in tqdm(range(n_samples)))
+    results = Parallel(n_jobs=20)(delayed(task)(ds, n_dithers) for _ in tqdm(range(n_samples)))
     for ii, res in enumerate(results):
         output["single"][ii] = res["single"]
         for d in n_dithers:
