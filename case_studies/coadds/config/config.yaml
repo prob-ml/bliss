@@ -133,7 +133,7 @@ training:
     optimizer_params:
         lr: 1e-4
 
-evaluation:
+results:
     overwrite: False
     test_path: ${paths.project}/output/test_dataset.pt
     models:
