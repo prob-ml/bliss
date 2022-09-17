@@ -26,6 +26,8 @@ def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold
         intercept = image.min(0)[0].min(-1)[0].min(-1)[0]
         intercept = intercept.view(1, image.shape[1], 1, 1)
         return torch.log(image - intercept + 1.0)
+        
+        # return torch.log(image - image.min() + 1.0)
     else:
         return torch.log1p(F.relu(image - background + z_threshold * background.sqrt(), inplace=True))
 

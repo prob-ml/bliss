@@ -91,7 +91,7 @@ def get_min_perm_loss(
     return locs_loss, star_params_loss
 
 
-def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+def get_params_logprob_all_combs_truncnorm(true_params, param_mean, param_logvar):
     # return shape (n_ptiles x max_detections x max_detections)
         
     assert true_params.shape == param_mean.shape == param_logvar.shape
@@ -111,6 +111,21 @@ def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
     norm_const = normal.cdf(zeros + 1) - normal.cdf(zeros - 1)
     
     return (normal.log_prob(true_params) - torch.log(norm_const + 1e-5)).sum(dim=3)
+
+def get_params_logprob_all_combs(true_params, param_mean, param_logvar):
+    # return shape (n_ptiles x max_detections x max_detections)
+    assert true_params.shape == param_mean.shape == param_logvar.shape
+
+    n_ptiles = true_params.size(0)
+    max_detections = true_params.size(1)
+
+    # view to evaluate all combinations of log_prob.
+    true_params = true_params.view(n_ptiles, 1, max_detections, -1)
+    param_mean = param_mean.view(n_ptiles, max_detections, 1, -1)
+    param_logvar = param_logvar.view(n_ptiles, max_detections, 1, -1)
+
+    sd = (param_logvar.exp() + 1e-5).sqrt()
+    return Normal(param_mean, sd).log_prob(true_params).sum(dim=3)
 
 
 class SleepPhase(pl.LightningModule):
@@ -277,7 +292,7 @@ class SleepPhase(pl.LightningModule):
         # enforce large error if source is off
         loc_mean, loc_logvar = pred["loc_mean"], pred["loc_logvar"]
         loc_mean = loc_mean + (true_tile_is_on_array == 0).float().unsqueeze(-1) * 1e16
-        locs_log_probs_all = get_params_logprob_all_combs(true_tile_locs, loc_mean, loc_logvar)
+        locs_log_probs_all = get_params_logprob_all_combs_truncnorm(true_tile_locs, loc_mean, loc_logvar)
         star_params_log_probs_all = get_params_logprob_all_combs(
             true_tile_log_fluxes, pred["log_flux_mean"], pred["log_flux_logvar"]
         )
