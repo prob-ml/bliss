@@ -33,6 +33,7 @@ class DetectionMetrics(Metric):
         self,
         slack=1.0,
         dist_sync_on_step=False,
+        disable_bar=False,
     ) -> None:
         """Computes matches between true and estimated locations.
 
@@ -52,6 +53,7 @@ class DetectionMetrics(Metric):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.slack = slack
+        self.disable_bar = disable_bar
 
         self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("tp_gal", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -67,7 +69,9 @@ class DetectionMetrics(Metric):
         assert true.batch_size == est.batch_size
 
         count = 0
-        for b in tqdm.tqdm(range(true.batch_size), desc="Updating detection metric"):
+        for b in tqdm.tqdm(
+            range(true.batch_size), desc="Detection Metric per batch", disable=self.disable_bar
+        ):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
             if ntrue > 0 and nest > 0:
