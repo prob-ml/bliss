@@ -13,7 +13,7 @@ from tqdm import tqdm
 from bliss.catalog import FullCatalog
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.encoder import Encoder
-from bliss.reporting import DetectionMetrics
+from bliss.reporting import DetectionMetrics, match_by_locs
 from case_studies.sdss_galaxies.plots.bliss_figures import CB_color_cycle, set_rc_params
 
 device = torch.device("cuda:0")
@@ -59,6 +59,84 @@ def _compute_mag_bin_metrics(
     return dict(metrics_per_mag)
 
 
+def _compute_tp_fp(truth: FullCatalog, est: FullCatalog):
+    # get precision tp per batch
+    all_tp = torch.zeros(truth.batch_size)
+    all_fp = torch.zeros(truth.batch_size)
+    all_ntrue = torch.zeros(truth.batch_size)
+    for b in range(truth.batch_size):
+        ntrue, nest = truth.n_sources[b].int().item(), est.n_sources[b].int().item()
+        tlocs, elocs = truth.plocs[b], est.plocs[b]
+        if ntrue > 0 and nest > 0:
+            _, mest, dkeep, _ = match_by_locs(tlocs, elocs)
+            tp = len(elocs[mest][dkeep])  # n_matches
+            fp = nest - tp
+        elif ntrue > 0:
+            tp = 0
+            fp = 0
+        elif nest > 0:
+            tp = 0
+            fp = nest
+        else:
+            tp = 0
+            fp = 0
+        all_tp[b] = tp
+        all_fp[b] = fp
+        all_ntrue[b] = ntrue
+
+    return all_tp, all_fp, all_ntrue
+
+
+def _comput_tp_fp_per_bin(mag_bins: Tensor, truth: FullCatalog, est: FullCatalog):
+    counts_per_mag = defaultdict(lambda: torch.zeros(len(mag_bins), truth.batch_size))
+    for ii, (mag1, mag2) in tqdm(enumerate(mag_bins), desc="tp/fp per bin", total=len(mag_bins)):
+
+        # precision
+        eparams = est.apply_param_bin("mags", mag1, mag2)
+        tp, fp, ntrue = _compute_tp_fp(truth, eparams)
+        counts_per_mag["tp_precision"][ii] = tp
+        counts_per_mag["fp_precision"][ii] = fp
+
+        # recall
+        tparams = truth.apply_param_bin("mags", mag1, mag2)
+        tp, _, ntrue = _compute_tp_fp(tparams, est)
+        counts_per_mag["tp_recall"][ii] = tp
+        counts_per_mag["ntrue"][ii] = ntrue
+
+    return counts_per_mag
+
+
+def _get_bootstrap_pr_err(n_samples: int, mag_bins: Tensor, truth: FullCatalog, est: FullCatalog):
+    """Get errors for precision/recall which need to be handled carefully to be efficient."""
+    counts_per_mag = _comput_tp_fp_per_bin(mag_bins, truth, est)
+    batch_size = truth.batch_size
+    n_mag_bins = mag_bins.shape[0]
+
+    # get counts in needed format
+    tpp_boot = counts_per_mag["tp_precision"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+    fpp_boot = counts_per_mag["fp_precision"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+    tpr_boot = counts_per_mag["tp_recall"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+    ntrue_boot = counts_per_mag["ntrue"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+
+    # get indices to boostrap
+    # NOTE: the indices for each sample repeat across magnitude bins
+    boot_indices = torch.randint(0, batch_size, (n_samples, 1, batch_size))
+    boot_indices = boot_indices.expand(n_samples, n_mag_bins, batch_size)
+
+    # get bootstrapped samples of counts
+    tpp_boot = torch.gather(tpp_boot, 2, boot_indices)
+    fpp_boot = torch.gather(fpp_boot, 2, boot_indices)
+    tpr_boot = torch.gather(tpr_boot, 2, boot_indices)
+    ntrue_boot = torch.gather(ntrue_boot, 2, boot_indices)
+    assert tpp_boot.shape == (n_samples, n_mag_bins, batch_size)
+
+    # finally, get precision and recall boostrapped samples
+    precision_boot = tpp_boot.sum(2) / (tpp_boot.sum(2) + fpp_boot.sum(2))
+    recall_boot = tpr_boot.sum(2) / ntrue_boot.sum(2)
+
+    return {"precision": precision_boot, "recall": recall_boot}
+
+
 def _load_test_dataset(path) -> Tuple[dict, FullCatalog]:
     test_ds = torch.load(path)
     image_keys = {"coadd_10", "coadd_25", "coadd_50", "single"}
@@ -89,7 +167,7 @@ def _add_mags_to_catalog(cat: FullCatalog) -> FullCatalog:
     return cat
 
 
-def bootstrap_fn(
+def _bootstrap_fn(
     n_samples: int,
     fn: Callable,
     truth: FullCatalog,
@@ -131,9 +209,18 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
     for ii, mname in enumerate(model_names):
         color = CB_color_cycle[ii]
         precision = data[mname]["mag_bin_metrics"]["precision"]
+        boot_precision = data[mname]["boot_mag_bin_metrics"]["precision"]
+        precision1 = boot_precision.quantile(0.05, 0)
+        precision2 = boot_precision.quantile(0.95, 0)
+        ax1.plot(x, precision, "-o", color=color, label=latex_names[mname])
+        ax1.fill_between(x, precision1, precision2, color=color, alpha=0.5)
+
         recall = data[mname]["mag_bin_metrics"]["recall"]
-        ax1.plot(x, precision, "-o", label=latex_names[mname], color=color)
-        ax2.plot(x, recall, "-o", label=latex_names[mname], color=color)
+        boot_recall = data[mname]["boot_mag_bin_metrics"]["recall"]
+        recall1 = boot_recall.quantile(0.05, 0)
+        recall2 = boot_recall.quantile(0.95, 0)
+        ax2.plot(x, recall, "-o", color=color, label=latex_names[mname])
+        ax2.fill_between(x, recall1, recall2, color=color, alpha=0.5)
 
     ax1.set_xlabel(r"\rm Magnitude")
     ax2.set_xlabel(r"\rm Magnitude")
@@ -174,7 +261,11 @@ def main(cfg):
             truth = _add_mags_to_catalog(truth)
             est = _add_mags_to_catalog(est)
             bin_metrics = _compute_mag_bin_metrics(mag_bins, truth, est)
-            outputs[model_name] = {"mag_bin_metrics": bin_metrics}
+            boot_metrics = _get_bootstrap_pr_err(1000, mag_bins, truth, est)
+            outputs[model_name] = {
+                "mag_bin_metrics": bin_metrics,
+                "boot_mag_bin_metrics": boot_metrics,
+            }
 
         torch.save(outputs, cfg.results.cache_results)
 
