@@ -167,39 +167,6 @@ def _add_mags_to_catalog(cat: FullCatalog) -> FullCatalog:
     return cat
 
 
-def _bootstrap_fn(
-    n_samples: int,
-    fn: Callable,
-    truth: FullCatalog,
-    est: FullCatalog,
-    *fn_args,
-) -> List:
-    h, w = truth.height, truth.width
-
-    truth_dict = {**truth}
-    truth_dict["n_sources"] = truth.n_sources
-    truth_dict["plocs"] = truth.plocs
-
-    est_dict = {**est}
-    est_dict["n_sources"] = truth.n_sources
-    est_dict["plocs"] = truth.plocs
-
-    metrics = []
-    for _ in range(n_samples):
-        boot_truth_dict = {}
-        boot_est_dict = {}
-        boostrap_indices = torch.randint(0, len(truth), (len(truth),))
-        for k in truth_dict:  # noqa: WPS528
-            boot_truth_dict[k] = truth_dict[k][boostrap_indices]
-            boot_est_dict[k] = est_dict[k][boostrap_indices]
-        boot_truth_cat = FullCatalog(h, w, boot_truth_dict)
-        boot_est_cat = FullCatalog(h, w, boot_est_dict)
-        metric = fn(*fn_args, boot_truth_cat, boot_est_cat)
-        metrics.append(metric)
-
-    return metrics
-
-
 def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 7))
@@ -212,14 +179,14 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
         boot_precision = data[mname]["boot_mag_bin_metrics"]["precision"]
         precision1 = boot_precision.quantile(0.05, 0)
         precision2 = boot_precision.quantile(0.95, 0)
-        ax1.plot(x, precision, "-o", color=color, label=latex_names[mname])
+        ax1.plot(x, precision, "-o", color=color, label=latex_names[mname], markersize=6)
         ax1.fill_between(x, precision1, precision2, color=color, alpha=0.5)
 
         recall = data[mname]["mag_bin_metrics"]["recall"]
         boot_recall = data[mname]["boot_mag_bin_metrics"]["recall"]
         recall1 = boot_recall.quantile(0.05, 0)
         recall2 = boot_recall.quantile(0.95, 0)
-        ax2.plot(x, recall, "-o", color=color, label=latex_names[mname])
+        ax2.plot(x, recall, "-o", color=color, label=latex_names[mname], markersize=6)
         ax2.fill_between(x, recall1, recall2, color=color, alpha=0.5)
 
     ax1.set_xlabel(r"\rm Magnitude")
@@ -230,6 +197,8 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
     ax2.legend(loc="best", prop={"size": 14})
     ax1.minorticks_on()
     ax2.minorticks_on()
+    ax1.set_xlim(20, 23)
+    ax2.set_xlim(20, 23)
 
     return fig
 
@@ -237,8 +206,9 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
 @hydra.main(config_path="./config", config_name="config")
 def main(cfg):
 
-    mag_bins2 = torch.arange(17.5, 23.5, 0.5)
-    mag_bins1 = mag_bins2 - 0.5
+    delta = 0.2
+    mag_bins1 = torch.arange(20.0, 23, delta)
+    mag_bins2 = mag_bins1 + delta
     mag_bins = torch.column_stack((mag_bins1, mag_bins2))
 
     model_names = cfg.results.models  # e.g. 'coadd50', 'single'
