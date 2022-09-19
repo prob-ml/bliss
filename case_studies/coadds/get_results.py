@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 import hydra
+import numpy as np
 import torch
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
@@ -26,6 +27,33 @@ latex_names = {
 }
 
 set_rc_params()
+
+
+def scatter_shade_plot(ax, x, y, xlims, delta, qs=(0.05, 0.95), color="m"):
+    # plot median and 25/75 quantiles on each bin decided by delta and xlims.
+
+    xbins = np.arange(xlims[0], xlims[1], delta)
+
+    xs = np.zeros(len(xbins))
+    ys = np.zeros(len(xbins))
+    yqs = np.zeros((len(xbins), 2))
+
+    for i, bx in enumerate(xbins):
+        keep_x = (x > bx) & (x < bx + delta)
+        y_bin = y[keep_x]
+
+        xs[i] = bx + delta / 2
+
+        if len(y_bin) == 0:  # noqa: WPS507
+            ys[i] = np.nan
+            yqs[i] = (np.nan, np.nan)
+            continue
+
+        ys[i] = np.median(y_bin)
+        yqs[i, :] = np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1])
+
+    ax.plot(xs, ys, marker="o", c=color, linestyle="-")
+    ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=0.5)
 
 
 def _compute_mag_bin_metrics(
@@ -167,14 +195,40 @@ def _add_mags_to_catalog(cat: FullCatalog) -> FullCatalog:
     return cat
 
 
+def _get_matched_fluxes(truth: FullCatalog, est: FullCatalog):
+    true_fluxes = []
+    est_fluxes = []
+
+    batch_size = truth.batch_size
+    for ii in tqdm(range(batch_size), desc="computing matched fluxes"):
+        n_sources1, n_sources2 = truth.n_sources[ii].item(), est.n_sources[ii].item()
+        if n_sources1 > 0 and n_sources2 > 0:
+            plocs1 = truth.plocs[ii]
+            plocs2 = est.plocs[ii]
+            mtrue, mest, dkeep, _ = match_by_locs(plocs1, plocs2)
+            tp = len(plocs2[mest][dkeep])  # n_matches
+            fluxes1 = truth["star_fluxes"][ii][mtrue][dkeep]
+            fluxes2 = est["star_fluxes"][ii][mest][dkeep]
+            for jj in range(tp):
+                flux1 = fluxes1[jj].item()
+                flux2 = fluxes2[jj].item()
+                assert flux1 > 0 and flux2 > 0
+                true_fluxes.append(flux1)
+                est_fluxes.append(flux2)
+
+    return torch.tensor(true_fluxes), torch.tensor(est_fluxes)
+
+
 def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 7))
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 7))
 
     x = (mag_bins[:, 1] + mag_bins[:, 0]) / 2
 
     for ii, mname in enumerate(model_names):
         color = CB_color_cycle[ii]
+
+        # precision
         precision = data[mname]["mag_bin_metrics"]["precision"]
         boot_precision = data[mname]["boot_mag_bin_metrics"]["precision"]
         precision1 = boot_precision.quantile(0.05, 0)
@@ -182,6 +236,7 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
         ax1.plot(x, precision, "-o", color=color, label=latex_names[mname], markersize=6)
         ax1.fill_between(x, precision1, precision2, color=color, alpha=0.5)
 
+        # recall
         recall = data[mname]["mag_bin_metrics"]["recall"]
         boot_recall = data[mname]["boot_mag_bin_metrics"]["recall"]
         recall1 = boot_recall.quantile(0.05, 0)
@@ -189,16 +244,26 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
         ax2.plot(x, recall, "-o", color=color, label=latex_names[mname], markersize=6)
         ax2.fill_between(x, recall1, recall2, color=color, alpha=0.5)
 
+        # fluxes
+        tfluxes, efluxes = data[mname]["matched_fluxes"]
+        res_flux = (efluxes - tfluxes) / tfluxes
+        tmags = convert_flux_to_mag(tfluxes)
+        scatter_shade_plot(ax3, tmags, res_flux, (20, 23), delta=0.2, color=color, qs=(0.25, 0.75))
+
     ax1.set_xlabel(r"\rm Magnitude")
     ax2.set_xlabel(r"\rm Magnitude")
     ax1.set_ylabel(r"\rm Precision")
     ax2.set_ylabel(r"\rm Recall")
+    ax3.set_xlabel(r"\rm Magnitude")
+    ax3.set_ylabel(r"\rm $(f^{\rm pred} - f^{\rm true}) / f^{\rm true}$")
+    ax3.axhline(0, linestyle="--", color="k")
     ax1.legend(loc="best", prop={"size": 14})
-    ax2.legend(loc="best", prop={"size": 14})
     ax1.minorticks_on()
     ax2.minorticks_on()
+    ax3.minorticks_on()
     ax1.set_xlim(20, 23)
     ax2.set_xlim(20, 23)
+    ax3.set_xlim(20, 23)
 
     return fig
 
@@ -221,6 +286,8 @@ def main(cfg):
         outputs = {}
 
         for model_name in model_names:
+
+            # run model and get catalogs
             model_path = f"output/{model_name}_encoder.pt"
             test_images = all_test_images[model_name]
             background = background_obj.sample(test_images.shape)
@@ -228,13 +295,19 @@ def main(cfg):
             est = _running_model_on_images(encoder, test_images, background)
             est["galaxy_bools"] = torch.zeros(est.batch_size, est.max_sources, 1)
 
+            # add mags to catalog
             truth = _add_mags_to_catalog(truth)
             est = _add_mags_to_catalog(est)
+
+            # get all metrics from catalogs
             bin_metrics = _compute_mag_bin_metrics(mag_bins, truth, est)
-            boot_metrics = _get_bootstrap_pr_err(1000, mag_bins, truth, est)
+            boot_metrics = _get_bootstrap_pr_err(10000, mag_bins, truth, est)
+            matched_fluxes = _get_matched_fluxes(truth, est)
+
             outputs[model_name] = {
                 "mag_bin_metrics": bin_metrics,
                 "boot_mag_bin_metrics": boot_metrics,
+                "matched_fluxes": matched_fluxes,
             }
 
         torch.save(outputs, cfg.results.cache_results)
