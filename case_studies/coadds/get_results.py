@@ -29,7 +29,7 @@ latex_names = {
 set_rc_params()
 
 
-def scatter_shade_plot(ax, x, y, xlims, delta, qs=(0.05, 0.95), color="m"):
+def scatter_shade_plot(ax, x, y, xlims, delta, qs=(0.25, 0.75), color="m"):
     # plot median and 25/75 quantiles on each bin decided by delta and xlims.
 
     xbins = np.arange(xlims[0], xlims[1], delta)
