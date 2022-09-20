@@ -29,7 +29,7 @@ datasets:
       - 1123.0
     n_batches: 10
     batch_size: 20
-    generate_device: "cuda:3"
+    generate_device: "cuda:6"
     testing_file: null
 
 models:
@@ -94,3 +94,4 @@ training:
     log_every_n_steps: 10
     deterministic: False
   weight_save_path: Null
+  use_legacy_bg: True

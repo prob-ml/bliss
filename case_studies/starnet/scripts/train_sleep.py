@@ -9,7 +9,7 @@ parser.add_argument('--config_path', type=str, default='./')
 
 parser.add_argument('--seed', type=int, default=23423)
 
-parser.add_argument('--cuda_no', type=int, default=3)
+parser.add_argument('--cuda_no', type=int, default=6)
 
 args = parser.parse_args()
 
@@ -60,8 +60,7 @@ trainer = instantiate(cfg.training.trainer)
 ###################
 t0 = time.time()
 
-os.environ["CUDA_VISIBLE_DEVICES"]="3"
-
+sleep_net.to(cuda_no)
 trainer.fit(sleep_net, datamodule = dataset)
 
 out_filename = os.path.join(args.outfolder, args.outfilename)

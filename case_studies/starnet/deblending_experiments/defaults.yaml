@@ -28,7 +28,7 @@ datasets:
       - 667.0
     n_batches: 40
     batch_size: 64
-    generate_device: "cuda:7"
+    generate_device: "cuda:6"
     testing_file: null
 
 models:

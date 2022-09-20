@@ -6,9 +6,12 @@ from torch import Tensor, nn
 from torch.distributions import categorical
 from torch.nn import functional as F
 
-USE_LEGACY_BG = True
 
-def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold: float = 4.0):
+def subtract_bg_and_log_transform(image: Tensor, 
+                                  background: Tensor, 
+                                  z_threshold: float = 4.0, 
+                                  use_legacy_bg: bool = False):
+
     """Transforms image before encoder network.
 
     This subtracts background plus a few standard deviations from the image,
@@ -22,12 +25,11 @@ def subtract_bg_and_log_transform(image: Tensor, background: Tensor, z_threshold
     Returns:
         A Tensor of the transformed images (n x c x h x w).
     """
-    if USE_LEGACY_BG: 
+    if use_legacy_bg: 
         intercept = image.min(0)[0].min(-1)[0].min(-1)[0]
         intercept = intercept.view(1, image.shape[1], 1, 1)
         return torch.log(image - intercept + 1.0)
         
-        # return torch.log(image - image.min() + 1.0)
     else:
         return torch.log1p(F.relu(image - background + z_threshold * background.sqrt(), inplace=True))
 

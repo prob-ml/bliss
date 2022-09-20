@@ -149,6 +149,7 @@ class SleepPhase(pl.LightningModule):
         annotate_probs: bool = False,
         slack=1.0,
         optimizer_params: dict = None,
+        use_legacy_bg: bool = False
     ):
         """Initializes SleepPhase class.
 
@@ -164,6 +165,8 @@ class SleepPhase(pl.LightningModule):
         self.image_decoder = decoder
         self.image_decoder.requires_grad_(False)
         self.optimizer_params = optimizer_params
+        
+        self.use_legacy_bg = use_legacy_bg
 
         # consistency
         assert self.image_decoder.tile_slen == self.image_encoder.tile_slen
@@ -183,7 +186,7 @@ class SleepPhase(pl.LightningModule):
     def tile_map_estimate(self, batch):
         images = batch["images"]
         background = batch["background"]
-        log_images = subtract_bg_and_log_transform(images, background)
+        log_images = subtract_bg_and_log_transform(images, background, use_legacy_bg = self.use_legacy_bg)
         log_image_ptiles = get_images_in_tiles(
             log_images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
@@ -272,7 +275,7 @@ class SleepPhase(pl.LightningModule):
         true_tile_is_on_array = get_is_on_from_n_sources(true_tile_n_sources, max_sources)
 
         # extract image tiles
-        log_images = subtract_bg_and_log_transform(images, background)
+        log_images = subtract_bg_and_log_transform(images, background, use_legacy_bg = self.use_legacy_bg)
         log_image_ptiles = get_images_in_tiles(
             log_images, self.image_encoder.tile_slen, self.image_encoder.ptile_slen
         )
