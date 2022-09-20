@@ -135,10 +135,10 @@ training:
 
 results:
     overwrite: False
-    test_path: ${paths.project}/output/test_dataset.pt
-    cache_results: ${paths.project}/output/metric_results.pt
+    test_path: ${paths.project}/output/test_dataset2.pt
+    cache_results: ${paths.project}/output/metric_results2.pt
     figs:
-        - money
+        - money2
     models:
         - "single"
         - "coadd_10"
