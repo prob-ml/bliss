@@ -11,6 +11,7 @@ from case_studies.coadds.coadd_decoder import CoaddGalsimBlends
 def task(ds: CoaddGalsimBlends, n_dithers):
     outputs = {}
     full_cat, dithers = ds._sample_full_catalog()
+    assert dithers.shape == (50, 2)
     for d in n_dithers:
         diths = dithers[:d]
         _, coadd, single, _ = ds._get_images(full_cat, diths)
@@ -26,7 +27,7 @@ def task(ds: CoaddGalsimBlends, n_dithers):
 @hydra.main(config_path="./config", config_name="config")
 def main(cfg):
     n_samples = 10000
-    n_dithers = [10, 25, 50]
+    n_dithers = [5, 10, 25, 35, 50]
     size = 88
     ds: CoaddGalsimBlends = instantiate(cfg.datasets.galsim_blends_coadds, prior={"n_dithers": 50})
     output = {f"coadd_{d}": torch.zeros(n_samples, 1, size, size) for d in n_dithers}
@@ -43,7 +44,7 @@ def main(cfg):
                 output[k] = torch.vstack([output[k], v])
     output["n_sources"] = output["n_sources"][:, 0]
 
-    torch.save(output, "output/test_dataset.pt")
+    torch.save(output, "output/test_dataset_extended.pt")
 
 
 if __name__ == "__main__":

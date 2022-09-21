@@ -60,9 +60,9 @@ datasets:
                 - 865.0
         tile_slen: 4
         max_sources_per_tile: 1
-        num_workers: 20
+        num_workers: 10
         batch_size: 32
-        n_batches: 20
+        n_batches: 10
         fix_validation_set: True
         valid_n_batches: 200
     galsim_blends_coadds:
@@ -135,12 +135,18 @@ training:
 
 results:
     overwrite: False
-    test_path: ${paths.project}/output/test_dataset2.pt
-    cache_results: ${paths.project}/output/metric_results2.pt
+    test_path: ${paths.project}/output/test_dataset_extended.pt
+    cache_results: ${paths.project}/output/metric_results_more_mags.pt
     figs:
-        - money2
+        - money3
     models:
         - "single"
+        # - "coadd_5"
         - "coadd_10"
         - "coadd_25"
+        # - "coadd_35"
         - "coadd_50"
+    mag_bins:
+        - 17
+        - 23
+        - 0.2

@@ -21,12 +21,14 @@ device = torch.device("cuda:0")
 
 latex_names = {
     "single": r"\rm single exposure",
+    "coadd_5": r"\rm Coadd $d=5$",
     "coadd_10": r"\rm Coadd $d=10$",
     "coadd_25": r"\rm Coadd $d=25$",
+    "coadd_35": r"\rm Coadd $d=35$",
     "coadd_50": r"\rm Coadd $d=50$",
 }
 
-set_rc_params()
+set_rc_params(fontsize=28)
 
 
 def scatter_shade_plot(ax, x, y, xlims, delta, qs=(0.25, 0.75), color="m"):
@@ -167,7 +169,7 @@ def _get_bootstrap_pr_err(n_samples: int, mag_bins: Tensor, truth: FullCatalog, 
 
 def _load_test_dataset(path) -> Tuple[dict, FullCatalog]:
     test_ds = torch.load(path)
-    image_keys = {"coadd_10", "coadd_25", "coadd_50", "single"}
+    image_keys = {"coadd_5", "coadd_10", "coadd_25", "coadd_35", "coadd_50", "single"}
     all_keys = list(test_ds.keys())
     truth_params = {k: test_ds.pop(k) for k in all_keys if k not in image_keys}
     truth_params["n_sources"] = truth_params["n_sources"].reshape(-1)
@@ -221,7 +223,7 @@ def _get_matched_fluxes(truth: FullCatalog, est: FullCatalog):
 
 def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
 
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 7))
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(24, 7))
 
     x = (mag_bins[:, 1] + mag_bins[:, 0]) / 2
 
@@ -257,7 +259,7 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
     ax3.set_xlabel(r"\rm Magnitude")
     ax3.set_ylabel(r"\rm $(f^{\rm pred} - f^{\rm true}) / f^{\rm true}$")
     ax3.axhline(0, linestyle="--", color="k")
-    ax1.legend(loc="best", prop={"size": 14})
+    ax1.legend(loc="best", prop={"size": 24})
     ax1.minorticks_on()
     ax2.minorticks_on()
     ax3.minorticks_on()
@@ -271,8 +273,8 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
 @hydra.main(config_path="./config", config_name="config")
 def main(cfg):
 
-    delta = 0.2
-    mag_bins1 = torch.arange(20.0, 23, delta)
+    mag1, mag2, delta = cfg.results.mag_bins
+    mag_bins1 = torch.arange(mag1, mag2, delta)
     mag_bins2 = mag_bins1 + delta
     mag_bins = torch.column_stack((mag_bins1, mag_bins2))
 
