@@ -327,19 +327,21 @@ class UniformGalsimPrior:
         self,
         single_galaxy_prior: SingleGalsimGalaxyPrior,
         max_n_sources: int,
+        mean_sources: float,
         max_shift: float,
         galaxy_prob: float,
     ):
         self.single_galaxy_prior = single_galaxy_prior
         self.max_shift = max_shift  # between 0 and 0.5, from center.
         self.max_n_sources = max_n_sources
+        self.mean_sources = mean_sources
         self.dim_latents = self.single_galaxy_prior.dim_latents
         self.galaxy_prob = galaxy_prob
         assert 0 <= self.max_shift <= 0.5
 
     def sample(self) -> Dict[str, Tensor]:
         """Returns a single batch of source parameters."""
-        n_sources = _sample_n_sources(self.max_n_sources)
+        n_sources = _sample_poisson_n_sources(self.mean_sources, self.max_n_sources)
 
         params = torch.zeros(self.max_n_sources, self.dim_latents)
         params[:n_sources, :] = self.single_galaxy_prior.sample(n_sources)
@@ -443,8 +445,10 @@ class FullCatalogDecoder:
         return self(full_cat)
 
 
-def _sample_n_sources(max_n_sources) -> int:
-    return int(torch.randint(1, max_n_sources + 1, (1,)).int().item())
+def _sample_poisson_n_sources(mean_sources, max_n_sources) -> int:
+    return int(
+        torch.clamp(torch.distributions.Poisson(mean_sources).sample([1]).item(), max=max_n_sources)
+    )
 
 
 def _uniform(a, b, n_samples=1) -> Tensor:
