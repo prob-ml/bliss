@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import Tensor
 from tqdm import tqdm
 
@@ -221,6 +222,28 @@ def _get_matched_fluxes(truth: FullCatalog, est: FullCatalog):
     return torch.tensor(true_fluxes), torch.tensor(est_fluxes)
 
 
+def _create_coadd_example_plot(test_images: Tensor):
+    set_rc_params(fontsize=20)
+
+    n = 1714
+    image1 = test_images["single"][n, 0]
+    image10 = test_images["coadd_10"][n, 0]
+    image25 = test_images["coadd_25"][n, 0]
+    image50 = test_images["coadd_50"][n, 0]
+
+    fig, axs = plt.subplots(1, 4, figsize=(24, 8))
+    axs[0].imshow(image1, interpolation=None)
+    axs[0].set_xlabel(xlabel="Single Exposures")
+    axs[1].imshow(image10, interpolation=None)
+    axs[1].set_xlabel(xlabel="$d = 10$")
+    axs[2].imshow(image25, interpolation=None)
+    axs[2].set_xlabel(xlabel="$d = 25$")
+    im = axs[3].imshow(image50, interpolation=None)
+    axs[3].set_xlabel(xlabel="$d = 50$")
+    fig.colorbar(im, ax=axs.ravel().tolist())
+    return fig
+
+
 def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
 
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(24, 7))
@@ -279,10 +302,10 @@ def main(cfg):
     mag_bins = torch.column_stack((mag_bins1, mag_bins2))
 
     model_names = cfg.results.models  # e.g. 'coadd50', 'single'
+    test_path = cfg.results.test_path
+    all_test_images, truth = _load_test_dataset(test_path)
 
     if cfg.results.overwrite:
-        test_path = cfg.results.test_path
-        all_test_images, truth = _load_test_dataset(test_path)
         background_obj = instantiate(cfg.datasets.galsim_blends.background)
 
         outputs = {}
@@ -324,6 +347,7 @@ def main(cfg):
 
         # create all figures
         figs = []
+        figs.append(_create_coadd_example_plot(all_test_images))
         figs.append(_create_money_plot(mag_bins, model_names, data))
 
         for fig, name in zip(figs, cfg.results.figs):
