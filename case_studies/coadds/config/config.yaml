@@ -37,7 +37,8 @@ datasets:
                 a_loc: 0.8371888967872619
                 a_scale: 4.432725319432478
                 a_bulge_disk_ratio: 2.0
-            max_n_sources: 6
+            max_n_sources: 8
+            mean_sources: 3
             max_shift: 0.5
             galaxy_prob: 0.0
         decoder:
@@ -70,7 +71,8 @@ datasets:
         prior:
             _target_: case_studies.coadds.coadd_decoder.CoaddUniformGalsimPrior
             single_galaxy_prior: ${datasets.galsim_blends.prior.single_galaxy_prior}
-            max_n_sources: 6
+            max_n_sources: 8
+            mean_sources: 3
             max_shift: 0.5
             galaxy_prob: 0.0
             n_dithers: 10
@@ -138,6 +140,7 @@ results:
     test_path: ${paths.project}/output/test_dataset_extended.pt
     cache_results: ${paths.project}/output/metric_results_more_mags.pt
     figs:
+        - coadd_example
         - money3
     models:
         - "single"
