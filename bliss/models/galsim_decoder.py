@@ -447,7 +447,7 @@ class FullCatalogDecoder:
 
 def _sample_poisson_n_sources(mean_sources, max_n_sources) -> int:
     return int(
-        torch.clamp(torch.distributions.Poisson(mean_sources).sample([1]).item(), max=max_n_sources)
+        torch.clamp(torch.distributions.Poisson(mean_sources).sample([1]), max=max_n_sources)
     )
 
 

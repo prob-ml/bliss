@@ -44,7 +44,7 @@ def main(cfg):
                 output[k] = torch.vstack([output[k], v])
     output["n_sources"] = output["n_sources"][:, 0]
 
-    torch.save(output, "output/test_dataset_extended.pt")
+    torch.save(output, "output/test_dataset_poisson.pt")
 
 
 if __name__ == "__main__":
