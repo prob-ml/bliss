@@ -138,10 +138,12 @@ training:
 results:
     overwrite: False
     test_path: ${paths.project}/output/test_dataset_extended.pt
-    cache_results: ${paths.project}/output/metric_results_more_mags.pt
+    cache_results: ${paths.project}/output/new_models/metrics_mags.pt
+    models_path: ${paths.project}/output/new_models
+    figs_path: ${paths.project}/output/figs/new1
     figs:
         - coadd_example
-        - money3
+        - money4
     models:
         - "single"
         # - "coadd_5"
@@ -150,6 +152,6 @@ results:
         # - "coadd_35"
         - "coadd_50"
     mag_bins:
-        - 17
+        - 20
         - 23
         - 0.2

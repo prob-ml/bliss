@@ -8,7 +8,6 @@ import numpy as np
 import torch
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import Tensor
 from tqdm import tqdm
 
@@ -313,7 +312,7 @@ def main(cfg):
         for model_name in model_names:
 
             # run model and get catalogs
-            model_path = f"output/{model_name}_encoder.pt"
+            model_path = f"{cfg.results.models_path}/{model_name}_encoder.pt"
             test_images = all_test_images[model_name]
             background = background_obj.sample(test_images.shape)
             encoder = _load_encoder(cfg, model_path)
@@ -340,7 +339,7 @@ def main(cfg):
     else:
         assert Path(cfg.results.cache_results).exists()
 
-        fig_path = Path("output/figs")
+        fig_path = Path(cfg.results.figs_path)
         fig_path.mkdir(exist_ok=True)
 
         data = torch.load(cfg.results.cache_results)
