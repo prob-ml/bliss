@@ -192,7 +192,7 @@ class DetectionEncoder(pl.LightningModule):
         else:
             tile_n_sources = torch.argmax(ns_log_probs_adj, dim=-1).unsqueeze(0)
         # get distributional parameters conditioned on the sampled numbers of light sources
-        dist_params_n_src = self._encode_for_n_sources(
+        dist_params_n_src = self.encode_for_n_sources(
             dist_params["per_source_params"], tile_n_sources
         )
 
@@ -328,7 +328,7 @@ class DetectionEncoder(pl.LightningModule):
             nslp_flat, true_catalog["n_sources"].reshape(-1), reduction="none"
         )
 
-        pred = self._encode_for_n_sources(
+        pred = self.encode_for_n_sources(
             dist_params["per_source_params"],
             rearrange(true_catalog["n_sources"], "n_ptiles -> 1 n_ptiles"),
         )

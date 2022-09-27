@@ -198,8 +198,11 @@ def _add_mags_to_catalog(cat: FullCatalog) -> FullCatalog:
 
 
 def _get_matched_fluxes(truth: FullCatalog, est: FullCatalog):
-    true_fluxes = []
-    est_fluxes = []
+    tfluxes = []
+    efluxes = []
+    log_tfluxes = []
+    log_efluxes = []
+    log_sd_efluxes = []
 
     batch_size = truth.batch_size
     for ii in tqdm(range(batch_size), desc="computing matched fluxes"):
@@ -211,14 +214,29 @@ def _get_matched_fluxes(truth: FullCatalog, est: FullCatalog):
             tp = len(plocs2[mest][dkeep])  # n_matches
             fluxes1 = truth["star_fluxes"][ii][mtrue][dkeep]
             fluxes2 = est["star_fluxes"][ii][mest][dkeep]
+            log_fluxes1 = truth["star_log_fluxes"][ii][mtrue][dkeep]
+            log_fluxes2 = est["star_log_fluxes"][ii][mest][dkeep]
+            sd_log_fluxes2 = est["log_flux_sd"][ii][mest][dkeep]
             for jj in range(tp):
                 flux1 = fluxes1[jj].item()
                 flux2 = fluxes2[jj].item()
+                log_flux1 = log_fluxes1[jj].item()
+                log_flux2 = log_fluxes2[jj].item()
+                sd_log_flux2 = sd_log_fluxes2[jj].item()
                 assert flux1 > 0 and flux2 > 0
-                true_fluxes.append(flux1)
-                est_fluxes.append(flux2)
+                tfluxes.append(flux1)
+                efluxes.append(flux2)
+                log_tfluxes.append(log_flux1)
+                log_efluxes.append(log_flux2)
+                log_sd_efluxes.append(sd_log_flux2)
 
-    return torch.tensor(true_fluxes), torch.tensor(est_fluxes)
+    return {
+        "true_fluxes": torch.tensor(tfluxes),
+        "est_fluxes": torch.tensor(efluxes),
+        "true_log_fluxes": torch.tensor(log_tfluxes),
+        "est_log_fluxes": torch.tensor(log_efluxes),
+        "est_sd_log_fluxes": torch.tensor(log_sd_efluxes),
+    }
 
 
 def _create_coadd_example_plot(test_images: Tensor):
@@ -240,6 +258,24 @@ def _create_coadd_example_plot(test_images: Tensor):
     axs[3].set_xlabel(xlabel="$d = 50$")
     fig.colorbar(im, ax=axs.ravel().tolist())
     return fig
+
+
+def _report_posterior_flux_calibration(report_file: str, model_names: list, data: dict):
+    sigmas = [1, 2, 3]
+    cis = [0.68, 0.95, 0.99]
+    with open(report_file, "w", encoding="utf-8") as f:
+        for model_name in model_names:
+            matched_fluxes = data[model_name]["matched_fluxes"]
+            tlfluxes = matched_fluxes["true_log_fluxes"]
+            elfluxes = matched_fluxes["est_log_fluxes"]
+            sd_elfluxes = matched_fluxes["est_sd_log_fluxes"]
+            print(f"Model '{model_name}' posterior calibration results:", file=f)
+            for s, ci in zip(sigmas, cis):
+                counts = tlfluxes < elfluxes + s * sd_elfluxes
+                counts &= tlfluxes > elfluxes - s * sd_elfluxes
+                fraction = counts.float().mean()
+                print(f"For {s}-sigma ({ci}): {fraction}", file=f)
+            print(file=f)
 
 
 def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
@@ -268,7 +304,9 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
         ax2.fill_between(x, recall1, recall2, color=color, alpha=0.5)
 
         # fluxes
-        tfluxes, efluxes = data[mname]["matched_fluxes"]
+        matched_fluxes = data[mname]["matched_fluxes"]
+        tfluxes = matched_fluxes["true_fluxes"]
+        efluxes = matched_fluxes["est_fluxes"]
         res_flux = (efluxes - tfluxes) / tfluxes
         tmags = convert_flux_to_mag(tfluxes)
         scatter_shade_plot(ax3, tmags, res_flux, (20, 23), delta=0.2, color=color, qs=(0.25, 0.75))
@@ -342,6 +380,7 @@ def main(cfg):
         fig_path.mkdir(exist_ok=True)
 
         data = torch.load(cfg.results.cache_results)
+        _report_posterior_flux_calibration(cfg.results.report_file, model_names, data)
 
         # create all figures
         figs = []

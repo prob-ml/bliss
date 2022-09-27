@@ -141,6 +141,7 @@ results:
     cache_results: ${paths.project}/output/new_models/metrics_mags_poisson.pt
     models_path: ${paths.project}/output/new_models
     figs_path: ${paths.project}/output/figs/new1
+    report_file: ${paths.project}/output/figs/new1/report.txt
     figs:
         - coadd_example
         - money_poisson1
