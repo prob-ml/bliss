@@ -164,12 +164,18 @@ class Encoder(nn.Module):
         tile_samples = self.detection_encoder.sample(
             dist_params, n_samples, n_source_weights=self.map_n_source_weights
         )
-
-        n_source_log_probs = dist_params["n_source_log_probs"][:, 1:]
-        tile_samples["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1).unsqueeze(0)
         locs = tile_samples["locs"]
         n_sources = tile_samples["n_sources"]
         is_on_array = get_is_on_from_n_sources(n_sources, self.detection_encoder.max_detections)
+
+        # add some variational distribution parameters to output
+        n_source_log_probs = dist_params["n_source_log_probs"][:, 1:]
+        tile_samples["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1).unsqueeze(0)
+        dist_params_n_src = self.detection_encoder.encode_for_n_sources(
+            dist_params["per_source_params"], n_sources
+        )
+        tile_samples["log_flux_sd"] = dist_params_n_src["log_flux_sd"]
+
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
             galaxy_probs = self.binary_encoder.forward(image_ptiles, locs)
@@ -177,9 +183,8 @@ class Encoder(nn.Module):
             if deterministic:
                 galaxy_bools = (galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
             else:
-                galaxy_bools = (
-                    torch.rand_like(galaxy_probs) > 0.5
-                ).float() * is_on_array.unsqueeze(-1)
+                galaxy_bools = (torch.rand_like(galaxy_probs) > 0.5).float()
+                galaxy_bools *= is_on_array.unsqueeze(-1)
 
             tile_samples.update(
                 {

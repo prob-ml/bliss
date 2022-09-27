@@ -231,7 +231,7 @@ class DetectionEncoder(pl.LightningModule):
         log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
         return torch.cat((log_probs, log_probs_last.reshape(1)))
 
-    def _encode_for_n_sources(
+    def encode_for_n_sources(
         self, params_per_source: Tensor, tile_n_sources: Tensor
     ) -> Dict[str, Tensor]:
         """Get distributional parameters conditioned on number of sources in tile.
