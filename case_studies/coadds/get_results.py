@@ -183,7 +183,7 @@ def _load_encoder(cfg, model_path) -> Encoder:
     return Encoder(model.eval(), n_images_per_batch=10, n_rows_per_batch=15).to(device).eval()
 
 
-def _running_model_on_images(encoder, images, background) -> FullCatalog:
+def _run_model_on_images(encoder, images, background) -> FullCatalog:
     tile_est = encoder.variational_mode(images, background)
     return tile_est.cpu().to_full_params()
 
@@ -222,7 +222,6 @@ def _get_matched_fluxes(truth: FullCatalog, est: FullCatalog):
 
 
 def _create_coadd_example_plot(test_images: Tensor):
-    set_rc_params(fontsize=20)
 
     n = 1714
     image1 = test_images["single"][n, 0]
@@ -316,7 +315,7 @@ def main(cfg):
             test_images = all_test_images[model_name]
             background = background_obj.sample(test_images.shape)
             encoder = _load_encoder(cfg, model_path)
-            est = _running_model_on_images(encoder, test_images, background)
+            est = _run_model_on_images(encoder, test_images, background)
             est["galaxy_bools"] = torch.zeros(est.batch_size, est.max_sources, 1)
 
             # add mags to catalog
