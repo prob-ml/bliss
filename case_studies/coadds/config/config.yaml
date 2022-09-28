@@ -137,11 +137,14 @@ training:
 
 results:
     overwrite: False
-    test_path: ${paths.project}/output/test_dataset_extended.pt
-    cache_results: ${paths.project}/output/metric_results_more_mags.pt
+    test_path: ${paths.project}/output/test_dataset_poisson.pt
+    cache_results: ${paths.project}/output/new_models/metrics_mags_poisson.pt
+    models_path: ${paths.project}/output/new_models
+    figs_path: ${paths.project}/output/figs/new1
+    report_file: ${paths.project}/output/figs/new1/report.txt
     figs:
         - coadd_example
-        - money3
+        - money_poisson1
     models:
         - "single"
         # - "coadd_5"
@@ -150,6 +153,6 @@ results:
         # - "coadd_35"
         - "coadd_50"
     mag_bins:
-        - 17
+        - 20
         - 23
         - 0.2

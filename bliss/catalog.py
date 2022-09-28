@@ -41,6 +41,7 @@ class TileCatalog(UserDict):
         "lensed_galaxy_bools",
         "lensed_galaxy_probs",
         "lens_params",
+        "log_flux_sd",
     }
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
