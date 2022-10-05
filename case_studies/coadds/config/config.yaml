@@ -89,6 +89,22 @@ datasets:
         n_batches: 10
         fix_validation_set: False
         valid_n_batches: 200
+    saved_coadd_module:
+        _target_: case_studies.coadds.coadd_decoder.SavedCoaddsModule
+        train_ds:
+            _target_: case_studies.coadds.coadd_decoder.SavedCoadds
+            dataset_file: ${paths.project}/output/datasets_poisson_30/train.pt
+            coadd_name: "coadd_10"
+            background: ${datasets.galsim_blends.background}
+            epoch_size: 10000
+        val_ds:
+            _target_: case_studies.coadds.coadd_decoder.SavedCoadds
+            dataset_file: ${paths.project}/output/datasets_poisson_30/val.pt
+            coadd_name: "coadd_10"
+            background: ${datasets.galsim_blends.background}
+            epoch_size: 10000
+        batch_size: 32
+
 models:
     detection_encoder:
         _target_: bliss.models.detection_encoder.DetectionEncoder
@@ -128,23 +144,23 @@ training:
         file: null
         batch_size: 32
         num_workers: 0
-    weight_save_path: ${paths.project}/output/${training.name}.pt
     seed: 42
+    weight_save_path: ${paths.project}/output/${training.name}_${training.seed}.pt
     model: ${models.detection_encoder}
-    dataset: ${datasets.galsim_blends}
+    dataset: ${datasets.saved_coadd_module}
     optimizer_params:
         lr: 1e-4
 
 results:
     overwrite: False
-    test_path: ${paths.project}/output/test_dataset_poisson.pt
-    cache_results: ${paths.project}/output/new_models/metrics_mags_poisson.pt
-    models_path: ${paths.project}/output/new_models
-    figs_path: ${paths.project}/output/figs/new1
-    report_file: ${paths.project}/output/figs/new1/report.txt
+    test_path: ${paths.project}/output/test_dataset_poisson30.pt
+    cache_results: ${paths.project}/output/poisson30_models_2/metrics_mags.pt
+    models_path: ${paths.project}/output/poisson30_models_2
+    figs_path: ${paths.project}/output/figs/poisson30_2
+    report_file: ${paths.project}/output/figs/poisson30_2/report.txt
     figs:
         - coadd_example
-        - money_poisson1
+        - money
     models:
         - "single"
         # - "coadd_5"
