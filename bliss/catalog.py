@@ -1,5 +1,5 @@
 import math
-from collections import UserDict, defaultdict
+from collections import UserDict
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
