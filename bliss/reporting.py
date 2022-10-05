@@ -33,7 +33,7 @@ class DetectionMetrics(Metric):
         self,
         slack=1.0,
         dist_sync_on_step=False,
-        disable_bar=False,
+        disable_bar=True,
     ) -> None:
         """Computes matches between true and estimated locations.
 
