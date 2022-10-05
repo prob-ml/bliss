@@ -446,9 +446,8 @@ class FullCatalogDecoder:
 
 
 def _sample_poisson_n_sources(mean_sources, max_n_sources) -> int:
-    return int(
-        torch.clamp(torch.distributions.Poisson(mean_sources).sample([1]), max=torch.tensor(max_n_sources))
-    )
+    n_sources = torch.distributions.Poisson(mean_sources).sample([1])
+    return int(torch.clamp(n_sources, max=torch.tensor(max_n_sources)))
 
 
 def _uniform(a, b, n_samples=1) -> Tensor:
