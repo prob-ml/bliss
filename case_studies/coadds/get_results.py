@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List
 
 import hydra
 import numpy as np
@@ -15,12 +15,13 @@ from bliss.catalog import FullCatalog
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.reporting import DetectionMetrics, match_by_locs
+from case_studies.coadds.coadd_decoder import load_coadd_dataset
 from case_studies.sdss_galaxies.plots.bliss_figures import CB_color_cycle, set_rc_params
 
 device = torch.device("cuda:0")
 
 latex_names = {
-    "single": r"\rm single exposure",
+    "single": r"\rm single-exposure",
     "coadd_5": r"\rm Coadd $d=5$",
     "coadd_10": r"\rm Coadd $d=10$",
     "coadd_25": r"\rm Coadd $d=25$",
@@ -165,16 +166,6 @@ def _get_bootstrap_pr_err(n_samples: int, mag_bins: Tensor, truth: FullCatalog, 
     recall_boot = tpr_boot.sum(2) / ntrue_boot.sum(2)
 
     return {"precision": precision_boot, "recall": recall_boot}
-
-
-def _load_test_dataset(path) -> Tuple[dict, FullCatalog]:
-    test_ds = torch.load(path)
-    image_keys = {"coadd_5", "coadd_10", "coadd_25", "coadd_35", "coadd_50", "single"}
-    all_keys = list(test_ds.keys())
-    truth_params = {k: test_ds.pop(k) for k in all_keys if k not in image_keys}
-    truth_params["n_sources"] = truth_params["n_sources"].reshape(-1)
-    truth_cat = FullCatalog(88, 88, truth_params)
-    return test_ds, truth_cat
 
 
 def _load_encoder(cfg, model_path) -> Encoder:
@@ -339,7 +330,7 @@ def main(cfg):
 
     model_names = cfg.results.models  # e.g. 'coadd50', 'single'
     test_path = cfg.results.test_path
-    all_test_images, truth = _load_test_dataset(test_path)
+    all_test_images, truth = load_coadd_dataset(test_path)
 
     if cfg.results.overwrite:
         background_obj = instantiate(cfg.datasets.galsim_blends.background)
