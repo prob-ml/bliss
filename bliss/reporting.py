@@ -40,6 +40,7 @@ class DetectionMetrics(Metric):
         Args:
             slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
             dist_sync_on_step: See torchmetrics documentation.
+            disable_bar: Whether to show progress bar
 
         Attributes:
             tp: true positives = # of sources matched with a true source.
