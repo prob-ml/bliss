@@ -69,9 +69,8 @@ class DetectionMetrics(Metric):
         assert true.batch_size == est.batch_size
 
         count = 0
-        for b in tqdm.tqdm(
-            range(true.batch_size), desc="Detection Metric per batch", disable=self.disable_bar
-        ):
+        desc = "Detection Metric per batch"
+        for b in tqdm.tqdm(range(true.batch_size), desc=desc, disable=self.disable_bar):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
             if ntrue > 0 and nest > 0:
