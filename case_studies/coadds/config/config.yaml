@@ -21,6 +21,8 @@ paths:
     project: ${paths.root}/case_studies/coadds
     output: ${paths.project}/output
 
+seed: 42
+
 datasets:
     galsim_blends:
         _target_: bliss.datasets.galsim_galaxies.GalsimBlends
@@ -67,9 +69,9 @@ datasets:
         fix_validation_set: True
         valid_n_batches: 200
     galsim_blends_coadds:
-        _target_: case_studies.coadds.coadd_decoder.CoaddGalsimBlends
+        _target_: case_studies.coadds.coadds.CoaddGalsimBlends
         prior:
-            _target_: case_studies.coadds.coadd_decoder.CoaddUniformGalsimPrior
+            _target_: case_studies.coadds.coadds.CoaddUniformGalsimPrior
             single_galaxy_prior: ${datasets.galsim_blends.prior.single_galaxy_prior}
             max_n_sources: 8
             mean_sources: 3
@@ -77,7 +79,7 @@ datasets:
             galaxy_prob: 0.0
             n_dithers: 10
         decoder:
-            _target_: case_studies.coadds.coadd_decoder.CoaddFullCatalogDecoder
+            _target_: case_studies.coadds.coadds.CoaddFullCatalogDecoder
             single_galaxy_decoder: ${datasets.galsim_blends.decoder.single_galaxy_decoder}
             slen: 40
             bp: 25 # needs to be 24+1 to account for padding
@@ -90,16 +92,16 @@ datasets:
         fix_validation_set: False
         valid_n_batches: 200
     saved_coadd_module:
-        _target_: case_studies.coadds.coadd_decoder.SavedCoaddsModule
+        _target_: case_studies.coadds.coadds.SavedCoaddsModule
         train_ds:
-            _target_: case_studies.coadds.coadd_decoder.SavedCoadds
-            dataset_file: ${paths.project}/output/datasets_poisson_30/train.pt
+            _target_: case_studies.coadds.coadds.SavedCoadds
+            dataset_file: ${paths.project}/output/datasets_poisson_3/train.pt
             coadd_name: "coadd_10"
             background: ${datasets.galsim_blends.background}
             epoch_size: 10000
         val_ds:
-            _target_: case_studies.coadds.coadd_decoder.SavedCoadds
-            dataset_file: ${paths.project}/output/datasets_poisson_30/val.pt
+            _target_: case_studies.coadds.coadds.SavedCoadds
+            dataset_file: ${paths.project}/output/datasets_poisson_3/val.pt
             coadd_name: "coadd_10"
             background: ${datasets.galsim_blends.background}
             epoch_size: 10000
@@ -144,20 +146,25 @@ training:
         file: null
         batch_size: 32
         num_workers: 0
-    seed: 42
-    weight_save_path: ${paths.project}/output/weights/${training.name}_${training.seed}.pt
+    seed: null
+    weight_save_path: ${paths.project}/output/weights/${seed}/${training.name}_${training.seed}.pt
     model: ${models.detection_encoder}
     dataset: ${datasets.saved_coadd_module}
     optimizer_params:
         lr: 1e-4
 
+get_data:
+    seed: ${seed}
+    type: train
+    path: ${paths.output}/datasets/${seed}/
+
 results:
     overwrite: False
-    test_path: ${paths.project}/output/test_dataset_poisson30.pt
-    cache_results: ${paths.project}/output/poisson30_models_2/metrics_mags.pt
-    models_path: ${paths.project}/output/poisson30_models_2
-    figs_path: ${paths.project}/output/figs/poisson30_2
-    report_file: ${paths.project}/output/figs/poisson30_2/report.txt
+    test_path: ${paths.project}/output/datasets/${seed}/test.pt
+    cache_results: ${paths.project}/output/cache/${seed}/metrics_mags.pt
+    models_path: ${paths.project}/output/weights/${seed}
+    figs_path: ${paths.project}/output/figs/${seed}/
+    report_file: ${paths.project}/output/figs/${seed}/report.txt
     figs:
         - coadd_example
         - money
