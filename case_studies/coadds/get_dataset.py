@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+from pathlib import Path
+
 import hydra
+import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
 from joblib import Parallel, delayed
@@ -26,10 +29,13 @@ def task(ds: CoaddGalsimBlends, n_dithers):
 
 @hydra.main(config_path="./config", config_name="config")
 def main(cfg):
-    n_samples = 10000
+    n_samples = 30000
     n_dithers = [5, 10, 25, 35, 50]
     size = 88
     prior_kwargs = {"n_dithers": max(n_dithers)}
+    seed = cfg.get_data.seed
+    pl.seed_everything(seed)
+
     ds: CoaddGalsimBlends = instantiate(cfg.datasets.galsim_blends_coadds, prior=prior_kwargs)
     output = {f"coadd_{d}": torch.zeros(n_samples, 1, size, size) for d in n_dithers}
     output["single"] = torch.zeros(n_samples, 1, size, size)
@@ -45,7 +51,23 @@ def main(cfg):
                 output[k] = torch.vstack([output[k], v])
     output["n_sources"] = output["n_sources"][:, 0]
 
-    torch.save(output, "output/datasets_poisson_30/val.pt")
+    # split into train/test/val
+    train = {k: v[:10000] for k, v in output.items()}
+    val = {k: v[10000:20000] for k, v in output.items()}
+    test = {k: v[20000:] for k, v in output.items()}
+
+    # create all needed paths for this experiment
+    output = Path(cfg.paths.output)
+    dataset = output.joinpth(f"datasets/{seed}")
+    dataset.mkdir(exist_ok=False)
+    output.joinpath(f"weights/{seed}").mkdir(exist_ok=False)
+    output.joinpath(f"cache/{seed}").mkdir(exist_ok=False)
+    output.joinpath(f"figs/{seed}").mkdir(exist_ok=False)
+
+    # saved datasets
+    torch.save(train, dataset / "train.pt")
+    torch.save(val, dataset / "val.pt")
+    torch.save(test, dataset / "test.pt")
 
 
 if __name__ == "__main__":
