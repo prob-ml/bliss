@@ -126,7 +126,7 @@ training:
     experiment: encoder
     name: null
     version: null
-    save_top_k: 1
+    save_top_k: 3
     trainer:
         _target_: pytorch_lightning.Trainer
         logger: True
@@ -145,7 +145,7 @@ training:
         batch_size: 32
         num_workers: 0
     seed: 42
-    weight_save_path: ${paths.project}/output/${training.name}_${training.seed}.pt
+    weight_save_path: ${paths.project}/output/weights/${training.name}_${training.seed}.pt
     model: ${models.detection_encoder}
     dataset: ${datasets.saved_coadd_module}
     optimizer_params:
