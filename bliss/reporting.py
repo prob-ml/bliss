@@ -49,6 +49,7 @@ class DetectionMetrics(Metric):
             total_correct_class: Total # of correct classifications over matched objects.
             total_n_matches: Total # of matches over batches.
             conf_matrix: Confusion matrix (galaxy vs star)
+            disable_bar: Whether to show progress bar
         """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
