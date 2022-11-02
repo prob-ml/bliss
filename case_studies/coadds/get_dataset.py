@@ -5,16 +5,16 @@ from hydra.utils import instantiate
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from case_studies.coadds.coadd_decoder import CoaddGalsimBlends
+from case_studies.coadds.coadds import CoaddGalsimBlends
 
 
 def task(ds: CoaddGalsimBlends, n_dithers):
     outputs = {}
-    full_cat, dithers = ds._sample_full_catalog()
+    full_cat, dithers = ds.sample_full_catalog()
     assert dithers.shape == (50, 2)
     for d in n_dithers:
         diths = dithers[:d]
-        _, coadd, single, _ = ds._get_images(full_cat, diths)
+        _, coadd, single, _ = ds.get_images(full_cat, diths)
         outputs[f"coadd_{d}"] = coadd
     outputs["single"] = single
     truth_params = {**full_cat}
@@ -29,7 +29,8 @@ def main(cfg):
     n_samples = 10000
     n_dithers = [5, 10, 25, 35, 50]
     size = 88
-    ds: CoaddGalsimBlends = instantiate(cfg.datasets.galsim_blends_coadds, prior={"n_dithers": 50})
+    prior_kwargs = {"n_dithers": max(n_dithers)}
+    ds: CoaddGalsimBlends = instantiate(cfg.datasets.galsim_blends_coadds, prior=prior_kwargs)
     output = {f"coadd_{d}": torch.zeros(n_samples, 1, size, size) for d in n_dithers}
     output["single"] = torch.zeros(n_samples, 1, size, size)
     results = Parallel(n_jobs=64)(delayed(task)(ds, n_dithers) for _ in tqdm(range(n_samples)))
