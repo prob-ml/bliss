@@ -58,7 +58,7 @@ def main(cfg):
 
     # create all needed paths for this experiment
     output = Path(cfg.paths.output)
-    dataset = output.joinpth(f"datasets/{seed}")
+    dataset = output.joinpath(f"datasets/{seed}")
     dataset.mkdir(exist_ok=False)
     output.joinpath(f"weights/{seed}").mkdir(exist_ok=False)
     output.joinpath(f"cache/{seed}").mkdir(exist_ok=False)
