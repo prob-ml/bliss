@@ -369,7 +369,7 @@ class FullCatalog(UserDict):
         n_batches, max_sources, _ = keep.shape
         as_indices = torch.arange(0, max_sources).expand(n_batches, max_sources).unsqueeze(-1)
         to_collect = torch.where(keep, as_indices, torch.ones_like(keep) * max_sources)
-        to_collect = to_collect.sort(axis=1)[0]
+        to_collect = to_collect.sort(dim=1)[0]
 
         # get dictionary with all params (including plocs)
         d = dict(self.items())
@@ -380,7 +380,7 @@ class FullCatalog(UserDict):
             to_collect_v = to_collect.expand(n_batches, max_sources, pdim)
             v_expand = torch.hstack([v, torch.zeros(v.shape[0], 1, v.shape[-1])])
             d_new[k] = torch.gather(v_expand, 1, to_collect_v)
-        d_new["n_sources"] = keep.sum(axis=(-2, -1)).long()
+        d_new["n_sources"] = keep.sum(dim=(-2, -1)).long()
         return type(self)(self.height, self.width, d_new)
 
     def to_tile_params(
