@@ -3,8 +3,7 @@ export TRAIN_EPOCHS=30
 export EPOCH_SIZE=10000
 export MODEL_NAME=$1 #options single / coadd_XYZ
 export CUDA_VISIBLE_DEVICES=$2
-# for i in 1 2 3 4 5
-for i in 1
+for i in 1 2 3 4 5
 do
     ./main.py mode=train training.name="${MODEL_NAME}_encoder" \
     training.experiment="${MODEL_NAME}_encoder" \
