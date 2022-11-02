@@ -81,7 +81,7 @@ class CoaddFullCatalogDecoder(FullCatalogDecoder):
 class CoaddGalsimBlends(GalsimBlends):
     """Dataset of coadd galsim blends."""
 
-    def _sample_full_catalog(self):
+    def sample_full_catalog(self):
         params_dict = self.prior.sample()
         dithers = params_dict["dithers"]
         params_dict.pop("dithers")
@@ -90,7 +90,7 @@ class CoaddGalsimBlends(GalsimBlends):
         params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
         return FullCatalog(self.slen, self.slen, params_dict), dithers
 
-    def _get_images(self, full_cat, dithers):
+    def get_images(self, full_cat, dithers):
         size = self.slen + 2 * self.bp
         noiseless, image0 = self.decoder.render_catalog(full_cat, dithers)
         image0 = image0.reshape(size, size)
@@ -107,8 +107,8 @@ class CoaddGalsimBlends(GalsimBlends):
         return noiseless, coadded_image, single_exposure[0, :, 1:-1, 1:-1], background[0]
 
     def __getitem__(self, idx):
-        full_cat, dithers = self._sample_full_catalog()
-        _, coadded_image, single_exposure, background = self._get_images(full_cat, dithers)
+        full_cat, dithers = self.sample_full_catalog()
+        _, coadded_image, single_exposure, background = self.get_images(full_cat, dithers)
         tile_params = self._get_tile_params(full_cat)
         return {
             "images": coadded_image,
