@@ -224,7 +224,7 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 def scene_metrics(
     true_params: FullCatalog,
     est_params: FullCatalog,
-    mag_min: float = -np.inf,
+    mag_min: float = 0,
     mag_max: float = np.inf,
     slack: float = 1.0,
 ) -> dict:
