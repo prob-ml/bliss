@@ -101,7 +101,6 @@ datasets:
         n_batches: 50
         batch_size: 32
         generate_device: "cuda:0"
-        testing_file: null
         fix_validation_set: true
         valid_n_batches: 256
 

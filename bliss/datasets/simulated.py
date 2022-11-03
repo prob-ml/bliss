@@ -29,7 +29,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         n_batches: int,
         batch_size: int,
         generate_device: str,
-        testing_file: Optional[str] = None,
         num_workers: int = 0,
         fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
@@ -38,7 +37,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         self.n_batches = n_batches
         self.batch_size = batch_size
-        self.testing_file = testing_file
         self.n_tiles_h = n_tiles_h
         self.n_tiles_w = n_tiles_w
 
@@ -117,3 +115,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             valid = self
             num_workers = self.num_workers
         return DataLoader(valid, batch_size=None, num_workers=num_workers)
+
+    def test_dataloader(self):
+        return DataLoader(self, batch_size=None, num_workers=self.num_workers)

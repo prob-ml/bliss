@@ -88,7 +88,6 @@ datasets:
         batch_size: 32
         valid_n_batches: 50
         generate_device: "cpu"
-        testing_file: null
         num_workers: 5
         fix_validation_set: true
     toy_gaussian:
