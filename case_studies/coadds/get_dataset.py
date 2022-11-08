@@ -58,16 +58,16 @@ def main(cfg):
 
     # create all needed paths for this experiment
     output = Path(cfg.paths.output)
-    dataset = output.joinpath(f"datasets/{seed}")
-    dataset.mkdir(exist_ok=False)
+    dataset_dir = output.joinpath(f"datasets/{seed}")
+    dataset_dir.mkdir(exist_ok=False)
     output.joinpath(f"weights/{seed}").mkdir(exist_ok=False)
     output.joinpath(f"cache/{seed}").mkdir(exist_ok=False)
     output.joinpath(f"figs/{seed}").mkdir(exist_ok=False)
 
     # saved datasets
-    torch.save(train, dataset / "train.pt")
-    torch.save(val, dataset / "val.pt")
-    torch.save(test, dataset / "test.pt")
+    torch.save(train, dataset_dir / "train.pt")
+    torch.save(val, dataset_dir / "val.pt")
+    torch.save(test, dataset_dir / "test.pt")
 
 
 if __name__ == "__main__":
