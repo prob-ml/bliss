@@ -1,4 +1,6 @@
 import sys
+import copy
+import pickle
 
 sys.path.append("../../")
 
@@ -13,7 +15,7 @@ from case_studies.strong_lensing.plots.main import load_models
 
 import matplotlib.pyplot as plt
 
-plt.style.use("ggplot")
+# plt.style.use("ggplot")
 import torch
 
 from astropy.table import Table
@@ -22,6 +24,13 @@ import plotly.graph_objects as go
 from hydra import compose, initialize
 from hydra.utils import instantiate
 import numpy as np
+
+import seaborn as sns
+sns.set_style("dark")
+plt.rcParams['text.usetex'] = True
+plt.rcParams["axes.grid"] = False
+plt.rcParams["font.size"] = 24
+
 
 with initialize(config_path="config"):
     cfg = compose("config", overrides=[])
@@ -44,9 +53,13 @@ increments = np.arange(0, 1.0, delta)
 galaxies = np.zeros(increments.shape)
 counts = np.zeros(increments.shape)
 
+test_type = "lensed_"
 batch_size = 8
 trials = 1000
+min_bucket_size = 25
+
 for _ in range(trials):
+
     tile_catalog = dataset.sample_prior(
         batch_size, cfg.datasets.simulated.n_tiles_h, cfg.datasets.simulated.n_tiles_w
     )
@@ -54,12 +67,18 @@ for _ in range(trials):
     images, backgrounds = dataset.simulate_image_from_catalog(tile_catalog)
 
     tile_map = enc.variational_mode(images, backgrounds, tile_catalog)
+    tile_map.locs = copy.deepcopy(tile_catalog.locs)
+    tile_map.n_sources = copy.deepcopy(tile_catalog.n_sources)
+
     full_map = tile_map.cpu().to_full_params()
     full_true = tile_catalog.cpu().to_full_params()
 
     for i in range(batch_size):
-        true_gal_bool = full_true["lensed_galaxy_bools"].cpu().numpy()[i, :, 0].astype("bool")
-        pred_gal_probs = full_map["lensed_galaxy_probs"].cpu().numpy()[i, ...]
+        true_gal_bool = full_true[f"{test_type}galaxy_bools"].cpu().numpy()[i, :, 0].astype("bool").squeeze()
+        pred_gal_probs = full_map[f"{test_type}galaxy_probs"].cpu().numpy()[i, ...].squeeze()
+        
+        # true_plocs = full_true.plocs.cpu().numpy().squeeze()[i,...]
+        # pred_plocs = full_map.plocs.cpu().numpy().squeeze()[i,...]
 
         gal_probs = pred_gal_probs[true_gal_bool]
         gal_buckets = (gal_probs // delta).astype("int")
@@ -69,14 +88,35 @@ for _ in range(trials):
         count_buckets = (pred_gal_probs // delta).astype("int")
         for bucket in count_buckets:
             counts[bucket] += 1
-
+    
 x = []
 y = []
+yerr = []
 for i, (galaxy, count) in enumerate(zip(galaxies, counts)):
-    if count > 0:
+    if count > min_bucket_size:
         x.append(increments[i])
-        y.append(galaxy / count)
 
+        phat = galaxy / count
+        y.append(phat)
+        yerr.append(np.sqrt(phat * (1 - phat) / count))
+data = x, y
+
+with open(f"{test_type}galaxy_posterior_new.pkl", "wb") as f:
+    pickle.dump(data, f)
+
+with open(f"{test_type}galaxy_posterior_new.pkl", "rb") as f:
+    data = pickle.load(f)
+    x, y = data
+
+if test_type == "lensed_":
+    plt.xlabel("$\gamma_s$")
+else:
+    plt.xlabel("$a_s$")
+
+plt.locator_params(axis='y', nbins=3)
+plt.ylabel(r"$\mathrm{Empirical Coverage}$")
 plt.plot(increments, increments, color="b")
-plt.scatter(x, y)
-plt.savefig("lensing_posterior.png")
+plt.errorbar(x, y, fmt="o")
+plt.savefig(f"test.png")
+
+plt.savefig(f"{test_type}galaxy_posterior_new.png")

@@ -1,7 +1,7 @@
 # pylint: disable=R
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -16,6 +16,12 @@ from torch.optim import Adam
 from bliss.catalog import TileCatalog, get_images_in_tiles
 from bliss.models.encoder_layers import EncoderCNN, make_enc_final
 from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
+from bliss.models.detection_encoder import (
+    ConcatBackgroundTransform,
+    EncoderCNN,
+    LogBackgroundTransform,
+    make_enc_final,
+)
 
 
 def get_galsim_params_nll(galaxy_bools, true_params, params):
@@ -78,7 +84,7 @@ def get_galsim_params_nll(galaxy_bools, true_params, params):
     return -log_prob
 
 
-def sample_galsim_encoder(var_dist_params):
+def sample_galsim_encoder(var_dist_params, deterministic: Optional[bool]):
     """Sample from the encoded variational distribution.
 
     Args:
@@ -98,8 +104,12 @@ def sample_galsim_encoder(var_dist_params):
         dist_mean = var_dist_params[..., 2 * latent_dim]
         dist_logvar = var_dist_params[..., 2 * latent_dim + 1]
         dist_sd = (dist_logvar.exp() + 1e-5).sqrt()
+        dist = Normal(dist_mean, dist_sd)
 
-        param = Normal(dist_mean, dist_sd).rsample()
+        if deterministic is not None:
+            param = dist.mean
+        else:
+            param = dist.rsample()
         positive_param_idxs = {0, 4, 6}  # strictly positive are log-normal
         bounded_param_idxs = {1, 3, 5}  # [0,1] bounded are logistic-normal
         angle_param_idx = {2}  # [0, 2 * pi] bounded are logistic normal after adjustment
@@ -125,6 +135,7 @@ class GalsimEncoder(pl.LightningModule):
 
     def __init__(
         self,
+        input_transform: Union[ConcatBackgroundTransform, LogBackgroundTransform],
         n_bands: int,
         tile_slen: int,
         ptile_slen: int,
@@ -137,6 +148,7 @@ class GalsimEncoder(pl.LightningModule):
     ):
         super().__init__()
 
+        self.input_transform = input_transform
         self.n_bands = n_bands
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
@@ -149,7 +161,8 @@ class GalsimEncoder(pl.LightningModule):
         # will be trained.
         latent_dim = 7
         dim_enc_conv_out = ((self.slen + 1) // 2 + 1) // 2
-        self.enc_conv = EncoderCNN(self.n_bands, channel, spatial_dropout)
+        n_bands_in = self.input_transform.output_channels(n_bands)
+        self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
         self.enc_final = make_enc_final(
             channel * 4 * dim_enc_conv_out**2,
             hidden,
@@ -192,7 +205,7 @@ class GalsimEncoder(pl.LightningModule):
 
     def sample(self, image_ptiles: Tensor, tile_locs: Tensor, deterministic: Optional[bool]):
         var_dist_params = self.encode(image_ptiles, tile_locs)
-        galaxy_params = sample_galsim_encoder(var_dist_params)
+        galaxy_params = sample_galsim_encoder(var_dist_params, deterministic)
         return galaxy_params.to(device=var_dist_params.device)
 
     def training_step(self, batch, batch_idx):
@@ -256,9 +269,10 @@ class GalsimEncoder(pl.LightningModule):
         }
 
     def _get_images_in_centered_tiles(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
-        n_bands = image_ptiles.shape[1] // 2
-        img, bg = torch.split(image_ptiles, (n_bands, n_bands), dim=1)
-        return self.center_ptiles(img - bg, tile_locs)
+        log_image_ptiles = self.input_transform(image_ptiles)
+        assert log_image_ptiles.shape[-1] == log_image_ptiles.shape[-2] == self.ptile_slen
+        # in each padded tile we need to center the corresponding galaxy/star
+        return self.center_ptiles(log_image_ptiles, tile_locs)
 
     # pylint: disable=too-many-statements
     def _make_plots(self, batch, n_samples=5):

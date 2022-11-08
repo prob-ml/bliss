@@ -1,7 +1,7 @@
 # pylint: disable=R
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -17,11 +17,17 @@ from bliss.catalog import TileCatalog, get_images_in_tiles
 from bliss.models.encoder_layers import EncoderCNN, make_enc_final
 from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
 from bliss.models.galsim_encoder import get_galsim_params_nll, sample_galsim_encoder
-
+from bliss.models.detection_encoder import (
+    ConcatBackgroundTransform,
+    EncoderCNN,
+    LogBackgroundTransform,
+    make_enc_final,
+)
 
 class LensEncoder(pl.LightningModule):
     def __init__(
         self,
+        input_transform: Union[ConcatBackgroundTransform, LogBackgroundTransform],
         n_bands: int,
         tile_slen: int,
         ptile_slen: int,
@@ -34,6 +40,7 @@ class LensEncoder(pl.LightningModule):
     ):
         super().__init__()
 
+        self.input_transform = input_transform
         self.n_bands = n_bands
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
@@ -50,7 +57,8 @@ class LensEncoder(pl.LightningModule):
         )
 
         dim_enc_conv_out = ((self.slen + 1) // 2 + 1) // 2
-        self.enc_conv = EncoderCNN(self.n_bands, channel, spatial_dropout)
+        n_bands_in = self.input_transform.output_channels(n_bands)
+        self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
         self.enc_final = make_enc_final(
             channel * 4 * dim_enc_conv_out**2,
             hidden,
@@ -91,7 +99,7 @@ class LensEncoder(pl.LightningModule):
             ms=max_sources,
         )
 
-    def sample(self, image_ptiles: Tensor, tile_locs: Tensor):
+    def sample(self, image_ptiles: Tensor, tile_locs: Tensor, deterministic: Optional[bool]):
         var_dist_params = self.encode(image_ptiles, tile_locs)
         latent_dim_split = 2 * self.latent_dim_split
         lensed_galaxy_params, pure_lens_params = (
@@ -101,15 +109,20 @@ class LensEncoder(pl.LightningModule):
 
         params_shape = list(var_dist_params[..., 0].shape) + [self.latent_dim]
         lens_params = torch.zeros(params_shape)
-        lens_params[..., : self.latent_dim_split] = sample_galsim_encoder(lensed_galaxy_params)
+        lens_params[..., : self.latent_dim_split] = sample_galsim_encoder(lensed_galaxy_params, deterministic)
 
         pure_lens_dim = self.latent_dim - self.latent_dim_split
         for param_idx in range(pure_lens_dim):
             dist_mean = pure_lens_params[..., 2 * param_idx]
             dist_logvar = pure_lens_params[..., 2 * param_idx + 1]
             dist_sd = (dist_logvar.exp() + 1e-5).sqrt()
+            dist = Normal(dist_mean, dist_sd)
 
-            param = Normal(dist_mean, dist_sd).rsample()
+            if deterministic is not None:
+                param = dist.mean
+            else:
+                param = dist.rsample()
+
             positive_param_idxs = {0}  # strictly positive are log-normal
             bounded_param_idxs = {3, 4}  # [0,1] bounded are logistic-normal
 
@@ -184,13 +197,13 @@ class LensEncoder(pl.LightningModule):
             batch["lensed_galaxy_bools"],
             pure_lens_params,
             pure_lens_pred,
-        )
+        ).to(device=lens_pred.device)
 
         loss_lensed_galaxy = get_galsim_params_nll(
             batch["lensed_galaxy_bools"],
             lensed_galaxy_params,
             lensed_galaxy_pred,
-        )
+        ).to(device=lens_pred.device)
 
         loss = loss_lens + loss_lensed_galaxy
 
@@ -199,9 +212,10 @@ class LensEncoder(pl.LightningModule):
         }
 
     def _get_images_in_centered_tiles(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
-        n_bands = image_ptiles.shape[1] // 2
-        img, bg = torch.split(image_ptiles, (n_bands, n_bands), dim=1)
-        return self.center_ptiles(img - bg, tile_locs)
+        log_image_ptiles = self.input_transform(image_ptiles)
+        assert log_image_ptiles.shape[-1] == log_image_ptiles.shape[-2] == self.ptile_slen
+        # in each padded tile we need to center the corresponding galaxy/star
+        return self.center_ptiles(log_image_ptiles, tile_locs)
 
     def _get_params_logprob(self, lensed_galaxy_bools, true_params, params):
         # return shape (n_ptiles x max_detections x max_detections)
