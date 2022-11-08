@@ -95,14 +95,14 @@ datasets:
         _target_: case_studies.coadds.coadds.SavedCoaddsModule
         train_ds:
             _target_: case_studies.coadds.coadds.SavedCoadds
-            dataset_file: ${paths.project}/output/datasets_poisson_3/train.pt
-            coadd_name: "coadd_10"
+            dataset_file: ${paths.project}/output/datasets/${seed}/train.pt
+            coadd_name: null
             background: ${datasets.galsim_blends.background}
             epoch_size: 10000
         val_ds:
             _target_: case_studies.coadds.coadds.SavedCoadds
-            dataset_file: ${paths.project}/output/datasets_poisson_3/val.pt
-            coadd_name: "coadd_10"
+            dataset_file: ${paths.project}/output/datasets/${seed}/val.pt
+            coadd_name: null
             background: ${datasets.galsim_blends.background}
             epoch_size: 10000
         batch_size: 32
