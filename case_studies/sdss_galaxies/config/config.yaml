@@ -242,7 +242,8 @@ plots:
         prior:
             _target_: bliss.models.galsim_decoder.UniformGalsimPrior
             single_galaxy_prior: ${datasets.sdss_galaxies.prior}
-            max_n_sources: 6
+            max_n_sources: 8
+            mean_sources: 3
             max_shift: 0.375
             galaxy_prob: 1.0
         decoder:
