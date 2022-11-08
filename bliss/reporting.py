@@ -225,7 +225,7 @@ def scene_metrics(
     true_params: FullCatalog,
     est_params: FullCatalog,
     mag_min: float = 0,
-    mag_max: float = np.inf,
+    mag_max: float = torch.inf,
     slack: float = 1.0,
 ) -> dict:
     """Return detection and classification metrics based on a given ground truth.

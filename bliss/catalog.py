@@ -361,7 +361,7 @@ class FullCatalog(UserDict):
         """Apply magnitude bin to given parameters."""
         assert pname in self, f"Parameter '{pname}' required to apply mag cut."
         assert self[pname].shape[-1] == 1, "Can only be applied to scalar parameters."
-        assert p_min >= 0, "Create bug otherwise"
+        assert self[pname].min() >= 0 and p_min >= 0, f"Cannot use this function with {pname}."
 
         # get indices to collect
         keep = self[pname] < p_max
