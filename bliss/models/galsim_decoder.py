@@ -8,6 +8,27 @@ from torch import Tensor
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.models.psf_decoder import PSFDecoder
 
+# lenstronomy utility functions
+import lenstronomy.Util.util as util
+import lenstronomy.Util.image_util as image_util
+
+# lenstronomy imports
+from lenstronomy.LensModel.lens_model import LensModel
+from lenstronomy.LensModel.Solver.lens_equation_solver import LensEquationSolver
+from lenstronomy.LightModel.light_model import LightModel
+from lenstronomy.PointSource.point_source import PointSource
+from lenstronomy.ImSim.image_model import ImageModel
+import lenstronomy.Util.param_util as param_util
+import lenstronomy.Util.simulation_util as sim_util
+import lenstronomy.Util.image_util as image_util
+from lenstronomy.Util import kernel_util
+import lenstronomy.Util.util as util
+from lenstronomy.Data.imaging_data import ImageData
+from lenstronomy.Data.psf import PSF
+from lenstronomy.ImSim.image_model import ImageModel
+from lenstronomy.LightModel.Profiles.shapelets import ShapeletSet
+from lenstronomy.LightModel.Profiles.shapelets_polar import ShapeletSetPolar
+from lenstronomy.ImSim.image_linear_solve import ImageLinearFit
 
 class SingleGalsimGalaxyPrior:
     dim_latents = 7
@@ -321,6 +342,106 @@ class SingleLensedGalsimGalaxyDecoder(SingleGalsimGalaxyDecoder):
         lensed_src = self.lens_galsim(unlensed_src, pure_lens_params)
         return torch.from_numpy(lensed_src).reshape(1, slen, slen)
 
+class LenstronomySingleLensedGalaxyDecoder(PSFDecoder):
+    def __init__(
+        self,
+        slen: int,
+        n_bands: int,
+        pixel_scale: float,
+        psf_params_file: Optional[str] = None,
+        psf_slen: Optional[int] = None,
+        sdss_bands: Optional[Tuple[int, ...]] = None,
+    ) -> None:
+        super().__init__(
+            psf_params_file=psf_params_file,
+            psf_slen=psf_slen,
+            sdss_bands=sdss_bands,
+            n_bands=n_bands,
+            pixel_scale=pixel_scale,
+        )
+        assert len(self.psf.shape) == 3 and self.psf.shape[0] == 1
+
+        assert n_bands == 1, "Only 1 band is supported"
+        self.slen = slen
+        self.n_bands = 1
+        self.pixel_scale = pixel_scale
+
+    def gen_lenstronomy_src(self, src_params, src_x, src_y):
+        total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = src_params
+        bulge_frac = 1 - disk_frac
+
+        disk_flux = total_flux * disk_frac
+        bulge_flux = total_flux * bulge_frac
+
+        source_model_list = []
+        kwargs_source = []
+        if disk_flux > 0:
+            b_d = a_d * disk_q
+            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
+            ell_factor_disk = (1 - disk_q) / (1 + disk_q)
+            e1_disk = ell_factor_disk * np.cos(beta_radians)
+            e2_disk = ell_factor_disk * np.sin(beta_radians)
+            kwargs_disk_sersic_source = {
+                'amp': disk_flux, 
+                'R_sersic': disk_hlr_arcsecs, 
+                'n_sersic': 1, 
+                'e1': e1_disk, 'e2': e2_disk, 
+                'center_x': src_x, 'center_y': src_y}
+        
+            source_model_list.append("SERSIC_ELLIPSE")
+            kwargs_source.append(kwargs_disk_sersic_source)
+        if bulge_flux > 0:
+            b_b = bulge_q * a_b
+            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
+            ell_factor_bulge = (1 - bulge_q) / (1 + bulge_q)
+            e1_bulge = ell_factor_bulge * np.cos(beta_radians)
+            e2_bulge = ell_factor_bulge * np.sin(beta_radians)
+            kwargs_bulge_sersic_source = {
+                'amp': bulge_flux, 
+                'R_sersic': bulge_hlr_arcsecs, 
+                'n_sersic': 4, 
+                'e1': e1_bulge, 'e2': e2_bulge, 
+                'center_x': src_x, 'center_y': src_y}
+
+            source_model_list.append("SERSIC_ELLIPSE")
+            kwargs_source.append(kwargs_bulge_sersic_source)
+
+        return source_model_list, kwargs_source
+
+    def __call__(self, z: Tensor) -> Tensor:
+        z = z.cpu().numpy()
+        src_light_params, lens_light_params, lens_sie_params = z[:7], z[7:14], z[14:]
+
+        # define data specifics
+        background_rms = .2  #  background noise per pixel
+        exp_time = 100.  #  exposure time (arbitrary units, flux per pixel is in units #photons/exp_time unit)
+        fwhm = 0.1 # full width half max of PSF
+        psf_type = 'GAUSSIAN'  # 'gaussian', 'pixel', 'NONE'
+
+        kwargs_data = sim_util.data_configure_simple(self.slen, self.pixel_scale, exp_time, background_rms)
+        data = ImageData(**kwargs_data)
+        psf = PSF(psf_type=psf_type, fwhm=fwhm, truncation=5)
+        
+        lens_model_list = ['SIE']
+        theta_e, lens_x, lens_y, lens_e1, lens_e2 = lens_sie_params
+        lens_kwargs = [{"theta_E": theta_e, "center_x": lens_x, "center_y": lens_y, "e1": lens_e1, "e2": lens_e2}]
+        lens_model = LensModel(lens_model_list)
+        
+        src_light_model_list, src_light_kwargs = self.gen_lenstronomy_src(src_light_params, src_x=0, src_y=0)
+        lens_light_model_list, lens_light_kwargs = self.gen_lenstronomy_src(lens_light_params, lens_x, lens_y)
+
+        src_light_model = LightModel(src_light_model_list)
+        lens_light_model = LightModel(lens_light_model_list)
+
+        kwargs_numerics = {'supersampling_factor': 1, 'supersampling_convolution': False}
+        lensed_model = ImageModel(data_class=data, psf_class=psf, kwargs_numerics=kwargs_numerics, lens_model_class=lens_model, source_model_class=src_light_model, lens_light_model_class=lens_light_model)
+        lensed_img = lensed_model.image(lens_kwargs, src_light_kwargs, kwargs_lens_light=lens_light_kwargs, kwargs_ps=None)
+
+        poisson = image_util.add_poisson(lensed_img, exp_time=exp_time)
+        bkg = image_util.add_background(lensed_img, sigma_bkd=background_rms)
+        lensed_full_noised = lensed_img + poisson + bkg
+
+        return torch.from_numpy(lensed_full_noised).reshape(1, self.slen, self.slen)
 
 class UniformGalsimPrior:
     def __init__(

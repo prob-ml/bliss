@@ -59,6 +59,56 @@ class GalaxyPrior:
         return self.latents[indices]
 
 
+class LenstronomyPrior(pl.LightningModule):
+
+    def __init__(
+        self,
+        n_bands: int,
+        f_min: float,
+        f_max: float,
+        alpha: float,
+        galaxy_prior: GalaxyPrior,
+        lensed_galaxy_prior: GalaxyPrior,
+    ):
+        super().__init__()
+        self.n_bands = n_bands
+        self.f_min = f_min
+        self.f_max = f_max
+        self.alpha = alpha
+
+        self.galaxy_prior = galaxy_prior
+        self.lensed_galaxy_prior = lensed_galaxy_prior
+
+        assert self.galaxy_prior is not None
+        assert self.lensed_galaxy_prior is not None
+
+    def sample_prior(self, batch_size: int) -> TileCatalog:
+        src_galaxy_params = self.galaxy_prior.sample(batch_size, self.device)
+        lensed_galaxy_params = self.lensed_galaxy_prior.sample(batch_size, self.device)
+        pure_lens_params = self._sample_lens_params(batch_size)
+        return torch.cat((src_galaxy_params, lensed_galaxy_params, pure_lens_params), dim=-1)
+
+    def _sample_lens_params(self, batch_size):
+        """Sample latent galaxy params from GalaxyPrior object."""
+        # latents are: theta_E, center_x/y, e_1/2
+        sample_params_from_dist = lambda dist, n : dist(batch_size, n, device=self.device)
+        base_radii = sample_params_from_dist(torch.rand, 1)
+        base_centers = sample_params_from_dist(torch.randn, 2)
+        base_qs = sample_params_from_dist(torch.rand, 1)
+        base_betas = sample_params_from_dist(torch.rand, 1)
+
+        lens_params = torch.zeros((batch_size, 5))
+        lens_params[:, 0:1] = base_radii * 5.0 + 5.0
+        lens_params[:, 1:3] = base_centers * 0.5
+
+        # ellipticities must satisfy some angle relationships
+        beta_radians = (base_betas - 0.5) * (np.pi / 4) # restrict to [-pi / 8, pi / 8] for now
+        ell_factors = (1 - base_qs) / (1 + base_qs)
+        lens_params[:, 3:4] = ell_factors * torch.cos(beta_radians)
+        lens_params[:, 4:5] = ell_factors * torch.sin(beta_radians)
+        return lens_params
+
+
 class ImagePrior(pl.LightningModule):
     """Prior distribution of objects in an astronomical image.
 

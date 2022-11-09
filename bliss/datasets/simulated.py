@@ -10,7 +10,8 @@ from tqdm import tqdm
 from bliss.catalog import TileCatalog
 from bliss.datasets.background import ConstantBackground, SimulatedSDSSBackground
 from bliss.models.decoder import ImageDecoder
-from bliss.models.prior import ImagePrior
+from bliss.models.galsim_decoder import LenstronomySingleLensedGalaxyDecoder
+from bliss.models.prior import ImagePrior, LenstronomyPrior
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -150,3 +151,39 @@ class BlissDataset(Dataset):
         d = {k: v[idx] for k, v in self.data.items()}
         d.update({"background": self.background, "slen": self.slen})
         return d
+
+class LenstronomyDataset(Dataset):
+    """A dataset that synthesizes lensed images from lenstronomy (used for substructure analysis,
+    NOT currently for strong lens detection"""
+
+    def __init__(
+        self, 
+        prior: LenstronomyPrior,
+        decoder: LenstronomySingleLensedGalaxyDecoder,
+        n_batches: int,
+        batch_size: int,
+        generate_device: str,
+    ):
+        super().__init__()
+
+        self.prior = prior
+        self.decoder = decoder
+        self.prior.requires_grad_(False)
+        self.decoder.requires_grad_(False)
+
+        self.n_batches = n_batches
+        self.batch_size = batch_size
+        self.generate_device = generate_device
+        self.decoder.device = generate_device
+
+    def sample_prior(self) -> TileCatalog:
+        return self.prior.sample_prior(self.batch_size)
+
+    def get_batch(self):
+        with torch.no_grad():
+            len_params_batch = self.sample_prior()
+            return [self.decoder(lens_params) for lens_params in len_params_batch]
+
+    def __iter__(self):
+        for _ in range(self.n_batches):
+            yield self.get_batch()
