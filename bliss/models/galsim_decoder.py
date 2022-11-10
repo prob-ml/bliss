@@ -445,8 +445,7 @@ class LenstronomySingleLensedGalaxyDecoder(PSFDecoder):
         return result
 
     def render_images(self, tile_catalog: TileCatalog) -> Tensor:
-        zs = torch.concat([tile_catalog["galaxy_params"][:,0,0,0,:], tile_catalog["lens_params"][:,0,0,0,:]], axis=-1)
-        return self(zs)
+        return self(tile_catalog["global"][:,0,0,0,:])
         
     def __call__(self, zs: Tensor) -> Tensor:
         if zs.shape[0] == 0:
