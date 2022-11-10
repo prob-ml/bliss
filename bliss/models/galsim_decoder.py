@@ -362,7 +362,7 @@ class LenstronomySingleLensedGalaxyDecoder(PSFDecoder):
         assert len(self.psf.shape) == 3 and self.psf.shape[0] == 1
 
         assert n_bands == 1, "Only 1 band is supported"
-        self.slen = slen
+        self.tile_slen = slen
         self.n_bands = 1
         self.pixel_scale = pixel_scale
 
@@ -408,7 +408,7 @@ class LenstronomySingleLensedGalaxyDecoder(PSFDecoder):
 
         return source_model_list, kwargs_source
 
-    def __call__(self, z: Tensor) -> Tensor:
+    def render_image(self, z):
         z = z.cpu().numpy()
         src_light_params, lens_light_params, lens_sie_params = z[:7], z[7:14], z[14:]
 
@@ -418,7 +418,7 @@ class LenstronomySingleLensedGalaxyDecoder(PSFDecoder):
         fwhm = 0.1 # full width half max of PSF
         psf_type = 'GAUSSIAN'  # 'gaussian', 'pixel', 'NONE'
 
-        kwargs_data = sim_util.data_configure_simple(self.slen, self.pixel_scale, exp_time, background_rms)
+        kwargs_data = sim_util.data_configure_simple(self.tile_slen, self.pixel_scale, exp_time, background_rms)
         data = ImageData(**kwargs_data)
         psf = PSF(psf_type=psf_type, fwhm=fwhm, truncation=5)
         
@@ -439,9 +439,24 @@ class LenstronomySingleLensedGalaxyDecoder(PSFDecoder):
 
         poisson = image_util.add_poisson(lensed_img, exp_time=exp_time)
         bkg = image_util.add_background(lensed_img, sigma_bkd=background_rms)
-        lensed_full_noised = lensed_img + poisson + bkg
+        lensed_full_noised = (lensed_img + poisson + bkg).astype(np.float32)
 
-        return torch.from_numpy(lensed_full_noised).reshape(1, self.slen, self.slen)
+        result = torch.from_numpy(lensed_full_noised).reshape(1, self.tile_slen, self.tile_slen)
+        return result
+
+    def render_images(self, tile_catalog: TileCatalog) -> Tensor:
+        zs = torch.concat([tile_catalog["galaxy_params"][:,0,0,0,:], tile_catalog["lens_params"][:,0,0,0,:]], axis=-1)
+        return self(zs)
+        
+    def __call__(self, zs: Tensor) -> Tensor:
+        if zs.shape[0] == 0:
+            return torch.zeros(0, self.slen, self.slen, device=zs.device)
+
+        images = []
+        for z in zs:
+            image = self.render_image(z)
+            images.append(image)
+        return torch.stack(images, dim=0).to(z.device)
 
 class UniformGalsimPrior:
     def __init__(

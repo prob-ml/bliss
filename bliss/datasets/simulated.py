@@ -1,7 +1,10 @@
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
+from queue import Queue
 
 import pytorch_lightning as pl
+import os
+import threading
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset
@@ -49,7 +52,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.image_prior.requires_grad_(False)
         self.image_decoder.requires_grad_(False)
         self.background.requires_grad_(False)
-        self.to(generate_device)
+        self.image_decoder.device = torch.device(generate_device)
+        
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
         self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
@@ -57,6 +61,30 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         # check training will work.
         total_ptiles = self.batch_size * self.n_tiles_h * self.n_tiles_w
         assert total_ptiles > 1, "Need at least 2 tiles over all batches."
+
+        torch.multiprocessing.set_start_method('spawn')
+        self.setup_gpu = False
+        BUF_SIZE = 2
+        self.data_queue = Queue(BUF_SIZE)
+        producer_thread = threading.Thread(target=self.populate_queue, args=())
+        producer_thread.start()
+
+    def populate_queue(self):
+        if not self.setup_gpu:
+            rank = os.getenv("LOCAL_RANK") 
+            if rank is None:
+                rank = "0"
+            rank = int(rank)
+
+            self.to(f"cuda:{rank}")
+            torch.random.manual_seed(rank) # to have non-repeated datasets for gradients
+            self.setup_gpu = True
+
+        while True:
+            with torch.no_grad():
+                tile_catalog = self.sample_prior(self.batch_size, self.n_tiles_h, self.n_tiles_w)
+                images, background = self.simulate_image_from_catalog(tile_catalog)
+                self.data_queue.put({**tile_catalog.to_dict(), "images": images, "background": background})
 
     image_prior: ImagePrior
     image_decoder: ImageDecoder
@@ -100,10 +128,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             yield self.get_batch()
 
     def get_batch(self) -> Dict[str, Tensor]:
-        with torch.no_grad():
-            tile_catalog = self.sample_prior(self.batch_size, self.n_tiles_h, self.n_tiles_w)
-            images, background = self.simulate_image_from_catalog(tile_catalog)
-            return {**tile_catalog.to_dict(), "images": images, "background": background}
+        return self.data_queue.get()
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
@@ -151,39 +176,3 @@ class BlissDataset(Dataset):
         d = {k: v[idx] for k, v in self.data.items()}
         d.update({"background": self.background, "slen": self.slen})
         return d
-
-class LenstronomyDataset(Dataset):
-    """A dataset that synthesizes lensed images from lenstronomy (used for substructure analysis,
-    NOT currently for strong lens detection"""
-
-    def __init__(
-        self, 
-        prior: LenstronomyPrior,
-        decoder: LenstronomySingleLensedGalaxyDecoder,
-        n_batches: int,
-        batch_size: int,
-        generate_device: str,
-    ):
-        super().__init__()
-
-        self.prior = prior
-        self.decoder = decoder
-        self.prior.requires_grad_(False)
-        self.decoder.requires_grad_(False)
-
-        self.n_batches = n_batches
-        self.batch_size = batch_size
-        self.generate_device = generate_device
-        self.decoder.device = generate_device
-
-    def sample_prior(self) -> TileCatalog:
-        return self.prior.sample_prior(self.batch_size)
-
-    def get_batch(self):
-        with torch.no_grad():
-            len_params_batch = self.sample_prior()
-            return [self.decoder(lens_params) for lens_params in len_params_batch]
-
-    def __iter__(self):
-        for _ in range(self.n_batches):
-            yield self.get_batch()

@@ -99,7 +99,7 @@ class LenstronomyPrior(pl.LightningModule):
 
         lens_params = torch.zeros((batch_size, 5))
         lens_params[:, 0:1] = base_radii * 5.0 + 5.0
-        lens_params[:, 1:3] = base_centers * 0.5
+        lens_params[:, 1:3] = base_centers * 0.25
 
         # ellipticities must satisfy some angle relationships
         beta_radians = (base_betas - 0.5) * (np.pi / 4) # restrict to [-pi / 8, pi / 8] for now
@@ -134,6 +134,7 @@ class ImagePrior(pl.LightningModule):
         min_sources: int,
         max_sources: int,
         mean_sources: int,
+        centered_sources: bool,
         f_min: float,
         f_max: float,
         alpha: float,
@@ -163,6 +164,7 @@ class ImagePrior(pl.LightningModule):
         self.min_sources = min_sources
         self.max_sources = max_sources
         self.mean_sources = mean_sources
+        self.centered_sources = centered_sources
         self.f_min = f_min
         self.f_max = f_max
         self.alpha = alpha
@@ -198,7 +200,7 @@ class ImagePrior(pl.LightningModule):
         assert n_tiles_w > 0
         n_sources = self._sample_n_sources(batch_size, n_tiles_h, n_tiles_w)
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
-        locs = self._sample_locs(is_on_array)
+        locs = self._sample_locs(is_on_array, centered_sources=self.centered_sources)
 
         galaxy_bools, star_bools = self._sample_n_galaxies_and_stars(is_on_array)
         lensed_galaxy_bools = self._sample_n_lenses(is_on_array, galaxy_bools)
@@ -248,13 +250,15 @@ class ImagePrior(pl.LightningModule):
         n_sources = n_sources.clamp(max=self.max_sources, min=self.min_sources)
         return rearrange(n_sources.long(), "b nth ntw 1 -> b nth ntw")
 
-    def _sample_locs(self, is_on_array):
+    def _sample_locs(self, is_on_array, centered_sources=False):
         # output dimension is batch_size x n_tiles_h x n_tiles_w x max_sources x 2
 
         # 2 = (x,y)
         batch_size, n_tiles_h, n_tiles_w, max_sources = is_on_array.shape
         shape = (batch_size, n_tiles_h, n_tiles_w, max_sources, 2)
         locs = torch.rand(*shape, device=is_on_array.device)
+        if centered_sources:
+            locs *= 0
         locs *= is_on_array.unsqueeze(-1)
 
         return locs
@@ -379,8 +383,8 @@ class ImagePrior(pl.LightningModule):
             base_qs = self._sample_param_from_dist(base_shape, 1, torch.rand, device)
             base_betas = self._sample_param_from_dist(base_shape, 1, torch.rand, device)
 
-            lens_params[..., 0:1] = base_radii * 25.0 + 5.0
-            lens_params[..., 1:3] = base_centers * 1.0
+            lens_params[..., 0:1] = base_radii * 5.0 + 5.0
+            lens_params[..., 1:3] = base_centers * 0.25
 
             # ellipticities must satisfy some angle relationships
             beta_radians = (base_betas - 0.5) * (np.pi / 2)  # [-pi / 4, pi / 4]

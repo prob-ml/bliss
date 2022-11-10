@@ -28,6 +28,11 @@ def train(cfg: DictConfig):
                 raise FileNotFoundError(f"path for {key} ({path.as_posix()}) does not exist")
     pl.seed_everything(cfg.training.seed)
 
+    # need to map: lr -> lr * GPUs, batch_size -> batch_size / GPUs to maintain
+    # https://forums.pytorchlightning.ai/t/effective-learning-rate-and-batch-size-with-lightning-in-ddp/101
+    cfg.training.optimizer_params["lr"] *= cfg.training.trainer.gpus
+    cfg.training.dataset.batch_size //= cfg.training.trainer.gpus
+
     # setup dataset.
     dataset = instantiate(cfg.training.dataset)
 

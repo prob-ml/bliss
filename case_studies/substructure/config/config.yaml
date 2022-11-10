@@ -12,7 +12,7 @@ hydra:
 
 mode: train
 
-gpus: 4 # use a single gpu by default.
+gpus: 1 # use a single gpu by default.
 
 paths:
     root: ${oc.env:BLISS_HOME}
@@ -23,18 +23,29 @@ paths:
 
 datasets:
     simulated:
-        _target_: bliss.datasets.simulated.LenstronomyDataset
-        prior: ${models.prior}
+        _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.lens_decoder}
+        prior: ${models.prior}
+        n_tiles_h: 1
+        n_tiles_w: 1
+        background:
+            _target_: bliss.datasets.background.SimulatedSDSSBackground
+            sdss_dir: ${paths.sdss}
+            run: 94
+            camcol: 1
+            field: 12
+            bands:
+                - 2
         n_batches: 10
         batch_size: 32
         generate_device: "cuda:0"
+        testing_file: null
         
 models:
     lens_decoder:
         _target_: bliss.models.galsim_decoder.LenstronomySingleLensedGalaxyDecoder
         n_bands: 1
-        slen: 80
+        slen: 52
         pixel_scale: 0.396
         psf_params_file: ${paths.data}/sdss/5313/3/117/psField-005313-3-0117.fits
         psf_slen: 25
@@ -68,49 +79,13 @@ models:
         psf_slen: 25
         sdss_bands:
             - 2
-    lensing_binary:
-        _target_: bliss.models.lensing_binary_encoder.LensingBinaryEncoder
-        input_transform:
-            _target_: bliss.models.detection_encoder.ConcatBackgroundTransform
-        n_bands: ${models.decoder.n_bands}
-        tile_slen: ${models.decoder.tile_slen}
-        ptile_slen: ${models.decoder.ptile_slen}
-        channel: 8
-        hidden: 128
-        spatial_dropout: 0.0
-        dropout: 0.0
-    binary:
-        _target_: bliss.models.binary.BinaryEncoder
-        input_transform:
-            _target_: bliss.models.detection_encoder.ConcatBackgroundTransform
-        n_bands: ${models.decoder.n_bands}
-        tile_slen: ${models.decoder.tile_slen}
-        ptile_slen: ${models.decoder.ptile_slen}
-        channel: 8
-        hidden: 128
-        spatial_dropout: 0.0
-        dropout: 0.0
-    detection_encoder:
-        _target_: bliss.models.detection_encoder.DetectionEncoder
-        input_transform:
-            _target_: bliss.models.detection_encoder.ConcatBackgroundTransform
-        n_bands: ${models.decoder.n_bands}
-        tile_slen: ${models.decoder.tile_slen}
-        ptile_slen: ${models.decoder.ptile_slen}
-        max_detections: ${models.prior.max_sources}
-        channel: 8
-        spatial_dropout: 0.0
-        dropout: 0.0
-        hidden: 128
-        annotate_probs: True
-        slack: 1.0
     galaxy_encoder:
         _target_: bliss.models.galsim_encoder.GalsimEncoder
         input_transform:
             _target_: bliss.models.detection_encoder.ConcatBackgroundTransform
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
-        ptile_slen: ${models.decoder.ptile_slen}
+        ptile_slen: ${models.lens_decoder.slen}
         hidden: 128
         channel: 8
         spatial_dropout: 0.0
@@ -121,23 +96,23 @@ models:
             _target_: bliss.models.detection_encoder.ConcatBackgroundTransform
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
-        ptile_slen: ${models.decoder.ptile_slen}
+        ptile_slen: ${models.lens_decoder.slen}
         hidden: 128
         channel: 8
         spatial_dropout: 0.0
         dropout: 0.0
-    galaxy_net:
-        _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
-        slen: 53
-        latent_dim: 8
-        hidden: 256
-        n_bands: 1
     prior:
-        _target_: bliss.models.prior.LenstronomyPrior
+        _target_: bliss.models.prior.ImagePrior
         n_bands: 1
+        max_sources: 1
+        mean_sources: 0.03
+        min_sources: 1
+        centered_sources: True
         f_min: 1e3
         f_max: 1e6
         alpha: 0.5
+        prob_galaxy: 1.0
+        prob_lensed_galaxy: 1.0
         galaxy_prior:
             _target_: bliss.models.galsim_decoder.SingleGalsimGalaxyPrior
             flux_sample: "pareto"
