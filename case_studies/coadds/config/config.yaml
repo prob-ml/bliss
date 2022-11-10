@@ -159,6 +159,12 @@ get_data:
     path: ${paths.output}/datasets/${seed}/
 
 results:
+    seeds: # used for training, should correspond to ones in `train.sh`
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
     overwrite: False
     test_path: ${paths.project}/output/datasets/${seed}/test.pt
     cache_results: ${paths.project}/output/cache/${seed}/metrics_mags.pt
