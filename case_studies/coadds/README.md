@@ -23,10 +23,13 @@ python get_dataset.py
 ./train.sh coadd_50 $GPU
 ```
 
-where `GPU` is the index of the GPU you want to use to train the model.
+where `GPU` is a variable corrresponding to the index of the GPU you want to use to train the model.
 
-3. Finally run the file that gets all plots. 
+3. Finally run the following to get all plots from the paper.
 
 ```bash
 python get_results.py
 ```
+
+The figures are saved as `.png` files in `./outputs/figs/{SEED}/` as default, where `SEED` is the value
+of the seed at the top of the config file.
