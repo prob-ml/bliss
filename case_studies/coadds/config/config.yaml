@@ -3,8 +3,6 @@ defaults:
     - training:
     - override hydra/job_logging: stdout
 
-# completely disable hydra logging
-# https://github.com/facebookresearch/hydra/issues/910
 hydra:
     output_subdir: null
     run:
@@ -167,7 +165,7 @@ results:
         - 5
     overwrite: False
     test_path: ${paths.project}/output/datasets/${seed}/test.pt
-    cache_results: ${paths.project}/output/cache/${seed}/metrics_mags.pt
+    cache_results: ${paths.project}/output/cache/${seed}/results.pt
     models_path: ${paths.project}/output/weights/${seed}
     figs_path: ${paths.project}/output/figs/${seed}/
     report_file: ${paths.project}/output/figs/${seed}/report.txt
@@ -176,11 +174,9 @@ results:
         - money
     models:
         - "single"
-        # - "coadd_5"
+        - "coadd_5"
         - "coadd_10"
         - "coadd_25"
-        # - "coadd_35"
-        - "coadd_50"
     mag_bins:
         - 20
         - 23
