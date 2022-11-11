@@ -28,7 +28,8 @@ where `GPU` is a variable corrresponding to the index of the GPU you want to use
 3. Finally run the following to get all plots from the paper.
 
 ```bash
-python get_results.py
+python get_results.py results.overwrite=True # generate cache containing results to plot
+python get_results.py # generate plots from cache
 ```
 
 The figures are saved as `.png` files in `./outputs/figs/{SEED}/` as default, where `SEED` is the value
