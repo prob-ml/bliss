@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
+from scipy import stats
 from torch import Tensor
 from tqdm import tqdm
 
@@ -118,7 +119,9 @@ def _compute_tp_fp(truth: FullCatalog, est: FullCatalog):
     return all_tp, all_fp, all_ntrue
 
 
-def _comput_tp_fp_per_bin(mag_bins: Tensor, truth: FullCatalog, est: FullCatalog):
+def _comput_tp_fp_per_bin(
+    mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
+) -> Dict[str, Tensor]:
     counts_per_mag = defaultdict(lambda: torch.zeros(len(mag_bins), truth.batch_size))
     for ii, (mag1, mag2) in tqdm(enumerate(mag_bins), desc="tp/fp per bin", total=len(mag_bins)):
 
@@ -137,7 +140,9 @@ def _comput_tp_fp_per_bin(mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
     return counts_per_mag
 
 
-def _get_bootstrap_pr_err(n_samples: int, mag_bins: Tensor, truth: FullCatalog, est: FullCatalog):
+def _get_bootstrap_pr_err(
+    n_samples: int, mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
+) -> Dict[str, Tensor]:
     """Get errors for precision/recall which need to be handled carefully to be efficient."""
     counts_per_mag = _comput_tp_fp_per_bin(mag_bins, truth, est)
     batch_size = truth.batch_size
@@ -165,6 +170,8 @@ def _get_bootstrap_pr_err(n_samples: int, mag_bins: Tensor, truth: FullCatalog, 
     precision_boot = tpp_boot.sum(2) / (tpp_boot.sum(2) + fpp_boot.sum(2))
     recall_boot = tpr_boot.sum(2) / ntrue_boot.sum(2)
 
+    assert precision_boot.shape == (n_samples, n_mag_bins)
+    assert recall_boot.shape == (n_samples, n_mag_bins)
     return {"precision": precision_boot, "recall": recall_boot}
 
 
@@ -188,7 +195,7 @@ def _add_mags_to_catalog(cat: FullCatalog) -> FullCatalog:
     return cat
 
 
-def _get_matched_fluxes(truth: FullCatalog, est: FullCatalog):
+def _get_matched_fluxes(truth: FullCatalog, est: FullCatalog) -> Dict[str, Tensor]:
     tfluxes = []
     efluxes = []
     log_tfluxes = []
@@ -227,7 +234,7 @@ def _get_matched_fluxes(truth: FullCatalog, est: FullCatalog):
         "true_log_fluxes": torch.tensor(log_tfluxes),
         "est_log_fluxes": torch.tensor(log_efluxes),
         "est_sd_log_fluxes": torch.tensor(log_sd_efluxes),
-    }
+    }  # shape = (n_matches,)
 
 
 def _create_coadd_example_plot(test_images: Tensor):
@@ -251,22 +258,75 @@ def _create_coadd_example_plot(test_images: Tensor):
     return fig
 
 
-def _report_posterior_flux_calibration(report_file: str, model_names: list, data: dict):
-    sigmas = [1, 2, 3]
-    cis = [0.68, 0.95, 0.99]
-    with open(report_file, "w", encoding="utf-8") as f:
-        for model_name in model_names:
-            matched_fluxes = data[model_name]["matched_fluxes"]
-            tlfluxes = matched_fluxes["true_log_fluxes"]
-            elfluxes = matched_fluxes["est_log_fluxes"]
-            sd_elfluxes = matched_fluxes["est_sd_log_fluxes"]
-            print(f"Model '{model_name}' posterior calibration results:", file=f)
-            for s, ci in zip(sigmas, cis):
-                counts = tlfluxes < elfluxes + s * sd_elfluxes
-                counts &= tlfluxes > elfluxes - s * sd_elfluxes
-                fraction = counts.float().mean()
-                print(f"For {s}-sigma ({ci}): {fraction}", file=f)
-            print(file=f)
+def _report_posterior_flux_calibration(model_names: list, data: dict):
+    fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+    cis = np.linspace(0.05, 1, 20)
+    cis[-1] = 0.99
+    sigmas = stats.norm.interval(cis)[1]
+
+    for ii, mname in enumerate(model_names):
+        matched_fluxes = data[mname]["matched_fluxes"]
+        tlfluxes = matched_fluxes["true_log_fluxes"]
+        elfluxes = matched_fluxes["est_log_fluxes"]
+        sd_elfluxes = matched_fluxes["est_sd_log_fluxes"]
+
+        # remove nan's
+        tlfluxes = tlfluxes.reshape(-1)
+        tlfluxes = tlfluxes[~torch.isnan(tlfluxes)]
+        elfluxes = elfluxes.reshape(-1)
+        elfluxes = elfluxes[~torch.isnan(elfluxes)]
+        sd_elfluxes = sd_elfluxes.reshape(-1)
+        sd_elfluxes = sd_elfluxes[~torch.isnan(sd_elfluxes)]
+
+        fractions = []
+        for s in sigmas:
+            counts = tlfluxes < elfluxes + s * sd_elfluxes
+            counts &= tlfluxes > elfluxes - s * sd_elfluxes
+            fractions.append(counts.float().mean().item())
+        fractions = np.array(fractions)
+
+        ax.plot(cis, fractions, "-x", color=CB_color_cycle[ii], label=latex_names[mname])
+
+    tick_labels = [0, 0.25, 0.5, 0.75, 1.0]
+    ax.plot(cis, cis, "--k", label="calibrated")
+    ax.legend(loc="best", prop={"size": 16})
+    ax.set_xticks(tick_labels)
+    ax.set_yticks(tick_labels)
+    return fig
+
+
+def _preprocess_data(data: dict, model_names: List[str], seeds: List[int]):
+    """Ensure matched fluxes has same shape across seeds (with nan's)."""
+    for mname in model_names:
+
+        # extract max number of matches across seeds
+        max_matches = 0
+        for seed in seeds:
+            tfluxes = data[mname][seed]["matched_fluxes"]["true_fluxes"]
+            max_matches = max(tfluxes.shape[0], max_matches)
+
+        # append nan's to the end so all models have same length across seeds
+        for seed in seeds:
+            for k, t in data[mname][seed]["matched_fluxes"].items():
+                new_t = torch.full((max_matches,), torch.nan)
+                for ii, v in enumerate(t):
+                    new_t[ii] = v
+                data[mname][seed]["matched_fluxes"][k] = new_t
+    return data
+
+
+def _stack_data(data: dict, model_names: List[str], output_names: List[str], seeds: List[int]):
+    new_data = {m: {output_name: {} for output_name in output_names} for m in model_names}
+    for mname in model_names:
+        for oname in output_names:
+            tensor_names = data[mname][seeds[-1]][oname]
+            new_output = {k: torch.tensor([]) for k in tensor_names}
+            for seed in seeds:
+                for k, t in data[mname][seed][oname].items():
+                    t = t.reshape(1, *t.shape)
+                    new_output[k] = torch.concat([new_output[k], t], axis=0)
+            new_data[mname][oname] = new_output
+    return new_data
 
 
 def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
@@ -278,26 +338,38 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
     for ii, mname in enumerate(model_names):
         color = CB_color_cycle[ii]
 
-        # precision
+        # collect data from model
         precision = data[mname]["mag_bin_metrics"]["precision"]
         boot_precision = data[mname]["boot_mag_bin_metrics"]["precision"]
-        precision1 = boot_precision.quantile(0.05, 0)
-        precision2 = boot_precision.quantile(0.95, 0)
+        recall = data[mname]["mag_bin_metrics"]["recall"]
+        boot_recall = data[mname]["boot_mag_bin_metrics"]["recall"]
+        matched_fluxes = data[mname]["matched_fluxes"]
+        tfluxes = matched_fluxes["true_fluxes"]
+        efluxes = matched_fluxes["est_fluxes"]
+
+        # flatten (across seeds)
+        precision = precision.mean(axis=0)
+        boot_precision = boot_precision.reshape(-1, boot_precision.shape[-1])
+        recall = recall.mean(axis=0)
+        boot_recall = boot_recall.reshape(-1, boot_recall.shape[-1])
+        tfluxes = tfluxes.reshape(-1)
+        tfluxes = tfluxes[~torch.isnan(tfluxes)]
+        efluxes = efluxes.reshape(-1)
+        efluxes = efluxes[~torch.isnan(efluxes)]
+
+        # precision
+        precision1 = boot_precision.quantile(0.25, 0)
+        precision2 = boot_precision.quantile(0.75, 0)
         ax1.plot(x, precision, "-o", color=color, label=latex_names[mname], markersize=6)
         ax1.fill_between(x, precision1, precision2, color=color, alpha=0.5)
 
         # recall
-        recall = data[mname]["mag_bin_metrics"]["recall"]
-        boot_recall = data[mname]["boot_mag_bin_metrics"]["recall"]
-        recall1 = boot_recall.quantile(0.05, 0)
-        recall2 = boot_recall.quantile(0.95, 0)
+        recall1 = boot_recall.quantile(0.25, 0)
+        recall2 = boot_recall.quantile(0.75, 0)
         ax2.plot(x, recall, "-o", color=color, label=latex_names[mname], markersize=6)
         ax2.fill_between(x, recall1, recall2, color=color, alpha=0.5)
 
         # fluxes
-        matched_fluxes = data[mname]["matched_fluxes"]
-        tfluxes = matched_fluxes["true_fluxes"]
-        efluxes = matched_fluxes["est_fluxes"]
         res_flux = (efluxes - tfluxes) / tfluxes
         tmags = convert_flux_to_mag(tfluxes)
         scatter_shade_plot(ax3, tmags, res_flux, (20, 23), delta=0.2, color=color, qs=(0.25, 0.75))
@@ -331,36 +403,40 @@ def main(cfg):
     model_names = cfg.results.models  # e.g. 'coadd50', 'single'
     test_path = cfg.results.test_path
     all_test_images, truth = load_coadd_dataset(test_path)
+    seeds = cfg.results.seeds
+    output_names = ["mag_bin_metrics", "boot_mag_bin_metrics", "matched_fluxes"]
 
     if cfg.results.overwrite:
         background_obj = instantiate(cfg.datasets.galsim_blends.background)
+        outputs = {model_name: {} for model_name in model_names}
 
-        outputs = {}
+        for seed in seeds:
+            for model_name in model_names:
+                # run model and get catalogs
+                model_path = f"{cfg.results.models_path}/{model_name}_encoder_{seed}.pt"
+                test_images = all_test_images[model_name]
+                background = background_obj.sample(test_images.shape)
+                encoder = _load_encoder(cfg, model_path)
+                est = _run_model_on_images(encoder, test_images, background)
 
-        for model_name in model_names:
+                # need galaxy_bools key to be present, even if only stars.
+                est["galaxy_bools"] = torch.zeros(est.batch_size, est.max_sources, 1)
 
-            # run model and get catalogs
-            model_path = f"{cfg.results.models_path}/{model_name}_encoder.pt"
-            test_images = all_test_images[model_name]
-            background = background_obj.sample(test_images.shape)
-            encoder = _load_encoder(cfg, model_path)
-            est = _run_model_on_images(encoder, test_images, background)
-            est["galaxy_bools"] = torch.zeros(est.batch_size, est.max_sources, 1)
+                # add mags to catalog
+                truth = _add_mags_to_catalog(truth)
+                est = _add_mags_to_catalog(est)
 
-            # add mags to catalog
-            truth = _add_mags_to_catalog(truth)
-            est = _add_mags_to_catalog(est)
+                # get all metrics from catalogs
+                bin_metrics = _compute_mag_bin_metrics(mag_bins, truth, est)
+                boot_metrics = _get_bootstrap_pr_err(10000, mag_bins, truth, est)
+                matched_fluxes = _get_matched_fluxes(truth, est)
 
-            # get all metrics from catalogs
-            bin_metrics = _compute_mag_bin_metrics(mag_bins, truth, est)
-            boot_metrics = _get_bootstrap_pr_err(10000, mag_bins, truth, est)
-            matched_fluxes = _get_matched_fluxes(truth, est)
-
-            outputs[model_name] = {
-                "mag_bin_metrics": bin_metrics,
-                "boot_mag_bin_metrics": boot_metrics,
-                "matched_fluxes": matched_fluxes,
-            }
+                outputs[model_name][seed] = {
+                    "mag_bin_metrics": bin_metrics,
+                    "boot_mag_bin_metrics": boot_metrics,
+                    "matched_fluxes": matched_fluxes,
+                }
+                assert list(outputs[model_name][seed].keys()) == output_names
 
         torch.save(outputs, cfg.results.cache_results)
 
@@ -370,13 +446,17 @@ def main(cfg):
         fig_path = Path(cfg.results.figs_path)
         fig_path.mkdir(exist_ok=True)
 
-        data = torch.load(cfg.results.cache_results)
-        _report_posterior_flux_calibration(cfg.results.report_file, model_names, data)
+        # stack data with different seeds
+        raw_data = torch.load(cfg.results.cache_results)
+        data = _preprocess_data(raw_data, model_names, seeds)
+        data = _stack_data(data, model_names, output_names, seeds)
+
+        # figs.append(_create_coadd_example_plot(all_test_images))
 
         # create all figures
         figs = []
-        figs.append(_create_coadd_example_plot(all_test_images))
         figs.append(_create_money_plot(mag_bins, model_names, data))
+        figs.append(_report_posterior_flux_calibration(model_names, data))
 
         for fig, name in zip(figs, cfg.results.figs):
             fig.savefig(fig_path / f"{name}.png", format="png")

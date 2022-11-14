@@ -170,8 +170,8 @@ results:
     figs_path: ${paths.project}/output/figs/${seed}/
     report_file: ${paths.project}/output/figs/${seed}/report.txt
     figs:
-        - coadd_example
         - money
+        - calibration
     models:
         - "single"
         - "coadd_5"
