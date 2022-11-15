@@ -163,13 +163,21 @@ class Encoder(nn.Module):
         tile_samples = self.detection_encoder.sample(
             dist_params, n_samples, n_source_weights=self.map_n_source_weights
         )
+
+        n_source_log_probs = dist_params["n_source_log_probs"][:, 1:]
+        tile_samples["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1).unsqueeze(0)
+
         locs = tile_samples["locs"]
         n_sources = tile_samples["n_sources"]
+        # FIXME: This is a hack. Should fail flake8. Don't merge into master - find a better way
+        dist_params_if_source = self.detection_encoder._encode_for_n_sources(
+            dist_params["per_source_params"], torch.ones_like(n_sources)
+        )
+        tile_samples["loc_mean"] = dist_params_if_source["loc_mean"]
+        tile_samples["loc_sd"] = dist_params_if_source["loc_sd"]
         is_on_array = get_is_on_from_n_sources(n_sources, self.detection_encoder.max_detections)
 
         # add some variational distribution parameters to output
-        n_source_log_probs = dist_params["n_source_log_probs"][:, 1:]
-        tile_samples["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1).unsqueeze(0)
         dist_params_n_src = self.detection_encoder.encode_for_n_sources(
             dist_params["per_source_params"], n_sources
         )

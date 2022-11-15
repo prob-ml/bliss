@@ -18,6 +18,8 @@ from bliss.datasets.sdss import SloanDigitalSkySurvey, column_to_tensor, convert
 class TileCatalog(UserDict):
     allowed_params = {
         "n_source_log_probs",
+        "loc_mean",
+        "loc_sd",
         "fluxes",
         "star_fluxes",
         "star_log_fluxes",
