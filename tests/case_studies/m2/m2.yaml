@@ -34,7 +34,6 @@ datasets:
     n_batches: 10
     batch_size: 20
     generate_device: "cuda:0"
-    testing_file: null
 
 models:
   decoder:

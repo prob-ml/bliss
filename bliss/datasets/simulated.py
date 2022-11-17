@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import pytorch_lightning as pl
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset, IterableDataset
+from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
@@ -29,7 +29,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         n_batches: int,
         batch_size: int,
         generate_device: str,
-        testing_file: Optional[str] = None,
         num_workers: int = 0,
         fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
@@ -38,7 +37,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         self.n_batches = n_batches
         self.batch_size = batch_size
-        self.testing_file = testing_file
         self.n_tiles_h = n_tiles_h
         self.n_tiles_w = n_tiles_w
 
@@ -119,34 +117,4 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return DataLoader(valid, batch_size=None, num_workers=num_workers)
 
     def test_dataloader(self):
-        dl = DataLoader(self, batch_size=None, num_workers=self.num_workers)
-
-        if self.testing_file is not None:
-            test_dataset = BlissDataset(self.testing_file)
-            dl = DataLoader(test_dataset, batch_size=self.batch_size, num_workers=0)
-
-        return dl
-
-
-class BlissDataset(Dataset):
-    """A dataset created from simulated batches saved as a single dict by bin/generate.py."""
-
-    def __init__(self, pt_file: str = "example.pt"):
-        super().__init__()
-
-        data = torch.load(pt_file)
-        assert isinstance(data, dict)
-
-        self.data = data
-        self.size = self.data["images"].shape[0]
-        self.background = self.data.pop("background")
-        self.slen = self.data.pop("slen")
-
-    def __len__(self):
-        """Get the number of batches saved in the file."""
-        return self.size
-
-    def __getitem__(self, idx):
-        d = {k: v[idx] for k, v in self.data.items()}
-        d.update({"background": self.background, "slen": self.slen})
-        return d
+        return DataLoader(self, batch_size=None, num_workers=self.num_workers)

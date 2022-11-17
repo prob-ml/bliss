@@ -33,12 +33,14 @@ class DetectionMetrics(Metric):
         self,
         slack=1.0,
         dist_sync_on_step=False,
+        disable_bar=True,
     ) -> None:
         """Computes matches between true and estimated locations.
 
         Args:
             slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
             dist_sync_on_step: See torchmetrics documentation.
+            disable_bar: Whether to show progress bar
 
         Attributes:
             tp: true positives = # of sources matched with a true source.
@@ -48,10 +50,12 @@ class DetectionMetrics(Metric):
             total_correct_class: Total # of correct classifications over matched objects.
             total_n_matches: Total # of matches over batches.
             conf_matrix: Confusion matrix (galaxy vs star)
+            disable_bar: Whether to show progress bar
         """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.slack = slack
+        self.disable_bar = disable_bar
 
         self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("tp_gal", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -67,7 +71,8 @@ class DetectionMetrics(Metric):
         assert true.batch_size == est.batch_size
 
         count = 0
-        for b in range(true.batch_size):
+        desc = "Detection Metric per batch"
+        for b in tqdm.tqdm(range(true.batch_size), desc=desc, disable=self.disable_bar):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
             if ntrue > 0 and nest > 0:
@@ -219,8 +224,8 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 def scene_metrics(
     true_params: FullCatalog,
     est_params: FullCatalog,
-    mag_min: float = -np.inf,
-    mag_max: float = np.inf,
+    mag_min: float = 0,
+    mag_max: float = torch.inf,
     slack: float = 1.0,
 ) -> dict:
     """Return detection and classification metrics based on a given ground truth.

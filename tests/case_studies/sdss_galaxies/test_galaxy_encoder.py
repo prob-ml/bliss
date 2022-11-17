@@ -16,7 +16,6 @@ class TestBasicGalaxyMeasure:
                 {
                     "datasets.simulated.n_batches": 1,
                     "datasets.simulated.generate_device": "cpu",
-                    "datasets.simulated.testing_file": None,
                 }
             )
         return overrides

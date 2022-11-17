@@ -99,7 +99,7 @@ class DetectionClassificationFigures(BlissFigures):
 
         # prepare magnitude bins
         mag_cuts2 = torch.arange(18, 24.5, 0.25)
-        mag_cuts1 = torch.full_like(mag_cuts2, fill_value=-np.inf)
+        mag_cuts1 = torch.full_like(mag_cuts2, fill_value=0)
         mag_cuts = torch.column_stack((mag_cuts1, mag_cuts2))
 
         mag_bins2 = torch.arange(18, 25, 1.0)
