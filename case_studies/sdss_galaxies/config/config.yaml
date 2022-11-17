@@ -67,7 +67,8 @@ datasets:
         prior:
             _target_: bliss.models.galsim_decoder.UniformGalsimPrior
             single_galaxy_prior: ${datasets.sdss_galaxies.prior}
-            max_n_sources: 6
+            max_n_sources: 8
+            mean_sources: 3
             max_shift: 0.5
             galaxy_prob: 0.7
         decoder:
@@ -100,7 +101,6 @@ datasets:
         n_batches: 50
         batch_size: 32
         generate_device: "cuda:0"
-        testing_file: null
         fix_validation_set: true
         valid_n_batches: 256
 
@@ -242,7 +242,8 @@ plots:
         prior:
             _target_: bliss.models.galsim_decoder.UniformGalsimPrior
             single_galaxy_prior: ${datasets.sdss_galaxies.prior}
-            max_n_sources: 6
+            max_n_sources: 8
+            mean_sources: 3
             max_shift: 0.375
             galaxy_prob: 1.0
         decoder:

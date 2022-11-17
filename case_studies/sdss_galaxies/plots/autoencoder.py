@@ -1,4 +1,3 @@
-import galsim
 import numpy as np
 import seaborn as sns
 import torch
@@ -11,7 +10,9 @@ from bliss.models.psf_decoder import PSFDecoder
 from case_studies.sdss_galaxies.plots.bliss_figures import BlissFigures, format_plot, set_rc_params
 
 
-def scatter_bin_plot(ax, x, y, xlims, delta, capsize=5.0, **plot_kwargs):
+def scatter_bin_plot(
+    ax, x, y, xlims, delta, capsize=5.0, qs=(0.25, 0.75), color="m", **plot_kwargs
+):
     # plot median and 25/75 quantiles on each bin decided by delta and xlims.
 
     xbins = np.arange(xlims[0], xlims[1], delta)
@@ -32,10 +33,10 @@ def scatter_bin_plot(ax, x, y, xlims, delta, capsize=5.0, **plot_kwargs):
             continue
 
         ys[i] = np.median(y_bin)
-        errs[i, :] = ys[i] - np.quantile(y_bin, 0.25), np.quantile(y_bin, 0.75) - ys[i]
+        errs[i, :] = ys[i] - np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1]) - ys[i]
 
     errs = errs.T.reshape(2, -1)
-    ax.errorbar(xs, ys, yerr=errs, marker="o", c="m", linestyle="--", capsize=capsize)
+    ax.errorbar(xs, ys, yerr=errs, marker="o", c=color, linestyle="-", capsize=capsize)
     format_plot(ax, **plot_kwargs)
 
 
@@ -224,7 +225,7 @@ class AEReconstructionFigures(BlissFigures):
             delta=0.2,
             xlims=xlims,
             xlabel=xlabel,
-            ylabel=r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm recon}$",
+            ylabel=r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$",
             xticks=xticks,
         )
 

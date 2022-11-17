@@ -61,6 +61,7 @@ def train(cfg: DictConfig):
     if cfg.training.weight_save_path is not None and (checkpoint_callback is not None):
         model_checkpoint = torch.load(checkpoint_callback.best_model_path, map_location="cpu")
         model_state_dict = model_checkpoint["state_dict"]
+        Path(cfg.training.weight_save_path).parent.mkdir(parents=True, exist_ok=True)
         torch.save(model_state_dict, cfg.training.weight_save_path)
         result_path = cfg.training.weight_save_path + ".log.json"
         with open(result_path, "w", encoding="utf-8") as fp:
@@ -125,8 +126,6 @@ def log_hyperparameters(config, model, trainer) -> None:
     hparams["mode"] = config["mode"]
     hparams["gpus"] = config["gpus"]
     hparams["training"] = config["training"]
-    hparams["model"] = config["training"]["model"]
-    hparams["dataset"] = config["training"]["dataset"]
     hparams["optimizer"] = config["training"]["optimizer_params"]
 
     # save number of model parameters

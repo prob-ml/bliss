@@ -3,8 +3,6 @@ defaults:
     - training:
     - override hydra/job_logging: stdout
 
-# completely disable hydra logging
-# https://github.com/facebookresearch/hydra/issues/910
 hydra:
     output_subdir: null
     run:
@@ -20,6 +18,8 @@ paths:
     data: ${paths.root}/data
     project: ${paths.root}/case_studies/coadds
     output: ${paths.project}/output
+
+seed: 42
 
 datasets:
     galsim_blends:
@@ -37,7 +37,8 @@ datasets:
                 a_loc: 0.8371888967872619
                 a_scale: 4.432725319432478
                 a_bulge_disk_ratio: 2.0
-            max_n_sources: 6
+            max_n_sources: 8
+            mean_sources: 3
             max_shift: 0.5
             galaxy_prob: 0.0
         decoder:
@@ -60,22 +61,23 @@ datasets:
                 - 865.0
         tile_slen: 4
         max_sources_per_tile: 1
-        num_workers: 20
+        num_workers: 10
         batch_size: 32
-        n_batches: 20
+        n_batches: 10
         fix_validation_set: True
         valid_n_batches: 200
     galsim_blends_coadds:
-        _target_: case_studies.coadds.coadd_decoder.CoaddGalsimBlends
+        _target_: case_studies.coadds.coadds.CoaddGalsimBlends
         prior:
-            _target_: case_studies.coadds.coadd_decoder.CoaddUniformGalsimPrior
+            _target_: case_studies.coadds.coadds.CoaddUniformGalsimPrior
             single_galaxy_prior: ${datasets.galsim_blends.prior.single_galaxy_prior}
-            max_n_sources: 6
+            max_n_sources: 8
+            mean_sources: 3
             max_shift: 0.5
             galaxy_prob: 0.0
             n_dithers: 10
         decoder:
-            _target_: case_studies.coadds.coadd_decoder.CoaddFullCatalogDecoder
+            _target_: case_studies.coadds.coadds.CoaddFullCatalogDecoder
             single_galaxy_decoder: ${datasets.galsim_blends.decoder.single_galaxy_decoder}
             slen: 40
             bp: 25 # needs to be 24+1 to account for padding
@@ -87,6 +89,22 @@ datasets:
         n_batches: 10
         fix_validation_set: False
         valid_n_batches: 200
+    saved_coadd_module:
+        _target_: case_studies.coadds.coadds.SavedCoaddsModule
+        train_ds:
+            _target_: case_studies.coadds.coadds.SavedCoadds
+            dataset_file: ${paths.project}/output/datasets/${seed}/train.pt
+            coadd_name: null
+            background: ${datasets.galsim_blends.background}
+            epoch_size: 10000
+        val_ds:
+            _target_: case_studies.coadds.coadds.SavedCoadds
+            dataset_file: ${paths.project}/output/datasets/${seed}/val.pt
+            coadd_name: null
+            background: ${datasets.galsim_blends.background}
+            epoch_size: 10000
+        batch_size: 32
+
 models:
     detection_encoder:
         _target_: bliss.models.detection_encoder.DetectionEncoder
@@ -108,7 +126,7 @@ training:
     experiment: encoder
     name: null
     version: null
-    save_top_k: 1
+    save_top_k: 3
     trainer:
         _target_: pytorch_lightning.Trainer
         logger: True
@@ -126,9 +144,40 @@ training:
         file: null
         batch_size: 32
         num_workers: 0
-    weight_save_path: ${paths.project}/output/${training.name}.pt
-    seed: 42
+    seed: null
+    weight_save_path: ${paths.project}/output/weights/${seed}/${training.name}_${training.seed}.pt
     model: ${models.detection_encoder}
-    dataset: ${datasets.galsim_blends}
+    dataset: ${datasets.saved_coadd_module}
     optimizer_params:
         lr: 1e-4
+
+get_data:
+    seed: ${seed}
+    type: train
+    path: ${paths.output}/datasets/${seed}/
+
+results:
+    seeds: # used for training, should correspond to ones in `train.sh`
+        - 1
+        - 2
+        - 3
+        - 4
+        - 5
+    overwrite: False
+    test_path: ${paths.project}/output/datasets/${seed}/test.pt
+    cache_results: ${paths.project}/output/cache/${seed}/results.pt
+    models_path: ${paths.project}/output/weights/${seed}
+    figs_path: ${paths.project}/output/figs/${seed}/
+    report_file: ${paths.project}/output/figs/${seed}/report.txt
+    figs:
+        - money
+        - calibration
+    models:
+        - "single"
+        - "coadd_5"
+        - "coadd_10"
+        - "coadd_25"
+    mag_bins:
+        - 20
+        - 23
+        - 0.2

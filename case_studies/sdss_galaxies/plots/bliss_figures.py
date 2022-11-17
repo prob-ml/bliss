@@ -68,6 +68,7 @@ def set_rc_params(
         "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
         # images
         "image.cmap": "gray",
+        "figure.autolayout": True,
     }
     mpl.rcParams.update(rc_params)
     sns.set_context(rc=rc_params)

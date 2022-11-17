@@ -33,7 +33,6 @@ datasets:
             _target_: bliss.datasets.simulated.ConstantBackground
             background:
                 - 865.0
-        testing_file: null
 
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
@@ -44,7 +43,6 @@ datasets:
         n_batches: 10
         batch_size: 32
         generate_device: "cuda:0"
-        testing_file: null
         background:
             _target_: bliss.datasets.simulated.ConstantBackground
             background:

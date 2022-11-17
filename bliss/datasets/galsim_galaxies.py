@@ -108,14 +108,14 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         self.slen = self.decoder.slen
         self.pixel_scale = self.decoder.pixel_scale
 
-    def _sample_full_catalog(self):
+    def sample_full_catalog(self):
         params_dict = self.prior.sample()
         params_dict["plocs"] = params_dict["locs"] * self.slen
         params_dict.pop("locs")
         params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
         return FullCatalog(self.slen, self.slen, params_dict)
 
-    def _get_images(self, full_cat):
+    def get_images(self, full_cat):
         noiseless, noiseless_centered, noiseless_uncentered = self.decoder(full_cat)
 
         # get background and noisy image.
@@ -196,8 +196,8 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
             assert not torch.any(torch.isnan(t))
 
     def __getitem__(self, idx):
-        full_cat = self._sample_full_catalog()
-        images, *metric_images, background = self._get_images(full_cat)
+        full_cat = self.sample_full_catalog()
+        images, *metric_images, background = self.get_images(full_cat)
         full_cat = self._add_metrics(full_cat, *metric_images, background)
         tile_params = self._get_tile_params(full_cat)
         self._run_nan_check(images, background, *tile_params.values())

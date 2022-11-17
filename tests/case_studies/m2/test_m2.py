@@ -39,7 +39,6 @@ def trained_star_encoder_m2(m2_model_setup, devices):
                 "datasets.simulated_m2.n_batches": 1,
                 "datasets.simulated_m2.batch_size": 2,
                 "datasets.simulated_m2.generate_device": "cpu",
-                "datasets.simulated_m2.testing_file": None,
             }
         )
 

@@ -161,7 +161,7 @@ def reconstruct(cfg):
             make_images_of_example_tile(tile_dir, encoder, decoder, frame, tile_map_recon)
 
             mag_max = cfg.reconstruct.mag_max
-            true_cat = ground_truth_catalog.apply_param_bin("mags", -np.inf, mag_max)
+            true_cat = ground_truth_catalog.apply_param_bin("mags", 0, mag_max)
             mismatch_dir = outdir / "reconstructions" / "mismatches"
             mismatch_dir.mkdir(exist_ok=True)
             plot_mismatches(
@@ -253,7 +253,7 @@ def calc_scene_metrics_by_mag(
     est_cat: FullCatalog, true_cat: FullCatalog, mag_start: int, mag_end: int, loc_slack: float
 ):
     scene_metrics_by_mag: Dict[str, Dict[str, Number]] = {}
-    mag_mins = [float(m - 1) for m in range(mag_start, mag_end + 1)] + [-np.inf]
+    mag_mins = [float(m - 1) for m in range(mag_start, mag_end + 1)] + [0]
     mag_maxes = [float(m) for m in range(mag_start, mag_end + 1)] + [mag_end]
     for mag_min, mag_max in zip(mag_mins, mag_maxes):
         # report counts on each bin
@@ -839,7 +839,7 @@ def get_positive_negative_stats(
     est_tile_cat: TileCatalog,
     mag_max: float = np.inf,
 ):
-    true_cat = true_cat.apply_param_bin("mags", -np.inf, mag_max)
+    true_cat = true_cat.apply_param_bin("mags", 0, mag_max)
     thresholds = np.linspace(0.01, 0.99, 99)
     est_tile_cat = est_tile_cat.copy()
 
