@@ -155,10 +155,7 @@ class DetectionEncoder(pl.LightningModule):
 
         n_source_log_probs = self.log_softmax(n_source_free_probs)
 
-        return {
-            "per_source_params": per_source_params,
-            "n_source_log_probs": n_source_log_probs,
-        }
+        return {"per_source_params": per_source_params, "n_source_log_probs": n_source_log_probs}
 
     def sample(
         self,
