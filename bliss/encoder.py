@@ -131,16 +131,15 @@ class Encoder(nn.Module):
         self, image: Tensor, background: Tensor, n_samples: Optional[int]
     ) -> Dict[str, Tensor]:
         n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.detection_encoder.tile_slen
-        ptile_loader = self._make_ptile_loader(image, background, n_tiles_h)
+        ptile_loader = self.make_ptile_loader(image, background, n_tiles_h)
         tile_map_list: List[Dict[str, Tensor]] = []
         with torch.no_grad():
             for ptiles in tqdm(ptile_loader, desc="Encoding ptiles"):
-                assert isinstance(ptiles, Tensor)
                 out_ptiles = self._encode_ptiles(ptiles, n_samples)
                 tile_map_list.append(out_ptiles)
-        return self._collate(tile_map_list)
+        return self.collate(tile_map_list)
 
-    def _make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int):
+    def make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int) -> Tensor:
         img_bg = torch.cat((image, background), dim=1).to(self.device)
         n_images = image.shape[0]
         for start_b in range(0, n_images, self.n_images_per_batch):
@@ -186,12 +185,7 @@ class Encoder(nn.Module):
                 galaxy_bools = (torch.rand_like(galaxy_probs) > 0.5).float()
                 galaxy_bools *= is_on_array.unsqueeze(-1)
 
-            tile_samples.update(
-                {
-                    "galaxy_bools": galaxy_bools,
-                    "galaxy_probs": galaxy_probs,
-                }
-            )
+            tile_samples.update({"galaxy_bools": galaxy_bools, "galaxy_probs": galaxy_probs})
 
             if self.lensing_binary_encoder is not None:
                 assert not self.lensing_binary_encoder.training
@@ -226,7 +220,7 @@ class Encoder(nn.Module):
         return tile_samples
 
     @staticmethod
-    def _collate(tile_map_list: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
+    def collate(tile_map_list: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
         out: Dict[str, Tensor] = {}
         for k in tile_map_list[0]:
             out[k] = torch.cat([d[k] for d in tile_map_list], dim=1)
