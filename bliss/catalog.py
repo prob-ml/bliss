@@ -402,33 +402,34 @@ class FullCatalog(UserDict):
             ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
                 `ignore_extra_sources` is False.
         """
-        assert self.batch_size == 1, "Currently only supported for a single image"
-        tile_coords_fp = torch.div(self.plocs, tile_slen, rounding_mode="trunc")
-        tile_coords = tile_coords_fp.to(torch.int).squeeze(0)
+        tile_coords = torch.div(self.plocs, tile_slen, rounding_mode="trunc").to(torch.int)
         n_tiles_h, n_tiles_w = get_n_tiles_hw(self.height, self.width, tile_slen)
-        tile_cat_shape = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile)
 
+        # prepare tiled tensors
+        tile_cat_shape = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile)
         tile_locs = torch.zeros((*tile_cat_shape, 2), device=self.device)
         tile_n_sources = torch.zeros(tile_cat_shape[:3], dtype=torch.int64, device=self.device)
-        tile_is_on_array = torch.zeros((*tile_cat_shape, 1), device=self.device)
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
             dtype = torch.int64 if k == "objid" else torch.float
             size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
             tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
-        n_sources = int(self.n_sources[0].item())
-        for (idx, coords) in enumerate(tile_coords[:n_sources]):
-            source_idx = tile_n_sources[0, coords[0], coords[1]].item()
-            if source_idx >= max_sources_per_tile:
-                if not ignore_extra_sources:
-                    raise ValueError("Number of sources per tile exceeds `max_sources_per_tile`.")
-                continue  # ignore extra sources in this tile.
-            tile_is_on_array[0, coords[0], coords[1]] = 1
-            tile_loc = (self.plocs[0, idx] - coords * tile_slen) / tile_slen
-            tile_locs[0, coords[0], coords[1], source_idx] = tile_loc
-            for k, v in tile_params.items():
-                v[0, coords[0], coords[1], source_idx] = self[k][0, idx]
-            tile_n_sources[0, coords[0], coords[1]] = source_idx + 1
+
+        for ii in range(self.batch_size):
+            n_sources = int(self.n_sources[ii].item())
+            for (idx, coords) in enumerate(tile_coords[ii][:n_sources]):
+                source_idx = tile_n_sources[ii, coords[0], coords[1]].item()
+                if source_idx >= max_sources_per_tile:
+                    if not ignore_extra_sources:
+                        raise ValueError(  # noqa: WPS220
+                            "# of sources per tile exceeds `max_sources_per_tile`."
+                        )
+                    continue  # ignore extra sources in this tile.
+                tile_loc = (self.plocs[ii, idx] - coords * tile_slen) / tile_slen
+                tile_locs[ii, coords[0], coords[1], source_idx] = tile_loc
+                for k, v in tile_params.items():
+                    v[ii, coords[0], coords[1], source_idx] = self[k][ii, idx]
+                tile_n_sources[ii, coords[0], coords[1]] = source_idx + 1
         tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
 
