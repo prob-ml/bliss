@@ -139,7 +139,7 @@ class Encoder(nn.Module):
                 tile_map_list.append(out_ptiles)
         return self.collate(tile_map_list)
 
-    def make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int) -> Tensor:
+    def make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int):
         img_bg = torch.cat((image, background), dim=1).to(self.device)
         n_images = image.shape[0]
         for start_b in range(0, n_images, self.n_images_per_batch):
