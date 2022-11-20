@@ -68,6 +68,8 @@ pre-commit --install
 
 # References
 
-Derek Hansen, Ismael Mendoza, Runjing Liu, Ziteng Pang, Zhe Zhao, Camille Avestruz, and Jeffrey Regier. [*Scalable Bayesian Inference for Detection and Deblending in Astronomical Images*](https://arxiv.org/pdf/2207.05642.pdf). ICML Workshop on Machine Learning for Astrophysics, 2022.
+Mallory Wang, Ismael Mendoza, Cheng Wang, Camille Avestruz, and Jeffrey Regier. *Statistical Inference for Coadded Astronomical Images.* Machine Learning and the Physical Sciences workshop, NeurIPS 2022. [arXiv:2211.09300](https://arxiv.org/abs/2211.09300)
 
-Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and The LSST Dark Energy Science Collaboration. *Variational Inference for Deblending Crowded Starfields.* [arXiv:2102.02409](https://arxiv.org/abs/2102.02409), 2021.
+Derek Hansen, Ismael Mendoza, Runjing Liu, Ziteng Pang, Zhe Zhao, Camille Avestruz, and Jeffrey Regier. *Scalable Bayesian Inference for Detection and Deblending in Astronomical Images*. ICML Workshop on Machine Learning for Astrophysics, 2022. [arXiv:2207.05642](https://arxiv.org/abs/2207.05642)
+
+Runjing Liu, Jon D. McAuliffe, Jeffrey Regier, and The LSST Dark Energy Science Collaboration. *Variational Inference for Deblending Crowded Starfields*, 2021. [arXiv:2102.02409](https://arxiv.org/abs/2102.02409)
