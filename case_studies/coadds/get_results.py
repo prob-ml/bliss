@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import math
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List
@@ -12,7 +13,7 @@ from scipy import stats
 from torch import Tensor
 from tqdm import tqdm
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.reporting import DetectionMetrics, match_by_locs
@@ -178,7 +179,7 @@ def _get_bootstrap_pr_err(
 def _load_encoder(cfg, model_path) -> Encoder:
     model = instantiate(cfg.models.detection_encoder).to(device).eval()
     model.load_state_dict(torch.load(model_path, map_location=device))
-    return Encoder(model.eval(), n_images_per_batch=10, n_rows_per_batch=15).to(device).eval()
+    return Encoder(model.eval(), n_images_per_batch=10, n_rows_per_batch=10).to(device).eval()
 
 
 def _run_model_on_images(encoder, images, background) -> FullCatalog:
@@ -195,67 +196,83 @@ def _add_mags_to_catalog(cat: FullCatalog) -> FullCatalog:
     return cat
 
 
-def _get_matched_fluxes(truth: FullCatalog, est: FullCatalog) -> Dict[str, Tensor]:
+def _get_fluxes_cond_true_detections(
+    encoder: Encoder, truth: FullCatalog, images: Tensor, background: Tensor
+) -> Dict[str, Tensor]:
+    """Return variational parameters on fluxes conditioning on true number of stars per tile."""
+    # setup
+    bp = encoder.border_padding
+    detection_encoder = encoder.detection_encoder
+    tile_slen = detection_encoder.tile_slen
+    batch_size = images.shape[0]
+    n_tiles_h = (images.shape[2] - 2 * bp) // tile_slen
+    n_tiles_w = (images.shape[3] - 2 * bp) // tile_slen
+    ptile_loader = encoder.make_ptile_loader(images, background, n_tiles_h)
+    tile_map_list: List[Dict[str, Tensor]] = []
+    assert n_tiles_h == n_tiles_w == encoder.n_rows_per_batch
+
+    # get true detections per tile
+    truth_tile_catalog = truth.to_tile_params(tile_slen, 1, ignore_extra_sources=True)
+    tile_n_sources = truth_tile_catalog.n_sources  # (b, n_tiles_h, n_tiles_w)
+    truth_at_most_one = truth_tile_catalog.to_full_params()
+
+    # organize `tile_n_sources` to match `ptiles` from loader.
+    size = n_tiles_h**2 * encoder.n_images_per_batch
+    n_ptiles_per_iter = int(batch_size * n_tiles_h**2 // size)
+    ptiles_n_sources = torch.zeros(n_ptiles_per_iter, size, dtype=torch.int64)
+    n_images_per_batch = encoder.n_images_per_batch
+    for ii in range(0, size):
+        start, end = n_images_per_batch * ii, (n_images_per_batch * (ii + 1))
+        ptiles_n_sources[ii] = tile_n_sources[start:end].reshape(-1)
+
+    with torch.no_grad():
+        for ii, ptiles in enumerate(tqdm(ptile_loader, desc="Encoding ptiles")):
+            dist_params = detection_encoder.encode(ptiles)
+            n_sources_ii = ptiles_n_sources[ii].unsqueeze(0)
+            dist_params_n_src = detection_encoder.encode_for_n_sources(
+                dist_params["per_source_params"], n_sources_ii
+            )
+            tile_samples = {}
+            tile_samples["n_sources"] = n_sources_ii.cpu()
+            tile_samples["locs"] = dist_params_n_src["loc_mean"].cpu()
+            tile_samples["star_log_fluxes"] = dist_params_n_src["log_flux_mean"].cpu()
+            tile_samples["log_flux_sd"] = dist_params_n_src["log_flux_sd"].cpu()
+            tile_map_list.append(tile_samples)
+    tile_samples = encoder.collate(tile_map_list)
+    flat_samples = {k: v.squeeze(0) for k, v in tile_samples.items()}
+    est_tile_catalog = TileCatalog.from_flat_dict(tile_slen, n_tiles_h, n_tiles_w, flat_samples)
+    est_with_true_counts = est_tile_catalog.cpu().to_full_params()
+
+    # collect into final tensors that have a single dimension
     tfluxes = []
     efluxes = []
-    log_tfluxes = []
-    log_efluxes = []
-    log_sd_efluxes = []
+    tlfluxes = []
+    elfluxes = []
+    sd_elfluxes = []
 
-    batch_size = truth.batch_size
-    for ii in tqdm(range(batch_size), desc="computing matched fluxes"):
-        n_sources1, n_sources2 = truth.n_sources[ii].item(), est.n_sources[ii].item()
-        if n_sources1 > 0 and n_sources2 > 0:
-            plocs1 = truth.plocs[ii]
-            plocs2 = est.plocs[ii]
-            mtrue, mest, dkeep, _ = match_by_locs(plocs1, plocs2)
-            tp = len(plocs2[mest][dkeep])  # n_matches
-            fluxes1 = truth["star_fluxes"][ii][mtrue][dkeep]
-            fluxes2 = est["star_fluxes"][ii][mest][dkeep]
-            log_fluxes1 = truth["star_log_fluxes"][ii][mtrue][dkeep]
-            log_fluxes2 = est["star_log_fluxes"][ii][mest][dkeep]
-            sd_log_fluxes2 = est["log_flux_sd"][ii][mest][dkeep]
-            for jj in range(tp):
-                flux1 = fluxes1[jj].item()
-                flux2 = fluxes2[jj].item()
-                log_flux1 = log_fluxes1[jj].item()
-                log_flux2 = log_fluxes2[jj].item()
-                sd_log_flux2 = sd_log_fluxes2[jj].item()
-                assert flux1 > 0 and flux2 > 0
-                tfluxes.append(flux1)
-                efluxes.append(flux2)
-                log_tfluxes.append(log_flux1)
-                log_efluxes.append(log_flux2)
-                log_sd_efluxes.append(sd_log_flux2)
+    for ii in range(batch_size):
+        n_sources_ii = truth_at_most_one.n_sources[ii].item()
+        assert n_sources_ii == est_with_true_counts.n_sources[ii].item()
+        for jj in range(n_sources_ii):
+            tlflux = truth_at_most_one["star_log_fluxes"][ii][jj].item()
+            elflux = est_with_true_counts["star_log_fluxes"][ii][jj].item()
+            sd_elflux = est_with_true_counts["log_flux_sd"][ii][jj].item()
+            assert tlflux != 0 and elflux != 0
+            tflux = math.exp(tlflux)
+            eflux = math.exp(elflux)
+            tfluxes.append(tflux)
+            efluxes.append(eflux)
+            tlfluxes.append(tlflux)
+            elfluxes.append(elflux)
+            sd_elfluxes.append(sd_elflux)
 
     return {
         "true_fluxes": torch.tensor(tfluxes),
         "est_fluxes": torch.tensor(efluxes),
-        "true_log_fluxes": torch.tensor(log_tfluxes),
-        "est_log_fluxes": torch.tensor(log_efluxes),
-        "est_sd_log_fluxes": torch.tensor(log_sd_efluxes),
-    }  # shape = (n_matches,)
-
-
-def _create_coadd_example_plot(test_images: Tensor):
-
-    n = 1714
-    image1 = test_images["single"][n, 0]
-    image10 = test_images["coadd_10"][n, 0]
-    image25 = test_images["coadd_25"][n, 0]
-    image50 = test_images["coadd_50"][n, 0]
-
-    fig, axs = plt.subplots(1, 4, figsize=(24, 8))
-    axs[0].imshow(image1, interpolation=None)
-    axs[0].set_xlabel(xlabel="Single Exposures")
-    axs[1].imshow(image10, interpolation=None)
-    axs[1].set_xlabel(xlabel="$d = 10$")
-    axs[2].imshow(image25, interpolation=None)
-    axs[2].set_xlabel(xlabel="$d = 25$")
-    im = axs[3].imshow(image50, interpolation=None)
-    axs[3].set_xlabel(xlabel="$d = 50$")
-    fig.colorbar(im, ax=axs.ravel().tolist())
-    return fig
+        "true_log_fluxes": torch.tensor(tlfluxes),
+        "est_log_fluxes": torch.tensor(elfluxes),
+        "est_sd_log_fluxes": torch.tensor(sd_elfluxes),
+    }
 
 
 def _report_posterior_flux_calibration(model_names: list, data: dict):
@@ -266,17 +283,9 @@ def _report_posterior_flux_calibration(model_names: list, data: dict):
 
     for ii, mname in enumerate(model_names):
         matched_fluxes = data[mname]["matched_fluxes"]
-        tlfluxes = matched_fluxes["true_log_fluxes"]
-        elfluxes = matched_fluxes["est_log_fluxes"]
-        sd_elfluxes = matched_fluxes["est_sd_log_fluxes"]
-
-        # remove nan's
-        tlfluxes = tlfluxes.reshape(-1)
-        tlfluxes = tlfluxes[~torch.isnan(tlfluxes)]
-        elfluxes = elfluxes.reshape(-1)
-        elfluxes = elfluxes[~torch.isnan(elfluxes)]
-        sd_elfluxes = sd_elfluxes.reshape(-1)
-        sd_elfluxes = sd_elfluxes[~torch.isnan(sd_elfluxes)]
+        tlfluxes = matched_fluxes["true_log_fluxes"].reshape(-1)
+        elfluxes = matched_fluxes["est_log_fluxes"].reshape(-1)
+        sd_elfluxes = matched_fluxes["est_sd_log_fluxes"].reshape(-1)
 
         fractions = []
         for s in sigmas:
@@ -290,32 +299,15 @@ def _report_posterior_flux_calibration(model_names: list, data: dict):
     tick_labels = [0, 0.25, 0.5, 0.75, 1.0]
     ax.plot(cis, cis, "--k", label="calibrated")
     ax.legend(loc="best", prop={"size": 16})
+    ax.set_xlabel(r"\rm Target coverage", fontsize=24)
+    ax.set_ylabel(r"\rm Realized coverage", fontsize=24)
     ax.set_xticks(tick_labels)
     ax.set_yticks(tick_labels)
     return fig
 
 
-def _preprocess_data(data: dict, model_names: List[str], seeds: List[int]):
-    """Ensure matched fluxes has same shape across seeds (with nan's)."""
-    for mname in model_names:
-
-        # extract max number of matches across seeds
-        max_matches = 0
-        for seed in seeds:
-            tfluxes = data[mname][seed]["matched_fluxes"]["true_fluxes"]
-            max_matches = max(tfluxes.shape[0], max_matches)
-
-        # append nan's to the end so all models have same length across seeds
-        for seed in seeds:
-            for k, t in data[mname][seed]["matched_fluxes"].items():
-                new_t = torch.full((max_matches,), torch.nan)
-                for ii, v in enumerate(t):
-                    new_t[ii] = v
-                data[mname][seed]["matched_fluxes"][k] = new_t
-    return data
-
-
 def _stack_data(data: dict, model_names: List[str], output_names: List[str], seeds: List[int]):
+    """Stack data so that there is a single tensor for all seeds."""
     new_data = {m: {output_name: {} for output_name in output_names} for m in model_names}
     for mname in model_names:
         for oname in output_names:
@@ -344,18 +336,14 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
         recall = data[mname]["mag_bin_metrics"]["recall"]
         boot_recall = data[mname]["boot_mag_bin_metrics"]["recall"]
         matched_fluxes = data[mname]["matched_fluxes"]
-        tfluxes = matched_fluxes["true_fluxes"]
-        efluxes = matched_fluxes["est_fluxes"]
+        tfluxes = matched_fluxes["true_fluxes"].reshape(-1)
+        efluxes = matched_fluxes["est_fluxes"].reshape(-1)
 
         # flatten (across seeds)
         precision = precision.mean(axis=0)
         boot_precision = boot_precision.reshape(-1, boot_precision.shape[-1])
         recall = recall.mean(axis=0)
         boot_recall = boot_recall.reshape(-1, boot_recall.shape[-1])
-        tfluxes = tfluxes.reshape(-1)
-        tfluxes = tfluxes[~torch.isnan(tfluxes)]
-        efluxes = efluxes.reshape(-1)
-        efluxes = efluxes[~torch.isnan(efluxes)]
 
         # precision
         precision1 = boot_precision.quantile(0.25, 0)
@@ -405,9 +393,9 @@ def main(cfg):
     all_test_images, truth = load_coadd_dataset(test_path)
     seeds = cfg.results.seeds
     output_names = ["mag_bin_metrics", "boot_mag_bin_metrics", "matched_fluxes"]
+    background_obj = instantiate(cfg.datasets.galsim_blends.background)
 
     if cfg.results.overwrite:
-        background_obj = instantiate(cfg.datasets.galsim_blends.background)
         outputs = {model_name: {} for model_name in model_names}
 
         for seed in seeds:
@@ -429,7 +417,9 @@ def main(cfg):
                 # get all metrics from catalogs
                 bin_metrics = _compute_mag_bin_metrics(mag_bins, truth, est)
                 boot_metrics = _get_bootstrap_pr_err(10000, mag_bins, truth, est)
-                matched_fluxes = _get_matched_fluxes(truth, est)
+                matched_fluxes = _get_fluxes_cond_true_detections(
+                    encoder, truth, test_images, background
+                )
 
                 outputs[model_name][seed] = {
                     "mag_bin_metrics": bin_metrics,
@@ -448,10 +438,7 @@ def main(cfg):
 
         # stack data with different seeds
         raw_data = torch.load(cfg.results.cache_results)
-        data = _preprocess_data(raw_data, model_names, seeds)
-        data = _stack_data(data, model_names, output_names, seeds)
-
-        # figs.append(_create_coadd_example_plot(all_test_images))
+        data = _stack_data(raw_data, model_names, output_names, seeds)
 
         # create all figures
         figs = []
