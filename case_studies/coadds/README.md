@@ -34,3 +34,5 @@ python get_results.py # generate plots from cache
 
 The figures are saved as `.png` files in `./outputs/figs/{SEED}/` as default, where `SEED` is the value
 of the seed at the top of the config file.
+
+**NOTE:** Results for Neurips 2022 submission can be reproduced at commit [7b9f7aa](https://github.com/prob-ml/bliss/commit/7b9f7aaabd88b512e4d42432166a8ce319329bd9).
