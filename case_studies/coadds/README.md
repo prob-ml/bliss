@@ -35,4 +35,8 @@ python get_results.py # generate plots from cache
 The figures are saved as `.png` files in `./outputs/figs/{SEED}/` as default, where `SEED` is the value
 of the seed at the top of the config file.
 
-**NOTE:** Results for the ML4Science Neurips 2022 submission can be reproduced at commit [7b9f7aa](https://github.com/prob-ml/bliss/commit/7b9f7aaabd88b512e4d42432166a8ce319329bd9).
+## Updates
+
+- 11/20/22: Flux measurement comparison (and flux posterior calibration) now conditions on true detections allowing for star-by-star comparison between models. 
+
+- 11/16/22: Results for the ML4Science Neurips 2022 submission can be reproduced at commit [7b9f7aa](https://github.com/prob-ml/bliss/commit/7b9f7aaabd88b512e4d42432166a8ce319329bd9).
