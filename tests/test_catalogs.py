@@ -14,7 +14,7 @@ def test_multiple_sources_one_tile():
 
     with pytest.raises(ValueError) as error_info:
         full_cat.to_tile_params(1, 1, ignore_extra_sources=False)
-    assert error_info.value.args[0] == "Number of sources per tile exceeds `max_sources_per_tile`."
+    assert error_info.value.args[0] == "# of sources per tile exceeds `max_sources_per_tile`."
 
     # should return only first source in first tile.
     tile_cat = full_cat.to_tile_params(1, 1, ignore_extra_sources=True)
