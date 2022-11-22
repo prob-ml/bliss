@@ -20,7 +20,6 @@ scipy = "^1.4.1"
 seaborn = "^0.11.2"
 torch = "^1.9"
 torchmetrics = "^0.5.1"
-pytest-mypy = "^0.9.1"
 
 [tool.poetry.dev-dependencies]
 Cython = "^0.29.21"
@@ -40,14 +39,12 @@ pre-commit-hooks = "^4.0.1"
 pylint = "^2.6.0"
 pytest = "^6.1.2"
 pytest-cov = "^2.10"
-rope = "^0.18.0"
+pytest-mypy = "^0.9.1"
 scikit-learn = "^0.24.2"
 sphinx-rtd-theme = "^0.5.2"
-statsmodels = "^0.12.2"
 tox = "^3.20.1"
 tqdm = "^4.62.3"
 wemake-python-styleguide = "^0.16.1"
-mypy = "^0.942"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
