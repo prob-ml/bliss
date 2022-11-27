@@ -230,6 +230,7 @@ class DetectionEncoder(pl.LightningModule):
 
     @staticmethod
     def _loc_mean_func(x):
+        # I don't think the special case for `x == 0` should be necessary
         return torch.sigmoid(x) * (x != 0).float()
 
     def encode_for_n_sources(
@@ -270,9 +271,7 @@ class DetectionEncoder(pl.LightningModule):
         names = self.dist_param_groups.keys()
         params_n_srcs = dict(zip(names, dist_params_split))
 
-        # I don't think the special case for `x == 0` should be necessary
         params_n_srcs["loc_mean"] = self._loc_mean_func(params_n_srcs["loc_mean"])
-
         params_n_srcs["loc_sd"] = (params_n_srcs["loc_logvar"].exp() + 1e-5).sqrt()
         params_n_srcs["log_flux_sd"] = (params_n_srcs["log_flux_logvar"].exp() + 1e-5).sqrt()
 
