@@ -228,6 +228,10 @@ class DetectionEncoder(pl.LightningModule):
         log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
         return torch.cat((log_probs, log_probs_last.reshape(1)))
 
+    @staticmethod
+    def _loc_mean_func(x):
+        return torch.sigmoid(x) * (x != 0).float()
+
     def encode_for_n_sources(
         self, params_per_source: Tensor, tile_n_sources: Tensor
     ) -> Dict[str, Tensor]:
@@ -267,8 +271,7 @@ class DetectionEncoder(pl.LightningModule):
         params_n_srcs = dict(zip(names, dist_params_split))
 
         # I don't think the special case for `x == 0` should be necessary
-        loc_mean_func = lambda x: torch.sigmoid(x) * (x != 0).float()
-        params_n_srcs["loc_mean"] = loc_mean_func(params_n_srcs["loc_mean"])
+        params_n_srcs["loc_mean"] = self._loc_mean_func(params_n_srcs["loc_mean"])
 
         params_n_srcs["loc_sd"] = (params_n_srcs["loc_logvar"].exp() + 1e-5).sqrt()
         params_n_srcs["log_flux_sd"] = (params_n_srcs["log_flux_logvar"].exp() + 1e-5).sqrt()
