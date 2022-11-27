@@ -25,7 +25,8 @@ def train(cfg: DictConfig):
             if key == "output":
                 path.mkdir(parents=True)
             else:
-                raise FileNotFoundError(f"path for {key} ({path.as_posix()}) does not exist")
+                err = "path for {} ({}) does not exist".format(str(key), path.as_posix())
+                raise FileNotFoundError(err)
     pl.seed_everything(cfg.training.seed)
 
     # setup dataset.

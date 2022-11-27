@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -108,8 +108,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dim: int,
         hidden: int,
         n_bands: int,
-        optimizer_params: dict = None,
-        ckpt: str = None,
+        optimizer_params: Optional[dict] = None,
+        ckpt: Optional[str] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -123,7 +123,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.register_buffer("one", torch.ones(1))
 
         if ckpt is not None:
-            self.load_state_dict(torch.load(ckpt, map_location=self.device))
+            self.load_state_dict(torch.load(ckpt, map_location=self.device))  # type: ignore
 
     def forward(self, image, background):
         return self.reconstruct(image, background)

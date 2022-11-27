@@ -443,7 +443,7 @@ def plot_image(
     fig: Figure,
     ax: Axes,
     image: np.ndarray,
-    vrange: tuple = None,
+    vrange: Optional[tuple] = None,
     colorbar: bool = True,
     cmap="gray",
 ) -> None:

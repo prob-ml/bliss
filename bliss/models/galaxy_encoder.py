@@ -27,7 +27,7 @@ class GalaxyEncoder(pl.LightningModule):
         hidden: int,
         vae_flow: Optional[CenteredGalaxyLatentFlow] = None,
         vae_flow_ckpt: Optional[str] = None,
-        optimizer_params: dict = None,
+        optimizer_params: Optional[dict] = None,
         crop_loss_at_border=False,
         checkpoint_path: Optional[str] = None,
         max_flux_valid_plots: Optional[int] = None,
@@ -56,7 +56,10 @@ class GalaxyEncoder(pl.LightningModule):
             self.slen, autoencoder.latent_dim, self.n_bands, hidden
         )
         if vae_flow is not None:
-            vae_flow.load_state_dict(torch.load(vae_flow_ckpt, map_location=vae_flow.device))
+            if vae_flow_ckpt is None:
+                raise TypeError("Using `vae_flow` requires `vae_flow_ckpt`.")
+            state_dict = torch.load(vae_flow_ckpt, map_location=vae_flow.device)  # type: ignore
+            vae_flow.load_state_dict(state_dict)
             vae_flow.eval()
             vae_flow.requires_grad_(False)
             self.enc.p_z = vae_flow
@@ -320,7 +323,7 @@ class GalaxyEncoder(pl.LightningModule):
 
     def _get_images_in_centered_tiles(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
         n_bands = image_ptiles.shape[1] // 2
-        img, bg = torch.split(image_ptiles, (n_bands, n_bands), dim=1)
+        img, bg = torch.split(image_ptiles, [n_bands, n_bands], dim=1)
         return self.center_ptiles(img - bg, tile_locs)
 
     def configure_optimizers(self):

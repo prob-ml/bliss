@@ -1,6 +1,6 @@
 # pylint: disable=R
 
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -32,7 +32,7 @@ class LensingBinaryEncoder(pl.LightningModule):
         hidden: int,
         spatial_dropout: float,
         dropout: float,
-        optimizer_params: dict = None,
+        optimizer_params: Optional[dict] = None,
     ):
         """Encoder which conditioned on other source params returns probability of being lensed.
 
