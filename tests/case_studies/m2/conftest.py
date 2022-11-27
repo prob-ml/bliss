@@ -9,7 +9,7 @@ from tests.conftest import ModelSetup
 def get_m2_cfg(overrides, devices):
     overrides.update({"gpus": devices.gpus, "paths.root": Path(__file__).parents[3].as_posix()})
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
-    with initialize(config_path="."):
+    with initialize(config_path=".", version_base=None):
         cfg = compose("m2", overrides=overrides)
     return cfg
 

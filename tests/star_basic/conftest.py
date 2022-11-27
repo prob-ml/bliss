@@ -12,7 +12,7 @@ def get_star_basic_cfg(overrides, devices):
         {"training.weight_save_path": None, "paths.root": Path(__file__).parents[2].as_posix()}
     )
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
-    with initialize(config_path="."):
+    with initialize(config_path=".", version_base=None):
         cfg = compose("star_basic", overrides=overrides)
     return cfg
 

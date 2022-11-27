@@ -9,7 +9,8 @@ from tests.conftest import ModelSetup
 def get_vae_cfg(overrides, devices):
     overrides.update({"gpus": devices.gpus, "paths.root": Path(__file__).parents[3].as_posix()})
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
-    with initialize(config_path="../../../case_studies/sdss_galaxies_vae/config"):
+    config_path = "../../../case_studies/sdss_galaxies_vae/config"
+    with initialize(config_path=config_path, version_base=None):
         cfg = compose("config", overrides=overrides)
     return cfg
 
