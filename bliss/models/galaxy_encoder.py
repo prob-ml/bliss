@@ -317,7 +317,7 @@ class GalaxyEncoder(pl.LightningModule):
         fig.tight_layout()
         if self.logger:
             self.logger.experiment.add_figure(
-                f"Epoch:{self.current_epoch}/Worst Validation Images", fig
+                f"Epoch:{self.current_epoch}/Worst_Validation_Images", fig
             )
         plt.close(fig)
 

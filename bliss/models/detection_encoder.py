@@ -484,7 +484,7 @@ class DetectionEncoder(pl.LightningModule):
         fig.tight_layout()
         if self.logger:
             if kind == "validation":
-                title = f"Epoch:{self.current_epoch}/Validation Images"
+                title = f"Epoch:{self.current_epoch}/Validation_Images"
                 self.logger.experiment.add_figure(title, fig)
             elif kind == "testing":
                 self.logger.experiment.add_figure("Test Images", fig)

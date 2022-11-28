@@ -228,6 +228,6 @@ class LensingBinaryEncoder(pl.LightningModule):
 
         fig.tight_layout()
 
-        title = f"Epoch:{self.current_epoch}/Validation Images"
+        title = f"Epoch:{self.current_epoch}/Validation_Images"
         if self.logger is not None:
             self.logger.experiment.add_figure(title, fig)
