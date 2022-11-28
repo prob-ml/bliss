@@ -4,8 +4,8 @@ from bliss.models.decoder import ImageDecoder
 from bliss.models.prior import ImagePrior
 
 
-def test_get_ellips(devices, get_sdss_galaxies_config):
-    cfg = get_sdss_galaxies_config({}, devices)
+def test_get_ellips(get_sdss_galaxies_config):
+    cfg = get_sdss_galaxies_config({})
     image_prior: ImagePrior = instantiate(cfg.models.prior, prob_galaxy=1.0, mean_sources=0.33)
     decoder: ImageDecoder = instantiate(cfg.models.decoder)
     tile_cat = image_prior.sample_prior(decoder.tile_slen, 1, 3, 3)
