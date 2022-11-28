@@ -16,12 +16,12 @@ plt.switch_backend("Agg")
 plt.ioff()
 
 
-def _conv2d_out(x):
+def _conv2d_out_dim(x):
     """Function to figure out dimension of our Conv2D."""
     return (x - 5) // 3 + 1
 
 
-def _conv2d_inv(x):
+def _conv2d_inv_dim(x):
     return (x - 1) * 3 + 5
 
 
@@ -36,7 +36,7 @@ class CenteredGalaxyEncoder(nn.Module):
         self.slen = slen
         self.latent_dim = latent_dim
 
-        min_slen = _conv2d_out(_conv2d_out(slen))
+        min_slen = _conv2d_out_dim(_conv2d_out_dim(slen))
         wn = weight_norm if use_weight_norm else _identity
 
         self.features = nn.Sequential(
@@ -65,7 +65,7 @@ class CenteredGalaxyDecoder(nn.Module):
         super().__init__()
 
         self.slen = slen
-        self.min_slen = _conv2d_out(_conv2d_out(slen))
+        self.min_slen = _conv2d_out_dim(_conv2d_out_dim(slen))
         wn = weight_norm if use_weight_norm else _identity
 
         self.fc = nn.Sequential(
@@ -91,7 +91,7 @@ class CenteredGalaxyDecoder(nn.Module):
         return F.relu(z)
 
     def _validate_slen(self):
-        slen2 = _conv2d_inv(_conv2d_inv(self.min_slen))
+        slen2 = _conv2d_inv_dim(_conv2d_inv_dim(self.min_slen))
         if slen2 != self.slen:
             raise ValueError(f"The input slen '{self.slen}' is invalid.")
 
