@@ -125,7 +125,6 @@ def log_hyperparameters(config, model, trainer) -> None:
 
     # choose which parts of hydra config will be saved to loggers
     hparams["mode"] = config["mode"]
-    hparams["gpus"] = config["gpus"]
     hparams["training"] = config["training"]
     hparams["optimizer"] = config["training"]["optimizer_params"]
 
