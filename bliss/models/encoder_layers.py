@@ -9,7 +9,7 @@ class LogBackgroundTransform:
 
     def __call__(self, image_and_background: Tensor) -> Tensor:
         n_bands = image_and_background.shape[1] // 2
-        image, background = torch.split(image_and_background, (n_bands, n_bands), 1)
+        image, background = torch.split(image_and_background, [n_bands, n_bands], 1)
         return torch.log1p(
             F.relu(image - background + self.z_threshold * background.sqrt(), inplace=True)
         )

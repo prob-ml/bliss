@@ -1,4 +1,4 @@
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -30,7 +30,7 @@ class BinaryEncoder(pl.LightningModule):
         hidden: int,
         spatial_dropout: float,
         dropout: float,
-        optimizer_params: dict = None,
+        optimizer_params: Optional[dict] = None,
     ):
         """Encoder which conditioned on other source params returns probability of galaxy vs. star.
 
@@ -223,6 +223,6 @@ class BinaryEncoder(pl.LightningModule):
                 reporting.add_legend(ax, labels)
         fig.tight_layout()
 
-        title = f"Epoch:{self.current_epoch}/Validation Images"
+        title = f"Epoch:{self.current_epoch}/Validation_Images"
         if self.logger is not None:
             self.logger.experiment.add_figure(title, fig)

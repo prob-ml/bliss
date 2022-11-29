@@ -2,8 +2,8 @@ import torch
 from hydra.utils import instantiate
 
 
-def test_coadd_galsim_blend(get_coadds_config, devices):
-    cfg = get_coadds_config({}, devices)
+def test_coadd_galsim_blend(get_coadds_config):
+    cfg = get_coadds_config({})
     cgb = instantiate(cfg.datasets.galsim_blends_coadds)
     ds = cgb[0]
     size = cgb.slen + 2 * cgb.bp

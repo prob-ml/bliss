@@ -10,17 +10,18 @@ class GalaxyVAEPrior:
         self,
         latent_dim: int,
         vae_flow: Optional[CenteredGalaxyLatentFlow] = None,
-        vae_flow_ckpt: str = None,
+        vae_flow_ckpt: Optional[str] = None,
     ):
         self.latent_dim = latent_dim
-        if vae_flow is None:
+        if vae_flow is None or vae_flow_ckpt is None:
             self.flow = None
         else:
             self.flow = vae_flow
             assert self.latent_dim == self.flow.latent_dim
             self.flow.eval()
             self.flow.requires_grad_(False)
-            self.flow.load_state_dict(torch.load(vae_flow_ckpt, map_location=vae_flow.device))
+            state_dict = torch.load(vae_flow_ckpt, map_location=vae_flow.device)  # type: ignore
+            self.flow.load_state_dict(state_dict)
 
     def sample(self, n_latent_samples, device):
         if self.flow is None:

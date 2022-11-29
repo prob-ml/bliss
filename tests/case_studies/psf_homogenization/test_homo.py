@@ -22,9 +22,9 @@ def _check_flux(img, psf, new_psf, background):
     assert torch.abs(orig_sum - conv_sum2) < 0.01 * orig_sum
 
 
-def test_homo_sdssframe(get_config, devices):
+def test_homo_sdssframe(get_config):
     pixel_scale = 0.393
-    cfg = get_config({}, devices)
+    cfg = get_config({})
     sdss_dir = Path(cfg.paths.sdss)
     coadd_file = Path(cfg.paths.data).joinpath("coadd_catalog_94_1_12.fits")
     frame = SDSSFrame(sdss_dir, pixel_scale, coadd_file)

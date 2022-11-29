@@ -1,4 +1,5 @@
 import galsim
+import numpy as np
 import torch
 
 from case_studies.coadds.align import align_single_exposures
@@ -17,7 +18,7 @@ def test_galsim_align():
         im = g0.drawImage(nx=slen, ny=slen, scale=pixel_scale, offset=i, bandpass=None)
         im = im.array
         img.append(im)
-    img = torch.tensor(img)
+    img = torch.tensor(np.array(img))
     assert align_single_exposures(img0, img, slen, dithers).shape == torch.Size(
         [len(dithers), slen - 2, slen - 2]
     )

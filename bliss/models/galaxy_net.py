@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Optional, Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -16,6 +16,19 @@ plt.switch_backend("Agg")
 plt.ioff()
 
 
+def _conv2d_out_dim(x):
+    """Function to figure out dimension of our Conv2D."""
+    return (x - 5) // 3 + 1
+
+
+def _conv2d_inv_dim(x):
+    return (x - 1) * 3 + 5
+
+
+def _identity(x):
+    return x
+
+
 class CenteredGalaxyEncoder(nn.Module):
     def __init__(self, slen, latent_dim, n_bands, hidden, use_weight_norm=False):
         super().__init__()
@@ -23,9 +36,8 @@ class CenteredGalaxyEncoder(nn.Module):
         self.slen = slen
         self.latent_dim = latent_dim
 
-        f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
-        min_slen = f(f(slen))
-        wn = lambda x: weight_norm(x) if use_weight_norm else x
+        min_slen = _conv2d_out_dim(_conv2d_out_dim(slen))
+        wn = weight_norm if use_weight_norm else _identity
 
         self.features = nn.Sequential(
             wn(nn.Conv2d(n_bands, 4, 5, stride=3, padding=0)),
@@ -53,13 +65,9 @@ class CenteredGalaxyDecoder(nn.Module):
         super().__init__()
 
         self.slen = slen
-
-        f = lambda x: (x - 5) // 3 + 1  # function to figure out dimension of conv2d output.
-        g = lambda x: (x - 1) * 3 + 5
-        self.min_slen = f(f(slen))
-        assert g(g(self.min_slen)) == slen
-
-        wn = lambda x: weight_norm(x) if use_weight_norm else x
+        self.min_slen = _conv2d_out_dim(_conv2d_out_dim(slen))
+        self._validate_slen()
+        wn = weight_norm if use_weight_norm else _identity
 
         self.fc = nn.Sequential(
             wn(nn.Linear(latent_dim, hidden)),
@@ -83,6 +91,11 @@ class CenteredGalaxyDecoder(nn.Module):
         assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
         return F.relu(z)
 
+    def _validate_slen(self):
+        slen2 = _conv2d_inv_dim(_conv2d_inv_dim(self.min_slen))
+        if slen2 != self.slen:
+            raise ValueError(f"The input slen '{self.slen}' is invalid.")
+
 
 class OneCenteredGalaxyAE(pl.LightningModule):
 
@@ -96,8 +109,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dim: int,
         hidden: int,
         n_bands: int,
-        optimizer_params: dict = None,
-        ckpt: str = None,
+        optimizer_params: Optional[dict] = None,
+        ckpt: Optional[str] = None,
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -111,7 +124,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.register_buffer("one", torch.ones(1))
 
         if ckpt is not None:
-            self.load_state_dict(torch.load(ckpt, map_location=self.device))
+            self.load_state_dict(torch.load(ckpt, map_location=self.device))  # type: ignore
 
     def forward(self, image, background):
         return self.reconstruct(image, background)
