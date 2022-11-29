@@ -3,10 +3,10 @@ name: case studies
 on:
   schedule:
     # run daily at 8 am UTC = 4 am EDT
-    - cron: '0 8 * * *'
+    - cron: "0 8 * * *"
 
 jobs:
-# from https://stackoverflow.com/questions/63014786/how-to-schedule-a-github-actions-nightly-build-but-run-it-only-when-there-where
+  # from https://stackoverflow.com/questions/63014786/how-to-schedule-a-github-actions-nightly-build-but-run-it-only-when-there-where
   check_date:
     runs-on: self-hosted
     name: Check latest commit
@@ -54,7 +54,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install "poetry-core>=1.0.0"
-          pip install "poetry==1.1.11"
+          pip install "poetry>=1.2.2"
 
       - name: Poetry cache
         uses: actions/cache@v2
