@@ -29,7 +29,7 @@ class LensEncoder(pl.LightningModule):
         channel: int,
         spatial_dropout: float,
         dropout: float,
-        optimizer_params: dict = None,
+        optimizer_params: Optional[dict] = None,
         checkpoint_path: Optional[str] = None,
     ):
         super().__init__()
@@ -200,7 +200,7 @@ class LensEncoder(pl.LightningModule):
 
     def _get_images_in_centered_tiles(self, image_ptiles: Tensor, tile_locs: Tensor) -> Tensor:
         n_bands = image_ptiles.shape[1] // 2
-        img, bg = torch.split(image_ptiles, (n_bands, n_bands), dim=1)
+        img, bg = torch.split(image_ptiles, [n_bands, n_bands], dim=1)
         return self.center_ptiles(img - bg, tile_locs)
 
     def _get_params_logprob(self, lensed_galaxy_bools, true_params, params):

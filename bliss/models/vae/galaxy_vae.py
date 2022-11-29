@@ -58,5 +58,5 @@ class CenteredGalaxyVencoder(CenteredGalaxyEncoder):
 
     def _encode(self, image: Tensor) -> Normal:
         encoded = self.features(image)
-        mean, logvar = torch.split(encoded, (self.latent_dim, self.latent_dim), -1)
+        mean, logvar = torch.split(encoded, [self.latent_dim, self.latent_dim], -1)
         return Normal(mean, F.softplus(logvar) + 1e-3)

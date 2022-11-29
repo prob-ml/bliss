@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pytorch_lightning as pl
 import torch
 from matplotlib import pyplot as plt
@@ -13,15 +15,14 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
         self,
         vae: OneCenteredGalaxyVAE,
         vae_ckpt: str,
-        optimizer_params: dict = None,
         n_layers=10,
+        optimizer_params: Optional[dict] = None,
     ):
         super().__init__()
 
         self.optimizer_params = optimizer_params
         # Embed the autoencoder
-        # assert vae_ckpt is not None
-        vae.load_state_dict(torch.load(vae_ckpt, map_location=vae.device))
+        vae.load_state_dict(torch.load(vae_ckpt, map_location=vae.device))  # type:ignore
         self.encoder = vae.get_encoder().eval()
         self.encoder.requires_grad_(False)
 

@@ -20,7 +20,7 @@ class GalaxyPrior:
         latents_file: str,
         n_latent_batches: Optional[int] = None,
         autoencoder: Optional[OneCenteredGalaxyAE] = None,
-        autoencoder_ckpt: str = None,
+        autoencoder_ckpt: Optional[str] = None,
         galaxy_dataset: Optional[Union[SingleGalsimGalaxies, ToyGaussian]] = None,
     ):
         """Class to sample galaxy latent variables.

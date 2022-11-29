@@ -1,5 +1,5 @@
 """Functions to evaluate the performance of BLISS predictions."""
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import galsim
 import matplotlib as mpl
@@ -28,6 +28,7 @@ class DetectionMetrics(Metric):
     fp: Tensor
     avg_distance: Tensor
     tp_gal: Tensor
+    full_state_update: Optional[bool] = True
 
     def __init__(
         self,
@@ -113,6 +114,7 @@ class ClassificationMetrics(Metric):
     total_coadd_gal_matches: Tensor
     total_correct_class: Tensor
     conf_matrix: Tensor
+    full_state_update: Optional[bool] = True
 
     def __init__(
         self,
@@ -441,7 +443,7 @@ def plot_image(
     fig: Figure,
     ax: Axes,
     image: np.ndarray,
-    vrange: tuple = None,
+    vrange: Optional[tuple] = None,
     colorbar: bool = True,
     cmap="gray",
 ) -> None:
@@ -478,7 +480,7 @@ def plot_locs(
     y = plocs[:, 0] - 0.5 + bp
     for i, (xi, yi) in enumerate(zip(x, y)):
         prob = galaxy_probs[i]
-        cmp = mpl.cm.get_cmap(cmap)
+        cmp = mpl.colormaps[cmap]
         color = cmp(prob)
         if bp < xi < slen - bp and bp < yi < slen - bp:
             ax.scatter(xi, yi, color=color, marker=m, s=s, lw=lw, alpha=alpha)
@@ -487,8 +489,8 @@ def plot_locs(
 
 
 def add_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s=20):
-    cmp1 = mpl.cm.get_cmap(cmap1)
-    cmp2 = mpl.cm.get_cmap(cmap2)
+    cmp1 = mpl.colormaps[cmap1]
+    cmp2 = mpl.colormaps[cmap2]
     colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
     markers = ("+", "+", "x", "x")
     sizes = (s * 2, s * 2, s + 5, s + 5)

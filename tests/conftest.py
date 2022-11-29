@@ -18,13 +18,12 @@ def pytest_addoption(parser):
     )
 
 
-def get_cfg(overrides, devices):
-    overrides.update({"gpus": devices.gpus})
+def get_cfg(overrides):
     overrides.update(
         {"training.weight_save_path": None, "paths.root": Path(__file__).parents[1].as_posix()}
     )
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
-    with initialize(config_path="../case_studies/sdss_galaxies/config"):
+    with initialize(config_path="../case_studies/sdss_galaxies/config", version_base=None):
         cfg = compose("config", overrides=overrides)
     return cfg
 
@@ -32,7 +31,7 @@ def get_cfg(overrides, devices):
 class DeviceSetup:
     def __init__(self, use_gpu):
         self.use_cuda = torch.cuda.is_available() if use_gpu else False
-        self.gpus = 1 if self.use_cuda else None
+        self.accelerator = "gpu" if self.use_cuda else "cpu"
         self.device = torch.device("cpu")
         if self.use_cuda:
             self.device = torch.device("cuda:0")
@@ -44,7 +43,7 @@ class ModelSetup:
         self.devices = devices
 
     def get_cfg(self, overrides):
-        return get_cfg(overrides, self.devices)
+        return get_cfg(overrides)
 
     def get_trainer(self, overrides):
         overrides.update(
@@ -56,6 +55,7 @@ class ModelSetup:
                 "training.trainer.enable_checkpointing": False,
                 "training.weight_save_path": None,
                 "training.trainer.profiler": None,
+                "training.trainer.accelerator": self.devices.accelerator,
             }
         )
         cfg = self.get_cfg(overrides)

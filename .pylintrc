@@ -45,7 +45,6 @@ disable=too-many-ancestors,
 	fixme,
 
 	# problems in the tests directory
-	no-self-use,
 	redefined-outer-name,
 
 	# when overriding methods you don't get to pick your arguments

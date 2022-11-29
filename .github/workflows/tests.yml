@@ -39,7 +39,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install "poetry-core>=1.0.0"
-          pip install "poetry==1.1.11"
+          pip install "poetry>=1.2.2"
 
       - name: Install fftw3
         run: |

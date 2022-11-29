@@ -43,7 +43,7 @@ class DetectionEncoder(pl.LightningModule):
         spatial_dropout: float,
         annotate_probs: bool = False,
         slack=1.0,
-        optimizer_params: dict = None,
+        optimizer_params: Optional[dict] = None,
     ):
         """Initializes DetectionEncoder.
 
@@ -110,9 +110,9 @@ class DetectionEncoder(pl.LightningModule):
         # There is one row for each possible number of detections (including zero).
         # Each row contains the indices of the relevant detections, padded by a dummy value.
         md, ntd = self.max_detections, self.n_total_detections
-        n_detections_map = torch.full((md + 1, md), ntd, device=self.device)
-        tri = torch.tril_indices(md, md, device=self.device)
-        n_detections_map[tri[0] + 1, tri[1]] = torch.arange(ntd, device=self.device)
+        n_detections_map = torch.full((md + 1, md), ntd, device=self.device)  # type: ignore
+        tri = torch.tril_indices(md, md, device=self.device)  # type: ignore
+        n_detections_map[tri[0] + 1, tri[1]] = torch.arange(ntd, device=self.device)  # type: ignore
         self.register_buffer("n_detections_map", n_detections_map)
 
         # plotting
@@ -144,7 +144,7 @@ class DetectionEncoder(pl.LightningModule):
         dim_out_all = enc_final_output.shape[1]
         dim_per_source_params = dim_out_all - (self.max_detections + 1)
         per_source_params, n_source_free_probs = torch.split(
-            enc_final_output, (dim_per_source_params, self.max_detections + 1), dim=1
+            enc_final_output, [dim_per_source_params, self.max_detections + 1], dim=1
         )
         per_source_params = rearrange(
             per_source_params,
@@ -178,7 +178,8 @@ class DetectionEncoder(pl.LightningModule):
             Consists of `"n_sources", "locs", "star_log_fluxes", and "star_fluxes"`.
         """
         if n_source_weights is None:
-            n_source_weights = torch.ones(self.max_detections + 1, device=self.device)
+            max_n_weights = self.max_detections + 1
+            n_source_weights = torch.ones(max_n_weights, device=self.device)  # type: ignore
         n_source_weights = n_source_weights.reshape(1, -1)
         ns_log_probs_adj = dist_params["n_source_log_probs"] + n_source_weights.log()
         ns_log_probs_adj -= ns_log_probs_adj.logsumexp(dim=-1, keepdim=True)
@@ -228,6 +229,11 @@ class DetectionEncoder(pl.LightningModule):
         log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
         return torch.cat((log_probs, log_probs_last.reshape(1)))
 
+    @staticmethod
+    def _loc_mean_func(x):
+        # I don't think the special case for `x == 0` should be necessary
+        return torch.sigmoid(x) * (x != 0).float()
+
     def encode_for_n_sources(
         self, params_per_source: Tensor, tile_n_sources: Tensor
     ) -> Dict[str, Tensor]:
@@ -266,10 +272,7 @@ class DetectionEncoder(pl.LightningModule):
         names = self.dist_param_groups.keys()
         params_n_srcs = dict(zip(names, dist_params_split))
 
-        # I don't think the special case for `x == 0` should be necessary
-        loc_mean_func = lambda x: torch.sigmoid(x) * (x != 0).float()
-        params_n_srcs["loc_mean"] = loc_mean_func(params_n_srcs["loc_mean"])
-
+        params_n_srcs["loc_mean"] = self._loc_mean_func(params_n_srcs["loc_mean"])
         params_n_srcs["loc_sd"] = (params_n_srcs["loc_logvar"].exp() + 1e-5).sqrt()
         params_n_srcs["log_flux_sd"] = (params_n_srcs["log_flux_logvar"].exp() + 1e-5).sqrt()
 
@@ -481,7 +484,7 @@ class DetectionEncoder(pl.LightningModule):
         fig.tight_layout()
         if self.logger:
             if kind == "validation":
-                title = f"Epoch:{self.current_epoch}/Validation Images"
+                title = f"Epoch:{self.current_epoch}/Validation_Images"
                 self.logger.experiment.add_figure(title, fig)
             elif kind == "testing":
                 self.logger.experiment.add_figure("Test Images", fig)
