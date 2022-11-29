@@ -66,6 +66,7 @@ class CenteredGalaxyDecoder(nn.Module):
 
         self.slen = slen
         self.min_slen = _conv2d_out_dim(_conv2d_out_dim(slen))
+        self._validate_slen()
         wn = weight_norm if use_weight_norm else _identity
 
         self.fc = nn.Sequential(
