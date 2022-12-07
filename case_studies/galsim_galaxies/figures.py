@@ -21,6 +21,8 @@ from bliss.models.psf_decoder import PSFDecoder
 from bliss.plotting import BlissFigure, plot_image, scatter_bin_plot
 from bliss.reporting import match_by_locs
 
+ALL_FIGS = {"single_gal", "blend_gal"}
+
 
 class AutoEncoderReconRandom(BlissFigure):
     def __init__(self, *args, n_examples: int = 5, **kwargs) -> None:
@@ -153,6 +155,10 @@ class AutoEncoderReconRandom(BlissFigure):
 
 
 class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
+    @property
+    def name(self) -> str:
+        return "ae_bin_residuals"
+
     @property
     def rc_kwargs(self):
         return {"fontsize": 24}
@@ -386,32 +392,33 @@ def load_models(cfg, device):
 
 
 def setup(cfg):
-    figs = set(cfg.plots.figs)
-    cachedir = cfg.plots.cachedir
-    device = torch.device(cfg.plots.device)
+    pcfg = cfg.plots
+    figs = set(pcfg.figs)
+    cachedir = pcfg.cachedir
+    device = torch.device(pcfg.device)
     bfig_kwargs = {
-        "figdir": cfg.plots.figdir,
+        "figdir": pcfg.figdir,
         "cachedir": cachedir,
-        "overwrite": cfg.plots.overwrite,
-        "img_format": cfg.plots.image_format,
+        "img_format": pcfg.image_format,
     }
 
     if not Path(cachedir).exists():
         warnings.warn("Specified cache directory does not exist, will attempt to create it.")
         Path(cachedir).mkdir(exist_ok=True, parents=True)
 
+    assert set(figs).issubset(ALL_FIGS)
     return figs, device, bfig_kwargs
 
 
-def make_autoencoder_figures(cfg, bfig_kwargs, device):
+def make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
     print("INFO: Creating autoencoder figures...")
     autoencoder = instantiate(cfg.models.galaxy_net)
     autoencoder.load_state_dict(torch.load(cfg.models.prior.galaxy_prior.autoencoder_ckpt))
     autoencoder = autoencoder.to(device).eval()
 
     # generate galsim simulated galaxies images if file does not exist.
-    galaxies_file = Path(cfg.plots.simulated_sdss_individual_galaxies)
-    if not galaxies_file.exists() or cfg.plots.overwrite:
+    galaxies_file = Path(cfg.plots.sim_single_gals_file)
+    if not galaxies_file.exists() or overwrite:
         print(f"INFO: Generating individual galaxy images and saving to: {galaxies_file}")
         dataset = instantiate(
             cfg.datasets.sdss_galaxies, batch_size=512, n_batches=20, num_workers=20
@@ -427,40 +434,38 @@ def make_autoencoder_figures(cfg, bfig_kwargs, device):
     args = (autoencoder, galaxies_file, psf_params_file, sdss_pixel_scale)
 
     # create figure classes and plot.
-    AutoEncoderReconRandom(n_examples=5, **bfig_kwargs)(*args)
-    AutoEncoderBinMeasurements(**bfig_kwargs)(*args)
+    AutoEncoderReconRandom(n_examples=5, overwrite=overwrite, **bfig_kwargs)(*args)
+    AutoEncoderBinMeasurements(overwrite=False, **bfig_kwargs)(*args)
     mpl.rc_file_defaults()
 
 
-def make_blend_figures(cfg, encoder, decoder, bfig_kwargs):
+def make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dict):
     print("INFO: Creating figures for metrics on simulated blended galaxies.")
-    blend_file = Path(cfg.simulated_blended_galaxies)
+    blend_file = Path(cfg.plots.sim_blend_gals_file)
 
     # create dataset of blends if not existant.
-    if not blend_file.exists() or cfg.overwrite:
+    if not blend_file.exists() or cfg.plots.overwrite:
         print(f"INFO: Creating dataset of simulated galsim blends and saving to {blend_file}")
-        dataset = instantiate(cfg.galsim_blended_galaxies)
+        dataset = instantiate(cfg.plots.galsim_blends)
         imagepath = blend_file.parent / (blend_file.stem + "_images.png")
         global_params = ("background", "slen")
         generate.generate(dataset, blend_file, imagepath, n_plots=25, global_params=global_params)
 
-    BlendGalsimFigure(**bfig_kwargs)(blend_file, encoder, decoder)
+    BlendGalsimFigure(overwrite=overwrite, **bfig_kwargs)(blend_file, encoder, decoder)
 
 
-@hydra.main(config_path="../config", config_name="config")
+@hydra.main(config_path="./config", config_name="config", version_base=None)
 def main(cfg):
-    plots_cfg = cfg.plots
-    figs, device, bfig_kwargs = setup(plots_cfg)
-    encoder, decoder = load_models(plots_cfg, device)
+    figs, device, bfig_kwargs = setup(cfg)
+    encoder, decoder = load_models(cfg, device)
+    overwrite = cfg.plots.overwrite
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if "single_gal" in figs:
-        make_autoencoder_figures(plots_cfg, bfig_kwargs, device)
+        make_autoencoder_figures(cfg, device, overwrite, bfig_kwargs)
 
     if "blend_gal" in figs:
-        make_blend_figures(plots_cfg, encoder, decoder, bfig_kwargs)
-
-    assert set(figs).issubset({"single_gal", "blend_gal"})
+        make_blend_figures(cfg, encoder, decoder, overwrite, bfig_kwargs)
 
 
 if __name__ == "__main__":

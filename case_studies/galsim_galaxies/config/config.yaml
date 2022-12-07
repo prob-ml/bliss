@@ -14,7 +14,7 @@ paths:
     root: ${oc.env:BLISS_HOME}
     sdss: ${paths.root}/data/sdss
     data: ${paths.root}/data
-    project: ${paths.root}/case_studies/sdss_galaxies
+    project: ${paths.root}/case_studies/galsim_galaxies
     output: ${paths.project}/output
 
 datasets:
