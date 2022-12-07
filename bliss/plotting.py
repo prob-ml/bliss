@@ -40,7 +40,7 @@ def _to_numpy(d: dict):
     return d
 
 
-def _set_rc_params(
+def set_rc_params(
     figsize=(10, 10),
     fontsize=18,
     title_size="large",
@@ -143,12 +143,12 @@ class BlissFigure:
 
     def __call__(self, *args, **kwargs):
         """Create figures and save to output directory with names from `self.fignames`."""
-        _set_rc_params(**self.rc_kwargs)
+        set_rc_params(**self.rc_kwargs)
         data = self.get_data(*args, **kwargs)
         data_np = _to_numpy(data)
         fig: Figure = self.create_figure(data_np)  # data for figures is all numpy arrays or floats.
         figfile = self.figdir / f"{self.name}.{self.img_format}"
-        fig.savefig(figfile, format=self.img_format)  # disable=pylint
+        fig.savefig(figfile, format=self.img_format)  # pylint: disable=no-member
         plt.close(fig)
 
 
