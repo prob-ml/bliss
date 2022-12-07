@@ -8,7 +8,7 @@ from hydra.utils import instantiate
 from joblib import Parallel, delayed
 from tqdm import tqdm
 
-from .coadds import CoaddGalsimBlends
+from case_studies.coadds.coadds import CoaddGalsimBlends
 
 
 def task(ds: CoaddGalsimBlends, n_dithers):
