@@ -18,8 +18,7 @@ from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.plotting import CB_color_cycle, set_rc_params
 from bliss.reporting import DetectionMetrics, match_by_locs
-
-from .coadds import load_coadd_dataset  # pylint: disable=relative-beyond-top-level
+from case_studies.coadds.coadds import load_coadd_dataset
 
 device = torch.device("cuda:0")
 
