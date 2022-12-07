@@ -35,7 +35,7 @@ from bliss.models.decoder import ImageDecoder
 from bliss.models.detection_encoder import DetectionEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.prior import ImagePrior
-from case_studies.sdss_galaxies.plots.bliss_figures import set_rc_params
+from bliss.plotting import set_rc_params
 
 Frame = Union[SDSSFrame, SimulatedFrame, SemiSyntheticFrame]
 
