@@ -21,119 +21,8 @@ from bliss.plotting import BlissFigure, add_loc_legend, plot_image, plot_locs
 from bliss.reporting import compute_mag_bin_metrics
 
 
-class SDSSReconstructionFigures(BlissFigure):
-    cache = "recon_sdss.pt"
-
-    def __init__(self, scenes: dict, *args, **kwargs) -> None:
-        self.scenes = scenes
-        super().__init__(*args, **kwargs)
-
-    @property
-    def rc_kwargs(self):
-        return {"fontsize": 22, "tick_label_size": "small", "legend_fontsize": "small"}
-
-    @property
-    def name(self) -> str:
-        return "sdss_recon"
-
-    def compute_data(
-        self, frame: Union[SDSSFrame, SimulatedFrame], encoder: Encoder, decoder: ImageDecoder
-    ):
-        data = {}
-        for figname, scene_coords in self.scenes.items():
-            h, w, scene_size = scene_coords["h"], scene_coords["w"], scene_coords["size"]
-            assert scene_size <= 300, "Scene too large, change slen."
-            h_end = h + scene_size
-            w_end = w + scene_size
-            true = frame.image[:, :, h:h_end, w:w_end]
-            coadd_params = frame.get_catalog((h, h_end), (w, w_end))
-
-            recon, tile_map_recon = reconstruct_scene_at_coordinates(
-                encoder,
-                decoder,
-                frame.image,
-                frame.background,
-                h_range=(h, h_end),
-                w_range=(w, w_end),
-            )
-            resid = (true - recon) / recon.sqrt()
-
-            tile_map_recon = tile_map_recon.cpu()
-            recon_map = tile_map_recon.to_full_params()
-
-            # get BLISS probability of n_sources in coadd locations.
-            coplocs = coadd_params.plocs.reshape(-1, 2)
-            prob_n_sources = tile_map_recon.get_tile_params_at_coord(coplocs)["n_source_log_probs"]
-            prob_n_sources = prob_n_sources.exp()
-
-            true = true.cpu()
-            recon = recon.cpu()
-            resid = resid.cpu()
-            data[figname] = {
-                "true": true[0, 0],
-                "recon": recon[0, 0],
-                "resid": resid[0, 0],
-                "coplocs": coplocs,
-                "cogbools": coadd_params["galaxy_bools"].reshape(-1),
-                "plocs": recon_map.plocs.reshape(-1, 2),
-                "gprobs": recon_map["galaxy_probs"].reshape(-1),
-                "prob_n_sources": prob_n_sources,
-            }
-
-        return data
-
-    def create_figures(self, data):  # pylint: disable=too-many-statements
-        """Make figures related to reconstruction in SDSS."""
-        out_figures = {}
-
-        pad = 6.0
-        for figname, scene_coords in self.scenes.items():
-            slen = scene_coords["size"]
-            dvalues = data[figname].values()
-            true, recon, res, coplocs, cogbools, plocs, gprobs, prob_n_sources = dvalues
-            assert slen == true.shape[-1] == recon.shape[-1] == res.shape[-1]
-            fig, (ax_true, ax_recon, ax_res) = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
-
-            ax_true.set_title("Original Image", pad=pad)
-            ax_recon.set_title("Reconstruction", pad=pad)
-            ax_res.set_title("Residual", pad=pad)
-
-            s = 55 * 300 / slen  # marker size
-            sp = s * 1.5
-            lw = 2 * np.sqrt(300 / slen)
-
-            vrange1 = (800, 1100)
-            vrange2 = (-5, 5)
-            labels = ["Coadd Galaxies", "Coadd Stars", "BLISS Galaxies", "BLISS Stars"]
-            plot_image(fig, ax_true, true, vrange1)
-            plot_locs(ax_true, 0, slen, coplocs, cogbools, "+", sp, lw, cmap="cool")
-            plot_locs(ax_true, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr")
-
-            plot_image(fig, ax_recon, recon, vrange1)
-            plot_locs(ax_recon, 0, slen, coplocs, cogbools, "+", sp, lw, cmap="cool")
-            plot_locs(ax_recon, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr")
-            add_loc_legend(ax_recon, labels, s=s)
-
-            plot_image(fig, ax_res, res, vrange2)
-            plot_locs(ax_res, 0, slen, coplocs, cogbools, "+", sp, lw, cmap="cool", alpha=0.5)
-            plot_locs(ax_res, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr", alpha=0.5)
-            plt.subplots_adjust(hspace=-0.4)
-            plt.tight_layout()
-
-            # plot probability of detection in each true object for blends
-            if "blend" in figname:
-                for ii, ploc in enumerate(coplocs.reshape(-1, 2)):
-                    prob = prob_n_sources[ii].item()
-                    x, y = ploc[1] + 0.5, ploc[0] + 0.5
-                    text = r"$\boldsymbol{" + f"{prob:.2f}" + "}$"
-                    ax_true.annotate(text, (x, y), color="lime")
-
-            out_figures[figname] = fig
-
-        return out_figures
-
-
 def _compute_detection_metrics(truth: FullCatalog, pred: FullCatalog):
+    """Return dictionary containing all metrics between true and predicted catalog."""
 
     # prepare magnitude bins
     mag_cuts2 = torch.arange(18, 24.5, 0.25)
@@ -225,17 +114,170 @@ def _make_detection_figure(
     return fig
 
 
-class BLISSDetectionFigureCuts(BlissFigure):
+def _make_classification_figure(
+    mags,
+    data,
+    cuts_or_bins="cuts",
+    xlims=(18, 24),
+    ylims=(0.5, 1.05),
+    ratio=2,
+    where_step="mid",
+    n_gap=50,
+):
+    # classification accuracy
+    class_acc = data["class_acc"]
+    galaxy_acc = data["galaxy_acc"]
+    star_acc = data["star_acc"]
+    fig, (ax1, ax2) = plt.subplots(
+        2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
+    )
+    xlabel = r"\rm magnitude " + cuts_or_bins[:-1]
+    ax2.plot(mags, galaxy_acc, "-o", label=r"\rm galaxy")
+    ax2.plot(mags, star_acc, "-o", label=r"\rm star")
+    ax2.plot(mags, class_acc, "-o", label=r"\rm overall")
+    ax2.set_xlim(xlims)
+    ax2.set_ylim(ylims)
+    ax2.set_xlabel(xlabel)
+    ax2.set_ylabel("classification accuracy")
+    ax2.legend(loc="lower left", prop={"size": 18})
+
+    # setup histogram up top.
+    gcounts = data["n_matches_coadd_gal"]
+    scounts = data["n_matches_coadd_star"]
+    ax1.step(mags, gcounts, label=r"\rm matched coadd galaxies", where=where_step)
+    ax1.step(mags, scounts, label=r"\rm matched coadd stars", where=where_step)
+    ymax = max(max(gcounts), max(scounts))
+    ymax = np.ceil(ymax / n_gap) * n_gap
+    yticks = np.arange(0, ymax, n_gap)
+    ax1.legend(loc="best", prop={"size": 16})
+    ax1.set_ylim((0, ymax))
+    ax1.set_yticks(yticks)
+    ax1.set_ylabel(r"\rm Counts")
+    plt.subplots_adjust(hspace=0)
+
+    return fig
+
+
+class SDSSReconstructionFigures(BlissFigure):
+    cache = "recon_sdss.pt"
+
+    def __init__(self, scene_name: str, scene_data: dict, *args, **kwargs) -> None:
+        self.scene_name = scene_name
+        self.scene_data = scene_data
+        super().__init__(*args, **kwargs)
+
+    @property
+    def rc_kwargs(self):
+        return {"fontsize": 22, "tick_label_size": "small", "legend_fontsize": "small"}
+
+    @property
+    def cache_name(self) -> str:
+        return self.name
+
+    @property
+    def name(self) -> str:
+        return f"sdss_recon_{self.scene_name}"
+
+    def compute_data(
+        self, frame: Union[SDSSFrame, SimulatedFrame], encoder: Encoder, decoder: ImageDecoder
+    ):
+        h, w, scene_size = self.scene_data["h"], self.scene_data["w"], self.scene_data["size"]
+        assert scene_size <= 300, "Scene too large, change slen."
+        h_end = h + scene_size
+        w_end = w + scene_size
+        true = frame.image[:, :, h:h_end, w:w_end]
+        coadd_params = frame.get_catalog((h, h_end), (w, w_end))
+
+        recon, tile_map_recon = reconstruct_scene_at_coordinates(
+            encoder,
+            decoder,
+            frame.image,
+            frame.background,
+            h_range=(h, h_end),
+            w_range=(w, w_end),
+        )
+        resid = (true - recon) / recon.sqrt()
+
+        tile_map_recon = tile_map_recon.cpu()
+        recon_map = tile_map_recon.to_full_params()
+
+        # get BLISS probability of n_sources in coadd locations.
+        coplocs = coadd_params.plocs.reshape(-1, 2)
+        prob_n_sources = tile_map_recon.get_tile_params_at_coord(coplocs)["n_source_log_probs"]
+        prob_n_sources = prob_n_sources.exp()
+
+        true = true.cpu()
+        recon = recon.cpu()
+        resid = resid.cpu()
+        return {
+            "true": true[0, 0],
+            "recon": recon[0, 0],
+            "resid": resid[0, 0],
+            "coplocs": coplocs,
+            "cogbools": coadd_params["galaxy_bools"].reshape(-1),
+            "plocs": recon_map.plocs.reshape(-1, 2),
+            "gprobs": recon_map["galaxy_probs"].reshape(-1),
+            "prob_n_sources": prob_n_sources,
+        }
+
+    def create_figure(self, data) -> Figure:
+        """Make figures related to reconstruction in SDSS."""
+
+        pad = 6.0
+        slen = self.scene_data["size"]
+        true, recon, res, coplocs, cogbools, plocs, gprobs, prob_n_sources = data.values()
+        assert slen == true.shape[-1] == recon.shape[-1] == res.shape[-1]
+        fig, (ax_true, ax_recon, ax_res) = plt.subplots(nrows=1, ncols=3, figsize=(28, 12))
+
+        ax_true.set_title("Original Image", pad=pad)
+        ax_recon.set_title("Reconstruction", pad=pad)
+        ax_res.set_title("Residual", pad=pad)
+
+        s = 55 * 300 / slen  # marker size
+        sp = s * 1.5
+        lw = 2 * np.sqrt(300 / slen)
+
+        vrange1 = (800, 1100)
+        vrange2 = (-5, 5)
+        labels = ["Coadd Galaxies", "Coadd Stars", "BLISS Galaxies", "BLISS Stars"]
+        plot_image(fig, ax_true, true, vrange1)
+        plot_locs(ax_true, 0, slen, coplocs, cogbools, "+", sp, lw, cmap="cool")
+        plot_locs(ax_true, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr")
+
+        plot_image(fig, ax_recon, recon, vrange1)
+        plot_locs(ax_recon, 0, slen, coplocs, cogbools, "+", sp, lw, cmap="cool")
+        plot_locs(ax_recon, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr")
+        add_loc_legend(ax_recon, labels, s=s)
+
+        plot_image(fig, ax_res, res, vrange2)
+        plot_locs(ax_res, 0, slen, coplocs, cogbools, "+", sp, lw, cmap="cool", alpha=0.5)
+        plot_locs(ax_res, 0, slen, plocs, gprobs, "x", s, lw, cmap="bwr", alpha=0.5)
+        plt.subplots_adjust(hspace=-0.4)
+        plt.tight_layout()
+
+        # plot probability of detection in each true object for blends
+        if "blend" in self.name:
+            for ii, ploc in enumerate(coplocs.reshape(-1, 2)):
+                prob = prob_n_sources[ii].item()
+                x, y = ploc[1] + 0.5, ploc[0] + 0.5
+                text = r"$\boldsymbol{" + f"{prob:.2f}" + "}$"
+                ax_true.annotate(text, (x, y), color="lime")
+
+        return fig
+
+
+class BlissDetectionCutsFigure(BlissFigure):
     @property
     def cache_name(self) -> str:
         return "sdss_detection"
 
     @property
     def name(self) -> str:
-        return "sdss_bliss_detection"
+        return "sdss_bliss_detection_cuts"
 
     @property
     def rc_kwargs(self):
+        sns.set_theme(style="darkgrid")
         return {"tick_label_size": 22, "label_size": 30}
 
     def compute_data(
@@ -271,90 +313,50 @@ class BLISSDetectionFigureCuts(BlissFigure):
         return _make_detection_figure(mag_cuts, cuts_data, ylims=(0.5, 1.03))
 
 
-class BLISSDetectionFigureBins(BLISSDetectionFigureCuts):
-    def create_figure(self, data) -> Figure:
-        mag_bins = data["bliss_metrics"]["mag_bins"]
-        bins_data = data["bliss_metrics"]["bins_data"]
-        return _make_detection_figure(
-            mag_bins - 0.5, bins_data, xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
-        )
-
-
-class BLISSClassificationFigure(BLISSDetectionFigure):
+class BlissDetectionBinsFigure(BlissDetectionCutsFigure):
     @property
     def name(self) -> str:
-        return "sdss_bliss_classification"
+        return "sdss_bliss_detection_bins"
 
-    @staticmethod
-    def _make_classification_figure(
-        mags,
-        data,
-        cuts_or_bins="cuts",
-        xlims=(18, 24),
-        ylims=(0.5, 1.05),
-        ratio=2,
-        where_step="mid",
-        n_gap=50,
-    ):
-        # classification accuracy
-        class_acc = data["class_acc"]
-        galaxy_acc = data["galaxy_acc"]
-        star_acc = data["star_acc"]
-        fig, (ax1, ax2) = plt.subplots(
-            2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
+    def create_figure(self, data) -> Figure:
+        mag_bins = data["bliss_metrics"]["mag_bins"] - 0.5
+        bins_data = data["bliss_metrics"]["bins_data"]
+        return _make_detection_figure(
+            mag_bins, bins_data, xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
         )
-        xlabel = r"\rm magnitude " + cuts_or_bins[:-1]
-        ax2.plot(mags, galaxy_acc, "-o", label=r"\rm galaxy")
-        ax2.plot(mags, star_acc, "-o", label=r"\rm star")
-        ax2.plot(mags, class_acc, "-o", label=r"\rm overall")
-        ax2.set_xlim(xlims)
-        ax2.set_ylim(ylims)
-        ax2.set_xlabel(xlabel)
-        ax2.set_ylabel("classification accuracy")
-        ax2.legend(loc="lower left", prop={"size": 18})
 
-        # setup histogram up top.
-        gcounts = data["n_matches_coadd_gal"]
-        scounts = data["n_matches_coadd_star"]
-        ax1.step(mags, gcounts, label=r"\rm matched coadd galaxies", where=where_step)
-        ax1.step(mags, scounts, label=r"\rm matched coadd stars", where=where_step)
-        ymax = max(max(gcounts), max(scounts))
-        ymax = np.ceil(ymax / n_gap) * n_gap
-        yticks = np.arange(0, ymax, n_gap)
-        ax1.legend(loc="best", prop={"size": 16})
-        ax1.set_ylim((0, ymax))
-        ax1.set_yticks(yticks)
-        ax1.set_ylabel(r"\rm Counts")
-        plt.subplots_adjust(hspace=0)
 
-        return fig
+class BlissClassificationCutsFigure(BlissDetectionCutsFigure):
+    @property
+    def name(self) -> str:
+        return "sdss_bliss_classification_cuts"
 
-    @staticmethod
-    def make_magnitude_prob_scatter_figure(data):
-        # scatter of matched objects magnitude vs classification probability.
-        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
-        tgbool = data["tgbool"].astype(bool)
-        egbool = data["egbool"].astype(bool)
-        tmag, egprob = data["tmag"], data["egprob"]
-        correct = np.equal(tgbool, egbool)
+    def create_figure(self, data) -> Figure:
+        mag_cuts = data["bliss_metrics"]["mag_cuts"]
+        cuts_data = data["bliss_metrics"]["cuts_data"]
+        return _make_classification_figure(mag_cuts, cuts_data, "cuts", ylims=(0.8, 1.03))
 
-        ax.scatter(tmag[correct], egprob[correct], marker="+", c="b", label="correct", alpha=0.5)
-        ax.scatter(
-            tmag[~correct], egprob[~correct], marker="x", c="r", label="incorrect", alpha=0.5
+
+class BlissClassificationBinsFigure(BlissDetectionCutsFigure):
+    @property
+    def name(self) -> str:
+        return "sdss_bliss_classification_bins"
+
+    def create_figure(self, data) -> Figure:
+        mag_bins = data["bliss_metrics"]["mag_bins"] - 0.5
+        bins_data = data["bliss_metrics"]["bins_data"]
+        return _make_classification_figure(
+            mag_bins, bins_data, "bins", xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
         )
-        ax.axhline(0.5, linestyle="--")
-        ax.axhline(0.1, linestyle="--")
-        ax.axhline(0.9, linestyle="--")
-        ax.set_xlabel("True Magnitude")
-        ax.set_ylabel("Estimated Probability of Galaxy")
-        ax.legend(loc="best", prop={"size": 22})
 
-        return fig
+
+class BlissMag2ScatterFigure(BlissClassificationCutsFigure):
+    @property
+    def name(self) -> str:
+        return "bliss_mag2_scatter"
 
     @staticmethod
-    def make_mag_mag_scatter_figure(data):
-        tgbool = data["tgbool"].astype(bool)
-        tmag, emag = data["tmag"], data["emag"]
+    def make_mag_mag_scatter_figure(tgbool: np.ndarray, tmag: np.ndarray, emag: np.ndarray):
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
         ax1.scatter(tmag[tgbool], emag[tgbool], marker="o", c="r", alpha=0.5)
@@ -373,29 +375,118 @@ class BLISSClassificationFigure(BLISSDetectionFigure):
 
         return fig
 
-    def create_metrics_figures(
-        self, mag_cuts, mag_bins, cuts_data, bins_data, full_metrics, name=""
+    def create_figure(self, data) -> Figure:
+        tgbool = data["bliss_metrics"]["full_metrics"]["tgbool"].astype(bool)
+        tmag = data["bliss_metrics"]["full_metrics"]["tmag"]
+        emag = data["bliss_metrics"]["full_metrics"]["emag"]
+        return self.make_mag_mag_scatter_figure(tgbool, tmag, emag)
+
+
+class BlissMagProbScatterFigure(BlissClassificationCutsFigure):
+    @property
+    def name(self) -> str:
+        return "bliss_mag_prob_scatter"
+
+    @staticmethod
+    def make_magnitude_prob_scatter_figure(
+        tgbool: np.ndarray, egbool: np.ndarray, tmag: np.ndarray, egprob: np.ndarray
     ):
-        f2 = self.make_classification_figure(mag_cuts, cuts_data, "cuts", ylims=(0.8, 1.03))
-        f4 = self.make_classification_figure(
-            mag_bins - 0.5, bins_data, "bins", xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
+        # scatter of matched objects magnitude vs classification probability.
+        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+        correct = np.equal(tgbool, egbool)
+
+        ax.scatter(tmag[correct], egprob[correct], marker="+", c="b", label="correct", alpha=0.5)
+        ax.scatter(
+            tmag[~correct], egprob[~correct], marker="x", c="r", label="incorrect", alpha=0.5
         )
-        f5 = self.make_magnitude_prob_scatter_figure(full_metrics)
-        f6 = self.make_mag_mag_scatter_figure(full_metrics)
+        ax.axhline(0.5, linestyle="--")
+        ax.axhline(0.1, linestyle="--")
+        ax.axhline(0.9, linestyle="--")
+        ax.set_xlabel("True Magnitude")
+        ax.set_ylabel("Estimated Probability of Galaxy")
+        ax.legend(loc="best", prop={"size": 22})
 
-        return {
-            f"{name}_class_cuts": f2,
-            f"{name}_class_bins": f4,
-            f"{name}_mag_prob_scatter": f5,
-            f"{name}_mag_mag_scatter": f6,
-        }
+        return fig
 
-    def create_figures(self, data):
-        """Make figures related to detection and classification in SDSS."""
-        sns.set_theme(style="darkgrid")
-        bliss_figs = self.create_metrics_figures(**data["bliss_metrics"], name="bliss_sdss")
-        photo_figs = self.create_metrics_figures(**data["photo_metrics"], name="photo_sdss")
-        return {**bliss_figs, **photo_figs}
+    def create_figure(self, data) -> Figure:
+        tgbool = data["bliss_metrics"]["full_metrics"]["tgbool"].astype(bool)
+        egbool = data["bliss_metrics"]["full_metrics"]["egbool"].astype(bool)
+        tmag = data["bliss_metrics"]["full_metrics"]["tmag"]
+        egprob = data["bliss_metrics"]["full_metrics"]["egprob"]
+        return self.make_magnitude_prob_scatter_figure(tgbool, egbool, tmag, egprob)
+
+
+class PhotoDetectionCutsFigure(BlissDetectionCutsFigure):
+    @property
+    def name(self) -> str:
+        return "sdss_photo_detection_cuts"
+
+    def create_figure(self, data) -> Figure:
+        mag_cuts = data["photo_metrics"]["mag_cuts"]
+        cuts_data = data["photo_metrics"]["cuts_data"]
+        return _make_detection_figure(mag_cuts, cuts_data, ylims=(0.5, 1.03))
+
+
+class PhotoDetectionBinsFigure(BlissDetectionCutsFigure):
+    @property
+    def name(self) -> str:
+        return "sdss_photo_detection_bins"
+
+    def create_figure(self, data) -> Figure:
+        mag_bins = data["photo_metrics"]["mag_bins"] - 0.5
+        bins_data = data["photo_metrics"]["bins_data"]
+        return _make_detection_figure(
+            mag_bins, bins_data, xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
+        )
+
+
+class PhotoClassificationCutsFigure(BlissDetectionCutsFigure):
+    @property
+    def name(self) -> str:
+        return "sdss_photo_classification_cuts"
+
+    def create_figure(self, data) -> Figure:
+        mag_cuts = data["photo_metrics"]["mag_cuts"]
+        cuts_data = data["photo_metrics"]["cuts_data"]
+        return _make_classification_figure(mag_cuts, cuts_data, "cuts", ylims=(0.8, 1.03))
+
+
+class PhotoClassificationBinsFigure(BlissDetectionCutsFigure):
+    @property
+    def name(self) -> str:
+        return "sdss_photo_classification_bins"
+
+    def create_figure(self, data) -> Figure:
+        mag_bins = data["photo_metrics"]["mag_bins"] - 0.5
+        bins_data = data["photo_metrics"]["bins_data"]
+        return _make_classification_figure(
+            mag_bins, bins_data, "bins", xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
+        )
+
+
+class PhotoMag2SatterFigure(BlissMag2ScatterFigure):
+    @property
+    def name(self) -> str:
+        return "photo_mag2_scatter"
+
+    def create_figure(self, data) -> Figure:
+        tgbool = data["photo_metrics"]["full_metrics"]["tgbool"].astype(bool)
+        tmag = data["photo_metrics"]["full_metrics"]["tmag"]
+        emag = data["photo_metrics"]["full_metrics"]["emag"]
+        return self.make_mag_mag_scatter_figure(tgbool, tmag, emag)
+
+
+class PhotoMagProbScatterFigure(BlissMagProbScatterFigure):
+    @property
+    def name(self) -> str:
+        return "photo_mag_prob_scatter"
+
+    def create_figure(self, data) -> Figure:
+        tgbool = data["photo_metrics"]["full_metrics"]["tgbool"].astype(bool)
+        egbool = data["photo_metrics"]["full_metrics"]["egbool"].astype(bool)
+        tmag = data["photo_metrics"]["full_metrics"]["tmag"]
+        egprob = data["photo_metrics"]["full_metrics"]["egprob"]
+        return self.make_magnitude_prob_scatter_figure(tgbool, egbool, tmag, egprob)
 
 
 def load_models(cfg, device):
@@ -459,21 +550,32 @@ def main(cfg):
     # FIGURE 1: Classification and Detection metrics
     if "detection_sdss" in figs:
         print("INFO: Creating classification and detection metrics from SDSS frame figures...")
-        dc_fig = DetectionClassificationFigures(**bfig_kwargs)
-        dc_fig.save_figures(frame, photo_cat, encoder, decoder)
+        args = frame, photo_cat, encoder, decoder
+        BlissDetectionCutsFigure(**bfig_kwargs)(*args)
+        BlissDetectionBinsFigure(**bfig_kwargs)(*args)
+        BlissClassificationCutsFigure(**bfig_kwargs)(*args)
+        BlissClassificationBinsFigure(**bfig_kwargs)(*args)
+        BlissMag2ScatterFigure(**bfig_kwargs)(*args)
+        BlissMagProbScatterFigure(**bfig_kwargs)(*args)
+
+        PhotoDetectionCutsFigure(**bfig_kwargs)(*args)
+        PhotoDetectionBinsFigure(**bfig_kwargs)(*args)
+        PhotoClassificationCutsFigure(**bfig_kwargs)(*args)
+        PhotoClassificationBinsFigure(**bfig_kwargs)(*args)
+        PhotoMag2SatterFigure(**bfig_kwargs)(*args)
+        PhotoMagProbScatterFigure(**bfig_kwargs)(*args)
+
         mpl.rc_file_defaults()
 
     # FIGURE 2: Reconstructions on SDSS
     if "recon_sdss" in figs:
         print("INFO: Creating reconstructions from SDSS figures...")
-        sdss_rec_fig = SDSSReconstructionFigures(cfg.plots.scenes, **bfig_kwargs)
-        sdss_rec_fig.save_figures(frame, encoder, decoder)
+        for scene_name, scene_data in cfg.plots.scenes.items():
+            sdss_rec_fig = SDSSReconstructionFigures(scene_name, scene_data, **bfig_kwargs)
+            sdss_rec_fig(frame, encoder, decoder)
         mpl.rc_file_defaults()
 
-    if not figs.intersection({1, 2, 3, 4}):
-        raise NotImplementedError(
-            "No figures were created, `cfg.plots.figs` should be a subset of [1,2,3,4]."
-        )
+    assert set(figs).issubset({"detection_sdss", "recon_sdss"})
 
 
 if __name__ == "__main__":
