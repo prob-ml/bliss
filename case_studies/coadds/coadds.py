@@ -14,7 +14,8 @@ from bliss.models.galsim_decoder import (
     SingleGalsimGalaxyPrior,
     UniformGalsimPrior,
 )
-from case_studies.coadds.align import align_single_exposures
+
+from .align import align_single_exposures  # pylint: disable=relative-beyond-top-level
 
 
 def load_coadd_dataset(path: str) -> Tuple[dict, FullCatalog]:
