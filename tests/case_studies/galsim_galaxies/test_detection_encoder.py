@@ -21,9 +21,9 @@ def overrides(devices):
     return overrides
 
 
-def test_sdss_detection_encoder(sdss_galaxies_setup, overrides, devices):
-    trained_location = sdss_galaxies_setup.get_trained_model(overrides)
-    results = sdss_galaxies_setup.test_model(overrides, trained_location)
+def test_sdss_detection_encoder(galsim_galaxies_setup, overrides, devices):
+    trained_location = galsim_galaxies_setup.get_trained_model(overrides)
+    results = galsim_galaxies_setup.test_model(overrides, trained_location)
 
     assert "avg_distance" in results
     assert "precision" in results
@@ -39,7 +39,7 @@ def test_sdss_detection_encoder(sdss_galaxies_setup, overrides, devices):
     assert results["f1"] > 0.6
 
 
-def test_detection_encoder_plotting(sdss_galaxies_setup, overrides):
+def test_detection_encoder_plotting(galsim_galaxies_setup, overrides):
     # just to test `make_validation_plots` works.
     overrides.update(
         {
@@ -48,4 +48,4 @@ def test_detection_encoder_plotting(sdss_galaxies_setup, overrides):
             "training.trainer.log_every_n_steps": 1,
         }
     )
-    sdss_galaxies_setup.get_trained_model(overrides)
+    galsim_galaxies_setup.get_trained_model(overrides)

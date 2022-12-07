@@ -39,10 +39,10 @@ def test_catalog_conversion():
     assert true_params.equals(tile_params_tilde)
 
 
-def test_coadd(get_sdss_galaxies_config):
+def test_coadd(get_galsim_galaxies_config):
 
     # get psf
-    cfg = get_sdss_galaxies_config({})
+    cfg = get_galsim_galaxies_config({})
     data_path = Path(cfg.paths.data)
 
     # read file and get flux / hlr

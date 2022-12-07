@@ -5,9 +5,8 @@ from bliss.datasets.sdss import SloanDigitalSkySurvey
 
 
 class TestSDSS:
-    def test_sdss(self, get_sdss_galaxies_config):
-        cfg = get_sdss_galaxies_config({})
-        sdss_dir = cfg.paths.sdss
+    def test_sdss(self, get_config):
+        sdss_dir = get_config({}).paths.sdss
         sdss_obj = SloanDigitalSkySurvey(
             sdss_dir,
             run=3900,

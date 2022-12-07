@@ -20,5 +20,5 @@ class TestBasicGalaxyMeasure:
             )
         return overrides
 
-    def test_simulated(self, overrides, sdss_galaxies_setup):
-        sdss_galaxies_setup.get_trained_model(overrides)
+    def test_simulated(self, overrides, galsim_galaxies_setup):
+        galsim_galaxies_setup.get_trained_model(overrides)
