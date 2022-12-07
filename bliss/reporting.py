@@ -305,7 +305,7 @@ def scene_metrics(
 def compute_mag_bin_metrics(
     mag_bins: Tensor, truth: FullCatalog, pred: FullCatalog
 ) -> Dict[str, Tensor]:
-    metrics_per_mag = defaultdict(lambda: torch.zeros(len(mag_bins)))
+    metrics_per_mag: dict = defaultdict(lambda: torch.zeros(len(mag_bins)))
     for ii, (mag1, mag2) in enumerate(mag_bins):
         res = scene_metrics(truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0)
         metrics_per_mag["precision"][ii] = res["precision"]
