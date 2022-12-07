@@ -20,6 +20,8 @@ from bliss.models.decoder import ImageDecoder
 from bliss.plotting import BlissFigure, add_loc_legend, plot_image, plot_locs
 from bliss.reporting import compute_mag_bin_metrics
 
+ALL_FIGS = ("detection_sdss", "recon_sdss")
+
 
 def _compute_detection_metrics(truth: FullCatalog, pred: FullCatalog):
     """Return dictionary containing all metrics between true and predicted catalog."""
@@ -90,8 +92,8 @@ def _make_detection_figure(
     ax2.plot(mags, precision, "-o", label=r"\rm precision")
     ax2.plot(mags, f1_score, "-o", label=r"\rm f1 score")
     ax2.legend(loc="lower left", prop={"size": 22})
-    ax2.set_xlabel(label=r"\rm magnitude cut")
-    ax2.set_ylabel(ylabel="metric")
+    ax2.set_xlabel(r"\rm magnitude cut")
+    ax2.set_ylabel(r"\rm metric")
     ax2.set_yticks(yticks)
     ax2.set_xlim(xlims)
     ax2.set_ylim(ylims)
@@ -524,46 +526,48 @@ def load_sdss_data(cfg):
 
 
 def setup(cfg):
-    figs = set(cfg.plots.figs)
-    cachedir = cfg.plots.cachedir
-    device = torch.device(cfg.plots.device)
+    pcfg = cfg.plots
+    figs = set(pcfg.figs)
+    cachedir = pcfg.cachedir
+    device = torch.device(pcfg.device)
     bfig_kwargs = {
-        "figdir": cfg.plots.figdir,
+        "figdir": pcfg.figdir,
         "cachedir": cachedir,
-        "overwrite": cfg.plots.overwrite,
-        "img_format": cfg.plots.image_format,
+        "img_format": pcfg.image_format,
     }
 
     if not Path(cachedir).exists():
         warnings.warn("Specified cache directory does not exist, will attempt to create it.")
         Path(cachedir).mkdir(exist_ok=True, parents=True)
 
+    assert set(figs).issubset(set(ALL_FIGS))
     return figs, device, bfig_kwargs
 
 
-@hydra.main(config_path="../config", config_name="config")
+@hydra.main(config_path="./config", config_name="config", version_base=None)
 def main(cfg):
     figs, device, bfig_kwargs = setup(cfg)
     encoder, decoder = load_models(cfg, device)
     frame, photo_cat = load_sdss_data(cfg)
+    overwrite = cfg.plots.overwrite
 
     # FIGURE 1: Classification and Detection metrics
     if "detection_sdss" in figs:
         print("INFO: Creating classification and detection metrics from SDSS frame figures...")
         args = frame, photo_cat, encoder, decoder
-        BlissDetectionCutsFigure(**bfig_kwargs)(*args)
-        BlissDetectionBinsFigure(**bfig_kwargs)(*args)
-        BlissClassificationCutsFigure(**bfig_kwargs)(*args)
-        BlissClassificationBinsFigure(**bfig_kwargs)(*args)
-        BlissMag2ScatterFigure(**bfig_kwargs)(*args)
-        BlissMagProbScatterFigure(**bfig_kwargs)(*args)
+        BlissDetectionCutsFigure(overwrite=overwrite, **bfig_kwargs)(*args)
+        BlissDetectionBinsFigure(overwrite=False, **bfig_kwargs)(*args)
+        BlissClassificationCutsFigure(overwrite=False, **bfig_kwargs)(*args)
+        BlissClassificationBinsFigure(overwrite=False, **bfig_kwargs)(*args)
+        BlissMag2ScatterFigure(overwrite=False, **bfig_kwargs)(*args)
+        BlissMagProbScatterFigure(overwrite=False, **bfig_kwargs)(*args)
 
-        PhotoDetectionCutsFigure(**bfig_kwargs)(*args)
-        PhotoDetectionBinsFigure(**bfig_kwargs)(*args)
-        PhotoClassificationCutsFigure(**bfig_kwargs)(*args)
-        PhotoClassificationBinsFigure(**bfig_kwargs)(*args)
-        PhotoMag2SatterFigure(**bfig_kwargs)(*args)
-        PhotoMagProbScatterFigure(**bfig_kwargs)(*args)
+        PhotoDetectionCutsFigure(overwrite=False, **bfig_kwargs)(*args)
+        PhotoDetectionBinsFigure(overwrite=False, **bfig_kwargs)(*args)
+        PhotoClassificationCutsFigure(overwrite=False, **bfig_kwargs)(*args)
+        PhotoClassificationBinsFigure(overwrite=False, **bfig_kwargs)(*args)
+        PhotoMag2SatterFigure(overwrite=False, **bfig_kwargs)(*args)
+        PhotoMagProbScatterFigure(overwrite=False, **bfig_kwargs)(*args)
 
         mpl.rc_file_defaults()
 
@@ -571,11 +575,11 @@ def main(cfg):
     if "recon_sdss" in figs:
         print("INFO: Creating reconstructions from SDSS figures...")
         for scene_name, scene_data in cfg.plots.scenes.items():
-            sdss_rec_fig = SDSSReconstructionFigures(scene_name, scene_data, **bfig_kwargs)
+            sdss_rec_fig = SDSSReconstructionFigures(
+                scene_name, scene_data, overwrite=overwrite, **bfig_kwargs
+            )
             sdss_rec_fig(frame, encoder, decoder)
         mpl.rc_file_defaults()
-
-    assert set(figs).issubset({"detection_sdss", "recon_sdss"})
 
 
 if __name__ == "__main__":
