@@ -21,7 +21,7 @@ from bliss.models.psf_decoder import PSFDecoder
 from bliss.plotting import BlissFigure, plot_image, scatter_bin_plot
 from bliss.reporting import match_by_locs
 
-ALL_FIGS = {"single_gal", "blend_gal"}
+ALL_FIGS = ("single_gal", "blend_gal")
 
 
 class AutoEncoderReconRandom(BlissFigure):
@@ -406,7 +406,7 @@ def setup(cfg):
         warnings.warn("Specified cache directory does not exist, will attempt to create it.")
         Path(cachedir).mkdir(exist_ok=True, parents=True)
 
-    assert set(figs).issubset(ALL_FIGS)
+    assert set(figs).issubset(set(ALL_FIGS))
     return figs, device, bfig_kwargs
 
 
