@@ -97,7 +97,7 @@ class BlissFigure:
         self,
         figdir: str,
         cachedir: str,
-        overwrite=False,
+        overwrite: bool = False,
         img_format: str = "png",
     ) -> None:
 
