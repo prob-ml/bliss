@@ -1,6 +1,12 @@
+# pylint: disable=import-error, wrong-import-position
+import os
+import sys
+
 import pytest
 
-from case_studies.sdss_galaxies_vae.reconstruction import reconstruct
+sys.path.insert(0, f'{os.environ.get("BLISS_HOME")}/case_studies/sdss_galaxies_vae')
+
+from reconstruction import reconstruct  # noqa: E402
 
 
 @pytest.fixture(scope="module")
