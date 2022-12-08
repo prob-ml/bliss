@@ -1,15 +1,15 @@
 from hydra.utils import instantiate
 
 
-def test_galaxy_prior(sdss_galaxies_setup):
+def test_galaxy_prior(galsim_galaxies_setup):
     """Test to ensure galaxy_dataset is passed in to galaxy_prior and flux dist is correct."""
-    cfg_unif = sdss_galaxies_setup.get_cfg(
+    cfg_unif = galsim_galaxies_setup.get_cfg(
         {
             "datasets.sdss_galaxies.prior.flux_sample": "uniform",
             "training": "sdss_detection_encoder",
         }
     )
-    cfg_par = sdss_galaxies_setup.get_cfg(
+    cfg_par = galsim_galaxies_setup.get_cfg(
         {
             "datasets.sdss_galaxies.prior.flux_sample": "pareto",
             "training": "sdss_detection_encoder",

@@ -5,14 +5,14 @@ from bliss.catalog import TileCatalog
 from bliss.datasets.galsim_galaxies import GalsimBlends
 
 
-def test_galaxy_blend(get_sdss_galaxies_config):
+def test_galaxy_blend(get_galsim_galaxies_config):
     overrides = {
         "datasets.galsim_blends.num_workers": 0,
         "datasets.galsim_blends.batch_size": 4,
         "datasets.galsim_blends.n_batches": 1,
         "datasets.galsim_blends.prior.max_n_sources": 3,
     }
-    cfg = get_sdss_galaxies_config(overrides)
+    cfg = get_galsim_galaxies_config(overrides)
     blend_ds: GalsimBlends = instantiate(cfg.datasets.galsim_blends)
 
     for b in blend_ds.train_dataloader():

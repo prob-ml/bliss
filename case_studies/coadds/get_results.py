@@ -16,9 +16,9 @@ from tqdm import tqdm
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.encoder import Encoder
+from bliss.plotting import CB_color_cycle, set_rc_params
 from bliss.reporting import DetectionMetrics, match_by_locs
 from case_studies.coadds.coadds import load_coadd_dataset
-from case_studies.sdss_galaxies.plots.bliss_figures import CB_color_cycle, set_rc_params
 
 device = torch.device("cuda:0")
 

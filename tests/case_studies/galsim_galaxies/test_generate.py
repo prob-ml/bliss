@@ -6,8 +6,8 @@ from bliss import generate
 
 
 class TestGenerate:
-    def test_generate_run(self, devices, get_sdss_galaxies_config):
-        cfg = get_sdss_galaxies_config({})
+    def test_generate_run(self, devices, get_galsim_galaxies_config):
+        cfg = get_galsim_galaxies_config({})
         dataset = instantiate(
             cfg.datasets.simulated,
             generate_device="cuda:0" if devices.use_cuda else "cpu",
