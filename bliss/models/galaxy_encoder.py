@@ -28,7 +28,7 @@ class GalaxyEncoder(pl.LightningModule):
         vae_flow: Optional[CenteredGalaxyLatentFlow] = None,
         vae_flow_ckpt: Optional[str] = None,
         optimizer_params: Optional[dict] = None,
-        crop_loss_at_border=False,
+        crop_loss_at_border: bool = False,
         checkpoint_path: Optional[str] = None,
         max_flux_valid_plots: Optional[int] = None,
     ):
