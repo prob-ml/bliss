@@ -1,9 +1,23 @@
 [tool.poetry]
-authors = ["Ismael Mendoza", "Runjing Liu", "Derek Hansen", "Ziteng Pang", "Zhe Zhao", "Jeffrey Regier"]
+authors = [
+  "Ismael Mendoza <imendoza@umich.edu>",
+  "Runjing Liu",
+  "Derek Hansen",
+  "Yash Patel",
+  "Ziteng Pang",
+  "Zhe Zhao",
+  "Mallory Wang",
+  "Cheng Wang",
+  "Jeffrey Regier",
+]
 description = "Bayesian Light Source Separator"
+documentation = "https://prob-ml.github.io/bliss/"
+keywords = ["cosmology", "blending", "weak lensing", "bayesian", "ml", "pytorch"]
 license = "MIT"
 name = "bliss"
-packages = [{include = "bliss"}, {include = 'case_studies'}]
+packages = [{include = "bliss"}, {include = 'case_studies/*/*.py'}]
+readme = "README.md"
+repository = "https://github.com/prob-ml/bliss"
 version = "0.1.0"
 
 [tool.poetry.dependencies]
