@@ -38,11 +38,11 @@ class DetectionEncoder(pl.LightningModule):
         tile_slen: int,
         ptile_slen: int,
         channel: int,
-        dropout,
+        dropout: float,
         hidden: int,
         spatial_dropout: float,
         annotate_probs: bool = False,
-        slack=1.0,
+        slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
     ):
         """Initializes DetectionEncoder.
