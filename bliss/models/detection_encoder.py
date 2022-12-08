@@ -42,7 +42,7 @@ class DetectionEncoder(pl.LightningModule):
         hidden: int,
         spatial_dropout: float,
         annotate_probs: bool = False,
-        slack=1.0,
+        slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
     ):
         """Initializes DetectionEncoder.
