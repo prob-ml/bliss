@@ -10,7 +10,7 @@ from torch.nn.utils import weight_norm
 from torch.optim import Adam
 from tqdm import tqdm
 
-from bliss.reporting import plot_image
+from bliss.plotting import plot_image
 
 plt.switch_backend("Agg")
 plt.ioff()

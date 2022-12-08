@@ -1,17 +1,14 @@
 """Functions to evaluate the performance of BLISS predictions."""
+from collections import defaultdict
 from typing import Dict, Optional, Tuple
 
 import galsim
-import matplotlib as mpl
 import numpy as np
 import torch
 import tqdm
 from astropy.table import Table
 from astropy.wcs import WCS
 from einops import rearrange, reduce
-from matplotlib.figure import Figure
-from matplotlib.pyplot import Axes
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import optimize as sp_optim
 from sklearn.metrics import confusion_matrix
 from torch import Tensor
@@ -305,6 +302,25 @@ def scene_metrics(
     return {**detection_result, **classification_result, "counts": counts}
 
 
+def compute_mag_bin_metrics(
+    mag_bins: Tensor, truth: FullCatalog, pred: FullCatalog
+) -> Dict[str, Tensor]:
+    metrics_per_mag: dict = defaultdict(lambda: torch.zeros(len(mag_bins)))
+    for ii, (mag1, mag2) in enumerate(mag_bins):
+        res = scene_metrics(truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0)
+        metrics_per_mag["precision"][ii] = res["precision"]
+        metrics_per_mag["recall"][ii] = res["recall"]
+        metrics_per_mag["f1"][ii] = res["f1"]
+        metrics_per_mag["class_acc"][ii] = res["class_acc"]
+        conf_matrix = res["conf_matrix"]
+        metrics_per_mag["galaxy_acc"][ii] = conf_matrix[0, 0] / conf_matrix[0, :].sum().item()
+        metrics_per_mag["star_acc"][ii] = conf_matrix[1, 1] / conf_matrix[1, :].sum().item()
+        for k, v in res["counts"].items():
+            metrics_per_mag[k][ii] = v
+
+    return dict(metrics_per_mag)
+
+
 class CoaddFullCatalog(FullCatalog):
     coadd_names = {
         "objid": "objid",
@@ -437,69 +453,3 @@ def get_single_galaxy_measurements(
         "mags": convert_flux_to_mag(fluxes),
         "ellips": ellips,
     }
-
-
-def plot_image(
-    fig: Figure,
-    ax: Axes,
-    image: np.ndarray,
-    vrange: Optional[tuple] = None,
-    colorbar: bool = True,
-    cmap="gray",
-) -> None:
-    h, w = image.shape
-    assert h == w
-    vmin = image.min().item() if vrange is None else vrange[0]
-    vmax = image.max().item() if vrange is None else vrange[1]
-
-    if colorbar:
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-    im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap=cmap)
-    if colorbar:
-        fig.colorbar(im, cax=cax, orientation="vertical")
-
-
-def plot_locs(
-    ax: Axes,
-    bp: int,
-    slen: int,
-    plocs: np.ndarray,
-    galaxy_probs: np.ndarray,
-    m: str = "x",
-    s: float = 20,
-    lw: float = 1,
-    alpha: float = 1,
-    annotate=False,
-    cmap: str = "bwr",
-) -> None:
-    n_samples, xy = plocs.shape
-    assert galaxy_probs.shape == (n_samples,) and xy == 2
-
-    x = plocs[:, 1] - 0.5 + bp
-    y = plocs[:, 0] - 0.5 + bp
-    for i, (xi, yi) in enumerate(zip(x, y)):
-        prob = galaxy_probs[i]
-        cmp = mpl.colormaps[cmap]
-        color = cmp(prob)
-        if bp < xi < slen - bp and bp < yi < slen - bp:
-            ax.scatter(xi, yi, color=color, marker=m, s=s, lw=lw, alpha=alpha)
-            if annotate:
-                ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
-
-
-def add_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s=20):
-    cmp1 = mpl.colormaps[cmap1]
-    cmp2 = mpl.colormaps[cmap2]
-    colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
-    markers = ("+", "+", "x", "x")
-    sizes = (s * 2, s * 2, s + 5, s + 5)
-    for label, c, m, size in zip(labels, colors, markers, sizes):
-        ax.scatter([], [], color=c, marker=m, label=label, s=size)
-    ax.legend(
-        bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
-        loc="lower left",
-        ncol=2,
-        mode="expand",
-        borderaxespad=0.0,
-    )

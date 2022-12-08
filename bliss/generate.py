@@ -5,7 +5,7 @@ import torch
 import tqdm
 from matplotlib import pyplot as plt
 
-from bliss.reporting import plot_image
+from bliss.plotting import plot_image
 
 
 def visualize(batch, path, n_samples, figsize=(12, 12)):

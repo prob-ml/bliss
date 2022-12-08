@@ -35,7 +35,7 @@ from bliss.models.decoder import ImageDecoder
 from bliss.models.detection_encoder import DetectionEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 from bliss.models.prior import ImagePrior
-from case_studies.sdss_galaxies.plots.bliss_figures import set_rc_params
+from bliss.plotting import plot_image, set_rc_params
 
 Frame = Union[SDSSFrame, SimulatedFrame, SemiSyntheticFrame]
 
@@ -468,13 +468,9 @@ def create_figure(
     ax_recon.set_title("Reconstruction", pad=pad)
 
     # plot images
-    reporting.plot_image(
-        fig, ax_true, true, vrange=(vmin, vmax), colorbar=colorbar, cmap="gist_gray"
-    )
+    plot_image(fig, ax_true, true, vrange=(vmin, vmax), colorbar=colorbar, cmap="gist_gray")
     if not tile_map:
-        reporting.plot_image(
-            fig, ax_recon, recon, vrange=(vmin, vmax), colorbar=colorbar, cmap="gist_gray"
-        )
+        plot_image(fig, ax_recon, recon, vrange=(vmin, vmax), colorbar=colorbar, cmap="gist_gray")
     else:
         is_on_array = rearrange(tile_map.is_on_array, "1 nth ntw 1 -> nth ntw 1 1")
         is_on_array = repeat(is_on_array, "nth ntw 1 1 -> nth ntw h w", h=4, w=4)
@@ -488,7 +484,7 @@ def create_figure(
         ax_res = axes[2]
         ax_res.set_title("Residual", pad=pad)
         vmin_res, vmax_res = -6.0, 6.0
-        reporting.plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
+        plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
 
     if coadd_objects is not None:
         locs_true = coadd_objects.plocs - 0.5
