@@ -39,4 +39,4 @@ jobs:
         run: |
           poetry version $(git describe --tags --abbrev=0)
           poetry build
-          poetry publish --username ${{ secrets.PYPI_USERNAME }} --password ${{ secrets.PYPI_PASSWORD }}
+          poetry publish --username __token__ --password ${{ secrets.PYPI_TOKEN }}
