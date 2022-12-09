@@ -1,0 +1,42 @@
+name: publish
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8]
+
+    steps:
+      - name: Checkout github repo
+        uses: actions/checkout@v2
+
+      - name: Create environment variables
+        run: echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "poetry"
+
+      - name: Install fftw3
+        run: |
+          sudo apt-get install libfftw3-dev
+
+      - name: Install poetry dependencies
+        run: |
+          poetry install
+
+      - name: Build and publish
+        run: |
+          poetry version $(git describe --tags --abbrev=0)
+          poetry build
+          poetry publish --username ${{ secrets.PYPI_USERNAME }} --password ${{ secrets.PYPI_PASSWORD }}
