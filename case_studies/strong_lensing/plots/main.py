@@ -127,7 +127,7 @@ def make_blend_sim_figure(cfg, encoder, decoder, bfig_kwargs):
     blend_fig.save_figures(blend_file, encoder, decoder)
 
 
-@hydra.main(config_path="../config", config_name="config")
+@hydra.main(config_path="../config", config_name="config", version_base=None)
 def main(cfg):
     figs, device, bfig_kwargs = setup(cfg)
     encoder, decoder = load_models(cfg, device)

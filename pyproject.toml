@@ -15,7 +15,7 @@ documentation = "https://prob-ml.github.io/bliss/"
 keywords = ["cosmology", "blending", "weak lensing", "bayesian", "ml", "pytorch"]
 license = "MIT"
 name = "bliss"
-packages = [{include = "bliss"}, {include = 'case_studies/*/*.py'}]
+packages = [{include = "bliss"}]
 readme = "README.md"
 repository = "https://github.com/prob-ml/bliss"
 version = "0.1.0"
