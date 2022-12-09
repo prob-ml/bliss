@@ -380,7 +380,7 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
     return fig
 
 
-@hydra.main(config_path="./config", config_name="config")
+@hydra.main(config_path="./config", config_name="config", version_base=None)
 def main(cfg):
 
     mag1, mag2, delta = cfg.results.mag_bins

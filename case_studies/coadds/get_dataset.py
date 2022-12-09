@@ -27,7 +27,7 @@ def task(ds: CoaddGalsimBlends, n_dithers):
     return outputs
 
 
-@hydra.main(config_path="./config", config_name="config")
+@hydra.main(config_path="./config", config_name="config", version_base=None)
 def main(cfg):
     n_samples = 30000
     n_dithers = [5, 10, 25, 35, 50]
