@@ -113,15 +113,10 @@ class TileCatalog(UserDict):
         parameters.
 
         Returns:
-            A dictionary of tensors with the same members as those in `tile_params`.
-            The first two dimensions of each tensor is `batch_size x max(n_sources)`,
-            where `max(n_sources)` is the maximum number of sources detected across samples.
-            In samples where the number of sources detected is less than max(n_sources),
-            these values will be zeroed out. Thus, it is imperative to use the "n_sources"
-            element to verify which locations/fluxes/parameters are zeroed out.
+            The FullCatalog instance corresponding to the TileCatalog instance.
 
             NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
-            pixel locations ("plocs") that are between 0 and slen.
+            pixel locations ("plocs") that are between 0 and `slen`.
         """
         plocs = self._get_full_locs_from_tiles()
         param_names_to_mask = {"plocs"}.union(set(self.keys()))
@@ -203,7 +198,7 @@ class TileCatalog(UserDict):
             out[k] = v
         return out
 
-    def equals(self, other, exclude=None, **kwargs):
+    def equals(self, other, exclude=None, **kwargs) -> bool:
         self_dict = self.to_dict()
         other_dict: Dict[str, Tensor] = other.to_dict()
         exclude = set() if exclude is None else set(exclude)
@@ -216,7 +211,7 @@ class TileCatalog(UserDict):
     def __eq__(self, other):
         return self.equals(other)
 
-    def get_tile_params_at_coord(self, plocs: torch.Tensor):
+    def get_tile_params_at_coord(self, plocs: torch.Tensor) -> Dict[str, Tensor]:
         """Return the parameters of the tiles that contain each of the locations in plocs."""
         assert len(plocs.shape) == 2 and plocs.shape[1] == 2
         assert plocs.device == self.locs.device
@@ -232,8 +227,8 @@ class TileCatalog(UserDict):
 
         return {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
 
-    def set_all_fluxes_and_mags(self, decoder):
-        """Set all fluxes (galaxy and star) of tile catalog given an ImageDecoder instance."""
+    def set_all_fluxes_and_mags(self, decoder) -> None:
+        """Set all fluxes (galaxy and star) of tile catalog given an `ImageDecoder` instance."""
         # first get galaxy fluxes
         assert "galaxy_bools" in self and "galaxy_params" in self and "star_fluxes" in self
         assert (
@@ -255,8 +250,8 @@ class TileCatalog(UserDict):
         self["mags"] = torch.zeros_like(self["fluxes"])
         self["mags"][is_on_array] = convert_flux_to_mag(self["fluxes"][is_on_array])
 
-    def set_galaxy_ellips(self, decoder, scale: float = 0.393):
-        """Sets galaxy ellipticities of tile catalog given an ImageDecoder instance."""
+    def set_galaxy_ellips(self, decoder, scale: float = 0.393) -> None:
+        """Sets galaxy ellipticities of tile catalog given an `ImageDecoder` instance."""
         galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
         ellips = decoder.get_galaxy_ellips(galaxy_bools, galaxy_params, scale=scale)
         self["ellips"] = ellips
