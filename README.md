@@ -22,47 +22,63 @@ BLISS uses state-of-the-art variational inference techniques including
 
 # Installation
 
+BLISS is pip installable with the following command: 
+
+```bash
+pip install bliss-deblender
+``` 
+
+and the required dependencies are listed in the ``[tool.poetry.dependencies]`` block of the ``pyproject.toml`` file.
+
+# Installation (Developers)
+
 1. To use and install `bliss` you first need to install [poetry](https://python-poetry.org/docs/).
 
 2. Then, install the [fftw](http://www.fftw.org) library (which is used by `galsim`). With Ubuntu you can install it by running
-```
+
+```bash
 sudo apt-get install libfftw3-dev
 ```
 
 3. Install git-lfs if you haven't already installed it for another project:
-```
+
+```bash
 git-lfs install
 ```
 
 4. Now download the bliss repo and fetch some pre-trained models and test data from git-lfs:
-```
+
+```bash
 git clone https://github.com/prob-ml/bliss.git
 ```
 
 5. To create a poetry environment with the `bliss` dependencies satisified, run
-```
+
+```bash
 cd bliss
 poetry install
 poetry shell
 ```
 
 6. Verify that bliss is installed correctly by running the tests both on your CPU (default) and on your GPU:
-```
+
+```bash
 pytest
 pytest --gpu
 ```
 
 7. Finally, if you are planning to contribute code to this repository, consider installing our pre-commit hooks so that your code commits will be checked locally for compliance with our coding conventions:
-```
+
+```bash
 pre-commit --install
 ```
 
 # Latest updates
-### Galaxies
+## Galaxies
    - BLISS now includes a galaxy model based on a VAE that was trained on Galsim galaxies.
    - BLISS now includes an algorithm for detecting, measuring, and deblending galaxies.
 
-### Stars
+## Stars
    - BLISS already includes the StarNet functionality from its predecessor repo: [DeblendingStarFields](https://github.com/Runjing-Liu120/DeblendingStarfields).
 
 

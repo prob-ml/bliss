@@ -14,11 +14,11 @@ description = "Bayesian Light Source Separator"
 documentation = "https://prob-ml.github.io/bliss/"
 keywords = ["cosmology", "blending", "weak lensing", "bayesian", "ml", "pytorch"]
 license = "MIT"
-name = "bliss"
+name = "bliss-deblender"
 packages = [{include = "bliss"}]
 readme = "README.md"
 repository = "https://github.com/prob-ml/bliss"
-version = "0.1.0"
+version = "0.1.1"
 
 [tool.poetry.dependencies]
 astropy = ">=4.2.1"

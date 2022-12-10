@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 from warnings import warn
 
 import numpy as np
@@ -10,7 +10,7 @@ from torch import Tensor
 from torch.distributions import Poisson
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.datasets.galsim_galaxies import SingleGalsimGalaxies, ToyGaussian
+from bliss.datasets.galsim_galaxies import SingleGalsimGalaxies
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 
 
@@ -21,7 +21,7 @@ class GalaxyPrior:
         n_latent_batches: Optional[int] = None,
         autoencoder: Optional[OneCenteredGalaxyAE] = None,
         autoencoder_ckpt: Optional[str] = None,
-        galaxy_dataset: Optional[Union[SingleGalsimGalaxies, ToyGaussian]] = None,
+        galaxy_dataset: Optional[SingleGalsimGalaxies] = None,
     ):
         """Class to sample galaxy latent variables.
 

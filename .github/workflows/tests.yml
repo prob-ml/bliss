@@ -27,30 +27,21 @@ jobs:
       - name: Checkout LFS objects
         run: git lfs checkout
 
+      - name: Install poetry
+        run: pipx install poetry
+
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
+          cache: "poetry"
 
       - name: Create environment variables
         run: echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
 
-      - name: Install Poetry
-        run: |
-          pip install --upgrade pip
-          pip install "poetry-core>=1.0.0"
-          pip install "poetry>=1.2.2"
-
       - name: Install fftw3
         run: |
           sudo apt-get install libfftw3-dev
-
-      - name: Poetry cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cache/pypoetry
-          key: ${{ runner.os }}-${{ hashFiles('./poetry.lock') }}
 
       - name: Install poetry dependencies
         run: |
