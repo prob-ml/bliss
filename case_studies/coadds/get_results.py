@@ -16,7 +16,7 @@ from tqdm import tqdm
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.encoder import Encoder
-from bliss.plotting import CB_color_cycle, set_rc_params
+from bliss.plotting import CB_color_cycle, scatter_shade_plot, set_rc_params
 from bliss.reporting import DetectionMetrics, match_by_locs
 from case_studies.coadds.coadds import load_coadd_dataset
 
@@ -32,33 +32,6 @@ latex_names = {
 }
 
 set_rc_params(fontsize=28)
-
-
-def scatter_shade_plot(ax, x, y, xlims, delta, qs=(0.25, 0.75), color="m"):
-    # plot median and 25/75 quantiles on each bin decided by delta and xlims.
-
-    xbins = np.arange(xlims[0], xlims[1], delta)
-
-    xs = np.zeros(len(xbins))
-    ys = np.zeros(len(xbins))
-    yqs = np.zeros((len(xbins), 2))
-
-    for i, bx in enumerate(xbins):
-        keep_x = (x > bx) & (x < bx + delta)
-        y_bin = y[keep_x]
-
-        xs[i] = bx + delta / 2
-
-        if len(y_bin) == 0:  # noqa: WPS507
-            ys[i] = np.nan
-            yqs[i] = (np.nan, np.nan)
-            continue
-
-        ys[i] = np.median(y_bin)
-        yqs[i, :] = np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1])
-
-    ax.plot(xs, ys, marker="o", c=color, linestyle="-")
-    ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=0.5)
 
 
 def _compute_mag_bin_metrics(

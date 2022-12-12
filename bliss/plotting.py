@@ -218,22 +218,20 @@ def add_loc_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s
     )
 
 
-def scatter_bin_plot(
-    ax: plt.Axes,
+def scatter_shade_plot(
+    ax: Axes,
     x: np.ndarray,
     y: np.ndarray,
-    xlims: Tuple[int, int],
+    xlims: Tuple[float, float],
     delta: float,
-    capsize=5.0,
-    qs=(0.25, 0.75),
-    color="m",
+    qs: Tuple[float, float] = (0.25, 0.75),
+    color: str = "m",
 ):
-    # plot median and 25/75 quantiles on each bin decided by delta and xlims.
     xbins = np.arange(xlims[0], xlims[1], delta)
 
     xs = np.zeros(len(xbins))
     ys = np.zeros(len(xbins))
-    errs = np.zeros((len(xbins), 2))
+    yqs = np.zeros((len(xbins), 2))
 
     for i, bx in enumerate(xbins):
         keep_x = (x > bx) & (x < bx + delta)
@@ -243,14 +241,14 @@ def scatter_bin_plot(
 
         if y_bin.shape[0] == 0:
             ys[i] = np.nan
-            errs[i] = (np.nan, np.nan)
+            yqs[i] = (np.nan, np.nan)
             continue
 
         ys[i] = np.median(y_bin)
-        errs[i, :] = ys[i] - np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1]) - ys[i]
+        yqs[i, :] = np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1])
 
-    errs = errs.T.reshape(2, -1)
-    ax.errorbar(xs, ys, yerr=errs, marker="o", c=color, linestyle="-", capsize=capsize)
+    ax.plot(xs, ys, marker="o", c=color, linestyle="-")
+    ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=0.5)
 
 
 def make_scatter_contours(ax, x, y):
