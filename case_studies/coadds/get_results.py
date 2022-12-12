@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import math
-from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List
 
@@ -16,8 +15,8 @@ from tqdm import tqdm
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.encoder import Encoder
-from bliss.plotting import CB_color_cycle, set_rc_params
-from bliss.reporting import DetectionMetrics, match_by_locs
+from bliss.plotting import CB_color_cycle, scatter_shade_plot, set_rc_params
+from bliss.reporting import compute_mag_bin_metrics, get_boostrap_precision_and_recall
 from case_studies.coadds.coadds import load_coadd_dataset
 
 device = torch.device("cuda:0")
@@ -32,148 +31,6 @@ latex_names = {
 }
 
 set_rc_params(fontsize=28)
-
-
-def scatter_shade_plot(ax, x, y, xlims, delta, qs=(0.25, 0.75), color="m"):
-    # plot median and 25/75 quantiles on each bin decided by delta and xlims.
-
-    xbins = np.arange(xlims[0], xlims[1], delta)
-
-    xs = np.zeros(len(xbins))
-    ys = np.zeros(len(xbins))
-    yqs = np.zeros((len(xbins), 2))
-
-    for i, bx in enumerate(xbins):
-        keep_x = (x > bx) & (x < bx + delta)
-        y_bin = y[keep_x]
-
-        xs[i] = bx + delta / 2
-
-        if len(y_bin) == 0:  # noqa: WPS507
-            ys[i] = np.nan
-            yqs[i] = (np.nan, np.nan)
-            continue
-
-        ys[i] = np.median(y_bin)
-        yqs[i, :] = np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1])
-
-    ax.plot(xs, ys, marker="o", c=color, linestyle="-")
-    ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=0.5)
-
-
-def _compute_mag_bin_metrics(
-    mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
-) -> Dict[str, Tensor]:
-    metrics_per_mag = defaultdict(lambda: torch.zeros(len(mag_bins)))
-
-    # compute data for precision/recall/classification accuracy as a function of magnitude.
-    for ii, (mag1, mag2) in tqdm(enumerate(mag_bins), desc="Metrics per bin", total=len(mag_bins)):
-        detection_metrics = DetectionMetrics(disable_bar=True)
-
-        # precision
-        eparams = est.apply_param_bin("mags", mag1, mag2)
-        detection_metrics.update(truth, eparams)
-        precision = detection_metrics.compute()["precision"]
-        detection_metrics.reset()
-
-        # recall
-        tparams = truth.apply_param_bin("mags", mag1, mag2)
-        detection_metrics.update(tparams, est)
-        recall = detection_metrics.compute()["recall"]
-
-        tcount = tparams.n_sources.sum().item()
-        ecount = eparams.n_sources.sum().item()
-
-        metrics_per_mag["precision"][ii] = precision
-        metrics_per_mag["recall"][ii] = recall
-        metrics_per_mag["tcount"][ii] = tcount
-        metrics_per_mag["ecount"][ii] = ecount
-
-    return dict(metrics_per_mag)
-
-
-def _compute_tp_fp(truth: FullCatalog, est: FullCatalog):
-    # get precision tp per batch
-    all_tp = torch.zeros(truth.batch_size)
-    all_fp = torch.zeros(truth.batch_size)
-    all_ntrue = torch.zeros(truth.batch_size)
-    for b in range(truth.batch_size):
-        ntrue, nest = truth.n_sources[b].int().item(), est.n_sources[b].int().item()
-        tlocs, elocs = truth.plocs[b], est.plocs[b]
-        if ntrue > 0 and nest > 0:
-            _, mest, dkeep, _ = match_by_locs(tlocs, elocs)
-            tp = len(elocs[mest][dkeep])  # n_matches
-            fp = nest - tp
-        elif ntrue > 0:
-            tp = 0
-            fp = 0
-        elif nest > 0:
-            tp = 0
-            fp = nest
-        else:
-            tp = 0
-            fp = 0
-        all_tp[b] = tp
-        all_fp[b] = fp
-        all_ntrue[b] = ntrue
-
-    return all_tp, all_fp, all_ntrue
-
-
-def _comput_tp_fp_per_bin(
-    mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
-) -> Dict[str, Tensor]:
-    counts_per_mag = defaultdict(lambda: torch.zeros(len(mag_bins), truth.batch_size))
-    for ii, (mag1, mag2) in tqdm(enumerate(mag_bins), desc="tp/fp per bin", total=len(mag_bins)):
-
-        # precision
-        eparams = est.apply_param_bin("mags", mag1, mag2)
-        tp, fp, ntrue = _compute_tp_fp(truth, eparams)
-        counts_per_mag["tp_precision"][ii] = tp
-        counts_per_mag["fp_precision"][ii] = fp
-
-        # recall
-        tparams = truth.apply_param_bin("mags", mag1, mag2)
-        tp, _, ntrue = _compute_tp_fp(tparams, est)
-        counts_per_mag["tp_recall"][ii] = tp
-        counts_per_mag["ntrue"][ii] = ntrue
-
-    return counts_per_mag
-
-
-def _get_bootstrap_pr_err(
-    n_samples: int, mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
-) -> Dict[str, Tensor]:
-    """Get errors for precision/recall which need to be handled carefully to be efficient."""
-    counts_per_mag = _comput_tp_fp_per_bin(mag_bins, truth, est)
-    batch_size = truth.batch_size
-    n_mag_bins = mag_bins.shape[0]
-
-    # get counts in needed format
-    tpp_boot = counts_per_mag["tp_precision"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
-    fpp_boot = counts_per_mag["fp_precision"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
-    tpr_boot = counts_per_mag["tp_recall"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
-    ntrue_boot = counts_per_mag["ntrue"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
-
-    # get indices to boostrap
-    # NOTE: the indices for each sample repeat across magnitude bins
-    boot_indices = torch.randint(0, batch_size, (n_samples, 1, batch_size))
-    boot_indices = boot_indices.expand(n_samples, n_mag_bins, batch_size)
-
-    # get bootstrapped samples of counts
-    tpp_boot = torch.gather(tpp_boot, 2, boot_indices)
-    fpp_boot = torch.gather(fpp_boot, 2, boot_indices)
-    tpr_boot = torch.gather(tpr_boot, 2, boot_indices)
-    ntrue_boot = torch.gather(ntrue_boot, 2, boot_indices)
-    assert tpp_boot.shape == (n_samples, n_mag_bins, batch_size)
-
-    # finally, get precision and recall boostrapped samples
-    precision_boot = tpp_boot.sum(2) / (tpp_boot.sum(2) + fpp_boot.sum(2))
-    recall_boot = tpr_boot.sum(2) / ntrue_boot.sum(2)
-
-    assert precision_boot.shape == (n_samples, n_mag_bins)
-    assert recall_boot.shape == (n_samples, n_mag_bins)
-    return {"precision": precision_boot, "recall": recall_boot}
 
 
 def _load_encoder(cfg, model_path) -> Encoder:
@@ -415,8 +272,8 @@ def main(cfg):
                 est = _add_mags_to_catalog(est)
 
                 # get all metrics from catalogs
-                bin_metrics = _compute_mag_bin_metrics(mag_bins, truth, est)
-                boot_metrics = _get_bootstrap_pr_err(10000, mag_bins, truth, est)
+                bin_metrics = compute_mag_bin_metrics(mag_bins, truth, est)
+                boot_metrics = get_boostrap_precision_and_recall(10000, mag_bins, truth, est)
                 matched_fluxes = _get_fluxes_cond_true_detections(
                     encoder, truth, test_images, background
                 )
