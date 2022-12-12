@@ -1,6 +1,6 @@
 """Functions to evaluate the performance of BLISS predictions."""
 from collections import defaultdict
-from typing import Dict, Optional, Tuple
+from typing import DefaultDict, Dict, Optional, Tuple
 
 import galsim
 import numpy as np
@@ -251,7 +251,9 @@ def _compute_batch_tp_fp(truth: FullCatalog, est: FullCatalog) -> Tuple[Tensor, 
 def _compute_tp_fp_per_mag_bin(
     mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
 ) -> Dict[str, Tensor]:
-    counts_per_mag = defaultdict(lambda: torch.zeros(len(mag_bins), truth.batch_size))
+    counts_per_mag: DefaultDict[str, Tensor] = defaultdict(
+        lambda: torch.zeros(len(mag_bins), truth.batch_size)
+    )
     for ii, (mag1, mag2) in tqdm(enumerate(mag_bins), desc="tp/fp per bin", total=len(mag_bins)):
 
         # precision
