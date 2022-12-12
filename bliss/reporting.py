@@ -29,9 +29,9 @@ class DetectionMetrics(Metric):
 
     def __init__(
         self,
-        slack=1.0,
-        dist_sync_on_step=False,
-        disable_bar=True,
+        slack: float = 1.0,
+        dist_sync_on_step: bool = False,
+        disable_bar: bool = True,
     ) -> None:
         """Computes matches between true and estimated locations.
 
@@ -115,8 +115,8 @@ class ClassificationMetrics(Metric):
 
     def __init__(
         self,
-        slack=1.0,
-        dist_sync_on_step=False,
+        slack: float = 1.0,
+        dist_sync_on_step: bool = False,
     ) -> None:
         """Computes matches between true and estimated locations.
 
@@ -328,6 +328,7 @@ def scene_metrics(
         mag_min: Discard all objects with magnitude lower than this.
         mag_max: Discard all objects with magnitude higher than this.
         slack: Pixel L-infinity distance slack when doing matching for metrics.
+        disable_bar: Whether to use a progress bar when computing each batch in DetectionMetrics.
 
     Returns:
         Dictionary with output from DetectionMetrics, ClassificationMetrics.
