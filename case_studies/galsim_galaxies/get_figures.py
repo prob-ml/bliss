@@ -363,7 +363,7 @@ class BlendGalsimFigure(BlissFigure):
         return fig
 
 
-def load_models(cfg, device):
+def _load_models(cfg, device):
     # load models required for SDSS reconstructions.
 
     location = instantiate(cfg.models.detection_encoder).to(device).eval()
@@ -391,7 +391,7 @@ def load_models(cfg, device):
     return encoder, decoder
 
 
-def setup(cfg):
+def _setup(cfg):
     pcfg = cfg.plots
     figs = set(pcfg.figs)
     cachedir = pcfg.cachedir
@@ -410,7 +410,7 @@ def setup(cfg):
     return figs, device, bfig_kwargs
 
 
-def make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
+def _make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
     print("INFO: Creating autoencoder figures...")
     autoencoder = instantiate(cfg.models.galaxy_net)
     autoencoder.load_state_dict(torch.load(cfg.models.prior.galaxy_prior.autoencoder_ckpt))
@@ -439,7 +439,7 @@ def make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
     mpl.rc_file_defaults()
 
 
-def make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dict):
+def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dict):
     print("INFO: Creating figures for metrics on simulated blended galaxies.")
     blend_file = Path(cfg.plots.sim_blend_gals_file)
 
@@ -456,16 +456,16 @@ def make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dict
 
 @hydra.main(config_path="./config", config_name="config", version_base=None)
 def main(cfg):
-    figs, device, bfig_kwargs = setup(cfg)
-    encoder, decoder = load_models(cfg, device)
+    figs, device, bfig_kwargs = _setup(cfg)
+    encoder, decoder = _load_models(cfg, device)
     overwrite = cfg.plots.overwrite
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if "single_gal" in figs:
-        make_autoencoder_figures(cfg, device, overwrite, bfig_kwargs)
+        _make_autoencoder_figures(cfg, device, overwrite, bfig_kwargs)
 
     if "blend_gal" in figs:
-        make_blend_figures(cfg, encoder, decoder, overwrite, bfig_kwargs)
+        _make_blend_figures(cfg, encoder, decoder, overwrite, bfig_kwargs)
 
 
 if __name__ == "__main__":
