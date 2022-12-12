@@ -18,7 +18,7 @@ from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.models.psf_decoder import PSFDecoder
-from bliss.plotting import BlissFigure, plot_image, scatter_bin_plot
+from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
 from bliss.reporting import match_by_locs
 
 ALL_FIGS = ("single_gal", "blend_gal")
@@ -176,7 +176,7 @@ class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
         # magnitudes
         true_mags, recon_mags = meas["true_mags"], meas["recon_mags"]
         x, y = np.log10(snr), recon_mags - true_mags
-        scatter_bin_plot(ax1, x, y, xlims, delta=0.2)
+        scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
         ax1.set_xlim(xlims)
         ax1.set_xlabel(xlabel)
         ax1.set_ylabel(r"\rm $m^{\rm recon} - m^{\rm true}$")
@@ -185,7 +185,7 @@ class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
         # fluxes
         true_fluxes, recon_fluxes = meas["true_fluxes"], meas["recon_fluxes"]
         x, y = np.log10(snr), (recon_fluxes - true_fluxes) / recon_fluxes
-        scatter_bin_plot(ax2, x, y, xlims, delta=0.2)
+        scatter_shade_plot(ax2, x, y, xlims, delta=0.2)
         ax2.set_xlim(xlims)
         ax2.set_xlabel(xlabel)
         ax2.set_ylabel(r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
@@ -194,7 +194,7 @@ class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
         # ellipticities
         true_ellip1, recon_ellip1 = meas["true_ellips"][:, 0], meas["recon_ellips"][:, 0]
         x, y = np.log10(snr), recon_ellip1 - true_ellip1
-        scatter_bin_plot(ax3, x, y, xlims, delta=0.2)
+        scatter_shade_plot(ax3, x, y, xlims, delta=0.2)
         ax3.set_xlim(xlims)
         ax3.set_xlabel(xlabel)
         ax3.set_ylabel(r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$")
@@ -202,7 +202,7 @@ class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
 
         true_ellip2, recon_ellip2 = meas["true_ellips"][:, 1], meas["recon_ellips"][:, 1]
         x, y = np.log10(snr), recon_ellip2 - true_ellip2
-        scatter_bin_plot(ax4, x, y, xlims, delta=0.2)
+        scatter_shade_plot(ax4, x, y, xlims, delta=0.2)
         ax4.set_xlim(xlims)
         ax4.set_xlabel(xlabel)
         ax4.set_ylabel(r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$")
@@ -303,7 +303,7 @@ class BlendGalsimFigure(BlissFigure):
         ylabel = r"\rm $m^{\rm recon} - m^{\rm true}$"
 
         x, y = np.log10(snr), est_mags - true_mags
-        scatter_bin_plot(ax1, x, y, xlims, delta=0.2)
+        scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
         ax1.set_xlabel(xlabel)
         ax1.set_ylabel(ylabel)
         ax1.set_xticks(xticks)
@@ -313,7 +313,7 @@ class BlendGalsimFigure(BlissFigure):
         xlabel = "$B$"
         ylabel = r"\rm $m^{\rm recon} - m^{\rm true}$"
         x, y = blendedness, est_mags - true_mags
-        scatter_bin_plot(ax2, x, y, xlims, delta=0.1)
+        scatter_shade_plot(ax2, x, y, xlims, delta=0.1)
         ax2.set_xlabel(xlabel)
         ax2.set_ylabel(ylabel)
         ax2.set_xticks(xticks)
@@ -323,7 +323,7 @@ class BlendGalsimFigure(BlissFigure):
         xlabel = r"$\log_{10} \rm SNR$"
         ylabel = r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$"
         x, y = np.log10(snr), est_ellips[:, 0] - true_ellips[:, 0]
-        scatter_bin_plot(ax3, x, y, xlims, delta=0.2)
+        scatter_shade_plot(ax3, x, y, xlims, delta=0.2)
         ax3.set_xlabel(xlabel)
         ax3.set_ylabel(ylabel)
         ax3.set_xticks(xticks)
@@ -333,7 +333,7 @@ class BlendGalsimFigure(BlissFigure):
         xlabel = "$B$"
         ylabel = r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$"
         x, y = blendedness, est_ellips[:, 0] - true_ellips[:, 0]
-        scatter_bin_plot(ax4, x, y, xlims, delta=0.1)
+        scatter_shade_plot(ax4, x, y, xlims, delta=0.1)
         ax4.set_xlabel(xlabel)
         ax4.set_ylabel(ylabel)
         ax4.set_xticks(xticks)
@@ -343,7 +343,7 @@ class BlendGalsimFigure(BlissFigure):
         xlabel = r"$\log_{10} \rm SNR$"
         ylabel = r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$"
         x, y = np.log10(snr), est_ellips[:, 1] - true_ellips[:, 1]
-        scatter_bin_plot(ax5, x, y, xlims, delta=0.2)
+        scatter_shade_plot(ax5, x, y, xlims, delta=0.2)
         ax5.set_xlabel(xlabel)
         ax5.set_ylabel(ylabel)
         ax5.set_xticks(xticks)
@@ -353,7 +353,7 @@ class BlendGalsimFigure(BlissFigure):
         xlabel = "$B$"
         ylabel = r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$"
         x, y = blendedness, est_ellips[:, 1] - true_ellips[:, 1]
-        scatter_bin_plot(ax6, x, y, xlims=xlims, delta=0.1)
+        scatter_shade_plot(ax6, x, y, xlims=xlims, delta=0.1)
         ax6.set_xlabel(xlabel)
         ax6.set_ylabel(ylabel)
         ax6.set_xticks(xticks)
@@ -363,7 +363,7 @@ class BlendGalsimFigure(BlissFigure):
         return fig
 
 
-def load_models(cfg, device):
+def _load_models(cfg, device):
     # load models required for SDSS reconstructions.
 
     location = instantiate(cfg.models.detection_encoder).to(device).eval()
@@ -391,7 +391,7 @@ def load_models(cfg, device):
     return encoder, decoder
 
 
-def setup(cfg):
+def _setup(cfg):
     pcfg = cfg.plots
     figs = set(pcfg.figs)
     cachedir = pcfg.cachedir
@@ -410,7 +410,7 @@ def setup(cfg):
     return figs, device, bfig_kwargs
 
 
-def make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
+def _make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
     print("INFO: Creating autoencoder figures...")
     autoencoder = instantiate(cfg.models.galaxy_net)
     autoencoder.load_state_dict(torch.load(cfg.models.prior.galaxy_prior.autoencoder_ckpt))
@@ -439,7 +439,7 @@ def make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
     mpl.rc_file_defaults()
 
 
-def make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dict):
+def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dict):
     print("INFO: Creating figures for metrics on simulated blended galaxies.")
     blend_file = Path(cfg.plots.sim_blend_gals_file)
 
@@ -456,16 +456,16 @@ def make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dict
 
 @hydra.main(config_path="./config", config_name="config", version_base=None)
 def main(cfg):
-    figs, device, bfig_kwargs = setup(cfg)
-    encoder, decoder = load_models(cfg, device)
+    figs, device, bfig_kwargs = _setup(cfg)
+    encoder, decoder = _load_models(cfg, device)
     overwrite = cfg.plots.overwrite
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if "single_gal" in figs:
-        make_autoencoder_figures(cfg, device, overwrite, bfig_kwargs)
+        _make_autoencoder_figures(cfg, device, overwrite, bfig_kwargs)
 
     if "blend_gal" in figs:
-        make_blend_figures(cfg, encoder, decoder, overwrite, bfig_kwargs)
+        _make_blend_figures(cfg, encoder, decoder, overwrite, bfig_kwargs)
 
 
 if __name__ == "__main__":
