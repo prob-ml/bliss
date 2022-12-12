@@ -220,12 +220,97 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     return row_indx, col_indx, dist_keep, avg_distance
 
 
+def _compute_batch_tp_fp(truth: FullCatalog, est: FullCatalog) -> Tuple[Tensor, Tensor, Tensor]:
+    """Separate purpose from `DetectionMetrics`, since here we don't aggregate over batches."""
+    all_tp = torch.zeros(truth.batch_size)
+    all_fp = torch.zeros(truth.batch_size)
+    all_ntrue = torch.zeros(truth.batch_size)
+    for b in range(truth.batch_size):
+        ntrue, nest = truth.n_sources[b].int().item(), est.n_sources[b].int().item()
+        tlocs, elocs = truth.plocs[b], est.plocs[b]
+        if ntrue > 0 and nest > 0:
+            _, mest, dkeep, _ = match_by_locs(tlocs, elocs)
+            tp = len(elocs[mest][dkeep])
+            fp = nest - tp
+        elif ntrue > 0:
+            tp = 0
+            fp = 0
+        elif nest > 0:
+            tp = 0
+            fp = nest
+        else:
+            tp = 0
+            fp = 0
+        all_tp[b] = tp
+        all_fp[b] = fp
+        all_ntrue[b] = ntrue
+
+    return all_tp, all_fp, all_ntrue
+
+
+def _compute_tp_fp_per_mag_bin(
+    mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
+) -> Dict[str, Tensor]:
+    counts_per_mag = defaultdict(lambda: torch.zeros(len(mag_bins), truth.batch_size))
+    for ii, (mag1, mag2) in tqdm(enumerate(mag_bins), desc="tp/fp per bin", total=len(mag_bins)):
+
+        # precision
+        eparams = est.apply_param_bin("mags", mag1, mag2)
+        tp, fp, _ = _compute_batch_tp_fp(truth, eparams)
+        counts_per_mag["tp_precision"][ii] = tp
+        counts_per_mag["fp_precision"][ii] = fp
+
+        # recall
+        tparams = truth.apply_param_bin("mags", mag1, mag2)
+        tp, _, ntrue = _compute_batch_tp_fp(tparams, est)
+        counts_per_mag["tp_recall"][ii] = tp
+        counts_per_mag["ntrue"][ii] = ntrue
+
+    return counts_per_mag
+
+
+def get_boostrap_precision_and_recall(
+    n_samples: int, mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
+) -> Dict[str, Tensor]:
+    """Get errors for precision/recall which need to be handled carefully to be efficient."""
+    counts_per_mag = _compute_tp_fp_per_mag_bin(mag_bins, truth, est)
+    batch_size = truth.batch_size
+    n_mag_bins = mag_bins.shape[0]
+
+    # get counts in needed format
+    tpp_boot = counts_per_mag["tp_precision"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+    fpp_boot = counts_per_mag["fp_precision"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+    tpr_boot = counts_per_mag["tp_recall"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+    ntrue_boot = counts_per_mag["ntrue"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+
+    # get indices to boostrap
+    # NOTE: the indices for each sample repeat across magnitude bins
+    boot_indices = torch.randint(0, batch_size, (n_samples, 1, batch_size))
+    boot_indices = boot_indices.expand(n_samples, n_mag_bins, batch_size)
+
+    # get bootstrapped samples of counts
+    tpp_boot = torch.gather(tpp_boot, 2, boot_indices)
+    fpp_boot = torch.gather(fpp_boot, 2, boot_indices)
+    tpr_boot = torch.gather(tpr_boot, 2, boot_indices)
+    ntrue_boot = torch.gather(ntrue_boot, 2, boot_indices)
+    assert tpp_boot.shape == (n_samples, n_mag_bins, batch_size)
+
+    # finally, get precision and recall boostrapped samples
+    precision_boot = tpp_boot.sum(2) / (tpp_boot.sum(2) + fpp_boot.sum(2))
+    recall_boot = tpr_boot.sum(2) / ntrue_boot.sum(2)
+
+    assert precision_boot.shape == (n_samples, n_mag_bins)
+    assert recall_boot.shape == (n_samples, n_mag_bins)
+    return {"precision": precision_boot, "recall": recall_boot}
+
+
 def scene_metrics(
     true_params: FullCatalog,
     est_params: FullCatalog,
     mag_min: float = 0,
     mag_max: float = torch.inf,
     slack: float = 1.0,
+    disable_bar: bool = True,
 ) -> dict:
     """Return detection and classification metrics based on a given ground truth.
 
@@ -245,7 +330,7 @@ def scene_metrics(
     Returns:
         Dictionary with output from DetectionMetrics, ClassificationMetrics.
     """
-    detection_metrics = DetectionMetrics(slack)
+    detection_metrics = DetectionMetrics(slack, disable_bar=disable_bar)
     classification_metrics = ClassificationMetrics(slack)
 
     # precision
@@ -307,7 +392,7 @@ def compute_mag_bin_metrics(
 ) -> Dict[str, Tensor]:
     metrics_per_mag: dict = defaultdict(lambda: torch.zeros(len(mag_bins)))
     for ii, (mag1, mag2) in enumerate(mag_bins):
-        res = scene_metrics(truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0)
+        res = scene_metrics(truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0, disable_bar=True)
         metrics_per_mag["precision"][ii] = res["precision"]
         metrics_per_mag["recall"][ii] = res["recall"]
         metrics_per_mag["f1"][ii] = res["f1"]
