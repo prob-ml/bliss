@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import warnings
 from pathlib import Path
-from typing import Union
+from typing import Dict, Tuple, Union
 
 import hydra
 import matplotlib as mpl
@@ -66,15 +66,14 @@ def _compute_detection_metrics(truth: FullCatalog, pred: FullCatalog):
 
 
 def _make_detection_figure(
-    mags,
-    data,
-    xlims=(18, 24),
-    ylims=(0.5, 1.05),
-    ratio=2,
-    where_step="mid",
-    n_gap=50,
+    mags: np.ndarray,
+    data: Dict[str, np.ndarray],
+    xlims: Tuple[float, float] = (18, 24),
+    ylims: Tuple[float, float] = (0.5, 1.05),
+    ratio: float = 2,
+    where_step: str = "mid",
+    n_gap: int = 50,
 ):
-    # precision / recall / f1 score
     precision = data["precision"]
     recall = data["recall"]
     f1_score = data["f1"]
@@ -82,6 +81,7 @@ def _make_detection_figure(
     tscount = data["tscount"]
     egcount = data["egcount"]
     escount = data["escount"]
+
     # (1) precision / recall
     fig, (ax1, ax2) = plt.subplots(
         2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
@@ -98,7 +98,7 @@ def _make_detection_figure(
     ax2.set_xlim(xlims)
     ax2.set_ylim(ylims)
 
-    # setup histogram plot up top.
+    # setup histogram plot up top
     c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]
     c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][4]
     ax1.step(mags, tgcount, label="coadd galaxies", where=where_step, color=c1)
