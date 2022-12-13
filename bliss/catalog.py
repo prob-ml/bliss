@@ -260,7 +260,14 @@ class TileCatalog(UserDict):
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params
 
-    def __init__(self, height: int, width: int, d: Dict[str, Tensor]):
+    def __init__(self, height: int, width: int, d: Dict[str, Tensor]) -> None:
+        """Initialize FullCatalog.
+
+        Args:
+            height: In pixels, without accounting for border padding.
+            width: In pixels, without accounting for border padding.
+            d: Dictionary containing parameters of FullCatalog with correct shape.
+        """
         self.height = height
         self.width = width
         self.plocs = d.pop("plocs")
