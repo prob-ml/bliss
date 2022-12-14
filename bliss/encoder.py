@@ -169,8 +169,7 @@ class Encoder(nn.Module):
 
         locs = tile_samples["locs"]
         n_sources = tile_samples["n_sources"]
-        # FIXME: This is a hack. Should fail flake8. Don't merge into master - find a better way
-        dist_params_if_source = self.detection_encoder._encode_for_n_sources(
+        dist_params_if_source = self.detection_encoder.encode_for_n_sources(
             dist_params["per_source_params"], torch.ones_like(n_sources)
         )
         tile_samples["loc_mean"] = dist_params_if_source["loc_mean"]

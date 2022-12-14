@@ -7,7 +7,7 @@ photo_catalog:
     field: 12
     band: 2
 frame:
-    _target_: reconstruction.SDSSFrame
+    _target_: bliss.inference.SDSSFrame
     sdss_dir: ${paths.sdss}
     pixel_scale: 0.396
     cat_file: ${paths.sdss}/coadd_catalog_94_1_12.fits
