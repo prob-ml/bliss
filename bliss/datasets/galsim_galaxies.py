@@ -1,7 +1,5 @@
 from typing import Dict, List, Optional
 
-import galsim
-import numpy as np
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
@@ -217,91 +215,6 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
             valid.append(next(iter(dl)))
         return DataLoader(valid, batch_size=None, num_workers=0)
-
-    def test_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-
-class ToyGaussian(pl.LightningDataModule, Dataset):
-    def __init__(
-        self,
-        num_workers,
-        batch_size,
-        n_batches,
-        slen,
-        n_bands,
-        pixel_scale,
-        background,
-        psf_fwhm,
-        min_flux,
-        max_flux,
-        min_hlr,
-        max_hlr,
-        max_e,
-    ):
-        super().__init__()
-        assert n_bands == 1, "Only 1 band is supported"
-        self.num_workers = num_workers
-        self.batch_size = batch_size
-        self.n_batches = n_batches
-
-        self.slen = slen
-        self.n_bands = n_bands
-        self.pixel_scale = pixel_scale
-
-        # create background
-        self.background = torch.zeros((self.n_bands, self.slen, self.slen), dtype=torch.float32)
-        self.background[...] = background
-
-        # small dummy psf
-        self.psf = galsim.Gaussian(fwhm=psf_fwhm).withFlux(1.0)
-        self.min_flux = min_flux
-        self.max_flux = max_flux
-        self.min_hlr = min_hlr
-        self.max_hlr = max_hlr
-        self.max_e = max_e
-
-    def _uniform(self, a, b):
-        # uses pytorch to return a single float ~ U(a, b)
-        unif = (a - b) * torch.rand(1) + b
-        return unif.item()
-
-    def __getitem__(self, idx):
-        flux_avg = self._uniform(self.min_flux, self.max_flux)
-        hlr = self._uniform(self.min_hlr, self.max_hlr)  # arcseconds
-        flux = (hlr / self.pixel_scale) ** 2 * np.pi * flux_avg  # approx
-
-        # sample ellipticity
-        ell = self._uniform(0, self.max_e)
-        theta = self._uniform(0, 2 * np.pi)
-        g1 = ell * np.cos(theta)
-        g2 = ell * np.sin(theta)
-
-        # pylint: disable=no-value-for-parameter
-        galaxy = galsim.Gaussian(half_light_radius=hlr).shear(g1=g1, g2=g2).withFlux(flux)
-        gal_conv = galsim.Convolution(galaxy, self.psf)
-        image = gal_conv.drawImage(
-            nx=self.slen, ny=self.slen, method="auto", scale=self.pixel_scale
-        )
-
-        # convert image to pytorch and reshape
-        image = torch.from_numpy(image.array).reshape(1, self.slen, self.slen)
-
-        # add noise and background.
-        image += self.background
-        noise = torch.sqrt(image) * torch.randn(*image.shape)
-        image += noise
-
-        return {"images": image, "background": self.background}
-
-    def __len__(self):
-        return self.batch_size * self.n_batches
-
-    def train_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-
-    def val_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)

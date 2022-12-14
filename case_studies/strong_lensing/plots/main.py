@@ -13,10 +13,10 @@ from bliss.catalog import PhotoFullCatalog
 from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame
 from bliss.models.decoder import ImageDecoder
-from case_studies.sdss_galaxies.plots.autoencoder import AEReconstructionFigures
-from case_studies.sdss_galaxies.plots.sdss_detection_metrics import DetectionClassificationFigures
+from case_studies.sdss_galaxies.plots.ae_recon import AEReconstructionFigures
+from case_studies.sdss_galaxies.plots.galsim_blends import BlendSimFigures
+from case_studies.sdss_galaxies.plots.sdss_detection import DetectionClassificationFigures
 from case_studies.sdss_galaxies.plots.sdss_reconstruction import SDSSReconstructionFigures
-from case_studies.sdss_galaxies.plots.sim_blend_metrics import BlendSimFigures
 
 
 def load_models(cfg, device):
@@ -127,7 +127,7 @@ def make_blend_sim_figure(cfg, encoder, decoder, bfig_kwargs):
     blend_fig.save_figures(blend_file, encoder, decoder)
 
 
-@hydra.main(config_path="../config", config_name="config")
+@hydra.main(config_path="../config", config_name="config", version_base=None)
 def main(cfg):
     figs, device, bfig_kwargs = setup(cfg)
     encoder, decoder = load_models(cfg, device)

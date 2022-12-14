@@ -16,7 +16,7 @@ from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.galaxy_net import CenteredGalaxyEncoder, OneCenteredGalaxyAE
 from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
 from bliss.models.vae.galaxy_vae import OneCenteredGalaxyVAE
-from bliss.reporting import add_legend, plot_image, plot_locs
+from bliss.plotting import add_loc_legend, plot_image, plot_locs
 
 
 class GalaxyEncoder(pl.LightningModule):
@@ -28,7 +28,7 @@ class GalaxyEncoder(pl.LightningModule):
         vae_flow: Optional[CenteredGalaxyLatentFlow] = None,
         vae_flow_ckpt: Optional[str] = None,
         optimizer_params: Optional[dict] = None,
-        crop_loss_at_border=False,
+        crop_loss_at_border: bool = False,
         checkpoint_path: Optional[str] = None,
         max_flux_valid_plots: Optional[int] = None,
     ):
@@ -312,7 +312,7 @@ class GalaxyEncoder(pl.LightningModule):
                     res_ax.axhline(b, color="w")
                     res_ax.axhline(b + eff_slen, color="w")
             if i == 0:
-                add_legend(true_ax, labels)
+                add_loc_legend(true_ax, labels)
 
         fig.tight_layout()
         if self.logger:

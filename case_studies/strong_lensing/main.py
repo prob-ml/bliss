@@ -13,7 +13,7 @@ if not getenv("BLISS_HOME"):
     environ["BLISS_HOME"] = bliss_home.as_posix()
 
 
-@hydra.main(config_path="./config", config_name="config")
+@hydra.main(config_path="./config", config_name="config", version_base=None)
 def main(cfg):
     if cfg.mode == "train":
         train(cfg)

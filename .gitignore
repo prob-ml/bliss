@@ -10,6 +10,7 @@ fits/*
 .tox
 *lightning_logs
 *.pkl
+*.whl
 .idea
 htmlcov/
 build/

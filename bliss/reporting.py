@@ -1,17 +1,14 @@
 """Functions to evaluate the performance of BLISS predictions."""
-from typing import Dict, Optional, Tuple
+from collections import defaultdict
+from typing import DefaultDict, Dict, Optional, Tuple
 
 import galsim
-import matplotlib as mpl
 import numpy as np
 import torch
 import tqdm
 from astropy.table import Table
 from astropy.wcs import WCS
 from einops import rearrange, reduce
-from matplotlib.figure import Figure
-from matplotlib.pyplot import Axes
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from scipy import optimize as sp_optim
 from sklearn.metrics import confusion_matrix
 from torch import Tensor
@@ -32,9 +29,9 @@ class DetectionMetrics(Metric):
 
     def __init__(
         self,
-        slack=1.0,
-        dist_sync_on_step=False,
-        disable_bar=True,
+        slack: float = 1.0,
+        dist_sync_on_step: bool = False,
+        disable_bar: bool = True,
     ) -> None:
         """Computes matches between true and estimated locations.
 
@@ -118,8 +115,8 @@ class ClassificationMetrics(Metric):
 
     def __init__(
         self,
-        slack=1.0,
-        dist_sync_on_step=False,
+        slack: float = 1.0,
+        dist_sync_on_step: bool = False,
     ) -> None:
         """Computes matches between true and estimated locations.
 
@@ -223,12 +220,99 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     return row_indx, col_indx, dist_keep, avg_distance
 
 
+def _compute_batch_tp_fp(truth: FullCatalog, est: FullCatalog) -> Tuple[Tensor, Tensor, Tensor]:
+    """Separate purpose from `DetectionMetrics`, since here we don't aggregate over batches."""
+    all_tp = torch.zeros(truth.batch_size)
+    all_fp = torch.zeros(truth.batch_size)
+    all_ntrue = torch.zeros(truth.batch_size)
+    for b in range(truth.batch_size):
+        ntrue, nest = truth.n_sources[b].int().item(), est.n_sources[b].int().item()
+        tlocs, elocs = truth.plocs[b], est.plocs[b]
+        if ntrue > 0 and nest > 0:
+            _, mest, dkeep, _ = match_by_locs(tlocs, elocs)
+            tp = len(elocs[mest][dkeep])
+            fp = nest - tp
+        elif ntrue > 0:
+            tp = 0
+            fp = 0
+        elif nest > 0:
+            tp = 0
+            fp = nest
+        else:
+            tp = 0
+            fp = 0
+        all_tp[b] = tp
+        all_fp[b] = fp
+        all_ntrue[b] = ntrue
+
+    return all_tp, all_fp, all_ntrue
+
+
+def _compute_tp_fp_per_mag_bin(
+    mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
+) -> Dict[str, Tensor]:
+    counts_per_mag: DefaultDict[str, Tensor] = defaultdict(
+        lambda: torch.zeros(len(mag_bins), truth.batch_size)
+    )
+    for ii, (mag1, mag2) in tqdm(enumerate(mag_bins), desc="tp/fp per bin", total=len(mag_bins)):
+
+        # precision
+        eparams = est.apply_param_bin("mags", mag1, mag2)
+        tp, fp, _ = _compute_batch_tp_fp(truth, eparams)
+        counts_per_mag["tp_precision"][ii] = tp
+        counts_per_mag["fp_precision"][ii] = fp
+
+        # recall
+        tparams = truth.apply_param_bin("mags", mag1, mag2)
+        tp, _, ntrue = _compute_batch_tp_fp(tparams, est)
+        counts_per_mag["tp_recall"][ii] = tp
+        counts_per_mag["ntrue"][ii] = ntrue
+
+    return counts_per_mag
+
+
+def get_boostrap_precision_and_recall(
+    n_samples: int, mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
+) -> Dict[str, Tensor]:
+    """Get errors for precision/recall which need to be handled carefully to be efficient."""
+    counts_per_mag = _compute_tp_fp_per_mag_bin(mag_bins, truth, est)
+    batch_size = truth.batch_size
+    n_mag_bins = mag_bins.shape[0]
+
+    # get counts in needed format
+    tpp_boot = counts_per_mag["tp_precision"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+    fpp_boot = counts_per_mag["fp_precision"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+    tpr_boot = counts_per_mag["tp_recall"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+    ntrue_boot = counts_per_mag["ntrue"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+
+    # get indices to boostrap
+    # NOTE: the indices for each sample repeat across magnitude bins
+    boot_indices = torch.randint(0, batch_size, (n_samples, 1, batch_size))
+    boot_indices = boot_indices.expand(n_samples, n_mag_bins, batch_size)
+
+    # get bootstrapped samples of counts
+    tpp_boot = torch.gather(tpp_boot, 2, boot_indices)
+    fpp_boot = torch.gather(fpp_boot, 2, boot_indices)
+    tpr_boot = torch.gather(tpr_boot, 2, boot_indices)
+    ntrue_boot = torch.gather(ntrue_boot, 2, boot_indices)
+    assert tpp_boot.shape == (n_samples, n_mag_bins, batch_size)
+
+    # finally, get precision and recall boostrapped samples
+    precision_boot = tpp_boot.sum(2) / (tpp_boot.sum(2) + fpp_boot.sum(2))
+    recall_boot = tpr_boot.sum(2) / ntrue_boot.sum(2)
+
+    assert precision_boot.shape == (n_samples, n_mag_bins)
+    assert recall_boot.shape == (n_samples, n_mag_bins)
+    return {"precision": precision_boot, "recall": recall_boot}
+
+
 def scene_metrics(
     true_params: FullCatalog,
     est_params: FullCatalog,
     mag_min: float = 0,
     mag_max: float = torch.inf,
     slack: float = 1.0,
+    disable_bar: bool = True,
 ) -> dict:
     """Return detection and classification metrics based on a given ground truth.
 
@@ -244,11 +328,12 @@ def scene_metrics(
         mag_min: Discard all objects with magnitude lower than this.
         mag_max: Discard all objects with magnitude higher than this.
         slack: Pixel L-infinity distance slack when doing matching for metrics.
+        disable_bar: Whether to use a progress bar when computing each batch in DetectionMetrics.
 
     Returns:
         Dictionary with output from DetectionMetrics, ClassificationMetrics.
     """
-    detection_metrics = DetectionMetrics(slack)
+    detection_metrics = DetectionMetrics(slack, disable_bar=disable_bar)
     classification_metrics = ClassificationMetrics(slack)
 
     # precision
@@ -303,6 +388,25 @@ def scene_metrics(
 
     # compute and return results
     return {**detection_result, **classification_result, "counts": counts}
+
+
+def compute_mag_bin_metrics(
+    mag_bins: Tensor, truth: FullCatalog, pred: FullCatalog
+) -> Dict[str, Tensor]:
+    metrics_per_mag: dict = defaultdict(lambda: torch.zeros(len(mag_bins)))
+    for ii, (mag1, mag2) in enumerate(mag_bins):
+        res = scene_metrics(truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0, disable_bar=True)
+        metrics_per_mag["precision"][ii] = res["precision"]
+        metrics_per_mag["recall"][ii] = res["recall"]
+        metrics_per_mag["f1"][ii] = res["f1"]
+        metrics_per_mag["class_acc"][ii] = res["class_acc"]
+        conf_matrix = res["conf_matrix"]
+        metrics_per_mag["galaxy_acc"][ii] = conf_matrix[0, 0] / conf_matrix[0, :].sum().item()
+        metrics_per_mag["star_acc"][ii] = conf_matrix[1, 1] / conf_matrix[1, :].sum().item()
+        for k, v in res["counts"].items():
+            metrics_per_mag[k][ii] = v
+
+    return dict(metrics_per_mag)
 
 
 class CoaddFullCatalog(FullCatalog):
@@ -437,69 +541,3 @@ def get_single_galaxy_measurements(
         "mags": convert_flux_to_mag(fluxes),
         "ellips": ellips,
     }
-
-
-def plot_image(
-    fig: Figure,
-    ax: Axes,
-    image: np.ndarray,
-    vrange: Optional[tuple] = None,
-    colorbar: bool = True,
-    cmap="gray",
-) -> None:
-    h, w = image.shape
-    assert h == w
-    vmin = image.min().item() if vrange is None else vrange[0]
-    vmax = image.max().item() if vrange is None else vrange[1]
-
-    if colorbar:
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-    im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap=cmap)
-    if colorbar:
-        fig.colorbar(im, cax=cax, orientation="vertical")
-
-
-def plot_locs(
-    ax: Axes,
-    bp: int,
-    slen: int,
-    plocs: np.ndarray,
-    galaxy_probs: np.ndarray,
-    m: str = "x",
-    s: float = 20,
-    lw: float = 1,
-    alpha: float = 1,
-    annotate=False,
-    cmap: str = "bwr",
-) -> None:
-    n_samples, xy = plocs.shape
-    assert galaxy_probs.shape == (n_samples,) and xy == 2
-
-    x = plocs[:, 1] - 0.5 + bp
-    y = plocs[:, 0] - 0.5 + bp
-    for i, (xi, yi) in enumerate(zip(x, y)):
-        prob = galaxy_probs[i]
-        cmp = mpl.colormaps[cmap]
-        color = cmp(prob)
-        if bp < xi < slen - bp and bp < yi < slen - bp:
-            ax.scatter(xi, yi, color=color, marker=m, s=s, lw=lw, alpha=alpha)
-            if annotate:
-                ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
-
-
-def add_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s=20):
-    cmp1 = mpl.colormaps[cmap1]
-    cmp2 = mpl.colormaps[cmap2]
-    colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
-    markers = ("+", "+", "x", "x")
-    sizes = (s * 2, s * 2, s + 5, s + 5)
-    for label, c, m, size in zip(labels, colors, markers, sizes):
-        ax.scatter([], [], color=c, marker=m, label=label, s=size)
-    ax.legend(
-        bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
-        loc="lower left",
-        ncol=2,
-        mode="expand",
-        borderaxespad=0.0,
-    )
