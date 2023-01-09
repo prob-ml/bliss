@@ -260,12 +260,18 @@ class BlendGalsimFigure(BlissFigure):
             tindx, eindx, dkeep, _ = match_by_locs(true_plocs_ii, est_plocs_ii)
             n_matches = len(tindx[dkeep])
 
-            snr_ii = full_truth["snr"][ii][tindx][dkeep]
-            blendedness_ii = full_truth["blendedness"][ii][tindx][dkeep]
-            true_mag_ii = full_truth["mags"][ii][tindx][dkeep]
-            est_mag_ii = full_est["mags"][ii][eindx][dkeep]
-            true_ellips_ii = full_truth["ellips"][ii][tindx][dkeep]
-            est_ellips_ii = full_est["ellips"][ii][eindx][dkeep]
+            # only evaluate flux/ellipticity residuals on galaxies labelled as galaxies.
+            tgbool_ii = full_truth["galaxy_bools"][ii][tindx][dkeep]
+            egbool_ii = full_est["galaxy_bools"][ii][tindx][dkeep]
+            gbool_ii = tgbool_ii == egbool_ii == 1
+
+            snr_ii = full_truth["snr"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
+            blendedness_ii = full_truth["blendedness"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
+            true_mag_ii = full_truth["mags"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
+            est_mag_ii = full_est["mags"][ii][eindx][dkeep][gbool_ii]  # noqa: WPS219
+            true_ellips_ii = full_truth["ellips"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
+            est_ellips_ii = full_est["ellips"][ii][eindx][dkeep][gbool_ii]  # noqa: WPS219
+
             n_matches = len(snr_ii)
             for jj in range(n_matches):
                 snr.append(snr_ii[jj].item())
