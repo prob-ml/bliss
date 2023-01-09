@@ -11,10 +11,10 @@ from bliss.catalog import FullCatalog
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.models.galsim_decoder import (
+    DefaultGalsimPrior,
     FullCatalogDecoder,
     SingleGalsimGalaxyDecoder,
     SingleGalsimGalaxyPrior,
-    UniformGalsimPrior,
 )
 from bliss.reporting import get_single_galaxy_ellipticities
 
@@ -77,7 +77,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
 
     def __init__(
         self,
-        prior: UniformGalsimPrior,
+        prior: DefaultGalsimPrior,
         decoder: FullCatalogDecoder,
         background: ConstantBackground,
         tile_slen: int,
