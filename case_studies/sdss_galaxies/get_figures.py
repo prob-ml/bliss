@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import warnings
 from pathlib import Path
-from typing import Dict, Tuple, Union
+from typing import Union
 
 import hydra
 import matplotlib as mpl
@@ -17,7 +17,7 @@ from bliss.catalog import FullCatalog, PhotoFullCatalog
 from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
 from bliss.models.decoder import ImageDecoder
-from bliss.plotting import BlissFigure, add_loc_legend, plot_image, plot_locs
+from bliss.plotting import BlissFigure, add_loc_legend, make_detection_figure, plot_image, plot_locs
 from bliss.reporting import compute_mag_bin_metrics
 
 ALL_FIGS = ("detection_sdss", "recon_sdss")
@@ -63,57 +63,6 @@ def _compute_detection_metrics(truth: FullCatalog, pred: FullCatalog):
         "bins_data": bins_data,
         "full_metrics": full_metrics,
     }
-
-
-def _make_detection_figure(
-    mags: np.ndarray,
-    data: Dict[str, np.ndarray],
-    xlims: Tuple[float, float] = (18, 24),
-    ylims: Tuple[float, float] = (0.5, 1.05),
-    ratio: float = 2,
-    where_step: str = "mid",
-    n_gap: int = 50,
-):
-    precision = data["precision"]
-    recall = data["recall"]
-    f1_score = data["f1"]
-    tgcount = data["tgcount"]
-    tscount = data["tscount"]
-    egcount = data["egcount"]
-    escount = data["escount"]
-
-    # (1) precision / recall
-    fig, (ax1, ax2) = plt.subplots(
-        2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
-    )
-    ymin = min(min(precision), min(recall))
-    yticks = np.arange(np.round(ymin, 1), 1.1, 0.1)
-    ax2.plot(mags, recall, "-o", label=r"\rm recall")
-    ax2.plot(mags, precision, "-o", label=r"\rm precision")
-    ax2.plot(mags, f1_score, "-o", label=r"\rm f1 score")
-    ax2.legend(loc="lower left", prop={"size": 22})
-    ax2.set_xlabel(r"\rm magnitude cut")
-    ax2.set_ylabel(r"\rm metric")
-    ax2.set_yticks(yticks)
-    ax2.set_xlim(xlims)
-    ax2.set_ylim(ylims)
-
-    # setup histogram plot up top
-    c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]
-    c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][4]
-    ax1.step(mags, tgcount, label="coadd galaxies", where=where_step, color=c1)
-    ax1.step(mags, tscount, label="coadd stars", where=where_step, color=c2)
-    ax1.step(mags, egcount, label="pred. galaxies", ls="--", where=where_step, color=c1)
-    ax1.step(mags, escount, label="pred. stars", ls="--", where=where_step, color=c2)
-    ymax = max(max(tgcount), max(tscount), max(egcount), max(escount))
-    ymax = np.ceil(ymax / n_gap) * n_gap
-    yticks = np.arange(0, ymax, n_gap)
-    ax1.set_ylim((0, ymax))
-    ax1.set_yticks(yticks)
-    ax1.set_ylabel(r"\rm Counts")
-    ax1.legend(loc="best", prop={"size": 16})
-    plt.subplots_adjust(hspace=0)
-    return fig
 
 
 def _make_classification_figure(
@@ -312,7 +261,7 @@ class BlissDetectionCutsFigure(BlissFigure):
     def create_figure(self, data) -> Figure:
         mag_cuts = data["bliss_metrics"]["mag_cuts"]
         cuts_data = data["bliss_metrics"]["cuts_data"]
-        return _make_detection_figure(mag_cuts, cuts_data, ylims=(0.5, 1.03))
+        return make_detection_figure(mag_cuts, cuts_data, ylims=(0.5, 1.03))
 
 
 class BlissDetectionBinsFigure(BlissDetectionCutsFigure):
@@ -323,7 +272,7 @@ class BlissDetectionBinsFigure(BlissDetectionCutsFigure):
     def create_figure(self, data) -> Figure:
         mag_bins = data["bliss_metrics"]["mag_bins"] - 0.5
         bins_data = data["bliss_metrics"]["bins_data"]
-        return _make_detection_figure(
+        return make_detection_figure(
             mag_bins, bins_data, xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
         )
 
@@ -426,7 +375,7 @@ class PhotoDetectionCutsFigure(BlissDetectionCutsFigure):
     def create_figure(self, data) -> Figure:
         mag_cuts = data["photo_metrics"]["mag_cuts"]
         cuts_data = data["photo_metrics"]["cuts_data"]
-        return _make_detection_figure(mag_cuts, cuts_data, ylims=(0.5, 1.03))
+        return make_detection_figure(mag_cuts, cuts_data, ylims=(0.5, 1.03))
 
 
 class PhotoDetectionBinsFigure(BlissDetectionCutsFigure):
@@ -437,7 +386,7 @@ class PhotoDetectionBinsFigure(BlissDetectionCutsFigure):
     def create_figure(self, data) -> Figure:
         mag_bins = data["photo_metrics"]["mag_bins"] - 0.5
         bins_data = data["photo_metrics"]["bins_data"]
-        return _make_detection_figure(
+        return make_detection_figure(
             mag_bins, bins_data, xlims=(17, 24), ylims=(0.0, 1.05), n_gap=25
         )
 
