@@ -16,7 +16,7 @@ from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.encoder import Encoder
 from bliss.plotting import CB_color_cycle, scatter_shade_plot, set_rc_params
-from bliss.reporting import compute_mag_bin_metrics, get_boostrap_precision_and_recall
+from bliss.reporting import compute_bin_metrics, get_boostrap_precision_and_recall
 from case_studies.coadds.coadds import load_coadd_dataset
 
 device = torch.device("cuda:0")
@@ -272,8 +272,10 @@ def main(cfg):
                 est = _add_mags_to_catalog(est)
 
                 # get all metrics from catalogs
-                bin_metrics = compute_mag_bin_metrics(mag_bins, truth, est)
-                boot_metrics = get_boostrap_precision_and_recall(10000, mag_bins, truth, est)
+                bin_metrics = compute_bin_metrics(truth, est, "mags", mag_bins)
+                boot_metrics = get_boostrap_precision_and_recall(
+                    10000, truth, est, "mags", mag_bins
+                )
                 matched_fluxes = _get_fluxes_cond_true_detections(
                     encoder, truth, test_images, background
                 )

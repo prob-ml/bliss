@@ -18,7 +18,7 @@ from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
 from bliss.models.decoder import ImageDecoder
 from bliss.plotting import BlissFigure, add_loc_legend, make_detection_figure, plot_image, plot_locs
-from bliss.reporting import compute_mag_bin_metrics
+from bliss.reporting import compute_bin_metrics
 
 ALL_FIGS = ("detection_sdss", "recon_sdss")
 
@@ -36,8 +36,8 @@ def _compute_detection_metrics(truth: FullCatalog, pred: FullCatalog):
     mag_bins = torch.column_stack((mag_bins1, mag_bins2))
 
     # compute metrics
-    cuts_data = compute_mag_bin_metrics(mag_cuts, truth, pred)
-    bins_data = compute_mag_bin_metrics(mag_bins, truth, pred)
+    cuts_data = compute_bin_metrics(truth, pred, "mags", mag_cuts)
+    bins_data = compute_bin_metrics(truth, pred, "mags", mag_bins)
 
     # data for scatter plot of misclassifications (over all magnitudes).
     tplocs = truth.plocs.reshape(-1, 2)
