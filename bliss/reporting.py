@@ -5,7 +5,6 @@ from typing import DefaultDict, Dict, Optional, Tuple
 import galsim
 import numpy as np
 import torch
-import tqdm
 from astropy.table import Table
 from astropy.wcs import WCS
 from einops import rearrange, reduce
@@ -13,6 +12,7 @@ from scipy import optimize as sp_optim
 from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
+from tqdm import tqdm
 
 from bliss.catalog import FullCatalog
 from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
@@ -70,7 +70,7 @@ class DetectionMetrics(Metric):
 
         count = 0
         desc = "Detection Metric per batch"
-        for b in tqdm.tqdm(range(true.batch_size), desc=desc, disable=self.disable_bar):
+        for b in tqdm(range(true.batch_size), desc=desc, disable=self.disable_bar):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
             if ntrue > 0 and nest > 0:
@@ -403,7 +403,7 @@ def compute_bin_metrics(
     truth: FullCatalog, pred: FullCatalog, param: str, bins: Tensor
 ) -> Dict[str, Tensor]:
     metrics_per_bin: dict = defaultdict(lambda: torch.zeros(len(bins)))
-    for ii, (b1, b2) in enumerate(bins):
+    for ii, (b1, b2) in tqdm(enumerate(bins), desc="detection metrics per bin", total=len(bins)):
         res = scene_metrics(truth, pred, param, b1, b2, slack=1.0, disable_bar=True)
         metrics_per_bin["precision"][ii] = res["precision"]
         metrics_per_bin["recall"][ii] = res["recall"]
@@ -511,7 +511,7 @@ def get_single_galaxy_ellipticities(
     galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
 
     # Now we use galsim to measure size and ellipticity
-    for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies", disable=no_bar):
+    for i in tqdm(range(n_samples), desc="Measuring galaxies", disable=no_bar):
         image = images_np[i]
         galsim_image = galsim.Image(image, scale=pixel_scale)
         res_true = galsim.hsm.EstimateShear(
