@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import warnings
 from pathlib import Path
+from typing import Dict, Tuple
 
 import hydra
 import matplotlib as mpl
@@ -19,9 +20,75 @@ from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.models.psf_decoder import PSFDecoder
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
-from bliss.reporting import match_by_locs
+from bliss.reporting import compute_bin_metrics, get_boostrap_precision_and_recall, match_by_locs
 
 ALL_FIGS = ("single_gal", "blend_gal")
+
+
+def _make_pr_figure(
+    bins: np.ndarray,
+    data: Dict[str, np.ndarray],
+    xlabel: str,
+    xlims: Tuple[float, float] = None,
+    ylims: Tuple[float, float] = None,
+    ratio: float = 2,
+    where_step: str = "mid",
+    n_ticks: int = 5,
+    ordmag: int = 3,
+):
+    precision = data["precision"]
+    recall = data["recall"]
+    boot_precision = data["boot"]["precision"]
+    boot_recall = data["boot"]["recall"]
+    tgcount = data["tgcount"]
+    tscount = data["tscount"]
+    egcount = data["egcount"]
+    escount = data["escount"]
+
+    fig, (ax1, ax2) = plt.subplots(
+        2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, ratio]}, sharex=True
+    )
+
+    # (bottom) plot of precision and recall
+    ymin = min(min(precision), min(recall))
+    yticks = np.arange(np.round(ymin, 1), 1.1, 0.1)
+    c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][0]
+    precision1 = np.quantile(boot_precision, 0.25, 0)
+    precision2 = np.quantile(boot_precision, 0.75, 0)
+    ax2.plot(bins, precision, "-o", color=c1, label=r"\rm Precision", markersize=6)
+    ax2.fill_between(bins, precision1, precision2, color=c1, alpha=0.5)
+
+    c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
+    recall1 = np.quantile(boot_recall, 0.25, 0)
+    recall2 = np.quantile(boot_recall, 0.75, 0)
+    ax2.plot(bins, recall, "-o", color=c2, label=r"\rm Recall", markersize=6)
+    ax2.fill_between(bins, recall1, recall2, color=c2, alpha=0.5)
+
+    ax2.legend(loc="lower left", prop={"size": 22})
+    ax2.set_xlabel(rf"\rm {xlabel}")
+    ax2.set_ylabel(r"\rm Detection metric")
+    ax2.set_yticks(yticks)
+
+    if xlims is not None:
+        ax2.set_xlim(xlims)
+    if ylims is not None:
+        ax2.set_ylim(ylims)
+
+    # setup histogram plot up top
+    c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]
+    c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][4]
+    ax1.step(bins, tgcount, label="True galaxies", where=where_step, color=c1)
+    ax1.step(bins, tscount, label="True stars", where=where_step, color=c2)
+    ax1.step(bins, egcount, label="Pred. galaxies", ls="--", where=where_step, color=c1)
+    ax1.step(bins, escount, label="Pred. stars", ls="--", where=where_step, color=c2)
+    ymax = max(max(tgcount), max(tscount), max(egcount), max(escount))
+    yticks = np.round(np.linspace(0, ymax, n_ticks), -ordmag)
+    ax1.set_ylim((0, np.round(ymax, -ordmag) + 10**ordmag))
+    ax1.set_yticks(yticks)
+    ax1.set_ylabel(r"\rm Counts")
+    ax1.legend(loc="best", prop={"size": 16})
+    plt.subplots_adjust(hspace=0)
+    return fig
 
 
 class AutoEncoderReconRandom(BlissFigure):
@@ -211,7 +278,7 @@ class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
         return fig
 
 
-class BlendGalsimFigure(BlissFigure):
+class BlendResidualFigure(BlissFigure):
     @property
     def rc_kwargs(self):
         return {"fontsize": 24}
@@ -225,7 +292,7 @@ class BlendGalsimFigure(BlissFigure):
         return "blendsim_gal_meas"
 
     def compute_data(self, blend_file: Path, encoder: Encoder, decoder: ImageDecoder):
-        blend_data = torch.load(blend_file)
+        blend_data: Dict[str, Tensor] = torch.load(blend_file)
         images = blend_data.pop("images")
         background = blend_data.pop("background")
         n_batches, _, slen, _ = images.shape
@@ -237,15 +304,31 @@ class BlendGalsimFigure(BlissFigure):
 
         # first create FullCatalog from simulated data
         tile_cat = TileCatalog(decoder.tile_slen, blend_data).cpu()
-        full_truth = tile_cat.to_full_params()
+        truth = tile_cat.to_full_params()
 
         print("INFO: BLISS posterior inference on images.")
         tile_est = encoder.variational_mode(images, background)
         tile_est.set_all_fluxes_and_mags(decoder)
         tile_est.set_galaxy_ellips(decoder, scale=0.393)
         tile_est = tile_est.cpu()
-        full_est = tile_est.to_full_params()
+        est = tile_est.to_full_params()
 
+        # compute detection metrics (snr)
+        # snr_bins2 = 10 ** torch.arange(0.2, 3.0, 0.1)
+        # snr_bins1 = 10 ** torch.arange(0.1, 2.9, 0.1)
+        # snr_bins = torch.column_stack((snr_bins1, snr_bins2))
+        # bin_metrics = compute_bin_metrics(truth, est, "snr", snr_bins)
+        # boot_metrics = get_boostrap_precision_and_recall(1000, truth, est, "snr", snr_bins)
+
+        # compute detection metrics (mag)
+        print("INFO: Computing detection metrics in magnitude bins")
+        mag_bins2 = torch.arange(18, 25, 0.5)
+        mag_bins1 = mag_bins2 - 0.5
+        mag_bins = torch.column_stack((mag_bins1, mag_bins2))
+        bin_metrics = compute_bin_metrics(truth, est, "mags", mag_bins)
+        boot_metrics = get_boostrap_precision_and_recall(1000, truth, est, "mags", mag_bins)
+
+        # collect quantities for residuals on ellipticites and flux of galaxies
         snr = []
         blendedness = []
         true_mags = []
@@ -255,33 +338,37 @@ class BlendGalsimFigure(BlissFigure):
         est_ellips1 = []
         est_ellips2 = []
         for ii in tqdm(range(n_batches), desc="Matching batches"):
-            true_plocs_ii, est_plocs_ii = full_truth.plocs[ii], full_est.plocs[ii]
+            true_plocs_ii, est_plocs_ii = truth.plocs[ii], est.plocs[ii]
 
             tindx, eindx, dkeep, _ = match_by_locs(true_plocs_ii, est_plocs_ii)
             n_matches = len(tindx[dkeep])
 
-            # only evaluate flux/ellipticity residuals on galaxies labelled as galaxies.
-            tgbool_ii = full_truth["galaxy_bools"][ii][tindx][dkeep]
-            egbool_ii = full_est["galaxy_bools"][ii][tindx][dkeep]
-            gbool_ii = tgbool_ii == egbool_ii == 1
+            if n_matches > 0:
 
-            snr_ii = full_truth["snr"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
-            blendedness_ii = full_truth["blendedness"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
-            true_mag_ii = full_truth["mags"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
-            est_mag_ii = full_est["mags"][ii][eindx][dkeep][gbool_ii]  # noqa: WPS219
-            true_ellips_ii = full_truth["ellips"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
-            est_ellips_ii = full_est["ellips"][ii][eindx][dkeep][gbool_ii]  # noqa: WPS219
+                # only evaluate flux/ellipticity residuals on galaxies labelled as galaxies.
+                tgbool_ii = truth["galaxy_bools"][ii][tindx][dkeep]
+                egbool_ii = est["galaxy_bools"][ii][eindx][dkeep]
+                gbool_ii = torch.eq(tgbool_ii, egbool_ii).eq(torch.ones_like(tgbool_ii))
+                gbool_ii = gbool_ii.flatten()
 
-            n_matches = len(snr_ii)
-            for jj in range(n_matches):
-                snr.append(snr_ii[jj].item())
-                blendedness.append(blendedness_ii[jj].item())
-                true_mags.append(true_mag_ii[jj].item())
-                est_mags.append(est_mag_ii[jj].item())
-                true_ellips1.append(true_ellips_ii[jj][0].item())
-                true_ellips2.append(true_ellips_ii[jj][1].item())
-                est_ellips1.append(est_ellips_ii[jj][0].item())
-                est_ellips2.append(est_ellips_ii[jj][1].item())
+                snr_ii = truth["snr"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
+                blendedness_ii = truth["blendedness"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
+                true_mag_ii = truth["mags"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
+                est_mag_ii = est["mags"][ii][eindx][dkeep][gbool_ii]  # noqa: WPS219
+                true_ellips_ii = truth["ellips"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
+                est_ellips_ii = est["ellips"][ii][eindx][dkeep][gbool_ii]  # noqa: WPS219
+
+                n_matched_gals = len(snr_ii)
+
+                for jj in range(n_matched_gals):
+                    snr.append(snr_ii[jj].item())
+                    blendedness.append(blendedness_ii[jj].item())
+                    true_mags.append(true_mag_ii[jj].item())
+                    est_mags.append(est_mag_ii[jj].item())
+                    true_ellips1.append(true_ellips_ii[jj][0].item())
+                    true_ellips2.append(true_ellips_ii[jj][1].item())
+                    est_ellips1.append(est_ellips_ii[jj][0].item())
+                    est_ellips2.append(est_ellips_ii[jj][1].item())
 
         true_ellips = torch.vstack([torch.tensor(true_ellips1), torch.tensor(true_ellips2)])
         true_ellips = true_ellips.T.reshape(-1, 2)
@@ -290,16 +377,31 @@ class BlendGalsimFigure(BlissFigure):
         est_ellips = est_ellips.T.reshape(-1, 2)
 
         return {
-            "snr": torch.tensor(snr),
-            "blendedness": torch.tensor(blendedness),
-            "true_mags": torch.tensor(true_mags),
-            "est_mags": torch.tensor(est_mags),
-            "true_ellips": true_ellips,
-            "est_ellips": est_ellips,
+            "residuals": {
+                "snr": torch.tensor(snr),
+                "blendedness": torch.tensor(blendedness),
+                "true_mags": torch.tensor(true_mags),
+                "est_mags": torch.tensor(est_mags),
+                "true_ellips": true_ellips,
+                "est_ellips": est_ellips,
+            },
+            "detection": {
+                "precision": bin_metrics["precision"],
+                "recall": bin_metrics["recall"],
+                "tgcount": bin_metrics["tgcount"],
+                "tscount": bin_metrics["tscount"],
+                "egcount": bin_metrics["egcount"],
+                "escount": bin_metrics["escount"],
+                "boot": {
+                    "precision": boot_metrics["precision"],
+                    "recall": boot_metrics["recall"],
+                },
+            },
+            "bins": {"mags": mag_bins.mean(1)},
         }
 
-    def create_figure(self, data):
-        snr, blendedness, true_mags, est_mags, true_ellips, est_ellips = data.values()
+    def create_figure(self, data) -> Figure:
+        snr, blendedness, true_mags, est_mags, true_ellips, est_ellips = data["residuals"].values()
         fig, axes = plt.subplots(3, 2, figsize=(12, 18))
         ax1, ax2, ax3, ax4, ax5, ax6 = axes.flatten()
 
@@ -367,6 +469,20 @@ class BlendGalsimFigure(BlissFigure):
         plt.tight_layout()
 
         return fig
+
+
+class BlendDetectionFigure(BlendResidualFigure):
+    @property
+    def rc_kwargs(self):
+        return {"fontsize": 32}
+
+    @property
+    def name(self) -> str:
+        return "blendsim_detection"
+
+    def create_figure(self, data) -> Figure:
+        mag_bins = data["bins"]["mags"]
+        return _make_pr_figure(mag_bins, data["detection"], "Magnitude", xlims=(18, 23))
 
 
 def _load_models(cfg, device):
@@ -457,7 +573,8 @@ def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dic
         global_params = ("background", "slen")
         generate.generate(dataset, blend_file, imagepath, n_plots=25, global_params=global_params)
 
-    BlendGalsimFigure(overwrite=overwrite, **bfig_kwargs)(blend_file, encoder, decoder)
+    BlendResidualFigure(overwrite=overwrite, **bfig_kwargs)(blend_file, encoder, decoder)
+    BlendDetectionFigure(overwrite=False, **bfig_kwargs)(blend_file, encoder, decoder)
 
 
 @hydra.main(config_path="./config", config_name="config", version_base=None)
