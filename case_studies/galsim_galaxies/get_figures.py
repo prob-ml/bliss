@@ -317,13 +317,6 @@ class BlendResidualFigure(BlissFigure):
         tile_est = tile_est.cpu()
         est = tile_est.to_full_params()
 
-        # compute detection metrics (snr)
-        # snr_bins2 = 10 ** torch.arange(0.2, 3.0, 0.1)
-        # snr_bins1 = 10 ** torch.arange(0.1, 2.9, 0.1)
-        # snr_bins = torch.column_stack((snr_bins1, snr_bins2))
-        # bin_metrics = compute_bin_metrics(truth, est, "snr", snr_bins)
-        # boot_metrics = get_boostrap_precision_and_recall(1000, truth, est, "snr", snr_bins)
-
         # compute detection metrics (mag)
         print("INFO: Computing detection metrics in magnitude bins")
         mag_bins2 = torch.arange(18.0, 24.0, 0.5)
