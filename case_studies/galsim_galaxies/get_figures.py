@@ -64,7 +64,7 @@ def _make_pr_figure(
     ax2.plot(bins, recall, "-o", color=c2, label=r"\rm Recall", markersize=6)
     ax2.fill_between(bins, recall1, recall2, color=c2, alpha=0.5)
 
-    ax2.legend(loc="lower left", prop={"size": 22})
+    ax2.legend(loc="lower left")
     ax2.set_xlabel(rf"\rm {xlabel}")
     ax2.set_ylabel(r"\rm Detection metric")
     ax2.set_yticks(yticks)
@@ -86,7 +86,7 @@ def _make_pr_figure(
     ax1.set_ylim((0, np.round(ymax, -ordmag) + 10**ordmag))
     ax1.set_yticks(yticks)
     ax1.set_ylabel(r"\rm Counts")
-    ax1.legend(loc="best", prop={"size": 16})
+    ax1.legend(loc="best", prop={"size": 20})
     plt.subplots_adjust(hspace=0)
     return fig
 
@@ -322,7 +322,7 @@ class BlendResidualFigure(BlissFigure):
 
         # compute detection metrics (mag)
         print("INFO: Computing detection metrics in magnitude bins")
-        mag_bins2 = torch.arange(18, 25, 0.5)
+        mag_bins2 = torch.arange(18.0, 23.5, 0.5)
         mag_bins1 = mag_bins2 - 0.5
         mag_bins = torch.column_stack((mag_bins1, mag_bins2))
         bin_metrics = compute_bin_metrics(truth, est, "mags", mag_bins)
@@ -485,6 +485,38 @@ class BlendDetectionFigure(BlendResidualFigure):
         return _make_pr_figure(mag_bins, data["detection"], "Magnitude", xlims=(18, 23))
 
 
+class BlendHistogramFigure(BlendResidualFigure):
+    @property
+    def rc_kwargs(self):
+        return {"fontsize": 32}
+
+    @property
+    def name(self) -> str:
+        return "blendsim_hists"
+
+    def create_figure(self, data) -> Figure:
+        snr = np.log10(data["residuals"]["snr"])
+        blendedness = data["residuals"]["blendedness"]
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+
+        xticks = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+        snr_bins = np.arange(0, 3.2, 0.2)
+        ax1.hist(snr, bins=snr_bins, histtype="step", log=True)
+        ax1.set_xlabel(r"$\log_{10} \rm SNR$")
+        ax1.set_ylabel(r"\rm Number of galaxies", size=24)
+        ax1.set_xticks(xticks)
+
+        xticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        blendedness_bins = np.arange(0, 1.1, 0.1)
+        ax2.hist(blendedness, bins=blendedness_bins, histtype="step", log=True)
+        ax2.set_xlabel("$B$")
+        ax2.set_ylabel(r"\rm Number of galaxies", size=24)
+        ax2.set_xticks(xticks)
+
+        return fig
+
+
 def _load_models(cfg, device):
     # load models required for SDSS reconstructions.
 
@@ -575,6 +607,7 @@ def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dic
 
     BlendResidualFigure(overwrite=overwrite, **bfig_kwargs)(blend_file, encoder, decoder)
     BlendDetectionFigure(overwrite=False, **bfig_kwargs)(blend_file, encoder, decoder)
+    BlendHistogramFigure(overwrite=False, **bfig_kwargs)(blend_file, encoder, decoder)
 
 
 @hydra.main(config_path="./config", config_name="config", version_base=None)
