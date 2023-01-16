@@ -31,10 +31,13 @@ def _make_pr_figure(
     xlabel: str,
     xlims: Tuple[float, float] = None,
     ylims: Tuple[float, float] = None,
+    ylims2: Tuple[float, float] = None,
     ratio: float = 2,
     where_step: str = "mid",
     n_ticks: int = 5,
     ordmag: int = 3,
+    metric_type: str = "Detection",
+    legend_size_hist: int = 20,
 ):
     precision = data["precision"]
     recall = data["recall"]
@@ -66,13 +69,15 @@ def _make_pr_figure(
 
     ax2.legend(loc="lower left")
     ax2.set_xlabel(rf"\rm {xlabel}")
-    ax2.set_ylabel(r"\rm Detection metric")
+    ax2.set_ylabel(rf"\rm {metric_type} metric")
     ax2.set_yticks(yticks)
 
     if xlims is not None:
         ax2.set_xlim(xlims)
     if ylims is not None:
         ax2.set_ylim(ylims)
+    if ylims2 is not None:
+        ax1.set_ylim(ylims2)
 
     # setup histogram plot up top
     c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]
@@ -83,10 +88,9 @@ def _make_pr_figure(
     ax1.step(bins, escount, label="Pred. stars", ls="--", where=where_step, color=c2)
     ymax = max(max(tgcount), max(tscount), max(egcount), max(escount))
     yticks = np.round(np.linspace(0, ymax, n_ticks), -ordmag)
-    ax1.set_ylim((0, np.round(ymax, -ordmag) + 10**ordmag))
     ax1.set_yticks(yticks)
     ax1.set_ylabel(r"\rm Counts")
-    ax1.legend(loc="best", prop={"size": 20})
+    ax1.legend(loc="best", prop={"size": legend_size_hist})
     plt.subplots_adjust(hspace=0)
     return fig
 
@@ -322,7 +326,7 @@ class BlendResidualFigure(BlissFigure):
 
         # compute detection metrics (mag)
         print("INFO: Computing detection metrics in magnitude bins")
-        mag_bins2 = torch.arange(18.0, 23.5, 0.5)
+        mag_bins2 = torch.arange(18.0, 24.0, 0.5)
         mag_bins1 = mag_bins2 - 0.5
         mag_bins = torch.column_stack((mag_bins1, mag_bins2))
         bin_metrics = compute_bin_metrics(truth, est, "mags", mag_bins)
@@ -337,6 +341,10 @@ class BlendResidualFigure(BlissFigure):
         est_mags = []
         est_ellips1 = []
         est_ellips2 = []
+        snr_class = []
+        mag_class = []
+        tgbools = []
+        egbools = []
         for ii in tqdm(range(n_batches), desc="Matching batches"):
             true_plocs_ii, est_plocs_ii = truth.plocs[ii], est.plocs[ii]
 
@@ -350,6 +358,17 @@ class BlendResidualFigure(BlissFigure):
                 egbool_ii = est["galaxy_bools"][ii][eindx][dkeep]
                 gbool_ii = torch.eq(tgbool_ii, egbool_ii).eq(torch.ones_like(tgbool_ii))
                 gbool_ii = gbool_ii.flatten()
+                snr_ii_class = truth["snr"][ii][tindx][dkeep]
+                mag_ii_class = truth["mags"][ii][tindx][dkeep]
+
+                assert len(tgbool_ii) == len(egbool_ii) == len(snr_ii_class) == n_matches
+
+                # save snr, mag, and booleans over matches for classification metrics
+                for jj in range(n_matches):
+                    snr_class.append(snr_ii_class[jj].item())
+                    tgbools.append(tgbool_ii[jj].item())
+                    egbools.append(egbool_ii[jj].item())
+                    mag_class.append(mag_ii_class[jj].item())
 
                 snr_ii = truth["snr"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
                 blendedness_ii = truth["blendedness"][ii][tindx][dkeep][gbool_ii]  # noqa: WPS219
@@ -397,7 +416,13 @@ class BlendResidualFigure(BlissFigure):
                     "recall": boot_metrics["recall"],
                 },
             },
-            "bins": {"mags": mag_bins.mean(1)},
+            "classification": {
+                "snr": torch.tensor(snr_class),
+                "mags": torch.tensor(mag_class),
+                "tgbools": torch.tensor(tgbools),
+                "egbools": torch.tensor(egbools),
+            },
+            "bins": {"mags": mag_bins},
         }
 
     def create_figure(self, data) -> Figure:
@@ -481,8 +506,102 @@ class BlendDetectionFigure(BlendResidualFigure):
         return "blendsim_detection"
 
     def create_figure(self, data) -> Figure:
+        mag_bins = data["bins"]["mags"].mean(1)  # take middle of bin as x for plotting
+        return _make_pr_figure(
+            mag_bins, data["detection"], "Magnitude", xlims=(18, 23), ylims2=(0, 5000)
+        )
+
+
+class BlendClassificationFigure(BlendResidualFigure):
+    @property
+    def rc_kwargs(self):
+        return {"fontsize": 28}
+
+    @property
+    def name(self) -> str:
+        return "blendsim_classification"
+
+    def _compute_pr(self, tgbool: np.ndarray, egbool: np.ndarray):
+        t = np.sum(tgbool)
+        p = np.sum(egbool)
+
+        cond1 = np.equal(tgbool, egbool).astype(bool)
+        cond2 = tgbool.astype(bool)
+        tp = (cond1 & cond2).astype(float).sum()
+
+        assert np.all(np.greater_equal(t, tp))
+        assert np.all(np.greater_equal(p, tp))
+        if t == 0 or p == 0:
+            return np.nan, np.nan
+
+        return tp / p, tp / t
+
+    def create_figure(self, data) -> Figure:
+        _, mags, tgbools, egbools = data["classification"].values()
         mag_bins = data["bins"]["mags"]
-        return _make_pr_figure(mag_bins, data["detection"], "Magnitude", xlims=(18, 23))
+        n_matches = len(mags)
+        n_bins = len(mag_bins)
+        n_boots = 1000
+
+        precision = np.zeros(n_bins)
+        recall = np.zeros(n_bins)
+        tgals = np.zeros(n_bins)
+        egals = np.zeros(n_bins)
+        tstars = np.zeros(n_bins)
+        estars = np.zeros(n_bins)
+
+        boot_precision = np.zeros((n_boots, n_bins))
+        boot_recall = np.zeros((n_boots, n_bins))
+
+        boot_indices = np.random.randint(0, n_matches, (n_boots, n_matches))
+
+        # compute boostrap precision and recall per bin
+        for ii in range(n_boots):
+            mags_ii = mags[boot_indices[ii]]
+            tgbools_ii = tgbools[boot_indices[ii]]
+            egbools_ii = egbools[boot_indices[ii]]
+            for jj, (b1, b2) in enumerate(mag_bins):
+                keep = (b1 < mags_ii) & (mags_ii < b2)
+                tgbool_ii = tgbools_ii[keep]
+                egbool_ii = egbools_ii[keep]
+
+                p, r = self._compute_pr(tgbool_ii, egbool_ii)
+                boot_precision[ii][jj] = p
+                boot_recall[ii][jj] = r
+
+        # compute precision and recall per bin
+        for jj, (b1, b2) in enumerate(mag_bins):
+            keep = (b1 < mags) & (mags < b2)
+            tgbool = tgbools[keep]
+            egbool = egbools[keep]
+            p, r = self._compute_pr(tgbool, egbool)
+            precision[jj] = p
+            recall[jj] = r
+
+            tgals[jj] = tgbool.sum()
+            egals[jj] = egbool.sum()
+            tstars[jj] = (~tgbool.astype(bool)).astype(float).sum()
+            estars[jj] = (~egbool.astype(bool)).astype(float).sum()
+
+        bins = mag_bins.mean(1)
+        data = {
+            "precision": precision,
+            "recall": recall,
+            "tgcount": tgals,
+            "egcount": egals,
+            "tscount": tstars,
+            "escount": estars,
+            "boot": {"precision": boot_precision, "recall": boot_recall},
+        }
+        return _make_pr_figure(
+            bins,
+            data,
+            "Magnitude",
+            xlims=(18, 23),
+            metric_type="Classification",
+            ylims2=(0, 2000),
+            legend_size_hist=16,
+        )
 
 
 class BlendHistogramFigure(BlendResidualFigure):
@@ -608,6 +727,7 @@ def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dic
     BlendResidualFigure(overwrite=overwrite, **bfig_kwargs)(blend_file, encoder, decoder)
     BlendDetectionFigure(overwrite=False, **bfig_kwargs)(blend_file, encoder, decoder)
     BlendHistogramFigure(overwrite=False, **bfig_kwargs)(blend_file, encoder, decoder)
+    BlendClassificationFigure(overwrite=False, **bfig_kwargs)(blend_file, encoder, decoder)
 
 
 @hydra.main(config_path="./config", config_name="config", version_base=None)
