@@ -24,9 +24,6 @@ jobs:
         with:
           lfs: true
 
-      - name: Checkout LFS objects
-        run: git lfs checkout
-
       - name: Install poetry
         run: pipx install poetry
 

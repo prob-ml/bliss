@@ -16,28 +16,21 @@ jobs:
           persist-credentials: false # otherwise, the token used is the GITHUB_TOKEN, instead of your personal access token.
           fetch-depth: 0 # otherwise, there would be errors pushing refs to the destination repository.
 
+      - name: Install poetry
+        run: pipx install poetry
+
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python-version }}
+          cache: "poetry"
 
       - name: Create environment variables
         run: echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
 
-      - name: Install Poetry
-        run: |
-          pip install --upgrade pip
-          pip install "poetry-core>=1.0.0"
-          pip install "poetry>=1.2.2"
       - name: Install fftw3
         run: |
           sudo apt-get install libfftw3-dev
-      - name: Poetry cache
-        uses: actions/cache@v2
-        with:
-          path: |
-            ~/.cache/pypoetry
-          key: ${{ runner.os }}-${{ hashFiles('./poetry.lock') }}
 
       - name: Install poetry dependencies
         run: |
@@ -50,11 +43,13 @@ jobs:
           poetry run make github
           popd
           git add --force ./docs
+
       - name: Commit files
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git commit -m "Generate docs" -a
+
       - name: Push changes
         uses: ad-m/github-push-action@887c31bd838a40c4da09953b6df364b5439bd7c3
         with:
