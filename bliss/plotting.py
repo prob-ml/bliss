@@ -225,7 +225,8 @@ def scatter_shade_plot(
     xlims: Tuple[float, float],
     delta: float,
     qs: Tuple[float, float] = (0.25, 0.75),
-    color: str = "m",
+    color: str = "#377eb8",
+    alpha: float = 0.5,
 ):
     xbins = np.arange(xlims[0], xlims[1], delta)
 
@@ -248,7 +249,7 @@ def scatter_shade_plot(
         yqs[i, :] = np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1])
 
     ax.plot(xs, ys, marker="o", c=color, linestyle="-")
-    ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=0.5)
+    ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=alpha)
 
 
 def make_scatter_contours(ax, x, y):

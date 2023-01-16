@@ -23,7 +23,7 @@ datasets:
     galsim_blends:
         _target_: bliss.datasets.galsim_galaxies.GalsimBlends
         prior:
-            _target_: bliss.models.galsim_decoder.UniformGalsimPrior
+            _target_: bliss.models.galsim_decoder.DefaultGalsimPrior
             single_galaxy_prior:
                 _target_: bliss.models.galsim_decoder.SingleGalsimGalaxyPrior
                 flux_sample: "pareto"
@@ -67,7 +67,7 @@ datasets:
     galsim_blends_coadds:
         _target_: case_studies.coadds.coadds.CoaddGalsimBlends
         prior:
-            _target_: case_studies.coadds.coadds.CoaddUniformGalsimPrior
+            _target_: case_studies.coadds.coadds.CoaddDefaultGalsimPrior
             single_galaxy_prior: ${datasets.galsim_blends.prior.single_galaxy_prior}
             max_n_sources: 8
             mean_sources: 3

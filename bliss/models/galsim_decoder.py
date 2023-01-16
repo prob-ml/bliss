@@ -322,7 +322,7 @@ class SingleLensedGalsimGalaxyDecoder(SingleGalsimGalaxyDecoder):
         return torch.from_numpy(lensed_src).reshape(1, slen, slen)
 
 
-class UniformGalsimPrior:
+class DefaultGalsimPrior:
     def __init__(
         self,
         single_galaxy_prior: SingleGalsimGalaxyPrior,
@@ -371,7 +371,7 @@ class UniformGalsimPrior:
         }
 
 
-class UniformBrightestCenterGalsimGalaxy(UniformGalsimPrior):
+class BCGPrior(DefaultGalsimPrior):
     def sample(self) -> Dict[str, Tensor]:
         """Returns a single batch of source parameters where brightest galaxy is centered."""
         sample = super().sample()

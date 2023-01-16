@@ -260,7 +260,14 @@ class TileCatalog(UserDict):
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params
 
-    def __init__(self, height: int, width: int, d: Dict[str, Tensor]):
+    def __init__(self, height: int, width: int, d: Dict[str, Tensor]) -> None:
+        """Initialize FullCatalog.
+
+        Args:
+            height: In pixels, without accounting for border padding.
+            width: In pixels, without accounting for border padding.
+            d: Dictionary containing parameters of FullCatalog with correct shape.
+        """
         self.height = height
         self.width = width
         self.plocs = d.pop("plocs")
@@ -357,7 +364,7 @@ class FullCatalog(UserDict):
         assert pname in self, f"Parameter '{pname}' required to apply mag cut."
         assert self[pname].shape[-1] == 1, "Can only be applied to scalar parameters."
         assert self[pname].min().item() >= 0, f"Cannot use this function with {pname}."
-        assert p_min >= 0, "`p_min` should bet at least 0 "
+        assert p_min >= 0, "`p_min` should be at least 0 "
 
         # get indices to collect
         keep = self[pname] < p_max
