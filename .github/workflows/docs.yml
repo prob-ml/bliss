@@ -25,9 +25,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
 
-      - name: Create environment variables
-        run: echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-
       - name: Install fftw3
         run: |
           sudo apt-get install libfftw3-dev
