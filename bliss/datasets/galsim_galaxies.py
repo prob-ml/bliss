@@ -11,10 +11,10 @@ from bliss.catalog import FullCatalog
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.models.galsim_decoder import (
+    DefaultGalsimPrior,
     FullCatalogDecoder,
     SingleGalsimGalaxyDecoder,
     SingleGalsimGalaxyPrior,
-    UniformGalsimPrior,
 )
 from bliss.reporting import get_single_galaxy_ellipticities
 
@@ -77,7 +77,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
 
     def __init__(
         self,
-        prior: UniformGalsimPrior,
+        prior: DefaultGalsimPrior,
         decoder: FullCatalogDecoder,
         background: ConstantBackground,
         tile_slen: int,
@@ -140,13 +140,13 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         psf = self.decoder.single_galaxy_decoder.psf_galsim
         psf_tensor = torch.from_numpy(psf.drawImage(nx=size, ny=size, scale=scale).array)
 
-        single_galaxy_tensor = noiseless_centered[:n_sources]
-        single_galaxy_tensor = rearrange(single_galaxy_tensor, "n 1 h w -> n h w", n=n_sources)
+        single_source = noiseless_centered[:n_sources]
+        single_source = rearrange(single_source, "n 1 h w -> n h w", n=n_sources)
         ellips = torch.zeros(self.max_n_sources, 2)
-        e12 = get_single_galaxy_ellipticities(single_galaxy_tensor, psf_tensor, scale)
+        e12 = get_single_galaxy_ellipticities(single_source, psf_tensor, scale)
         ellips[:n_sources, :] = e12
         ellips = rearrange(ellips, "n g -> 1 n g", n=self.max_n_sources, g=2)
-        ellips *= galaxy_bools
+        ellips *= galaxy_bools  # star ellipticity measurements get zeroed out
 
         # get snr and blendedness
         snr = torch.zeros(self.max_n_sources)
@@ -231,7 +231,7 @@ def _get_snr(image: Tensor, background: Tensor) -> float:
     return torch.sqrt(torch.sum(image**2 / image_with_background)).item()
 
 
-def _get_blendedness(single_galaxy: Tensor, all_galaxies: Tensor) -> float:
-    num = torch.sum(single_galaxy * single_galaxy).item()
-    denom = torch.sum(single_galaxy * all_galaxies).item()
+def _get_blendedness(single_source: Tensor, all_sources: Tensor) -> float:
+    num = torch.sum(single_source * single_source).item()
+    denom = torch.sum(single_source * all_sources).item()
     return 1 - num / denom

@@ -5,7 +5,6 @@ from typing import DefaultDict, Dict, Optional, Tuple
 import galsim
 import numpy as np
 import torch
-import tqdm
 from astropy.table import Table
 from astropy.wcs import WCS
 from einops import rearrange, reduce
@@ -13,6 +12,7 @@ from scipy import optimize as sp_optim
 from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
+from tqdm import tqdm
 
 from bliss.catalog import FullCatalog
 from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
@@ -70,7 +70,7 @@ class DetectionMetrics(Metric):
 
         count = 0
         desc = "Detection Metric per batch"
-        for b in tqdm.tqdm(range(true.batch_size), desc=desc, disable=self.disable_bar):
+        for b in tqdm(range(true.batch_size), desc=desc, disable=self.disable_bar):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
             if ntrue > 0 and nest > 0:
@@ -248,85 +248,94 @@ def _compute_batch_tp_fp(truth: FullCatalog, est: FullCatalog) -> Tuple[Tensor, 
     return all_tp, all_fp, all_ntrue
 
 
-def _compute_tp_fp_per_mag_bin(
-    mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
+def _compute_tp_fp_per_bin(
+    truth: FullCatalog,
+    est: FullCatalog,
+    param: str,
+    bins: Tensor,
 ) -> Dict[str, Tensor]:
-    counts_per_mag: DefaultDict[str, Tensor] = defaultdict(
-        lambda: torch.zeros(len(mag_bins), truth.batch_size)
+    counts_per_bin: DefaultDict[str, Tensor] = defaultdict(
+        lambda: torch.zeros(len(bins), truth.batch_size)
     )
-    for ii, (mag1, mag2) in tqdm(enumerate(mag_bins), desc="tp/fp per bin", total=len(mag_bins)):
+    for ii, (b1, b2) in tqdm(enumerate(bins), desc="tp/fp per bin", total=len(bins)):
 
         # precision
-        eparams = est.apply_param_bin("mags", mag1, mag2)
+        eparams = est.apply_param_bin(param, b1, b2)
         tp, fp, _ = _compute_batch_tp_fp(truth, eparams)
-        counts_per_mag["tp_precision"][ii] = tp
-        counts_per_mag["fp_precision"][ii] = fp
+        counts_per_bin["tp_precision"][ii] = tp
+        counts_per_bin["fp_precision"][ii] = fp
 
         # recall
-        tparams = truth.apply_param_bin("mags", mag1, mag2)
+        tparams = truth.apply_param_bin(param, b1, b2)
         tp, _, ntrue = _compute_batch_tp_fp(tparams, est)
-        counts_per_mag["tp_recall"][ii] = tp
-        counts_per_mag["ntrue"][ii] = ntrue
+        counts_per_bin["tp_recall"][ii] = tp
+        counts_per_bin["ntrue"][ii] = ntrue
 
-    return counts_per_mag
+    return counts_per_bin
 
 
 def get_boostrap_precision_and_recall(
-    n_samples: int, mag_bins: Tensor, truth: FullCatalog, est: FullCatalog
+    n_samples: int,
+    truth: FullCatalog,
+    est: FullCatalog,
+    param: str,
+    bins: Tensor,
 ) -> Dict[str, Tensor]:
     """Get errors for precision/recall which need to be handled carefully to be efficient."""
-    counts_per_mag = _compute_tp_fp_per_mag_bin(mag_bins, truth, est)
+    counts_per_bin = _compute_tp_fp_per_bin(truth, est, param, bins)
     batch_size = truth.batch_size
-    n_mag_bins = mag_bins.shape[0]
+    n_bins = bins.shape[0]
 
     # get counts in needed format
-    tpp_boot = counts_per_mag["tp_precision"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
-    fpp_boot = counts_per_mag["fp_precision"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
-    tpr_boot = counts_per_mag["tp_recall"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
-    ntrue_boot = counts_per_mag["ntrue"].unsqueeze(0).expand(n_samples, n_mag_bins, batch_size)
+    tpp_boot = counts_per_bin["tp_precision"].unsqueeze(0).expand(n_samples, n_bins, batch_size)
+    fpp_boot = counts_per_bin["fp_precision"].unsqueeze(0).expand(n_samples, n_bins, batch_size)
+    tpr_boot = counts_per_bin["tp_recall"].unsqueeze(0).expand(n_samples, n_bins, batch_size)
+    ntrue_boot = counts_per_bin["ntrue"].unsqueeze(0).expand(n_samples, n_bins, batch_size)
 
     # get indices to boostrap
-    # NOTE: the indices for each sample repeat across magnitude bins
+    # NOTE: the indices for each sample repeat across bins
     boot_indices = torch.randint(0, batch_size, (n_samples, 1, batch_size))
-    boot_indices = boot_indices.expand(n_samples, n_mag_bins, batch_size)
+    boot_indices = boot_indices.expand(n_samples, n_bins, batch_size)
 
     # get bootstrapped samples of counts
     tpp_boot = torch.gather(tpp_boot, 2, boot_indices)
     fpp_boot = torch.gather(fpp_boot, 2, boot_indices)
     tpr_boot = torch.gather(tpr_boot, 2, boot_indices)
     ntrue_boot = torch.gather(ntrue_boot, 2, boot_indices)
-    assert tpp_boot.shape == (n_samples, n_mag_bins, batch_size)
+    assert tpp_boot.shape == (n_samples, n_bins, batch_size)
 
     # finally, get precision and recall boostrapped samples
     precision_boot = tpp_boot.sum(2) / (tpp_boot.sum(2) + fpp_boot.sum(2))
     recall_boot = tpr_boot.sum(2) / ntrue_boot.sum(2)
 
-    assert precision_boot.shape == (n_samples, n_mag_bins)
-    assert recall_boot.shape == (n_samples, n_mag_bins)
+    assert precision_boot.shape == (n_samples, n_bins)
+    assert recall_boot.shape == (n_samples, n_bins)
     return {"precision": precision_boot, "recall": recall_boot}
 
 
 def scene_metrics(
     true_params: FullCatalog,
     est_params: FullCatalog,
-    mag_min: float = 0,
-    mag_max: float = torch.inf,
+    param: str,
+    p_min: float = 0,
+    p_max: float = torch.inf,
     slack: float = 1.0,
     disable_bar: bool = True,
 ) -> dict:
     """Return detection and classification metrics based on a given ground truth.
 
-    These metrics are computed as a function of magnitude based on the specified
-    bin `(mag_min, mag_max)` but are designed to be independent of the estimated magnitude.
-    Hence, precision is computed by taking a cut in the estimated parameters based on the magnitude
+    These metrics are computed as a function of `param` based on the specified
+    bin `(p_min, p_max)` but are designed to be independent of the estimated `param`.
+    Hence, precision is computed by taking a cut in the estimated parameters based on the `param`
     bin and matching them with *any* true objects. Similarly, recall is computed by taking a cut
     on the true parameters and matching them with *any* predicted objects.
 
     Args:
         true_params: True parameters of each source in the scene (e.g. from coadd catalog)
         est_params: Predictions on scene obtained from predict_on_scene function.
-        mag_min: Discard all objects with magnitude lower than this.
-        mag_max: Discard all objects with magnitude higher than this.
+        param: Name of the parameter to make the cut on.
+        p_min: Discard all objects with `param` value lower than this.
+        p_max: Discard all objects with `param` value higher than this.
         slack: Pixel L-infinity distance slack when doing matching for metrics.
         disable_bar: Whether to use a progress bar when computing each batch in DetectionMetrics.
 
@@ -337,13 +346,13 @@ def scene_metrics(
     classification_metrics = ClassificationMetrics(slack)
 
     # precision
-    eparams = est_params.apply_param_bin("mags", mag_min, mag_max)
+    eparams = est_params.apply_param_bin(param, p_min, p_max)
     detection_metrics.update(true_params, eparams)
     precision = detection_metrics.compute()["precision"]
     detection_metrics.reset()  # reset global state since recall and precision use different cuts.
 
     # recall
-    tparams = true_params.apply_param_bin("mags", mag_min, mag_max)
+    tparams = true_params.apply_param_bin(param, p_min, p_max)
     detection_metrics.update(tparams, est_params)
     recall = detection_metrics.compute()["recall"]
     n_galaxies_detected = detection_metrics.compute()["n_galaxies_detected"]
@@ -359,13 +368,13 @@ def scene_metrics(
     }
 
     # classification
-    tparams = true_params.apply_param_bin("mags", mag_min, mag_max)
+    tparams = true_params.apply_param_bin(param, p_min, p_max)
     classification_metrics.update(tparams, est_params)
     classification_result = classification_metrics.compute()
 
     # report counts on each bin
-    tparams = true_params.apply_param_bin("mags", mag_min, mag_max)
-    eparams = est_params.apply_param_bin("mags", mag_min, mag_max)
+    tparams = true_params.apply_param_bin(param, p_min, p_max)
+    eparams = est_params.apply_param_bin(param, p_min, p_max)
     tcount = tparams.n_sources.sum().item()
     tgcount = tparams["galaxy_bools"].sum().int().item()
     tscount = tcount - tgcount
@@ -390,23 +399,23 @@ def scene_metrics(
     return {**detection_result, **classification_result, "counts": counts}
 
 
-def compute_mag_bin_metrics(
-    mag_bins: Tensor, truth: FullCatalog, pred: FullCatalog
+def compute_bin_metrics(
+    truth: FullCatalog, pred: FullCatalog, param: str, bins: Tensor
 ) -> Dict[str, Tensor]:
-    metrics_per_mag: dict = defaultdict(lambda: torch.zeros(len(mag_bins)))
-    for ii, (mag1, mag2) in enumerate(mag_bins):
-        res = scene_metrics(truth, pred, mag_min=mag1, mag_max=mag2, slack=1.0, disable_bar=True)
-        metrics_per_mag["precision"][ii] = res["precision"]
-        metrics_per_mag["recall"][ii] = res["recall"]
-        metrics_per_mag["f1"][ii] = res["f1"]
-        metrics_per_mag["class_acc"][ii] = res["class_acc"]
+    metrics_per_bin: dict = defaultdict(lambda: torch.zeros(len(bins)))
+    for ii, (b1, b2) in tqdm(enumerate(bins), desc="detection metrics per bin", total=len(bins)):
+        res = scene_metrics(truth, pred, param, b1, b2, slack=1.0, disable_bar=True)
+        metrics_per_bin["precision"][ii] = res["precision"]
+        metrics_per_bin["recall"][ii] = res["recall"]
+        metrics_per_bin["f1"][ii] = res["f1"]
+        metrics_per_bin["class_acc"][ii] = res["class_acc"]
         conf_matrix = res["conf_matrix"]
-        metrics_per_mag["galaxy_acc"][ii] = conf_matrix[0, 0] / conf_matrix[0, :].sum().item()
-        metrics_per_mag["star_acc"][ii] = conf_matrix[1, 1] / conf_matrix[1, :].sum().item()
+        metrics_per_bin["galaxy_acc"][ii] = conf_matrix[0, 0] / conf_matrix[0, :].sum().item()
+        metrics_per_bin["star_acc"][ii] = conf_matrix[1, 1] / conf_matrix[1, :].sum().item()
         for k, v in res["counts"].items():
-            metrics_per_mag[k][ii] = v
+            metrics_per_bin[k][ii] = v
 
-    return dict(metrics_per_mag)
+    return dict(metrics_per_bin)
 
 
 class CoaddFullCatalog(FullCatalog):
@@ -502,7 +511,7 @@ def get_single_galaxy_ellipticities(
     galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
 
     # Now we use galsim to measure size and ellipticity
-    for i in tqdm.tqdm(range(n_samples), desc="Measuring galaxies", disable=no_bar):
+    for i in tqdm(range(n_samples), desc="Measuring galaxies", disable=no_bar):
         image = images_np[i]
         galsim_image = galsim.Image(image, scale=pixel_scale)
         res_true = galsim.hsm.EstimateShear(

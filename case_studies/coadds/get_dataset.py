@@ -11,7 +11,7 @@ from tqdm import tqdm
 from case_studies.coadds.coadds import CoaddGalsimBlends
 
 
-def task(ds: CoaddGalsimBlends, n_dithers):
+def _task(ds: CoaddGalsimBlends, n_dithers):
     outputs = {}
     full_cat, dithers = ds.sample_full_catalog()
     assert dithers.shape == (50, 2)
@@ -39,7 +39,7 @@ def main(cfg):
     ds: CoaddGalsimBlends = instantiate(cfg.datasets.galsim_blends_coadds, prior=prior_kwargs)
     output = {f"coadd_{d}": torch.zeros(n_samples, 1, size, size) for d in n_dithers}
     output["single"] = torch.zeros(n_samples, 1, size, size)
-    results = Parallel(n_jobs=64)(delayed(task)(ds, n_dithers) for _ in tqdm(range(n_samples)))
+    results = Parallel(n_jobs=64)(delayed(_task)(ds, n_dithers) for _ in tqdm(range(n_samples)))
     for ii, res in enumerate(results):
         output["single"][ii] = res["single"]
         for d in n_dithers:

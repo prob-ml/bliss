@@ -72,12 +72,12 @@ datasets:
     galsim_blends:
         _target_: bliss.datasets.galsim_galaxies.GalsimBlends
         prior:
-            _target_: bliss.models.galsim_decoder.UniformGalsimPrior
+            _target_: bliss.models.galsim_decoder.DefaultGalsimPrior
             single_galaxy_prior: ${datasets.sdss_galaxies.prior}
             max_n_sources: 8
             mean_sources: 3
             max_shift: 0.375
-            galaxy_prob: 1.0
+            galaxy_prob: 0.7
         decoder:
             _target_: bliss.models.galsim_decoder.FullCatalogDecoder
             single_galaxy_decoder: ${datasets.sdss_galaxies.decoder}
