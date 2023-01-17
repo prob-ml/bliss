@@ -270,7 +270,7 @@ class FullCatalog(UserDict):
         """
         self.height = height
         self.width = width
-        self.plocs = d.pop("plocs")
+        self.plocs = d.pop("plocs")  # pixel distance from top-left corner of inner image.
         self.n_sources = d.pop("n_sources")
         self.batch_size, self.max_sources, hw = self.plocs.shape
         assert hw == 2
