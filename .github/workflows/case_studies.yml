@@ -40,7 +40,10 @@ jobs:
           lfs: true
 
       - name: Install poetry
-        run: pipx install poetry
+        run: |
+          pip install --upgrade pip
+          pip install "poetry-core>=1.0.0"
+          pip install "poetry>=1.2.2"
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v3
