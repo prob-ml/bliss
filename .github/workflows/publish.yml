@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout github repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Create environment variables
         run: echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
@@ -22,7 +22,7 @@ jobs:
         run: pipx install poetry
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
           cache: "poetry"
