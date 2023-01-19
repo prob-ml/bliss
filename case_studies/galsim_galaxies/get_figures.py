@@ -646,7 +646,11 @@ class ToySeparationFigure(BlissFigure):
     def compute_data(self, encoder: Encoder, decoder: ImageDecoder, blends_ds: GalsimBlends):
         # first, decide image size
         slen = 44
+        bp = encoder.detection_encoder.border_padding
         tile_slen = encoder.detection_encoder.tile_slen
+        size = 44 + 2 * bp
+        blends_ds.slen = slen
+        blends_ds.decoder.slen = slen
         assert slen / tile_slen % 2 == 1, "Need odd number of tiles to center galaxy."
 
         # now separations between galaxies to be considered (in pixels)
@@ -666,22 +670,26 @@ class ToySeparationFigure(BlissFigure):
         )
         gparams = gparams.reshape(1, 2, 7).expand(batch_size, 2, 7)
 
-        # create full catalog
+        # create full catalogs (need separately since decoder only accepts 1 batch)
         x0, y0 = 22, 22  # center plocs
-        plocs = torch.tensor([[[x0, y0], [x0 + sep, y0]] for sep in seps])
-        d = {
-            "n_sources": torch.full((batch_size,), n_sources),
-            "plocs": plocs,
-            "galaxy_bools": torch.ones(batch_size, n_sources, 1),
-            "galaxy_params": gparams,
-            "star_bools": torch.zeros(batch_size, n_sources, 1),
-            "star_fluxes": torch.zeros(batch_size, n_sources, 1),
-            "star_log_fluxes": torch.zeros(batch_size, n_sources, 1),
-        }
-        full_cat = FullCatalog(slen, slen, d)
-
-        # get image
-        images, _, _, _, background = blends_ds.get_images(full_cat)
+        images = torch.zeros(batch_size, 1, size, size)
+        background = torch.zeros(batch_size, 1, size, size)
+        plocs = torch.tensor([[[x0, y0], [x0, y0 + sep]] for sep in seps]).reshape(batch_size, 2, 2)
+        for ii in range(batch_size):
+            ploc = plocs[ii].reshape(1, 2, 2)
+            d = {
+                "n_sources": torch.full((1,), n_sources),
+                "plocs": ploc,
+                "galaxy_bools": torch.ones(1, n_sources, 1),
+                "galaxy_params": gparams[ii, None],
+                "star_bools": torch.zeros(1, n_sources, 1),
+                "star_fluxes": torch.zeros(1, n_sources, 1),
+                "star_log_fluxes": torch.zeros(1, n_sources, 1),
+            }
+            full_cat = FullCatalog(slen, slen, d)
+            image, _, _, _, bg = blends_ds.get_images(full_cat)
+            images[ii] = image
+            background[ii] = bg
 
         # predictions from encoder
         tile_est = encoder.variational_mode(images, background)
@@ -702,42 +710,43 @@ class ToySeparationFigure(BlissFigure):
                 "flux": torch.zeros(batch_size, 2, 1),
                 "ploc": torch.zeros(batch_size, 2, 2),
                 "ploc_sd": torch.zeros(batch_size, 2, 2),
-                "log_flux_sd": torch.zeros(batch_size, 2, 1),
             },
+            "tile_est": tile_est.to_dict(),
         }
         for ii, sep in enumerate(seps):
+
+            # get tile_est for a single batch
+            d = tile_est.to_dict()
+            d = {k: v[ii, None] for k, v in d.items()}
+            tile_est_ii = TileCatalog(tile_slen, d)
+
             ploc = plocs[ii]
-            params_at_coord = tile_est.get_tile_params_at_coord(ploc)
-            prob_n_source = params_at_coord["n_source_log_probs"]
+            params_at_coord = tile_est_ii.get_tile_params_at_coord(ploc)
+            prob_n_source = torch.exp(params_at_coord["n_source_log_probs"])
             flux = params_at_coord["fluxes"]
             ploc_sd = params_at_coord["loc_sd"] * tile_slen
-            log_flux_sd = params_at_coord["log_flux_sd"]
+            loc = params_at_coord["locs"]
+            assert prob_n_source.shape == flux.shape == (2, 1)
+            assert ploc_sd.shape == loc.shape == (2, 2)
 
             if sep <= 2:
                 params["est"]["prob_n_source"][ii][0] = prob_n_source[0]
                 params["est"]["flux"][ii][0] = flux[0]
+                params["est"]["ploc"][ii][0] = loc[0] * tile_slen + 5 * tile_slen
                 params["est"]["ploc_sd"][ii][0] = ploc_sd[0]
-                params["est"]["log_flux_sd"][ii][0] = log_flux_sd[0]
 
                 params["est"]["prob_n_source"][ii][1] = torch.nan
                 params["est"]["flux"][ii][1] = torch.nan
+                params["est"]["ploc"][ii][1] = torch.tensor([torch.nan, torch.nan])
                 params["est"]["ploc_sd"][ii][1] = torch.tensor([torch.nan, torch.nan])
-                params["est"]["log_flux_sd"][ii][1] = torch.nan
-
             else:
+                bias = 6 + (sep - 3) // 4
                 params["est"]["prob_n_source"][ii] = prob_n_source
                 params["est"]["flux"][ii] = flux
+                params["est"]["ploc"][ii][0] = loc[0] * tile_slen + 5 * tile_slen
+                params["est"]["ploc"][ii][1][0] = loc[1][0] * tile_slen + 5 * tile_slen
+                params["est"]["ploc"][ii][1][1] = loc[1][1] * tile_slen + bias * tile_slen
                 params["est"]["ploc_sd"][ii] = ploc_sd
-                params["est"]["log_flux_sd"][ii] = log_flux_sd
-
-        # plocs are annoying to get (need bias calculation), so we handle them separately
-        est = tile_est.to_full_params()
-        for ii, sep in enumerate(seps):
-            if sep <= 2:
-                params["est"]["plocs"][ii][0] = est.plocs[ii][0]
-                params["est"]["plocs"][ii][1] = torch.tensor([torch.nan, torch.nan])
-            else:
-                params["est"]["plocs"][ii] = est.plocs[ii]
 
         return params
 
