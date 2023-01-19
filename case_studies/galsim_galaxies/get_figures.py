@@ -655,7 +655,7 @@ class ToySeparationFigure(BlissFigure):
 
         # now separations between galaxies to be considered (in pixels)
         # for efficiency, we set the batch_size equal to the number of separations
-        seps = torch.arange(0, 18, 1)
+        seps = torch.arange(0, 12, 0.25)
         batch_size = len(seps)
 
         # Params: total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a
@@ -729,7 +729,7 @@ class ToySeparationFigure(BlissFigure):
             assert prob_n_source.shape == flux.shape == (2, 1)
             assert ploc_sd.shape == loc.shape == (2, 2)
 
-            if sep <= 2:
+            if sep < 2:
                 params["est"]["prob_n_source"][ii][0] = prob_n_source[0]
                 params["est"]["flux"][ii][0] = flux[0]
                 params["est"]["ploc"][ii][0] = loc[0] * tile_slen + 5 * tile_slen
@@ -740,12 +740,12 @@ class ToySeparationFigure(BlissFigure):
                 params["est"]["ploc"][ii][1] = torch.tensor([torch.nan, torch.nan])
                 params["est"]["ploc_sd"][ii][1] = torch.tensor([torch.nan, torch.nan])
             else:
-                bias = 6 + (sep - 3) // 4
+                bias = 5 + np.ceil((sep - 2) / 4)
                 params["est"]["prob_n_source"][ii] = prob_n_source
                 params["est"]["flux"][ii] = flux
                 params["est"]["ploc"][ii][0] = loc[0] * tile_slen + 5 * tile_slen
-                params["est"]["ploc"][ii][1][0] = loc[1][0] * tile_slen + 5 * tile_slen
-                params["est"]["ploc"][ii][1][1] = loc[1][1] * tile_slen + bias * tile_slen
+                params["est"]["ploc"][ii, 1, 0] = loc[1][0] * tile_slen + 5 * tile_slen
+                params["est"]["ploc"][ii, 1, 1] = loc[1][1] * tile_slen + bias * tile_slen
                 params["est"]["ploc_sd"][ii] = ploc_sd
 
         return params
