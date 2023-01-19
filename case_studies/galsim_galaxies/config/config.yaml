@@ -197,6 +197,7 @@ plots:
     figs:
         - "single_gal"
         - "blend_gal"
+        - "toy"
     location_checkpoint: ${paths.project}/models/sdss_detection_encoder.pt
     galaxy_checkpoint: ${paths.project}/models/sdss_galaxy_encoder.pt
     binary_checkpoint: ${paths.project}/models/sdss_binary.pt
