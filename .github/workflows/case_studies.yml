@@ -41,7 +41,8 @@ jobs:
 
       - name: Install poetry
         run: |
-          pipx install poetry --force
+          pipx install poetry
+          pipx ensurepath
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
