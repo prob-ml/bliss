@@ -655,7 +655,7 @@ class ToySeparationFigure(BlissFigure):
 
         # now separations between galaxies to be considered (in pixels)
         # for efficiency, we set the batch_size equal to the number of separations
-        seps = torch.arange(0, 12, 0.25)
+        seps = torch.arange(0, 18, 0.25)
         batch_size = len(seps)
 
         # Params: total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a
@@ -751,7 +751,127 @@ class ToySeparationFigure(BlissFigure):
         return params
 
     def create_figure(self, data) -> Figure:
-        return plt.figure
+        seps: np.ndarray = data["seps"]
+        images: np.ndarray = data["images"]
+        tplocs: np.ndarray = data["truth"]["ploc"]
+        eplocs: np.ndarray = data["est"]["ploc"]
+
+        # first, create image with 3 example separations (very blended to not blended)
+        bp = 24
+        fig, axes = plt.subplots(1, 3, figsize=(12, 7))
+        axes = axes.flatten()
+        seps_to_plot = [4, 8, 12]
+        trim = 20  # zoom into relevant part of the image
+
+        c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
+        c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]
+
+        for ii, psep in enumerate(seps_to_plot):
+            indx = list(seps).index(psep)
+            image = images[indx, 0, trim:-trim, trim:-trim]
+            x1 = tplocs[indx, :, 1] + bp - 0.5 - trim
+            y1 = tplocs[indx, :, 0] + bp - 0.5 - trim
+            x2 = eplocs[indx, :, 1] + bp - 0.5 - trim
+            y2 = eplocs[indx, :, 0] + bp - 0.5 - trim
+            axes[ii].imshow(image, cmap="gray")
+            axes[ii].scatter(x1, y1, marker="x", color="b", s=30, label=None if ii else "Truth")
+            axes[ii].scatter(x2, y2, marker="+", color="r", s=50, label=None if ii else "Predicted")
+            axes[ii].set_xticks([0, 10, 20, 30, 40, 50])
+            axes[ii].set_yticks([0, 10, 20, 30, 40, 50])
+
+            if ii == 0:
+                axes[ii].legend(loc="best", prop={"size": 14}, markerscale=2)
+
+            if ii > 0:
+                axes[ii].set_yticks([])  # turn off axis
+                axes[ii].set_ylim(axes[0].get_ylim())  # align axes
+
+            if ii == 2:
+                axes[ii].text(24, 18, "1", color=c1)
+                axes[ii].text(37, 18, "2", color=c2)
+        fig.tight_layout()
+
+        return fig
+
+
+class ToySeparationFigureMeasurements(ToySeparationFigure):
+    @property
+    def rc_kwargs(self):
+        return {"fontsize": 22, "tick_label_size": "small", "legend_fontsize": "small"}
+
+    @property
+    def cache_name(self) -> str:
+        return "toy_separation"
+
+    @property
+    def name(self) -> str:
+        return "toy_separation_measurements"
+
+    def create_figure(self, data) -> Figure:
+        fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+        axs = axes.flatten()
+        seps = data["seps"]
+        xticks = [sep for sep in seps if sep % 2 == 0]
+
+        c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
+        c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]
+
+        # probability of detection in each tile
+        prob_n1 = data["est"]["prob_n_source"][:, 0]
+        prob_n2 = data["est"]["prob_n_source"][:, 1]
+
+        axs[0].plot(seps, prob_n1, "-", label="1", color=c1)
+        axs[0].plot(seps, prob_n2, "-", label="2", color=c2)
+        axs[0].axvline(2, color="k", ls="--", label=r"\rm Same tile")
+        axs[0].legend(loc="best")
+        axs[0].set_xticks(xticks)
+        axs[0].set_xlabel(r"\rm Separation (pixels)")
+        axs[0].set_ylabel(r"\rm Detection Probability")
+
+        # distance residual
+        tploc1 = data["truth"]["ploc"][:, 0]
+        tploc2 = data["truth"]["ploc"][:, 1]
+        eploc1 = data["est"]["ploc"][:, 0]
+        eploc2 = data["est"]["ploc"][:, 1]
+        dist1 = ((tploc1 - eploc1) ** 2).sum(1) ** (1 / 2)
+        dist2 = ((tploc2 - eploc2) ** 2).sum(1) ** (1 / 2)
+
+        axs[1].plot(seps, dist1, "-", label="1", color=c1)
+        axs[1].plot(seps, dist2, "-", label="2", color=c2)
+        axs[1].axhline(0, ls="-", color="k")
+        axs[1].axvline(2, ls="--", color="k", label=r"\rm Same tile")
+        axs[1].set_xticks(xticks)
+        axs[1].set_xlabel(r"\rm Separation (pixels)")
+        axs[1].set_ylabel(r"\rm Distance residual (pixels)")
+
+        # location error (squared sum) estimate
+        eploc_sd1 = (data["est"]["ploc_sd"][:, 0] ** 2).sum(1) ** (1 / 2)
+        eploc_sd2 = (data["est"]["ploc_sd"][:, 1] ** 2).sum(1) ** (1 / 2)
+        axs[3].plot(seps, eploc_sd1, "-", label="1", color=c1)
+        axs[3].plot(seps, eploc_sd2, "-", label="2", color=c2)
+        axs[3].axhline(0, ls="-", color="k")
+        axs[3].axvline(2, ls="--", color="k", label=r"\rm Same tile")
+        axs[3].set_xticks(xticks)
+        axs[3].set_xlabel(r"\rm Separation (pixels)")
+        axs[3].set_ylabel(r"\rm Predicted centroid error")
+
+        # flux normalized residuals
+        tflux1 = data["truth"]["flux"][:, 0]
+        tflux2 = data["truth"]["flux"][:, 1]
+        eflux1 = data["est"]["flux"][:, 0]
+        eflux2 = data["est"]["flux"][:, 1]
+        rflux1 = (tflux1 - eflux1) / tflux1
+        rflux2 = (tflux2 - eflux2) / tflux2
+
+        axs[2].plot(seps, rflux1, "-", label="1", color=c1)
+        axs[2].plot(seps, rflux2, "-", label="2", color=c2)
+        axs[2].axhline(0, ls="-", color="k")
+        axs[2].axvline(2, ls="--", color="k", label=r"\rm Same tile")
+        axs[2].set_xticks(xticks)
+        axs[2].set_xlabel(r"\rm Separation (pixels)")
+        axs[2].set_ylabel(r"$\Delta f / f^{\rm true}$")
+
+        return fig
 
 
 def _load_models(cfg, device):
@@ -865,6 +985,7 @@ def main(cfg):
         print("INFO: Creating figures for testing BLISS on pair galaxy toy example.")
         blend_ds = instantiate(cfg.plots.galsim_blends)
         ToySeparationFigure(overwrite=overwrite, **bfig_kwargs)(encoder, decoder, blend_ds)
+        ToySeparationFigureMeasurements(overwrite=False, **bfig_kwargs)(encoder, decoder, blend_ds)
 
 
 if __name__ == "__main__":
