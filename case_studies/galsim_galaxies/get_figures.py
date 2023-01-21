@@ -14,7 +14,8 @@ from torch import Tensor
 from tqdm import tqdm
 
 from bliss import generate, reporting
-from bliss.catalog import TileCatalog
+from bliss.catalog import FullCatalog, TileCatalog
+from bliss.datasets.galsim_galaxies import GalsimBlends
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
@@ -22,7 +23,7 @@ from bliss.models.psf_decoder import PSFDecoder
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
 from bliss.reporting import compute_bin_metrics, get_boostrap_precision_and_recall, match_by_locs
 
-ALL_FIGS = ("single_gal", "blend_gal")
+ALL_FIGS = ("single_gal", "blend_gal", "toy")
 
 
 def _make_pr_figure(
@@ -629,6 +630,267 @@ class BlendHistogramFigure(BlendResidualFigure):
         return fig
 
 
+class ToySeparationFigure(BlissFigure):
+    @property
+    def rc_kwargs(self):
+        return {"fontsize": 22, "tick_label_size": "small", "legend_fontsize": "small"}
+
+    @property
+    def cache_name(self) -> str:
+        return "toy_separation"
+
+    @property
+    def name(self) -> str:
+        return "toy_separation"
+
+    def compute_data(self, encoder: Encoder, decoder: ImageDecoder, blends_ds: GalsimBlends):
+        # first, decide image size
+        slen = 44
+        bp = encoder.detection_encoder.border_padding
+        tile_slen = encoder.detection_encoder.tile_slen
+        size = 44 + 2 * bp
+        blends_ds.slen = slen
+        blends_ds.decoder.slen = slen
+        assert slen / tile_slen % 2 == 1, "Need odd number of tiles to center galaxy."
+
+        # now separations between galaxies to be considered (in pixels)
+        # for efficiency, we set the batch_size equal to the number of separations
+        seps = torch.arange(0, 18, 0.1)
+        batch_size = len(seps)
+
+        # Params: total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a
+        # first centered galaxy, then moving one.
+        n_sources = 2
+        flux1, flux2 = 2e5, 1e5
+        gparams = torch.tensor(
+            [
+                [flux1, 1.0, torch.pi / 4, 0.7, 1.5, 0, 0],
+                [flux2, 1.0, 3 * torch.pi / 4, 0.7, 1.0, 0, 0],
+            ],
+        )
+        gparams = gparams.reshape(1, 2, 7).expand(batch_size, 2, 7)
+
+        # create full catalogs (need separately since decoder only accepts 1 batch)
+        x0, y0 = 22, 22  # center plocs
+        images = torch.zeros(batch_size, 1, size, size)
+        background = torch.zeros(batch_size, 1, size, size)
+        plocs = torch.tensor([[[x0, y0], [x0, y0 + sep]] for sep in seps]).reshape(batch_size, 2, 2)
+        for ii in range(batch_size):
+            ploc = plocs[ii].reshape(1, 2, 2)
+            d = {
+                "n_sources": torch.full((1,), n_sources),
+                "plocs": ploc,
+                "galaxy_bools": torch.ones(1, n_sources, 1),
+                "galaxy_params": gparams[ii, None],
+                "star_bools": torch.zeros(1, n_sources, 1),
+                "star_fluxes": torch.zeros(1, n_sources, 1),
+                "star_log_fluxes": torch.zeros(1, n_sources, 1),
+            }
+            full_cat = FullCatalog(slen, slen, d)
+            image, _, _, _, bg = blends_ds.get_images(full_cat)
+            images[ii] = image
+            background[ii] = bg
+
+        # predictions from encoder
+        tile_est = encoder.variational_mode(images, background)
+        tile_est.set_all_fluxes_and_mags(decoder)
+        tile_est = tile_est.cpu()
+
+        # now we need to obtain flux, pred. ploc, prob. of detection in tile and std. of ploc
+        # for each source
+        params = {
+            "images": images,
+            "seps": seps,
+            "truth": {
+                "flux": torch.tensor([flux1, flux2]).reshape(1, 2, 1).expand(batch_size, 2, 1),
+                "ploc": plocs,
+            },
+            "est": {
+                "prob_n_source": torch.zeros(batch_size, 2, 1),
+                "flux": torch.zeros(batch_size, 2, 1),
+                "ploc": torch.zeros(batch_size, 2, 2),
+                "ploc_sd": torch.zeros(batch_size, 2, 2),
+            },
+            "tile_est": tile_est.to_dict(),
+        }
+        for ii, sep in enumerate(seps):
+
+            # get tile_est for a single batch
+            d = tile_est.to_dict()
+            d = {k: v[ii, None] for k, v in d.items()}
+            tile_est_ii = TileCatalog(tile_slen, d)
+
+            ploc = plocs[ii]
+            params_at_coord = tile_est_ii.get_tile_params_at_coord(ploc)
+            prob_n_source = torch.exp(params_at_coord["n_source_log_probs"])
+            flux = params_at_coord["fluxes"]
+            ploc_sd = params_at_coord["loc_sd"] * tile_slen
+            loc = params_at_coord["locs"]
+            assert prob_n_source.shape == flux.shape == (2, 1)
+            assert ploc_sd.shape == loc.shape == (2, 2)
+
+            if sep < 2:
+                params["est"]["prob_n_source"][ii][0] = prob_n_source[0]
+                params["est"]["flux"][ii][0] = flux[0]
+                params["est"]["ploc"][ii][0] = loc[0] * tile_slen + 5 * tile_slen
+                params["est"]["ploc_sd"][ii][0] = ploc_sd[0]
+
+                params["est"]["prob_n_source"][ii][1] = torch.nan
+                params["est"]["flux"][ii][1] = torch.nan
+                params["est"]["ploc"][ii][1] = torch.tensor([torch.nan, torch.nan])
+                params["est"]["ploc_sd"][ii][1] = torch.tensor([torch.nan, torch.nan])
+            else:
+                bias = 5 + np.ceil((sep - 2) / 4)
+                params["est"]["prob_n_source"][ii] = prob_n_source
+                params["est"]["flux"][ii] = flux
+                params["est"]["ploc"][ii][0] = loc[0] * tile_slen + 5 * tile_slen
+                params["est"]["ploc"][ii, 1, 0] = loc[1][0] * tile_slen + 5 * tile_slen
+                params["est"]["ploc"][ii, 1, 1] = loc[1][1] * tile_slen + bias * tile_slen
+                params["est"]["ploc_sd"][ii] = ploc_sd
+
+        return params
+
+    def create_figure(self, data) -> Figure:
+        seps: np.ndarray = data["seps"]
+        images: np.ndarray = data["images"]
+        tplocs: np.ndarray = data["truth"]["ploc"]
+        eplocs: np.ndarray = data["est"]["ploc"]
+
+        # first, create image with 3 example separations (very blended to not blended)
+        bp = 24
+        fig, axes = plt.subplots(1, 3, figsize=(12, 7))
+        axes = axes.flatten()
+        seps_to_plot = [4, 8, 12]
+        trim = 20  # zoom into relevant part of the image
+
+        c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]  # true
+        c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]  # predicted
+
+        for ii, psep in enumerate(seps_to_plot):
+            indx = list(seps).index(psep)
+            image = images[indx, 0, trim:-trim, trim:-trim]
+            x1 = tplocs[indx, :, 1] + bp - 0.5 - trim
+            y1 = tplocs[indx, :, 0] + bp - 0.5 - trim
+            x2 = eplocs[indx, :, 1] + bp - 0.5 - trim
+            y2 = eplocs[indx, :, 0] + bp - 0.5 - trim
+            axes[ii].imshow(image, cmap="gray")
+            axes[ii].scatter(x1, y1, marker="x", color=c1, s=30, label=None if ii else "Truth")
+            axes[ii].scatter(x2, y2, marker="+", color=c2, s=50, label=None if ii else "Predicted")
+            axes[ii].set_xticks([0, 10, 20, 30, 40, 50])
+            axes[ii].set_yticks([0, 10, 20, 30, 40, 50])
+            axes[ii].set_title(rf"\rm Separation: {psep} pixels")
+
+            if ii == 0:
+                axes[ii].legend(loc="best", prop={"size": 14}, markerscale=2)
+
+            if ii > 0:
+                axes[ii].set_yticks([])  # turn off axis
+                axes[ii].set_ylim(axes[0].get_ylim())  # align axes
+
+            axes[ii].text(x1[0].item(), y1[0].item() - 7, "1", color=c1)
+            axes[ii].text(x2[1].item(), y2[1].item() - 7, "2", color=c2)
+
+        fig.tight_layout()
+
+        return fig
+
+
+class ToySeparationFigureMeasurements(ToySeparationFigure):
+    @property
+    def rc_kwargs(self):
+        return {"fontsize": 22, "tick_label_size": "small", "legend_fontsize": "small"}
+
+    @property
+    def cache_name(self) -> str:
+        return "toy_separation"
+
+    @property
+    def name(self) -> str:
+        return "toy_separation_measurements"
+
+    def create_figure(self, data) -> Figure:
+        fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+        axs = axes.flatten()
+        seps = data["seps"]
+        xticks = [sep for sep in seps if sep % 2 == 0]
+
+        c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
+        c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]
+
+        # probability of detection in each tile
+        prob_n1 = data["est"]["prob_n_source"][:, 0]
+        prob_n2 = data["est"]["prob_n_source"][:, 1]
+
+        axs[0].plot(seps, prob_n1, "-", label="1", color=c1)
+        axs[0].plot(seps, prob_n2, "-", label="2", color=c2)
+        axs[0].axvline(2, color="k", ls="--", label=r"\rm Tile boundary")
+        axs[0].axvline(6, ls="--", color="k")
+        axs[0].axvline(10, ls="--", color="k")
+        axs[0].axvline(14, ls="--", color="k")
+        axs[0].legend(loc="best")
+        axs[0].set_xticks(xticks)
+        axs[0].set_xlim(0, 16)
+        axs[0].set_xlabel(r"\rm Separation (pixels)")
+        axs[0].set_ylabel(r"\rm Detection Probability")
+
+        # distance residual
+        tploc1 = data["truth"]["ploc"][:, 0]
+        tploc2 = data["truth"]["ploc"][:, 1]
+        eploc1 = data["est"]["ploc"][:, 0]
+        eploc2 = data["est"]["ploc"][:, 1]
+        dist1 = ((tploc1 - eploc1) ** 2).sum(1) ** (1 / 2)
+        dist2 = ((tploc2 - eploc2) ** 2).sum(1) ** (1 / 2)
+
+        axs[1].plot(seps, dist1, "-", label="1", color=c1)
+        axs[1].plot(seps, dist2, "-", label="2", color=c2)
+        axs[1].axhline(0, ls="-", color="k")
+        axs[1].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
+        axs[1].axvline(6, ls="--", color="k")
+        axs[1].axvline(10, ls="--", color="k")
+        axs[1].axvline(14, ls="--", color="k")
+        axs[1].set_xticks(xticks)
+        axs[1].set_xlim(0, 16)
+        axs[1].set_xlabel(r"\rm Separation (pixels)")
+        axs[1].set_ylabel(r"\rm Distance residual (pixels)")
+
+        # location error (squared sum) estimate
+        eploc_sd1 = (data["est"]["ploc_sd"][:, 0] ** 2).sum(1) ** (1 / 2)
+        eploc_sd2 = (data["est"]["ploc_sd"][:, 1] ** 2).sum(1) ** (1 / 2)
+        axs[3].plot(seps, eploc_sd1, "-", label="1", color=c1)
+        axs[3].plot(seps, eploc_sd2, "-", label="2", color=c2)
+        axs[3].axhline(0, ls="-", color="k")
+        axs[3].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
+        axs[3].axvline(6, ls="--", color="k")
+        axs[3].axvline(10, ls="--", color="k")
+        axs[3].axvline(14, ls="--", color="k")
+        axs[3].set_xticks(xticks)
+        axs[3].set_xlim(0, 16)
+        axs[3].set_xlabel(r"\rm Separation (pixels)")
+        axs[3].set_ylabel(r"\rm Predicted centroid std.")
+
+        # flux normalized residuals
+        tflux1 = data["truth"]["flux"][:, 0]
+        tflux2 = data["truth"]["flux"][:, 1]
+        eflux1 = data["est"]["flux"][:, 0]
+        eflux2 = data["est"]["flux"][:, 1]
+        rflux1 = (tflux1 - eflux1) / tflux1
+        rflux2 = (tflux2 - eflux2) / tflux2
+
+        axs[2].plot(seps, rflux1, "-", label="1", color=c1)
+        axs[2].plot(seps, rflux2, "-", label="2", color=c2)
+        axs[2].axhline(0, ls="-", color="k")
+        axs[2].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
+        axs[2].axvline(6, ls="--", color="k")
+        axs[2].axvline(10, ls="--", color="k")
+        axs[2].axvline(14, ls="--", color="k")
+        axs[2].set_xticks(xticks)
+        axs[2].set_xlim(0, 16)
+        axs[2].set_xlabel(r"\rm Separation (pixels)")
+        axs[2].set_ylabel(r"$\Delta f / f^{\rm true}$")
+
+        return fig
+
+
 def _load_models(cfg, device):
     # load models required for SDSS reconstructions.
 
@@ -735,6 +997,12 @@ def main(cfg):
 
     if "blend_gal" in figs:
         _make_blend_figures(cfg, encoder, decoder, overwrite, bfig_kwargs)
+
+    if "toy" in figs:
+        print("INFO: Creating figures for testing BLISS on pair galaxy toy example.")
+        blend_ds = instantiate(cfg.plots.galsim_blends)
+        ToySeparationFigure(overwrite=overwrite, **bfig_kwargs)(encoder, decoder, blend_ds)
+        ToySeparationFigureMeasurements(overwrite=False, **bfig_kwargs)(encoder, decoder, blend_ds)
 
 
 if __name__ == "__main__":
