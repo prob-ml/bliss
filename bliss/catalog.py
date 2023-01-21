@@ -42,6 +42,7 @@ class TileCatalog(UserDict):
         "lensed_galaxy_probs",
         "lens_params",
         "log_flux_sd",
+        "loc_sd",
     }
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
@@ -225,7 +226,13 @@ class TileCatalog(UserDict):
         x_indx = torch.searchsorted(x_coords.contiguous(), plocs[:, 0].contiguous()) - 1
         y_indx = torch.searchsorted(y_coords.contiguous(), plocs[:, 1].contiguous()) - 1
 
-        return {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
+        # gather in dictionary
+        d = {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
+
+        # also include locs
+        d["locs"] = self.locs[:, x_indx, y_indx, :, :].reshape(n_total, -1)
+
+        return d
 
     def set_all_fluxes_and_mags(self, decoder) -> None:
         """Set all fluxes (galaxy and star) of tile catalog given an `ImageDecoder` instance."""
@@ -270,7 +277,7 @@ class FullCatalog(UserDict):
         """
         self.height = height
         self.width = width
-        self.plocs = d.pop("plocs")
+        self.plocs = d.pop("plocs")  # pixel distance from top-left corner of inner image.
         self.n_sources = d.pop("n_sources")
         self.batch_size, self.max_sources, hw = self.plocs.shape
         assert hw == 2

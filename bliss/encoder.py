@@ -174,6 +174,7 @@ class Encoder(nn.Module):
             dist_params["per_source_params"], n_sources
         )
         tile_samples["log_flux_sd"] = dist_params_n_src["log_flux_sd"]
+        tile_samples["loc_sd"] = dist_params_n_src["loc_sd"]
 
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
