@@ -655,7 +655,7 @@ class ToySeparationFigure(BlissFigure):
 
         # now separations between galaxies to be considered (in pixels)
         # for efficiency, we set the batch_size equal to the number of separations
-        seps = torch.arange(0, 18, 0.25)
+        seps = torch.arange(0, 18, 0.1)
         batch_size = len(seps)
 
         # Params: total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a
@@ -763,8 +763,8 @@ class ToySeparationFigure(BlissFigure):
         seps_to_plot = [4, 8, 12]
         trim = 20  # zoom into relevant part of the image
 
-        c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
-        c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]
+        c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]  # true
+        c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]  # predicted
 
         for ii, psep in enumerate(seps_to_plot):
             indx = list(seps).index(psep)
@@ -774,10 +774,11 @@ class ToySeparationFigure(BlissFigure):
             x2 = eplocs[indx, :, 1] + bp - 0.5 - trim
             y2 = eplocs[indx, :, 0] + bp - 0.5 - trim
             axes[ii].imshow(image, cmap="gray")
-            axes[ii].scatter(x1, y1, marker="x", color="b", s=30, label=None if ii else "Truth")
-            axes[ii].scatter(x2, y2, marker="+", color="r", s=50, label=None if ii else "Predicted")
+            axes[ii].scatter(x1, y1, marker="x", color=c1, s=30, label=None if ii else "Truth")
+            axes[ii].scatter(x2, y2, marker="+", color=c2, s=50, label=None if ii else "Predicted")
             axes[ii].set_xticks([0, 10, 20, 30, 40, 50])
             axes[ii].set_yticks([0, 10, 20, 30, 40, 50])
+            axes[ii].set_title(rf"\rm Separation: {psep} pixels")
 
             if ii == 0:
                 axes[ii].legend(loc="best", prop={"size": 14}, markerscale=2)
@@ -786,9 +787,9 @@ class ToySeparationFigure(BlissFigure):
                 axes[ii].set_yticks([])  # turn off axis
                 axes[ii].set_ylim(axes[0].get_ylim())  # align axes
 
-            if ii == 2:
-                axes[ii].text(24, 18, "1", color=c1)
-                axes[ii].text(37, 18, "2", color=c2)
+            axes[ii].text(x1[0].item(), y1[0].item() - 7, "1", color=c1)
+            axes[ii].text(x2[1].item(), y2[1].item() - 7, "2", color=c2)
+
         fig.tight_layout()
 
         return fig
@@ -822,9 +823,13 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
 
         axs[0].plot(seps, prob_n1, "-", label="1", color=c1)
         axs[0].plot(seps, prob_n2, "-", label="2", color=c2)
-        axs[0].axvline(2, color="k", ls="--", label=r"\rm Same tile")
+        axs[0].axvline(2, color="k", ls="--", label=r"\rm Tile boundary")
+        axs[0].axvline(6, ls="--", color="k")
+        axs[0].axvline(10, ls="--", color="k")
+        axs[0].axvline(14, ls="--", color="k")
         axs[0].legend(loc="best")
         axs[0].set_xticks(xticks)
+        axs[0].set_xlim(0, 16)
         axs[0].set_xlabel(r"\rm Separation (pixels)")
         axs[0].set_ylabel(r"\rm Detection Probability")
 
@@ -839,8 +844,12 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         axs[1].plot(seps, dist1, "-", label="1", color=c1)
         axs[1].plot(seps, dist2, "-", label="2", color=c2)
         axs[1].axhline(0, ls="-", color="k")
-        axs[1].axvline(2, ls="--", color="k", label=r"\rm Same tile")
+        axs[1].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
+        axs[1].axvline(6, ls="--", color="k")
+        axs[1].axvline(10, ls="--", color="k")
+        axs[1].axvline(14, ls="--", color="k")
         axs[1].set_xticks(xticks)
+        axs[1].set_xlim(0, 16)
         axs[1].set_xlabel(r"\rm Separation (pixels)")
         axs[1].set_ylabel(r"\rm Distance residual (pixels)")
 
@@ -850,10 +859,14 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         axs[3].plot(seps, eploc_sd1, "-", label="1", color=c1)
         axs[3].plot(seps, eploc_sd2, "-", label="2", color=c2)
         axs[3].axhline(0, ls="-", color="k")
-        axs[3].axvline(2, ls="--", color="k", label=r"\rm Same tile")
+        axs[3].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
+        axs[3].axvline(6, ls="--", color="k")
+        axs[3].axvline(10, ls="--", color="k")
+        axs[3].axvline(14, ls="--", color="k")
         axs[3].set_xticks(xticks)
+        axs[3].set_xlim(0, 16)
         axs[3].set_xlabel(r"\rm Separation (pixels)")
-        axs[3].set_ylabel(r"\rm Predicted centroid error")
+        axs[3].set_ylabel(r"\rm Predicted centroid std.")
 
         # flux normalized residuals
         tflux1 = data["truth"]["flux"][:, 0]
@@ -866,8 +879,12 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         axs[2].plot(seps, rflux1, "-", label="1", color=c1)
         axs[2].plot(seps, rflux2, "-", label="2", color=c2)
         axs[2].axhline(0, ls="-", color="k")
-        axs[2].axvline(2, ls="--", color="k", label=r"\rm Same tile")
+        axs[2].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
+        axs[2].axvline(6, ls="--", color="k")
+        axs[2].axvline(10, ls="--", color="k")
+        axs[2].axvline(14, ls="--", color="k")
         axs[2].set_xticks(xticks)
+        axs[2].set_xlim(0, 16)
         axs[2].set_xlabel(r"\rm Separation (pixels)")
         axs[2].set_ylabel(r"$\Delta f / f^{\rm true}$")
 
