@@ -281,6 +281,35 @@ class TileCatalog(UserDict):
         ellips = decoder.get_galaxy_ellips(galaxy_bools, galaxy_params, scale=scale)
         self["ellips"] = ellips
 
+    def set_snr(self, decoder, background: Tensor) -> None:
+
+        ptile_slen = decoder.ptile_slen
+        star_dec = decoder.star_tile_decoder
+        galaxy_dec = decoder.galaxy_tile_decoder
+
+        b, nth, ntw, _, _ = self["star_fluxes"].shape
+        star_fluxes = rearrange(self["star_fluxes"], "b nth ntw s 1 -> (b nth ntw) s 1")
+        star_bools = rearrange(self["star_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
+        galaxy_params = rearrange(self["galaxy_params"], "b nth ntw s d -> (b nth ntw) s d")
+        galaxy_bools = rearrange(self["galaxy_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
+
+        single_stars = star_dec.forward(star_fluxes, star_bools, ptile_slen)
+        single_galaxies = galaxy_dec.forward(galaxy_params, galaxy_bools)
+
+        single_stars = rearrange(single_stars, "np s 1 h w -> np s h w")
+        single_galaxies = rearrange(single_galaxies, "np s 1 h w -> np s h w")
+
+        np, s, h, w = single_galaxies.shape
+        bg = background.reshape(1, 1, h, w).expand(np, s, h, w)
+
+        star_snr = (single_stars**2 / (single_stars + bg)).sum(axis=(-1, -2)).sqrt()
+        gal_snr = (single_galaxies**2 / (single_galaxies + bg)).sum(axis=(-1, -2)).sqrt()
+
+        star_snr = rearrange(star_snr, "(b nth ntw) s -> b nth ntw s 1", b=b, nth=nth, ntw=ntw)
+        gal_snr = rearrange(gal_snr, "(b nth ntw) s -> b nth ntw s 1", b=b, nth=nth, ntw=ntw)
+        snr = gal_snr * self["galaxy_bools"] + star_snr * self["star_bools"]
+        self["snr"] = snr
+
 
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params
