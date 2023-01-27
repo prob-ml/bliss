@@ -113,7 +113,7 @@ def _make_pr_figure(
     ax2.fill_between(bins, recall1, recall2, color=c2, alpha=0.5)
 
     ax2.legend(loc="lower left")
-    ax2.set_xlabel(rf"\rm {xlabel}")
+    ax2.set_xlabel(xlabel)
     ax2.set_ylabel(rf"\rm {metric_type} metric")
     ax2.set_yticks(yticks)
 
@@ -393,9 +393,7 @@ class BlendResidualFigure(BlissFigure):
         background = background.expand(n_batches, 1, slen, slen)
 
         # background for snr
-        ptile_slen = decoder.ptile_slen
         bg = background[0, 0, 0, 0].item()
-        snr_background = torch.tensor([bg]).reshape(1, 1).expand(ptile_slen, ptile_slen)
 
         # first create FullCatalog from simulated data
         tile_cat = TileCatalog(decoder.tile_slen, blend_data).cpu()
@@ -405,17 +403,16 @@ class BlendResidualFigure(BlissFigure):
         tile_est = encoder.variational_mode(images, background)
         tile_est.set_all_fluxes_and_mags(decoder)
         tile_est.set_galaxy_ellips(decoder, scale=0.393)
-        tile_est.set_snr(decoder, snr_background)
+        tile_est.set_snr(decoder, bg)
         tile_est = tile_est.cpu()
         est = tile_est.to_full_params()
 
-        # compute detection metrics (mag)
-        print("INFO: Computing detection metrics in magnitude bins")
-        mag_bins2 = torch.arange(18.0, 24.0, 0.5)
-        mag_bins1 = mag_bins2 - 0.5
-        mag_bins = torch.column_stack((mag_bins1, mag_bins2))
-        bin_metrics = compute_bin_metrics(truth, est, "mags", mag_bins)
-        boot_metrics = get_boostrap_precision_and_recall(1000, truth, est, "mags", mag_bins)
+        # compute detection metrics (snr)
+        snr_bins2 = 10 ** torch.arange(0.2, 3.2, 0.2)
+        snr_bins1 = 10 ** torch.arange(0.0, 3.0, 0.2)
+        snr_bins = torch.column_stack((snr_bins1, snr_bins2))
+        bin_metrics = compute_bin_metrics(truth, est, "snr", snr_bins)
+        boot_metrics = get_boostrap_precision_and_recall(1000, truth, est, "snr", snr_bins)
 
         # collect quantities for residuals on ellipticites and flux of galaxies
         snr = []
@@ -432,7 +429,6 @@ class BlendResidualFigure(BlissFigure):
         egbools = []
         for ii in tqdm(range(n_batches), desc="Matching batches"):
             true_plocs_ii, est_plocs_ii = truth.plocs[ii], est.plocs[ii]
-
             tindx, eindx, dkeep, _ = match_by_locs(true_plocs_ii, est_plocs_ii)
             n_matches = len(tindx[dkeep])
 
@@ -499,6 +495,7 @@ class BlendResidualFigure(BlissFigure):
                     "precision": boot_metrics["precision"],
                     "recall": boot_metrics["recall"],
                 },
+                "bins": snr_bins,
             },
             "classification": {
                 "snr": torch.tensor(snr_class),
@@ -506,7 +503,6 @@ class BlendResidualFigure(BlissFigure):
                 "tgbools": torch.tensor(tgbools),
                 "egbools": torch.tensor(egbools),
             },
-            "bins": {"mags": mag_bins},
         }
 
     def create_figure(self, data) -> Figure:
@@ -590,9 +586,10 @@ class BlendDetectionFigure(BlendResidualFigure):
         return "blendsim_detection"
 
     def create_figure(self, data) -> Figure:
-        mag_bins = data["bins"]["mags"].mean(1)  # take middle of bin as x for plotting
+        # take middle of bin as x for plotting
+        snr_bins = np.log10(data["detection"]["bins"].mean(1))
         return _make_pr_figure(
-            mag_bins, data["detection"], "Magnitude", xlims=(18, 23), ylims2=(0, 5000)
+            snr_bins, data["detection"], r"$\log_{10} \rm SNR$", xlims=(0.5, 3), ylims2=(0, 2000)
         )
 
 
@@ -621,10 +618,10 @@ class BlendClassificationFigure(BlendResidualFigure):
         return tp / p, tp / t
 
     def create_figure(self, data) -> Figure:
-        _, mags, tgbools, egbools = data["classification"].values()
-        mag_bins = data["bins"]["mags"]
-        n_matches = len(mags)
-        n_bins = len(mag_bins)
+        snrs, _, tgbools, egbools = data["classification"].values()
+        snr_bins = data["detection"]["bins"]
+        n_matches = len(snrs)
+        n_bins = len(snr_bins)
         n_boots = 1000
 
         precision = np.zeros(n_bins)
@@ -641,11 +638,11 @@ class BlendClassificationFigure(BlendResidualFigure):
 
         # compute boostrap precision and recall per bin
         for ii in range(n_boots):
-            mags_ii = mags[boot_indices[ii]]
+            snrs_ii = snrs[boot_indices[ii]]
             tgbools_ii = tgbools[boot_indices[ii]]
             egbools_ii = egbools[boot_indices[ii]]
-            for jj, (b1, b2) in enumerate(mag_bins):
-                keep = (b1 < mags_ii) & (mags_ii < b2)
+            for jj, (b1, b2) in enumerate(snr_bins):
+                keep = (b1 < snrs_ii) & (snrs_ii < b2)
                 tgbool_ii = tgbools_ii[keep]
                 egbool_ii = egbools_ii[keep]
 
@@ -654,8 +651,8 @@ class BlendClassificationFigure(BlendResidualFigure):
                 boot_recall[ii][jj] = r
 
         # compute precision and recall per bin
-        for jj, (b1, b2) in enumerate(mag_bins):
-            keep = (b1 < mags) & (mags < b2)
+        for jj, (b1, b2) in enumerate(snr_bins):
+            keep = (b1 < snrs) & (snrs < b2)
             tgbool = tgbools[keep]
             egbool = egbools[keep]
             p, r = self._compute_pr(tgbool, egbool)
@@ -667,7 +664,7 @@ class BlendClassificationFigure(BlendResidualFigure):
             tstars[jj] = (~tgbool.astype(bool)).astype(float).sum()
             estars[jj] = (~egbool.astype(bool)).astype(float).sum()
 
-        bins = mag_bins.mean(1)
+        bins = np.log10(snr_bins.mean(1))
         data = {
             "precision": precision,
             "recall": recall,
@@ -680,11 +677,12 @@ class BlendClassificationFigure(BlendResidualFigure):
         return _make_pr_figure(
             bins,
             data,
-            "Magnitude",
-            xlims=(18, 23),
-            metric_type="Classification",
-            ylims2=(0, 2000),
+            r"$\log_{10} \rm SNR$",
+            xlims=(0.5, 3),
+            metric_type="Galaxy Classification",
+            ylims2=(0, 1000),
             legend_size_hist=16,
+            ylims=(0.5, 1.03),
         )
 
 
