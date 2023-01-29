@@ -275,7 +275,7 @@ class AutoEncoderReconRandom(BlissFigure):
 class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
     @property
     def name(self) -> str:
-        return "ae_bin_residuals"
+        return "ae_bin_measurements"
 
     @property
     def rc_kwargs(self):
@@ -284,47 +284,41 @@ class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
     def create_figure(self, data) -> Figure:
         meas = data["measurements"]
 
-        fig, axes = plt.subplots(2, 2, figsize=(16, 16))
-        ((ax1, ax2), (ax3, ax4)) = axes
+        fig, axes = plt.subplots(1, 3, figsize=(18, 7))
+        ax1, ax2, ax3 = axes.flatten()
         snr = meas["snr"]
         xticks = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0, 3)
         xlabel = r"$\log_{10} \text{SNR}$"
 
-        # magnitudes
-        true_mags, recon_mags = meas["true_mags"], meas["recon_mags"]
-        x, y = np.log10(snr), recon_mags - true_mags
-        scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
-        ax1.set_xlim(xlims)
-        ax1.set_xlabel(xlabel)
-        ax1.set_ylabel(r"\rm $m^{\rm recon} - m^{\rm true}$")
-        ax1.set_xticks(xticks)
-
         # fluxes
         true_fluxes, recon_fluxes = meas["true_fluxes"], meas["recon_fluxes"]
         x, y = np.log10(snr), (recon_fluxes - true_fluxes) / recon_fluxes
-        scatter_shade_plot(ax2, x, y, xlims, delta=0.2)
-        ax2.set_xlim(xlims)
-        ax2.set_xlabel(xlabel)
-        ax2.set_ylabel(r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
-        ax2.set_xticks(xticks)
+        scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
+        ax1.set_xlim(xlims)
+        ax1.set_xlabel(xlabel)
+        ax1.set_ylabel(r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
+        ax1.set_xticks(xticks)
+        ax1.axhline(0, ls="--", color="k")
 
         # ellipticities
         true_ellip1, recon_ellip1 = meas["true_ellips"][:, 0], meas["recon_ellips"][:, 0]
         x, y = np.log10(snr), recon_ellip1 - true_ellip1
-        scatter_shade_plot(ax3, x, y, xlims, delta=0.2)
-        ax3.set_xlim(xlims)
-        ax3.set_xlabel(xlabel)
-        ax3.set_ylabel(r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$")
-        ax3.set_xticks(xticks)
+        scatter_shade_plot(ax2, x, y, xlims, delta=0.2)
+        ax2.set_xlim(xlims)
+        ax2.set_xlabel(xlabel)
+        ax2.set_ylabel(r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$")
+        ax2.set_xticks(xticks)
+        ax2.axhline(0, ls="--", color="k")
 
         true_ellip2, recon_ellip2 = meas["true_ellips"][:, 1], meas["recon_ellips"][:, 1]
         x, y = np.log10(snr), recon_ellip2 - true_ellip2
-        scatter_shade_plot(ax4, x, y, xlims, delta=0.2)
-        ax4.set_xlim(xlims)
-        ax4.set_xlabel(xlabel)
-        ax4.set_ylabel(r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$")
-        ax4.set_xticks(xticks)
+        scatter_shade_plot(ax3, x, y, xlims, delta=0.2)
+        ax3.set_xlim(xlims)
+        ax3.set_xlabel(xlabel)
+        ax3.set_ylabel(r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$")
+        ax3.set_xticks(xticks)
+        ax3.axhline(0, ls="--", color="k")
 
         return fig
 
@@ -729,7 +723,7 @@ class ToySeparationFigure(BlissFigure):
 
     @property
     def name(self) -> str:
-        return "toy_separation"
+        return "toy_separations"
 
     def compute_data(self, encoder: Encoder, decoder: ImageDecoder, blends_ds: GalsimBlends):
         # first, decide image size
@@ -898,7 +892,7 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
 
     @property
     def name(self) -> str:
-        return "toy_separation_measurements"
+        return "toy_measurements"
 
     def create_figure(self, data) -> Figure:
         fig, axes = plt.subplots(2, 2, figsize=(12, 12))
