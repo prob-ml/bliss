@@ -114,7 +114,7 @@ def _make_pr_figure(
 
     ax2.legend(loc="lower left")
     ax2.set_xlabel(xlabel)
-    ax2.set_ylabel(rf"\rm {metric_type} metric")
+    ax2.set_ylabel(rf"\rm {metric_type} Metric")
     ax2.set_yticks(yticks)
 
     if xlims is not None:
@@ -952,7 +952,7 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         axs[3].set_xticks(xticks)
         axs[3].set_xlim(0, 16)
         axs[3].set_xlabel(r"\rm Separation (pixels)")
-        axs[3].set_ylabel(r"\rm Predicted centroid std.")
+        axs[3].set_ylabel(r"\rm Predicted centroid std. (pixels)")
 
         # flux normalized residuals
         tflux1 = data["truth"]["flux"][:, 0]
@@ -972,7 +972,7 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         axs[2].set_xticks(xticks)
         axs[2].set_xlim(0, 16)
         axs[2].set_xlabel(r"\rm Separation (pixels)")
-        axs[2].set_ylabel(r"$ (f^{\rm pred} - f^{\rm true})/ f^{\rm true}$")
+        axs[2].set_ylabel(r"$ (f^{\rm recon} - f^{\rm true})/ f^{\rm true}$")
 
         return fig
 
