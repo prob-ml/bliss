@@ -5,7 +5,6 @@ from bliss.models.detection_encoder import get_is_on_from_n_sources
 
 
 def plot_image(axarr, image, x0=0, x1=0, slen0=100, slen1=100):
-
     subimage = image[x0 : (x0 + slen0), x1 : (x1 + slen1)]
     vmin = subimage.min()
     vmax = subimage.max()
@@ -27,7 +26,6 @@ def plot_locations(locs, slen, border_padding, ax, marker="o", color="b"):
 
 
 def get_params_in_tiles(tile_coords, locs, fluxes, slen, subimage_slen, edge_padding=0):
-
     # locs are the coordinates in the full image, in coordinates between 0-1
     assert torch.all(locs <= 1.0)
     assert torch.all(locs >= 0.0)

@@ -180,7 +180,6 @@ class AutoEncoderReconRandom(BlissFigure):
         }
 
     def _reconstruction_figure(self, images, recons, residuals) -> Figure:
-
         pad = 6.0
         fig, axes = plt.subplots(nrows=self.n_examples, ncols=3, figsize=(12, 20))
         assert images.shape[0] == recons.shape[0] == residuals.shape[0] == self.n_examples
@@ -191,7 +190,6 @@ class AutoEncoderReconRandom(BlissFigure):
         vmax_res = residuals.max().item()
 
         for i in range(self.n_examples):
-
             ax_true = axes[i, 0]
             ax_recon = axes[i, 1]
             ax_res = axes[i, 2]
@@ -346,7 +344,6 @@ class BlendResidualFigure(BlissFigure):
             n_matches = len(tindx[dkeep])
 
             if n_matches > 0:
-
                 # only evaluate flux/ellipticity residuals on galaxies labelled as galaxies.
                 tgbool_ii = truth["galaxy_bools"][ii][tindx][dkeep]
                 egbool_ii = est["galaxy_bools"][ii][eindx][dkeep]
@@ -714,7 +711,6 @@ class ToySeparationFigure(BlissFigure):
             "tile_est": tile_est.to_dict(),
         }
         for ii, sep in enumerate(seps):
-
             # get tile_est for a single batch
             d = tile_est.to_dict()
             d = {k: v[ii, None] for k, v in d.items()}
