@@ -100,7 +100,6 @@ class BlissFigure:
         overwrite: bool = False,
         img_format: str = "png",
     ) -> None:
-
         self.figdir = Path(figdir)
         self.cachefile = Path(cachedir) / (self.cache_name + ".pt")
         self.overwrite = overwrite

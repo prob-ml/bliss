@@ -253,7 +253,7 @@ class SemiSyntheticFrame:
 
 def apply_mask(image, background, regions, mask_bg_val=865.0):
     """Replaces specified regions with background noise."""
-    for (h, h_end, w, w_end) in regions:
+    for h, h_end, w, w_end in regions:
         img = image[:, :, h:h_end, w:w_end]
         image[:, :, h:h_end, w:w_end] = mask_bg_val + torch.tensor(
             mask_bg_val

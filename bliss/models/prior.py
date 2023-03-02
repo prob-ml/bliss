@@ -83,7 +83,7 @@ class ImagePrior(pl.LightningModule):
         n_bands: int,
         min_sources: int,
         max_sources: int,
-        mean_sources: int,
+        mean_sources: float,
         f_min: float,
         f_max: float,
         alpha: float,
