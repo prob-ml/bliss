@@ -98,7 +98,6 @@ class CenteredGalaxyDecoder(nn.Module):
 
 
 class OneCenteredGalaxyAE(pl.LightningModule):
-
     # ---------------
     # Model
     # ----------------

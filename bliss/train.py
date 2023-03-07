@@ -15,7 +15,6 @@ from pytorch_lightning.utilities import rank_zero_only
 
 
 def train(cfg: DictConfig):
-
     # setup paths and seed
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
     assert isinstance(paths, dict)

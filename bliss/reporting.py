@@ -258,7 +258,6 @@ def _compute_tp_fp_per_bin(
         lambda: torch.zeros(len(bins), truth.batch_size)
     )
     for ii, (b1, b2) in tqdm(enumerate(bins), desc="tp/fp per bin", total=len(bins)):
-
         # precision
         eparams = est.apply_param_bin(param, b1, b2)
         tp, fp, _ = _compute_batch_tp_fp(truth, eparams)

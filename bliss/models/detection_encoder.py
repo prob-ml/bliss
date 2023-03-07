@@ -11,6 +11,7 @@ from torch import Tensor, nn
 from torch.distributions import Categorical, Normal, Poisson
 from torch.nn import functional as F
 from torch.optim import Adam
+from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.encoder_layers import (
@@ -44,6 +45,7 @@ class DetectionEncoder(pl.LightningModule):
         annotate_probs: bool = False,
         slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
+        scheduler_params: Optional[dict] = None,
     ):
         """Initializes DetectionEncoder.
 
@@ -60,7 +62,8 @@ class DetectionEncoder(pl.LightningModule):
             hidden: TODO (document this)
             annotate_probs: Annotate probabilities on validation plots?
             slack: Slack to use when matching locations for validation metrics.
-            optimizer_params: Optimizer for training.
+            optimizer_params: arguments passed to the Adam optimizer
+            scheduler_params: arguments passed to the learning rate scheduler
         """
         super().__init__()
 
@@ -68,6 +71,7 @@ class DetectionEncoder(pl.LightningModule):
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.optimizer_params = optimizer_params
+        self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
 
         assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
@@ -122,7 +126,24 @@ class DetectionEncoder(pl.LightningModule):
         self.val_detection_metrics = DetectionMetrics(slack)
         self.test_detection_metrics = DetectionMetrics(slack)
 
-    def encode(self, image_ptiles: Tensor) -> Dict[str, Tensor]:
+    def _final_encoding(self, enc_final_output):
+        dim_out_all = enc_final_output.shape[1]
+        dim_per_source_params = dim_out_all - (self.max_detections + 1)
+        per_source_params, n_source_free_probs = torch.split(
+            enc_final_output, [dim_per_source_params, self.max_detections + 1], dim=1
+        )
+        per_source_params = rearrange(
+            per_source_params,
+            "n_ptiles (td pps) -> n_ptiles td pps",
+            td=self.n_total_detections,
+            pps=self.n_params_per_source,
+        )
+
+        n_source_log_probs = self.log_softmax(n_source_free_probs)
+
+        return {"per_source_params": per_source_params, "n_source_log_probs": n_source_log_probs}
+
+    def encode_tiled(self, image_ptiles: Tensor) -> Dict[str, Tensor]:
         """Encodes distributional parameters from image padded tiles.
 
         Args:
@@ -140,22 +161,23 @@ class DetectionEncoder(pl.LightningModule):
         transformed_ptiles = self.input_transform(image_ptiles)
         enc_conv_output = self.enc_conv(transformed_ptiles)
         enc_final_output = self.enc_final(enc_conv_output)
+        return self._final_encoding(enc_final_output)
 
-        dim_out_all = enc_final_output.shape[1]
-        dim_per_source_params = dim_out_all - (self.max_detections + 1)
-        per_source_params, n_source_free_probs = torch.split(
-            enc_final_output, [dim_per_source_params, self.max_detections + 1], dim=1
+    def do_encode_batch(self, images_with_background):
+        image_ptiles = get_images_in_tiles(
+            images_with_background,
+            self.tile_slen,
+            self.ptile_slen,
         )
-        per_source_params = rearrange(
-            per_source_params,
-            "n_ptiles (td pps) -> n_ptiles td pps",
-            td=self.n_total_detections,
-            pps=self.n_params_per_source,
-        )
+        image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
+        transformed_ptiles = self.input_transform(image_ptiles)
+        enc_conv_output = self.enc_conv(transformed_ptiles)
+        return self.enc_final(enc_conv_output)
 
-        n_source_log_probs = self.log_softmax(n_source_free_probs)
-
-        return {"per_source_params": per_source_params, "n_source_log_probs": n_source_log_probs}
+    def encode_batch(self, batch):
+        images_with_background = torch.cat((batch["images"], batch["background"]), dim=1)
+        enc_final_output = self.do_encode_batch(images_with_background)
+        return self._final_encoding(enc_final_output)
 
     def sample(
         self,
@@ -166,8 +188,8 @@ class DetectionEncoder(pl.LightningModule):
         """Sample from the encoded variational distribution.
 
         Args:
-            dist_params: The output of `self.encode(image_ptiles)`,
-                which is the distributional parameters in matrix form.
+            dist_params:
+                The distributional parameters in matrix form.
             n_samples:
                 The number of samples to draw. If None, the variational mode is taken instead.
             n_source_weights:
@@ -240,7 +262,7 @@ class DetectionEncoder(pl.LightningModule):
         """Get distributional parameters conditioned on number of sources in tile.
 
         Args:
-            params_per_source: An output of `self.encode(ptiles)`,
+            params_per_source:
                 Has size `(batch_size x n_tiles_h x n_tiles_w) * d`.
             tile_n_sources:
                 A tensor of the number of sources in each tile.
@@ -286,59 +308,40 @@ class DetectionEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
-        return Adam(self.parameters(), **self.optimizer_params)
+        optimizer = Adam(self.parameters(), **self.optimizer_params)
+        scheduler = MultiStepLR(optimizer, **self.scheduler_params)
+        return [optimizer], [scheduler]
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
         batch_size = len(batch["n_sources"])
-        loss = self._get_loss(batch)["loss"]
-        self.log("train/loss", loss, batch_size=batch_size)
-        return loss
+        out = self._get_loss(batch)
+        self.log("train/loss", out["loss"], batch_size=batch_size)
+        return out["loss"]
 
     def _get_loss(self, batch: Dict[str, Tensor]):
-        true_catalog = {
-            "locs": rearrange(
-                batch["locs"][:, :, :, 0 : self.max_detections],
-                "n nth ntw ns hw -> (n nth ntw) ns hw",
-            ),
-            "star_log_fluxes": rearrange(
-                batch["star_log_fluxes"][:, :, :, 0 : self.max_detections],
-                "n nth ntw ns b -> (n nth ntw) ns b",
-            ),
-            "galaxy_bools": rearrange(
-                batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
-                "n nth ntw ns 1 -> (n nth ntw) ns 1",
-            ),
-            "n_sources": rearrange(
-                batch["n_sources"].clamp(max=self.max_detections), "n nth ntw -> (n nth ntw)"
-            ),
-        }
-        true_catalog["is_on_array"] = get_is_on_from_n_sources(
-            true_catalog["n_sources"], self.max_detections
-        )
-        image_ptiles = get_images_in_tiles(
-            torch.cat((batch["images"], batch["background"]), dim=1),
-            self.tile_slen,
-            self.ptile_slen,
-        )
-        image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-        dist_params = self.encode(image_ptiles)
+        true_catalog = TileCatalog(self.tile_slen, batch)
+        # next we clamp so that the the maximum number of true sources does not exceed the
+        # support of the variational distribution
+        true_catalog = true_catalog.truncate_sources(self.max_detections)
+
+        dist_params = self.encode_batch(batch)
+
         nslp_flat = rearrange(dist_params["n_source_log_probs"], "n_ptiles ns -> n_ptiles ns")
-        counter_loss = F.nll_loss(
-            nslp_flat, true_catalog["n_sources"].reshape(-1), reduction="none"
-        )
+        truth_flat = true_catalog.n_sources.reshape(-1)
+        counter_loss = F.nll_loss(nslp_flat, truth_flat, reduction="none")
 
         pred = self.encode_for_n_sources(
             dist_params["per_source_params"],
-            rearrange(true_catalog["n_sources"], "n_ptiles -> 1 n_ptiles"),
+            rearrange(true_catalog.n_sources, "b ht wt -> 1 (b ht wt)"),
         )
         locs_log_probs_all = _get_params_logprob_all_combs(
-            true_catalog["locs"],
+            rearrange(true_catalog.locs, "b ht wt d p -> (b ht wt) d p"),
             pred["loc_mean"].squeeze(0),
             pred["loc_sd"].squeeze(0),
         )
         star_params_log_probs_all = _get_params_logprob_all_combs(
-            true_catalog["star_log_fluxes"],
+            rearrange(true_catalog["star_log_fluxes"], "b ht wt d p -> (b ht wt) d p"),
             pred["log_flux_mean"].squeeze(0),
             pred["log_flux_sd"].squeeze(0),
         )
@@ -346,8 +349,8 @@ class DetectionEncoder(pl.LightningModule):
         (locs_loss, star_params_loss) = _get_min_perm_loss(
             locs_log_probs_all,
             star_params_log_probs_all,
-            rearrange(true_catalog["galaxy_bools"], "n_ptiles ns 1 -> n_ptiles ns"),
-            true_catalog["is_on_array"],
+            rearrange(true_catalog["galaxy_bools"], "b ht wt ns 1 -> (b ht wt) ns"),
+            rearrange(true_catalog.is_on_array, "b ht wt d -> (b ht wt) d"),
         )
 
         loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss + star_params_loss
@@ -379,13 +382,9 @@ class DetectionEncoder(pl.LightningModule):
         }
         true_tile_catalog = TileCatalog(self.tile_slen, catalog_dict)
         true_full_catalog = true_tile_catalog.to_full_params()
-        image_ptiles = get_images_in_tiles(
-            torch.cat((batch["images"], batch["background"]), dim=1),
-            self.tile_slen,
-            self.ptile_slen,
-        )
-        image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-        dist_params = self.encode(image_ptiles)
+
+        dist_params = self.encode_batch(batch)
+
         est_catalog_dict = self.variational_mode(dist_params)
         est_tile_catalog = TileCatalog.from_flat_dict(
             true_tile_catalog.tile_slen,
@@ -402,62 +401,29 @@ class DetectionEncoder(pl.LightningModule):
         self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
         return batch
 
-    def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
-        # pylint: disable=too-many-statements
-        """Pytorch lightning method."""
-        batch: Dict[str, Tensor] = outputs[-1]
-        if self.n_bands > 1:
-            return
-        n_samples = min(int(math.sqrt(len(batch["n_sources"]))) ** 2, max_n_samples)
-        nrows = int(n_samples**0.5)  # for figure
-
-        catalog_dict = {
-            "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-            "star_log_fluxes": batch["star_log_fluxes"][:, :, :, 0 : self.max_detections],
-            "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
-            "star_bools": batch["star_bools"][:, :, :, 0 : self.max_detections],
-            "n_sources": batch["n_sources"].clamp(max=self.max_detections),
-        }
-        true_tile_catalog = TileCatalog(self.tile_slen, catalog_dict)
-        true_cat = true_tile_catalog.to_full_params()
-
-        image_ptiles = get_images_in_tiles(
-            torch.cat((batch["images"], batch["background"]), dim=1),
-            self.tile_slen,
-            self.ptile_slen,
-        )
-        image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-        dist_params = self.encode(image_ptiles)
-
-        est_catalog_dict = self.variational_mode(dist_params)
-        est_tile_catalog = TileCatalog.from_flat_dict(
-            true_tile_catalog.tile_slen,
-            true_tile_catalog.n_tiles_h,
-            true_tile_catalog.n_tiles_w,
-            est_catalog_dict,
-        )
-        est_cat = est_tile_catalog.to_full_params()
-
+    def plot_image_detections(self, images, true_cat, est_cat, nrows, img_ids):
         # setup figure and axes.
         fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(20, 20))
         axes = axes.flatten() if nrows > 1 else [axes]
 
-        images = batch["images"]
-        assert images.shape[-2] == images.shape[-1]
-        bp = self.border_padding
-        for idx, ax in enumerate(axes):
-            true_n_sources = true_cat.n_sources[idx].item()
-            n_sources = est_cat.n_sources[idx].item()
+        for ax_idx, ax in enumerate(axes):
+            if ax_idx >= len(img_ids):
+                break
+
+            img_id = img_ids[ax_idx]
+            true_n_sources = true_cat.n_sources[img_id].item()
+            n_sources = est_cat.n_sources[img_id].item()
             ax.set_xlabel(f"True num: {true_n_sources}; Est num: {n_sources}")
 
             # add white border showing where centers of stars and galaxies can be
+            bp = self.border_padding
             ax.axvline(bp, color="w")
             ax.axvline(images.shape[-1] - bp, color="w")
             ax.axhline(bp, color="w")
             ax.axhline(images.shape[-2] - bp, color="w")
 
             # plot image first
-            image = images[idx, 0].cpu().numpy()
+            image = images[img_id, 0].cpu().numpy()
             vmin = image.min().item()
             vmax = image.max().item()
             divider = make_axes_locatable(ax)
@@ -465,13 +431,13 @@ class DetectionEncoder(pl.LightningModule):
             im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
             fig.colorbar(im, cax=cax, orientation="vertical")
 
-            true_cat.plot_plocs(ax, idx, "galaxy", bp=bp, color="r", marker="x", s=20)
-            true_cat.plot_plocs(ax, idx, "star", bp=bp, color="c", marker="x", s=20)
-            est_cat.plot_plocs(ax, idx, "all", bp=bp, color="b", marker="+", s=30)
+            true_cat.plot_plocs(ax, img_id, "galaxy", bp=bp, color="r", marker="x", s=20)
+            true_cat.plot_plocs(ax, img_id, "star", bp=bp, color="m", marker="x", s=20)
+            est_cat.plot_plocs(ax, img_id, "all", bp=bp, color="b", marker="+", s=30)
 
-            if idx == 0:
+            if ax_idx == 0:
                 ax.scatter(None, None, color="r", marker="x", s=20, label="t.gal")
-                ax.scatter(None, None, color="c", marker="x", s=20, label="t.star")
+                ax.scatter(None, None, color="m", marker="x", s=20, label="t.star")
                 ax.scatter(None, None, color="b", marker="+", s=30, label="p.source")
                 ax.legend(
                     bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
@@ -482,45 +448,50 @@ class DetectionEncoder(pl.LightningModule):
                 )
 
         fig.tight_layout()
-        if self.logger:
-            if kind == "validation":
-                title = f"Epoch:{self.current_epoch}/Validation_Images"
-                self.logger.experiment.add_figure(title, fig)
-            elif kind == "testing":
-                self.logger.experiment.add_figure("Test Images", fig)
-            else:
-                raise NotImplementedError()
-        plt.close(fig)
+        return fig
 
-    def test_step(self, batch, batch_idx):
-        """Pytorch lightning method."""
-        catalog_dict = {
-            "locs": batch["locs"][:, :, :, 0 : self.max_detections],
-            "star_log_fluxes": batch["star_log_fluxes"][:, :, :, 0 : self.max_detections],
-            "galaxy_bools": batch["galaxy_bools"][:, :, :, 0 : self.max_detections],
-            "n_sources": batch["n_sources"].clamp(max=self.max_detections),
-        }
-        true_tile_catalog = TileCatalog(self.tile_slen, catalog_dict)
-        true_full_catalog = true_tile_catalog.to_full_params()
+    def _parse_batch(self, batch):
+        dist_params = self.encode_batch(batch)
 
-        image_ptiles = get_images_in_tiles(
-            torch.cat((batch["images"], batch["background"]), dim=1),
-            self.tile_slen,
-            self.ptile_slen,
-        )
-        image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-        dist_params = self.encode(image_ptiles)
+        true_tile_catalog = TileCatalog(self.tile_slen, batch)
+        true_cat = true_tile_catalog.to_full_params()
 
         est_catalog_dict = self.variational_mode(dist_params)
         est_tile_catalog = TileCatalog.from_flat_dict(
-            self.tile_slen,
+            true_tile_catalog.tile_slen,
             true_tile_catalog.n_tiles_h,
             true_tile_catalog.n_tiles_w,
             est_catalog_dict,
         )
-        est_full_catalog = est_tile_catalog.to_full_params()
-        metrics = self.test_detection_metrics(true_full_catalog, est_full_catalog)
-        batch_size = len(batch["images"])
+        est_cat = est_tile_catalog.to_full_params()
+
+        return batch["images"], true_cat, est_cat
+
+    def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
+        """Pytorch lightning method."""
+        if self.n_bands > 1 or not self.logger:
+            return
+
+        batch: Dict[str, Tensor] = outputs[-1]
+        images, true_cat, est_cat = self._parse_batch(batch)
+
+        # log a grid of figures to the tensorboard
+        batch_size = len(images)
+        n_samples = min(int(math.sqrt(batch_size)) ** 2, max_n_samples)
+        nrows = int(n_samples**0.5)  # for figure
+        wrong_idx = (est_cat.n_sources != true_cat.n_sources).nonzero().view(-1)[:max_n_samples]
+        fig = self.plot_image_detections(images, true_cat, est_cat, nrows, wrong_idx)
+        title_root = f"Epoch:{self.current_epoch}/" if kind == "validation" else ""
+        title = f"{title_root}{kind} images"
+        self.logger.experiment.add_figure(title, fig)
+        plt.close(fig)
+
+    def test_step(self, batch, batch_idx):
+        """Pytorch lightning method."""
+        images, true_cat, est_cat = self._parse_batch(batch)
+
+        batch_size = len(images)
+        metrics = self.test_detection_metrics(true_cat, est_cat)
         self.log("precision", metrics["precision"], batch_size=batch_size)
         self.log("recall", metrics["recall"], batch_size=batch_size)
         self.log("f1", metrics["f1"], batch_size=batch_size)

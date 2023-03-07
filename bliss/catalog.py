@@ -1,5 +1,6 @@
 import math
 from collections import UserDict
+from copy import copy
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -47,10 +48,18 @@ class TileCatalog(UserDict):
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.tile_slen = tile_slen
+        d = copy(d)  # shallow copy, so we don't mutate the argument
         self.locs = d.pop("locs")
         self.n_sources = d.pop("n_sources")
         self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
         assert self.n_sources.shape == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
+
+        # a bit of a hack, but removing images and background, if present,
+        # lets us instantiate a TileCatalog directly from a batch
+        if "images" in d.keys() and "background" in d.keys():
+            d.pop("images")
+            d.pop("background")
+
         super().__init__(**d)
 
     def __setitem__(self, key: str, item: Tensor) -> None:
@@ -106,6 +115,15 @@ class TileCatalog(UserDict):
         for k, v in self.to_dict().items():
             out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         return type(self)(self.tile_slen, out)
+
+    def truncate_sources(self, max_sources):
+        """Removes sources in excess of `max_sources` from a catalog."""
+        catalog_dict: Dict[str, Tensor] = {}
+        for k, v in self.items():
+            catalog_dict[k] = v[:, :, :, 0:max_sources]
+        catalog_dict["locs"] = self.locs[:, :, :, 0:max_sources]
+        catalog_dict["n_sources"] = self.n_sources.clamp(0, max_sources)
+        return type(self)(self.tile_slen, catalog_dict)
 
     def to_full_params(self):
         """Converts image parameters in tiles to parameters of full image.
@@ -427,7 +445,7 @@ class FullCatalog(UserDict):
 
         for ii in range(self.batch_size):
             n_sources = int(self.n_sources[ii].item())
-            for (idx, coords) in enumerate(tile_coords[ii][:n_sources]):
+            for idx, coords in enumerate(tile_coords[ii][:n_sources]):
                 source_idx = tile_n_sources[ii, coords[0], coords[1]].item()
                 if source_idx >= max_sources_per_tile:
                     if not ignore_extra_sources:
