@@ -159,7 +159,7 @@ class Encoder(nn.Module):
     def _encode_ptiles(self, image_ptiles: Tensor, n_samples: Optional[int]):
         assert isinstance(self.map_n_source_weights, Tensor)
         deterministic = n_samples is None
-        dist_params = self.detection_encoder.encode(image_ptiles)
+        dist_params = self.detection_encoder.encode_tiled(image_ptiles)
         tile_samples = self.detection_encoder.sample(
             dist_params, n_samples, n_source_weights=self.map_n_source_weights
         )

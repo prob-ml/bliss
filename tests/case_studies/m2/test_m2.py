@@ -10,7 +10,6 @@ from bliss.models.detection_encoder import DetectionEncoder
 
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):
-
     # l-infty error in location,
     # matrix of true x est error
     locs_error = torch.abs(est_locs.unsqueeze(0) - true_locs.unsqueeze(1)).max(-1)[0]
@@ -47,12 +46,12 @@ def trained_star_encoder_m2(m2_model_setup, devices):
 
 
 def get_map_estimate(
-    image_encoder: DetectionEncoder, images, background, slen: int, wlen: int = None
+    image_encoder: DetectionEncoder, images, background, slen: int, wlen: int = -1
 ):
     # return full estimate of parameters in full image.
     # NOTE: slen*wlen is size of the image without border padding
 
-    if wlen is None:
+    if wlen < 0:
         wlen = slen
     assert isinstance(slen, int) and isinstance(wlen, int)
     # check image compatibility
@@ -71,9 +70,9 @@ def get_map_estimate(
     )
     _, n_tiles_h, n_tiles_w, _, _, _ = image_ptiles.shape
     image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-    var_params = image_encoder.encode(image_ptiles)
+    var_params = image_encoder.encode_tiled(image_ptiles)
     tile_cutoff = 25**2
-    var_params2 = image_encoder.encode(image_ptiles[:tile_cutoff])
+    var_params2 = image_encoder.encode_tiled(image_ptiles[:tile_cutoff])
 
     assert torch.allclose(
         var_params["n_source_log_probs"][:tile_cutoff],

@@ -1,7 +1,5 @@
 import torch
-from einops import rearrange
 
-from bliss.catalog import get_images_in_tiles
 from bliss.models.detection_encoder import DetectionEncoder, LogBackgroundTransform
 
 
@@ -53,13 +51,9 @@ class TestSourceEncoder:
 
             images *= background_tensor.sqrt()
             images += background_tensor
-            image_ptiles = get_images_in_tiles(
-                torch.cat((images, background_tensor), dim=1),
-                star_encoder.tile_slen,
-                star_encoder.ptile_slen,
-            )
-            image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-            var_params = star_encoder.encode(image_ptiles)
+            batch = {"images": images, "background": background_tensor}
+
+            var_params = star_encoder.encode_batch(batch)
             catalog = star_encoder.variational_mode(var_params)
 
             assert catalog["n_sources"].size() == torch.Size([batch_size * n_tiles_h * n_tiles_w])
@@ -67,24 +61,18 @@ class TestSourceEncoder:
             assert catalog["locs"].shape == correct_locs_shape
 
     def test_sample(self, devices):
-        device = devices.device
-
-        max_detections = 4
         ptile_slen = 10
         n_bands = 2
         tile_slen = 2
         n_samples = 5
         background = (10.0, 20.0)
-        background_tensor = torch.tensor(background).view(1, -1, 1, 1).to(device)
+        background_tensor = torch.tensor(background).view(1, -1, 1, 1).to(devices.device)
 
-        images = (
-            torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(device)
-            * background_tensor.sqrt()
-            + background_tensor
-        )
+        images = torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(devices.device)
+        images = images * background_tensor.sqrt() + background_tensor
         background_tensor = background_tensor.expand(*images.shape)
 
-        star_encoder: DetectionEncoder = DetectionEncoder(
+        star_encoder = DetectionEncoder(
             LogBackgroundTransform(),
             channel=8,
             dropout=0,
@@ -93,14 +81,9 @@ class TestSourceEncoder:
             ptile_slen=ptile_slen,
             tile_slen=tile_slen,
             n_bands=n_bands,
-            max_detections=max_detections,
-        ).to(device)
+            max_detections=4,
+        ).to(devices.device)
 
-        image_ptiles = get_images_in_tiles(
-            torch.cat((images, background_tensor), dim=1),
-            star_encoder.tile_slen,
-            star_encoder.ptile_slen,
-        )
-        image_ptiles = rearrange(image_ptiles, "n nth ntw b h w -> (n nth ntw) b h w")
-        var_params = star_encoder.encode(image_ptiles)
+        batch = {"images": images, "background": background_tensor}
+        var_params = star_encoder.encode_batch(batch)
         star_encoder.sample(var_params, n_samples)

@@ -359,7 +359,6 @@ class BlissMag2ScatterFigure(BlissClassificationCutsFigure):
 
     @staticmethod
     def make_mag_mag_scatter_figure(tgbool: np.ndarray, tmag: np.ndarray, emag: np.ndarray):
-
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 7))
         ax1.scatter(tmag[tgbool], emag[tgbool], marker="o", c="r", alpha=0.5)
         ax1.plot([15, 23], [15, 23], c="r", label="x=y line")

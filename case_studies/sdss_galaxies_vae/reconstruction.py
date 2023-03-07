@@ -910,7 +910,7 @@ def make_images_of_example_blend(
 
     masks = ((4, 5), (3, 7))
 
-    for (i, (h_mask, w_mask)) in enumerate(masks):
+    for i, (h_mask, w_mask) in enumerate(masks):
         tile_onegal_dict = tile_map_recon.to_dict()
         tile_onegal_dict["n_sources"] = tile_onegal_dict["n_sources"].clone()
         tile_onegal_dict["galaxy_bools"] = tile_onegal_dict["galaxy_bools"].clone()

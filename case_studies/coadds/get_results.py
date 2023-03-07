@@ -53,6 +53,7 @@ def _add_mags_to_catalog(cat: FullCatalog) -> FullCatalog:
     return cat
 
 
+# pylint: disable=too-many-statements
 def _get_fluxes_cond_true_detections(
     encoder: Encoder, truth: FullCatalog, images: Tensor, background: Tensor
 ) -> Dict[str, Tensor]:
@@ -84,7 +85,7 @@ def _get_fluxes_cond_true_detections(
 
     with torch.no_grad():
         for ii, ptiles in enumerate(tqdm(ptile_loader, desc="Encoding ptiles")):
-            dist_params = detection_encoder.encode(ptiles)
+            dist_params = detection_encoder.encode_tiled(ptiles)
             n_sources_ii = ptiles_n_sources[ii].unsqueeze(0)
             dist_params_n_src = detection_encoder.encode_for_n_sources(
                 dist_params["per_source_params"], n_sources_ii
@@ -179,7 +180,6 @@ def _stack_data(data: dict, model_names: List[str], output_names: List[str], see
 
 
 def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
-
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(24, 7))
 
     x = (mag_bins[:, 1] + mag_bins[:, 0]) / 2
@@ -216,7 +216,7 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
 
         # fluxes
         res_flux = (efluxes - tfluxes) / tfluxes
-        tmags = convert_flux_to_mag(tfluxes)
+        tmags = convert_flux_to_mag(tfluxes).data.numpy()
         scatter_shade_plot(ax3, tmags, res_flux, (20, 23), delta=0.2, color=color, qs=(0.25, 0.75))
 
     ax1.set_xlabel(r"\rm Magnitude")
@@ -239,7 +239,6 @@ def _create_money_plot(mag_bins: Tensor, model_names: List[str], data: dict):
 
 @hydra.main(config_path="./config", config_name="config", version_base=None)
 def main(cfg):
-
     mag1, mag2, delta = cfg.results.mag_bins
     mag_bins1 = torch.arange(mag1, mag2, delta)
     mag_bins2 = mag_bins1 + delta

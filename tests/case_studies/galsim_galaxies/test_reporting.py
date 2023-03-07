@@ -40,7 +40,6 @@ def test_catalog_conversion():
 
 
 def test_coadd(get_galsim_galaxies_config):
-
     # get psf
     cfg = get_galsim_galaxies_config({})
     data_path = Path(cfg.paths.data)

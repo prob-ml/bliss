@@ -261,7 +261,6 @@ class GalaxyEncoder(pl.LightningModule):
         fig, axes = plt.subplots(nrows=n_samples, ncols=3, figsize=figsize, squeeze=False)
 
         for i, idx in enumerate(worst_indices):
-
             true_ax = axes[i, 0]
             recon_ax = axes[i, 1]
             res_ax = axes[i, 2]
