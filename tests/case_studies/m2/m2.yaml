@@ -57,6 +57,10 @@ models:
     spatial_dropout: 0.11399
     dropout: 0.013123
     hidden: 185
+    optimizer_params:
+      lr: 0.00098352
+      weight_decay: 0.000080410
+
   prior:
     _target_: bliss.models.prior.ImagePrior
     n_bands: 2
@@ -71,9 +75,6 @@ models:
 training:
   model: "${models.detection_encoder}"
   dataset: "${datasets.simulated_m2}"
-  optimizer_params:
-    lr: 0.00098352
-    weight_decay: 0.000080410
   n_epochs: 400
   experiment: default
   version: null

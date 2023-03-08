@@ -109,12 +109,12 @@ models:
         dropout: 0.0
         hidden: 128
         annotate_probs: false
+        optimizer_params:
+            lr: 1e-3
 
 training:
     model: "${models.detection_encoder}"
     dataset: "${datasets.simulated}"
-    optimizer_params:
-        lr: 1e-3
     n_epochs: 201
     experiment: default
     version: null
