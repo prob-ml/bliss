@@ -29,7 +29,6 @@ ALL_FIGS = ("single_gal", "blend_gal", "toy")
 def _reconstruction_figure(
     n_examples: int, images, recons, residuals, figsize=(12, 20), hspace=-0.4
 ) -> Figure:
-
     pad = 6.0
     fig, axes = plt.subplots(nrows=n_examples, ncols=3, figsize=figsize)
     assert images.shape[0] == recons.shape[0] == residuals.shape[0] == n_examples
@@ -40,7 +39,6 @@ def _reconstruction_figure(
     vmax_res = residuals.max().item()
 
     for i in range(n_examples):
-
         ax_true = axes[i, 0]
         ax_recon = axes[i, 1]
         ax_res = axes[i, 2]
@@ -1011,7 +1009,6 @@ class ToySeparationFigureResiduals(ToySeparationFigure):
         fig, axes = plt.subplots(nrows=n_examples, ncols=3, figsize=(11, 18))
 
         for i in range(n_examples):
-
             ax_true = axes[i, 0]
             ax_recon = axes[i, 1]
             ax_res = axes[i, 2]
