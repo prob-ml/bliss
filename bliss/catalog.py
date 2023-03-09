@@ -283,7 +283,6 @@ class TileCatalog(UserDict):
         self["ellips"] = ellips
 
     def set_snr(self, decoder, bg: float) -> None:
-
         star_dec = decoder.star_tile_decoder
         galaxy_dec = decoder.galaxy_tile_decoder
 
