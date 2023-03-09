@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import warnings
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import hydra
 import matplotlib as mpl
@@ -724,7 +724,7 @@ class ToySeparationFigure(BlissFigure):
         return "toy_separations"
 
     @property
-    def separations_to_plot(self) -> list(int):
+    def separations_to_plot(self) -> List[int]:
         return [4, 8, 12]
 
     def compute_data(self, encoder: Encoder, decoder: ImageDecoder, blends_ds: GalsimBlends):
