@@ -96,7 +96,7 @@ def _make_pr_figure(
     )
 
     # (bottom) plot of precision and recall
-    ymin = min(min(precision), min(recall))
+    ymin = min(precision.min(), recall.min())
     yticks = np.arange(np.round(ymin, 1), 1.1, 0.1)
     c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][0]
     precision1 = np.quantile(boot_precision, 0.25, 0)
