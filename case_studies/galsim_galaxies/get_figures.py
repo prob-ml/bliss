@@ -725,6 +725,10 @@ class ToySeparationFigure(BlissFigure):
     def name(self) -> str:
         return "toy_separations"
 
+    @property
+    def separations_to_plot(self) -> list(int):
+        return [4, 8, 12]
+
     def compute_data(self, encoder: Encoder, decoder: ImageDecoder, blends_ds: GalsimBlends):
         # first, decide image size
         slen = 44
@@ -846,7 +850,7 @@ class ToySeparationFigure(BlissFigure):
         bp = 24
         fig, axes = plt.subplots(1, 3, figsize=(12, 7))
         axes = axes.flatten()
-        seps_to_plot = [4, 8, 12]
+        seps_to_plot = self.separations_to_plot
         trim = 20  # zoom into relevant part of the image
 
         c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]  # true
@@ -907,8 +911,8 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         prob_n1 = data["est"]["prob_n_source"][:, 0]
         prob_n2 = data["est"]["prob_n_source"][:, 1]
 
-        axs[0].plot(seps, prob_n1, "-", label="1", color=c1)
-        axs[0].plot(seps, prob_n2, "-", label="2", color=c2)
+        axs[0].plot(seps, prob_n1, "-", label="Galaxy 1", color=c1)
+        axs[0].plot(seps, prob_n2, "-", label="Galaxy 2", color=c2)
         axs[0].axvline(2, color="k", ls="--", label=r"\rm Tile boundary")
         axs[0].axvline(6, ls="--", color="k")
         axs[0].axvline(10, ls="--", color="k")
@@ -927,8 +931,8 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         dist1 = ((tploc1 - eploc1) ** 2).sum(1) ** (1 / 2)
         dist2 = ((tploc2 - eploc2) ** 2).sum(1) ** (1 / 2)
 
-        axs[1].plot(seps, dist1, "-", label="1", color=c1)
-        axs[1].plot(seps, dist2, "-", label="2", color=c2)
+        axs[1].plot(seps, dist1, "-", color=c1)
+        axs[1].plot(seps, dist2, "-", color=c2)
         axs[1].axhline(0, ls="-", color="k")
         axs[1].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
         axs[1].axvline(6, ls="--", color="k")
@@ -942,8 +946,8 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         # location error (squared sum) estimate
         eploc_sd1 = (data["est"]["ploc_sd"][:, 0] ** 2).sum(1) ** (1 / 2)
         eploc_sd2 = (data["est"]["ploc_sd"][:, 1] ** 2).sum(1) ** (1 / 2)
-        axs[3].plot(seps, eploc_sd1, "-", label="1", color=c1)
-        axs[3].plot(seps, eploc_sd2, "-", label="2", color=c2)
+        axs[3].plot(seps, eploc_sd1, "-", color=c1)
+        axs[3].plot(seps, eploc_sd2, "-", color=c2)
         axs[3].axhline(0, ls="-", color="k")
         axs[3].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
         axs[3].axvline(6, ls="--", color="k")
@@ -951,6 +955,7 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         axs[3].axvline(14, ls="--", color="k")
         axs[3].set_xticks(xticks)
         axs[3].set_xlim(0, 16)
+        axs[3].set_ylim(axs[1].get_ylim())
         axs[3].set_xlabel(r"\rm Separation (pixels)")
         axs[3].set_ylabel(r"\rm Predicted centroid std. (pixels)")
 
@@ -962,8 +967,8 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         rflux1 = (eflux1 - tflux1) / tflux1
         rflux2 = (eflux2 - tflux2) / tflux2
 
-        axs[2].plot(seps, rflux1, "-", label="1", color=c1)
-        axs[2].plot(seps, rflux2, "-", label="2", color=c2)
+        axs[2].plot(seps, rflux1, "-", color=c1)
+        axs[2].plot(seps, rflux2, "-", color=c2)
         axs[2].axhline(0, ls="-", color="k")
         axs[2].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
         axs[2].axvline(6, ls="--", color="k")
