@@ -101,8 +101,6 @@ models:
         psf_slen: 25
         sdss_bands:
             - 2
-        optimizer_params:
-            lr: 1e-3
     detection_encoder:
         _target_: bliss.models.detection_encoder.DetectionEncoder
         input_transform:

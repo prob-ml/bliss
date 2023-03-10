@@ -158,7 +158,7 @@ models:
         hidden: 256
         n_bands: 1
         optimizer_params:
-            lr: 1e-4
+            lr: 1e-3
     prior:
         _target_: bliss.models.prior.ImagePrior
         n_bands: 1
