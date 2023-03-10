@@ -543,7 +543,6 @@ class BlendResidualFigure(BlissFigure):
         ax3.set_xticks(xticks)
         ax3.axhline(0, ls="--", color="k")
 
-
         xticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
         xlims = (0, 1)
         xlabel = "$B$"
