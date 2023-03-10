@@ -68,7 +68,7 @@ class ModelSetup:
 
     def get_model_for_training(self, overrides):
         cfg = self.get_cfg(overrides)
-        model = instantiate(cfg.training.model, optimizer_params=cfg.training.optimizer_params)
+        model = instantiate(cfg.training.model)
         return model.to(self.devices.device)
 
     def get_trained_model(self, overrides):

@@ -32,7 +32,7 @@ def train(cfg: DictConfig):
     dataset = instantiate(cfg.training.dataset)
 
     # setup model
-    model = instantiate(cfg.training.model, optimizer_params=cfg.training.optimizer_params)
+    model = instantiate(cfg.training.model)
 
     # setup trainer
     logger = setup_logger(cfg, paths)
@@ -125,7 +125,6 @@ def log_hyperparameters(config, model, trainer) -> None:
     # choose which parts of hydra config will be saved to loggers
     hparams["mode"] = config["mode"]
     hparams["training"] = config["training"]
-    hparams["optimizer"] = config["training"]["optimizer_params"]
 
     # save number of model parameters
     hparams["model/params_total"] = sum(p.numel() for p in model.parameters())

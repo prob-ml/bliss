@@ -1,8 +1,6 @@
 name: "lens_encoder"
 model: ${models.lens_encoder}
 dataset: ${datasets.simulated}
-optimizer_params:
-  lr: 1e-4
 n_epochs: 4001
 save_top_k: 5
 trainer:

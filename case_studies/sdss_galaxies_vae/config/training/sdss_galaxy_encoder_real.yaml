@@ -14,8 +14,6 @@ training:
   name: "sdss_galaxy_encoder_real"
   model: ${models.galaxy_encoder}
   dataset: ${datasets.sdss_blended_galaxies}
-  optimizer_params:
-    lr: 1e-4
   n_epochs: 160
   trainer:
     enable_checkpointing: True
