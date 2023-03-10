@@ -101,6 +101,8 @@ models:
         hidden: 128
         spatial_dropout: 0.0
         dropout: 0.0
+        optimizer_params:
+            lr: 1e-4
     decoder:
         _target_: bliss.models.decoder.ImageDecoder
         n_bands: 1
@@ -132,6 +134,8 @@ models:
         hidden: 128
         annotate_probs: True
         slack: 1.
+        optimizer_params:
+            lr: 1e-4
     galaxy_encoder:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         decoder: ${models.decoder}
@@ -139,16 +143,22 @@ models:
         hidden: ${models.galaxy_vae.hidden}
         #vae_flow: ${models.galaxy_flow}
         #vae_flow_ckpt: ${paths.project}/models/sdss_vae_flow.pt
+        optimizer_params:
+            lr: 1e-4
     galaxy_flow:
         _target_: bliss.models.vae.galaxy_flow.CenteredGalaxyLatentFlow
         vae: ${models.galaxy_vae}
         vae_ckpt: ${paths.project}/models/sdss_vae.pt
+        optimizer_params:
+            lr: 1e-3
     galaxy_vae:
         _target_: bliss.models.vae.galaxy_vae.OneCenteredGalaxyVAE
         slen: 53
         latent_dim: 32
         hidden: 256
         n_bands: 1
+        optimizer_params:
+            lr: 1e-3
     prior:
         _target_: bliss.models.prior.ImagePrior
         n_bands: 1

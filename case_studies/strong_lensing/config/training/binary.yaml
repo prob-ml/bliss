@@ -1,8 +1,6 @@
 name: "binary"
 model: ${models.binary}
 dataset: ${datasets.simulated}
-optimizer_params:
-  lr: 1e-4
 n_epochs: 1501
 save_top_k: 5
 trainer:
