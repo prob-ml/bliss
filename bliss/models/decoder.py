@@ -418,8 +418,7 @@ def trim_source(source: Tensor, ptile_slen: int):
 
 class StarPSFDecoder(PSFDecoder):
     def forward(self, fluxes: Tensor, star_bools: Tensor, ptile_slen: int):
-        """Renders star tile from locations and fluxes."""
-        # locs: is (n_ptiles x max_num_stars x 2)
+        """Renders star tile from fluxes."""
         # fluxes: Is (n_ptiles x max_stars x n_bands)
         # star_bools: Is (n_ptiles x max_stars x 1)
         # max_sources obtained from locs, allows for more flexibility when rendering.

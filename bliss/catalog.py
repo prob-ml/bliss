@@ -12,6 +12,7 @@ from einops import rearrange, reduce, repeat
 from matplotlib.pyplot import Axes
 from torch import Tensor
 from torch.nn import functional as F
+from tqdm import tqdm
 
 from bliss.datasets.sdss import SloanDigitalSkySurvey, column_to_tensor, convert_flux_to_mag
 
@@ -280,6 +281,53 @@ class TileCatalog(UserDict):
         galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
         ellips = decoder.get_galaxy_ellips(galaxy_bools, galaxy_params, scale=scale)
         self["ellips"] = ellips
+
+    def set_snr(self, decoder, bg: float) -> None:
+        star_dec = decoder.star_tile_decoder
+        galaxy_dec = decoder.galaxy_tile_decoder
+
+        b, nth, ntw, s, _ = self["star_fluxes"].shape
+        star_fluxes = rearrange(self["star_fluxes"], "b nth ntw s 1 -> (b nth ntw) s 1")
+        star_bools = rearrange(self["star_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
+        galaxy_params = rearrange(self["galaxy_params"], "b nth ntw s d -> (b nth ntw) s d")
+        galaxy_bools = rearrange(self["galaxy_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
+
+        n_total = b * nth * ntw
+        snr = torch.zeros(n_total, s, 1)
+        n_parts = 1000  # not all fits in GPU
+        for ii in tqdm(range(0, n_total, n_parts), desc="computing SNR", total=n_total // n_parts):
+            jj = ii + n_parts
+            star_fluxes_ii = star_fluxes[ii:jj]
+            star_bools_ii = star_bools[ii:jj]
+            galaxy_params_ii = galaxy_params[ii:jj]
+            galaxy_bools_ii = galaxy_bools[ii:jj]
+
+            # galaxies first to get correct sizes
+            single_galaxies_ii = galaxy_dec.forward(galaxy_params_ii, galaxy_bools_ii)
+            single_galaxies_ii = rearrange(single_galaxies_ii, "np s 1 h w -> np s h w")
+            single_galaxies_ii = single_galaxies_ii.cpu()
+            _, _, h, w = single_galaxies_ii.shape
+            assert h == w
+            bg_ii = torch.full_like(single_galaxies_ii, bg)
+
+            single_stars_ii = star_dec.forward(star_fluxes_ii, star_bools_ii, h)
+            single_stars_ii = rearrange(single_stars_ii, "np s 1 h w -> np s h w")
+            single_stars_ii = single_stars_ii.cpu()
+
+            star_snr = (single_stars_ii**2 / (single_stars_ii + bg_ii)).sum(axis=(-1, -2)).sqrt()
+            gal_snr = (
+                (single_galaxies_ii**2 / (single_galaxies_ii + bg_ii)).sum(axis=(-1, -2)).sqrt()
+            )
+
+            star_snr = rearrange(star_snr, "n s -> n s 1")
+            gal_snr = rearrange(gal_snr, "n s -> n s 1")
+
+            galaxy_bools_ii = galaxy_bools_ii.cpu()
+            star_bools_ii = star_bools_ii.cpu()
+            snr[ii:jj] = gal_snr * galaxy_bools_ii + star_snr * star_bools_ii  # noqa: WPS362
+
+        snr = rearrange(snr, "(b nth ntw) s 1 -> b nth ntw s 1", b=b, nth=nth, ntw=ntw, s=s)
+        self["snr"] = snr.to(decoder.device)
 
 
 class FullCatalog(UserDict):
