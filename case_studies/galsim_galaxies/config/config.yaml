@@ -216,7 +216,26 @@ plots:
     psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
     sim_single_gals_file: ${paths.project}/models/simulated_sdss_individual_galaxies.pt
     sim_blend_gals_file: ${paths.project}/models/simulated_blended_galaxies.pt
-    galsim_blends: ${datasets.galsim_blends}
+    galsim_blends:
+        _target_: bliss.datasets.galsim_galaxies.GalsimBlends
+        prior:
+            _target_: bliss.models.galsim_decoder.DefaultGalsimPrior
+            single_galaxy_prior: ${datasets.sdss_galaxies.prior}
+            max_n_sources: 8
+            mean_sources: 3
+            max_shift: 0.25
+            galaxy_prob: 0.7
+        decoder:
+            _target_: bliss.models.galsim_decoder.FullCatalogDecoder
+            single_galaxy_decoder: ${datasets.sdss_galaxies.decoder}
+            slen: 40
+            bp: 24
+        background: ${datasets.sdss_galaxies.background}
+        tile_slen: 4
+        max_sources_per_tile: 1
+        num_workers: 20
+        batch_size: 512
+        n_batches: 20
     sdss_pixel_scale: 0.396
     device: "cuda:0"
     encoder:
