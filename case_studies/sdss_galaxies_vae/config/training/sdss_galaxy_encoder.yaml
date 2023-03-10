@@ -12,8 +12,6 @@ training:
     name: "sdss_galaxy_encoder"
     model: ${models.galaxy_encoder}
     dataset: ${datasets.simulated}
-    optimizer_params:
-        lr: 1e-4
     # n_epochs: 4001
     n_epochs: 201
     trainer:

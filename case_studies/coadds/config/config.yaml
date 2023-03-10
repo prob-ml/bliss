@@ -118,6 +118,9 @@ models:
         hidden: 128
         annotate_probs: True
         slack: 1.0
+        optimizer_params:
+            lr: 1e-4
+
 
 training:
     n_epochs: 1001
@@ -147,8 +150,6 @@ training:
     weight_save_path: ${paths.project}/output/weights/${seed}/${training.name}_${training.seed}.pt
     model: ${models.detection_encoder}
     dataset: ${datasets.saved_coadd_module}
-    optimizer_params:
-        lr: 1e-4
 
 get_data:
     seed: ${seed}
