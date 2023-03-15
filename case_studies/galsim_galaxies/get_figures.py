@@ -861,7 +861,7 @@ class ToySeparationFigure(BlissFigure):
         fig, axes = plt.subplots(1, 3, figsize=(12, 7))
         axes = axes.flatten()
         seps_to_plot = self.separations_to_plot
-        trim = 20  # zoom into relevant part of the image
+        trim = 25  # zoom into relevant part of the image
 
         c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]  # true
         c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]  # predicted
@@ -876,8 +876,8 @@ class ToySeparationFigure(BlissFigure):
             axes[ii].imshow(image, cmap="gray")
             axes[ii].scatter(x1, y1, marker="x", color="r", s=30, label=None if ii else "Truth")
             axes[ii].scatter(x2, y2, marker="+", color="b", s=50, label=None if ii else "Predicted")
-            axes[ii].set_xticks([0, 10, 20, 30, 40, 50])
-            axes[ii].set_yticks([0, 10, 20, 30, 40, 50])
+            axes[ii].set_xticks([0, 10, 20, 30, 40])
+            axes[ii].set_yticks([0, 10, 20, 30, 40])
             axes[ii].set_title(rf"\rm Separation: {psep} pixels")
 
             if ii == 0:
@@ -910,15 +910,19 @@ class ToySeparationFigureResiduals(ToySeparationFigure):
 
     def create_figure(self, data) -> Figure:
         n_examples = 3
+        bp = 24
         seps_to_plot = [4, 8, 12]
         seps = data["seps"]
+        tplocs: np.ndarray = data["truth"]["ploc"]
         images_all, recon_all, res_all = data["images"], data["recon"], data["resid"]
         trim = 20
         indices = np.array([list(seps).index(psep) for psep in seps_to_plot]).astype(int)
 
-        images = images_all[indices, 0, trim:-trim, trim:-trim]
-        recons = recon_all[indices, 0, trim:-trim, trim:-trim]
-        residuals = res_all[indices, 0, trim:-trim, trim:-trim]
+        images = images_all[indices, 0, trim + 10 : -trim - 10, trim + 15 : -trim - 5]
+        recons = recon_all[indices, 0, trim + 10 : -trim - 10, trim + 15 : -trim - 5]
+        residuals = res_all[indices, 0, trim + 10 : -trim - 10, trim + 15 : -trim - 5]
+        x1 = tplocs[indices, :, 1] + bp - 0.5 - trim - 15
+        y1 = tplocs[indices, :, 0] + bp - 0.5 - trim - 10
 
         pad = 6.0
         fig, axes = plt.subplots(nrows=n_examples, ncols=3, figsize=(11, 18))
@@ -936,6 +940,10 @@ class ToySeparationFigureResiduals(ToySeparationFigure):
                     r"Residual $\left(\tilde{x} - x\right) / \sqrt{\tilde{x}}$", pad=pad
                 )
 
+            ax_true.scatter(x1[i], y1[i], color="r", alpha=0.5, s=40, marker="x", label="Truth")
+            ax_recon.scatter(x1[i], y1[i], color="r", alpha=0.5, s=40, marker="x")
+            ax_res.scatter(x1[i], y1[i], color="r", alpha=0.5, s=40, marker="x")
+
             # standarize ranges of true and reconstruction
             image = images[i]
             recon = recons[i]
@@ -950,6 +958,16 @@ class ToySeparationFigureResiduals(ToySeparationFigure):
             plot_image(fig, ax_true, image, vrange=(vmin, vmax))
             plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
             plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
+
+            ax_true.set_xticks([0, 10, 20, 30])
+            ax_true.set_yticks([0, 10, 20, 30])
+            ax_recon.set_xticks([0, 10, 20, 30])
+            ax_recon.set_yticks([0, 10, 20, 30])
+            ax_res.set_xticks([0, 10, 20, 30])
+            ax_res.set_yticks([0, 10, 20, 30])
+
+            if i == 0:
+                ax_true.legend(loc="best", prop={"size": 14}, markerscale=2)
 
         plt.subplots_adjust(hspace=-0.9)
         plt.tight_layout()
