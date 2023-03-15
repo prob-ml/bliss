@@ -51,7 +51,7 @@ def _reconstruction_figure(
         if i == 0:
             ax_true.set_title("Images $x$", pad=pad)
             ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
-            ax_res.set_title(r"Residual $\left(x - \tilde{x}\right) / \sqrt{\tilde{x}}$", pad=pad)
+            ax_res.set_title(r"Residual $\left(\tilde{x} - x\right) / \sqrt{\tilde{x}}$", pad=pad)
 
         # standarize ranges of true and reconstruction
         image = images[i, 0]
@@ -228,47 +228,6 @@ class AutoEncoderReconRandom(BlissFigure):
             "measurements": measurements,
             "true_params": true_params,
         }
-
-    def _reconstruction_figure(self, images, recons, residuals) -> Figure:
-        pad = 6.0
-        fig, axes = plt.subplots(nrows=self.n_examples, ncols=3, figsize=(12, 20))
-        assert images.shape[0] == recons.shape[0] == residuals.shape[0] == self.n_examples
-        assert images.shape[1] == recons.shape[1] == residuals.shape[1] == 1, "1 band only."
-
-        # pick standard ranges for residuals
-        vmin_res = residuals.min().item()
-        vmax_res = residuals.max().item()
-
-        for i in range(self.n_examples):
-            ax_true = axes[i, 0]
-            ax_recon = axes[i, 1]
-            ax_res = axes[i, 2]
-
-            # only add titles to the first axes.
-            if i == 0:
-                ax_true.set_title("Images $x$", pad=pad)
-                ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
-                ax_res.set_title(
-                    r"Residual $\left(\tilde{x}\right - x) / \sqrt{\tilde{x}}$", pad=pad
-                )
-
-            # standarize ranges of true and reconstruction
-            image = images[i, 0]
-            recon = recons[i, 0]
-            residual = residuals[i, 0]
-
-            vmin = min(image.min().item(), recon.min().item())
-            vmax = max(image.max().item(), recon.max().item())
-
-            # plot images
-            plot_image(fig, ax_true, image, vrange=(vmin, vmax))
-            plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
-            plot_image(fig, ax_res, residual, vrange=(vmin_res, vmax_res))
-
-        plt.subplots_adjust(hspace=-0.4)
-        plt.tight_layout()
-
-        return fig
 
     def create_figure(self, data) -> Figure:
         return _reconstruction_figure(self.n_examples, *data["random"].values())
