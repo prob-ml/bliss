@@ -465,51 +465,33 @@ class BlendResidualFigure(BlissFigure):
 
     def create_figure(self, data) -> Figure:
         snr, blendedness, tfluxes, efluxes, true_ellips, est_ellips = data["residuals"].values()
-        fig, axes = plt.subplots(3, 2, figsize=(12, 18))
+        fig, axes = plt.subplots(3, 2, figsize=(12, 18), sharex="col", sharey="row")
         ax1, ax2, ax3, ax4, ax5, ax6 = axes.flatten()
 
-        xticks = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0.5, 3)
         xlabel = r"$\log_{10} \rm SNR$"
         ylabel = r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$"
         x, y = np.log10(snr), (efluxes - tfluxes) / tfluxes
         scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
-        ax1.set_xlabel(xlabel)
         ax1.set_ylabel(ylabel)
-        ax1.set_xticks(xticks)
         ax1.axhline(0, ls="--", color="k")
 
-        xticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
         xlims = (0, 1)
-        xlabel = "$B$"
-        ylabel = r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$"
         x, y = blendedness, (efluxes - tfluxes) / tfluxes
         scatter_shade_plot(ax2, x, y, xlims, delta=0.1)
-        ax2.set_xlabel(xlabel)
-        ax2.set_ylabel(ylabel)
-        ax2.set_xticks(xticks)
         ax2.axhline(0, ls="--", color="k")
 
-        xticks = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0.5, 3)
-        xlabel = r"$\log_{10} \rm SNR$"
         ylabel = r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$"
         x, y = np.log10(snr), est_ellips[:, 0] - true_ellips[:, 0]
         scatter_shade_plot(ax3, x, y, xlims, delta=0.2)
-        ax3.set_xlabel(xlabel)
         ax3.set_ylabel(ylabel)
-        ax3.set_xticks(xticks)
         ax3.axhline(0, ls="--", color="k")
+        ax3.set_ylim(-1.5, 0.5)
 
-        xticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
         xlims = (0, 1)
-        xlabel = "$B$"
-        ylabel = r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$"
         x, y = blendedness, est_ellips[:, 0] - true_ellips[:, 0]
         scatter_shade_plot(ax4, x, y, xlims, delta=0.1)
-        ax4.set_xlabel(xlabel)
-        ax4.set_ylabel(ylabel)
-        ax4.set_xticks(xticks)
         ax4.axhline(0, ls="--", color="k")
 
         xticks = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
@@ -522,15 +504,14 @@ class BlendResidualFigure(BlissFigure):
         ax5.set_ylabel(ylabel)
         ax5.set_xticks(xticks)
         ax5.axhline(0, ls="--", color="k")
+        ax5.set_ylim(-1.5, 0.5)
 
         xticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
         xlims = (0, 1)
         xlabel = "$B$"
-        ylabel = r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$"
         x, y = blendedness, est_ellips[:, 1] - true_ellips[:, 1]
         scatter_shade_plot(ax6, x, y, xlims=xlims, delta=0.1)
         ax6.set_xlabel(xlabel)
-        ax6.set_ylabel(ylabel)
         ax6.set_xticks(xticks)
         ax6.axhline(0, ls="--", color="k")
 
