@@ -993,8 +993,8 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         tflux2 = data["truth"]["flux"][:, 1]
         eflux1 = data["est"]["flux"][:, 0]
         eflux2 = data["est"]["flux"][:, 1]
-        rflux1 = (tflux1 - eflux1) / tflux1
-        rflux2 = (tflux2 - eflux2) / tflux2
+        rflux1 = (eflux1 - tflux1) / tflux1
+        rflux2 = (eflux2 - tflux2) / tflux2
 
         axs[2].plot(seps, rflux1, "-", color=c1)
         axs[2].plot(seps, rflux2, "-", color=c2)
@@ -1006,7 +1006,7 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         axs[2].set_xticks(xticks)
         axs[2].set_xlim(0, 16)
         axs[2].set_xlabel(r"\rm Separation (pixels)")
-        axs[2].set_ylabel(r"\rm $(f^{\rm true} - f^{\rm recon}) / f^{\rm true}$")
+        axs[2].set_ylabel(r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
 
         return fig
 
