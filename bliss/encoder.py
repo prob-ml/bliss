@@ -159,22 +159,19 @@ class Encoder(nn.Module):
     def _encode_ptiles(self, image_ptiles: Tensor, n_samples: Optional[int]):
         assert isinstance(self.map_n_source_weights, Tensor)
         deterministic = n_samples is None
-        dist_params = self.detection_encoder.encode_tiled(image_ptiles)
+        pred = self.detection_encoder.encode_tiled(image_ptiles)
         tile_samples = self.detection_encoder.sample(
-            dist_params, n_samples, n_source_weights=self.map_n_source_weights
+            pred, n_samples, n_source_weights=self.map_n_source_weights
         )
         locs = tile_samples["locs"]
         n_sources = tile_samples["n_sources"]
         is_on_array = get_is_on_from_n_sources(n_sources, self.detection_encoder.max_detections)
 
         # add some variational distribution parameters to output
-        n_source_log_probs = dist_params["n_source_log_probs"][:, 1:]
+        n_source_log_probs = pred["n_source_log_probs"][:, 1:]
         tile_samples["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1).unsqueeze(0)
-        dist_params_n_src = self.detection_encoder.encode_for_n_sources(
-            dist_params["per_source_params"], n_sources
-        )
-        tile_samples["log_flux_sd"] = dist_params_n_src["log_flux_sd"]
-        tile_samples["loc_sd"] = dist_params_n_src["loc_sd"]
+        tile_samples["log_flux_sd"] = pred["log_flux_sd"]
+        tile_samples["loc_sd"] = pred["loc_sd"]
 
         if self.binary_encoder is not None:
             assert not self.binary_encoder.training
