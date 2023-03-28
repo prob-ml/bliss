@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from omegaconf import OmegaConf
 from torch import Tensor
-from torch.distributions import Categorical, Normal, Poisson
+from torch.distributions import Categorical, Normal
 from torch.nn import functional as F
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
@@ -157,37 +157,22 @@ class DetectionEncoder(pl.LightningModule):
         tile_fluxes = pred["log_flux_mean"].exp()
         tile_fluxes *= tile_is_on_array
 
-        # we have to unsqueeze the tensors below because a TileCatalog can store multiple
+        # we have to unsqueeze some tensors below because a TileCatalog can store multiple
         # light sources per tile, but we predict only one source per tile
         est_catalog_dict = {
             "locs": rearrange(pred["loc_mean"], "b ht wt d -> b ht wt 1 d"),
             "star_log_fluxes": rearrange(pred["log_flux_mean"], "b ht wt d -> b ht wt 1 d"),
             "star_fluxes": rearrange(tile_fluxes, "b ht wt d -> b ht wt 1 d"),
-            "n_sources": rearrange(tile_is_on_array, "b ht wt d -> b ht wt 1 d"),
+            "n_sources": rearrange(tile_is_on_array, "b ht wt 1 -> b ht wt"),
         }
         est_tile_catalog = TileCatalog(self.tile_slen, est_catalog_dict)
         return est_tile_catalog.to_full_params()
-
-    def _get_n_source_prior_log_prob(self, detection_rate):
-        possible_n_sources = torch.tensor(range(self.max_detections))
-        log_probs = Poisson(torch.tensor(detection_rate)).log_prob(possible_n_sources)
-        log_probs_last = torch.log1p(-torch.logsumexp(log_probs, 0).exp())
-        return torch.cat((log_probs, log_probs_last.reshape(1)))
-
-    # Pytorch Lightning methods
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
         optimizer = Adam(self.parameters(), **self.optimizer_params)
         scheduler = MultiStepLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
-
-    def training_step(self, batch, batch_idx, optimizer_idx=0):
-        """Training step (pytorch lightning)."""
-        batch_size = len(batch["n_sources"])
-        out = self._get_loss(batch)
-        self.log("train/loss", out["loss"], batch_size=batch_size)
-        return out["loss"]
 
     def _get_loss(self, batch: Dict[str, Tensor]):
         true_catalog = TileCatalog(self.tile_slen, batch)
@@ -224,6 +209,23 @@ class DetectionEncoder(pl.LightningModule):
             "star_params_loss": star_params_loss,
         }
 
+    def training_step(self, batch, batch_idx, optimizer_idx=0):
+        """Training step (pytorch lightning)."""
+        batch_size = len(batch["n_sources"])
+        out = self._get_loss(batch)
+        self.log("train/loss", out["loss"], batch_size=batch_size)
+        return out["loss"]
+
+    def _parse_batch(self, batch):
+        pred = self.encode_batch(batch)
+
+        true_tile_catalog = TileCatalog(self.tile_slen, batch)
+        true_cat = true_tile_catalog.to_full_params()
+
+        est_cat = self.variational_mode(pred)
+
+        return true_cat, est_cat
+
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         batch_size = len(batch["images"])
@@ -235,15 +237,9 @@ class DetectionEncoder(pl.LightningModule):
         self.log("val/locs_loss", out["locs_loss"].mean(), batch_size=batch_size)
         self.log("val/star_params_loss", out["star_params_loss"].mean(), batch_size=batch_size)
 
-        true_tile_catalog = TileCatalog(self.tile_slen, batch)
-        true_tile_catalog = true_tile_catalog.truncate_sources(1)  # do we need this?
-        true_full_catalog = true_tile_catalog.to_full_params()
+        true_cat, est_cat = self._parse_batch(batch)
 
-        pred = self.encode_batch(batch)
-
-        est_full_catalog = self.variational_mode(pred)
-
-        metrics = self.val_detection_metrics(true_full_catalog, est_full_catalog)
+        metrics = self.val_detection_metrics(true_cat, est_cat)
         self.log("val/precision", metrics["precision"], batch_size=batch_size)
         self.log("val/recall", metrics["recall"], batch_size=batch_size)
         self.log("val/f1", metrics["f1"], batch_size=batch_size)
@@ -299,37 +295,20 @@ class DetectionEncoder(pl.LightningModule):
         fig.tight_layout()
         return fig
 
-    def _parse_batch(self, batch):
-        pred = self.encode_batch(batch)
-
-        true_tile_catalog = TileCatalog(self.tile_slen, batch)
-        true_cat = true_tile_catalog.to_full_params()
-
-        est_catalog_dict = self.variational_mode(pred)
-        est_tile_catalog = TileCatalog.from_flat_dict(
-            true_tile_catalog.tile_slen,
-            true_tile_catalog.n_tiles_h,
-            true_tile_catalog.n_tiles_w,
-            est_catalog_dict,
-        )
-        est_cat = est_tile_catalog.to_full_params()
-
-        return batch["images"], true_cat, est_cat
-
     def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
         """Pytorch lightning method."""
         if self.n_bands > 1 or not self.logger:
             return
 
         batch: Dict[str, Tensor] = outputs[-1]
-        images, true_cat, est_cat = self._parse_batch(batch)
+        true_cat, est_cat = self._parse_batch(batch)
 
         # log a grid of figures to the tensorboard
-        batch_size = len(images)
+        batch_size = len(batch["images"])
         n_samples = min(int(math.sqrt(batch_size)) ** 2, max_n_samples)
         nrows = int(n_samples**0.5)  # for figure
         wrong_idx = (est_cat.n_sources != true_cat.n_sources).nonzero().view(-1)[:max_n_samples]
-        fig = self.plot_image_detections(images, true_cat, est_cat, nrows, wrong_idx)
+        fig = self.plot_image_detections(batch["images"], true_cat, est_cat, nrows, wrong_idx)
         title_root = f"Epoch:{self.current_epoch}/" if kind == "validation" else ""
         title = f"{title_root}{kind} images"
         self.logger.experiment.add_figure(title, fig)
@@ -337,9 +316,9 @@ class DetectionEncoder(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        images, true_cat, est_cat = self._parse_batch(batch)
+        true_cat, est_cat = self._parse_batch(batch)
 
-        batch_size = len(images)
+        batch_size = len(batch["images"])
         metrics = self.test_detection_metrics(true_cat, est_cat)
         self.log("precision", metrics["precision"], batch_size=batch_size)
         self.log("recall", metrics["recall"], batch_size=batch_size)
