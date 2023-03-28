@@ -49,7 +49,7 @@ datasets:
         batch_size: 256
         n_batches: 10
         fix_validation_set: True
-        valid_n_batches: 5  #200
+        valid_n_batches: 10  #200
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
@@ -68,12 +68,12 @@ datasets:
         batch_size: 64
         generate_device: "cuda:0"
         fix_validation_set: true
-        valid_n_batches: 6  #256
+        valid_n_batches: 10  #256
 
 # this architecture is based on yolov5l.yaml, see
 # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
 like_yolov5l:
-    nc: 2  # number of classes (a hack to get the right output size)
+    nc: 3  # number of classes (a hack to get the right output size)
     depth_multiple: 1.0  # model depth multiple
     width_multiple: 1.0  # layer channel multiple
     anchors:
@@ -186,7 +186,7 @@ models:
             galaxy_dataset: ${datasets.sdss_galaxies}
 
 training:
-    n_epochs: 121
+    n_epochs: 1000
     experiment: default
     version: null
     save_top_k: 1

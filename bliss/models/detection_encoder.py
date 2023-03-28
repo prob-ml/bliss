@@ -86,6 +86,7 @@ class DetectionEncoder(pl.LightningModule):
             "loc_logvar": {"dim": 2},
             "log_flux_mean": {"dim": self.n_bands},
             "log_flux_logvar": {"dim": self.n_bands},
+            "galaxy_prob": {"dim": 1},
         }
 
     def encode_batch(self, batch):
@@ -111,6 +112,7 @@ class DetectionEncoder(pl.LightningModule):
         pred["loc_mean"] = pred["loc_mean"].sigmoid()
         pred["loc_sd"] = pred["loc_logvar"].clamp(-6, 3).exp().sqrt()
         pred["log_flux_sd"] = pred["log_flux_logvar"].clamp(-6, 10).exp().sqrt()
+        pred["galaxy_prob"] = pred["galaxy_prob"].sigmoid().clamp(1e-3, 1 - 1e-3)
 
         # delete these so we don't accidentally use them
         del pred["loc_logvar"]
@@ -182,24 +184,35 @@ class DetectionEncoder(pl.LightningModule):
 
         pred = self.encode_batch(batch)
 
+        # counter loss
         on_prob_flat = rearrange(pred["on_prob"], "b ht wt 1 -> (b ht wt) 1")
         off_on_prob = torch.cat([1 - on_prob_flat, on_prob_flat], dim=1)
-        truth_flat = true_catalog.n_sources.reshape(-1)
-        counter_loss = F.nll_loss(off_on_prob, truth_flat, reduction="none")
+        true_on_flat = true_catalog.n_sources.reshape(-1)
+        counter_loss = F.nll_loss(off_on_prob, true_on_flat, reduction="none")
 
+        # location loss
         loc_dist = Normal(pred["loc_mean"].view(-1, 2), pred["loc_sd"].view(-1, 2))
         locs_loss = -(
             loc_dist.log_prob(true_catalog.locs.view(-1, 2)).sum(1)
             * true_catalog.is_on_array.view(-1)
         )
 
+        # star flux loss
         flux_dist = Normal(pred["log_flux_mean"].reshape(-1), pred["log_flux_sd"].view(-1))
         star_params_loss = -(
             flux_dist.log_prob(true_catalog["star_log_fluxes"].view(-1))
             * true_catalog.is_on_array.view(-1)
         )
 
-        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss + star_params_loss
+        # star/galaxy classification: calculate cross entropy loss only for "on" sources
+        galaxy_prob_flat = rearrange(pred["galaxy_prob"], "b ht wt 1 -> (b ht wt) 1")
+        star_gal_prob = torch.cat([1 - galaxy_prob_flat, galaxy_prob_flat], dim=1)
+        gal_bools_flat = true_catalog["galaxy_bools"].view(-1)
+        binary_loss = F.nll_loss(star_gal_prob, gal_bools_flat.long()) * true_on_flat
+
+        # is this detach necessary?
+        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float()
+        loss_vec += counter_loss + star_params_loss + binary_loss
         loss = loss_vec.mean()
 
         return {
@@ -207,6 +220,7 @@ class DetectionEncoder(pl.LightningModule):
             "counter_loss": counter_loss,
             "locs_loss": locs_loss,
             "star_params_loss": star_params_loss,
+            "binary_loss": binary_loss,
         }
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
