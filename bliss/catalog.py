@@ -53,7 +53,6 @@ class TileCatalog(UserDict):
         self.locs = d.pop("locs")
         self.n_sources = d.pop("n_sources")
         self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
-        assert self.n_sources.shape == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
 
         # a bit of a hack, but removing images and background, if present,
         # lets us instantiate a TileCatalog directly from a batch

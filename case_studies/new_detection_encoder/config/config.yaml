@@ -54,7 +54,7 @@ datasets:
 # this architecture is based on yolov5l.yaml, see
 # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
 like_yolov5l:
-    nc: 3  # number of classes (a hack to get the right output size)
+    nc: 2  # number of classes (a hack to get the right output size)
     depth_multiple: 1.0  # model depth multiple
     width_multiple: 1.0  # layer channel multiple
     anchors:
@@ -102,18 +102,10 @@ models:
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
 
     detection_encoder:
-        _target_: case_studies.new_detection_encoder.main.NewDetectionEncoder
-        #  _target_: bliss.models.detection_encoder.DetectionEncoder
-        input_transform:
-            _target_: bliss.models.detection_encoder.ConcatBackgroundTransform
+        _target_: bliss.models.detection_encoder.DetectionEncoder
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
         ptile_slen: 52
-        max_detections: ${models.prior.max_sources}
-        channel: 8
-        spatial_dropout: 0.0
-        dropout: 0.0
-        hidden: 128
         annotate_probs: true
         slack: 1.
 
