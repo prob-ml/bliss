@@ -107,10 +107,10 @@ class DetectionEncoder(pl.LightningModule):
         names = self.dist_param_groups.keys()
         pred = dict(zip(names, dist_params_split))
 
-        pred["on_prob"] = pred["on_prob"].sigmoid()
+        pred["on_prob"] = pred["on_prob"].sigmoid().clamp(1e-3, 1 - 1e-3)
         pred["loc_mean"] = pred["loc_mean"].sigmoid()
-        pred["loc_sd"] = (pred["loc_logvar"].exp() + 1e-5).sqrt()
-        pred["log_flux_sd"] = (pred["log_flux_logvar"].exp() + 1e-5).sqrt()
+        pred["loc_sd"] = pred["loc_logvar"].clamp(-6, 3).exp().sqrt()
+        pred["log_flux_sd"] = pred["log_flux_logvar"].clamp(-6, 10).exp().sqrt()
 
         # delete these so we don't accidentally use them
         del pred["loc_logvar"]

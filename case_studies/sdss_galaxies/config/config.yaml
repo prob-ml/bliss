@@ -54,8 +54,8 @@ datasets:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
         prior: ${models.prior}
-        n_tiles_h: 10
-        n_tiles_w: 10
+        n_tiles_h: 8
+        n_tiles_w: 8
         background:
             _target_: bliss.datasets.background.SimulatedSDSSBackground
             sdss_dir: ${paths.sdss}
@@ -64,8 +64,8 @@ datasets:
             field: 12
             bands:
                 - 2
-        n_batches: 50
-        batch_size: 32
+        n_batches: 128
+        batch_size: 64
         generate_device: "cuda:0"
         fix_validation_set: true
         valid_n_batches: 6  #256
