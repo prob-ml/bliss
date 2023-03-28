@@ -49,7 +49,7 @@ datasets:
         batch_size: 256
         n_batches: 10
         fix_validation_set: True
-        valid_n_batches: 200
+        valid_n_batches: 5  #200
     simulated:
         _target_: bliss.datasets.simulated.SimulatedDataset
         decoder: ${models.decoder}
@@ -68,7 +68,45 @@ datasets:
         batch_size: 32
         generate_device: "cuda:0"
         fix_validation_set: true
-        valid_n_batches: 256
+        valid_n_batches: 6  #256
+
+# this architecture is based on yolov5l.yaml, see
+# https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
+like_yolov5l:
+    nc: 2  # number of classes (a hack to get the right output size)
+    depth_multiple: 1.0  # model depth multiple
+    width_multiple: 1.0  # layer channel multiple
+    anchors:
+        - [4, 4]  # P3/8
+
+    backbone: [
+        # [from, number, module, args]
+        [-1, 1, Conv, [64, 5, 1]],
+        [-1, 3, Conv, [64, 1, 1]],
+        [-1, 1, Conv, [128, 3, 2]],
+        [-1, 1, Conv, [128, 3, 1]],
+        [-1, 1, Conv, [256, 3, 2]],
+        [-1, 6, C3, [256]],
+        [-1, 1, Conv, [512, 3, 2]],
+        [-1, 9, C3, [512]],
+        [-1, 1, Conv, [1024, 3, 2]],
+        [-1, 3, C3, [1024]],
+        [-1, 1, SPPF, [1024, 5]],
+    ]
+
+    head: [
+        [-1, 1, Conv, [512, 1, 1]],
+        [-1, 1, nn.Upsample, [None, 2, 'nearest']],
+        [[-1, 6], 1, Concat, [1]],
+        [-1, 3, C3, [512, false]],
+
+        [-1, 1, Conv, [256, 1, 1]],
+        [-1, 1, nn.Upsample, [None, 2, 'nearest']],
+        [[-1, 4, 5], 1, Concat, [1]],
+        [-1, 3, C3, [256, false]],
+
+        [[17], 1, Detect, [nc, anchors]],
+    ]
 
 models:
     binary:
@@ -103,20 +141,17 @@ models:
             - 2
     detection_encoder:
         _target_: bliss.models.detection_encoder.DetectionEncoder
-        input_transform:
-            _target_: bliss.models.detection_encoder.ConcatBackgroundTransform
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
         ptile_slen: 52
-        max_detections: ${models.prior.max_sources}
-        channel: 8
-        spatial_dropout: 0.0
-        dropout: 0.0
-        hidden: 128
         annotate_probs: True
         slack: 1.0
         optimizer_params:
-            lr: 1e-4
+            lr: 1e-3
+        scheduler_params:
+            milestones: [32]
+            gamma: 0.1
+        architecture: ${like_yolov5l}
     galaxy_encoder:
         _target_: bliss.models.galaxy_encoder.GalaxyEncoder
         decoder: ${models.decoder}
