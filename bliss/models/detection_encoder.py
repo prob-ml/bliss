@@ -62,10 +62,11 @@ class DetectionEncoder(pl.LightningModule):
         assert (ptile_slen - tile_slen) % 2 == 0
         self.border_padding = (ptile_slen - tile_slen) // 2
 
-        # Number of distributional parameters used to characterize each source in an image.
+        # number of distributional parameters used to characterize each source
         self.n_params_per_source = sum(param["dim"] for param in self.dist_param_groups.values())
 
-        # networks to be trained
+        # a hack to get the right number of outputs from yolo
+        architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
         self.model = DetectionModel(cfg=arch_dict, ch=2)
         self.tiles_to_crop = (ptile_slen - tile_slen) // (2 * tile_slen)
@@ -238,12 +239,12 @@ class DetectionEncoder(pl.LightningModule):
 
         # log all losses
         for k, v in loss_dict.items():
-            self.log("val/{}".format(k), v, batch_size=batch_size)
+            self.log("val_loss/{}".format(k), v, batch_size=batch_size)
 
         # log all metrics
         metrics = self.val_detection_metrics(true_cat, est_cat)
         for k, v in metrics.items():
-            self.log("val/{}".format(k), v, batch_size=batch_size)
+            self.log("val_metric/{}".format(k), v, batch_size=batch_size)
 
         # do we really need to save all these batches?
         return batch

@@ -73,7 +73,6 @@ datasets:
 # this architecture is based on yolov5l.yaml, see
 # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
 like_yolov5l:
-    nc: 3  # number of classes (a hack to get the right output size)
     depth_multiple: 1.0  # model depth multiple
     width_multiple: 1.0  # layer channel multiple
     anchors:
