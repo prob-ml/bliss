@@ -9,7 +9,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from omegaconf import OmegaConf
 from torch import Tensor
 from torch.distributions import Categorical, Normal
-from torch.nn import functional as F
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
@@ -108,6 +107,7 @@ class DetectionEncoder(pl.LightningModule):
         names = self.dist_param_groups.keys()
         pred = dict(zip(names, dist_params_split))
 
+        # should verify that these clamps aren't too extreme
         pred["on_prob"] = pred["on_prob"].sigmoid().clamp(1e-3, 1 - 1e-3)
         pred["loc_mean"] = pred["loc_mean"].sigmoid()
         pred["loc_sd"] = pred["loc_logvar"].clamp(-6, 3).exp().sqrt()
@@ -176,88 +176,76 @@ class DetectionEncoder(pl.LightningModule):
         scheduler = MultiStepLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
 
-    def _get_loss(self, batch: Dict[str, Tensor]):
-        true_catalog = TileCatalog(self.tile_slen, batch)
+    def _get_loss(self, pred, true_tile_catalog):
         # next we clamp so that the the maximum number of true sources does not exceed the
         # support of the variational distribution
-        true_catalog = true_catalog.truncate_sources(1)
-
-        pred = self.encode_batch(batch)
+        true_cat = true_tile_catalog.truncate_sources(1)
 
         # counter loss
         on_prob_flat = rearrange(pred["on_prob"], "b ht wt 1 -> (b ht wt) 1")
         off_on_prob = torch.cat([1 - on_prob_flat, on_prob_flat], dim=1)
-        true_on_flat = true_catalog.n_sources.reshape(-1)
-        counter_loss = F.nll_loss(off_on_prob, true_on_flat, reduction="none")
+        true_on_flat = true_cat.n_sources.reshape(-1)
+        counter_loss = -Categorical(off_on_prob).log_prob(true_on_flat)
 
         # location loss
         loc_dist = Normal(pred["loc_mean"].view(-1, 2), pred["loc_sd"].view(-1, 2))
         locs_loss = -(
-            loc_dist.log_prob(true_catalog.locs.view(-1, 2)).sum(1)
-            * true_catalog.is_on_array.view(-1)
+            loc_dist.log_prob(true_cat.locs.view(-1, 2)).sum(1) * true_cat.is_on_array.view(-1)
         )
 
         # star flux loss
         flux_dist = Normal(pred["log_flux_mean"].reshape(-1), pred["log_flux_sd"].view(-1))
         star_params_loss = -(
-            flux_dist.log_prob(true_catalog["star_log_fluxes"].view(-1))
-            * true_catalog.is_on_array.view(-1)
+            flux_dist.log_prob(true_cat["star_log_fluxes"].view(-1)) * true_cat.is_on_array.view(-1)
         )
 
         # star/galaxy classification: calculate cross entropy loss only for "on" sources
         galaxy_prob_flat = rearrange(pred["galaxy_prob"], "b ht wt 1 -> (b ht wt) 1")
         star_gal_prob = torch.cat([1 - galaxy_prob_flat, galaxy_prob_flat], dim=1)
-        gal_bools_flat = true_catalog["galaxy_bools"].view(-1)
-        binary_loss = F.nll_loss(star_gal_prob, gal_bools_flat.long()) * true_on_flat
+        gal_bools_flat = true_cat["galaxy_bools"].view(-1)
+        binary_loss = -Categorical(star_gal_prob).log_prob(gal_bools_flat.long()) * true_on_flat
 
-        # is this detach necessary?
-        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float()
-        loss_vec += counter_loss + star_params_loss + binary_loss
-        loss = loss_vec.mean()
+        loss = counter_loss + locs_loss + star_params_loss + binary_loss
 
         return {
-            "loss": loss,
-            "counter_loss": counter_loss,
-            "locs_loss": locs_loss,
-            "star_params_loss": star_params_loss,
-            "binary_loss": binary_loss,
+            "loss": loss.mean(),
+            "counter_loss": counter_loss.mean(),
+            "locs_loss": locs_loss.mean(),
+            "star_params_loss": star_params_loss.mean(),
+            "binary_loss": binary_loss.mean(),
         }
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
         batch_size = len(batch["n_sources"])
-        out = self._get_loss(batch)
-        self.log("train/loss", out["loss"], batch_size=batch_size)
-        return out["loss"]
-
-    def _parse_batch(self, batch):
         pred = self.encode_batch(batch)
-
         true_tile_catalog = TileCatalog(self.tile_slen, batch)
-        true_cat = true_tile_catalog.to_full_params()
+        loss_dict = self._get_loss(pred, true_tile_catalog)
 
-        est_cat = self.variational_mode(pred)
-
-        return true_cat, est_cat
+        for k, v in loss_dict.items():
+            self.log("train/{}".format(k), v, batch_size=batch_size)
+        return loss_dict["loss"]
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         batch_size = len(batch["images"])
-        out = self._get_loss(batch)
+
+        pred = self.encode_batch(batch)
+        est_cat = self.variational_mode(pred)
+        true_tile_catalog = TileCatalog(self.tile_slen, batch)
+        true_cat = true_tile_catalog.to_full_params()
+        loss_dict = self._get_loss(pred, true_tile_catalog)
 
         # log all losses
-        self.log("val/loss", out["loss"], batch_size=batch_size)
-        self.log("val/counter_loss", out["counter_loss"].mean(), batch_size=batch_size)
-        self.log("val/locs_loss", out["locs_loss"].mean(), batch_size=batch_size)
-        self.log("val/star_params_loss", out["star_params_loss"].mean(), batch_size=batch_size)
+        for k, v in loss_dict.items():
+            self.log("val/{}".format(k), v, batch_size=batch_size)
 
-        true_cat, est_cat = self._parse_batch(batch)
-
+        # log all metrics
         metrics = self.val_detection_metrics(true_cat, est_cat)
-        self.log("val/precision", metrics["precision"], batch_size=batch_size)
-        self.log("val/recall", metrics["recall"], batch_size=batch_size)
-        self.log("val/f1", metrics["f1"], batch_size=batch_size)
-        self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
+        for k, v in metrics.items():
+            self.log("val/{}".format(k), v, batch_size=batch_size)
+
+        # do we really need to save all these batches?
         return batch
 
     def plot_image_detections(self, images, true_cat, est_cat, nrows, img_ids):
@@ -309,6 +297,13 @@ class DetectionEncoder(pl.LightningModule):
         fig.tight_layout()
         return fig
 
+    def _parse_batch(self, batch):
+        pred = self.encode_batch(batch)
+        true_tile_catalog = TileCatalog(self.tile_slen, batch)
+        true_cat = true_tile_catalog.to_full_params()
+        est_cat = self.variational_mode(pred)
+        return true_cat, est_cat
+
     def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
         """Pytorch lightning method."""
         if self.n_bands > 1 or not self.logger:
@@ -330,13 +325,12 @@ class DetectionEncoder(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        true_cat, est_cat = self._parse_batch(batch)
-
         batch_size = len(batch["images"])
+        true_cat, est_cat = self._parse_batch(batch)
         metrics = self.test_detection_metrics(true_cat, est_cat)
-        self.log("precision", metrics["precision"], batch_size=batch_size)
-        self.log("recall", metrics["recall"], batch_size=batch_size)
-        self.log("f1", metrics["f1"], batch_size=batch_size)
-        self.log("avg_distance", metrics["avg_distance"], batch_size=batch_size)
+
+        # log all metrics
+        for k, v in metrics.items():
+            self.log("test/{}".format(k), v, batch_size=batch_size)
 
         return batch
