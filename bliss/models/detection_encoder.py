@@ -196,7 +196,7 @@ class DetectionEncoder(pl.LightningModule):
 
         # star flux loss
         flux_dist = Normal(pred["log_flux_mean"].reshape(-1), pred["log_flux_sd"].view(-1))
-        star_params_loss = -(
+        star_flux_loss = -(
             flux_dist.log_prob(true_cat["star_log_fluxes"].view(-1)) * true_cat.is_on_array.view(-1)
         )
 
@@ -206,13 +206,13 @@ class DetectionEncoder(pl.LightningModule):
         gal_bools_flat = true_cat["galaxy_bools"].view(-1)
         binary_loss = -Categorical(star_gal_prob).log_prob(gal_bools_flat.long()) * true_on_flat
 
-        loss = counter_loss + locs_loss + star_params_loss + binary_loss
+        loss = counter_loss + locs_loss + star_flux_loss + binary_loss
 
         return {
             "loss": loss.mean(),
             "counter_loss": counter_loss.mean(),
             "locs_loss": locs_loss.mean(),
-            "star_params_loss": star_params_loss.mean(),
+            "star_flux_loss": star_flux_loss.mean(),
             "binary_loss": binary_loss.mean(),
         }
 
@@ -239,7 +239,7 @@ class DetectionEncoder(pl.LightningModule):
 
         # log all losses
         for k, v in loss_dict.items():
-            self.log("val_loss/{}".format(k), v, batch_size=batch_size)
+            self.log("val/{}".format(k), v, batch_size=batch_size)
 
         # log all metrics
         metrics = self.val_detection_metrics(true_cat, est_cat)
