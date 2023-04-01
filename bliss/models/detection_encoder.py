@@ -190,21 +190,21 @@ class DetectionEncoder(pl.LightningModule):
 
         # location loss
         loc_dist = Normal(pred["loc_mean"].view(-1, 2), pred["loc_sd"].view(-1, 2))
-        locs_loss = -(
-            loc_dist.log_prob(true_cat.locs.view(-1, 2)).sum(1) * true_cat.is_on_array.view(-1)
-        )
+        locs_loss = -loc_dist.log_prob(true_cat.locs.view(-1, 2)).sum(1)
+        locs_loss *= true_cat.is_on_array.view(-1)
 
         # star flux loss
         flux_dist = Normal(pred["log_flux_mean"].reshape(-1), pred["log_flux_sd"].view(-1))
-        star_flux_loss = -(
-            flux_dist.log_prob(true_cat["star_log_fluxes"].view(-1)) * true_cat.is_on_array.view(-1)
-        )
+        star_flux_loss = -flux_dist.log_prob(true_cat["star_log_fluxes"].view(-1))
+        star_flux_loss *= true_cat.is_on_array.view(-1)
+        star_flux_loss *= 1 - true_cat["galaxy_bools"].view(-1)
 
-        # star/galaxy classification: calculate cross entropy loss only for "on" sources
+        # star/galaxy classification
         galaxy_prob_flat = rearrange(pred["galaxy_prob"], "b ht wt 1 -> (b ht wt) 1")
         star_gal_prob = torch.cat([1 - galaxy_prob_flat, galaxy_prob_flat], dim=1)
         gal_bools_flat = true_cat["galaxy_bools"].view(-1)
-        binary_loss = -Categorical(star_gal_prob).log_prob(gal_bools_flat.long()) * true_on_flat
+        binary_loss = -Categorical(star_gal_prob).log_prob(gal_bools_flat.long())
+        binary_loss *= true_cat.is_on_array.view(-1)
 
         loss = counter_loss + locs_loss + star_flux_loss + binary_loss
 

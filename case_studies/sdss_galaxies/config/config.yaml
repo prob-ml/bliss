@@ -170,12 +170,12 @@ models:
         _target_: bliss.models.prior.ImagePrior
         n_bands: 1
         max_sources: 1
-        mean_sources: 0.03
+        mean_sources: 0.2
         min_sources: 0
         f_min: 622.0
         f_max: 1e6
         alpha: 0.43
-        prob_galaxy: 0.7
+        prob_galaxy: 0.30
         galaxy_prior:
             _target_: bliss.models.prior.GalaxyPrior
             n_latent_batches: 160
