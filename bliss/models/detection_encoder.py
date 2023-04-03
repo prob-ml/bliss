@@ -5,7 +5,6 @@ import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from omegaconf import OmegaConf
 from torch import Tensor
 from torch.distributions import Categorical, Normal
@@ -14,6 +13,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
 from bliss.catalog import TileCatalog
+from bliss.plotting import plot_detections
 from bliss.reporting import DetectionMetrics
 
 
@@ -30,7 +30,7 @@ class DetectionEncoder(pl.LightningModule):
         architecture,
         n_bands: int,
         tile_slen: int,
-        ptile_slen: int,
+        tiles_to_crop: int,
         annotate_probs: bool = False,
         slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
@@ -41,9 +41,8 @@ class DetectionEncoder(pl.LightningModule):
         Args:
             architecture: yaml to specifying the encoder network architecture
             n_bands: number of bands
-            tile_slen: dimension of full image, we assume its square for now
-            ptile_slen: dimension (in pixels) of the individual
-                            image padded tiles (usually 8 for stars, and _ for galaxies).
+            tile_slen: dimension in pixels of a square tile
+            tiles_to_crop: margin of tiles not to use for computing loss
             annotate_probs: Annotate probabilities on validation plots?
             slack: Slack to use when matching locations for validation metrics.
             optimizer_params: arguments passed to the Adam optimizer
@@ -55,12 +54,7 @@ class DetectionEncoder(pl.LightningModule):
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
 
-        assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
-        self.ptile_slen = ptile_slen
-
-        assert (ptile_slen - tile_slen) % 2 == 0
-        self.border_padding = (ptile_slen - tile_slen) // 2
 
         # number of distributional parameters used to characterize each source
         self.n_params_per_source = sum(param["dim"] for param in self.dist_param_groups.values())
@@ -69,7 +63,7 @@ class DetectionEncoder(pl.LightningModule):
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
         self.model = DetectionModel(cfg=arch_dict, ch=2)
-        self.tiles_to_crop = (ptile_slen - tile_slen) // (2 * tile_slen)
+        self.tiles_to_crop = tiles_to_crop
 
         # plotting
         self.annotate_probs = annotate_probs
@@ -244,59 +238,10 @@ class DetectionEncoder(pl.LightningModule):
         # log all metrics
         metrics = self.val_detection_metrics(true_cat, est_cat)
         for k, v in metrics.items():
-            self.log("val_metric/{}".format(k), v, batch_size=batch_size)
+            self.log("val/{}".format(k), v, batch_size=batch_size)
 
         # do we really need to save all these batches?
         return batch
-
-    def plot_image_detections(self, images, true_cat, est_cat, nrows, img_ids):
-        # setup figure and axes
-        fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(20, 20))
-        axes = axes.flatten() if nrows > 1 else [axes]
-
-        for ax_idx, ax in enumerate(axes):
-            if ax_idx >= len(img_ids):
-                break
-
-            img_id = img_ids[ax_idx]
-            true_n_sources = true_cat.n_sources[img_id].item()
-            n_sources = est_cat.n_sources[img_id].item()
-            ax.set_xlabel(f"True num: {true_n_sources}; Est num: {n_sources}")
-
-            # add white border showing where centers of stars and galaxies can be
-            bp = self.border_padding
-            ax.axvline(bp, color="w")
-            ax.axvline(images.shape[-1] - bp, color="w")
-            ax.axhline(bp, color="w")
-            ax.axhline(images.shape[-2] - bp, color="w")
-
-            # plot image first
-            image = images[img_id, 0].cpu().numpy()
-            vmin = image.min().item()
-            vmax = image.max().item()
-            divider = make_axes_locatable(ax)
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
-            fig.colorbar(im, cax=cax, orientation="vertical")
-
-            true_cat.plot_plocs(ax, img_id, "galaxy", bp=bp, color="r", marker="x", s=20)
-            true_cat.plot_plocs(ax, img_id, "star", bp=bp, color="m", marker="x", s=20)
-            est_cat.plot_plocs(ax, img_id, "all", bp=bp, color="b", marker="+", s=30)
-
-            if ax_idx == 0:
-                ax.scatter(None, None, color="r", marker="x", s=20, label="t.gal")
-                ax.scatter(None, None, color="m", marker="x", s=20, label="t.star")
-                ax.scatter(None, None, color="b", marker="+", s=30, label="p.source")
-                ax.legend(
-                    bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
-                    loc="lower left",
-                    ncol=2,
-                    mode="expand",
-                    borderaxespad=0.0,
-                )
-
-        fig.tight_layout()
-        return fig
 
     def _parse_batch(self, batch):
         pred = self.encode_batch(batch)
@@ -318,7 +263,8 @@ class DetectionEncoder(pl.LightningModule):
         n_samples = min(int(math.sqrt(batch_size)) ** 2, max_n_samples)
         nrows = int(n_samples**0.5)  # for figure
         wrong_idx = (est_cat.n_sources != true_cat.n_sources).nonzero().view(-1)[:max_n_samples]
-        fig = self.plot_image_detections(batch["images"], true_cat, est_cat, nrows, wrong_idx)
+        margin_px = self.tiles_to_crop * self.tile_slen
+        fig = plot_detections(batch["images"], true_cat, est_cat, nrows, wrong_idx, margin_px)
         title_root = f"Epoch:{self.current_epoch}/" if kind == "validation" else ""
         title = f"{title_root}{kind} images"
         self.logger.experiment.add_figure(title, fig)

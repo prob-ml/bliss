@@ -142,7 +142,7 @@ models:
         _target_: bliss.models.detection_encoder.DetectionEncoder
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
-        ptile_slen: 52
+        tiles_to_crop: 6
         annotate_probs: True
         slack: 1.0
         optimizer_params:
