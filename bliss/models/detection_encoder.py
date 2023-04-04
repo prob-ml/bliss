@@ -6,6 +6,7 @@ import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
 from omegaconf import OmegaConf
+from omegaconf.dictconfig import DictConfig
 from torch import Tensor
 from torch.distributions import Categorical, Normal
 from torch.optim import Adam
@@ -27,7 +28,7 @@ class DetectionEncoder(pl.LightningModule):
 
     def __init__(
         self,
-        architecture,
+        architecture: DictConfig,
         n_bands: int,
         tile_slen: int,
         tiles_to_crop: int,
@@ -170,34 +171,30 @@ class DetectionEncoder(pl.LightningModule):
         scheduler = MultiStepLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
 
-    def _get_loss(self, pred, true_tile_catalog):
-        # next we clamp so that the the maximum number of true sources does not exceed the
-        # support of the variational distribution
-        true_cat = true_tile_catalog.truncate_sources(1)
-
+    def _get_loss(self, pred: Dict[str, Tensor], true_tile_cat: TileCatalog):
         # counter loss
         on_prob_flat = rearrange(pred["on_prob"], "b ht wt 1 -> (b ht wt) 1")
         off_on_prob = torch.cat([1 - on_prob_flat, on_prob_flat], dim=1)
-        true_on_flat = true_cat.n_sources.reshape(-1)
+        true_on_flat = true_tile_cat.n_sources.reshape(-1)
         counter_loss = -Categorical(off_on_prob).log_prob(true_on_flat)
 
         # location loss
         loc_dist = Normal(pred["loc_mean"].view(-1, 2), pred["loc_sd"].view(-1, 2))
-        locs_loss = -loc_dist.log_prob(true_cat.locs.view(-1, 2)).sum(1)
-        locs_loss *= true_cat.is_on_array.view(-1)
+        locs_loss = -loc_dist.log_prob(true_tile_cat.locs.view(-1, 2)).sum(1)
+        locs_loss *= true_tile_cat.is_on_array.view(-1)
 
         # star flux loss
         flux_dist = Normal(pred["log_flux_mean"].reshape(-1), pred["log_flux_sd"].view(-1))
-        star_flux_loss = -flux_dist.log_prob(true_cat["star_log_fluxes"].view(-1))
-        star_flux_loss *= true_cat.is_on_array.view(-1)
-        star_flux_loss *= 1 - true_cat["galaxy_bools"].view(-1)
+        star_flux_loss = -flux_dist.log_prob(true_tile_cat["star_log_fluxes"].view(-1))
+        star_flux_loss *= true_tile_cat.is_on_array.view(-1)
+        star_flux_loss *= 1 - true_tile_cat["galaxy_bools"].view(-1)
 
         # star/galaxy classification
         galaxy_prob_flat = rearrange(pred["galaxy_prob"], "b ht wt 1 -> (b ht wt) 1")
         star_gal_prob = torch.cat([1 - galaxy_prob_flat, galaxy_prob_flat], dim=1)
-        gal_bools_flat = true_cat["galaxy_bools"].view(-1)
+        gal_bools_flat = true_tile_cat["galaxy_bools"].view(-1)
         binary_loss = -Categorical(star_gal_prob).log_prob(gal_bools_flat.long())
-        binary_loss *= true_cat.is_on_array.view(-1)
+        binary_loss *= true_tile_cat.is_on_array.view(-1)
 
         loss = counter_loss + locs_loss + star_flux_loss + binary_loss
 
@@ -209,81 +206,56 @@ class DetectionEncoder(pl.LightningModule):
             "binary_loss": binary_loss.mean(),
         }
 
-    def training_step(self, batch, batch_idx, optimizer_idx=0):
-        """Training step (pytorch lightning)."""
+    def _generic_step(self, batch, logging_name, plot_images=False):
         batch_size = len(batch["n_sources"])
         pred = self.encode_batch(batch)
         true_tile_catalog = TileCatalog(self.tile_slen, batch)
         loss_dict = self._get_loss(pred, true_tile_catalog)
-
-        for k, v in loss_dict.items():
-            self.log("train/{}".format(k), v, batch_size=batch_size)
-
         true_full_cat = true_tile_catalog.to_full_params()
         est_cat = self.variational_mode(pred)
-        metrics = self.metrics(true_full_cat, est_cat)
-        for k, v in metrics.items():
-            self.log("train/{}".format(k), v, batch_size=batch_size)
-
-        return loss_dict["loss"]
-
-    def validation_step(self, batch, batch_idx):
-        """Pytorch lightning method."""
-        batch_size = len(batch["images"])
-
-        pred = self.encode_batch(batch)
-        est_cat = self.variational_mode(pred)
-        true_tile_catalog = TileCatalog(self.tile_slen, batch)
-        true_cat = true_tile_catalog.to_full_params()
-        loss_dict = self._get_loss(pred, true_tile_catalog)
 
         # log all losses
         for k, v in loss_dict.items():
-            self.log("val/{}".format(k), v, batch_size=batch_size)
+            self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
         # log all metrics
-        metrics = self.metrics(true_cat, est_cat)
+        metrics = self.metrics(true_full_cat, est_cat)
         for k, v in metrics.items():
-            self.log("val/{}".format(k), v, batch_size=batch_size)
-
-        # do we really need to save all these batches?
-        return batch
-
-    def _parse_batch(self, batch):
-        pred = self.encode_batch(batch)
-        true_tile_catalog = TileCatalog(self.tile_slen, batch)
-        true_cat = true_tile_catalog.to_full_params()
-        est_cat = self.variational_mode(pred)
-        return true_cat, est_cat
-
-    def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
-        """Pytorch lightning method."""
-        if not self.logger:
-            return
-
-        batch: Dict[str, Tensor] = outputs[-1]
-        true_cat, est_cat = self._parse_batch(batch)
+            self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
-        batch_size = len(batch["images"])
-        n_samples = min(int(math.sqrt(batch_size)) ** 2, max_n_samples)
-        nrows = int(n_samples**0.5)  # for figure
-        wrong_idx = (est_cat.n_sources != true_cat.n_sources).nonzero().view(-1)[:max_n_samples]
-        margin_px = self.tiles_to_crop * self.tile_slen
-        fig = plot_detections(batch["images"], true_cat, est_cat, nrows, wrong_idx, margin_px)
-        title_root = f"Epoch:{self.current_epoch}/" if kind == "validation" else ""
-        title = f"{title_root}{kind} images"
-        self.logger.experiment.add_figure(title, fig)
-        plt.close(fig)
+        if plot_images:
+            batch_size = len(batch["images"])
+            n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
+            nrows = int(n_samples**0.5)  # for figure
+            wrong_idx = (est_cat.n_sources != true_full_cat.n_sources).nonzero()
+            wrong_idx = wrong_idx.view(-1)[:n_samples]
+            margin_px = self.tiles_to_crop * self.tile_slen
+            fig = plot_detections(
+                batch["images"], true_full_cat, est_cat, nrows, wrong_idx, margin_px
+            )
+            title_root = f"Epoch:{self.current_epoch}/"
+            title = f"{title_root}{logging_name} images"
+            self.logger.experiment.add_figure(title, fig)
+            plt.close(fig)
+
+        return loss_dict["loss"]
+
+    def training_step(self, batch, batch_idx, optimizer_idx=0):
+        """Training step (pytorch lightning)."""
+        return self._generic_step(batch, "train")
+
+    def validation_step(self, batch, batch_idx):
+        """Pytorch lightning method."""
+        self._generic_step(batch, "val", plot_images=True)
+        return batch  # do we really need to save all these batches?
+
+    def validation_epoch_end(self, outputs):
+        """Pytorch lightning method."""
+        batch: Dict[str, Tensor] = outputs[-1]
+        self._generic_step(batch, "val")
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        batch_size = len(batch["images"])
-        true_cat, est_cat = self._parse_batch(batch)
-
-        # log all metrics
-        metrics = self.metrics(true_cat, est_cat)
-        for k, v in metrics.items():
-            self.log("test/{}".format(k), v, batch_size=batch_size)
-
-        return batch
+        self._generic_step(batch, "test")
+        return batch  # do we really need to save all these batches?
