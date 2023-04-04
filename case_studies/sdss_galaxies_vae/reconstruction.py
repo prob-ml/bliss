@@ -18,7 +18,7 @@ from torch.distributions import Normal, Poisson
 from torch.types import Number
 from tqdm import tqdm
 
-from bliss import reporting
+from bliss import metrics
 from bliss.catalog import FullCatalog, PhotoFullCatalog, TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.encoder import Encoder
@@ -263,8 +263,8 @@ def calc_scene_metrics_by_mag(
         tgcount = true_cat_binned["galaxy_bools"].sum().int().item()
         tscount = tcount - tgcount
 
-        detection_metrics = reporting.DetectionMetrics(loc_slack)
-        classification_metrics = reporting.ClassificationMetrics(loc_slack)
+        detection_metrics = metrics.DetectionMetrics(loc_slack)
+        classification_metrics = metrics.ClassificationMetrics(loc_slack)
 
         # precision
         est_cat_binned = est_cat.apply_param_bin("mags", mag_min, mag_max)
@@ -872,7 +872,7 @@ def stats_for_threshold(
             "est_tile_matches": est_tile_matches,
         }
     est_matches = torch.zeros(est_cat.plocs.shape[1], dtype=torch.bool)
-    row_indx, col_indx, d, _ = reporting.match_by_locs(true_plocs[0], est_cat.plocs[0], 1.0)
+    row_indx, col_indx, d, _ = metrics.match_by_locs(true_plocs[0], est_cat.plocs[0], 1.0)
     true_matches[row_indx] = d
     est_matches[col_indx] = d
     est_cat["matched"] = est_matches.reshape(1, -1, 1)
@@ -1059,7 +1059,7 @@ def plot_mismatches(
 
     photo_catalog = catalogs.get("photo")
     if photo_catalog is not None:
-        row_indx, _, d, _ = reporting.match_by_locs(true_cat.plocs[0], photo_catalog.plocs[0], 1.0)
+        row_indx, _, d, _ = metrics.match_by_locs(true_cat.plocs[0], photo_catalog.plocs[0], 1.0)
         photo_true_matches = torch.zeros(true_cat.plocs.shape[1], dtype=torch.bool)
         photo_true_matches[row_indx] = d
     else:

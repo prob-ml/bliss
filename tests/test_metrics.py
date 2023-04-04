@@ -1,7 +1,7 @@
 import torch
 
 from bliss.catalog import FullCatalog
-from bliss.reporting import ClassificationMetrics, DetectionMetrics
+from bliss.metrics import ClassificationMetrics, DetectionMetrics
 
 
 def test_metrics():

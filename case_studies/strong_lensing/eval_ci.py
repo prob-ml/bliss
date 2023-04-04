@@ -2,26 +2,24 @@ import sys
 
 sys.path.append("../../")
 
+import matplotlib.pyplot as plt
 from einops import rearrange
+
+from bliss import metrics
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss import reporting
-from bliss.encoder import Encoder
-from bliss.inference import SDSSFrame
 from bliss.datasets import sdss
-from bliss.inference import reconstruct_scene_at_coordinates
+from bliss.encoder import Encoder
+from bliss.inference import SDSSFrame, reconstruct_scene_at_coordinates
 from case_studies.strong_lensing.plots.main import load_models
 
-import matplotlib.pyplot as plt
-
 plt.style.use("ggplot")
-import torch
-
-from astropy.table import Table
+import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import torch
+from astropy.table import Table
 from hydra import compose, initialize
 from hydra.utils import instantiate
-import numpy as np
 
 with initialize(config_path="config"):
     cfg = compose("config", overrides=[])

@@ -4,7 +4,7 @@ import galsim
 import torch
 from astropy.table import Table
 
-from bliss import reporting
+from bliss import metrics
 from bliss.catalog import FullCatalog
 from bliss.datasets import sdss
 
@@ -20,7 +20,7 @@ def test_scene_metrics():
             "mags": torch.tensor([[[23.0]]]).float(),
         },
     )
-    reporting.scene_metrics(true_params, true_params, "mags", p_max=25, slack=1.0)
+    metrics.scene_metrics(true_params, true_params, "mags", p_max=25, slack=1.0)
 
 
 def test_catalog_conversion():
@@ -65,7 +65,7 @@ def test_coadd(get_galsim_galaxies_config):
     h = 1489
     w = 2048
     bp = 24
-    reporting.CoaddFullCatalog.from_table(coadd_cat, wcs, (bp, h - bp), (bp, w - bp), band="r")
+    metrics.CoaddFullCatalog.from_table(coadd_cat, wcs, (bp, h - bp), (bp, w - bp), band="r")
 
 
 def test_measurements():
@@ -77,4 +77,4 @@ def test_measurements():
     psf_image = psf.drawImage(nx=slen, ny=slen, scale=pixel_scale).array.reshape(1, slen, slen)
     image = gal_conv.drawImage(nx=slen, ny=slen, scale=pixel_scale).array.reshape(1, 1, slen, slen)
     image, psf_image = torch.from_numpy(image), torch.from_numpy(psf_image)
-    reporting.get_single_galaxy_measurements(image, psf_image, pixel_scale)
+    metrics.get_single_galaxy_measurements(image, psf_image, pixel_scale)

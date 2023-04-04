@@ -15,8 +15,8 @@ from tqdm import tqdm
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.sdss import convert_flux_to_mag
 from bliss.encoder import Encoder
+from bliss.metrics import compute_bin_metrics, get_boostrap_precision_and_recall
 from bliss.plotting import CB_color_cycle, scatter_shade_plot, set_rc_params
-from bliss.reporting import compute_bin_metrics, get_boostrap_precision_and_recall
 from case_studies.coadds.coadds import load_coadd_dataset
 
 device = torch.device("cuda:0")

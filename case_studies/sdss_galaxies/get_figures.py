@@ -12,13 +12,13 @@ from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 
-from bliss import reporting
+from bliss import metrics
 from bliss.catalog import FullCatalog, PhotoFullCatalog
 from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
+from bliss.metrics import compute_bin_metrics
 from bliss.models.decoder import ImageDecoder
 from bliss.plotting import BlissFigure, add_loc_legend, plot_image, plot_locs
-from bliss.reporting import compute_bin_metrics
 
 ALL_FIGS = ("detection_sdss", "recon_sdss")
 
@@ -42,7 +42,7 @@ def _compute_detection_metrics(truth: FullCatalog, pred: FullCatalog):
     # data for scatter plot of misclassifications (over all magnitudes).
     tplocs = truth.plocs.reshape(-1, 2)
     eplocs = pred.plocs.reshape(-1, 2)
-    tindx, eindx, dkeep, _ = reporting.match_by_locs(tplocs, eplocs, slack=1.0)
+    tindx, eindx, dkeep, _ = metrics.match_by_locs(tplocs, eplocs, slack=1.0)
 
     # compute egprob separately for PHOTO
     egbool = pred["galaxy_bools"].reshape(-1)[eindx][dkeep]

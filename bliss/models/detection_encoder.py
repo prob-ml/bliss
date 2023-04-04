@@ -13,8 +13,8 @@ from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
 from bliss.catalog import TileCatalog
+from bliss.metrics import DetectionMetrics
 from bliss.plotting import plot_detections
-from bliss.reporting import DetectionMetrics
 
 
 class DetectionEncoder(pl.LightningModule):
@@ -69,8 +69,7 @@ class DetectionEncoder(pl.LightningModule):
         self.annotate_probs = annotate_probs
 
         # metrics
-        self.val_detection_metrics = DetectionMetrics(slack)
-        self.test_detection_metrics = DetectionMetrics(slack)
+        self.metrics = DetectionMetrics(slack)
 
     @property
     def dist_param_groups(self):
@@ -219,6 +218,13 @@ class DetectionEncoder(pl.LightningModule):
 
         for k, v in loss_dict.items():
             self.log("train/{}".format(k), v, batch_size=batch_size)
+
+        true_full_cat = true_tile_catalog.to_full_params()
+        est_cat = self.variational_mode(pred)
+        metrics = self.metrics(true_full_cat, est_cat)
+        for k, v in metrics.items():
+            self.log("train/{}".format(k), v, batch_size=batch_size)
+
         return loss_dict["loss"]
 
     def validation_step(self, batch, batch_idx):
@@ -236,7 +242,7 @@ class DetectionEncoder(pl.LightningModule):
             self.log("val/{}".format(k), v, batch_size=batch_size)
 
         # log all metrics
-        metrics = self.val_detection_metrics(true_cat, est_cat)
+        metrics = self.metrics(true_cat, est_cat)
         for k, v in metrics.items():
             self.log("val/{}".format(k), v, batch_size=batch_size)
 
@@ -252,7 +258,7 @@ class DetectionEncoder(pl.LightningModule):
 
     def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
         """Pytorch lightning method."""
-        if self.n_bands > 1 or not self.logger:
+        if not self.logger:
             return
 
         batch: Dict[str, Tensor] = outputs[-1]
@@ -274,9 +280,9 @@ class DetectionEncoder(pl.LightningModule):
         """Pytorch lightning method."""
         batch_size = len(batch["images"])
         true_cat, est_cat = self._parse_batch(batch)
-        metrics = self.test_detection_metrics(true_cat, est_cat)
 
         # log all metrics
+        metrics = self.metrics(true_cat, est_cat)
         for k, v in metrics.items():
             self.log("test/{}".format(k), v, batch_size=batch_size)
 

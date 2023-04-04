@@ -8,10 +8,10 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
+from bliss.metrics import get_single_galaxy_ellipticities
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
 from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder, SingleLensedGalsimGalaxyDecoder
 from bliss.models.psf_decoder import PSFDecoder, get_mgrid
-from bliss.reporting import get_single_galaxy_ellipticities
 
 GalaxyModel = Union[OneCenteredGalaxyAE, SingleGalsimGalaxyDecoder]
 

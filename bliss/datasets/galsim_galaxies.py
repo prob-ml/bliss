@@ -10,13 +10,13 @@ from tqdm import tqdm
 from bliss.catalog import FullCatalog
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.sdss import convert_flux_to_mag
+from bliss.metrics import get_single_galaxy_ellipticities
 from bliss.models.galsim_decoder import (
     DefaultGalsimPrior,
     FullCatalogDecoder,
     SingleGalsimGalaxyDecoder,
     SingleGalsimGalaxyPrior,
 )
-from bliss.reporting import get_single_galaxy_ellipticities
 
 
 class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):

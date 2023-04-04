@@ -12,8 +12,8 @@ from bliss.catalog import DecalsFullCatalog, FullCatalog, TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
 from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
+from bliss.metrics import CoaddFullCatalog
 from bliss.models.decoder import ImageDecoder
-from bliss.reporting import CoaddFullCatalog
 
 
 def reconstruct_scene_at_coordinates(
