@@ -12,7 +12,7 @@ from bliss import generate
 from bliss.catalog import PhotoFullCatalog
 from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame
-from bliss.models.decoder import ImageDecoder
+from bliss.simulator.decoder import ImageDecoder
 from case_studies.sdss_galaxies.plots.ae_recon import AEReconstructionFigures
 from case_studies.sdss_galaxies.plots.galsim_blends import BlendSimFigures
 from case_studies.sdss_galaxies.plots.sdss_detection import DetectionClassificationFigures

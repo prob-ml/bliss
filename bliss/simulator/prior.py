@@ -11,7 +11,7 @@ from torch.distributions import Poisson
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.datasets.galsim_galaxies import SingleGalsimGalaxies
-from bliss.models.galaxy_net import OneCenteredGalaxyAE
+from bliss.simulator.galaxy_net import OneCenteredGalaxyAE
 
 
 class GalaxyPrior:

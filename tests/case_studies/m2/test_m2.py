@@ -6,7 +6,7 @@ import torch
 from einops import rearrange, reduce
 
 from bliss.catalog import TileCatalog, get_images_in_tiles
-from bliss.models.detection_encoder import DetectionEncoder
+from bliss.detection_encoder import DetectionEncoder
 
 
 def _get_tpr_ppv(true_locs, true_mag, est_locs, est_mag, slack=1.0):

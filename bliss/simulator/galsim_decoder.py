@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.models.psf_decoder import PSFDecoder
+from bliss.simulator.psf_decoder import PSFDecoder
 
 
 class SingleGalsimGalaxyPrior:

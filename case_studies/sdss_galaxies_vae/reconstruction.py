@@ -21,6 +21,7 @@ from tqdm import tqdm
 from bliss import metrics
 from bliss.catalog import FullCatalog, PhotoFullCatalog, TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
+from bliss.detection_encoder import DetectionEncoder
 from bliss.encoder import Encoder
 from bliss.inference import (
     SDSSFrame,
@@ -30,12 +31,11 @@ from bliss.inference import (
     reconstruct_scene_at_coordinates,
     sample_at_coordinates,
 )
-from bliss.models.binary import BinaryEncoder
-from bliss.models.decoder import ImageDecoder
-from bliss.models.detection_encoder import DetectionEncoder
-from bliss.models.galaxy_encoder import GalaxyEncoder
-from bliss.models.prior import ImagePrior
 from bliss.plotting import plot_image, set_rc_params
+from bliss.simulator.binary import BinaryEncoder
+from bliss.simulator.decoder import ImageDecoder
+from bliss.simulator.galaxy_encoder import GalaxyEncoder
+from bliss.simulator.prior import ImagePrior
 
 Frame = Union[SDSSFrame, SimulatedFrame, SemiSyntheticFrame]
 

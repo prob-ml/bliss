@@ -1,6 +1,6 @@
 import torch
 
-from bliss.models.detection_encoder import DetectionEncoder
+from bliss.detection_encoder import DetectionEncoder
 
 
 class TestSourceEncoder:

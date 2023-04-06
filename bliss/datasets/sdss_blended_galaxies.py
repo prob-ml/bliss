@@ -10,9 +10,9 @@ from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
+from bliss.detection_encoder import DetectionEncoder
 from bliss.encoder import Encoder
-from bliss.models.binary import BinaryEncoder
-from bliss.models.detection_encoder import DetectionEncoder
+from bliss.simulator.binary import BinaryEncoder
 
 
 class SdssBlendedGalaxies(pl.LightningDataModule):

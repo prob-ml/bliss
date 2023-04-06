@@ -20,10 +20,10 @@ from bliss.datasets.galsim_galaxies import GalsimBlends
 from bliss.datasets.sdss import convert_mag_to_flux
 from bliss.encoder import Encoder
 from bliss.metrics import compute_bin_metrics, get_boostrap_precision_and_recall, match_by_locs
-from bliss.models.decoder import ImageDecoder
-from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.models.psf_decoder import PSFDecoder
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
+from bliss.simulator.decoder import ImageDecoder
+from bliss.simulator.galaxy_net import OneCenteredGalaxyAE
+from bliss.simulator.psf_decoder import PSFDecoder
 
 ALL_FIGS = ("single_gal", "blend_gal", "toy")
 

@@ -11,14 +11,14 @@ from torch.nn import BCELoss
 from torch.optim import Adam
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.models.encoder_layers import (
+from bliss.plotting import add_loc_legend, plot_image, plot_locs
+from bliss.simulator.encoder_layers import (
     ConcatBackgroundTransform,
     EncoderCNN,
     LogBackgroundTransform,
     make_enc_final,
 )
-from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
-from bliss.plotting import add_loc_legend, plot_image, plot_locs
+from bliss.simulator.galaxy_encoder import CenterPaddedTilesTransform
 
 
 class LensingBinaryEncoder(pl.LightningModule):

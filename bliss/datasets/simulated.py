@@ -9,8 +9,8 @@ from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.datasets.background import ConstantBackground, SimulatedSDSSBackground
-from bliss.models.decoder import ImageDecoder
-from bliss.models.prior import ImagePrior
+from bliss.simulator.decoder import ImageDecoder
+from bliss.simulator.prior import ImagePrior
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(

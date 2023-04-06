@@ -6,12 +6,12 @@ from torch import Tensor, nn
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.models.binary import BinaryEncoder
-from bliss.models.detection_encoder import DetectionEncoder
-from bliss.models.galaxy_encoder import GalaxyEncoder
-from bliss.models.galsim_encoder import GalsimEncoder
-from bliss.models.lens_encoder import LensEncoder
-from bliss.models.lensing_binary_encoder import LensingBinaryEncoder
+from bliss.detection_encoder import DetectionEncoder
+from bliss.simulator.binary import BinaryEncoder
+from bliss.simulator.galaxy_encoder import GalaxyEncoder
+from bliss.simulator.galsim_encoder import GalsimEncoder
+from bliss.simulator.lens_encoder import LensEncoder
+from bliss.simulator.lensing_binary_encoder import LensingBinaryEncoder
 
 
 class Encoder(nn.Module):

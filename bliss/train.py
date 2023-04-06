@@ -32,7 +32,7 @@ def train(cfg: DictConfig):
     dataset = instantiate(cfg.training.dataset)
 
     # setup model
-    model = instantiate(cfg.training.model)
+    encoder = instantiate(cfg.training.encoder)
 
     # setup trainer
     logger = setup_logger(cfg, paths)
@@ -46,16 +46,16 @@ def train(cfg: DictConfig):
     )
 
     if logger:
-        log_hyperparameters(config=cfg, model=model, trainer=trainer)
+        log_hyperparameters(config=cfg, model=encoder, trainer=trainer)
 
     # train!
     tic = time_ns()
-    trainer.fit(model, datamodule=dataset)
+    trainer.fit(encoder, datamodule=dataset)
     toc = time_ns()
     train_time_sec = (toc - tic) * 1e-9
     # test!
     if cfg.training.testing.file is not None:
-        trainer.test(model, datamodule=dataset)
+        trainer.test(encoder, datamodule=dataset)
 
     # Load best weights from checkpoint
     if cfg.training.weight_save_path is not None and (checkpoint_callback is not None):

@@ -1,7 +1,7 @@
 from hydra.utils import instantiate
 
-from bliss.models.decoder import ImageDecoder
-from bliss.models.prior import ImagePrior
+from bliss.simulator.decoder import ImageDecoder
+from bliss.simulator.prior import ImagePrior
 
 
 def test_get_ellips(get_galsim_galaxies_config):

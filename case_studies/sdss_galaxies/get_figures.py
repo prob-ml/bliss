@@ -17,8 +17,8 @@ from bliss.catalog import FullCatalog, PhotoFullCatalog
 from bliss.encoder import Encoder
 from bliss.inference import SDSSFrame, SimulatedFrame, reconstruct_scene_at_coordinates
 from bliss.metrics import compute_bin_metrics
-from bliss.models.decoder import ImageDecoder
 from bliss.plotting import BlissFigure, add_loc_legend, plot_image, plot_locs
+from bliss.simulator.decoder import ImageDecoder
 
 ALL_FIGS = ("detection_sdss", "recon_sdss")
 

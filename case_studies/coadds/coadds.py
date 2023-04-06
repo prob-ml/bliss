@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, Dataset
 from bliss.catalog import FullCatalog
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.galsim_galaxies import GalsimBlends
-from bliss.models.galsim_decoder import (
+from bliss.simulator.galsim_decoder import (
     DefaultGalsimPrior,
     FullCatalogDecoder,
     SingleGalsimGalaxyPrior,

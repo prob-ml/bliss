@@ -5,7 +5,7 @@ from einops import rearrange
 from torch import Tensor
 from torch.nn import functional as F
 
-from bliss.models.decoder import get_mgrid
+from bliss.simulator.decoder import get_mgrid
 
 
 def align_single_exposures(img0: Tensor, images: Tensor, slen: int, dithers: Tensor, scale=0.393):
