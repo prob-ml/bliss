@@ -17,7 +17,7 @@ class TestSourceEncoder:
         n_tiles_w = 5
         # TODO: we can no longer detect 4 source per tile; now we can only detect 1
         max_detections = 4
-        ptile_slen = 10
+        tiles_to_crop = 2
         n_bands = 2
         tile_slen = 2
         background = (10.0, 20.0)
@@ -28,7 +28,7 @@ class TestSourceEncoder:
             # Let's use a config.yml file for these tests, in part so we can specify a
             # nontrivial encoder architecture
             architecture=[[-1, 1, "Conv", [64, 5, 1]]],
-            ptile_slen=ptile_slen,
+            tiles_to_crop=tiles_to_crop,
             tile_slen=tile_slen,
             n_bands=n_bands,
         ).to(device)
@@ -40,8 +40,8 @@ class TestSourceEncoder:
             images = torch.randn(
                 batch_size,
                 n_bands,
-                ptile_slen + (n_tiles_h - 1) * tile_slen,
-                ptile_slen + (n_tiles_w - 1) * tile_slen,
+                (n_tiles_h + 2 * tiles_to_crop) * tile_slen,
+                (n_tiles_w - 2 * tiles_to_crop) * tile_slen,
                 device=device,
             )
 
@@ -58,29 +58,3 @@ class TestSourceEncoder:
             assert catalog["n_sources"].size() == torch.Size([batch_size * n_tiles_h * n_tiles_w])
             correct_locs_shape = torch.Size([batch_size * n_tiles_h * n_tiles_w, max_detections, 2])
             assert catalog["locs"].shape == correct_locs_shape
-
-    def test_sample(self, devices):
-        ptile_slen = 10
-        n_bands = 2
-        tile_slen = 2
-        n_samples = 5
-        background = (10.0, 20.0)
-        background_tensor = torch.tensor(background).view(1, -1, 1, 1).to(devices.device)
-
-        images = torch.randn(1, n_bands, 4 * ptile_slen, 4 * ptile_slen).to(devices.device)
-        images = images * background_tensor.sqrt() + background_tensor
-        background_tensor = background_tensor.expand(*images.shape)
-
-        star_encoder = DetectionEncoder(
-            # TODO: DetectionEncoder requires architecture now.
-            # Let's use a config.yml file for these tests, in part so we can specify a
-            # nontrivial encoder architecture
-            architecture=[[-1, 1, "Conv", [64, 5, 1]]],
-            ptile_slen=ptile_slen,
-            tile_slen=tile_slen,
-            n_bands=n_bands,
-        ).to(devices.device)
-
-        batch = {"images": images, "background": background_tensor}
-        var_params = star_encoder.encode_batch(batch)
-        star_encoder.sample(var_params, n_samples)

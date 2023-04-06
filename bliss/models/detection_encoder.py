@@ -1,5 +1,5 @@
 import math
-from typing import Dict, Optional, Union
+from typing import Dict, Optional
 
 import pytorch_lightning as pl
 import torch
@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from torch import Tensor
-from torch.distributions import Categorical, Normal
+from torch.distributions import Categorical, Distribution, LogNormal, Normal
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
@@ -16,6 +16,62 @@ from yolov5.models.yolo import DetectionModel
 from bliss.catalog import TileCatalog
 from bliss.metrics import DetectionMetrics
 from bliss.plotting import plot_detections
+
+
+class TransformedBernoulli:
+    def __init__(self):
+        self.dim = 1
+
+    def get_dist(self, untransformed_params):
+        yes_prob = untransformed_params.sigmoid().clamp(1e-4, 1 - 1e-4)
+        no_yes_prob = torch.cat([1 - yes_prob, yes_prob], dim=3)
+        return Categorical(no_yes_prob)
+
+
+class TransformedNormal:
+    def __init__(self, low_clamp=-20, high_clamp=20):
+        self.dim = 2
+        self.low_clamp = low_clamp
+        self.high_clamp = high_clamp
+
+    def get_dist(self, untransformed_params):
+        mean = untransformed_params[:, :, :, 0]
+        sd = untransformed_params[:, :, :, 1].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        return Normal(mean, sd)
+
+
+class TransformedDiagonalBivariateNormal:
+    def __init__(self):
+        self.dim = 4
+
+    def get_dist(self, untransformed_params):
+        mean = untransformed_params[:, :, :, :2]
+        # TODO: verify that this clamp isn't too extreme
+        sd = untransformed_params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
+        return Normal(mean, sd)
+
+
+class TransformedLogNormal:
+    def __init__(self):
+        self.dim = 2
+
+    def get_dist(self, untransformed_params):
+        mu = untransformed_params[:, :, :, 0]
+        sigma = untransformed_params[:, :, :, 1].clamp(-6, 10).exp().sqrt()
+        return LogNormal(mu, sigma)
+
+
+class TransformedLogitNormal:
+    def __init__(self, low=0, high=1):
+        self.dim = 2
+        self.low = low
+        self.high = high
+        raise NotImplementedError()
+
+    def get_dist(self, untransformed_params):
+        mu = untransformed_params[:, :, :, 0]
+        sigma = untransformed_params[:, :, :, 1].clamp(-6, 10).exp().sqrt()
+        return Normal(mu, sigma)
 
 
 class DetectionEncoder(pl.LightningModule):
@@ -58,7 +114,7 @@ class DetectionEncoder(pl.LightningModule):
         self.tile_slen = tile_slen
 
         # number of distributional parameters used to characterize each source
-        self.n_params_per_source = sum(param["dim"] for param in self.dist_param_groups.values())
+        self.n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
 
         # a hack to get the right number of outputs from yolo
         architecture["nc"] = self.n_params_per_source - 5
@@ -75,12 +131,18 @@ class DetectionEncoder(pl.LightningModule):
     @property
     def dist_param_groups(self):
         return {
-            "on_prob": {"dim": 1},
-            "loc_mean": {"dim": 2},
-            "loc_logvar": {"dim": 2},
-            "log_flux_mean": {"dim": self.n_bands},
-            "log_flux_logvar": {"dim": self.n_bands},
-            "galaxy_prob": {"dim": 1},
+            "on_prob": TransformedBernoulli(),
+            "loc": TransformedDiagonalBivariateNormal(),
+            "star_log_flux": TransformedNormal(low_clamp=-6, high_clamp=3),
+            "galaxy_prob": TransformedBernoulli(),
+            # galsim parameters
+            "galsim_flux": TransformedLogNormal(),
+            "galsim_disk_frac": TransformedLogitNormal(),
+            "galsim_beta_radians": TransformedLogitNormal(high=2 * torch.pi),
+            "galsim_disk_q": TransformedLogitNormal(),
+            "galsim_a_d": TransformedLogNormal(),
+            "galsim_bulge_q": TransformedLogitNormal(),
+            "galsim_a_b": TransformedLogNormal(),
         }
 
     def encode_batch(self, batch):
@@ -97,70 +159,30 @@ class DetectionEncoder(pl.LightningModule):
         ttc = self.tiles_to_crop
         output_cropped = output4d[:, ttc:-ttc, ttc:-ttc, :]
 
-        split_sizes = [v["dim"] for v in self.dist_param_groups.values()]
+        split_sizes = [v.dim for v in self.dist_param_groups.values()]
         dist_params_split = torch.split(output_cropped, split_sizes, 3)
         names = self.dist_param_groups.keys()
         pred = dict(zip(names, dist_params_split))
 
-        # should verify that these clamps aren't too extreme
-        pred["on_prob"] = pred["on_prob"].sigmoid().clamp(1e-3, 1 - 1e-3)
-        pred["loc_mean"] = pred["loc_mean"].sigmoid()
-        pred["loc_sd"] = pred["loc_logvar"].clamp(-6, 3).exp().sqrt()
-        pred["log_flux_sd"] = pred["log_flux_logvar"].clamp(-6, 10).exp().sqrt()
-        pred["galaxy_prob"] = pred["galaxy_prob"].sigmoid().clamp(1e-3, 1 - 1e-3)
-
-        # delete these so we don't accidentally use them
-        del pred["loc_logvar"]
-        del pred["log_flux_logvar"]
+        for k, v in pred.items():
+            pred[k] = self.dist_param_groups[k].get_dist(v)
 
         return pred
 
-    def sample(
-        self,
-        pred: Dict[str, Tensor],
-        n_samples: Union[int, None],
-    ) -> Dict[str, Tensor]:
-        """Sample from the encoded variational distribution.
-
-        Args:
-            pred:
-                The distributional parameters in matrix form.
-            n_samples:
-                The number of samples to draw. If None, the variational mode is taken instead.
-
-        Returns:
-            A dictionary of tensors with shape `n_samples * n_ptiles * max_sources * ...`.
-            Consists of `"n_sources", "locs", "star_log_fluxes", and "star_fluxes"`.
-        """
-        off_on_prob = torch.cat([1 - pred["on_prob"], pred["on_prob"]], dim=1)
-        tile_is_on_array = Categorical(probs=off_on_prob).sample((n_samples,))
-
-        tile_locs = Normal(pred["loc_mean"], pred["loc_sd"]).rsample()
-        tile_log_fluxes = Normal(pred["log_flux_mean"], pred["log_flux_sd"]).rsample()
-
-        tile_fluxes = tile_log_fluxes.exp()
-        tile_fluxes *= tile_is_on_array
-
-        return {
-            "locs": tile_locs,
-            "star_log_fluxes": tile_log_fluxes,
-            "star_fluxes": tile_fluxes,
-            "n_sources": tile_is_on_array,
-        }
-
     def variational_mode(self, pred: Dict[str, Tensor]) -> Dict[str, Tensor]:
         """Compute the mode of the variational distribution."""
-        tile_is_on_array = (pred["on_prob"] > 0.5).int()
-        tile_fluxes = pred["log_flux_mean"].exp()
-        tile_fluxes *= tile_is_on_array
+        tile_is_on_array = pred["on_prob"].mode
+        # this is the mode of star_log_flux but not the mean of the star_flux distribution
+        star_fluxes = pred["star_log_flux"].mode.exp()  # type: ignore
+        star_fluxes *= tile_is_on_array
 
         # we have to unsqueeze some tensors below because a TileCatalog can store multiple
         # light sources per tile, but we predict only one source per tile
         est_catalog_dict = {
-            "locs": rearrange(pred["loc_mean"], "b ht wt d -> b ht wt 1 d"),
-            "star_log_fluxes": rearrange(pred["log_flux_mean"], "b ht wt d -> b ht wt 1 d"),
-            "star_fluxes": rearrange(tile_fluxes, "b ht wt d -> b ht wt 1 d"),
-            "n_sources": rearrange(tile_is_on_array, "b ht wt 1 -> b ht wt"),
+            "locs": rearrange(pred["loc"].mode, "b ht wt d -> b ht wt 1 d"),
+            "star_log_fluxes": rearrange(pred["star_log_flux"].mode, "b ht wt -> b ht wt 1 1"),
+            "star_fluxes": rearrange(star_fluxes, "b ht wt -> b ht wt 1 1"),
+            "n_sources": tile_is_on_array,
         }
         est_tile_catalog = TileCatalog(self.tile_slen, est_catalog_dict)
         return est_tile_catalog.to_full_params()
@@ -171,30 +193,29 @@ class DetectionEncoder(pl.LightningModule):
         scheduler = MultiStepLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
 
-    def _get_loss(self, pred: Dict[str, Tensor], true_tile_cat: TileCatalog):
+    def _get_loss(self, pred: Dict[str, Distribution], true_tile_cat: TileCatalog):
         # counter loss
-        on_prob_flat = rearrange(pred["on_prob"], "b ht wt 1 -> (b ht wt) 1")
-        off_on_prob = torch.cat([1 - on_prob_flat, on_prob_flat], dim=1)
-        true_on_flat = true_tile_cat.n_sources.reshape(-1)
-        counter_loss = -Categorical(off_on_prob).log_prob(true_on_flat)
+        counter_loss = -pred["on_prob"].log_prob(true_tile_cat.n_sources)
 
         # location loss
-        loc_dist = Normal(pred["loc_mean"].view(-1, 2), pred["loc_sd"].view(-1, 2))
-        locs_loss = -loc_dist.log_prob(true_tile_cat.locs.view(-1, 2)).sum(1)
-        locs_loss *= true_tile_cat.is_on_array.view(-1)
+        # all the squeezing/rearranging below is because a TileCatalog can store multiple
+        # light sources per tile, which is annoying here, but helpful for storing samples
+        # real catlogs. Still, we may want to change it to just store one.
+        locs_loss = -pred["loc"].log_prob(true_tile_cat.locs.squeeze(3)).sum(-1)
+        locs_loss *= true_tile_cat.is_on_array.squeeze(3)
 
         # star flux loss
-        flux_dist = Normal(pred["log_flux_mean"].reshape(-1), pred["log_flux_sd"].view(-1))
-        star_flux_loss = -flux_dist.log_prob(true_tile_cat["star_log_fluxes"].view(-1))
-        star_flux_loss *= true_tile_cat.is_on_array.view(-1)
-        star_flux_loss *= 1 - true_tile_cat["galaxy_bools"].view(-1)
+        star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
+        star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
+        star_flux_loss *= true_tile_cat.is_on_array.squeeze(3)
+        true_gal_bools = rearrange(true_tile_cat["galaxy_bools"], "b ht wt 1 1 -> b ht wt")
+        star_flux_loss *= 1 - true_gal_bools
 
-        # star/galaxy classification
-        galaxy_prob_flat = rearrange(pred["galaxy_prob"], "b ht wt 1 -> (b ht wt) 1")
-        star_gal_prob = torch.cat([1 - galaxy_prob_flat, galaxy_prob_flat], dim=1)
-        gal_bools_flat = true_tile_cat["galaxy_bools"].view(-1)
-        binary_loss = -Categorical(star_gal_prob).log_prob(gal_bools_flat.long())
-        binary_loss *= true_tile_cat.is_on_array.view(-1)
+        # star/galaxy classification loss
+        binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools.long())
+        binary_loss *= true_tile_cat.is_on_array.squeeze(3)
+
+        # TODO: compute galsim loss
 
         loss = counter_loss + locs_loss + star_flux_loss + binary_loss
 
@@ -206,7 +227,7 @@ class DetectionEncoder(pl.LightningModule):
             "binary_loss": binary_loss.mean(),
         }
 
-    def _generic_step(self, batch, logging_name, plot_images=False):
+    def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
         batch_size = len(batch["n_sources"])
         pred = self.encode_batch(batch)
         true_tile_catalog = TileCatalog(self.tile_slen, batch)
@@ -219,9 +240,10 @@ class DetectionEncoder(pl.LightningModule):
             self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
         # log all metrics
-        metrics = self.metrics(true_full_cat, est_cat)
-        for k, v in metrics.items():
-            self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+        if log_metrics:
+            metrics = self.metrics(true_full_cat, est_cat)
+            for k, v in metrics.items():
+                self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
         if plot_images:
@@ -247,7 +269,7 @@ class DetectionEncoder(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        self._generic_step(batch, "val", plot_images=True)
+        self._generic_step(batch, "val", log_metrics=True, plot_images=True)
         return batch  # do we really need to save all these batches?
 
     def validation_epoch_end(self, outputs):
@@ -257,5 +279,5 @@ class DetectionEncoder(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        self._generic_step(batch, "test")
+        self._generic_step(batch, "test", log_metrics=True)
         return batch  # do we really need to save all these batches?
