@@ -8,7 +8,7 @@ from matplotlib import pyplot as plt
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
 from torch import Tensor
-from torch.distributions import Categorical, Distribution, LogNormal, Normal
+from torch.distributions import Distribution
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
@@ -16,62 +16,13 @@ from yolov5.models.yolo import DetectionModel
 from bliss.catalog import TileCatalog
 from bliss.metrics import DetectionMetrics
 from bliss.plotting import plot_detections
-
-
-class TransformedBernoulli:
-    def __init__(self):
-        self.dim = 1
-
-    def get_dist(self, untransformed_params):
-        yes_prob = untransformed_params.sigmoid().clamp(1e-4, 1 - 1e-4)
-        no_yes_prob = torch.cat([1 - yes_prob, yes_prob], dim=3)
-        return Categorical(no_yes_prob)
-
-
-class TransformedNormal:
-    def __init__(self, low_clamp=-20, high_clamp=20):
-        self.dim = 2
-        self.low_clamp = low_clamp
-        self.high_clamp = high_clamp
-
-    def get_dist(self, untransformed_params):
-        mean = untransformed_params[:, :, :, 0]
-        sd = untransformed_params[:, :, :, 1].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
-        return Normal(mean, sd)
-
-
-class TransformedDiagonalBivariateNormal:
-    def __init__(self):
-        self.dim = 4
-
-    def get_dist(self, untransformed_params):
-        mean = untransformed_params[:, :, :, :2]
-        # TODO: verify that this clamp isn't too extreme
-        sd = untransformed_params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
-        return Normal(mean, sd)
-
-
-class TransformedLogNormal:
-    def __init__(self):
-        self.dim = 2
-
-    def get_dist(self, untransformed_params):
-        mu = untransformed_params[:, :, :, 0]
-        sigma = untransformed_params[:, :, :, 1].clamp(-6, 10).exp().sqrt()
-        return LogNormal(mu, sigma)
-
-
-class TransformedLogitNormal:
-    def __init__(self, low=0, high=1):
-        self.dim = 2
-        self.low = low
-        self.high = high
-
-    def get_dist(self, untransformed_params):
-        mu = untransformed_params[:, :, :, 0]
-        sigma = untransformed_params[:, :, :, 1].clamp(-6, 10).exp().sqrt()
-        # TODO: fix this using distribution transforms
-        return Normal(mu, sigma)
+from bliss.unconstrained_dists import (
+    TransformedBernoulli,
+    TransformedDiagonalBivariateNormal,
+    TransformedLogitNormal,
+    TransformedLogNormal,
+    TransformedNormal,
+)
 
 
 class DetectionEncoder(pl.LightningModule):
@@ -130,6 +81,7 @@ class DetectionEncoder(pl.LightningModule):
 
     @property
     def dist_param_groups(self):
+        # TODO: override this method in case_studies/strong_lensing to detect strong lenses too
         return {
             "on_prob": TransformedBernoulli(),
             "loc": TransformedDiagonalBivariateNormal(),
@@ -146,6 +98,8 @@ class DetectionEncoder(pl.LightningModule):
         }
 
     def encode_batch(self, batch):
+        # TODO: consider adding multiple log and sigmoid transformed images to this stack,
+        # each with a different offset and scale
         images_with_background = torch.cat((batch["images"], batch["background"]), dim=1)
 
         # setting this to true every time is a hack to make yolo DetectionModel
@@ -190,6 +144,7 @@ class DetectionEncoder(pl.LightningModule):
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
         optimizer = Adam(self.parameters(), **self.optimizer_params)
+        # TODO: tune this more and try the OneCycle learning rate scheduler
         scheduler = MultiStepLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
 
@@ -216,6 +171,8 @@ class DetectionEncoder(pl.LightningModule):
         binary_loss *= true_tile_cat.is_on_array.squeeze(3)
 
         # TODO: compute galsim loss
+        # TODO: consider using a different NN head (but same backbone) for galsim parameters
+        # TODO: explore whether small tiles are helpful for galsim parameter estimation
 
         loss = counter_loss + locs_loss + star_flux_loss + binary_loss
 
@@ -241,6 +198,7 @@ class DetectionEncoder(pl.LightningModule):
 
         # log all metrics
         if log_metrics:
+            # TODO: figure out why these metrics so slow to compute
             metrics = self.metrics(true_full_cat, est_cat)
             for k, v in metrics.items():
                 self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
@@ -253,6 +211,7 @@ class DetectionEncoder(pl.LightningModule):
             wrong_idx = (est_cat.n_sources != true_full_cat.n_sources).nonzero()
             wrong_idx = wrong_idx.view(-1)[:n_samples]
             margin_px = self.tiles_to_crop * self.tile_slen
+            # TODO: clean up the plot_detection interface
             fig = plot_detections(
                 batch["images"], true_full_cat, est_cat, nrows, wrong_idx, margin_px
             )

@@ -16,6 +16,10 @@ paths:
     project: ${paths.root}/case_studies/summer_template
     output: ${paths.project}/output
 
+# TODO: add the ability to use simulate datasets that have been stored on disk
+# TODO: make whether datasets include labels or not that can be used for training
+# TODO: make DC2 dataset with labels and training on it
+# TODO: create some multiband datasets
 datasets:
     sdss_galaxies:
         _target_: bliss.datasets.galsim_galaxies.SingleGalsimGalaxies
