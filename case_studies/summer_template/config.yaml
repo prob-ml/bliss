@@ -13,7 +13,7 @@ paths:
     root: ${oc.env:BLISS_HOME}
     sdss: ${paths.root}/data/sdss
     data: ${paths.root}/data
-    project: ${paths.root}/case_studies/bliss_overhaul
+    project: ${paths.root}/case_studies/summer_template
     output: ${paths.project}/output
 
 datasets:
@@ -167,9 +167,9 @@ training:
     name: "sdss_detection_encoder"
     dataset: ${datasets.simulated}
     model: ${models.detection_encoder}
+    version: null
     n_epochs: 1000
     experiment: default
-    version: null
     save_top_k: 1
     trainer:
         _target_: pytorch_lightning.Trainer

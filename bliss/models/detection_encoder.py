@@ -66,11 +66,11 @@ class TransformedLogitNormal:
         self.dim = 2
         self.low = low
         self.high = high
-        raise NotImplementedError()
 
     def get_dist(self, untransformed_params):
         mu = untransformed_params[:, :, :, 0]
         sigma = untransformed_params[:, :, :, 1].clamp(-6, 10).exp().sqrt()
+        # TODO: fix this using distribution transforms
         return Normal(mu, sigma)
 
 
