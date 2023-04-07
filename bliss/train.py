@@ -29,10 +29,10 @@ def train(cfg: DictConfig):
     pl.seed_everything(cfg.training.seed)
 
     # setup dataset.
-    dataset = instantiate(cfg.training.dataset)
+    simulator = instantiate(cfg.simulator)
 
     # setup model
-    encoder = instantiate(cfg.training.encoder)
+    encoder = instantiate(cfg.encoder)
 
     # setup trainer
     logger = setup_logger(cfg, paths)
@@ -50,12 +50,12 @@ def train(cfg: DictConfig):
 
     # train!
     tic = time_ns()
-    trainer.fit(encoder, datamodule=dataset)
+    trainer.fit(encoder, datamodule=simulator)
     toc = time_ns()
     train_time_sec = (toc - tic) * 1e-9
     # test!
     if cfg.training.testing.file is not None:
-        trainer.test(encoder, datamodule=dataset)
+        trainer.test(encoder, datamodule=simulator)
 
     # Load best weights from checkpoint
     if cfg.training.weight_save_path is not None and (checkpoint_callback is not None):

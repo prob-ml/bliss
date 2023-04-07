@@ -7,13 +7,13 @@ from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
 from bliss.catalog import FullCatalog
-from bliss.datasets.background import ConstantBackground
-from bliss.datasets.galsim_galaxies import GalsimBlends
+from bliss.simulator.background import ConstantBackground
 from bliss.simulator.galsim_decoder import (
     DefaultGalsimPrior,
     FullCatalogDecoder,
     SingleGalsimGalaxyPrior,
 )
+from bliss.simulator.galsim_galaxies import GalsimBlends
 from case_studies.coadds.align import align_single_exposures
 
 

@@ -46,6 +46,8 @@ class SingleGalsimGalaxyPrior:
         self.a_scale = a_scale
         self.a_bulge_disk_ratio = a_bulge_disk_ratio
 
+        # TODO: SingleGalsimGalaxyPrior should take an arbitrary distribution object as an arg,
+        # not the parameters of either a gamma or a uniform distribution
         if self.a_sample == "uniform":
             assert self.min_a_d is not None
             assert self.max_a_d is not None

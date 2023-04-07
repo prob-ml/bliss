@@ -10,10 +10,10 @@ from torch.nn import functional as F
 
 from bliss.catalog import DecalsFullCatalog, FullCatalog, TileCatalog
 from bliss.datasets.sdss import SloanDigitalSkySurvey
-from bliss.datasets.simulated import SimulatedDataset
 from bliss.encoder import Encoder
 from bliss.metrics import CoaddFullCatalog
 from bliss.simulator.decoder import ImageDecoder
+from bliss.simulator.simulated_dataset import SimulatedDataset
 
 
 def reconstruct_scene_at_coordinates(

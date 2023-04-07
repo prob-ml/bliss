@@ -6,7 +6,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from bliss.datasets.background import ConstantBackground
+from bliss.simulator.background import ConstantBackground
 from bliss.simulator.galsim_decoder import SingleGalsimGalaxyDecoder, SingleGalsimGalaxyPrior
 
 

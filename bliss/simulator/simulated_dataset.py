@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
-from bliss.datasets.background import ConstantBackground, SimulatedSDSSBackground
+from bliss.simulator.background import ConstantBackground, SimulatedSDSSBackground
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import ImagePrior
 
