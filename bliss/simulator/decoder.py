@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
@@ -9,11 +9,11 @@ from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.metrics import get_single_galaxy_ellipticities
-from bliss.simulator.galaxy_net import OneCenteredGalaxyAE
-from bliss.simulator.galsim_decoder import SingleGalsimGalaxyDecoder, SingleLensedGalsimGalaxyDecoder
+from bliss.simulator.galsim_decoder import (
+    SingleGalsimGalaxyDecoder,
+    SingleLensedGalsimGalaxyDecoder,
+)
 from bliss.simulator.psf_decoder import PSFDecoder, get_mgrid
-
-GalaxyModel = Union[OneCenteredGalaxyAE, SingleGalsimGalaxyDecoder]
 
 
 class ImageDecoder(pl.LightningModule):
@@ -37,7 +37,7 @@ class ImageDecoder(pl.LightningModule):
         sdss_bands: Tuple[int, ...],
         psf_params_file: str,
         border_padding: Optional[int] = None,
-        galaxy_model: Optional[GalaxyModel] = None,
+        galaxy_model: Optional[SingleGalsimGalaxyDecoder] = None,
         lens_model: Optional[SingleLensedGalsimGalaxyDecoder] = None,
     ):
         """Initializes ImageDecoder.
@@ -442,15 +442,13 @@ class StarPSFDecoder(PSFDecoder):
 
 
 class GalaxyDecoder(nn.Module):
-    def __init__(self, tile_slen, ptile_slen, n_bands, galaxy_model: GalaxyModel):
+    def __init__(self, tile_slen, ptile_slen, n_bands, galaxy_model: SingleGalsimGalaxyDecoder):
         super().__init__()
         self.n_bands = n_bands
         self.tiler = TileRenderer(tile_slen, ptile_slen)
         self.ptile_slen = ptile_slen
 
-        if isinstance(galaxy_model, OneCenteredGalaxyAE):
-            galaxy_decoder = galaxy_model.get_decoder()
-        elif isinstance(galaxy_model, SingleGalsimGalaxyDecoder):
+        if isinstance(galaxy_model, SingleGalsimGalaxyDecoder):
             galaxy_decoder = galaxy_model
         else:
             raise TypeError("galaxy_model is not a valid type.")

@@ -1,6 +1,4 @@
-from pathlib import Path
 from typing import Optional
-from warnings import warn
 
 import numpy as np
 import pytorch_lightning as pl
@@ -10,53 +8,7 @@ from torch import Tensor
 from torch.distributions import Poisson
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.datasets.galsim_galaxies import SingleGalsimGalaxies
-from bliss.simulator.galaxy_net import OneCenteredGalaxyAE
-
-
-class GalaxyPrior:
-    def __init__(
-        self,
-        latents_file: str,
-        n_latent_batches: Optional[int] = None,
-        autoencoder: Optional[OneCenteredGalaxyAE] = None,
-        autoencoder_ckpt: Optional[str] = None,
-        galaxy_dataset: Optional[SingleGalsimGalaxies] = None,
-    ):
-        """Class to sample galaxy latent variables.
-
-        Args:
-            latents_file: Location of previously sampled galaxy latent variables.
-            n_latent_batches: Number of batches for galaxy latent samples.
-            autoencoder: A OneCenteredGalaxyAE object used to generate galaxy latents.
-            autoencoder_ckpt: Location of state_dict for autoencoder (optional).
-            galaxy_dataset: Galaxy dataset for generating galaxy images to encode.
-        """
-        latents_path = Path(latents_file)
-        if latents_path.exists():
-            latents = torch.load(latents_path, "cpu")
-        else:
-            assert galaxy_dataset is not None
-            assert autoencoder_ckpt is not None
-            assert autoencoder is not None
-            autoencoder.load_state_dict(
-                torch.load(autoencoder_ckpt, map_location=torch.device("cpu"))
-            )
-            dataloader = galaxy_dataset.train_dataloader()
-            autoencoder = autoencoder.cuda()
-            if isinstance(galaxy_dataset, SingleGalsimGalaxies):
-                flux_sample = galaxy_dataset.prior.flux_sample
-                a_sample = galaxy_dataset.prior.a_sample
-                warn(f"Creating latents of Galsim galaxies with {flux_sample} flux distribution...")
-                warn(f"Creating latents from Galsim galaxies with {a_sample} size distribution...")
-            latents = autoencoder.generate_latents(dataloader, n_latent_batches)
-            torch.save(latents, latents_path)
-        self.latents = latents
-
-    def sample(self, total_latent, device):
-        self.latents = self.latents.to(device)
-        indices = torch.randint(0, len(self.latents), (total_latent,), device=device)
-        return self.latents[indices]
+from bliss.simulator.galsim_decoder import SingleGalsimGalaxyPrior
 
 
 class ImagePrior(pl.LightningModule):
@@ -89,8 +41,8 @@ class ImagePrior(pl.LightningModule):
         alpha: float,
         prob_galaxy: float,
         prob_lensed_galaxy: float = 0.0,
-        galaxy_prior: Optional[GalaxyPrior] = None,
-        lensed_galaxy_prior: Optional[GalaxyPrior] = None,
+        galaxy_prior: Optional[SingleGalsimGalaxyPrior] = None,
+        lensed_galaxy_prior=None,
     ):
         """Initializes ImagePrior.
 

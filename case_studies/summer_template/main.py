@@ -12,14 +12,16 @@ if not getenv("BLISS_HOME"):
     environ["BLISS_HOME"] = bliss_home.as_posix()
 
 
+def infer(cfg):
+    pass
+
+
 @hydra.main(config_path=".", config_name="config", version_base=None)
 def main(cfg):
     if cfg.mode == "train":
         train(cfg)
     elif cfg.mode == "infer":
-        filepath = cfg.generate.file + ".pt"
-        imagepath = cfg.generate.file + ".png"
-        # infer(cfg.generate.dataset, filepath, imagepath, cfg.generate.n_plots)
+        infer(cfg)
     else:
         raise KeyError
 
