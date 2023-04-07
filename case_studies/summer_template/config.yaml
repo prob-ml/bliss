@@ -24,7 +24,7 @@ paths:
 # TODO: create configs files like this one for DECaLS and DC2
 
 simulator:
-    _target_: bliss.datasets.simulated.SimulatedDataset
+    _target_: bliss.simulator.simulated_dataset.SimulatedDataset
     prior:
         _target_: bliss.simulator.prior.ImagePrior
         n_bands: 1
