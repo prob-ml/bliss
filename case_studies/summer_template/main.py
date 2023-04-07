@@ -4,7 +4,6 @@ from pathlib import Path
 
 import hydra
 
-from bliss.generate import generate
 from bliss.train import train
 
 if not getenv("BLISS_HOME"):
@@ -17,10 +16,10 @@ if not getenv("BLISS_HOME"):
 def main(cfg):
     if cfg.mode == "train":
         train(cfg)
-    elif cfg.mode == "generate":
+    elif cfg.mode == "infer":
         filepath = cfg.generate.file + ".pt"
         imagepath = cfg.generate.file + ".png"
-        generate(cfg.generate.dataset, filepath, imagepath, cfg.generate.n_plots)
+        # infer(cfg.generate.dataset, filepath, imagepath, cfg.generate.n_plots)
     else:
         raise KeyError
 

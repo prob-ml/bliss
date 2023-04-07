@@ -118,7 +118,7 @@ simulator:
             - 2
 
 encoder:
-    _target_: bliss.detection_encoder.DetectionEncoder
+    _target_: bliss.encoder.Encoder
     n_bands: ${simulator.decoder.n_bands}
     tile_slen: ${simulator.decoder.tile_slen}
     tiles_to_crop: 6
