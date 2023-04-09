@@ -160,7 +160,7 @@ training:
 
 inference:
     dataset:
-        _target_: bliss.datasets.sdss.SloanDigitalSkySurvey
+        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
         sdss_dir: ${paths.sdss}
         run: 3900
         camcol: 6
