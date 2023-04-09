@@ -7,7 +7,7 @@ hydra:
     run:
         dir: .
 
-mode: predict
+mode: train
 
 paths:
     root: ${oc.env:BLISS_HOME}
@@ -17,10 +17,14 @@ paths:
     output: ${paths.project}/output
 
 
-# TODO: add the ability to use simulated datasets that have been stored on disk
+# TODO: add the ability to use simulated datasets that have been stored on disk in multiple files
 # TODO: make DC2 dataset/simulator with labels and train with it
 # TODO: create some multiband datasets
 # TODO: create configs files like this one for DECaLS and DC2
+# TODO: match key results from Ismael/Derek's papers
+# TODO: increase bliss version number to 0.2 (use bumpversion, publish, and document workflow)
+# TODO: benchmark galaxy find on new SDSS fields using HST as ground truth
+# TODO: run on Google cloud with A100 chips
 
 simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
@@ -33,7 +37,7 @@ simulator:
         f_min: 622.0
         f_max: 1e6
         alpha: 0.43
-        prob_galaxy: 0.30
+        prob_galaxy: 0.3
         galaxy_prior:
             _target_: bliss.simulator.galsim_galaxies.SingleGalsimGalaxyPrior
             flux_sample: "pareto"
@@ -52,8 +56,7 @@ simulator:
         ptile_slen: 52
         border_padding: 24
         psf_slen: 25
-        sdss_bands:
-            - 2
+        sdss_bands: [2]
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
         galaxy_model:
             _target_: bliss.simulator.galsim_galaxies.SingleGalsimGalaxyDecoder
@@ -62,24 +65,22 @@ simulator:
             pixel_scale: 0.396
             psf_params_file: ${simulator.decoder.psf_params_file}
             psf_slen: 25
-            sdss_bands:
-                - 2
+            sdss_bands: [2]
     background:
         _target_: bliss.simulator.background.SimulatedSDSSBackground
         sdss_dir: ${paths.sdss}
         run: 94
         camcol: 1
         field: 12
-        bands:
-            - 2
+        bands: [2]
     n_tiles_h: 8
     n_tiles_w: 8
     n_batches: 128
     batch_size: 64
-    generate_device: "cuda:0"
     fix_validation_set: true
-    valid_n_batches: 10  #256
-    num_workers: 0 # TODO: get 5 workers running and achieve ~6 training iterations/sec
+    valid_n_batches: 10  # 256
+    generate_device: "cpu"
+    num_workers: 16  # can only use > 0 workers if simulator is running on the cpu
 
 encoder:
     _target_: bliss.encoder.Encoder
