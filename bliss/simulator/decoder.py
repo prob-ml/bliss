@@ -671,7 +671,7 @@ class ImageDecoder(pl.LightningModule):
         return folded_image[:, :, crop_idx : (-crop_idx or None), crop_idx : (-crop_idx or None)]
 
 
-class FullCatalogDecoder:
+class GalsimImageDecoder:
     def __init__(self, single_galaxy_decoder: GalsimGalaxyDecoder, slen: int, bp: int) -> None:
         self.single_galaxy_decoder = single_galaxy_decoder
         self.slen = slen

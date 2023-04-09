@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from bliss.catalog import FullCatalog
 from bliss.simulator.background import ConstantBackground
-from bliss.simulator.decoder import DefaultGalsimPrior, FullCatalogDecoder, GalaxyPrior
+from bliss.simulator.decoder import DefaultGalsimPrior, GalaxyPrior, GalsimImageDecoder
 from case_studies.coadds.align import align_single_exposures
 
 
@@ -59,7 +59,7 @@ class CoaddDefaultGalsimPrior(DefaultGalsimPrior):
         return d
 
 
-class CoaddFullCatalogDecoder(FullCatalogDecoder):
+class CoaddFullCatalogDecoder(GalsimImageDecoder):
     def render_catalog(self, full_cat: FullCatalog, dithers: Tensor) -> Tuple[Tensor, Tensor]:
         size = self.slen + 2 * self.bp
         images = torch.zeros(len(dithers), 1, size, size)
