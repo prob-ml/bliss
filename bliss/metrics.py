@@ -14,8 +14,7 @@ from torch import Tensor
 from torchmetrics import Metric
 from tqdm import tqdm
 
-from bliss.catalog import FullCatalog
-from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
+from bliss.catalog import FullCatalog, column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
 
 
 class DetectionMetrics(Metric):

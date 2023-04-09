@@ -1,20 +1,15 @@
 import math
 from collections import UserDict
 from copy import copy
-from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+import numpy as np
 import torch
-from astropy.io import fits
-from astropy.table import Table
-from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from matplotlib.pyplot import Axes
 from torch import Tensor
 from torch.nn import functional as F
 from tqdm import tqdm
-
-from bliss.datasets.sdss import SloanDigitalSkySurvey, column_to_tensor, convert_flux_to_mag
 
 
 class TileCatalog(UserDict):
@@ -522,167 +517,6 @@ class FullCatalog(UserDict):
         ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
 
 
-class PhotoFullCatalog(FullCatalog):
-    """Class for the SDSS PHOTO Catalog.
-
-    Some resources:
-    - https://www.sdss.org/dr12/algorithms/classify/
-    - https://www.sdss.org/dr12/algorithms/resolve/
-    """
-
-    @classmethod
-    def from_file(cls, sdss_path, run, camcol, field, band):
-        sdss_path = Path(sdss_path)
-        camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
-        po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
-        po_fits = fits.getdata(po_path)
-        objc_type = column_to_tensor(po_fits, "objc_type")
-        thing_id = column_to_tensor(po_fits, "thing_id")
-        ras = column_to_tensor(po_fits, "ra")
-        decs = column_to_tensor(po_fits, "dec")
-        galaxy_bools = (objc_type == 3) & (thing_id != -1)
-        star_bools = (objc_type == 6) & (thing_id != -1)
-        star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
-        star_mags = column_to_tensor(po_fits, "psfmag") * star_bools.reshape(-1, 1)
-        galaxy_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
-        galaxy_mags = column_to_tensor(po_fits, "cmodelmag") * galaxy_bools.reshape(-1, 1)
-        fluxes = star_fluxes + galaxy_fluxes
-        mags = star_mags + galaxy_mags
-        keep = galaxy_bools | star_bools
-        galaxy_bools = galaxy_bools[keep]
-        star_bools = star_bools[keep]
-        ras = ras[keep]
-        decs = decs[keep]
-        fluxes = fluxes[keep][:, band]
-        mags = mags[keep][:, band]
-
-        sdss = SloanDigitalSkySurvey(sdss_path, run, camcol, fields=(field,), bands=(band,))
-        wcs: WCS = sdss[0]["wcs"][0]
-
-        # get pixel coordinates
-        pts = []
-        prs = []
-        for ra, dec in zip(ras, decs):
-            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
-            pts.append(float(pt))
-            prs.append(float(pr))
-        pts = torch.tensor(pts) + 0.5  # For consistency with BLISS
-        prs = torch.tensor(prs) + 0.5
-        plocs = torch.stack((prs, pts), dim=-1)
-        nobj = plocs.shape[0]
-
-        d = {
-            "plocs": plocs.reshape(1, nobj, 2),
-            "n_sources": torch.tensor((nobj,)),
-            "galaxy_bools": galaxy_bools.reshape(1, nobj, 1).float(),
-            "star_bools": star_bools.reshape(1, nobj, 1).float(),
-            "fluxes": fluxes.reshape(1, nobj, 1),
-            "mags": mags.reshape(1, nobj, 1),
-            "ra": ras.reshape(1, nobj, 1),
-            "dec": decs.reshape(1, nobj, 1),
-        }
-
-        height = sdss[0]["image"].shape[1]
-        width = sdss[0]["image"].shape[2]
-
-        return cls(height, width, d)
-
-
-class DecalsFullCatalog(FullCatalog):
-    """Class for the Decals Sweep Tractor Catalog.
-
-    Some resources:
-    - https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/south/sweep/9.0/
-    - https://www.legacysurvey.org/dr9/files/#sweep-catalogs-region-sweep
-    - https://www.legacysurvey.org/dr5/description/#photometry
-    - https://www.legacysurvey.org/dr9/bitmasks/
-    """
-
-    @staticmethod
-    def _flux_to_mag(flux):
-        return 22.5 - 2.5 * torch.log10(flux)
-
-    @classmethod
-    def from_file(
-        cls,
-        decals_cat_path,
-        wcs: WCS,
-        hlim: Tuple[int, int],  # in degrees
-        wlim: Tuple[int, int],  # in degrees
-        band: str = "r",
-        mag_max=23,
-    ):
-        assert hlim[0] == wlim[0]
-        catalog_path = Path(decals_cat_path)
-        table = Table.read(catalog_path, format="fits")
-        band = band.capitalize()
-
-        ra_lim, dec_lim = wcs.all_pix2world(wlim, hlim, 0)
-        bitmask = 0b0011010000000001  # noqa: WPS339
-
-        objid = column_to_tensor(table, "OBJID")
-        objc_type = table["TYPE"].data.astype(str)
-        bits = table["MASKBITS"].data.astype(int)
-        is_galaxy = torch.from_numpy(
-            (objc_type == "DEV")
-            | (objc_type == "REX")
-            | (objc_type == "EXP")
-            | (objc_type == "SER")
-        )
-        is_star = torch.from_numpy(objc_type == "PSF")
-        ra = column_to_tensor(table, "RA")
-        dec = column_to_tensor(table, "DEC")
-        flux = column_to_tensor(table, f"FLUX_{band}")
-        mask = torch.from_numpy((bits & bitmask) == 0).bool()
-
-        galaxy_bool = is_galaxy & mask & (flux > 0)
-        star_bool = is_star & mask & (flux > 0)
-
-        # get pixel coordinates
-        pt, pr = wcs.all_world2pix(ra, dec, 0)  # pixels
-        pt = torch.tensor(pt)
-        pr = torch.tensor(pr)
-        ploc = torch.stack((pr, pt), dim=-1)
-
-        # filter on locations
-        # first lims imposed on frame
-        keep_coord = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec > dec_lim[0]) & (dec < dec_lim[1])
-        # then, SDSS saturation
-        regions = [(1200, 1360, 1700, 1900), (280, 400, 1220, 1320)]
-        keep_sat = torch.ones(len(ra)).bool()
-        for lim in regions:
-            keep_sat = keep_sat & ((pr < lim[0]) | (pr > lim[1]) | (pt < lim[2]) | (pt > lim[3]))
-        keep = (galaxy_bool | star_bool) & keep_coord & keep_sat
-
-        # filter quantities
-        objid = objid[keep]
-        galaxy_bool = galaxy_bool[keep]
-        star_bool = star_bool[keep]
-        ra = ra[keep]
-        dec = dec[keep]
-        flux = flux[keep]
-        mag = cls._flux_to_mag(flux)
-        ploc = ploc[keep, :]
-        nobj = ploc.shape[0]
-
-        d = {
-            "objid": objid.reshape(1, nobj, 1),
-            "ra": ra.reshape(1, nobj, 1),
-            "dec": dec.reshape(1, nobj, 1),
-            "plocs": ploc.reshape(1, nobj, 2) - hlim[0] + 0.5,  # BLISS consistency
-            "n_sources": torch.tensor((nobj,)),
-            "galaxy_bools": galaxy_bool.reshape(1, nobj, 1).float(),
-            "star_bools": star_bool.reshape(1, nobj, 1).float(),
-            "fluxes": flux.reshape(1, nobj, 1),
-            "mags": mag.reshape(1, nobj, 1),
-        }
-
-        height = hlim[1] - hlim[0]
-        width = wlim[1] - wlim[0]
-        full_cat = cls(height, width, d)
-        return full_cat.apply_param_bin("mags", 0, mag_max)
-
-
 def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tensor:
     """Divides a batch of full images into padded tiles.
 
@@ -753,3 +587,30 @@ def get_is_on_from_n_sources(n_sources, max_sources):
         is_on_array[..., i] = n_sources > i
 
     return is_on_array
+
+
+def convert_mag_to_flux(mag: Tensor, nelec_per_nmgy=987.31) -> Tensor:
+    # default corresponds to average value of columns for run 94, camcol 1, field 12
+    return 10 ** ((22.5 - mag) / 2.5) * nelec_per_nmgy
+
+
+def convert_flux_to_mag(flux: Tensor, nelec_per_nmgy=987.31) -> Tensor:
+    # default corresponds to average value of columns for run 94, camcol 1, field 12
+    return 22.5 - 2.5 * torch.log10(flux / nelec_per_nmgy)
+
+
+def column_to_tensor(table, colname):
+    dtypes = {
+        np.dtype(">i2"): int,
+        np.dtype(">i4"): int,
+        np.dtype(">i8"): int,
+        np.dtype("bool"): bool,
+        np.dtype(">f4"): np.float32,
+        np.dtype(">f8"): np.float32,
+        np.dtype("float32"): np.float32,
+        np.dtype("float64"): np.dtype("float64"),
+    }
+    x = np.array(table[colname])
+    dtype = dtypes[x.dtype]
+    x = x.astype(dtype)
+    return torch.from_numpy(x)

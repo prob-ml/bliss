@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from bliss.datasets.sdss import SloanDigitalSkySurvey
+from bliss.surveys.sdss import SloanDigitalSkySurvey
 
 
 # TODO: this test generates lots of warnings...we should fix what we can a suppress the rest

@@ -5,7 +5,8 @@ import torch
 from einops import rearrange
 from torch import Tensor, nn
 
-from bliss.datasets.sdss import SloanDigitalSkySurvey
+# TODO: rewrite so this module so that it does not depend on any specific survey
+from bliss.surveys.sdss import SloanDigitalSkySurvey
 
 
 class ConstantBackground(nn.Module):

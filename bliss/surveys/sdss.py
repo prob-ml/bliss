@@ -7,18 +7,9 @@ from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
 from einops import rearrange
 from scipy.interpolate import RegularGridInterpolator
-from torch import Tensor
 from torch.utils.data import Dataset
 
-
-def convert_mag_to_flux(mag: Tensor, nelec_per_nmgy=987.31) -> Tensor:
-    # default corresponds to average value of columns for run 94, camcol 1, field 12
-    return 10 ** ((22.5 - mag) / 2.5) * nelec_per_nmgy
-
-
-def convert_flux_to_mag(flux: Tensor, nelec_per_nmgy=987.31) -> Tensor:
-    # default corresponds to average value of columns for run 94, camcol 1, field 12
-    return 22.5 - 2.5 * torch.log10(flux / nelec_per_nmgy)
+from bliss.catalog import FullCatalog, column_to_tensor
 
 
 class SloanDigitalSkySurvey(Dataset):
@@ -123,18 +114,67 @@ class SloanDigitalSkySurvey(Dataset):
         }
 
 
-def column_to_tensor(table, colname):
-    dtypes = {
-        np.dtype(">i2"): int,
-        np.dtype(">i4"): int,
-        np.dtype(">i8"): int,
-        np.dtype("bool"): bool,
-        np.dtype(">f4"): np.float32,
-        np.dtype(">f8"): np.float32,
-        np.dtype("float32"): np.float32,
-        np.dtype("float64"): np.dtype("float64"),
-    }
-    x = np.array(table[colname])
-    dtype = dtypes[x.dtype]
-    x = x.astype(dtype)
-    return torch.from_numpy(x)
+class PhotoFullCatalog(FullCatalog):
+    """Class for the SDSS PHOTO Catalog.
+
+    Some resources:
+    - https://www.sdss.org/dr12/algorithms/classify/
+    - https://www.sdss.org/dr12/algorithms/resolve/
+    """
+
+    @classmethod
+    def from_file(cls, sdss_path, run, camcol, field, band):
+        sdss_path = Path(sdss_path)
+        camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
+        po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+        po_fits = fits.getdata(po_path)
+        objc_type = column_to_tensor(po_fits, "objc_type")
+        thing_id = column_to_tensor(po_fits, "thing_id")
+        ras = column_to_tensor(po_fits, "ra")
+        decs = column_to_tensor(po_fits, "dec")
+        galaxy_bools = (objc_type == 3) & (thing_id != -1)
+        star_bools = (objc_type == 6) & (thing_id != -1)
+        star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
+        star_mags = column_to_tensor(po_fits, "psfmag") * star_bools.reshape(-1, 1)
+        galaxy_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
+        galaxy_mags = column_to_tensor(po_fits, "cmodelmag") * galaxy_bools.reshape(-1, 1)
+        fluxes = star_fluxes + galaxy_fluxes
+        mags = star_mags + galaxy_mags
+        keep = galaxy_bools | star_bools
+        galaxy_bools = galaxy_bools[keep]
+        star_bools = star_bools[keep]
+        ras = ras[keep]
+        decs = decs[keep]
+        fluxes = fluxes[keep][:, band]
+        mags = mags[keep][:, band]
+
+        sdss = SloanDigitalSkySurvey(sdss_path, run, camcol, fields=(field,), bands=(band,))
+        wcs: WCS = sdss[0]["wcs"][0]
+
+        # get pixel coordinates
+        pts = []
+        prs = []
+        for ra, dec in zip(ras, decs):
+            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
+            pts.append(float(pt))
+            prs.append(float(pr))
+        pts = torch.tensor(pts) + 0.5  # For consistency with BLISS
+        prs = torch.tensor(prs) + 0.5
+        plocs = torch.stack((prs, pts), dim=-1)
+        nobj = plocs.shape[0]
+
+        d = {
+            "plocs": plocs.reshape(1, nobj, 2),
+            "n_sources": torch.tensor((nobj,)),
+            "galaxy_bools": galaxy_bools.reshape(1, nobj, 1).float(),
+            "star_bools": star_bools.reshape(1, nobj, 1).float(),
+            "fluxes": fluxes.reshape(1, nobj, 1),
+            "mags": mags.reshape(1, nobj, 1),
+            "ra": ras.reshape(1, nobj, 1),
+            "dec": decs.reshape(1, nobj, 1),
+        }
+
+        height = sdss[0]["image"].shape[1]
+        width = sdss[0]["image"].shape[2]
+
+        return cls(height, width, d)

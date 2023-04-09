@@ -9,10 +9,7 @@ from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.metrics import get_single_galaxy_ellipticities
-from bliss.simulator.galsim_decoder import (
-    SingleGalsimGalaxyDecoder,
-    SingleLensedGalsimGalaxyDecoder,
-)
+from bliss.simulator.galsim_decoder import SingleGalsimGalaxyDecoder
 from bliss.simulator.psf_decoder import PSFDecoder, get_mgrid
 
 
@@ -38,7 +35,6 @@ class ImageDecoder(pl.LightningModule):
         psf_params_file: str,
         border_padding: Optional[int] = None,
         galaxy_model: Optional[SingleGalsimGalaxyDecoder] = None,
-        lens_model: Optional[SingleLensedGalsimGalaxyDecoder] = None,
     ):
         """Initializes ImageDecoder.
 
@@ -51,7 +47,6 @@ class ImageDecoder(pl.LightningModule):
             psf_params_file: Path where point-spread-function (PSF) data is located.
             border_padding: Size of border around the final image where sources will not be present.
             galaxy_model: Specifies how galaxy shapes are decoded from latent representation.
-            lens_model: Specifies how lensed galaxy shapes are decoded from latent representation.
         """
         super().__init__()
         self.n_bands = n_bands
@@ -76,16 +71,6 @@ class ImageDecoder(pl.LightningModule):
                 self.ptile_slen,
                 self.n_bands,
                 galaxy_model,
-            )
-
-        if lens_model is None:
-            self.lensed_galaxy_tile_decoder: Optional[LensedGalaxyTileDecoder] = None
-        else:
-            self.lensed_galaxy_tile_decoder = LensedGalaxyTileDecoder(
-                self.tile_slen,
-                self.ptile_slen,
-                self.n_bands,
-                lens_model,
             )
 
     def render_images(self, tile_catalog: TileCatalog) -> Tensor:
@@ -219,7 +204,6 @@ class ImageDecoder(pl.LightningModule):
         centered_stars = self.star_tile_decoder.forward(star_fluxes, star_bools, self.ptile_slen)
         stars = self.tiler.forward(locs, centered_stars)
         galaxies = torch.zeros(img_shape, device=locs.device)
-        lensed_galaxies = torch.zeros(img_shape, device=locs.device)
 
         if self.galaxy_tile_decoder is not None:
             centered_galaxies = self.galaxy_tile_decoder.forward(
@@ -227,17 +211,7 @@ class ImageDecoder(pl.LightningModule):
             )
             galaxies = self.tiler.forward(locs, centered_galaxies)
 
-        if self.lensed_galaxy_tile_decoder is not None:
-            lensed_galaxy_bools = rearrange(
-                tile_catalog["lensed_galaxy_bools"], "b nth ntw s 1 -> (b nth ntw) s 1"
-            )
-            lensed_galaxy_bools *= galaxy_bools * is_on_array
-            centered_lensed_galaxies = self.lensed_galaxy_tile_decoder.forward(
-                tile_catalog["lens_params"], lensed_galaxy_bools
-            )
-            lensed_galaxies = self.tiler.forward(locs, centered_lensed_galaxies)
-
-        return lensed_galaxies.view(img_shape) + galaxies.view(img_shape) + stars.view(img_shape)
+        return galaxies.view(img_shape) + stars.view(img_shape)
 
     def _validate_border_padding(self, border_padding):
         # Border Padding
@@ -490,69 +464,6 @@ class GalaxyDecoder(nn.Module):
         return gal.view(gal_shape)
 
     def size_galaxy(self, galaxy: Tensor):
-        n_galaxies, n_bands, h, w = galaxy.shape
-        assert h == w
-        assert (h % 2) == 1, "dimension of galaxy image should be odd"
-        assert n_bands == self.n_bands
-        galaxy = rearrange(galaxy, "n c h w -> (n c) h w")
-        sized_galaxy = fit_source_to_ptile(galaxy, self.ptile_slen)
-        outsize = sized_galaxy.shape[-1]
-        return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
-
-
-class LensedGalaxyTileDecoder(nn.Module):
-    def __init__(self, tile_slen, ptile_slen, n_bands, lens_model: SingleLensedGalsimGalaxyDecoder):
-        super().__init__()
-        self.n_bands = n_bands
-        self.tiler = TileRenderer(tile_slen, ptile_slen)
-        self.ptile_slen = ptile_slen
-        self.lens_decoder = lens_model
-
-    def forward(self, lens_params, lensed_galaxy_bools):
-        """Renders galaxy tile from locations and galaxy parameters."""
-        # max_sources obtained from locs, allows for more flexibility when rendering.
-        n_ptiles = lensed_galaxy_bools.shape[0]
-        max_sources = lensed_galaxy_bools.shape[1]
-
-        n_lens_params = lens_params.shape[-1]
-        lens_params = lens_params.view(n_ptiles, max_sources, n_lens_params)
-        assert lens_params.shape[0] == lensed_galaxy_bools.shape[0] == n_ptiles
-        assert lens_params.shape[1] == lensed_galaxy_bools.shape[1] == max_sources
-        assert lensed_galaxy_bools.shape[2] == 1
-
-        single_lensed_galaxies = self._render_single_lensed_galaxies(
-            lens_params, lensed_galaxy_bools
-        )
-        single_lensed_galaxies *= lensed_galaxy_bools.unsqueeze(-1).unsqueeze(-1)
-        return single_lensed_galaxies
-
-    def _render_single_lensed_galaxies(self, lens_params, lensed_galaxy_bools):
-        # flatten parameters
-        n_galaxy_params = lens_params.shape[-1]
-        z_lens = lens_params.view(-1, n_galaxy_params)
-        b_lens = lensed_galaxy_bools.flatten()
-
-        # allocate memory
-        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        lensed_gal = torch.zeros(
-            z_lens.shape[0], self.n_bands, slen, slen, device=lens_params.device
-        )
-
-        # forward only galaxies that are on!
-        # no background
-        lensed_gal_on = self.lens_decoder(z_lens[b_lens == 1])
-
-        # size the galaxy (either trims or crops to the size of ptile)
-        lensed_gal_on = self.size_lens(lensed_gal_on)
-
-        # set galaxies
-        lensed_gal[b_lens == 1] = lensed_gal_on
-
-        batchsize = lens_params.shape[0]
-        gal_shape = (batchsize, -1, self.n_bands, lensed_gal.shape[-1], lensed_gal.shape[-1])
-        return lensed_gal.view(gal_shape)
-
-    def size_lens(self, galaxy: Tensor):
         n_galaxies, n_bands, h, w = galaxy.shape
         assert h == w
         assert (h % 2) == 1, "dimension of galaxy image should be odd"
