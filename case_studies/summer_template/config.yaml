@@ -17,7 +17,7 @@ paths:
     output: ${paths.project}/output
 
 
-# TODO: add the ability to use simulated datasets that have been stored on disk in multiple files
+# TODO: add the ability to use simulated galaxies that have been stored on disk
 # TODO: make DC2 dataset/simulator with labels and train with it
 # TODO: create some multiband datasets
 # TODO: create configs files like this one for DECaLS and DC2
@@ -39,7 +39,7 @@ simulator:
         alpha: 0.43
         prob_galaxy: 0.3
         galaxy_prior:
-            _target_: bliss.simulator.galsim_galaxies.SingleGalsimGalaxyPrior
+            _target_: bliss.simulator.galsim_decoder.SingleGalsimGalaxyPrior
             flux_sample: "pareto"
             min_flux: 622.0
             max_flux: 1e6
@@ -59,7 +59,7 @@ simulator:
         sdss_bands: [2]
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
         galaxy_model:
-            _target_: bliss.simulator.galsim_galaxies.SingleGalsimGalaxyDecoder
+            _target_: bliss.simulator.galsim_decoder.SingleGalsimGalaxyDecoder
             n_bands: 1
             slen: 53
             pixel_scale: 0.396

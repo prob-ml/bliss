@@ -416,16 +416,11 @@ class StarPSFDecoder(PSFDecoder):
 
 
 class GalaxyDecoder(nn.Module):
-    def __init__(self, tile_slen, ptile_slen, n_bands, galaxy_model: SingleGalsimGalaxyDecoder):
+    def __init__(self, tile_slen, ptile_slen, n_bands, galaxy_decoder: SingleGalsimGalaxyDecoder):
         super().__init__()
         self.n_bands = n_bands
         self.tiler = TileRenderer(tile_slen, ptile_slen)
         self.ptile_slen = ptile_slen
-
-        if isinstance(galaxy_model, SingleGalsimGalaxyDecoder):
-            galaxy_decoder = galaxy_model
-        else:
-            raise TypeError("galaxy_model is not a valid type.")
         self.galaxy_decoder = galaxy_decoder
 
     def forward(self, galaxy_params: Tensor, galaxy_bools: Tensor):

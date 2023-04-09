@@ -236,18 +236,6 @@ class DefaultGalsimPrior:
         }
 
 
-class BCGPrior(DefaultGalsimPrior):
-    def sample(self) -> Dict[str, Tensor]:
-        """Returns a single batch of source parameters where brightest galaxy is centered."""
-        sample = super().sample()
-        n_sources = sample.pop("n_sources")
-        flux = sample["galaxy_params"][:, 0].reshape(-1)
-        idx_order = torch.argsort(-flux)
-        reordered_sample = {k: v[idx_order] for k, v in sample.items()}
-        reordered_sample["locs"][0, :] = 0.5 + _uniform(0.015, 0.03, 2)  # slight off-center.
-        return {"n_sources": n_sources, **reordered_sample}
-
-
 class FullCatalogDecoder:
     def __init__(
         self, single_galaxy_decoder: SingleGalsimGalaxyDecoder, slen: int, bp: int
