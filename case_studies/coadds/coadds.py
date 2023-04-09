@@ -8,12 +8,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from bliss.catalog import FullCatalog
 from bliss.simulator.background import ConstantBackground
-from bliss.simulator.galsim_decoder import (
-    DefaultGalsimPrior,
-    FullCatalogDecoder,
-    SingleGalsimGalaxyPrior,
-)
-from bliss.simulator.galsim_galaxies import GalsimBlends
+from bliss.simulator.decoder import DefaultGalsimPrior, FullCatalogDecoder, GalaxyPrior
 from case_studies.coadds.align import align_single_exposures
 
 
@@ -41,7 +36,7 @@ def _linear_coadd(aligned_images, weight):
 class CoaddDefaultGalsimPrior(DefaultGalsimPrior):
     def __init__(
         self,
-        single_galaxy_prior: SingleGalsimGalaxyPrior,
+        single_galaxy_prior: GalaxyPrior,
         max_n_sources: int,
         mean_sources: float,
         max_shift: float,

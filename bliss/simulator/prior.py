@@ -1,5 +1,6 @@
 from typing import Optional
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
@@ -7,7 +8,48 @@ from torch import Tensor
 from torch.distributions import Poisson
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.simulator.galsim_decoder import SingleGalsimGalaxyPrior
+
+
+class GalsimGalaxyPrior:
+    dim_latents = 7
+
+    def __init__(
+        self,
+        min_flux: float,
+        max_flux: float,
+        alpha: float,
+        a_concentration: float,
+        a_loc: float,
+        a_scale: float,
+        a_bulge_disk_ratio: float,
+    ) -> None:
+        self.min_flux = min_flux
+        self.max_flux = max_flux
+        self.alpha = alpha
+
+        self.a_concentration = a_concentration
+        self.a_loc = a_loc
+        self.a_scale = a_scale
+        self.a_bulge_disk_ratio = a_bulge_disk_ratio
+
+    def sample(self, total_latent, device="cpu"):
+        total_flux = _draw_pareto(self.alpha, self.min_flux, self.max_flux, n_samples=total_latent)
+
+        disk_frac = _uniform(0, 1, n_samples=total_latent)
+        beta_radians = _uniform(0, 2 * np.pi, n_samples=total_latent)
+        disk_q = _uniform(0, 1, n_samples=total_latent)
+        bulge_q = _uniform(0, 1, n_samples=total_latent)
+
+        disk_a = _gamma(self.a_concentration, self.a_loc, self.a_scale, n_samples=total_latent)
+        bulge_a = _gamma(
+            self.a_concentration,
+            self.a_loc / self.a_bulge_disk_ratio,
+            self.a_scale / self.a_bulge_disk_ratio,
+            n_samples=total_latent,
+        )
+
+        param_lst = [total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
+        return torch.stack(param_lst, dim=1).to(device)
 
 
 class ImagePrior(pl.LightningModule):
@@ -40,7 +82,7 @@ class ImagePrior(pl.LightningModule):
         alpha: float,
         prob_galaxy: float,
         prob_lensed_galaxy: float = 0.0,
-        galaxy_prior: Optional[SingleGalsimGalaxyPrior] = None,
+        galaxy_prior: Optional[GalsimGalaxyPrior] = None,
         lensed_galaxy_prior=None,
     ):
         """Initializes ImagePrior.
@@ -170,21 +212,6 @@ class ImagePrior(pl.LightningModule):
 
         return galaxy_bools, star_bools
 
-    def _sample_n_lenses(self, is_on_array, galaxy_bools):
-        batch_size, n_tiles_h, n_tiles_w, max_sources = is_on_array.shape
-        uniform = torch.rand(
-            batch_size,
-            n_tiles_h,
-            n_tiles_w,
-            max_sources,
-            1,
-            device=is_on_array.device,
-        )
-        # currently only support lensing where galaxy is present
-        lensed_galaxy_bools = uniform < self.prob_lensed_galaxy
-        lensed_galaxy_bools = lensed_galaxy_bools * galaxy_bools * is_on_array.unsqueeze(-1)
-        return lensed_galaxy_bools.float()
-
     def _sample_star_fluxes(self, star_bools: Tensor):
         """Samples star fluxes.
 
@@ -246,13 +273,20 @@ class ImagePrior(pl.LightningModule):
         )
         return galaxy_params * galaxy_bools
 
-    def _sample_param_from_dist(self, shape, n, dist, device):
-        batch_size, n_tiles_h, n_tiles_w, max_sources = shape
-        return dist(
-            batch_size,
-            n_tiles_h,
-            n_tiles_w,
-            max_sources,
-            n,
-            device=device,
-        )
+
+def _uniform(a, b, n_samples=1) -> Tensor:
+    # uses pytorch to return a single float ~ U(a, b)
+    return (a - b) * torch.rand(n_samples) + b
+
+
+def _draw_pareto(alpha, min_x, max_x, n_samples=1) -> Tensor:
+    # draw pareto conditioned on being less than f_max
+    assert alpha is not None
+    u_max = 1 - (min_x / max_x) ** alpha
+    uniform_samples = torch.rand(n_samples) * u_max
+    return min_x / (1.0 - uniform_samples) ** (1 / alpha)
+
+
+def _gamma(concentration, loc, scale, n_samples=1):
+    x = torch.distributions.Gamma(concentration, rate=1.0).sample((n_samples,))
+    return x * scale + loc

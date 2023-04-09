@@ -6,11 +6,10 @@ import torch
 from einops import rearrange
 from torch import Tensor, nn
 
-from bliss.simulator.decoder import TileRenderer, fit_source_to_ptile
-from bliss.simulator.galsim_decoder import SingleGalsimGalaxyDecoder
+from bliss.simulator.decoder import GalsimGalaxyDecoder, TileRenderer, fit_source_to_ptile
 
 
-class SingleLensedGalsimGalaxyDecoder(SingleGalsimGalaxyDecoder):
+class SingleLensedGalsimGalaxyDecoder(GalsimGalaxyDecoder):
     def __init__(
         self,
         slen: int,
@@ -209,6 +208,21 @@ class LensedGalaxyTileDecoder(nn.Module):
         outsize = sized_galaxy.shape[-1]
         return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
 
+    def _sample_n_lenses(self, is_on_array, galaxy_bools):
+        batch_size, n_tiles_h, n_tiles_w, max_sources = is_on_array.shape
+        uniform = torch.rand(
+            batch_size,
+            n_tiles_h,
+            n_tiles_w,
+            max_sources,
+            1,
+            device=is_on_array.device,
+        )
+        # currently only support lensing where galaxy is present
+        lensed_galaxy_bools = uniform < self.prob_lensed_galaxy
+        lensed_galaxy_bools = lensed_galaxy_bools * galaxy_bools * is_on_array.unsqueeze(-1)
+        return lensed_galaxy_bools.float()
+
     def _sample_lens_params(self, lensed_galaxy_bools):
         """Sample latent galaxy params from GalaxyPrior object."""
         base_shape = list(lensed_galaxy_bools.shape)[:-1]
@@ -230,3 +244,14 @@ class LensedGalaxyTileDecoder(nn.Module):
             lens_params[..., 3:4] = ell_factors * torch.cos(beta_radians)
             lens_params[..., 4:5] = ell_factors * torch.sin(beta_radians)
         return lens_params * lensed_galaxy_bools
+
+    def _sample_param_from_dist(self, shape, n, dist, device):
+        batch_size, n_tiles_h, n_tiles_w, max_sources = shape
+        return dist(
+            batch_size,
+            n_tiles_h,
+            n_tiles_w,
+            max_sources,
+            n,
+            device=device,
+        )

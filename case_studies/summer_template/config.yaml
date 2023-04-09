@@ -39,12 +39,10 @@ simulator:
         alpha: 0.43
         prob_galaxy: 0.3
         galaxy_prior:
-            _target_: bliss.simulator.galsim_decoder.SingleGalsimGalaxyPrior
-            flux_sample: "pareto"
+            _target_: bliss.simulator.prior.GalsimGalaxyPrior
             min_flux: 622.0
             max_flux: 1e6
             alpha: 0.47
-            a_sample: "gamma"
             a_concentration: 0.39330758068481686
             a_loc: 0.8371888967872619
             a_scale: 4.432725319432478
@@ -59,7 +57,7 @@ simulator:
         sdss_bands: [2]
         psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
         galaxy_model:
-            _target_: bliss.simulator.galsim_decoder.SingleGalsimGalaxyDecoder
+            _target_: bliss.simulator.decoder.GalsimGalaxyDecoder
             n_bands: 1
             slen: 53
             pixel_scale: 0.396
