@@ -7,7 +7,7 @@ hydra:
     run:
         dir: .
 
-mode: train
+mode: predict
 
 paths:
     root: ${oc.env:BLISS_HOME}
@@ -99,6 +99,7 @@ encoder:
         depth_multiple: 1.0  # model depth multiple
         width_multiple: 1.0  # layer channel multiple
         anchors:
+            # TODO: investigate whether other size anchors would work better
             - [4, 4]  # P3/8
         backbone: [
             # [from, number, module, args]
@@ -157,6 +158,12 @@ training:
     seed: 42
 
 inference:
-    dataset: ${datasets.sdss_frame}
+    dataset:
+        _target_: bliss.datasets.sdss.SloanDigitalSkySurvey
+        sdss_dir: ${paths.sdss}
+        run: 3900
+        camcol: 6
+        fields: [269]
+        bands: [2]
     encoder: ${encoder}
     weight_save_path: ${paths.project}/models/${training.name}.pt
