@@ -4,12 +4,14 @@ from bliss.catalog import FullCatalog
 from bliss.metrics import ClassificationMetrics, DetectionMetrics
 
 
+# TODO: this test generates lots of warnings...we should fix what we can a suppress the rest
 def test_metrics():
     slen = 50
     slack = 1.0
     detect = DetectionMetrics(slack)
     classify = ClassificationMetrics(slack)
 
+    # TODO: reformat this code...it's too long
     true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]]).reshape(2, 2, 2)
     est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]]).reshape(
         2, 2, 2
@@ -17,24 +19,19 @@ def test_metrics():
     true_galaxy_bools = torch.tensor([[1, 0], [1, 1]]).reshape(2, 2, 1)
     est_galaxy_bools = torch.tensor([[0, 1], [1, 0]]).reshape(2, 2, 1)
 
-    true_params = FullCatalog(
-        slen,
-        slen,
-        {
-            "n_sources": torch.tensor([1, 2]),
-            "plocs": true_locs * slen,
-            "galaxy_bools": true_galaxy_bools,
-        },
-    )
-    est_params = FullCatalog(
-        slen,
-        slen,
-        {
-            "n_sources": torch.tensor([2, 2]),
-            "plocs": est_locs * slen,
-            "galaxy_bools": est_galaxy_bools,
-        },
-    )
+    d_true = {
+        "n_sources": torch.tensor([1, 2]),
+        "plocs": true_locs * slen,
+        "galaxy_bools": true_galaxy_bools,
+    }
+    true_params = FullCatalog(slen, slen, d_true)
+
+    d_est = {
+        "n_sources": torch.tensor([2, 2]),
+        "plocs": est_locs * slen,
+        "galaxy_bools": est_galaxy_bools,
+    }
+    est_params = FullCatalog(slen, slen, d_est)
 
     results_detection = detect(true_params, est_params)
     precision = results_detection["precision"]

@@ -1,9 +1,9 @@
 import torch
 
-from bliss.detection_encoder import DetectionEncoder
+from bliss.encoder import Encoder
 
 
-class TestSourceEncoder:
+class TestEncoder:
     def test_variational_mode(self, devices):
         """Tests forward function of source encoder.
 
@@ -22,11 +22,9 @@ class TestSourceEncoder:
         tile_slen = 2
         background = (10.0, 20.0)
 
-        # get encoder
-        star_encoder: DetectionEncoder = DetectionEncoder(
-            # TODO: DetectionEncoder requires architecture now.
-            # Let's use a config.yml file for these tests, in part so we can specify a
-            # nontrivial encoder architecture
+        encoder: Encoder = Encoder(
+            # TODO: Let's use this directory's config.yml file
+            # for these tests, in part so we can specify a nontrivial encoder architecture
             architecture=[[-1, 1, "Conv", [64, 5, 1]]],
             tiles_to_crop=tiles_to_crop,
             tile_slen=tile_slen,
@@ -34,7 +32,7 @@ class TestSourceEncoder:
         ).to(device)
 
         with torch.no_grad():
-            star_encoder.eval()
+            encoder.eval()
 
             # simulate image padded tiles
             images = torch.randn(
@@ -52,8 +50,8 @@ class TestSourceEncoder:
             images += background_tensor
             batch = {"images": images, "background": background_tensor}
 
-            var_params = star_encoder.encode_batch(batch)
-            catalog = star_encoder.variational_mode(var_params)
+            var_params = encoder.encode_batch(batch)
+            catalog = encoder.variational_mode(var_params)
 
             assert catalog["n_sources"].size() == torch.Size([batch_size * n_tiles_h * n_tiles_w])
             correct_locs_shape = torch.Size([batch_size * n_tiles_h * n_tiles_w, max_detections, 2])

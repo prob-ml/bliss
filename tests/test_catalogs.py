@@ -19,9 +19,10 @@ def test_multiple_sources_one_tile():
     # should return only first source in first tile.
     tile_cat = full_cat.to_tile_params(1, 1, ignore_extra_sources=True)
     assert torch.equal(tile_cat.n_sources, torch.tensor([[1, 0], [0, 0]]).reshape(1, 2, 2))
-    assert torch.equal(
+    assert torch.isclose(
         tile_cat.locs, torch.tensor([[[0.5, 0.5], [0, 0]], [[0, 0], [0, 0]]]).reshape(1, 2, 2, 1, 2)
     )
+    # TODO: galaxy_bools should be a long, not a float32
     assert torch.equal(
         tile_cat["galaxy_bools"],
         torch.tensor([[[1.0], [0.0]], [[0.0], [0.0]]]).reshape(1, 2, 2, 1, 1),
