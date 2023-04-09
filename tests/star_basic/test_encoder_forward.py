@@ -3,6 +3,7 @@ import torch
 from bliss.encoder import Encoder
 
 
+# TODO: also test some round-trip reconstructions of images
 class TestEncoder:
     def test_variational_mode(self, devices):
         """Tests forward function of source encoder.

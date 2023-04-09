@@ -3,6 +3,7 @@ import pytest
 from bliss.train import train
 
 
+# TODO: add some tests of blended stars and galaxies
 class TestSleepStarOneTile:
     @pytest.fixture(scope="class")
     def overrides(self, devices):
