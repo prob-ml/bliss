@@ -16,7 +16,6 @@ from tqdm import tqdm
 
 from bliss import generate, metrics
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.datasets.sdss import convert_mag_to_flux
 from bliss.encoder import Encoder
 from bliss.metrics import compute_bin_metrics, get_boostrap_precision_and_recall, match_by_locs
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
@@ -24,6 +23,7 @@ from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.galaxy_net import OneCenteredGalaxyAE
 from bliss.simulator.galsim_galaxies import GalsimBlends
 from bliss.simulator.psf_decoder import PSFDecoder
+from bliss.surveys.sdss import convert_mag_to_flux
 
 ALL_FIGS = ("single_gal", "blend_gal", "toy")
 

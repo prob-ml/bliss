@@ -6,13 +6,11 @@ from astropy.table import Table
 
 from bliss import metrics
 from bliss.catalog import FullCatalog
-from bliss.datasets import sdss
+from bliss.surveys import sdss
 
 
 def test_scene_metrics():
-    true_params = FullCatalog(
-        100,
-        100,
+    d = (
         {
             "plocs": torch.tensor([[[50.0, 50.0]]]).float(),
             "galaxy_bools": torch.tensor([[[1]]]).float(),
@@ -20,13 +18,12 @@ def test_scene_metrics():
             "mags": torch.tensor([[[23.0]]]).float(),
         },
     )
+    true_params = FullCatalog(100, 100, d)
     metrics.scene_metrics(true_params, true_params, "mags", p_max=25, slack=1.0)
 
 
 def test_catalog_conversion():
-    true_params = FullCatalog(
-        100,
-        100,
+    d = (
         {
             "plocs": torch.tensor([[[51.8, 49.6]]]).float(),
             "galaxy_bools": torch.tensor([[[1]]]).float(),
@@ -34,6 +31,7 @@ def test_catalog_conversion():
             "mags": torch.tensor([[[23.0]]]).float(),
         },
     )
+    true_params = FullCatalog(d, 100, 100)
     true_tile_params = true_params.to_tile_params(tile_slen=4, max_sources_per_tile=1)
     tile_params_tilde = true_tile_params.to_full_params()
     assert true_params.equals(tile_params_tilde)
