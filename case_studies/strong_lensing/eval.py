@@ -3,13 +3,7 @@ import sys
 sys.path.append("../../")
 
 import matplotlib.pyplot as plt
-from einops import rearrange
 
-from bliss import metrics
-from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.datasets import sdss
-from bliss.encoder import Encoder
-from bliss.inference import SDSSFrame, reconstruct_scene_at_coordinates
 from case_studies.strong_lensing.plots.main import load_models
 
 plt.style.use("ggplot")
