@@ -11,17 +11,21 @@ def prepare_image(x):
 
 
 def predict(cfg):
-    sdss = instantiate(cfg.inference.dataset)
     encoder = instantiate(cfg.encoder).cuda()
-    # TODO: load saved weights
+    enc_state_dict = torch.load(cfg.training.weight_save_path)
+    encoder.load_state_dict(enc_state_dict)
     encoder.eval()
+
+    sdss = instantiate(cfg.predict.dataset)
     batch = {
         "images": prepare_image(sdss[0]["image"]),
         "background": prepare_image(sdss[0]["background"]),
     }
+
     with torch.no_grad():
         pred = encoder.encode_batch(batch)
         est_cat = encoder.variational_mode(pred)
+
     # TODO: plot the original image, the reconstruction, and the residual image using plotly's
     # interactive (zoomable) plots
     # TODO: display accuracy metrics if ground truth, or a proxy for ground truth, is available

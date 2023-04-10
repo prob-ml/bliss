@@ -3,8 +3,6 @@ from pathlib import Path
 import pytest
 from hydra import compose, initialize
 
-from tests.conftest import ModelSetup
-
 
 def get_strong_lensing_cfg(overrides):
     overrides.update({"paths.root": Path(__file__).parents[3].as_posix()})
@@ -14,7 +12,7 @@ def get_strong_lensing_cfg(overrides):
     return cfg
 
 
-class SingleGalsimGalaxiesSetup(ModelSetup):
+class SingleGalsimGalaxiesSetup:
     def get_cfg(self, overrides):
         return get_strong_lensing_cfg(overrides)
 

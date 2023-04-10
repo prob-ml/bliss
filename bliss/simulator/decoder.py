@@ -10,8 +10,7 @@ from einops import rearrange, reduce
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from bliss.catalog import FullCatalog, TileCatalog, get_is_on_from_n_sources
-from bliss.metrics import get_single_galaxy_ellipticities
+from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 
 
 def get_mgrid(slen: int):
@@ -474,79 +473,6 @@ class ImageDecoder(pl.LightningModule):
         image_ptiles = self._render_ptiles(tile_catalog)
         return self._reconstruct_image_from_ptiles(image_ptiles)
 
-    def render_large_scene(
-        self, tile_catalog: TileCatalog, batch_size: Optional[int] = None
-    ) -> Tensor:
-        if batch_size is None:
-            batch_size = 75**2 + 500 * 2
-
-        _, n_tiles_h, n_tiles_w, _, _ = tile_catalog.locs.shape
-        n_rows_per_batch = batch_size // n_tiles_w
-        h = tile_catalog.locs.shape[1] * tile_catalog.tile_slen + 2 * self.border_padding
-        w = tile_catalog.locs.shape[2] * tile_catalog.tile_slen + 2 * self.border_padding
-        scene = torch.zeros(1, 1, h, w)
-        for row in range(0, n_tiles_h, n_rows_per_batch):
-            end_row = row + n_rows_per_batch
-            start_h = row * tile_catalog.tile_slen
-            end_h = end_row * tile_catalog.tile_slen + 2 * self.border_padding
-            tile_cat_row = tile_catalog.crop((row, end_row), (0, None))
-            img_row = self.render_images(tile_cat_row)
-            scene[:, :, start_h:end_h] += img_row.cpu()
-        return scene
-
-    def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
-        assert self.galaxy_decoder is not None
-        galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_shapes = self.galaxy_decoder(galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5])
-        galaxy_fluxes = reduce(galaxy_shapes, "n 1 h w -> n", "sum")
-        assert torch.all(galaxy_fluxes >= 0.0)
-        galaxy_fluxes_all = torch.zeros_like(
-            galaxy_bools_flat.reshape(-1), dtype=galaxy_fluxes.dtype
-        )
-        galaxy_fluxes_all[galaxy_bools_flat.squeeze(-1) > 0.5] = galaxy_fluxes
-        galaxy_fluxes = rearrange(
-            galaxy_fluxes_all,
-            "(b nth ntw s) -> b nth ntw s 1",
-            b=galaxy_params_in.shape[0],
-            nth=galaxy_params_in.shape[1],
-            ntw=galaxy_params_in.shape[2],
-            s=galaxy_params_in.shape[3],
-        )
-        galaxy_fluxes *= galaxy_bools
-        return galaxy_fluxes
-
-    def get_galaxy_ellips(
-        self, galaxy_bools: Tensor, galaxy_params_in: Tensor, scale: float = 0.393
-    ) -> Tensor:
-        assert self.galaxy_decoder is not None
-        b, nth, ntw, s, _ = galaxy_bools.shape
-        b_flat = b * nth * ntw * s
-        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-
-        unfit_psf = self.star_tile_decoder.forward_psf_from_params()
-        psf = fit_source_to_ptile(unfit_psf, self.ptile_slen)
-        psf_image = rearrange(psf, "1 h w -> h w", h=slen, w=slen)
-
-        galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_shapes = self.galaxy_decoder(galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5])
-        galaxy_shapes = self.galaxy_decoder.size_galaxy(galaxy_shapes)
-        single_galaxies = rearrange(galaxy_shapes, "n 1 h w -> n h w", h=slen, w=slen)
-        ellips = get_single_galaxy_ellipticities(single_galaxies, psf_image, scale)
-
-        ellips_all = torch.zeros(b_flat, 2, dtype=ellips.dtype, device=ellips.device)
-        ellips_all[galaxy_bools_flat.squeeze(-1) > 0.5] = ellips
-        ellips = rearrange(
-            ellips_all, "(b nth ntw s) g -> b nth ntw s g", b=b, nth=nth, ntw=ntw, s=s, g=2
-        )
-        ellips *= galaxy_bools
-        return ellips
-
-    def forward(self):
-        """Decodes latent representation into an image."""
-        raise NotImplementedError("Please use `render_images` instead.")
-
     def _render_ptiles(self, tile_catalog: TileCatalog) -> Tensor:
         # n_sources: is (batch_size x n_tiles_h x n_tiles_w)
         # locs: is (batch_size x n_tiles_h x n_tiles_w x max_sources x 2)
@@ -596,24 +522,6 @@ class ImageDecoder(pl.LightningModule):
 
         return galaxies.view(img_shape) + stars.view(img_shape)
 
-    def _validate_border_padding(self, border_padding):
-        # Border Padding
-        # Images are first rendered on *padded* tiles (aka ptiles).
-        # The padded tile consists of the tile and neighboring tiles
-        # The width of the padding is given by ptile_slen.
-        # border_padding is the amount of padding we leave in the final image. Useful for
-        # avoiding sources getting too close to the edges.
-        if border_padding is None:
-            # default value matches encoder default.
-            border_padding = (self.ptile_slen - self.tile_slen) / 2
-
-        n_tiles_of_padding = (self.ptile_slen / self.tile_slen - 1) / 2
-        ptile_padding = n_tiles_of_padding * self.tile_slen
-        assert border_padding % 1 == 0, "amount of border padding must be an integer"
-        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
-        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
-        return int(border_padding)
-
     def _reconstruct_image_from_ptiles(self, image_ptiles: Tensor) -> Tensor:
         """Reconstruct an image from a tensor of padded tiles.
 
@@ -651,62 +559,20 @@ class ImageDecoder(pl.LightningModule):
         crop_idx = max_padding - self.border_padding
         return folded_image[:, :, crop_idx : (-crop_idx or None), crop_idx : (-crop_idx or None)]
 
+    def _validate_border_padding(self, border_padding):
+        # Border Padding
+        # Images are first rendered on *padded* tiles (aka ptiles).
+        # The padded tile consists of the tile and neighboring tiles
+        # The width of the padding is given by ptile_slen.
+        # border_padding is the amount of padding we leave in the final image. Useful for
+        # avoiding sources getting too close to the edges.
+        if border_padding is None:
+            # default value matches encoder default.
+            border_padding = (self.ptile_slen - self.tile_slen) / 2
 
-class GalsimImageDecoder:
-    def __init__(self, single_galaxy_decoder: GalsimGalaxyDecoder, slen: int, bp: int) -> None:
-        self.single_galaxy_decoder = single_galaxy_decoder
-        self.slen = slen
-        self.bp = bp
-        assert self.slen + 2 * self.bp >= self.single_galaxy_decoder.slen
-        self.pixel_scale = self.single_galaxy_decoder.pixel_scale
-
-    def __call__(self, full_cat: FullCatalog):
-        return self.render_catalog(full_cat)
-
-    def _render_star(self, flux: float, slen: int, offset: Optional[Tensor] = None) -> Tensor:
-        assert offset is None or offset.shape == (2,)
-        star = self.single_galaxy_decoder.psf_galsim.withFlux(flux)  # creates a copy
-        offset = offset if offset is None else offset.numpy()
-        image = star.drawImage(nx=slen, ny=slen, scale=self.pixel_scale, offset=offset)
-        return torch.from_numpy(image.array).reshape(1, slen, slen)
-
-    def render_catalog(self, full_cat: FullCatalog):
-        size = self.slen + 2 * self.bp
-        full_plocs = full_cat.plocs
-        b, max_n_sources, _ = full_plocs.shape
-        assert b == 1, "Only one batch supported for now."
-        assert self.single_galaxy_decoder.n_bands == 1, "Only 1 band supported for now"
-
-        image = torch.zeros(1, size, size)
-        noiseless_centered = torch.zeros(max_n_sources, 1, size, size)
-        noiseless_uncentered = torch.zeros(max_n_sources, 1, size, size)
-
-        n_sources = int(full_cat.n_sources[0].item())
-        galaxy_params = full_cat["galaxy_params"][0]
-        star_fluxes = full_cat["star_fluxes"][0]
-        galaxy_bools = full_cat["galaxy_bools"][0]
-        star_bools = full_cat["star_bools"][0]
-        plocs = full_plocs[0]
-        for ii in range(n_sources):
-            offset_x = plocs[ii][1] + self.bp - size / 2
-            offset_y = plocs[ii][0] + self.bp - size / 2
-            offset = torch.tensor([offset_x, offset_y])
-            if galaxy_bools[ii] == 1:
-                centered = self.single_galaxy_decoder.render_galaxy(galaxy_params[ii], size)
-                uncentered = self.single_galaxy_decoder.render_galaxy(
-                    galaxy_params[ii], size, offset
-                )
-            elif star_bools[ii] == 1:
-                centered = self._render_star(star_fluxes[ii][0].item(), size)
-                uncentered = self._render_star(star_fluxes[ii][0].item(), size, offset)
-            else:
-                continue
-            noiseless_centered[ii] = centered
-            noiseless_uncentered[ii] = uncentered
-            image += uncentered
-
-        return image, noiseless_centered, noiseless_uncentered
-
-    def forward_tile(self, tile_cat: TileCatalog):
-        full_cat = tile_cat.to_full_params()
-        return self(full_cat)
+        n_tiles_of_padding = (self.ptile_slen / self.tile_slen - 1) / 2
+        ptile_padding = n_tiles_of_padding * self.tile_slen
+        assert border_padding % 1 == 0, "amount of border padding must be an integer"
+        assert n_tiles_of_padding % 1 == 0, "n_tiles_of_padding must be an integer"
+        assert border_padding <= ptile_padding, "Too much border, increase ptile_slen"
+        return int(border_padding)
