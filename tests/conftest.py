@@ -31,7 +31,7 @@ def cfg(pytestconfig):
         "training.weight_save_path": None,
         "training.trainer.profiler": None,
         "training.trainer.accelerator": "gpu" if use_gpu else "cpu",
-        "paths.root": Path(__file__).parents[2].as_posix(),
+        "paths.root": Path(__file__).parents[1].as_posix(),
     }
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
     with initialize(config_path=".", version_base=None):
