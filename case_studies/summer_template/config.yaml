@@ -53,7 +53,7 @@ simulator:
         slen: 80
         tile_slen: 4
         galaxy_decoder:
-            _target_: bliss.simulator.decoder.GalsimGalaxyDecoder
+            _target_: bliss.simulator.decoder.GalaxyDecoder
             n_bands: 1
             slen: 53
             ptile_slen: 52

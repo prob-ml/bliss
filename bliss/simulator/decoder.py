@@ -165,7 +165,7 @@ class PSFDecoder(nn.Module):
         return (term1 + term2 + term3) / (1 + b + p0)
 
 
-class GalsimGalaxyDecoder(PSFDecoder):
+class GalaxyDecoder(PSFDecoder):
     def __init__(
         self,
         slen: int,
@@ -302,9 +302,7 @@ class GalsimGalaxyDecoder(PSFDecoder):
 
 
 class ImageDecoder:
-    def __init__(
-        self, galaxy_decoder: GalsimGalaxyDecoder, slen: int, bp: int, tile_slen: int
-    ) -> None:
+    def __init__(self, galaxy_decoder: GalaxyDecoder, slen: int, bp: int, tile_slen: int) -> None:
         self.galaxy_decoder = galaxy_decoder
         self.slen = slen
         self.bp = bp

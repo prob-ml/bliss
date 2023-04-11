@@ -32,30 +32,34 @@ simulator:
         galaxy_prior: null
     decoder:
         _target_: bliss.simulator.decoder.ImageDecoder
-        n_bands: 1
+        bp: 8
+        slen: 16
         tile_slen: 2
-        ptile_slen: 6
-        border_padding: 2
-        psf_slen: 25
-        sdss_bands: [2]
-        psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
+        galaxy_decoder:
+            _target_: bliss.simulator.decoder.GalaxyDecoder
+            n_bands: 1
+            slen: 1
+            ptile_slen: 6
+            pixel_scale: 0.396
+            psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
+            psf_slen: 25
+            sdss_bands: [2]
     background:
         _target_: bliss.simulator.background.ConstantBackground
         background: [865.0]
-    n_tiles_h: 5
-    n_tiles_w: 5
+    n_tiles_h: 4
+    n_tiles_w: 4
     n_batches: 10
     batch_size: 32
     fix_validation_set: true
     valid_n_batches: 10  # 256
-    generate_device: "cpu"
     num_workers: 0  # can only use > 0 workers if simulator is running on the cpu
 
 encoder:
     _target_: bliss.encoder.Encoder
-    n_bands: ${simulator.decoder.n_bands}
-    tile_slen: ${simulator.decoder.tile_slen}
-    tiles_to_crop: 0
+    n_bands: 1
+    tile_slen: 2
+    tiles_to_crop: 2
     annotate_probs: True
     slack: 1.0
     optimizer_params:
@@ -98,7 +102,7 @@ encoder:
         ]
 
 training:
-    n_epochs: 201
+    n_epochs: 1
     experiment: default
     version: null
     save_top_k: 1
@@ -120,3 +124,5 @@ training:
         num_workers: 0
     weight_save_path: null
     seed: 42
+
+# TODO: use code coverage to check for and delete dead code once tests are restored

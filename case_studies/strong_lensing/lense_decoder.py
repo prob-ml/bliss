@@ -6,10 +6,10 @@ import torch
 from einops import rearrange
 from torch import Tensor, nn
 
-from bliss.simulator.decoder import GalsimGalaxyDecoder, TileRenderer, fit_source_to_ptile
+from bliss.simulator.decoder import GalaxyDecoder, fit_source_to_ptile
 
 
-class SingleLensedGalsimGalaxyDecoder(GalsimGalaxyDecoder):
+class SingleLensedGalsimGalaxyDecoder(GalaxyDecoder):
     def __init__(
         self,
         slen: int,
