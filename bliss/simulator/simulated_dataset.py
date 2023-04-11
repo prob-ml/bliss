@@ -28,7 +28,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         n_tiles_w: int,
         n_batches: int,
         batch_size: int,
-        generate_device: str,
         num_workers: int = 0,
         fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
@@ -44,9 +43,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.image_decoder = decoder
         self.background = background
         self.image_prior.requires_grad_(False)
-        self.image_decoder.requires_grad_(False)
         self.background.requires_grad_(False)
-        self.to(generate_device)
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
         self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
@@ -66,7 +63,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         )
 
     def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> TileCatalog:
-        return self.image_prior.sample_prior(self.tile_slen, batch_size, n_tiles_h, n_tiles_w)
+        tile_slen = self.image_decoder.tile_slen
+        return self.image_prior.sample_prior(tile_slen, batch_size, n_tiles_h, n_tiles_w)
 
     def simulate_image_from_catalog(self, tile_catalog: TileCatalog) -> Tuple[Tensor, Tensor]:
         images = self.image_decoder.render_images(tile_catalog)
