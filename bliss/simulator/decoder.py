@@ -74,38 +74,29 @@ class PSFDecoder(nn.Module):
 
     def __init__(
         self,
-        n_bands: int = 1,
-        pixel_scale: float = 0.393,
-        psf_gauss_fwhm: Optional[float] = None,
-        psf_params_file: Optional[str] = None,
-        psf_slen: Optional[int] = None,
-        sdss_bands: Optional[Tuple[int, ...]] = None,
+        n_bands: int,
+        pixel_scale: float,
+        psf_params_file: str,
+        psf_slen: int,
+        sdss_bands: Tuple[int, ...],
     ):
         super().__init__()
         self.n_bands = n_bands
         self.params = None  # psf params from fits file
 
-        assert psf_params_file is not None or psf_gauss_fwhm is not None
-        if psf_gauss_fwhm is not None:
-            assert psf_slen is not None
-            self.psf_galsim = galsim.Gaussian(fwhm=psf_gauss_fwhm, flux=1.0)
-            self.psf = self.psf_galsim.drawImage(nx=psf_slen, ny=psf_slen, scale=pixel_scale).array
-            self.psf = self.psf.reshape(1, psf_slen, psf_slen)
-        else:
-            assert psf_params_file is not None and psf_slen is not None and sdss_bands is not None
-            assert Path(psf_params_file).suffix == ".fits"
-            assert len(sdss_bands) == n_bands
-            psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
-            self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
-            self.psf_slen = psf_slen
-            grid = self._get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-            # Bryan: extra factor to be consistent with old repo, probably unimportant...
-            grid *= self.psf_slen / (self.psf_slen - 1)
-            self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
+        assert Path(psf_params_file).suffix == ".fits"
+        assert len(sdss_bands) == n_bands
+        psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
+        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
+        self.psf_slen = psf_slen
+        grid = self._get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
+        # Bryan: extra factor to be consistent with old repo, probably unimportant...
+        grid *= self.psf_slen / (self.psf_slen - 1)
+        self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
 
-            self.psf = self.forward_psf_from_params().detach().numpy()
-            psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
-            self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
+        self.psf = self.forward_psf_from_params().detach().numpy()
+        psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
+        self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
 
     def forward(self, x):  # type: ignore
         raise NotImplementedError("Please extend this class and implement forward()")
@@ -172,13 +163,11 @@ class GalaxyDecoder(PSFDecoder):
         ptile_slen: int,
         n_bands: int,
         pixel_scale: float,
-        psf_params_file: Optional[str] = None,
-        psf_slen: Optional[int] = None,
-        sdss_bands: Optional[Tuple[int, ...]] = None,
-        psf_gauss_fwhm: Optional[float] = None,
+        psf_params_file: str,
+        psf_slen: int,
+        sdss_bands: Tuple[int, ...],
     ) -> None:
         super().__init__(
-            psf_gauss_fwhm=psf_gauss_fwhm,
             psf_params_file=psf_params_file,
             psf_slen=psf_slen,
             sdss_bands=sdss_bands,
@@ -336,6 +325,8 @@ class ImageDecoder:
 
         images = torch.zeros(batch_size, self.galaxy_decoder.n_bands, bp_slen_bp, bp_slen_bp)
 
+        # TODO: can we profile this loop and speed it? (which call to galsim takes so long?)
+        # Does galsim have any way to write batches of sources with one call? What did DC2 do?
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             for s in range(n_sources):

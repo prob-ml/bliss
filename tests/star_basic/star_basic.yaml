@@ -49,10 +49,10 @@ simulator:
         background: [865.0]
     n_tiles_h: 4
     n_tiles_w: 4
-    n_batches: 10
+    n_batches: 2
     batch_size: 32
     fix_validation_set: true
-    valid_n_batches: 10  # 256
+    valid_n_batches: 2
     num_workers: 0  # can only use > 0 workers if simulator is running on the cpu
 
 encoder:

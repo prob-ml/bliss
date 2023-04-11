@@ -38,7 +38,6 @@ datasets:
             pixel_scale: 0.396
             psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
             psf_slen: 25
-            psf_gauss_fwhm: null
             sdss_bands:
                 - 2
         background:
