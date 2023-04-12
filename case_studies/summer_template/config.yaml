@@ -162,3 +162,4 @@ predict:
         bands: [2]
     encoder: ${encoder}
     weight_save_path: ${paths.project}/models/${training.name}.pt
+    device: "cuda:0"

@@ -2,7 +2,9 @@
 from pathlib import Path
 
 import pytest
+import torch
 from hydra import compose, initialize
+from hydra.utils import instantiate
 
 
 # command line arguments for tests
@@ -13,9 +15,6 @@ def pytest_addoption(parser):
         default=False,
         help="Run tests using gpu.",
     )
-
-
-# TODO: load trained encoder here and make it available as a fixture
 
 
 @pytest.fixture(scope="session")
@@ -31,9 +30,24 @@ def cfg(pytestconfig):
         "training.weight_save_path": None,
         "training.trainer.profiler": None,
         "training.trainer.accelerator": "gpu" if use_gpu else "cpu",
+        "predict.device": "cuda:0" if use_gpu else "cpu",
         "paths.root": Path(__file__).parents[1].as_posix(),
     }
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
     with initialize(config_path=".", version_base=None):
-        the_cfg = compose("star_basic", overrides=overrides)
+        the_cfg = compose("basic_config", overrides=overrides)
     return the_cfg
+
+
+@pytest.fixture(scope="session")
+def encoder(cfg):
+    encoder = instantiate(cfg.encoder).to(cfg.predict.device)
+    enc_state_dict = torch.load(cfg.predict.weight_save_path)
+    encoder.load_state_dict(enc_state_dict)
+    # remember to put encoder in eval mode if using it for prediction
+    return encoder
+
+
+@pytest.fixture(scope="session")
+def decoder(cfg):
+    return instantiate(cfg.simulator.decoder)

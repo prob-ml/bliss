@@ -14,8 +14,9 @@ mode: train
 paths:
     root: ${oc.env:BLISS_HOME}
     output: ${paths.root}/output
-    sdss: ${paths.root}/data/sdss
     data: ${paths.root}/data
+    sdss: ${paths.data}/sdss
+    pretrained_models: ${paths.data}/pretrained_models
 
 simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
@@ -41,7 +42,7 @@ simulator:
             slen: 1
             ptile_slen: 6
             pixel_scale: 0.396
-            psf_params_file: ${paths.data}/sdss/94/1/12/psField-000094-1-0012.fits
+            psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
             psf_slen: 25
             sdss_bands: [2]
     background:
@@ -115,7 +116,7 @@ training:
         check_val_every_n_epoch: 1001
         max_epochs: ${training.n_epochs}
         min_epochs: ${training.n_epochs}
-        accelerator: "gpu"
+        accelerator: "cpu"
         devices: 1
         log_every_n_steps: 10
     testing:
@@ -124,5 +125,17 @@ training:
         num_workers: 0
     weight_save_path: null
     seed: 42
+
+predict:
+    dataset:
+        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
+        sdss_dir: ${paths.sdss}
+        run: 3900
+        camcol: 6
+        fields: [269]
+        bands: [2]
+    encoder: ${encoder}
+    weight_save_path: ${paths.pretrained_models}/sdss_encoder.pt
+    device: "cpu"
 
 # TODO: use code coverage to check for and delete dead code once tests are restored
