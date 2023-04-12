@@ -11,48 +11,6 @@ from torch import Tensor, nn
 from bliss.catalog import FullCatalog, TileCatalog
 
 
-def fit_source_to_ptile(source: Tensor, ptile_slen: int):
-    if ptile_slen >= source.shape[-1]:
-        fitted_source = expand_source(source, ptile_slen)
-    else:
-        fitted_source = trim_source(source, ptile_slen)
-    return fitted_source
-
-
-def expand_source(source: Tensor, ptile_slen: int):
-    """Pad the source with zeros so that it is size ptile_slen."""
-    assert len(source.shape) == 3
-    slen = ptile_slen + ((ptile_slen % 2) == 0) * 1
-    source_slen = source.shape[2]
-    assert source_slen <= slen, "Should be using trim source."
-
-    source_expanded = torch.zeros(source.shape[0], slen, slen, device=source.device)
-    offset = int((slen - source_slen) / 2)
-    source_expanded[:, offset : (offset + source_slen), offset : (offset + source_slen)] = source
-
-    return source_expanded
-
-
-def trim_source(source: Tensor, ptile_slen: int):
-    """Crop the source to length ptile_slen x ptile_slen, centered at the middle."""
-    assert len(source.shape) == 3
-
-    # if self.ptile_slen is even, we still make source dimension odd.
-    # otherwise, the source won't have a peak in the center pixel.
-    local_slen = ptile_slen + ((ptile_slen % 2) == 0) * 1
-
-    source_slen = source.shape[2]
-    source_center = (source_slen - 1) / 2
-
-    assert source_slen >= local_slen
-
-    r = np.floor(local_slen / 2)
-    l_indx = int(source_center - r)
-    u_indx = int(source_center + r + 1)
-
-    return source[:, l_indx:u_indx, l_indx:u_indx]
-
-
 class PSFDecoder(nn.Module):
     """Abstract decoder class to subclass whenever the decoded result will go through a PSF.
 
@@ -182,22 +140,6 @@ class GalaxyDecoder(PSFDecoder):
         self.pixel_scale = pixel_scale
         self.ptile_slen = ptile_slen
 
-    def __call__(self, z: Tensor, offset: Optional[Tensor] = None) -> Tensor:
-        if z.shape[0] == 0:
-            return torch.zeros(0, 1, self.slen, self.slen, device=z.device)
-
-        if z.shape == (7,):
-            assert offset is None or offset.shape == (2,)
-            return self.render_galaxy(z, self.slen, offset)
-
-        images = []
-        for ii, latent in enumerate(z):
-            off = offset if not offset else offset[ii]
-            assert off is None or off.shape == (2,)
-            image = self.render_galaxy(latent, self.slen, off)
-            images.append(image)
-        return torch.stack(images, dim=0).to(z.device)
-
     def _render_galaxy_np(
         self,
         galaxy_params: Tensor,
@@ -243,51 +185,6 @@ class GalaxyDecoder(PSFDecoder):
     ) -> Tensor:
         image = self._render_galaxy_np(galaxy_params, self.psf_galsim, slen, offset)
         return torch.from_numpy(image).reshape(1, slen, slen)
-
-    def forward(self, galaxy_params: Tensor, galaxy_bools: Tensor):
-        """Renders galaxy tile from locations and galaxy parameters."""
-        # max_sources obtained from locs, allows for more flexibility when rendering.
-        n_ptiles, max_sources, _ = galaxy_bools.shape
-        assert galaxy_bools.shape[2] == 1
-        n_galaxy_params = galaxy_params.shape[-1]
-        galaxy_params = galaxy_params.view(n_ptiles, max_sources, n_galaxy_params)
-        single_galaxies = self._render_single_galaxies(galaxy_params, galaxy_bools)
-        single_galaxies *= galaxy_bools.unsqueeze(-1).unsqueeze(-1)
-        return single_galaxies
-
-    def _render_single_galaxies(self, galaxy_params, galaxy_bools):
-        # flatten parameters
-        n_galaxy_params = galaxy_params.shape[-1]
-        z = galaxy_params.view(-1, n_galaxy_params)
-        b = galaxy_bools.flatten()
-
-        # allocate memory
-        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-        gal = torch.zeros(z.shape[0], self.n_bands, slen, slen, device=galaxy_params.device)
-
-        # forward only galaxies that are on!
-        # no background
-        gal_on = self(z[b == 1])
-
-        # size the galaxy (either trims or crops to the size of ptile)
-        gal_on = self.size_galaxy(gal_on)
-
-        # set galaxies
-        gal[b == 1] = gal_on
-
-        batchsize = galaxy_params.shape[0]
-        gal_shape = (batchsize, -1, self.n_bands, gal.shape[-1], gal.shape[-1])
-        return gal.view(gal_shape)
-
-    def size_galaxy(self, galaxy: Tensor):
-        n_galaxies, n_bands, h, w = galaxy.shape
-        assert h == w
-        assert (h % 2) == 1, "dimension of galaxy image should be odd"
-        assert n_bands == self.n_bands
-        galaxy = rearrange(galaxy, "n c h w -> (n c) h w")
-        sized_galaxy = fit_source_to_ptile(galaxy, self.ptile_slen)
-        outsize = sized_galaxy.shape[-1]
-        return sized_galaxy.view(n_galaxies, self.n_bands, outsize, outsize)
 
 
 class ImageDecoder:
