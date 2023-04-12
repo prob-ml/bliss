@@ -2,11 +2,7 @@
 from collections import defaultdict
 from typing import DefaultDict, Dict, Optional, Tuple
 
-import galsim
-import numpy as np
 import torch
-from astropy.table import Table
-from astropy.wcs import WCS
 from einops import rearrange, reduce
 from scipy import optimize as sp_optim
 from sklearn.metrics import confusion_matrix
@@ -14,7 +10,7 @@ from torch import Tensor
 from torchmetrics import Metric
 from tqdm import tqdm
 
-from bliss.catalog import FullCatalog, column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
+from bliss.catalog import FullCatalog
 
 
 class DetectionMetrics(Metric):
@@ -414,137 +410,3 @@ def compute_bin_metrics(
             metrics_per_bin[k][ii] = v
 
     return dict(metrics_per_bin)
-
-
-class CoaddFullCatalog(FullCatalog):
-    coadd_names = {
-        "objid": "objid",
-        "galaxy_bools": "galaxy_bool",
-        "fluxes": "flux",
-        "mags": "mag",
-        "ra": "ra",
-        "dec": "dec",
-    }
-    allowed_params = FullCatalog.allowed_params.union(coadd_names.keys())
-
-    @classmethod
-    def from_file(
-        cls, coadd_file: str, wcs: WCS, hlim: Tuple[int, int], wlim: Tuple[int, int], band="r"
-    ):
-        coadd_table = Table.read(coadd_file, format="fits")
-        return cls.from_table(coadd_table, wcs, hlim, wlim, band)
-
-    @classmethod
-    def from_table(
-        cls, cat, wcs: WCS, hlim: Tuple[int, int], wlim: Tuple[int, int], band: str = "r"
-    ):
-        """Load coadd catalog from file, add extra useful information, convert to tensors."""
-        # filter saturated objects
-        cat = cat[~cat["is_saturated"].data.astype(bool)]
-
-        # add additional useful columns to coadd catalog
-        x, y = wcs.all_world2pix(cat["ra"], cat["dec"], 0)
-        galaxy_bools = ~cat["probpsf"].data.astype(bool)
-        psfmag = cat[f"psfmag_{band}"] * cat["probpsf"]
-        galmag = cat[f"modelMag_{band}"] * (1 - cat["probpsf"])
-        mag = psfmag + galmag
-        cat["x"] = x
-        cat["y"] = y
-        cat["galaxy_bool"] = galaxy_bools
-        cat["mag"] = mag
-        cat["flux"] = convert_mag_to_flux(mag)
-        cat.replace_column("is_saturated", cat["is_saturated"].data.astype(bool))
-
-        # misclassified bright galaxies in PHOTO as galaxies (obtaind by eye)
-        misclass_ids = (8647475119820964111, 8647475119820964100, 8647475119820964192)
-        for iid in misclass_ids:
-            idx = np.where(cat["objid"] == iid)[0].item()
-            cat["galaxy_bool"][idx] = 0
-
-        # only return objects inside limits.
-        w, h = cat["x"], cat["y"]
-        keep = np.ones(len(cat)).astype(bool)
-        keep &= (h > hlim[0]) & (h < hlim[1])
-        keep &= (w > wlim[0]) & (w < wlim[1])
-        height = hlim[1] - hlim[0]
-        width = wlim[1] - wlim[0]
-        data = {}
-        h = torch.from_numpy(np.array(h).astype(np.float32)[keep])
-        w = torch.from_numpy(np.array(w).astype(np.float32)[keep])
-
-        # shift by +0.5 so it is consistent with BLISS parameters.
-        data["plocs"] = torch.stack((h - hlim[0], w - wlim[0]), dim=1).unsqueeze(0) + 0.5
-        data["n_sources"] = torch.tensor(data["plocs"].shape[1]).reshape(1)
-
-        for bliss_name, coadd_name in cls.coadd_names.items():
-            arr = column_to_tensor(cat, coadd_name)[keep]
-            data[bliss_name] = rearrange(arr, "n_sources -> 1 n_sources 1")
-
-        data["galaxy_bools"] = data["galaxy_bools"].float()
-        data["star_fluxes"] = data["fluxes"] * (1 - data["galaxy_bools"])
-        return cls(height, width, data)
-
-
-def get_single_galaxy_ellipticities(
-    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396, no_bar: bool = True
-) -> Tensor:
-    """Returns ellipticities of (noiseless, single-band) individual galaxy images.
-
-    Args:
-        pixel_scale: Conversion from arcseconds to pixel.
-        no_bar: Whether to use a progress bar.
-        images: Array of shape (n_samples, slen, slen) containing images of
-            single-centered galaxies without noise or background.
-        psf_image: Array of shape (slen, slen) containing PSF image used for
-            convolving the galaxies in `true_images`.
-
-    Returns:
-        Tensor containing ellipticity measurements for each galaxy in `images`.
-    """
-    device = images.device
-    n_samples, _, _ = images.shape
-    ellips = torch.zeros((n_samples, 2))  # 2nd shape: e1, e2
-    images_np = images.detach().cpu().numpy()
-    psf_np = psf_image.detach().cpu().numpy()
-    galsim_psf_image = galsim.Image(psf_np, scale=pixel_scale)
-
-    # Now we use galsim to measure size and ellipticity
-    for i in tqdm(range(n_samples), desc="Measuring galaxies", disable=no_bar):
-        image = images_np[i]
-        galsim_image = galsim.Image(image, scale=pixel_scale)
-        res_true = galsim.hsm.EstimateShear(
-            galsim_image, galsim_psf_image, shear_est="KSB", strict=False
-        )
-        g1, g2 = float(res_true.corrected_g1), float(res_true.corrected_g2)
-        ellips[i, :] = torch.tensor([g1, g2])
-
-    return ellips.to(device)
-
-
-def get_single_galaxy_measurements(
-    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396
-) -> Dict[str, Tensor]:
-    """Compute individual galaxy measurements comparing true images with reconstructed images.
-
-    Args:
-        pixel_scale: Conversion from arcseconds to pixel.
-        images: Array of shape (n_samples, n_bands, slen, slen) containing images of
-            single-centered galaxies without noise or background.
-        psf_image: Array of shape (n_bands, slen, slen) containing PSF image used for
-            convolving the galaxies in `true_images`.
-
-    Returns:
-        Dictionary containing fluxes, magnitudes, and ellipticities of `images`.
-    """
-    _, c, slen, w = images.shape
-    assert slen == w and c == 1 and psf_image.shape == (c, slen, w)
-    images = rearrange(images, "n c h w -> (n c) h w")
-    psf_image = rearrange(psf_image, "c h w -> (c h) w")
-    fluxes = torch.sum(images, (1, 2))
-    ellips = get_single_galaxy_ellipticities(images, psf_image, pixel_scale)
-
-    return {
-        "fluxes": fluxes,
-        "mags": convert_flux_to_mag(fluxes),
-        "ellips": ellips,
-    }

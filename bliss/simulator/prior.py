@@ -68,7 +68,6 @@ class ImagePrior(pl.LightningModule):
         f_max: Prior parameter on fluxes
         alpha: Prior parameter on fluxes
         prob_galaxy: Prior probability a source is a galaxy
-        prob_lensed_galaxy: Prior probability a galaxy is lensed
     """
 
     def __init__(
@@ -81,9 +80,7 @@ class ImagePrior(pl.LightningModule):
         f_max: float,
         alpha: float,
         prob_galaxy: float,
-        prob_lensed_galaxy: float = 0.0,
         galaxy_prior: Optional[GalsimGalaxyPrior] = None,
-        lensed_galaxy_prior=None,
     ):
         """Initializes ImagePrior.
 
@@ -95,10 +92,8 @@ class ImagePrior(pl.LightningModule):
             f_min: Prior parameter on fluxes
             f_max: Prior parameter on fluxes
             alpha: Prior parameter on fluxes (pareto parameter)
-            prob_lensed_galaxy: Prior probability a galaxy is lensed
             prob_galaxy: Prior probability a source is a galaxy
             galaxy_prior: Object from which galaxy latents are sampled
-            lensed_galaxy_prior: Object from which lens galaxy latents are sampled
         """
         super().__init__()
         self.n_bands = n_bands
@@ -114,11 +109,6 @@ class ImagePrior(pl.LightningModule):
         self.galaxy_prior = galaxy_prior
         if self.prob_galaxy > 0.0:
             assert self.galaxy_prior is not None
-
-        self.prob_lensed_galaxy = prob_lensed_galaxy
-        self.lensed_galaxy_prior = lensed_galaxy_prior
-        if self.prob_lensed_galaxy > 0.0:
-            assert self.lensed_galaxy_prior is not None
 
     def sample_prior(
         self, tile_slen: int, batch_size: int, n_tiles_h: int, n_tiles_w: int
