@@ -55,13 +55,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     image_prior: ImagePrior
     image_decoder: ImageDecoder
 
-    def to(self, generate_device):
-        self.image_prior: ImagePrior = self.image_prior.to(generate_device)
-        self.image_decoder: ImageDecoder = self.image_decoder.to(generate_device)
-        self.background: Union[ConstantBackground, SimulatedSDSSBackground] = self.background.to(
-            generate_device
-        )
-
     def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> TileCatalog:
         tile_slen = self.image_decoder.tile_slen
         return self.image_prior.sample_prior(tile_slen, batch_size, n_tiles_h, n_tiles_w)
@@ -76,19 +69,10 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     @staticmethod
     def _apply_noise(images_mean):
         # add noise to images.
-
-        if torch.any(images_mean <= 0):
-            warnings.warn("image mean less than 0")
-            images_mean = images_mean.clamp(min=1.0)
-
+        assert torch.all(images_mean > 1e-8)
         images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
         images += images_mean
-
         return images
-
-    @property
-    def tile_slen(self) -> int:
-        return self.image_decoder.tile_slen
 
     def __iter__(self):
         for _ in range(self.n_batches):
