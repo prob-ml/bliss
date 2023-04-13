@@ -222,8 +222,6 @@ class ImageDecoder:
 
         images = torch.zeros(batch_size, self.galaxy_decoder.n_bands, bp_slen_bp, bp_slen_bp)
 
-        # TODO: can we profile this loop and speed it? (which call to galsim takes so long?)
-        # Does galsim have any way to write batches of sources with one call? What did DC2 do?
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             for s in range(n_sources):

@@ -1,6 +1,6 @@
 # pylint: disable=R
 
-from typing import Dict, Optional, Union
+from typing import Dict, Optional
 
 import pytorch_lightning as pl
 import torch
@@ -12,26 +12,14 @@ from torch.optim import Adam
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.plotting import add_loc_legend, plot_image, plot_locs
-from bliss.simulator.encoder_layers import (
-    ConcatBackgroundTransform,
-    EncoderCNN,
-    LogBackgroundTransform,
-    make_enc_final,
-)
-from bliss.simulator.galaxy_encoder import CenterPaddedTilesTransform
 
 
 class LensingBinaryEncoder(pl.LightningModule):
     def __init__(
         self,
-        input_transform: Union[ConcatBackgroundTransform, LogBackgroundTransform],
         n_bands: int,
         tile_slen: int,
         ptile_slen: int,
-        channel: int,
-        hidden: int,
-        spatial_dropout: float,
-        dropout: float,
         optimizer_params: Optional[dict] = None,
     ):
         """Encoder which conditioned on other source params returns probability of being lensed.
@@ -42,20 +30,13 @@ class LensingBinaryEncoder(pl.LightningModule):
         used for distinguishing stars from galaxies (future refactor)
 
         Arguments:
-            input_transform: Transformation to apply to input image.
             n_bands: number of bands
             tile_slen: dimension (in pixels) of each tile.
             ptile_slen: dimension (in pixels) of the individual image padded tiles.
-            channel: TODO (document this)
-            hidden: TODO (document this)
-            spatial_dropout: TODO (document this)
-            dropout: TODO (document this)
-            optimizer_params: TODO (document this)
         """
         super().__init__()
         self.save_hyperparameters()
         self.optimizer_params = optimizer_params
-        self.input_transform = input_transform
 
         self.max_sources = 1  # by construction.
 
@@ -70,14 +51,6 @@ class LensingBinaryEncoder(pl.LightningModule):
         assert border_padding % 1 == 0, "amount of border padding should be an integer"
         self.border_padding = int(border_padding)
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
-
-        dim_enc_conv_out = ((self.slen + 1) // 2 + 1) // 2
-        n_bands_in = self.input_transform.output_channels(n_bands)
-        self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
-        self.enc_final = make_enc_final(channel * 4 * dim_enc_conv_out**2, hidden, 1, dropout)
-
-        # grid for center cropped tiles
-        self.center_ptiles = CenterPaddedTilesTransform(self.tile_slen, self.ptile_slen)
 
     def forward(self, image_ptiles, locs):
         return self.encode(image_ptiles, locs)

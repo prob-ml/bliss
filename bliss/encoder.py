@@ -81,7 +81,6 @@ class Encoder(pl.LightningModule):
 
     @property
     def dist_param_groups(self):
-        # TODO: override this method in case_studies/strong_lensing to detect strong lenses too
         return {
             "on_prob": TransformedBernoulli(),
             "loc": TransformedDiagonalBivariateNormal(),
@@ -98,8 +97,6 @@ class Encoder(pl.LightningModule):
         }
 
     def encode_batch(self, batch):
-        # TODO: consider adding multiple log and sigmoid transformed images to this stack,
-        # each with a different offset and scale
         images_with_background = torch.cat((batch["images"], batch["background"]), dim=1)
 
         # setting this to true every time is a hack to make yolo DetectionModel
@@ -128,7 +125,7 @@ class Encoder(pl.LightningModule):
 
     def variational_mode(self, pred: Dict[str, Tensor]) -> Dict[str, Tensor]:
         """Compute the mode of the variational distribution."""
-        # TODO: the mean would be better at minimizing squared error...return that instead?
+        # the mean would be better at minimizing squared error...should we return that instead?
         tile_is_on_array = pred["on_prob"].mode
         # this is the mode of star_log_flux but not the mean of the star_flux distribution
         star_fluxes = pred["star_log_flux"].mode.exp()  # type: ignore
@@ -148,7 +145,6 @@ class Encoder(pl.LightningModule):
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
         optimizer = Adam(self.parameters(), **self.optimizer_params)
-        # TODO: tune this more and try the OneCycle learning rate scheduler
         scheduler = MultiStepLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
 
@@ -174,10 +170,6 @@ class Encoder(pl.LightningModule):
         binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools.long())
         binary_loss *= true_tile_cat.is_on_array.squeeze(3)
 
-        # TODO: compute galsim loss
-        # TODO: consider using a different NN head (but same backbone) for galsim parameters
-        # TODO: explore whether small tiles are helpful for galsim parameter estimation
-
         loss = counter_loss + locs_loss + star_flux_loss + binary_loss
 
         return {
@@ -202,7 +194,6 @@ class Encoder(pl.LightningModule):
 
         # log all metrics
         if log_metrics:
-            # TODO: figure out why these metrics so slow to compute
             metrics = self.metrics(true_full_cat, est_cat)
             for k, v in metrics.items():
                 self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
@@ -215,7 +206,6 @@ class Encoder(pl.LightningModule):
             wrong_idx = (est_cat.n_sources != true_full_cat.n_sources).nonzero()
             wrong_idx = wrong_idx.view(-1)[:n_samples]
             margin_px = self.tiles_to_crop * self.tile_slen
-            # TODO: clean up the plot_detection interface
             fig = plot_detections(
                 batch["images"], true_full_cat, est_cat, nrows, wrong_idx, margin_px
             )

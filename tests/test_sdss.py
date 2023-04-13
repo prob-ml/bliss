@@ -4,7 +4,6 @@ import pytest
 from bliss.surveys.sdss import SloanDigitalSkySurvey
 
 
-# TODO: this test generates lots of warnings...we should fix what we can and suppress the rest
 class TestSDSS:
     def test_sdss(self, cfg):
         sdss_dir = cfg.paths.sdss

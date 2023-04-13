@@ -5,7 +5,7 @@ import torch
 from einops import rearrange
 from torch import Tensor, nn
 
-# TODO: rewrite so this module so that it does not depend on any specific survey
+# ideally this module wouldn't depend on any specific survey
 from bliss.surveys.sdss import SloanDigitalSkySurvey
 
 

@@ -82,7 +82,6 @@ encoder:
         depth_multiple: 1.0  # model depth multiple
         width_multiple: 1.0  # layer channel multiple
         anchors:
-            # TODO: investigate whether other size anchors would work better
             - [4, 4]  # P3/8
         backbone: [
             # [from, number, module, args]
@@ -145,5 +144,3 @@ predict:
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/sdss_encoder.pt
     device: "cpu"
-
-# TODO: use code coverage to check for and delete dead code once tests are restored

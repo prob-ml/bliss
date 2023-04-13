@@ -30,7 +30,6 @@ class TransformedDiagonalBivariateNormal:
 
     def get_dist(self, untransformed_params):
         mean = untransformed_params[:, :, :, :2]
-        # TODO: verify that this clamp isn't too extreme
         sd = untransformed_params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
         return Normal(mean, sd)
 
@@ -54,5 +53,4 @@ class TransformedLogitNormal:
     def get_dist(self, untransformed_params):
         mu = untransformed_params[:, :, :, 0]
         sigma = untransformed_params[:, :, :, 1].clamp(-6, 10).exp().sqrt()
-        # TODO: fix this using distribution transforms
         return Normal(mu, sigma)

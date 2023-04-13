@@ -17,15 +17,6 @@ paths:
     output: ${paths.project}/output
 
 
-# TODO: add the ability to use simulated galaxies that have been stored on disk
-# TODO: make DC2 dataset/simulator with labels and train with it
-# TODO: create some multiband datasets
-# TODO: create configs files like this one for DECaLS and DC2
-# TODO: match key results from Ismael/Derek's papers
-# TODO: increase bliss version number to 0.2 (use bumpversion, publish, and document workflow)
-# TODO: benchmark galaxy find on new SDSS fields using HST as ground truth
-# TODO: run on Google cloud with A100 chips
-
 simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
     prior:
@@ -94,7 +85,6 @@ encoder:
         depth_multiple: 1.0  # model depth multiple
         width_multiple: 1.0  # layer channel multiple
         anchors:
-            # TODO: investigate whether other size anchors would work better
             - [4, 4]  # P3/8
         backbone: [
             # [from, number, module, args]
@@ -121,7 +111,6 @@ encoder:
             [-1, 3, C3, [256, false]],
             [[17], 1, Detect, [nc, anchors]],
         ]
-    # TODO: implement pretraining and try pretraining with crowded fields
     # pretrained_weights: ${paths.project}/models/${training.name}.pt
 
 

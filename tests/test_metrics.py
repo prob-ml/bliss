@@ -4,7 +4,6 @@ from bliss.catalog import FullCatalog
 from bliss.metrics import ClassificationMetrics, DetectionMetrics
 
 
-# TODO: this test generates lots of warnings...we should fix what we can a suppress the rest
 def test_metrics():
     slen = 50
     slack = 1.0

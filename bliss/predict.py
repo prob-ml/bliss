@@ -27,7 +27,4 @@ def predict(cfg):
         pred = encoder.encode_batch(batch)
         est_cat = encoder.variational_mode(pred)
 
-    # TODO: plot the original image, the reconstruction, and the residual image using plotly's
-    # interactive (zoomable) plots
-    # TODO: display accuracy metrics if ground truth, or a proxy for ground truth, is available
     print("{} light sources detected".format(est_cat.n_sources.item()))
