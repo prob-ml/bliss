@@ -117,7 +117,7 @@ encoder:
 training:
     name: "sdss_encoder"
     version: null
-    n_epochs: 1
+    n_epochs: 200
     experiment: default
     save_top_k: 1
     trainer:
