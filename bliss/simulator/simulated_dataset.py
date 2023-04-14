@@ -55,17 +55,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     image_prior: ImagePrior
     image_decoder: ImageDecoder
 
-    def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> TileCatalog:
-        tile_slen = self.image_decoder.tile_slen
-        return self.image_prior.sample_prior(tile_slen, batch_size, n_tiles_h, n_tiles_w)
-
-    def simulate_image_from_catalog(self, tile_catalog: TileCatalog) -> Tuple[Tensor, Tensor]:
-        images = self.image_decoder.render_images(tile_catalog)
-        background = self.background.sample(images.shape)
-        images += background
-        images = self._apply_noise(images)
-        return images, background
-
     @staticmethod
     def _apply_noise(images_mean):
         # add noise to images.
@@ -74,15 +63,28 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         images += images_mean
         return images
 
+    def simulate_image(self, tile_catalog: TileCatalog) -> Tuple[Tensor, Tensor]:
+        images = self.image_decoder.render_images(tile_catalog)
+        background = self.background.sample(images.shape)
+        images += background
+        images = self._apply_noise(images)
+        return images, background
+
+    def get_batch(self) -> Dict:
+        with torch.no_grad():
+            tile_catalog = self.image_prior.sample_prior(
+                self.image_decoder.tile_slen, self.batch_size, self.n_tiles_h, self.n_tiles_w
+            )
+            images, background = self.simulate_image(tile_catalog)
+            return {
+                "tile_catalog": tile_catalog.to_dict(),
+                "images": images,
+                "background": background,
+            }
+
     def __iter__(self):
         for _ in range(self.n_batches):
             yield self.get_batch()
-
-    def get_batch(self) -> Dict[str, Tensor]:
-        with torch.no_grad():
-            tile_catalog = self.sample_prior(self.batch_size, self.n_tiles_h, self.n_tiles_w)
-            images, background = self.simulate_image_from_catalog(tile_catalog)
-            return {**tile_catalog.to_dict(), "images": images, "background": background}
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)

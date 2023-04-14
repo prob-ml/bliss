@@ -11,8 +11,6 @@ from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 
 
 class GalsimGalaxyPrior:
-    dim_latents = 7
-
     def __init__(
         self,
         min_flux: float,
