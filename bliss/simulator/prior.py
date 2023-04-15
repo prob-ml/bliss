@@ -10,7 +10,7 @@ from torch.distributions import Poisson
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 
 
-class GalsimGalaxyPrior:
+class GalaxyPrior:
     def __init__(
         self,
         min_flux: float,
@@ -70,7 +70,11 @@ class ImagePrior(pl.LightningModule):
 
     def __init__(
         self,
+        n_tiles_h: int,
+        n_tiles_w: int,
+        tile_slen: int,
         n_bands: int,
+        batch_size: int,
         min_sources: int,
         max_sources: int,
         mean_sources: float,
@@ -78,12 +82,16 @@ class ImagePrior(pl.LightningModule):
         f_max: float,
         alpha: float,
         prob_galaxy: float,
-        galaxy_prior: Optional[GalsimGalaxyPrior] = None,
+        galaxy_prior: Optional[GalaxyPrior] = None,
     ):
         """Initializes ImagePrior.
 
         Args:
+            n_tiles_h: Image height in tiles,
+            n_tiles_w: Image width in tiles,
+            tile_slen: Tile side length in pixels,
             n_bands: Number of bands (colors) in the image.
+            batch_size: int,
             min_sources: Minimum number of sources in a tile
             max_sources: Maximum number of sources in a tile
             mean_sources: Mean rate of sources appearing in a tile
@@ -94,11 +102,16 @@ class ImagePrior(pl.LightningModule):
             galaxy_prior: Object from which galaxy latents are sampled
         """
         super().__init__()
+        self.n_tiles_h = n_tiles_h
+        self.n_tiles_w = n_tiles_w
+        self.tile_slen = tile_slen
         self.n_bands = n_bands
-        assert max_sources > 0, "No sources will be drawn."
+        self.batch_size = batch_size
+
         self.min_sources = min_sources
         self.max_sources = max_sources
         self.mean_sources = mean_sources
+
         self.f_min = f_min
         self.f_max = f_max
         self.alpha = alpha
@@ -108,16 +121,8 @@ class ImagePrior(pl.LightningModule):
         if self.prob_galaxy > 0.0:
             assert self.galaxy_prior is not None
 
-    def sample_prior(
-        self, tile_slen: int, batch_size: int, n_tiles_h: int, n_tiles_w: int
-    ) -> TileCatalog:
+    def sample_prior(self) -> TileCatalog:
         """Samples latent variables from the prior of an astronomical image.
-
-        Args:
-            tile_slen: Side length of catalog tiles.
-            batch_size: The number of samples to draw.
-            n_tiles_h: Number of tiles height-wise.
-            n_tiles_w: Number of tiles width-wise.
 
         Returns:
             A dictionary of tensors. Each tensor is a particular per-tile quantity; i.e.
@@ -125,9 +130,7 @@ class ImagePrior(pl.LightningModule):
             `(batch_size, self.n_tiles_h, self.n_tiles_w)`.
             The remaining dimensions are variable-specific.
         """
-        assert n_tiles_h > 0
-        assert n_tiles_w > 0
-        n_sources = self._sample_n_sources(batch_size, n_tiles_h, n_tiles_w)
+        n_sources = self._sample_n_sources(self.batch_size, self.n_tiles_h, self.n_tiles_w)
         is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
         locs = self._sample_locs(is_on_array)
 
@@ -146,7 +149,7 @@ class ImagePrior(pl.LightningModule):
             "star_log_fluxes": star_log_fluxes,
         }
 
-        return TileCatalog(tile_slen, catalog_params)
+        return TileCatalog(self.tile_slen, catalog_params)
 
     @staticmethod
     def _get_log_fluxes(fluxes):

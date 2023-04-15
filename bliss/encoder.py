@@ -181,11 +181,12 @@ class Encoder(pl.LightningModule):
         }
 
     def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
-        batch_size = len(batch["tile_catalog"]["n_sources"])
+        batch_size = batch["images"].size(0)
         pred = self.encode_batch(batch)
-        true_tile_catalog = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        loss_dict = self._get_loss(pred, true_tile_catalog)
-        true_full_cat = true_tile_catalog.to_full_params()
+        true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
+        loss_dict = self._get_loss(pred, true_tile_cat)
+        true_full_cat = true_tile_cat.to_full_params()
         est_cat = self.variational_mode(pred)
 
         # log all losses

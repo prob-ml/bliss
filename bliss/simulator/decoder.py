@@ -8,7 +8,7 @@ from astropy.io import fits
 from einops import rearrange, reduce
 from torch import Tensor, nn
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import TileCatalog
 
 
 class PSFDecoder(nn.Module):
@@ -188,12 +188,9 @@ class GalaxyDecoder(PSFDecoder):
 
 
 class ImageDecoder:
-    def __init__(self, galaxy_decoder: GalaxyDecoder, slen: int, bp: int, tile_slen: int) -> None:
+    def __init__(self, galaxy_decoder: GalaxyDecoder, bp: int) -> None:
         self.galaxy_decoder = galaxy_decoder
-        self.slen = slen
         self.bp = bp
-        self.tile_slen = tile_slen
-        assert self.slen + 2 * self.bp >= self.galaxy_decoder.slen
         self.pixel_scale = self.galaxy_decoder.pixel_scale
 
     def _render_star(self, flux: float, slen: int, offset: Optional[Tensor] = None) -> Tensor:
@@ -203,32 +200,28 @@ class ImageDecoder:
         image = star.drawImage(nx=slen, ny=slen, scale=self.pixel_scale, offset=offset)
         return torch.from_numpy(image.array).reshape(1, slen, slen)
 
-    def _add_source(self, b, s, full_cat, images):
-        bp_slen_bp = self.slen + 2 * self.bp
-        offset_yx = full_cat.plocs[b][s] + self.bp - bp_slen_bp / 2
-        offset_xy = torch.tensor([offset_yx[1], offset_yx[0]])
+    def render_images(self, tile_cat: TileCatalog):
+        batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
+        assert n_tiles_h == n_tiles_w
+        slen_h_bp = tile_cat.tile_slen * n_tiles_h + 2 * self.bp
 
-        if full_cat["galaxy_bools"][b][s] == 1:
-            gp = full_cat["galaxy_params"][b][s]
-            images[b] += self.galaxy_decoder.render_galaxy(gp, bp_slen_bp, offset_xy)
-        elif full_cat["star_bools"][b][s] == 1:
-            sp = full_cat["star_fluxes"][b][s].item()
-            images[b] += self._render_star(sp, bp_slen_bp, offset_xy)
+        full_cat = tile_cat.to_full_params()
+        assert self.galaxy_decoder.n_bands == 1, "only 1 band supported for now"
 
-    def render_images_fullcat(self, full_cat: FullCatalog):
-        bp_slen_bp = self.slen + 2 * self.bp
-        batch_size, _max_n_sources, _ = full_cat.plocs.shape
-        assert self.galaxy_decoder.n_bands == 1, "Only 1 band supported for now"
-
-        images = torch.zeros(batch_size, self.galaxy_decoder.n_bands, bp_slen_bp, bp_slen_bp)
+        images = torch.zeros(batch_size, self.galaxy_decoder.n_bands, slen_h_bp, slen_h_bp)
 
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             for s in range(n_sources):
-                self._add_source(b, s, full_cat, images)
+                plocs = full_cat.plocs[b][s]
+                offset_yx = plocs + self.bp - slen_h_bp / 2  # and slen_w_bp
+                offset_xy = torch.tensor([offset_yx[1], offset_yx[0]])
+
+                if full_cat["galaxy_bools"][b][s] == 1:
+                    gp = full_cat["galaxy_params"][b][s]
+                    images[b] += self.galaxy_decoder.render_galaxy(gp, slen_h_bp, offset_xy)
+                elif full_cat["star_bools"][b][s] == 1:
+                    sp = full_cat["star_fluxes"][b][s].item()
+                    images[b] += self._render_star(sp, slen_h_bp, offset_xy)
 
         return images
-
-    def render_images(self, tile_cat: TileCatalog):
-        full_cat = tile_cat.to_full_params()
-        return self.render_images_fullcat(full_cat)

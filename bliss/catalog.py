@@ -111,6 +111,13 @@ class TileCatalog(UserDict):
             out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         return type(self)(self.tile_slen, out)
 
+    def symmetric_crop(self, tiles_to_crop):
+        _batch_size, tile_height, tile_width = self.n_sources.shape
+        return self.crop(
+            [tiles_to_crop, tile_height - tiles_to_crop],
+            [tiles_to_crop, tile_width - tiles_to_crop],
+        )
+
     def truncate_sources(self, max_sources):
         """Removes sources in excess of `max_sources` from a catalog."""
         catalog_dict: Dict[str, Tensor] = {}

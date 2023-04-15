@@ -24,10 +24,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         prior: ImagePrior,
         decoder: ImageDecoder,
         background: Union[ConstantBackground, SimulatedSDSSBackground],
-        n_tiles_h: int,
-        n_tiles_w: int,
         n_batches: int,
-        batch_size: int,
         num_workers: int = 0,
         fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
@@ -35,9 +32,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         super().__init__()
 
         self.n_batches = n_batches
-        self.batch_size = batch_size
-        self.n_tiles_h = n_tiles_h
-        self.n_tiles_w = n_tiles_w
 
         self.image_prior = prior
         self.image_decoder = decoder
@@ -47,13 +41,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
         self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
-
-        # check training will work.
-        total_ptiles = self.batch_size * self.n_tiles_h * self.n_tiles_w
-        assert total_ptiles > 1, "Need at least 2 tiles over all batches."
-
-    image_prior: ImagePrior
-    image_decoder: ImageDecoder
 
     @staticmethod
     def _apply_noise(images_mean):
@@ -72,9 +59,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def get_batch(self) -> Dict:
         with torch.no_grad():
-            tile_catalog = self.image_prior.sample_prior(
-                self.image_decoder.tile_slen, self.batch_size, self.n_tiles_h, self.n_tiles_w
-            )
+            tile_catalog = self.image_prior.sample_prior()
             images, background = self.simulate_image(tile_catalog)
             return {
                 "tile_catalog": tile_catalog.to_dict(),
