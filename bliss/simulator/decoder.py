@@ -212,7 +212,9 @@ class ImageDecoder:
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             for s in range(n_sources):
-                offset_yx = full_cat.plocs[b][s] + slen_h / 2
+                offset_yx = full_cat.plocs[b][s] - (slen_h / 2)
+                # I don't think we should have to do this swap, though it does give us consistency
+                # btw tile_cat and images...is plocs backwards?
                 offset_xy = torch.tensor([offset_yx[1], offset_yx[0]])
 
                 if full_cat["galaxy_bools"][b][s] == 1:
