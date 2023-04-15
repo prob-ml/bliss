@@ -20,9 +20,9 @@ paths:
 simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
     n_batches: 128
-    valid_n_batches: 1  # 256
+    valid_n_batches: 10  # 256
     fix_validation_set: true
-    num_workers: 16
+    num_workers: 32
     prior:
         _target_: bliss.simulator.prior.ImagePrior
         n_tiles_h: 20
@@ -48,7 +48,6 @@ simulator:
             a_bulge_disk_ratio: 2.0
     decoder:
         _target_: bliss.simulator.decoder.ImageDecoder
-        bp: 0
         galaxy_decoder:
             _target_: bliss.simulator.decoder.GalaxyDecoder
             slen: 53

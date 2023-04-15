@@ -188,9 +188,8 @@ class GalaxyDecoder(PSFDecoder):
 
 
 class ImageDecoder:
-    def __init__(self, galaxy_decoder: GalaxyDecoder, bp: int) -> None:
+    def __init__(self, galaxy_decoder: GalaxyDecoder) -> None:
         self.galaxy_decoder = galaxy_decoder
-        self.bp = bp
         self.pixel_scale = self.galaxy_decoder.pixel_scale
 
     def _render_star(self, flux: float, slen: int, offset: Optional[Tensor] = None) -> Tensor:
@@ -203,25 +202,24 @@ class ImageDecoder:
     def render_images(self, tile_cat: TileCatalog):
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
         assert n_tiles_h == n_tiles_w
-        slen_h_bp = tile_cat.tile_slen * n_tiles_h + 2 * self.bp
+        slen_h = tile_cat.tile_slen * n_tiles_h
 
         full_cat = tile_cat.to_full_params()
         assert self.galaxy_decoder.n_bands == 1, "only 1 band supported for now"
 
-        images = torch.zeros(batch_size, self.galaxy_decoder.n_bands, slen_h_bp, slen_h_bp)
+        images = torch.zeros(batch_size, self.galaxy_decoder.n_bands, slen_h, slen_h)
 
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             for s in range(n_sources):
-                plocs = full_cat.plocs[b][s]
-                offset_yx = plocs + self.bp - slen_h_bp / 2  # and slen_w_bp
+                offset_yx = full_cat.plocs[b][s] + slen_h / 2
                 offset_xy = torch.tensor([offset_yx[1], offset_yx[0]])
 
                 if full_cat["galaxy_bools"][b][s] == 1:
                     gp = full_cat["galaxy_params"][b][s]
-                    images[b] += self.galaxy_decoder.render_galaxy(gp, slen_h_bp, offset_xy)
+                    images[b] += self.galaxy_decoder.render_galaxy(gp, slen_h, offset_xy)
                 elif full_cat["star_bools"][b][s] == 1:
                     sp = full_cat["star_fluxes"][b][s].item()
-                    images[b] += self._render_star(sp, slen_h_bp, offset_xy)
+                    images[b] += self._render_star(sp, slen_h, offset_xy)
 
         return images
