@@ -55,4 +55,4 @@ repos:
         language_version: python3.10
         types: [python]
         args:
-          - "--line-length=100"
+          - "--check --line-length=100"
