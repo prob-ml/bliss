@@ -45,21 +45,12 @@ class TileCatalog(UserDict):
         self.locs = d.pop("locs")
         self.n_sources = d.pop("n_sources")
         self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
-
-        # a bit of a hack, but removing images and background, if present,
-        # lets us instantiate a TileCatalog directly from a batch
-        if "images" in d.keys() and "background" in d.keys():
-            d.pop("images")
-            d.pop("background")
-
         super().__init__(**d)
 
     def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
-            raise ValueError(
-                f"The key '{key}' is not in the allowed parameters for TileCatalog"
-                " (check spelling?)"
-            )
+            msg = f"The key '{key}' is not in the allowed parameters for TileCatalog"
+            raise ValueError(msg)
         self._validate(item)
         super().__setitem__(key, item)
 
@@ -104,15 +95,6 @@ class TileCatalog(UserDict):
             [tiles_to_crop, tile_height - tiles_to_crop],
             [tiles_to_crop, tile_width - tiles_to_crop],
         )
-
-    def truncate_sources(self, max_sources):
-        """Removes sources in excess of `max_sources` from a catalog."""
-        catalog_dict: Dict[str, Tensor] = {}
-        for k, v in self.items():
-            catalog_dict[k] = v[:, :, :, 0:max_sources]
-        catalog_dict["locs"] = self.locs[:, :, :, 0:max_sources]
-        catalog_dict["n_sources"] = self.n_sources.clamp(0, max_sources)
-        return type(self)(self.tile_slen, catalog_dict)
 
     def to_full_params(self):
         """Converts image parameters in tiles to parameters of full image.
@@ -206,19 +188,6 @@ class TileCatalog(UserDict):
             out[k] = v
         return out
 
-    def equals(self, other, exclude=None, **kwargs) -> bool:
-        self_dict = self.to_dict()
-        other_dict: Dict[str, Tensor] = other.to_dict()
-        exclude = set() if exclude is None else set(exclude)
-        keys = set(self_dict.keys()).union(other_dict.keys()).difference(exclude)
-        for k in keys:
-            if not torch.allclose(self_dict[k], other_dict[k], **kwargs):
-                return False
-        return True
-
-    def __eq__(self, other):
-        return self.equals(other)
-
     def get_tile_params_at_coord(self, plocs: torch.Tensor) -> Dict[str, Tensor]:
         """Return the parameters of the tiles that contain each of the locations in plocs."""
         assert len(plocs.shape) == 2 and plocs.shape[1] == 2
@@ -291,21 +260,6 @@ class FullCatalog(UserDict):
     @property
     def device(self):
         return self.plocs.device
-
-    def equals(self, other, exclude=None):
-        assert self.batch_size == other.batch_size == 1
-        idx_self = self.plocs[0, :, 0].argsort()
-        idx_other: Tensor = other.plocs[0, :, 0].argsort()
-        exclude = set() if exclude is None else set(exclude)
-        keys = set(self.keys()).union(other.keys()).difference(exclude)
-        if not torch.allclose(self.plocs[:, idx_self, :], other.plocs[:, idx_other, :]):
-            return False
-        for k in keys:
-            self_value = self[k][:, idx_self, :].float()
-            other_value = other[k][:, idx_other, :].float()
-            if not torch.allclose(self_value, other_value, equal_nan=True):
-                return False
-        return True
 
     def crop(
         self,
