@@ -5,7 +5,8 @@ import torch
 from astropy.table import Table
 from astropy.wcs import WCS
 
-from bliss.catalog import FullCatalog, column_to_tensor
+from bliss.catalog import FullCatalog
+from bliss.surveys.sdss import column_to_tensor
 
 
 class DecalsFullCatalog(FullCatalog):

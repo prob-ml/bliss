@@ -3,13 +3,10 @@ from collections import UserDict
 from copy import copy
 from typing import Dict, Optional, Tuple
 
-import numpy as np
 import torch
 from einops import rearrange, reduce, repeat
 from matplotlib.pyplot import Axes
 from torch import Tensor
-from torch.nn import functional as F
-from tqdm import tqdm
 
 
 class TileCatalog(UserDict):
@@ -80,20 +77,10 @@ class TileCatalog(UserDict):
         assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
         assert x.device == self.device
 
-    @classmethod
-    def from_flat_dict(cls, tile_slen: int, n_tiles_h: int, n_tiles_w: int, d: Dict[str, Tensor]):
-        catalog_dict: Dict[str, Tensor] = {}
-        for k, v in d.items():
-            catalog_dict[k] = v.reshape(-1, n_tiles_h, n_tiles_w, *v.shape[1:])
-        return cls(tile_slen, catalog_dict)
-
     @property
     def is_on_array(self) -> Tensor:
         """Returns a (n x nth x ntw x n_sources) tensor indicating whether source is on."""
         return get_is_on_from_n_sources(self.n_sources, self.max_sources)
-
-    def cpu(self):
-        return self.to("cpu")
 
     def to(self, device):
         out = {}
@@ -253,82 +240,6 @@ class TileCatalog(UserDict):
         d["locs"] = self.locs[:, x_indx, y_indx, :, :].reshape(n_total, -1)
 
         return d
-
-    def set_all_fluxes_and_mags(self, decoder) -> None:
-        """Set all fluxes (galaxy and star) of tile catalog given an `ImageDecoder` instance."""
-        # first get galaxy fluxes
-        assert "galaxy_bools" in self and "galaxy_params" in self and "star_fluxes" in self
-        assert (
-            self.device == decoder.device
-        ), f"TileCatalog on {self.device} but decoder on {decoder.device}"
-        galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
-        with torch.no_grad():
-            galaxy_fluxes = decoder.get_galaxy_fluxes(galaxy_bools, galaxy_params)
-        self["galaxy_fluxes"] = galaxy_fluxes
-
-        # update default fluxes
-        star_bools = self["star_bools"]
-        star_fluxes = self["star_fluxes"]
-        fluxes = galaxy_bools * galaxy_fluxes + star_bools * star_fluxes
-        self["fluxes"] = fluxes
-
-        # mags (careful with 0s)
-        is_on_array = self.is_on_array > 0
-        self["mags"] = torch.zeros_like(self["fluxes"])
-        self["mags"][is_on_array] = convert_flux_to_mag(self["fluxes"][is_on_array])
-
-    def set_galaxy_ellips(self, decoder, scale: float = 0.393) -> None:
-        """Sets galaxy ellipticities of tile catalog given an `ImageDecoder` instance."""
-        galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
-        ellips = decoder.get_galaxy_ellips(galaxy_bools, galaxy_params, scale=scale)
-        self["ellips"] = ellips
-
-    def set_snr(self, decoder, bg: float) -> None:
-        star_dec = decoder.star_tile_decoder
-        galaxy_dec = decoder.galaxy_tile_decoder
-
-        b, nth, ntw, s, _ = self["star_fluxes"].shape
-        star_fluxes = rearrange(self["star_fluxes"], "b nth ntw s 1 -> (b nth ntw) s 1")
-        star_bools = rearrange(self["star_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
-        galaxy_params = rearrange(self["galaxy_params"], "b nth ntw s d -> (b nth ntw) s d")
-        galaxy_bools = rearrange(self["galaxy_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
-
-        n_total = b * nth * ntw
-        snr = torch.zeros(n_total, s, 1)
-        n_parts = 1000  # not all fits in GPU
-        for ii in tqdm(range(0, n_total, n_parts), desc="computing SNR", total=n_total // n_parts):
-            jj = ii + n_parts
-            star_fluxes_ii = star_fluxes[ii:jj]
-            star_bools_ii = star_bools[ii:jj]
-            galaxy_params_ii = galaxy_params[ii:jj]
-            galaxy_bools_ii = galaxy_bools[ii:jj]
-
-            # galaxies first to get correct sizes
-            single_galaxies_ii = galaxy_dec.forward(galaxy_params_ii, galaxy_bools_ii)
-            single_galaxies_ii = rearrange(single_galaxies_ii, "np s 1 h w -> np s h w")
-            single_galaxies_ii = single_galaxies_ii.cpu()
-            _, _, h, w = single_galaxies_ii.shape
-            assert h == w
-            bg_ii = torch.full_like(single_galaxies_ii, bg)
-
-            single_stars_ii = star_dec.forward(star_fluxes_ii, star_bools_ii, h)
-            single_stars_ii = rearrange(single_stars_ii, "np s 1 h w -> np s h w")
-            single_stars_ii = single_stars_ii.cpu()
-
-            star_snr = (single_stars_ii**2 / (single_stars_ii + bg_ii)).sum(axis=(-1, -2)).sqrt()
-            gal_snr = (
-                (single_galaxies_ii**2 / (single_galaxies_ii + bg_ii)).sum(axis=(-1, -2)).sqrt()
-            )
-
-            star_snr = rearrange(star_snr, "n s -> n s 1")
-            gal_snr = rearrange(gal_snr, "n s -> n s 1")
-
-            galaxy_bools_ii = galaxy_bools_ii.cpu()
-            star_bools_ii = star_bools_ii.cpu()
-            snr[ii:jj] = gal_snr * galaxy_bools_ii + star_snr * star_bools_ii  # noqa: WPS362
-
-        snr = rearrange(snr, "(b nth ntw) s 1 -> b nth ntw s 1", b=b, nth=nth, ntw=ntw, s=s)
-        self["snr"] = snr.to(decoder.device)
 
 
 class FullCatalog(UserDict):
@@ -524,46 +435,8 @@ class FullCatalog(UserDict):
         ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
 
 
-def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tensor:
-    """Divides a batch of full images into padded tiles.
-
-    This is similar to nn.conv2d, with a sliding window=ptile_slen and stride=tile_slen.
-
-    Arguments:
-        images: Tensor of images with size (batchsize x n_bands x slen x slen)
-        tile_slen: Side length of tile
-        ptile_slen: Side length of padded tile
-
-    Returns:
-        A batchsize x n_tiles_h x n_tiles_w x n_bands x tile_height x tile_width image
-    """
-    assert len(images.shape) == 4
-    n_bands = images.shape[1]
-    window = ptile_slen
-    n_tiles_h, n_tiles_w = get_n_padded_tiles_hw(
-        images.shape[2], images.shape[3], window, tile_slen
-    )
-    tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
-    # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
-    return rearrange(
-        tiles,
-        "b (c h w) (nth ntw) -> b nth ntw c h w",
-        nth=n_tiles_h,
-        ntw=n_tiles_w,
-        c=n_bands,
-        h=window,
-        w=window,
-    )
-
-
 def get_n_tiles_hw(height: int, width: int, tile_slen: int):
     return math.ceil(height / tile_slen), math.ceil(width / tile_slen)
-
-
-def get_n_padded_tiles_hw(height, width, window, tile_slen):
-    nh = ((height - window) // tile_slen) + 1
-    nw = ((width - window) // tile_slen) + 1
-    return nh, nw
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -594,30 +467,3 @@ def get_is_on_from_n_sources(n_sources, max_sources):
         is_on_array[..., i] = n_sources > i
 
     return is_on_array
-
-
-def convert_mag_to_flux(mag: Tensor, nelec_per_nmgy=987.31) -> Tensor:
-    # default corresponds to average value of columns for run 94, camcol 1, field 12
-    return 10 ** ((22.5 - mag) / 2.5) * nelec_per_nmgy
-
-
-def convert_flux_to_mag(flux: Tensor, nelec_per_nmgy=987.31) -> Tensor:
-    # default corresponds to average value of columns for run 94, camcol 1, field 12
-    return 22.5 - 2.5 * torch.log10(flux / nelec_per_nmgy)
-
-
-def column_to_tensor(table, colname):
-    dtypes = {
-        np.dtype(">i2"): int,
-        np.dtype(">i4"): int,
-        np.dtype(">i8"): int,
-        np.dtype("bool"): bool,
-        np.dtype(">f4"): np.float32,
-        np.dtype(">f8"): np.float32,
-        np.dtype("float32"): np.float32,
-        np.dtype("float64"): np.dtype("float64"),
-    }
-    x = np.array(table[colname])
-    dtype = dtypes[x.dtype]
-    x = x.astype(dtype)
-    return torch.from_numpy(x)
