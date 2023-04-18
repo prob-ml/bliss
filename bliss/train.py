@@ -85,7 +85,7 @@ def setup_logger(cfg, paths):
     if cfg.training.trainer.logger:
         logger = TensorBoardLogger(
             save_dir=paths["output"],
-            name=cfg.training.experiment,
+            name=cfg.training.name,
             version=cfg.training.version,
             default_hp_metric=False,
         )
