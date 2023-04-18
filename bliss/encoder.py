@@ -17,11 +17,11 @@ from bliss.catalog import TileCatalog
 from bliss.metrics import DetectionMetrics
 from bliss.plotting import plot_detections
 from bliss.unconstrained_dists import (
-    TransformedBernoulli,
-    TransformedDiagonalBivariateNormal,
-    TransformedLogitNormal,
-    TransformedLogNormal,
-    TransformedNormal,
+    UnconstrainedBernoulli,
+    UnconstrainedDiagonalBivariateNormal,
+    UnconstrainedLogitNormal,
+    UnconstrainedLogNormal,
+    UnconstrainedNormal,
 )
 
 
@@ -82,18 +82,18 @@ class Encoder(pl.LightningModule):
     @property
     def dist_param_groups(self):
         return {
-            "on_prob": TransformedBernoulli(),
-            "loc": TransformedDiagonalBivariateNormal(),
-            "star_log_flux": TransformedNormal(low_clamp=-6, high_clamp=3),
-            "galaxy_prob": TransformedBernoulli(),
+            "on_prob": UnconstrainedBernoulli(),
+            "loc": UnconstrainedDiagonalBivariateNormal(),
+            "star_log_flux": UnconstrainedNormal(low_clamp=-6, high_clamp=3),
+            "galaxy_prob": UnconstrainedBernoulli(),
             # galsim parameters
-            "galsim_flux": TransformedLogNormal(),
-            "galsim_disk_frac": TransformedLogitNormal(),
-            "galsim_beta_radians": TransformedLogitNormal(high=2 * torch.pi),
-            "galsim_disk_q": TransformedLogitNormal(),
-            "galsim_a_d": TransformedLogNormal(),
-            "galsim_bulge_q": TransformedLogitNormal(),
-            "galsim_a_b": TransformedLogNormal(),
+            "galsim_flux": UnconstrainedLogNormal(),
+            "galsim_disk_frac": UnconstrainedLogitNormal(),
+            "galsim_beta_radians": UnconstrainedLogitNormal(high=2 * torch.pi),
+            "galsim_disk_q": UnconstrainedLogitNormal(),
+            "galsim_a_d": UnconstrainedLogNormal(),
+            "galsim_bulge_q": UnconstrainedLogitNormal(),
+            "galsim_a_b": UnconstrainedLogNormal(),
         }
 
     def encode_batch(self, batch):
@@ -156,19 +156,19 @@ class Encoder(pl.LightningModule):
         # all the squeezing/rearranging below is because a TileCatalog can store multiple
         # light sources per tile, which is annoying here, but helpful for storing samples
         # real catlogs. Still, we may want to change it to just store one.
-        locs_loss = -pred["loc"].log_prob(true_tile_cat.locs.squeeze(3)).sum(-1)
-        locs_loss *= true_tile_cat.is_on_array.squeeze(3)
+        true_locs = true_tile_cat.locs.squeeze(3)
+        locs_loss = -pred["loc"].log_prob(true_locs)
+        locs_loss *= true_tile_cat.n_sources
 
         # star flux loss
         star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
         star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
-        star_flux_loss *= true_tile_cat.is_on_array.squeeze(3)
-        true_gal_bools = rearrange(true_tile_cat["galaxy_bools"], "b ht wt 1 1 -> b ht wt")
-        star_flux_loss *= 1 - true_gal_bools
+        star_flux_loss *= rearrange(true_tile_cat["star_bools"], "b ht wt 1 1 -> b ht wt")
 
         # star/galaxy classification loss
-        binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools.long())
-        binary_loss *= true_tile_cat.is_on_array.squeeze(3)
+        true_gal_bools = rearrange(true_tile_cat["galaxy_bools"], "b ht wt 1 1 -> b ht wt")
+        binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
+        binary_loss *= true_tile_cat.n_sources
 
         loss = counter_loss + locs_loss + star_flux_loss + binary_loss
 

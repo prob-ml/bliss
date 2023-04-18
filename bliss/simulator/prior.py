@@ -198,8 +198,9 @@ class ImagePrior(pl.LightningModule):
             device=is_on_array.device,
         )
         galaxy_bools = uniform < self.prob_galaxy
-        galaxy_bools = (galaxy_bools * is_on_array.unsqueeze(-1)).float()
-        star_bools = (1 - galaxy_bools) * is_on_array.unsqueeze(-1)
+        star_bools = galaxy_bools.bitwise_not()
+        galaxy_bools *= is_on_array.unsqueeze(-1)
+        star_bools *= is_on_array.unsqueeze(-1)
 
         return galaxy_bools, star_bools
 

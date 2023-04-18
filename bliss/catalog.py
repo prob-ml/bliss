@@ -54,11 +54,6 @@ class TileCatalog(UserDict):
         self._validate(item)
         super().__setitem__(key, item)
 
-        # provide star_bools automatically if galaxy_bools is set.
-        if key == "galaxy_bools" and "star_bools" not in self:
-            star_bools = self.is_on_array.unsqueeze(-1) * (1 - item)
-            super().__setitem__("star_bools", star_bools)
-
     def __getitem__(self, key: str) -> Tensor:
         assert isinstance(key, str)
         return super().__getitem__(key)
@@ -241,13 +236,6 @@ class FullCatalog(UserDict):
         self._validate(item)
         super().__setitem__(key, item)
 
-        # provide star_bools automatically if galaxy_bools is set.
-        if key == "galaxy_bools" and "star_bools" not in self:
-            assert item.dtype != torch.bool, "galaxy_bools should be float for consistency."
-            is_on_array = get_is_on_from_n_sources(self.n_sources, self.max_sources)
-            star_bools = (1 - item) * is_on_array.unsqueeze(-1)
-            super().__setitem__("star_bools", star_bools)
-
     def __getitem__(self, key: str) -> Tensor:
         assert isinstance(key, str)
         return super().__getitem__(key)
@@ -414,7 +402,7 @@ def get_is_on_from_n_sources(n_sources, max_sources):
         *n_sources.shape,
         max_sources,
         device=n_sources.device,
-        dtype=torch.float,
+        dtype=torch.bool,
     )
 
     for i in range(max_sources):
