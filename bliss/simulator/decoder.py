@@ -148,8 +148,7 @@ class GalaxyDecoder(PSFDecoder):
         offset: Optional[Tensor] = None,
     ) -> Tensor:
         assert offset is None or offset.shape == (2,)
-        if isinstance(galaxy_params, Tensor):
-            galaxy_params = galaxy_params.cpu().detach()
+        galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
         bulge_frac = 1 - disk_frac
 

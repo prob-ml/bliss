@@ -255,7 +255,7 @@ class ImagePrior(pl.LightningModule):
             samples = galaxy_prior.sample(total_latent, galaxy_bools.device)
         else:
             samples = torch.zeros((total_latent, 1), device=galaxy_bools.device)
-        galaxy_params = rearrange(
+        return rearrange(
             samples,
             "(b nth ntw s) g -> b nth ntw s g",
             b=batch_size,
@@ -263,7 +263,6 @@ class ImagePrior(pl.LightningModule):
             ntw=n_tiles_w,
             s=max_sources,
         )
-        return galaxy_params * galaxy_bools
 
 
 def _uniform(a, b, n_samples=1) -> Tensor:

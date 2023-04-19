@@ -57,6 +57,7 @@ class Encoder(pl.LightningModule):
             scheduler_params: arguments passed to the learning rate scheduler
         """
         super().__init__()
+        self.save_hyperparameters()
 
         self.n_bands = n_bands
         self.optimizer_params = optimizer_params
@@ -152,33 +153,49 @@ class Encoder(pl.LightningModule):
         # counter loss
         counter_loss = -pred["on_prob"].log_prob(true_tile_cat.n_sources)
 
-        # location loss
         # all the squeezing/rearranging below is because a TileCatalog can store multiple
         # light sources per tile, which is annoying here, but helpful for storing samples
-        # real catlogs. Still, we may want to change it to just store one.
+        # and real catalogs. Still, there may be a better way.
+
+        # location loss
         true_locs = true_tile_cat.locs.squeeze(3)
         locs_loss = -pred["loc"].log_prob(true_locs)
         locs_loss *= true_tile_cat.n_sources
-
-        # star flux loss
-        star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
-        star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
-        star_flux_loss *= rearrange(true_tile_cat["star_bools"], "b ht wt 1 1 -> b ht wt")
 
         # star/galaxy classification loss
         true_gal_bools = rearrange(true_tile_cat["galaxy_bools"], "b ht wt 1 1 -> b ht wt")
         binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
         binary_loss *= true_tile_cat.n_sources
 
+        # star flux loss
+        true_star_bools = rearrange(true_tile_cat["star_bools"], "b ht wt 1 1 -> b ht wt")
+        star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
+        star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
+        star_flux_loss *= true_star_bools
+
+        loss_with_components = {
+            "counter_loss": counter_loss.mean(),
+            "locs_loss": locs_loss.sum() / true_tile_cat.n_sources.sum(),
+            "binary_loss": binary_loss.sum() / true_tile_cat.n_sources.sum(),
+            "star_flux_loss": star_flux_loss.sum() / true_star_bools.sum(),
+        }
+
         loss = counter_loss + locs_loss + star_flux_loss + binary_loss
 
-        return {
-            "loss": loss.mean(),
-            "counter_loss": counter_loss.mean(),
-            "locs_loss": locs_loss.mean(),
-            "star_flux_loss": star_flux_loss.mean(),
-            "binary_loss": binary_loss.mean(),
-        }
+        # galaxy properties loss
+        galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
+        galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
+        for i, param_name in enumerate(galsim_names):
+            galsim_pn = f"galsim_{param_name}"
+            true_param_vals = galsim_true_vals[:, :, :, i]
+            loss_term = -pred[galsim_pn].log_prob(true_param_vals)
+            loss_term *= true_gal_bools
+            loss += loss_term
+            loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
+
+        loss_with_components["loss"] = loss.mean()
+
+        return loss_with_components
 
     def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
         batch_size = batch["images"].size(0)

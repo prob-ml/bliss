@@ -46,7 +46,7 @@ def train(cfg: DictConfig):
     )
 
     if logger:
-        log_hyperparameters(config=cfg, model=encoder, trainer=trainer)
+        log_hyperparameters(config=cfg, trainer=trainer)
 
     # train!
     tic = time_ns()
@@ -117,27 +117,10 @@ def setup_profiler(cfg):
 
 # https://github.com/ashleve/lightning-hydra-template/blob/main/src/utils/utils.py
 @rank_zero_only
-def log_hyperparameters(config, model, trainer) -> None:
-    """Log config and num of model parameters to all Lightning loggers."""
-
-    hparams = {}
-
-    # choose which parts of hydra config will be saved to loggers
-    hparams["mode"] = config["mode"]
-    hparams["training"] = config["training"]
-
-    # save number of model parameters
-    hparams["model/params_total"] = sum(p.numel() for p in model.parameters())
-    hparams["model/params_trainable"] = sum(
-        p.numel() for p in model.parameters() if p.requires_grad
-    )
-    hparams["model/params_not_trainable"] = sum(
-        p.numel() for p in model.parameters() if not p.requires_grad
-    )
-
+def log_hyperparameters(config, trainer) -> None:
+    """Log config to all Lightning loggers."""
     # send hparams to all loggers
-    trainer.logger.log_hyperparams(hparams)
-
+    trainer.logger.log_hyperparams(config)
     # trick to disable logging any more hyperparameters for all loggers
     trainer.logger.log_hyperparams = empty
 
