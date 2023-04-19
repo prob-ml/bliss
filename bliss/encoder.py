@@ -150,8 +150,12 @@ class Encoder(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def _get_loss(self, pred: Dict[str, Distribution], true_tile_cat: TileCatalog):
+        loss_with_components = {}
+
         # counter loss
         counter_loss = -pred["on_prob"].log_prob(true_tile_cat.n_sources)
+        loss = counter_loss
+        loss_with_components["counter_loss"] = counter_loss.mean()
 
         # all the squeezing/rearranging below is because a TileCatalog can store multiple
         # light sources per tile, which is annoying here, but helpful for storing samples
@@ -161,26 +165,23 @@ class Encoder(pl.LightningModule):
         true_locs = true_tile_cat.locs.squeeze(3)
         locs_loss = -pred["loc"].log_prob(true_locs)
         locs_loss *= true_tile_cat.n_sources
+        loss += locs_loss
+        loss_with_components["locs_loss"] = locs_loss.sum() / true_tile_cat.n_sources.sum()
 
         # star/galaxy classification loss
         true_gal_bools = rearrange(true_tile_cat["galaxy_bools"], "b ht wt 1 1 -> b ht wt")
         binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
         binary_loss *= true_tile_cat.n_sources
+        loss += binary_loss
+        loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
 
         # star flux loss
         true_star_bools = rearrange(true_tile_cat["star_bools"], "b ht wt 1 1 -> b ht wt")
         star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
         star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
         star_flux_loss *= true_star_bools
-
-        loss_with_components = {
-            "counter_loss": counter_loss.mean(),
-            "locs_loss": locs_loss.sum() / true_tile_cat.n_sources.sum(),
-            "binary_loss": binary_loss.sum() / true_tile_cat.n_sources.sum(),
-            "star_flux_loss": star_flux_loss.sum() / true_star_bools.sum(),
-        }
-
-        loss = counter_loss + locs_loss + star_flux_loss + binary_loss
+        loss += star_flux_loss
+        loss_with_components["star_flux_loss"] = star_flux_loss.sum() / true_star_bools.sum()
 
         # galaxy properties loss
         galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
