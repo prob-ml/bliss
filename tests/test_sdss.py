@@ -1,12 +1,12 @@
 import numpy as np
 import pytest
 
-from bliss.datasets.sdss import SloanDigitalSkySurvey
+from bliss.surveys.sdss import SloanDigitalSkySurvey
 
 
 class TestSDSS:
-    def test_sdss(self, get_config):
-        sdss_dir = get_config({}).paths.sdss
+    def test_sdss(self, cfg):
+        sdss_dir = cfg.paths.sdss
         sdss_obj = SloanDigitalSkySurvey(
             sdss_dir,
             run=3900,

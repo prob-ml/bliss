@@ -1,20 +1,12 @@
 import math
 from collections import UserDict
 from copy import copy
-from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import torch
-from astropy.io import fits
-from astropy.table import Table
-from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from matplotlib.pyplot import Axes
 from torch import Tensor
-from torch.nn import functional as F
-from tqdm import tqdm
-
-from bliss.datasets.sdss import SloanDigitalSkySurvey, column_to_tensor, convert_flux_to_mag
 
 
 class TileCatalog(UserDict):
@@ -53,29 +45,14 @@ class TileCatalog(UserDict):
         self.locs = d.pop("locs")
         self.n_sources = d.pop("n_sources")
         self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
-        assert self.n_sources.shape == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
-
-        # a bit of a hack, but removing images and background, if present,
-        # lets us instantiate a TileCatalog directly from a batch
-        if "images" in d.keys() and "background" in d.keys():
-            d.pop("images")
-            d.pop("background")
-
         super().__init__(**d)
 
     def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
-            raise ValueError(
-                f"The key '{key}' is not in the allowed parameters for TileCatalog"
-                " (check spelling?)"
-            )
+            msg = f"The key '{key}' is not in the allowed parameters for TileCatalog"
+            raise ValueError(msg)
         self._validate(item)
         super().__setitem__(key, item)
-
-        # provide star_bools automatically if galaxy_bools is set.
-        if key == "galaxy_bools" and "star_bools" not in self:
-            star_bools = self.is_on_array.unsqueeze(-1) * (1 - item)
-            super().__setitem__("star_bools", star_bools)
 
     def __getitem__(self, key: str) -> Tensor:
         assert isinstance(key, str)
@@ -86,20 +63,10 @@ class TileCatalog(UserDict):
         assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
         assert x.device == self.device
 
-    @classmethod
-    def from_flat_dict(cls, tile_slen: int, n_tiles_h: int, n_tiles_w: int, d: Dict[str, Tensor]):
-        catalog_dict: Dict[str, Tensor] = {}
-        for k, v in d.items():
-            catalog_dict[k] = v.reshape(-1, n_tiles_h, n_tiles_w, *v.shape[1:])
-        return cls(tile_slen, catalog_dict)
-
     @property
     def is_on_array(self) -> Tensor:
         """Returns a (n x nth x ntw x n_sources) tensor indicating whether source is on."""
         return get_is_on_from_n_sources(self.n_sources, self.max_sources)
-
-    def cpu(self):
-        return self.to("cpu")
 
     def to(self, device):
         out = {}
@@ -117,14 +84,12 @@ class TileCatalog(UserDict):
             out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         return type(self)(self.tile_slen, out)
 
-    def truncate_sources(self, max_sources):
-        """Removes sources in excess of `max_sources` from a catalog."""
-        catalog_dict: Dict[str, Tensor] = {}
-        for k, v in self.items():
-            catalog_dict[k] = v[:, :, :, 0:max_sources]
-        catalog_dict["locs"] = self.locs[:, :, :, 0:max_sources]
-        catalog_dict["n_sources"] = self.n_sources.clamp(0, max_sources)
-        return type(self)(self.tile_slen, catalog_dict)
+    def symmetric_crop(self, tiles_to_crop):
+        _batch_size, tile_height, tile_width = self.n_sources.shape
+        return self.crop(
+            [tiles_to_crop, tile_height - tiles_to_crop],
+            [tiles_to_crop, tile_width - tiles_to_crop],
+        )
 
     def to_full_params(self):
         """Converts image parameters in tiles to parameters of full image.
@@ -218,19 +183,6 @@ class TileCatalog(UserDict):
             out[k] = v
         return out
 
-    def equals(self, other, exclude=None, **kwargs) -> bool:
-        self_dict = self.to_dict()
-        other_dict: Dict[str, Tensor] = other.to_dict()
-        exclude = set() if exclude is None else set(exclude)
-        keys = set(self_dict.keys()).union(other_dict.keys()).difference(exclude)
-        for k in keys:
-            if not torch.allclose(self_dict[k], other_dict[k], **kwargs):
-                return False
-        return True
-
-    def __eq__(self, other):
-        return self.equals(other)
-
     def get_tile_params_at_coord(self, plocs: torch.Tensor) -> Dict[str, Tensor]:
         """Return the parameters of the tiles that contain each of the locations in plocs."""
         assert len(plocs.shape) == 2 and plocs.shape[1] == 2
@@ -252,82 +204,6 @@ class TileCatalog(UserDict):
         d["locs"] = self.locs[:, x_indx, y_indx, :, :].reshape(n_total, -1)
 
         return d
-
-    def set_all_fluxes_and_mags(self, decoder) -> None:
-        """Set all fluxes (galaxy and star) of tile catalog given an `ImageDecoder` instance."""
-        # first get galaxy fluxes
-        assert "galaxy_bools" in self and "galaxy_params" in self and "star_fluxes" in self
-        assert (
-            self.device == decoder.device
-        ), f"TileCatalog on {self.device} but decoder on {decoder.device}"
-        galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
-        with torch.no_grad():
-            galaxy_fluxes = decoder.get_galaxy_fluxes(galaxy_bools, galaxy_params)
-        self["galaxy_fluxes"] = galaxy_fluxes
-
-        # update default fluxes
-        star_bools = self["star_bools"]
-        star_fluxes = self["star_fluxes"]
-        fluxes = galaxy_bools * galaxy_fluxes + star_bools * star_fluxes
-        self["fluxes"] = fluxes
-
-        # mags (careful with 0s)
-        is_on_array = self.is_on_array > 0
-        self["mags"] = torch.zeros_like(self["fluxes"])
-        self["mags"][is_on_array] = convert_flux_to_mag(self["fluxes"][is_on_array])
-
-    def set_galaxy_ellips(self, decoder, scale: float = 0.393) -> None:
-        """Sets galaxy ellipticities of tile catalog given an `ImageDecoder` instance."""
-        galaxy_bools, galaxy_params = self["galaxy_bools"], self["galaxy_params"]
-        ellips = decoder.get_galaxy_ellips(galaxy_bools, galaxy_params, scale=scale)
-        self["ellips"] = ellips
-
-    def set_snr(self, decoder, bg: float) -> None:
-        star_dec = decoder.star_tile_decoder
-        galaxy_dec = decoder.galaxy_tile_decoder
-
-        b, nth, ntw, s, _ = self["star_fluxes"].shape
-        star_fluxes = rearrange(self["star_fluxes"], "b nth ntw s 1 -> (b nth ntw) s 1")
-        star_bools = rearrange(self["star_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
-        galaxy_params = rearrange(self["galaxy_params"], "b nth ntw s d -> (b nth ntw) s d")
-        galaxy_bools = rearrange(self["galaxy_bools"], "b nth ntw s 1 -> (b nth ntw) s 1")
-
-        n_total = b * nth * ntw
-        snr = torch.zeros(n_total, s, 1)
-        n_parts = 1000  # not all fits in GPU
-        for ii in tqdm(range(0, n_total, n_parts), desc="computing SNR", total=n_total // n_parts):
-            jj = ii + n_parts
-            star_fluxes_ii = star_fluxes[ii:jj]
-            star_bools_ii = star_bools[ii:jj]
-            galaxy_params_ii = galaxy_params[ii:jj]
-            galaxy_bools_ii = galaxy_bools[ii:jj]
-
-            # galaxies first to get correct sizes
-            single_galaxies_ii = galaxy_dec.forward(galaxy_params_ii, galaxy_bools_ii)
-            single_galaxies_ii = rearrange(single_galaxies_ii, "np s 1 h w -> np s h w")
-            single_galaxies_ii = single_galaxies_ii.cpu()
-            _, _, h, w = single_galaxies_ii.shape
-            assert h == w
-            bg_ii = torch.full_like(single_galaxies_ii, bg)
-
-            single_stars_ii = star_dec.forward(star_fluxes_ii, star_bools_ii, h)
-            single_stars_ii = rearrange(single_stars_ii, "np s 1 h w -> np s h w")
-            single_stars_ii = single_stars_ii.cpu()
-
-            star_snr = (single_stars_ii**2 / (single_stars_ii + bg_ii)).sum(axis=(-1, -2)).sqrt()
-            gal_snr = (
-                (single_galaxies_ii**2 / (single_galaxies_ii + bg_ii)).sum(axis=(-1, -2)).sqrt()
-            )
-
-            star_snr = rearrange(star_snr, "n s -> n s 1")
-            gal_snr = rearrange(gal_snr, "n s -> n s 1")
-
-            galaxy_bools_ii = galaxy_bools_ii.cpu()
-            star_bools_ii = star_bools_ii.cpu()
-            snr[ii:jj] = gal_snr * galaxy_bools_ii + star_snr * star_bools_ii  # noqa: WPS362
-
-        snr = rearrange(snr, "(b nth ntw) s 1 -> b nth ntw s 1", b=b, nth=nth, ntw=ntw, s=s)
-        self["snr"] = snr.to(decoder.device)
 
 
 class FullCatalog(UserDict):
@@ -360,13 +236,6 @@ class FullCatalog(UserDict):
         self._validate(item)
         super().__setitem__(key, item)
 
-        # provide star_bools automatically if galaxy_bools is set.
-        if key == "galaxy_bools" and "star_bools" not in self:
-            assert item.dtype != torch.bool, "galaxy_bools should be float for consistency."
-            is_on_array = get_is_on_from_n_sources(self.n_sources, self.max_sources)
-            star_bools = (1 - item) * is_on_array.unsqueeze(-1)
-            super().__setitem__("star_bools", star_bools)
-
     def __getitem__(self, key: str) -> Tensor:
         assert isinstance(key, str)
         return super().__getitem__(key)
@@ -379,21 +248,6 @@ class FullCatalog(UserDict):
     @property
     def device(self):
         return self.plocs.device
-
-    def equals(self, other, exclude=None):
-        assert self.batch_size == other.batch_size == 1
-        idx_self = self.plocs[0, :, 0].argsort()
-        idx_other: Tensor = other.plocs[0, :, 0].argsort()
-        exclude = set() if exclude is None else set(exclude)
-        keys = set(self.keys()).union(other.keys()).difference(exclude)
-        if not torch.allclose(self.plocs[:, idx_self, :], other.plocs[:, idx_other, :]):
-            return False
-        for k in keys:
-            self_value = self[k][:, idx_self, :].float()
-            other_value = other[k][:, idx_other, :].float()
-            if not torch.allclose(self_value, other_value, equal_nan=True):
-                return False
-        return True
 
     def crop(
         self,
@@ -523,207 +377,8 @@ class FullCatalog(UserDict):
         ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
 
 
-class PhotoFullCatalog(FullCatalog):
-    """Class for the SDSS PHOTO Catalog.
-
-    Some resources:
-    - https://www.sdss.org/dr12/algorithms/classify/
-    - https://www.sdss.org/dr12/algorithms/resolve/
-    """
-
-    @classmethod
-    def from_file(cls, sdss_path, run, camcol, field, band):
-        sdss_path = Path(sdss_path)
-        camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
-        po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
-        po_fits = fits.getdata(po_path)
-        objc_type = column_to_tensor(po_fits, "objc_type")
-        thing_id = column_to_tensor(po_fits, "thing_id")
-        ras = column_to_tensor(po_fits, "ra")
-        decs = column_to_tensor(po_fits, "dec")
-        galaxy_bools = (objc_type == 3) & (thing_id != -1)
-        star_bools = (objc_type == 6) & (thing_id != -1)
-        star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
-        star_mags = column_to_tensor(po_fits, "psfmag") * star_bools.reshape(-1, 1)
-        galaxy_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
-        galaxy_mags = column_to_tensor(po_fits, "cmodelmag") * galaxy_bools.reshape(-1, 1)
-        fluxes = star_fluxes + galaxy_fluxes
-        mags = star_mags + galaxy_mags
-        keep = galaxy_bools | star_bools
-        galaxy_bools = galaxy_bools[keep]
-        star_bools = star_bools[keep]
-        ras = ras[keep]
-        decs = decs[keep]
-        fluxes = fluxes[keep][:, band]
-        mags = mags[keep][:, band]
-
-        sdss = SloanDigitalSkySurvey(sdss_path, run, camcol, fields=(field,), bands=(band,))
-        wcs: WCS = sdss[0]["wcs"][0]
-
-        # get pixel coordinates
-        pts = []
-        prs = []
-        for ra, dec in zip(ras, decs):
-            pt, pr = wcs.wcs_world2pix(ra, dec, 0)
-            pts.append(float(pt))
-            prs.append(float(pr))
-        pts = torch.tensor(pts) + 0.5  # For consistency with BLISS
-        prs = torch.tensor(prs) + 0.5
-        plocs = torch.stack((prs, pts), dim=-1)
-        nobj = plocs.shape[0]
-
-        d = {
-            "plocs": plocs.reshape(1, nobj, 2),
-            "n_sources": torch.tensor((nobj,)),
-            "galaxy_bools": galaxy_bools.reshape(1, nobj, 1).float(),
-            "star_bools": star_bools.reshape(1, nobj, 1).float(),
-            "fluxes": fluxes.reshape(1, nobj, 1),
-            "mags": mags.reshape(1, nobj, 1),
-            "ra": ras.reshape(1, nobj, 1),
-            "dec": decs.reshape(1, nobj, 1),
-        }
-
-        height = sdss[0]["image"].shape[1]
-        width = sdss[0]["image"].shape[2]
-
-        return cls(height, width, d)
-
-
-class DecalsFullCatalog(FullCatalog):
-    """Class for the Decals Sweep Tractor Catalog.
-
-    Some resources:
-    - https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/south/sweep/9.0/
-    - https://www.legacysurvey.org/dr9/files/#sweep-catalogs-region-sweep
-    - https://www.legacysurvey.org/dr5/description/#photometry
-    - https://www.legacysurvey.org/dr9/bitmasks/
-    """
-
-    @staticmethod
-    def _flux_to_mag(flux):
-        return 22.5 - 2.5 * torch.log10(flux)
-
-    @classmethod
-    def from_file(
-        cls,
-        decals_cat_path,
-        wcs: WCS,
-        hlim: Tuple[int, int],  # in degrees
-        wlim: Tuple[int, int],  # in degrees
-        band: str = "r",
-        mag_max=23,
-    ):
-        assert hlim[0] == wlim[0]
-        catalog_path = Path(decals_cat_path)
-        table = Table.read(catalog_path, format="fits")
-        band = band.capitalize()
-
-        ra_lim, dec_lim = wcs.all_pix2world(wlim, hlim, 0)
-        bitmask = 0b0011010000000001  # noqa: WPS339
-
-        objid = column_to_tensor(table, "OBJID")
-        objc_type = table["TYPE"].data.astype(str)
-        bits = table["MASKBITS"].data.astype(int)
-        is_galaxy = torch.from_numpy(
-            (objc_type == "DEV")
-            | (objc_type == "REX")
-            | (objc_type == "EXP")
-            | (objc_type == "SER")
-        )
-        is_star = torch.from_numpy(objc_type == "PSF")
-        ra = column_to_tensor(table, "RA")
-        dec = column_to_tensor(table, "DEC")
-        flux = column_to_tensor(table, f"FLUX_{band}")
-        mask = torch.from_numpy((bits & bitmask) == 0).bool()
-
-        galaxy_bool = is_galaxy & mask & (flux > 0)
-        star_bool = is_star & mask & (flux > 0)
-
-        # get pixel coordinates
-        pt, pr = wcs.all_world2pix(ra, dec, 0)  # pixels
-        pt = torch.tensor(pt)
-        pr = torch.tensor(pr)
-        ploc = torch.stack((pr, pt), dim=-1)
-
-        # filter on locations
-        # first lims imposed on frame
-        keep_coord = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec > dec_lim[0]) & (dec < dec_lim[1])
-        # then, SDSS saturation
-        regions = [(1200, 1360, 1700, 1900), (280, 400, 1220, 1320)]
-        keep_sat = torch.ones(len(ra)).bool()
-        for lim in regions:
-            keep_sat = keep_sat & ((pr < lim[0]) | (pr > lim[1]) | (pt < lim[2]) | (pt > lim[3]))
-        keep = (galaxy_bool | star_bool) & keep_coord & keep_sat
-
-        # filter quantities
-        objid = objid[keep]
-        galaxy_bool = galaxy_bool[keep]
-        star_bool = star_bool[keep]
-        ra = ra[keep]
-        dec = dec[keep]
-        flux = flux[keep]
-        mag = cls._flux_to_mag(flux)
-        ploc = ploc[keep, :]
-        nobj = ploc.shape[0]
-
-        d = {
-            "objid": objid.reshape(1, nobj, 1),
-            "ra": ra.reshape(1, nobj, 1),
-            "dec": dec.reshape(1, nobj, 1),
-            "plocs": ploc.reshape(1, nobj, 2) - hlim[0] + 0.5,  # BLISS consistency
-            "n_sources": torch.tensor((nobj,)),
-            "galaxy_bools": galaxy_bool.reshape(1, nobj, 1).float(),
-            "star_bools": star_bool.reshape(1, nobj, 1).float(),
-            "fluxes": flux.reshape(1, nobj, 1),
-            "mags": mag.reshape(1, nobj, 1),
-        }
-
-        height = hlim[1] - hlim[0]
-        width = wlim[1] - wlim[0]
-        full_cat = cls(height, width, d)
-        return full_cat.apply_param_bin("mags", 0, mag_max)
-
-
-def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tensor:
-    """Divides a batch of full images into padded tiles.
-
-    This is similar to nn.conv2d, with a sliding window=ptile_slen and stride=tile_slen.
-
-    Arguments:
-        images: Tensor of images with size (batchsize x n_bands x slen x slen)
-        tile_slen: Side length of tile
-        ptile_slen: Side length of padded tile
-
-    Returns:
-        A batchsize x n_tiles_h x n_tiles_w x n_bands x tile_height x tile_width image
-    """
-    assert len(images.shape) == 4
-    n_bands = images.shape[1]
-    window = ptile_slen
-    n_tiles_h, n_tiles_w = get_n_padded_tiles_hw(
-        images.shape[2], images.shape[3], window, tile_slen
-    )
-    tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
-    # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
-    return rearrange(
-        tiles,
-        "b (c h w) (nth ntw) -> b nth ntw c h w",
-        nth=n_tiles_h,
-        ntw=n_tiles_w,
-        c=n_bands,
-        h=window,
-        w=window,
-    )
-
-
 def get_n_tiles_hw(height: int, width: int, tile_slen: int):
     return math.ceil(height / tile_slen), math.ceil(width / tile_slen)
-
-
-def get_n_padded_tiles_hw(height, width, window, tile_slen):
-    nh = ((height - window) // tile_slen) + 1
-    nw = ((width - window) // tile_slen) + 1
-    return nh, nw
 
 
 def get_is_on_from_n_sources(n_sources, max_sources):
@@ -747,7 +402,7 @@ def get_is_on_from_n_sources(n_sources, max_sources):
         *n_sources.shape,
         max_sources,
         device=n_sources.device,
-        dtype=torch.float,
+        dtype=torch.bool,
     )
 
     for i in range(max_sources):

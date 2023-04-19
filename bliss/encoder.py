@@ -1,242 +1,256 @@
-"""Scripts to produce BLISS estimates on astronomical images."""
-from typing import Dict, List, Optional, Tuple, Union
+import math
+from typing import Dict, Optional
 
+import pytorch_lightning as pl
 import torch
-from torch import Tensor, nn
-from tqdm import tqdm
+from einops import rearrange
+from matplotlib import pyplot as plt
+from omegaconf import OmegaConf
+from omegaconf.dictconfig import DictConfig
+from torch import Tensor
+from torch.distributions import Distribution
+from torch.optim import Adam
+from torch.optim.lr_scheduler import MultiStepLR
+from yolov5.models.yolo import DetectionModel
 
-from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.models.binary import BinaryEncoder
-from bliss.models.detection_encoder import DetectionEncoder
-from bliss.models.galaxy_encoder import GalaxyEncoder
-from bliss.models.galsim_encoder import GalsimEncoder
-from bliss.models.lens_encoder import LensEncoder
-from bliss.models.lensing_binary_encoder import LensingBinaryEncoder
+from bliss.catalog import TileCatalog
+from bliss.metrics import DetectionMetrics
+from bliss.plotting import plot_detections
+from bliss.unconstrained_dists import (
+    UnconstrainedBernoulli,
+    UnconstrainedDiagonalBivariateNormal,
+    UnconstrainedLogitNormal,
+    UnconstrainedLogNormal,
+    UnconstrainedNormal,
+)
 
 
-class Encoder(nn.Module):
-    """Encodes astronomical image into variational parameters.
+class Encoder(pl.LightningModule):
+    """Encodes the distribution of a latent variable representing an astronomical image.
 
-    This module takes an astronomical image, or specifically padded tiles
-    of an astronomical image, and returns either samples from the variational
-    distribution of the latent catalog of objects represented by that image.
-
-    Alternatively, this module can also return a sequential 'maximum-a-posteriori'
-    (though this is not the true MAP since estimation is done sequentially rather than
-    for the joint distribution or parameters).
-
-    Attributes:
-        See the __init__ function for a description of the attributes, which are
-        the submodules for specific components of the catalog.
+    This class implements the source encoder, which is supposed to take in
+    an astronomical image of size slen * slen and returns a NN latent variable
+    representation of this image.
     """
 
     def __init__(
         self,
-        detection_encoder: DetectionEncoder,
-        binary_encoder: Optional[BinaryEncoder] = None,
-        galaxy_encoder: Optional[Union[GalaxyEncoder, GalsimEncoder]] = None,
-        lensing_binary_encoder: Optional[LensingBinaryEncoder] = None,
-        lens_encoder: Optional[LensEncoder] = None,
-        n_images_per_batch: Optional[int] = None,
-        n_rows_per_batch: Optional[int] = None,
-        map_n_source_weights: Optional[Tuple[float, ...]] = None,
+        architecture: DictConfig,
+        n_bands: int,
+        tile_slen: int,
+        tiles_to_crop: int,
+        annotate_probs: bool = False,
+        slack: float = 1.0,
+        optimizer_params: Optional[dict] = None,
+        scheduler_params: Optional[dict] = None,
     ):
-        """Initializes Encoder.
-
-        This module requires at least the `detection_encoder`. Other
-        modules can be incorporated to add more information about the catalog,
-        specifically whether an object is a galaxy or star (`binary_encoder`), or
-        the latent parameter describing the shape of the galaxy `galaxy_encoder`.
+        """Initializes DetectionEncoder.
 
         Args:
-            detection_encoder: Module that takes padded tiles and returns the number
-                of sources and locations per-tile.
-            binary_encoder: Module that takes padded tiles and locations and
-                returns a classification between stars and galaxies. Defaults to None.
-            lensing_binary_encoder: Module that takes padded tiles and locations and
-                returns a classification between lensed and unlensed galaxies. Defaults to None.
-            galaxy_encoder: Module that takes padded tiles and locations and returns the variational
-                distribution of the latent variable determining the galaxy shape. Defaults to None.
-            lens_encoder: Module that takes padded tiles and locations and returns the variational
-                distribution of the latent variables determining the lens shape. Defaults to None.
-            n_images_per_batch: How many images can be processed at a time on the GPU?
-                If not specified, defaults to an amount known to fit on my GPU.
-            n_rows_per_batch: How many vertical padded tiles can be processed at a time on the GPU?
-                If not specified, defaults to an amount known to fit on my GPU.
-            map_n_source_weights: Optional. See DetectionEncoder. If specified, weights the argmax
-                in MAP estimation of locations. Useful for raising/lowering the threshold for
-                turning sources on/off.
+            architecture: yaml to specifying the encoder network architecture
+            n_bands: number of bands
+            tile_slen: dimension in pixels of a square tile
+            tiles_to_crop: margin of tiles not to use for computing loss
+            annotate_probs: Annotate probabilities on validation plots?
+            slack: Slack to use when matching locations for validation metrics.
+            optimizer_params: arguments passed to the Adam optimizer
+            scheduler_params: arguments passed to the learning rate scheduler
         """
         super().__init__()
-        self._dummy_param = nn.Parameter(torch.empty(0))
+        self.save_hyperparameters()
 
-        self.detection_encoder = detection_encoder
-        self.binary_encoder = binary_encoder
-        self.lensing_binary_encoder = lensing_binary_encoder
-        self.galaxy_encoder = galaxy_encoder
-        self.lens_encoder = lens_encoder
+        self.n_bands = n_bands
+        self.optimizer_params = optimizer_params
+        self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
 
-        if self.lens_encoder is not None:
-            # need to have lensing classifier and source galaxy encoder if lensing is desired
-            assert self.lensing_binary_encoder is not None
+        self.tile_slen = tile_slen
 
-        if map_n_source_weights is None:
-            map_n_source_weights_tnsr = torch.ones(self.detection_encoder.max_detections + 1)
-        else:
-            map_n_source_weights_tnsr = torch.tensor(map_n_source_weights)
+        # number of distributional parameters used to characterize each source
+        self.n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
 
-        self.n_images_per_batch = n_images_per_batch if n_images_per_batch is not None else 10
-        self.n_rows_per_batch = n_rows_per_batch if n_rows_per_batch is not None else 15
-        self.register_buffer("map_n_source_weights", map_n_source_weights_tnsr, persistent=False)
+        # a hack to get the right number of outputs from yolo
+        architecture["nc"] = self.n_params_per_source - 5
+        arch_dict = OmegaConf.to_container(architecture)
+        self.model = DetectionModel(cfg=arch_dict, ch=2)
+        self.tiles_to_crop = tiles_to_crop
 
-    def forward(self, x):
-        raise NotImplementedError("Unavailable. Use .variational_mode() or .sample() instead.")
+        # plotting
+        self.annotate_probs = annotate_probs
 
-    def variational_mode(self, image: Tensor, background: Tensor) -> TileCatalog:
-        """Get maximum a posteriori of catalog from image padded tiles.
+        # metrics
+        self.metrics = DetectionMetrics(slack)
 
-        Note that, strictly speaking, this is not the true MAP of the variational
-        distribution of the catalog.
+    @property
+    def dist_param_groups(self):
+        return {
+            "on_prob": UnconstrainedBernoulli(),
+            "loc": UnconstrainedDiagonalBivariateNormal(),
+            "star_log_flux": UnconstrainedNormal(low_clamp=-6, high_clamp=3),
+            "galaxy_prob": UnconstrainedBernoulli(),
+            # galsim parameters
+            "galsim_flux": UnconstrainedLogNormal(),
+            "galsim_disk_frac": UnconstrainedLogitNormal(),
+            "galsim_beta_radians": UnconstrainedLogitNormal(high=2 * torch.pi),
+            "galsim_disk_q": UnconstrainedLogitNormal(),
+            "galsim_a_d": UnconstrainedLogNormal(),
+            "galsim_bulge_q": UnconstrainedLogitNormal(),
+            "galsim_a_b": UnconstrainedLogNormal(),
+        }
 
-        Rather, we use sequential estimation; the MAP of the locations is first estimated,
-        then plugged-in to the binary and galaxy encoders. Thus, the binary and galaxy
-        encoders are conditioned on the location MAP. The true MAP would require optimizing
-        over the entire catalog jointly, but this is not tractable.
+    def encode_batch(self, batch):
+        images_with_background = torch.cat((batch["images"], batch["background"]), dim=1)
 
-        Args:
-            image: An astronomical image,
-                with shape `n * n_bands * h * w`.
-            background: Background associated with image,
-                with shape `n * n_bands * h * w`.
+        # setting this to true every time is a hack to make yolo DetectionModel
+        # give us output of the right dimension
+        self.model.model[-1].training = True
 
-        Returns:
-            A dictionary of the maximum a posteriori
-            of the catalog in tiles. Specifically, this dictionary comprises:
-                - The output of DetectionEncoder.variational_mode()
-                - 'galaxy_bools', 'star_bools', and 'galaxy_probs' from BinaryEncoder.
-                - 'galaxy_params' from GalaxyEncoder.
-                - 'lens_params' from LensEncoder.
-        """
-        tile_map_dict = self.sample(image, background, None)
-        n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.detection_encoder.tile_slen
-        n_tiles_w = (image.shape[3] - 2 * self.border_padding) // self.detection_encoder.tile_slen
-        return TileCatalog.from_flat_dict(
-            self.detection_encoder.tile_slen,
-            n_tiles_h,
-            n_tiles_w,
-            {k: v.squeeze(0) for k, v in tile_map_dict.items()},
-        )
+        assert images_with_background.size(2) % 8 == 0, "image dims must be multiples of 8"
+        assert images_with_background.size(3) % 8 == 0, "image dims must be multiples of 8"
+        output = self.model(images_with_background)
+        # there's an extra dimension for channel that is always a singleton
+        output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
 
-    def sample(
-        self, image: Tensor, background: Tensor, n_samples: Optional[int]
-    ) -> Dict[str, Tensor]:
-        n_tiles_h = (image.shape[2] - 2 * self.border_padding) // self.detection_encoder.tile_slen
-        ptile_loader = self.make_ptile_loader(image, background, n_tiles_h)
-        tile_map_list: List[Dict[str, Tensor]] = []
-        with torch.no_grad():
-            for ptiles in tqdm(ptile_loader, desc="Encoding ptiles"):
-                out_ptiles = self._encode_ptiles(ptiles, n_samples)
-                tile_map_list.append(out_ptiles)
-        return self.collate(tile_map_list)
+        ttc = self.tiles_to_crop
+        if ttc > 0:
+            output4d = output4d[:, ttc:-ttc, ttc:-ttc, :]
 
-    def make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int):
-        img_bg = torch.cat((image, background), dim=1).to(self.device)
-        n_images = image.shape[0]
-        for start_b in range(0, n_images, self.n_images_per_batch):
-            for row in range(0, n_tiles_h, self.n_rows_per_batch):
-                end_b = start_b + self.n_images_per_batch
-                end_row = row + self.n_rows_per_batch
-                start_h = row * self.detection_encoder.tile_slen
-                end_h = end_row * self.detection_encoder.tile_slen + 2 * self.border_padding
-                img_bg_cropped = img_bg[start_b:end_b, :, start_h:end_h, :]
-                image_ptiles = get_images_in_tiles(
-                    img_bg_cropped,
-                    self.detection_encoder.tile_slen,
-                    self.detection_encoder.ptile_slen,
-                )
-                yield image_ptiles.reshape(-1, *image_ptiles.shape[-3:])
+        split_sizes = [v.dim for v in self.dist_param_groups.values()]
+        dist_params_split = torch.split(output4d, split_sizes, 3)
+        names = self.dist_param_groups.keys()
+        pred = dict(zip(names, dist_params_split))
 
-    def _encode_ptiles(self, image_ptiles: Tensor, n_samples: Optional[int]):
-        assert isinstance(self.map_n_source_weights, Tensor)
-        deterministic = n_samples is None
-        dist_params = self.detection_encoder.encode_tiled(image_ptiles)
-        tile_samples = self.detection_encoder.sample(
-            dist_params, n_samples, n_source_weights=self.map_n_source_weights
-        )
-        locs = tile_samples["locs"]
-        n_sources = tile_samples["n_sources"]
-        is_on_array = get_is_on_from_n_sources(n_sources, self.detection_encoder.max_detections)
+        for k, v in pred.items():
+            pred[k] = self.dist_param_groups[k].get_dist(v)
 
-        # add some variational distribution parameters to output
-        n_source_log_probs = dist_params["n_source_log_probs"][:, 1:]
-        tile_samples["n_source_log_probs"] = n_source_log_probs.unsqueeze(-1).unsqueeze(0)
-        dist_params_n_src = self.detection_encoder.encode_for_n_sources(
-            dist_params["per_source_params"], n_sources
-        )
-        tile_samples["log_flux_sd"] = dist_params_n_src["log_flux_sd"]
-        tile_samples["loc_sd"] = dist_params_n_src["loc_sd"]
+        return pred
 
-        if self.binary_encoder is not None:
-            assert not self.binary_encoder.training
-            galaxy_probs = self.binary_encoder.forward(image_ptiles, locs)
-            galaxy_probs *= is_on_array.unsqueeze(-1)
-            if deterministic:
-                galaxy_bools = (galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
-            else:
-                galaxy_bools = (torch.rand_like(galaxy_probs) > 0.5).float()
-                galaxy_bools *= is_on_array.unsqueeze(-1)
+    def variational_mode(self, pred: Dict[str, Tensor]) -> Dict[str, Tensor]:
+        """Compute the mode of the variational distribution."""
+        # the mean would be better at minimizing squared error...should we return that instead?
+        tile_is_on_array = pred["on_prob"].mode
+        # this is the mode of star_log_flux but not the mean of the star_flux distribution
+        star_fluxes = pred["star_log_flux"].mode.exp()  # type: ignore
+        star_fluxes *= tile_is_on_array
 
-            tile_samples.update({"galaxy_bools": galaxy_bools, "galaxy_probs": galaxy_probs})
+        # we have to unsqueeze some tensors below because a TileCatalog can store multiple
+        # light sources per tile, but we predict only one source per tile
+        est_catalog_dict = {
+            "locs": rearrange(pred["loc"].mode, "b ht wt d -> b ht wt 1 d"),
+            "star_log_fluxes": rearrange(pred["star_log_flux"].mode, "b ht wt -> b ht wt 1 1"),
+            "star_fluxes": rearrange(star_fluxes, "b ht wt -> b ht wt 1 1"),
+            "n_sources": tile_is_on_array,
+        }
+        est_tile_catalog = TileCatalog(self.tile_slen, est_catalog_dict)
+        return est_tile_catalog.to_full_params()
 
-            if self.lensing_binary_encoder is not None:
-                assert not self.lensing_binary_encoder.training
-                lensed_galaxy_probs = self.lensing_binary_encoder.forward(image_ptiles, locs)
-                lensed_galaxy_probs *= is_on_array.unsqueeze(-1)
+    def configure_optimizers(self):
+        """Configure optimizers for training (pytorch lightning)."""
+        optimizer = Adam(self.parameters(), **self.optimizer_params)
+        scheduler = MultiStepLR(optimizer, **self.scheduler_params)
+        return [optimizer], [scheduler]
 
-                if deterministic:
-                    lensed_galaxy_bools = (lensed_galaxy_probs > 0.5).float()
-                    lensed_galaxy_bools *= is_on_array.unsqueeze(-1)
-                else:
-                    lensed_galaxy_bools = (torch.rand_like(lensed_galaxy_probs) > 0.5).float()
-                    lensed_galaxy_bools *= is_on_array.unsqueeze(-1)
+    def _get_loss(self, pred: Dict[str, Distribution], true_tile_cat: TileCatalog):
+        loss_with_components = {}
 
-                # currently only support lensing where galaxy is present
-                lensed_galaxy_bools *= galaxy_bools
+        # counter loss
+        counter_loss = -pred["on_prob"].log_prob(true_tile_cat.n_sources)
+        loss = counter_loss
+        loss_with_components["counter_loss"] = counter_loss.mean()
 
-                tile_samples["lensed_galaxy_bools"] = lensed_galaxy_bools
-                tile_samples["lensed_galaxy_probs"] = lensed_galaxy_probs
+        # all the squeezing/rearranging below is because a TileCatalog can store multiple
+        # light sources per tile, which is annoying here, but helpful for storing samples
+        # and real catalogs. Still, there may be a better way.
 
-        if self.galaxy_encoder is not None:
-            galaxy_params = self.galaxy_encoder.sample(
-                image_ptiles, locs, deterministic=deterministic
+        # location loss
+        true_locs = true_tile_cat.locs.squeeze(3)
+        locs_loss = -pred["loc"].log_prob(true_locs)
+        locs_loss *= true_tile_cat.n_sources
+        loss += locs_loss
+        loss_with_components["locs_loss"] = locs_loss.sum() / true_tile_cat.n_sources.sum()
+
+        # star/galaxy classification loss
+        true_gal_bools = rearrange(true_tile_cat["galaxy_bools"], "b ht wt 1 1 -> b ht wt")
+        binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
+        binary_loss *= true_tile_cat.n_sources
+        loss += binary_loss
+        loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
+
+        # star flux loss
+        true_star_bools = rearrange(true_tile_cat["star_bools"], "b ht wt 1 1 -> b ht wt")
+        star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
+        star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
+        star_flux_loss *= true_star_bools
+        loss += star_flux_loss
+        loss_with_components["star_flux_loss"] = star_flux_loss.sum() / true_star_bools.sum()
+
+        # galaxy properties loss
+        galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
+        galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
+        for i, param_name in enumerate(galsim_names):
+            galsim_pn = f"galsim_{param_name}"
+            true_param_vals = galsim_true_vals[:, :, :, i]
+            loss_term = -pred[galsim_pn].log_prob(true_param_vals)
+            loss_term *= true_gal_bools
+            loss += loss_term
+            loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
+
+        loss_with_components["loss"] = loss.mean()
+
+        return loss_with_components
+
+    def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
+        batch_size = batch["images"].size(0)
+        pred = self.encode_batch(batch)
+        true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
+        loss_dict = self._get_loss(pred, true_tile_cat)
+        true_full_cat = true_tile_cat.to_full_params()
+        est_cat = self.variational_mode(pred)
+
+        # log all losses
+        for k, v in loss_dict.items():
+            self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+
+        # log all metrics
+        if log_metrics:
+            metrics = self.metrics(true_full_cat, est_cat)
+            for k, v in metrics.items():
+                self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+
+        # log a grid of figures to the tensorboard
+        if plot_images:
+            batch_size = len(batch["images"])
+            n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
+            nrows = int(n_samples**0.5)  # for figure
+            wrong_idx = (est_cat.n_sources != true_full_cat.n_sources).nonzero()
+            wrong_idx = wrong_idx.view(-1)[:n_samples]
+            margin_px = self.tiles_to_crop * self.tile_slen
+            fig = plot_detections(
+                batch["images"], true_full_cat, est_cat, nrows, wrong_idx, margin_px
             )
-            galaxy_params *= is_on_array.unsqueeze(-1) * galaxy_bools
-            tile_samples.update({"galaxy_params": galaxy_params})
+            title_root = f"Epoch:{self.current_epoch}/"
+            title = f"{title_root}{logging_name} images"
+            if self.logger:
+                self.logger.experiment.add_figure(title, fig)
+            plt.close(fig)
 
-        if self.lens_encoder is not None:
-            lens_params = self.lens_encoder.sample(image_ptiles, locs)
-            lens_params *= is_on_array.unsqueeze(-1) * lensed_galaxy_bools
-            tile_samples.update({"lens_params": lens_params})
+        return loss_dict["loss"]
 
-        return tile_samples
+    def training_step(self, batch, batch_idx, optimizer_idx=0):
+        """Training step (pytorch lightning)."""
+        return self._generic_step(batch, "train")
 
-    @staticmethod
-    def collate(tile_map_list: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
-        out: Dict[str, Tensor] = {}
-        for k in tile_map_list[0]:
-            out[k] = torch.cat([d[k] for d in tile_map_list], dim=1)
-        return out
+    def validation_step(self, batch, batch_idx):
+        """Pytorch lightning method."""
+        self._generic_step(batch, "val", log_metrics=True, plot_images=True)
+        return batch  # do we really need to save all these batches?
 
-    def get_images_in_ptiles(self, images):
-        """Run get_images_in_ptiles with correct tile_slen and ptile_slen."""
-        return get_images_in_tiles(
-            images, self.detection_encoder.tile_slen, self.detection_encoder.ptile_slen
-        )
+    def validation_epoch_end(self, outputs):
+        """Pytorch lightning method."""
+        batch: Dict[str, Tensor] = outputs[-1]
+        self._generic_step(batch, "val")
 
-    @property
-    def border_padding(self) -> int:
-        return self.detection_encoder.border_padding
-
-    @property
-    def device(self):
-        return self._dummy_param.device
+    def test_step(self, batch, batch_idx):
+        """Pytorch lightning method."""
+        self._generic_step(batch, "test", log_metrics=True)
+        return batch  # do we really need to save all these batches?
