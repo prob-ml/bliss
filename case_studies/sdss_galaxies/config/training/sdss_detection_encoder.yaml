@@ -1,9 +1,0 @@
-# @package _global_
-training:
-  name: "sdss_detection_encoder"
-  model: ${models.detection_encoder}
-  dataset: ${datasets.simulated}
-  n_epochs: 1501
-  save_top_k: 10
-  trainer:
-    enable_checkpointing: True
