@@ -118,6 +118,7 @@ def _make_pr_figure(
     ax2.set_xlabel(xlabel)
     ax2.set_ylabel(rf"\rm {metric_type} Metric")
     ax2.set_yticks(yticks)
+    ax2.grid(linestyle="-", linewidth=0.5, which="major", axis="both")
 
     if xlims is not None:
         ax2.set_xlim(xlims)
@@ -138,6 +139,7 @@ def _make_pr_figure(
     ax1.set_yticks(yticks)
     ax1.set_ylabel(r"\rm Counts")
     ax1.legend(loc="best", prop={"size": legend_size_hist})
+    ax1.grid(linestyle="-", linewidth=0.5, which="major", axis="both")
     plt.subplots_adjust(hspace=0)
     return fig
 
@@ -475,11 +477,13 @@ class BlendResidualFigure(BlissFigure):
         scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
         ax1.set_ylabel(ylabel)
         ax1.axhline(0, ls="--", color="k")
+        ax1.set_ylim(-1, 2.5)
 
         xlims = (0, 1)
         x, y = blendedness, (efluxes - tfluxes) / tfluxes
         scatter_shade_plot(ax2, x, y, xlims, delta=0.1)
         ax2.axhline(0, ls="--", color="k")
+        ax2.set_ylim(-1, 2.5)
 
         xlims = (0.5, 3)
         ylabel = r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$"
