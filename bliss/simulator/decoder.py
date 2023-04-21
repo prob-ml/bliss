@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Callable, Tuple
+from typing import Tuple
 
 import galsim
 import numpy as np
@@ -11,25 +11,7 @@ from torch import Tensor, nn
 from bliss.catalog import TileCatalog
 
 
-class PSFDecoder(nn.Module):
-    """Abstract decoder class to subclass whenever the decoded result will go through a PSF.
-
-    PSF (point-spread function) use is common for decoding the final realistic astronomical
-    image to account for sensor lens effects. PSF loading is suppported as a direct image (npy)
-    or through attributes (npy or fits) file.
-
-    For parameter loading, a psf_params_file should be indicated, with the corresponding
-    psf_slen and sdss_bands.
-
-    Attributes:
-        psf_params_file: PSF parameters (saved either in a numpy file or fits file from SDSS)
-        psf_slen: Side-length of the PSF.
-        sdss_bands: Bands to retrieve from PSF.
-        n_bands: Number of bands to retrieve from PSF.
-    """
-
-    forward: Callable[..., Tensor]
-
+class ImageDecoder(nn.Module):
     def __init__(
         self,
         n_bands: int,
@@ -37,27 +19,31 @@ class PSFDecoder(nn.Module):
         psf_params_file: str,
         psf_slen: int,
         sdss_bands: Tuple[int, ...],
-    ):
+    ) -> None:
         super().__init__()
+        assert n_bands == 1, "Only 1 band is supported"
+
         self.n_bands = n_bands
+        self.pixel_scale = pixel_scale
+
         self.params = None  # psf params from fits file
 
         assert Path(psf_params_file).suffix == ".fits"
         assert len(sdss_bands) == n_bands
         psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
+
         self.psf_slen = psf_slen
+
         grid = self._get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
         # Bryan: extra factor to be consistent with old repo, probably unimportant...
         grid *= self.psf_slen / (self.psf_slen - 1)
         self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
 
         self.psf = self.forward_psf_from_params().detach().numpy()
+        assert len(self.psf.shape) == 3 and self.psf.shape[0] == 1
         psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
         self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
-
-    def forward(self, x):  # type: ignore
-        raise NotImplementedError("Please extend this class and implement forward()")
 
     @staticmethod
     def _get_mgrid(slen: int):
@@ -113,29 +99,6 @@ class PSFDecoder(nn.Module):
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
-
-class GalaxyDecoder(PSFDecoder):
-    def __init__(
-        self,
-        n_bands: int,
-        pixel_scale: float,
-        psf_params_file: str,
-        psf_slen: int,
-        sdss_bands: Tuple[int, ...],
-    ) -> None:
-        super().__init__(
-            psf_params_file=psf_params_file,
-            psf_slen=psf_slen,
-            sdss_bands=sdss_bands,
-            n_bands=n_bands,
-            pixel_scale=pixel_scale,
-        )
-        assert len(self.psf.shape) == 3 and self.psf.shape[0] == 1
-
-        assert n_bands == 1, "Only 1 band is supported"
-        self.n_bands = 1
-        self.pixel_scale = pixel_scale
-
     def render_galaxy(
         self,
         galaxy_params: Tensor,
@@ -174,15 +137,9 @@ class GalaxyDecoder(PSFDecoder):
         image = gal_conv.drawImage(nx=slen_x, ny=slen_y, scale=self.pixel_scale, offset=offset)
         return torch.from_numpy(image.array)
 
-
-class ImageDecoder:
-    def __init__(self, galaxy_decoder: GalaxyDecoder) -> None:
-        self.galaxy_decoder = galaxy_decoder
-        self.pixel_scale = self.galaxy_decoder.pixel_scale
-
     def _render_star(self, flux: float, slen_x: int, slen_y: int, offset: Tensor) -> Tensor:
         assert offset.shape == (2,)
-        star = self.galaxy_decoder.psf_galsim.withFlux(flux)  # creates a copy
+        star = self.psf_galsim.withFlux(flux)  # creates a copy
         offset = offset.numpy()
         image = star.drawImage(nx=slen_x, ny=slen_y, scale=self.pixel_scale, offset=offset)
         return torch.from_numpy(image.array)
@@ -194,9 +151,8 @@ class ImageDecoder:
         slen_w = tile_cat.tile_slen * n_tiles_w
 
         full_cat = tile_cat.to_full_params()
-        assert self.galaxy_decoder.n_bands == 1, "only 1 band supported for now"
 
-        images = torch.zeros(batch_size, self.galaxy_decoder.n_bands, slen_h, slen_w)
+        images = torch.zeros(batch_size, self.n_bands, slen_h, slen_w)
 
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
@@ -206,7 +162,7 @@ class ImageDecoder:
 
                 if full_cat["galaxy_bools"][b][s] == 1:
                     gp = full_cat["galaxy_params"][b][s]
-                    images[b, 0] += self.galaxy_decoder.render_galaxy(gp, slen_w, slen_h, offset)
+                    images[b, 0] += self.render_galaxy(gp, slen_w, slen_h, offset)
                 elif full_cat["star_bools"][b][s] == 1:
                     sp = full_cat["star_fluxes"][b][s].item()
                     images[b, 0] += self._render_star(sp, slen_w, slen_h, offset)
