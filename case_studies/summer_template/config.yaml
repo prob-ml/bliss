@@ -134,7 +134,7 @@ training:
         file: null
         batch_size: 32
         num_workers: 0  # why not increase this?
-    weight_save_path: ${paths.output}/${training.name}_${training.version}.pt
+    weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
     seed: 42
 
 predict:
