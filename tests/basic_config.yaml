@@ -52,8 +52,6 @@ simulator:
         galaxy_decoder:
             _target_: bliss.simulator.decoder.GalaxyDecoder
             n_bands: 1
-            slen: 1
-            ptile_slen: 6
             pixel_scale: 0.396
             psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
             psf_slen: 25

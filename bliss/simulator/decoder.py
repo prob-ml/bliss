@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Callable, Optional, Tuple
+from typing import Callable, Tuple
 
 import galsim
 import numpy as np
@@ -117,8 +117,6 @@ class PSFDecoder(nn.Module):
 class GalaxyDecoder(PSFDecoder):
     def __init__(
         self,
-        slen: int,
-        ptile_slen: int,
         n_bands: int,
         pixel_scale: float,
         psf_params_file: str,
@@ -135,19 +133,18 @@ class GalaxyDecoder(PSFDecoder):
         assert len(self.psf.shape) == 3 and self.psf.shape[0] == 1
 
         assert n_bands == 1, "Only 1 band is supported"
-        self.slen = slen
         self.n_bands = 1
         self.pixel_scale = pixel_scale
-        self.ptile_slen = ptile_slen
 
-    def _render_galaxy_np(
+    def render_galaxy(
         self,
         galaxy_params: Tensor,
-        psf: galsim.GSObject,
-        slen: int,
-        offset: Optional[Tensor] = None,
+        slen_x: int,
+        slen_y: int,
+        offset: Tensor,
     ) -> Tensor:
-        assert offset is None or offset.shape == (2,)
+        assert offset.shape == (2,)
+
         galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
         bulge_frac = 1 - disk_frac
@@ -172,18 +169,10 @@ class GalaxyDecoder(PSFDecoder):
             ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
             components.append(bulge)
         galaxy = galsim.Add(components)
-        gal_conv = galsim.Convolution(galaxy, psf)
+        gal_conv = galsim.Convolution(galaxy, self.psf_galsim)
         offset = offset if offset is None else offset.numpy()
-        return gal_conv.drawImage(nx=slen, ny=slen, scale=self.pixel_scale, offset=offset).array
-
-    def render_galaxy(
-        self,
-        galaxy_params: Tensor,
-        slen: int,
-        offset: Optional[Tensor] = None,
-    ) -> Tensor:
-        image = self._render_galaxy_np(galaxy_params, self.psf_galsim, slen, offset)
-        return torch.from_numpy(image).reshape(1, slen, slen)
+        image = gal_conv.drawImage(nx=slen_x, ny=slen_y, scale=self.pixel_scale, offset=offset)
+        return torch.from_numpy(image.array)
 
 
 class ImageDecoder:
@@ -191,36 +180,35 @@ class ImageDecoder:
         self.galaxy_decoder = galaxy_decoder
         self.pixel_scale = self.galaxy_decoder.pixel_scale
 
-    def _render_star(self, flux: float, slen: int, offset: Optional[Tensor] = None) -> Tensor:
-        assert offset is None or offset.shape == (2,)
+    def _render_star(self, flux: float, slen_x: int, slen_y: int, offset: Tensor) -> Tensor:
+        assert offset.shape == (2,)
         star = self.galaxy_decoder.psf_galsim.withFlux(flux)  # creates a copy
-        offset = offset if offset is None else offset.numpy()
-        image = star.drawImage(nx=slen, ny=slen, scale=self.pixel_scale, offset=offset)
-        return torch.from_numpy(image.array).reshape(1, slen, slen)
+        offset = offset.numpy()
+        image = star.drawImage(nx=slen_x, ny=slen_y, scale=self.pixel_scale, offset=offset)
+        return torch.from_numpy(image.array)
 
     def render_images(self, tile_cat: TileCatalog):
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
-        assert n_tiles_h == n_tiles_w
+
         slen_h = tile_cat.tile_slen * n_tiles_h
+        slen_w = tile_cat.tile_slen * n_tiles_w
 
         full_cat = tile_cat.to_full_params()
         assert self.galaxy_decoder.n_bands == 1, "only 1 band supported for now"
 
-        images = torch.zeros(batch_size, self.galaxy_decoder.n_bands, slen_h, slen_h)
+        images = torch.zeros(batch_size, self.galaxy_decoder.n_bands, slen_h, slen_w)
 
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             for s in range(n_sources):
-                offset_yx = full_cat.plocs[b][s] - (slen_h / 2)
-                # I don't think we should have to do this swap, though it does give us consistency
-                # btw tile_cat and images...is plocs backwards?
-                offset_xy = torch.tensor([offset_yx[1], offset_yx[0]])
+                plocs = full_cat.plocs[b][s]
+                offset = torch.tensor([plocs[1] - (slen_w / 2), plocs[0] - (slen_h / 2)])
 
                 if full_cat["galaxy_bools"][b][s] == 1:
                     gp = full_cat["galaxy_params"][b][s]
-                    images[b] += self.galaxy_decoder.render_galaxy(gp, slen_h, offset_xy)
+                    images[b, 0] += self.galaxy_decoder.render_galaxy(gp, slen_w, slen_h, offset)
                 elif full_cat["star_bools"][b][s] == 1:
                     sp = full_cat["star_fluxes"][b][s].item()
-                    images[b] += self._render_star(sp, slen_h, offset_xy)
+                    images[b, 0] += self._render_star(sp, slen_w, slen_h, offset)
 
         return images

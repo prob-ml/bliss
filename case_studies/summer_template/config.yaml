@@ -50,8 +50,6 @@ simulator:
         _target_: bliss.simulator.decoder.ImageDecoder
         galaxy_decoder:
             _target_: bliss.simulator.decoder.GalaxyDecoder
-            slen: 53
-            ptile_slen: 52
             psf_slen: 25
             n_bands: ${simulator.prior.n_bands}
             pixel_scale: 0.396
