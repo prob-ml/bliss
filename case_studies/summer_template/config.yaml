@@ -64,7 +64,6 @@ encoder:
     n_bands: 1
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
-    annotate_probs: true
     slack: 1.0
     optimizer_params:
         lr: 1e-3
