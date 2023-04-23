@@ -33,19 +33,17 @@ simulator:
         max_sources: 1
         mean_sources: 0.2
         min_sources: 0
-        f_min: 622.0
-        f_max: 1e6
-        alpha: 0.43
         prob_galaxy: 0.3
-        galaxy_prior:
-            _target_: bliss.simulator.prior.GalaxyPrior
-            min_flux: 622.0
-            max_flux: 1e6
-            alpha: 0.47
-            a_concentration: 0.39330758068481686
-            a_loc: 0.8371888967872619
-            a_scale: 4.432725319432478
-            a_bulge_disk_ratio: 2.0
+        star_flux_min: 622.0
+        star_flux_max: 1e6
+        star_flux_alpha: 0.43
+        galaxy_flux_min: 622.0
+        galaxy_flux_max: 1e6
+        galaxy_alpha: 0.47
+        galaxy_a_concentration: 0.39330758068481686
+        galaxy_a_loc: 0.8371888967872619
+        galaxy_a_scale: 4.432725319432478
+        galaxy_a_bd_ratio: 2.0
     decoder:
         _target_: bliss.simulator.decoder.ImageDecoder
         psf_slen: 25
