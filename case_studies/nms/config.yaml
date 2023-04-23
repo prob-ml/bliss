@@ -14,7 +14,7 @@ paths:
     root: ${oc.env:BLISS_HOME}
     data: ${paths.root}/data
     sdss: ${paths.data}/sdss
-    project: ${paths.root}/case_studies/summer_template
+    project: ${paths.root}/case_studies/nms
     output: ${paths.project}/output
 
 simulator:
