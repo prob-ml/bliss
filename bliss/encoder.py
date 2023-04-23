@@ -161,14 +161,14 @@ class Encoder(pl.LightningModule):
         locs_loss = -pred["loc"].log_prob(true_locs)
         locs_loss *= true_tile_cat.n_sources
         loss += locs_loss
-        loss_with_components["locs_loss"] = locs_loss.sum() / true_tile_cat.n_sources.sum()
+        loss_with_components["locs_loss"] = locs_loss.mean()
 
         # star/galaxy classification loss
         true_gal_bools = rearrange(true_tile_cat["galaxy_bools"], "b ht wt 1 1 -> b ht wt")
         binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
         binary_loss *= true_tile_cat.n_sources
         loss += binary_loss
-        loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
+        loss_with_components["binary_loss"] = binary_loss.mean()
 
         # star flux loss
         true_star_bools = rearrange(true_tile_cat["star_bools"], "b ht wt 1 1 -> b ht wt")
@@ -176,7 +176,7 @@ class Encoder(pl.LightningModule):
         star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
         star_flux_loss *= true_star_bools
         loss += star_flux_loss
-        loss_with_components["star_flux_loss"] = star_flux_loss.sum() / true_star_bools.sum()
+        loss_with_components["star_flux_loss"] = star_flux_loss.mean()
 
         # galaxy properties loss
         galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
@@ -187,7 +187,7 @@ class Encoder(pl.LightningModule):
             loss_term = -pred[galsim_pn].log_prob(true_param_vals)
             loss_term *= true_gal_bools
             loss += loss_term
-            loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
+            loss_with_components[galsim_pn] = loss_term.mean()
 
         loss_with_components["loss"] = loss.mean()
 
