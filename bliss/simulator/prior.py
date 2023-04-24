@@ -162,8 +162,8 @@ class ImagePrior(pl.LightningModule):
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
         beta_radians = Uniform(0, 2 * np.pi).sample(latent_dims)
-        disk_q = Uniform(0, 1).sample(latent_dims)
-        bulge_q = Uniform(0, 1).sample(latent_dims)
+        disk_q = Uniform(1e-8, 1).sample(latent_dims)
+        bulge_q = Uniform(1e-8, 1).sample(latent_dims)
 
         base_dist = Gamma(self.galaxy_a_concentration, rate=1.0)
         disk_a = base_dist.sample(latent_dims) * self.galaxy_a_scale + self.galaxy_a_loc

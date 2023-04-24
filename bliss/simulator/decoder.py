@@ -99,15 +99,7 @@ class ImageDecoder(nn.Module):
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
-    def render_galaxy(
-        self,
-        galaxy_params: Tensor,
-        slen_x: int,
-        slen_y: int,
-        offset: Tensor,
-    ) -> Tensor:
-        assert offset.shape == (2,)
-
+    def render_galaxy(self, galaxy_params: Tensor):
         galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
         bulge_frac = 1 - disk_frac
@@ -127,44 +119,34 @@ class ImageDecoder(nn.Module):
         if bulge_flux > 0:
             b_b = bulge_q * a_b
             bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
-            bulge = galsim.DeVaucouleurs(
-                flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs
-            ).shear(q=bulge_q, beta=beta_radians * galsim.radians)
-            components.append(bulge)
+            bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs)
+            sheared_bulge = bulge.shear(q=bulge_q, beta=beta_radians * galsim.radians)
+            components.append(sheared_bulge)
         galaxy = galsim.Add(components)
-        gal_conv = galsim.Convolution(galaxy, self.psf_galsim)
-        offset = offset if offset is None else offset.numpy()
-        image = gal_conv.drawImage(nx=slen_x, ny=slen_y, scale=self.pixel_scale, offset=offset)
-        return torch.from_numpy(image.array)
-
-    def _render_star(self, flux: float, slen_x: int, slen_y: int, offset: Tensor) -> Tensor:
-        assert offset.shape == (2,)
-        star = self.psf_galsim.withFlux(flux)  # creates a copy
-        offset = offset.numpy()
-        image = star.drawImage(nx=slen_x, ny=slen_y, scale=self.pixel_scale, offset=offset)
-        return torch.from_numpy(image.array)
+        return galsim.Convolution(galaxy, self.psf_galsim)
 
     def render_images(self, tile_cat: TileCatalog):
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
-
         slen_h = tile_cat.tile_slen * n_tiles_h
         slen_w = tile_cat.tile_slen * n_tiles_w
+        images = np.zeros((batch_size, self.n_bands, slen_h, slen_w), dtype=np.float32)
 
         full_cat = tile_cat.to_full_params()
 
-        images = torch.zeros(batch_size, self.n_bands, slen_h, slen_w)
-
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
+            gs_img = galsim.Image(array=images[b, 0], scale=self.pixel_scale)
             for s in range(n_sources):
-                plocs = full_cat.plocs[b][s]
-                offset = torch.tensor([plocs[1] - (slen_w / 2), plocs[0] - (slen_h / 2)])
-
                 if full_cat["galaxy_bools"][b][s] == 1:
-                    gp = full_cat["galaxy_params"][b][s]
-                    images[b, 0] += self.render_galaxy(gp, slen_w, slen_h, offset)
+                    galsim_obj = self.render_galaxy(full_cat["galaxy_params"][b][s])
                 elif full_cat["star_bools"][b][s] == 1:
-                    sp = full_cat["star_fluxes"][b][s].item()
-                    images[b, 0] += self._render_star(sp, slen_w, slen_h, offset)
+                    galsim_obj = self.psf_galsim.withFlux(full_cat["star_fluxes"][b][s].item())
+                else:
+                    raise AssertionError("Every source is a star or galaxy")
 
-        return images
+                plocs = full_cat.plocs[b][s]
+                offset = np.array([plocs[1] - (slen_w / 2), plocs[0] - (slen_h / 2)])
+                # essentially all the runtime of the simulator is incurred by this call to drawImage
+                galsim_obj.drawImage(offset=offset, method="auto", add_to_image=True, image=gs_img)
+
+        return torch.from_numpy(images)
