@@ -34,30 +34,24 @@ simulator:
         max_sources: 1
         mean_sources: 0.1
         min_sources: 0
-        f_min: 1e5
-        f_max: 1e6
-        alpha: 0.5
         prob_galaxy: 0.5
-        galaxy_prior:
-            _target_: bliss.simulator.prior.GalaxyPrior
-            min_flux: 622.0
-            max_flux: 1e6
-            alpha: 0.47
-            a_concentration: 0.39330758068481686
-            a_loc: 0.8371888967872619
-            a_scale: 4.432725319432478
-            a_bulge_disk_ratio: 2.0
+        star_flux_min: 1e5
+        star_flux_max: 1e6
+        star_flux_alpha: 0.5
+        galaxy_flux_min: 622.0
+        galaxy_flux_max: 1e6
+        galaxy_alpha: 0.47
+        galaxy_a_concentration: 0.39330758068481686
+        galaxy_a_loc: 0.8371888967872619
+        galaxy_a_scale: 4.432725319432478
+        galaxy_a_bd_ratio: 2.0
     decoder:
         _target_: bliss.simulator.decoder.ImageDecoder
-        galaxy_decoder:
-            _target_: bliss.simulator.decoder.GalaxyDecoder
-            n_bands: 1
-            slen: 1
-            ptile_slen: 6
-            pixel_scale: 0.396
-            psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
-            psf_slen: 25
-            sdss_bands: [2]
+        n_bands: 1
+        pixel_scale: 0.396
+        psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
+        psf_slen: 25
+        sdss_bands: [2]
     background:
         _target_: bliss.simulator.background.ConstantBackground
         background: [865.0]
@@ -67,7 +61,6 @@ encoder:
     n_bands: 1
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 0
-    annotate_probs: True
     slack: 1.0
     optimizer_params:
         lr: 1e-3
