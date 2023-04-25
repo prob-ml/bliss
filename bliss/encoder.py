@@ -39,7 +39,6 @@ class Encoder(pl.LightningModule):
         n_bands: int,
         tile_slen: int,
         tiles_to_crop: int,
-        annotate_probs: bool = False,
         slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
@@ -51,7 +50,6 @@ class Encoder(pl.LightningModule):
             n_bands: number of bands
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
-            annotate_probs: Annotate probabilities on validation plots?
             slack: Slack to use when matching locations for validation metrics.
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
@@ -73,9 +71,6 @@ class Encoder(pl.LightningModule):
         arch_dict = OmegaConf.to_container(architecture)
         self.model = DetectionModel(cfg=arch_dict, ch=2)
         self.tiles_to_crop = tiles_to_crop
-
-        # plotting
-        self.annotate_probs = annotate_probs
 
         # metrics
         self.metrics = DetectionMetrics(slack)
@@ -104,8 +99,8 @@ class Encoder(pl.LightningModule):
         # give us output of the right dimension
         self.model.model[-1].training = True
 
-        assert images_with_background.size(2) % 8 == 0, "image dims must be multiples of 8"
-        assert images_with_background.size(3) % 8 == 0, "image dims must be multiples of 8"
+        assert images_with_background.size(2) % 16 == 0, "image dims must be multiples of 16"
+        assert images_with_background.size(3) % 16 == 0, "image dims must be multiples of 16"
         output = self.model(images_with_background)
         # there's an extra dimension for channel that is always a singleton
         output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
