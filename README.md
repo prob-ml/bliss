@@ -70,7 +70,7 @@ pytest --gpu
 7. Finally, if you are planning to contribute code to this repository, consider installing our pre-commit hooks so that your code commits will be checked locally for compliance with our coding conventions:
 
 ```bash
-pre-commit --install
+pre-commit install
 ```
 
 # Latest updates
