@@ -49,7 +49,7 @@ git-lfs install
 4. Now download the bliss repo and fetch some pre-trained models and test data from git-lfs:
 
 ```bash
-git clone https://github.com/prob-ml/bliss.git
+git clone git@github.com:prob-ml/bliss.git
 ```
 
 5. To create a poetry environment with the `bliss` dependencies satisified, run
