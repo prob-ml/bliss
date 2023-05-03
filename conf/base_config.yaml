@@ -15,6 +15,7 @@ paths:
     root: ${oc.env:BLISS_HOME}
     data: ${paths.root}/data
     sdss: ${paths.data}/sdss
+    decals: ${paths.data}/decals
     output: ${paths.root}/output
     pretrained_models: ${paths.data}/pretrained_models
 
