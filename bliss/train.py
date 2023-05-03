@@ -29,7 +29,8 @@ def train(cfg: DictConfig):
     pl.seed_everything(cfg.training.seed)
 
     # setup dataset.
-    simulator = instantiate(cfg.simulator)
+    disk_dataset = instantiate(cfg.dataset)
+    # simulator = instantiate(cfg.simulator)
 
     # setup model
     encoder = instantiate(cfg.encoder)
@@ -55,12 +56,14 @@ def train(cfg: DictConfig):
 
     # train!
     tic = time_ns()
-    trainer.fit(encoder, datamodule=simulator)
+    trainer.fit(encoder, datamodule=disk_dataset)
+    # trainer.fit(encoder, datamodule=simulator)
     toc = time_ns()
     train_time_sec = (toc - tic) * 1e-9
     # test!
     if cfg.training.testing.file is not None:
-        trainer.test(encoder, datamodule=simulator)
+        trainer.test(encoder, datamodule=disk_dataset)
+        # trainer.test(encoder, datamodule=simulator)
 
     # Load best weights from checkpoint
     if cfg.training.weight_save_path is not None and (checkpoint_callback is not None):

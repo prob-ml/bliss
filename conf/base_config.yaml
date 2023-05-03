@@ -18,6 +18,7 @@ paths:
     decals: ${paths.data}/decals
     output: ${paths.root}/output
     pretrained_models: ${paths.data}/pretrained_models
+    disk_dataset: ${paths.data}/disk_dataset
 
 simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
@@ -53,6 +54,36 @@ simulator:
         psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
         psf_slen: 25
         sdss_bands: [2]
+
+dataset:
+    _target_: bliss.disk_dataset.DiskDataset
+    disk_batch_size: 5000
+    data_path: ${paths.disk_dataset}
+    n_batches: 2
+    num_workers: 0
+    prior:
+        _target_: bliss.simulator.prior.ImagePrior
+        n_tiles_h: 8
+        n_tiles_w: 8
+        tile_slen: 4
+        n_bands: 1
+        batch_size: 32 # TODO: maybe just set this to `disk_batch_size`? and set `n_batches` accordingly?
+        max_sources: 1
+        mean_sources: 0.1
+        min_sources: 0
+        prob_galaxy: 0.5
+        star_flux_min: 1e5
+        star_flux_max: 1e6
+        star_flux_alpha: 0.5
+        galaxy_flux_min: 622.0
+        galaxy_flux_max: 1e6
+        galaxy_alpha: 0.47
+        galaxy_a_concentration: 0.39330758068481686
+        galaxy_a_loc: 0.8371888967872619
+        galaxy_a_scale: 4.432725319432478
+        galaxy_a_bd_ratio: 2.0
+    decoder: ${simulator.decoder}
+    background: ${simulator.background}
 
 encoder:
     _target_: bliss.encoder.Encoder
