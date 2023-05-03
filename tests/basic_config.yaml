@@ -16,6 +16,7 @@ paths:
     output: ${paths.root}/output
     data: ${paths.root}/data
     sdss: ${paths.data}/sdss
+    decals: ${paths.data}/decals
     pretrained_models: ${paths.data}/pretrained_models
 
 simulator:
