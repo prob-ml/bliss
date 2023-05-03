@@ -58,8 +58,8 @@ simulator:
 cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
     simulator: ${simulator}
-    file_data_capacity: 50
-    cached_data_path: ${paths.data}/test_cached_dataset
+    file_data_capacity: 5000
+    cached_data_path: ${paths.data}/cached_dataset
 
 encoder:
     _target_: bliss.encoder.Encoder
