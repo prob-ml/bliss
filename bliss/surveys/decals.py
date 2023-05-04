@@ -47,7 +47,7 @@ class DecalsFullCatalog(FullCatalog):
             use get_plocs_from_ra_dec after loading the data.
         """
         catalog_path = Path(decals_cat_path)
-        table = Table.read(catalog_path, format="fits")
+        table = Table.read(catalog_path, format="fits", unit_parse_strict="silent")
         table = {k.upper(): v for k, v in table.items()}  # uppercase keys
         band = band.capitalize()
 
@@ -106,4 +106,20 @@ class DecalsFullCatalog(FullCatalog):
         return cls(height, width, d)
 
     def get_plocs_from_ra_dec(self, wcs: WCS):
-        raise NotImplementedError()
+        """Converts RA/DEC coordinates into pixel coordinates.
+
+        Args:
+            wcs (WCS): WCS object to use for transformation.
+
+        Returns:
+            A 1xNx2 tensor containing the locations of the light sources in pixel coordinates. This
+            function does not write self.plocs, so you should do that manually if necessary.
+        """
+        ra = self["ra"].numpy().squeeze()
+        dec = self["dec"].numpy().squeeze()
+
+        pt, pr = wcs.all_world2pix(ra, dec, 0)  # convert to pixel coordinates
+        pt = torch.tensor(pt)
+        pr = torch.tensor(pr)
+        plocs = torch.stack((pr, pt), dim=-1)
+        return plocs.reshape(1, plocs.size()[0], 2) + 0.5  # BLISS consistency
