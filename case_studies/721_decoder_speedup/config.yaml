@@ -1,9 +1,8 @@
 ---
 defaults:
     - _self_
+    - override hydra/job_logging: stdout
 
-# completely disable hydra logging
-# https://github.com/facebookresearch/hydra/issues/910
 hydra:
     output_subdir: null
     run:
@@ -15,9 +14,8 @@ paths:
     root: ${oc.env:BLISS_HOME}
     data: ${paths.root}/data
     sdss: ${paths.data}/sdss
-    decals: ${paths.data}/decals
-    output: ${paths.root}/output
-    pretrained_models: ${paths.data}/pretrained_models
+    project: ${paths.root}/case_studies/summer_template
+    output: ${paths.project}/output
 
 simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
@@ -35,8 +33,8 @@ simulator:
         max_sources: 1
         mean_sources: 0.2
         min_sources: 0
-        prob_galaxy: 0.72
-        star_flux_min: 622
+        prob_galaxy: 0.3
+        star_flux_min: 622.0
         star_flux_max: 1e6
         star_flux_alpha: 0.43
         galaxy_flux_min: 622.0
@@ -48,11 +46,24 @@ simulator:
         galaxy_a_bd_ratio: 2.0
     decoder:
         _target_: bliss.simulator.decoder.ImageDecoder
+        psf_slen: 25
         n_bands: ${simulator.prior.n_bands}
         pixel_scale: 0.396
         psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
-        psf_slen: 25
         sdss_bands: [2]
+    background:
+        _target_: bliss.simulator.background.SimulatedSDSSBackground
+        sdss_dir: ${paths.sdss}
+        run: 94
+        camcol: 1
+        field: 12
+        bands: [2]
+
+cached_simulator:
+    _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
+    simulator: ${simulator}
+    file_data_capacity: 5000
+    cached_data_path: ${paths.data}/cached_dataset
 
 encoder:
     _target_: bliss.encoder.Encoder
@@ -97,9 +108,10 @@ encoder:
             [-1, 3, C3, [256, false]],
             [[17], 1, Detect, [nc, anchors]],
         ]
+    # pretrained_weights: ${paths.project}/models/${training.name}.pt
 
 training:
-    name: null
+    name: "sdss_encoder"
     version: null
     n_epochs: 50
     save_top_k: 1
@@ -109,27 +121,30 @@ training:
         enable_checkpointing: true
         profiler: null
         reload_dataloaders_every_n_epochs: 0
-        check_val_every_n_epoch: 10
-        log_every_n_steps: 10  # corresponds to n_batches
         max_epochs: ${training.n_epochs}
         min_epochs: ${training.n_epochs}
-        accelerator: "cpu"
+        accelerator: "gpu"
         devices: 1
+        limit_train_batches: 1.0
+        limit_val_batches: 1.0
+        check_val_every_n_epoch: 10
+        log_every_n_steps: 10  # corresponds to n_batches
     testing:
         file: null
         batch_size: 32
-        num_workers: 0
+        num_workers: 0  # why not increase this?
+    weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
     seed: 42
-    weight_save_path: null
+    use_cached_simulator: false
 
 predict:
     dataset:
         _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
         sdss_dir: ${paths.sdss}
-        run: 94
-        camcol: 1
-        fields: [12]
+        run: 3900
+        camcol: 6
+        fields: [269]
         bands: [2]
     encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/sdss.pt
+    weight_save_path: ${paths.data}/pretrained_models/${training.name}.pt
     device: "cuda:0"

@@ -1,10 +1,12 @@
+import os
+import pickle
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
 import pytorch_lightning as pl
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader, IterableDataset
+from torch.utils.data import DataLoader, Dataset, IterableDataset
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
@@ -87,3 +89,77 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
+
+
+class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
+    def __init__(
+        self,
+        simulator: SimulatedDataset,
+        file_data_capacity: int,
+        cached_data_path: str,
+    ):
+        super().__init__()
+
+        self.simulator = simulator
+        self.file_data_capacity = file_data_capacity
+        self.cached_data_path = cached_data_path
+
+        # largest `batch_size` multiple <= `file_data_capacity`
+        self.file_data_size = (
+            self.file_data_capacity // self.simulator.image_prior.batch_size
+        ) * self.simulator.image_prior.batch_size
+        # number of files needed to store >= `n_batches` * `batch_size` images
+        # in <= `file_data_size`-image files
+        self.n_files = -(
+            self.simulator.n_batches * self.simulator.image_prior.batch_size // -self.file_data_size
+        )  # ceil division
+
+        # stores details of the written image files - { filename: str, data }
+        self.data_files: List[Dict] = []
+
+        # assume cached image files exist, read from disk
+        for file_idx in range(self.n_files):
+            filename = f"dataset_{file_idx}.pkl"
+            assert os.path.exists(
+                f"{self.cached_data_path}/{filename}"
+            ), f"{self.cached_data_path}/{filename} not found; run `bliss/generate.py` first."
+            if filename.startswith("dataset_") and filename.endswith(".pkl"):
+                self.data_files.append(
+                    {
+                        "filename": filename,
+                        "data": self.read_file(f"{self.cached_data_path}/{filename}"),
+                    }
+                )
+
+    def read_file(self, filename: str) -> Dict:
+        with open(filename, "rb") as f:
+            return pickle.load(f)
+
+    def __len__(self) -> int:
+        return self.n_files * self.file_data_size
+
+    def __getitem__(self, idx: int) -> Dict:
+        file_idx = idx // self.file_data_size
+        data_idx = idx % self.file_data_size
+        return self.data_files[file_idx]["data"][data_idx]
+
+    def train_dataloader(self):
+        return DataLoader(
+            self,
+            batch_size=self.simulator.image_prior.batch_size,
+            num_workers=self.simulator.num_workers,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self,
+            batch_size=self.simulator.image_prior.batch_size,
+            num_workers=self.simulator.num_workers,
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self,
+            batch_size=self.simulator.image_prior.batch_size,
+            num_workers=self.simulator.num_workers,
+        )
