@@ -54,6 +54,12 @@ simulator:
         psf_slen: 25
         sdss_bands: [2]
 
+cached_simulator:
+    _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
+    simulator: ${simulator}
+    file_data_capacity: 50
+    cached_data_path: ${paths.data}/test_cached_dataset
+
 encoder:
     _target_: bliss.encoder.Encoder
     n_bands: 1
@@ -121,6 +127,7 @@ training:
         num_workers: 0
     seed: 42
     weight_save_path: null
+    use_cached_simulator: False
 
 predict:
     dataset:
