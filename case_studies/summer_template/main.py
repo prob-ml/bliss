@@ -6,6 +6,7 @@ import hydra
 
 from bliss.predict import predict
 from bliss.train import train
+from bliss.generate import generate
 
 if not getenv("BLISS_HOME"):
     project_path = Path(__file__).resolve()
@@ -15,7 +16,9 @@ if not getenv("BLISS_HOME"):
 
 @hydra.main(config_path=".", config_name="config", version_base=None)
 def main(cfg):
-    if cfg.mode == "train":
+    if cfg.mode == "generate":
+        generate(cfg)
+    elif cfg.mode == "train":
         train(cfg)
     elif cfg.mode == "predict":
         predict(cfg)
