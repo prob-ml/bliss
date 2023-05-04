@@ -60,7 +60,7 @@ dataset:
     disk_batch_size: 5000
     data_path: ${paths.disk_dataset}
     n_batches: 2
-    num_workers: 0
+    num_workers: 32
     prior:
         _target_: bliss.simulator.prior.ImagePrior
         n_tiles_h: 8
