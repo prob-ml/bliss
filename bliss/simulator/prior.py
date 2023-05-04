@@ -86,8 +86,11 @@ class ImagePrior(pl.LightningModule):
         self.galaxy_a_scale = galaxy_a_scale
         self.galaxy_a_bd_ratio = galaxy_a_bd_ratio
 
-    def sample_prior(self, batch_size = 0) -> TileCatalog:
+    def sample_prior(self, batch_size=0) -> TileCatalog:
         """Samples latent variables from the prior of an astronomical image.
+
+        Args:
+            batch_size: int, overrides self.batch_size if not 0.
 
         Returns:
             A dictionary of tensors. Each tensor is a particular per-tile quantity; i.e.

@@ -29,11 +29,11 @@ def train(cfg: DictConfig):
     pl.seed_everything(cfg.training.seed)
 
     # setup dataset.
-    dataset = (
-        instantiate(cfg.cached_simulator)
-        if cfg.training.use_cached_simulator
-        else instantiate(cfg.simulator)
-    )
+    dataset = None
+    if cfg.training.use_simulator:
+        dataset = instantiate(cfg.simulator)
+    else:
+        dataset = instantiate(cfg.dataset)
 
     # setup model
     encoder = instantiate(cfg.encoder)
