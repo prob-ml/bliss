@@ -154,7 +154,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         return DataLoader(
             self,
             batch_size=self.simulator.image_prior.batch_size,
-            num_workers=self.simulator.num_workers,
+            num_workers=0,
         )
 
     def test_dataloader(self):

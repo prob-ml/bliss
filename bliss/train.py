@@ -14,7 +14,7 @@ from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.utilities import rank_zero_only
 
 
-def train(cfg: DictConfig):
+def train(cfg: DictConfig):  # pylint: disable=too-many-branches
     # setup paths and seed
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
     assert isinstance(paths, dict)
@@ -29,11 +29,10 @@ def train(cfg: DictConfig):
     pl.seed_everything(cfg.training.seed)
 
     # setup dataset.
-    dataset = (
-        instantiate(cfg.cached_simulator)
-        if cfg.training.use_cached_simulator
-        else instantiate(cfg.simulator)
-    )
+    if cfg.training.use_cached_simulator:
+        dataset = instantiate(cfg.cached_simulator)
+    else:
+        dataset = instantiate(cfg.simulator)
 
     # setup model
     encoder = instantiate(cfg.encoder)
