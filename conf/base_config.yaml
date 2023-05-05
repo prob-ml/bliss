@@ -1,0 +1,134 @@
+---
+defaults:
+    - _self_
+
+# completely disable hydra logging
+# https://github.com/facebookresearch/hydra/issues/910
+hydra:
+    output_subdir: null
+    run:
+        dir: .
+
+mode: train
+
+paths:
+    root: ${oc.env:BLISS_HOME}
+    data: ${paths.root}/data
+    sdss: ${paths.data}/sdss
+    output: ${paths.root}/output
+    pretrained_models: ${paths.data}/pretrained_models
+
+simulator:
+    _target_: bliss.simulator.simulated_dataset.SimulatedDataset
+    n_batches: 128
+    valid_n_batches: 10  # 256
+    fix_validation_set: true
+    num_workers: 32
+    prior:
+        _target_: bliss.simulator.prior.ImagePrior
+        n_tiles_h: 20
+        n_tiles_w: 20
+        tile_slen: 4
+        n_bands: 1
+        batch_size: 64
+        max_sources: 1
+        mean_sources: 0.2
+        min_sources: 0
+        prob_galaxy: 0.3
+        star_flux_min: 622.0
+        star_flux_max: 1e6
+        star_flux_alpha: 0.43
+        galaxy_flux_min: 622.0
+        galaxy_flux_max: 1e6
+        galaxy_alpha: 0.47
+        galaxy_a_concentration: 0.39330758068481686
+        galaxy_a_loc: 0.8371888967872619
+        galaxy_a_scale: 4.432725319432478
+        galaxy_a_bd_ratio: 2.0
+    decoder:
+        _target_: bliss.simulator.decoder.ImageDecoder
+        n_bands: ${simulator.prior.n_bands}
+        pixel_scale: 0.396
+        psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
+        psf_slen: 25
+        sdss_bands: [2]
+
+encoder:
+    _target_: bliss.encoder.Encoder
+    n_bands: 1
+    tile_slen: ${simulator.prior.tile_slen}
+    tiles_to_crop: 1
+    slack: 1.0
+    optimizer_params:
+        lr: 1e-3
+    scheduler_params:
+        milestones: [32]
+        gamma: 0.1
+    architecture:
+        # this architecture is based on yolov5l.yaml, see
+        # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
+        depth_multiple: 1.0  # model depth multiple
+        width_multiple: 1.0  # layer channel multiple
+        anchors:
+            - [4, 4]  # P3/8
+        backbone: [
+            # [from, number, module, args]
+            [-1, 1, Conv, [64, 5, 1]],
+            [-1, 3, Conv, [64, 1, 1]],
+            [-1, 1, Conv, [128, 3, 2]],
+            [-1, 1, Conv, [128, 3, 1]],
+            [-1, 1, Conv, [256, 3, 2]],
+            [-1, 6, C3, [256]],
+            [-1, 1, Conv, [512, 3, 2]],
+            [-1, 9, C3, [512]],
+            [-1, 1, Conv, [1024, 3, 2]],
+            [-1, 3, C3, [1024]],
+            [-1, 1, SPPF, [1024, 5]],
+        ]
+        head: [
+            [-1, 1, Conv, [512, 1, 1]],
+            [-1, 1, nn.Upsample, [None, 2, 'nearest']],
+            [[-1, 6], 1, Concat, [1]],
+            [-1, 3, C3, [512, false]],
+            [-1, 1, Conv, [256, 1, 1]],
+            [-1, 1, nn.Upsample, [None, 2, 'nearest']],
+            [[-1, 4, 5], 1, Concat, [1]],
+            [-1, 3, C3, [256, false]],
+            [[17], 1, Detect, [nc, anchors]],
+        ]
+
+training:
+    version: null
+    n_epochs: 50
+    save_top_k: 1
+    pretrained_weights: null
+    trainer:
+        _target_: pytorch_lightning.Trainer
+        logger: true
+        enable_checkpointing: true
+        profiler: null
+        reload_dataloaders_every_n_epochs: 0
+        check_val_every_n_epoch: 10
+        log_every_n_steps: 10  # corresponds to n_batches
+        max_epochs: ${training.n_epochs}
+        min_epochs: ${training.n_epochs}
+        accelerator: "gpu"
+        devices: 1
+    testing:
+        file: null
+        batch_size: 32
+        num_workers: 0
+    seed: 42
+    weight_save_path: null
+
+predict:
+    dataset:
+        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
+        sdss_dir: ${paths.sdss}
+        run: 94
+        camcol: 1
+        fields: [12]
+        bands: [2]
+    encoder: ${encoder}
+    weight_save_path: ${paths.pretrained_models}/${training.name}.pt
+    device: "cuda:0"
