@@ -1,5 +1,6 @@
 ---
 defaults:
+    - ../conf@_here_: base_config
     - _self_
 
 # completely disable hydra logging
@@ -119,7 +120,7 @@ training:
         log_every_n_steps: 10  # corresponds to n_batches
         max_epochs: ${training.n_epochs}
         min_epochs: ${training.n_epochs}
-        accelerator: "cpu"
+        accelerator: "gpu"
         devices: 1
     testing:
         file: null
@@ -127,7 +128,7 @@ training:
         num_workers: 0
     seed: 42
     weight_save_path: null
-    use_cached_simulator: False
+    use_cached_simulator: false
 
 predict:
     dataset:
