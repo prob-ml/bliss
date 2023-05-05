@@ -101,10 +101,13 @@ encoder:
         ]
 
 training:
+    name: "sdss_encoder"
     n_epochs: 1
     experiment: default
     version: null
     save_top_k: 1
+    pretrained_weights: ${paths.pretrained_models}/${training.name}.pt
+
     trainer:
         _target_: pytorch_lightning.Trainer
         logger: False
