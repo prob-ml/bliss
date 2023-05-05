@@ -131,9 +131,9 @@ predict:
     dataset:
         _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
         sdss_dir: ${paths.sdss}
-        run: 3900
-        camcol: 6
-        fields: [269]
+        run: 94
+        camcol: 1
+        fields: [12]
         bands: [2]
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/sdss_encoder.pt
