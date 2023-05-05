@@ -126,14 +126,14 @@ class Encoder(pl.LightningModule):
         # this is the mode of star_log_flux but not the mean of the star_flux distribution
         star_fluxes = pred["star_log_flux"].mode.exp()  # type: ignore
         star_fluxes *= tile_is_on_array
-        galaxy_bools = pred["galaxy_prob"].mode * pred["on_prob"].mode
-        star_bools = (1 - pred["galaxy_prob"].mode) * pred["on_prob"].mode
+        galaxy_bools = pred["galaxy_prob"].mode * pred["on_prob"].mode  # type: ignore
+        star_bools = (1 - pred["galaxy_prob"].mode) * pred["on_prob"].mode  # type: ignore
 
         galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
-        galsim_names = [f"galsim_{name}" for name in galsim_names]
+        galsim_dists = [pred[f"galsim_{name}"] for name in galsim_names]
         # for params with transformed distribution mode and median aren't implemented.
         # instead, we compute median using inverse cdf 0.5
-        galsim_param_lst = [pred[name].icdf(torch.tensor(0.5)) for name in galsim_names]
+        galsim_param_lst = [d.icdf(torch.tensor(0.5)) for d in galsim_dists]  # type: ignore
         galaxy_params = torch.stack(galsim_param_lst, dim=3)
 
         # we have to unsqueeze some tensors below because a TileCatalog can store multiple
@@ -144,7 +144,7 @@ class Encoder(pl.LightningModule):
             "star_fluxes": rearrange(star_fluxes, "b ht wt -> b ht wt 1 1"),
             "n_sources": tile_is_on_array,
             "galaxy_bools": rearrange(galaxy_bools, "b ht wt -> b ht wt 1 1"),
-            "star_bools": rearrange(star_bools,"b ht wt -> b ht wt 1 1"),
+            "star_bools": rearrange(star_bools, "b ht wt -> b ht wt 1 1"),
             "galaxy_params": rearrange(galaxy_params, "b ht wt d -> b ht wt 1 d"),
         }
 
