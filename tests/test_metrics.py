@@ -6,6 +6,7 @@ from astropy.wcs import WCS
 
 from bliss.catalog import FullCatalog
 from bliss.metrics import BlissMetrics
+from bliss.predict import predict
 from bliss.surveys.decals import DecalsFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey
 
@@ -140,9 +141,45 @@ def test_photo_decals_agree(cfg):
     assert precision == 1
 
 
-def test_bliss_photo_agree():
+def test_bliss_photo_agree(cfg):
     """Compares metrics for agreement between BLISS-inferred catalog and Photo catalog."""
-    raise NotImplementedError()
+    device = cfg.predict.device
+    slack = 1.0
+    detect = DetectionMetrics(slack).to(device)
+
+    est_cat = predict(cfg)  # get predicted catalog for SDSS frame in config
+    true_cat = PhotoFullCatalog.from_file(
+        cfg.paths.sdss,
+        run=cfg.predict.dataset.run,
+        camcol=cfg.predict.dataset.camcol,
+        field=cfg.predict.dataset.fields[0],
+        band=cfg.predict.dataset.bands[0],
+    )
+
+    # filter by top brightness
+    n = 200
+    true_flux = true_cat["fluxes"]
+    top_n_true = torch.argsort(true_flux, dim=1)[0, -n:, 0]
+    top_n_true_locs = true_cat.plocs[:, top_n_true]
+
+    est_flux = est_cat["star_fluxes"]
+    top_n_est = torch.argsort(est_flux, dim=1)[0, -n:, 0]
+    top_n_est_locs = est_cat.plocs[:, top_n_est]
+
+    # construct catalogs restricted to n brightest sources
+    d_true = {
+        "plocs": top_n_true_locs.to(device),
+        "n_sources": torch.tensor([n]),
+        "galaxy_bools": true_cat["galaxy_bools"][:, top_n_true].to(device),
+    }
+    top_n_true_cat = PhotoFullCatalog(true_cat.height, true_cat.width, d_true)
+
+    d_est = {"plocs": top_n_est_locs.to(device), "n_sources": torch.tensor([n])}
+    top_n_est_cat = FullCatalog(est_cat.height, est_cat.width, d_est)
+
+    results_detection = detect(top_n_true_cat, top_n_est_cat)
+    f1 = results_detection["f1"]
+    assert f1 > 0.6
 
 
 def test_bliss_photo_agree_comp_decals():
