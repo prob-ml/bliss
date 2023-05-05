@@ -34,6 +34,11 @@ def train(cfg: DictConfig):
     # setup model
     encoder = instantiate(cfg.encoder)
 
+    # load pretrained weights
+    if "pretrained_weights" in cfg.training:
+        enc_state_dict = torch.load(cfg.training.pretrained_weights)
+        encoder.load_state_dict(enc_state_dict)
+
     # setup trainer
     logger = setup_logger(cfg, paths)
     checkpoint_callback = setup_callbacks(cfg)

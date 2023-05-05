@@ -16,6 +16,7 @@ paths:
     sdss: ${paths.data}/sdss
     project: ${paths.root}/case_studies/summer_template
     output: ${paths.project}/output
+    pretrained_models: ${paths.data}/pretrained_models
 
 simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
@@ -102,13 +103,13 @@ encoder:
             [-1, 3, C3, [256, false]],
             [[17], 1, Detect, [nc, anchors]],
         ]
-    # pretrained_weights: ${paths.project}/models/${training.name}.pt
 
 training:
     name: "sdss_encoder"
     version: null
     n_epochs: 50
     save_top_k: 1
+    pretrained_weights: ${paths.pretrained_models}/${training.name}.pt
     trainer:
         _target_: pytorch_lightning.Trainer
         logger: true
@@ -134,10 +135,10 @@ predict:
     dataset:
         _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
         sdss_dir: ${paths.sdss}
-        run: 3900
-        camcol: 6
-        fields: [269]
+        run: 94
+        camcol: 1
+        fields: [12]
         bands: [2]
     encoder: ${encoder}
-    weight_save_path: ${paths.data}/pretrained_models/${training.name}.pt
+    weight_save_path: ${paths.pretrained_models}/${training.name}.pt
     device: "cuda:0"
