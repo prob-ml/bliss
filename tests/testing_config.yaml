@@ -1,0 +1,38 @@
+---
+defaults:
+    - ../conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+simulator:
+    n_batches: 2
+    valid_n_batches: 2
+    num_workers: 0
+    prior:
+        n_tiles_h: 8
+        n_tiles_w: 8
+        batch_size: 32
+        prob_galaxy: 0.5
+        star_flux_min: 1e5
+    background:
+        _target_: bliss.simulator.background.ConstantBackground
+        background: [865.0]
+
+training:
+    name: "sdss_encoder"
+    n_epochs: 1
+    pretrained_weights: ${paths.pretrained_models}/${training.name}.pt
+    seed: 42
+    weight_save_path: null
+    trainer:
+        logger: false
+        enable_checkpointing: false
+        profiler: null
+        check_val_every_n_epoch: 1001
+        log_every_n_steps: 10
+        accelerator: "cpu"
+        devices: 1
+
+predict:
+    weight_save_path: ${paths.pretrained_models}/sdss_encoder.pt
+    device: "cpu"
