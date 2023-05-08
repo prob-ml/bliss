@@ -17,32 +17,27 @@ FileDatum = TypedDict(
 
 
 def generate(cfg: DictConfig):
-    simulator = instantiate(cfg.simulator)
-
     file_data_capacity = cfg.cached_simulator.file_data_capacity
     cached_data_path = cfg.cached_simulator.cached_data_path
 
     # largest `batch_size` multiple <= `file_data_capacity`
-    file_data_size = (
-        file_data_capacity // simulator.image_prior.batch_size
-    ) * simulator.image_prior.batch_size
+    bs = cfg.cached_simulator.batch_size
+    file_data_size = (file_data_capacity // bs) * bs
 
     assert (
-        file_data_size >= simulator.image_prior.batch_size
-        and file_data_size > simulator.image_prior.batch_size * simulator.num_workers
+        file_data_size >= bs and file_data_size > bs * cfg.cached_simulator.num_workers
     ), "file_data_capacity too small"
 
     # number of files needed to store >= `n_batches` * `batch_size` images
     # in <= `file_data_size`-image files
-    n_files = -(
-        simulator.n_batches * simulator.image_prior.batch_size // -file_data_size
-    )  # ceil division
+    n_files = -(cfg.cached_simulator.n_batches * bs // -file_data_size)  # ceil division
 
     # stores details of the written image files - { filename: string, data }
     data_files: List[Dict] = []
 
     # use SimulatedDataset to generate data in minibatches iteratively,
     # then concatenate before caching to disk via pickle
+    simulator = instantiate(cfg.simulator)
     simulated_dataset = simulator.train_dataloader().dataset
     assert isinstance(
         simulated_dataset, IterableDataset
@@ -55,7 +50,7 @@ def generate(cfg: DictConfig):
     # assume overwriting any existing cached image files
     for file_idx in tqdm(range(n_files), desc="Generating and writing cached dataset"):
         batch_data = []
-        for _ in range(file_data_size // simulator.image_prior.batch_size):
+        for _ in range(file_data_size // bs):
             batch_data.append(next(iter(simulated_dataset)))
 
         # TODO: refactor/optimize this dictionary/tensor flattening
