@@ -20,8 +20,6 @@ simulator:
 
 training:
     name: "sdss_encoder"
-    testing:
-        num_workers: 0  # why not increase this?
     weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
     seed: 42
     use_cached_simulator: true

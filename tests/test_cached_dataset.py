@@ -50,5 +50,5 @@ class TestCachedDataset:
 
     def test_train_with_cached_data(self, cfg):
         cfg.training.use_cached_simulator = True
-        # TODO: if possible, check that training uses cached dataset
+        # TODO: check that training uses cached dataset
         train(cfg)

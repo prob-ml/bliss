@@ -18,7 +18,12 @@ def pytest_addoption(parser):
 
 
 @pytest.fixture(scope="session")
-def cfg(pytestconfig):
+def cached_data_path(tmpdir_factory):
+    return tmpdir_factory.mktemp("cached_dataset")
+
+
+@pytest.fixture(scope="session")
+def cfg(pytestconfig, cached_data_path):
     use_gpu = pytestconfig.getoption("gpu")
 
     # pytest-specific overrides
@@ -26,6 +31,7 @@ def cfg(pytestconfig):
         "training.trainer.accelerator": "gpu" if use_gpu else "cpu",
         "predict.device": "cuda:0" if use_gpu else "cpu",
         "paths.root": Path(__file__).parents[1].as_posix(),
+        "cached_simulator.cached_data_path": str(cached_data_path),
     }
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
     with initialize(config_path=".", version_base=None):

@@ -113,6 +113,7 @@ training:
     version: null
     n_epochs: 50
     save_top_k: 1
+    pretrained_weights: null
     trainer:
         _target_: pytorch_lightning.Trainer
         logger: true
@@ -130,7 +131,7 @@ training:
         batch_size: 32
         num_workers: 0
     seed: 42
-    weight_save_path: ${paths.pretrained_models}/sdss.pt
+    weight_save_path: null
     use_cached_simulator: false
 
 predict:

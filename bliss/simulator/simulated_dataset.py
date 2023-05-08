@@ -80,7 +80,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def val_dataloader(self):
         if self.fix_validation_set:
-            valid: List[Dict[str, Tensor]] = []
+            valid: List[Dict[str, Tensor]] = []  # type: ignore
             for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
                 valid.append(self.get_batch())
             num_workers = 0
