@@ -19,9 +19,10 @@ simulator:
         background: [865.0]
 
 training:
-    name: "sdss_encoder"
+    name: "pytest_encoder"
+    version: "version0"
     n_epochs: 1
-    pretrained_weights: ${paths.pretrained_models}/${training.name}.pt
+    pretrained_weights: ${paths.pretrained_models}/crowded_field.pt
     seed: 42
     weight_save_path: null
     trainer:
@@ -34,5 +35,5 @@ training:
         devices: 1
 
 predict:
-    weight_save_path: ${paths.pretrained_models}/sdss_encoder.pt
+    weight_save_path: ${paths.pretrained_models}/crowded_field.pt
     device: "cpu"
