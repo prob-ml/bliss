@@ -108,10 +108,6 @@ class Encoder(pl.LightningModule):
         # there's an extra dimension for channel that is always a singleton
         output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
 
-        ttc = self.tiles_to_crop
-        if ttc > 0:
-            output4d = output4d[:, ttc:-ttc, ttc:-ttc, :]
-
         split_sizes = [v.dim for v in self.dist_param_groups.values()]
         dist_params_split = torch.split(output4d, split_sizes, 3)
         names = self.dist_param_groups.keys()
@@ -161,10 +157,12 @@ class Encoder(pl.LightningModule):
         return [optimizer], [scheduler]
 
     def _get_loss(self, pred: Dict[str, Distribution], true_tile_cat: TileCatalog):
+        ttc = self.tiles_to_crop
         loss_with_components = {}
 
         # counter loss
         counter_loss = -pred["on_prob"].log_prob(true_tile_cat.n_sources)
+        counter_loss = counter_loss[:, ttc:-ttc, ttc:-ttc]
         loss = counter_loss
         loss_with_components["counter_loss"] = counter_loss.mean()
 
@@ -176,23 +174,26 @@ class Encoder(pl.LightningModule):
         true_locs = true_tile_cat.locs.squeeze(3)
         locs_loss = -pred["loc"].log_prob(true_locs)
         locs_loss *= true_tile_cat.n_sources
+        locs_loss = locs_loss[:, ttc:-ttc, ttc:-ttc]
         loss += locs_loss
-        loss_with_components["locs_loss"] = locs_loss.sum() / true_tile_cat.n_sources.sum()
+        loss_with_components["locs_loss"] = locs_loss.mean()
 
         # star/galaxy classification loss
         true_gal_bools = rearrange(true_tile_cat["galaxy_bools"], "b ht wt 1 1 -> b ht wt")
         binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
         binary_loss *= true_tile_cat.n_sources
+        binary_loss = binary_loss[:, ttc:-ttc, ttc:-ttc]
         loss += binary_loss
-        loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
+        loss_with_components["binary_loss"] = binary_loss.mean()
 
         # star flux loss
         true_star_bools = rearrange(true_tile_cat["star_bools"], "b ht wt 1 1 -> b ht wt")
         star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
         star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
         star_flux_loss *= true_star_bools
+        star_flux_loss = star_flux_loss[:, ttc:-ttc, ttc:-ttc]
         loss += star_flux_loss
-        loss_with_components["star_flux_loss"] = star_flux_loss.sum() / true_star_bools.sum()
+        loss_with_components["star_flux_loss"] = star_flux_loss.mean()
 
         # galaxy properties loss
         galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
@@ -202,8 +203,9 @@ class Encoder(pl.LightningModule):
             true_param_vals = galsim_true_vals[:, :, :, i]
             loss_term = -pred[galsim_pn].log_prob(true_param_vals)
             loss_term *= true_gal_bools
+            loss_term = loss_term[:, ttc:-ttc, ttc:-ttc]
             loss += loss_term
-            loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
+            loss_with_components[galsim_pn] = loss_term.mean()
 
         loss_with_components["loss"] = loss.mean()
 
@@ -213,7 +215,6 @@ class Encoder(pl.LightningModule):
         batch_size = batch["images"].size(0)
         pred = self.encode_batch(batch)
         true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
         loss_dict = self._get_loss(pred, true_tile_cat)
         true_full_cat = true_tile_cat.to_full_params()
         est_cat = self.variational_mode(pred)
