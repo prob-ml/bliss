@@ -4,9 +4,9 @@ from pathlib import Path
 
 import hydra
 
+from bliss.generate import generate
 from bliss.predict import predict
 from bliss.train import train
-from bliss.generate import generate
 
 if not getenv("BLISS_HOME"):
     project_path = Path(__file__).resolve()
