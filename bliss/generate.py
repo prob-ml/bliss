@@ -21,12 +21,9 @@ def generate(cfg: DictConfig):
     cached_data_path = cfg.cached_simulator.cached_data_path
 
     # largest `batch_size` multiple <= `file_data_capacity`
-    bs = cfg.cached_simulator.batch_size
+    bs = cfg.simulator.prior.batch_size
     file_data_size = (file_data_capacity // bs) * bs
-
-    assert (
-        file_data_size >= bs and file_data_size > bs * cfg.cached_simulator.num_workers
-    ), "file_data_capacity too small"
+    assert file_data_size >= bs, "file_data_capacity too small"
 
     # number of files needed to store >= `n_batches` * `batch_size` images
     # in <= `file_data_size`-image files
@@ -53,34 +50,51 @@ def generate(cfg: DictConfig):
         for _ in range(file_data_size // bs):
             batch_data.append(next(iter(simulated_dataset)))
 
-        # TODO: refactor/optimize this dictionary/tensor flattening
-        flat_data = {}
-        # concatenate tensors in tile_catalog dictionaries
-        tile_catalog_flattened = {
-            key: flatten_tile_catalog_tensor(key, batch_data)
-            for key in batch_data[0]["tile_catalog"].keys()
-        }
-        flat_data["tile_catalog"] = tile_catalog_flattened
-        flat_data["images"] = flatten_tensor("images", batch_data)
-        flat_data["background"] = flatten_tensor("background", batch_data)
-
-        assert len(flat_data["images"]) == file_data_size
-        assert len(flat_data["background"]) == file_data_size
-        # reconstruct data as list of single-input FileDatum dictionaries
-        file_data: List[FileDatum] = []
-        for i in range(file_data_size):
-            file_datum: FileDatum = {}  # type: ignore
-            # construct a TileCatalog dictionary of ith-input tensors
-            file_datum["tile_catalog"] = {  # type: ignore
-                k: flat_data["tile_catalog"][k][i] for k in flat_data["tile_catalog"].keys()
-            }
-            file_datum["images"] = flat_data["images"][i]
-            file_datum["background"] = flat_data["background"][i]
-            file_data.append(file_datum)
+        file_data = itemize_data(batch_data, n_items=file_data_size)
 
         data_files.append({"filename": f"dataset_{file_idx}.pkl", "data": file_data})
         with open(f"{cached_data_path}/{data_files[-1]['filename']}", "wb") as f:
             pickle.dump(file_data, f)
+
+    valid = generate_validation_data(cfg.cached_simulator.valid_n_batches, simulated_dataset)
+    with open(f"{cached_data_path}/dataset_valid.pkl", "wb") as f:
+        pickle.dump(valid, f)
+
+
+def generate_validation_data(valid_n_batches: int, simulated_dataset):
+    batch_valid_data: List[Dict[str, torch.Tensor]] = []
+    for _ in tqdm(range(valid_n_batches), desc="Generating fixed validation set"):
+        batch_valid_data.append(next(iter(simulated_dataset)))
+    return batch_valid_data
+
+
+def itemize_data(batch_data, n_items: int) -> List[FileDatum]:
+    # TODO: refactor/optimize this dictionary/tensor flattening
+    flat_data = {}
+    # concatenate tensors in tile_catalog dictionaries
+    tile_catalog_flattened = {
+        key: flatten_tile_catalog_tensor(key, batch_data)
+        for key in batch_data[0]["tile_catalog"].keys()
+    }
+    flat_data["tile_catalog"] = tile_catalog_flattened
+    flat_data["images"] = flatten_tensor("images", batch_data)
+    flat_data["background"] = flatten_tensor("background", batch_data)
+
+    assert len(flat_data["images"]) == n_items
+    assert len(flat_data["background"]) == n_items
+    # reconstruct data as list of single-input FileDatum dictionaries
+    file_data: List[FileDatum] = []
+    for i in range(n_items):
+        file_datum: FileDatum = {}  # type: ignore
+        # construct a TileCatalog dictionary of ith-input tensors
+        file_datum["tile_catalog"] = {  # type: ignore
+            k: flat_data["tile_catalog"][k][i] for k in flat_data["tile_catalog"].keys()
+        }
+        file_datum["images"] = flat_data["images"][i]
+        file_datum["background"] = flat_data["background"][i]
+        file_data.append(file_datum)
+
+    return file_data
 
 
 def flatten_tile_catalog_tensor(key, batch_data):

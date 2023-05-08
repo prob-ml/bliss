@@ -1,12 +1,13 @@
 import os
 import pickle
+import random
 import warnings
-from typing import Dict, List, Optional, Tuple, TypedDict, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import pytorch_lightning as pl
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset, IterableDataset
+from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
@@ -92,10 +93,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
 
-DataFile = TypedDict("DataFile", {"filename": str, "data": List[FileDatum]})
-
-
-class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
+class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
         self,
         n_batches: int,
@@ -116,58 +114,51 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         self.file_data_capacity = file_data_capacity
         self.cached_data_path = cached_data_path
 
-        # largest `batch_size` multiple <= `file_data_capacity`
-        self.file_data_size = (self.file_data_capacity // self.batch_size) * self.batch_size
-        # number of files needed to store >= `n_batches` * `batch_size` images,
-        #   in <= `file_data_size`-image files
-        self.n_files = -(self.n_batches * self.batch_size // -self.file_data_size)  # ceil division
-
-        # stores details of the written image files - { filename: str, data: List[FileDatum] }
-        self.data_files: List[DataFile] = []
+        self.data: List[FileDatum] = []
 
         # assume cached image files exist, read from disk
-        for file_idx in range(self.n_files):
-            filename = f"dataset_{file_idx}.pkl"
-            assert os.path.exists(
-                f"{self.cached_data_path}/{filename}"
-            ), f"{self.cached_data_path}/{filename} not found; run `bliss/generate.py` first."
-            if filename.startswith("dataset_") and filename.endswith(".pkl"):
-                self.data_files.append(
-                    {
-                        "filename": filename,
-                        "data": self.read_file(f"{self.cached_data_path}/{filename}"),
-                    }
-                )
+        for filename in os.listdir(self.cached_data_path):
+            if "valid" in filename:
+                continue
+            if filename.startswith("dataset") and filename.endswith(".pkl"):
+                self.data += self.read_file(f"{self.cached_data_path}/{filename}")
+        assert self.data, "No cached data loaded; run `generate.py` first"
 
     def read_file(self, filename: str) -> List[FileDatum]:
         with open(filename, "rb") as f:
             return pickle.load(f)
 
-    def __len__(self) -> int:
-        return self.n_files * self.file_data_size
+    def get_batch(self, batch_idx) -> Dict:
+        batch_data = self.data[batch_idx * self.batch_size : (batch_idx + 1) * self.batch_size]
+        images = torch.stack([datum["images"] for datum in batch_data])
+        background = torch.stack([datum["background"] for datum in batch_data])
+        tile_catalog = {}
+        assert len(batch_data), f"Batch for batch_idx {batch_idx} is empty"
+        for key in batch_data[0]["tile_catalog"]:
+            tile_catalog[key] = torch.stack([datum["tile_catalog"][key] for datum in batch_data])
+        return {
+            "tile_catalog": tile_catalog,
+            "images": images,
+            "background": background,
+        }
 
-    def __getitem__(self, idx: int) -> FileDatum:
-        file_idx = idx // self.file_data_size
-        data_idx = idx % self.file_data_size
-        return self.data_files[file_idx]["data"][data_idx]
+    def __iter__(self):
+        random.shuffle(self.data)
+        for batch_idx in range(self.n_batches):
+            yield self.get_batch(batch_idx)
 
     def train_dataloader(self):
-        return DataLoader(
-            self,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )
+        return DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(
-            self,
-            batch_size=self.batch_size,
-            num_workers=0,
-        )
+        if self.fix_validation_set:
+            assert os.path.exists(
+                f"{self.cached_data_path}/dataset_valid.pkl"
+            ), "No cached validation data found; run `generate.py` with 'fix_validation_set=true'"
+            valid = self.read_file(f"{self.cached_data_path}/dataset_valid.pkl")
+        else:
+            valid = self
+        return DataLoader(valid, batch_size=None, num_workers=0)
 
     def test_dataloader(self):
-        return DataLoader(
-            self,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )
+        return DataLoader(self, batch_size=None, num_workers=self.num_workers)

@@ -1,6 +1,5 @@
 ---
 defaults:
-    - ../conf@_here_: base_config
     - _self_
 
 # completely disable hydra logging
@@ -131,7 +130,7 @@ training:
         batch_size: 32
         num_workers: 0
     seed: 42
-    weight_save_path: null
+    weight_save_path: ${paths.pretrained_models}/sdss.pt
     use_cached_simulator: false
 
 predict:

@@ -18,6 +18,10 @@ simulator:
         _target_: bliss.simulator.background.ConstantBackground
         background: [865.0]
 
+cached_simulator:
+    file_data_capacity: 50
+    cached_data_path: ${paths.data}/test_cached_dataset
+
 training:
     name: "pytest_encoder"
     version: "version0"

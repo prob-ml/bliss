@@ -20,7 +20,6 @@ simulator:
 
 training:
     name: "sdss_encoder"
-    pretrained_weights: ${paths.pretrained_models}/${training.name}.pt
     testing:
         num_workers: 0  # why not increase this?
     weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
