@@ -35,7 +35,7 @@ def train(cfg: DictConfig):
     encoder = instantiate(cfg.encoder)
 
     # load pretrained weights
-    if "pretrained_weights" in cfg.training:
+    if "pretrained_weights" in cfg.training and cfg.training.pretrained_weights is not None:
         enc_state_dict = torch.load(cfg.training.pretrained_weights)
         encoder.load_state_dict(enc_state_dict)
 
