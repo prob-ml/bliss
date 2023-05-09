@@ -12,7 +12,7 @@ paths:
 simulator:
     prior:
         max_sources: 1
-        mean_sources: 0.2
+        mean_sources: 0.006
         min_sources: 0
     background:
         _target_: bliss.simulator.background.SimulatedSDSSBackground
