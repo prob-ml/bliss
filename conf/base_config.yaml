@@ -102,7 +102,6 @@ training:
     version: null
     n_epochs: 50
     save_top_k: 1
-    pretrained_weights: null
     trainer:
         _target_: pytorch_lightning.Trainer
         logger: true
