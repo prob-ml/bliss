@@ -29,8 +29,8 @@ def test_metrics():
     est_params = FullCatalog(slen, slen, d_est)
 
     results_metrics = bliss_metrics(true_params, est_params)
-    precision = results_metrics["precision"]
-    recall = results_metrics["recall"]
+    precision = results_metrics["detection_precision"]
+    recall = results_metrics["detection_recall"]
     avg_distance = results_metrics["avg_distance"]
 
     class_acc = results_metrics["class_acc"]

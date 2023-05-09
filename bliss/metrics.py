@@ -7,7 +7,6 @@ from scipy.sparse.csgraph import min_weight_full_bipartite_matching
 from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
-from tqdm import tqdm
 
 from bliss.catalog import FullCatalog
 
@@ -39,7 +38,6 @@ class BlissMetrics(Metric):
             disable_bar: Whether to show progress bar
 
         Attributes:
-            
             detection_tp: true positives = # of sources matched with a true source.
             detection_fp: false positives = # of predicted sources not matched with true source
             avg_distance: Average l-infinity distance over matched objects.
@@ -70,17 +68,18 @@ class BlissMetrics(Metric):
         assert true.batch_size == est.batch_size
 
         count = 0
-        desc = "Bliss Metric per batch"
-        for b in tqdm(range(true.batch_size), desc=desc, disable=self.disable_bar):
+        for b in range(true.batch_size):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
             tgbool, egbool = true["galaxy_bools"][b].reshape(-1), est["galaxy_bools"][b].reshape(-1)
-            mtrue, mest, dkeep, avg_distance = match_by_locs(tlocs[:ntrue], elocs[:nest], self.slack)
+            mtrue, mest, dkeep, avg_distance = match_by_locs(
+                tlocs[: int(ntrue)], elocs[: int(nest)], self.slack
+            )
             detection_tp = len(elocs[mest][dkeep])
             detection_fp = nest - detection_tp
             tgbool = tgbool[mtrue][dkeep].reshape(-1)
             egbool = egbool[mest][dkeep].reshape(-1)
-            assert fp >= 0
+            assert detection_fp >= 0
             self.detection_tp += detection_tp
             self.detection_fp += detection_fp
             self.avg_distance += avg_distance
@@ -97,10 +96,14 @@ class BlissMetrics(Metric):
 
     def compute(self) -> Dict[str, Tensor]:
         """Calculate f1, misclassification accuracy, confusion matrix."""
-        det_precision = self.detection_tp / (self.detection_tp + self.detection_fp)  # PPV = positive predictive value
-        det_recall = self.detection_tp / self.total_true_n_sources  # TPR = true positive rate
+        # PPV = positive predictive value
+        det_precision = self.detection_tp / (self.detection_tp + self.detection_fp)
+        # TPR = true positive rate
+        det_recall = self.detection_tp / self.total_true_n_sources
+        # f1 score
         f1 = (2 * det_precision * det_recall) / (det_precision + det_recall)
-        total_class = self.gal_tp + self.gal_fp + self.gal_tn + self.gal_fn # total number of predictions
+        # total number of predictions
+        total_class = self.gal_tp + self.gal_fp + self.gal_tn + self.gal_fn
         return {
             "detection_precision": det_precision,
             "detection_recall": det_recall,
