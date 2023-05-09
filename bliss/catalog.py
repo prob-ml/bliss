@@ -1,7 +1,7 @@
 import math
 from collections import UserDict
 from copy import copy
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import torch
 from einops import rearrange, reduce, repeat
@@ -262,43 +262,6 @@ class FullCatalog(UserDict):
     @property
     def device(self):
         return self.plocs.device
-
-    def crop(
-        self,
-        h_min: Optional[int] = None,
-        h_max: Optional[int] = None,
-        w_min: Optional[int] = None,
-        w_max: Optional[int] = None,
-    ):
-        assert self.batch_size == 1
-        keep = torch.ones(self.max_sources, dtype=torch.bool)
-        height_out = self.height
-        width_out = self.width
-        if h_min is not None:
-            keep *= self.plocs[0, :, 0] >= h_min
-            height_out -= h_min
-        if h_max is not None:
-            keep *= self.plocs[0, :, 0] <= (self.height - h_max)
-            height_out -= h_max
-        if w_min is not None:
-            keep *= self.plocs[0, :, 1] >= w_min
-            width_out -= w_min
-        if w_max is not None:
-            keep *= self.plocs[0, :, 1] <= (self.width - w_max)
-            width_out -= w_max
-        d = {}
-        d["plocs"] = self.plocs[:, keep] - torch.tensor(
-            [h_min, w_min], dtype=self.plocs.dtype, device=self.plocs.device
-        )
-        d["n_sources"] = keep.sum().reshape(1).to(self.n_sources.dtype).to(self.n_sources.device)
-        for k, v in self.items():
-            d[k] = v[:, keep]
-        return type(self)(height_out, width_out, d)
-
-    def crop_at_coords(self, h_start, h_end, w_start, w_end):
-        h_max = self.height - h_end
-        w_max = self.width - w_end
-        return self.crop(h_start, h_max, w_start, w_max)
 
     def apply_param_bin(self, pname: str, p_min: float, p_max: float):
         """Apply magnitude bin to given parameters."""
