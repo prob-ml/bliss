@@ -91,7 +91,9 @@ class TestMetrics:
             encoder.eval()
             pred = encoder.encode_batch(batch)
         bliss_cat = encoder.variational_mode(pred).to(torch.device("cpu"))
-        bliss_cat.plocs += torch.tensor([h_lim[0], w_lim[0]])  # coords in original image
+        bliss_cat.plocs += torch.tensor(
+            [h_lim[0] + cfg.encoder.tile_slen, w_lim[0] + cfg.encoder.tile_slen]
+        )  # coords in original image
 
         return {"decals": decals_cat, "photo": photo_cat, "bliss": bliss_cat}
 
@@ -178,7 +180,7 @@ class TestMetrics:
 
     def test_bliss_photo_agree(self, brightest_catalogs):
         """Compares metrics for agreement between BLISS-inferred catalog and Photo catalog."""
-        results = BlissMetrics(slack=5.0)(brightest_catalogs["photo"], brightest_catalogs["bliss"])
+        results = BlissMetrics(slack=1.0)(brightest_catalogs["photo"], brightest_catalogs["bliss"])
         assert results["f1"] > 0.8
 
     def test_bliss_photo_agree_comp_decals(self, brightest_catalogs):
@@ -187,9 +189,9 @@ class TestMetrics:
         photo_cat = brightest_catalogs["photo"]
         bliss_cat = brightest_catalogs["bliss"]
 
-        metrics = BlissMetrics(slack=5.0)
+        metrics = BlissMetrics(slack=1.0)
 
         bliss_vs_decals = metrics(decals_cat, bliss_cat)
-        photo_vs_decals = metrics(photo_cat, decals_cat)
+        photo_vs_decals = metrics(decals_cat, photo_cat)
 
         assert np.isclose(bliss_vs_decals["f1"], photo_vs_decals["f1"], atol=0.1)

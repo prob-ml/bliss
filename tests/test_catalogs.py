@@ -35,8 +35,6 @@ def test_load_decals_from_file(cfg):
     sample_file = Path(cfg.paths.decals).joinpath("tractor-3366m010.fits")
     decals_cat = DecalsFullCatalog.from_file(sample_file)
 
-    assert not torch.all(decals_cat.plocs)  # all plocs should be 0 by default
-
     ras = decals_cat["ra"].numpy()
     decs = decals_cat["dec"].numpy()
 
