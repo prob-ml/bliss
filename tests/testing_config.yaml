@@ -35,7 +35,6 @@ training:
         devices: 1
 
 predict:
-    dataset:
-      decals: ${paths.decals}/tractor-3366m010.fits
+    decals_frame: ${paths.decals}/tractor-3366m010.fits
     weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cpu"

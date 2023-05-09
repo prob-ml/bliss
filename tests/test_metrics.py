@@ -79,7 +79,7 @@ class TestMetrics:
         # get RA/DEC limits of cropped image and construct catalogs
         ra_lim, dec_lim = wcs.all_pix2world(w_lim, h_lim, 0)
         photo_cat = self._get_photo_cat(base_photo_cat, ra_lim, dec_lim).to(torch.device("cpu"))
-        decals_path = cfg.predict.dataset.decals
+        decals_path = cfg.predict.decals_frame
         decals_cat = self._get_decals_cat(decals_path, ra_lim, dec_lim, wcs).to(torch.device("cpu"))
 
         # get predicted BLISS catalog
