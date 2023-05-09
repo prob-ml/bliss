@@ -15,8 +15,8 @@ from bliss.catalog import FullCatalog
 class BlissMetrics(Metric):
     """Calculates aggregate detection metrics on batches over full images (not tiles)."""
 
-    tp: Tensor
-    fp: Tensor
+    detection_tp: Tensor
+    detection_fp: Tensor
     avg_distance: Tensor
     total_true_n_souces: Tensor
     gal_tp: Tensor
@@ -39,8 +39,9 @@ class BlissMetrics(Metric):
             disable_bar: Whether to show progress bar
 
         Attributes:
-            tp: true positives = # of sources matched with a true source.
-            fp: false positives = # of predicted sources not matched with true source
+            
+            detection_tp: true positives = # of sources matched with a true source.
+            detection_fp: false positives = # of predicted sources not matched with true source
             avg_distance: Average l-infinity distance over matched objects.
             total_true_n_sources: Total number of true sources over batches seen.
             disable_bar: Whether to show progress bar
@@ -54,8 +55,8 @@ class BlissMetrics(Metric):
         self.slack = slack
         self.disable_bar = disable_bar
 
-        self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("fp", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("detection_tp", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("detection_fp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total_true_n_sources", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("gal_tp", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -74,43 +75,40 @@ class BlissMetrics(Metric):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
             tgbool, egbool = true["galaxy_bools"][b].reshape(-1), est["galaxy_bools"][b].reshape(-1)
-            if ntrue > 0 and nest > 0:
-                mtrue, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
-                tp = len(elocs[mest][dkeep])
-                fp = nest - tp
-                tgbool = tgbool[mtrue][dkeep].reshape(-1)
-                egbool = egbool[mest][dkeep].reshape(-1)
-                assert fp >= 0
-                self.tp += tp
-                self.fp += fp
-                self.avg_distance += avg_distance
-                self.total_true_n_sources += ntrue  # type: ignore
-                conf_matrix = confusion_matrix(tgbool, egbool, labels=[1, 0])
-                # decompose confusion matrix to pass to lightning logger
-                self.gal_tp += conf_matrix[0][0]
-                self.gal_fp += conf_matrix[0][1]
-                self.gal_fn += conf_matrix[1][0]
-                self.gal_tn += conf_matrix[1][1]
+            mtrue, mest, dkeep, avg_distance = match_by_locs(tlocs[:ntrue], elocs[:nest], self.slack)
+            detection_tp = len(elocs[mest][dkeep])
+            detection_fp = nest - detection_tp
+            tgbool = tgbool[mtrue][dkeep].reshape(-1)
+            egbool = egbool[mest][dkeep].reshape(-1)
+            assert fp >= 0
+            self.detection_tp += detection_tp
+            self.detection_fp += detection_fp
+            self.avg_distance += avg_distance
+            self.total_true_n_sources += ntrue  # type: ignore
+            conf_matrix = confusion_matrix(tgbool.cpu(), egbool.cpu(), labels=[1, 0])
+            # decompose confusion matrix to pass to lightning logger
+            self.gal_tp += conf_matrix[0][0]
+            self.gal_fp += conf_matrix[0][1]
+            self.gal_fn += conf_matrix[1][0]
+            self.gal_tn += conf_matrix[1][1]
 
-                count += 1
+            count += 1
         self.avg_distance /= count
 
     def compute(self) -> Dict[str, Tensor]:
         """Calculate f1, misclassification accuracy, confusion matrix."""
-        precision = self.tp / (self.tp + self.fp)  # = PPV = positive predictive value
-        recall = self.tp / self.total_true_n_sources  # = TPR = true positive rate
-        f1 = (2 * precision * recall) / (precision + recall)
+        det_precision = self.detection_tp / (self.detection_tp + self.detection_fp)  # PPV = positive predictive value
+        det_recall = self.detection_tp / self.total_true_n_sources  # TPR = true positive rate
+        f1 = (2 * det_precision * det_recall) / (det_precision + det_recall)
+        total_class = self.gal_tp + self.gal_fp + self.gal_tn + self.gal_fn # total number of predictions
         return {
-            "tp": self.tp,
-            "fp": self.fp,
-            "precision": precision,
-            "recall": recall,
+            "detection_precision": det_precision,
+            "detection_recall": det_recall,
             "f1": f1,
             "avg_distance": self.avg_distance,
             "n_matches": self.gal_tp + self.gal_fp + self.gal_tn + self.gal_fn,
             "n_matches_gal_coadd": self.gal_tp + self.gal_fn,
-            "class_acc": (self.gal_tp + self.gal_tn)
-            / (self.gal_tp + self.gal_fp + self.gal_tn + self.gal_fn),
+            "class_acc": (self.gal_tp + self.gal_tn) / total_class,
             "gal_tp": self.gal_tp,
             "gal_fp": self.gal_fp,
             "gal_fn": self.gal_fn,
@@ -146,12 +144,8 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
 
     # reshape
-    locs1 = true_locs.view(-1, 2)  # 11x2 - coordinates for true light sources
-    locs2 = est_locs.view(-1, 2)  # 7x2 - coordinates for estimated light sources
-
-    # remove non-existent estimated/true light sources
-    locs1 = locs1[torch.abs(locs1).sum(dim=1) != 0]
-    locs2 = locs2[torch.abs(locs2).sum(dim=1) != 0]
+    locs1 = true_locs.view(-1, 2)
+    locs2 = est_locs.view(-1, 2)
 
     locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
     locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
