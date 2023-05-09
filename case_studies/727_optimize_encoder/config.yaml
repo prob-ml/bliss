@@ -1,0 +1,68 @@
+---
+defaults:
+    - ../../conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+hydra:
+    sweeper:
+        params:
+            simulator.prior.n_tiles_h: 8, 12, 16, 20, 24, 28, 32
+            simulator.prior.n_tiles_w: 8, 12, 16, 20, 24, 28, 32
+            simulator.prior.batch_size: 8, 16 32, 64, 128, 256
+            # encoder.architecture.anchors: [[4, 4]], [
+            #         [10,13, 16,30, 33,23]  # P3/8
+            #         [30,61, 62,45, 59,119]  # P4/16
+            #         [116,90, 156,198, 373,326]  # P5/32
+            #     ], 1, 2, 3, 4
+            # encoder.architecture.head: [ # base_config (YOLOv5)
+            #         [-1, 1, Conv, [512, 1, 1]],
+            #         [-1, 1, nn.Upsample, [None, 2, 'nearest']],
+            #         [[-1, 6], 1, Concat, [1]],
+            #         [-1, 3, C3, [512, false]],
+            #         [-1, 1, Conv, [256, 1, 1]],
+            #         [-1, 1, nn.Upsample, [None, 2, 'nearest']],
+            #         [[-1, 4, 5], 1, Concat, [1]],
+            #         [-1, 3, C3, [256, false]],
+            #         [[17], 1, Detect, [nc, anchors]]
+            #     ], [ # YOLOv8
+            #         [-1, 1, nn.Upsample, [None, 2, 'nearest']],
+            #         [[-1, 6], 1, Concat, [1]]  # cat backbone P4,
+            #         [-1, 3, C2f, [512]]  # 12,
+            #         [-1, 1, nn.Upsample, [None, 2, 'nearest']],
+            #         [[-1, 4], 1, Concat, [1]]  # cat backbone P3,
+            #         [-1, 3, C2f, [256]]  # 15 (P3/8-small),
+            #         [-1, 1, Conv, [256, 3, 2]],
+            #         [[-1, 12], 1, Concat, [1]]  # cat head P4,
+            #         [-1, 3, C2f, [512]]  # 18 (P4/16-medium),
+            #         [-1, 1, Conv, [512, 3, 2]],
+            #         [[-1, 9], 1, Concat, [1]]  # cat head P5,
+            #         [-1, 3, C2f, [1024]]  # 21 (P5/32-large),
+            #         [[15, 18, 21], 1, Detect, [nc]]  # Detect(P3, P4, P5)
+            #     ], 
+
+paths:
+    project: ${paths.root}/case_studies/727_optimize_encoder
+    output: ${paths.project}/output
+    pretrained_models: ${paths.data}/pretrained_models
+
+simulator:
+    n_batches: 5
+    background:
+        _target_: bliss.simulator.background.SimulatedSDSSBackground
+        sdss_dir: ${paths.sdss}
+        run: 94
+        camcol: 1
+        field: 12
+        bands: [2]
+
+cached_simulator:
+    file_data_capacity: 150
+
+training:
+    name: "encoder"
+    version: "sdss"
+    pretrained_weights: ${paths.pretrained_models}/sdss.pt
+    weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
+    seed: 42
+    use_cached_simulator: true

@@ -87,6 +87,7 @@ encoder:
         # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
         depth_multiple: 1.0  # model depth multiple
         width_multiple: 1.0  # layer channel multiple
+        # max_channels: 512
         anchors:
             - [4, 4]  # P3/8
         backbone: [
