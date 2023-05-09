@@ -150,8 +150,8 @@ class TestMetrics:
         est_params = FullCatalog(slen, slen, d_est)
 
         results = metrics(true_params, est_params)
-        precision = results["precision"]
-        recall = results["recall"]
+        precision = results["detection_precision"]
+        recall = results["detection_recall"]
         avg_distance = results["avg_distance"]
 
         class_acc = results["class_acc"]
@@ -174,7 +174,7 @@ class TestMetrics:
     def test_photo_decals_agree(self, catalogs):
         """Compares metrics for agreement between Photo catalog and Decals catalog."""
         results = BlissMetrics()(catalogs["decals"], catalogs["photo"])
-        assert results["precision"] > 0.8
+        assert results["detection_precision"] > 0.8
 
     def test_bliss_photo_agree(self, brightest_catalogs):
         """Compares metrics for agreement between BLISS-inferred catalog and Photo catalog."""
