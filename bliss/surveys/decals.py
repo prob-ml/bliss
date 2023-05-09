@@ -26,19 +26,34 @@ class DecalsFullCatalog(FullCatalog):
     @classmethod
     def from_file(
         cls,
-        decals_cat_path,
-        wcs: WCS,
-        hlim: Tuple[int, int],  # in degrees
-        wlim: Tuple[int, int],  # in degrees
+        decals_cat_path: str,
+        ra_lim: Tuple[int, int] = (-360, 360),
+        dec_lim: Tuple[int, int] = (-90, 90),
         band: str = "r",
-        mag_max=23,
     ):
-        assert hlim[0] == wlim[0]
+        """Loads DECaLS catalog from FITS file.
+
+        Args:
+            decals_cat_path (str): Path to .fits file.
+            ra_lim (Tuple[int, int]): Range of RA values to keep.
+                Defaults to (-360, 360).
+            dec_lim (Tuple[int, int]): Range of DEC values to keep.
+                Defaults to (-90, 90).
+            band (str): Band to read from. Defaults to "r".
+
+        Returns:
+            A DecalsFullCatalog containing data from the provided file. Note that the
+            coordinates in (RA, DEC) are not converted to plocs by default. For this,
+            use get_plocs_from_ra_dec after loading the data.
+        """
         catalog_path = Path(decals_cat_path)
-        table = Table.read(catalog_path, format="fits")
+        table = Table.read(catalog_path, format="fits", unit_parse_strict="silent")
+        table = {k.upper(): v for k, v in table.items()}  # uppercase keys
         band = band.capitalize()
 
-        ra_lim, dec_lim = wcs.all_pix2world(wlim, hlim, 0)
+        # filter out pixels that aren't in primary region, had issues with source fitting,
+        # in SGA large galaxy, or in a globular cluster. In the future this should probably
+        # be an input parameter.
         bitmask = 0b0011010000000001  # noqa: WPS339
 
         objid = column_to_tensor(table, "OBJID")
@@ -59,21 +74,10 @@ class DecalsFullCatalog(FullCatalog):
         galaxy_bool = is_galaxy & mask & (flux > 0)
         star_bool = is_star & mask & (flux > 0)
 
-        # get pixel coordinates
-        pt, pr = wcs.all_world2pix(ra, dec, 0)  # pixels
-        pt = torch.tensor(pt)
-        pr = torch.tensor(pr)
-        ploc = torch.stack((pr, pt), dim=-1)
-
         # filter on locations
         # first lims imposed on frame
         keep_coord = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec > dec_lim[0]) & (dec < dec_lim[1])
-        # then, SDSS saturation
-        regions = [(1200, 1360, 1700, 1900), (280, 400, 1220, 1320)]
-        keep_sat = torch.ones(len(ra)).bool()
-        for lim in regions:
-            keep_sat = keep_sat & ((pr < lim[0]) | (pr > lim[1]) | (pt < lim[2]) | (pt > lim[3]))
-        keep = (galaxy_bool | star_bool) & keep_coord & keep_sat
+        keep = (galaxy_bool | star_bool) & keep_coord
 
         # filter quantities
         objid = objid[keep]
@@ -83,14 +87,13 @@ class DecalsFullCatalog(FullCatalog):
         dec = dec[keep]
         flux = flux[keep]
         mag = cls._flux_to_mag(flux)
-        ploc = ploc[keep, :]
-        nobj = ploc.shape[0]
+        nobj = objid.shape[0]
 
         d = {
             "objid": objid.reshape(1, nobj, 1),
             "ra": ra.reshape(1, nobj, 1),
             "dec": dec.reshape(1, nobj, 1),
-            "plocs": ploc.reshape(1, nobj, 2) - hlim[0] + 0.5,  # BLISS consistency
+            "plocs": torch.zeros((1, nobj, 2)),  # compatibility with FullCatalog
             "n_sources": torch.tensor((nobj,)),
             "galaxy_bools": galaxy_bool.reshape(1, nobj, 1).float(),
             "star_bools": star_bool.reshape(1, nobj, 1).float(),
@@ -98,7 +101,25 @@ class DecalsFullCatalog(FullCatalog):
             "mags": mag.reshape(1, nobj, 1),
         }
 
-        height = hlim[1] - hlim[0]
-        width = wlim[1] - wlim[0]
-        full_cat = cls(height, width, d)
-        return full_cat.apply_param_bin("mags", 0, mag_max)
+        height = dec_lim[1] - dec_lim[0]
+        width = ra_lim[1] - ra_lim[0]
+        return cls(height, width, d)
+
+    def get_plocs_from_ra_dec(self, wcs: WCS):
+        """Converts RA/DEC coordinates into pixel coordinates.
+
+        Args:
+            wcs (WCS): WCS object to use for transformation.
+
+        Returns:
+            A 1xNx2 tensor containing the locations of the light sources in pixel coordinates. This
+            function does not write self.plocs, so you should do that manually if necessary.
+        """
+        ra = self["ra"].numpy().squeeze()
+        dec = self["dec"].numpy().squeeze()
+
+        pt, pr = wcs.all_world2pix(ra, dec, 0)  # convert to pixel coordinates
+        pt = torch.tensor(pt)
+        pr = torch.tensor(pr)
+        plocs = torch.stack((pr, pt), dim=-1)
+        return plocs.reshape(1, plocs.size()[0], 2) + 0.5  # BLISS consistency
