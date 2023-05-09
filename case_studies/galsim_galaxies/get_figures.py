@@ -114,7 +114,7 @@ def _make_pr_figure(
     ax2.plot(bins, recall, "-o", color=c2, label=r"\rm Recall", markersize=6)
     ax2.fill_between(bins, recall1, recall2, color=c2, alpha=0.5)
 
-    ax2.legend(loc="lower left")
+    ax2.legend()
     ax2.set_xlabel(xlabel)
     ax2.set_ylabel(rf"\rm {metric_type} Metric")
     ax2.set_yticks(yticks)
