@@ -146,8 +146,8 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
 
     # reshape
-    locs1 = true_locs.view(-1, 2)  # 11x2 - coordinates for true light sources
-    locs2 = est_locs.view(-1, 2)  # 7x2 - coordinates for estimated light sources
+    locs1 = true_locs.view(-1, 2)  # Nx2 - coordinates for true light sources
+    locs2 = est_locs.view(-1, 2)  # Mx2 - coordinates for estimated light sources
 
     # remove non-existent estimated/true light sources
     locs1 = locs1[torch.abs(locs1).sum(dim=1) != 0]
@@ -159,6 +159,9 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 
     # Penalize all pairs which are greater than slack apart to favor valid matches.
     locs_err = locs_err + (locs_err_l_infty > slack) * locs_err.max()
+
+    # add small constant to avoid 0 weights (required for sparse bipartite matching)
+    locs_err += 0.001
 
     # convert light source error matrix to CSR
     csr_locs_err = csr_matrix(locs_err.detach().cpu())
