@@ -14,7 +14,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
 from bliss.catalog import TileCatalog
-from bliss.metrics import DetectionMetrics
+from bliss.metrics import BlissMetrics
 from bliss.plotting import plot_detections
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
@@ -73,7 +73,7 @@ class Encoder(pl.LightningModule):
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
-        self.metrics = DetectionMetrics(slack)
+        self.metrics = BlissMetrics(slack)
 
     @property
     def dist_param_groups(self):

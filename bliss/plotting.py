@@ -1,7 +1,6 @@
 """Common functions to plot results."""
 from abc import abstractmethod
 from pathlib import Path
-from typing import Optional, Tuple
 
 import matplotlib as mpl
 import numpy as np
@@ -9,7 +8,6 @@ import seaborn as sns
 import torch
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
-from matplotlib.pyplot import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 CB_color_cycle = [
@@ -151,119 +149,12 @@ class BlissFigure:
         plt.close(fig)
 
 
-def plot_image(
-    fig: Figure,
-    ax: Axes,
-    image: np.ndarray,
-    vrange: Optional[tuple] = None,
-    colorbar: bool = True,
-    cmap="gray",
-) -> None:
-    h, w = image.shape
-    assert h == w
-    vmin = image.min().item() if vrange is None else vrange[0]
-    vmax = image.max().item() if vrange is None else vrange[1]
-
-    if colorbar:
-        divider = make_axes_locatable(ax)
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-    im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap=cmap)
-    if colorbar:
-        fig.colorbar(im, cax=cax, orientation="vertical")
-
-
-def plot_locs(
-    ax: Axes,
-    bp: int,
-    slen: int,
-    plocs: np.ndarray,
-    galaxy_probs: np.ndarray,
-    m: str = "x",
-    s: float = 20,
-    lw: float = 1,
-    alpha: float = 1,
-    annotate=False,
-    cmap: str = "bwr",
-) -> None:
-    n_samples, xy = plocs.shape
-    assert galaxy_probs.shape == (n_samples,) and xy == 2
-
-    x = plocs[:, 1] - 0.5 + bp
-    y = plocs[:, 0] - 0.5 + bp
-    for i, (xi, yi) in enumerate(zip(x, y)):
-        prob = galaxy_probs[i]
-        cmp = mpl.colormaps[cmap]
-        color = cmp(prob)
-        if bp < xi < slen - bp and bp < yi < slen - bp:
-            ax.scatter(xi, yi, color=color, marker=m, s=s, lw=lw, alpha=alpha)
-            if annotate:
-                ax.annotate(f"{galaxy_probs[i]:.2f}", (xi, yi), color=color, fontsize=8)
-
-
-def add_loc_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s=20):
-    cmp1 = mpl.colormaps[cmap1]
-    cmp2 = mpl.colormaps[cmap2]
-    colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
-    markers = ("+", "+", "x", "x")
-    sizes = (s * 2, s * 2, s + 5, s + 5)
-    for label, c, m, size in zip(labels, colors, markers, sizes):
-        ax.scatter([], [], color=c, marker=m, label=label, s=size)
-    ax.legend(
-        bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
-        loc="lower left",
-        ncol=2,
-        mode="expand",
-        borderaxespad=0.0,
-    )
-
-
-def scatter_shade_plot(
-    ax: Axes,
-    x: np.ndarray,
-    y: np.ndarray,
-    xlims: Tuple[float, float],
-    delta: float,
-    qs: Tuple[float, float] = (0.25, 0.75),
-    color: str = "#377eb8",
-    alpha: float = 0.5,
-):
-    xbins = np.arange(xlims[0], xlims[1], delta)
-
-    xs = np.zeros(len(xbins))
-    ys = np.zeros(len(xbins))
-    yqs = np.zeros((len(xbins), 2))
-
-    for i, bx in enumerate(xbins):
-        keep_x = (x > bx) & (x < bx + delta)
-        y_bin: np.ndarray = y[keep_x]
-
-        xs[i] = bx + delta / 2
-
-        if y_bin.shape[0] == 0:
-            ys[i] = np.nan
-            yqs[i] = (np.nan, np.nan)
-            continue
-
-        ys[i] = np.median(y_bin)
-        yqs[i, :] = np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1])
-
-    ax.plot(xs, ys, marker="o", c=color, linestyle="-")
-    ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=alpha)
-
-
-def make_scatter_contours(ax, x, y):
-    sns.scatterplot(x=x, y=y, s=10, color="0.15", ax=ax)
-    sns.histplot(x=x, y=y, pthresh=0.1, cmap="mako", ax=ax, cbar=True)
-    sns.kdeplot(x=x, y=y, levels=10, color="w", linewidths=1, ax=ax)
-
-
 def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px):
-    # can we merge this method with some of the methods above?
     fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(20, 20))
-    axes = axes.flatten() if nrows > 1 else [axes]
+    axes = axes.flatten() if nrows > 1 else [axes]  # flatten
 
     for ax_idx, ax in enumerate(axes):
-        if ax_idx >= len(img_ids):
+        if ax_idx >= len(img_ids):  # don't plot on this ax if there aren't enough images
             break
 
         img_id = img_ids[ax_idx]
