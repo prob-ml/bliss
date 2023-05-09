@@ -27,5 +27,6 @@ bin/
 data/sdss/rcf_list
 data/sdss_all
 case_studies/sdss_galaxies/models/simulated_blended_galaxies.pt
+case_studies/*/data/
 venv
 nohup.out

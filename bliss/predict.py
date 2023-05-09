@@ -28,3 +28,5 @@ def predict(cfg):
         est_cat = encoder.variational_mode(pred)
 
     print("{} light sources detected".format(est_cat.n_sources.item()))
+
+    return est_cat

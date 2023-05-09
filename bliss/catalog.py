@@ -245,6 +245,20 @@ class FullCatalog(UserDict):
         assert x.shape[:-1] == (self.batch_size, self.max_sources)
         assert x.device == self.device
 
+    def to_dict(self) -> Dict[str, Tensor]:
+        out = {}
+        out["plocs"] = self.plocs
+        out["n_sources"] = self.n_sources
+        for k, v in self.items():
+            out[k] = v
+        return out
+
+    def to(self, device):
+        out = {}
+        for k, v in self.to_dict().items():
+            out[k] = v.to(device)
+        return type(self)(self.height, self.width, out)
+
     @property
     def device(self):
         return self.plocs.device

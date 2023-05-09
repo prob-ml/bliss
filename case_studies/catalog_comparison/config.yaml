@@ -1,0 +1,9 @@
+---
+defaults:
+    - ../../conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+predict:
+    weight_save_path: ${paths.pretrained_models}/sdss.pt
+    device: "cpu"

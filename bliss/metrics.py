@@ -157,6 +157,9 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     # Penalize all pairs which are greater than slack apart to favor valid matches.
     locs_err = locs_err + (locs_err_l_infty > slack) * locs_err.max()
 
+    # add small constant to avoid 0 weights (required for sparse bipartite matching)
+    locs_err += 0.001
+
     # convert light source error matrix to CSR
     csr_locs_err = csr_matrix(locs_err.detach().cpu())
 
