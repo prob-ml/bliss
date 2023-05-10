@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-
-# pylint: disable=duplicate-code
 from os import environ, getenv
 from pathlib import Path
 
