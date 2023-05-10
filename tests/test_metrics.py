@@ -163,6 +163,32 @@ class TestMetrics:
         assert class_acc == 1 / 2
         assert avg_distance.item() == 50 * (0.01 + (0.01 + 0.09) / 2) / 2
 
+    def test_no_sources(self):
+        """Tests that metrics work when there are no true or estimated sources."""
+        metrics = BlissMetrics(slack=2.0)
+
+        true_locs = torch.tensor(
+            [[[10, 10]], [[20, 20]], [[30, 30]], [[40, 40]]], dtype=torch.float
+        )
+        est_locs = torch.tensor([[[10, 10]], [[20, 20]], [[30, 30]], [[41, 41]]], dtype=torch.float)
+        true_galaxy_bools = torch.tensor([[[1]], [[1]], [[1]], [[1]]])
+        est_galaxy_bools = torch.tensor([[[1]], [[1]], [[1]], [[1]]])
+        true_sources = torch.tensor([0, 0, 1, 1])
+        est_sources = torch.tensor([0, 1, 0, 1])
+
+        d_true = {"n_sources": true_sources, "plocs": true_locs, "galaxy_bools": true_galaxy_bools}
+        true_params = FullCatalog(50, 50, d_true)
+
+        d_est = {"n_sources": est_sources, "plocs": est_locs, "galaxy_bools": est_galaxy_bools}
+        est_params = FullCatalog(50, 50, d_est)
+
+        results = metrics(true_params, est_params)
+
+        assert results["detection_precision"] == 1 / 2
+        assert results["detection_recall"] == 1 / 2
+        assert results["gal_tp"] == results["gal_fp"] == results["gal_fn"] == 1
+        assert results["avg_distance"].item() == 1
+
     def test_photo_self_agreement(self, catalogs):
         """Compares PhotoFullCatalog to itself as safety check for metrics."""
         results = BlissMetrics()(catalogs["photo"], catalogs["photo"])
