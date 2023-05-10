@@ -72,6 +72,17 @@ class BlissMetrics(Metric):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
             tgbool, egbool = true["galaxy_bools"][b].reshape(-1), est["galaxy_bools"][b].reshape(-1)
+
+            self.total_true_n_sources += ntrue  # type: ignore
+            # if either ntrue or nest are 0, manually increment FP/FN and continue
+            if ntrue == 0 or nest == 0:
+                if nest > 0:  # all estimated are false positives
+                    self.detection_fp += nest
+                    self.gal_fp += egbool.sum()
+                elif ntrue > 0:  # all true are false negatives
+                    self.gal_fn += tgbool.sum()
+                continue
+
             mtrue, mest, dkeep, avg_distance = match_by_locs(
                 tlocs[: int(ntrue)], elocs[: int(nest)], self.slack
             )
@@ -83,7 +94,6 @@ class BlissMetrics(Metric):
             self.detection_tp += detection_tp
             self.detection_fp += detection_fp
             self.avg_distance += avg_distance
-            self.total_true_n_sources += ntrue  # type: ignore
             conf_matrix = confusion_matrix(tgbool.cpu(), egbool.cpu(), labels=[1, 0])
             # decompose confusion matrix to pass to lightning logger
             self.gal_tp += conf_matrix[0][0]
