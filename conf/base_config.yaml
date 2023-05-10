@@ -54,6 +54,14 @@ simulator:
         psf_slen: 25
         sdss_bands: [2]
 
+cached_simulator:
+    _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
+    n_batches: ${simulator.n_batches}
+    num_workers: ${simulator.num_workers}
+    batch_size: ${simulator.prior.batch_size}
+    file_data_capacity: 5000
+    cached_data_path: ${paths.data}/cached_dataset
+
 encoder:
     _target_: bliss.encoder.Encoder
     n_bands: 1
@@ -98,11 +106,17 @@ encoder:
             [[17], 1, Detect, [nc, anchors]],
         ]
 
+generate:
+    splits: [train, valid, test]
+    valid_n_batches: ${simulator.valid_n_batches}
+    test_n_batches: ${simulator.valid_n_batches}
+
 training:
     name: null
     version: null
     n_epochs: 50
     save_top_k: 1
+    pretrained_weights: null
     trainer:
         _target_: pytorch_lightning.Trainer
         logger: true
@@ -121,6 +135,7 @@ training:
         num_workers: 0
     seed: 42
     weight_save_path: null
+    use_cached_simulator: false
 
 predict:
     dataset:
