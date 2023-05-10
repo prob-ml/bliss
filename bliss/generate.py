@@ -45,27 +45,29 @@ def generate(cfg: DictConfig):
         os.makedirs(cached_data_path)
 
     # assume overwriting any existing cached image files
-    for file_idx in tqdm(range(n_files), desc="Generating and writing cached dataset"):
-        batch_data = []
-        for _ in range(file_data_size // bs):
-            batch_data.append(next(iter(simulated_dataset)))
-
+    for file_idx in tqdm(range(n_files), desc="Generating and writing cached dataset files"):
+        batch_data = generate_data(
+            file_data_size // bs, simulated_dataset, "Simulating images in batches for file"
+        )
         file_data = itemize_data(batch_data, n_items=file_data_size)
-
         data_files.append({"filename": f"dataset_{file_idx}.pkl", "data": file_data})
         with open(f"{cached_data_path}/{data_files[-1]['filename']}", "wb") as f:
             pickle.dump(file_data, f)
 
-    valid = generate_validation_data(cfg.cached_simulator.valid_n_batches, simulated_dataset)
+    valid = generate_data(
+        cfg.cached_simulator.valid_n_batches,
+        simulated_dataset,
+        "Generating fixed validation set in batches",
+    )
     with open(f"{cached_data_path}/dataset_valid.pkl", "wb") as f:
         pickle.dump(valid, f)
 
 
-def generate_validation_data(valid_n_batches: int, simulated_dataset):
-    batch_valid_data: List[Dict[str, torch.Tensor]] = []
-    for _ in tqdm(range(valid_n_batches), desc="Generating fixed validation set"):
-        batch_valid_data.append(next(iter(simulated_dataset)))
-    return batch_valid_data
+def generate_data(n_batches: int, simulated_dataset, desc="Generating data"):
+    batch_data: List[Dict[str, torch.Tensor]] = []
+    for _ in tqdm(range(n_batches), desc=desc):
+        batch_data.append(next(iter(simulated_dataset)))
+    return batch_data
 
 
 def itemize_data(batch_data, n_items: int) -> List[FileDatum]:
@@ -100,7 +102,7 @@ def itemize_data(batch_data, n_items: int) -> List[FileDatum]:
 def flatten_tile_catalog_tensor(key, batch_data):
     if len(batch_data) > 1:
         flattened = torch.cat([data["tile_catalog"][key] for data in batch_data])
-        flattened = torch.flatten(flattened, start_dim=0, end_dim=1)
+        flattened = torch.flatten(torch.unsqueeze(flattened, 0), start_dim=0, end_dim=1)
     else:
         # only one batch, no need to cat / flatten
         flattened = batch_data[0]["tile_catalog"][key]
@@ -110,7 +112,7 @@ def flatten_tile_catalog_tensor(key, batch_data):
 def flatten_tensor(key, batch_data):
     if len(batch_data) > 1:
         flattened = torch.cat([data[key] for data in batch_data])
-        flattened = torch.flatten(flattened, start_dim=0, end_dim=1)
+        flattened = torch.flatten(torch.unsqueeze(flattened, 0), start_dim=0, end_dim=1)
     else:
         # only one batch, no need to cat / flatten
         flattened = batch_data[0][key]

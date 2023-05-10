@@ -115,6 +115,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.cached_data_path = cached_data_path
 
         self.data: List[FileDatum] = []
+        self.valid: Union[List[FileDatum], CachedSimulatedDataset] = []
 
         # assume cached image files exist, read from disk
         for filename in os.listdir(self.cached_data_path):
@@ -123,6 +124,14 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
             if filename.startswith("dataset") and filename.endswith(".pkl"):
                 self.data += self.read_file(f"{self.cached_data_path}/{filename}")
         assert self.data, "No cached data loaded; run `generate.py` first"
+
+        if self.fix_validation_set:
+            assert os.path.exists(
+                f"{self.cached_data_path}/dataset_valid.pkl"
+            ), "No cached validation data found; run `generate.py` with 'fix_validation_set=true'"
+            self.valid = self.read_file(f"{self.cached_data_path}/dataset_valid.pkl")
+        else:
+            self.valid = self
 
     def read_file(self, filename: str) -> List[FileDatum]:
         with open(filename, "rb") as f:
@@ -148,17 +157,10 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
             yield self.get_batch(batch_idx)
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=self.num_workers)
+        return DataLoader(self, batch_size=None, num_workers=0)
 
     def val_dataloader(self):
-        if self.fix_validation_set:
-            assert os.path.exists(
-                f"{self.cached_data_path}/dataset_valid.pkl"
-            ), "No cached validation data found; run `generate.py` with 'fix_validation_set=true'"
-            valid = self.read_file(f"{self.cached_data_path}/dataset_valid.pkl")
-        else:
-            valid = self
-        return DataLoader(valid, batch_size=None, num_workers=0)
+        return DataLoader(self.valid, batch_size=None, num_workers=0)
 
     def test_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=self.num_workers)
+        return DataLoader(self, batch_size=None, num_workers=0)
