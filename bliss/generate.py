@@ -44,23 +44,34 @@ def generate(cfg: DictConfig):
     if not os.path.exists(cached_data_path):
         os.makedirs(cached_data_path)
 
-    # assume overwriting any existing cached image files
-    for file_idx in tqdm(range(n_files), desc="Generating and writing cached dataset files"):
-        batch_data = generate_data(
-            file_data_size // bs, simulated_dataset, "Simulating images in batches for file"
-        )
-        file_data = itemize_data(batch_data, n_items=file_data_size)
-        data_files.append({"filename": f"dataset_{file_idx}.pkl", "data": file_data})
-        with open(f"{cached_data_path}/{data_files[-1]['filename']}", "wb") as f:
-            pickle.dump(file_data, f)
+    if "train" in cfg.generate.splits:
+        # assume overwriting any existing cached image files
+        for file_idx in tqdm(range(n_files), desc="Generating and writing cached dataset files"):
+            batch_data = generate_data(
+                file_data_size // bs, simulated_dataset, "Simulating images in batches for file"
+            )
+            file_data = itemize_data(batch_data, n_items=file_data_size)
+            data_files.append({"filename": f"dataset_{file_idx}.pkl", "data": file_data})
+            with open(f"{cached_data_path}/{data_files[-1]['filename']}", "wb") as f:
+                pickle.dump(file_data, f)
 
-    valid = generate_data(
-        cfg.cached_simulator.valid_n_batches,
-        simulated_dataset,
-        "Generating fixed validation set in batches",
-    )
-    with open(f"{cached_data_path}/dataset_valid.pkl", "wb") as f:
-        pickle.dump(valid, f)
+    if "valid" in cfg.generate.splits:
+        valid = generate_data(
+            cfg.generate.valid_n_batches,
+            simulated_dataset,
+            "Generating fixed validation set in batches",
+        )
+        with open(f"{cached_data_path}/dataset_valid.pkl", "wb") as f:
+            pickle.dump(valid, f)
+
+    if "test" in cfg.generate.splits:
+        test = generate_data(
+            cfg.generate.test_n_batches,
+            simulated_dataset,
+            "Generating fixed test set in batches",
+        )
+        with open(f"{cached_data_path}/dataset_test.pkl", "wb") as f:
+            pickle.dump(test, f)
 
 
 def generate_data(n_batches: int, simulated_dataset, desc="Generating data"):

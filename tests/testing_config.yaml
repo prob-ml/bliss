@@ -20,7 +20,7 @@ simulator:
 
 cached_simulator:
     file_data_capacity: 50
-    cached_data_path: ${paths.data}/test_cached_dataset
+    cached_data_path: null # use pytest tmpdir
 
 training:
     name: "pytest_encoder"

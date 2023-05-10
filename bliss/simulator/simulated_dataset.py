@@ -97,8 +97,6 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
         self,
         n_batches: int,
-        valid_n_batches: int,
-        fix_validation_set: bool,
         num_workers: int,
         batch_size: int,
         file_data_capacity: int,
@@ -107,31 +105,33 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
         super().__init__()
 
         self.n_batches = n_batches
-        self.valid_n_batches = valid_n_batches
-        self.fix_validation_set = fix_validation_set
         self.num_workers = num_workers
         self.batch_size = batch_size
         self.file_data_capacity = file_data_capacity
         self.cached_data_path = cached_data_path
 
         self.data: List[FileDatum] = []
-        self.valid: Union[List[FileDatum], CachedSimulatedDataset] = []
+        self.valid: List[FileDatum] = []
+        self.test: List[FileDatum] = []
 
         # assume cached image files exist, read from disk
         for filename in os.listdir(self.cached_data_path):
-            if "valid" in filename:
+            if "valid" in filename or "test" in filename:
                 continue
             if filename.startswith("dataset") and filename.endswith(".pkl"):
                 self.data += self.read_file(f"{self.cached_data_path}/{filename}")
         assert self.data, "No cached data loaded; run `generate.py` first"
 
-        if self.fix_validation_set:
-            assert os.path.exists(
-                f"{self.cached_data_path}/dataset_valid.pkl"
-            ), "No cached validation data found; run `generate.py` with 'fix_validation_set=true'"
-            self.valid = self.read_file(f"{self.cached_data_path}/dataset_valid.pkl")
-        else:
-            self.valid = self
+        # fix validation set
+        assert os.path.exists(
+            f"{self.cached_data_path}/dataset_valid.pkl"
+        ), "No cached validation data found; run `generate.py` first"
+        self.valid = self.read_file(f"{self.cached_data_path}/dataset_valid.pkl")
+
+        assert os.path.exists(
+            f"{self.cached_data_path}/dataset_test.pkl"
+        ), "No cached test data found; run `generate.py` first"
+        self.test = self.read_file(f"{self.cached_data_path}/dataset_test.pkl")
 
     def read_file(self, filename: str) -> List[FileDatum]:
         with open(filename, "rb") as f:
@@ -163,4 +163,4 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
         return DataLoader(self.valid, batch_size=None, num_workers=0)
 
     def test_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=0)
+        return DataLoader(self.test, batch_size=None, num_workers=0)
