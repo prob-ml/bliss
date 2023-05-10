@@ -57,9 +57,8 @@ simulator:
 cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
     n_batches: ${simulator.n_batches}
-    num_workers: ${simulator.num_workers}
     batch_size: ${simulator.prior.batch_size}
-    file_data_capacity: 5000
+    num_workers: ${simulator.num_workers}
     cached_data_path: ${paths.data}/cached_dataset
 
 encoder:
@@ -110,6 +109,7 @@ generate:
     splits: [train, valid, test]
     valid_n_batches: ${simulator.valid_n_batches}
     test_n_batches: ${simulator.valid_n_batches}
+    file_data_capacity: 5000
 
 training:
     name: null

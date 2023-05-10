@@ -17,7 +17,7 @@ FileDatum = TypedDict(
 
 
 def generate(cfg: DictConfig):
-    file_data_capacity = cfg.cached_simulator.file_data_capacity
+    file_data_capacity = cfg.generate.file_data_capacity
     cached_data_path = cfg.cached_simulator.cached_data_path
 
     # largest `batch_size` multiple <= `file_data_capacity`

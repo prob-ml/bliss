@@ -19,7 +19,7 @@ simulator:
         field: 12
         bands: [2]
 
-cached_simulator:
+generate:
     file_data_capacity: 150
 
 training:

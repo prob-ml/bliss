@@ -97,9 +97,8 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
         self,
         n_batches: int,
-        num_workers: int,
         batch_size: int,
-        file_data_capacity: int,
+        num_workers: int,
         cached_data_path: str,
     ):
         super().__init__()
@@ -107,7 +106,6 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.n_batches = n_batches
         self.num_workers = num_workers
         self.batch_size = batch_size
-        self.file_data_capacity = file_data_capacity
         self.cached_data_path = cached_data_path
 
         self.data: List[FileDatum] = []
