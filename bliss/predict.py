@@ -19,8 +19,8 @@ def predict(cfg):
 
     sdss = instantiate(cfg.predict.dataset)
     batch = {
-        "images": prepare_image(sdss[0]["image"], cfg.predict.device),
-        "background": prepare_image(sdss[0]["background"], cfg.predict.device),
+        "images": prepare_image(sdss[0]["image"][:,160:320,160:320], cfg.predict.device),
+        "background": prepare_image(sdss[0]["background"][:,160:320,160:320], cfg.predict.device),
     }
 
     with torch.no_grad():
