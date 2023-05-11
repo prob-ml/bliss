@@ -11,17 +11,19 @@ def prepare_image(x, device):
     return x[:, :, :height, :width]
 
 
-def predict(cfg):
+def predict(cfg, image, background):
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     enc_state_dict = torch.load(cfg.predict.weight_save_path)
     encoder.load_state_dict(enc_state_dict)
     encoder.eval()
 
-    sdss = instantiate(cfg.predict.dataset)
-    batch = {
-        "images": prepare_image(sdss[0]["image"][:,160:320,160:320], cfg.predict.device),
-        "background": prepare_image(sdss[0]["background"][:,160:320,160:320], cfg.predict.device),
-    }
+    # sdss = instantiate(cfg.predict.dataset)
+    # batch = {
+    #     "images": prepare_image(sdss[0]["image"][:,160:320,160:320], cfg.predict.device),
+    #     "background": prepare_image(sdss[0]["background"][:,160:320,160:320], cfg.predict.device),
+    # }
+
+    batch = {"images": image, "background": background}
 
     with torch.no_grad():
         pred = encoder.encode_batch(batch)
