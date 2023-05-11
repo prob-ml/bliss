@@ -7,8 +7,8 @@ defaults:
 hydra:
     sweeper:
         params:
-            simulator.prior.n_tiles_h: 8, 12, 16, 20, 24, 28, 32
-            simulator.prior.n_tiles_w: 8, 12, 16, 20, 24, 28, 32
+            # simulator.prior.n_tiles_h: 8, 12, 16, 20, 24, 28, 32
+            # simulator.prior.n_tiles_w: 8, 12, 16, 20, 24, 28, 32
             simulator.prior.batch_size: 8, 16 32, 64, 128, 256
             # encoder.architecture.anchors: [[4, 4]], [
             #         [10,13, 16,30, 33,23]  # P3/8
@@ -47,7 +47,6 @@ paths:
     pretrained_models: ${paths.data}/pretrained_models
 
 simulator:
-    n_batches: 5
     background:
         _target_: bliss.simulator.background.SimulatedSDSSBackground
         sdss_dir: ${paths.sdss}
@@ -56,8 +55,9 @@ simulator:
         field: 12
         bands: [2]
 
-cached_simulator:
-    file_data_capacity: 150
+generate:
+    n_batches: 5
+    max_images_per_file: 300
 
 training:
     name: "encoder"
