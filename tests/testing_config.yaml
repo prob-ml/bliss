@@ -19,6 +19,7 @@ simulator:
 
 generate:
     n_batches: 2
+    batch_size: 32
     max_images_per_file: 50
     cached_data_path: null # use pytest tmpdir
 

@@ -1,5 +1,4 @@
 import os
-import pickle
 import random
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
@@ -116,7 +115,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
         for filename in os.listdir(self.cached_data_path):
             if "valid" in filename or "test" in filename:
                 continue
-            if filename.startswith("dataset") and filename.endswith(".pkl"):
+            if filename.startswith("dataset") and filename.endswith(".pt"):
                 self.data += self.read_file(f"{self.cached_data_path}/{filename}")
         assert self.data, "No cached data loaded; run `generate.py` first"
         assert len(self.data) >= self.n_batches * self.batch_size, (
@@ -128,18 +127,18 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         # fix validation set
         assert os.path.exists(
-            f"{self.cached_data_path}/dataset_valid.pkl"
+            f"{self.cached_data_path}/dataset_valid.pt"
         ), "No cached validation data found; run `generate.py` first"
-        self.valid = self.read_file(f"{self.cached_data_path}/dataset_valid.pkl")
+        self.valid = self.read_file(f"{self.cached_data_path}/dataset_valid.pt")
 
         assert os.path.exists(
-            f"{self.cached_data_path}/dataset_test.pkl"
+            f"{self.cached_data_path}/dataset_test.pt"
         ), "No cached test data found; run `generate.py` first"
-        self.test = self.read_file(f"{self.cached_data_path}/dataset_test.pkl")
+        self.test = self.read_file(f"{self.cached_data_path}/dataset_test.pt")
 
     def read_file(self, filename: str) -> List[FileDatum]:
         with open(filename, "rb") as f:
-            return pickle.load(f)
+            return torch.load(f)
 
     def get_batch(self, batch_idx) -> Dict:
         batch_data = self.data[batch_idx * self.batch_size : (batch_idx + 1) * self.batch_size]
