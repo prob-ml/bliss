@@ -13,7 +13,7 @@ def cached_data(cfg):
     generate(cfg)
     # check that cached dataset exists
     cached_dataset_should_exist = cfg.simulator.n_batches > 0 and (
-        cfg.simulator.prior.batch_size < cfg.cached_simulator.file_data_capacity
+        cfg.simulator.prior.batch_size < cfg.generate.max_images_per_file
     )
     file_path = cfg.cached_simulator.cached_data_path + "/dataset_0.pkl"
     if cached_dataset_should_exist:
