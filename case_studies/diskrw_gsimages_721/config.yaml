@@ -10,7 +10,6 @@ paths:
     pretrained_models: ${paths.data}/pretrained_models
 
 simulator:
-    n_batches: 5
     background:
         _target_: bliss.simulator.background.SimulatedSDSSBackground
         sdss_dir: ${paths.sdss}
@@ -20,7 +19,8 @@ simulator:
         bands: [2]
 
 generate:
-    file_data_capacity: 150
+    n_batches: 5
+    max_images_per_file: 150
 
 training:
     name: "encoder"

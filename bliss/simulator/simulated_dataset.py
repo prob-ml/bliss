@@ -119,6 +119,12 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
             if filename.startswith("dataset") and filename.endswith(".pkl"):
                 self.data += self.read_file(f"{self.cached_data_path}/{filename}")
         assert self.data, "No cached data loaded; run `generate.py` first"
+        assert len(self.data) >= self.n_batches * self.batch_size, (
+            f"Insufficient cached data loaded; "
+            f"need at least {self.n_batches * self.batch_size} "
+            f"but only have {len(self.data)}. Re-run `generate.py` with "
+            f"different generation `n_batches` and/or `batch_size`."
+        )
 
         # fix validation set
         assert os.path.exists(
@@ -155,10 +161,10 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
             yield self.get_batch(batch_idx)
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=0)
+        return DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return DataLoader(self.valid, batch_size=None, num_workers=0)
+        return DataLoader(self.valid, batch_size=None, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return DataLoader(self.test, batch_size=None, num_workers=0)
+        return DataLoader(self.test, batch_size=None, num_workers=self.num_workers)

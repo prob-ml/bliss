@@ -56,10 +56,10 @@ simulator:
 
 cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
-    n_batches: ${simulator.n_batches}
+    n_batches: ${generate.n_batches}
     batch_size: ${simulator.prior.batch_size}
-    num_workers: ${simulator.num_workers}
-    cached_data_path: ${paths.data}/cached_dataset
+    num_workers: 0
+    cached_data_path: ${generate.cached_data_path}
 
 encoder:
     _target_: bliss.encoder.Encoder
@@ -107,9 +107,11 @@ encoder:
 
 generate:
     splits: [train, valid, test]
+    n_batches: ${simulator.n_batches}
     valid_n_batches: ${simulator.valid_n_batches}
     test_n_batches: ${simulator.valid_n_batches}
-    file_data_capacity: 5000
+    max_images_per_file: 5000
+    cached_data_path: ${paths.data}/cached_dataset
 
 training:
     name: null

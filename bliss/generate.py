@@ -17,17 +17,17 @@ FileDatum = TypedDict(
 
 
 def generate(cfg: DictConfig):
-    file_data_capacity = cfg.generate.file_data_capacity
+    max_images_per_file = cfg.generate.max_images_per_file
     cached_data_path = cfg.cached_simulator.cached_data_path
 
-    # largest `batch_size` multiple <= `file_data_capacity`
+    # largest `batch_size` multiple <= `max_images_per_file`
     bs = cfg.simulator.prior.batch_size
-    file_data_size = (file_data_capacity // bs) * bs
-    assert file_data_size >= bs, "file_data_capacity too small"
+    images_per_file = (max_images_per_file // bs) * bs
+    assert images_per_file >= bs, "max_images_per_file too small"
 
     # number of files needed to store >= `n_batches` * `batch_size` images
-    # in <= `file_data_size`-image files
-    n_files = -(cfg.cached_simulator.n_batches * bs // -file_data_size)  # ceil division
+    # in <= `images_per_file`-image files
+    n_files = -(cfg.generate.n_batches * bs // -images_per_file)  # ceil division
 
     # stores details of the written image files - { filename: string, data }
     data_files: List[Dict] = []
@@ -48,9 +48,9 @@ def generate(cfg: DictConfig):
         # assume overwriting any existing cached image files
         for file_idx in tqdm(range(n_files), desc="Generating and writing cached dataset files"):
             batch_data = generate_data(
-                file_data_size // bs, simulated_dataset, "Simulating images in batches for file"
+                images_per_file // bs, simulated_dataset, "Simulating images in batches for file"
             )
-            file_data = itemize_data(batch_data, n_items=file_data_size)
+            file_data = itemize_data(batch_data, n_items=images_per_file)
             data_files.append({"filename": f"dataset_{file_idx}.pkl", "data": file_data})
             with open(f"{cached_data_path}/{data_files[-1]['filename']}", "wb") as f:
                 pickle.dump(file_data, f)
