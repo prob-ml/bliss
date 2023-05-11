@@ -1,5 +1,4 @@
 import os
-import pickle
 
 import pytest
 import torch
@@ -15,12 +14,12 @@ def cached_data(cfg):
     cached_dataset_should_exist = cfg.simulator.n_batches > 0 and (
         cfg.simulator.prior.batch_size < cfg.generate.max_images_per_file
     )
-    file_path = cfg.cached_simulator.cached_data_path + "/dataset_0.pkl"
+    file_path = cfg.cached_simulator.cached_data_path + "/dataset_0.pt"
     if cached_dataset_should_exist:
         assert os.path.exists(file_path), f"{file_path} not found"
     # cursory check of contents of cached dataset
     with open(file_path, "rb") as f:
-        cached_dataset = pickle.load(f)
+        cached_dataset = torch.load(f)
         assert isinstance(cached_dataset, list), "cached_dataset must be a list"
         assert isinstance(cached_dataset[0], dict), "cached_dataset must be a list of dictionaries"
         assert isinstance(
