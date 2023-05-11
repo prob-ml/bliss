@@ -8,6 +8,20 @@ bliss.generate module
    :members:
    :no-undoc-members:
 
+bliss.train module
+------------------
+
+.. automodule:: bliss.train
+   :members:
+   :no-undoc-members:
+
+bliss.predict module
+--------------------
+
+.. automodule:: bliss.predict
+   :members:
+   :no-undoc-members:
+
 
 bliss.metrics module
 --------------------
@@ -23,47 +37,31 @@ bliss.plotting module
    :members:
    :no-undoc-members:
 
-bliss.sleep module
-------------------
+bliss.catalog module
+--------------------
 
-.. automodule:: bliss.sleep
+.. automodule:: bliss.catalog
    :members:
    :no-undoc-members:
 
-bliss.train module
-------------------
+bliss.encoder module
+--------------------
 
-.. automodule:: bliss.train
-   :members:
-   :no-undoc-members:
-
-bliss.tune module
------------------
-
-.. automodule:: bliss.tune
-   :members:
-   :no-undoc-members:
-
-bliss.wake module
------------------
-
-.. automodule:: bliss.wake
+.. automodule:: bliss.encoder
    :members:
    :no-undoc-members:
 
 
-Datasets
------------
+bliss.surveys module
+--------------------
 
-.. toctree::
-   :maxdepth: 2
+.. automodule:: bliss.surveys
+   :members:
+   :no-undoc-members:
 
-   bliss.datasets
+bliss.simulator module
+----------------------
 
-Models
------------
-
-.. toctree::
-   :maxdepth: 2
-
-   bliss.models
+.. automodule:: bliss.simulator
+   :members:
+   :no-undoc-members:
