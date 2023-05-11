@@ -5,7 +5,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    project: ${paths.root}/case_studies/721_diskrw_gsimages
+    project: ${paths.root}/case_studies/diskrw_gsimages_721
     output: ${paths.project}/output
     pretrained_models: ${paths.data}/pretrained_models
 
