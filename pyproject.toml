@@ -20,6 +20,9 @@ readme = "README.md"
 repository = "https://github.com/prob-ml/bliss"
 version = "0.1.1"
 
+[tool.poetry.scripts]
+bliss = "main:main"
+
 [tool.poetry.dependencies]
 astropy = ">=4.2.1"
 einops = ">=0.3.0"
