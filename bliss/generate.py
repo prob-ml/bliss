@@ -1,5 +1,4 @@
 import os
-import pickle
 from typing import Dict, List, TypedDict
 
 import torch
@@ -21,7 +20,7 @@ def generate(cfg: DictConfig):
     cached_data_path = cfg.cached_simulator.cached_data_path
 
     # largest `batch_size` multiple <= `max_images_per_file`
-    bs = cfg.simulator.prior.batch_size
+    bs = cfg.generate.batch_size
     images_per_file = (max_images_per_file // bs) * bs
     assert images_per_file >= bs, "max_images_per_file too small"
 
@@ -34,7 +33,7 @@ def generate(cfg: DictConfig):
 
     # use SimulatedDataset to generate data in minibatches iteratively,
     # then concatenate before caching to disk via pickle
-    simulator = instantiate(cfg.simulator)
+    simulator = instantiate(cfg.simulator, prior={"batch_size": bs})
     simulated_dataset = simulator.train_dataloader().dataset
     assert isinstance(
         simulated_dataset, IterableDataset
@@ -51,9 +50,9 @@ def generate(cfg: DictConfig):
                 images_per_file // bs, simulated_dataset, "Simulating images in batches for file"
             )
             file_data = itemize_data(batch_data, n_items=images_per_file)
-            data_files.append({"filename": f"dataset_{file_idx}.pkl", "data": file_data})
+            data_files.append({"filename": f"dataset_{file_idx}.pt", "data": file_data})
             with open(f"{cached_data_path}/{data_files[-1]['filename']}", "wb") as f:
-                pickle.dump(file_data, f)
+                torch.save(file_data, f)
 
     if "valid" in cfg.generate.splits:
         valid = generate_data(
@@ -61,8 +60,8 @@ def generate(cfg: DictConfig):
             simulated_dataset,
             "Generating fixed validation set in batches",
         )
-        with open(f"{cached_data_path}/dataset_valid.pkl", "wb") as f:
-            pickle.dump(valid, f)
+        with open(f"{cached_data_path}/dataset_valid.pt", "wb") as f:
+            torch.save(valid, f)
 
     if "test" in cfg.generate.splits:
         test = generate_data(
@@ -70,8 +69,8 @@ def generate(cfg: DictConfig):
             simulated_dataset,
             "Generating fixed test set in batches",
         )
-        with open(f"{cached_data_path}/dataset_test.pkl", "wb") as f:
-            pickle.dump(test, f)
+        with open(f"{cached_data_path}/dataset_test.pt", "wb") as f:
+            torch.save(test, f)
 
 
 def generate_data(n_batches: int, simulated_dataset, desc="Generating data"):
