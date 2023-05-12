@@ -17,7 +17,7 @@ FileDatum = TypedDict(
 
 def generate(cfg: DictConfig):
     max_images_per_file = cfg.generate.max_images_per_file
-    cached_data_path = cfg.cached_simulator.cached_data_path
+    cached_data_path = cfg.generate.cached_data_path
 
     # largest `batch_size` multiple <= `max_images_per_file`
     bs = cfg.generate.batch_size
