@@ -1,24 +1,18 @@
 import torch
 from hydra.utils import instantiate
 
-from bliss.predict import predict, prepare_image
+from bliss.predict import predict_sdss
 
 
 class TestSdssReconstrust:
     def test_sdss_reconstrst(self, cfg):
-        sdss = instantiate(cfg.predict.dataset)
-        true_img = sdss[0]["image"][:, 160:320, 160:320]
-        true_bg = sdss[0]["background"][:, 160:320, 160:320]
-        prepare_img = prepare_image(true_img, cfg.predict.device)
-        prepare_bg = prepare_image(true_bg, cfg.predict.device)
-        est_full = predict(cfg, prepare_img, prepare_bg)
+        est_full, true_img, true_bg = predict_sdss(cfg)
         est_tile = est_full.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
 
         decoder_obj = instantiate(cfg.simulator.decoder)
         recon_img = decoder_obj.render_images(est_tile)[0, 0]
 
         ptc = cfg.encoder.tile_slen * cfg.encoder.tiles_to_crop
-        sdss = instantiate(cfg.predict.dataset)
         true_img_crop = true_img[0][ptc:-ptc, ptc:-ptc]
         true_bg_crop = true_bg[0][ptc:-ptc, ptc:-ptc]
         true_bright = true_img_crop - true_bg_crop

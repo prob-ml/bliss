@@ -26,3 +26,16 @@ def predict(cfg, image, background):
     print("{} light sources detected".format(est_cat.n_sources.item()))
 
     return est_cat
+
+
+def predict_sdss(cfg):
+    sdss = instantiate(cfg.predict.dataset)
+    idx0, idx1 = cfg.predict.crop[0], cfg.predict.crop[1]
+
+    crop_img = sdss[0]["image"][:, idx0:idx1, idx0:idx1]
+    crop_bg = sdss[0]["background"][:, idx0:idx1, idx0:idx1]
+
+    prepare_img = prepare_image(crop_img, cfg.predict.device)
+    prepare_bg = prepare_image(crop_bg, cfg.predict.device)
+
+    return predict(cfg, prepare_img, prepare_bg), crop_img, crop_bg

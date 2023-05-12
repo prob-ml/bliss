@@ -151,3 +151,4 @@ predict:
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cuda:0"
+    crop: [0, -1]
