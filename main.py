@@ -5,9 +5,10 @@ from os import environ, getenv
 from pathlib import Path
 
 import hydra
+from hydra.utils import instantiate
 
 from bliss.generate import generate
-from bliss.predict import predict
+from bliss.predict import predict, prepare_image
 from bliss.train import train
 
 if not getenv("BLISS_HOME"):
@@ -25,7 +26,10 @@ def main(cfg):
     elif cfg.mode == "train":
         train(cfg)
     elif cfg.mode == "predict":
-        predict(cfg)
+        sdss = instantiate(cfg.predict.dataset)
+        prepare_img = prepare_image(sdss[0]["image"], cfg.predict.device)
+        prepare_bg = prepare_image(sdss[0]["background"], cfg.predict.device)
+        predict(cfg, prepare_img, prepare_bg)
     else:
         raise KeyError
 
