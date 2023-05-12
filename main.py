@@ -7,7 +7,7 @@ from pathlib import Path
 import hydra
 
 from bliss.generate import generate
-from bliss.predict import predict
+from bliss.predict import predict_sdss
 from bliss.train import train
 
 if not getenv("BLISS_HOME"):
@@ -25,7 +25,7 @@ def main(cfg):
     elif cfg.mode == "train":
         train(cfg)
     elif cfg.mode == "predict":
-        predict(cfg)
+        predict_sdss(cfg)
     else:
         raise KeyError
 
