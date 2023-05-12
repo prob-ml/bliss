@@ -17,7 +17,7 @@ FileDatum = TypedDict(
 
 def generate(cfg: DictConfig):
     max_images_per_file = cfg.generate.max_images_per_file
-    cached_data_path = cfg.cached_simulator.cached_data_path
+    cached_data_path = cfg.generate.cached_data_path
 
     # largest `batch_size` multiple <= `max_images_per_file`
     bs = cfg.generate.batch_size
@@ -42,6 +42,7 @@ def generate(cfg: DictConfig):
     # create cached_data_path if it doesn't exist
     if not os.path.exists(cached_data_path):
         os.makedirs(cached_data_path)
+    print("Data will be saved to {}".format(cached_data_path))
 
     if "train" in cfg.generate.splits:
         # assume overwriting any existing cached image files
