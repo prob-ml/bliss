@@ -21,7 +21,7 @@ class ImageDecoder(nn.Module):
         sdss_bands: Tuple[int, ...],
     ) -> None:
         super().__init__()
-        assert n_bands == 1, "Only 1 band is supported"
+        assert n_bands == 5, "Testing 5 bands"
 
         self.n_bands = n_bands
         self.pixel_scale = pixel_scale
@@ -41,9 +41,13 @@ class ImageDecoder(nn.Module):
         self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
 
         self.psf = self.forward_psf_from_params().detach().numpy()
-        assert len(self.psf.shape) == 3 and self.psf.shape[0] == 1
-        psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
-        self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
+        assert len(self.psf.shape) == 3 and self.psf.shape[0] == 5
+
+        self.psf_galsim = []
+
+        for i in range(n_bands):
+            psf_image = galsim.Image(self.psf[i], scale=pixel_scale)
+            self.psf_galsim.append(galsim.InterpolatedImage(psf_image).withFlux(1.0))
 
     @staticmethod
     def _get_mgrid(slen: int):
@@ -99,7 +103,7 @@ class ImageDecoder(nn.Module):
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
-    def render_galaxy(self, galaxy_params: Tensor):
+    def render_galaxy(self, galaxy_params: Tensor, bnd: int):
         galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
         bulge_frac = 1 - disk_frac
@@ -123,7 +127,7 @@ class ImageDecoder(nn.Module):
             sheared_bulge = bulge.shear(q=bulge_q, beta=beta_radians * galsim.radians)
             components.append(sheared_bulge)
         galaxy = galsim.Add(components)
-        return galsim.Convolution(galaxy, self.psf_galsim)
+        return galsim.Convolution(galaxy, self.psf_galsim[bnd])
 
     def render_images(self, tile_cat: TileCatalog):
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
@@ -135,18 +139,26 @@ class ImageDecoder(nn.Module):
 
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
-            gs_img = galsim.Image(array=images[b, 0], scale=self.pixel_scale)
-            for s in range(n_sources):
-                if full_cat["galaxy_bools"][b][s] == 1:
-                    galsim_obj = self.render_galaxy(full_cat["galaxy_params"][b][s])
-                elif full_cat["star_bools"][b][s] == 1:
-                    galsim_obj = self.psf_galsim.withFlux(full_cat["star_fluxes"][b][s].item())
-                else:
-                    raise AssertionError("Every source is a star or galaxy")
+            for bnd in range(self.n_bands):
+                gs_img = galsim.Image(array=images[b, bnd], scale=self.pixel_scale)
+                for s in range(n_sources):
+                    if full_cat["galaxy_bools"][b][s] == 1:
+                        galsim_obj = self.render_galaxy(  # noqa: WPS220
+                            full_cat["galaxy_params"][b][s], bnd
+                        )
+                    elif full_cat["star_bools"][b][s] == 1:
+                        galsim_obj = self.psf_galsim[bnd].withFlux(  # noqa: WPS220
+                            full_cat["star_fluxes"][b][s].item()
+                        )
+                    else:
+                        raise AssertionError("Every source is a star or galaxy")  # noqa: WPS220
 
-                plocs = full_cat.plocs[b][s]
-                offset = np.array([plocs[1] - (slen_w / 2), plocs[0] - (slen_h / 2)])
-                # essentially all the runtime of the simulator is incurred by this call to drawImage
-                galsim_obj.drawImage(offset=offset, method="auto", add_to_image=True, image=gs_img)
+                    plocs = full_cat.plocs[b][s]
+                    offset = np.array([plocs[1] - (slen_w / 2), plocs[0] - (slen_h / 2)])
+                    # essentially all the runtime of the simulator is incurred by this call
+                    # to drawImage
+                    galsim_obj.drawImage(
+                        offset=offset, method="auto", add_to_image=True, image=gs_img
+                    )
 
         return torch.from_numpy(images)
