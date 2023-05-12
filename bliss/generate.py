@@ -42,6 +42,7 @@ def generate(cfg: DictConfig):
     # create cached_data_path if it doesn't exist
     if not os.path.exists(cached_data_path):
         os.makedirs(cached_data_path)
+    print("Data will be saved to {}".format(cached_data_path))
 
     if "train" in cfg.generate.splits:
         # assume overwriting any existing cached image files
