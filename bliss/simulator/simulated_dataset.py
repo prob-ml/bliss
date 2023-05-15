@@ -187,8 +187,12 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
             self.test += self.read_file(f"{self.cached_data_path}/{filename}")
 
     def read_file(self, filename: str) -> List[FileDatum]:
-        with open(filename, "rb") as f:
-            return torch.load(f)
+        try:
+            with open(filename, "rb") as f:
+                return torch.load(f)
+        except EOFError as eof:
+            print(f"Error opening/reading {filename}")
+            raise eof
 
     def __len__(self):
         return self.train_n_batches * self.batch_size
