@@ -43,3 +43,4 @@ predict:
     decals_frame: ${paths.decals}/tractor-3366m010.fits
     weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cpu"
+    crop: [160, 320]

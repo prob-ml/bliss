@@ -1,5 +1,5 @@
 from bliss.generate import generate
-from bliss.predict import predict
+from bliss.predict import predict_sdss
 from bliss.train import train
 
 
@@ -11,4 +11,4 @@ class TestEndToEnd:
         train(cfg)
 
     def test_predict(self, cfg):
-        predict(cfg)
+        predict_sdss(cfg)

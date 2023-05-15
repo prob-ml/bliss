@@ -11,10 +11,10 @@ from bliss.train import train
 def cached_data(cfg):
     generate(cfg)
     # check that cached dataset exists
-    cached_dataset_should_exist = cfg.simulator.n_batches > 0 and (
-        cfg.simulator.prior.batch_size < cfg.generate.max_images_per_file
+    cached_dataset_should_exist = cfg.generate.n_batches > 0 and (
+        cfg.generate.batch_size < cfg.generate.max_images_per_file
     )
-    file_path = cfg.cached_simulator.cached_data_path + "/dataset_0.pt"
+    file_path = cfg.generate.cached_data_path + "/dataset_0.pt"
     if cached_dataset_should_exist:
         assert os.path.exists(file_path), f"{file_path} not found"
     # cursory check of contents of cached dataset
@@ -31,9 +31,10 @@ def cached_data(cfg):
         assert isinstance(
             cached_dataset[0]["background"], torch.Tensor
         ), "cached_dataset[0]['background'] must be a torch.Tensor"
-        assert (
-            len(cached_dataset) == cfg.simulator.prior.batch_size
-        ), f"cached_dataset must be a list of length {cfg.simulator.prior.batch_size}"
+        assert len(cached_dataset) == cfg.generate.batch_size, (
+            f"cached_dataset has length {len(cached_dataset)}, "
+            "but must be list of length {cfg.generate.batch_size}"
+        )
         assert (
             len(cached_dataset[0]["images"]) == 1
         ), "cached_dataset[0]['images'] must be a single tensor"
