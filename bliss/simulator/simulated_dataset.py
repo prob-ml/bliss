@@ -1,16 +1,15 @@
 import os
-import random
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
 import pytorch_lightning as pl
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader, IterableDataset
+from torch.utils.data import DataLoader, Dataset, IterableDataset
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
-from bliss.generate import FileDatum
+from bliss.generate import FileDatum, itemize_data
 from bliss.simulator.background import ConstantBackground, SimulatedSDSSBackground
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import ImagePrior
@@ -92,7 +91,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
 
-class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
+class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
     def __init__(
         self,
         n_batches: int,
@@ -129,41 +128,32 @@ class CachedSimulatedDataset(pl.LightningDataModule, IterableDataset):
         assert os.path.exists(
             f"{self.cached_data_path}/dataset_valid.pt"
         ), "No cached validation data found; run `generate.py` first"
-        self.valid = self.read_file(f"{self.cached_data_path}/dataset_valid.pt")
+        valid_batched_data = self.read_file(f"{self.cached_data_path}/dataset_valid.pt")
+        self.valid = itemize_data(valid_batched_data)
 
         assert os.path.exists(
             f"{self.cached_data_path}/dataset_test.pt"
         ), "No cached test data found; run `generate.py` first"
-        self.test = self.read_file(f"{self.cached_data_path}/dataset_test.pt")
+        test_batched_data = self.read_file(f"{self.cached_data_path}/dataset_test.pt")
+        self.test = itemize_data(test_batched_data)
 
     def read_file(self, filename: str) -> List[FileDatum]:
         with open(filename, "rb") as f:
             return torch.load(f)
 
-    def get_batch(self, batch_idx) -> Dict:
-        batch_data = self.data[batch_idx * self.batch_size : (batch_idx + 1) * self.batch_size]
-        images = torch.stack([datum["images"] for datum in batch_data])
-        background = torch.stack([datum["background"] for datum in batch_data])
-        tile_catalog = {}
-        assert len(batch_data), f"Batch for batch_idx {batch_idx} is empty"
-        for key in batch_data[0]["tile_catalog"]:
-            tile_catalog[key] = torch.stack([datum["tile_catalog"][key] for datum in batch_data])
-        return {
-            "tile_catalog": tile_catalog,
-            "images": images,
-            "background": background,
-        }
+    def __len__(self):
+        return self.n_batches * self.batch_size
 
-    def __iter__(self):
-        random.shuffle(self.data)
-        for batch_idx in range(self.n_batches):
-            yield self.get_batch(batch_idx)
+    def __getitem__(self, idx):
+        return self.data[idx]
 
     def train_dataloader(self):
-        return DataLoader(self, batch_size=None, num_workers=self.num_workers)
+        return DataLoader(
+            self, shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.valid, batch_size=None, num_workers=self.num_workers)
+        return DataLoader(self.valid, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return DataLoader(self.test, batch_size=None, num_workers=self.num_workers)
+        return DataLoader(self.test, batch_size=self.batch_size, num_workers=self.num_workers)
