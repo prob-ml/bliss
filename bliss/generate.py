@@ -28,9 +28,6 @@ def generate(cfg: DictConfig):
     # in <= `images_per_file`-image files
     n_files = -(cfg.generate.n_batches * bs // -images_per_file)  # ceil division
 
-    # stores details of the written image files - { filename: string, data }
-    data_files: List[Dict] = []
-
     # use SimulatedDataset to generate data in minibatches iteratively,
     # then concatenate before caching to disk via pickle
     simulator = instantiate(cfg.simulator, prior={"batch_size": bs})
@@ -50,9 +47,8 @@ def generate(cfg: DictConfig):
             batch_data = generate_data(
                 images_per_file // bs, simulated_dataset, "Simulating images in batches for file"
             )
-            file_data = itemize_data(batch_data, n_items=images_per_file)
-            data_files.append({"filename": f"dataset_{file_idx}.pt", "data": file_data})
-            with open(f"{cached_data_path}/{data_files[-1]['filename']}", "wb") as f:
+            file_data = itemize_data(batch_data)
+            with open(f"{cached_data_path}/dataset_{file_idx}.pt", "wb") as f:
                 torch.save(file_data, f)
 
     if "valid" in cfg.generate.splits:
@@ -81,7 +77,7 @@ def generate_data(n_batches: int, simulated_dataset, desc="Generating data"):
     return batch_data
 
 
-def itemize_data(batch_data, n_items: int) -> List[FileDatum]:
+def itemize_data(batch_data) -> List[FileDatum]:
     # TODO: refactor/optimize this dictionary/tensor flattening
     flat_data = {}
     # concatenate tensors in tile_catalog dictionaries
@@ -93,9 +89,8 @@ def itemize_data(batch_data, n_items: int) -> List[FileDatum]:
     flat_data["images"] = flatten_tensor("images", batch_data)
     flat_data["background"] = flatten_tensor("background", batch_data)
 
-    assert len(flat_data["images"]) == n_items
-    assert len(flat_data["background"]) == n_items
     # reconstruct data as list of single-input FileDatum dictionaries
+    n_items = len(flat_data["images"])
     file_data: List[FileDatum] = []
     for i in range(n_items):
         file_datum: FileDatum = {}  # type: ignore
