@@ -52,26 +52,10 @@ def generate(cfg: DictConfig):
                 images_per_file // bs, simulated_dataset, "Simulating images in batches for file"
             )
             file_data = itemize_data(batch_data)
-            with open(f"{cached_data_path}/dataset_{file_idx}.pt", "wb") as f:
+            with open(
+                f"{cached_data_path}/{cfg.generate.train_file_prefix}_{file_idx}.pt", "wb"
+            ) as f:
                 torch.save(file_data, f)
-
-    if "valid" in cfg.generate.splits:
-        valid = generate_data(
-            cfg.generate.valid_n_batches,
-            simulated_dataset,
-            "Generating fixed validation set in batches",
-        )
-        with open(f"{cached_data_path}/dataset_valid.pt", "wb") as f:
-            torch.save(valid, f)
-
-    if "test" in cfg.generate.splits:
-        test = generate_data(
-            cfg.generate.test_n_batches,
-            simulated_dataset,
-            "Generating fixed test set in batches",
-        )
-        with open(f"{cached_data_path}/dataset_test.pt", "wb") as f:
-            torch.save(test, f)
 
 
 def generate_data(n_batches: int, simulated_dataset, desc="Generating data"):

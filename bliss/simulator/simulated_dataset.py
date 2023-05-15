@@ -98,6 +98,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
+        train_file_prefix: str = "dataset",
     ):
         super().__init__()
 
@@ -105,6 +106,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         self.num_workers = num_workers
         self.batch_size = batch_size
         self.cached_data_path = cached_data_path
+        self.train_file_prefix = train_file_prefix
 
         self.data: List[FileDatum] = []
         self.valid: List[FileDatum] = []
@@ -114,7 +116,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         for filename in os.listdir(self.cached_data_path):
             if "valid" in filename or "test" in filename:
                 continue
-            if filename.startswith("dataset") and filename.endswith(".pt"):
+            if filename.startswith(self.train_file_prefix) and filename.endswith(".pt"):
                 self.data += self.read_file(f"{self.cached_data_path}/{filename}")
 
         # fix validation set

@@ -60,6 +60,9 @@ cached_simulator:
     batch_size: ${generate.batch_size}
     num_workers: 0
     cached_data_path: ${generate.cached_data_path}
+    train_file_prefix: ${generate.train_file_prefix}
+    val_split_file_idxs: null
+    test_split_file_idxs: null
 
 encoder:
     _target_: bliss.encoder.Encoder
@@ -113,6 +116,7 @@ generate:
     test_n_batches: ${simulator.valid_n_batches}
     max_images_per_file: 5000
     cached_data_path: ${paths.data}/cached_dataset
+    train_file_prefix: dataset
 
 training:
     name: null
