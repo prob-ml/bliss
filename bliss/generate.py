@@ -3,7 +3,7 @@ from typing import Dict, List, TypedDict
 
 import torch
 from hydra.utils import instantiate
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import IterableDataset
 from tqdm import tqdm
 
@@ -40,6 +40,10 @@ def generate(cfg: DictConfig):
     if not os.path.exists(cached_data_path):
         os.makedirs(cached_data_path)
     print("Data will be saved to {}".format(cached_data_path))
+
+    # Save Hydra config (used to generate data) to cached_data_path
+    with open(f"{cfg.generate.cached_data_path}/hparams.yaml", "w", encoding="utf-8") as f:
+        OmegaConf.save(cfg, f)
 
     if "train" in cfg.generate.splits:
         # assume overwriting any existing cached image files
