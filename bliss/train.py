@@ -2,19 +2,20 @@ import datetime as dt
 import json
 from pathlib import Path
 from time import time_ns
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.utilities import rank_zero_only
 
 
-def train(cfg: DictConfig):  # pylint: disable=too-many-branches
+def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-statements
     # setup paths and seed
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
     assert isinstance(paths, dict)
@@ -44,10 +45,15 @@ def train(cfg: DictConfig):  # pylint: disable=too-many-branches
 
     # setup trainer
     logger = setup_logger(cfg, paths)
-    checkpoint_callback = setup_callbacks(cfg)
+    checkpoint_callback = setup_checkpoint_callback(cfg)
+    early_stopping = setup_early_stopping(cfg)
     profiler = setup_profiler(cfg)
 
-    callbacks = [] if checkpoint_callback is None else [checkpoint_callback]
+    callbacks = []
+    if checkpoint_callback:
+        callbacks.append(checkpoint_callback)
+    if early_stopping:
+        callbacks.append(early_stopping)
 
     trainer = instantiate(
         cfg.training.trainer, logger=logger, profiler=profiler, callbacks=callbacks
@@ -100,7 +106,8 @@ def setup_logger(cfg, paths):
     return logger
 
 
-def setup_callbacks(cfg) -> Optional[ModelCheckpoint]:
+def setup_checkpoint_callback(cfg):
+    checkpoint_callback = None
     if cfg.training.trainer.enable_checkpointing:
         checkpoint_callback = ModelCheckpoint(
             filename="epoch={epoch}-val_loss={val/loss:.3f}",
@@ -111,9 +118,16 @@ def setup_callbacks(cfg) -> Optional[ModelCheckpoint]:
             save_on_train_epoch_end=False,
             auto_insert_metric_name=False,
         )
-    else:
-        checkpoint_callback = None
     return checkpoint_callback
+
+
+def setup_early_stopping(cfg):
+    early_stopping = None
+    if cfg.training.enable_early_stopping:
+        early_stopping = EarlyStopping(
+            monitor="val/loss", mode="min", patience=cfg.training.patience
+        )
+    return early_stopping
 
 
 def setup_profiler(cfg):
