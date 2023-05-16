@@ -56,13 +56,13 @@ simulator:
 
 cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
-    n_batches: ${generate.n_batches}
+    train_n_batches: ${generate.n_batches}
     batch_size: ${generate.batch_size}
     num_workers: 0
     cached_data_path: ${generate.cached_data_path}
-    train_file_prefix: ${generate.train_file_prefix}
-    val_split_file_idxs: null
-    test_split_file_idxs: null
+    file_prefix: ${generate.file_prefix}
+    val_split_file_idxs: null # inclusive range
+    test_split_file_idxs: null # inclusive range
 
 encoder:
     _target_: bliss.encoder.Encoder
@@ -109,14 +109,13 @@ encoder:
         ]
 
 generate:
-    splits: [train, valid, test]
+    n_workers_per_process: 0
     n_batches: ${simulator.n_batches}
     batch_size: ${simulator.prior.batch_size}
-    valid_n_batches: ${simulator.valid_n_batches}
-    test_n_batches: ${simulator.valid_n_batches}
     max_images_per_file: 5000
     cached_data_path: ${paths.data}/cached_dataset
-    train_file_prefix: dataset
+    file_prefix: dataset
+    files_start_idx: 0
 
 training:
     name: null

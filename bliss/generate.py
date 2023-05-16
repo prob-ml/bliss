@@ -18,6 +18,8 @@ FileDatum = TypedDict(
 def generate(cfg: DictConfig):
     max_images_per_file = cfg.generate.max_images_per_file
     cached_data_path = cfg.generate.cached_data_path
+    files_start_idx = cfg.generate.files_start_idx
+    n_workers_per_process = cfg.generate.n_workers_per_process
 
     # largest `batch_size` multiple <= `max_images_per_file`
     bs = cfg.generate.batch_size
@@ -30,7 +32,9 @@ def generate(cfg: DictConfig):
 
     # use SimulatedDataset to generate data in minibatches iteratively,
     # then concatenate before caching to disk via pickle
-    simulator = instantiate(cfg.simulator, prior={"batch_size": bs})
+    simulator = instantiate(
+        cfg.simulator, num_workers=n_workers_per_process, prior={"batch_size": bs}
+    )
     simulated_dataset = simulator.train_dataloader().dataset
     assert isinstance(
         simulated_dataset, IterableDataset
@@ -45,17 +49,15 @@ def generate(cfg: DictConfig):
     with open(f"{cfg.generate.cached_data_path}/hparams.yaml", "w", encoding="utf-8") as f:
         OmegaConf.save(cfg, f)
 
-    if "train" in cfg.generate.splits:
-        # assume overwriting any existing cached image files
-        for file_idx in tqdm(range(n_files), desc="Generating and writing cached dataset files"):
-            batch_data = generate_data(
-                images_per_file // bs, simulated_dataset, "Simulating images in batches for file"
-            )
-            file_data = itemize_data(batch_data)
-            with open(
-                f"{cached_data_path}/{cfg.generate.train_file_prefix}_{file_idx}.pt", "wb"
-            ) as f:
-                torch.save(file_data, f)
+    # assume overwriting any existing cached image files
+    file_idxs = range(files_start_idx, files_start_idx + n_files)
+    for file_idx in tqdm(file_idxs, desc="Generating and writing cached dataset files"):
+        batch_data = generate_data(
+            images_per_file // bs, simulated_dataset, "Simulating images in batches for file"
+        )
+        file_data = itemize_data(batch_data)
+        with open(f"{cached_data_path}/{cfg.generate.file_prefix}_{file_idx}.pt", "wb") as f:
+            torch.save(file_data, f)
 
 
 def generate_data(n_batches: int, simulated_dataset, desc="Generating data"):
