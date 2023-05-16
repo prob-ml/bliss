@@ -12,9 +12,14 @@ class TestSimulate:
 
         for i in range(4):
             sim_tile = torch.load(cfg.paths.data + "/test_image/sim_tile" + str(i) + ".pt")
-            sim_img = sim_dataset.simulate_image(sim_tile)
+            image, background = sim_dataset.simulate_image(sim_tile)
 
-            est_full = predict(cfg, sim_img[0], sim_img[1])
+            # move data to the device the encoder is on
+            sim_tile = sim_tile.to(cfg.predict.device)
+            image = image.to(cfg.predict.device)
+            background = background.to(cfg.predict.device)
+
+            est_full = predict(cfg, image, background)
             est_tile = est_full.to_tile_params(tile_slen, max_sources)
             ttc = cfg.encoder.tiles_to_crop
             sim_galaxy_bools = sim_tile["galaxy_bools"][:, ttc:-ttc, ttc:-ttc]
