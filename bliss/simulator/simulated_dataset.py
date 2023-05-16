@@ -140,7 +140,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         return self.data[idx]
 
     def train_dataloader(self):
-        assert self.data, "No cached data loaded; run `generate.py` first"
+        assert self.data, "No cached train data loaded; run `generate.py` first"
         assert len(self.data) >= self.n_batches * self.batch_size, (
             f"Insufficient cached data loaded; "
             f"need at least {self.n_batches * self.batch_size} "
