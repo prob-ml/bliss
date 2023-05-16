@@ -116,26 +116,18 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
                 continue
             if filename.startswith("dataset") and filename.endswith(".pt"):
                 self.data += self.read_file(f"{self.cached_data_path}/{filename}")
-        assert self.data, "No cached data loaded; run `generate.py` first"
-        assert len(self.data) >= self.n_batches * self.batch_size, (
-            f"Insufficient cached data loaded; "
-            f"need at least {self.n_batches * self.batch_size} "
-            f"but only have {len(self.data)}. Re-run `generate.py` with "
-            f"different generation `n_batches` and/or `batch_size`."
-        )
 
         # fix validation set
-        assert os.path.exists(
-            f"{self.cached_data_path}/dataset_valid.pt"
-        ), "No cached validation data found; run `generate.py` first"
-        valid_batched_data = self.read_file(f"{self.cached_data_path}/dataset_valid.pt")
-        self.valid = itemize_data(valid_batched_data)
+        val_file = f"{self.cached_data_path}/dataset_valid.pt"
+        if os.path.exists(val_file):
+            valid_batched_data = self.read_file(val_file)
+            self.valid = itemize_data(valid_batched_data)
 
-        assert os.path.exists(
-            f"{self.cached_data_path}/dataset_test.pt"
-        ), "No cached test data found; run `generate.py` first"
-        test_batched_data = self.read_file(f"{self.cached_data_path}/dataset_test.pt")
-        self.test = itemize_data(test_batched_data)
+        # fix test set
+        test_file = f"{self.cached_data_path}/dataset_test.pt"
+        if os.path.exists(test_file):
+            test_batched_data = self.read_file(test_file)
+            self.test = itemize_data(test_batched_data)
 
     def read_file(self, filename: str) -> List[FileDatum]:
         with open(filename, "rb") as f:
@@ -148,12 +140,21 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         return self.data[idx]
 
     def train_dataloader(self):
+        assert self.data, "No cached train data loaded; run `generate.py` first"
+        assert len(self.data) >= self.n_batches * self.batch_size, (
+            f"Insufficient cached data loaded; "
+            f"need at least {self.n_batches * self.batch_size} "
+            f"but only have {len(self.data)}. Re-run `generate.py` with "
+            f"different generation `n_batches` and/or `batch_size`."
+        )
         return DataLoader(
             self, shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers
         )
 
     def val_dataloader(self):
+        assert self.valid, "No cached validation data found; run `generate.py` first"
         return DataLoader(self.valid, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
+        assert self.test, "No cached test data found; run `generate.py` first"
         return DataLoader(self.test, batch_size=self.batch_size, num_workers=self.num_workers)
