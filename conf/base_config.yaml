@@ -119,6 +119,8 @@ training:
     version: null
     n_epochs: 50
     save_top_k: 1
+    enable_early_stopping: true
+    patience: 3
     pretrained_weights: null
     trainer:
         _target_: pytorch_lightning.Trainer
@@ -129,7 +131,7 @@ training:
         check_val_every_n_epoch: 10
         log_every_n_steps: 10  # corresponds to n_batches
         max_epochs: ${training.n_epochs}
-        min_epochs: ${training.n_epochs}
+        min_epochs: 1
         accelerator: "gpu"
         devices: 1
     testing:
