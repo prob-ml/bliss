@@ -148,7 +148,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
             f"different generation `n_batches` and/or `batch_size`."
         )
         return DataLoader(
-            self.data, shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers
+            self, shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers
         )
 
     def val_dataloader(self):
