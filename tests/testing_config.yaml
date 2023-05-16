@@ -27,6 +27,7 @@ training:
     name: "pytest_encoder"
     version: "version0"
     n_epochs: 1
+    enable_early_stopping: false
     pretrained_weights: ${paths.pretrained_models}/sdss.pt
     seed: 42
     weight_save_path: null
