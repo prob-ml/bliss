@@ -7,6 +7,7 @@ defaults:
 hydra:
     sweeper:
         params:
+            training.seed: 15942,17508,16433,2857,25956
             # simulator.prior.n_tiles_h: 8, 12, 16, 20, 24, 28, 32
             # simulator.prior.n_tiles_w: 8, 12, 16, 20, 24, 28, 32
             # cached_simulator.batch_size: 8, 16, 32, 64, 128, 256
@@ -15,7 +16,7 @@ hydra:
             #         [30,61, 62,45, 59,119]  # P4/16
             #         [116,90, 156,198, 373,326]  # P5/32
             #     ], 1, 2, 3, 4
-            encoder.architecture.anchors: "[[2, 2]], [[4, 4]], [[8, 8]], [[12, 12]], [[16, 16]], [[20, 20]]"
+            # encoder.architecture.anchors: "[[2, 2]], [[4, 4]], [[8, 8]], [[12, 12]], [[16, 16]], [[20, 20]]"
             # encoder.architecture.head: [ # base_config (YOLOv5)
             #         [-1, 1, Conv, [512, 1, 1]],
             #         [-1, 1, nn.Upsample, [None, 2, 'nearest']],
@@ -47,13 +48,17 @@ hydra:
             #     # gamma: 0.1
             #     # ----- OneCycleLR -----
             #     max_lr: 1e-3 
+            # encoder.tiles_to_crop: 1, 2
+
 
 paths:
-    project: ${paths.root}/case_studies/727_optimize_encoder
+    project: ${paths.root}/case_studies/optimize_encoder_727
     output: ${paths.project}/output
     pretrained_models: ${paths.data}/pretrained_models
 
 simulator:
+    prior:
+        mean_sources: 0.006
     background:
         _target_: bliss.simulator.background.SimulatedSDSSBackground
         sdss_dir: ${paths.sdss}
@@ -62,14 +67,21 @@ simulator:
         field: 12
         bands: [2]
 
+cached_simulator:
+    n_batches: 1024
+    batch_size: 64
+    cached_data_path: /data/scratch/aakash/cached_finetune_large
+
 generate:
-    n_batches: 5
-    max_images_per_file: 300
+    n_batches: 32
+    batch_size: 128
+    max_images_per_file: 1024
+    cached_data_path: /data/scratch/zhteoh/cached_dataset_large_0.06
 
 training:
     name: "encoder"
-    version: "sdss"
-    pretrained_weights: ${paths.pretrained_models}/sdss.pt
+    version: "sdss-finetuned-0.006"
+    pretrained_weights: ${paths.pretrained_models}/sdss-pretrained-0.02.pt
     weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
     seed: 42
     use_cached_simulator: true
