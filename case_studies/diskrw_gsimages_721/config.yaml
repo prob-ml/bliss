@@ -18,8 +18,13 @@ simulator:
         field: 12
         bands: [2]
 
+cached_simulator:
+    n_train_batches: 192
+    val_split_file_idxs: [96, 97, 98]
+    test_split_file_idxs: [99, 100, 101]
+
 generate:
-    n_batches: 5
+    n_batches: 6
     max_images_per_file: 150
 
 training:
