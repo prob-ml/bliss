@@ -53,6 +53,17 @@ simulator:
         psf_params_file: ${paths.sdss}/94/1/12/psField-000094-1-0012.fits
         psf_slen: 25
         sdss_bands: [2]
+    background:
+        _target_: bliss.simulator.background.SimulatedSDSSBackground
+        sdss_dir: /data/sdss
+        params:
+            run: 94
+            camcol: 1
+            field:
+                start: 12
+                end: 500
+                step: 50
+            bands: [2]
 
 cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset

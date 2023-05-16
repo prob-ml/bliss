@@ -23,17 +23,30 @@ class ConstantBackground(nn.Module):
 
 
 class SimulatedSDSSBackground(nn.Module):
-    def __init__(self, sdss_dir, run, camcol, field, bands):
+    def __init__(self, sdss_dir, params):
         super().__init__()
+        run = params["run"]
+        camcol = params["camcol"]
+        field_params = params["field"]
+        if isinstance(field_params, int):
+            fields = (field_params,)  # allow single integer value
+        else:
+            assert field_params["start"] < field_params["end"]
+            fields = range(field_params["start"], field_params["end"], field_params["step"])
+        bands = params["bands"]
+
         sdss_data = SloanDigitalSkySurvey(
             sdss_dir=sdss_dir,
             run=run,
             camcol=camcol,
-            fields=(field,),
+            fields=fields,
             bands=bands,
         )
-        background = torch.from_numpy(sdss_data[0]["background"])
-        background = rearrange(background, "c h w -> 1 c h w", c=len(bands))
+        background = torch.from_numpy(
+            np.stack([sdss_data[i]["background"] for i in range(len(sdss_data))], axis=0)
+        )
+        if len(sdss_data) == 1:
+            background = rearrange(background, "c h w -> 1 c h w", c=len(bands))
         self.register_buffer("background", background, persistent=False)
         self.height, self.width = self.background.shape[-2:]
 
@@ -41,8 +54,12 @@ class SimulatedSDSSBackground(nn.Module):
         assert isinstance(self.background, Tensor)
         batch_size, c, hlen, wlen = shape
         assert self.background.shape[1] == c
+
+        # select region to sample from (same for all images in batch for simplicity)
         h_diff, w_diff = self.height - hlen, self.width - wlen
         h = 0 if h_diff == 0 else np.random.randint(h_diff)
         w = 0 if w_diff == 0 else np.random.randint(w_diff)
-        bg = self.background[:, :, h : (h + hlen), w : (w + wlen)]
-        return bg.expand(batch_size, -1, -1, -1)
+
+        # sample region from random background for each image in batch
+        n = np.random.randint(self.background.shape[0], size=(batch_size,))
+        return self.background[n, :, h : (h + hlen), w : (w + wlen)]
