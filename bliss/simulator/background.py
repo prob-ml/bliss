@@ -1,8 +1,10 @@
-from typing import Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import torch
 from einops import rearrange
+from omegaconf import OmegaConf
+from omegaconf.listconfig import ListConfig
 from torch import Tensor, nn
 
 # ideally this module wouldn't depend on any specific survey
@@ -23,32 +25,22 @@ class ConstantBackground(nn.Module):
 
 
 class SimulatedSDSSBackground(nn.Module):
-    def __init__(self, sdss_dir, params):
+    def __init__(self, sdss_dir, param_list: ListConfig):
         super().__init__()
-        run = params["run"]
-        camcol = params["camcol"]
-        field_params = params["field"]
-        if isinstance(field_params, int):
-            fields = (field_params,)  # allow single integer value
-        else:
-            assert field_params["start"] < field_params["end"]
-            fields = range(field_params["start"], field_params["end"], field_params["step"])
-        bands = params["bands"]
 
-        sdss_data = SloanDigitalSkySurvey(
-            sdss_dir=sdss_dir,
-            run=run,
-            camcol=camcol,
-            fields=fields,
-            bands=bands,
-        )
-        background = torch.from_numpy(
-            np.stack([sdss_data[i]["background"] for i in range(len(sdss_data))], axis=0)
-        )
-        if len(sdss_data) == 1:
-            background = rearrange(background, "c h w -> 1 c h w", c=len(bands))
+        # Add all backgrounds from specified run/col/field to list
+        backgrounds = []
+        for param_obj in param_list:
+            params: Dict = OmegaConf.to_container(param_obj)  # type: ignore
+            sdss = SloanDigitalSkySurvey(sdss_dir=sdss_dir, **params)
+            backgrounds.extend([field["background"] for field in sdss])  # type: ignore
+
+        background = torch.from_numpy(np.stack(backgrounds, axis=0))
+        if len(background.size()) == 3:  # convert to 4d tensor if only one background
+            background = rearrange(background, "c h w -> 1 c h w")
+
         self.register_buffer("background", background, persistent=False)
-        self.height, self.width = self.background.shape[-2:]
+        self.height, self.width = self.background.shape[-2:]  # type: ignore
 
     def sample(self, shape) -> Tensor:
         assert isinstance(self.background, Tensor)

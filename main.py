@@ -5,6 +5,7 @@ from os import environ, getenv
 from pathlib import Path
 
 import hydra
+from omegaconf import OmegaConf
 
 from bliss.generate import generate
 from bliss.predict import predict_sdss
@@ -14,6 +15,9 @@ if not getenv("BLISS_HOME"):
     project_path = Path(__file__).resolve()
     bliss_home = project_path.parents[0]
     environ["BLISS_HOME"] = bliss_home.as_posix()
+
+# register resolver to use ranges in config file
+OmegaConf.register_new_resolver("range", range, replace=True)
 
 
 # config_path should be overriden when running `bliss` poetry executable

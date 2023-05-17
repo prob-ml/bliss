@@ -56,13 +56,10 @@ simulator:
     background:
         _target_: bliss.simulator.background.SimulatedSDSSBackground
         sdss_dir: /data/sdss
-        params:
-            run: 94
+        param_list:
+          - run: 94
             camcol: 1
-            field:
-                start: 12
-                end: 500
-                step: 50
+            fields: ${range:12,500,50}
             bands: [2]
 
 cached_simulator:
