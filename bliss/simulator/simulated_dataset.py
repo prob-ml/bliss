@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
-from bliss.generate import FileDatum, itemize_data
+from bliss.generate import FileDatum
 from bliss.simulator.background import ConstantBackground, SimulatedSDSSBackground
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import ImagePrior
@@ -94,17 +94,23 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
     def __init__(
         self,
-        n_batches: int,
+        train_n_batches: int,
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
+        file_prefix: str,
+        val_split_file_idxs: List[int],
+        test_split_file_idxs: List[int],
     ):
         super().__init__()
 
-        self.n_batches = n_batches
+        self.train_n_batches = train_n_batches
         self.num_workers = num_workers
         self.batch_size = batch_size
         self.cached_data_path = cached_data_path
+        self.file_prefix = file_prefix
+        self.val_split_file_idxs = val_split_file_idxs or []
+        self.test_split_file_idxs = test_split_file_idxs or []
 
         self.data: List[FileDatum] = []
         self.valid: List[FileDatum] = []
@@ -112,48 +118,51 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
 
         # assume cached image files exist, read from disk
         for filename in os.listdir(self.cached_data_path):
-            if "valid" in filename or "test" in filename:
+            if not filename.endswith(".pt"):
                 continue
-            if filename.startswith("dataset") and filename.endswith(".pt"):
+
+            file_idx = int(filename.split("_")[-1].split(".")[0])
+            if file_idx in self.val_split_file_idxs or file_idx in self.test_split_file_idxs:
+                continue
+            if filename.startswith(self.file_prefix) and filename.endswith(".pt"):
                 self.data += self.read_file(f"{self.cached_data_path}/{filename}")
-        assert self.data, "No cached data loaded; run `generate.py` first"
-        assert len(self.data) >= self.n_batches * self.batch_size, (
-            f"Insufficient cached data loaded; "
-            f"need at least {self.n_batches * self.batch_size} "
-            f"but only have {len(self.data)}. Re-run `generate.py` with "
-            f"different generation `n_batches` and/or `batch_size`."
-        )
 
         # fix validation set
-        assert os.path.exists(
-            f"{self.cached_data_path}/dataset_valid.pt"
-        ), "No cached validation data found; run `generate.py` first"
-        valid_batched_data = self.read_file(f"{self.cached_data_path}/dataset_valid.pt")
-        self.valid = itemize_data(valid_batched_data)
+        for idx in self.val_split_file_idxs:
+            filename = f"{self.file_prefix}_{idx}.pt"
+            self.valid += self.read_file(f"{self.cached_data_path}/{filename}")
 
-        assert os.path.exists(
-            f"{self.cached_data_path}/dataset_test.pt"
-        ), "No cached test data found; run `generate.py` first"
-        test_batched_data = self.read_file(f"{self.cached_data_path}/dataset_test.pt")
-        self.test = itemize_data(test_batched_data)
+        # fix test set
+        for idx in self.test_split_file_idxs:
+            filename = f"{self.file_prefix}_{idx}.pt"
+            self.test += self.read_file(f"{self.cached_data_path}/{filename}")
 
     def read_file(self, filename: str) -> List[FileDatum]:
         with open(filename, "rb") as f:
             return torch.load(f)
 
     def __len__(self):
-        return self.n_batches * self.batch_size
+        return self.train_n_batches * self.batch_size
 
     def __getitem__(self, idx):
         return self.data[idx]
 
     def train_dataloader(self):
+        assert self.data, "No cached train data loaded; run `generate.py` first"
+        assert len(self.data) >= self.train_n_batches * self.batch_size, (
+            f"Insufficient cached data loaded; "
+            f"need at least {self.train_n_batches * self.batch_size} "
+            f"but only have {len(self.data)}. Re-run `generate.py` with "
+            f"different generation `train_n_batches` and/or `batch_size`."
+        )
         return DataLoader(
             self, shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers
         )
 
     def val_dataloader(self):
+        assert self.valid, "No cached validation data found; run `generate.py` first"
         return DataLoader(self.valid, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
+        assert self.test, "No cached test data found; run `generate.py` first"
         return DataLoader(self.test, batch_size=self.batch_size, num_workers=self.num_workers)

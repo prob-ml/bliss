@@ -60,6 +60,9 @@ cached_simulator:
     batch_size: ${generate.batch_size} # 128 for large cached
     num_workers: 0
     cached_data_path: ${generate.cached_data_path}
+    file_prefix: ${generate.file_prefix}
+    val_split_file_idxs: null # inclusive range
+    test_split_file_idxs: null # inclusive range
 
 encoder:
     _target_: bliss.encoder.Encoder
@@ -119,19 +122,21 @@ encoder:
         ]
 
 generate:
-    splits: [train, valid, test]
+    n_workers_per_process: 0
     n_batches: ${simulator.n_batches}
     batch_size: ${simulator.prior.batch_size}
-    valid_n_batches: ${simulator.valid_n_batches}
-    test_n_batches: ${simulator.valid_n_batches}
     max_images_per_file: 5000
     cached_data_path: ${paths.data}/cached_dataset
+    file_prefix: dataset
+    files_start_idx: 0
 
 training:
     name: null
     version: null
     n_epochs: 30
     save_top_k: 1
+    enable_early_stopping: true
+    patience: 3
     pretrained_weights: null
     trainer:
         _target_: pytorch_lightning.Trainer
@@ -142,7 +147,7 @@ training:
         check_val_every_n_epoch: 10
         log_every_n_steps: 10  # corresponds to n_batches
         max_epochs: ${training.n_epochs}
-        min_epochs: ${training.n_epochs}
+        min_epochs: 1
         accelerator: "gpu"
         devices: 1
     testing:

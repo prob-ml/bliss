@@ -10,14 +10,14 @@ class TestSdssReconstrust:
         est_tile = est_full.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
 
         decoder_obj = instantiate(cfg.simulator.decoder)
-        recon_img = decoder_obj.render_images(est_tile)[0, 0]
+        recon_img = decoder_obj.render_images(est_tile.to("cpu"))[0, 0]
 
         ptc = cfg.encoder.tile_slen * cfg.encoder.tiles_to_crop
         true_img_crop = true_img[0][ptc:-ptc, ptc:-ptc]
         true_bg_crop = true_bg[0][ptc:-ptc, ptc:-ptc]
         true_bright = true_img_crop - true_bg_crop
 
-        bright_pix_mask = torch.tensor(recon_img - 100) > 0
+        bright_pix_mask = (recon_img - 100) > 0
         res_bright = recon_img[bright_pix_mask] - torch.tensor(true_bright)[bright_pix_mask]
 
         recon_img += true_bg_crop

@@ -6,7 +6,6 @@ defaults:
 
 simulator:
     valid_n_batches: 2
-    num_workers: 0
     prior:
         n_tiles_h: 8
         n_tiles_w: 8
@@ -17,8 +16,13 @@ simulator:
         _target_: bliss.simulator.background.ConstantBackground
         background: [865.0]
 
+cached_simulator:
+    train_n_batches: 2
+    val_split_file_idxs: [2, 3]
+    test_split_file_idxs: [4, 5]
+
 generate:
-    n_batches: 2
+    n_batches: 6
     batch_size: 32
     max_images_per_file: 50
     cached_data_path: null # use pytest tmpdir
@@ -27,12 +31,13 @@ training:
     name: "pytest_encoder"
     version: "version0"
     n_epochs: 1
+    enable_early_stopping: true
     pretrained_weights: ${paths.pretrained_models}/sdss.pt
     seed: 42
     weight_save_path: null
     trainer:
         logger: false
-        enable_checkpointing: false
+        enable_checkpointing: true
         profiler: null
         check_val_every_n_epoch: 1001
         log_every_n_steps: 10
