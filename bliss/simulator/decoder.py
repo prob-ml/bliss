@@ -22,43 +22,31 @@ class ImageDecoder(nn.Module):
     ) -> None:
         super().__init__()
         assert n_bands == 1, "Only 1 band is supported"
+        assert Path(psf_params_file).suffix == ".fits"
+        assert len(sdss_bands) == n_bands
 
         self.n_bands = n_bands
         self.pixel_scale = pixel_scale
-
-        self.params = None  # psf params from fits file
-
-        assert Path(psf_params_file).suffix == ".fits"
-        assert len(sdss_bands) == n_bands
-        psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
-        self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
-
         self.psf_slen = psf_slen
 
-        grid = self._get_mgrid(self.psf_slen) * (self.psf_slen - 1) / 2
-        # Bryan: extra factor to be consistent with old repo, probably unimportant...
-        grid *= self.psf_slen / (self.psf_slen - 1)
+        # load raw params from file
+        params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
+        self.register_buffer("params", params)  # don't need to update params, so use buffer
+
+        # generate grid for psf
+        grid = self._get_mgrid() * (self.psf_slen - 1) / 2
         self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
 
-        self.psf = self.forward_psf_from_params().detach().numpy()
-        assert len(self.psf.shape) == 3 and self.psf.shape[0] == 1
-        psf_image = galsim.Image(self.psf[0], scale=pixel_scale)
-        self.psf_galsim = galsim.InterpolatedImage(psf_image).withFlux(1.0)
+        self.psf_galsim = self._get_psf()
 
-    @staticmethod
-    def _get_mgrid(slen: int):
-        offset = (slen - 1) / 2
-        # Currently type-checking with mypy doesn't work with np.mgrid
-        # See https://github.com/python/mypy/issues/11185.
-        x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]  # type: ignore
-        mgrid = torch.tensor(np.dstack((y, x))) / offset
-        # mgrid is between -1 and 1
-        # then scale slightly because of the way f.grid_sample
-        # parameterizes the edges: (0, 0) is center of edge pixel
-        return mgrid.float() * (slen - 1) / slen
+    def _get_psf(self):
+        """Construct PSF image from parameters. This is the main entry point for generating the psf.
 
-    def forward_psf_from_params(self):
+        Returns:
+            galsim_psf (InterpolatedImage): the psf transformation to be used by GalSim
+        """
         assert self.params is not None, "Can only be used when `psf_params_file` is given."
+
         # get psf in each band
         psf_list = []
         for i in range(self.n_bands):
@@ -74,10 +62,33 @@ class ImageDecoder(nn.Module):
         # check format
         n_bands, psf_slen, _ = psf.shape
         assert n_bands == self.n_bands and (psf_slen % 2) == 1 and psf_slen == psf.shape[2]
-        return psf
+
+        # convert to image
+        psf_image = galsim.Image(psf.detach().numpy()[0], scale=self.pixel_scale)
+        return galsim.InterpolatedImage(psf_image).withFlux(1.0)
+
+    def _get_mgrid(self):
+        """Construct the base grid for the PSF."""
+        offset = (self.psf_slen - 1) / 2
+        x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]  # type: ignore
+        mgrid = torch.tensor(np.dstack((y, x))) / offset
+        return mgrid.float()
 
     @staticmethod
     def _get_fit_file_psf_params(psf_fit_file: str, bands: Tuple[int, ...]):
+        """Load psf parameters from fits file.
+
+        See https://data.sdss.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/psField.html
+        for details on the parameters.
+
+        Args:
+            psf_fit_file (str): file to load from
+            bands (Tuple[int, ...]): SDSS bands to load
+
+        Returns:
+            psf_params: tensor of parameters for each band
+        """
+        # HDU 6 contains the PSF header (after primary and eigenimages)
         data = fits.open(psf_fit_file, ignore_missing_end=True).pop(6).data
         psf_params = torch.zeros(len(bands), 6)
         for i, band in enumerate(bands):
@@ -94,6 +105,24 @@ class ImageDecoder(nn.Module):
 
     @staticmethod
     def _psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
+        """Generate the PSF from the parameters using the power-law model.
+
+        See https://data.sdss.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/psField.html
+        for details on the parameters and the equation used.
+
+        Args:
+            r: radius
+            sigma1: Inner gaussian sigma for the composite fit
+            sigma2: Outer gaussian sigma for the composite fit
+            sigmap: Width parameter for power law (pixels)
+            beta: Slope of power law.
+            b: Ratio of the outer PSF to the inner PSF at the origin
+            p0: The value of the power law at the origin.
+
+        Returns:
+            The psf function evaluated at r.
+        """
+
         term1 = torch.exp(-(r**2) / (2 * sigma1))
         term2 = b * torch.exp(-(r**2) / (2 * sigma2))
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
