@@ -14,22 +14,19 @@ from bliss.catalog import TileCatalog
 class ImageDecoder(nn.Module):
     def __init__(
         self,
-        n_bands: int,
         pixel_scale: float,
         psf_params_file: str,
         psf_slen: int,
         sdss_bands: Tuple[int, ...],
     ) -> None:
         super().__init__()
-        assert n_bands == 5, "Testing 5 bands"
 
-        self.n_bands = n_bands
+        self.n_bands = len(sdss_bands)
         self.pixel_scale = pixel_scale
 
         self.params = None  # psf params from fits file
 
         assert Path(psf_params_file).suffix == ".fits"
-        assert len(sdss_bands) == n_bands
         psf_params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
         self.params = nn.Parameter(psf_params.clone(), requires_grad=True)
 
@@ -41,11 +38,11 @@ class ImageDecoder(nn.Module):
         self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
 
         self.psf = self.forward_psf_from_params().detach().numpy()
-        assert len(self.psf.shape) == 3 and self.psf.shape[0] == 5
+        assert len(self.psf.shape) == 3 and self.psf.shape[0] == self.n_bands
 
         self.psf_galsim = []
 
-        for i in range(n_bands):
+        for i in range(self.n_bands):
             psf_image = galsim.Image(self.psf[i], scale=pixel_scale)
             self.psf_galsim.append(galsim.InterpolatedImage(psf_image).withFlux(1.0))
 
@@ -137,18 +134,25 @@ class ImageDecoder(nn.Module):
 
         full_cat = tile_cat.to_full_params()
 
+        # Nested looping + conditionals are necessary for the drawing of each light
+        # source. Ignored relevant style checks for that reason.
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             for bnd in range(self.n_bands):
                 gs_img = galsim.Image(array=images[b, bnd], scale=self.pixel_scale)
                 for s in range(n_sources):
                     if full_cat["galaxy_bools"][b][s] == 1:
-                        galsim_obj = self.render_galaxy(  # noqa: WPS220
-                            full_cat["galaxy_params"][b][s], bnd
+                        gal_with_band = torch.cat(  # noqa: WPS220,WPS317
+                            (
+                                torch.unsqueeze(full_cat["galaxy_params"][b][s][bnd], 0),
+                                full_cat["galaxy_params"][b][s][self.n_bands :],
+                            ),
+                            0,
                         )
+                        galsim_obj = self.render_galaxy(gal_with_band, bnd)  # noqa: WPS220
                     elif full_cat["star_bools"][b][s] == 1:
                         galsim_obj = self.psf_galsim[bnd].withFlux(  # noqa: WPS220
-                            full_cat["star_fluxes"][b][s].item()
+                            full_cat["star_fluxes"][b][s][bnd].item()  # noqa: WPS219
                         )
                     else:
                         raise AssertionError("Every source is a star or galaxy")  # noqa: WPS220
@@ -160,5 +164,7 @@ class ImageDecoder(nn.Module):
                     galsim_obj.drawImage(
                         offset=offset, method="auto", add_to_image=True, image=gs_img
                     )
+        # TODO: clamp image values. strange issue - happens only after galsim rendering
+        images[images < 1e-8] = 1.1e-8
 
         return torch.from_numpy(images)
