@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from einops import rearrange
 from omegaconf import OmegaConf
-from omegaconf.listconfig import ListConfig
+from omegaconf.dictconfig import DictConfig
 from torch import Tensor, nn
 
 # ideally this module wouldn't depend on any specific survey
@@ -25,14 +25,17 @@ class ConstantBackground(nn.Module):
 
 
 class SimulatedSDSSBackground(nn.Module):
-    def __init__(self, sdss_dir, param_list: ListConfig):
+    def __init__(self, sdss_fields: DictConfig):
         super().__init__()
+        sdss_dir = sdss_fields["dir"]
+        field_list = sdss_fields["field_list"]
+        bands = sdss_fields["bands"]  # use same bands across fields
 
         # Add all backgrounds from specified run/col/field to list
         backgrounds = []
-        for param_obj in param_list:
+        for param_obj in field_list:
             params: Dict = OmegaConf.to_container(param_obj)  # type: ignore
-            sdss = SloanDigitalSkySurvey(sdss_dir=sdss_dir, **params)
+            sdss = SloanDigitalSkySurvey(sdss_dir=sdss_dir, bands=bands, **params)
             backgrounds.extend([field["background"] for field in sdss])  # type: ignore
 
         background = torch.from_numpy(np.stack(backgrounds, axis=0))

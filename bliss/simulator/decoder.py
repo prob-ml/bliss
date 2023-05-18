@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Tuple
 
 import galsim
@@ -6,6 +5,7 @@ import numpy as np
 import torch
 from astropy.io import fits
 from einops import rearrange, reduce
+from omegaconf import DictConfig
 from torch import Tensor, nn
 
 from bliss.catalog import TileCatalog
@@ -14,43 +14,49 @@ from bliss.catalog import TileCatalog
 class ImageDecoder(nn.Module):
     def __init__(
         self,
-        n_bands: int,
         pixel_scale: float,
-        psf_params_file: str,
         psf_slen: int,
-        sdss_bands: Tuple[int, ...],
+        sdss_fields: DictConfig,
     ) -> None:
         super().__init__()
-        assert n_bands == 1, "Only 1 band is supported"
-        assert Path(psf_params_file).suffix == ".fits"
-        assert len(sdss_bands) == n_bands
 
-        self.n_bands = n_bands
+        self.n_bands = len(sdss_fields["bands"])
         self.pixel_scale = pixel_scale
         self.psf_slen = psf_slen
+        self.psf_galsim = []
 
-        # load raw params from file
-        params = self._get_fit_file_psf_params(psf_params_file, sdss_bands)
-        self.register_buffer("params", params)  # don't need to update params, so use buffer
+        sdss_dir = sdss_fields["dir"]
+        sdss_bands = sdss_fields["bands"]
 
-        # generate grid for psf
-        grid = self._get_mgrid() * (self.psf_slen - 1) / 2
-        self.register_buffer("cached_radii_grid", (grid**2).sum(2).sqrt())
+        for field_params in sdss_fields["field_list"]:
+            run = field_params["run"]
+            camcol = field_params["camcol"]
+            fields = field_params["fields"]
 
-        self.psf_galsim = self._get_psf()
+            for field in fields:
+                # load raw params from file
+                field_dir = f"{sdss_dir}/{run}/{camcol}/{field}"
+                filename = f"{field_dir}/psField-{run:06}-{camcol}-{field:04}.fits"
+                psf_params = self._get_fit_file_psf_params(filename, sdss_bands)
 
-    def _get_psf(self):
+                # load psf image from params
+                self.psf_galsim.append(self._get_psf(psf_params))
+
+    def _get_psf(self, params):
         """Construct PSF image from parameters. This is the main entry point for generating the psf.
+
+        Args:
+            params: list of psf parameters, loaded from _get_fit_file_psf_params
 
         Returns:
             galsim_psf (InterpolatedImage): the psf transformation to be used by GalSim
         """
-        assert self.params is not None, "Can only be used when `psf_params_file` is given."
-
         # get psf in each band
         psf_list = []
         for i in range(self.n_bands):
-            band_psf = self._psf_fun(self.cached_radii_grid, *self.params[i])
+            grid = self._get_mgrid() * (self.psf_slen - 1) / 2
+            radii_grid = (grid**2).sum(2).sqrt()
+            band_psf = self._psf_fun(radii_grid, *params[i])
             psf_list.append(band_psf.unsqueeze(0))
         psf = torch.cat(psf_list)
         assert (psf > 0).all()
@@ -128,7 +134,7 @@ class ImageDecoder(nn.Module):
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
-    def render_galaxy(self, galaxy_params: Tensor):
+    def render_galaxy(self, galaxy_params: Tensor, psf):
         galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
         bulge_frac = 1 - disk_frac
@@ -152,7 +158,7 @@ class ImageDecoder(nn.Module):
             sheared_bulge = bulge.shear(q=bulge_q, beta=beta_radians * galsim.radians)
             components.append(sheared_bulge)
         galaxy = galsim.Add(components)
-        return galsim.Convolution(galaxy, self.psf_galsim)
+        return galsim.Convolution(galaxy, psf)
 
     def render_images(self, tile_cat: TileCatalog):
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
@@ -165,11 +171,14 @@ class ImageDecoder(nn.Module):
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             gs_img = galsim.Image(array=images[b, 0], scale=self.pixel_scale)
+            # pick random psf for each image
+            n = int(np.random.randint(len(self.psf_galsim)))
+            psf = self.psf_galsim[n]
             for s in range(n_sources):
                 if full_cat["galaxy_bools"][b][s] == 1:
-                    galsim_obj = self.render_galaxy(full_cat["galaxy_params"][b][s])
+                    galsim_obj = self.render_galaxy(full_cat["galaxy_params"][b][s], psf)
                 elif full_cat["star_bools"][b][s] == 1:
-                    galsim_obj = self.psf_galsim.withFlux(full_cat["star_fluxes"][b][s].item())
+                    galsim_obj = psf.withFlux(full_cat["star_fluxes"][b][s].item())
                 else:
                     raise AssertionError("Every source is a star or galaxy")
 
