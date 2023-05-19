@@ -12,9 +12,9 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey
 
 
 class ConstantBackground(nn.Module):
-    def __init__(self, background: Tuple[float, ...]):
+    def __init__(self, background: Tuple[float], **kwargs):
         super().__init__()
-        bg: Tensor = torch.tensor(background)
+        bg: Tensor = torch.tensor([background])
         bg = rearrange(bg, "c -> 1 c 1 1")
         self.register_buffer("background", bg, persistent=False)
 

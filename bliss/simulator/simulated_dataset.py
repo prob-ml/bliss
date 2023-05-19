@@ -115,11 +115,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             A dictionary of the simulated TileCatalog, and (batch_size, bands, height, width)
             tensors for images and background.
         """
-        _, rcf_indices = (
+        rcfs, rcf_indices = (
             self._get_random_rcf(self.image_prior.batch_size) if not independent else None
         )
         with torch.no_grad():
-            tile_catalog = self.image_prior.sample_prior()  # TODO: add rcf
+            tile_catalog = self.image_prior.sample_prior(rcfs)  # TODO: add rcf
             images, background = self.simulate_image(tile_catalog, rcf_indices)
             return {
                 "tile_catalog": tile_catalog.to_dict(),
