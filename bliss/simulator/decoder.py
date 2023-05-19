@@ -23,7 +23,7 @@ class ImageDecoder(nn.Module):
         self.n_bands = len(sdss_fields["bands"])
         self.pixel_scale = pixel_scale
         self.psf_slen = psf_slen
-        self.psf_galsim = []
+        self.psf_galsim = {}  # Dictionary indexed by (run, camcol, field) tuple
 
         sdss_dir = sdss_fields["dir"]
         sdss_bands = sdss_fields["bands"]
@@ -40,7 +40,7 @@ class ImageDecoder(nn.Module):
                 psf_params = self._get_fit_file_psf_params(filename, sdss_bands)
 
                 # load psf image from params
-                self.psf_galsim.append(self._get_psf(psf_params))
+                self.psf_galsim[(run, camcol, field)] = self._get_psf(psf_params)
 
     def _get_psf(self, params):
         """Construct PSF image from parameters. This is the main entry point for generating the psf.
@@ -160,20 +160,28 @@ class ImageDecoder(nn.Module):
         galaxy = galsim.Add(components)
         return galsim.Convolution(galaxy, psf)
 
-    def render_images(self, tile_cat: TileCatalog):
+    def render_images(self, tile_cat: TileCatalog, rcf=None):
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
+        if rcf is not None:
+            assert rcf.shape[0] == batch_size
+
         slen_h = tile_cat.tile_slen * n_tiles_h
         slen_w = tile_cat.tile_slen * n_tiles_w
         images = np.zeros((batch_size, self.n_bands, slen_h, slen_w), dtype=np.float32)
 
         full_cat = tile_cat.to_full_params()
 
+        # if rcf is specified, use the PSF from that row/camcol/field
+        if rcf is not None:
+            psfs = [self.psf_galsim[tuple(rcf[b])] for b in range(batch_size)]  # type: ignore
+        else:  # otherwise pick a random psf
+            psfs = np.random.randint(len(self.psf_galsim), size=(batch_size,))  # type: ignore
+
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             gs_img = galsim.Image(array=images[b, 0], scale=self.pixel_scale)
-            # pick random psf for each image
-            n = int(np.random.randint(len(self.psf_galsim)))
-            psf = self.psf_galsim[n]
+
+            psf = psfs[b]
             for s in range(n_sources):
                 if full_cat["galaxy_bools"][b][s] == 1:
                     galsim_obj = self.render_galaxy(full_cat["galaxy_params"][b][s], psf)

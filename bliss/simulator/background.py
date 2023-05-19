@@ -45,7 +45,7 @@ class SimulatedSDSSBackground(nn.Module):
         self.register_buffer("background", background, persistent=False)
         self.height, self.width = self.background.shape[-2:]  # type: ignore
 
-    def sample(self, shape) -> Tensor:
+    def sample(self, shape, rcf_indices=None) -> Tensor:
         assert isinstance(self.background, Tensor)
         batch_size, c, hlen, wlen = shape
         assert self.background.shape[1] == c
@@ -56,5 +56,9 @@ class SimulatedSDSSBackground(nn.Module):
         w = 0 if w_diff == 0 else np.random.randint(w_diff)
 
         # sample region from random background for each image in batch
-        n = np.random.randint(self.background.shape[0], size=(batch_size,))
+        if rcf_indices is not None:
+            assert rcf_indices.shape[0] == batch_size
+            n = rcf_indices
+        else:
+            n = np.random.randint(self.background.shape[0], size=(batch_size,))
         return self.background[n, :, h : (h + hlen), w : (w + wlen)]
