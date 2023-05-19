@@ -1,10 +1,16 @@
+import itertools
+from pathlib import Path
+
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from astropy.io import fits
+from omegaconf.dictconfig import DictConfig
 from torch import Tensor
 from torch.distributions import Gamma, Poisson, Uniform
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
+from bliss.surveys.sdss import column_to_tensor
 
 
 class ImagePrior(pl.LightningModule):
@@ -17,10 +23,10 @@ class ImagePrior(pl.LightningModule):
 
     def __init__(
         self,
+        sdss_fields: DictConfig,
         n_tiles_h: int,
         n_tiles_w: int,
         tile_slen: int,
-        n_bands: int,
         batch_size: int,
         min_sources: int,
         max_sources: int,
@@ -40,10 +46,10 @@ class ImagePrior(pl.LightningModule):
         """Initializes ImagePrior.
 
         Args:
+            sdss_fields: sdss frames to sample from,
             n_tiles_h: Image height in tiles,
             n_tiles_w: Image width in tiles,
             tile_slen: Tile side length in pixels,
-            n_bands: Number of bands (colors) in the image.
             batch_size: int,
             min_sources: Minimum number of sources in a tile
             max_sources: Maximum number of sources in a tile
@@ -64,8 +70,11 @@ class ImagePrior(pl.LightningModule):
         self.n_tiles_h = n_tiles_h
         self.n_tiles_w = n_tiles_w
         self.tile_slen = tile_slen
-        self.n_bands = n_bands
+        # NOTE: bands have to be consecutive (i.e. [2, 3, 4], not [0, 3, 4])
+        self.bands = sdss_fields["bands"]
+        self.n_bands = len(self.bands)
         self.batch_size = batch_size
+        self.sdss = sdss_fields["dir"]
 
         self.min_sources = min_sources
         self.max_sources = max_sources
@@ -140,10 +149,54 @@ class ImagePrior(pl.LightningModule):
         return galaxy_bools, star_bools
 
     def _sample_star_fluxes(self):
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        return self._draw_truncated_pareto(
+        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+        fluxes = torch.zeros(
+            self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, self.n_bands
+        )
+        # draw value for g-band from pareto for each light source
+        fluxes[:, :, :, :, 0] = self._draw_truncated_pareto(
             self.star_flux_alpha, self.star_flux_min, self.star_flux_max, latent_dims
         )
+        # Compute r-band via g-band value and ratio from SDSS catalog
+        fluxes[:, :, :, :, 1:] = self.multiflux(6, fluxes[:, :, :, :, 0])
+        return fluxes
+
+    def multiflux(self, obj_id, flux_base) -> Tensor:
+        # TODO: Remove fixed camcol/field/run values (or specify in config)
+        camcol = 1
+        field = 12
+        run = 94
+
+        sdss_path = Path(self.sdss)
+        camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
+        po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+        po_fits = fits.getdata(po_path)
+
+        fluxes = column_to_tensor(po_fits, "psfflux")
+        objc_type = column_to_tensor(po_fits, "objc_type").numpy()
+        thing_id = column_to_tensor(po_fits, "thing_id").numpy()
+
+        # TODO: Rewrite so star and galaxy sources are separated from SDSS file
+        # to avoid variable runtime in while loop
+        # pick random light source from SDSS image
+        obj = np.random.randint(0, 999)
+        while objc_type[obj] != obj_id or thing_id[obj] == -1 or torch.any(fluxes[obj] < 0):
+            obj = np.random.randint(0, 999)
+
+        flux_rest = torch.zeros(
+            self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, self.n_bands - 1
+        )
+        flux_ratios = fluxes[obj, self.bands[1] : self.bands[-1] + 1] / fluxes[obj, self.bands[0]]
+
+        for b, h, w, s in itertools.product(  # noqa: WPS352
+            range(self.batch_size),
+            range(self.n_tiles_h),
+            range(self.n_tiles_w),
+            range(self.max_sources),
+        ):
+            flux_rest[b, h, w, s, :] = flux_ratios * flux_base[b, h, w, s]
+
+        return flux_rest
 
     @staticmethod
     def _draw_truncated_pareto(alpha, min_x, max_x, n_samples) -> Tensor:
@@ -154,11 +207,16 @@ class ImagePrior(pl.LightningModule):
 
     def _sample_galaxy_prior(self):
         """Sample latent galaxy params from GalaxyPrior object."""
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
+        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
 
-        total_flux = self._draw_truncated_pareto(
+        total_flux = torch.zeros(
+            self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, self.n_bands
+        )
+        total_flux[:, :, :, :, 0] = self._draw_truncated_pareto(
             self.galaxy_alpha, self.galaxy_flux_min, self.galaxy_flux_max, latent_dims
         )
+
+        total_flux[:, :, :, :, 1:] = self.multiflux(3, total_flux[:, :, :, :, 0])
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
         beta_radians = Uniform(0, 2 * np.pi).sample(latent_dims)
@@ -172,5 +230,13 @@ class ImagePrior(pl.LightningModule):
         bulge_scale = self.galaxy_a_scale / self.galaxy_a_bd_ratio
         bulge_a = base_dist.sample(latent_dims) * bulge_scale + bulge_loc
 
+        disk_frac = torch.unsqueeze(disk_frac, 4)
+        beta_radians = torch.unsqueeze(beta_radians, 4)
+        disk_q = torch.unsqueeze(disk_q, 4)
+        disk_a = torch.unsqueeze(disk_a, 4)
+        bulge_q = torch.unsqueeze(bulge_q, 4)
+        bulge_a = torch.unsqueeze(bulge_a, 4)
+
         param_lst = [total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
+
         return torch.cat(param_lst, dim=4)

@@ -93,14 +93,25 @@ class Encoder(pl.LightningModule):
         }
 
     def encode_batch(self, batch):
-        images_with_background = torch.cat((batch["images"], batch["background"]), dim=1)
+        batch["images"] = torch.unsqueeze(batch["images"], dim=2)
+        batch["background"] = torch.unsqueeze(batch["background"], dim=2)
+        img_dims = list(batch["images"].size())
+        images_with_background = torch.zeros(
+            img_dims[0],
+            img_dims[1],
+            img_dims[2] * 2,
+            img_dims[3],
+            img_dims[4],
+        )
+        images_with_background[:, :, 0, :, :] = batch["images"]
+        images_with_background[:, :, 1, :, :] = batch["background"]
 
         # setting this to true every time is a hack to make yolo DetectionModel
         # give us output of the right dimension
         self.model.model[-1].training = True
 
-        assert images_with_background.size(2) % 16 == 0, "image dims must be multiples of 16"
         assert images_with_background.size(3) % 16 == 0, "image dims must be multiples of 16"
+        assert images_with_background.size(4) % 16 == 0, "image dims must be multiples of 16"
         bn_warn = "batchnorm training requires a larger batch. did you mean to use eval mode?"
         assert (not self.training) or batch["images"].size(0) > 4, bn_warn
 

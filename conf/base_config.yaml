@@ -21,7 +21,7 @@ paths:
 
 simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
-    n_batches: 128
+    n_batches: 64
     valid_n_batches: 10  # 256
     fix_validation_set: true
     num_workers: 32
@@ -34,10 +34,10 @@ simulator:
             fields: ${range:12,500,50}
     prior:
         _target_: bliss.simulator.prior.ImagePrior
+        sdss_fields: ${simulator.sdss_fields}
         n_tiles_h: 20
         n_tiles_w: 20
         tile_slen: 4
-        n_bands: 1
         batch_size: 64
         max_sources: 1
         mean_sources: 0.2
@@ -64,8 +64,8 @@ simulator:
 
 cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
-    train_n_batches: ${generate.n_batches}
-    batch_size: ${generate.batch_size}
+    n_batches: ${generate.n_batches} # 1024 for large cached
+    batch_size: ${generate.batch_size} # 128 for large cached
     num_workers: 0
     cached_data_path: ${generate.cached_data_path}
     file_prefix: ${generate.file_prefix}
@@ -74,7 +74,7 @@ cached_simulator:
 
 encoder:
     _target_: bliss.encoder.Encoder
-    n_bands: 1
+    n_bands: 3
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
     slack: 1.0
@@ -92,7 +92,20 @@ encoder:
             - [4, 4]  # P3/8
         backbone: [
             # [from, number, module, args]
-            [-1, 1, Conv, [64, 5, 1]],
+            # Uncomment for 3-D Model
+            # [-1, 1, Conv3d, [5, 64, 1]], # Add pooling layer?
+            # [-1, 1, Conv3d_down, [64, 1, 1]],
+            # [-1, 3, Conv, [64, 1, 1]],
+            # [-1, 1, Conv, [128, 3, 2]],
+            # [-1, 1, Conv, [128, 3, 1]],
+            # [-1, 1, Conv, [256, 3, 2]],
+            # [-1, 6, C3, [256]],
+            # [-1, 1, Conv, [512, 3, 2]],
+            # [-1, 9, C3, [512]],
+            # [-1, 1, Conv, [1024, 3, 2]],
+            # [-1, 3, C3, [1024]],
+            # [-1, 1, SPPF, [1024, 5]],
+            [-1, 1, Conv, [64, 5, 1]], # Existing architecture
             [-1, 3, Conv, [64, 1, 1]],
             [-1, 1, Conv, [128, 3, 2]],
             [-1, 1, Conv, [128, 3, 1]],
@@ -128,7 +141,7 @@ generate:
 training:
     name: null
     version: null
-    n_epochs: 50
+    n_epochs: 30
     save_top_k: 1
     enable_early_stopping: true
     patience: 3
@@ -147,7 +160,7 @@ training:
         devices: 1
     testing:
         file: null
-        batch_size: 32
+        batch_size: 64
         num_workers: 0
     seed: 42
     weight_save_path: null
@@ -160,7 +173,7 @@ predict:
         run: 94
         camcol: 1
         fields: [12]
-        bands: [2]
+        bands: [2, 3, 4]
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cuda:0"

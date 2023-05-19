@@ -49,7 +49,7 @@ class ImageDecoder(nn.Module):
             params: list of psf parameters, loaded from _get_fit_file_psf_params
 
         Returns:
-            galsim_psf (InterpolatedImage): the psf transformation to be used by GalSim
+            images (List[InterpolatedImage]): list of psf transformations for each band
         """
         # get psf in each band
         psf_list = []
@@ -70,8 +70,12 @@ class ImageDecoder(nn.Module):
         assert n_bands == self.n_bands and (psf_slen % 2) == 1 and psf_slen == psf.shape[2]
 
         # convert to image
-        psf_image = galsim.Image(psf.detach().numpy()[0], scale=self.pixel_scale)
-        return galsim.InterpolatedImage(psf_image).withFlux(1.0)
+        images = []
+        for i in range(self.n_bands):
+            psf_image = galsim.Image(psf.detach().numpy()[i], scale=self.pixel_scale)
+            images.append(galsim.InterpolatedImage(psf_image).withFlux(1.0))
+
+        return images
 
     def _get_mgrid(self):
         """Construct the base grid for the PSF."""
@@ -134,7 +138,7 @@ class ImageDecoder(nn.Module):
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
-    def render_galaxy(self, galaxy_params: Tensor, psf):
+    def render_galaxy(self, galaxy_params: Tensor, psf, bnd: int):
         galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
         bulge_frac = 1 - disk_frac
@@ -158,7 +162,7 @@ class ImageDecoder(nn.Module):
             sheared_bulge = bulge.shear(q=bulge_q, beta=beta_radians * galsim.radians)
             components.append(sheared_bulge)
         galaxy = galsim.Add(components)
-        return galsim.Convolution(galaxy, psf)
+        return galsim.Convolution(galaxy, psf[bnd])
 
     def render_images(self, tile_cat: TileCatalog, rcf=None):
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
@@ -177,22 +181,38 @@ class ImageDecoder(nn.Module):
         else:  # otherwise pick a random psf
             psfs = np.random.randint(len(self.psf_galsim), size=(batch_size,))  # type: ignore
 
+        # Nested looping + conditionals are necessary for the drawing of each light
+        # source. Ignored relevant style checks for that reason.
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
-            gs_img = galsim.Image(array=images[b, 0], scale=self.pixel_scale)
-
             psf = psfs[b]
-            for s in range(n_sources):
-                if full_cat["galaxy_bools"][b][s] == 1:
-                    galsim_obj = self.render_galaxy(full_cat["galaxy_params"][b][s], psf)
-                elif full_cat["star_bools"][b][s] == 1:
-                    galsim_obj = psf.withFlux(full_cat["star_fluxes"][b][s].item())
-                else:
-                    raise AssertionError("Every source is a star or galaxy")
+            for bnd in range(self.n_bands):
+                gs_img = galsim.Image(array=images[b, bnd], scale=self.pixel_scale)
+                for s in range(n_sources):
+                    if full_cat["galaxy_bools"][b][s] == 1:
+                        gal_with_band = torch.cat(  # noqa: WPS220,WPS317
+                            (
+                                torch.unsqueeze(full_cat["galaxy_params"][b][s][bnd], 0),
+                                full_cat["galaxy_params"][b][s][self.n_bands :],
+                            ),
+                            0,
+                        )
+                        galsim_obj = self.render_galaxy(gal_with_band, psf, bnd)  # noqa: WPS220
+                    elif full_cat["star_bools"][b][s] == 1:
+                        galsim_obj = psf[bnd].withFlux(  # noqa: WPS220
+                            full_cat["star_fluxes"][b][s][bnd].item()  # noqa: WPS219
+                        )
+                    else:
+                        raise AssertionError("Every source is a star or galaxy")  # noqa: WPS220
 
-                plocs = full_cat.plocs[b][s]
-                offset = np.array([plocs[1] - (slen_w / 2), plocs[0] - (slen_h / 2)])
-                # essentially all the runtime of the simulator is incurred by this call to drawImage
-                galsim_obj.drawImage(offset=offset, method="auto", add_to_image=True, image=gs_img)
+                    plocs = full_cat.plocs[b][s]
+                    offset = np.array([plocs[1] - (slen_w / 2), plocs[0] - (slen_h / 2)])
+                    # essentially all the runtime of the simulator is incurred by this call
+                    # to drawImage
+                    galsim_obj.drawImage(
+                        offset=offset, method="auto", add_to_image=True, image=gs_img
+                    )
+        # TODO: clamp image values. strange issue - happens only after galsim rendering
+        images[images < 1e-8] = 1.1e-8
 
         return torch.from_numpy(images)
