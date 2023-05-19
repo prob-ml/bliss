@@ -90,11 +90,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             Tuple[Tensor, Tensor]: tuple of images and backgrounds
         """
         images = self.image_decoder.render_images(tile_catalog, self.rcf_list[rcf_indices])
-        # use RCF for SDSS background only
-        if self.background.__class__ is SimulatedSDSSBackground:
-            background = self.background.sample(images.shape, rcf_indices)  # type: ignore
-        else:
-            background = self.background.sample(images.shape)
+        background = self.background.sample(images.shape, rcf_indices)  # type: ignore
         images += background
         images = self._apply_noise(images)
         return images, background

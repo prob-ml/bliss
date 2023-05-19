@@ -12,13 +12,13 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey
 
 
 class ConstantBackground(nn.Module):
-    def __init__(self, background: Tuple[float, ...]):
+    def __init__(self, background: Tuple[float, ...], **_kwargs):
         super().__init__()
         bg: Tensor = torch.tensor(background)
         bg = rearrange(bg, "c -> 1 c 1 1")
         self.register_buffer("background", bg, persistent=False)
 
-    def sample(self, shape) -> Tensor:
+    def sample(self, shape, **_kwargs) -> Tensor:
         assert isinstance(self.background, Tensor)
         batch_size, c, hlen, wlen = shape
         return self.background.expand(batch_size, c, hlen, wlen)

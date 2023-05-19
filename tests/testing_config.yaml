@@ -6,6 +6,13 @@ defaults:
 
 simulator:
     valid_n_batches: 2
+    sdss_fields:
+        dir: /data/sdss
+        bands: [2]
+        field_list:  # list of dictionaries, each with run, camcol, and list of fields
+          - run: 94
+            camcol: 1
+            fields: [12]
     prior:
         n_tiles_h: 8
         n_tiles_w: 8
