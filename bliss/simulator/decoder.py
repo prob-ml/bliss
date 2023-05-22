@@ -179,8 +179,10 @@ class ImageDecoder(nn.Module):
         if rcf is not None:
             psfs = [self.psf_galsim[tuple(rcf[b])] for b in range(batch_size)]  # type: ignore
         else:  # otherwise pick a random psf
-            psfs = np.random.randint(len(self.psf_galsim), size=(batch_size,))  # type: ignore
-
+            psfs = [
+                list(self.psf_galsim.values())[i]
+                for i in np.random.randint(len(self.psf_galsim), size=(batch_size,))
+            ]
         # Nested looping + conditionals are necessary for the drawing of each light
         # source. Ignored relevant style checks for that reason.
         for b in range(batch_size):

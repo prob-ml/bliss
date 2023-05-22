@@ -152,16 +152,17 @@ class ImagePrior(pl.LightningModule):
         select_gal_rcfs = []
         select_star_rcfs = []
 
-        for rcf in batch_rcfs:
-            rcf = tuple(rcf)
-            if rcf in self.rcf_gals_rest:
-                select_gal_rcfs.append(self.rcf_gals_rest[rcf])  # noqa: WPS529
-            else:  # noqa: WPS529
-                select_gal_rcfs.append(np.random.choice(list(self.rcf_gals_rest.values())))
-            if rcf in self.rcf_stars_rest:
-                select_star_rcfs.append(self.rcf_stars_rest[rcf])  # noqa: WPS529
-            else:  # noqa: WPS529
-                select_star_rcfs.append(np.random.choice(list(self.rcf_stars_rest.values())))
+        if self.n_bands > 1:
+            for rcf in batch_rcfs:
+                rcf = tuple(rcf)
+                if rcf in self.rcf_gals_rest:
+                    select_gal_rcfs.append(self.rcf_gals_rest[rcf])  # noqa: WPS529
+                else:  # noqa: WPS529
+                    select_gal_rcfs.append(np.random.choice(list(self.rcf_gals_rest.values())))
+                if rcf in self.rcf_stars_rest:
+                    select_star_rcfs.append(self.rcf_stars_rest[rcf])  # noqa: WPS529
+                else:  # noqa: WPS529
+                    select_star_rcfs.append(np.random.choice(list(self.rcf_stars_rest.values())))
 
         galaxy_params = self._sample_galaxy_prior(select_gal_rcfs)
         star_fluxes = self._sample_star_fluxes(select_star_rcfs)

@@ -5,7 +5,8 @@ defaults:
     - override hydra/job_logging: stdout
 
 simulator:
-    valid_n_batches: 2
+    valid_n_batches: 6
+    n_batches: 2
     sdss_fields:
         dir: /data/sdss
         bands: [2]

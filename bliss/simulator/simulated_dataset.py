@@ -89,8 +89,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         Returns:
             Tuple[Tensor, Tensor]: tuple of images and backgrounds
         """
-        images = self.image_decoder.render_images(tile_catalog, self.rcf_list[rcf_indices])
-        background = self.background.sample(images.shape, rcf_indices)  # type: ignore
+        rcf = self.rcf_list[rcf_indices] if rcf_indices is not None else None
+        images = self.image_decoder.render_images(tile_catalog, rcf)
+        background = self.background.sample(images.shape, rcf_indices=rcf_indices)  # type: ignore
         images += background
         images = self._apply_noise(images)
         return images, background

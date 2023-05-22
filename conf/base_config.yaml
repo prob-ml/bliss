@@ -64,7 +64,6 @@ simulator:
 
 cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
-    n_batches: ${generate.n_batches} # 1024 for large cached
     batch_size: ${generate.batch_size} # 128 for large cached
     num_workers: 0
     cached_data_path: ${generate.cached_data_path}
@@ -74,7 +73,7 @@ cached_simulator:
 
 encoder:
     _target_: bliss.encoder.Encoder
-    n_bands: 3
+    n_bands: 1
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
     slack: 1.0
@@ -173,7 +172,7 @@ predict:
         run: 94
         camcol: 1
         fields: [12]
-        bands: [2, 3, 4]
+        bands: [2]
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cuda:0"

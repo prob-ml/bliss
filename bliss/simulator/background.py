@@ -15,7 +15,7 @@ class ConstantBackground(nn.Module):
     def __init__(self, background: Tuple[float, ...], **_kwargs):
         super().__init__()
         bg: Tensor = torch.tensor([background])
-        bg = rearrange(bg, "c -> 1 c 1 1")
+        bg = rearrange(bg[0], "c -> 1 c 1 1")
         self.register_buffer("background", bg, persistent=False)
 
     def sample(self, shape, **_kwargs) -> Tensor:
