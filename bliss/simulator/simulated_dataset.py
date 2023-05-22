@@ -1,4 +1,6 @@
+import logging
 import os
+import time
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -20,6 +22,8 @@ from bliss.simulator.prior import ImagePrior
 warnings.filterwarnings(
     "ignore", ".*does not have many workers which may be a bottleneck.*", UserWarning
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
@@ -166,7 +170,10 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         self.test: List[FileDatum] = []
 
         # assume cached image files exist, read from disk
-        for filename in os.listdir(self.cached_data_path):
+        logger.info("Reading cached files (training set)...")
+        start_time = time.time()
+        cached_data_files = os.listdir(self.cached_data_path)
+        for filename in cached_data_files:
             if not filename.endswith(".pt"):
                 continue
 
@@ -176,15 +183,27 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
             if filename.startswith(self.file_prefix) and filename.endswith(".pt"):
                 self.data += self.read_file(f"{self.cached_data_path}/{filename}")
 
+            if len(self.data) >= self.train_n_batches * self.batch_size:
+                break
+        # trim to train_n_batches * batch_size
+        self.data = self.data[: self.train_n_batches * self.batch_size]
+        logger.info("done (took %s seconds).", time.time() - start_time)  # noqa: WPS323
+
         # fix validation set
+        logger.info("Reading cached files (validation set)...")
+        start_time = time.time()
         for idx in self.val_split_file_idxs:
             filename = f"{self.file_prefix}_{idx}.pt"
             self.valid += self.read_file(f"{self.cached_data_path}/{filename}")
+        logger.info("done (took %s seconds).", time.time() - start_time)  # noqa: WPS323
 
         # fix test set
+        logger.info("Reading cached files (test set)...")
+        start_time = time.time()
         for idx in self.test_split_file_idxs:
             filename = f"{self.file_prefix}_{idx}.pt"
             self.test += self.read_file(f"{self.cached_data_path}/{filename}")
+        logger.info("done (took %s seconds).", time.time() - start_time)  # noqa: WPS323
 
     def read_file(self, filename: str) -> List[FileDatum]:
         try:

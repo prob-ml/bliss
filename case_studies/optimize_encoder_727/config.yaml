@@ -8,8 +8,6 @@ hydra:
     sweeper:
         params:
             training.seed: 15942,17508,16433,2857,25956
-            # simulator.prior.n_tiles_h: 8, 12, 16, 20, 24, 28, 32
-            # simulator.prior.n_tiles_w: 8, 12, 16, 20, 24, 28, 32
             # cached_simulator.batch_size: 8, 16, 32, 64, 128, 256
             # encoder.architecture.anchors: [[4, 4]], [
             #         [10,13, 16,30, 33,23]  # P3/8
@@ -68,9 +66,15 @@ simulator:
         bands: [2]
 
 cached_simulator:
-    n_batches: 1024
     batch_size: 64
-    cached_data_path: /data/scratch/aakash/cached_finetune_large
+    # 59GB dataset - 140 files
+    #  training set  : 112 files * 96 batches * 64 images/batch = 688,128 images (80%)
+    #  validation set: 14 files * 10 batches * 64 images/batch = 8,960 images (10%)
+    #  testing set   : 14 files * 10 batches * 64 images/batch = 8,960 images (10%)
+    train_n_batches: 10752
+    val_split_file_idxs: [113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126]
+    test_split_file_idxs: null # [127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+    cached_data_path: /data/scratch/zhteoh/cached_dataset_${simulator.prior.mean_sources}_50GB
 
 generate:
     n_batches: 32
@@ -80,8 +84,11 @@ generate:
 
 training:
     name: "encoder"
-    version: "sdss-finetuned-0.006"
-    pretrained_weights: ${paths.pretrained_models}/sdss-pretrained-0.02.pt
+    version: "sdss-pretrained-50GB-${simulator.prior.mean_sources}-val-per-epoch"
+    enable_early_stopping: false
+    pretrained_weights: ${paths.pretrained_models}/sdss-pretrained-50GB-${simulator.prior.mean_sources}.pt
+    trainer:
+        check_val_every_n_epoch: 1
     weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
     seed: 42
     use_cached_simulator: true

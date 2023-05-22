@@ -1,0 +1,58 @@
+---
+defaults:
+    - ../../../conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+hydra:
+    hydra_logging:
+        handlers:
+            console:
+                class: logging.StreamHandler
+                stream: ext://sys.stderr
+        root:
+            handlers: [console]
+        disable_existing_loggers: false
+    job_logging:
+        handlers:
+            console:
+                class: logging.StreamHandler
+                stream: ext://sys.stderr
+        root:
+            handlers: [console]
+        disable_existing_loggers: false
+    sweeper:
+        params:
+            training.seed: 17508, 16433, 2857, 25956
+            +tune_bs: "{batch_size: 8, train_n_batches: 18432}, {batch_size: 16, train_n_batches: 9216}, {batch_size: 32, train_n_batches: 4608}, {batch_size: 64, train_n_batches: 2304}, {batch_size: 128, train_n_batches: 1152}, {batch_size: 256, train_n_batches: 576}"
+
+mode: train
+
+paths:
+    project: ${paths.root}/case_studies/optimize_encoder_727
+    output: ${paths.project}/output
+    data: ${paths.project}/data
+    pretrained_models: ${paths.data}/pretrained_models
+
+cached_simulator:
+    batch_size: ${tune_bs.batch_size}
+    # 13GB dataset (for finetuning) - 30 files
+    #  training set  : 24 files * 96 batches * 64 images/batch = 147,456 images (80%)
+    #  validation set: 3 files * 10 batches * 64 images/batch = 1,920 images (10%)
+    #  testing set   : 3 files * 10 batches * 64 images/batch = 1,920 images (10%)
+    train_n_batches: ${tune_bs.train_n_batches}
+    val_split_file_idxs: [24, 25, 26]
+    test_split_file_idxs: null # [27, 28, 29]
+    cached_data_path: /data/scratch/zhteoh/cached_dataset_0.006_50GB # finetuned on mean_sources=0.006
+
+training:
+    name: "encoder"
+    version: "sdss-batch-size-${tune_bs.batch_size}"
+    enable_early_stopping: true
+    patience: 5
+    pretrained_weights: ${paths.pretrained_models}/sdss-pretrained-50GB-0.2-val-per-epoch.pt # assume it's best
+    trainer:
+        check_val_every_n_epoch: 1
+        min_epochs: 5
+    weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
+    use_cached_simulator: true

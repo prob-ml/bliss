@@ -1,0 +1,254 @@
+Global seed set to 15942
+
+
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [2]
+
+  | Name    | Type           | Params
+-------------------------------------------
+0 | model   | DetectionModel | 30.8 M
+1 | metrics | BlissMetrics   | 0     
+-------------------------------------------
+30.8 M    Trainable params
+0         Non-trainable params
+30.8 M    Total params
+123.081   Total estimated model params size (MB)
+
+#0 : training.seed=15942 +tune_bs={batch_size:8,train_n_batches:18432}
+
+Epoch 0, global step 18432: 'val/loss' reached 0.06885 (best 0.06885), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-8/checkpoints/epoch=0-val_loss=0.069.ckpt' as top 1
+Epoch 1, global step 36864: 'val/loss' was not in top 1
+Epoch 2, global step 55296: 'val/loss' reached 0.05175 (best 0.05175), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-8/checkpoints/epoch=2-val_loss=0.052.ckpt' as top 1
+Epoch 3, global step 73728: 'val/loss' reached 0.04305 (best 0.04305), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-8/checkpoints/epoch=3-vEpoch 8, global step 165888: 'val/loss' was not in top 1
+Trainer was signaled to stop but the required `min_epochs=10` or `min_steps=None` has not been met. Training will continue...
+Epoch 9, global step 184320: 'val/loss' was not in top 1
+Global seed set to 15942
+
+
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [2]
+
+  | Name    | Type           | Params
+-------------------------------------------
+0 | model   | DetectionModel | 30.8 M
+1 | metrics | BlissMetrics   | 0     
+-------------------------------------------
+30.8 M    Trainable params
+0         Non-trainable params
+30.8 M    Total params
+123.081   Total estimated model params size (MB)
+
+#1 : training.seed=15942 +tune_bs={batch_size:16,train_n_batches:9216}
+
+Epoch 0, global step 9216: 'val/loss' reached 0.11567 (best 0.11567), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-16/checkpoints/epoch=0-val_loss=0.116.ckpt' as top 1
+Epoch 1, global step 18432: 'val/loss' reached 0.07639 (best 0.07639), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-16/checkpoints/epoch=1-val_loss=0.076.ckpt' as top 1
+Epoch 2, global step 27648: 'val/loss' was not in top 1
+Epoch 3, global step 36864: 'val/loss' reached 0.06644 (best 0.06644), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-16/checkpoints/epoch=3-val_loss=0.066.ckpt' as top 1
+Epoch 4, global step 46080: 'val/loss' reached 0.06305 (best 0.06305), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-16/checkpoints/epoch=4-val_loss=0.063.ckpt' as top 1
+Epoch 5, global step 55296: 'val/loss' was not in top 1
+Epoch 6, global step 64512: 'val/loss' was not in top 1
+Epoch 7, global step 73728: 'val/loss' was not in top 1
+Epoch 8, global step 82944: 'val/loss' was not in top 1
+Epoch 9, global step 92160: 'val/loss' was not in top 1
+Global seed set to 15942
+
+
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [2]
+
+  | Name    | Type           | Params
+-------------------------------------------
+0 | model   | DetectionModel | 30.8 M
+1 | metrics | BlissMetrics   | 0     
+-------------------------------------------
+30.8 M    Trainable params
+0         Non-trainable params
+30.8 M    Total params
+123.081   Total estimated model params size (MB)
+
+#2 : training.seed=15942 +tune_bs={batch_size:32,train_n_batches:4608}
+
+Epoch 0, global step 4608: 'val/loss' reached 0.06150 (best 0.06150), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-32/checkpoints/epoch=0-val_loss=0.062.ckpt' as top 1
+Epoch 1, global step 9216: 'val/loss' reached 0.05908 (best 0.05908), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-32/checkpoints/epoch=1-val_loss=0.059.ckpt' as top 1
+Epoch 2, global step 13824: 'val/loss' was not in top 1
+Epoch 3, global step 18432: 'val/loss' reached 0.05128 (best 0.05128), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-32/checkpoints/epoch=3-val_loss=0.051.ckpt' as top 1
+Epoch 4, global step 23040: 'val/loss' was not in top 1
+Epoch 5, global step 27648: 'val/loss' was not in top 1
+Epoch 6, global step 32256: 'val/loss' was not in top 1
+Epoch 7, global step 36864: 'val/loss' was not in top 1
+Epoch 8, global step 41472: 'val/loss' was not in top 1
+Trainer was signaled to stop but the required `min_epochs=10` or `min_steps=None` has not been met. Training will continue...
+Epoch 9, global step 46080: 'val/loss' was not in top 1
+Global seed set to 15942
+
+
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [2]
+
+  | Name    | Type           | Params
+-------------------------------------------
+0 | model   | DetectionModel | 30.8 M
+1 | metrics | BlissMetrics   | 0     
+-------------------------------------------
+30.8 M    Trainable params
+0         Non-trainable params
+30.8 M    Total params
+123.081   Total estimated model params size (MB)
+
+#3 : training.seed=15942 +tune_bs={batch_size:64,train_n_batches:2304}
+
+Epoch 0, global step 2304: 'val/loss' reached 0.06453 (best 0.06453), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-64/checkpoints/epoch=0-val_loss=0.065.ckpt' as top 1
+Epoch 1, global step 4608: 'val/loss' reached 0.05592 (best 0.05592), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-64/checkpoints/epoch=1-val_loss=0.056.ckpt' as top 1
+Epoch 2, global step 6912: 'val/loss' was not in top 1
+Epoch 3, global step 9216: 'val/loss' was not in top 1
+Epoch 4, global step 11520: 'val/loss' was not in top 1
+Epoch 5, global step 13824: 'val/loss' was not in top 1
+Epoch 6, global step 16128: 'val/loss' was not in top 1
+Trainer was signaled to stop but the required `min_epochs=10` or `min_steps=None` has not been met. Training will continue...
+Epoch 7, global step 18432: 'val/loss' was not in top 1
+Epoch 8, global step 20736: 'val/loss' was not in top 1
+Epoch 9, global step 23040: 'val/loss' was not in top 1
+Global seed set to 15942
+
+
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [2]
+
+  | Name    | Type           | Params
+-------------------------------------------
+0 | model   | DetectionModel | 30.8 M
+1 | metrics | BlissMetrics   | 0     
+-------------------------------------------
+30.8 M    Trainable params
+0         Non-trainable params
+30.8 M    Total params
+123.081   Total estimated model params size (MB)
+
+#4 : training.seed=15942 +tune_bs={batch_size:128,train_n_batches:1152}
+
+Epoch 0, global step 1152: 'val/loss' reached 0.05344 (best 0.05344), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-128/checkpoints/epoch=0-val_loss=0.053.ckpt' as top 1
+Epoch 1, global step 2304: 'val/loss' was not in top 1
+Epoch 2, global step 3456: 'val/loss' was not in top 1
+Epoch 3, global step 4608: 'val/loss' was not in top 1
+Epoch 4, global step 5760: 'val/loss' was not in top 1
+Epoch 5, global step 6912: 'val/loss' was not in top 1
+Trainer was signaled to stop but the required `min_epochs=10` or `min_steps=None` has not been met. Training will continue...
+Epoch 6, global step 8064: 'val/loss' was not in top 1
+Epoch 7, global step 9216: 'val/loss' was not in top 1
+Epoch 8, global step 10368: 'val/loss' was not in top 1
+Epoch 9, global step 11520: 'val/loss' was not in top 1
+Global seed set to 15942
+
+
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [2]
+
+  | Name    | Type           | Params
+-------------------------------------------
+0 | model   | DetectionModel | 30.8 M
+1 | metrics | BlissMetrics   | 0     
+-------------------------------------------
+30.8 M    Trainable params
+0         Non-trainable params
+30.8 M    Total params
+123.081   Total estimated model params size (MB)
+Global seed set to 17508
+
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [2]
+
+  | Name    | Type           | Params
+-------------------------------------------
+0 | model   | DetectionModel | 30.8 M
+1 | metrics | BlissMetrics   | 0     
+-------------------------------------------
+30.8 M    Trainable params
+0         Non-trainable params
+30.8 M    Total params
+123.081   Total estimated model params size (MB)
+
+#5 : training.seed=15942 +tune_bs={batch_size:256,train_n_batches:576}
+
+Epoch 0, global step 18432: 'val/loss' reached 0.07965 (best 0.07965), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-8/checkpoints/epoch=0-val_loss=0.080.ckpt' as top 1
+Epoch 1, global step 36864: 'val/loss' reached 0.04607 (best 0.04607), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-8/checkpoints/epoch=1-val_loss=0.046.ckpt' as top 1
+Epoch 2, global step 55296: 'val/loss' was not in top 1
+Epoch 3, global step 73728: 'val/loss' was not in top 1
+?
+Epoch 5, global step 110592: 'val/loss' was not in top 1
+Epoch 6, global step 129024: 'val/loss' was not in top 1
+Trainer was signaled to stop but the required `min_epochs=10` or `min_steps=None` has not been met. Training will continue...
+Epoch 7, global step 147456: 'val/loss' was not in top 1
+Epoch 8, global step 165888: 'val/loss' was not in top 1
+Epoch 9, global step 184320: 'val/loss' was not in top 1
+
+[2023-05-25 11:58:46,278][HYDRA] Launching 24 jobs locally
+[2023-05-25 11:58:46,278][HYDRA] 	#0 : training.seed=17508 +tune_bs={batch_size:8,train_n_batches:18432}
+Global seed set to 17508
+Reading cached files (training set)...
+done (took 122.05012941360474 seconds).
+Reading cached files (validation set)...
+done (took 13.336366891860962 seconds).
+Reading cached files (test set)...
+done (took 9.5367431640625e-07 seconds).
+
+                 from  n    params  module                                  arguments                     
+  0                -1  1      3328  yolov5.models.common.Conv               [2, 64, 5, 1]                 
+  1                -1  3     12672  yolov5.models.common.Conv               [64, 64, 1, 1]                
+  2                -1  1     73984  yolov5.models.common.Conv               [64, 128, 3, 2]               
+  3                -1  1    147712  yolov5.models.common.Conv               [128, 128, 3, 1]              
+  4                -1  1    295424  yolov5.models.common.Conv               [128, 256, 3, 2]              
+  5                -1  6   1118208  yolov5.models.common.C3                 [256, 256, 6]                 
+  6                -1  1   1180672  yolov5.models.common.Conv               [256, 512, 3, 2]              
+  7                -1  9   6433792  yolov5.models.common.C3                 [512, 512, 9]                 
+  8                -1  1   4720640  yolov5.models.common.Conv               [512, 1024, 3, 2]             
+  9                -1  3   9971712  yolov5.models.common.C3                 [1024, 1024, 3]               
+ 10                -1  1   2624512  yolov5.models.common.SPPF               [1024, 1024, 5]               
+ 11                -1  1    525312  yolov5.models.common.Conv               [1024, 512, 1, 1]             
+ 12                -1  1         0  torch.nn.modules.upsampling.Upsample    [None, 2, 'nearest']          
+ 13           [-1, 6]  1         0  yolov5.models.common.Concat             [1]                           
+ 14                -1  3   2757632  yolov5.models.common.C3                 [1024, 512, 3, False]         
+ 15                -1  1    131584  yolov5.models.common.Conv               [512, 256, 1, 1]              
+ 16                -1  1         0  torch.nn.modules.upsampling.Upsample    [None, 2, 'nearest']          
+ 17        [-1, 4, 5]  1         0  yolov5.models.common.Concat             [1]                           
+ 18                -1  3    756224  yolov5.models.common.C3                 [768, 256, 3, False]          
+ 19              [17]  1     16918  yolov5.models.yolo.Detect               [17, [[4, 4]], [768]]         
+Model summary: 275 layers, 30770326 parameters, 30770326 gradients, 363.2 GFLOPs
+
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [2]
+
+  | Name    | Type           | Params
+-------------------------------------------
+0 | model   | DetectionModel | 30.8 M
+1 | metrics | BlissMetrics   | 0     
+-------------------------------------------
+30.8 M    Trainable params
+0         Non-trainable params
+30.8 M    Total params
+123.081   Total estimated model params size (MB)
+Epoch 0, global step 18432: 'val/loss' reached 0.09823 (best 0.09823), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-8/checkpoints/epoch=0-val_loss=0.098.ckpt' as top 1
+Epoch 1, global step 36864: 'val/loss' reached 0.04535 (best 0.04535), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-batch-size-8/checkpoints/epoch=1-val_loss=0.045.ckpt' as top 1
