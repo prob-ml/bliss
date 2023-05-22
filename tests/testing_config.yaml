@@ -8,7 +8,7 @@ simulator:
     valid_n_batches: 6
     n_batches: 2
     sdss_fields:
-        dir: /data/sdss
+        dir: ${paths.sdss}
         bands: [2]
         field_list:  # list of dictionaries, each with run, camcol, and list of fields
           - run: 94
