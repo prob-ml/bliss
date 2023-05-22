@@ -1,0 +1,44 @@
+Global seed set to 15942
+Reading cached files (training set):   0%|          | 0/129 [00:00<?, ?it/s]Reading cached files (training set):   1%|          | 1/129 [00:02<05:40,  2.66s/it]Reading cached files (training set):   2%|▏         | 2/129 [00:05<05:31,  2.61s/it]Reading cached files (training set):   2%|▏         | 3/129 [00:07<05:17,  2.52s/it]Reading cached files (training set):   3%|▎         | 4/129 [00:10<05:10,  2.48s/it]Reading cached files (training set):   4%|▍         | 5/129 [00:12<05:11,  2.51s/it]Reading cached files (training set):   5%|▍         | 6/129 [00:15<05:14,  2.56s/it]Reading cached files (training set):   5%|▌         | 7/129 [00:18<05:28,  2.70s/it]Reading cached files (training set):   6%|▌         | 8/129 [00:21<05:29,  2.72s/it]Reading cached files (training set):   7%|▋         | 9/129 [00:23<05:31,  2.76s/it]Reading cached files (training set):   8%|▊         | 10/129 [00:26<05:37,  2.84s/it]Reading cached files (training set):   9%|▊         | 11/129 [00:29<05:09,  2.62s/it]Reading cached files (training set):   9%|▉         | 12/129 [00:32<05:25,  2.78s/it]Reading cached files (training set):  10%|█         | 13/129 [00:34<04:59,  2.58s/it]Reading cached files (training set):  11%|█         | 14/129 [00:37<05:14,  2.74s/it]Reading cached files (training set):  12%|█▏        | 15/129 [00:39<04:50,  2.55s/it]Reading cached files (training set):  12%|█▏        | 16/129 [00:42<05:11,  2.76s/it]Reading cached files (training set):  13%|█▎        | 17/129 [00:44<04:45,  2.55s/it]Reading cached files (training set):  14%|█▍        | 18/129 [00:46<04:27,  2.41s/it]Reading cached files (training set):  15%|█▍        | 19/129 [00:50<05:00,  2.73s/it]Reading cached files (training set):  16%|█▌        | 20/129 [00:52<04:38,  2.55s/it]Reading cached files (training set):  16%|█▋        | 21/129 [00:54<04:22,  2.43s/it]Reading cached files (training set):  17%|█▋        | 22/129 [00:58<05:00,  2.81s/it]Reading cached files (training set):  18%|█▊        | 23/129 [01:00<04:38,  2.62s/it]Reading cached files (training set):  19%|█▊        | 24/129 [01:02<04:34,  2.61s/it]
+Reading cached files (validation set):   0%|          | 0/3 [00:00<?, ?it/s]Reading cached files (validation set):  33%|███▎      | 1/3 [00:04<00:09,  4.50s/it]Reading cached files (validation set):  67%|██████▋   | 2/3 [00:06<00:03,  3.14s/it]Reading cached files (validation set): 100%|██████████| 3/3 [00:08<00:00,  2.69s/it]Reading cached files (validation set): 100%|██████████| 3/3 [00:08<00:00,  2.95s/it]
+Reading cached files (test set): 0it [00:00, ?it/s]Reading cached files (test set): 0it [00:00, ?it/s]
+
+                 from  n    params  module                                  arguments                     
+  0                -1  1      3328  yolov5.models.common.Conv               [2, 64, 5, 1]                 
+  1                -1  3     12672  yolov5.models.common.Conv               [64, 64, 1, 1]                
+  2                -1  1     73984  yolov5.models.common.Conv               [64, 128, 3, 2]               
+  3                -1  1    147712  yolov5.models.common.Conv               [128, 128, 3, 1]              
+  4                -1  1    295424  yolov5.models.common.Conv               [128, 256, 3, 2]              
+  5                -1  6   1118208  yolov5.models.common.C3                 [256, 256, 6]                 
+  6                -1  1   1180672  yolov5.models.common.Conv               [256, 512, 3, 2]              
+  7                -1  9   6433792  yolov5.models.common.C3                 [512, 512, 9]                 
+  8                -1  1   4720640  yolov5.models.common.Conv               [512, 1024, 3, 2]             
+  9                -1  3   9971712  yolov5.models.common.C3                 [1024, 1024, 3]               
+ 10                -1  1   2624512  yolov5.models.common.SPPF               [1024, 1024, 5]               
+ 11                -1  1    525312  yolov5.models.common.Conv               [1024, 512, 1, 1]             
+ 12                -1  1         0  torch.nn.modules.upsampling.Upsample    [None, 2, 'nearest']          
+ 13           [-1, 6]  1         0  yolov5.models.common.Concat             [1]                           
+ 14                -1  3   2757632  yolov5.models.common.C3                 [1024, 512, 3, False]         
+ 15                -1  1    131584  yolov5.models.common.Conv               [512, 256, 1, 1]              
+ 16                -1  1         0  torch.nn.modules.upsampling.Upsample    [None, 2, 'nearest']          
+ 17        [-1, 4, 5]  1         0  yolov5.models.common.Concat             [1]                           
+ 18                -1  3    756224  yolov5.models.common.C3                 [768, 256, 3, False]          
+ 19              [17]  1     16918  yolov5.models.yolo.Detect               [17, [[4, 4]], [768]]         
+Model summary: 275 layers, 30770326 parameters, 30770326 gradients, 363.2 GFLOPs
+
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+IPU available: False, using: 0 IPUs
+HPU available: False, using: 0 HPUs
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [3]
+
+  | Name    | Type           | Params
+-------------------------------------------
+0 | model   | DetectionModel | 30.8 M
+1 | metrics | BlissMetrics   | 0     
+-------------------------------------------
+30.8 M    Trainable params
+0         Non-trainable params
+30.8 M    Total params
+123.081   Total estimated model params size (MB)
+Epoch 0, global step 2304: 'val/loss' reached 0.05901 (best 0.05901), saving model to '/home/zhteoh/727-optimize-encoder-new-data-gen/case_studies/optimize_encoder_727/output/encoder/sdss-pretrain-0.02/checkpoints/epoch=0-val_loss=0.059.ckpt' as top 1

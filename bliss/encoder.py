@@ -10,7 +10,7 @@ from omegaconf.dictconfig import DictConfig
 from torch import Tensor
 from torch.distributions import Distribution
 from torch.optim import Adam
-from torch.optim.lr_scheduler import MultiStepLR, OneCycleLR
+from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
 from bliss.catalog import TileCatalog
@@ -61,7 +61,6 @@ class Encoder(pl.LightningModule):
         self.n_bands = len(self.bands)
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
-        # self.scheduler_params = scheduler_params if scheduler_params else {"max_lr": 1e-3}
 
         self.tile_slen = tile_slen
 
@@ -160,7 +159,6 @@ class Encoder(pl.LightningModule):
         """Configure optimizers for training (pytorch lightning)."""
         optimizer = Adam(self.parameters(), **self.optimizer_params)
         scheduler = MultiStepLR(optimizer, **self.scheduler_params)
-        # scheduler = OneCycleLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
 
     def _get_loss(self, pred: Dict[str, Distribution], true_tile_cat: TileCatalog):

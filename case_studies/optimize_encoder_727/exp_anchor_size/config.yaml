@@ -1,0 +1,51 @@
+---
+defaults:
+    - ../../conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+hydra:
+    sweeper:
+        params:
+            training.seed: 15942, 17508, 16433, 2857, 25956
+
+paths:
+    project: ${paths.root}/case_studies/optimize_encoder_727
+    output: ${paths.project}/output
+    pretrained_models: ${paths.data}/pretrained_models
+
+simulator:
+    prior:
+        mean_sources: 0.006
+    background:
+        _target_: bliss.simulator.background.SimulatedSDSSBackground
+        sdss_dir: ${paths.sdss}
+        run: 94
+        camcol: 1
+        field: 12
+        bands: [2]
+
+cached_simulator:
+    batch_size: 64
+    # 59GB dataset - 140 files
+    #  training set  : 112 files * 96 batches * 64 images/batch = 688,128 images (80%)
+    #  validation set: 14 files * 10 batches * 64 images/batch = 8,960 images (10%)
+    #  testing set   : 14 files * 10 batches * 64 images/batch = 8,960 images (10%)
+    train_n_batches: 10752
+    val_split_file_idxs: [113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126]
+    test_split_file_idxs: null # [127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+    cached_data_path: /data/scratch/zhteoh/cached_dataset_0.02_50GB
+
+generate:
+    n_batches: 32
+    batch_size: 128
+    max_images_per_file: 1024
+    cached_data_path: /data/scratch/zhteoh/cached_dataset_large_0.06
+
+training:
+    name: "encoder"
+    version: "sdss-pretrained-50GB-0.02"
+    pretrained_weights: ${paths.pretrained_models}/sdss-pretrained-0.02.pt
+    weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
+    seed: 42
+    use_cached_simulator: true

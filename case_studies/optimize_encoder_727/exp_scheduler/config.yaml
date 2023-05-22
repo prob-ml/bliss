@@ -1,0 +1,41 @@
+---
+defaults:
+    - ../../../conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stderr
+
+hydra:
+    sweeper:
+        params:
+            training.seed: 15942, 17508, 16433, 2857, 25956
+            +tune_scheduler_lr:
+
+mode: train
+
+paths:
+    project: ${paths.root}/case_studies/optimize_encoder_727
+    output: ${paths.project}/output
+    pretrained_models: ${paths.data}/pretrained_models
+
+cached_simulator:
+    batch_size: 64
+    # 13GB dataset (for finetuning) - 30 files
+    #  training set  : 24 files * 96 batches * 64 images/batch = 147,456 images (80%)
+    #  validation set: 3 files * 10 batches * 64 images/batch = 1,920 images (10%)
+    #  testing set   : 3 files * 10 batches * 64 images/batch = 1,920 images (10%)
+    train_n_batches: 2304
+    val_split_file_idxs: [24, 25, 26]
+    test_split_file_idxs: null # [27, 28, 29]
+    cached_data_path: /data/scratch/zhteoh/cached_dataset_0.006_50GB # finetuned on mean_sources=0.006
+
+training:
+    name: "encoder"
+    version: "sdss-pretrain-${tune_pretrain_mean_sources}"
+    enable_early_stopping: true
+    patience: 5
+    pretrained_weights: ${paths.pretrained_models}/sdss-pretrained-50GB-${tune_pretrain_mean_sources}-val-per-epoch.pt # assume it's best
+    trainer:
+        check_val_every_n_epoch: 1
+        min_epochs: 10
+    weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
+    use_cached_simulator: true
