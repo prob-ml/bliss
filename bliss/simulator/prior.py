@@ -78,8 +78,7 @@ class ImagePrior(pl.LightningModule):
         self.batch_size = batch_size
         self.sdss = sdss_fields["dir"]
 
-        self.rcf_stars_rest = {}
-        self.rcf_gals_rest = {}
+        self.rcf_stars_rest, self.rcf_gals_rest = self._sample_ratios(sdss_fields["field_list"])
 
         self.min_sources = min_sources
         self.max_sources = max_sources
@@ -99,41 +98,6 @@ class ImagePrior(pl.LightningModule):
         self.galaxy_a_loc = galaxy_a_loc
         self.galaxy_a_scale = galaxy_a_scale
         self.galaxy_a_bd_ratio = galaxy_a_bd_ratio
-
-        # load all star, galaxy fluxes relative to r-band required for sampling
-        for field_params in sdss_fields["field_list"]:
-            run = field_params["run"]
-            camcol = field_params["camcol"]
-            fields = field_params["fields"]
-            for field in fields:
-                sdss_path = Path(self.sdss)
-                camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
-                po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
-                po_fits = fits.getdata(po_path)
-
-                fluxes = column_to_tensor(po_fits, "psfflux")
-                objc_type = column_to_tensor(po_fits, "objc_type").numpy()
-                thing_id = column_to_tensor(po_fits, "thing_id").numpy()
-
-                star_fluxes_rest = []
-                gal_fluxes_rest = []
-
-                for obj, _ in enumerate(objc_type):
-                    if objc_type[obj] == 6 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        ratios = (  # noqa: WPS220
-                            fluxes[obj] / fluxes[obj][2]  # flux relative to r-band
-                        )
-                        star_fluxes_rest.append(ratios)  # noqa: WPS220
-                    elif objc_type[obj] == 3 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        ratios = (  # noqa: WPS220
-                            fluxes[obj] / fluxes[obj][2]  # flux relative to r-band
-                        )
-                        gal_fluxes_rest.append(ratios)  # noqa: WPS220
-
-                if star_fluxes_rest:
-                    self.rcf_stars_rest[(run, camcol, field)] = star_fluxes_rest
-                if gal_fluxes_rest:
-                    self.rcf_gals_rest[(run, camcol, field)] = gal_fluxes_rest
 
     def sample_prior(self, batch_rcfs) -> TileCatalog:
         """Samples latent variables from the prior of an astronomical image.
@@ -239,6 +203,45 @@ class ImagePrior(pl.LightningModule):
                 total_flux[b, h, w, s, bnd] = flux_sample[bnd] * flux_base[b, h, w, s]
 
         return total_flux
+
+    def _sample_ratios(self, sdss_fields):
+        rcf_stars_rest = {}
+        rcf_gals_rest = {}
+        # load all star, galaxy fluxes relative to r-band required for sampling
+        for field_params in sdss_fields:
+            run = field_params["run"]
+            camcol = field_params["camcol"]
+            fields = field_params["fields"]
+            for field in fields:
+                sdss_path = Path(self.sdss)
+                camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
+                po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+                po_fits = fits.getdata(po_path)
+
+                fluxes = column_to_tensor(po_fits, "psfflux")
+                objc_type = column_to_tensor(po_fits, "objc_type").numpy()
+                thing_id = column_to_tensor(po_fits, "thing_id").numpy()
+
+                star_fluxes_rest = []
+                gal_fluxes_rest = []
+
+                for obj, _ in enumerate(objc_type):
+                    if objc_type[obj] == 6 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
+                        ratios = (  # noqa: WPS220
+                            fluxes[obj] / fluxes[obj][2]  # flux relative to r-band
+                        )
+                        star_fluxes_rest.append(ratios)  # noqa: WPS220
+                    elif objc_type[obj] == 3 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
+                        ratios = (  # noqa: WPS220
+                            fluxes[obj] / fluxes[obj][2]  # flux relative to r-band
+                        )
+                        gal_fluxes_rest.append(ratios)  # noqa: WPS220
+
+                if star_fluxes_rest:
+                    rcf_stars_rest[(run, camcol, field)] = star_fluxes_rest
+                if gal_fluxes_rest:
+                    rcf_gals_rest[(run, camcol, field)] = gal_fluxes_rest
+        return rcf_stars_rest, rcf_gals_rest
 
     @staticmethod
     def _draw_truncated_pareto(alpha, min_x, max_x, n_samples) -> Tensor:
