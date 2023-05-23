@@ -1,16 +1,18 @@
+import numpy as np
 import torch
 from hydra.utils import instantiate
 
 from bliss.predict import predict_sdss
 
 
-class TestSdssReconstrust:
-    def test_sdss_reconstrst(self, cfg):
+class TestSdssReconstruct:
+    def test_sdss_reconstruct(self, cfg):
         est_full, true_img, true_bg = predict_sdss(cfg)
         est_tile = est_full.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
 
         decoder_obj = instantiate(cfg.simulator.decoder)
-        recon_img = decoder_obj.render_images(est_tile.to("cpu"))[0, 0]
+        rcfs = np.array([[94, 1, 12]])
+        recon_img = decoder_obj.render_images(est_tile.to("cpu"), rcfs)[0, 0]
 
         ptc = cfg.encoder.tile_slen * cfg.encoder.tiles_to_crop
         true_img_crop = true_img[0][ptc:-ptc, ptc:-ptc]

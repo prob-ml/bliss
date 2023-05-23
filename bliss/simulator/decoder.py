@@ -174,14 +174,9 @@ class ImageDecoder(nn.Module):
 
         full_cat = tile_cat.to_full_params()
 
-        # if rcf is specified, use the PSF from that row/camcol/field
-        if rcf is not None:
-            psfs = [self.psf_galsim[tuple(rcf[b])] for b in range(batch_size)]  # type: ignore
-        else:  # otherwise pick a random psf
-            psfs = [
-                list(self.psf_galsim.values())[i]
-                for i in np.random.randint(len(self.psf_galsim), size=(batch_size,))
-            ]
+        # use the PSF from specified row/camcol/field
+        psfs = [self.psf_galsim[tuple(rcf[b])] for b in range(batch_size)]  # type: ignore
+
         # Nested looping + conditionals are necessary for the drawing of each light
         # source. Ignored relevant style checks for that reason.
         for b in range(batch_size):
