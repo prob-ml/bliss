@@ -1,8 +1,10 @@
 import numpy as np
 import torch
 from hydra.utils import instantiate
+from omegaconf.dictconfig import DictConfig
 
 from bliss.predict import predict
+from bliss.simulator.background import SimulatedSDSSBackground
 
 
 class TestSimulate:
@@ -46,14 +48,21 @@ class TestSimulate:
     def test_multi_background(self, cfg):
         """Test loading backgrounds and PSFs from multiple fields works."""
         sdss_fields = {
+            "dir": cfg.simulator.sdss_fields.dir,
+            "bands": cfg.simulator.sdss_fields.bands,
             "field_list": [
                 {"run": 94, "camcol": 1, "fields": [12]},
                 {"run": 3900, "camcol": 6, "fields": [269]},
-            ]
+            ],
         }
-        decoder = {"sdss_fields": sdss_fields}  # override doesn't get passed recursively
-        simulator = instantiate(cfg.simulator, sdss_fields=sdss_fields, decoder=decoder)
+        decoder = {"sdss_fields": sdss_fields}  # override isn't passed recursively
 
+        simulator = instantiate(cfg.simulator, sdss_fields=sdss_fields, decoder=decoder)
         assert np.all(simulator.rcf_list == np.array([[94, 1, 12], [3900, 6, 269]]))
         assert (94, 1, 12) in simulator.image_decoder.psf_galsim.keys()
         assert (3900, 6, 269) in simulator.image_decoder.psf_galsim.keys()
+
+        # manually construct background since testing_config uses ConstantBackground
+        bg_cfg = DictConfig(sdss_fields)
+        background = SimulatedSDSSBackground(bg_cfg)
+        assert background.background.size()[0] == 2
