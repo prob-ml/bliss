@@ -177,13 +177,8 @@ class ImagePrior(pl.LightningModule):
         total_flux = self.multiflux(star_ratios, r_flux)
 
         # select specified bands
-        select_flux = torch.zeros(
-            self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, self.n_bands
-        )
-        for i, bnd in enumerate(self.bands):
-            select_flux[:, :, :, :, i] = total_flux[:, :, :, :, bnd]
-
-        return select_flux
+        bands = np.array(self.bands)
+        return total_flux[..., bands]
 
     def multiflux(self, rcf_ratios, flux_base) -> Tensor:
         """Generate flux values for remaining bands based on draw."""
@@ -262,7 +257,7 @@ class ImagePrior(pl.LightningModule):
 
         # select specified ban
         bands = np.array(self.bands)
-        select_flux = total_flux[:, :, :, :, bands]
+        select_flux = total_flux[..., bands]
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
         beta_radians = Uniform(0, 2 * np.pi).sample(latent_dims)
