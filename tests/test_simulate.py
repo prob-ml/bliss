@@ -66,3 +66,11 @@ class TestSimulate:
         bg_cfg = DictConfig(sdss_fields)
         background = SimulatedSDSSBackground(bg_cfg)
         assert background.background.size()[0] == 2
+
+    def test_multi_band(self, cfg):
+        """Test simulating data with multiple bands."""
+        cfg.simulator.sdss_fields.bands = [2, 3, 4]  # override default with multiple bands
+        simulator = instantiate(cfg.simulator)
+        batch = simulator.get_batch()
+        assert batch["images"].size(1) == 3
+        assert batch["background"].size(1) == 3
