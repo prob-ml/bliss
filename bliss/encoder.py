@@ -36,7 +36,7 @@ class Encoder(pl.LightningModule):
     def __init__(
         self,
         architecture: DictConfig,
-        n_bands: int,
+        bands: list,
         tile_slen: int,
         tiles_to_crop: int,
         slack: float = 1.0,
@@ -47,7 +47,7 @@ class Encoder(pl.LightningModule):
 
         Args:
             architecture: yaml to specifying the encoder network architecture
-            n_bands: number of bands
+            bands: specified band-pass filters
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
             slack: Slack to use when matching locations for validation metrics.
@@ -57,7 +57,8 @@ class Encoder(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.n_bands = n_bands
+        self.bands = bands
+        self.n_bands = len(self.bands)
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
 
@@ -93,13 +94,6 @@ class Encoder(pl.LightningModule):
         }
 
     def encode_batch(self, batch):
-        img_dims = list(batch["images"].size())
-        images_with_background = torch.zeros(
-            img_dims[0],
-            img_dims[1] * 2,
-            img_dims[2],
-            img_dims[3],
-        )
         images_with_background = torch.cat((batch["images"], batch["background"]), dim=1)
 
         # setting this to true every time is a hack to make yolo DetectionModel
