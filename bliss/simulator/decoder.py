@@ -164,10 +164,9 @@ class ImageDecoder(nn.Module):
         galaxy = galsim.Add(components)
         return galsim.Convolution(galaxy, psf[bnd])
 
-    def render_images(self, tile_cat: TileCatalog, rcf=None):
+    def render_images(self, tile_cat: TileCatalog, rcf):
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
-        if rcf is not None:
-            assert rcf.shape[0] == batch_size
+        assert rcf.shape[0] == batch_size
 
         slen_h = tile_cat.tile_slen * n_tiles_h
         slen_w = tile_cat.tile_slen * n_tiles_w

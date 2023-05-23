@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from hydra.utils import instantiate
 
@@ -12,7 +13,8 @@ class TestSimulate:
 
         for i in range(4):
             sim_tile = torch.load(cfg.paths.data + "/test_image/sim_tile" + str(i) + ".pt")
-            image, background = sim_dataset.simulate_image(sim_tile)
+            _, rcf_indices = sim_dataset.get_random_rcf(sim_tile.n_sources.size(0))  # noqa: WPS437
+            image, background = sim_dataset.simulate_image(sim_tile, rcf_indices)
 
             # move data to the device the encoder is on
             sim_tile = sim_tile.to(cfg.predict.device)
@@ -40,3 +42,18 @@ class TestSimulate:
             est_fluxes = est_star_fluxes[0, :, :, 0, 0] + est_galaxy_fluxes[0, :, :, 0]
 
             assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 0.1
+
+    def test_multi_background(self, cfg):
+        """Test loading backgrounds and PSFs from multiple fields works."""
+        sdss_fields = {
+            "field_list": [
+                {"run": 94, "camcol": 1, "fields": [12]},
+                {"run": 3900, "camcol": 6, "fields": [269]},
+            ]
+        }
+        decoder = {"sdss_fields": sdss_fields}  # override doesn't get passed recursively
+        simulator = instantiate(cfg.simulator, sdss_fields=sdss_fields, decoder=decoder)
+
+        assert np.all(simulator.rcf_list == np.array([[94, 1, 12], [3900, 6, 269]]))
+        assert (94, 1, 12) in simulator.image_decoder.psf_galsim.keys()
+        assert (3900, 6, 269) in simulator.image_decoder.psf_galsim.keys()

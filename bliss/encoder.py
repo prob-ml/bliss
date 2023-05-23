@@ -69,7 +69,7 @@ class Encoder(pl.LightningModule):
         # a hack to get the right number of outputs from yolo
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
-        self.model = DetectionModel(cfg=arch_dict, ch=2)
+        self.model = DetectionModel(cfg=arch_dict, ch=2 * self.n_bands)
         self.tiles_to_crop = tiles_to_crop
 
         # metrics

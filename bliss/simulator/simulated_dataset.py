@@ -59,7 +59,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             rcf_list.extend([(run, camcol, field) for field in rcf_params["fields"]])
         return np.array(rcf_list)
 
-    def _get_random_rcf(self, num_samples=1):
+    def get_random_rcf(self, num_samples=1):
         """Get random run, camcol, field combination from loaded params.
 
         Args:
@@ -79,24 +79,24 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         images += images_mean
         return images
 
-    def simulate_image(self, tile_catalog: TileCatalog, rcf_indices=None) -> Tuple[Tensor, Tensor]:
+    def simulate_image(self, tile_catalog: TileCatalog, rcf_indices) -> Tuple[Tensor, Tensor]:
         """Simulate a batch of images.
 
         Args:
             tile_catalog (TileCatalog): The TileCatalog to render.
-            rcf_indices: Indices of rcfs in self.rcf_list. Defaults to None.
+            rcf_indices: Indices of row/camcol/field in self.rcf_list to sample from.
 
         Returns:
             Tuple[Tensor, Tensor]: tuple of images and backgrounds
         """
-        rcf = self.rcf_list[rcf_indices] if rcf_indices is not None else None
+        rcf = self.rcf_list[rcf_indices]
         images = self.image_decoder.render_images(tile_catalog, rcf)
         background = self.background.sample(images.shape, rcf_indices=rcf_indices)  # type: ignore
         images += background
         images = self._apply_noise(images)
         return images, background
 
-    def get_batch(self, independent=False) -> Dict:
+    def get_batch(self) -> Dict:
         """Get a batch of simulated images.
 
         The images are simulated by first generating a tile catalog from the prior, followed
@@ -104,19 +104,13 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         the same row, camcol, and field combination is used for the background, PSF, and flux ratios
         of a single simulated image.
 
-        Args:
-            independent (bool, optional): Use different RCF combinations for background, psf, and
-                flux ratios for each image. Defaults to False.
-
         Returns:
             A dictionary of the simulated TileCatalog, and (batch_size, bands, height, width)
             tensors for images and background.
         """
-        rcfs, rcf_indices = (
-            self._get_random_rcf(self.image_prior.batch_size) if not independent else None
-        )
+        rcfs, rcf_indices = self.get_random_rcf(self.image_prior.batch_size)
         with torch.no_grad():
-            tile_catalog = self.image_prior.sample_prior(rcfs)  # TODO: add rcf
+            tile_catalog = self.image_prior.sample_prior(rcfs)
             images, background = self.simulate_image(tile_catalog, rcf_indices)
             return {
                 "tile_catalog": tile_catalog.to_dict(),
