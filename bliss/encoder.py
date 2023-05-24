@@ -78,13 +78,15 @@ class Encoder(pl.LightningModule):
 
     @property
     def dist_param_groups(self):
-        return {
+        # create a unique parameter for each per-band flux
+        star_fluxes = [f"star_log_flux {bnd}" for bnd in self.bands]
+        gal_fluxes = [f"galsim_flux {bnd}" for bnd in self.bands]
+
+        d = {
             "on_prob": UnconstrainedBernoulli(),
             "loc": UnconstrainedDiagonalBivariateNormal(),
-            "star_log_flux": UnconstrainedNormal(low_clamp=-6, high_clamp=3),
             "galaxy_prob": UnconstrainedBernoulli(),
             # galsim parameters
-            "galsim_flux": UnconstrainedLogNormal(),
             "galsim_disk_frac": UnconstrainedLogitNormal(),
             "galsim_beta_radians": UnconstrainedLogitNormal(high=2 * torch.pi),
             "galsim_disk_q": UnconstrainedLogitNormal(),
@@ -92,8 +94,14 @@ class Encoder(pl.LightningModule):
             "galsim_bulge_q": UnconstrainedLogitNormal(),
             "galsim_a_b": UnconstrainedLogNormal(),
         }
+        for flux in star_fluxes:
+            d[flux] = UnconstrainedNormal(low_clamp=-6, high_clamp=3)
+        for flux in gal_fluxes:
+            d[flux] = UnconstrainedLogNormal()
+        return d
 
     def encode_batch(self, batch):
+        # cat images and background together, irrespective of matching on each band
         images_with_background = torch.cat((batch["images"], batch["background"]), dim=1)
 
         # setting this to true every time is a hack to make yolo DetectionModel
@@ -128,12 +136,24 @@ class Encoder(pl.LightningModule):
         # the mean would be better at minimizing squared error...should we return that instead?
         tile_is_on_array = pred["on_prob"].mode
         # this is the mode of star_log_flux but not the mean of the star_flux distribution
-        star_fluxes = pred["star_log_flux"].mode.exp()  # type: ignore
-        star_fluxes *= tile_is_on_array
+        est_catalog_dict = {}
+
+        # populate est_catalog_dict with per-band (log) star fluxes
+        # NOTE: insert code here
+        star_log_fluxes = torch.cat([pred[f"star_log_flux {bnd}"] for bnd in self.bands], 4)
+        star_fluxes = star_log_fluxes.exp()
         galaxy_bools = pred["galaxy_prob"].mode * pred["on_prob"].mode  # type: ignore
         star_bools = (1 - pred["galaxy_prob"].mode) * pred["on_prob"].mode  # type: ignore
 
-        galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
+        galsimflux_names = [f"flux {bnd}" for bnd in self.bands]
+        galsim_names = galsimflux_names + [
+            "disk_frac",
+            "beta_radians",
+            "disk_q",
+            "a_d",
+            "bulge_q",
+            "a_b",
+        ]
         galsim_dists = [pred[f"galsim_{name}"] for name in galsim_names]
         # for params with transformed distribution mode and median aren't implemented.
         # instead, we compute median using inverse cdf 0.5
@@ -144,8 +164,8 @@ class Encoder(pl.LightningModule):
         # light sources per tile, but we predict only one source per tile
         est_catalog_dict = {
             "locs": rearrange(pred["loc"].mode, "b ht wt d -> b ht wt 1 d"),
-            "star_log_fluxes": rearrange(pred["star_log_flux"].mode, "b ht wt -> b ht wt 1 1"),
-            "star_fluxes": rearrange(star_fluxes, "b ht wt -> b ht wt 1 1"),
+            "star_log_fluxes": star_log_fluxes,
+            "star_fluxes": star_fluxes,
             "n_sources": tile_is_on_array,
             "galaxy_bools": rearrange(galaxy_bools, "b ht wt -> b ht wt 1 1"),
             "star_bools": rearrange(star_bools, "b ht wt -> b ht wt 1 1"),
@@ -187,16 +207,22 @@ class Encoder(pl.LightningModule):
         loss += binary_loss
         loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
 
-        # star flux loss
+        # star flux losses
         true_star_bools = rearrange(true_tile_cat["star_bools"], "b ht wt 1 1 -> b ht wt")
-        star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
-        star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
-        star_flux_loss *= true_star_bools
-        loss += star_flux_loss
-        loss_with_components["star_flux_loss"] = star_flux_loss.sum() / true_star_bools.sum()
+        star_log_fluxes = rearrange(
+            true_tile_cat["star_log_fluxes"], "b ht wt 1 bnd -> b ht wt bnd"
+        )
+        for i, bnd in enumerate(self.bands):
+            star_flux_loss = -pred[f"star_log_flux {bnd}"].log_prob(star_log_fluxes[:, :, :, i])
+            star_flux_loss *= true_star_bools
+            loss += star_flux_loss
+            loss_with_components[f"star_flux_loss {bnd}"] = (
+                star_flux_loss.sum() / true_star_bools.sum()
+            )
 
         # galaxy properties loss
-        galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
+        fluxes = [f"flux {bnd}" for bnd in self.bands]
+        galsim_names = fluxes + ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
         galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
         for i, param_name in enumerate(galsim_names):
             galsim_pn = f"galsim_{param_name}"
