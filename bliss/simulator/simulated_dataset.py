@@ -2,8 +2,10 @@ import os
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
+from omegaconf.listconfig import ListConfig
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from tqdm import tqdm
@@ -27,6 +29,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         decoder: ImageDecoder,
         background: Union[ConstantBackground, SimulatedSDSSBackground],
         n_batches: int,
+        sdss_fields: ListConfig,
         num_workers: int = 0,
         fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
@@ -34,8 +37,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         super().__init__()
 
         self.n_batches = n_batches
-
         self.image_prior = prior
+        self.batch_size = self.image_prior.batch_size
         self.image_decoder = decoder
         self.background = background
         self.image_prior.requires_grad_(False)
@@ -43,6 +46,30 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
         self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
+
+        # list of (run, camcol, field) tuples from config
+        self.rcf_list = self._get_rcf_list(sdss_fields)
+
+    def _get_rcf_list(self, sdss_fields):
+        """Converts dict of row, camcol, field params into list of tuples."""
+        rcf_list = []  # list of (run, camcol, field) pairs
+        for rcf_params in sdss_fields["field_list"]:
+            run = rcf_params["run"]
+            camcol = rcf_params["camcol"]
+            rcf_list.extend([(run, camcol, field) for field in rcf_params["fields"]])
+        return np.array(rcf_list)
+
+    def get_random_rcf(self, num_samples=1):
+        """Get random run, camcol, field combination from loaded params.
+
+        Args:
+            num_samples (int, optional): number of random samples to get. Defaults to 1.
+
+        Returns:
+            Array of (row, camcol, field) pairs and index of each pair in self.rcf_list.
+        """
+        n = np.random.randint(len(self.rcf_list), size=(num_samples,), dtype=int)
+        return self.rcf_list[n], n
 
     @staticmethod
     def _apply_noise(images_mean):
@@ -52,17 +79,39 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         images += images_mean
         return images
 
-    def simulate_image(self, tile_catalog: TileCatalog) -> Tuple[Tensor, Tensor]:
-        images = self.image_decoder.render_images(tile_catalog)
-        background = self.background.sample(images.shape)
+    def simulate_image(self, tile_catalog: TileCatalog, rcf_indices) -> Tuple[Tensor, Tensor]:
+        """Simulate a batch of images.
+
+        Args:
+            tile_catalog (TileCatalog): The TileCatalog to render.
+            rcf_indices: Indices of row/camcol/field in self.rcf_list to sample from.
+
+        Returns:
+            Tuple[Tensor, Tensor]: tuple of images and backgrounds
+        """
+        rcf = self.rcf_list[rcf_indices]
+        images = self.image_decoder.render_images(tile_catalog, rcf)
+        background = self.background.sample(images.shape, rcf_indices=rcf_indices)  # type: ignore
         images += background
         images = self._apply_noise(images)
         return images, background
 
     def get_batch(self) -> Dict:
+        """Get a batch of simulated images.
+
+        The images are simulated by first generating a tile catalog from the prior, followed
+        by choosing a random background and PSF and using those to generate the image. By default,
+        the same row, camcol, and field combination is used for the background, PSF, and flux ratios
+        of a single simulated image.
+
+        Returns:
+            A dictionary of the simulated TileCatalog, and (batch_size, bands, height, width)
+            tensors for images and background.
+        """
+        rcfs, rcf_indices = self.get_random_rcf(self.image_prior.batch_size)
         with torch.no_grad():
-            tile_catalog = self.image_prior.sample_prior()
-            images, background = self.simulate_image(tile_catalog)
+            tile_catalog = self.image_prior.sample_prior(rcfs)
+            images, background = self.simulate_image(tile_catalog, rcf_indices)
             return {
                 "tile_catalog": tile_catalog.to_dict(),
                 "images": images,

@@ -36,7 +36,7 @@ class Encoder(pl.LightningModule):
     def __init__(
         self,
         architecture: DictConfig,
-        n_bands: int,
+        bands: list,
         tile_slen: int,
         tiles_to_crop: int,
         slack: float = 1.0,
@@ -47,7 +47,7 @@ class Encoder(pl.LightningModule):
 
         Args:
             architecture: yaml to specifying the encoder network architecture
-            n_bands: number of bands
+            bands: specified band-pass filters
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
             slack: Slack to use when matching locations for validation metrics.
@@ -57,7 +57,8 @@ class Encoder(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
-        self.n_bands = n_bands
+        self.bands = bands
+        self.n_bands = len(self.bands)
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
 
@@ -69,7 +70,7 @@ class Encoder(pl.LightningModule):
         # a hack to get the right number of outputs from yolo
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
-        self.model = DetectionModel(cfg=arch_dict, ch=2)
+        self.model = DetectionModel(cfg=arch_dict, ch=2 * self.n_bands)
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
