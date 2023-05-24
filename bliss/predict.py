@@ -106,7 +106,7 @@ def plot_predict(cfg, image, background, true_plocs, est_cat):
     show(Tabs(tabs=[tab1, tab2, tab3]))
 
 
-def predict(cfg, image, background, true_plocs):
+def predict(cfg, image, background, true_plocs=None):
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     enc_state_dict = torch.load(cfg.predict.weight_save_path)
     encoder.load_state_dict(enc_state_dict)
@@ -118,7 +118,7 @@ def predict(cfg, image, background, true_plocs):
         pred = encoder.encode_batch(batch)
         est_cat = encoder.variational_mode(pred)
 
-    if cfg.predict.plot.ifPlot:
+    if (cfg.predict.plot.ifPlot) & (true_plocs is not None):
         ttc = cfg.encoder.tiles_to_crop
         ts = cfg.encoder.tile_slen
         ptc = ttc * ts
