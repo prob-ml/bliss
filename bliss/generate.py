@@ -2,9 +2,9 @@ import os
 from typing import Dict, List, TypedDict
 
 import torch
+from einops import rearrange
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from torch.utils.data import IterableDataset
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
@@ -36,9 +36,6 @@ def generate(cfg: DictConfig):
         cfg.simulator, num_workers=n_workers_per_process, prior={"batch_size": bs}
     )
     simulated_dataset = simulator.train_dataloader().dataset
-    assert isinstance(
-        simulated_dataset, IterableDataset
-    ), "simulated_dataset must be IterableDataset"
 
     # create cached_data_path if it doesn't exist
     if not os.path.exists(cached_data_path):
@@ -68,16 +65,18 @@ def generate_data(n_batches: int, simulated_dataset, desc="Generating data"):
 
 
 def itemize_data(batch_data) -> List[FileDatum]:
-    # TODO: refactor/optimize this dictionary/tensor flattening
     flat_data = {}
-    # concatenate tensors in tile_catalog dictionaries
-    tile_catalog_flattened = {
-        key: flatten_tile_catalog_tensor(key, batch_data)
-        for key in batch_data[0]["tile_catalog"].keys()
-    }
+
+    tile_catalog_flattened = {}
+    for key in batch_data[0]["tile_catalog"].keys():
+        batch_tc_key = torch.stack([data["tile_catalog"][key] for data in batch_data])
+        tile_catalog_flattened[key] = rearrange(batch_tc_key, "b c ... -> (b c) ...")
     flat_data["tile_catalog"] = tile_catalog_flattened
-    flat_data["images"] = flatten_tensor("images", batch_data)
-    flat_data["background"] = flatten_tensor("background", batch_data)
+
+    batch_images = torch.stack([data["images"] for data in batch_data])
+    batch_bg = torch.stack([data["background"] for data in batch_data])
+    flat_data["images"] = rearrange(batch_images, "b c ... -> (b c) ...")  # type: ignore
+    flat_data["background"] = rearrange(batch_bg, "b c ... -> (b c) ...")  # type: ignore
 
     # reconstruct data as list of single-input FileDatum dictionaries
     n_items = len(flat_data["images"])
@@ -93,23 +92,3 @@ def itemize_data(batch_data) -> List[FileDatum]:
         file_data.append(file_datum)
 
     return file_data
-
-
-def flatten_tile_catalog_tensor(key, batch_data):
-    if len(batch_data) > 1:
-        flattened = torch.cat([data["tile_catalog"][key] for data in batch_data])
-        flattened = torch.flatten(torch.unsqueeze(flattened, 0), start_dim=0, end_dim=1)
-    else:
-        # only one batch, no need to cat / flatten
-        flattened = batch_data[0]["tile_catalog"][key]
-    return flattened
-
-
-def flatten_tensor(key, batch_data):
-    if len(batch_data) > 1:
-        flattened = torch.cat([data[key] for data in batch_data])
-        flattened = torch.flatten(torch.unsqueeze(flattened, 0), start_dim=0, end_dim=1)
-    else:
-        # only one batch, no need to cat / flatten
-        flattened = batch_data[0][key]
-    return flattened
