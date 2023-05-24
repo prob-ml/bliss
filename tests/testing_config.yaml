@@ -57,3 +57,5 @@ predict:
     weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cpu"
     crop: [160, 320]
+    plot:
+        ifPlot: false
