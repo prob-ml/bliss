@@ -1,3 +1,4 @@
+import os
 import warnings
 from pathlib import Path
 
@@ -57,6 +58,7 @@ class SloanDigitalSkySurvey(Dataset):
         pf_file = f"photoField-{run:06d}-{camcol:d}.fits"
         camcol_path = self.sdss_path.joinpath(str(run), str(camcol))
         pf_path = camcol_path.joinpath(pf_file)
+        assert os.path.exists(pf_path), f"{pf_path} does not exist"
         self.pf_fits = fits.getdata(pf_path)
 
         fieldnums = self.pf_fits["FIELD"]

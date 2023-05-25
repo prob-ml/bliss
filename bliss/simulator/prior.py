@@ -1,4 +1,5 @@
 import itertools
+import os
 from pathlib import Path
 
 import numpy as np
@@ -213,6 +214,7 @@ class ImagePrior(pl.LightningModule):
                 sdss_path = Path(self.sdss)
                 camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
                 po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+                assert os.path.exists(po_path), f"{po_path} doesn't exist"
                 po_fits = fits.getdata(po_path)
 
                 fluxes = column_to_tensor(po_fits, "psfflux")
