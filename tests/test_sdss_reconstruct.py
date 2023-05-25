@@ -7,7 +7,7 @@ from bliss.predict import predict_sdss
 
 class TestSdssReconstruct:
     def test_sdss_reconstruct(self, cfg):
-        est_full, true_img, true_bg = predict_sdss(cfg)
+        est_full, _, true_img, true_bg = predict_sdss(cfg)
         est_tile = est_full.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
 
         decoder_obj = instantiate(cfg.simulator.decoder)

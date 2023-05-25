@@ -100,7 +100,8 @@ def plot_predict(cfg, image, background, true_plocs, est_cat):
         recon_img = np.log((recon_img - recon_img.min()) + 10)
         title = "log-"
 
-    output_file(cfg.predict.plot.out_file_name)
+    if cfg.predict.plot.out_file_name is not None:
+        output_file(cfg.predict.plot.out_file_name)
 
     np_image = np.array(image)
     np_recon = np.array(recon_img)
@@ -161,4 +162,6 @@ def predict_sdss(cfg):
     prepare_img = prepare_image(crop_img, cfg.predict.device)
     prepare_bg = prepare_image(crop_bg, cfg.predict.device)
 
-    return predict(cfg, prepare_img, prepare_bg, sdss_plocs), crop_img, crop_bg
+    est_cat = predict(cfg, prepare_img, prepare_bg, sdss_plocs)
+
+    return est_cat, sdss_plocs, crop_img, crop_bg

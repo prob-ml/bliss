@@ -59,3 +59,4 @@ predict:
     crop: [160, 320]
     plot:
         ifPlot: false
+        out_file_name: null

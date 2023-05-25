@@ -169,4 +169,4 @@ predict:
         width: 1000
         height: 1000
         out_file_name: predict.html
-    ifSimulated: false
+    ifSimulated: true
