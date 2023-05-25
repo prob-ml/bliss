@@ -165,6 +165,18 @@ class ImageDecoder(nn.Module):
         return galsim.Convolution(galaxy, psf[bnd])
 
     def render_images(self, tile_cat: TileCatalog, rcf):
+        """Render images from a tile catalog.
+
+        Args:
+            tile_cat (TileCatalog): the tile catalog to create images from
+            rcf (ndarray): array containing the row/camcol/field of PSFs to use
+
+        Raises:
+            AssertionError: rcf must contain batch_size values
+
+        Returns:
+            Tuple[Tensor, List]: tensor of images and list of PSFs used to generate them
+        """
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
         assert rcf.shape[0] == batch_size
 
@@ -211,4 +223,4 @@ class ImageDecoder(nn.Module):
         # TODO: clamp image values. strange issue - happens only after galsim rendering
         images[images < 1e-8] = 1.1e-8
 
-        return torch.from_numpy(images)
+        return torch.from_numpy(images), psfs

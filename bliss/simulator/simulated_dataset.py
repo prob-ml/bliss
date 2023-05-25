@@ -6,6 +6,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from omegaconf.listconfig import ListConfig
+from skimage.restoration import richardson_lucy
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from tqdm import tqdm
@@ -79,7 +80,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         images += images_mean
         return images
 
-    def simulate_image(self, tile_catalog: TileCatalog, rcf_indices) -> Tuple[Tensor, Tensor]:
+    def simulate_image(
+        self, tile_catalog: TileCatalog, rcf_indices
+    ) -> Tuple[Tensor, Tensor, Tensor]:
         """Simulate a batch of images.
 
         Args:
@@ -90,11 +93,48 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             Tuple[Tensor, Tensor]: tuple of images and backgrounds
         """
         rcf = self.rcf_list[rcf_indices]
-        images = self.image_decoder.render_images(tile_catalog, rcf)
+        images, psfs = self.image_decoder.render_images(tile_catalog, rcf)
         background = self.background.sample(images.shape, rcf_indices=rcf_indices)  # type: ignore
         images += background
         images = self._apply_noise(images)
-        return images, background
+        deconv_images = self.get_deconvolved_images(images, background, psfs)
+        return images, background, deconv_images
+
+    def get_deconvolved_images(self, images, backgrounds, psfs) -> Tensor:
+        """Deconvolve the synthetic images with the psf used to generate them.
+
+        Args:
+            images (ndarray): batch of images
+            backgrounds (ndarray): batch of backgrounds
+            psfs (ndarray): batch of psfs
+
+        Returns:
+            Tensor: batch of deconvolved images
+        """
+        deconv_images = np.zeros_like(images)
+        for i in range(images.shape[0]):
+            for band in range(self.image_prior.n_bands):
+                deconv_images[i][band] = self.deconvolve_image(
+                    images[i][band], backgrounds[i][band], psfs[i][band]
+                )
+        return torch.from_numpy(deconv_images)
+
+    def deconvolve_image(self, image, background, psf, pad=5):
+        """Deconvolve a single image.
+
+        Args:
+            image (Tensor): the image to deconvolve
+            background (Tensor): background of the image (used for padding)
+            psf (ndarray): the psf used to generate the image
+            pad (int): the pad width (in pixels). Defaults to 5.
+
+        Returns:
+            ndarray: the deconvolved image, same size as the original
+        """
+        padded_image = np.pad(image, pad, mode="constant", constant_values=background.mean().item())
+        normalized = padded_image / np.max(padded_image)
+        deconv = richardson_lucy(normalized, psf.original.image.array)
+        return deconv[pad:-pad, pad:-pad]
 
     def get_batch(self) -> Dict:
         """Get a batch of simulated images.
@@ -111,11 +151,12 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         rcfs, rcf_indices = self.get_random_rcf(self.image_prior.batch_size)
         with torch.no_grad():
             tile_catalog = self.image_prior.sample_prior(rcfs)
-            images, background = self.simulate_image(tile_catalog, rcf_indices)
+            images, background, deconv = self.simulate_image(tile_catalog, rcf_indices)
             return {
                 "tile_catalog": tile_catalog.to_dict(),
                 "images": images,
                 "background": background,
+                "deconvolution": deconv,
             }
 
     def __iter__(self):

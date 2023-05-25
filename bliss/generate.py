@@ -11,7 +11,12 @@ from bliss.catalog import TileCatalog
 
 FileDatum = TypedDict(
     "FileDatum",
-    {"tile_catalog": TileCatalog, "images": torch.Tensor, "background": torch.Tensor},
+    {
+        "tile_catalog": TileCatalog,
+        "images": torch.Tensor,
+        "background": torch.Tensor,
+        "deconvolution": torch.Tensor,
+    },
 )
 
 
@@ -78,6 +83,7 @@ def itemize_data(batch_data) -> List[FileDatum]:
     flat_data["tile_catalog"] = tile_catalog_flattened
     flat_data["images"] = flatten_tensor("images", batch_data)
     flat_data["background"] = flatten_tensor("background", batch_data)
+    flat_data["deconvolution"] = flatten_tensor("deconvolution", batch_data)
 
     # reconstruct data as list of single-input FileDatum dictionaries
     n_items = len(flat_data["images"])
@@ -90,6 +96,7 @@ def itemize_data(batch_data) -> List[FileDatum]:
         }
         file_datum["images"] = flat_data["images"][i]
         file_datum["background"] = flat_data["background"][i]
+        file_datum["deconvolution"] = flat_data["deconvolution"][i]
         file_data.append(file_datum)
 
     return file_data
