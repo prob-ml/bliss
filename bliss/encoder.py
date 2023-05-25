@@ -140,6 +140,11 @@ class Encoder(pl.LightningModule):
 
         # populate est_catalog_dict with per-band (log) star fluxes
         # NOTE: insert code here
+        star_logflux_names = [f"star_log_flux {bnd}" for bnd in self.bands]
+        for flux in star_logflux_names:
+            pred[flux] = pred[flux].mode  # type: ignore
+            pred[flux] = torch.mul(pred[flux], tile_is_on_array)  # type: ignore
+            pred[flux] = rearrange(pred[flux], "b ht wt -> b ht wt 1 1")
         star_log_fluxes = torch.cat([pred[f"star_log_flux {bnd}"] for bnd in self.bands], 4)
         star_fluxes = star_log_fluxes.exp()
         galaxy_bools = pred["galaxy_prob"].mode * pred["on_prob"].mode  # type: ignore
