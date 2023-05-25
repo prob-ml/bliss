@@ -163,10 +163,10 @@ predict:
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cuda:0"
-    crop: [160, 1200]
+    crop: [160, 800]
     plot:
         ifPlot: true
         width: 1000
         height: 1000
         out_file_name: predict.html
-    ifSimulated: true
+    ifSimulated: false

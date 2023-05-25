@@ -7,7 +7,6 @@ from bliss.predict import predict
 from bliss.simulator.background import SimulatedSDSSBackground
 
 
-
 class TestSimulate:
     def test_simulate(self, cfg):
         sim_dataset = instantiate(cfg.simulator)

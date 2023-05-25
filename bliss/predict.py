@@ -40,9 +40,9 @@ def add_cat(p, est_plocs, true_plocs, decals_plocs=None):
     p.scatter(
         est_plocs[:, 1],
         est_plocs[:, 0],
-        color="red",
+        color="darksalmon",
         marker="circle",
-        legend_label="est cat",
+        legend_label="estimate catalog",
         size=10,
         fill_color=None,
     )
@@ -50,8 +50,8 @@ def add_cat(p, est_plocs, true_plocs, decals_plocs=None):
         true_plocs[:, 1],
         true_plocs[:, 0],
         marker="circle",
-        color="green",
-        legend_label="sdss cat",
+        color="cyan",
+        legend_label="sdss catalog",
         size=20,
         fill_color=None,
     )
@@ -60,8 +60,8 @@ def add_cat(p, est_plocs, true_plocs, decals_plocs=None):
             decals_plocs[:, 1],
             decals_plocs[:, 0],
             marker="circle",
-            color="pink",
-            legend_label="decals cat",
+            color="lightgreen",
+            legend_label="decals catalog",
             size=5,
         )
     p.legend.click_policy = "hide"
@@ -86,23 +86,27 @@ def plot_predict(cfg, image, background, true_plocs, est_cat):
     true_plocs = np.array(crop_plocs(cfg, h, true_plocs).cpu())
     decoder_obj = instantiate(cfg.simulator.decoder)
     est_tile = est_cat.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
-    recon_img = decoder_obj.render_images(est_tile.cpu())[0, 0]
-    res = torch.tensor(image).cpu() - recon_img - torch.tensor(background).cpu()
+    rcfs = np.array([[94, 1, 12]])
+    recon_img = decoder_obj.render_images(est_tile.to("cpu"), rcfs)[0, 0]
+
+    image = image.to("cpu")
+    background = background.to("cpu")
+    res = image - recon_img - background
 
     # normalize for big image
     title = ""
     if w >= 200:
-        image = np.log((image - image.min()).cpu() + 10)
-        recon_img = np.log((recon_img - recon_img.min()).cpu() + 10)
+        image = np.log((image - image.min()) + 10)
+        recon_img = np.log((recon_img - recon_img.min()) + 10)
         title = "log-"
 
     output_file(cfg.predict.plot.out_file_name)
 
-    np_image = np.array(image.cpu())
+    np_image = np.array(image)
     np_recon = np.array(recon_img)
-    tab1 = plot_image(cfg, np_image, w, h, est_plocs, true_plocs, title + "image_true")
-    tab2 = plot_image(cfg, np_recon, w, h, est_plocs, true_plocs, title + "recon")
-    tab3 = plot_image(cfg, np.array(res), w, h, est_plocs, true_plocs, title + "res")
+    tab1 = plot_image(cfg, np_image, w, h, est_plocs, true_plocs, title + "true image")
+    tab2 = plot_image(cfg, np_recon, w, h, est_plocs, true_plocs, title + "reconstruct image")
+    tab3 = plot_image(cfg, np.array(res), w, h, est_plocs, true_plocs, "residual")
     show(Tabs(tabs=[tab1, tab2, tab3]))
 
 
