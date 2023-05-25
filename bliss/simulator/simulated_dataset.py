@@ -169,12 +169,6 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         self.valid: List[FileDatum] = []
         self.test: List[FileDatum] = []
 
-        print(
-            "=================================================\n"
-            f"No. Batches: {self.train_n_batches}, Batch Size: {self.batch_size}\n"
-            "=================================================",
-        )
-
         # assume cached image files exist, read from disk
         logger.info("Reading cached files (training set)...")
         start_time = time.time()

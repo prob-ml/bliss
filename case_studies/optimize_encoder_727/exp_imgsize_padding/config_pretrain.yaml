@@ -1,0 +1,56 @@
+---
+defaults:
+    - ../../../conf@_here_: base_config
+    - _self_
+
+hydra:
+    sweeper:
+        params:
+            +tune_imgsize_padding: "{n_tiles: 16, ttc: 1, train_n_batches: 16128}, {n_tiles: 20, ttc: 1, train_n_batches: 10752}, {n_tiles: 20, ttc: 2, train_n_batches: 10752}, {n_tiles: 48, ttc: 1, train_n_batches: 1792}, {n_tiles: 48, ttc: 5, train_n_batches: 1792}, {n_tiles: 100, ttc: 2, train_n_batches: 448}"
+
+mode: train
+
+paths:
+    project: ${paths.root}/case_studies/optimize_encoder_727
+    output: ${paths.project}/output
+    pretrained_models: ${paths.data}/pretrained_models
+
+simulator:
+    prior:
+        mean_sources: 0.2
+        n_tiles_h: ${tune_imgsize_padding.n_tiles}
+        n_tiles_w: ${tune_imgsize_padding.n_tiles}
+
+# ~50GB dataset (for pretraining) - 140 files including test set
+cached_simulator:
+    # train / val / test file split: 0-111 (112) / 112-125 (14) / 126-139 (14)
+    train_n_batches: ${tune_imgsize_padding.train_n_batches}
+    val_split_file_idxs: [112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125]
+    test_split_file_idxs: [126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140]
+    cached_data_path: /data/scratch/zhteoh/cached_dataset_${simulator.prior.mean_sources}_${tune_imgsize_padding.n_tiles}tiles_50GB
+
+# n_tiles_h x n_tiles_w : n batches in 4 files, max_image_per_file (n batches / file)
+# 16  x 16 : 576, 9216 (144 batches / file)
+# 20  x 20 : 384, 6144 ( 96 batches / file)
+# 48  x 48 :  64, 1024 ( 16 batches / file)
+# 100 x 100:  16,  256 (  4 batches / file)
+generate:
+    n_batches: null
+    batch_size: 64
+    max_images_per_file: null
+    cached_data_path: /data/scratch/zhteoh/cached_dataset_${simulator.prior.mean_sources}_${tune_imgsize_padding.n_tiles}tiles_50GB
+
+encoder:
+    tiles_to_crop: ${tune_imgsize_padding.ttc}
+
+training:
+    name: "encoder"
+    version: "sdss-pretrained-imgsize-${tune_imgsize_padding.n_tiles}-padding-${tune_imgsize_padding.ttc}-0.2"
+    enable_early_stopping: false
+    pretrained_weights: null
+    trainer:
+        check_val_every_n_epoch: 1
+        min_epochs: 20
+        max_epochs: 20
+    weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
+    use_cached_simulator: true

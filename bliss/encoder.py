@@ -1,9 +1,11 @@
+import logging
 import math
 from typing import Dict, Optional
 
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
+from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
@@ -24,6 +26,8 @@ from bliss.unconstrained_dists import (
     UnconstrainedNormal,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class Encoder(pl.LightningModule):
     """Encodes the distribution of a latent variable representing an astronomical image.
@@ -42,6 +46,8 @@ class Encoder(pl.LightningModule):
         slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
+        use_scheduler_cfg: bool = False,
+        scheduler: Optional[DictConfig] = None,
     ):
         """Initializes DetectionEncoder.
 
@@ -53,6 +59,8 @@ class Encoder(pl.LightningModule):
             slack: Slack to use when matching locations for validation metrics.
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
+            use_scheduler_cfg: whether to use the scheduler config
+            scheduler: yaml specifying the learning rate scheduler
         """
         super().__init__()
         self.save_hyperparameters()
@@ -72,6 +80,8 @@ class Encoder(pl.LightningModule):
         arch_dict = OmegaConf.to_container(architecture)
         self.model = DetectionModel(cfg=arch_dict, ch=2 * self.n_bands)
         self.tiles_to_crop = tiles_to_crop
+        self.use_scheduler_cfg = use_scheduler_cfg
+        self.scheduler_cfg = OmegaConf.to_container(scheduler)
 
         # metrics
         self.metrics = BlissMetrics(slack)
@@ -158,7 +168,10 @@ class Encoder(pl.LightningModule):
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
         optimizer = Adam(self.parameters(), **self.optimizer_params)
-        scheduler = MultiStepLR(optimizer, **self.scheduler_params)
+        if self.use_scheduler_cfg:
+            scheduler = instantiate(self.scheduler_cfg, optimizer=optimizer)
+        else:
+            scheduler = MultiStepLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
 
     def _get_loss(self, pred: Dict[str, Distribution], true_tile_cat: TileCatalog):

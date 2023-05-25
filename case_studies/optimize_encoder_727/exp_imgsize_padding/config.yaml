@@ -23,7 +23,7 @@ hydra:
     sweeper:
         params:
             training.seed: 15942, 17508, 16433, 2857, 25956
-            +tune_scheduler: "{use_scheduler_cfg: true, max_lr: 3}, {use_scheduler_cfg: true, max_lr: 1}, {use_scheduler_cfg: true, max_lr: 0.3}, {use_scheduler_cfg: false, max_lr: null}"
+            +tune_imgsize_padding: "{n_tiles: 16, ttc: 1}, {n_tiles: 20, ttc: 1}, {n_tiles: 20, ttc: 2}, {n_tiles: 48, ttc: 1}, {n_tiles: 48, ttc: 5}, {n_tiles: 100, ttc: 2}"
 
 mode: train
 
@@ -31,6 +31,12 @@ paths:
     project: ${paths.root}/case_studies/optimize_encoder_727
     output: ${paths.project}/output
     pretrained_models: ${paths.data}/pretrained_models
+
+simulator:
+    prior:
+        n_tiles_h: ${tune_imgsize_padding.n_tiles}
+        n_tiles_w: ${tune_imgsize_padding.n_tiles}
+
 
 cached_simulator:
     batch_size: 64
@@ -44,21 +50,16 @@ cached_simulator:
     cached_data_path: /data/scratch/zhteoh/cached_dataset_0.006_50GB # finetuned on mean_sources=0.006
 
 encoder:
-    use_scheduler_cfg: ${tune_scheduler.use_scheduler_cfg}
-    scheduler:
-        _target_: torch.optim.lr_scheduler.OneCycleLR
-        max_lr: ${tune_scheduler.max_lr}
-        epochs: ${training.trainer.min_epochs}
-        steps_per_epoch: ${cached_simulator.train_n_batches}
+    tiles_to_crop: ${tune_imgsize_padding.ttc}
 
 training:
     name: "encoder"
-    version: "sdss-scheduler-speed-maxlr-${tune_scheduler.max_lr}"
+    version: "sdss-imgsize-${tune_imgsize_padding.n_tiles}-padding-${tune_imgsize_padding.ttc}"
     enable_early_stopping: true
     patience: 5
     pretrained_weights: ${paths.pretrained_models}/sdss-pretrained-50GB-0.2-val-per-epoch.pt # assume it's best
     trainer:
         check_val_every_n_epoch: 1
-        min_epochs: 10
+        min_epochs: 5
     weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
     use_cached_simulator: true
