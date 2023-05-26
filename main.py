@@ -35,7 +35,7 @@ def main(cfg):
     elif cfg.mode == "train":
         train(cfg)
     elif cfg.mode == "predict":
-        predict_sdss(cfg, if_plot=True)
+        predict_sdss(cfg)
     else:
         raise KeyError
 

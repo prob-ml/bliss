@@ -9,7 +9,7 @@ hydra:
     run:
         dir: .
 
-mode: predict
+mode: train
 
 paths:
     root: ${oc.env:BLISS_HOME}
@@ -164,13 +164,13 @@ predict:
     weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cuda:0"
     crop:
-        if_crop: true
+        do_crop: true
         left_upper_corner: [160, 160]
         width: 640
         height: 640
     plot:
-        if_plot: true
+        show_plot: true
         width: 1000
         height: 1000
         out_file_name: predict.html
-    if_simulated: false
+    is_simulated: false

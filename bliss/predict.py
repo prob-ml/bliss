@@ -28,13 +28,13 @@ def crop_image(cfg, image, background):
     return image, background
 
 
-def predict(cfg, image, background, if_plot=False, true_plocs=None):
+def predict(cfg, image, background, show_plot=False, true_plocs=None):
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     enc_state_dict = torch.load(cfg.predict.weight_save_path)
     encoder.load_state_dict(enc_state_dict)
     encoder.eval()
 
-    if cfg.predict.crop.if_crop:
+    if cfg.predict.crop.do_crop:
         image, background = crop_image(cfg, image, background)
     batch = {"images": image, "background": background}
 
@@ -42,7 +42,7 @@ def predict(cfg, image, background, if_plot=False, true_plocs=None):
         pred = encoder.encode_batch(batch)
         est_cat = encoder.variational_mode(pred)
 
-    if if_plot and (true_plocs is not None):
+    if show_plot and (true_plocs is not None):
         ttc = cfg.encoder.tiles_to_crop
         ts = cfg.encoder.tile_slen
         ptc = ttc * ts
@@ -53,7 +53,7 @@ def predict(cfg, image, background, if_plot=False, true_plocs=None):
     return est_cat, image, background
 
 
-def predict_sdss(cfg, if_plot=False):
+def predict_sdss(cfg):
     sdss_plocs = PhotoFullCatalog.from_file(
         cfg.paths.sdss,
         run=cfg.predict.dataset.run,
@@ -64,8 +64,9 @@ def predict_sdss(cfg, if_plot=False):
     sdss = instantiate(cfg.predict.dataset)
     prepare_img = prepare_image(sdss[0]["image"], cfg.predict.device)
     prepare_bg = prepare_image(sdss[0]["background"], cfg.predict.device)
+    show_plot = cfg.predict.plot.show_plot
 
-    est_cat, crop_img, crop_bg = predict(cfg, prepare_img, prepare_bg, if_plot, sdss_plocs)
+    est_cat, crop_img, crop_bg = predict(cfg, prepare_img, prepare_bg, show_plot, sdss_plocs)
 
     return est_cat, crop_img[0], crop_bg[0], sdss_plocs
 
@@ -86,14 +87,14 @@ def decal_plocs_from_sdss(cfg):
     return cat.get_plocs_from_ra_dec(wcs)
 
 
-def crop_plocs(cfg, w, h, plocs, if_crop=False):
+def crop_plocs(cfg, w, h, plocs, do_crop=False):
     tiles_to_crop = cfg.encoder.tiles_to_crop
     tile_slen = cfg.encoder.tile_slen
     minh = tiles_to_crop * tile_slen
     maxh = h + tiles_to_crop * tile_slen
     minw = tiles_to_crop * tile_slen
     maxw = w + tiles_to_crop * tile_slen
-    if if_crop:
+    if do_crop:
         minh += cfg.predict.crop.left_upper_corner[0]
         maxh += cfg.predict.crop.left_upper_corner[0]
         minw += cfg.predict.crop.left_upper_corner[1]
@@ -143,12 +144,13 @@ def plot_image(cfg, img, w, h, est_plocs, true_plocs, title):
     """Function that generate plots for images."""
     p = figure(width=cfg.predict.plot.width, height=cfg.predict.plot.height)
     p.image(image=[img], x=0, y=0, dw=w, dh=h, palette="Viridis256")
-    if_crop = cfg.predict.crop.if_crop
+    do_crop = cfg.predict.crop.do_crop
+    is_simulated = cfg.predict.is_simulated
 
-    true_plocs = np.array(crop_plocs(cfg, w, h, true_plocs, if_crop).cpu())
+    true_plocs = np.array(crop_plocs(cfg, w, h, true_plocs, do_crop).cpu())
     decals_plocs = None
-    if if_crop:
-        decals_plocs = np.array(crop_plocs(cfg, w, h, decal_plocs_from_sdss(cfg)[0], if_crop))
+    if do_crop and (not is_simulated):
+        decals_plocs = np.array(crop_plocs(cfg, w, h, decal_plocs_from_sdss(cfg)[0], do_crop))
     return TabPanel(child=add_cat(p, est_plocs, true_plocs, decals_plocs), title=title)
 
 
