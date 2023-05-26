@@ -45,7 +45,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Create environment variables
-        run: | 
+        run: |
           echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
           echo "JUPYTER_PLATFORM_DIRS=1" >> $GITHUB_ENV
 
@@ -54,7 +54,7 @@ jobs:
           pip install --upgrade pip
           pip install "poetry-core>=1.0.0"
           pip install "poetry>=1.2.2"
-          
+
       - name: Poetry cache
         uses: actions/cache@v2
         with:

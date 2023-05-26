@@ -22,11 +22,11 @@ BLISS uses state-of-the-art variational inference techniques including
 
 # Installation
 
-BLISS is pip installable with the following command: 
+BLISS is pip installable with the following command:
 
 ```bash
 pip install bliss-deblender
-``` 
+```
 
 and the required dependencies are listed in the ``[tool.poetry.dependencies]`` block of the ``pyproject.toml`` file.
 
