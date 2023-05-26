@@ -28,7 +28,7 @@ def crop_image(cfg, image, background):
     return image, background
 
 
-def predict(cfg, image, background, true_plocs=None):
+def predict(cfg, image, background, if_plot=False, true_plocs=None):
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     enc_state_dict = torch.load(cfg.predict.weight_save_path)
     encoder.load_state_dict(enc_state_dict)
@@ -42,7 +42,7 @@ def predict(cfg, image, background, true_plocs=None):
         pred = encoder.encode_batch(batch)
         est_cat = encoder.variational_mode(pred)
 
-    if (cfg.predict.plot.if_plot) and (true_plocs is not None):
+    if if_plot and (true_plocs is not None):
         ttc = cfg.encoder.tiles_to_crop
         ts = cfg.encoder.tile_slen
         ptc = ttc * ts
@@ -53,7 +53,7 @@ def predict(cfg, image, background, true_plocs=None):
     return est_cat, image, background
 
 
-def predict_sdss(cfg):
+def predict_sdss(cfg, if_plot=False):
     sdss_plocs = PhotoFullCatalog.from_file(
         cfg.paths.sdss,
         run=cfg.predict.dataset.run,
@@ -65,7 +65,7 @@ def predict_sdss(cfg):
     prepare_img = prepare_image(sdss[0]["image"], cfg.predict.device)
     prepare_bg = prepare_image(sdss[0]["background"], cfg.predict.device)
 
-    est_cat, crop_img, crop_bg = predict(cfg, prepare_img, prepare_bg, sdss_plocs)
+    est_cat, crop_img, crop_bg = predict(cfg, prepare_img, prepare_bg, if_plot, sdss_plocs)
 
     return est_cat, crop_img[0], crop_bg[0], sdss_plocs
 
@@ -168,7 +168,7 @@ def plot_predict(cfg, image, background, true_plocs, est_cat):
 
     # normalize for big image
     title = ""
-    if w >= 160:
+    if w >= 150:
         image = np.log((image - image.min()) + 10)
         recon_img = np.log((recon_img - recon_img.min()) + 10)
         title = "log-"
