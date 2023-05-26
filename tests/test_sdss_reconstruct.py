@@ -1,5 +1,4 @@
 import numpy as np
-import torch
 from hydra.utils import instantiate
 
 from bliss.predict import predict_sdss
@@ -7,7 +6,7 @@ from bliss.predict import predict_sdss
 
 class TestSdssReconstruct:
     def test_sdss_reconstruct(self, cfg):
-        est_full, _, true_img, true_bg = predict_sdss(cfg)
+        est_full, true_img, true_bg, _ = predict_sdss(cfg)
         est_tile = est_full.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
 
         decoder_obj = instantiate(cfg.simulator.decoder)
@@ -20,13 +19,14 @@ class TestSdssReconstruct:
         true_bright = true_img_crop - true_bg_crop
 
         bright_pix_mask = (recon_img - 100) > 0
-        res_bright = recon_img[bright_pix_mask] - torch.tensor(true_bright)[bright_pix_mask]
+        recon_img = recon_img.to(cfg.predict.device)
+        res_bright = recon_img[bright_pix_mask] - true_bright[bright_pix_mask]
 
         recon_img += true_bg_crop
-        res_img = recon_img - torch.tensor(true_img_crop)
+        res_img = recon_img - true_img_crop
 
         flux_diff = res_bright.abs().sum()
-        flux_sum = torch.tensor(true_bright)[bright_pix_mask].sum()
+        flux_sum = true_bright[bright_pix_mask].sum()
 
         assert ((res_img.abs() / recon_img.sqrt()) > 5).sum() == 0
         assert flux_diff / flux_sum < 0.2

@@ -17,26 +17,98 @@ def prepare_image(x, device):
     return x[:, :, :height, :width]
 
 
-def crop_plocs(cfg, h, plocs):
+def crop_image(cfg, image, background):
+    idx0 = cfg.predict.crop.left_upper_corner[0]
+    idx1 = cfg.predict.crop.left_upper_corner[1]
+    width = cfg.predict.crop.width
+    height = cfg.predict.crop.height
+    if ((idx0 + height) <= image.shape[2]) and ((idx1 + width) <= image.shape[3]):
+        image = image[:, :, idx0 : idx0 + height, idx1 : idx1 + width]
+        background = background[:, :, idx0 : idx0 + height, idx1 : idx1 + width]
+    return image, background
+
+
+def predict(cfg, image, background, if_crop=False, true_plocs=None):
+    encoder = instantiate(cfg.encoder).to(cfg.predict.device)
+    enc_state_dict = torch.load(cfg.predict.weight_save_path)
+    encoder.load_state_dict(enc_state_dict)
+    encoder.eval()
+
+    if if_crop:
+        image, background = crop_image(cfg, image, background)
+    batch = {"images": image, "background": background}
+
+    with torch.no_grad():
+        pred = encoder.encode_batch(batch)
+        est_cat = encoder.variational_mode(pred)
+
+    if (cfg.predict.plot.if_plot) and (true_plocs is not None):
+        ttc = cfg.encoder.tiles_to_crop
+        ts = cfg.encoder.tile_slen
+        ptc = ttc * ts
+        cropped_image = image[0, 0, ptc:-ptc, ptc:-ptc]
+        cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
+        plot_predict(cfg, cropped_image, cropped_background, true_plocs, est_cat)
+
+    return est_cat, image, background
+
+
+def predict_sdss(cfg):
+    sdss_plocs = PhotoFullCatalog.from_file(
+        cfg.paths.sdss,
+        run=cfg.predict.dataset.run,
+        camcol=cfg.predict.dataset.camcol,
+        field=cfg.predict.dataset.fields[0],
+        band=cfg.predict.dataset.bands[0],
+    ).plocs[0]
+    sdss = instantiate(cfg.predict.dataset)
+    prepare_img = prepare_image(sdss[0]["image"], cfg.predict.device)
+    prepare_bg = prepare_image(sdss[0]["background"], cfg.predict.device)
+    if_crop = cfg.predict.crop.if_crop_sdss
+
+    est_cat, crop_img, crop_bg = predict(cfg, prepare_img, prepare_bg, if_crop, sdss_plocs)
+
+    return est_cat, crop_img[0], crop_bg[0], sdss_plocs
+
+
+def decal_plocs_from_sdss(cfg):
+    """Use wcs to match sdss image with corresponding DeCals catalog for futher plotting."""
+    sdss = instantiate(cfg.predict.dataset)
+    idx0 = cfg.predict.crop.left_upper_corner[0]
+    idx1 = cfg.predict.crop.left_upper_corner[1]
+    width = cfg.predict.crop.width
+    height = cfg.predict.crop.height
+    wcs = sdss[0]["wcs"][0]
+    ra_lim, dec_lim = wcs.all_pix2world((idx1, idx1 + width), (idx0, idx0 + height), 0)
+
+    decals_path = cfg.paths.decals + "/tractor-3366m010.fits"
+    cat = DecalsFullCatalog.from_file(decals_path, ra_lim, dec_lim)
+
+    return cat.get_plocs_from_ra_dec(wcs)
+
+
+def crop_plocs(cfg, w, h, plocs, if_crop=False):
     tiles_to_crop = cfg.encoder.tiles_to_crop
     tile_slen = cfg.encoder.tile_slen
-    if not cfg.predict.ifSimulated:
-        crop = cfg.predict.crop
-        minb = crop[0] + tiles_to_crop * tile_slen
-        maxb = crop[1] - tiles_to_crop * tile_slen
+    minh = tiles_to_crop * tile_slen
+    maxh = h + tiles_to_crop * tile_slen
+    minw = tiles_to_crop * tile_slen
+    maxw = w + tiles_to_crop * tile_slen
+    if if_crop:
+        minh += cfg.predict.crop.left_upper_corner[0]
+        maxh += cfg.predict.crop.left_upper_corner[0]
+        minw += cfg.predict.crop.left_upper_corner[1]
+        maxw += cfg.predict.crop.left_upper_corner[1]
 
-    else:
-        minb = tiles_to_crop * tile_slen
-        maxb = h + tiles_to_crop * tile_slen
-
-    x0_mask = (plocs[:, 0] > minb) & (plocs[:, 0] < maxb)
-    x1_mask = (plocs[:, 1] > minb) & (plocs[:, 1] < maxb)
+    x0_mask = (plocs[:, 0] > minh) & (plocs[:, 0] < maxh)
+    x1_mask = (plocs[:, 1] > minw) & (plocs[:, 1] < maxw)
     x_mask = x0_mask * x1_mask
 
-    return plocs[x_mask] - minb
+    return plocs[x_mask].cpu() - torch.tensor([minh, minw])
 
 
 def add_cat(p, est_plocs, true_plocs, decals_plocs=None):
+    """Function that overlaying scatter plots on given image using different catalogs."""
     p.scatter(
         est_plocs[:, 1],
         est_plocs[:, 0],
@@ -69,21 +141,25 @@ def add_cat(p, est_plocs, true_plocs, decals_plocs=None):
 
 
 def plot_image(cfg, img, w, h, est_plocs, true_plocs, title):
+    """Function that generate plots for images."""
     p = figure(width=cfg.predict.plot.width, height=cfg.predict.plot.height)
     p.image(image=[img], x=0, y=0, dw=w, dh=h, palette="Viridis256")
-    if cfg.predict.ifSimulated:
+    if_crop = cfg.predict.crop.if_crop_sdss
+    if cfg.predict.if_simulated:
+        true_plocs = np.array(crop_plocs(cfg, w, h, true_plocs).cpu())
         tab = TabPanel(child=add_cat(p, est_plocs, true_plocs), title=title)
     else:
-        decals_plocs = np.array(crop_plocs(cfg, h, decal_plocs_from_sdss(cfg)[0]))
+        true_plocs = np.array(crop_plocs(cfg, w, h, true_plocs, if_crop).cpu())
+        decals_plocs = np.array(crop_plocs(cfg, w, h, decal_plocs_from_sdss(cfg)[0], if_crop))
         tab = TabPanel(child=add_cat(p, est_plocs, true_plocs, decals_plocs), title=title)
     return tab
 
 
 def plot_predict(cfg, image, background, true_plocs, est_cat):
+    """Function that use bokeh to save generated plots to an html file."""
     w, h = image.shape
 
     est_plocs = np.array(est_cat.plocs.cpu())[0]
-    true_plocs = np.array(crop_plocs(cfg, h, true_plocs).cpu())
     decoder_obj = instantiate(cfg.simulator.decoder)
     est_tile = est_cat.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
     rcfs = np.array([[94, 1, 12]])
@@ -109,59 +185,3 @@ def plot_predict(cfg, image, background, true_plocs, est_cat):
     tab2 = plot_image(cfg, np_recon, w, h, est_plocs, true_plocs, title + "reconstruct image")
     tab3 = plot_image(cfg, np.array(res), w, h, est_plocs, true_plocs, "residual")
     show(Tabs(tabs=[tab1, tab2, tab3]))
-
-
-def predict(cfg, image, background, true_plocs=None):
-    encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-    enc_state_dict = torch.load(cfg.predict.weight_save_path)
-    encoder.load_state_dict(enc_state_dict)
-    encoder.eval()
-
-    batch = {"images": image, "background": background}
-
-    with torch.no_grad():
-        pred = encoder.encode_batch(batch)
-        est_cat = encoder.variational_mode(pred)
-
-    if (cfg.predict.plot.ifPlot) & (true_plocs is not None):
-        ttc = cfg.encoder.tiles_to_crop
-        ts = cfg.encoder.tile_slen
-        ptc = ttc * ts
-        cropped_image = image[0, 0, ptc:-ptc, ptc:-ptc]
-        cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
-        plot_predict(cfg, cropped_image, cropped_background, true_plocs, est_cat)
-
-    return est_cat
-
-
-def decal_plocs_from_sdss(cfg):
-    sdss = instantiate(cfg.predict.dataset)
-    idx0, idx1 = cfg.predict.crop[0], cfg.predict.crop[1]
-    wcs = sdss[0]["wcs"][0]
-    ra_lim, dec_lim = wcs.all_pix2world((idx0, idx1), (idx0, idx1), 0)
-
-    decals_path = cfg.paths.decals + "/tractor-3366m010.fits"
-    cat = DecalsFullCatalog.from_file(decals_path, ra_lim, dec_lim)
-
-    return cat.get_plocs_from_ra_dec(wcs)
-
-
-def predict_sdss(cfg):
-    idx0, idx1 = cfg.predict.crop[0], cfg.predict.crop[1]
-    sdss_plocs = PhotoFullCatalog.from_file(
-        cfg.paths.sdss,
-        run=cfg.predict.dataset.run,
-        camcol=cfg.predict.dataset.camcol,
-        field=cfg.predict.dataset.fields[0],
-        band=cfg.predict.dataset.bands[0],
-    ).plocs[0]
-    sdss = instantiate(cfg.predict.dataset)
-    crop_img = sdss[0]["image"][:, idx0:idx1, idx0:idx1]
-    crop_bg = sdss[0]["background"][:, idx0:idx1, idx0:idx1]
-
-    prepare_img = prepare_image(crop_img, cfg.predict.device)
-    prepare_bg = prepare_image(crop_bg, cfg.predict.device)
-
-    est_cat = predict(cfg, prepare_img, prepare_bg, sdss_plocs)
-
-    return est_cat, sdss_plocs, crop_img, crop_bg
