@@ -62,4 +62,4 @@ predict:
         height: 160
     plot:
         if_plot: false
-        out_file_name: null
+        out_file_name: predict.html

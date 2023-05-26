@@ -28,13 +28,13 @@ def crop_image(cfg, image, background):
     return image, background
 
 
-def predict(cfg, image, background, if_crop=False, true_plocs=None):
+def predict(cfg, image, background, true_plocs=None):
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     enc_state_dict = torch.load(cfg.predict.weight_save_path)
     encoder.load_state_dict(enc_state_dict)
     encoder.eval()
 
-    if if_crop:
+    if cfg.predict.crop.if_crop:
         image, background = crop_image(cfg, image, background)
     batch = {"images": image, "background": background}
 
@@ -64,9 +64,8 @@ def predict_sdss(cfg):
     sdss = instantiate(cfg.predict.dataset)
     prepare_img = prepare_image(sdss[0]["image"], cfg.predict.device)
     prepare_bg = prepare_image(sdss[0]["background"], cfg.predict.device)
-    if_crop = cfg.predict.crop.if_crop_sdss
 
-    est_cat, crop_img, crop_bg = predict(cfg, prepare_img, prepare_bg, if_crop, sdss_plocs)
+    est_cat, crop_img, crop_bg = predict(cfg, prepare_img, prepare_bg, sdss_plocs)
 
     return est_cat, crop_img[0], crop_bg[0], sdss_plocs
 
@@ -107,7 +106,7 @@ def crop_plocs(cfg, w, h, plocs, if_crop=False):
     return plocs[x_mask].cpu() - torch.tensor([minh, minw])
 
 
-def add_cat(p, est_plocs, true_plocs, decals_plocs=None):
+def add_cat(p, est_plocs, true_plocs, decals_plocs):
     """Function that overlaying scatter plots on given image using different catalogs."""
     p.scatter(
         est_plocs[:, 1],
@@ -144,15 +143,13 @@ def plot_image(cfg, img, w, h, est_plocs, true_plocs, title):
     """Function that generate plots for images."""
     p = figure(width=cfg.predict.plot.width, height=cfg.predict.plot.height)
     p.image(image=[img], x=0, y=0, dw=w, dh=h, palette="Viridis256")
-    if_crop = cfg.predict.crop.if_crop_sdss
-    if cfg.predict.if_simulated:
-        true_plocs = np.array(crop_plocs(cfg, w, h, true_plocs).cpu())
-        tab = TabPanel(child=add_cat(p, est_plocs, true_plocs), title=title)
-    else:
-        true_plocs = np.array(crop_plocs(cfg, w, h, true_plocs, if_crop).cpu())
+    if_crop = cfg.predict.crop.if_crop
+
+    true_plocs = np.array(crop_plocs(cfg, w, h, true_plocs, if_crop).cpu())
+    decals_plocs = None
+    if if_crop:
         decals_plocs = np.array(crop_plocs(cfg, w, h, decal_plocs_from_sdss(cfg)[0], if_crop))
-        tab = TabPanel(child=add_cat(p, est_plocs, true_plocs, decals_plocs), title=title)
-    return tab
+    return TabPanel(child=add_cat(p, est_plocs, true_plocs, decals_plocs), title=title)
 
 
 def plot_predict(cfg, image, background, true_plocs, est_cat):
@@ -171,7 +168,7 @@ def plot_predict(cfg, image, background, true_plocs, est_cat):
 
     # normalize for big image
     title = ""
-    if w >= 200:
+    if w >= 160:
         image = np.log((image - image.min()) + 10)
         recon_img = np.log((recon_img - recon_img.min()) + 10)
         title = "log-"

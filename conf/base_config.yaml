@@ -164,7 +164,7 @@ predict:
     weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cuda:0"
     crop:
-        if_crop_sdss: true
+        if_crop: true
         left_upper_corner: [160, 160]
         width: 640
         height: 640
