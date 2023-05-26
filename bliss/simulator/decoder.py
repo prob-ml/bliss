@@ -99,7 +99,11 @@ class ImageDecoder(nn.Module):
         Returns:
             psf_params: tensor of parameters for each band
         """
-        assert os.path.exists(psf_fit_file), f"{psf_fit_file} does not exist"
+        msg = (
+            f"{psf_fit_file} does not exist. "
+            + "Make sure data files are available for fields specified in config."
+        )
+        assert os.path.exists(psf_fit_file), msg
         # HDU 6 contains the PSF header (after primary and eigenimages)
         data = fits.open(psf_fit_file, ignore_missing_end=True).pop(6).data
         psf_params = torch.zeros(len(bands), 6)
