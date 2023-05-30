@@ -1,3 +1,4 @@
+import os
 from typing import Tuple
 
 import galsim
@@ -98,6 +99,11 @@ class ImageDecoder(nn.Module):
         Returns:
             psf_params: tensor of parameters for each band
         """
+        msg = (
+            f"{psf_fit_file} does not exist. "
+            + "Make sure data files are available for fields specified in config."
+        )
+        assert os.path.exists(psf_fit_file), msg
         # HDU 6 contains the PSF header (after primary and eigenimages)
         data = fits.open(psf_fit_file, ignore_missing_end=True).pop(6).data
         psf_params = torch.zeros(len(bands), 6)
@@ -198,13 +204,13 @@ class ImageDecoder(nn.Module):
                 gs_img = galsim.Image(array=images[b, bnd], scale=self.pixel_scale)
                 for s in range(n_sources):
                     if full_cat["galaxy_bools"][b][s] == 1:
-                        gal_with_band = torch.cat(  # noqa: WPS220,WPS317
-                            (
-                                torch.unsqueeze(full_cat["galaxy_params"][b][s][bnd], 0),
-                                full_cat["galaxy_params"][b][s][self.n_bands :],
-                            ),
-                            0,
-                        )
+                        # the flux for this band of this galaxy
+                        curr_gal_band = full_cat["galaxy_params"][b][s][bnd]  # noqa: WPS220
+                        curr_gal_band = torch.unsqueeze(curr_gal_band, 0)  # noqa: WPS220
+                        # all non-flux related params for this galaxy
+                        rem_params = full_cat["galaxy_params"][b][s][self.n_bands :]  # noqa: WPS220
+
+                        gal_with_band = torch.cat((curr_gal_band, rem_params), 0)  # noqa: WPS220
                         galsim_obj = self.render_galaxy(gal_with_band, psf, bnd)  # noqa: WPS220
                     elif full_cat["star_bools"][b][s] == 1:
                         galsim_obj = psf[bnd].withFlux(  # noqa: WPS220

@@ -1,4 +1,5 @@
 import itertools
+import os
 from pathlib import Path
 
 import numpy as np
@@ -78,7 +79,9 @@ class ImagePrior(pl.LightningModule):
         self.batch_size = batch_size
         self.sdss = sdss_fields["dir"]
 
-        self.rcf_stars_rest, self.rcf_gals_rest = self._sample_ratios(sdss_fields["field_list"])
+        self.rcf_stars_rest, self.rcf_gals_rest = self._load_color_distribution(
+            sdss_fields["field_list"]
+        )
 
         self.min_sources = min_sources
         self.max_sources = max_sources
@@ -119,11 +122,11 @@ class ImagePrior(pl.LightningModule):
             rcf = tuple(rcf)
             if rcf in self.rcf_gals_rest:
                 select_gal_rcfs.append(self.rcf_gals_rest[rcf])  # noqa: WPS529
-            else:  # noqa: WPS529
+            else:
                 select_gal_rcfs.append(np.random.choice(list(self.rcf_gals_rest.values())))
             if rcf in self.rcf_stars_rest:
                 select_star_rcfs.append(self.rcf_stars_rest[rcf])  # noqa: WPS529
-            else:  # noqa: WPS529
+            else:
                 select_star_rcfs.append(np.random.choice(list(self.rcf_stars_rest.values())))
 
         galaxy_params = self._sample_galaxy_prior(select_gal_rcfs)
@@ -199,7 +202,7 @@ class ImagePrior(pl.LightningModule):
 
         return total_flux
 
-    def _sample_ratios(self, sdss_fields):
+    def _load_color_distribution(self, sdss_fields):
         rcf_stars_rest = {}
         rcf_gals_rest = {}
         # load all star, galaxy fluxes relative to r-band required for sampling
@@ -211,6 +214,11 @@ class ImagePrior(pl.LightningModule):
                 sdss_path = Path(self.sdss)
                 camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
                 po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+                msg = (
+                    f"{po_path} does not exist. "
+                    + "Make sure data files are available for fields specified in config."
+                )
+                assert os.path.exists(po_path), msg
                 po_fits = fits.getdata(po_path)
 
                 fluxes = column_to_tensor(po_fits, "psfflux")
