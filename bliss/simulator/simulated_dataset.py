@@ -119,14 +119,14 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 )
         return torch.from_numpy(deconv_images)
 
-    def deconvolve_image(self, image, background, psf, pad=5):
+    def deconvolve_image(self, image, background, psf, pad=10):
         """Deconvolve a single image.
 
         Args:
             image (Tensor): the image to deconvolve
             background (Tensor): background of the image (used for padding)
             psf (ndarray): the psf used to generate the image
-            pad (int): the pad width (in pixels). Defaults to 5.
+            pad (int): the pad width (in pixels). Defaults to 10.
 
         Returns:
             ndarray: the deconvolved image, same size as the original

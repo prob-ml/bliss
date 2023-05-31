@@ -1,5 +1,6 @@
 import itertools
 import os
+import random
 from pathlib import Path
 
 import numpy as np
@@ -120,14 +121,17 @@ class ImagePrior(pl.LightningModule):
 
         for rcf in batch_rcfs:
             rcf = tuple(rcf)
-            if rcf in self.rcf_gals_rest:
-                select_gal_rcfs.append(self.rcf_gals_rest[rcf])  # noqa: WPS529
-            else:
-                select_gal_rcfs.append(np.random.choice(list(self.rcf_gals_rest.values())))
-            if rcf in self.rcf_stars_rest:
-                select_star_rcfs.append(self.rcf_stars_rest[rcf])  # noqa: WPS529
-            else:
-                select_star_rcfs.append(np.random.choice(list(self.rcf_stars_rest.values())))
+            # get value if key exists, otherwise pick randomly
+            select_gal_rcfs.append(
+                self.rcf_gals_rest[rcf]
+                if rcf in self.rcf_gals_rest
+                else random.choice(list(self.rcf_gals_rest.values()))
+            )
+            select_star_rcfs.append(
+                self.rcf_stars_rest[rcf]
+                if rcf in self.rcf_stars_rest
+                else random.choice(list(self.rcf_stars_rest.values()))
+            )
 
         galaxy_params = self._sample_galaxy_prior(select_gal_rcfs)
         star_fluxes = self._sample_star_fluxes(select_star_rcfs)
