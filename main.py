@@ -27,7 +27,7 @@ omegaconf.OmegaConf.register_new_resolver("range", make_range, replace=True)
 
 
 # config_path should be overriden when running `bliss` poetry executable
-# e.g., `bliss --cp case_studies/summer_template`
+# e.g., `bliss --cp case_studies/summer_template -cn config`
 @hydra.main(config_path="conf", config_name="base_config", version_base=None)
 def main(cfg):
     if cfg.mode == "generate":
