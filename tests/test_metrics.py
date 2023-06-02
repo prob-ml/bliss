@@ -206,8 +206,10 @@ class TestMetrics:
 
     def test_bliss_photo_agree(self, brightest_catalogs):
         """Compares metrics for agreement between BLISS-inferred catalog and Photo catalog."""
-        results = BlissMetrics(slack=1.0)(brightest_catalogs["photo"], brightest_catalogs["bliss"])
+        slack = 1.0
+        results = BlissMetrics(slack)(brightest_catalogs["photo"], brightest_catalogs["bliss"])
         assert results["f1"] > 0.8
+        assert results["avg_keep_distance"] < slack
 
     def test_bliss_photo_agree_comp_decals(self, brightest_catalogs):
         """Compares metrics between BLISS and Photo catalog with DECaLS as GT."""
