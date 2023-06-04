@@ -264,15 +264,10 @@ class Encoder(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        self._generic_step(batch, "val", log_metrics=True, plot_images=True)
-        return batch  # do we really need to save all these batches?
-
-    def validation_epoch_end(self, outputs):
-        """Pytorch lightning method."""
-        batch: Dict[str, Tensor] = outputs[-1]
-        self._generic_step(batch, "val")
+        # only plot images on the first batch of epoch
+        plot_images = batch_idx == 0
+        self._generic_step(batch, "val", log_metrics=True, plot_images=plot_images)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         self._generic_step(batch, "test", log_metrics=True)
-        return batch  # do we really need to save all these batches?
