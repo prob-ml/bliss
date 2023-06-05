@@ -17,6 +17,7 @@ class BlissMetrics(Metric):
     detection_tp: Tensor
     detection_fp: Tensor
     avg_distance: Tensor
+    avg_keep_distance: Tensor
     total_true_n_souces: Tensor
     gal_tp: Tensor
     gal_fp: Tensor
@@ -40,7 +41,8 @@ class BlissMetrics(Metric):
         Attributes:
             detection_tp: true positives = # of sources matched with a true source.
             detection_fp: false positives = # of predicted sources not matched with true source
-            avg_distance: Average l-infinity distance over matched objects.
+            avg_distance: Average l-infinity distance over all matched objects.
+            avg_keep_distance: Average l-infinity distance over matched objects to keep.
             total_true_n_sources: Total number of true sources over batches seen.
             disable_bar: Whether to show progress bar
             gal_tp: true positives = # of sources correctly classified as a galaxy
@@ -56,6 +58,7 @@ class BlissMetrics(Metric):
         self.add_state("detection_tp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("detection_fp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("avg_keep_distance", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total_true_n_sources", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("gal_tp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("gal_fp", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -68,6 +71,7 @@ class BlissMetrics(Metric):
         assert true.batch_size == est.batch_size
 
         count = 0
+        good_match_count = 0
         for b in range(true.batch_size):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
@@ -83,7 +87,7 @@ class BlissMetrics(Metric):
                     self.gal_fn += tgbool.sum()
                 continue
 
-            mtrue, mest, dkeep, avg_distance = match_by_locs(
+            mtrue, mest, dkeep, avg_distance, avg_keep_distance = match_by_locs(
                 tlocs[: int(ntrue)], elocs[: int(nest)], self.slack
             )
             detection_tp = len(elocs[mest][dkeep])
@@ -94,6 +98,10 @@ class BlissMetrics(Metric):
             self.detection_tp += detection_tp
             self.detection_fp += detection_fp
             self.avg_distance += avg_distance
+            # avg_keep_distance can be nan if no good matches were found, so ignore in that case
+            if not torch.isnan(avg_keep_distance):
+                self.avg_keep_distance += avg_keep_distance
+                good_match_count += 1
             conf_matrix = confusion_matrix(tgbool.cpu(), egbool.cpu(), labels=[1, 0])
             # decompose confusion matrix to pass to lightning logger
             self.gal_tp += conf_matrix[0][0]
@@ -103,6 +111,7 @@ class BlissMetrics(Metric):
 
             count += 1
         self.avg_distance /= count
+        self.avg_keep_distance /= good_match_count
 
     def compute(self) -> Dict[str, Tensor]:
         """Calculate f1, misclassification accuracy, confusion matrix."""
@@ -119,6 +128,7 @@ class BlissMetrics(Metric):
             "detection_recall": det_recall,
             "f1": f1,
             "avg_distance": self.avg_distance,
+            "avg_keep_distance": self.avg_keep_distance,
             "n_matches": self.gal_tp + self.gal_fp + self.gal_tn + self.gal_fn,
             "n_matches_gal_coadd": self.gal_tp + self.gal_fn,
             "class_acc": (self.gal_tp + self.gal_tn) / total_class,
@@ -150,7 +160,8 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
         - row_indx: Indicies of true objects matched to estimated objects.
         - col_indx: Indicies of estimated objects matched to true objects.
         - dist_keep: Matched objects to keep based on l1 distances.
-        - avg_distance: Average l-infinity distance over matched objects.
+        - avg_distance: Average l-infinity distance over all matched objects.
+        - avg_keep_distance: Average l-infinity distance over matched objects to keep.
     """
     assert len(true_locs.shape) == len(est_locs.shape) == 2
     assert true_locs.shape[-1] == est_locs.shape[-1] == 2
@@ -182,8 +193,9 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     # GOOD match condition: L-infinity distance is less than slack
     dist_keep = (dist < slack).bool()
     avg_distance = dist.mean()
+    avg_keep_distance = dist[dist < slack].mean()
 
     if dist_keep.sum() > 0:
         assert dist[dist_keep].max() <= slack
 
-    return row_indx, col_indx, dist_keep, avg_distance
+    return row_indx, col_indx, dist_keep, avg_distance, avg_keep_distance
