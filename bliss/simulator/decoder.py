@@ -145,6 +145,23 @@ class ImageDecoder(nn.Module):
         return (term1 + term2 + term3) / (1 + b + p0)
 
     def render_galaxy(self, galaxy_params: Tensor, psf, bnd: int):
+        """Render a galaxy with given params and PSF.
+
+        Args:
+            galaxy_params (Tensor): Tensor containing the following parameters:
+                - total_flux: the total flux of the galaxy
+                - disk_frac: the fraction of flux attributed to the disk (rest goes to bulge)
+                - beta_radians: the angle of shear in radians
+                - disk_q: the minor-to-major axis ratio of the disk
+                - a_d: semi-major axis of disk
+                - bulge_q: minor-to-major axis ratio of the bulge
+                - a_b: semi-major axis of bulge
+            psf (List): a list of PSFs for each band
+            bnd (int): band
+
+        Returns:
+            GSObject: a galsim representation of the rendered galaxy convolved with the PSF
+        """
         galaxy_params = galaxy_params.cpu().detach()
         total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
         bulge_frac = 1 - disk_frac
