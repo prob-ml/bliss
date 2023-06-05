@@ -3,23 +3,12 @@
 # gracefully exit
 trap "cleanup" SIGINT SIGTERM EXIT
 
-# Usage: generate_data_in_parallel.sh <relative config_path> <num_files_per_process> <num_processes> <num_workers_per_process>
+# Usage: generate_data_in_parallel.sh <relative config_path> <num_files_per_process> [<config_overrides> <num_processes> <num_workers_per_process>]
 CONFIG_PATH=$1
 N_FILES_PER_PROCESS=$2
 CONFIG_OVERRIDES=${3:-""}
 NUM_PROCESSES=${4:-32}
 N_WORKERS_PER_PROCESS=${5:-0}
-
-# Gracefully exit when interrupted
-pids=()
-cleanup() {
-    echo "Ending background processes"
-    for pid in "${pids[@]}";
-    do
-        kill -15 $pid
-    done
-}
-trap cleanup SIGINT
 
 # Error if CONFIG_PATH, N_FILES_PER_PROCESS not specified
 if [ -z "$CONFIG_PATH" ] || [ -z "$N_FILES_PER_PROCESS" ]; then
@@ -40,9 +29,11 @@ for pid in "${pids[@]}"; do
     wait $pid
 done
 
+# Gracefully exit when interrupted
 cleanup() {
-    echo "Killing bliss data generation processes..."
-    for pid in "${pids[@]}"; do
-        kill $pid
+    echo "Ending background processes"
+    for pid in "${pids[@]}";
+    do
+        kill -15 $pid
     done
 }
