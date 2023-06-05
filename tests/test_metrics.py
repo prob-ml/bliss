@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
 import torch
+from hydra.utils import instantiate
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics
 from bliss.predict import prepare_image
 from bliss.surveys.decals import DecalsFullCatalog
@@ -189,9 +190,20 @@ class TestMetrics:
         assert results["gal_tp"] == results["gal_fp"] == results["gal_fn"] == 1
         assert results["avg_distance"].item() == 1
 
+    def test_classification_metrics(self, cfg):
+        """Test galaxy classification metrics."""
+        simulator = instantiate(cfg.simulator, prior={"batch_size": 4})
+        batch = next(iter(simulator.train_dataloader()))
+        catalog = TileCatalog(cfg.encoder.tile_slen, batch["tile_catalog"]).to_full_params()
+        metrics = BlissMetrics()
+        results = BlissMetrics()(catalog, catalog)
+        for metric in metrics.classification_metrics:
+            assert results[f"{metric}_mae"] == 0
+
     def test_photo_self_agreement(self, catalogs):
         """Compares PhotoFullCatalog to itself as safety check for metrics."""
-        results = BlissMetrics()(catalogs["photo"], catalogs["photo"])
+        metrics = BlissMetrics()
+        results = metrics(catalogs["photo"], catalogs["photo"])
         assert results["f1"] == 1
 
     def test_decals_self_agreement(self, catalogs):
