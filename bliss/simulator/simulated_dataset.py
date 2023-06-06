@@ -79,7 +79,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         images += images_mean
         return images
 
-    def simulate_image(self, tile_catalog: TileCatalog, rcf_indices) -> Tuple[Tensor, Tensor]:
+    def simulate_image(
+        self, tile_catalog: TileCatalog, rcf_indices
+    ) -> Tuple[Tensor, Tensor, Tensor]:
         """Simulate a batch of images.
 
         Args:
@@ -87,14 +89,14 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             rcf_indices: Indices of row/camcol/field in self.rcf_list to sample from.
 
         Returns:
-            Tuple[Tensor, Tensor]: tuple of images and backgrounds
+            Tuple[Tensor, Tensor, Tensor]: tuple of images, backgrounds, and psf parameters
         """
         rcf = self.rcf_list[rcf_indices]
-        images = self.image_decoder.render_images(tile_catalog, rcf)
+        images, psf_params = self.image_decoder.render_images(tile_catalog, rcf)
         background = self.background.sample(images.shape, rcf_indices=rcf_indices)  # type: ignore
         images += background
         images = self._apply_noise(images)
-        return images, background
+        return images, background, psf_params
 
     def get_batch(self) -> Dict:
         """Get a batch of simulated images.
@@ -105,17 +107,18 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         of a single simulated image.
 
         Returns:
-            A dictionary of the simulated TileCatalog, and (batch_size, bands, height, width)
-            tensors for images and background.
+            Dict: A dictionary of the simulated TileCatalog, (batch_size, bands, height, width)
+            tensors for images and background, and a (batch_size, 1, 6) tensor for the psf params.
         """
         rcfs, rcf_indices = self.get_random_rcf(self.image_prior.batch_size)
         with torch.no_grad():
             tile_catalog = self.image_prior.sample_prior(rcfs)
-            images, background = self.simulate_image(tile_catalog, rcf_indices)
+            images, background, psf_params = self.simulate_image(tile_catalog, rcf_indices)
             return {
                 "tile_catalog": tile_catalog.to_dict(),
                 "images": images,
                 "background": background,
+                "psf_params": psf_params,
             }
 
     def __iter__(self):

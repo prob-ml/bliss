@@ -70,7 +70,9 @@ class Encoder(pl.LightningModule):
         # a hack to get the right number of outputs from yolo
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
-        self.model = DetectionModel(cfg=arch_dict, ch=2 * self.n_bands)
+
+        num_channels = 8 * self.n_bands
+        self.model = DetectionModel(cfg=arch_dict, ch=num_channels)
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
@@ -94,18 +96,20 @@ class Encoder(pl.LightningModule):
         }
 
     def encode_batch(self, batch):
-        images_with_background = torch.cat((batch["images"], batch["background"]), dim=1)
+        n, _, h, w = batch["images"].size()
+        psf_param_ch = batch["psf_params"].view(n, 6, 1, 1).expand(n, 6, h, w)
+        inputs = torch.cat((batch["images"], batch["background"], psf_param_ch), dim=1)
 
         # setting this to true every time is a hack to make yolo DetectionModel
         # give us output of the right dimension
         self.model.model[-1].training = True
 
-        assert images_with_background.size(2) % 16 == 0, "image dims must be multiples of 16"
-        assert images_with_background.size(3) % 16 == 0, "image dims must be multiples of 16"
+        assert inputs.size(2) % 16 == 0, "image dims must be multiples of 16"
+        assert inputs.size(3) % 16 == 0, "image dims must be multiples of 16"
         bn_warn = "batchnorm training requires a larger batch. did you mean to use eval mode?"
         assert (not self.training) or batch["images"].size(0) > 4, bn_warn
 
-        output = self.model(images_with_background)
+        output = self.model(inputs)
         # there's an extra dimension for channel that is always a singleton
         output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
 
