@@ -43,6 +43,7 @@ class Encoder(pl.LightningModule):
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
         use_deconv_channel=False,
+        concat_psf_params=False,
     ):
         """Initializes DetectionEncoder.
 
@@ -55,6 +56,7 @@ class Encoder(pl.LightningModule):
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
             use_deconv_channel: whether to use the deconvolution as an input channel
+            concat_psf_params: whether to concat psf params to input
         """
         super().__init__()
         self.save_hyperparameters()
@@ -64,6 +66,7 @@ class Encoder(pl.LightningModule):
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.use_deconv_channel = use_deconv_channel
+        self.concat_psf_params = concat_psf_params
 
         self.tile_slen = tile_slen
 
@@ -74,7 +77,11 @@ class Encoder(pl.LightningModule):
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
 
-        num_channels = 3 if self.use_deconv_channel else 2
+        num_channels = 2  # image + background
+        if self.use_deconv_channel:
+            num_channels += 1
+        if self.concat_psf_params:
+            num_channels += 6
         num_channels *= self.n_bands
         self.model = DetectionModel(cfg=arch_dict, ch=num_channels)
         self.tiles_to_crop = tiles_to_crop
@@ -101,10 +108,14 @@ class Encoder(pl.LightningModule):
 
     def encode_batch(self, batch):
         # only take the channels that are present in the input
-        channels = ["images", "background"]
+        inputs = [batch["images"], batch["background"]]
         if self.use_deconv_channel:
-            channels.append("deconvolution")
-        inputs = torch.cat([batch[channel] for channel in channels], dim=1)
+            inputs.append(batch["deconvolution"])
+        if self.concat_psf_params:
+            n, _, h, w = batch["images"].size()
+            inputs.append(batch["psf_params"].view(n, 6, 1, 1).expand(n, 6, h, w))
+
+        inputs = torch.cat(inputs, dim=1)
 
         # setting this to true every time is a hack to make yolo DetectionModel
         # give us output of the right dimension

@@ -16,6 +16,7 @@ FileDatum = TypedDict(
         "images": torch.Tensor,
         "background": torch.Tensor,
         "deconvolution": torch.Tensor,
+        "psf_params": torch.Tensor,
     },
 )
 
@@ -81,9 +82,11 @@ def itemize_data(batch_data) -> List[FileDatum]:
     batch_images = torch.stack([data["images"] for data in batch_data])
     batch_bg = torch.stack([data["background"] for data in batch_data])
     batch_deconv = torch.stack([data["deconvolution"] for data in batch_data])
+    batch_psf = torch.stack([data["psf_params"] for data in batch_data])
     flat_data["images"] = rearrange(batch_images, "b c ... -> (b c) ...")  # type: ignore
     flat_data["background"] = rearrange(batch_bg, "b c ... -> (b c) ...")  # type: ignore
     flat_data["deconvolution"] = rearrange(batch_deconv, "b c ... -> (b c) ...")  # type: ignore
+    flat_data["psf_params"] = rearrange(batch_psf, "b c ... -> (b c) ...")  # type: ignore
 
     # reconstruct data as list of single-input FileDatum dictionaries
     n_items = len(flat_data["images"])
@@ -97,6 +100,7 @@ def itemize_data(batch_data) -> List[FileDatum]:
         file_datum["images"] = flat_data["images"][i]
         file_datum["background"] = flat_data["background"][i]
         file_datum["deconvolution"] = flat_data["deconvolution"][i]
+        file_datum["psf_params"] = flat_data["psf_params"][i]
         file_data.append(file_datum)
 
     return file_data

@@ -25,6 +25,7 @@ class ImageDecoder(nn.Module):
         self.pixel_scale = pixel_scale
         self.psf_slen = psf_slen
         self.psf_galsim = {}  # Dictionary indexed by (run, camcol, field) tuple
+        self.psf_params = {}
 
         sdss_dir = sdss_fields["dir"]
         sdss_bands = sdss_fields["bands"]
@@ -42,6 +43,7 @@ class ImageDecoder(nn.Module):
 
                 # load psf image from params
                 self.psf_galsim[(run, camcol, field)] = self._get_psf(psf_params)
+                self.psf_params[(run, camcol, field)] = psf_params
 
     def _get_psf(self, params):
         """Construct PSF image from parameters. This is the main entry point for generating the psf.
@@ -198,7 +200,7 @@ class ImageDecoder(nn.Module):
             AssertionError: rcf must contain batch_size values
 
         Returns:
-            Tuple[Tensor, List]: tensor of images and list of PSFs used to generate them
+            Tuple[Tensor, List, Tensor]: tensor of images and list of PSFs used to generate them
         """
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
         assert rcf.shape[0] == batch_size
@@ -211,6 +213,8 @@ class ImageDecoder(nn.Module):
 
         # use the PSF from specified row/camcol/field
         psfs = [self.psf_galsim[tuple(rcf[b])] for b in range(batch_size)]  # type: ignore
+        param_list = [self.psf_params[tuple(rcf[b])] for b in range(batch_size)]  # type: ignore
+        psf_params = torch.stack(param_list, dim=0)  # type: ignore
 
         # Nested looping + conditionals are necessary for the drawing of each light
         # source. Ignored relevant style checks for that reason.
@@ -246,4 +250,4 @@ class ImageDecoder(nn.Module):
         # TODO: clamp image values. strange issue - happens only after galsim rendering
         images[images < 1e-8] = 1.1e-8
 
-        return torch.from_numpy(images), psfs
+        return torch.from_numpy(images), psfs, psf_params

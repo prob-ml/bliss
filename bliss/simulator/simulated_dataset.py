@@ -82,7 +82,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def simulate_image(
         self, tile_catalog: TileCatalog, rcf_indices
-    ) -> Tuple[Tensor, Tensor, Tensor]:
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """Simulate a batch of images.
 
         Args:
@@ -90,15 +90,16 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             rcf_indices: Indices of row/camcol/field in self.rcf_list to sample from.
 
         Returns:
-            Tuple[Tensor, Tensor]: tuple of images and backgrounds
+            Tuple[Tensor, Tensor, Tensor, Tensor]: tuple of images, backgrounds, deconvolved images,
+            and psf parameters
         """
         rcf = self.rcf_list[rcf_indices]
-        images, psfs = self.image_decoder.render_images(tile_catalog, rcf)
+        images, psfs, psf_params = self.image_decoder.render_images(tile_catalog, rcf)
         background = self.background.sample(images.shape, rcf_indices=rcf_indices)  # type: ignore
         images += background
         images = self._apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
-        return images, background, deconv_images
+        return images, background, deconv_images, psf_params
 
     def get_deconvolved_images(self, images, backgrounds, psfs) -> Tensor:
         """Deconvolve the synthetic images with the psf used to generate them.
@@ -145,18 +146,19 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         of a single simulated image.
 
         Returns:
-            A dictionary of the simulated TileCatalog, and (batch_size, bands, height, width)
-            tensors for images and background.
+            Dict: A dictionary of the simulated TileCatalog, (batch_size, bands, height, width)
+            tensors for images and background, and a (batch_size, 1, 6) tensor for the psf params.
         """
         rcfs, rcf_indices = self.get_random_rcf(self.image_prior.batch_size)
         with torch.no_grad():
             tile_catalog = self.image_prior.sample_prior(rcfs)
-            images, background, deconv = self.simulate_image(tile_catalog, rcf_indices)
+            images, background, deconv, psf_params = self.simulate_image(tile_catalog, rcf_indices)
             return {
                 "tile_catalog": tile_catalog.to_dict(),
                 "images": images,
                 "background": background,
                 "deconvolution": deconv,
+                "psf_params": psf_params,
             }
 
     def __iter__(self):
