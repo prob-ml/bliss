@@ -1,7 +1,6 @@
 import base64
-import subprocess  # noqa: S404
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional, Tuple
 
 import requests
 import torch
@@ -19,32 +18,250 @@ from bliss.train import train as _train
 SurveyType = Literal["decals", "hst", "lsst", "sdss"]
 
 
-def generate(
-    n_batches: int,
-    batch_size: int,
-    max_images_per_file: int,
-    cached_data_path: str,
-    **kwargs,
-) -> None:
-    """Generate and cache simulated images to disk.
+class BlissClient:
+    def __init__(self, cwd: str):
+        self._cwd = cwd
+        # cached_data_path (str): Path to directory where cached data will be stored.
+        self._cached_data_path = self.cwd + "/dataset"
+        Path(self.cached_data_path).mkdir(parents=True, exist_ok=True)
+        # pretrained_weights_path (str): Path to directory to store pretrained weights.
+        self._pretrained_weights_path = self.cwd + "/pretrained_weights"
+        Path(self.pretrained_weights_path).mkdir(parents=True, exist_ok=True)
+        # output_path (str): Path to directory to store trained model weights.
+        self._output_path = self.cwd + "/output"
+        Path(self.output_path).mkdir(parents=True, exist_ok=True)
 
-    Args:
-        n_batches (int): Number of batches to simulate.
-        batch_size (int): Number of images per batch.
-        max_images_per_file (int): Number of images per cached file.
-        cached_data_path (str): Path to directory where cached data will be stored.
-        **kwargs: Keyword arguments to override default configuration values.
-    """  # noqa: RST210
-    cfg = base_config()
-    # apply overrides
-    cfg.generate.n_batches = n_batches
-    cfg.generate.batch_size = batch_size
-    cfg.generate.max_images_per_file = max_images_per_file
-    cfg.generate.cached_data_path = cached_data_path
-    for k, v in kwargs.items():
-        OmegaConf.update(cfg, k, v)
+    def generate(
+        self,
+        n_batches: int,
+        batch_size: int,
+        max_images_per_file: int,
+        **kwargs,
+    ) -> None:
+        """Generate and cache simulated images to disk.
 
-    _generate(cfg)
+        Args:
+            n_batches (int): Number of batches to simulate.
+            batch_size (int): Number of images per batch.
+            max_images_per_file (int): Number of images per cached file.
+            kwargs: Keyword arguments to override default configuration values.
+        """  # noqa: RST210
+        cfg = base_config()
+        # apply overrides
+        cfg.generate.n_batches = n_batches
+        cfg.generate.batch_size = batch_size
+        cfg.generate.max_images_per_file = max_images_per_file
+        cfg.generate.cached_data_path = self.cached_data_path
+        for k, v in kwargs.items():
+            OmegaConf.update(cfg, k, v)
+
+        _generate(cfg)
+
+    def load_pretrained_weights_for_survey(self, survey: SurveyType, filename: str) -> None:
+        """Load pretrained weights for a survey.
+
+        Args:
+            survey (SurveyType): Survey to load pretrained weights for.
+            filename (str): Name of pretrained weights file to load.
+        """
+        weights = _download_git_lfs_file(
+            "https://api.github.com/repos/prob-ml/bliss/contents/"
+            f"data/pretrained_models/{survey}.pt"
+        )
+        with open(self.pretrained_weights_path + filename, "wb+") as f:
+            f.write(weights)
+
+    def train(self, weight_save_path, **kwargs) -> None:
+        """Train model on simulated images.
+
+        Args:
+            weight_save_path (str): Path to directory after cwd where trained model
+                weights will be stored.
+            kwargs: Keyword arguments to override default configuration values.
+        """  # noqa: RST210
+        cfg = base_config()
+        # apply overrides
+        cfg.training.weight_save_path = self.output_path + f"/{weight_save_path}"
+        for k, v in kwargs.items():
+            OmegaConf.update(cfg, k, v)
+
+        _train(cfg)
+
+    def train_on_cached_data(
+        self,
+        weight_save_path,
+        train_n_batches,
+        batch_size,
+        val_split_file_idxs,
+        pretrained_weights_filename: Optional[str] = None,
+        **kwargs,
+    ) -> None:
+        """Train on cached data.
+
+        Args:
+            weight_save_path (str): Path to directory after cwd where trained model
+                weights will be stored.
+            train_n_batches (int): Number of batches to train on.
+            batch_size (int): Number of images per batch.
+            val_split_file_idxs (List[int]): List of file indices to use for validation.
+            pretrained_weights_filename (str): Name of pretrained weights file to load.
+            kwargs: Keyword arguments to override default configuration values.
+        """  # noqa: RST210
+        cfg = base_config()
+        cfg.training.use_cached_simulator = True
+        # apply overrides
+        cfg.training.weight_save_path = self.output_path + f"/{weight_save_path}"
+        cfg.cached_simulator.cached_data_path = self.cached_data_path
+        cfg.cached_simulator.train_n_batches = train_n_batches
+        cfg.cached_simulator.batch_size = batch_size
+        cfg.cached_simulator.val_split_file_idxs = val_split_file_idxs
+        if pretrained_weights_filename is not None:
+            cfg.training.pretrained_weights = (
+                self.pretrained_weights_path + f"/{pretrained_weights_filename}"
+            )
+        for k, v in kwargs.items():
+            OmegaConf.update(cfg, k, v)
+
+        _train(cfg)
+
+    def load_survey(self, survey: SurveyType, run, camcol, field, download_dir: str):
+        sdss_download.download_all(run, camcol, field, self.cwd + f"/{download_dir}")
+        # assert files downloaded at download_dir
+
+    def predict_sdss(
+        self,
+        data_path: str,
+        weight_save_path: str,
+        **kwargs,
+    ) -> Tuple[FullCatalog, Table, Table]:
+        """Predict on SDSS images.
+
+        Args:
+            data_path (str): Path to directory after cwd where SDSS images are stored.
+            weight_save_path (str): Path to directory after cwd where trained model
+                weights are stored.
+            kwargs: Keyword arguments to override default configuration values.
+
+        Returns:
+            Tuple[FullCatalog, Table, Table]: Tuple of predicted catalog, astropy.table
+            of predicted catalog, and astropy.table of predicted galaxy_params.
+        """
+        cfg = base_config()
+        # apply overrides
+        cfg.predict.dataset.sdss_dir = self.cwd + f"/{data_path}"
+        cfg.predict.weight_save_path = self.output_path + f"/{weight_save_path}"
+        cfg.paths.sdss = cfg.predict.dataset.sdss_dir
+        for k, v in kwargs.items():
+            OmegaConf.update(cfg, k, v)
+
+        # download survey images if not already downloaded
+        run, camcol, field = (
+            cfg.predict.dataset.run,
+            cfg.predict.dataset.camcol,
+            cfg.predict.dataset.fields[0],
+        )
+        bands = ["u", "g", "r", "i", "z"]
+        for band in bands:
+            sdss_data_file_path = (
+                Path(cfg.predict.dataset.sdss_dir)
+                / f"{run}"
+                / f"{camcol}"
+                / f"{field}"
+                / f"frame-{band}-{'{:06d}'.format(run)}-{camcol}-{'{:04d}'.format(field)}.fits"
+            )
+            if not sdss_data_file_path.exists():
+                self.load_survey("sdss", run, camcol, field, download_dir=data_path)
+                break
+
+        est_cat, _, _, _ = _predict_sdss(cfg)
+        est_cat_table, galaxy_params_table = to_astropy_table(est_cat)
+        return est_cat, est_cat_table, galaxy_params_table
+
+    def plot_predictions_in_notebook(self):
+        """Plot predictions in notebook."""
+        from IPython.core.display import HTML  # pylint: disable=import-outside-toplevel
+        from IPython.display import display  # pylint: disable=import-outside-toplevel
+
+        with open("./predict.html", "r", encoding="utf-8") as f:
+            html_str = f.read()
+            display(HTML(html_str))
+
+    def get_dataset_file(self, filename: str):
+        with open(self.cached_data_path + "/" + filename, "rb") as f:
+            return torch.load(f)
+
+    # Getters and setters
+    @property
+    def cwd(self) -> str:
+        """Get current working directory.
+
+        Returns:
+            str: Current working directory.
+        """
+        return self._cwd
+
+    @cwd.setter
+    def cwd(self, cwd: str) -> None:
+        """Set current working directory.
+
+        Args:
+            cwd (str): Current working directory.
+        """
+        self._cwd = cwd
+
+    @property
+    def cached_data_path(self) -> str:
+        """Get path to cached data.
+
+        Returns:
+            str: Path to cached data.
+        """
+        return self._cached_data_path
+
+    @cached_data_path.setter
+    def cached_data_path(self, cached_data_path: str) -> None:
+        """Set path to cached data.
+
+        Args:
+            cached_data_path (str): Path to cached data.
+        """
+        self._cached_data_path = cached_data_path
+
+    @property
+    def pretrained_weights_path(self) -> str:
+        """Get path to cached data.
+
+        Returns:
+            str: Path to cached data.
+        """
+        return self._pretrained_weights_path
+
+    @pretrained_weights_path.setter
+    def pretrained_weights_path(self, pretrained_weights_path: str) -> None:
+        """Set path to pretrained weights.
+
+        Args:
+            pretrained_weights_path (str): Path to pretrained weights.
+        """
+        self._pretrained_weights_path = pretrained_weights_path
+
+    @property
+    def output_path(self) -> str:
+        """Get path to output.
+
+        Returns:
+            str: Path to output.
+        """
+        return self._output_path
+
+    @output_path.setter
+    def output_path(self, output_path: str) -> None:
+        """Set path to output.
+
+        Args:
+            output_path (str): Path to output.
+        """
+        self._output_path = output_path
 
 
 def _download_git_lfs_file(url) -> bytes:
@@ -96,89 +313,6 @@ def _download_git_lfs_file(url) -> bytes:
     # Get and write weights to pretrained weights path
     file = requests.get(lfs_ptr_download_url, timeout=10)
     return file.content
-
-
-def load_pretrained_weights_for_survey(survey: SurveyType, pretrained_weights_path) -> None:
-    """Load pretrained weights for a survey.
-
-    Args:
-        survey (SurveyType): Survey to load pretrained weights for.
-        pretrained_weights_path (str): Path to store pretrained weights.
-    """
-    weights = _download_git_lfs_file(
-        f"https://api.github.com/repos/prob-ml/bliss/contents/data/pretrained_models/{survey}.pt"
-    )
-    with open(pretrained_weights_path, "wb+") as f:
-        f.write(weights)
-
-
-def train(weight_save_path, **kwargs) -> None:
-    """Train model on simulated images.
-
-    Args:
-        weight_save_path (str): Path to directory where trained model weights will be stored.
-        **kwargs: Keyword arguments to override default configuration values.
-    """  # noqa: RST210
-    cfg = base_config()
-    # apply overrides
-    cfg.training.weight_save_path = weight_save_path
-    for k, v in kwargs.items():
-        OmegaConf.update(cfg, k, v)
-
-    _train(cfg)
-
-
-def train_on_cached_data(
-    weight_save_path,
-    cached_data_path,
-    train_n_batches,
-    batch_size,
-    val_split_file_idxs,
-    **kwargs,
-) -> None:
-    """Train on cached data.
-
-    Args:
-        weight_save_path (str): Path to directory where trained model weights will be stored.
-        cached_data_path (str): Path to directory where cached data is stored.
-        train_n_batches (int): Number of batches to train on.
-        batch_size (int): Number of images per batch.
-        val_split_file_idxs (List[int]): List of file indices to use for validation.
-        **kwargs: Keyword arguments to override default configuration values.
-    """  # noqa: RST210
-    cfg = base_config()
-    cfg.training.use_cached_simulator = True
-    # apply overrides
-    cfg.training.weight_save_path = weight_save_path
-    cfg.cached_simulator.cached_data_path = cached_data_path
-    cfg.cached_simulator.train_n_batches = train_n_batches
-    cfg.cached_simulator.batch_size = batch_size
-    cfg.cached_simulator.val_split_file_idxs = val_split_file_idxs
-    for k, v in kwargs.items():
-        OmegaConf.update(cfg, k, v)
-
-    _train(cfg)
-
-
-def load_survey_via_makefile(survey: SurveyType, run, camcol, field, download_dir: Path):
-    with subprocess.Popen(  # noqa: S603, S607
-        [
-            "make",
-            f"RUN={run}",
-            f"CAMCOL={camcol}",
-            f"FIELD={field}",
-            f"DOWNLOAD_DIR={download_dir}",
-        ],
-        stdout=subprocess.PIPE,
-        cwd=Path(__file__).parent / "surveys",
-    ) as process:
-        assert process.wait() == 0
-        # assert files downloaded at download_dir
-
-
-def load_survey(survey: SurveyType, run, camcol, field, download_dir: Path):
-    sdss_download.download_all(run, camcol, field, str(download_dir))
-    # assert files downloaded at download_dir
 
 
 def to_astropy_table(est_cat: FullCatalog):
@@ -237,37 +371,3 @@ def to_astropy_table(est_cat: FullCatalog):
     est_cat_table["galaxy_params"] = galaxy_params_table
 
     return est_cat_table, galaxy_params_table
-
-
-def predict_sdss(data_path: str, weight_save_path: str, **kwargs):
-    cfg = base_config()
-    # apply overrides
-    cfg.predict.dataset.sdss_dir = data_path
-    cfg.predict.weight_save_path = weight_save_path
-    cfg.paths.sdss = cfg.predict.dataset.sdss_dir
-    for k, v in kwargs.items():
-        OmegaConf.update(cfg, k, v)
-
-    # download survey images if not already downloaded
-    run, camcol, field = (
-        cfg.predict.dataset.run,
-        cfg.predict.dataset.camcol,
-        cfg.predict.dataset.fields[0],
-    )
-    bands = ["u", "g", "r", "i", "z"]
-    for band in bands:
-        sdss_data_file_path = (
-            Path(cfg.predict.dataset.sdss_dir)
-            / f"{run}"
-            / f"{camcol}"
-            / f"{field}"
-            / f"frame-{band}-{'{:06d}'.format(run)}-{camcol}-{'{:04d}'.format(field)}.fits"
-        )
-        if not sdss_data_file_path.exists():
-            download_dir = Path(cfg.predict.dataset.sdss_dir)
-            load_survey("sdss", run, camcol, field, download_dir)
-            break
-
-    est_cat, _, _, _ = _predict_sdss(cfg)
-    est_cat_table, galaxy_params_table = to_astropy_table(est_cat)
-    return est_cat, est_cat_table, galaxy_params_table
