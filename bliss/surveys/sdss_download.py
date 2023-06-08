@@ -56,22 +56,18 @@ def download_all(run=94, camcol=1, field=12, download_dir="."):
     for band in BANDS:
         download_gz_file(
             f"{URLBASE}/photo/redux/301/{run_stripped}/objcs/{camcol}/"
-            "fpM-{run6}-{band}{camcol}-{field4}.fit.gz",
+            f"fpM-{run6}-{band}{camcol}-{field4}.fit.gz",
             f"{download_dir}/{subdir3}/fpM-{run6}-{band}{camcol}-{field4}.fits",
         )
 
         download_bz2_file(
             f"{URLBASE}/photoObj/frames/301/{run_stripped}/{camcol}/"
-            "frame-{band}-{run6}-{camcol}-{field4}.fits.bz2",
+            f"frame-{band}-{run6}-{camcol}-{field4}.fits.bz2",
             f"{download_dir}/{subdir3}/frame-{band}-{run6}-{camcol}-{field4}.fits",
         )
 
     download_file(
         f"{URLBASE}/photo/redux/301/{run_stripped}/objcs/{camcol}/"
-        "psField-{run6}-{camcol}-{field4}.fit",
+        f"psField-{run6}-{camcol}-{field4}.fit",
         f"{download_dir}/{subdir3}/psField-{run6}-{camcol}-{field4}.fits",
     )
-
-
-if __name__ == "__main__":
-    download_all()
