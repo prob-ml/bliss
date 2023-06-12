@@ -1,12 +1,14 @@
 import base64
 from pathlib import Path
-from typing import Literal, Optional, Tuple
+from typing import Dict, Literal, Optional, Tuple
 
 import requests
 import torch
 from astropy import units as u
 from astropy.table import Table
+from einops import rearrange
 from omegaconf import OmegaConf
+from torch import Tensor
 
 from bliss.catalog import FullCatalog
 from bliss.conf.igs import base_config
@@ -68,7 +70,7 @@ class BlissClient:
             "https://api.github.com/repos/prob-ml/bliss/contents/"
             f"data/pretrained_models/{survey}.pt"
         )
-        with open(self.pretrained_weights_path + filename, "wb+") as f:
+        with open(self.pretrained_weights_path + f"/{filename}", "wb+") as f:
             f.write(weights)
 
     def train(self, weight_save_path, **kwargs) -> None:
@@ -133,7 +135,7 @@ class BlissClient:
         data_path: str,
         weight_save_path: str,
         **kwargs,
-    ) -> Tuple[FullCatalog, Table, Table]:
+    ) -> Tuple[FullCatalog, Table, Table, Table]:
         """Predict on SDSS images.
 
         Args:
@@ -173,9 +175,10 @@ class BlissClient:
                 self.load_survey("sdss", run, camcol, field, download_dir=data_path)
                 break
 
-        est_cat, _, _, _ = _predict_sdss(cfg)
-        est_cat_table, galaxy_params_table = to_astropy_table(est_cat)
-        return est_cat, est_cat_table, galaxy_params_table
+        est_cat, _, _, _, pred = _predict_sdss(cfg)
+        est_cat_table, galaxy_params_table = fullcat_to_astropy_table(est_cat)
+        pred_table = pred_to_astropy_table(pred)
+        return est_cat, est_cat_table, galaxy_params_table, pred_table
 
     def plot_predictions_in_notebook(self):
         """Plot predictions in notebook."""
@@ -229,10 +232,10 @@ class BlissClient:
 
     @property
     def pretrained_weights_path(self) -> str:
-        """Get path to cached data.
+        """Get path to directory containing pretrained weights.
 
         Returns:
-            str: Path to cached data.
+            str: Path to directory containing pretrained weights.
         """
         return self._pretrained_weights_path
 
@@ -315,7 +318,7 @@ def _download_git_lfs_file(url) -> bytes:
     return file.content
 
 
-def to_astropy_table(est_cat: FullCatalog):
+def fullcat_to_astropy_table(est_cat: FullCatalog):
     assert list(est_cat.keys()) == [
         "star_log_fluxes",
         "star_fluxes",
@@ -352,22 +355,68 @@ def to_astropy_table(est_cat: FullCatalog):
         for i, name in enumerate(galaxy_params_names):
             galaxy_params_dic[name] = galaxy_params[i]
         galaxy_params_dic["galaxy_flux"] = galaxy_params_dic["galaxy_flux"] * u.nmgy
-        galaxy_params_dic["galaxy_disk_frac"] = (
-            galaxy_params_dic["galaxy_disk_frac"] * u.dimensionless_unscaled
-        )
         galaxy_params_dic["galaxy_beta_radians"] = (
             galaxy_params_dic["galaxy_beta_radians"] * u.radian
         )
-        galaxy_params_dic["galaxy_disk_q"] = (
-            galaxy_params_dic["galaxy_disk_q"] * u.dimensionless_unscaled
-        )
         galaxy_params_dic["galaxy_a_d"] = galaxy_params_dic["galaxy_a_d"] * u.arcsec
-        galaxy_params_dic["galaxy_bulge_q"] = (
-            galaxy_params_dic["galaxy_bulge_q"] * u.dimensionless_unscaled
-        )
         galaxy_params_dic["galaxy_a_b"] = galaxy_params_dic["galaxy_a_b"] * u.arcsec
         galaxy_params_list.append(galaxy_params_dic)
     galaxy_params_table = Table(galaxy_params_list)
     est_cat_table["galaxy_params"] = galaxy_params_table
 
     return est_cat_table, galaxy_params_table
+
+
+def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
+    pred.pop("loc")
+
+    # extract parameters from distributions
+    dist_params = {}
+    for pred_key, pred_dist in pred.items():
+        if isinstance(pred_dist, torch.distributions.Categorical):
+            probs = rearrange(pred_dist.probs, "b nth ntw ... -> b (nth ntw) ...")
+            dist_params[f"{pred_key}_false"] = probs[..., 0]
+            dist_params[f"{pred_key}_true"] = probs[..., 1]
+        elif (  # noqa: WPS337
+            isinstance(
+                pred_dist,
+                (torch.distributions.Independent, torch.distributions.TransformedDistribution),
+            )
+        ) and isinstance(pred_dist.base_dist, torch.distributions.Normal):
+            dist_params[f"{pred_key}_mean"] = rearrange(
+                pred_dist.base_dist.mean, "b nth ntw ... -> b (nth ntw) ..."
+            )
+            dist_params[f"{pred_key}_std"] = rearrange(
+                pred_dist.base_dist.stddev, "b nth ntw ... -> b (nth ntw) ..."
+            )
+        elif isinstance(pred_dist, (torch.distributions.Normal, torch.distributions.LogNormal)):
+            dist_params[f"{pred_key}_mean"] = rearrange(
+                pred_dist.mean, "b nth ntw ... -> b (nth ntw) ..."
+            )
+            dist_params[f"{pred_key}_std"] = rearrange(
+                pred_dist.stddev, "b nth ntw ... -> b (nth ntw) ..."
+            )
+        else:
+            raise NotImplementedError(f"Unknown distribution {pred_dist}")
+
+    # convert dictionary of tensors to list of dictionaries
+    n = [torch.squeeze(v).shape[0] for v in dist_params.values()][0]  # number of rows
+    dist_params_list = [
+        {k: torch.squeeze(v)[i].cpu() for k, v in dist_params.items()} for i in range(n)
+    ]
+
+    pred_table = Table(dist_params_list)
+    # convert values to astropy units
+    log_nmgy = u.LogUnit(u.nmgy)
+    pred_table["star_log_flux_mean"] = pred_table["star_log_flux_mean"] * log_nmgy
+    pred_table["star_log_flux_std"] = pred_table["star_log_flux_std"] * log_nmgy
+    pred_table["galsim_flux_mean"] = pred_table["galsim_flux_mean"] * u.nmgy
+    pred_table["galsim_flux_std"] = pred_table["galsim_flux_std"] * u.nmgy
+    pred_table["galsim_beta_radians_mean"] = pred_table["galsim_beta_radians_mean"] * u.radian
+    pred_table["galsim_beta_radians_std"] = pred_table["galsim_beta_radians_std"] * u.radian
+    pred_table["galsim_a_d_mean"] = pred_table["galsim_a_d_mean"] * u.arcsec
+    pred_table["galsim_a_d_std"] = pred_table["galsim_a_d_std"] * u.arcsec
+    pred_table["galsim_a_b_mean"] = pred_table["galsim_a_b_mean"] * u.arcsec
+    pred_table["galsim_a_b_std"] = pred_table["galsim_a_b_std"] * u.arcsec
+
+    return pred_table
