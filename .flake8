@@ -113,4 +113,7 @@ ignore =
     E731,W503,WPS202,WPS213,WPS214,WPS231,WPS232,WPS236,WPS336,WPS338,WPS345,WPS347,WPS358,WPS421,WPS440,WPS441,WPS442,WPS602,
 
     # we don't care about security/cryptography
-    S311
+    S311,
+
+    # not sure what's wrong with the module name
+    WPS100

@@ -12,7 +12,7 @@ from torch import Tensor
 from torch.distributions import Gamma, Poisson, Uniform
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.surveys.sdss import column_to_tensor
+from bliss.utils import column_to_tensor
 
 
 class ImagePrior(pl.LightningModule):

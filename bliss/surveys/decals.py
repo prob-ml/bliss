@@ -6,7 +6,7 @@ from astropy.table import Table
 from astropy.wcs import WCS
 
 from bliss.catalog import FullCatalog
-from bliss.surveys.sdss import column_to_tensor
+from bliss.utils import column_to_tensor, convert_flux_to_mag
 
 
 class DecalsFullCatalog(FullCatalog):
@@ -18,10 +18,6 @@ class DecalsFullCatalog(FullCatalog):
     - https://www.legacysurvey.org/dr5/description/#photometry
     - https://www.legacysurvey.org/dr9/bitmasks/
     """
-
-    @staticmethod
-    def _flux_to_mag(flux):
-        return 22.5 - 2.5 * torch.log10(flux)
 
     @classmethod
     def from_file(
@@ -86,7 +82,7 @@ class DecalsFullCatalog(FullCatalog):
         ra = ra[keep]
         dec = dec[keep]
         flux = flux[keep]
-        mag = cls._flux_to_mag(flux)
+        mag = convert_flux_to_mag(flux, 1)
         nobj = objid.shape[0]
 
         d = {
