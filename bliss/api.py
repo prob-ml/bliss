@@ -1,6 +1,6 @@
 import base64
 from pathlib import Path
-from typing import Dict, Literal, Optional, Tuple
+from typing import Dict, Literal, Optional, Tuple, TypeAlias
 
 import requests
 import torch
@@ -17,10 +17,12 @@ from bliss.predict import predict_sdss as _predict_sdss
 from bliss.surveys import sdss_download
 from bliss.train import train as _train
 
-SurveyType = Literal["decals", "hst", "lsst", "sdss"]
+SurveyType: TypeAlias = Literal["decals", "hst", "lsst", "sdss"]
 
 
 class BlissClient:
+    """Client for interacting with the BLISS API."""
+
     def __init__(self, cwd: str):
         self._cwd = cwd
         # cached_data_path (str): Path to directory where cached data will be stored.
