@@ -22,6 +22,7 @@ def cached_data_path(bliss_client):
         n_batches=3,
         batch_size=64,
         max_images_per_file=128,
+        training={"trainer": {"accelerator": "cpu"}},
     )
     return bliss_client.cached_data_path
 
@@ -32,7 +33,10 @@ def pretrained_weights_filename(bliss_client):
         bliss_client.pretrained_weights_path
     ), f"pretrained_weights_path {bliss_client.pretrained_weights_path} not found"
     filename = "sdss_pretrained_fixture.pt"
-    bliss_client.load_pretrained_weights_for_survey(survey="sdss", filename=filename)
+    bliss_client.load_pretrained_weights_for_survey(
+        survey="sdss",
+        filename=filename,
+    )
     return filename
 
 
@@ -45,6 +49,7 @@ def weight_save_path(bliss_client, pretrained_weights_filename):
         batch_size=64,
         val_split_file_idxs=[1],
         pretrained_weights_filename=pretrained_weights_filename,
+        training={"trainer": {"accelerator": "cpu"}},
     )
     return weight_save_path
 
@@ -63,6 +68,7 @@ class TestApi:
             max_images_per_file=128,
             simulator={"prior": {"mean_sources": 0.02}},  # optional
             generate={"file_prefix": "dataset"},  # optional
+            training={"trainer": {"accelerator": "cpu"}},
         )
         # check that cached datasets generated
         assert os.path.exists(
@@ -95,12 +101,15 @@ class TestApi:
             batch_size=64,
             val_split_file_idxs=[1],
             pretrained_weights_filename=pretrained_weights_filename,
+            training={"trainer": {"accelerator": "cpu"}},
         )
 
     def test_predict_sdss_default_rcf(self, bliss_client, weight_save_path):
         bliss_client.predict_sdss(
             data_path="data/sdss",
             weight_save_path=weight_save_path,
+            training={"trainer": {"accelerator": "cpu"}},
+            predict={"device": "cpu"},
         )
         bliss_client.plot_predictions_in_notebook()
 
@@ -108,5 +117,6 @@ class TestApi:
         bliss_client.predict_sdss(
             data_path="data/sdss",
             weight_save_path=weight_save_path,
-            predict={"dataset": {"run": 1011, "camcol": 3, "fields": [44]}},
+            predict={"dataset": {"run": 1011, "camcol": 3, "fields": [44]}, "device": "cpu"},
+            training={"trainer": {"accelerator": "cpu"}},
         )
