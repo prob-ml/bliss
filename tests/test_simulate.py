@@ -23,7 +23,7 @@ class TestSimulate:
             image = image.to(cfg.predict.device)
             background = background.to(cfg.predict.device)
 
-            est_full, _, _ = predict(cfg, image, background)
+            est_full, _, _, _ = predict(cfg, image, background)
             est_tile = est_full.to_tile_params(tile_slen, max_sources)
             ttc = cfg.encoder.tiles_to_crop
             sim_galaxy_bools = sim_tile["galaxy_bools"][:, ttc:-ttc, ttc:-ttc]
