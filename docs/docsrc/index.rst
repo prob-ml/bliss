@@ -35,3 +35,4 @@ Table of Contents
 
     Installation
     api/index
+    tutorials/index
