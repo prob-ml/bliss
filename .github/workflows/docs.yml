@@ -40,6 +40,7 @@ jobs:
           poetry run make github
           popd
           git add --force ./docs
+          git restore --staged ./docs/docsrc/bin
 
       - name: Commit files
         run: |
