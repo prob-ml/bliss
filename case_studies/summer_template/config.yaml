@@ -1,6 +1,6 @@
 ---
 defaults:
-    - ../../conf@_here_: base_config
+    - ../../bliss/conf@_here_: base_config
     - _self_
     - override hydra/job_logging: stdout
 

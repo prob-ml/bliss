@@ -1,6 +1,13 @@
 bliss package
 =============
 
+bliss.api module
+----------------
+
+.. automodule:: bliss.api
+   :members:
+   :no-undoc-members:
+
 bliss.generate module
 ---------------------
 

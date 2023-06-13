@@ -50,7 +50,7 @@ def predict(cfg, image, background, show_plot=False, true_plocs=None):
         cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
         plot_predict(cfg, cropped_image, cropped_background, true_plocs, est_cat)
 
-    return est_cat, image, background
+    return est_cat, image, background, pred
 
 
 def predict_sdss(cfg):
@@ -66,9 +66,9 @@ def predict_sdss(cfg):
     prepare_bg = prepare_image(sdss[0]["background"], cfg.predict.device)
     show_plot = cfg.predict.plot.show_plot
 
-    est_cat, crop_img, crop_bg = predict(cfg, prepare_img, prepare_bg, show_plot, sdss_plocs)
+    est_cat, crop_img, crop_bg, pred = predict(cfg, prepare_img, prepare_bg, show_plot, sdss_plocs)
 
-    return est_cat, crop_img[0], crop_bg[0], sdss_plocs
+    return est_cat, crop_img[0], crop_bg[0], sdss_plocs, pred
 
 
 def decal_plocs_from_sdss(cfg):
