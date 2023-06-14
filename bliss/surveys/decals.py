@@ -6,6 +6,7 @@ from astropy.table import Table
 from astropy.wcs import WCS
 
 from bliss.catalog import FullCatalog
+from bliss.surveys import decals_download
 from bliss.surveys.sdss import column_to_tensor
 
 
@@ -47,6 +48,8 @@ class DecalsFullCatalog(FullCatalog):
             use get_plocs_from_ra_dec after loading the data.
         """
         catalog_path = Path(decals_cat_path)
+        if not catalog_path.exists():
+            decals_download.download_decals_base(str(catalog_path.parent))
         table = Table.read(catalog_path, format="fits", unit_parse_strict="silent")
         table = {k.upper(): v for k, v in table.items()}  # uppercase keys
         band = band.capitalize()

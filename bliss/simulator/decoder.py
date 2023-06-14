@@ -10,6 +10,7 @@ from omegaconf import DictConfig
 from torch import Tensor, nn
 
 from bliss.catalog import TileCatalog
+from bliss.surveys import sdss_download
 
 
 class ImageDecoder(nn.Module):
@@ -39,6 +40,8 @@ class ImageDecoder(nn.Module):
                 # load raw params from file
                 field_dir = f"{sdss_dir}/{run}/{camcol}/{field}"
                 filename = f"{field_dir}/psField-{run:06}-{camcol}-{field:04}.fits"
+                if not os.path.exists(filename):
+                    sdss_download.download_psfield(run, camcol, field, download_dir=sdss_dir)
                 psf_params = self._get_fit_file_psf_params(filename, sdss_bands)
 
                 # load psf image from params

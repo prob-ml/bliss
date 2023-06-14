@@ -4,29 +4,59 @@ from pathlib import Path
 
 import requests
 
+__all__ = [  # noqa: WPS410
+    "download_pf",
+    "download_po",
+    "download_frame",
+    "download_psfield",
+    "download_all",
+]
+
 URLBASE = "https://data.sdss.org/sas/dr12/boss"
 BANDS = ("u", "g", "r", "i", "z")
 
 
-def download_file(url, filename):
-    Path(filename).parent.mkdir(parents=True, exist_ok=True)
-    response = requests.get(url, timeout=10)
-    with open(filename, "wb") as out_file:
-        out_file.write(response.content)
+def download_pf(run=94, camcol=1, download_dir="."):
+    download_file(
+        f"{URLBASE}/photoObj/301/{_stripped(run)}/photoField-{_run6(run)}-{camcol}.fits",
+        f"{download_dir}/{_subdir2(run, camcol)}/photoField-{_run6(run)}-{camcol}.fits",
+    )
 
 
-def download_gz_file(url, filename):
-    Path(filename).parent.mkdir(parents=True, exist_ok=True)
-    response = requests.get(url, timeout=10)
-    with open(filename, "wb") as out_file:
-        out_file.write(gzip.decompress(response.content))
+def download_po(run=94, camcol=1, field=12, download_dir="."):
+    download_file(
+        f"{URLBASE}/photoObj/301/{_stripped(run)}/{camcol}/"
+        f"photoObj-{_run6(run)}-{camcol}-{_field4(field)}.fits",
+        f"{download_dir}/{_subdir3(run, camcol, field)}/"
+        f"photoObj-{_run6(run)}-{camcol}-{_field4(field)}.fits",
+    )
 
 
-def download_bz2_file(url, filename):
-    Path(filename).parent.mkdir(parents=True, exist_ok=True)
-    response = requests.get(url, timeout=10)
-    with open(filename, "wb") as out_file:
-        out_file.write(bz2.decompress(response.content))
+def download_frame(run=94, camcol=1, field=12, band="r", download_dir="."):
+    download_file(
+        f"{URLBASE}/photo/redux/301/{_stripped(run)}/objcs/{camcol}/"
+        f"fpM-{_run6(run)}-{band}{camcol}-{_field4(field)}.fit.gz",
+        f"{download_dir}/{_subdir3(run, camcol, field)}/"
+        f"fpM-{_run6(run)}-{band}{camcol}-{_field4(field)}.fits",
+        gzip.decompress,
+    )
+
+    download_file(
+        f"{URLBASE}/photoObj/frames/301/{_stripped(run)}/{camcol}/"
+        f"frame-{band}-{_run6(run)}-{camcol}-{_field4(field)}.fits.bz2",
+        f"{download_dir}/{_subdir3(run, camcol, field)}/"
+        f"frame-{band}-{_run6(run)}-{camcol}-{_field4(field)}.fits",
+        bz2.decompress,
+    )
+
+
+def download_psfield(run=94, camcol=1, field=12, download_dir="."):
+    download_file(
+        f"{URLBASE}/photo/redux/301/{_stripped(run)}/objcs/{camcol}/"
+        f"psField-{_run6(run)}-{camcol}-{_field4(field)}.fit",
+        f"{download_dir}/{_subdir3(run, camcol, field)}/"
+        f"psField-{_run6(run)}-{camcol}-{_field4(field)}.fits",
+    )
 
 
 def download_all(run=94, camcol=1, field=12, download_dir="."):
@@ -34,40 +64,38 @@ def download_all(run=94, camcol=1, field=12, download_dir="."):
         # create download directory
         Path(download_dir).mkdir(parents=True, exist_ok=True)
 
-    # strip leading zeros
-    run_stripped = str(run).lstrip("0")
-    field_stripped = str(field).lstrip("0")
-
-    run6 = f"{int(run_stripped):06d}"
-    field4 = f"{int(field_stripped):04d}"
-
-    subdir2 = f"{run_stripped}/{camcol}"
-    subdir3 = f"{run_stripped}/{camcol}/{field_stripped}"
-
-    download_file(
-        f"{URLBASE}/photoObj/301/{run_stripped}/photoField-{run6}-{camcol}.fits",
-        f"{download_dir}/{subdir2}/photoField-{run6}-{camcol}.fits",
-    )
-    download_file(
-        f"{URLBASE}/photoObj/301/{run_stripped}/{camcol}/photoObj-{run6}-{camcol}-{field4}.fits",
-        f"{download_dir}/{subdir3}/photoObj-{run6}-{camcol}-{field4}.fits",
-    )
+    download_pf(run, camcol, download_dir)
+    download_po(run, camcol, field, download_dir)
 
     for band in BANDS:
-        download_gz_file(
-            f"{URLBASE}/photo/redux/301/{run_stripped}/objcs/{camcol}/"
-            f"fpM-{run6}-{band}{camcol}-{field4}.fit.gz",
-            f"{download_dir}/{subdir3}/fpM-{run6}-{band}{camcol}-{field4}.fits",
-        )
+        download_frame(run, camcol, field, band, download_dir)
 
-        download_bz2_file(
-            f"{URLBASE}/photoObj/frames/301/{run_stripped}/{camcol}/"
-            f"frame-{band}-{run6}-{camcol}-{field4}.fits.bz2",
-            f"{download_dir}/{subdir3}/frame-{band}-{run6}-{camcol}-{field4}.fits",
-        )
+    download_psfield(run, camcol, field, download_dir)
 
-    download_file(
-        f"{URLBASE}/photo/redux/301/{run_stripped}/objcs/{camcol}/"
-        f"psField-{run6}-{camcol}-{field4}.fit",
-        f"{download_dir}/{subdir3}/psField-{run6}-{camcol}-{field4}.fits",
-    )
+
+# Helper functions
+def download_file(url, filename, preprocess_fn=lambda x: x):  # noqa: WPS404
+    Path(filename).parent.mkdir(parents=True, exist_ok=True)
+    response = requests.get(url, timeout=10)
+    with open(filename, "wb") as out_file:
+        out_file.write(preprocess_fn(response.content))
+
+
+def _stripped(val):
+    return str(val).lstrip("0")
+
+
+def _run6(run):
+    return f"{int(_stripped(run)):06d}"
+
+
+def _field4(field):
+    return f"{int(_stripped(field)):04d}"
+
+
+def _subdir2(run, camcol):
+    return f"{_stripped(run)}/{camcol}"
+
+
+def _subdir3(run, camcol, field):
+    return f"{_stripped(run)}/{camcol}/{_stripped(field)}"

@@ -12,6 +12,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 
 from bliss.catalog import FullCatalog
+from bliss.surveys import sdss_download
 
 
 def convert_mag_to_flux(mag: Tensor, nelec_per_nmgy=987.31) -> Tensor:
@@ -58,6 +59,8 @@ class SloanDigitalSkySurvey(Dataset):
         pf_file = f"photoField-{run:06d}-{camcol:d}.fits"
         camcol_path = self.sdss_path.joinpath(str(run), str(camcol))
         pf_path = camcol_path.joinpath(pf_file)
+        if not os.path.exists(pf_path):
+            sdss_download.download_pf(run, camcol, download_dir=str(self.sdss_path))
         msg = (
             f"{pf_path} does not exist. "
             + "Make sure data files are available for specified fields."
@@ -110,6 +113,11 @@ class SloanDigitalSkySurvey(Dataset):
     def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
         frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
         frame_path = str(field_dir.joinpath(frame_name))
+        if not os.path.exists(frame_path):
+            sdss_download.download_frame(
+                run, camcol, field, band=bl, download_dir=str(self.sdss_path)
+            )
+        assert os.path.exists(frame_path), f"{frame_path} does not exist."
         frame = fits.open(frame_path)
         calibration = frame[1].data  # pylint: disable=maybe-no-member
         nelec_per_nmgy = gain / calibration
@@ -161,6 +169,9 @@ class PhotoFullCatalog(FullCatalog):
         sdss_path = Path(sdss_path)
         camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
         po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+        if not os.path.exists(po_path):
+            sdss_download.download_po(run, camcol, field, download_dir=sdss_path)
+        assert os.path.exists(po_path), f"File {po_path} does not exist."
         po_fits = fits.getdata(po_path)
         objc_type = column_to_tensor(po_fits, "objc_type")
         thing_id = column_to_tensor(po_fits, "thing_id")
