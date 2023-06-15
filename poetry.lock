@@ -5440,7 +5440,7 @@ test = ["argcomplete (>=2.0)", "pre-commit", "pytest", "pytest-mock"]
 name = "types-requests"
 version = "2.31.0.1"
 description = "Typing stubs for requests"
-category = "main"
+category = "dev"
 optional = false
 python-versions = "*"
 files = [
@@ -5455,7 +5455,7 @@ types-urllib3 = "*"
 name = "types-urllib3"
 version = "1.26.25.13"
 description = "Typing stubs for urllib3"
-category = "main"
+category = "dev"
 optional = false
 python-versions = "*"
 files = [
@@ -5882,4 +5882,4 @@ tqdm = ">=4.64.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "7a356e73f1a7d6b4b6633d84db9977f52e6544b63f87d8e5038521caae9ca818"
+content-hash = "3405525db6a4a3b6f5b97da140f398627706ba3b695d27f0b5acf6c7bf60cc54"
