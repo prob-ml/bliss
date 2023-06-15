@@ -60,7 +60,6 @@ pre-commit-hooks = "^4.4.0"
 pylint = ">=2.6.0"
 pytest = ">=6.1.2"
 pytest-cov = ">=2.10"
-pytest-mypy = ">=0.9.1"
 sphinx-rtd-theme = ">=0.5.2"
 torch-tb-profiler = "^0.4.1"
 tqdm = ">=4.62.3"
@@ -99,5 +98,3 @@ minversion = "6.0"
 testpaths = [
   "tests",
 ]
-
-
