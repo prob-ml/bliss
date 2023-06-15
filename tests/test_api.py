@@ -17,21 +17,26 @@ def bliss_client(cwd):
 
 @pytest.fixture(scope="class")
 def cached_data_path(bliss_client):
-    bliss_client.cached_data_path = bliss_client.cwd + "/dataset"
+    bliss_client.cached_data_path = bliss_client.cwd + "/data/cached_dataset"
     bliss_client.generate(n_batches=3, batch_size=8, max_images_per_file=16)
     return bliss_client.cached_data_path
 
 
 @pytest.fixture(scope="class")
 def pretrained_weights_filename(bliss_client):
-    assert Path(
-        bliss_client.pretrained_weights_path
-    ).exists(), f"pretrained_weights_path {bliss_client.pretrained_weights_path} not found"
     filename = "sdss_pretrained_fixture.pt"
     bliss_client.load_pretrained_weights_for_survey(
         survey="sdss",
         filename=filename,
     )
+    not_found_err_msg = (
+        "pretrained weights "
+        + f"{bliss_client.cwd}/data/pretrained_models/sdss_pretrained_fixture.pt "
+        + "not found"
+    )
+    assert Path(
+        bliss_client.cwd + "/data/pretrained_models/sdss_pretrained_fixture.pt"
+    ).exists(), not_found_err_msg
     return filename
 
 
@@ -55,7 +60,7 @@ def weight_save_path(bliss_client, pretrained_weights_filename):
 class TestApi:
     def test_generate(self, bliss_client):
         # alter default cached_data_path
-        bliss_client.cached_data_path = bliss_client.cwd + "/dataset_ms0.02"
+        bliss_client.cached_data_path = bliss_client.cwd + "/data/cached_dataset_ms0.02"
         bliss_client.generate(
             n_batches=3,
             batch_size=8,
@@ -63,10 +68,10 @@ class TestApi:
             simulator={"prior": {"mean_sources": 0.02}},  # optional
             generate={"file_prefix": "dataset"},  # optional
         )
-        # check that cached datasets generated
+        # check that cached dataset generated
         assert Path(
-            bliss_client.cwd + "/dataset_ms0.02/dataset_0.pt"
-        ).exists(), "{CWD}/dataset_ms0.02/dataset_0.pt not found"
+            bliss_client.cwd + "/data/cached_dataset_ms0.02/dataset_0.pt"
+        ).exists(), "{CWD}/data/cached_dataset_ms0.02/dataset_0.pt not found"
 
     def test_get_dataset_file(self, bliss_client, cached_data_path):
         bliss_client.cached_data_path = cached_data_path
@@ -74,12 +79,17 @@ class TestApi:
         assert isinstance(dataset0, list), "dataset0 must be a list"
 
     def test_load_pretrained_weights(self, bliss_client):
-        assert Path(
-            bliss_client.pretrained_weights_path
-        ).exists(), f"pretrained_weights_path {bliss_client.pretrained_weights_path} not found"
         bliss_client.load_pretrained_weights_for_survey(
             survey="sdss", filename="sdss_pretrained.pt"
         )
+        not_found_err_msg = (
+            "pretrained weights "
+            + f"{bliss_client.cwd}/data/pretrained_models/sdss_pretrained.pt "
+            + "not found"
+        )
+        assert Path(
+            bliss_client.cwd + "/data/pretrained_models/sdss_pretrained.pt"
+        ).exists(), not_found_err_msg
 
     def test_train_on_cached_data(self, bliss_client, pretrained_weights_filename):
         bliss_client.train_on_cached_data(
@@ -100,16 +110,13 @@ class TestApi:
 
     def test_predict_sdss_default_rcf(self, bliss_client, weight_save_path):
         bliss_client.predict_sdss(
-            data_path="data/sdss",
             weight_save_path=weight_save_path,
-            training={"trainer": {"accelerator": "cpu"}},
             predict={"device": "cpu"},
         )
         bliss_client.plot_predictions_in_notebook()
 
     def test_predict_sdss_custom_rcf(self, bliss_client, weight_save_path):
         bliss_client.predict_sdss(
-            data_path="data/sdss",
             weight_save_path=weight_save_path,
             predict={"dataset": {"run": 1011, "camcol": 3, "fields": [44]}, "device": "cpu"},
         )

@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict, Literal, Optional, Tuple, TypeAlias
 
 import torch
@@ -63,6 +64,7 @@ class BlissClient:
             "https://api.github.com/repos/prob-ml/bliss/contents/"
             f"data/pretrained_models/{survey}.pt"
         )
+        Path(self.base_cfg.paths.pretrained_models).mkdir(parents=True, exist_ok=True)
         with open(self.base_cfg.paths.pretrained_models + f"/{filename}", "wb+") as f:
             f.write(weights)
 
