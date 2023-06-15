@@ -115,8 +115,5 @@ ignore =
     # we don't care about security/cryptography
     S311,
 
-    # not sure what's wrong with the module name
-    WPS100,
-
     # upper-case constants are fine in Enums
     WPS115
