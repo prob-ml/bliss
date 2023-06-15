@@ -1,5 +1,5 @@
 import math
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -13,7 +13,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
-from bliss.catalog import TileCatalog
+from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics
 from bliss.plotting import plot_detections
 from bliss.unconstrained_dists import (
@@ -74,7 +74,7 @@ class Encoder(pl.LightningModule):
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
-        self.metrics = BlissMetrics(slack)
+        self.metrics = BlissMetrics(mode=BlissMetrics.Mode.Tile, slack=slack)
 
     @property
     def dist_param_groups(self):
@@ -123,15 +123,25 @@ class Encoder(pl.LightningModule):
 
         return pred
 
-    def variational_mode(self, pred: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        """Compute the mode of the variational distribution."""
+    def variational_mode(
+        self, pred: Dict[str, Tensor], return_full: Optional[bool] = True
+    ) -> Union[FullCatalog, TileCatalog]:
+        """Compute the mode of the variational distribution.
+
+        Args:
+            pred (Dict[str, Tensor]): model predictions
+            return_full (bool, optional): If True, returns a FullCatalog instead of a TileCatalog.
+                Defaults to False.
+
+        Returns:
+            Union[FullCatalog, TileCatalog]: Catalog based on predictions.
+        """
         # the mean would be better at minimizing squared error...should we return that instead?
         tile_is_on_array = pred["on_prob"].mode
         # this is the mode of star_log_flux but not the mean of the star_flux distribution
         star_fluxes = pred["star_log_flux"].mode.exp()  # type: ignore
-        star_fluxes *= tile_is_on_array
-        galaxy_bools = pred["galaxy_prob"].mode * pred["on_prob"].mode  # type: ignore
-        star_bools = (1 - pred["galaxy_prob"].mode) * pred["on_prob"].mode  # type: ignore
+        galaxy_bools = pred["galaxy_prob"].mode  # type: ignore
+        star_bools = 1 - pred["galaxy_prob"].mode  # type: ignore
 
         galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
         galsim_dists = [pred[f"galsim_{name}"] for name in galsim_names]
@@ -153,7 +163,7 @@ class Encoder(pl.LightningModule):
         }
 
         est_tile_catalog = TileCatalog(self.tile_slen, est_catalog_dict)
-        return est_tile_catalog.to_full_params()
+        return est_tile_catalog if not return_full else est_tile_catalog.to_full_params()
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
@@ -216,8 +226,7 @@ class Encoder(pl.LightningModule):
         true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
         loss_dict = self._get_loss(pred, true_tile_cat)
-        true_full_cat = true_tile_cat.to_full_params()
-        est_cat = self.variational_mode(pred)
+        est_tile_cat = self.variational_mode(pred, return_full=False)  # get tile cat for metrics
 
         # log all losses
         for k, v in loss_dict.items():
@@ -225,7 +234,7 @@ class Encoder(pl.LightningModule):
 
         # log all metrics
         if log_metrics:
-            metrics = self.metrics(true_full_cat, est_cat)
+            metrics = self.metrics(true_tile_cat, est_tile_cat)
             for k, v in metrics.items():
                 self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
@@ -234,11 +243,15 @@ class Encoder(pl.LightningModule):
             batch_size = len(batch["images"])
             n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
             nrows = int(n_samples**0.5)  # for figure
-            wrong_idx = (est_cat.n_sources != true_full_cat.n_sources).nonzero()
+
+            true_full_cat = true_tile_cat.to_full_params()
+            est_full_cat = est_tile_cat.to_full_params()
+            wrong_idx = (est_full_cat.n_sources != true_full_cat.n_sources).nonzero()
             wrong_idx = wrong_idx.view(-1)[:n_samples]
+
             margin_px = self.tiles_to_crop * self.tile_slen
             fig = plot_detections(
-                batch["images"], true_full_cat, est_cat, nrows, wrong_idx, margin_px
+                batch["images"], true_full_cat, est_full_cat, nrows, wrong_idx, margin_px
             )
             title_root = f"Epoch:{self.current_epoch}/"
             title = f"{title_root}{logging_name} images"

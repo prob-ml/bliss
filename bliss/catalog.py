@@ -103,13 +103,13 @@ class TileCatalog(UserDict):
             NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
             pixel locations ("plocs") that are between 0 and `slen`.
         """
-        plocs = self._get_full_locs_from_tiles()
+        plocs = self.get_full_locs_from_tiles()
         param_names_to_mask = {"plocs"}.union(set(self.keys()))
         tile_params_to_gather = {"plocs": plocs}
         tile_params_to_gather.update(self)
 
         params = {}
-        indices_to_retrieve, is_on_array = self._get_indices_of_on_sources()
+        indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()
         for param_name, tile_param in tile_params_to_gather.items():
             k = tile_param.shape[-1]
             param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
@@ -123,13 +123,11 @@ class TileCatalog(UserDict):
         height, width = self.n_tiles_h * self.tile_slen, self.n_tiles_w * self.tile_slen
         return FullCatalog(height, width, params)
 
-    def _get_full_locs_from_tiles(self) -> Tensor:
+    def get_full_locs_from_tiles(self) -> Tensor:
         """Get the full image locations from tile locations.
 
         Returns:
-            A tuple of two elements, "plocs" and "locs".
-            "plocs" are the pixel coordinates of each source (between 0 and slen).
-            "locs" are the scaled locations of each source (between 0 and 1).
+            Tensor: pixel coordinates of each source (between 0 and slen).
         """
         slen = self.n_tiles_h * self.tile_slen
         wlen = self.n_tiles_w * self.tile_slen
@@ -151,7 +149,7 @@ class TileCatalog(UserDict):
             ntw=self.n_tiles_w,
         )
 
-    def _get_indices_of_on_sources(self) -> Tuple[Tensor, Tensor]:
+    def get_indices_of_on_sources(self) -> Tuple[Tensor, Tensor]:
         """Get the indices of detected sources from each tile.
 
         Returns:
@@ -204,6 +202,24 @@ class TileCatalog(UserDict):
         d["locs"] = self.locs[:, x_indx, y_indx, :, :].reshape(n_total, -1)
 
         return d
+
+    def gather_param_at_tiles(self, param_name: str, indices: Tensor) -> Tensor:
+        """Gets the tile parameters at the desired indices.
+
+        Args:
+            param_name (str): Param name. Must be either "locs" or in keys of catalog.
+            indices (Tensor): The indices to gather. Normally this will come from
+                get_indices_of_on_sources, but notably, we use the indices of the true catalog to
+                gather from the tile catalog when computing metrics.
+
+        Returns:
+            Tensor: (b, n, k) tensor, where b=batch size, n=length of indices, and k=param dims
+        """
+        assert param_name == "locs" or param_name in self.keys(), f"'{param_name}' not in catalog"
+        param = self.get_full_locs_from_tiles() if param_name == "locs" else self[param_name]
+        param = rearrange(param, "b h w s k -> b (h w s) k")
+        idx_to_gather = repeat(indices, "... -> ... k", k=param.size(-1))
+        return torch.gather(param, dim=1, index=idx_to_gather)
 
 
 class FullCatalog(UserDict):

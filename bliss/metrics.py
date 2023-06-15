@@ -1,4 +1,8 @@
-from typing import Dict, List, Optional
+# pylint: disable=E1101
+# mypy: disable-error-code="union-attr"
+
+from enum import Enum
+from typing import Dict, List, Union
 
 import numpy as np
 import torch
@@ -9,24 +13,38 @@ from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, TileCatalog
+
+# define type alias to simplify signatures
+Catalog = Union[TileCatalog, FullCatalog]
 
 
 class BlissMetrics(Metric):
-    """Calculates aggregate metrics on batches over full images (not tiles)."""
+    """Calculates detection and classification metrics between two catalogs.
 
-    # Detection metrics
+    BlissMetrics supports two modes, Full and Tile, which indicate what type of catalog to operate
+    over. For FullCatalogs, all metrics are computed by matching predicted sources to true sources.
+    For TileCatalogs, detection metrics are still computed that way, but star/galaxy parameter
+    metrics are computed conditioned on true source location and type; i.e, given a true star or
+    galaxy in a tile in the true catalog, get the corresponding parameters in the same tile in the
+    estimated catalog (regardless of type/existence predicted by estimated catalog in that tile.
+    """
+
+    # detection metrics
     detection_tp: Tensor
     detection_fp: Tensor
-    avg_distance: Tensor
-    avg_keep_distance: Tensor
-    total_true_n_souces: Tensor
+    total_true_n_sources: Tensor
+    total_distance: Tensor
+    total_distance_keep: Tensor
+    match_count: Tensor
+    match_count_keep: Tensor
     gal_tp: Tensor
     gal_fp: Tensor
-    gal_fn: Tensor
-    gal_tn: Tensor
+    star_tp: Tensor
+    star_fp: Tensor
 
-    # Classification metrics
+    # classification metrics
+    star_flux: List
     disk_flux: List
     bulge_flux: List
     disk_q: List
@@ -35,60 +53,43 @@ class BlissMetrics(Metric):
     bulge_hlr: List
     beta_radians: List
 
-    full_state_update: Optional[bool] = True
+    full_state_update: bool = False
+
+    class Mode(Enum):  # noqa: WPS431
+        Full = 1
+        Tile = 2
 
     def __init__(
         self,
+        mode: Mode = Mode.Full,
         slack: float = 1.0,
         dist_sync_on_step: bool = False,
         disable_bar: bool = True,
     ) -> None:
-        """Computes matches between true and estimated locations.
-
-        Args:
-            slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
-            dist_sync_on_step: See torchmetrics documentation.
-            disable_bar: Whether to show progress bar
-
-        Attributes:
-            detection_tp: true positives = # of sources matched with a true source.
-            detection_fp: false positives = # of predicted sources not matched with true source
-            avg_distance: Average l-infinity distance over all matched objects.
-            avg_keep_distance: Average l-infinity distance over matched objects to keep.
-            total_true_n_sources: Total number of true sources over batches seen.
-            disable_bar: Whether to show progress bar
-            gal_tp: true positives = # of sources correctly classified as a galaxy
-            gal_fp: false positives = # of sources incorrectly classified as a galaxy
-            gal_fn: false negatives = # of sources incorrectly classified as a star
-            gal_tn: true negatives = # of sources correctly classified as a star
-            disk_flux: Residuals of disk flux
-            bulge_flux: Residuals of bulge flux
-            disk_q: Residuals of disk ratio of major to minor axis
-            bulge_q: Residuals of bulge ratio of major to minor axis
-            disk_hlr: Residuals of disk half-light radius
-            bulge_hlr: Residuals of bulge half-light radius
-            beta_radians: Residuals of galaxy angle
-        """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.slack = slack
         self.disable_bar = disable_bar
+        self.mode = mode
 
         self.detection_metrics = [
             "detection_tp",
             "detection_fp",
-            "avg_distance",
-            "avg_keep_distance",
             "total_true_n_sources",
+            "total_distance",
+            "total_distance_keep",
+            "match_count",
+            "match_count_keep",
             "gal_tp",
             "gal_fp",
-            "gal_fn",
-            "gal_tn",
+            "star_tp",
+            "star_fp",
         ]
         for metric in self.detection_metrics:
             self.add_state(metric, default=torch.tensor(0.0), dist_reduce_fx="sum")
 
         self.classification_metrics = [
+            "star_flux",
             "disk_flux",
             "bulge_flux",
             "disk_q",
@@ -100,80 +101,71 @@ class BlissMetrics(Metric):
         for metric in self.classification_metrics:
             self.add_state(metric, default=[], dist_reduce_fx="sum")
 
-    # pylint: disable=no-member
-    def update(self, true: FullCatalog, est: FullCatalog) -> None:  # type: ignore
-        """Update the internal state of metrics including tp, fp, total_coadd_gal_matches, etc."""
+    def update(self, true: Catalog, est: Catalog) -> None:
         assert true.batch_size == est.batch_size
+        if self.mode is BlissMetrics.Mode.Full:
+            assert isinstance(true, FullCatalog) and isinstance(
+                est, FullCatalog
+            ), "Metrics mode is set to `Full` but received a TileCatalog"
+        elif self.mode is BlissMetrics.Mode.Tile:
+            assert isinstance(true, TileCatalog) and isinstance(
+                est, TileCatalog
+            ), "Metrics mode is set to `Tile` but received a FullCatalog"
 
-        count, good_match_count = 0, 0
+        self._update_detection_metrics(true, est)
+        self._update_classification_metrics(true, est)
+
+    def _update_detection_metrics(self, true: Catalog, est: Catalog) -> None:
+        """Update detection metrics."""
+        if self.mode is BlissMetrics.Mode.Full:
+            true_locs = true.plocs
+            est_locs = est.plocs
+            tgbool = true["galaxy_bools"]
+            egbool = est["galaxy_bools"]
+        elif self.mode is BlissMetrics.Mode.Tile:
+            true_on_idx, true_is_on = true.get_indices_of_on_sources()
+            est_on_idx, est_is_on = est.get_indices_of_on_sources()
+
+            true_locs = true.gather_param_at_tiles("locs", true_on_idx)
+            true_locs *= true_is_on.unsqueeze(-1)
+            est_locs = est.gather_param_at_tiles("locs", est_on_idx)
+            est_locs *= est_is_on.unsqueeze(-1)
+
+            tgbool = true.gather_param_at_tiles("galaxy_bools", true_on_idx)
+            tgbool *= true_is_on.unsqueeze(-1)
+            egbool = est.gather_param_at_tiles("galaxy_bools", est_on_idx)
+            egbool *= est_is_on.unsqueeze(-1)
+
         for b in range(true.batch_size):
-            ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
-            tlocs, elocs = true.plocs[b], est.plocs[b]
-            tgbool, egbool = true["galaxy_bools"][b].reshape(-1), est["galaxy_bools"][b].reshape(-1)
+            ntrue = int(true.n_sources[b].int().sum().item())
+            nest = int(est.n_sources[b].int().sum().item())
+            self.total_true_n_sources += ntrue
 
-            self.total_true_n_sources += ntrue  # type: ignore
             # if either ntrue or nest are 0, manually increment FP/FN and continue
             if ntrue == 0 or nest == 0:
-                if nest > 0:  # all estimated are false positives
+                if nest > 0:
                     self.detection_fp += nest
-                    self.gal_fp += egbool.sum()
-                elif ntrue > 0:  # all true are false negatives
-                    self.gal_fn += tgbool.sum()
                 continue
 
-            # Match true and estimated locations
             mtrue, mest, dkeep, avg_distance, avg_keep_distance = match_by_locs(
-                tlocs[: int(ntrue)], elocs[: int(nest)], self.slack
+                true_locs[b, 0:ntrue], est_locs[b, 0:nest], self.slack
             )
 
-            # Compute detection metrics
-            tgbool = tgbool[mtrue][dkeep].reshape(-1)
-            egbool = egbool[mest][dkeep].reshape(-1)
-            self._update_detection_metrics(
-                elocs, nest, tgbool, egbool, mest, dkeep, avg_distance, avg_keep_distance
-            )
+            # update TP/FP and distances
+            tp = dkeep.sum().item()
+            self.detection_tp += tp
+            self.detection_fp += nest - tp
+
+            self.total_distance += avg_distance
+            self.match_count += 1
             if not torch.isnan(avg_keep_distance):
-                good_match_count += 1
+                self.total_distance_keep += avg_keep_distance
+                self.match_count_keep += 1
 
-            # Compute classification metrics
-            if "galaxy_params" in true:
-                true_gal_params = true["galaxy_params"][b][mtrue][dkeep]  # noqa: WPS529
-                est_gal_params = est["galaxy_params"][b][mest][dkeep]
-                self._update_galaxy_metrics(true_gal_params, est_gal_params)
-
-            count += 1
-
-        self.avg_distance /= count
-        self.avg_keep_distance /= good_match_count
-
-    def _update_detection_metrics(
-        self, elocs, nest, tgbool, egbool, mest, dkeep, avg_distance, avg_keep_distance
-    ) -> None:
-        """Update detection metrics for a batch.
-
-        Args:
-            elocs: Locations of sources from estimated catalog.
-            nest: Number of estimated sources.
-            tgbool: Galaxy bools from true catalog.
-            egbool: Galaxy bools from estimated catalog.
-            mest: See match_by_locs.
-            dkeep: See match_by_locs.
-            avg_distance: See match_by_locs.
-            avg_keep_distance: See match_by_locs.
-        """
-        detection_tp = len(elocs[mest][dkeep])
-        detection_fp = nest - detection_tp
-        assert detection_fp >= 0
-
-        self.detection_tp += detection_tp
-        self.detection_fp += detection_fp
-
-        self.avg_distance += avg_distance
-        # avg_keep_distance can be nan if no good matches were found, so ignore in that case
-        if not torch.isnan(avg_keep_distance):
-            self.avg_keep_distance += avg_keep_distance
-
-        self._update_confusion_matrix(tgbool, egbool)  # compute confusion matrix
+            # update star/galaxy classification TP/FP
+            batch_tgbool = tgbool[b][mtrue][dkeep].reshape(-1)
+            batch_egbool = egbool[b][mest][dkeep].reshape(-1)
+            self._update_confusion_matrix(batch_tgbool, batch_egbool)
 
     def _update_confusion_matrix(self, tgbool: Tensor, egbool: Tensor) -> None:
         """Compute galaxy detection confusion matrix and update TP/FP/TN/FN.
@@ -183,21 +175,37 @@ class BlissMetrics(Metric):
             egbool (Tensor): Galaxy bools from estimated catalog.
         """
         conf_matrix = confusion_matrix(tgbool.cpu(), egbool.cpu(), labels=[1, 0])
-        # decompose confusion matrix to pass to lightning logger
+        # decompose confusion matrix
         self.gal_tp += conf_matrix[0][0]
         self.gal_fp += conf_matrix[0][1]
-        self.gal_fn += conf_matrix[1][0]
-        self.gal_tn += conf_matrix[1][1]
+        self.star_fp += conf_matrix[1][0]
+        self.star_tp += conf_matrix[1][1]
 
-    def _update_galaxy_metrics(self, true_gal_params: Tensor, est_gal_params: Tensor) -> None:
-        """Update galaxy classification metrics for a batch.
+    def _update_classification_metrics(self, true: Catalog, est: Catalog) -> None:
+        """Update classification metrics based on estimated params at locations of true sources."""
+        # only compute classification metrics if available
+        if "galaxy_params" not in true or "galaxy_params" not in est:
+            return
 
-        Args:
-            true_gal_params (Tensor): Galaxy parameters from true catalog.
-                Parameters are total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b
-            est_gal_params (Tensor): Galaxy parameters from estimated catalog.
-        """
+        # get galaxy params in estimated catalog at tiles containing a galaxy in the true catalog
+        true_indices, true_is_on = true.get_indices_of_on_sources()
+
+        # construct masks for true source type
+        true_gal_bools = true.gather_param_at_tiles("galaxy_bools", true_indices)
+        gal_mask = true_gal_bools.squeeze() * true_is_on
+        star_mask = (~true_gal_bools).squeeze() * true_is_on
+
+        # gather parameters where source is present in true catalog AND source is actually a star
+        # or galaxy respectively in true catalog
+        # note that the boolean indexing collapses across batches to return a 1D tensor
+        true_gal_params = true.gather_param_at_tiles("galaxy_params", true_indices)[gal_mask]
+        est_gal_params = est.gather_param_at_tiles("galaxy_params", true_indices)[gal_mask]
+        true_star_fluxes = true.gather_param_at_tiles("star_fluxes", true_indices)[star_mask]
+        est_star_fluxes = est.gather_param_at_tiles("star_fluxes", true_indices)[star_mask]
+
         # fluxes
+        self.star_flux.append(torch.abs(true_star_fluxes - est_star_fluxes).squeeze())
+
         est_disk_flux = est_gal_params[:, 0] * est_gal_params[:, 1]  # total flux * disk fraction
         true_disk_flux = true_gal_params[:, 0] * true_gal_params[:, 1]
         self.disk_flux.append(torch.abs(true_disk_flux - est_disk_flux))
@@ -223,30 +231,29 @@ class BlissMetrics(Metric):
         true_bulge_hlr = true_gal_params[:, 6] * torch.sqrt(true_gal_params[:, 5])
         self.bulge_hlr.append(torch.abs(true_bulge_hlr - est_bulge_hlr))
 
-    def compute(self) -> Dict[str, Tensor]:
-        """Calculate f1, misclassification accuracy, confusion matrix."""
-        # PPV = positive predictive value
-        det_precision = self.detection_tp / (self.detection_tp + self.detection_fp)
-        # TPR = true positive rate
-        det_recall = self.detection_tp / self.total_true_n_sources
-        # f1 score
-        f1 = (2 * det_precision * det_recall) / (det_precision + det_recall)
-        # total number of predictions
-        total_class = self.gal_tp + self.gal_fp + self.gal_tn + self.gal_fn
+    def compute(self) -> Dict[str, float]:
+        precision = self.detection_tp / (self.detection_tp + self.detection_fp)
+        recall = self.detection_tp / self.total_true_n_sources
+        f1 = 2 * precision * recall / (precision + recall)
+
+        avg_distance = self.total_distance / self.match_count.item()
+        avg_keep_distance = self.total_distance_keep / self.match_count_keep.item()
+
+        class_acc = (self.gal_tp + self.star_tp) / (
+            self.gal_tp + self.star_tp + self.gal_fp + self.star_fp
+        )
 
         metrics = {
-            "detection_precision": det_precision,
-            "detection_recall": det_recall,
-            "f1": f1,
-            "avg_distance": self.avg_distance,
-            "avg_keep_distance": self.avg_keep_distance,
-            "n_matches": self.gal_tp + self.gal_fp + self.gal_tn + self.gal_fn,
-            "n_matches_gal_coadd": self.gal_tp + self.gal_fn,
-            "class_acc": (self.gal_tp + self.gal_tn) / total_class,
-            "gal_tp": self.gal_tp,
-            "gal_fp": self.gal_fp,
-            "gal_fn": self.gal_fn,
-            "gal_tn": self.gal_tn,
+            "detection_precision": precision.item(),
+            "detection_recall": recall.item(),
+            "f1": f1.item(),
+            "avg_distance": avg_distance.item(),
+            "avg_keep_distance": avg_keep_distance.item(),
+            "gal_tp": self.gal_tp.item(),
+            "gal_fp": self.gal_fp.item(),
+            "star_tp": self.star_tp.item(),
+            "star_fp": self.star_fp.item(),
+            "class_acc": class_acc.item(),
         }
 
         # add classification metrics if computed
@@ -254,8 +261,7 @@ class BlissMetrics(Metric):
             for metric in self.classification_metrics:
                 # flatten list of variable-size tensors and take the median
                 vals: List = sum([t.flatten().tolist() for t in getattr(self, metric)], [])
-                mae = np.median(vals) if vals else np.nan
-                metrics[f"{metric}_mae"] = torch.tensor(mae)
+                metrics[f"{metric}_mae"] = np.median(vals) if vals else np.nan
 
         return metrics
 
