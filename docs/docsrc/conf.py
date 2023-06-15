@@ -36,6 +36,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.intersphinx",
     "sphinx_rtd_theme",
+    "nbsphinx",
 ]
 
 intersphinx_mapping = {
@@ -52,7 +53,7 @@ templates_path = ["_templates"]
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
+exclude_patterns = []  # type: ignore
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -65,3 +66,35 @@ html_theme = "sphinx_rtd_theme"
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
+
+# For nbsphinx
+nbsphinx_execute = "never"
+
+# Below code is necessary to ensure pandoc is available for use by nbsphinx.
+# See https://stackoverflow.com/questions/62398231/building-docs-fails-due-to-missing-pandoc/71585691#71585691 # noqa: E501 # pylint: disable=line-too-long
+from inspect import getsourcefile  # noqa: E402 # pylint: disable=wrong-import-position
+
+# Get path to directory containing this file, conf.py.
+PATH_OF_THIS_FILE = getsourcefile(lambda: 0)  # noqa: WPS522
+DOCS_DIRECTORY = os.path.dirname(os.path.abspath(PATH_OF_THIS_FILE))  # type: ignore
+
+
+def ensure_pandoc_installed(_):
+    import pypandoc  # pylint: disable=import-outside-toplevel
+
+    # Download pandoc if necessary. If pandoc is already installed and on
+    # the PATH, the installed version will be used. Otherwise, we will
+    # download a copy of pandoc into docs/bin/ and add that to our PATH.
+    pandoc_dir = os.path.join(DOCS_DIRECTORY, "bin")
+    # Add dir containing pandoc binary to the PATH environment variable
+    if pandoc_dir not in os.environ["PATH"].split(os.pathsep):
+        os.environ["PATH"] += os.pathsep + pandoc_dir
+    pypandoc.ensure_pandoc_installed(
+        version="2.11.4",
+        targetfolder=pandoc_dir,
+        delete_installer=True,
+    )
+
+
+def setup(app):
+    app.connect("builder-inited", ensure_pandoc_installed)
