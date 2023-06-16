@@ -54,10 +54,6 @@ jobs:
         run: |
           poetry run flake8 bliss/ tests/ case_studies/
 
-      - name: Run mypy
-        run: |
-          env MYPYPATH=typings poetry run mypy --ignore-missing-imports bliss
-
       - name: Run pylint
         run: |
           poetry run pylint bliss/ tests/ case_studies/

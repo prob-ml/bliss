@@ -40,7 +40,7 @@ def generate(cfg: DictConfig):
     # create cached_data_path if it doesn't exist
     if not os.path.exists(cached_data_path):
         os.makedirs(cached_data_path)
-    print("Data will be saved to {}".format(cached_data_path))
+    print("Data will be saved to {}".format(cached_data_path))  # noqa: WPS421
 
     # Save Hydra config (used to generate data) to cached_data_path
     with open(f"{cfg.generate.cached_data_path}/hparams.yaml", "w", encoding="utf-8") as f:

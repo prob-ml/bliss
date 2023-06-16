@@ -181,28 +181,6 @@ class TileCatalog(UserDict):
             out[k] = v
         return out
 
-    def get_tile_params_at_coord(self, plocs: torch.Tensor) -> Dict[str, Tensor]:
-        """Return the parameters of the tiles that contain each of the locations in plocs."""
-        assert len(plocs.shape) == 2 and plocs.shape[1] == 2
-        assert plocs.device == self.locs.device
-        n_total = len(plocs)
-        slen = self.n_tiles_h * self.tile_slen
-        wlen = self.n_tiles_w * self.tile_slen
-        # coordinates on tiles.
-        x_coords = torch.arange(0, slen, self.tile_slen, device=self.locs.device).long()
-        y_coords = torch.arange(0, wlen, self.tile_slen, device=self.locs.device).long()
-
-        x_indx = torch.searchsorted(x_coords.contiguous(), plocs[:, 0].contiguous()) - 1
-        y_indx = torch.searchsorted(y_coords.contiguous(), plocs[:, 1].contiguous()) - 1
-
-        # gather in dictionary
-        d = {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
-
-        # also include locs
-        d["locs"] = self.locs[:, x_indx, y_indx, :, :].reshape(n_total, -1)
-
-        return d
-
     def gather_param_at_tiles(self, param_name: str, indices: Tensor) -> Tensor:
         """Gets the tile parameters at the desired indices.
 
