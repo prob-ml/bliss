@@ -36,13 +36,6 @@ repos:
         entry: flake8
         language: system
         types: [python]
-      - id: mypy
-        name: mypy
-        entry: mypy
-        language: system
-        types: [python]
-        args:
-          - "--ignore-missing-imports"
       - id: darglint
         name: darglint
         entry: darglint

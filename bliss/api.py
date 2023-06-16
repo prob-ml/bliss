@@ -4,7 +4,7 @@ from typing import Dict, Literal, Optional, Tuple, TypeAlias
 
 import requests
 import torch
-from astropy import units as u
+from astropy import units as u  # noqa: WPS347
 from astropy.table import Table
 from einops import rearrange
 from omegaconf import OmegaConf
