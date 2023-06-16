@@ -60,3 +60,5 @@ predict:
         left_upper_corner: [160, 160]
         width: 160
         height: 160
+    plot:
+        show_plot: false
