@@ -200,7 +200,7 @@ class ImageDecoder(nn.Module):
             AssertionError: rcf must contain batch_size values
 
         Returns:
-            Tuple[Tensor, List, Tensor]: tensor of images and list of PSFs used to generate them
+            Tuple[Tensor, List, Tensor]: tensor of images, list of PSFs, tensor of PSF params
         """
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
         assert rcf.shape[0] == batch_size
