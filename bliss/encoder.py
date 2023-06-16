@@ -42,8 +42,7 @@ class Encoder(pl.LightningModule):
         slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
-        use_deconv_channel=False,
-        concat_psf_params=False,
+        input_transform_params: Optional[dict] = None,
     ):
         """Initializes DetectionEncoder.
 
@@ -55,8 +54,8 @@ class Encoder(pl.LightningModule):
             slack: Slack to use when matching locations for validation metrics.
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
-            use_deconv_channel: whether to use the deconvolution as an input channel
-            concat_psf_params: whether to concat psf params to input
+            input_transform_params: used for determining what channels to use as input (e.g.
+                deconvolution, concatenate PSF parameters, z-score inputs, etc.)
         """
         super().__init__()
         self.save_hyperparameters()
@@ -65,8 +64,7 @@ class Encoder(pl.LightningModule):
         self.n_bands = len(self.bands)
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
-        self.use_deconv_channel = use_deconv_channel
-        self.concat_psf_params = concat_psf_params
+        self.input_transform_params = input_transform_params
 
         self.tile_slen = tile_slen
 
@@ -77,12 +75,7 @@ class Encoder(pl.LightningModule):
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
 
-        num_channels = 2  # image + background
-        if self.use_deconv_channel:
-            num_channels += 1
-        if self.concat_psf_params:
-            num_channels += 6
-        num_channels *= self.n_bands
+        num_channels = self._get_num_input_channels()
         self.model = DetectionModel(cfg=arch_dict, ch=num_channels)
         self.tiles_to_crop = tiles_to_crop
 
@@ -106,16 +99,49 @@ class Encoder(pl.LightningModule):
             "galsim_a_b": UnconstrainedLogNormal(),
         }
 
-    def encode_batch(self, batch):
-        # only take the channels that are present in the input
+    def _get_num_input_channels(self):
+        """Determine number of input channels for model based on desired input transforms."""
+        num_channels = 2  # image + background
+        if self.input_transform_params.get("use_deconv_channel"):
+            num_channels += 1
+        if self.input_transform_params.get("concat_psf_params"):
+            num_channels += 6
+        num_channels *= self.n_bands
+        return num_channels
+
+    def get_input_tensor(self, batch):
+        """Extracts data from batch and concatenates into a single tensor to be input into model.
+
+        By default, only the image and background are used. Other input transforms can be specified
+        in self.input_transform_params. Supported options are:
+            use_deconv_channel: add channel for image deconvolved with PSF
+            concat_psf_params: add each PSF parameter as a channel
+            #TODO: add other transforms here, like z-score and multi-band
+
+        Args:
+            batch: input batch (as dictionary)
+
+        Returns:
+            Tensor: b x c x h x w tensor, where the number of input channels `c` is based on the
+                input transformations to use
+        """
         inputs = [batch["images"], batch["background"]]
-        if self.use_deconv_channel:
+        if self.input_transform_params.get("use_deconv_channel"):
+            assert (
+                "deconvolution" in batch
+            ), "use_deconv_channel specified but deconvolution not present in data"
             inputs.append(batch["deconvolution"])
-        if self.concat_psf_params:
+        if self.input_transform_params.get("concat_psf_params"):
+            assert (
+                "psf_params" in batch
+            ), "concat_psf_params specified but psf params not present in data"
             n, _, h, w = batch["images"].size()
             inputs.append(batch["psf_params"].view(n, 6, 1, 1).expand(n, 6, h, w))
+        return torch.cat(inputs, dim=1)
 
-        inputs = torch.cat(inputs, dim=1)
+    def encode_batch(self, batch):
+        # get input tensor from batch with specified channels and transforms
+        inputs = self.get_input_tensor(batch)
 
         # setting this to true every time is a hack to make yolo DetectionModel
         # give us output of the right dimension
