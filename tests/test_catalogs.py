@@ -25,6 +25,24 @@ def multi_source_tilecat():
     return TileCatalog(4, d)
 
 
+def test_unallowed_param():
+    d_tile = {
+        "n_sources": torch.zeros((1, 2, 2)),
+        "locs": torch.zeros((1, 2, 2, 1, 2)),
+        "unallowed": torch.zeros((1, 2, 2, 1, 2)),
+    }
+    with pytest.raises(ValueError):
+        TileCatalog(4, d_tile)
+
+    d_full = {
+        "n_sources": torch.tensor([1]),
+        "plocs": torch.tensor([5, 5]).reshape(1, 1, 2),
+        "unallowed": torch.zeros(1, 1, 1),
+    }
+    with pytest.raises(ValueError):
+        FullCatalog(10, 10, d_full)
+
+
 def test_multiple_sources_one_tile():
     d = {
         "n_sources": torch.tensor([2]),
@@ -83,6 +101,9 @@ def test_restrict_tile_cat_to_brightest(multi_source_tilecat):
     assert cat["galaxy_params"][0, 1, 1, 0, 0] == 600
     assert cat.n_sources.max() == 1
 
+    # do it again to make sure nothing changes
+    assert cat.get_brightest_source_per_tile().max_sources == 1
+
 
 def test_filter_tile_cat_by_flux(multi_source_tilecat):
     cat = multi_source_tilecat.filter_tile_catalog_by_flux(300, 2000)
@@ -91,3 +112,19 @@ def test_filter_tile_cat_by_flux(multi_source_tilecat):
     assert torch.equal(cat["galaxy_params"][0, 0, 1, :, 0], torch.tensor([0, 0]))
     assert torch.equal(cat["galaxy_params"][0, 1, 0, :, 0], torch.tensor([0, 0]))
     assert torch.equal(cat["galaxy_params"][0, 1, 1, :, 0], torch.tensor([0, 600]))
+
+
+def test_bin_full_cat_by_flux():
+    d = {
+        "n_sources": torch.tensor([3]),
+        "plocs": torch.tensor([[10, 10], [20, 20], [30, 30]]).reshape(1, 3, 2),
+        "galaxy_bools": torch.tensor([1, 1, 0]).reshape(1, 3, 1),
+        "mags": torch.tensor([20, 23, 22]).reshape(1, 3, 1),
+    }
+    binned_cat = FullCatalog(40, 40, d).apply_param_bin("mags", 21, 24)
+    new_plocs = binned_cat.plocs[:, 0 : binned_cat.n_sources]
+    new_mags = binned_cat.plocs[:, 0 : binned_cat.n_sources]
+
+    assert new_plocs.shape == (1, 2, 2)
+    assert new_mags.min() < 24
+    assert new_mags.max() > 21
