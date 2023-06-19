@@ -11,7 +11,8 @@ class TestSdssReconstruct:
 
         decoder_obj = instantiate(cfg.simulator.decoder)
         rcfs = np.array([[94, 1, 12]])
-        recon_img = decoder_obj.render_images(est_tile.to("cpu"), rcfs)[0, 0]
+        images, _, _ = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
+        recon_img = images[0, 0]
 
         ptc = cfg.encoder.tile_slen * cfg.encoder.tiles_to_crop
         true_img_crop = true_img[0][ptc:-ptc, ptc:-ptc]

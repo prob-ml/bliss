@@ -162,7 +162,8 @@ def plot_predict(cfg, image, background, true_plocs, est_cat):
     decoder_obj = instantiate(cfg.simulator.decoder)
     est_tile = est_cat.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
     rcfs = np.array([[94, 1, 12]])
-    recon_img = decoder_obj.render_images(est_tile.to("cpu"), rcfs)[0, 0]
+    images, _, _ = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
+    recon_img = images[0][0]  # first image in batch, first band in image
 
     image = image.to("cpu")
     background = background.to("cpu")
