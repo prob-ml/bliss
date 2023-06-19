@@ -1,20 +1,10 @@
 # pylint: skip-file
 from pathlib import Path
 
-import omegaconf
 import pytest
 import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
-
-
-# just returning range has issues with referencing other objects, this is more robust
-def make_range(start, stop, step=1):
-    return omegaconf.listconfig.ListConfig(list(range(start, stop, step)))
-
-
-# resolve ranges in config file
-omegaconf.OmegaConf.register_new_resolver("range", make_range, replace=True)
 
 
 # command line arguments for tests
