@@ -89,11 +89,15 @@ class TileCatalog(UserDict):
 
     @property
     def star_bools(self) -> Tensor:
-        return self["source_type"] == SourceType.STAR
+        is_star = self["source_type"] == SourceType.STAR
+        is_on = self.n_sources.view(is_star.shape)
+        return is_star * is_on
 
     @property
     def galaxy_bools(self) -> Tensor:
-        return self["source_type"] == SourceType.GALAXY
+        is_galaxy = self["source_type"] == SourceType.GALAXY
+        is_on = self.n_sources.view(is_galaxy.shape)
+        return is_galaxy * is_on
 
     def to(self, device):
         out = {}
@@ -348,11 +352,15 @@ class FullCatalog(UserDict):
 
     @property
     def star_bools(self) -> Tensor:
-        return self["source_type"] == SourceType.STAR
+        is_star = self["source_type"] == SourceType.STAR
+        is_on = self.n_sources.view(is_star.shape)
+        return is_star * is_on
 
     @property
     def galaxy_bools(self) -> Tensor:
-        return self["source_type"] == SourceType.GALAXY
+        is_galaxy = self["source_type"] == SourceType.GALAXY
+        is_on = self.n_sources.view(is_galaxy.shape)
+        return is_galaxy * is_on
 
     def one_source(self, b: int, s: int):
         """Return a dict containing all parameter for one specified light source."""

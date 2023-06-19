@@ -248,7 +248,7 @@ class Encoder(pl.LightningModule):
         true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
         star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
         star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
-        star_flux_loss *= true_star_bools * true_tile_cat.n_sources
+        star_flux_loss *= true_star_bools
         loss += star_flux_loss
         loss_with_components["star_flux_loss"] = star_flux_loss.sum() / true_star_bools.sum()
 
@@ -259,7 +259,7 @@ class Encoder(pl.LightningModule):
             galsim_pn = f"galsim_{param_name}"
             true_param_vals = galsim_true_vals[:, :, :, i]
             loss_term = -pred[galsim_pn].log_prob(true_param_vals)
-            loss_term *= true_gal_bools * true_tile_cat.n_sources
+            loss_term *= true_gal_bools
             loss += loss_term
             loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
 

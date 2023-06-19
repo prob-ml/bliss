@@ -31,6 +31,8 @@ class TestSimulate:
         for i in range(4):
             sim_tile = torch.load(cfg.paths.data + "/test_image/sim_tile" + str(i) + ".pt")
             _, rcf_indices = sim_dataset.get_random_rcf(sim_tile.n_sources.size(0))  # noqa: WPS437
+            sim_tile["source_type"] = sim_tile.pop("galaxy_bools")
+            sim_tile.pop("star_bools")
             image, background, _, _ = sim_dataset.simulate_image(sim_tile, rcf_indices)
 
             # move data to the device the encoder is on
