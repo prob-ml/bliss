@@ -4,8 +4,25 @@ import numpy as np
 import pytest
 import torch
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, TileCatalog
 from bliss.surveys.decals import DecalsFullCatalog
+
+
+@pytest.fixture(scope="module")
+def multi_source_tilecat():
+    d = {
+        "n_sources": torch.tensor([[[2, 1], [0, 2]]]),
+        "locs": torch.zeros(1, 2, 2, 2, 2),
+        "galaxy_bools": torch.ones((1, 2, 2, 2, 1)).bool(),
+        "galaxy_params": torch.zeros((1, 2, 2, 2, 7)),
+        "star_fluxes": torch.zeros((1, 2, 2, 2, 1)),
+    }
+    d["galaxy_params"][0, 0, 0, :, 0] = torch.tensor([1000, 500])
+    d["galaxy_params"][0, 0, 1, :, 0] = torch.tensor([10000, 200])
+    d["galaxy_params"][0, 1, 0, :, 0] = torch.tensor([0, 800])
+    d["galaxy_params"][0, 1, 1, :, 0] = torch.tensor([300, 600])
+
+    return TileCatalog(4, d)
 
 
 def test_multiple_sources_one_tile():
@@ -57,3 +74,20 @@ def test_load_decals_ranges(cfg):
     assert np.max(ras) <= ra_lim[1]
     assert np.min(decs) >= dec_lim[0]
     assert np.max(decs) <= dec_lim[1]
+
+
+def test_restrict_tile_cat_to_brightest(multi_source_tilecat):
+    cat = multi_source_tilecat.get_brightest_source_per_tile()
+    assert cat.max_sources == 1
+    assert cat["galaxy_params"][0, 0, 0, 0, 0] == 1000
+    assert cat["galaxy_params"][0, 1, 1, 0, 0] == 600
+    assert cat.n_sources.max() == 1
+
+
+def test_filter_tile_cat_by_flux(multi_source_tilecat):
+    cat = multi_source_tilecat.filter_tile_catalog_by_flux(300, 2000)
+    assert cat.max_sources == 2
+    assert torch.equal(cat["galaxy_params"][0, 0, 0, :, 0], torch.tensor([1000, 500]))
+    assert torch.equal(cat["galaxy_params"][0, 0, 1, :, 0], torch.tensor([0, 0]))
+    assert torch.equal(cat["galaxy_params"][0, 1, 0, :, 0], torch.tensor([0, 0]))
+    assert torch.equal(cat["galaxy_params"][0, 1, 1, :, 0], torch.tensor([0, 600]))
