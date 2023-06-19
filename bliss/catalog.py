@@ -1,12 +1,18 @@
 import math
 from collections import UserDict
 from copy import copy
+from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
 from einops import rearrange, reduce, repeat
 from matplotlib.pyplot import Axes
 from torch import Tensor
+
+
+class SourceType(IntEnum):
+    STAR = 0
+    GALAXY = 1
 
 
 class TileCatalog(UserDict):
@@ -19,12 +25,11 @@ class TileCatalog(UserDict):
         "ellips",
         "snr",
         "blendedness",
-        "galaxy_bools",
+        "source_type",
         "galaxy_params",
         "galaxy_fluxes",
         "galaxy_probs",
         "galaxy_blends",
-        "star_bools",
         "objid",
         "hlr",
         "ra",
@@ -32,9 +37,6 @@ class TileCatalog(UserDict):
         "matched",
         "mismatched",
         "detection_thresholds",
-        "lensed_galaxy_bools",
-        "lensed_galaxy_probs",
-        "lens_params",
         "log_flux_sd",
         "loc_sd",
     }
@@ -65,8 +67,33 @@ class TileCatalog(UserDict):
 
     @property
     def is_on_array(self) -> Tensor:
-        """Returns a (n x nth x ntw x n_sources) tensor indicating whether source is on."""
-        return get_is_on_from_n_sources(self.n_sources, self.max_sources)
+        """Provides tensor which indicates how many sources are present for each batch.
+
+        Return a boolean array of `shape=(*n_sources.shape, max_sources)` whose `(*,l)th` entry
+        indicates whether there are more than l sources on the `*th` index.
+
+        Returns:
+            Tensor indicating how many sources are present for each batch.
+        """
+        is_on_array = torch.zeros(
+            *self.n_sources.shape,
+            self.max_sources,
+            device=self.n_sources.device,
+            dtype=torch.bool,
+        )
+
+        for i in range(self.max_sources):
+            is_on_array[..., i] = self.n_sources > i
+
+        return is_on_array
+
+    @property
+    def star_bools(self) -> Tensor:
+        return self["source_type"] == SourceType.STAR
+
+    @property
+    def galaxy_bools(self) -> Tensor:
+        return self["source_type"] == SourceType.GALAXY
 
     def to(self, device):
         out = {}
@@ -319,6 +346,24 @@ class FullCatalog(UserDict):
     def device(self):
         return self.plocs.device
 
+    @property
+    def star_bools(self) -> Tensor:
+        return self["source_type"] == SourceType.STAR
+
+    @property
+    def galaxy_bools(self) -> Tensor:
+        return self["source_type"] == SourceType.GALAXY
+
+    def one_source(self, b: int, s: int):
+        """Return a dict containing all parameter for one specified light source."""
+        out = {}
+        for k, v in self.to_dict().items():
+            if k == "n_sources":
+                assert s < v[b]
+                continue
+            out[k] = v[b][s]
+        return out
+
     def apply_param_bin(self, pname: str, p_min: float, p_max: float):
         """Apply magnitude bin to given parameters."""
         assert pname in self, f"Parameter '{pname}' required to apply mag cut."
@@ -366,7 +411,8 @@ class FullCatalog(UserDict):
                 `ignore_extra_sources` is False.
         """
         tile_coords = torch.div(self.plocs, tile_slen, rounding_mode="trunc").to(torch.int)
-        n_tiles_h, n_tiles_w = get_n_tiles_hw(self.height, self.width, tile_slen)
+        n_tiles_h = math.ceil(self.height / tile_slen)
+        n_tiles_w = math.ceil(self.width / tile_slen)
 
         # prepare tiled tensors
         tile_cat_shape = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile)
@@ -398,9 +444,9 @@ class FullCatalog(UserDict):
 
     def plot_plocs(self, ax: Axes, idx: int, object_type: str, bp: int = 0, **kwargs):
         if object_type == "galaxy":
-            keep = self["galaxy_bools"][idx, :].squeeze(-1).bool()
+            keep = self.galaxy_bools[idx, :].squeeze(-1).bool()
         elif object_type == "star":
-            keep = self["star_bools"][idx, :].squeeze(-1).bool()
+            keep = self.star_bools[idx, :].squeeze(-1).bool()
         elif object_type == "all":
             keep = torch.ones(self.max_sources, dtype=torch.bool, device=self.plocs.device)
         else:
@@ -408,37 +454,3 @@ class FullCatalog(UserDict):
         plocs = self.plocs[idx, keep] - 0.5 + bp
         plocs = plocs.detach().cpu()
         ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
-
-
-def get_n_tiles_hw(height: int, width: int, tile_slen: int):
-    return math.ceil(height / tile_slen), math.ceil(width / tile_slen)
-
-
-def get_is_on_from_n_sources(n_sources, max_sources):
-    """Provides tensor which indicates how many sources are present for each batch.
-
-    Return a boolean array of `shape=(*n_sources.shape, max_sources)` whose `(*,l)th` entry
-    indicates whether there are more than l sources on the `*th` index.
-
-    Arguments:
-        n_sources: Tensor with number of sources per tile.
-        max_sources: Maximum number of sources allowed per tile.
-
-    Returns:
-        Tensor indicating how many sources are present for each batch.
-    """
-    assert not torch.any(torch.isnan(n_sources))
-    assert torch.all(n_sources >= 0)
-    assert torch.all(n_sources.le(max_sources))
-
-    is_on_array = torch.zeros(
-        *n_sources.shape,
-        max_sources,
-        device=n_sources.device,
-        dtype=torch.bool,
-    )
-
-    for i in range(max_sources):
-        is_on_array[..., i] = n_sources > i
-
-    return is_on_array

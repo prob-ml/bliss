@@ -95,7 +95,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         """
         rcf = self.rcf_list[rcf_indices]
         images, psfs, psf_params = self.image_decoder.render_images(tile_catalog, rcf)
-        background = self.background.sample(images.shape, rcf_indices=rcf_indices)  # type: ignore
+        background = self.background.sample(images.shape, rcf_indices=rcf_indices)
         images += background
         images = self._apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
@@ -170,7 +170,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def val_dataloader(self):
         if self.fix_validation_set:
-            valid: List[Dict[str, Tensor]] = []  # type: ignore
+            valid: List[Dict[str, Tensor]] = []
             for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
                 valid.append(self.get_batch())
             num_workers = 0

@@ -10,7 +10,7 @@ from omegaconf.dictconfig import DictConfig
 from torch import Tensor
 from torch.distributions import Gamma, Poisson, Uniform
 
-from bliss.catalog import TileCatalog, get_is_on_from_n_sources
+from bliss.catalog import SourceType, TileCatalog
 from bliss.surveys.sdss import SDSSDownloader, column_to_tensor
 
 
@@ -137,12 +137,11 @@ class ImagePrior(pl.LightningModule):
         star_log_fluxes = star_fluxes.log()
 
         n_sources = self._sample_n_sources()
-        galaxy_bools, star_bools = self._sample_n_galaxies_and_stars(n_sources)
+        source_type = self._sample_source_type()
 
         catalog_params = {
             "n_sources": n_sources,
-            "galaxy_bools": galaxy_bools,
-            "star_bools": star_bools,
+            "source_type": source_type,
             "locs": locs,
             "galaxy_params": galaxy_params,
             "star_fluxes": star_fluxes,
@@ -162,18 +161,12 @@ class ImagePrior(pl.LightningModule):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 2)
         return Uniform(0, 1).sample(latent_dims)
 
-    def _sample_n_galaxies_and_stars(self, n_sources):
+    def _sample_source_type(self):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
         uniform_aux_var = torch.rand(*latent_dims)
-        galaxy_bools = uniform_aux_var < self.prob_galaxy
-        star_bools = galaxy_bools.bitwise_not()
-
-        # gate galaxy/star booleans according n_sources
-        is_on_array = get_is_on_from_n_sources(n_sources, self.max_sources)
-        galaxy_bools *= is_on_array.unsqueeze(-1)
-        star_bools *= is_on_array.unsqueeze(-1)
-
-        return galaxy_bools, star_bools
+        galaxy_bool = uniform_aux_var < self.prob_galaxy
+        star_bool = galaxy_bool.bitwise_not()
+        return SourceType.STAR * star_bool + SourceType.GALAXY * galaxy_bool
 
     def _sample_star_fluxes(self, star_ratios):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
@@ -259,7 +252,21 @@ class ImagePrior(pl.LightningModule):
         return min_x / (1.0 - uniform_samples) ** (1 / alpha)
 
     def _sample_galaxy_prior(self, gal_ratios):
-        """Sample latent galaxy params from GalaxyPrior object."""
+        """Sample the latent galaxy params.
+
+        Args:
+            gal_ratios: flux ratios for multiband galaxies (why is this an argument?)
+
+        Returns:
+            source_params (Tensor): Tensor containing the following parameters:
+                - total_flux: the total flux of the galaxy
+                - disk_frac: the fraction of flux attributed to the disk (rest goes to bulge)
+                - beta_radians: the angle of shear in radians
+                - disk_q: the minor-to-major axis ratio of the disk
+                - a_d: semi-major axis of disk
+                - bulge_q: minor-to-major axis ratio of the bulge
+                - a_b: semi-major axis of bulge
+        """
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
 
         r_flux = self._draw_truncated_pareto(

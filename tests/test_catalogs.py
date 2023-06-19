@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog, TileCatalog, SourceType
 from bliss.surveys.decals import DecalsFullCatalog
 
 
@@ -47,7 +47,7 @@ def test_multiple_sources_one_tile():
     d = {
         "n_sources": torch.tensor([2]),
         "plocs": torch.tensor([[0.5, 0.5], [0.6, 0.6]]).reshape(1, 2, 2),
-        "galaxy_bools": torch.tensor([1, 1]).reshape(1, 2, 1),
+        "source_type": torch.full((1, 2, 1), SourceType.GALAXY),
     }
     full_cat = FullCatalog(2, 2, d)
 
@@ -63,7 +63,7 @@ def test_multiple_sources_one_tile():
     assert torch.allclose(tile_cat.locs, correct_locs)
 
     correct_gbs = torch.tensor([[[1], [0]], [[0], [0]]]).reshape(1, 2, 2, 1, 1)
-    assert torch.equal(tile_cat["galaxy_bools"], correct_gbs)
+    assert torch.equal(tile_cat.galaxy_bools, correct_gbs)
 
 
 def test_load_decals_from_file(cfg):

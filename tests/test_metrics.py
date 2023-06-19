@@ -115,10 +115,9 @@ class TestMetrics:
 
         top_n_decals = torch.argsort(decals_cat["fluxes"].squeeze())[-n:]
         top_n_photo = torch.argsort(photo_cat["fluxes"].squeeze())[-n:]
-        bliss_fluxes = (
-            bliss_cat["star_fluxes"] * bliss_cat["star_bools"]
-            + bliss_cat["galaxy_params"][:, :, 0, None] * bliss_cat["galaxy_bools"]
-        )  # galaxy fluxes
+
+        bliss_fluxes = bliss_cat["star_fluxes"] * bliss_cat.star_bools
+        bliss_fluxes += bliss_cat["galaxy_params"][:, :, 0, None] * bliss_cat.galaxy_bools
         top_n_bliss = torch.argsort(bliss_fluxes.squeeze())[-n:]
 
         decals_cat = self._get_sliced_catalog(decals_cat, top_n_decals)
@@ -134,20 +133,20 @@ class TestMetrics:
 
         true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]])
         est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]])
-        true_galaxy_bools = torch.tensor([[[1], [0]], [[1], [1]]])
-        est_galaxy_bools = torch.tensor([[[0], [1]], [[1], [0]]])
+        true_source_type = torch.tensor([[[1], [0]], [[1], [1]]])
+        est_source_type = torch.tensor([[[0], [1]], [[1], [0]]])
 
         d_true = {
             "n_sources": torch.tensor([1, 2]),
             "plocs": true_locs * slen,
-            "galaxy_bools": true_galaxy_bools,
+            "source_type": true_source_type,
         }
         true_params = FullCatalog(slen, slen, d_true)
 
         d_est = {
             "n_sources": torch.tensor([2, 2]),
             "plocs": est_locs * slen,
-            "galaxy_bools": est_galaxy_bools,
+            "source_type": est_source_type,
         }
         est_params = FullCatalog(slen, slen, d_est)
 
@@ -171,15 +170,15 @@ class TestMetrics:
             [[[10, 10]], [[20, 20]], [[30, 30]], [[40, 40]]], dtype=torch.float
         )
         est_locs = torch.tensor([[[10, 10]], [[20, 20]], [[30, 30]], [[41, 41]]], dtype=torch.float)
-        true_galaxy_bools = torch.tensor([[[1]], [[1]], [[1]], [[1]]])
-        est_galaxy_bools = torch.tensor([[[1]], [[1]], [[1]], [[1]]])
+        true_source_type = torch.tensor([[[1]], [[1]], [[1]], [[1]]])
+        est_source_type = torch.tensor([[[1]], [[1]], [[1]], [[1]]])
         true_sources = torch.tensor([0, 0, 1, 1])
         est_sources = torch.tensor([0, 1, 0, 1])
 
-        d_true = {"n_sources": true_sources, "plocs": true_locs, "galaxy_bools": true_galaxy_bools}
+        d_true = {"n_sources": true_sources, "plocs": true_locs, "source_type": true_source_type}
         true_params = FullCatalog(50, 50, d_true)
 
-        d_est = {"n_sources": est_sources, "plocs": est_locs, "galaxy_bools": est_galaxy_bools}
+        d_est = {"n_sources": est_sources, "plocs": est_locs, "source_type": est_source_type}
         est_params = FullCatalog(50, 50, d_est)
 
         results = metrics(true_params, est_params)

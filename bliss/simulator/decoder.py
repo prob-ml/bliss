@@ -7,9 +7,9 @@ import torch
 from astropy.io import fits
 from einops import rearrange, reduce
 from omegaconf import DictConfig
-from torch import Tensor, nn
+from torch import nn
 
-from bliss.catalog import TileCatalog
+from bliss.catalog import SourceType, TileCatalog
 from bliss.surveys.sdss import SDSSDownloader
 
 
@@ -86,7 +86,7 @@ class ImageDecoder(nn.Module):
     def _get_mgrid(self):
         """Construct the base grid for the PSF."""
         offset = (self.psf_slen - 1) / 2
-        x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]  # type: ignore
+        x, y = np.mgrid[-offset : (offset + 1), -offset : (offset + 1)]
         mgrid = torch.tensor(np.dstack((y, x))) / offset
         return mgrid.float()
 
@@ -149,40 +149,38 @@ class ImageDecoder(nn.Module):
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
 
-    def render_galaxy(self, galaxy_params: Tensor, psf, bnd: int):
+    def render_star(self, psf, band, source_params):
+        return psf[band].withFlux(source_params["star_fluxes"][band].item())
+
+    def render_galaxy(self, psf, band, source_params):
         """Render a galaxy with given params and PSF.
 
         Args:
-            galaxy_params (Tensor): Tensor containing the following parameters:
-                - total_flux: the total flux of the galaxy
-                - disk_frac: the fraction of flux attributed to the disk (rest goes to bulge)
-                - beta_radians: the angle of shear in radians
-                - disk_q: the minor-to-major axis ratio of the disk
-                - a_d: semi-major axis of disk
-                - bulge_q: minor-to-major axis ratio of the bulge
-                - a_b: semi-major axis of bulge
+            source_params (Tensor): Tensor containing the following parameters:
             psf (List): a list of PSFs for each band
-            bnd (int): band
+            band (int): band
 
         Returns:
             GSObject: a galsim representation of the rendered galaxy convolved with the PSF
         """
-        galaxy_params = galaxy_params.cpu().detach()
-        total_flux, disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
-        bulge_frac = 1 - disk_frac
+        galaxy_params = source_params["galaxy_params"]
+        total_flux = galaxy_params[band]
+
+        # the remaining parameters are the non-flux parameters for this galaxy
+        nonflux_params = galaxy_params[self.n_bands :]
+        disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = nonflux_params
 
         disk_flux = total_flux * disk_frac
+        bulge_frac = 1 - disk_frac
         bulge_flux = total_flux * bulge_frac
 
         components = []
         if disk_flux > 0:
             b_d = a_d * disk_q
             disk_hlr_arcsecs = np.sqrt(a_d * b_d)
-            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
-                q=disk_q,
-                beta=beta_radians * galsim.radians,
-            )
-            components.append(disk)
+            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs)
+            sheared_disk = disk.shear(q=disk_q, beta=beta_radians * galsim.radians)
+            components.append(sheared_disk)
         if bulge_flux > 0:
             b_b = bulge_q * a_b
             bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
@@ -190,7 +188,14 @@ class ImageDecoder(nn.Module):
             sheared_bulge = bulge.shear(q=bulge_q, beta=beta_radians * galsim.radians)
             components.append(sheared_bulge)
         galaxy = galsim.Add(components)
-        return galsim.Convolution(galaxy, psf[bnd])
+        return galsim.Convolution(galaxy, psf[band])
+
+    @property
+    def source_renderers(self):
+        return {
+            SourceType.STAR: self.render_star,
+            SourceType.GALAXY: self.render_galaxy,
+        }
 
     def render_images(self, tile_cat: TileCatalog, rcf):
         """Render images from a tile catalog.
@@ -215,42 +220,31 @@ class ImageDecoder(nn.Module):
         full_cat = tile_cat.to_full_params()
 
         # use the PSF from specified row/camcol/field
-        psfs = [self.psf_galsim[tuple(rcf[b])] for b in range(batch_size)]  # type: ignore
-        param_list = [self.psf_params[tuple(rcf[b])] for b in range(batch_size)]  # type: ignore
-        psf_params = torch.stack(param_list, dim=0)  # type: ignore
+        psfs = [self.psf_galsim[tuple(rcf[b])] for b in range(batch_size)]
+        param_list = [self.psf_params[tuple(rcf[b])] for b in range(batch_size)]
+        psf_params = torch.stack(param_list, dim=0)
 
-        # Nested looping + conditionals are necessary for the drawing of each light
-        # source. Ignored relevant style checks for that reason.
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             psf = psfs[b]
-            for bnd in range(self.n_bands):
-                gs_img = galsim.Image(array=images[b, bnd], scale=self.pixel_scale)
+            for band in range(self.n_bands):
+                gs_img = galsim.Image(array=images[b, band], scale=self.pixel_scale)
                 for s in range(n_sources):
-                    if full_cat["galaxy_bools"][b][s] == 1:
-                        # the flux for this band of this galaxy
-                        curr_gal_band = full_cat["galaxy_params"][b][s][bnd]  # noqa: WPS220
-                        curr_gal_band = torch.unsqueeze(curr_gal_band, 0)  # noqa: WPS220
-                        # all non-flux related params for this galaxy
-                        rem_params = full_cat["galaxy_params"][b][s][self.n_bands :]  # noqa: WPS220
+                    source_params = full_cat.one_source(b, s)
+                    source_type = source_params["source_type"].item()
+                    renderer = self.source_renderers[source_type]
+                    galsim_obj = renderer(psf, band, source_params)
 
-                        gal_with_band = torch.cat((curr_gal_band, rem_params), 0)  # noqa: WPS220
-                        galsim_obj = self.render_galaxy(gal_with_band, psf, bnd)  # noqa: WPS220
-                    elif full_cat["star_bools"][b][s] == 1:
-                        galsim_obj = psf[bnd].withFlux(  # noqa: WPS220
-                            full_cat["star_fluxes"][b][s][bnd].item()  # noqa: WPS219
-                        )
-                    else:
-                        raise AssertionError("Every source is a star or galaxy")  # noqa: WPS220
+                    plocs0, plocs1 = source_params["plocs"]
+                    offset = np.array([plocs1 - (slen_w / 2), plocs0 - (slen_h / 2)])
 
-                    plocs = full_cat.plocs[b][s]
-                    offset = np.array([plocs[1] - (slen_w / 2), plocs[0] - (slen_h / 2)])
                     # essentially all the runtime of the simulator is incurred by this call
                     # to drawImage
                     galsim_obj.drawImage(
                         offset=offset, method="auto", add_to_image=True, image=gs_img
                     )
-        # TODO: clamp image values. strange issue - happens only after galsim rendering
-        images[images < 1e-8] = 1.1e-8
 
-        return torch.from_numpy(images), psfs, psf_params
+        # clamping here helps with an strange issue caused by galsim rendering
+        images = torch.from_numpy(images).clamp(1e-8)
+
+        return images, psfs, psf_params
