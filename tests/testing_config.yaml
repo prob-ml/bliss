@@ -7,6 +7,7 @@ defaults:
 simulator:
     valid_n_batches: 6
     n_batches: 2
+    num_workers: 0
     sdss_fields:
         dir: ${paths.sdss}
         bands: [2]
@@ -25,6 +26,7 @@ simulator:
         background: [865.0]
 
 cached_simulator:
+    num_workers: 0
     train_n_batches: 1
     val_split_file_idxs: [1]
     test_split_file_idxs: [2]

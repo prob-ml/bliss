@@ -89,7 +89,11 @@ class TestApi:
             val_split_file_idxs=[1],
             pretrained_weights_filename=pretrained_weights_filename,
             training={
-                "trainer": {"accelerator": "cpu", "check_val_every_n_epoch": 1},
+                "trainer": {
+                    "accelerator": "cpu",
+                    "check_val_every_n_epoch": 1,
+                    "log_every_n_steps": 1,
+                },
                 "n_epochs": 1,
             },
         )
