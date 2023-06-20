@@ -5,9 +5,8 @@ from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics
-from bliss.predict import prepare_image
 from bliss.surveys.decals import DecalsFullCatalog
-from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey
+from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey, prepare_image
 
 
 class TestMetrics:

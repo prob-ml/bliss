@@ -7,6 +7,7 @@ from astropy.wcs import WCS
 
 from bliss.catalog import FullCatalog
 from bliss.surveys.sdss import column_to_tensor
+from bliss.utils.download_utils import download_git_lfs_file
 
 
 class DecalsFullCatalog(FullCatalog):
@@ -47,6 +48,8 @@ class DecalsFullCatalog(FullCatalog):
             use get_plocs_from_ra_dec after loading the data.
         """
         catalog_path = Path(decals_cat_path)
+        if not catalog_path.exists():
+            download_decals_base(str(catalog_path.parent))
         table = Table.read(catalog_path, format="fits", unit_parse_strict="silent")
         table = {k.upper(): v for k, v in table.items()}  # uppercase keys
         band = band.capitalize()
@@ -123,3 +126,18 @@ class DecalsFullCatalog(FullCatalog):
         pr = torch.tensor(pr)
         plocs = torch.stack((pr, pt), dim=-1)
         return plocs.reshape(1, plocs.size()[0], 2) + 0.5  # BLISS consistency
+
+
+def download_decals_base(download_dir: str):
+    cutout_filename = "cutout_336.635_-0.9600.fits"
+    tractor_filename = "tractor-3366m010.fits"
+    cutout = download_git_lfs_file(
+        f"https://api.github.com/repos/prob-ml/bliss/contents/data/decals/{cutout_filename}"
+    )
+    tractor = download_git_lfs_file(
+        f"https://api.github.com/repos/prob-ml/bliss/contents/data/decals/{tractor_filename}"
+    )
+    cutout_path = Path(download_dir) / cutout_filename
+    tractor_path = Path(download_dir) / tractor_filename
+    cutout_path.write_bytes(cutout)
+    tractor_path.write_bytes(tractor)

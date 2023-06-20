@@ -107,7 +107,7 @@ ignore =
     WPS420,
 
     # darglint validates our doc strings
-    RST201,RST301,D202,RST203,
+    RST201,RST301,D202,RST203,RST210
 
     # we don't care about security/cryptography
     S311,
