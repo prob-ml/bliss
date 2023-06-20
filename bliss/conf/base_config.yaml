@@ -163,6 +163,16 @@ predict:
         camcol: 1
         fields: [12]
         bands: [2]
+        predict_device: ${predict.device}
+        predict_crop: ${predict.crop}
+    photo_catalog:
+        _target_: bliss.surveys.sdss.PhotoFullCatalog
+        sdss_dir: ${paths.sdss}
+        run: ${predict.dataset.run}
+        camcol: ${predict.dataset.camcol}
+        fields: ${predict.dataset.fields}
+        bands: ${predict.dataset.bands}
+    trainer: ${training.trainer}
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cuda:0"

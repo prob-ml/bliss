@@ -1,5 +1,4 @@
 import itertools
-import os
 import random
 from pathlib import Path
 
@@ -12,8 +11,7 @@ from torch import Tensor
 from torch.distributions import Gamma, Poisson, Uniform
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
-from bliss.surveys import sdss_download
-from bliss.surveys.sdss import column_to_tensor
+from bliss.surveys.sdss import SDSSDownloader, column_to_tensor
 
 
 class ImagePrior(pl.LightningModule):
@@ -220,12 +218,12 @@ class ImagePrior(pl.LightningModule):
                 camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
                 po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
                 if not po_path.exists():
-                    sdss_download.download_po(run, camcol, field, str(sdss_path))
+                    SDSSDownloader(run, camcol, field, str(sdss_path)).download_po()
                 msg = (
                     f"{po_path} does not exist. "
                     + "Make sure data files are available for fields specified in config."
                 )
-                assert os.path.exists(po_path), msg
+                assert Path(po_path).exists(), msg
                 po_fits = fits.getdata(po_path)
 
                 fluxes = column_to_tensor(po_fits, "psfflux")

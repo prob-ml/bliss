@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from typing import Tuple
 
 import galsim
@@ -10,7 +10,7 @@ from omegaconf import DictConfig
 from torch import Tensor, nn
 
 from bliss.catalog import TileCatalog
-from bliss.surveys import sdss_download
+from bliss.surveys.sdss import SDSSDownloader
 
 
 class ImageDecoder(nn.Module):
@@ -40,8 +40,8 @@ class ImageDecoder(nn.Module):
                 # load raw params from file
                 field_dir = f"{sdss_dir}/{run}/{camcol}/{field}"
                 filename = f"{field_dir}/psField-{run:06}-{camcol}-{field:04}.fits"
-                if not os.path.exists(filename):
-                    sdss_download.download_psfield(run, camcol, field, download_dir=sdss_dir)
+                if not Path(filename).exists():
+                    SDSSDownloader(run, camcol, field, download_dir=sdss_dir).download_psfield()
                 psf_params = self._get_fit_file_psf_params(filename, sdss_bands)
 
                 # load psf image from params
@@ -108,7 +108,7 @@ class ImageDecoder(nn.Module):
             f"{psf_fit_file} does not exist. "
             + "Make sure data files are available for fields specified in config."
         )
-        assert os.path.exists(psf_fit_file), msg
+        assert Path(psf_fit_file).exists(), msg
         # HDU 6 contains the PSF header (after primary and eigenimages)
         data = fits.open(psf_fit_file, ignore_missing_end=True).pop(6).data
         psf_params = torch.zeros(len(bands), 6)

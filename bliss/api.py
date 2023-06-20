@@ -12,7 +12,7 @@ from bliss.catalog import FullCatalog
 from bliss.conf.igs import base_config
 from bliss.generate import generate as _generate
 from bliss.predict import predict_sdss as _predict_sdss
-from bliss.surveys import sdss_download
+from bliss.surveys.sdss import SDSSDownloader
 from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
 
@@ -41,7 +41,7 @@ class BlissClient:
             batch_size (int): Number of images per batch.
             max_images_per_file (int): Number of images per cached file.
             **kwargs: Keyword arguments to override default configuration values.
-        """  # noqa: RST210
+        """
         cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
         cfg.generate.n_batches = n_batches
@@ -75,7 +75,7 @@ class BlissClient:
             weight_save_path (str): Path to directory after cwd where trained model
                 weights will be stored.
             **kwargs: Keyword arguments to override default configuration values.
-        """  # noqa: RST210
+        """
         cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
         cfg.training.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
@@ -103,7 +103,7 @@ class BlissClient:
             val_split_file_idxs (List[int]): List of file indices to use for validation.
             pretrained_weights_filename (str): Name of pretrained weights file to load.
             **kwargs: Keyword arguments to override default configuration values.
-        """  # noqa: RST210
+        """
         cfg = OmegaConf.create(self.base_cfg)
         cfg.training.use_cached_simulator = True
         # apply overrides
@@ -121,7 +121,7 @@ class BlissClient:
         _train(cfg)
 
     def load_survey(self, survey: SurveyType, run, camcol, field, download_dir: str):
-        sdss_download.download_all(run, camcol, field, self.cwd + f"/{download_dir}")
+        SDSSDownloader(run, camcol, field, self.cwd + f"/{download_dir}").download_all()
         # assert files downloaded at download_dir
 
     def predict_sdss(
@@ -139,7 +139,7 @@ class BlissClient:
         Returns:
             Tuple[FullCatalog, Table, Table]: Tuple of predicted catalog, astropy.table
             of predicted catalog, and astropy.table of predicted galaxy_params.
-        """  # noqa: RST210
+        """
         cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
         cfg.predict.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
