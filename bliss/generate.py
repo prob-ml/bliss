@@ -91,9 +91,9 @@ def itemize_data(batch_data) -> List[FileDatum]:
     n_items = len(flat_data["images"])
     file_data: List[FileDatum] = []
     for i in range(n_items):
-        file_datum: FileDatum = {}  # type: ignore
+        file_datum: FileDatum = {}
         # construct a TileCatalog dictionary of ith-input tensors
-        file_datum["tile_catalog"] = {  # type: ignore
+        file_datum["tile_catalog"] = {
             k: flat_data["tile_catalog"][k][i] for k in flat_data["tile_catalog"].keys()
         }
         file_datum["images"] = flat_data["images"][i]

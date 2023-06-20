@@ -13,7 +13,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics
 from bliss.plotting import plot_detections
 from bliss.unconstrained_dists import (
@@ -186,15 +186,16 @@ class Encoder(pl.LightningModule):
         # the mean would be better at minimizing squared error...should we return that instead?
         tile_is_on_array = pred["on_prob"].mode
         # this is the mode of star_log_flux but not the mean of the star_flux distribution
-        star_fluxes = pred["star_log_flux"].mode.exp()  # type: ignore
-        galaxy_bools = pred["galaxy_prob"].mode  # type: ignore
-        star_bools = 1 - pred["galaxy_prob"].mode  # type: ignore
+        star_fluxes = pred["star_log_flux"].mode.exp()
+        galaxy_bools = pred["galaxy_prob"].mode
+        star_bools = 1 - galaxy_bools
+        source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
 
         galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
         galsim_dists = [pred[f"galsim_{name}"] for name in galsim_names]
         # for params with transformed distribution mode and median aren't implemented.
         # instead, we compute median using inverse cdf 0.5
-        galsim_param_lst = [d.icdf(torch.tensor(0.5)) for d in galsim_dists]  # type: ignore
+        galsim_param_lst = [d.icdf(torch.tensor(0.5)) for d in galsim_dists]
         galaxy_params = torch.stack(galsim_param_lst, dim=3)
 
         # we have to unsqueeze some tensors below because a TileCatalog can store multiple
@@ -204,8 +205,7 @@ class Encoder(pl.LightningModule):
             "star_log_fluxes": rearrange(pred["star_log_flux"].mode, "b ht wt -> b ht wt 1 1"),
             "star_fluxes": rearrange(star_fluxes, "b ht wt -> b ht wt 1 1"),
             "n_sources": tile_is_on_array,
-            "galaxy_bools": rearrange(galaxy_bools, "b ht wt -> b ht wt 1 1"),
-            "star_bools": rearrange(star_bools, "b ht wt -> b ht wt 1 1"),
+            "source_type": rearrange(source_type, "b ht wt -> b ht wt 1 1"),
             "galaxy_params": rearrange(galaxy_params, "b ht wt d -> b ht wt 1 d"),
         }
 
@@ -238,14 +238,14 @@ class Encoder(pl.LightningModule):
         loss_with_components["locs_loss"] = locs_loss.sum() / true_tile_cat.n_sources.sum()
 
         # star/galaxy classification loss
-        true_gal_bools = rearrange(true_tile_cat["galaxy_bools"], "b ht wt 1 1 -> b ht wt")
+        true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
         binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
         binary_loss *= true_tile_cat.n_sources
         loss += binary_loss
         loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
 
         # star flux loss
-        true_star_bools = rearrange(true_tile_cat["star_bools"], "b ht wt 1 1 -> b ht wt")
+        true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
         star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
         star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
         star_flux_loss *= true_star_bools
