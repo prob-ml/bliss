@@ -3,16 +3,17 @@ import base64
 import requests
 
 
-def download_git_lfs_file(url) -> bytes:
+def download_git_lfs_file(url, headers=None) -> bytes:
     """Download a file from git-lfs.
 
     Args:
         url (str): URL to git-lfs file.
+        headers (dict, optional): Headers to pass to requests.get. Defaults to None.
 
     Returns:
         bytes: File contents.
     """
-    ptr_file = requests.get(url, timeout=10)
+    ptr_file = requests.get(url, headers=headers, timeout=10)
     ptr = ptr_file.json()
     ptr_sha = ptr["sha"]
 
