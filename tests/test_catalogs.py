@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from bliss.catalog import FullCatalog, TileCatalog, SourceType
+from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.surveys.decals import DecalsFullCatalog
 
 
@@ -13,7 +13,7 @@ def multi_source_tilecat():
     d = {
         "n_sources": torch.tensor([[[2, 1], [0, 2]]]),
         "locs": torch.zeros(1, 2, 2, 2, 2),
-        "galaxy_bools": torch.ones((1, 2, 2, 2, 1)).bool(),
+        "source_type": torch.ones((1, 2, 2, 2, 1)).bool(),
         "galaxy_params": torch.zeros((1, 2, 2, 2, 7)),
         "star_fluxes": torch.zeros((1, 2, 2, 2, 1)),
     }
@@ -118,7 +118,7 @@ def test_bin_full_cat_by_flux():
     d = {
         "n_sources": torch.tensor([3]),
         "plocs": torch.tensor([[10, 10], [20, 20], [30, 30]]).reshape(1, 3, 2),
-        "galaxy_bools": torch.tensor([1, 1, 0]).reshape(1, 3, 1),
+        "source_type": torch.tensor([1, 1, 0]).reshape(1, 3, 1),
         "mags": torch.tensor([20, 23, 22]).reshape(1, 3, 1),
     }
     binned_cat = FullCatalog(40, 40, d).apply_param_bin("mags", 21, 24)

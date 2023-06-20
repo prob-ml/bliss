@@ -90,14 +90,12 @@ class TileCatalog(UserDict):
     @property
     def star_bools(self) -> Tensor:
         is_star = self["source_type"] == SourceType.STAR
-        is_on = self.n_sources.view(is_star.shape)
-        return is_star * is_on
+        return is_star * self.is_on_array.unsqueeze(-1)
 
     @property
     def galaxy_bools(self) -> Tensor:
         is_galaxy = self["source_type"] == SourceType.GALAXY
-        is_on = self.n_sources.view(is_galaxy.shape)
-        return is_galaxy * is_on
+        return is_galaxy * self.is_on_array.unsqueeze(-1)
 
     def to(self, device):
         out = {}
@@ -237,7 +235,7 @@ class TileCatalog(UserDict):
             Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
         """
         fluxes = torch.where(
-            self["galaxy_bools"], self["galaxy_params"][..., 0, None], self["star_fluxes"]
+            self.galaxy_bools, self["galaxy_params"][..., 0, None], self["star_fluxes"]
         )
         return torch.where(self.is_on_array[..., None], fluxes, torch.zeros_like(fluxes))
 
@@ -252,9 +250,8 @@ class TileCatalog(UserDict):
 
         # sort by fluxes of "on" sources to get brightest source per tile
         on_fluxes = self._get_fluxes_of_on_sources()
-        top_idx = on_fluxes.argsort(dim=3, descending=True)[
-            :, :, :, 0:1, 0
-        ]  # 0:1 keeps dims right for slicing
+        # 0:1 keeps dims right for slicing
+        top_idx = on_fluxes.argsort(dim=3, descending=True)[:, :, :, 0:1, 0]
 
         d = {}
         for key, val in self.to_dict().items():
@@ -271,8 +268,8 @@ class TileCatalog(UserDict):
         """Restricts TileCatalog to sources that have a flux between min_flux and max_flux.
 
         Args:
-            min_flux (float): Minimum flux value to keep. Defaults to 622.
-            max_flux (float): Maximum flux value to keep. Defaults to 1e6.
+            min_flux (float): Minimum flux value to keep. Defaults to 0.
+            max_flux (float): Maximum flux value to keep. Defaults to infinity.
 
         Returns:
             TileCatalog: a new catalog with only sources within the flux range. Note that the size
