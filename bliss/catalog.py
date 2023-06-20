@@ -199,6 +199,68 @@ class TileCatalog(UserDict):
         idx_to_gather = repeat(indices, "... -> ... k", k=param.size(-1))
         return torch.gather(param, dim=1, index=idx_to_gather)
 
+    def _get_fluxes_of_on_sources(self):
+        """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
+
+        Returns:
+            Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
+        """
+        fluxes = torch.where(
+            self["galaxy_bools"], self["galaxy_params"][..., 0, None], self["star_fluxes"]
+        )
+        return torch.where(self.is_on_array[..., None], fluxes, torch.zeros_like(fluxes))
+
+    def get_brightest_source_per_tile(self):
+        """Restrict TileCatalog to only the brightest 'on' source per tile.
+
+        Returns:
+            TileCatalog: a new catalog with only one source per tile
+        """
+        if self.max_sources == 1:
+            return self
+
+        # sort by fluxes of "on" sources to get brightest source per tile
+        on_fluxes = self._get_fluxes_of_on_sources()
+        top_idx = on_fluxes.argsort(dim=3, descending=True)[
+            :, :, :, 0:1, 0
+        ]  # 0:1 keeps dims right for slicing
+
+        d = {}
+        for key, val in self.to_dict().items():
+            if key == "n_sources":
+                d[key] = self.n_sources.bool().int()  # send all positive values to 1, 0 to 0
+            else:
+                param_dim = val.size(-1)
+                idx_to_gather = repeat(top_idx, "... -> ... k", k=param_dim)
+                d[key] = torch.take_along_dim(val, idx_to_gather, dim=3)
+
+        return TileCatalog(self.tile_slen, d)
+
+    def filter_tile_catalog_by_flux(self, min_flux=0, max_flux=torch.inf):
+        """Restricts TileCatalog to sources that have a flux between min_flux and max_flux.
+
+        Args:
+            min_flux (float): Minimum flux value to keep. Defaults to 622.
+            max_flux (float): Maximum flux value to keep. Defaults to 1e6.
+
+        Returns:
+            TileCatalog: a new catalog with only sources within the flux range. Note that the size
+                of the tensors stays the same, but params at sources outside the range are set to 0.
+        """
+
+        # get fluxes of "on" sources to mask by
+        on_fluxes = self._get_fluxes_of_on_sources()
+        flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
+
+        d = {}
+        for key, val in self.to_dict().items():
+            if key == "n_sources":
+                d[key] = flux_mask.sum(dim=3).squeeze()  # number of sources within range in tile
+            else:
+                d[key] = torch.where(flux_mask, val, torch.zeros_like(val))
+
+        return TileCatalog(self.tile_slen, d)
+
 
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params
