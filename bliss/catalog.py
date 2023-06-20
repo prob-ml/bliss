@@ -351,7 +351,8 @@ class FullCatalog(UserDict):
         return self.plocs.device
 
     def get_is_on_mask(self) -> Tensor:
-        return torch.arange(self.max_sources).view(1, -1) < self.n_sources.view(-1, 1)
+        arange = torch.arange(self.max_sources, device=self.device)
+        return arange.view(1, -1) < self.n_sources.view(-1, 1)
 
     @property
     def star_bools(self) -> Tensor:
