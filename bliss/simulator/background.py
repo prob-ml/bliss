@@ -34,14 +34,14 @@ class SimulatedSDSSBackground(nn.Module):
         # Add all backgrounds from specified run/col/field to list
         backgrounds = []
         for param_obj in field_list:
-            params: Dict = OmegaConf.to_container(param_obj)  # type: ignore
+            params: Dict = OmegaConf.to_container(param_obj)
             sdss = SloanDigitalSkySurvey(sdss_dir=sdss_dir, bands=bands, **params)
-            backgrounds.extend([field["background"] for field in sdss])  # type: ignore
+            backgrounds.extend([field["background"] for field in sdss])
 
         background = torch.from_numpy(np.stack(backgrounds, axis=0))
 
         self.register_buffer("background", background, persistent=False)
-        self.height, self.width = self.background.shape[-2:]  # type: ignore
+        self.height, self.width = self.background.shape[-2:]
 
     def sample(self, shape, rcf_indices) -> Tensor:
         """Sample a random region to use as the background for each image.

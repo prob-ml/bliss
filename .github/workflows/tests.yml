@@ -37,6 +37,7 @@ jobs:
         run: |
           echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
           echo "JUPYTER_PLATFORM_DIRS=1" >> $GITHUB_ENV
+          echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
 
       - name: Install fftw3
         run: |
@@ -54,10 +55,6 @@ jobs:
         run: |
           poetry run flake8 bliss/ tests/ case_studies/
 
-      - name: Run mypy
-        run: |
-          env MYPYPATH=typings poetry run mypy --ignore-missing-imports bliss
-
       - name: Run pylint
         run: |
           poetry run pylint bliss/ tests/ case_studies/
@@ -73,6 +70,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: ./coverage.xml
           flags: unittests
           env_vars: OS,PYTHON

@@ -1,20 +1,10 @@
 # pylint: skip-file
 from pathlib import Path
 
-import omegaconf
 import pytest
 import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
-
-
-# just returning range has issues with referencing other objects, this is more robust
-def make_range(start, stop, step=1):
-    return omegaconf.listconfig.ListConfig(list(range(start, stop, step)))
-
-
-# resolve ranges in config file
-omegaconf.OmegaConf.register_new_resolver("range", make_range, replace=True)
 
 
 # command line arguments for tests
@@ -33,7 +23,12 @@ def cached_data_path(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def cfg(pytestconfig, cached_data_path):
+def output_path(tmpdir_factory):
+    return tmpdir_factory.mktemp("output")
+
+
+@pytest.fixture(scope="session")
+def cfg(pytestconfig, cached_data_path, output_path):
     use_gpu = pytestconfig.getoption("gpu")
 
     # pytest-specific overrides
@@ -41,6 +36,7 @@ def cfg(pytestconfig, cached_data_path):
         "training.trainer.accelerator": "gpu" if use_gpu else "cpu",
         "predict.device": "cuda:0" if use_gpu else "cpu",
         "paths.root": Path(__file__).parents[1].as_posix(),
+        "paths.output": str(output_path),
         "cached_simulator.cached_data_path": str(cached_data_path),
         "generate.cached_data_path": str(cached_data_path),
     }

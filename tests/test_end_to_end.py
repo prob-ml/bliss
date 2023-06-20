@@ -11,4 +11,6 @@ class TestEndToEnd:
         train(cfg)
 
     def test_predict(self, cfg):
-        predict_sdss(cfg)
+        the_cfg = cfg.copy()
+        the_cfg.predict.plot.show_plot = True
+        predict_sdss(the_cfg)

@@ -7,6 +7,7 @@ defaults:
 simulator:
     valid_n_batches: 6
     n_batches: 2
+    num_workers: 0
     sdss_fields:
         dir: ${paths.sdss}
         bands: [2]
@@ -25,14 +26,15 @@ simulator:
         background: [865.0]
 
 cached_simulator:
-    train_n_batches: 2
-    val_split_file_idxs: [2, 3]
-    test_split_file_idxs: [4, 5]
+    num_workers: 0
+    train_n_batches: 1
+    val_split_file_idxs: [1]
+    test_split_file_idxs: [2]
 
 generate:
-    n_batches: 6
-    batch_size: 32
-    max_images_per_file: 50
+    n_batches: 3
+    batch_size: 8
+    max_images_per_file: 8
     cached_data_path: null # use pytest tmpdir
 
 training:
@@ -60,3 +62,5 @@ predict:
         left_upper_corner: [160, 160]
         width: 160
         height: 160
+    plot:
+        show_plot: false

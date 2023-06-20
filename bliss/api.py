@@ -1,10 +1,8 @@
-import base64
 from pathlib import Path
 from typing import Dict, Literal, Optional, Tuple, TypeAlias
 
-import requests
 import torch
-from astropy import units as u
+from astropy import units as u  # noqa: WPS347
 from astropy.table import Table
 from einops import rearrange
 from omegaconf import OmegaConf
@@ -14,8 +12,9 @@ from bliss.catalog import FullCatalog
 from bliss.conf.igs import base_config
 from bliss.generate import generate as _generate
 from bliss.predict import predict_sdss as _predict_sdss
-from bliss.surveys import sdss_download
+from bliss.surveys.sdss import SDSSDownloader
 from bliss.train import train as _train
+from bliss.utils.download_utils import download_git_lfs_file
 
 SurveyType: TypeAlias = Literal["decals", "hst", "lsst", "sdss"]
 
@@ -25,15 +24,8 @@ class BlissClient:
 
     def __init__(self, cwd: str):
         self._cwd = cwd
-        # cached_data_path (str): Path to directory where cached data will be stored.
-        self._cached_data_path = self.cwd + "/dataset"
-        Path(self.cached_data_path).mkdir(parents=True, exist_ok=True)
-        # pretrained_weights_path (str): Path to directory to store pretrained weights.
-        self._pretrained_weights_path = self.cwd + "/pretrained_weights"
-        Path(self.pretrained_weights_path).mkdir(parents=True, exist_ok=True)
-        # output_path (str): Path to directory to store trained model weights.
-        self._output_path = self.cwd + "/output"
-        Path(self.output_path).mkdir(parents=True, exist_ok=True)
+        self.base_cfg = base_config()
+        self.base_cfg.paths.root = self.cwd
 
     def generate(
         self,
@@ -48,14 +40,14 @@ class BlissClient:
             n_batches (int): Number of batches to simulate.
             batch_size (int): Number of images per batch.
             max_images_per_file (int): Number of images per cached file.
-            kwargs: Keyword arguments to override default configuration values.
-        """  # noqa: RST210
-        cfg = base_config()
+            **kwargs: Keyword arguments to override default configuration values.
+        """
+        cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
         cfg.generate.n_batches = n_batches
         cfg.generate.batch_size = batch_size
         cfg.generate.max_images_per_file = max_images_per_file
-        cfg.generate.cached_data_path = self.cached_data_path
+
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
 
@@ -66,13 +58,14 @@ class BlissClient:
 
         Args:
             survey (SurveyType): Survey to load pretrained weights for.
-            filename (str): Name of pretrained weights file to load.
+            filename (str): Name of pretrained weights file downloaded.
         """
-        weights = _download_git_lfs_file(
+        weights = download_git_lfs_file(
             "https://api.github.com/repos/prob-ml/bliss/contents/"
             f"data/pretrained_models/{survey}.pt"
         )
-        with open(self.pretrained_weights_path + f"/{filename}", "wb+") as f:
+        Path(self.base_cfg.paths.pretrained_models).mkdir(parents=True, exist_ok=True)
+        with open(self.base_cfg.paths.pretrained_models + f"/{filename}", "wb+") as f:
             f.write(weights)
 
     def train(self, weight_save_path, **kwargs) -> None:
@@ -81,11 +74,11 @@ class BlissClient:
         Args:
             weight_save_path (str): Path to directory after cwd where trained model
                 weights will be stored.
-            kwargs: Keyword arguments to override default configuration values.
-        """  # noqa: RST210
-        cfg = base_config()
+            **kwargs: Keyword arguments to override default configuration values.
+        """
+        cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
-        cfg.training.weight_save_path = self.output_path + f"/{weight_save_path}"
+        cfg.training.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
 
@@ -109,19 +102,18 @@ class BlissClient:
             batch_size (int): Number of images per batch.
             val_split_file_idxs (List[int]): List of file indices to use for validation.
             pretrained_weights_filename (str): Name of pretrained weights file to load.
-            kwargs: Keyword arguments to override default configuration values.
-        """  # noqa: RST210
-        cfg = base_config()
+            **kwargs: Keyword arguments to override default configuration values.
+        """
+        cfg = OmegaConf.create(self.base_cfg)
         cfg.training.use_cached_simulator = True
         # apply overrides
-        cfg.training.weight_save_path = self.output_path + f"/{weight_save_path}"
-        cfg.cached_simulator.cached_data_path = self.cached_data_path
+        cfg.training.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
         cfg.cached_simulator.train_n_batches = train_n_batches
         cfg.cached_simulator.batch_size = batch_size
         cfg.cached_simulator.val_split_file_idxs = val_split_file_idxs
         if pretrained_weights_filename is not None:
             cfg.training.pretrained_weights = (
-                self.pretrained_weights_path + f"/{pretrained_weights_filename}"
+                cfg.paths.pretrained_models + f"/{pretrained_weights_filename}"
             )
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
@@ -129,53 +121,30 @@ class BlissClient:
         _train(cfg)
 
     def load_survey(self, survey: SurveyType, run, camcol, field, download_dir: str):
-        sdss_download.download_all(run, camcol, field, self.cwd + f"/{download_dir}")
+        SDSSDownloader(run, camcol, field, self.cwd + f"/{download_dir}").download_all()
         # assert files downloaded at download_dir
 
     def predict_sdss(
         self,
-        data_path: str,
         weight_save_path: str,
         **kwargs,
     ) -> Tuple[FullCatalog, Table, Table, Table]:
         """Predict on SDSS images.
 
         Args:
-            data_path (str): Path to directory after cwd where SDSS images are stored.
             weight_save_path (str): Path to directory after cwd where trained model
                 weights are stored.
-            kwargs: Keyword arguments to override default configuration values.
+            **kwargs: Keyword arguments to override default configuration values.
 
         Returns:
             Tuple[FullCatalog, Table, Table]: Tuple of predicted catalog, astropy.table
             of predicted catalog, and astropy.table of predicted galaxy_params.
         """
-        cfg = base_config()
+        cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
-        cfg.predict.dataset.sdss_dir = self.cwd + f"/{data_path}"
-        cfg.predict.weight_save_path = self.output_path + f"/{weight_save_path}"
-        cfg.paths.sdss = cfg.predict.dataset.sdss_dir
+        cfg.predict.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
-
-        # download survey images if not already downloaded
-        run, camcol, field = (
-            cfg.predict.dataset.run,
-            cfg.predict.dataset.camcol,
-            cfg.predict.dataset.fields[0],
-        )
-        bands = ["u", "g", "r", "i", "z"]
-        for band in bands:
-            sdss_data_file_path = (
-                Path(cfg.predict.dataset.sdss_dir)
-                / f"{run}"
-                / f"{camcol}"
-                / f"{field}"
-                / f"frame-{band}-{'{:06d}'.format(run)}-{camcol}-{'{:04d}'.format(field)}.fits"
-            )
-            if not sdss_data_file_path.exists():
-                self.load_survey("sdss", run, camcol, field, download_dir=data_path)
-                break
 
         est_cat, _, _, _, pred = _predict_sdss(cfg)
         est_cat_table, galaxy_params_table = fullcat_to_astropy_table(est_cat)
@@ -187,7 +156,7 @@ class BlissClient:
         from IPython.core.display import HTML  # pylint: disable=import-outside-toplevel
         from IPython.display import display  # pylint: disable=import-outside-toplevel
 
-        with open("./predict.html", "r", encoding="utf-8") as f:
+        with open(self.base_cfg.predict.plot.out_file_name, "r", encoding="utf-8") as f:
             html_str = f.read()
             display(HTML(html_str))
 
@@ -221,7 +190,7 @@ class BlissClient:
         Returns:
             str: Path to cached data.
         """
-        return self._cached_data_path
+        return self.base_cfg.generate.cached_data_path
 
     @cached_data_path.setter
     def cached_data_path(self, cached_data_path: str) -> None:
@@ -230,102 +199,14 @@ class BlissClient:
         Args:
             cached_data_path (str): Path to cached data.
         """
-        self._cached_data_path = cached_data_path
-
-    @property
-    def pretrained_weights_path(self) -> str:
-        """Get path to directory containing pretrained weights.
-
-        Returns:
-            str: Path to directory containing pretrained weights.
-        """
-        return self._pretrained_weights_path
-
-    @pretrained_weights_path.setter
-    def pretrained_weights_path(self, pretrained_weights_path: str) -> None:
-        """Set path to pretrained weights.
-
-        Args:
-            pretrained_weights_path (str): Path to pretrained weights.
-        """
-        self._pretrained_weights_path = pretrained_weights_path
-
-    @property
-    def output_path(self) -> str:
-        """Get path to output.
-
-        Returns:
-            str: Path to output.
-        """
-        return self._output_path
-
-    @output_path.setter
-    def output_path(self, output_path: str) -> None:
-        """Set path to output.
-
-        Args:
-            output_path (str): Path to output.
-        """
-        self._output_path = output_path
-
-
-def _download_git_lfs_file(url) -> bytes:
-    """Download a file from git-lfs.
-
-    Args:
-        url (str): URL to git-lfs file.
-
-    Returns:
-        bytes: File contents.
-    """
-    ptr_file = requests.get(url, timeout=10)
-    ptr = ptr_file.json()
-    ptr_sha = ptr["sha"]
-
-    blob_file = requests.get(
-        f"https://api.github.com/repos/prob-ml/bliss/git/blobs/{ptr_sha}", timeout=10
-    )
-    blob = blob_file.json()
-    blob_content = blob["content"]
-    assert blob["encoding"] == "base64"
-
-    blob_decoded = base64.b64decode(blob_content).decode("utf-8").split("\n")
-    sha = blob_decoded[1].split(" ")[1].split(":")[1]
-    size = int(blob_decoded[2].split(" ")[1])
-
-    lfs_ptr_file = requests.post(
-        "https://github.com/prob-ml/bliss.git/info/lfs/objects/batch",
-        headers={
-            "Accept": "application/vnd.git-lfs+json",
-            # Already added when you pass json=
-            # 'Content-type': 'application/json',
-        },
-        json={
-            "operation": "download",
-            "transfer": ["basic"],
-            "objects": [
-                {
-                    "oid": sha,
-                    "size": size,
-                }
-            ],
-        },
-        timeout=10,
-    )
-    lfs_ptr = lfs_ptr_file.json()
-    lfs_ptr_download_url = lfs_ptr["objects"][0]["actions"]["download"]["href"]  # noqa: WPS219
-
-    # Get and write weights to pretrained weights path
-    file = requests.get(lfs_ptr_download_url, timeout=10)
-    return file.content
+        self.base_cfg.generate.cached_data_path = cached_data_path
 
 
 def fullcat_to_astropy_table(est_cat: FullCatalog):
     assert list(est_cat.keys()) == [
         "star_log_fluxes",
         "star_fluxes",
-        "galaxy_bools",
-        "star_bools",
+        "source_type",
         "galaxy_params",
     ]
 

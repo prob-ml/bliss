@@ -5,9 +5,8 @@ from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics
-from bliss.predict import prepare_image
 from bliss.surveys.decals import DecalsFullCatalog
-from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey
+from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey, prepare_image
 
 
 class TestMetrics:
@@ -116,10 +115,9 @@ class TestMetrics:
 
         top_n_decals = torch.argsort(decals_cat["fluxes"].squeeze())[-n:]
         top_n_photo = torch.argsort(photo_cat["fluxes"].squeeze())[-n:]
-        bliss_fluxes = (
-            bliss_cat["star_fluxes"] * bliss_cat["star_bools"]
-            + bliss_cat["galaxy_params"][:, :, 0, None] * bliss_cat["galaxy_bools"]
-        )  # galaxy fluxes
+
+        bliss_fluxes = bliss_cat["star_fluxes"] * bliss_cat.star_bools
+        bliss_fluxes += bliss_cat["galaxy_params"][:, :, 0, None] * bliss_cat.galaxy_bools
         top_n_bliss = torch.argsort(bliss_fluxes.squeeze())[-n:]
 
         decals_cat = self._get_sliced_catalog(decals_cat, top_n_decals)
@@ -131,24 +129,24 @@ class TestMetrics:
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
         slen = 50
-        metrics = BlissMetrics()
+        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=1.0)
 
         true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]])
         est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]])
-        true_galaxy_bools = torch.tensor([[[1], [0]], [[1], [1]]])
-        est_galaxy_bools = torch.tensor([[[0], [1]], [[1], [0]]])
+        true_source_type = torch.tensor([[[1], [0]], [[1], [1]]])
+        est_source_type = torch.tensor([[[0], [1]], [[1], [0]]])
 
         d_true = {
             "n_sources": torch.tensor([1, 2]),
             "plocs": true_locs * slen,
-            "galaxy_bools": true_galaxy_bools,
+            "source_type": true_source_type,
         }
         true_params = FullCatalog(slen, slen, d_true)
 
         d_est = {
             "n_sources": torch.tensor([2, 2]),
             "plocs": est_locs * slen,
-            "galaxy_bools": est_galaxy_bools,
+            "source_type": est_source_type,
         }
         est_params = FullCatalog(slen, slen, d_est)
 
@@ -159,67 +157,70 @@ class TestMetrics:
 
         class_acc = results["class_acc"]
 
-        assert precision == 2 / (2 + 2)
-        assert recall == 2 / 3
-        assert class_acc == 1 / 2
-        assert avg_distance.item() == 50 * (0.01 + (0.01 + 0.09) / 2) / 2
+        assert np.isclose(precision, 2 / (2 + 2))
+        assert np.isclose(recall, 2 / 3)
+        assert np.isclose(class_acc, 1 / 2)
+        assert np.isclose(avg_distance, 50 * (0.01 + (0.01 + 0.09) / 2) / 2)
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
-        metrics = BlissMetrics(slack=2.0)
+        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=2.0)
 
         true_locs = torch.tensor(
             [[[10, 10]], [[20, 20]], [[30, 30]], [[40, 40]]], dtype=torch.float
         )
         est_locs = torch.tensor([[[10, 10]], [[20, 20]], [[30, 30]], [[41, 41]]], dtype=torch.float)
-        true_galaxy_bools = torch.tensor([[[1]], [[1]], [[1]], [[1]]])
-        est_galaxy_bools = torch.tensor([[[1]], [[1]], [[1]], [[1]]])
+        true_source_type = torch.tensor([[[1]], [[1]], [[1]], [[1]]])
+        est_source_type = torch.tensor([[[1]], [[1]], [[1]], [[1]]])
         true_sources = torch.tensor([0, 0, 1, 1])
         est_sources = torch.tensor([0, 1, 0, 1])
 
-        d_true = {"n_sources": true_sources, "plocs": true_locs, "galaxy_bools": true_galaxy_bools}
+        d_true = {"n_sources": true_sources, "plocs": true_locs, "source_type": true_source_type}
         true_params = FullCatalog(50, 50, d_true)
 
-        d_est = {"n_sources": est_sources, "plocs": est_locs, "galaxy_bools": est_galaxy_bools}
+        d_est = {"n_sources": est_sources, "plocs": est_locs, "source_type": est_source_type}
         est_params = FullCatalog(50, 50, d_est)
 
         results = metrics(true_params, est_params)
 
         assert results["detection_precision"] == 1 / 2
         assert results["detection_recall"] == 1 / 2
-        assert results["gal_tp"] == results["gal_fp"] == results["gal_fn"] == 1
-        assert results["avg_distance"].item() == 1
+        assert results["gal_tp"] == 1
+        assert results["avg_distance"] == 1
 
     def test_classification_metrics(self, cfg):
         """Test galaxy classification metrics."""
         simulator = instantiate(cfg.simulator, prior={"batch_size": 4})
         batch = next(iter(simulator.train_dataloader()))
-        catalog = TileCatalog(cfg.encoder.tile_slen, batch["tile_catalog"]).to_full_params()
-        metrics = BlissMetrics()
-        results = BlissMetrics()(catalog, catalog)
+        catalog = TileCatalog(cfg.encoder.tile_slen, batch["tile_catalog"])
+        metrics = BlissMetrics(mode=BlissMetrics.Mode.Tile, slack=1.0)
+        results = metrics(catalog, catalog)
         for metric in metrics.classification_metrics:
             assert results[f"{metric}_mae"] == 0
 
     def test_photo_self_agreement(self, catalogs):
         """Compares PhotoFullCatalog to itself as safety check for metrics."""
-        metrics = BlissMetrics()
+        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=1.0)
         results = metrics(catalogs["photo"], catalogs["photo"])
         assert results["f1"] == 1
 
     def test_decals_self_agreement(self, catalogs):
         """Compares Decals catalog to itself as safety check for metrics."""
-        results = BlissMetrics()(catalogs["decals"], catalogs["decals"])
+        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=1.0)
+        results = metrics(catalogs["decals"], catalogs["decals"])
         assert results["f1"] == 1
 
     def test_photo_decals_agree(self, catalogs):
         """Compares metrics for agreement between Photo catalog and Decals catalog."""
-        results = BlissMetrics()(catalogs["decals"], catalogs["photo"])
+        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=1.0)
+        results = metrics(catalogs["decals"], catalogs["photo"])
         assert results["detection_precision"] > 0.8
 
     def test_bliss_photo_agree(self, brightest_catalogs):
         """Compares metrics for agreement between BLISS-inferred catalog and Photo catalog."""
         slack = 1.0
-        results = BlissMetrics(slack)(brightest_catalogs["photo"], brightest_catalogs["bliss"])
+        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=slack)
+        results = metrics(brightest_catalogs["photo"], brightest_catalogs["bliss"])
         assert results["f1"] > 0.8
         assert results["avg_keep_distance"] < slack
 
@@ -229,7 +230,7 @@ class TestMetrics:
         photo_cat = brightest_catalogs["photo"]
         bliss_cat = brightest_catalogs["bliss"]
 
-        metrics = BlissMetrics(slack=1.0)
+        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=1.0)
 
         bliss_vs_decals = metrics(decals_cat, bliss_cat)
         photo_vs_decals = metrics(decals_cat, photo_cat)

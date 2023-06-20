@@ -8,51 +8,6 @@ from bliss.surveys.decals import DecalsFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 
 
-def prepare_image(x, device):
-    x = torch.from_numpy(x).unsqueeze(0)
-    x = x.to(device=device)
-    # image dimensions must be a multiple of 16
-    height = x.size(2) - (x.size(2) % 16)
-    width = x.size(3) - (x.size(3) % 16)
-    return x[:, :, :height, :width]
-
-
-def crop_image(cfg, image, background):
-    idx0 = cfg.predict.crop.left_upper_corner[0]
-    idx1 = cfg.predict.crop.left_upper_corner[1]
-    width = cfg.predict.crop.width
-    height = cfg.predict.crop.height
-    if ((idx0 + height) <= image.shape[2]) and ((idx1 + width) <= image.shape[3]):
-        image = image[:, :, idx0 : idx0 + height, idx1 : idx1 + width]
-        background = background[:, :, idx0 : idx0 + height, idx1 : idx1 + width]
-    return image, background
-
-
-def predict(cfg, image, background, show_plot=False, true_plocs=None):
-    encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-    enc_state_dict = torch.load(cfg.predict.weight_save_path)
-    encoder.load_state_dict(enc_state_dict)
-    encoder.eval()
-
-    if cfg.predict.crop.do_crop:
-        image, background = crop_image(cfg, image, background)
-    batch = {"images": image, "background": background}
-
-    with torch.no_grad():
-        pred = encoder.encode_batch(batch)
-        est_cat = encoder.variational_mode(pred)
-
-    if show_plot and (true_plocs is not None):
-        ttc = cfg.encoder.tiles_to_crop
-        ts = cfg.encoder.tile_slen
-        ptc = ttc * ts
-        cropped_image = image[0, 0, ptc:-ptc, ptc:-ptc]
-        cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
-        plot_predict(cfg, cropped_image, cropped_background, true_plocs, est_cat)
-
-    return est_cat, image, background, pred
-
-
 def predict_sdss(cfg):
     sdss_plocs = PhotoFullCatalog.from_file(
         cfg.paths.sdss,
@@ -62,13 +17,20 @@ def predict_sdss(cfg):
         band=cfg.predict.dataset.bands[0],
     ).plocs[0]
     sdss = instantiate(cfg.predict.dataset)
-    prepare_img = prepare_image(sdss[0]["image"], cfg.predict.device)
-    prepare_bg = prepare_image(sdss[0]["background"], cfg.predict.device)
-    show_plot = cfg.predict.plot.show_plot
 
-    est_cat, crop_img, crop_bg, pred = predict(cfg, prepare_img, prepare_bg, show_plot, sdss_plocs)
+    encoder = instantiate(cfg.encoder).to(cfg.predict.device)
+    enc_state_dict = torch.load(cfg.predict.weight_save_path)
+    encoder.load_state_dict(enc_state_dict)
+    encoder.eval()
+    trainer = instantiate(cfg.predict.trainer)
+    est_cat, images, background, pred = trainer.predict(encoder, datamodule=sdss)[0].values()
+    if cfg.predict.plot.show_plot and (sdss_plocs is not None):
+        ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
+        cropped_image = images[0, 0, ptc:-ptc, ptc:-ptc]
+        cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
+        plot_predict(cfg, cropped_image, cropped_background, sdss_plocs, est_cat)
 
-    return est_cat, crop_img[0], crop_bg[0], sdss_plocs, pred
+    return est_cat, images[0], background[0], sdss_plocs, pred
 
 
 def decal_plocs_from_sdss(cfg):
@@ -155,14 +117,15 @@ def plot_image(cfg, img, w, h, est_plocs, true_plocs, title):
 
 
 def plot_predict(cfg, image, background, true_plocs, est_cat):
-    """Function that use bokeh to save generated plots to an html file."""
+    """Function that uses bokeh to save generated plots to an html file."""
     w, h = image.shape
 
     est_plocs = np.array(est_cat.plocs.cpu())[0]
     decoder_obj = instantiate(cfg.simulator.decoder)
     est_tile = est_cat.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
     rcfs = np.array([[94, 1, 12]])
-    recon_img = decoder_obj.render_images(est_tile.to("cpu"), rcfs)[0, 0]
+    images, _, _ = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
+    recon_img = images[0][0]  # first image in batch, first band in image
 
     image = image.to("cpu")
     background = background.to("cpu")

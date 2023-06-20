@@ -1,5 +1,5 @@
 import math
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -13,7 +13,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
-from bliss.catalog import TileCatalog
+from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics
 from bliss.plotting import plot_detections
 from bliss.unconstrained_dists import (
@@ -42,6 +42,7 @@ class Encoder(pl.LightningModule):
         slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
+        input_transform_params: Optional[dict] = None,
     ):
         """Initializes DetectionEncoder.
 
@@ -53,6 +54,8 @@ class Encoder(pl.LightningModule):
             slack: Slack to use when matching locations for validation metrics.
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
+            input_transform_params: used for determining what channels to use as input (e.g.
+                deconvolution, concatenate PSF parameters, z-score inputs, etc.)
         """
         super().__init__()
         self.save_hyperparameters()
@@ -61,6 +64,7 @@ class Encoder(pl.LightningModule):
         self.n_bands = len(self.bands)
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
+        self.input_transform_params = input_transform_params
 
         self.tile_slen = tile_slen
 
@@ -70,11 +74,13 @@ class Encoder(pl.LightningModule):
         # a hack to get the right number of outputs from yolo
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
-        self.model = DetectionModel(cfg=arch_dict, ch=2 * self.n_bands)
+
+        num_channels = self._get_num_input_channels()
+        self.model = DetectionModel(cfg=arch_dict, ch=num_channels)
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
-        self.metrics = BlissMetrics(slack)
+        self.metrics = BlissMetrics(mode=BlissMetrics.Mode.Tile, slack=slack)
 
     @property
     def dist_param_groups(self):
@@ -100,20 +106,60 @@ class Encoder(pl.LightningModule):
             d[flux] = UnconstrainedLogNormal()
         return d
 
+    def _get_num_input_channels(self):
+        """Determine number of input channels for model based on desired input transforms."""
+        num_channels = 2  # image + background
+        if self.input_transform_params.get("use_deconv_channel"):
+            num_channels += 1
+        if self.input_transform_params.get("concat_psf_params"):
+            num_channels += 6
+        num_channels *= self.n_bands
+        return num_channels
+
+    def get_input_tensor(self, batch):
+        """Extracts data from batch and concatenates into a single tensor to be input into model.
+
+        By default, only the image and background are used. Other input transforms can be specified
+        in self.input_transform_params. Supported options are:
+            use_deconv_channel: add channel for image deconvolved with PSF
+            concat_psf_params: add each PSF parameter as a channel
+            #TODO: add other transforms here, like z-score and multi-band
+
+        Args:
+            batch: input batch (as dictionary)
+
+        Returns:
+            Tensor: b x c x h x w tensor, where the number of input channels `c` is based on the
+                input transformations to use
+        """
+        inputs = [batch["images"], batch["background"]]
+        if self.input_transform_params.get("use_deconv_channel"):
+            assert (
+                "deconvolution" in batch
+            ), "use_deconv_channel specified but deconvolution not present in data"
+            inputs.append(batch["deconvolution"])
+        if self.input_transform_params.get("concat_psf_params"):
+            assert (
+                "psf_params" in batch
+            ), "concat_psf_params specified but psf params not present in data"
+            n, _, h, w = batch["images"].size()
+            inputs.append(batch["psf_params"].view(n, 6, 1, 1).expand(n, 6, h, w))
+        return torch.cat(inputs, dim=1)
+
     def encode_batch(self, batch):
-        # cat images and background together, irrespective of matching on each band
-        images_with_background = torch.cat((batch["images"], batch["background"]), dim=1)
+        # get input tensor from batch with specified channels and transforms
+        inputs = self.get_input_tensor(batch)
 
         # setting this to true every time is a hack to make yolo DetectionModel
         # give us output of the right dimension
         self.model.model[-1].training = True
 
-        assert images_with_background.size(2) % 16 == 0, "image dims must be multiples of 16"
-        assert images_with_background.size(3) % 16 == 0, "image dims must be multiples of 16"
+        assert inputs.size(2) % 16 == 0, "image dims must be multiples of 16"
+        assert inputs.size(3) % 16 == 0, "image dims must be multiples of 16"
         bn_warn = "batchnorm training requires a larger batch. did you mean to use eval mode?"
         assert (not self.training) or batch["images"].size(0) > 4, bn_warn
 
-        output = self.model(images_with_background)
+        output = self.model(inputs)
         # there's an extra dimension for channel that is always a singleton
         output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
 
@@ -131,8 +177,19 @@ class Encoder(pl.LightningModule):
 
         return pred
 
-    def variational_mode(self, pred: Dict[str, Tensor]) -> Dict[str, Tensor]:
-        """Compute the mode of the variational distribution."""
+    def variational_mode(
+        self, pred: Dict[str, Tensor], return_full: Optional[bool] = True
+    ) -> Union[FullCatalog, TileCatalog]:
+        """Compute the mode of the variational distribution.
+
+        Args:
+            pred (Dict[str, Tensor]): model predictions
+            return_full (bool, optional): If True, returns a FullCatalog instead of a TileCatalog.
+                Defaults to False.
+
+        Returns:
+            Union[FullCatalog, TileCatalog]: Catalog based on predictions.
+        """
         # the mean would be better at minimizing squared error...should we return that instead?
         tile_is_on_array = pred["on_prob"].mode
         # this is the mode of star_log_flux but not the mean of the star_flux distribution
@@ -147,9 +204,9 @@ class Encoder(pl.LightningModule):
             pred[flux] = rearrange(pred[flux], "b ht wt -> b ht wt 1 1")
         star_log_fluxes = torch.cat([pred[f"star_log_flux {bnd}"] for bnd in self.bands], 4)
         star_fluxes = star_log_fluxes.exp()
-        galaxy_bools = pred["galaxy_prob"].mode * pred["on_prob"].mode  # type: ignore
-        star_bools = (1 - pred["galaxy_prob"].mode) * pred["on_prob"].mode  # type: ignore
-
+        galaxy_bools = pred["galaxy_prob"].mode
+        star_bools = 1 - galaxy_bools
+        source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
         galsimflux_names = [f"flux {bnd}" for bnd in self.bands]
         galsim_names = galsimflux_names + [
             "disk_frac",
@@ -162,7 +219,7 @@ class Encoder(pl.LightningModule):
         galsim_dists = [pred[f"galsim_{name}"] for name in galsim_names]
         # for params with transformed distribution mode and median aren't implemented.
         # instead, we compute median using inverse cdf 0.5
-        galsim_param_lst = [d.icdf(torch.tensor(0.5)) for d in galsim_dists]  # type: ignore
+        galsim_param_lst = [d.icdf(torch.tensor(0.5)) for d in galsim_dists]
         galaxy_params = torch.stack(galsim_param_lst, dim=3)
 
         # we have to unsqueeze some tensors below because a TileCatalog can store multiple
@@ -172,13 +229,12 @@ class Encoder(pl.LightningModule):
             "star_log_fluxes": star_log_fluxes,
             "star_fluxes": star_fluxes,
             "n_sources": tile_is_on_array,
-            "galaxy_bools": rearrange(galaxy_bools, "b ht wt -> b ht wt 1 1"),
-            "star_bools": rearrange(star_bools, "b ht wt -> b ht wt 1 1"),
+            "source_type": rearrange(source_type, "b ht wt -> b ht wt 1 1"),
             "galaxy_params": rearrange(galaxy_params, "b ht wt d -> b ht wt 1 d"),
         }
 
         est_tile_catalog = TileCatalog(self.tile_slen, est_catalog_dict)
-        return est_tile_catalog.to_full_params()
+        return est_tile_catalog if not return_full else est_tile_catalog.to_full_params()
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
@@ -206,7 +262,7 @@ class Encoder(pl.LightningModule):
         loss_with_components["locs_loss"] = locs_loss.sum() / true_tile_cat.n_sources.sum()
 
         # star/galaxy classification loss
-        true_gal_bools = rearrange(true_tile_cat["galaxy_bools"], "b ht wt 1 1 -> b ht wt")
+        true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
         binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
         binary_loss *= true_tile_cat.n_sources
         loss += binary_loss
@@ -247,8 +303,7 @@ class Encoder(pl.LightningModule):
         true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
         loss_dict = self._get_loss(pred, true_tile_cat)
-        true_full_cat = true_tile_cat.to_full_params()
-        est_cat = self.variational_mode(pred)
+        est_tile_cat = self.variational_mode(pred, return_full=False)  # get tile cat for metrics
 
         # log all losses
         for k, v in loss_dict.items():
@@ -256,7 +311,7 @@ class Encoder(pl.LightningModule):
 
         # log all metrics
         if log_metrics:
-            metrics = self.metrics(true_full_cat, est_cat)
+            metrics = self.metrics(true_tile_cat, est_tile_cat)
             for k, v in metrics.items():
                 self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
@@ -265,11 +320,15 @@ class Encoder(pl.LightningModule):
             batch_size = len(batch["images"])
             n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
             nrows = int(n_samples**0.5)  # for figure
-            wrong_idx = (est_cat.n_sources != true_full_cat.n_sources).nonzero()
+
+            true_full_cat = true_tile_cat.to_full_params()
+            est_full_cat = est_tile_cat.to_full_params()
+            wrong_idx = (est_full_cat.n_sources != true_full_cat.n_sources).nonzero()
             wrong_idx = wrong_idx.view(-1)[:n_samples]
+
             margin_px = self.tiles_to_crop * self.tile_slen
             fig = plot_detections(
-                batch["images"], true_full_cat, est_cat, nrows, wrong_idx, margin_px
+                batch["images"], true_full_cat, est_full_cat, nrows, wrong_idx, margin_px
             )
             title_root = f"Epoch:{self.current_epoch}/"
             title = f"{title_root}{logging_name} images"
@@ -292,3 +351,15 @@ class Encoder(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         self._generic_step(batch, "test", log_metrics=True)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        """Pytorch lightning method."""
+        with torch.no_grad():
+            pred = self.encode_batch(batch)
+            est_cat = self.variational_mode(pred)
+        return {
+            "est_cat": est_cat,
+            "images": batch["images"],
+            "background": batch["background"],
+            "pred": pred,
+        }

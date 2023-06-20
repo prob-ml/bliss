@@ -11,7 +11,13 @@ from bliss.catalog import TileCatalog
 
 FileDatum = TypedDict(
     "FileDatum",
-    {"tile_catalog": TileCatalog, "images": torch.Tensor, "background": torch.Tensor},
+    {
+        "tile_catalog": TileCatalog,
+        "images": torch.Tensor,
+        "background": torch.Tensor,
+        "deconvolution": torch.Tensor,
+        "psf_params": torch.Tensor,
+    },
 )
 
 
@@ -40,7 +46,7 @@ def generate(cfg: DictConfig):
     # create cached_data_path if it doesn't exist
     if not os.path.exists(cached_data_path):
         os.makedirs(cached_data_path)
-    print("Data will be saved to {}".format(cached_data_path))
+    print("Data will be saved to {}".format(cached_data_path))  # noqa: WPS421
 
     # Save Hydra config (used to generate data) to cached_data_path
     with open(f"{cfg.generate.cached_data_path}/hparams.yaml", "w", encoding="utf-8") as f:
@@ -67,28 +73,33 @@ def generate_data(n_batches: int, simulated_dataset, desc="Generating data"):
 def itemize_data(batch_data) -> List[FileDatum]:
     flat_data = {}
 
+    # flatten tile catalog
     tile_catalog_flattened = {}
     for key in batch_data[0]["tile_catalog"].keys():
         batch_tc_key = torch.stack([data["tile_catalog"][key] for data in batch_data])
         tile_catalog_flattened[key] = rearrange(batch_tc_key, "b c ... -> (b c) ...")
     flat_data["tile_catalog"] = tile_catalog_flattened
 
-    batch_images = torch.stack([data["images"] for data in batch_data])
-    batch_bg = torch.stack([data["background"] for data in batch_data])
-    flat_data["images"] = rearrange(batch_images, "b c ... -> (b c) ...")  # type: ignore
-    flat_data["background"] = rearrange(batch_bg, "b c ... -> (b c) ...")  # type: ignore
+    # flatten the rest of the data
+    keys = ["images", "background", "deconvolution", "psf_params"]
+    for key in keys:
+        if key in batch_data[0]:
+            batch_ch = torch.stack([data[key] for data in batch_data])
+            flat_data[key] = rearrange(batch_ch, "b c ... -> (b c) ...")
 
     # reconstruct data as list of single-input FileDatum dictionaries
     n_items = len(flat_data["images"])
     file_data: List[FileDatum] = []
     for i in range(n_items):
-        file_datum: FileDatum = {}  # type: ignore
+        file_datum: FileDatum = {}
         # construct a TileCatalog dictionary of ith-input tensors
-        file_datum["tile_catalog"] = {  # type: ignore
+        file_datum["tile_catalog"] = {
             k: flat_data["tile_catalog"][k][i] for k in flat_data["tile_catalog"].keys()
         }
         file_datum["images"] = flat_data["images"][i]
         file_datum["background"] = flat_data["background"][i]
+        file_datum["deconvolution"] = flat_data["deconvolution"][i]
+        file_datum["psf_params"] = flat_data["psf_params"][i]
         file_data.append(file_datum)
 
     return file_data
