@@ -111,12 +111,16 @@ class TestApi:
     def test_predict_sdss_default_rcf(self, bliss_client, weight_save_path):
         bliss_client.predict_sdss(
             weight_save_path=weight_save_path,
-            predict={"device": "cpu"},
+            predict={"device": "cpu", "trainer": {"accelerator": "cpu"}},
         )
         bliss_client.plot_predictions_in_notebook()
 
     def test_predict_sdss_custom_rcf(self, bliss_client, weight_save_path):
         bliss_client.predict_sdss(
             weight_save_path=weight_save_path,
-            predict={"dataset": {"run": 1011, "camcol": 3, "fields": [44]}, "device": "cpu"},
+            predict={
+                "dataset": {"run": 1011, "camcol": 3, "fields": [44]},
+                "device": "cpu",
+                "trainer": {"accelerator": "cpu"},
+            },
         )

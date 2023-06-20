@@ -156,7 +156,7 @@ class BlissClient:
         from IPython.core.display import HTML  # pylint: disable=import-outside-toplevel
         from IPython.display import display  # pylint: disable=import-outside-toplevel
 
-        with open("./predict.html", "r", encoding="utf-8") as f:
+        with open(self.base_cfg.predict.plot.out_file_name, "r", encoding="utf-8") as f:
             html_str = f.read()
             display(HTML(html_str))
 

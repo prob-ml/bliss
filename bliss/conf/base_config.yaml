@@ -185,5 +185,5 @@ predict:
         show_plot: true
         width: 1000
         height: 1000
-        out_file_name: predict.html
+        out_file_name: ${paths.output}/predict.html
     is_simulated: false
