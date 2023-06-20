@@ -66,7 +66,7 @@ class TileCatalog(UserDict):
         assert x.device == self.device
 
     @property
-    def is_on_array(self) -> Tensor:
+    def is_on_mask(self) -> Tensor:
         """Provides tensor which indicates how many sources are present for each batch.
 
         Return a boolean array of `shape=(*n_sources.shape, max_sources)` whose `(*,l)th` entry
@@ -75,7 +75,7 @@ class TileCatalog(UserDict):
         Returns:
             Tensor indicating how many sources are present for each batch.
         """
-        is_on_array = torch.zeros(
+        is_on_mask = torch.zeros(
             *self.n_sources.shape,
             self.max_sources,
             device=self.n_sources.device,
@@ -83,19 +83,19 @@ class TileCatalog(UserDict):
         )
 
         for i in range(self.max_sources):
-            is_on_array[..., i] = self.n_sources > i
+            is_on_mask[..., i] = self.n_sources > i
 
-        return is_on_array
+        return is_on_mask
 
     @property
     def star_bools(self) -> Tensor:
         is_star = self["source_type"] == SourceType.STAR
-        return is_star * self.is_on_array.unsqueeze(-1)
+        return is_star * self.is_on_mask.unsqueeze(-1)
 
     @property
     def galaxy_bools(self) -> Tensor:
         is_galaxy = self["source_type"] == SourceType.GALAXY
-        return is_galaxy * self.is_on_array.unsqueeze(-1)
+        return is_galaxy * self.is_on_mask.unsqueeze(-1)
 
     def to(self, device):
         out = {}
@@ -192,7 +192,7 @@ class TileCatalog(UserDict):
             For example, if we had 3 tiles with a maximum of two sources each,
             the elements of this tensor would take values from 0 up to and including 5.
         """
-        tile_is_on_array_sampled = self.is_on_array
+        tile_is_on_array_sampled = self.is_on_mask
         n_sources = reduce(tile_is_on_array_sampled, "b nth ntw d -> b", "sum")
         max_sources = int(n_sources.max().int().item())
         tile_is_on_array = rearrange(tile_is_on_array_sampled, "b nth ntw d -> b (nth ntw d)")
@@ -237,7 +237,7 @@ class TileCatalog(UserDict):
         fluxes = torch.where(
             self.galaxy_bools, self["galaxy_params"][..., 0, None], self["star_fluxes"]
         )
-        return torch.where(self.is_on_array[..., None], fluxes, torch.zeros_like(fluxes))
+        return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
     def get_brightest_source_per_tile(self):
         """Restrict TileCatalog to only the brightest 'on' source per tile.
