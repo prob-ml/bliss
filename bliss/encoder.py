@@ -321,3 +321,15 @@ class Encoder(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         self._generic_step(batch, "test", log_metrics=True)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        """Pytorch lightning method."""
+        with torch.no_grad():
+            pred = self.encode_batch(batch)
+            est_cat = self.variational_mode(pred)
+        return {
+            "est_cat": est_cat,
+            "images": batch["images"],
+            "background": batch["background"],
+            "pred": pred,
+        }

@@ -22,7 +22,7 @@ def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-state
     for key in paths.keys():
         path = Path(paths[key])
         if not path.exists():
-            if key == "output":
+            if key in ["data", "sdss", "decals", "output", "pretrained_models"]:  # noqa: WPS510
                 path.mkdir(parents=True)
             else:
                 err = "path for {} ({}) does not exist".format(str(key), path.as_posix())

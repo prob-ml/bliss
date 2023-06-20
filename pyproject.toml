@@ -18,7 +18,7 @@ name = "bliss-deblender"
 packages = [{include = "bliss"}]
 readme = "README.md"
 repository = "https://github.com/prob-ml/bliss"
-version = "0.2.0"
+version = "0.2.1"
 
 [tool.poetry.scripts]
 bliss = "main:main"
