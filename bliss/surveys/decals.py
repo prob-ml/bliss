@@ -5,7 +5,7 @@ import torch
 from astropy.table import Table
 from astropy.wcs import WCS
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, SourceType
 from bliss.surveys.sdss import column_to_tensor
 from bliss.utils.download_utils import download_git_lfs_file
 
@@ -92,14 +92,16 @@ class DecalsFullCatalog(FullCatalog):
         mag = cls._flux_to_mag(flux)
         nobj = objid.shape[0]
 
+        assert torch.all(star_bool + galaxy_bool)
+        source_type = SourceType.STAR * star_bool + SourceType.GALAXY * galaxy_bool
+
         d = {
             "objid": objid.reshape(1, nobj, 1),
             "ra": ra.reshape(1, nobj, 1),
             "dec": dec.reshape(1, nobj, 1),
             "plocs": torch.zeros((1, nobj, 2)),  # compatibility with FullCatalog
             "n_sources": torch.tensor((nobj,)),
-            "galaxy_bools": galaxy_bool.reshape(1, nobj, 1).float(),
-            "star_bools": star_bool.reshape(1, nobj, 1).float(),
+            "source_type": source_type.reshape(1, nobj, 1),
             "fluxes": flux.reshape(1, nobj, 1),
             "mags": mag.reshape(1, nobj, 1),
         }

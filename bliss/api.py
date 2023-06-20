@@ -206,8 +206,7 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     assert list(est_cat.keys()) == [
         "star_log_fluxes",
         "star_fluxes",
-        "galaxy_bools",
-        "star_bools",
+        "source_type",
         "galaxy_params",
     ]
 

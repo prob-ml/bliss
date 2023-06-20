@@ -13,7 +13,7 @@ from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog, SourceType, TileCatalog
 
 # define type alias to simplify signatures
 Catalog = Union[TileCatalog, FullCatalog]
@@ -120,8 +120,8 @@ class BlissMetrics(Metric):
         if self.mode is BlissMetrics.Mode.Full:
             true_locs = true.plocs
             est_locs = est.plocs
-            tgbool = true["galaxy_bools"]
-            egbool = est["galaxy_bools"]
+            tgbool = true.galaxy_bools
+            egbool = est.galaxy_bools
         elif self.mode is BlissMetrics.Mode.Tile:
             true_on_idx, true_is_on = true.get_indices_of_on_sources()
             est_on_idx, est_is_on = est.get_indices_of_on_sources()
@@ -131,9 +131,12 @@ class BlissMetrics(Metric):
             est_locs = est.gather_param_at_tiles("locs", est_on_idx)
             est_locs *= est_is_on.unsqueeze(-1)
 
-            tgbool = true.gather_param_at_tiles("galaxy_bools", true_on_idx)
+            true_st = true.gather_param_at_tiles("source_type", true_on_idx)
+            tgbool = true_st == SourceType.GALAXY
             tgbool *= true_is_on.unsqueeze(-1)
-            egbool = est.gather_param_at_tiles("galaxy_bools", est_on_idx)
+
+            est_st = est.gather_param_at_tiles("source_type", est_on_idx)
+            egbool = est_st == SourceType.GALAXY
             egbool *= est_is_on.unsqueeze(-1)
 
         for b in range(true.batch_size):
@@ -191,7 +194,8 @@ class BlissMetrics(Metric):
         true_indices, true_is_on = true.get_indices_of_on_sources()
 
         # construct masks for true source type
-        true_gal_bools = true.gather_param_at_tiles("galaxy_bools", true_indices)
+        true_st = true.gather_param_at_tiles("source_type", true_indices)
+        true_gal_bools = true_st == SourceType.GALAXY
         gal_mask = true_gal_bools.squeeze() * true_is_on
         star_mask = (~true_gal_bools).squeeze() * true_is_on
 

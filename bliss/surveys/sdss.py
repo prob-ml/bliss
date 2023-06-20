@@ -14,7 +14,7 @@ from scipy.interpolate import RegularGridInterpolator
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, SourceType
 
 
 class SloanDigitalSkySurvey(pl.LightningDataModule, Dataset):
@@ -298,11 +298,13 @@ class PhotoFullCatalog(FullCatalog):
         plocs = torch.stack((prs, pts), dim=-1)
         nobj = plocs.shape[0]
 
+        assert torch.all(star_bools + galaxy_bools)
+        source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
+
         d = {
             "plocs": plocs.reshape(1, nobj, 2),
             "n_sources": torch.tensor((nobj,)),
-            "galaxy_bools": galaxy_bools.reshape(1, nobj, 1).float(),
-            "star_bools": star_bools.reshape(1, nobj, 1).float(),
+            "source_type": source_type.reshape(1, nobj, 1),
             "fluxes": fluxes.reshape(1, nobj, 1),
             "mags": mags.reshape(1, nobj, 1),
             "ra": ras.reshape(1, nobj, 1),
