@@ -150,13 +150,25 @@ class ImageDecoder(nn.Module):
         return (term1 + term2 + term3) / (1 + b + p0)
 
     def render_star(self, psf, band, source_params):
+        """Render a star with given params and PSF.
+
+        Args:
+            source_params (Tensor): Tensor containing the parameters for a particular source
+                (see prior.py for details about these parameters)
+            psf (List): a list of PSFs for each band
+            band (int): band
+
+        Returns:
+            GSObject: a galsim representation of the rendered star convolved with the PSF
+        """
         return psf[band].withFlux(source_params["star_fluxes"][band].item())
 
     def render_galaxy(self, psf, band, source_params):
         """Render a galaxy with given params and PSF.
 
         Args:
-            source_params (Tensor): Tensor containing the following parameters:
+            source_params (Tensor): Tensor containing the parameters for a particular source
+                (see prior.py for details about these parameters)
             psf (List): a list of PSFs for each band
             band (int): band
 
