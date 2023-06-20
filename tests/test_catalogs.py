@@ -123,8 +123,8 @@ def test_bin_full_cat_by_flux():
     }
     binned_cat = FullCatalog(40, 40, d).apply_param_bin("mags", 21, 24)
     new_plocs = binned_cat.plocs[:, 0 : binned_cat.n_sources]
-    new_mags = binned_cat.plocs[:, 0 : binned_cat.n_sources]
+    new_mags = binned_cat["mags"][:, 0 : binned_cat.n_sources]
 
     assert new_plocs.shape == (1, 2, 2)
-    assert new_mags.min() < 24
-    assert new_mags.max() > 21
+    assert new_mags.max() < 24
+    assert new_mags.min() > 21

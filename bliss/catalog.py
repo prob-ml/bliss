@@ -236,7 +236,7 @@ class TileCatalog(UserDict):
 
         return TileCatalog(self.tile_slen, d)
 
-    def filter_tile_catalog_by_flux(self, min_flux=622, max_flux=1e6):
+    def filter_tile_catalog_by_flux(self, min_flux=0, max_flux=torch.inf):
         """Restricts TileCatalog to sources that have a flux between min_flux and max_flux.
 
         Args:
