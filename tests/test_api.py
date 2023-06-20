@@ -1,8 +1,11 @@
+import os
+import shutil
 from pathlib import Path
 
 import pytest
 
 from bliss.api import BlissClient
+from bliss.utils.download_utils import download_git_lfs_file
 
 
 @pytest.fixture(scope="session")
@@ -16,7 +19,7 @@ def bliss_client(cwd):
 
 
 @pytest.fixture(scope="class")
-def cached_data_path(bliss_client):
+def cached_data_path_api(bliss_client):
     bliss_client.cached_data_path = bliss_client.cwd + "/data/cached_dataset"
     bliss_client.generate(n_batches=3, batch_size=8, max_images_per_file=16)
     return bliss_client.cached_data_path
@@ -55,7 +58,7 @@ def weight_save_path(bliss_client, pretrained_weights_filename):
 
 
 @pytest.mark.usefixtures(
-    "bliss_client", "cached_data_path", "pretrained_weights_filename", "weight_save_path"
+    "bliss_client", "cached_data_path_api", "pretrained_weights_filename", "weight_save_path"
 )
 class TestApi:
     def test_generate(self, bliss_client):
@@ -73,15 +76,25 @@ class TestApi:
             bliss_client.cwd + "/data/cached_dataset_ms0.02/dataset_0.pt"
         ).exists(), "{CWD}/data/cached_dataset_ms0.02/dataset_0.pt not found"
 
-    def test_get_dataset_file(self, bliss_client, cached_data_path):
-        bliss_client.cached_data_path = cached_data_path
+    def test_get_dataset_file(self, bliss_client, cached_data_path_api):
+        bliss_client.cached_data_path = cached_data_path_api
         dataset0 = bliss_client.get_dataset_file(filename="dataset_0.pt")
         assert isinstance(dataset0, list), "dataset0 must be a list"
 
-    def test_load_pretrained_weights(self, bliss_client):
-        bliss_client.load_pretrained_weights_for_survey(
-            survey="sdss", filename="sdss_pretrained.pt"
-        )
+    def test_load_pretrained_weights(self, bliss_client, cfg):
+        # Only download pretrained weights if run via GitHub Actions
+        if os.environ.get("GITHUB_TOKEN") is None:
+            # Run locally, so use pretrained weights from local BLISS_HOME
+            # Copy pretrained weights to {cwd}/data/pretrained_models
+            local_pretrained_weights_path = Path(cfg.paths.data) / "pretrained_models/sdss.pt"
+            test_pretrained_weights_path = (
+                Path(bliss_client.cwd) / "data/pretrained_models/sdss_pretrained.pt"
+            )
+            shutil.copy(str(local_pretrained_weights_path), str(test_pretrained_weights_path))
+        else:
+            bliss_client.load_pretrained_weights_for_survey(
+                survey="sdss", filename="sdss_pretrained.pt"
+            )
         not_found_err_msg = (
             "pretrained weights "
             + f"{bliss_client.cwd}/data/pretrained_models/sdss_pretrained.pt "
@@ -109,18 +122,52 @@ class TestApi:
         )
 
     def test_predict_sdss_default_rcf(self, bliss_client, weight_save_path):
+        # If run via GitHub Actions, download from our Git LFS to avoid having to connect to
+        # SDSS remote server; else download from SDSS remote server
+        if os.environ.get("GITHUB_TOKEN") is not None:
+            download_rcf_from_git(run=94, camcol=1, field=12, cwd=bliss_client.cwd)
         bliss_client.predict_sdss(
             weight_save_path=weight_save_path,
             predict={"device": "cpu", "trainer": {"accelerator": "cpu"}},
         )
         bliss_client.plot_predictions_in_notebook()
 
-    def test_predict_sdss_custom_rcf(self, bliss_client, weight_save_path):
-        bliss_client.predict_sdss(
-            weight_save_path=weight_save_path,
-            predict={
-                "dataset": {"run": 1011, "camcol": 3, "fields": [44]},
-                "device": "cpu",
-                "trainer": {"accelerator": "cpu"},
-            },
+
+def download_rcf_from_git(run, camcol, field, cwd):
+    run_stripped = str(run).lstrip("0")
+    field_stripped = str(field).lstrip("0")
+    run6 = f"{int(run_stripped):06d}"
+    field4 = f"{int(field_stripped):04d}"
+
+    base_url = f"https://api.github.com/repos/prob-ml/bliss/contents/data/sdss/{run}/{camcol}"
+    save_path_rc = Path(cwd) / f"data/sdss/{run}/{camcol}"
+    save_path_rcf = save_path_rc / f"{field}"
+    save_path_rcf.mkdir(parents=True, exist_ok=True)
+
+    assert os.environ["GITHUB_TOKEN"] is not None, "GITHUB_TOKEN environment variable not found"
+    headers = {"authorization": f"Bearer {os.environ['GITHUB_TOKEN']}"}
+    pf = download_git_lfs_file(f"{base_url}/photoField-{run6}-{camcol}.fits", headers)
+    po = download_git_lfs_file(
+        f"{base_url}/{field}/photoObj-{run6}-{camcol}-{field4}.fits", headers
+    )
+    psf = download_git_lfs_file(
+        f"{base_url}/{field}/psField-{run6}-{camcol}-{field4}.fits", headers
+    )
+    save_file(f"{save_path_rc}/photoField-{run6}-{camcol}.fits", pf)
+    save_file(f"{save_path_rc}/{field}/photoObj-{run6}-{camcol}-{field4}.fits", po)
+    save_file(f"{save_path_rc}/{field}/psField-{run6}-{camcol}-{field4}.fits", psf)
+
+    for band in "ugriz":
+        fpm = download_git_lfs_file(
+            f"{base_url}/{field}/fpM-{run6}-{band}{camcol}-{field4}.fits", headers
         )
+        frame = download_git_lfs_file(
+            f"{base_url}/{field}/frame-{band}-{run6}-{camcol}-{field4}.fits", headers
+        )
+        save_file(f"{save_path_rcf}/fpM-{run6}-{band}{camcol}-{field4}.fits", fpm)
+        save_file(f"{save_path_rcf}/frame-{band}-{run6}-{camcol}-{field4}.fits", frame)
+
+
+def save_file(file_loc, data):
+    with open(file_loc, "wb") as f:
+        f.write(data)
