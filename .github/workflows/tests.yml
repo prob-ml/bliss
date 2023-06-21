@@ -12,7 +12,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
 
     strategy:
       matrix:
@@ -39,13 +39,9 @@ jobs:
           echo "JUPYTER_PLATFORM_DIRS=1" >> $GITHUB_ENV
           echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Install fftw3
-        run: |
-          sudo apt-get install libfftw3-dev
-
       - name: Install poetry dependencies
         run: |
-          poetry install
+          poetry install --sync
 
       - name: Run black
         run: |
@@ -63,9 +59,13 @@ jobs:
         run: |
           poetry run darglint bliss/ tests/
 
-      - name: Run Tests
+      - name: Run Tests on the CPU
         run: |
           poetry run pytest --cov=./bliss --cov-report=xml --durations=0
+
+      - name: Run Tests on the GPU
+        run: |
+          poetry run pytest --gpu
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
