@@ -6,6 +6,7 @@ from omegaconf.dictconfig import DictConfig
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
+from bliss.catalog import TileCatalog
 from bliss.simulator.background import SimulatedSDSSBackground
 from bliss.surveys.sdss import prepare_batch
 
@@ -26,52 +27,44 @@ class TestSimulate:
     def test_simulate(self, cfg):
         # temporary addition until new tile catalogs are generated
         # loads single r-band model with correct number of outputs
-        cfg.simulator.sdss_fields.bands = [2]
-        cfg.encoder.bands = [2]
-        cfg.encoder.z_score = False
         sim_dataset = instantiate(cfg.simulator)
-        tile_slen = cfg.encoder.tile_slen
-        max_sources = cfg.simulator.prior.max_sources
+        sim_tile = torch.load(cfg.paths.data + "/test_image/dataset_0.pt")
+        sim_tile = TileCatalog(4, sim_tile)
 
-        for i in range(4):
-            sim_tile = torch.load(cfg.paths.data + "/test_image/sim_tile" + str(i) + ".pt")
-            _, rcf_indices = sim_dataset.get_random_rcf(sim_tile.n_sources.size(0))  # noqa: WPS437
-            sim_tile["source_type"] = sim_tile.pop("galaxy_bools")
-            sim_tile.pop("star_bools")
-            image, background, _, _ = sim_dataset.simulate_image(sim_tile, rcf_indices)
+        _, rcf_indices = sim_dataset.get_random_rcf(sim_tile.n_sources.size(0))  # noqa: WPS437
+        image, background, _, _ = sim_dataset.simulate_image(sim_tile, rcf_indices)
 
-            # move data to the device the encoder is on
-            sim_tile = sim_tile.to(cfg.predict.device)
-            image = image.to(cfg.predict.device)
-            background = background.to(cfg.predict.device)
+        # move data to the device the encoder is on
+        sim_tile = sim_tile.to(cfg.predict.device)
+        image = image.to(cfg.predict.device)
+        background = background.to(cfg.predict.device)
 
-            sdss_test = SDSSTest(image, background, cfg)
-            encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-            enc_state_dict = torch.load(cfg.predict.weight_save_path)
-            encoder.load_state_dict(enc_state_dict)
-            encoder.eval()
-            trainer = instantiate(cfg.predict.trainer)
-            est_full = trainer.predict(encoder, datamodule=sdss_test)[0]["est_cat"]
-            est_tile = est_full.to_tile_params(tile_slen, max_sources)
-            ttc = cfg.encoder.tiles_to_crop
-            sim_galaxy_bools = sim_tile.galaxy_bools[:, ttc:-ttc, ttc:-ttc]
-            sim_star_bools = sim_tile.star_bools[:, ttc:-ttc, ttc:-ttc]
+        sdss_test = SDSSTest(image, background, cfg)
+        encoder = instantiate(cfg.encoder).to(cfg.predict.device)
+        enc_state_dict = torch.load(cfg.predict.mb_weight_save_path)
+        encoder.load_state_dict(enc_state_dict)
+        encoder.eval()
+        trainer = instantiate(cfg.predict.trainer)
+        est_tile = trainer.predict(encoder, datamodule=sdss_test)[0]["est_cat"]
+        ttc = cfg.encoder.tiles_to_crop
+        sim_galaxy_bools = sim_tile.galaxy_bools[:, ttc:-ttc, ttc:-ttc]
+        sim_star_bools = sim_tile.star_bools[:, ttc:-ttc, ttc:-ttc]
 
-            assert torch.equal(sim_galaxy_bools, est_tile.galaxy_bools)
-            assert torch.equal(sim_star_bools, est_tile.star_bools)
+        assert torch.equal(sim_galaxy_bools, est_tile.galaxy_bools)
+        assert torch.equal(sim_star_bools, est_tile.star_bools)
 
-            sim_star_fluxes = sim_tile["star_fluxes"] * sim_tile.star_bools
-            sim_galaxy_params = sim_tile["galaxy_params"] * sim_tile.galaxy_bools
-            sim_galaxy_fluxes = sim_galaxy_params[:, :, :, :, 0]
-            sim_fluxes = sim_star_fluxes[:, :, :, :, 0] + sim_galaxy_fluxes
-            sim_fluxes_crop = sim_fluxes[0, ttc:-ttc, ttc:-ttc, 0]
+        sim_star_fluxes = sim_tile["star_fluxes"] * sim_tile.star_bools
+        sim_galaxy_params = sim_tile["galaxy_params"] * sim_tile.galaxy_bools
+        sim_galaxy_fluxes = sim_galaxy_params[:, :, :, :, 0]
+        sim_fluxes = sim_star_fluxes[:, :, :, :, 0] + sim_galaxy_fluxes
+        sim_fluxes_crop = sim_fluxes[0, ttc:-ttc, ttc:-ttc, 0]
 
-            est_star_fluxes = est_tile["star_fluxes"] * est_tile.star_bools
-            est_galaxy_params = est_tile["galaxy_params"] * est_tile.galaxy_bools
-            est_galaxy_fluxes = est_galaxy_params[:, :, :, :, 0]
-            est_fluxes = est_star_fluxes[0, :, :, 0, 0] + est_galaxy_fluxes[0, :, :, 0]
+        est_star_fluxes = est_tile["star_fluxes"] * est_tile.star_bools
+        est_galaxy_params = est_tile["galaxy_params"] * est_tile.galaxy_bools
+        est_galaxy_fluxes = est_galaxy_params[:, :, :, :, 0]
+        est_fluxes = est_star_fluxes[0, :, :, 0, 0] + est_galaxy_fluxes[0, :, :, 0]
 
-            assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 0.1
+        assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 0.1
 
     def test_multi_background(self, cfg):
         """Test loading backgrounds and PSFs from multiple fields works."""

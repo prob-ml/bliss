@@ -194,7 +194,6 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         file_prefix: str,
         val_split_file_idxs: List[int],
         test_split_file_idxs: List[int],
-        z_score_transform: bool,
     ):
         super().__init__()
 

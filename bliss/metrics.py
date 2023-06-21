@@ -110,6 +110,11 @@ class BlissMetrics(Metric):
             "r_flux_g",
             "i_flux_g",
             "z_flux_g",
+            "u_flux_s",
+            "g_flux_s",
+            "r_flux_s",
+            "i_flux_s",
+            "z_flux_s",
         ]
         for metric in self.classification_metrics:
             self.add_state(metric, default=[], dist_reduce_fx="sum")
@@ -210,18 +215,31 @@ class BlissMetrics(Metric):
         true_st = true.gather_param_at_tiles("source_type", true_indices)
         true_gal_bools = true_st == SourceType.GALAXY
         gal_mask = true_gal_bools.squeeze() * true_is_on
+        star_mask = (~true_gal_bools).squeeze() * true_is_on
 
         # gather parameters where source is present in true catalog AND source is actually a star
         # or galaxy respectively in true catalog
         # note that the boolean indexing collapses across batches to return a 1D tensor
         true_gal_params = true.gather_param_at_tiles("galaxy_params", true_indices)[gal_mask]
         est_gal_params = est.gather_param_at_tiles("galaxy_params", true_indices)[gal_mask]
+        true_star_fluxes = true.gather_param_at_tiles("star_fluxes", true_indices)[
+            star_mask
+        ]  # noqa: W0612, C0301
+        est_star_fluxes = est.gather_param_at_tiles("star_fluxes", true_indices)[
+            star_mask
+        ]  # noqa: W0612, C0301
 
         self.u_flux_g.append(torch.abs(true_gal_params[:, 0] - est_gal_params[:, 0]))
         self.g_flux_g.append(torch.abs(true_gal_params[:, 1] - est_gal_params[:, 1]))
         self.r_flux_g.append(torch.abs(true_gal_params[:, 2] - est_gal_params[:, 2]))
         self.i_flux_g.append(torch.abs(true_gal_params[:, 3] - est_gal_params[:, 3]))
         self.z_flux_g.append(torch.abs(true_gal_params[:, 4] - est_gal_params[:, 4]))
+
+        self.u_flux_s.append(torch.abs(true_star_fluxes[:, 0] - est_star_fluxes[:, 0]))
+        self.g_flux_s.append(torch.abs(true_star_fluxes[:, 1] - est_star_fluxes[:, 1]))
+        self.r_flux_s.append(torch.abs(true_star_fluxes[:, 2] - est_star_fluxes[:, 2]))
+        self.i_flux_s.append(torch.abs(true_star_fluxes[:, 3] - est_star_fluxes[:, 3]))
+        self.z_flux_s.append(torch.abs(true_star_fluxes[:, 4] - est_star_fluxes[:, 4]))
 
         self.disk_frac.append(torch.abs(true_gal_params[:, 5] - est_gal_params[:, 5]))
         self.bulge_frac.append((1 - torch.abs(true_gal_params[:, 5]) - (1 - est_gal_params[:, 5])))

@@ -37,7 +37,6 @@ class Encoder(pl.LightningModule):
         self,
         architecture: DictConfig,
         bands: list,
-        z_score: bool,
         tile_slen: int,
         tiles_to_crop: int,
         slack: float = 1.0,
@@ -50,7 +49,6 @@ class Encoder(pl.LightningModule):
         Args:
             architecture: yaml to specifying the encoder network architecture
             bands: specified band-pass filters
-            z_score: specifies z-score transform
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
             slack: Slack to use when matching locations for validation metrics.
@@ -75,7 +73,7 @@ class Encoder(pl.LightningModule):
         if self.n_bands > 1:
             self.z_score = True
         else:
-            self.z_score = z_score
+            self.z_score = self.input_transform_params["z_score"]
 
         # number of distributional parameters used to characterize each source
         self.n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
@@ -372,6 +370,10 @@ class Encoder(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
+        # NOTE: Debugging predict issue in test_simulate.py - extra dimension
+        if len(batch["images"].shape) > 4:
+            batch["images"] = torch.squeeze(batch["images"])
+            batch["background"] = torch.squeeze(batch["background"])
         with torch.no_grad():
             pred = self.encode_batch(batch)
             est_cat = self.variational_mode(pred)

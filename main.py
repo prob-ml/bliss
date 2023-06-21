@@ -18,7 +18,7 @@ if not getenv("BLISS_HOME"):
 
 # config_path should be overriden when running `bliss` poetry executable
 # e.g., `bliss --cp case_studies/summer_template`
-@hydra.main(config_path="case_studies/summer_template", config_name="config", version_base=None)
+@hydra.main(config_path="bliss/conf", config_name="base_config", version_base=None)
 def main(cfg):
     if cfg.mode == "generate":
         generate(cfg)
