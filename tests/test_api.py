@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 import pytest
+from omegaconf import OmegaConf
 
 from bliss.api import BlissClient
 from bliss.utils.download_utils import download_git_lfs_file
@@ -14,8 +15,16 @@ def cwd(tmpdir_factory):
 
 
 @pytest.fixture(scope="class")
-def bliss_client(cwd):
-    return BlissClient(str(cwd))
+def bliss_client(cwd, cfg):
+    client = BlissClient(str(cwd))
+    # Hack to apply select conftest.py overrides, since client.base_cfg should be private
+    overrides = {
+        "training.trainer.accelerator": cfg.training.trainer.accelerator,
+        "predict.device": cfg.predict.device,
+    }
+    for k, v in overrides.items():
+        OmegaConf.update(client.base_cfg, k, v)
+    return client
 
 
 @pytest.fixture(scope="class")
@@ -25,21 +34,35 @@ def cached_data_path_api(bliss_client):
     return bliss_client.cached_data_path
 
 
-@pytest.fixture(scope="class")
-def pretrained_weights_filename(bliss_client):
-    filename = "sdss_pretrained_fixture.pt"
-    bliss_client.load_pretrained_weights_for_survey(
-        survey="sdss",
-        filename=filename,
-    )
+def download_pretrained_weights(bliss_client, cfg, filename):
+    # Only test downloading pretrained weights (from Git LFS) if run via GitHub Actions
+    if os.environ.get("GITHUB_TOKEN") is None:
+        # Run locally, so use pretrained weights from local BLISS_HOME
+        # Copy pretrained weights to {cwd}/data/pretrained_models
+        local_pretrained_weights_path = Path(cfg.paths.data) / "pretrained_models/sdss.pt"
+        test_pretrained_weights_path = Path(bliss_client.cwd) / f"data/pretrained_models/{filename}"
+        test_pretrained_weights_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(str(local_pretrained_weights_path), str(test_pretrained_weights_path))
+    else:
+        bliss_client.load_pretrained_weights_for_survey(
+            survey="sdss",
+            filename=filename,
+            request_headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}"},
+        )
     not_found_err_msg = (
         "pretrained weights "
-        + f"{bliss_client.cwd}/data/pretrained_models/sdss_pretrained_fixture.pt "
+        + f"{bliss_client.cwd}/data/pretrained_models/{filename} "
         + "not found"
     )
     assert Path(
-        bliss_client.cwd + "/data/pretrained_models/sdss_pretrained_fixture.pt"
+        bliss_client.cwd + f"/data/pretrained_models/{filename}"
     ).exists(), not_found_err_msg
+
+
+@pytest.fixture(scope="class")
+def pretrained_weights_filename(bliss_client, cfg):
+    filename = "sdss_pretrained.pt"
+    download_pretrained_weights(bliss_client, cfg, filename)
     return filename
 
 
@@ -48,11 +71,10 @@ def weight_save_path(bliss_client, pretrained_weights_filename):
     weight_save_path = "tutorial_encoder/0_fixture.pt"
     bliss_client.train_on_cached_data(
         weight_save_path=weight_save_path,
-        train_n_batches=2,
+        train_n_batches=1,
         batch_size=8,
         val_split_file_idxs=[1],
         pretrained_weights_filename=pretrained_weights_filename,
-        training={"trainer": {"accelerator": "cpu", "check_val_every_n_epoch": 1}, "n_epochs": 1},
     )
     return weight_save_path
 
@@ -82,27 +104,7 @@ class TestApi:
         assert isinstance(dataset0, list), "dataset0 must be a list"
 
     def test_load_pretrained_weights(self, bliss_client, cfg):
-        # Only download pretrained weights if run via GitHub Actions
-        if os.environ.get("GITHUB_TOKEN") is None:
-            # Run locally, so use pretrained weights from local BLISS_HOME
-            # Copy pretrained weights to {cwd}/data/pretrained_models
-            local_pretrained_weights_path = Path(cfg.paths.data) / "pretrained_models/sdss.pt"
-            test_pretrained_weights_path = (
-                Path(bliss_client.cwd) / "data/pretrained_models/sdss_pretrained.pt"
-            )
-            shutil.copy(str(local_pretrained_weights_path), str(test_pretrained_weights_path))
-        else:
-            bliss_client.load_pretrained_weights_for_survey(
-                survey="sdss", filename="sdss_pretrained.pt"
-            )
-        not_found_err_msg = (
-            "pretrained weights "
-            + f"{bliss_client.cwd}/data/pretrained_models/sdss_pretrained.pt "
-            + "not found"
-        )
-        assert Path(
-            bliss_client.cwd + "/data/pretrained_models/sdss_pretrained.pt"
-        ).exists(), not_found_err_msg
+        download_pretrained_weights(bliss_client, cfg, "sdss.pt")
 
     def test_train_on_cached_data(self, bliss_client, pretrained_weights_filename):
         bliss_client.train_on_cached_data(
@@ -111,26 +113,45 @@ class TestApi:
             batch_size=8,
             val_split_file_idxs=[1],
             pretrained_weights_filename=pretrained_weights_filename,
-            training={
-                "trainer": {
-                    "accelerator": "cpu",
-                    "check_val_every_n_epoch": 1,
-                    "log_every_n_steps": 1,
-                },
-                "n_epochs": 1,
-            },
         )
 
-    def test_predict_sdss_default_rcf(self, bliss_client, weight_save_path):
+    def test_predict_sdss_default_rcf(self, bliss_client, weight_save_path, cfg):
         # If run via GitHub Actions, download from our Git LFS to avoid having to connect to
         # SDSS remote server; else download from SDSS remote server
         if os.environ.get("GITHUB_TOKEN") is not None:
             download_rcf_from_git(run=94, camcol=1, field=12, cwd=bliss_client.cwd)
-        bliss_client.predict_sdss(
-            weight_save_path=weight_save_path,
-            predict={"device": "cpu", "trainer": {"accelerator": "cpu"}},
-        )
+        bliss_client.predict_sdss(weight_save_path=weight_save_path)
+
+        # This function call internally requires DECaLS catalog data, so download from Git LFS if
+        # authenticated via GitHub Actions, else copy from local BLISS_HOME
+        if os.environ.get("GITHUB_TOKEN") is not None:
+            download_decals_base_from_git(bliss_client.cwd + "/data/decals")
+        else:
+            local_decals_base_path = Path(cfg.paths.data) / "decals"
+            test_decals_base_path = Path(bliss_client.cwd) / "data/decals"
+            shutil.copytree(
+                str(local_decals_base_path), str(test_decals_base_path), dirs_exist_ok=True
+            )
         bliss_client.plot_predictions_in_notebook()
+
+
+def download_decals_base_from_git(download_dir: str):
+    assert os.environ["GITHUB_TOKEN"] is not None, "GITHUB_TOKEN environment variable not found"
+
+    tractor_filename = "tractor-3366m010.fits"
+    cutout_filename = "cutout_336.635_-0.9600.fits"
+    cutout = download_git_lfs_file(
+        f"https://api.github.com/repos/prob-ml/bliss/contents/data/decals/{cutout_filename}",
+        headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}"},
+    )
+    tractor = download_git_lfs_file(
+        f"https://api.github.com/repos/prob-ml/bliss/contents/data/decals/{tractor_filename}",
+        headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}"},
+    )
+    cutout_path = Path(download_dir) / cutout_filename
+    tractor_path = Path(download_dir) / tractor_filename
+    cutout_path.write_bytes(cutout)
+    tractor_path.write_bytes(tractor)
 
 
 def download_rcf_from_git(run, camcol, field, cwd):
@@ -145,7 +166,7 @@ def download_rcf_from_git(run, camcol, field, cwd):
     save_path_rcf.mkdir(parents=True, exist_ok=True)
 
     assert os.environ["GITHUB_TOKEN"] is not None, "GITHUB_TOKEN environment variable not found"
-    headers = {"authorization": f"Bearer {os.environ['GITHUB_TOKEN']}"}
+    headers = {"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}"}
     pf = download_git_lfs_file(f"{base_url}/photoField-{run6}-{camcol}.fits", headers)
     po = download_git_lfs_file(
         f"{base_url}/{field}/photoObj-{run6}-{camcol}-{field4}.fits", headers
