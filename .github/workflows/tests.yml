@@ -41,7 +41,7 @@ jobs:
 
       - name: Install poetry dependencies
         run: |
-          poetry install
+          poetry install --sync
 
       - name: Run black
         run: |
