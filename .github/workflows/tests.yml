@@ -39,10 +39,6 @@ jobs:
           echo "JUPYTER_PLATFORM_DIRS=1" >> $GITHUB_ENV
           echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> $GITHUB_ENV
 
-      - name: Install fftw3
-        run: |
-          sudo apt-get install libfftw3-dev
-
       - name: Install poetry dependencies
         run: |
           poetry install
