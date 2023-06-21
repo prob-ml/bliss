@@ -47,7 +47,7 @@ class BlissClient:
         cfg.generate.n_batches = n_batches
         cfg.generate.batch_size = batch_size
         cfg.generate.max_images_per_file = max_images_per_file
-
+        cfg.generate.cached_data_path = self.cached_data_path
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
 

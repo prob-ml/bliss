@@ -24,6 +24,11 @@ class SDSSTest(pl.LightningDataModule):
 
 class TestSimulate:
     def test_simulate(self, cfg):
+        # temporary addition until new tile catalogs are generated
+        # loads single r-band model with correct number of outputs
+        cfg.simulator.sdss_fields.bands = [2]
+        cfg.encoder.bands = [2]
+        cfg.encoder.z_score = False
         sim_dataset = instantiate(cfg.simulator)
         tile_slen = cfg.encoder.tile_slen
         max_sources = cfg.simulator.prior.max_sources

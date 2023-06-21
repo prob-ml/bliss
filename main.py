@@ -6,7 +6,7 @@ from pathlib import Path
 
 import hydra
 
-from bliss.generate import generate
+from bliss.generate_catalog import generate
 from bliss.predict import predict_sdss
 from bliss.train import train
 
@@ -17,8 +17,8 @@ if not getenv("BLISS_HOME"):
 
 
 # config_path should be overriden when running `bliss` poetry executable
-# e.g., `bliss --cp case_studies/summer_template -cn config`
-@hydra.main(config_path="bliss/conf", config_name="base_config", version_base=None)
+# e.g., `bliss --cp case_studies/summer_template`
+@hydra.main(config_path="case_studies/summer_template", config_name="config", version_base=None)
 def main(cfg):
     if cfg.mode == "generate":
         generate(cfg)

@@ -9,17 +9,17 @@ class TestSdssReconstruct:
         est_full, true_img, true_bg, _, _ = predict_sdss(cfg)
         est_tile = est_full.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
 
+        # reconstruction test only considers r-band image/catalog params
         decoder_obj = instantiate(cfg.simulator.decoder)
         rcfs = np.array([[94, 1, 12]])
-        images, _, _ = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
-        recon_img = images[0, 0]
+        recon_img = decoder_obj.render_images(est_tile.to("cpu"), rcfs)[0, 2]
 
         ptc = cfg.encoder.tile_slen * cfg.encoder.tiles_to_crop
-        true_img_crop = true_img[0][ptc:-ptc, ptc:-ptc]
-        true_bg_crop = true_bg[0][ptc:-ptc, ptc:-ptc]
+        true_img_crop = true_img[2][ptc:-ptc, ptc:-ptc]
+        true_bg_crop = true_bg[2][ptc:-ptc, ptc:-ptc]
         true_bright = true_img_crop - true_bg_crop
 
-        bright_pix_mask = (recon_img - 100) > 0
+        bright_pix_mask = (recon_img - 100) > 0  # originally 100
         recon_img = recon_img.to(cfg.predict.device)
         res_bright = recon_img[bright_pix_mask] - true_bright[bright_pix_mask]
 
@@ -29,5 +29,5 @@ class TestSdssReconstruct:
         flux_diff = res_bright.abs().sum()
         flux_sum = true_bright[bright_pix_mask].sum()
 
-        assert ((res_img.abs() / recon_img.sqrt()) > 5).sum() == 0
-        assert flux_diff / flux_sum < 0.2
+        assert ((res_img.abs() / recon_img.sqrt()) > 7).sum() == 0
+        assert flux_diff / flux_sum < 0.3

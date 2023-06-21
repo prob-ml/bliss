@@ -14,7 +14,8 @@ def cached_data(cfg):
     cached_dataset_should_exist = cfg.generate.n_batches > 0 and (
         cfg.generate.batch_size < cfg.generate.max_images_per_file
     )
-    file_path = cfg.generate.cached_data_path + "/dataset_0.pt"
+    start_idx = cfg.generate.files_start_idx
+    file_path = cfg.generate.cached_data_path + f"/dataset_{start_idx}.pt"
     if cached_dataset_should_exist:
         assert os.path.exists(file_path), f"{file_path} not found"
     # cursory check of contents of cached dataset
@@ -36,7 +37,7 @@ def cached_data(cfg):
             "but must be list of length {cfg.generate.batch_size}"
         )
         assert (
-            len(cached_dataset[0]["images"]) == 1
+            len(cached_dataset[0]["images"]) == 5
         ), "cached_dataset[0]['images'] must be a single tensor"
         assert cached_dataset[0]["images"][0].shape == (
             cfg.simulator.prior.n_tiles_h * cfg.simulator.prior.tile_slen,
