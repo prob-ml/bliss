@@ -53,16 +53,22 @@ class BlissClient:
 
         _generate(cfg)
 
-    def load_pretrained_weights_for_survey(self, survey: SurveyType, filename: str) -> None:
+    def load_pretrained_weights_for_survey(
+        self, survey: SurveyType, filename: str, request_headers: Optional[Dict[str, str]] = None
+    ) -> None:
         """Load pretrained weights for a survey.
 
         Args:
             survey (SurveyType): Survey to load pretrained weights for.
             filename (str): Name of pretrained weights file downloaded.
+            request_headers (Optional[Dict[str, str]], optional): Request headers for downloading
+                pretrained weights. Required if calling this function to load pretrained weights
+                frequently (> 60 requests/hour, as of 2022-11-28). Defaults to None.
         """
         weights = download_git_lfs_file(
             "https://api.github.com/repos/prob-ml/bliss/contents/"
-            f"data/pretrained_models/{survey}.pt"
+            f"data/pretrained_models/{survey}.pt",
+            request_headers,
         )
         Path(self.base_cfg.paths.pretrained_models).mkdir(parents=True, exist_ok=True)
         with open(self.base_cfg.paths.pretrained_models + f"/{filename}", "wb+") as f:
