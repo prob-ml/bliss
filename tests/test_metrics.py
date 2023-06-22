@@ -37,37 +37,6 @@ class TestMetrics:
 
         return cropped_image, cropped_background, (min_w, max_w), (min_h, max_h)
 
-    def _get_photo_cat(self, photo_cat, ra_lim, dec_lim):
-        """Helper function to restrict photo catalog to within RA and DEC limits."""
-        ra = photo_cat["ra"].squeeze()
-        dec = photo_cat["dec"].squeeze()
-
-        keep = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec >= dec_lim[0]) & (dec <= dec_lim[1])
-        plocs = photo_cat.plocs[:, keep]
-        n_sources = torch.tensor([plocs.size()[1]])
-
-        d = {"plocs": plocs, "n_sources": n_sources}
-        for key in photo_cat.keys():
-            d[key] = photo_cat[key][:, keep]
-
-        return PhotoFullCatalog(
-            plocs[0, :, 0].max() - plocs[0, :, 0].min(),  # new height
-            plocs[0, :, 1].max() - plocs[0, :, 1].min(),  # new width
-            d,
-        )
-
-    def _get_decals_cat(self, filename, ra_lim, dec_lim, wcs):
-        """Helper function to load DECaLS data for test cases."""
-        cat = DecalsFullCatalog.from_file(filename, ra_lim, dec_lim)
-
-        # if provided, use WCS to convert RA and DEC to plocs
-        if wcs is not None:
-            plocs = cat.get_plocs_from_ra_dec(wcs)
-            cat.plocs = plocs
-            cat.height, cat.width = wcs.array_shape
-
-        return cat
-
     @pytest.fixture(scope="class")
     def catalogs(self, cfg, encoder):
         """The main entry point to get data for most of the tests."""
@@ -78,9 +47,10 @@ class TestMetrics:
 
         # get RA/DEC limits of cropped image and construct catalogs
         ra_lim, dec_lim = wcs.all_pix2world(w_lim, h_lim, 0)
-        photo_cat = self._get_photo_cat(base_photo_cat, ra_lim, dec_lim).to(torch.device("cpu"))
+        photo_cat = base_photo_cat.restrict_by_ra_dec(ra_lim, dec_lim).to(torch.device("cpu"))
         decals_path = cfg.predict.decals_frame
-        decals_cat = self._get_decals_cat(decals_path, ra_lim, dec_lim, wcs).to(torch.device("cpu"))
+        decals_cat = DecalsFullCatalog.from_file(decals_path, ra_lim, dec_lim, wcs=wcs)
+        decals_cat = decals_cat.to(torch.device("cpu"))
 
         # get predicted BLISS catalog
         with torch.no_grad():
