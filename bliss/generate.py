@@ -24,7 +24,6 @@ FileDatum = TypedDict(
 def generate(cfg: DictConfig):
     max_images_per_file = cfg.generate.max_images_per_file
     cached_data_path = cfg.generate.cached_data_path
-    files_start_idx = cfg.generate.files_start_idx
     n_workers_per_process = cfg.generate.n_workers_per_process
 
     # largest `batch_size` multiple <= `max_images_per_file`
@@ -35,6 +34,10 @@ def generate(cfg: DictConfig):
     # number of files needed to store >= `n_batches` * `batch_size` images
     # in <= `images_per_file`-image files
     n_files = -(cfg.generate.n_batches * bs // -images_per_file)  # ceil division
+
+    # note: this is technically "n_files for this process"
+    process_index = cfg.generate.get("process_index", 0)
+    files_start_idx = process_index * n_files
 
     # use SimulatedDataset to generate data in minibatches iteratively,
     # then concatenate before caching to disk via pickle
