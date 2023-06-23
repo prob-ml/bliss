@@ -2,7 +2,6 @@
 defaults:
     - ../bliss/conf@_here_: base_config
     - _self_
-    - override hydra/job_logging: stdout
 
 simulator:
     valid_n_batches: 6
