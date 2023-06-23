@@ -16,6 +16,7 @@ from yolov5.models.yolo import DetectionModel
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics
 from bliss.plotting import plot_detections
+from bliss.transforms import z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
     UnconstrainedDiagonalBivariateNormal,
@@ -68,12 +69,6 @@ class Encoder(pl.LightningModule):
         self.input_transform_params = input_transform_params
 
         self.tile_slen = tile_slen
-
-        # automatically z-score if number of bands is greater than 1.
-        if self.n_bands > 1:
-            self.z_score = True
-        else:
-            self.z_score = self.input_transform_params["z_score"]
 
         # number of distributional parameters used to characterize each source
         self.n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
@@ -155,12 +150,8 @@ class Encoder(pl.LightningModule):
             assert (
                 batch["background"][0, 0].std() > 0
             ), "Constant backgrounds not supported for multi-band encoding"
-            inputs[0] = (
-                batch["images"] - torch.mean(batch["images"], dim=(2, 3), keepdim=True)
-            ) / torch.std(batch["images"], dim=(2, 3), keepdim=True)
-            inputs[1] = (
-                batch["background"] - torch.mean(batch["background"], dim=(2, 3), keepdim=True)
-            ) / torch.std(batch["background"], dim=(2, 3), keepdim=True)
+            inputs[0] = z_score(batch["images"])
+            inputs[1] = z_score(batch["background"])
         return torch.cat(inputs, dim=1)
 
     def encode_batch(self, batch):
@@ -370,13 +361,9 @@ class Encoder(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
-        # NOTE: Debugging predict issue in test_simulate.py - extra dimension
-        if len(batch["images"].shape) > 4:
-            batch["images"] = torch.squeeze(batch["images"])
-            batch["background"] = torch.squeeze(batch["background"])
         with torch.no_grad():
             pred = self.encode_batch(batch)
-            est_cat = self.variational_mode(pred)
+            est_cat = self.variational_mode(pred, return_full=False)
         return {
             "est_cat": est_cat,
             "images": batch["images"],

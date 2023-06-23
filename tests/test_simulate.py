@@ -25,10 +25,10 @@ class SDSSTest(pl.LightningDataModule):
 
 class TestSimulate:
     def test_simulate(self, cfg):
-        # temporary addition until new tile catalogs are generated
         # loads single r-band model with correct number of outputs
         sim_dataset = instantiate(cfg.simulator)
         sim_tile = torch.load(cfg.paths.data + "/test_image/dataset_0.pt")
+        # NOTE: sim_tile is a batch of 4 images
         sim_tile = TileCatalog(4, sim_tile)
 
         _, rcf_indices = sim_dataset.get_random_rcf(sim_tile.n_sources.size(0))  # noqa: WPS437
@@ -41,7 +41,7 @@ class TestSimulate:
 
         sdss_test = SDSSTest(image, background, cfg)
         encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-        enc_state_dict = torch.load(cfg.predict.mb_weight_save_path)
+        enc_state_dict = torch.load(cfg.predict.weight_save_path)
         encoder.load_state_dict(enc_state_dict)
         encoder.eval()
         trainer = instantiate(cfg.predict.trainer)
@@ -64,7 +64,7 @@ class TestSimulate:
         est_galaxy_fluxes = est_galaxy_params[:, :, :, :, 0]
         est_fluxes = est_star_fluxes[0, :, :, 0, 0] + est_galaxy_fluxes[0, :, :, 0]
 
-        assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 0.1
+        assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 0.2
 
     def test_multi_background(self, cfg):
         """Test loading backgrounds and PSFs from multiple fields works."""

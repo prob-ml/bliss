@@ -50,14 +50,13 @@ training:
         enable_checkpointing: true
         profiler: null
         check_val_every_n_epoch: 1001
-        log_every_n_steps: 10
+        log_every_n_steps: 1
         accelerator: "cpu"
         devices: 1
 
 predict:
     decals_frame: ${paths.decals}/tractor-3366m010.fits
-    weight_save_path: ${paths.pretrained_models}/r_long.pt
-    mb_weight_save_path: ${paths.pretrained_models}/zscore_five_band.pt
+    weight_save_path: ${paths.pretrained_models}/zscore_five_band.pt
     device: "cpu"
     crop:
         left_upper_corner: [160, 160]

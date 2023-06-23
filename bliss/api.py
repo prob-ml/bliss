@@ -1,6 +1,9 @@
+import logging
+from os import environ, getenv
 from pathlib import Path
 from typing import Dict, Literal, Optional, Tuple, TypeAlias
 
+import hydra
 import torch
 from astropy import units as u  # noqa: WPS347
 from astropy.table import Table
@@ -53,16 +56,22 @@ class BlissClient:
 
         _generate(cfg)
 
-    def load_pretrained_weights_for_survey(self, survey: SurveyType, filename: str) -> None:
+    def load_pretrained_weights_for_survey(
+        self, survey: SurveyType, filename: str, request_headers: Optional[Dict[str, str]] = None
+    ) -> None:
         """Load pretrained weights for a survey.
 
         Args:
             survey (SurveyType): Survey to load pretrained weights for.
             filename (str): Name of pretrained weights file downloaded.
+            request_headers (Optional[Dict[str, str]], optional): Request headers for downloading
+                pretrained weights. Required if calling this function to load pretrained weights
+                frequently (> 60 requests/hour, as of 2022-11-28). Defaults to None.
         """
         weights = download_git_lfs_file(
             "https://api.github.com/repos/prob-ml/bliss/contents/"
-            f"data/pretrained_models/{survey}.pt"
+            f"data/pretrained_models/{survey}.pt",
+            request_headers,
         )
         Path(self.base_cfg.paths.pretrained_models).mkdir(parents=True, exist_ok=True)
         with open(self.base_cfg.paths.pretrained_models + f"/{filename}", "wb+") as f:
@@ -303,3 +312,45 @@ def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
     pred_table["galsim_a_b_std"] = pred_table["galsim_a_b_std"] * u.arcsec
 
     return pred_table
+
+
+# pragma: no cover
+# ============================== CLI ==============================
+
+
+# config_path should be overriden when running `bliss` poetry executable
+# e.g., `bliss -cp case_studies/summer_template -cn config`
+@hydra.main(config_path="conf", config_name="base_config", version_base=None)
+def main(cfg):
+    """Main entry point(s) for BLISS."""
+    if not getenv("BLISS_HOME"):
+        project_path = Path(__file__).resolve()
+        bliss_home = project_path.parents[1]
+        environ["BLISS_HOME"] = bliss_home.as_posix()
+
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "WARNING: BLISS_HOME not set, setting to project root %s\n",  # noqa: WPS323
+            environ["BLISS_HOME"],
+        )
+
+    bliss_client = BlissClient(cwd=cfg.paths.root)
+    if cfg.mode == "generate":
+        bliss_client.generate(
+            n_batches=cfg.generate.n_batches,
+            batch_size=cfg.generate.batch_size,
+            max_images_per_file=cfg.generate.max_images_per_file,
+            **cfg,
+        )
+    elif cfg.mode == "train":
+        bliss_client.train(weight_save_path=cfg.training.weight_save_path, **cfg)
+    elif cfg.mode == "predict":
+        bliss_client.predict_sdss(weight_save_path=cfg.predict.weight_save_path, **cfg)
+    else:
+        raise KeyError
+
+
+if __name__ == "__main__":
+    main()  # pylint: disable=no-value-for-parameter
+
+# pragma: no cover

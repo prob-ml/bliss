@@ -70,9 +70,9 @@ def crop_image(cfg, image, background):
 def predict(cfg, image, background, show_plot=False, true_plocs=None):
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     if len(cfg.encoder.bands) == 1:
-        enc_state_dict = torch.load(cfg.predict.weight_save_path)
+        enc_state_dict = torch.load(cfg.predict.weight_save_path)  # figure out how to handle this
     elif len(cfg.encoder.bands) == 5:
-        enc_state_dict = torch.load(cfg.predict.mb_weight_save_path)
+        enc_state_dict = torch.load(cfg.predict.weight_save_path)
     else:
         sys.exit()
     encoder.load_state_dict(enc_state_dict)
@@ -115,16 +115,17 @@ def predict_sdss(cfg):
     bg = align(bg, sdss)
 
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-    enc_state_dict = torch.load(cfg.predict.mb_weight_save_path)
+    enc_state_dict = torch.load(cfg.predict.weight_save_path)
     encoder.load_state_dict(enc_state_dict)
     encoder.eval()
     trainer = instantiate(cfg.predict.trainer)
     est_cat, images, background, pred = trainer.predict(encoder, datamodule=sdss)[0].values()
+    est_full = est_cat.to_full_params()
     if cfg.predict.plot.show_plot and (sdss_plocs is not None):
         ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
         cropped_image = images[0, 0, ptc:-ptc, ptc:-ptc]
         cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
-        plot_predict(cfg, cropped_image, cropped_background, sdss_plocs, est_cat)
+        plot_predict(cfg, cropped_image, cropped_background, sdss_plocs, est_full)
 
     return est_cat, images[0], background[0], sdss_plocs, pred
 

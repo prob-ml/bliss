@@ -87,7 +87,7 @@ encoder:
     input_transform_params:
         use_deconv_channel: false
         concat_psf_params: false
-        z_score: false
+        z_score: true
     architecture:
         # this architecture is based on yolov5l.yaml, see
         # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
@@ -128,7 +128,6 @@ generate:
     max_images_per_file: 5000
     cached_data_path: ${paths.data}/cached_dataset
     file_prefix: dataset
-    files_start_idx: 0
 
 training:
     name: null
