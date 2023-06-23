@@ -27,7 +27,7 @@ simulator:
     num_workers: 32
     sdss_fields:  # Used in simulator for sampling backgrounds and PSFs for decoder
         dir: ${paths.sdss}
-        bands: [2]
+        bands: [0, 1, 2, 3, 4]
         field_list:  # list of dictionaries, each with run, camcol, and list of fields
           - run: 94
             camcol: 1
@@ -73,7 +73,7 @@ cached_simulator:
 
 encoder:
     _target_: bliss.encoder.Encoder
-    bands: [2]
+    bands: ${simulator.bands}
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
     slack: 1.0
@@ -119,13 +119,14 @@ encoder:
         ]
 
 generate:
+    process_index: 0
     n_workers_per_process: 0
     n_batches: ${simulator.n_batches}
     batch_size: ${simulator.prior.batch_size}
-    max_images_per_file: 5000
+    max_images_per_file: 4096
     cached_data_path: ${paths.data}/cached_dataset
     file_prefix: dataset
-    files_start_idx: 0
+    num_files_per_process: 128
 
 training:
     name: null
@@ -162,7 +163,7 @@ predict:
         run: 94
         camcol: 1
         fields: [12]
-        bands: [2]
+        bands: ${simulator.bands}
         predict_device: ${predict.device}
         predict_crop: ${predict.crop}
     photo_catalog:
