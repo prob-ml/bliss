@@ -365,4 +365,4 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
     if dist_keep.sum() > 0:
         assert dist[dist_keep].max() <= slack
 
-    return row_indx, col_indx, dist_keep, avg_distance, avg_keep_distance
+    return row_indx, col_indx, dist_keep.cpu().numpy(), avg_distance, avg_keep_distance
