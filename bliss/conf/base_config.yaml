@@ -27,7 +27,7 @@ simulator:
     num_workers: 32
     sdss_fields:  # Used in simulator for sampling backgrounds and PSFs for decoder
         dir: ${paths.sdss}
-        bands: [0, 1, 2, 3, 4]
+        bands: [2]
         field_list:  # list of dictionaries, each with run, camcol, and list of fields
           - run: 94
             camcol: 1
