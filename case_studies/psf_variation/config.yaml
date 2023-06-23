@@ -1,0 +1,23 @@
+---
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+mode: predict
+
+paths:
+    project: ${paths.root}/case_studies/psf_variation
+    pretrained_models: ${paths.data}/pretrained_models
+
+encoder:
+    input_transform_params:
+        use_deconv_channel: true
+        concat_psf_params: true
+    bands: [2]
+
+cached_simulator:
+    batch_size: 2
+    train_n_batches: 0
+    cached_data_path: ${paths.project}/data
+    test_split_file_idxs: [0]
