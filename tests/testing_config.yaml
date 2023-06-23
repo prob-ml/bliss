@@ -50,7 +50,7 @@ training:
         enable_checkpointing: true
         profiler: null
         check_val_every_n_epoch: 1001
-        log_every_n_steps: 10
+        log_every_n_steps: 1
         accelerator: "cpu"
         devices: 1
 
