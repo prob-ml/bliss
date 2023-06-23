@@ -73,7 +73,7 @@ cached_simulator:
 
 encoder:
     _target_: bliss.encoder.Encoder
-    bands: ${simulator.bands}
+    bands: [2]
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
     slack: 1.0
@@ -163,7 +163,7 @@ predict:
         run: 94
         camcol: 1
         fields: [12]
-        bands: ${simulator.bands}
+        bands: ${encoder.bands}
         predict_device: ${predict.device}
         predict_crop: ${predict.crop}
     photo_catalog:
