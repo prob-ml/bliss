@@ -19,6 +19,11 @@ from bliss.catalog import FullCatalog, SourceType, TileCatalog
 Catalog = Union[TileCatalog, FullCatalog]
 
 
+class MetricsMode(Enum):
+    FULL = 1
+    TILE = 2
+
+
 class BlissMetrics(Metric):
     """Calculates detection and classification metrics between two catalogs.
 
@@ -28,6 +33,9 @@ class BlissMetrics(Metric):
     metrics are computed conditioned on true source location and type; i.e, given a true star or
     galaxy in a tile in the true catalog, get the corresponding parameters in the same tile in the
     estimated catalog (regardless of type/existence predicted by estimated catalog in that tile.
+
+    Note that galaxy classification metrics are only computed when the values are available in
+    both catalogs.
     """
 
     # detection metrics
@@ -55,13 +63,9 @@ class BlissMetrics(Metric):
 
     full_state_update: bool = False
 
-    class Mode(Enum):  # noqa: WPS431
-        Full = 1
-        Tile = 2
-
     def __init__(
         self,
-        mode: Mode = Mode.Full,
+        mode: MetricsMode = MetricsMode.FULL,
         slack: float = 1.0,
         dist_sync_on_step: bool = False,
         disable_bar: bool = True,
@@ -103,26 +107,24 @@ class BlissMetrics(Metric):
 
     def update(self, true: Catalog, est: Catalog) -> None:
         assert true.batch_size == est.batch_size
-        if self.mode is BlissMetrics.Mode.Full:
-            assert isinstance(true, FullCatalog) and isinstance(
-                est, FullCatalog
-            ), "Metrics mode is set to `Full` but received a TileCatalog"
-        elif self.mode is BlissMetrics.Mode.Tile:
-            assert isinstance(true, TileCatalog) and isinstance(
-                est, TileCatalog
-            ), "Metrics mode is set to `Tile` but received a FullCatalog"
+        if self.mode is MetricsMode.FULL:
+            msg = "Metrics mode is set to `Full` but received a TileCatalog"
+            assert isinstance(true, FullCatalog) and isinstance(est, FullCatalog), msg
+        elif self.mode is MetricsMode.TILE:
+            msg = "Metrics mode is set to `Tile` but received a FullCatalog"
+            assert isinstance(true, TileCatalog) and isinstance(est, TileCatalog), msg
 
-        self._update_detection_metrics(true, est)
-        self._update_classification_metrics(true, est)
+        match_true, match_est = self._update_detection_metrics(true, est)
+        self._update_classification_metrics(true, est, match_true, match_est)
 
     def _update_detection_metrics(self, true: Catalog, est: Catalog) -> None:
         """Update detection metrics."""
-        if self.mode is BlissMetrics.Mode.Full:
+        if self.mode is MetricsMode.FULL:
             true_locs = true.plocs
             est_locs = est.plocs
             tgbool = true.galaxy_bools
             egbool = est.galaxy_bools
-        elif self.mode is BlissMetrics.Mode.Tile:
+        elif self.mode is MetricsMode.TILE:
             true_on_idx, true_is_on = true.get_indices_of_on_sources()
             est_on_idx, est_is_on = est.get_indices_of_on_sources()
 
@@ -139,6 +141,7 @@ class BlissMetrics(Metric):
             egbool = est_st == SourceType.GALAXY
             egbool *= est_is_on.unsqueeze(-1)
 
+        match_true, match_est = [], []
         for b in range(true.batch_size):
             ntrue = int(true.n_sources[b].int().sum().item())
             nest = int(est.n_sources[b].int().sum().item())
@@ -153,6 +156,8 @@ class BlissMetrics(Metric):
             mtrue, mest, dkeep, avg_distance, avg_keep_distance = match_by_locs(
                 true_locs[b, 0:ntrue], est_locs[b, 0:nest], self.slack
             )
+            match_true.append(mtrue[dkeep])
+            match_est.append(mest[dkeep])
 
             # update TP/FP and distances
             tp = dkeep.sum().item()
@@ -170,6 +175,8 @@ class BlissMetrics(Metric):
             batch_egbool = egbool[b][mest][dkeep].reshape(-1)
             self._update_confusion_matrix(batch_tgbool, batch_egbool)
 
+        return match_true, match_est
+
     def _update_confusion_matrix(self, tgbool: Tensor, egbool: Tensor) -> None:
         """Compute galaxy detection confusion matrix and update TP/FP/TN/FN.
 
@@ -184,28 +191,20 @@ class BlissMetrics(Metric):
         self.star_fp += conf_matrix[1][0]
         self.star_tp += conf_matrix[1][1]
 
-    def _update_classification_metrics(self, true: Catalog, est: Catalog) -> None:
+    def _update_classification_metrics(
+        self, true: Catalog, est: Catalog, match_true: List, match_est: List
+    ) -> None:
         """Update classification metrics based on estimated params at locations of true sources."""
         # only compute classification metrics if available
         if "galaxy_params" not in true or "galaxy_params" not in est:
             return
 
-        # get galaxy params in estimated catalog at tiles containing a galaxy in the true catalog
-        true_indices, true_is_on = true.get_indices_of_on_sources()
-
-        # construct masks for true source type
-        true_st = true.gather_param_at_tiles("source_type", true_indices)
-        true_gal_bools = true_st == SourceType.GALAXY
-        gal_mask = true_gal_bools.squeeze() * true_is_on
-        star_mask = (~true_gal_bools).squeeze() * true_is_on
-
-        # gather parameters where source is present in true catalog AND source is actually a star
-        # or galaxy respectively in true catalog
-        # note that the boolean indexing collapses across batches to return a 1D tensor
-        true_gal_params = true.gather_param_at_tiles("galaxy_params", true_indices)[gal_mask]
-        est_gal_params = est.gather_param_at_tiles("galaxy_params", true_indices)[gal_mask]
-        true_star_fluxes = true.gather_param_at_tiles("star_fluxes", true_indices)[star_mask]
-        est_star_fluxes = est.gather_param_at_tiles("star_fluxes", true_indices)[star_mask]
+        # get parameters depending on the kind of catalog
+        if self.mode is MetricsMode.FULL:
+            params = self._get_classification_params_full(true, est, match_true, match_est)
+        elif self.mode is MetricsMode.TILE:
+            params = self._get_classification_params_tile(true, est)
+        true_gal_params, est_gal_params, true_star_fluxes, est_star_fluxes = params
 
         # fluxes
         self.star_flux.append(torch.abs(true_star_fluxes - est_star_fluxes).squeeze())
@@ -234,6 +233,43 @@ class BlissMetrics(Metric):
         est_bulge_hlr = est_gal_params[:, 6] * torch.sqrt(est_gal_params[:, 5])
         true_bulge_hlr = true_gal_params[:, 6] * torch.sqrt(true_gal_params[:, 5])
         self.bulge_hlr.append(torch.abs(true_bulge_hlr - est_bulge_hlr))
+
+    def _get_classification_params_full(self, true, est, match_true, match_est):
+        """Get galaxy params in true and est catalogs based on matches."""
+        batch_size, max_true, max_est = true.batch_size, true.plocs.shape[1], est.plocs.shape[1]
+        true_mask = torch.zeros((batch_size, max_true)).bool()
+        est_mask = torch.zeros((batch_size, max_est)).bool()
+
+        for i in range(batch_size):
+            true_mask[i][match_true[i]] = True
+            est_mask[i][match_est[i]] = True
+
+        true_galaxy_params = true["galaxy_params"][true_mask]
+        est_galaxy_params = est["galaxy_params"][est_mask]
+        true_star_fluxes = true["star_fluxes"][true_mask]
+        est_star_fluxes = est["star_fluxes"][est_mask]
+
+        return true_galaxy_params, est_galaxy_params, true_star_fluxes, est_star_fluxes
+
+    def _get_classification_params_tile(self, true, est):
+        """Get galaxy params in est catalog at tiles containing a galaxy in the true catalog."""
+        true_indices, true_is_on = true.get_indices_of_on_sources()
+
+        # construct masks for true source type
+        true_st = true.gather_param_at_tiles("source_type", true_indices)
+        true_gal_bools = true_st == SourceType.GALAXY
+        gal_mask = true_gal_bools.squeeze() * true_is_on
+        star_mask = (~true_gal_bools).squeeze() * true_is_on
+
+        # gather parameters where source is present in true catalog AND source is actually a star
+        # or galaxy respectively in true catalog
+        # note that the boolean indexing collapses across batches to return a 1D tensor
+        true_gal_params = true.gather_param_at_tiles("galaxy_params", true_indices)[gal_mask]
+        est_gal_params = est.gather_param_at_tiles("galaxy_params", true_indices)[gal_mask]
+        true_star_fluxes = true.gather_param_at_tiles("star_fluxes", true_indices)[star_mask]
+        est_star_fluxes = est.gather_param_at_tiles("star_fluxes", true_indices)[star_mask]
+
+        return true_gal_params, est_gal_params, true_star_fluxes, est_star_fluxes
 
     def compute(self) -> Dict[str, float]:
         precision = self.detection_tp / (self.detection_tp + self.detection_fp)
