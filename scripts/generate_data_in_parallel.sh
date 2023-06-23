@@ -25,7 +25,7 @@ fi
 pids=()
 for ((i=0; i<$NUM_PROCESSES; i++));
 do
-    bliss 'mode=generate' "generate.process_index=$i" $CONFIG_OVERRIDES &
+    bliss 'mode=generate' "+generate.process_index=$i" $CONFIG_OVERRIDES &
     pids+=($!) # store PID in array
 done
 

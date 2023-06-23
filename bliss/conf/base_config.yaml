@@ -119,14 +119,12 @@ encoder:
         ]
 
 generate:
-    process_index: 0
     n_workers_per_process: 0
     n_batches: ${simulator.n_batches}
     batch_size: ${simulator.prior.batch_size}
     max_images_per_file: 4096
     cached_data_path: ${paths.data}/cached_dataset
     file_prefix: dataset
-    num_files_per_process: 128
 
 training:
     name: null
