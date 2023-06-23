@@ -6,6 +6,7 @@ from omegaconf.dictconfig import DictConfig
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
+from bliss.catalog import TileCatalog
 from bliss.simulator.background import SimulatedSDSSBackground
 from bliss.surveys.sdss import prepare_batch
 
@@ -29,10 +30,9 @@ class TestSimulate:
         max_sources = cfg.simulator.prior.max_sources
 
         for i in range(4):
-            sim_tile = torch.load(cfg.paths.data + "/test_image/sim_tile" + str(i) + ".pt")
+            with open(f"{cfg.paths.data}/test_image/sim_tile{i}.pt", "rb") as f:
+                sim_tile = TileCatalog(tile_slen, torch.load(f))
             _, rcf_indices = sim_dataset.get_random_rcf(sim_tile.n_sources.size(0))  # noqa: WPS437
-            sim_tile["source_type"] = sim_tile.pop("galaxy_bools")
-            sim_tile.pop("star_bools")
             image, background, _, _ = sim_dataset.simulate_image(sim_tile, rcf_indices)
 
             # move data to the device the encoder is on

@@ -4,7 +4,7 @@ import torch
 from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.metrics import BlissMetrics
+from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.surveys.decals import DecalsFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey, prepare_image
 
@@ -37,37 +37,6 @@ class TestMetrics:
 
         return cropped_image, cropped_background, (min_w, max_w), (min_h, max_h)
 
-    def _get_photo_cat(self, photo_cat, ra_lim, dec_lim):
-        """Helper function to restrict photo catalog to within RA and DEC limits."""
-        ra = photo_cat["ra"].squeeze()
-        dec = photo_cat["dec"].squeeze()
-
-        keep = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec >= dec_lim[0]) & (dec <= dec_lim[1])
-        plocs = photo_cat.plocs[:, keep]
-        n_sources = torch.tensor([plocs.size()[1]])
-
-        d = {"plocs": plocs, "n_sources": n_sources}
-        for key in photo_cat.keys():
-            d[key] = photo_cat[key][:, keep]
-
-        return PhotoFullCatalog(
-            plocs[0, :, 0].max() - plocs[0, :, 0].min(),  # new height
-            plocs[0, :, 1].max() - plocs[0, :, 1].min(),  # new width
-            d,
-        )
-
-    def _get_decals_cat(self, filename, ra_lim, dec_lim, wcs):
-        """Helper function to load DECaLS data for test cases."""
-        cat = DecalsFullCatalog.from_file(filename, ra_lim, dec_lim)
-
-        # if provided, use WCS to convert RA and DEC to plocs
-        if wcs is not None:
-            plocs = cat.get_plocs_from_ra_dec(wcs)
-            cat.plocs = plocs
-            cat.height, cat.width = wcs.array_shape
-
-        return cat
-
     @pytest.fixture(scope="class")
     def catalogs(self, cfg, encoder):
         """The main entry point to get data for most of the tests."""
@@ -78,9 +47,10 @@ class TestMetrics:
 
         # get RA/DEC limits of cropped image and construct catalogs
         ra_lim, dec_lim = wcs.all_pix2world(w_lim, h_lim, 0)
-        photo_cat = self._get_photo_cat(base_photo_cat, ra_lim, dec_lim).to(torch.device("cpu"))
+        photo_cat = base_photo_cat.restrict_by_ra_dec(ra_lim, dec_lim).to(torch.device("cpu"))
         decals_path = cfg.predict.decals_frame
-        decals_cat = self._get_decals_cat(decals_path, ra_lim, dec_lim, wcs).to(torch.device("cpu"))
+        decals_cat = DecalsFullCatalog.from_file(decals_path, ra_lim, dec_lim, wcs=wcs)
+        decals_cat = decals_cat.to(torch.device("cpu"))
 
         # get predicted BLISS catalog
         with torch.no_grad():
@@ -126,10 +96,17 @@ class TestMetrics:
 
         return {"decals": decals_cat, "photo": photo_cat, "bliss": bliss_cat}
 
+    @pytest.fixture(scope="class")
+    def tile_catalog(self, cfg):
+        """Generate a tile catalog for testing classification metrics."""
+        simulator = instantiate(cfg.simulator, prior={"batch_size": 4})
+        batch = next(iter(simulator.train_dataloader()))
+        return TileCatalog(cfg.encoder.tile_slen, batch["tile_catalog"])
+
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
         slen = 50
-        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
 
         true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]])
         est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]])
@@ -164,7 +141,7 @@ class TestMetrics:
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
-        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=2.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=2.0)
 
         true_locs = torch.tensor(
             [[[10, 10]], [[20, 20]], [[30, 30]], [[40, 40]]], dtype=torch.float
@@ -188,38 +165,43 @@ class TestMetrics:
         assert results["gal_tp"] == 1
         assert results["avg_distance"] == 1
 
-    def test_classification_metrics(self, cfg):
-        """Test galaxy classification metrics."""
-        simulator = instantiate(cfg.simulator, prior={"batch_size": 4})
-        batch = next(iter(simulator.train_dataloader()))
-        catalog = TileCatalog(cfg.encoder.tile_slen, batch["tile_catalog"])
-        metrics = BlissMetrics(mode=BlissMetrics.Mode.Tile, slack=1.0)
-        results = metrics(catalog, catalog)
+    def test_classification_metrics_tile(self, tile_catalog):
+        """Test galaxy classification metrics on tile catalog."""
+        metrics = BlissMetrics(mode=MetricsMode.TILE, slack=1.0)
+        results = metrics(tile_catalog, tile_catalog)
+        for metric in metrics.classification_metrics:
+            assert results[f"{metric}_mae"] == 0
+
+    def test_classification_metrics_full(self, tile_catalog):
+        """Test galaxy classification metrics on full catalog."""
+        full_catalog = tile_catalog.to_full_params()
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
+        results = metrics(full_catalog, full_catalog)
         for metric in metrics.classification_metrics:
             assert results[f"{metric}_mae"] == 0
 
     def test_photo_self_agreement(self, catalogs):
         """Compares PhotoFullCatalog to itself as safety check for metrics."""
-        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
         results = metrics(catalogs["photo"], catalogs["photo"])
         assert results["f1"] == 1
 
     def test_decals_self_agreement(self, catalogs):
         """Compares Decals catalog to itself as safety check for metrics."""
-        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
         results = metrics(catalogs["decals"], catalogs["decals"])
         assert results["f1"] == 1
 
     def test_photo_decals_agree(self, catalogs):
         """Compares metrics for agreement between Photo catalog and Decals catalog."""
-        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
         results = metrics(catalogs["decals"], catalogs["photo"])
         assert results["detection_precision"] > 0.8
 
     def test_bliss_photo_agree(self, brightest_catalogs):
         """Compares metrics for agreement between BLISS-inferred catalog and Photo catalog."""
         slack = 1.0
-        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=slack)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=slack)
         results = metrics(brightest_catalogs["photo"], brightest_catalogs["bliss"])
         assert results["f1"] > 0.8
         assert results["avg_keep_distance"] < slack
@@ -230,7 +212,7 @@ class TestMetrics:
         photo_cat = brightest_catalogs["photo"]
         bliss_cat = brightest_catalogs["bliss"]
 
-        metrics = BlissMetrics(mode=BlissMetrics.Mode.Full, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
 
         bliss_vs_decals = metrics(decals_cat, bliss_cat)
         photo_vs_decals = metrics(decals_cat, photo_cat)
