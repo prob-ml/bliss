@@ -39,7 +39,7 @@ def download_pretrained_weights(bliss_client, cfg, filename):
     if os.environ.get("GITHUB_TOKEN") is None:
         # Run locally, so use pretrained weights from local BLISS_HOME
         # Copy pretrained weights to {cwd}/data/pretrained_models
-        local_pretrained_weights_path = Path(cfg.paths.data) / "pretrained_models/sdss.pt"
+        local_pretrained_weights_path = Path(cfg.paths.data) / "pretrained_models/r_long.pt"
         test_pretrained_weights_path = Path(bliss_client.cwd) / f"data/pretrained_models/{filename}"
         test_pretrained_weights_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(str(local_pretrained_weights_path), str(test_pretrained_weights_path))
@@ -104,7 +104,7 @@ class TestApi:
         assert isinstance(dataset0, list), "dataset0 must be a list"
 
     def test_load_pretrained_weights(self, bliss_client, cfg):
-        download_pretrained_weights(bliss_client, cfg, "sdss.pt")
+        download_pretrained_weights(bliss_client, cfg, "r_long.pt")
 
     def test_train_on_cached_data(self, bliss_client, pretrained_weights_filename):
         bliss_client.train_on_cached_data(
