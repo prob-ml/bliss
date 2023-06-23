@@ -171,7 +171,7 @@ class ImagePrior(pl.LightningModule):
     def _sample_star_fluxes(self, star_ratios):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
         r_flux = self._draw_truncated_pareto(
-            self.galaxy_alpha, self.galaxy_flux_min, self.galaxy_flux_max, latent_dims
+            self.star_flux_alpha, self.star_flux_min, self.star_flux_max, latent_dims
         )
         total_flux = self.multiflux(star_ratios, r_flux)
 

@@ -58,6 +58,8 @@ class TileCatalog(UserDict):
 
     def __getitem__(self, key: str) -> Tensor:
         assert isinstance(key, str)
+        if hasattr(self, key):  # noqa: WPS421
+            return getattr(self, key)
         return super().__getitem__(key)
 
     def _validate(self, x: Tensor):
@@ -322,6 +324,8 @@ class FullCatalog(UserDict):
 
     def __getitem__(self, key: str) -> Tensor:
         assert isinstance(key, str)
+        if hasattr(self, key):  # noqa: WPS421
+            return getattr(self, key)
         return super().__getitem__(key)
 
     def _validate(self, x: Tensor):

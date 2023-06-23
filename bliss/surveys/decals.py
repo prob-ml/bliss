@@ -31,6 +31,7 @@ class DecalsFullCatalog(FullCatalog):
         ra_lim: Tuple[int, int] = (-360, 360),
         dec_lim: Tuple[int, int] = (-90, 90),
         band: str = "r",
+        wcs: WCS = None,
     ):
         """Loads DECaLS catalog from FITS file.
 
@@ -41,6 +42,8 @@ class DecalsFullCatalog(FullCatalog):
             dec_lim (Tuple[int, int]): Range of DEC values to keep.
                 Defaults to (-90, 90).
             band (str): Band to read from. Defaults to "r".
+            wcs (WCS): An optional WCS object to use to convert the RA/DEC values to pixel
+                coordinates. If not provided, the returned plocs will all be zero.
 
         Returns:
             A DecalsFullCatalog containing data from the provided file. Note that the
@@ -108,7 +111,15 @@ class DecalsFullCatalog(FullCatalog):
 
         height = dec_lim[1] - dec_lim[0]
         width = ra_lim[1] - ra_lim[0]
-        return cls(height, width, d)
+        cat = cls(height, width, d)
+
+        # if WCS provided, convert RA/DEC to plocs
+        if wcs is not None:
+            plocs = cat.get_plocs_from_ra_dec(wcs)
+            cat.plocs = plocs
+            cat.height, cat.width = wcs.array_shape
+
+        return cat
 
     def get_plocs_from_ra_dec(self, wcs: WCS):
         """Converts RA/DEC coordinates into pixel coordinates.

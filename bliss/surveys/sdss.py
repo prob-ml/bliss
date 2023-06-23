@@ -316,6 +316,25 @@ class PhotoFullCatalog(FullCatalog):
 
         return cls(height, width, d)
 
+    def restrict_by_ra_dec(self, ra_lim, dec_lim):
+        """Helper function to restrict photo catalog to within RA and DEC limits."""
+        ra = self["ra"].squeeze()
+        dec = self["dec"].squeeze()
+
+        keep = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec >= dec_lim[0]) & (dec <= dec_lim[1])
+        plocs = self.plocs[:, keep]
+        n_sources = torch.tensor([plocs.size()[1]])
+
+        d = {"plocs": plocs, "n_sources": n_sources}
+        for key, val in self.items():
+            d[key] = val[:, keep]
+
+        return PhotoFullCatalog(
+            plocs[0, :, 0].max() - plocs[0, :, 0].min(),  # new height
+            plocs[0, :, 1].max() - plocs[0, :, 1].min(),  # new width
+            d,
+        )
+
 
 # Data type conversion helpers
 def convert_mag_to_flux(mag: Tensor, nelec_per_nmgy=987.31) -> Tensor:
