@@ -13,7 +13,6 @@ cleanup() {
 # gracefully exit on these conditions
 trap "cleanup" SIGINT SIGTERM
 
-# Usage: generate_data_in_parallel.sh <relative config_path> <num_files_per_process> [<config_overrides> <num_processes> <num_workers_per_process>]
 NUM_PROCESSES=${1:-""}
 CONFIG_OVERRIDES=${2:-""}
 
