@@ -1,6 +1,7 @@
 ---
 defaults:
     - _self_
+    - override /hydra/job_logging: stdout
 
 # completely disable hydra logging
 # https://github.com/facebookresearch/hydra/issues/910

@@ -75,7 +75,7 @@ def weight_save_path(bliss_client, pretrained_weights_filename):
         batch_size=8,
         val_split_file_idxs=[1],
         pretrained_weights_filename=pretrained_weights_filename,
-        training={"n_epochs": 1, "trainer": {"check_val_every_n_epoch": 1}},
+        training={"n_epochs": 1, "trainer": {"check_val_every_n_epoch": 1, "log_every_n_steps": 1}},
     )
     return weight_save_path
 
