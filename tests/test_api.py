@@ -47,7 +47,7 @@ def download_pretrained_weights(bliss_client, cfg, filename):
         shutil.copy(str(local_pretrained_weights_path), str(test_pretrained_weights_path))
     else:
         bliss_client.load_pretrained_weights_for_survey(
-            survey="sdss",
+            survey="zscore_five_band",  # temporary fix to run API tests
             filename=filename,
             request_headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}"},
         )
