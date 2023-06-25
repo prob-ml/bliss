@@ -14,7 +14,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
-from bliss.metrics import BlissMetrics
+from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
 from bliss.transforms import z_score
 from bliss.unconstrained_dists import (
@@ -82,7 +82,7 @@ class Encoder(pl.LightningModule):
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
-        self.metrics = BlissMetrics(mode=BlissMetrics.Mode.Tile, slack=slack)
+        self.metrics = BlissMetrics(mode=MetricsMode.TILE, slack=slack)
 
     @property
     def dist_param_groups(self):
@@ -134,7 +134,11 @@ class Encoder(pl.LightningModule):
             Tensor: b x c x h x w tensor, where the number of input channels `c` is based on the
                 input transformations to use
         """
-        inputs = [batch["images"], batch["background"]]
+        # If using five-band cached simulator, only select bands encoder is expecting
+        imgs = batch["images"][:, self.bands]
+        bgs = batch["background"][:, self.bands]
+        inputs = [imgs, bgs]
+
         if self.input_transform_params.get("use_deconv_channel"):
             assert (
                 "deconvolution" in batch
@@ -150,8 +154,8 @@ class Encoder(pl.LightningModule):
             assert (
                 batch["background"][0, 0].std() > 0
             ), "Constant backgrounds not supported for multi-band encoding"
-            inputs[0] = z_score(batch["images"])
-            inputs[1] = z_score(batch["background"])
+            inputs[0] = z_score(inputs[0])
+            inputs[1] = z_score(inputs[1])
         return torch.cat(inputs, dim=1)
 
     def encode_batch(self, batch):

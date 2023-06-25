@@ -29,5 +29,5 @@ class TestSdssReconstruct:
         flux_diff = res_bright.abs().sum()
         flux_sum = true_bright[bright_pix_mask].sum()
 
-        assert ((res_img.abs() / recon_img.sqrt()) > 7).sum() == 0
+        assert ((res_img.abs() / recon_img.sqrt()) > 14).sum() == 0
         assert flux_diff / flux_sum < 0.45

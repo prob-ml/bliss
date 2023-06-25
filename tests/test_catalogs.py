@@ -43,6 +43,26 @@ def test_unallowed_param():
         FullCatalog(10, 10, d_full)
 
 
+def test_param_accessors():
+    d_tile = {
+        "n_sources": torch.tensor([[[[1], [0]], [[1], [1]]]]).reshape((1, 2, 2)),
+        "locs": torch.zeros((1, 2, 2, 1, 2)),
+        "source_type": torch.tensor([[[1], [1]], [[1], [0]]]).reshape((1, 2, 2, 1, 1)),
+    }
+    tile_cat = TileCatalog(4, d_tile)
+    assert tile_cat.locs.equal(tile_cat["locs"])
+    assert tile_cat.galaxy_bools.equal(tile_cat["galaxy_bools"])
+
+    keys = tile_cat.to_dict().keys()
+    assert "locs" in keys
+    assert "source_type" in keys
+    assert "galaxy_bools" not in keys
+
+    full_cat = tile_cat.to_full_params()
+    assert full_cat.plocs.equal(full_cat["plocs"])
+    assert full_cat.galaxy_bools.equal(full_cat["galaxy_bools"])
+
+
 def test_multiple_sources_one_tile():
     d = {
         "n_sources": torch.tensor([2]),

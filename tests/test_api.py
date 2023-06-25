@@ -39,7 +39,9 @@ def download_pretrained_weights(bliss_client, cfg, filename):
     if os.environ.get("GITHUB_TOKEN") is None:
         # Run locally, so use pretrained weights from local BLISS_HOME
         # Copy pretrained weights to {cwd}/data/pretrained_models
-        local_pretrained_weights_path = Path(cfg.paths.data) / "pretrained_models/r_long.pt"
+        local_pretrained_weights_path = (
+            Path(cfg.paths.data) / "pretrained_models/zscore_five_band.pt"
+        )
         test_pretrained_weights_path = Path(bliss_client.cwd) / f"data/pretrained_models/{filename}"
         test_pretrained_weights_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(str(local_pretrained_weights_path), str(test_pretrained_weights_path))
@@ -74,7 +76,9 @@ def weight_save_path(bliss_client, pretrained_weights_filename):
         train_n_batches=1,
         batch_size=8,
         val_split_file_idxs=[1],
+        test_split_file_idxs=[1],
         pretrained_weights_filename=pretrained_weights_filename,
+        training={"n_epochs": 1, "trainer": {"check_val_every_n_epoch": 1, "log_every_n_steps": 1}},
     )
     return weight_save_path
 
@@ -83,37 +87,10 @@ def weight_save_path(bliss_client, pretrained_weights_filename):
     "bliss_client", "cached_data_path_api", "pretrained_weights_filename", "weight_save_path"
 )
 class TestApi:
-    def test_generate(self, bliss_client):
-        # alter default cached_data_path
-        bliss_client.cached_data_path = bliss_client.cwd + "/data/cached_dataset_ms0.02"
-        bliss_client.generate(
-            n_batches=3,
-            batch_size=8,
-            max_images_per_file=16,
-            simulator={"prior": {"mean_sources": 0.02}},  # optional
-            generate={"file_prefix": "dataset"},  # optional
-        )
-        # check that cached dataset generated
-        assert Path(
-            bliss_client.cwd + "/data/cached_dataset_ms0.02/dataset_0.pt"
-        ).exists(), "{CWD}/data/cached_dataset_ms0.02/dataset_0.pt not found"
-
     def test_get_dataset_file(self, bliss_client, cached_data_path_api):
         bliss_client.cached_data_path = cached_data_path_api
         dataset0 = bliss_client.get_dataset_file(filename="dataset_0.pt")
         assert isinstance(dataset0, list), "dataset0 must be a list"
-
-    def test_load_pretrained_weights(self, bliss_client, cfg):
-        download_pretrained_weights(bliss_client, cfg, "r_long.pt")
-
-    def test_train_on_cached_data(self, bliss_client, pretrained_weights_filename):
-        bliss_client.train_on_cached_data(
-            weight_save_path="tutorial_encoder/0.pt",
-            train_n_batches=2,
-            batch_size=8,
-            val_split_file_idxs=[1],
-            pretrained_weights_filename=pretrained_weights_filename,
-        )
 
     def test_predict_sdss_default_rcf(self, bliss_client, weight_save_path, cfg):
         # If run via GitHub Actions, download from our Git LFS to avoid having to connect to

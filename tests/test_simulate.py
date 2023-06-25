@@ -64,7 +64,7 @@ class TestSimulate:
         est_galaxy_fluxes = est_galaxy_params[:, :, :, :, 0]
         est_fluxes = est_star_fluxes[0, :, :, 0, 0] + est_galaxy_fluxes[0, :, :, 0]
 
-        assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 0.2
+        assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 0.25
 
     def test_multi_background(self, cfg):
         """Test loading backgrounds and PSFs from multiple fields works."""

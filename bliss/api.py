@@ -99,6 +99,7 @@ class BlissClient:
         train_n_batches,
         batch_size,
         val_split_file_idxs,
+        test_split_file_idxs,
         pretrained_weights_filename: Optional[str] = None,
         **kwargs,
     ) -> None:
@@ -110,6 +111,7 @@ class BlissClient:
             train_n_batches (int): Number of batches to train on.
             batch_size (int): Number of images per batch.
             val_split_file_idxs (List[int]): List of file indices to use for validation.
+            test_split_file_idxs (List[int]): List of file indices to use for testing.
             pretrained_weights_filename (str): Name of pretrained weights file to load.
             **kwargs: Keyword arguments to override default configuration values.
         """
@@ -120,6 +122,7 @@ class BlissClient:
         cfg.cached_simulator.train_n_batches = train_n_batches
         cfg.cached_simulator.batch_size = batch_size
         cfg.cached_simulator.val_split_file_idxs = val_split_file_idxs
+        cfg.cached_simulator.test_split_file_idxs = test_split_file_idxs
         if pretrained_weights_filename is not None:
             cfg.training.pretrained_weights = (
                 cfg.paths.pretrained_models + f"/{pretrained_weights_filename}"

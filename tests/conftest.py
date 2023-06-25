@@ -49,7 +49,7 @@ def cfg(pytestconfig, cached_data_path, output_path):
 @pytest.fixture(scope="session")
 def encoder(cfg):
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-    enc_state_dict = torch.load(cfg.predict.mb_weight_save_path)
+    enc_state_dict = torch.load(cfg.predict.weight_save_path)
     encoder.load_state_dict(enc_state_dict)
     # remember to put encoder in eval mode if using it for prediction
     return encoder
