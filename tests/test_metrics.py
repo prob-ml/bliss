@@ -18,7 +18,7 @@ class TestMetrics:
             run=cfg.predict.dataset.run,
             camcol=cfg.predict.dataset.camcol,
             field=cfg.predict.dataset.fields[0],
-            band=cfg.predict.photo_catalog.bands[0],
+            band=2,
         )
         sdss = SloanDigitalSkySurvey(cfg.paths.sdss, 94, 1, (12,), (0, 1, 2, 3, 4))
 
@@ -45,7 +45,6 @@ class TestMetrics:
     def catalogs(self, cfg, encoder):
         """The main entry point to get data for most of the tests."""
         # load SDSS catalog and WCS
-        cfg.predict.dataset.bands = [2]  # keep all predictions to r-band
         base_photo_cat, sdss = self._get_sdss_data(cfg)
 
         wcs = sdss[0]["wcs"][2]
