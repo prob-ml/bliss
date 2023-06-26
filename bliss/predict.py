@@ -1,5 +1,3 @@
-import sys
-
 import numpy as np
 import torch
 from bokeh.models import TabPanel, Tabs
