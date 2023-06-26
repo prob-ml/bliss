@@ -7,8 +7,8 @@ from bokeh.plotting import figure, output_file, show
 from hydra.utils import instantiate
 from reproject import reproject_interp
 
-from bliss.surveys.decals import DecalsFullCatalog
-from bliss.surveys.sdss import PhotoFullCatalog
+from bliss.surveys.decals import DarkEnergyCameraLegacySurvey, DecalsFullCatalog
+from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey
 
 
 def prepare_image(x, device):
@@ -59,6 +59,9 @@ def align(img, ref_wcs):
 
 def predict_sdss(cfg):
     sdss = instantiate(cfg.predict.dataset)
+    assert isinstance(
+        sdss, SloanDigitalSkySurvey
+    ), "sdss expected to be a SloanDigitalSkySurvey, but got {}".format(type(sdss))
 
     sdss_cat = PhotoFullCatalog.from_file(
         cfg.paths.sdss,
@@ -110,8 +113,46 @@ def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
     return est_cat
 
 
-def decal_plocs_from_sdss(cfg):
-    """Use wcs to match sdss image with corresponding DeCals catalog for futher plotting."""
+def decals_plocs_from_decals(decals: DarkEnergyCameraLegacySurvey, cfg):
+    # get ra_lim, dec_lim corresponding to DECaLS image(s)
+    width_in_deg = DarkEnergyCameraLegacySurvey.pix_to_deg(cfg.predict.dataset.width)
+    height_in_deg = DarkEnergyCameraLegacySurvey.pix_to_deg(cfg.predict.dataset.height)
+    ra_lim = (
+        cfg.predict.dataset.ra - width_in_deg / 2,
+        cfg.predict.dataset.ra + width_in_deg / 2,
+    )
+    dec_lim = (
+        cfg.predict.dataset.dec - height_in_deg / 2,
+        cfg.predict.dataset.dec + height_in_deg / 2,
+    )
+    tractor_filename = cfg.paths.decals + f"/tractor-{decals.get_brick_name()}.fits"
+    return DecalsFullCatalog.from_file(tractor_filename, ra_lim, dec_lim).plocs[0]
+
+
+def predict_decals(cfg):
+    decals = instantiate(cfg.predict.dataset)
+    assert isinstance(
+        decals, DarkEnergyCameraLegacySurvey
+    ), "decals expected to be a DarkEnergyCameraLegacySurvey, but got {}".format(type(decals))
+    decals_plocs = decals_plocs_from_decals(decals, cfg)
+
+    encoder = instantiate(cfg.encoder).to(cfg.predict.device)
+    enc_state_dict = torch.load(cfg.predict.weight_save_path)
+    encoder.load_state_dict(enc_state_dict)
+    encoder.eval()
+    trainer = instantiate(cfg.predict.trainer)
+    est_cat, images, background, pred = trainer.predict(encoder, datamodule=decals)[0].values()
+    if cfg.predict.plot.show_plot and (decals_plocs is not None):
+        ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
+        cropped_image = images[0, 0, ptc:-ptc, ptc:-ptc]
+        cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
+        plot_predict(cfg, cropped_image, cropped_background, decals_plocs, est_cat)
+
+    return est_cat, images[0], background[0], decals_plocs, pred
+
+
+def decals_plocs_from_sdss(cfg):
+    """Use wcs to match sdss image with corresponding DECaLS catalog for futher plotting."""
     sdss = instantiate(cfg.predict.dataset)
     idx0 = cfg.predict.crop.left_upper_corner[0]
     idx1 = cfg.predict.crop.left_upper_corner[1]
@@ -147,7 +188,7 @@ def crop_plocs(cfg, w, h, plocs, do_crop=False):
 
 
 def add_cat(p, est_plocs, true_plocs, decals_plocs):
-    """Function that overlaying scatter plots on given image using different catalogs."""
+    """Function to overlay scatter plots on given image using different catalogs."""
     p.scatter(
         est_plocs[:, 1],
         est_plocs[:, 0],
@@ -189,7 +230,7 @@ def plot_image(cfg, img, w, h, est_plocs, true_plocs, title):
     true_plocs = np.array(crop_plocs(cfg, w, h, true_plocs, do_crop).cpu())
     decals_plocs = None
     if do_crop and (not is_simulated):
-        decals_plocs = np.array(crop_plocs(cfg, w, h, decal_plocs_from_sdss(cfg)[0], do_crop))
+        decals_plocs = np.array(crop_plocs(cfg, w, h, decals_plocs_from_sdss(cfg)[0], do_crop))
     return TabPanel(child=add_cat(p, est_plocs, true_plocs, decals_plocs), title=title)
 
 
@@ -200,7 +241,7 @@ def plot_predict(cfg, image, background, true_plocs, est_cat):
     est_plocs = np.array(est_cat.plocs.cpu())[0]
     decoder_obj = instantiate(cfg.simulator.decoder)
     est_tile = est_cat.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
-    rcfs = np.array([[94, 1, 12]])
+    rcfs = np.array([[94, 1, 12]])  # TODO: find corresponding SDSS RCF for this est_cat
     images, _, _ = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
     recon_img = images[0][0]  # first image in batch, first band in image
 

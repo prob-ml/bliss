@@ -1,13 +1,161 @@
 from pathlib import Path
 from typing import Tuple
 
+import numpy as np
+import pytorch_lightning as pl
 import torch
+from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
+from numpy.core.defchararray import startswith
+from pyvo.dal import sia
+from torch.utils.data import DataLoader, Dataset
 
 from bliss.catalog import FullCatalog, SourceType
-from bliss.surveys.sdss import column_to_tensor
-from bliss.utils.download_utils import download_git_lfs_file
+from bliss.surveys.sdss import column_to_tensor, prepare_batch, prepare_image
+from bliss.utils.download_utils import download_file_to_dst
+
+
+class DarkEnergyCameraLegacySurvey(pl.LightningDataModule, Dataset):
+    PIX_SCALE = 0.262  # arcsec/pixel
+    PIX_SIZE = 3600  # arcsec/degree
+
+    def __init__(
+        self,
+        decals_dir="data/decals",
+        ra=335,
+        dec=0,
+        width=2400,
+        height=1489,
+        bands=("g", "r", "i", "z"),
+        predict_device=None,
+        predict_crop=None,
+    ):
+        super().__init__()
+
+        self.decals_path = Path(decals_dir)
+        self.ra = ra
+        self.dec = dec
+        self.width = width
+        self.height = height
+        self.bands = bands
+
+        self.downloader = DecalsDownloader(ra, dec, width, height, self.decals_path)
+
+        self.items = []
+        self.prepare_data()
+        assert self.items is not None, "No data found even after prepare_data()."
+
+        self.predict_device = predict_device
+        self.predict_crop = predict_crop
+
+    def prepare_data(self):
+        for band in self.bands:
+            self.brick_name = self.downloader.download_cutout(band)
+        assert self.brick_name is not None, "No brick ID found even after prepare_data()."
+        self.downloader.download_catalog(self.brick_name)
+
+    def __len__(self):
+        return 1
+
+    def __getitem__(self, idx):
+        return self.get_from_disk(idx)
+
+    def get_from_disk(self, idx):
+        cutout_list = []
+        for band in self.bands:
+            cutout_list.append(self.read_cutout_for_band(band))
+
+        ret = {}
+        for k in cutout_list[0]:
+            data_per_band = [cutout[k] for cutout in cutout_list]
+            if isinstance(data_per_band[0], np.ndarray):
+                ret[k] = np.stack(data_per_band)
+            else:
+                ret[k] = data_per_band
+        return ret
+
+    def read_cutout_for_band(self, band):
+        cutout = fits.open(self.decals_path / f"cutout_{self.ra}_{self.dec}_{band}.fits")
+        image = cutout[0].data  # pylint: disable=no-member
+        hr = cutout[0].header  # pylint: disable=no-member
+        wcs = WCS(hr)
+        return {
+            "image": image,
+            "background": np.zeros_like(image),  # TODO: find a way to get background
+            "wcs": wcs,
+        }
+
+    def get_brick_name(self) -> str:  # noqa: WPS615
+        if self.brick_name is None:
+            self.prepare_data()
+        return self.brick_name  # type: ignore
+
+    def predict_dataloader(self):
+        img = prepare_image(self[0]["image"], device=self.predict_device)
+        bg = prepare_image(self[0]["background"], device=self.predict_device)
+        batch = prepare_batch(img, bg, self.predict_crop)
+        return DataLoader([batch], batch_size=1)
+
+    @staticmethod
+    def pix_to_deg(pix: int) -> float:
+        return pix * DarkEnergyCameraLegacySurvey.PIX_SCALE / DarkEnergyCameraLegacySurvey.PIX_SIZE
+
+
+class DecalsDownloader:
+    """Class for downloading DECaLS data."""
+
+    URLBASE = "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9"
+    DEF_ACCESS_URL = "https://datalab.noirlab.edu/sia/ls_dr9"
+
+    def __init__(self, ra, dec, width, height, download_dir):
+        self.ra = ra
+        self.dec = dec
+        self.width = DarkEnergyCameraLegacySurvey.pix_to_deg(width)  # in degrees
+        self.height = DarkEnergyCameraLegacySurvey.pix_to_deg(height)  # in degrees
+        self.download_dir = download_dir
+
+        self.svc = sia.SIAService(DecalsDownloader.DEF_ACCESS_URL)
+
+    def download_cutout(self, band="r"):
+        img_table = self.svc.search(
+            pos=(self.ra, self.dec), size=(self.width, self.height), verbosity=2
+        ).to_table()
+        sel = (
+            (img_table["proctype"] == "Stack")
+            & (img_table["prodtype"] == "image")
+            & (startswith(img_table["obs_bandpass"].astype(str), band))
+        )
+        row = img_table[sel]
+        if row is None:
+            raise ValueError(
+                f"No image found for band {band} for region "
+                f"(RA={self.ra}, Dec={self.dec}, width={self.width}, height={self.height})."
+            )
+        img_url = row[0]["access_url"]
+        cutout_filename = self.download_dir / f"cutout_{self.ra}_{self.dec}_{band}.fits"
+        download_file_to_dst(img_url, cutout_filename)
+        cutout = fits.open(cutout_filename)
+        return cutout[0].header["BRICK"]  # pylint: disable=no-member
+
+    def download_catalog(self, brick_name):
+        """Download tractor catalog for specified RA, Dec, width, height."""
+        tractor_filename = self.download_dir / f"tractor-{brick_name}.fits"
+        ra_int = int(float(str(self.ra).lstrip("0")))
+        download_file_to_dst(
+            f"{DecalsDownloader.URLBASE}/south/tractor/{ra_int}/tractor-{brick_name}.fits",
+            tractor_filename,
+        )
+
+    @staticmethod
+    def download_catalog_from_filename(tractor_filename: str):
+        """Download tractor catalog given tractor-<brick_name>.fits filename."""
+        brick_name = tractor_filename.split("-")[1].split(".")[0]
+        ra_int = int(brick_name[:4])
+        download_file_to_dst(
+            f"{DecalsDownloader.URLBASE}/south/tractor/{ra_int}/{tractor_filename}",
+            tractor_filename,
+        )
 
 
 class DecalsFullCatalog(FullCatalog):
@@ -52,7 +200,7 @@ class DecalsFullCatalog(FullCatalog):
         """
         catalog_path = Path(decals_cat_path)
         if not catalog_path.exists():
-            download_decals_base(str(catalog_path.parent))
+            DecalsDownloader.download_catalog_from_filename(catalog_path.name)
         table = Table.read(catalog_path, format="fits", unit_parse_strict="silent")
         table = {k.upper(): v for k, v in table.items()}  # uppercase keys
         band = band.capitalize()
@@ -139,18 +287,3 @@ class DecalsFullCatalog(FullCatalog):
         pr = torch.tensor(pr)
         plocs = torch.stack((pr, pt), dim=-1)
         return plocs.reshape(1, plocs.size()[0], 2) + 0.5  # BLISS consistency
-
-
-def download_decals_base(download_dir: str):
-    cutout_filename = "cutout_336.635_-0.9600.fits"
-    tractor_filename = "tractor-3366m010.fits"
-    cutout = download_git_lfs_file(
-        f"https://api.github.com/repos/prob-ml/bliss/contents/data/decals/{cutout_filename}"
-    )
-    tractor = download_git_lfs_file(
-        f"https://api.github.com/repos/prob-ml/bliss/contents/data/decals/{tractor_filename}"
-    )
-    cutout_path = Path(download_dir) / cutout_filename
-    tractor_path = Path(download_dir) / tractor_filename
-    cutout_path.write_bytes(cutout)
-    tractor_path.write_bytes(tractor)
