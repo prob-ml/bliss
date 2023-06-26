@@ -2,10 +2,12 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import requests
 import torch
+from mock_tests import mock_get, mock_post
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
-from bliss.surveys.decals import DecalsFullCatalog
+from bliss.surveys.decals import DecalsFullCatalog, download_decals_base
 
 
 @pytest.fixture(scope="module")
@@ -148,3 +150,10 @@ def test_bin_full_cat_by_flux():
     assert new_plocs.shape == (1, 2, 2)
     assert new_mags.max() < 24
     assert new_mags.min() > 21
+
+
+def test_download_decals(tmpdir_factory, monkeypatch):
+    monkeypatch.setattr(requests, "get", mock_get)
+    monkeypatch.setattr(requests, "post", mock_post)
+
+    download_decals_base(tmpdir_factory.mktemp("decals"))
