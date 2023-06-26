@@ -1,6 +1,5 @@
 import bz2
 import gzip
-import os
 from pathlib import Path
 
 import pytest
@@ -9,6 +8,7 @@ from mock_tests import mock_get, mock_post, mock_train
 from omegaconf import OmegaConf
 
 from bliss import api
+from bliss.api import BlissClient
 
 
 @pytest.fixture(scope="session")
@@ -18,7 +18,7 @@ def cwd(tmpdir_factory):
 
 @pytest.fixture(scope="class")
 def bliss_client(cwd, cfg):
-    client = api.BlissClient(str(cwd))
+    client = BlissClient(str(cwd))
     # Hack to apply select conftest.py overrides, since client.base_cfg should be private
     overrides = {
         "training.trainer.accelerator": cfg.training.trainer.accelerator,
@@ -32,7 +32,7 @@ def bliss_client(cwd, cfg):
 @pytest.fixture(scope="class")
 def cached_data_path_api(bliss_client):
     bliss_client.cached_data_path = bliss_client.cwd + "/data/cached_dataset"
-    bliss_client.generate(n_batches=2, batch_size=5, max_images_per_file=5)
+    bliss_client.generate(n_batches=3, batch_size=5, max_images_per_file=10)
     return bliss_client.cached_data_path
 
 
@@ -64,13 +64,12 @@ class TestApi:
     def test_load_pretrained_weights(self, bliss_client, monkeypatch):
         monkeypatch.setattr(requests, "get", mock_get)
         monkeypatch.setattr(requests, "post", mock_post)
-        monkeypatch.setenv("GITHUB_TOKEN", "test")
 
         filename = "sdss_pretrained.pt"
         bliss_client.load_pretrained_weights_for_survey(
             survey="sdss",
             filename=filename,
-            request_headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}"},
+            request_headers={"Authorization": "test"},
         )
         not_found_err_msg = (
             "pretrained weights "
@@ -93,17 +92,17 @@ class TestApi:
 
         download_dir = "data"
         bliss_client.load_survey("sdss", 94, 1, 12, download_dir)
-        assert os.path.exists(f"{bliss_client.cwd}/{download_dir}/94/1/photoField-000094-1.fits")
-        assert os.path.exists(
+        assert Path(f"{bliss_client.cwd}/{download_dir}/94/1/photoField-000094-1.fits").exists()
+        assert Path(
             f"{bliss_client.cwd}/{download_dir}/94/1/12/photoObj-000094-1-0012.fits"
-        )
-        assert os.path.exists(
+        ).exists()
+        assert Path(
             f"{bliss_client.cwd}/{download_dir}/94/1/12/frame-r-000094-1-0012.fits"
-        )
-        assert os.path.exists(f"{bliss_client.cwd}/{download_dir}/94/1/12/fpM-000094-r1-0012.fits")
-        assert os.path.exists(
+        ).exists()
+        assert Path(f"{bliss_client.cwd}/{download_dir}/94/1/12/fpM-000094-r1-0012.fits").exists()
+        assert Path(
             f"{bliss_client.cwd}/{download_dir}/94/1/12/psField-000094-1-0012.fits"
-        )
+        ).exists()
 
     def test_predict_sdss_default_rcf(self, bliss_client, weight_save_path, cfg):
         paths = {"sdss": cfg.paths.sdss, "decals": cfg.paths.decals}
