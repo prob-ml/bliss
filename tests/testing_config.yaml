@@ -52,6 +52,8 @@ training:
         log_every_n_steps: 1
         accelerator: "cpu"
         devices: 1
+    testing:
+        file: True
 
 predict:
     decals_frame: ${paths.decals}/tractor-3366m010.fits
