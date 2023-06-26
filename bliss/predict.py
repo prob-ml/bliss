@@ -3,20 +3,71 @@ import torch
 from bokeh.models import TabPanel, Tabs
 from bokeh.plotting import figure, output_file, show
 from hydra.utils import instantiate
+from reproject import reproject_interp
 
 from bliss.surveys.decals import DecalsFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 
 
+def prepare_image(x, device):
+    x = torch.from_numpy(x).unsqueeze(0)
+    x = x.to(device=device)
+    # image dimensions must be a multiple of 16
+    height = x.size(2) - (x.size(2) % 16)
+    width = x.size(3) - (x.size(3) % 16)
+    x = x[:, :, :height, :width]
+
+    return x  # noqa: WPS331
+
+
+def align(img, sdss):
+    """Reproject images based on some reference WCS for pixel alignment."""
+    reproj_d = {}
+    footprint_d = {}
+
+    orig_dim = img.shape
+
+    # align with r-band WCS
+    for bnd in range(img.shape[0]):
+        reproj, footprint = reproject_interp(  # noqa: WPS317
+            (img[bnd], sdss[0]["wcs"][bnd]), sdss[0]["wcs"][2], order="bicubic"
+        )
+        reproj_d[bnd] = reproj
+        footprint_d[bnd] = footprint
+
+    # use footprints to handle NaNs from reprojection
+    h, w = footprint_d[0].shape
+    out_print = np.ones((h, w))
+    for fp in footprint_d.values():
+        out_print = out_print * fp  # noqa: WPS350
+
+    out_print = np.expand_dims(out_print, axis=0)
+
+    reproj_out = np.zeros((5, orig_dim[1], orig_dim[2]))
+
+    for i in range(img.shape[0]):
+        reproj_d[i] = np.multiply(reproj_d[i], out_print)
+        cropped = reproj_d[i][0, : orig_dim[1], : orig_dim[2]]
+        cropped[np.isnan(cropped)] = 0
+        reproj_out[i] = cropped
+
+    return reproj_out
+
+
 def predict_sdss(cfg):
-    sdss_plocs = PhotoFullCatalog.from_file(
+    sdss_frame = PhotoFullCatalog.from_file(
         cfg.paths.sdss,
         run=cfg.predict.dataset.run,
         camcol=cfg.predict.dataset.camcol,
         field=cfg.predict.dataset.fields[0],
-        band=cfg.predict.dataset.bands[0],
-    ).plocs[0]
+        band=cfg.predict.photo_catalog.bands[2],
+    )
+    sdss_plocs = sdss_frame.plocs[0]
     sdss = instantiate(cfg.predict.dataset)
+    img = sdss[0]["image"]
+    bg = sdss[0]["background"]
+    img = align(img, sdss)
+    bg = align(bg, sdss)
 
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     enc_state_dict = torch.load(cfg.predict.weight_save_path)
@@ -24,11 +75,12 @@ def predict_sdss(cfg):
     encoder.eval()
     trainer = instantiate(cfg.predict.trainer)
     est_cat, images, background, pred = trainer.predict(encoder, datamodule=sdss)[0].values()
+    est_full = est_cat.to_full_params()
     if cfg.predict.plot.show_plot and (sdss_plocs is not None):
         ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
         cropped_image = images[0, 0, ptc:-ptc, ptc:-ptc]
         cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
-        plot_predict(cfg, cropped_image, cropped_background, sdss_plocs, est_cat)
+        plot_predict(cfg, cropped_image, cropped_background, sdss_plocs, est_full)
 
     return est_cat, images[0], background[0], sdss_plocs, pred
 

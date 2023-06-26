@@ -39,13 +39,15 @@ def download_pretrained_weights(bliss_client, cfg, filename):
     if os.environ.get("GITHUB_TOKEN") is None:
         # Run locally, so use pretrained weights from local BLISS_HOME
         # Copy pretrained weights to {cwd}/data/pretrained_models
-        local_pretrained_weights_path = Path(cfg.paths.data) / "pretrained_models/sdss.pt"
+        local_pretrained_weights_path = (
+            Path(cfg.paths.data) / "pretrained_models/zscore_five_band.pt"
+        )
         test_pretrained_weights_path = Path(bliss_client.cwd) / f"data/pretrained_models/{filename}"
         test_pretrained_weights_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(str(local_pretrained_weights_path), str(test_pretrained_weights_path))
     else:
         bliss_client.load_pretrained_weights_for_survey(
-            survey="sdss",
+            survey="zscore_five_band",  # NOTE: temporary fix to run API tests - better name?
             filename=filename,
             request_headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}"},
         )
@@ -74,6 +76,7 @@ def weight_save_path(bliss_client, pretrained_weights_filename):
         train_n_batches=1,
         batch_size=8,
         val_split_file_idxs=[1],
+        test_split_file_idxs=[1],
         pretrained_weights_filename=pretrained_weights_filename,
         training={"n_epochs": 1, "trainer": {"check_val_every_n_epoch": 1, "log_every_n_steps": 1}},
     )

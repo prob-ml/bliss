@@ -28,7 +28,7 @@ simulator:
     num_workers: 32
     sdss_fields:  # Used in simulator for sampling backgrounds and PSFs for decoder
         dir: ${paths.sdss}
-        bands: [2]
+        bands: [0, 1, 2, 3, 4]
         field_list:  # list of dictionaries, each with run, camcol, and list of fields
           - run: 94
             camcol: 1
@@ -68,13 +68,15 @@ cached_simulator:
     batch_size: ${generate.batch_size} # 128 for large cached
     num_workers: 0
     cached_data_path: ${generate.cached_data_path}
+    train_n_batches: null
     file_prefix: ${generate.file_prefix}
+    bands: [0, 1, 2, 3, 4]
     val_split_file_idxs: null # inclusive range
     test_split_file_idxs: null # inclusive range
 
 encoder:
     _target_: bliss.encoder.Encoder
-    bands: [2]
+    bands: [0, 1, 2, 3, 4]
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
     slack: 1.0
@@ -86,6 +88,7 @@ encoder:
     input_transform_params:
         use_deconv_channel: false
         concat_psf_params: false
+        z_score: true
     architecture:
         # this architecture is based on yolov5l.yaml, see
         # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
@@ -148,7 +151,7 @@ training:
         accelerator: "gpu"
         devices: 1
     testing:
-        file: null
+        file: true
         batch_size: 32
         num_workers: 0
     seed: 42
@@ -174,7 +177,7 @@ predict:
         bands: ${predict.dataset.bands}
     trainer: ${training.trainer}
     encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/sdss.pt
+    weight_save_path: ${paths.pretrained_models}/zscore_five_band.pt
     device: "cuda:0"
     crop:
         do_crop: true
@@ -187,3 +190,4 @@ predict:
         height: 1000
         out_file_name: ${paths.output}/predict.html
     is_simulated: false
+    plot_preds: false

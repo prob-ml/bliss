@@ -1,4 +1,5 @@
 import math
+import warnings
 from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
@@ -16,6 +17,7 @@ from yolov5.models.yolo import DetectionModel
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
+from bliss.transforms import z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
     UnconstrainedDiagonalBivariateNormal,
@@ -61,10 +63,14 @@ class Encoder(pl.LightningModule):
         self.save_hyperparameters()
 
         self.bands = bands
+        self.sdss_bands = ["u", "g", "r", "i", "z"]  # NOTE: SDSS-specific naming conventions
         self.n_bands = len(self.bands)
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.input_transform_params = input_transform_params
+
+        if not self.input_transform_params.get("z_score") and self.n_bands > 1:
+            warnings.warn("Performing multi-band encoding without z-scoring.")
 
         self.tile_slen = tile_slen
 
@@ -84,13 +90,15 @@ class Encoder(pl.LightningModule):
 
     @property
     def dist_param_groups(self):
-        return {
+        # create a unique parameter for each per-band flux
+        star_fluxes = [f"star_log_flux {bnd}" for bnd in self.sdss_bands]
+        gal_fluxes = [f"galsim_flux_{bnd}" for bnd in self.sdss_bands]
+
+        d = {
             "on_prob": UnconstrainedBernoulli(),
             "loc": UnconstrainedDiagonalBivariateNormal(),
-            "star_log_flux": UnconstrainedNormal(low_clamp=-6, high_clamp=3),
             "galaxy_prob": UnconstrainedBernoulli(),
             # galsim parameters
-            "galsim_flux": UnconstrainedLogNormal(),
             "galsim_disk_frac": UnconstrainedLogitNormal(),
             "galsim_beta_radians": UnconstrainedLogitNormal(high=2 * torch.pi),
             "galsim_disk_q": UnconstrainedLogitNormal(),
@@ -98,6 +106,11 @@ class Encoder(pl.LightningModule):
             "galsim_bulge_q": UnconstrainedLogitNormal(),
             "galsim_a_b": UnconstrainedLogNormal(),
         }
+        for flux in star_fluxes:
+            d[flux] = UnconstrainedNormal(low_clamp=-6, high_clamp=3)
+        for flux in gal_fluxes:
+            d[flux] = UnconstrainedLogNormal()
+        return d
 
     def _get_num_input_channels(self):
         """Determine number of input channels for model based on desired input transforms."""
@@ -106,7 +119,7 @@ class Encoder(pl.LightningModule):
             num_channels += 1
         if self.input_transform_params.get("concat_psf_params"):
             num_channels += 6
-        num_channels *= self.n_bands
+        num_channels *= self.n_bands  # multi-band support
         return num_channels
 
     def get_input_tensor(self, batch):
@@ -125,7 +138,11 @@ class Encoder(pl.LightningModule):
             Tensor: b x c x h x w tensor, where the number of input channels `c` is based on the
                 input transformations to use
         """
-        inputs = [batch["images"], batch["background"]]
+        # If using five-band cached simulator, only select bands encoder is expecting
+        imgs = batch["images"][:, self.bands]
+        bgs = batch["background"][:, self.bands]
+        inputs = [imgs, bgs]
+
         if self.input_transform_params.get("use_deconv_channel"):
             assert (
                 "deconvolution" in batch
@@ -137,6 +154,12 @@ class Encoder(pl.LightningModule):
             ), "concat_psf_params specified but psf params not present in data"
             n, _, h, w = batch["images"].size()
             inputs.append(batch["psf_params"].view(n, 6, 1, 1).expand(n, 6, h, w))
+        if self.input_transform_params.get("z_score"):
+            assert (
+                batch["background"][0, 0].std() > 0
+            ), "Constant backgrounds not supported for multi-band encoding"
+            inputs[0] = z_score(inputs[0])
+            inputs[1] = z_score(inputs[1])
         return torch.cat(inputs, dim=1)
 
     def encode_batch(self, batch):
@@ -186,12 +209,29 @@ class Encoder(pl.LightningModule):
         # the mean would be better at minimizing squared error...should we return that instead?
         tile_is_on_array = pred["on_prob"].mode
         # this is the mode of star_log_flux but not the mean of the star_flux distribution
-        star_fluxes = pred["star_log_flux"].mode.exp()
+        est_catalog_dict = {}
+
+        # populate est_catalog_dict with per-band (log) star fluxes
+        star_logflux_names = [f"star_log_flux {bnd}" for bnd in self.sdss_bands]
+        flux_d = {}
+        for flux in star_logflux_names:
+            flux_d[flux] = pred[flux].mode  # type: ignore
+            flux_d[flux] = torch.mul(flux_d[flux], tile_is_on_array)  # type: ignore
+            flux_d[flux] = rearrange(flux_d[flux], "b ht wt -> b ht wt 1 1")
+        star_log_fluxes = torch.cat([flux_d[f"star_log_flux {bnd}"] for bnd in self.sdss_bands], 4)
+        star_fluxes = star_log_fluxes.exp()
         galaxy_bools = pred["galaxy_prob"].mode
         star_bools = 1 - galaxy_bools
         source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
-
-        galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
+        galsimflux_names = [f"flux_{bnd}" for bnd in self.sdss_bands]
+        galsim_names = galsimflux_names + [
+            "disk_frac",
+            "beta_radians",
+            "disk_q",
+            "a_d",
+            "bulge_q",
+            "a_b",
+        ]
         galsim_dists = [pred[f"galsim_{name}"] for name in galsim_names]
         # for params with transformed distribution mode and median aren't implemented.
         # instead, we compute median using inverse cdf 0.5
@@ -202,8 +242,8 @@ class Encoder(pl.LightningModule):
         # light sources per tile, but we predict only one source per tile
         est_catalog_dict = {
             "locs": rearrange(pred["loc"].mode, "b ht wt d -> b ht wt 1 d"),
-            "star_log_fluxes": rearrange(pred["star_log_flux"].mode, "b ht wt -> b ht wt 1 1"),
-            "star_fluxes": rearrange(star_fluxes, "b ht wt -> b ht wt 1 1"),
+            "star_log_fluxes": star_log_fluxes,
+            "star_fluxes": star_fluxes,
             "n_sources": tile_is_on_array,
             "source_type": rearrange(source_type, "b ht wt -> b ht wt 1 1"),
             "galaxy_params": rearrange(galaxy_params, "b ht wt d -> b ht wt 1 d"),
@@ -244,16 +284,22 @@ class Encoder(pl.LightningModule):
         loss += binary_loss
         loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
 
-        # star flux loss
+        # star flux losses
         true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
-        star_log_fluxes = rearrange(true_tile_cat["star_log_fluxes"], "b ht wt 1 1 -> b ht wt")
-        star_flux_loss = -pred["star_log_flux"].log_prob(star_log_fluxes)
-        star_flux_loss *= true_star_bools
-        loss += star_flux_loss
-        loss_with_components["star_flux_loss"] = star_flux_loss.sum() / true_star_bools.sum()
+        star_log_fluxes = rearrange(
+            true_tile_cat["star_log_fluxes"], "b ht wt 1 bnd -> b ht wt bnd"
+        )
+        for i, bnd in enumerate(self.sdss_bands):
+            star_flux_loss = -pred[f"star_log_flux {bnd}"].log_prob(star_log_fluxes[:, :, :, i])
+            star_flux_loss *= true_star_bools
+            loss += star_flux_loss
+            loss_with_components[f"star_flux_loss {bnd}"] = (
+                star_flux_loss.sum() / true_star_bools.sum()
+            )
 
         # galaxy properties loss
-        galsim_names = ["flux", "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
+        fluxes = [f"flux_{bnd}" for bnd in self.sdss_bands]
+        galsim_names = fluxes + ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
         galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
         for i, param_name in enumerate(galsim_names):
             galsim_pn = f"galsim_{param_name}"
@@ -326,7 +372,7 @@ class Encoder(pl.LightningModule):
         """Pytorch lightning method."""
         with torch.no_grad():
             pred = self.encode_batch(batch)
-            est_cat = self.variational_mode(pred)
+            est_cat = self.variational_mode(pred, return_full=False)
         return {
             "est_cat": est_cat,
             "images": batch["images"],

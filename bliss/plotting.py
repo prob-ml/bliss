@@ -1,4 +1,5 @@
 """Common functions to plot results."""
+import numpy as np
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
@@ -23,7 +24,8 @@ def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px):
         ax.axhline(images.shape[-2] - margin_px, color="w")
 
         # plot image first
-        image = images[img_id, 0].cpu().numpy()
+        image = images[img_id].cpu().numpy()
+        image = np.sum(image, axis=0)
         vmin = image.min().item()
         vmax = image.max().item()
         divider = make_axes_locatable(ax)

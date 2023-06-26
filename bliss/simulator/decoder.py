@@ -244,9 +244,8 @@ class ImageDecoder(nn.Module):
                 for s in range(n_sources):
                     source_params = full_cat.one_source(b, s)
                     source_type = source_params["source_type"].item()
-                    renderer = self.source_renderers[source_type]
+                    renderer = self.source_renderers[source_type]  # NOTE: SDSS-Specific!
                     galsim_obj = renderer(psf, band, source_params)
-
                     plocs0, plocs1 = source_params["plocs"]
                     offset = np.array([plocs1 - (slen_w / 2), plocs0 - (slen_h / 2)])
 
