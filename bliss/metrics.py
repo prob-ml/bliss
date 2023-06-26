@@ -51,10 +51,19 @@ class BlissMetrics(Metric):
     star_tp: Tensor
     star_fp: Tensor
 
-    # classification metrics
-    star_flux: List
-    disk_flux: List
-    bulge_flux: List
+    # Classification metrics
+    disk_frac: List
+    bulge_frac: List
+    u_flux_s: List
+    g_flux_s: List
+    r_flux_s: List
+    i_flux_s: List
+    z_flux_s: List
+    u_flux_g: List
+    g_flux_g: List
+    r_flux_g: List
+    i_flux_g: List
+    z_flux_g: List
     disk_q: List
     bulge_q: List
     disk_hlr: List
@@ -93,14 +102,23 @@ class BlissMetrics(Metric):
             self.add_state(metric, default=torch.tensor(0.0), dist_reduce_fx="sum")
 
         self.classification_metrics = [
-            "star_flux",
-            "disk_flux",
-            "bulge_flux",
+            "disk_frac",
+            "bulge_frac",
             "disk_q",
             "bulge_q",
             "disk_hlr",
             "bulge_hlr",
             "beta_radians",
+            "u_flux_g",
+            "g_flux_g",
+            "r_flux_g",
+            "i_flux_g",
+            "z_flux_g",
+            "u_flux_s",
+            "g_flux_s",
+            "r_flux_s",
+            "i_flux_s",
+            "z_flux_s",
         ]
         for metric in self.classification_metrics:
             self.add_state(metric, default=[], dist_reduce_fx="sum")
@@ -206,32 +224,36 @@ class BlissMetrics(Metric):
             params = self._get_classification_params_tile(true, est)
         true_gal_params, est_gal_params, true_star_fluxes, est_star_fluxes = params
 
-        # fluxes
-        self.star_flux.append(torch.abs(true_star_fluxes - est_star_fluxes).squeeze())
+        self.u_flux_g.append(torch.abs(true_gal_params[:, 0] - est_gal_params[:, 0]))
+        self.g_flux_g.append(torch.abs(true_gal_params[:, 1] - est_gal_params[:, 1]))
+        self.r_flux_g.append(torch.abs(true_gal_params[:, 2] - est_gal_params[:, 2]))
+        self.i_flux_g.append(torch.abs(true_gal_params[:, 3] - est_gal_params[:, 3]))
+        self.z_flux_g.append(torch.abs(true_gal_params[:, 4] - est_gal_params[:, 4]))
 
-        est_disk_flux = est_gal_params[:, 0] * est_gal_params[:, 1]  # total flux * disk fraction
-        true_disk_flux = true_gal_params[:, 0] * true_gal_params[:, 1]
-        self.disk_flux.append(torch.abs(true_disk_flux - est_disk_flux))
+        self.u_flux_s.append(torch.abs(true_star_fluxes[:, 0] - est_star_fluxes[:, 0]))
+        self.g_flux_s.append(torch.abs(true_star_fluxes[:, 1] - est_star_fluxes[:, 1]))
+        self.r_flux_s.append(torch.abs(true_star_fluxes[:, 2] - est_star_fluxes[:, 2]))
+        self.i_flux_s.append(torch.abs(true_star_fluxes[:, 3] - est_star_fluxes[:, 3]))
+        self.z_flux_s.append(torch.abs(true_star_fluxes[:, 4] - est_star_fluxes[:, 4]))
 
-        est_bulge_flux = est_gal_params[:, 0] - est_disk_flux  # total flux - disk flux
-        true_bulge_flux = true_gal_params[:, 0] - true_disk_flux
-        self.bulge_flux.append(torch.abs(true_bulge_flux - est_bulge_flux))
+        self.disk_frac.append(torch.abs(true_gal_params[:, 5] - est_gal_params[:, 5]))
+        self.bulge_frac.append((1 - torch.abs(true_gal_params[:, 5]) - (1 - est_gal_params[:, 5])))
 
         # angle
-        self.beta_radians.append(torch.abs(true_gal_params[:, 2] - est_gal_params[:, 2]))
+        self.beta_radians.append(torch.abs(true_gal_params[:, 6] - est_gal_params[:, 6]))
 
         # axis ratio
-        self.disk_q.append(torch.abs(true_gal_params[:, 3] - est_gal_params[:, 3]))
-        self.bulge_q.append(torch.abs(true_gal_params[:, 5] - est_gal_params[:, 5]))
+        self.disk_q.append(torch.abs(true_gal_params[:, 7] - est_gal_params[:, 7]))
+        self.bulge_q.append(torch.abs(true_gal_params[:, 9] - est_gal_params[:, 9]))
 
         # half-light radius
         # sqrt(a * b) = sqrt(a * a * q) = a * sqrt(q)
-        est_disk_hlr = est_gal_params[:, 4] * torch.sqrt(est_gal_params[:, 3])
-        true_disk_hlr = true_gal_params[:, 4] * torch.sqrt(true_gal_params[:, 3])
+        est_disk_hlr = est_gal_params[:, 8] * torch.sqrt(est_gal_params[:, 7])
+        true_disk_hlr = true_gal_params[:, 8] * torch.sqrt(true_gal_params[:, 7])
         self.disk_hlr.append(torch.abs(true_disk_hlr - est_disk_hlr))
 
-        est_bulge_hlr = est_gal_params[:, 6] * torch.sqrt(est_gal_params[:, 5])
-        true_bulge_hlr = true_gal_params[:, 6] * torch.sqrt(true_gal_params[:, 5])
+        est_bulge_hlr = est_gal_params[:, 10] * torch.sqrt(est_gal_params[:, 9])
+        true_bulge_hlr = true_gal_params[:, 10] * torch.sqrt(true_gal_params[:, 9])
         self.bulge_hlr.append(torch.abs(true_bulge_hlr - est_bulge_hlr))
 
     def _get_classification_params_full(self, true, est, match_true, match_est):
@@ -297,7 +319,7 @@ class BlissMetrics(Metric):
         }
 
         # add classification metrics if computed
-        if self.disk_flux:
+        if self.disk_frac:
             for metric in self.classification_metrics:
                 # flatten list of variable-size tensors and take the median
                 vals: List = sum([t.flatten().tolist() for t in getattr(self, metric)], [])

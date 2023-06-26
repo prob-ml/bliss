@@ -50,7 +50,7 @@ class BlissClient:
         cfg.generate.n_batches = n_batches
         cfg.generate.batch_size = batch_size
         cfg.generate.max_images_per_file = max_images_per_file
-
+        cfg.generate.cached_data_path = self.cached_data_path
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
 
@@ -99,6 +99,7 @@ class BlissClient:
         train_n_batches,
         batch_size,
         val_split_file_idxs,
+        test_split_file_idxs,
         pretrained_weights_filename: Optional[str] = None,
         **kwargs,
     ) -> None:
@@ -110,6 +111,7 @@ class BlissClient:
             train_n_batches (int): Number of batches to train on.
             batch_size (int): Number of images per batch.
             val_split_file_idxs (List[int]): List of file indices to use for validation.
+            test_split_file_idxs (List[int]): List of file indices to use for testing.
             pretrained_weights_filename (str): Name of pretrained weights file to load.
             **kwargs: Keyword arguments to override default configuration values.
         """
@@ -120,6 +122,7 @@ class BlissClient:
         cfg.cached_simulator.train_n_batches = train_n_batches
         cfg.cached_simulator.batch_size = batch_size
         cfg.cached_simulator.val_split_file_idxs = val_split_file_idxs
+        cfg.cached_simulator.test_split_file_idxs = test_split_file_idxs
         if pretrained_weights_filename is not None:
             cfg.training.pretrained_weights = (
                 cfg.paths.pretrained_models + f"/{pretrained_weights_filename}"
@@ -226,9 +229,9 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     # Convert to astropy table
     est_cat_table = Table(est_cat_list)
     # Convert all _fluxes columns to u.Quantity
-    log_nmgy = u.LogUnit(u.nmgy)
+    log_nmgy = (u.LogUnit(u.nmgy),)
     est_cat_table["star_log_fluxes"] = est_cat_table["star_log_fluxes"] * log_nmgy
-    est_cat_table["star_fluxes"] = est_cat_table["star_fluxes"] * u.nmgy
+    est_cat_table["star_fluxes"] = est_cat_table["star_fluxes"] * (u.nmgy,)
 
     # Create inner table for galaxy_params
     # Convert list of tensors to list of dictionaries
@@ -300,10 +303,14 @@ def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
     pred_table = Table(dist_params_list)
     # convert values to astropy units
     log_nmgy = u.LogUnit(u.nmgy)
-    pred_table["star_log_flux_mean"] = pred_table["star_log_flux_mean"] * log_nmgy
-    pred_table["star_log_flux_std"] = pred_table["star_log_flux_std"] * log_nmgy
-    pred_table["galsim_flux_mean"] = pred_table["galsim_flux_mean"] * u.nmgy
-    pred_table["galsim_flux_std"] = pred_table["galsim_flux_std"] * u.nmgy
+
+    bands = ["u", "g", "r", "i", "z"]  # NOTE: SDSS-specific!
+    for bnd in bands:
+        pred_table[f"star_log_flux {bnd}_mean"] = pred_table[f"star_log_flux {bnd}_mean"] * log_nmgy
+        pred_table[f"star_log_flux {bnd}_std"] = pred_table[f"star_log_flux {bnd}_std"] * log_nmgy
+        pred_table[f"galsim_flux_{bnd}_mean"] = pred_table[f"galsim_flux_{bnd}_mean"] * u.nmgy
+        pred_table[f"galsim_flux_{bnd}_std"] = pred_table[f"galsim_flux_{bnd}_std"] * u.nmgy
+
     pred_table["galsim_beta_radians_mean"] = pred_table["galsim_beta_radians_mean"] * u.radian
     pred_table["galsim_beta_radians_std"] = pred_table["galsim_beta_radians_std"] * u.radian
     pred_table["galsim_a_d_mean"] = pred_table["galsim_a_d_mean"] * u.arcsec
