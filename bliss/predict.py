@@ -105,7 +105,7 @@ def predict_sdss(cfg):
         run=cfg.predict.dataset.run,
         camcol=cfg.predict.dataset.camcol,
         field=cfg.predict.dataset.fields[0],
-        band=cfg.predict.dataset.bands[0],
+        band=cfg.predict.photo_catalog.bands[2],
     )
     sdss_plocs = sdss_frame.plocs[0]
     sdss = instantiate(cfg.predict.dataset)

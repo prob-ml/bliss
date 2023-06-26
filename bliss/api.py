@@ -229,9 +229,9 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     # Convert to astropy table
     est_cat_table = Table(est_cat_list)
     # Convert all _fluxes columns to u.Quantity
-    log_nmgy = u.LogUnit(u.nmgy)
+    log_nmgy = (u.LogUnit(u.nmgy),)
     est_cat_table["star_log_fluxes"] = est_cat_table["star_log_fluxes"] * log_nmgy
-    est_cat_table["star_fluxes"] = est_cat_table["star_fluxes"] * u.nmgy
+    est_cat_table["star_fluxes"] = est_cat_table["star_fluxes"] * (u.nmgy,)
 
     # Create inner table for galaxy_params
     # Convert list of tensors to list of dictionaries
@@ -303,10 +303,14 @@ def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
     pred_table = Table(dist_params_list)
     # convert values to astropy units
     log_nmgy = u.LogUnit(u.nmgy)
-    pred_table["star_log_flux_mean"] = pred_table["star_log_flux_mean"] * log_nmgy
-    pred_table["star_log_flux_std"] = pred_table["star_log_flux_std"] * log_nmgy
-    pred_table["galsim_flux_mean"] = pred_table["galsim_flux_mean"] * u.nmgy
-    pred_table["galsim_flux_std"] = pred_table["galsim_flux_std"] * u.nmgy
+
+    bands = ["u", "g", "r", "i", "z"]  # NOTE: SDSS-specific!
+    for bnd in bands:
+        pred_table[f"star_log_flux {bnd}_mean"] = pred_table[f"star_log_flux {bnd}_mean"] * log_nmgy
+        pred_table[f"star_log_flux {bnd}_std"] = pred_table[f"star_log_flux {bnd}_std"] * log_nmgy
+        pred_table[f"galsim_flux_{bnd}_mean"] = pred_table[f"galsim_flux_{bnd}_mean"] * u.nmgy
+        pred_table[f"galsim_flux_{bnd}_std"] = pred_table[f"galsim_flux_{bnd}_std"] * u.nmgy
+
     pred_table["galsim_beta_radians_mean"] = pred_table["galsim_beta_radians_mean"] * u.radian
     pred_table["galsim_beta_radians_std"] = pred_table["galsim_beta_radians_std"] * u.radian
     pred_table["galsim_a_d_mean"] = pred_table["galsim_a_d_mean"] * u.arcsec

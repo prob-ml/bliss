@@ -1,4 +1,5 @@
 import math
+import warnings
 from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
@@ -68,6 +69,9 @@ class Encoder(pl.LightningModule):
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.input_transform_params = input_transform_params
 
+        if not self.input_transform_params.get("z_score") and self.n_bands > 1:
+            warnings.warn("Performing multi-band encoding without z-scoring.")
+
         self.tile_slen = tile_slen
 
         # number of distributional parameters used to characterize each source
@@ -88,7 +92,7 @@ class Encoder(pl.LightningModule):
     def dist_param_groups(self):
         # create a unique parameter for each per-band flux
         star_fluxes = [f"star_log_flux {bnd}" for bnd in self.sdss_bands]
-        gal_fluxes = [f"galsim_flux {bnd}" for bnd in self.sdss_bands]
+        gal_fluxes = [f"galsim_flux_{bnd}" for bnd in self.sdss_bands]
 
         d = {
             "on_prob": UnconstrainedBernoulli(),
@@ -209,16 +213,17 @@ class Encoder(pl.LightningModule):
 
         # populate est_catalog_dict with per-band (log) star fluxes
         star_logflux_names = [f"star_log_flux {bnd}" for bnd in self.sdss_bands]
+        flux_d = {}
         for flux in star_logflux_names:
-            pred[flux] = pred[flux].mode  # type: ignore
-            pred[flux] = torch.mul(pred[flux], tile_is_on_array)  # type: ignore
-            pred[flux] = rearrange(pred[flux], "b ht wt -> b ht wt 1 1")
-        star_log_fluxes = torch.cat([pred[f"star_log_flux {bnd}"] for bnd in self.sdss_bands], 4)
+            flux_d[flux] = pred[flux].mode  # type: ignore
+            flux_d[flux] = torch.mul(flux_d[flux], tile_is_on_array)  # type: ignore
+            flux_d[flux] = rearrange(flux_d[flux], "b ht wt -> b ht wt 1 1")
+        star_log_fluxes = torch.cat([flux_d[f"star_log_flux {bnd}"] for bnd in self.sdss_bands], 4)
         star_fluxes = star_log_fluxes.exp()
         galaxy_bools = pred["galaxy_prob"].mode
         star_bools = 1 - galaxy_bools
         source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
-        galsimflux_names = [f"flux {bnd}" for bnd in self.sdss_bands]
+        galsimflux_names = [f"flux_{bnd}" for bnd in self.sdss_bands]
         galsim_names = galsimflux_names + [
             "disk_frac",
             "beta_radians",
@@ -293,7 +298,7 @@ class Encoder(pl.LightningModule):
             )
 
         # galaxy properties loss
-        fluxes = [f"flux {bnd}" for bnd in self.sdss_bands]
+        fluxes = [f"flux_{bnd}" for bnd in self.sdss_bands]
         galsim_names = fluxes + ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
         galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
         for i, param_name in enumerate(galsim_names):

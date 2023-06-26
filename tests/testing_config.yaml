@@ -20,9 +20,6 @@ simulator:
         batch_size: 32
         prob_galaxy: 0.5
         star_flux_min: 1e5
-    # background:
-    #     _target_: bliss.simulator.background.SimulatedSDSSBackground
-    #     sdss_fields: ${simulator.sdss_fields}
 
 cached_simulator:
     num_workers: 0
@@ -55,7 +52,6 @@ training:
 
 predict:
     decals_frame: ${paths.decals}/tractor-3366m010.fits
-    weight_save_path: ${paths.pretrained_models}/zscore_five_band.pt
     device: "cpu"
     crop:
         left_upper_corner: [160, 160]

@@ -228,14 +228,12 @@ class ImagePrior(pl.LightningModule):
 
                 for obj, _ in enumerate(objc_type):
                     if objc_type[obj] == 6 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        ratios = (  # noqa: WPS220
-                            fluxes[obj] / fluxes[obj][2]
-                        )  # noqa: WPS220  # flux relative to r-band
+                        # flux relative to r-band
+                        ratios = fluxes[obj] / fluxes[obj][2]  # noqa: WPS220
                         star_fluxes_rest.append(ratios)  # noqa: WPS220
                     elif objc_type[obj] == 3 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        ratios = (  # noqa: WPS220
-                            fluxes[obj] / fluxes[obj][2]
-                        )  # noqa: WPS220  # flux relative to r-band
+                        # flux relative to r-band
+                        ratios = fluxes[obj] / fluxes[obj][2]  # noqa: WPS220
                         gal_fluxes_rest.append(ratios)  # noqa: WPS220
 
                 if star_fluxes_rest:
