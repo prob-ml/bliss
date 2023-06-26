@@ -45,7 +45,9 @@ class TestSimulate:
         encoder.load_state_dict(enc_state_dict)
         encoder.eval()
         trainer = instantiate(cfg.predict.trainer)
-        est_tile = trainer.predict(encoder, datamodule=sdss_test)[0]["est_cat"]
+        est_tile = trainer.predict(encoder, datamodule=sdss_test)[0]["est_cat"].to(
+            cfg.predict.device
+        )
         ttc = cfg.encoder.tiles_to_crop
         sim_galaxy_bools = sim_tile.galaxy_bools[:, ttc:-ttc, ttc:-ttc]
         sim_star_bools = sim_tile.star_bools[:, ttc:-ttc, ttc:-ttc]

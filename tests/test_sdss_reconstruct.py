@@ -20,7 +20,6 @@ class TestSdssReconstruct:
         true_bright = true_img_crop - true_bg_crop
 
         bright_pix_mask = (recon_img - 100) > 0  # originally 100
-        recon_img = recon_img.to(cfg.predict.device)
         res_bright = recon_img[bright_pix_mask] - true_bright[bright_pix_mask]
 
         recon_img += true_bg_crop
