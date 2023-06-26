@@ -13,19 +13,44 @@ cleanup() {
 # gracefully exit on these conditions
 trap "cleanup" SIGINT SIGTERM
 
-NUM_PROCESSES=${1:-""}
-CONFIG_OVERRIDES=${2:-""}
+# parse command line arguments
+CONFIG_OVERRIDES=""
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -n|--num-processes)
+      NUM_PROCESSES="$2"
+      shift;shift;;
+    -cp|--config-path)
+      CONFIG_PATH="$2"
+      shift;shift;;
+    -cn|--config-name)
+      CONFIG_NAME="$2"
+      shift;shift;;
+    -*|--*)
+      echo "Unknown option $1"
+      exit 1;;
+    *)
+      CONFIG_OVERRIDES="$CONFIG_OVERRIDES $1"
+      shift;;
+  esac
+done
+
 
 # Error if NUM_PROCESS not specified
 if [ -z "$NUM_PROCESSES" ]; then
-    echo "Usage: generate_data_in_parallel.sh <num_processes> [<config_overrides>]"
+    echo "Usage: generate_data_in_parallel.sh -n NUM_PROCESSES [-cp CONFIG_PATH] [-cn CONFIG_NAME] [CONFIG_OVERRIDES]"
     exit 1
 fi
 
 pids=()
 for ((i=0; i<$NUM_PROCESSES; i++));
 do
-    bliss 'mode=generate' "+generate.process_index=$i" $CONFIG_OVERRIDES &
+    bliss \
+        ${CONFIG_PATH:+-cp $CONFIG_PATH} \
+        ${CONFIG_NAME:+-cn $CONFIG_NAME} \
+        'mode=generate' \
+        "+generate.process_index=$i" \
+        $CONFIG_OVERRIDES &
     pids+=($!) # store PID in array
 done
 
