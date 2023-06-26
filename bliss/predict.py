@@ -56,49 +56,6 @@ def align(img, sdss):
     return reproj_out
 
 
-def crop_image(cfg, image, background):
-    idx0 = cfg.predict.crop.left_upper_corner[0]
-    idx1 = cfg.predict.crop.left_upper_corner[1]
-    width = cfg.predict.crop.width
-    height = cfg.predict.crop.height
-    if ((idx0 + height) <= image.shape[2]) and ((idx1 + width) <= image.shape[3]):
-        image = image[:, :, idx0 : idx0 + height, idx1 : idx1 + width]
-        background = background[:, :, idx0 : idx0 + height, idx1 : idx1 + width]
-    return image, background
-
-
-def predict(cfg, image, background, show_plot=False, true_plocs=None):
-    encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-    if len(cfg.encoder.bands) == 1:
-        enc_state_dict = torch.load(cfg.predict.weight_save_path)  # figure out how to handle this
-    elif len(cfg.encoder.bands) == 5:
-        enc_state_dict = torch.load(cfg.predict.weight_save_path)
-    else:
-        sys.exit()
-    encoder.load_state_dict(enc_state_dict)
-    encoder.eval()
-
-    if cfg.predict.crop.do_crop:
-        image, background = crop_image(cfg, image, background)
-
-    batch = {"images": image.float(), "background": background.float()}
-
-    with torch.no_grad():
-        encoder = encoder.float()
-        pred = encoder.encode_batch(batch)
-        est_cat = encoder.variational_mode(pred)
-
-    if show_plot and (true_plocs is not None):
-        ttc = cfg.encoder.tiles_to_crop
-        ts = cfg.encoder.tile_slen
-        ptc = ttc * ts
-        cropped_image = image[0, 0, ptc:-ptc, ptc:-ptc]
-        cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
-        plot_predict(cfg, cropped_image, cropped_background, true_plocs, est_cat)
-
-    return est_cat, image, background, pred
-
-
 def predict_sdss(cfg):
     sdss_frame = PhotoFullCatalog.from_file(
         cfg.paths.sdss,
