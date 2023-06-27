@@ -74,37 +74,6 @@ class TestMetrics:
 
         return {"decals": decals_cat, "photo": photo_cat, "bliss": bliss_cat}
 
-    def _get_sliced_catalog(self, catalog, idx_to_keep):
-        """Creates a new FullCatalog using only certain indices from old catalog."""
-        d = {key: val[:, idx_to_keep, :] for key, val in catalog.items()}
-        d["n_sources"] = torch.tensor([len(idx_to_keep)])
-        d["plocs"] = catalog.plocs[:, idx_to_keep, :]
-        return FullCatalog(catalog.height, catalog.width, d)
-
-    @pytest.fixture(scope="class")
-    def brightest_catalogs(self, catalogs):
-        """Get catalogs restricted to only the brightest n sources."""
-        decals_cat = catalogs["decals"]
-        photo_cat = catalogs["photo"]
-        bliss_cat = catalogs["bliss"]
-
-        n = min(decals_cat.n_sources.item(), photo_cat.n_sources.item(), bliss_cat.n_sources.item())
-
-        top_n_decals = torch.argsort(decals_cat["fluxes"].squeeze())[-n:]
-        photo_r_fluxes = photo_cat["fluxes"][:, :, 2]
-        top_n_photo = torch.argsort(photo_r_fluxes.squeeze())[-n:]
-        bliss_fluxes = (
-            bliss_cat["star_fluxes"] * (bliss_cat["source_type"] is False)  # noqa: E712
-            + bliss_cat["galaxy_params"][:, :, 0, None] * bliss_cat["source_type"]
-        )  # galaxy fluxes
-        top_n_bliss = torch.argsort(torch.sum(bliss_fluxes, dim=2).squeeze())[-n:]
-
-        decals_cat = self._get_sliced_catalog(decals_cat, top_n_decals)
-        photo_cat = self._get_sliced_catalog(photo_cat, top_n_photo)
-        bliss_cat = self._get_sliced_catalog(bliss_cat, top_n_bliss)
-
-        return {"decals": decals_cat, "photo": photo_cat, "bliss": bliss_cat}
-
     @pytest.fixture(scope="class")
     def tile_catalog(self, cfg):
         """Generate a tile catalog for testing classification metrics."""
