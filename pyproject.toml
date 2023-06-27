@@ -40,6 +40,7 @@ yolov5 = "^7.0.9"
 bokeh = "^3.1.1"
 astropy = ">=4.2.1"
 galsim = ">=2.2.4"
+reproject = ">=0.11.0"
 
 [tool.poetry.dev-dependencies]
 Cython = ">=0.29.21"

@@ -188,6 +188,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         self,
         train_n_batches: int,
         batch_size: int,
+        bands: List,
         num_workers: int,
         cached_data_path: str,
         file_prefix: str,
@@ -201,6 +202,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         self.batch_size = batch_size
         self.cached_data_path = cached_data_path
         self.file_prefix = file_prefix
+        self.bands = bands
         self.val_split_file_idxs = val_split_file_idxs or []
         self.test_split_file_idxs = test_split_file_idxs or []
 

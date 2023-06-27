@@ -45,6 +45,7 @@ def weight_save_path(bliss_client, cfg):
         train_n_batches=1,
         batch_size=5,
         val_split_file_idxs=[1],
+        test_split_file_idxs=[1],
         training={
             "n_epochs": 1,
             "trainer": {"check_val_every_n_epoch": 1, "log_every_n_steps": 1},

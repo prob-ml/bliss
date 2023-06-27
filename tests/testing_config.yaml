@@ -9,7 +9,7 @@ simulator:
     num_workers: 0
     sdss_fields:
         dir: ${paths.sdss}
-        bands: [2]
+        bands: [0, 1, 2, 3, 4]
         field_list:  # list of dictionaries, each with run, camcol, and list of fields
           - run: 94
             camcol: 1
@@ -20,9 +20,6 @@ simulator:
         batch_size: 32
         prob_galaxy: 0.5
         star_flux_min: 1e5
-    background:
-        _target_: bliss.simulator.background.ConstantBackground
-        background: [865.0]
 
 cached_simulator:
     num_workers: 0
@@ -41,7 +38,7 @@ training:
     version: "version0"
     n_epochs: 1
     enable_early_stopping: true
-    pretrained_weights: ${paths.pretrained_models}/sdss.pt
+    pretrained_weights: ${paths.pretrained_models}/zscore_five_band.pt
     seed: 42
     weight_save_path: null
     trainer:
@@ -57,7 +54,6 @@ training:
 
 predict:
     decals_frame: ${paths.decals}/tractor-3366m010.fits
-    weight_save_path: ${paths.pretrained_models}/sdss.pt
     device: "cpu"
     crop:
         left_upper_corner: [160, 160]
