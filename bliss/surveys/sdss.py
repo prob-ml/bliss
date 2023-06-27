@@ -24,7 +24,6 @@ class SloanDigitalSkySurvey(pl.LightningDataModule, Dataset):
         run=3900,
         camcol=6,
         fields=(269,),
-        bands=(0, 1, 2, 3, 4),
         predict_device=None,
         predict_crop=None,
         # take a way to specify labels? e.g., from sdss PhotoFullCatalog or decals catalog
@@ -37,7 +36,7 @@ class SloanDigitalSkySurvey(pl.LightningDataModule, Dataset):
         self.run = run
         self.camcol = camcol
         self.fields = fields
-        self.bands = bands
+        self.bands = [0, 1, 2, 3, 4]
 
         self.downloader = SDSSDownloader(run, camcol, fields[0], download_dir=sdss_dir)
 
@@ -255,7 +254,7 @@ class PhotoFullCatalog(FullCatalog):
     """
 
     @classmethod
-    def from_file(cls, sdss_path, run, camcol, field, band):
+    def from_file(cls, sdss_path, run, camcol, field, sdss_obj):
         sdss_path = Path(sdss_path)
         camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
         po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
@@ -280,11 +279,11 @@ class PhotoFullCatalog(FullCatalog):
         star_bools = star_bools[keep]
         ras = ras[keep]
         decs = decs[keep]
-        fluxes = fluxes[keep][:, band]
-        mags = mags[keep][:, band]
+        fluxes = fluxes[keep]
+        mags = mags[keep]
+        n_bands = 5
 
-        sdss = SloanDigitalSkySurvey(str(sdss_path), run, camcol, fields=(field,), bands=(band,))
-        wcs: WCS = sdss[0]["wcs"][0]
+        wcs: WCS = sdss_obj[0]["wcs"][2]  # r-band WCS
 
         # get pixel coordinates
         pts = []
@@ -305,14 +304,14 @@ class PhotoFullCatalog(FullCatalog):
             "plocs": plocs.reshape(1, nobj, 2),
             "n_sources": torch.tensor((nobj,)),
             "source_type": source_type.reshape(1, nobj, 1),
-            "fluxes": fluxes.reshape(1, nobj, 1),
-            "mags": mags.reshape(1, nobj, 1),
+            "fluxes": fluxes.reshape(1, nobj, n_bands),
+            "mags": mags.reshape(1, nobj, n_bands),
             "ra": ras.reshape(1, nobj, 1),
             "dec": decs.reshape(1, nobj, 1),
         }
 
-        height = sdss[0]["image"].shape[1]
-        width = sdss[0]["image"].shape[2]
+        height = sdss_obj[0]["image"].shape[1]
+        width = sdss_obj[0]["image"].shape[2]
 
         return cls(height, width, d)
 
