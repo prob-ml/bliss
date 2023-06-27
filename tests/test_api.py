@@ -59,6 +59,10 @@ class TestApi:
         monkeypatch.setattr(api, "_train", mock_train)
         bliss_client.train("test", training={"n_epochs": 1})
 
+    def test_train_on_cached_data(self, cfg, bliss_client, monkeypatch):
+        monkeypatch.setattr(api, "_train", mock_train)
+        bliss_client.train_on_cached_data("test.pt", 4, 4, None, None, "test_pretrained.pt")
+
     def test_load_survey(self, bliss_client, monkeypatch):
         monkeypatch.setattr(requests, "get", mock_get)
         monkeypatch.setattr(requests, "post", mock_post)
