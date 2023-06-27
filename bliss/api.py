@@ -159,7 +159,8 @@ class BlissClient:
             OmegaConf.update(cfg, k, v)
 
         est_cat, _, _, _, pred = _predict_sdss(cfg)
-        est_cat_table, galaxy_params_table = fullcat_to_astropy_table(est_cat)
+        full_cat = est_cat.to_full_params()
+        est_cat_table, galaxy_params_table = fullcat_to_astropy_table(full_cat)
         pred_table = pred_to_astropy_table(pred)
         return est_cat, est_cat_table, galaxy_params_table, pred_table
 

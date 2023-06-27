@@ -4,21 +4,16 @@ from pathlib import Path
 
 import pytest
 import requests
-from mock_tests import mock_get, mock_post, mock_train
+from mock_tests import mock_generate, mock_get, mock_post, mock_predict_sdss, mock_train
 from omegaconf import OmegaConf
 
 from bliss import api
 from bliss.api import BlissClient
 
 
-@pytest.fixture(scope="session")
-def cwd(tmpdir_factory):
-    return tmpdir_factory.mktemp("cwd")
-
-
 @pytest.fixture(scope="class")
-def bliss_client(cwd, cfg):
-    client = BlissClient(str(cwd))
+def bliss_client(cfg, tmpdir_factory):
+    client = BlissClient(str(tmpdir_factory.mktemp("cwd")))
     # Hack to apply select conftest.py overrides, since client.base_cfg should be private
     overrides = {
         "training.trainer.accelerator": cfg.training.trainer.accelerator,
@@ -29,38 +24,17 @@ def bliss_client(cwd, cfg):
     return client
 
 
-@pytest.fixture(scope="class")
-def cached_data_path_api(bliss_client):
-    bliss_client.cached_data_path = bliss_client.cwd + "/data/cached_dataset"
-    bliss_client.generate(n_batches=3, batch_size=5, max_images_per_file=10)
-    return bliss_client.cached_data_path
-
-
-@pytest.fixture(scope="class")
-def weight_save_path(bliss_client, cfg):
-    """Train model for 1 epoch and return path to saved model."""
-    weight_save_path = "tutorial_encoder/0_fixture.pt"
-    bliss_client.train_on_cached_data(
-        weight_save_path=weight_save_path,
-        train_n_batches=1,
-        batch_size=5,
-        val_split_file_idxs=[1],
-        test_split_file_idxs=[1],
-        training={
-            "n_epochs": 1,
-            "trainer": {"check_val_every_n_epoch": 1, "log_every_n_steps": 1},
-            "pretrained_weights": cfg.predict.weight_save_path,
-        },
-    )
-    return weight_save_path
-
-
-@pytest.mark.usefixtures("bliss_client", "cached_data_path_api", "weight_save_path")
+@pytest.mark.usefixtures("bliss_client")
 class TestApi:
-    def test_get_dataset_file(self, bliss_client, cached_data_path_api):
-        bliss_client.cached_data_path = cached_data_path_api
+    def test_get_dataset_file(self, cfg, bliss_client):
+        bliss_client.cached_data_path = cfg.paths.data + "/tests/multiband_data"
         dataset0 = bliss_client.get_dataset_file(filename="dataset_0.pt")
         assert isinstance(dataset0, list), "dataset0 must be a list"
+
+    def test_generate(self, bliss_client, monkeypatch):
+        monkeypatch.setattr(api, "_generate", mock_generate)
+        bliss_client.generate(n_batches=2, batch_size=1, max_images_per_file=2)
+        assert Path(bliss_client.cached_data_path).exists()
 
     def test_load_pretrained_weights(self, bliss_client, monkeypatch):
         monkeypatch.setattr(requests, "get", mock_get)
@@ -105,7 +79,8 @@ class TestApi:
             f"{bliss_client.cwd}/{download_dir}/94/1/12/psField-000094-1-0012.fits"
         ).exists()
 
-    def test_predict_sdss_default_rcf(self, bliss_client, weight_save_path, cfg):
-        paths = {"sdss": cfg.paths.sdss, "decals": cfg.paths.decals}
-        bliss_client.predict_sdss(weight_save_path=weight_save_path, paths=paths)
+    def test_predict_sdss_default_rcf(self, cfg, bliss_client, monkeypatch):
+        monkeypatch.setattr(api, "_predict_sdss", mock_predict_sdss)
+        # cached predict data stored at cfg.paths.data, copied to temp dir in mock_predict_sdss
+        bliss_client.predict_sdss("test_path", paths={"data": cfg.paths.data})
         bliss_client.plot_predictions_in_notebook()
