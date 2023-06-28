@@ -2,12 +2,13 @@ from pathlib import Path
 
 import mock_tests
 import pytest
+import torch
 from astropy.table import Table
 from omegaconf import OmegaConf
 
 from bliss import api, generate, train
 from bliss.api import BlissClient
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, SourceType
 
 
 @pytest.fixture(scope="class")
@@ -125,3 +126,22 @@ class TestApi:
 
         bliss_client.plot_predictions_in_notebook()
         assert Path(bliss_client.base_cfg.predict.plot.out_file_name).exists()
+
+    def test_fullcat_to_astropy_table(self):
+        # make 1 x 1 x 1 tensors in catalog
+        d = {
+            "plocs": torch.tensor([[[0.0, 0.0]]]),
+            "n_sources": torch.tensor((1,)),
+            "fluxes": torch.tensor([[[0.0]]]),
+            "mags": torch.tensor([[[0.0]]]),
+            "ra": torch.tensor([[[0.0]]]),
+            "dec": torch.tensor([[[0.0]]]),
+            "star_log_fluxes": torch.tensor([[[0.0]]]),
+            "star_fluxes": torch.tensor([[[0.0]]]),
+            "source_type": torch.tensor([[[SourceType.STAR]]]),
+            "galaxy_params": torch.rand(1, 1, 7),
+        }
+        cat = FullCatalog(1, 1, d)
+        est_cat_table, galaxy_params_table = api.fullcat_to_astropy_table(cat)
+        assert isinstance(est_cat_table, Table)
+        assert isinstance(galaxy_params_table, Table)
