@@ -25,6 +25,12 @@ def bliss_client(cfg, tmpdir_factory):
 
 @pytest.mark.usefixtures("bliss_client")
 class TestApi:
+    """Basic tests for API functions like generate, train, and predict_sdss.
+
+    Note that these tests are mostly focused on interface and output directory structure, instead
+    of the general behavior of those functions (which is tested in other files).
+    """
+
     def test_generate(self, bliss_client, monkeypatch):
         monkeypatch.setattr(generate, "instantiate", mock_tests.mock_simulator)
         monkeypatch.setattr(generate, "itemize_data", mock_tests.mock_itemize_data)
