@@ -216,19 +216,29 @@ class BlissClient:
 
 
 def fullcat_to_astropy_table(est_cat: FullCatalog):
-    assert list(est_cat.keys()) == [
+    required_keys = [
         "star_log_fluxes",
         "star_fluxes",
         "source_type",
         "galaxy_params",
     ]
+    assert all(k in est_cat.keys() for k in required_keys), "`est_cat` missing required keys"
 
     # Convert dictionary of tensors to list of dictionaries
-    n = [torch.squeeze(v).shape[0] for v in est_cat.values()][0]  # number of rows
-    est_cat_list = [{k: torch.squeeze(v)[i].cpu() for k, v in est_cat.items()} for i in range(n)]
+    on_vals = {}
+    is_on_mask = est_cat.get_is_on_mask()
+    for k, v in est_cat.items():
+        if k == "galaxy_params":
+            # reshape get_is_on_mask() to have same last dimension as galaxy_params
+            galaxy_params_mask = is_on_mask.unsqueeze(-1).expand_as(v)
+            on_vals[k] = v[galaxy_params_mask].reshape(-1, v.shape[-1]).cpu()
+        else:
+            on_vals[k] = v[is_on_mask].cpu()
+    n = is_on_mask.sum()  # number of (predicted) objects
+    rows = [{k: v[i].cpu() for k, v in on_vals.items()} for i in range(n)]
 
     # Convert to astropy table
-    est_cat_table = Table(est_cat_list)
+    est_cat_table = Table(rows)
     # Convert all _fluxes columns to u.Quantity
     log_nmgy = (u.LogUnit(u.nmgy),)
     est_cat_table["star_log_fluxes"] = est_cat_table["star_log_fluxes"] * log_nmgy
@@ -296,7 +306,7 @@ def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
             raise NotImplementedError(f"Unknown distribution {pred_dist}")
 
     # convert dictionary of tensors to list of dictionaries
-    n = [torch.squeeze(v).shape[0] for v in dist_params.values()][0]  # number of rows
+    n = torch.squeeze(dist_params["on_prob_false"]).shape[0]  # number of rows
     dist_params_list = [
         {k: torch.squeeze(v)[i].cpu() for k, v in dist_params.items()} for i in range(n)
     ]
