@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import DataLoader, IterableDataset
 
 from bliss.catalog import TileCatalog
+from bliss.surveys.sdss import SDSSDownloader
 
 
 class MockGetResponse:
@@ -43,6 +44,22 @@ class MockTrainer:
 class MockCallback:
     def __init__(self, *args, **kwargs):
         self.best_model_path = "data/tests/test_checkpoint.pt"
+
+
+class MockSDSSDownloader(SDSSDownloader):
+    def __init__(self, run, camcol, field, download_dir):
+        # copy data from normal dir instead of downloading
+        shutil.copytree(
+            f"data/sdss/{run}/{camcol}/{field}",
+            f"{download_dir}/{run}/{camcol}/{field}",
+            dirs_exist_ok=True,
+        )
+        pf_file = f"photoField-{run:06d}-{camcol:d}.fits"
+        shutil.copyfile(
+            f"data/sdss/{run}/{camcol}/{pf_file}", f"{download_dir}/{run}/{camcol}/{pf_file}"
+        )
+
+        super().__init__(run, camcol, field, download_dir)
 
 
 def mock_get(*args, **kwargs):

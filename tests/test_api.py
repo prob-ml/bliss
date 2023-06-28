@@ -1,10 +1,7 @@
-import bz2
-import gzip
 from pathlib import Path
 
 import mock_tests
 import pytest
-import requests
 from astropy.table import Table
 from omegaconf import OmegaConf
 
@@ -45,8 +42,8 @@ class TestApi:
         assert isinstance(dataset0, list)
 
     def test_load_pretrained_weights(self, bliss_client, monkeypatch):
-        monkeypatch.setattr(requests, "get", mock_tests.mock_get)
-        monkeypatch.setattr(requests, "post", mock_tests.mock_post)
+        monkeypatch.setattr("requests.get", mock_tests.mock_get)
+        monkeypatch.setattr("requests.post", mock_tests.mock_post)
 
         filename = "sdss_pretrained.pt"
         bliss_client.load_pretrained_weights_for_survey(
@@ -92,10 +89,10 @@ class TestApi:
         assert Path(f"{bliss_client.base_cfg.paths.output}/{weight_save_path}").exists()
 
     def test_load_survey(self, bliss_client, monkeypatch):
-        monkeypatch.setattr(requests, "get", mock_tests.mock_get)
-        monkeypatch.setattr(requests, "post", mock_tests.mock_post)
-        monkeypatch.setattr(gzip, "decompress", lambda x: x)
-        monkeypatch.setattr(bz2, "decompress", lambda x: x)
+        monkeypatch.setattr("requests.get", mock_tests.mock_get)
+        monkeypatch.setattr("requests.post", mock_tests.mock_post)
+        monkeypatch.setattr("gzip.decompress", lambda x: x)
+        monkeypatch.setattr("bz2.decompress", lambda x: x)
 
         download_dir = "data"
         bliss_client.load_survey("sdss", 94, 1, 12, download_dir)
@@ -111,7 +108,7 @@ class TestApi:
             f"{bliss_client.cwd}/{download_dir}/94/1/12/psField-000094-1-0012.fits"
         ).exists()
 
-    def test_predict_sdss_default_rcf(self, cfg, bliss_client, monkeypatch):
+    def test_predict_sdss_default_rcf(self, bliss_client, monkeypatch):
         monkeypatch.setattr(api, "_predict_sdss", mock_tests.mock_predict_sdss)
         # cached predict data copied to temp dir in mock_tests.mock_predict_sdss
         cat, cat_table, gal_params_table, pred_table = bliss_client.predict_sdss("test_path")
