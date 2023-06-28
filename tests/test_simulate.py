@@ -27,7 +27,7 @@ class TestSimulate:
     def test_simulate(self, cfg):
         # loads single r-band model with correct number of outputs
         sim_dataset = instantiate(cfg.simulator)
-        sim_tile = torch.load(cfg.paths.data + "/test_image/dataset_0.pt")
+        sim_tile = torch.load(cfg.paths.data + "/tests/test_image/dataset_0.pt")
         # NOTE: sim_tile is a batch of 4 images
         sim_tile = TileCatalog(4, sim_tile)
 
@@ -69,8 +69,9 @@ class TestSimulate:
         # NOTE: Considers ALL 5 predicted fluxes and ALL four images in batch
         assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 0.3
 
-    def test_multi_background(self, cfg):
+    def test_multi_background(self, cfg, monkeypatch):
         """Test loading backgrounds and PSFs from multiple fields works."""
+        monkeypatch.delattr("requests.get")  # make sure we don't download anything
         sdss_fields = {
             "dir": cfg.simulator.sdss_fields.dir,
             "bands": cfg.simulator.sdss_fields.bands,
@@ -91,8 +92,9 @@ class TestSimulate:
         background = SimulatedSDSSBackground(bg_cfg)
         assert background.background.size()[0] == 2
 
-    def test_multi_band(self, cfg):
+    def test_multi_band(self, cfg, monkeypatch):
         """Test simulating data with multiple bands."""
+        monkeypatch.delattr("requests.get")  # make sure we don't download anything
         cfg.simulator.sdss_fields.bands = [2, 3, 4]  # override default with multiple bands
         simulator = instantiate(cfg.simulator)
         batch = simulator.get_batch()

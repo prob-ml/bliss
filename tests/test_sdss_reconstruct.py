@@ -1,12 +1,11 @@
 import numpy as np
 from hydra.utils import instantiate
-
-from bliss.predict import predict_sdss
+from mock_tests import mock_predict_sdss
 
 
 class TestSdssReconstruct:
     def test_sdss_reconstruct(self, cfg):
-        est_tile, true_img, true_bg, _, _ = predict_sdss(cfg)
+        est_tile, true_img, true_bg, _, _ = mock_predict_sdss(cfg)
 
         # reconstruction test only considers r-band image/catalog params
         decoder_obj = instantiate(cfg.simulator.decoder)
