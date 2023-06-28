@@ -35,6 +35,11 @@ class Encoder(pl.LightningModule):
     representation of this image.
     """
 
+    SDSS_BANDS = ["u", "g", "r", "i", "z"]  # NOTE: SDSS-specific naming conventions
+    STAR_FLUX_NAMES = [f"star_log_flux_{bnd}" for bnd in SDSS_BANDS]
+    GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in SDSS_BANDS]
+    GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
+
     def __init__(
         self,
         architecture: DictConfig,
@@ -63,7 +68,6 @@ class Encoder(pl.LightningModule):
         self.save_hyperparameters()
 
         self.bands = bands
-        self.sdss_bands = ["u", "g", "r", "i", "z"]  # NOTE: SDSS-specific naming conventions
         self.n_bands = len(self.bands)
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
@@ -90,10 +94,6 @@ class Encoder(pl.LightningModule):
 
     @property
     def dist_param_groups(self):
-        # create a unique parameter for each per-band flux
-        star_fluxes = [f"star_log_flux {bnd}" for bnd in self.sdss_bands]
-        gal_fluxes = [f"galsim_flux_{bnd}" for bnd in self.sdss_bands]
-
         d = {
             "on_prob": UnconstrainedBernoulli(),
             "loc": UnconstrainedDiagonalBivariateNormal(),
@@ -106,9 +106,9 @@ class Encoder(pl.LightningModule):
             "galsim_bulge_q": UnconstrainedLogitNormal(),
             "galsim_a_b": UnconstrainedLogNormal(),
         }
-        for flux in star_fluxes:
+        for flux in self.STAR_FLUX_NAMES:
             d[flux] = UnconstrainedNormal(low_clamp=-6, high_clamp=3)
-        for flux in gal_fluxes:
+        for flux in self.GAL_FLUX_NAMES:
             d[flux] = UnconstrainedLogNormal()
         return d
 
@@ -129,7 +129,6 @@ class Encoder(pl.LightningModule):
         in self.input_transform_params. Supported options are:
             use_deconv_channel: add channel for image deconvolved with PSF
             concat_psf_params: add each PSF parameter as a channel
-            #TODO: add other transforms here, like z-score and multi-band
 
         Args:
             batch: input batch (as dictionary)
@@ -138,9 +137,14 @@ class Encoder(pl.LightningModule):
             Tensor: b x c x h x w tensor, where the number of input channels `c` is based on the
                 input transformations to use
         """
+        # Support single-band data with single band specified
+        if batch["images"].shape[1] == 1 and self.n_bands == 1:
+            imgs = batch["images"]
+            bgs = batch["background"]
         # If using five-band cached simulator, only select bands encoder is expecting
-        imgs = batch["images"][:, self.bands]
-        bgs = batch["background"][:, self.bands]
+        else:
+            imgs = batch["images"][:, self.bands]
+            bgs = batch["background"][:, self.bands]
         inputs = [imgs, bgs]
 
         if self.input_transform_params.get("use_deconv_channel"):
@@ -152,8 +156,8 @@ class Encoder(pl.LightningModule):
             assert (
                 "psf_params" in batch
             ), "concat_psf_params specified but psf params not present in data"
-            n, _, h, w = batch["images"].size()
-            inputs.append(batch["psf_params"].view(n, 6, 1, 1).expand(n, 6, h, w))
+            n, c, h, w = batch["images"].size()
+            inputs.append(batch["psf_params"].view(n, 6 * c, 1, 1).expand(n, 6 * c, h, w))
         if self.input_transform_params.get("z_score"):
             assert (
                 batch["background"][0, 0].std() > 0
@@ -212,41 +216,39 @@ class Encoder(pl.LightningModule):
         est_catalog_dict = {}
 
         # populate est_catalog_dict with per-band (log) star fluxes
-        star_logflux_names = [f"star_log_flux {bnd}" for bnd in self.sdss_bands]
-        flux_d = {}
-        for flux in star_logflux_names:
-            flux_d[flux] = pred[flux].mode  # type: ignore
-            flux_d[flux] = torch.mul(flux_d[flux], tile_is_on_array)  # type: ignore
-            flux_d[flux] = rearrange(flux_d[flux], "b ht wt -> b ht wt 1 1")
-        star_log_fluxes = torch.cat([flux_d[f"star_log_flux {bnd}"] for bnd in self.sdss_bands], 4)
+        star_log_fluxes = torch.stack(
+            [pred[name].mode * tile_is_on_array for name in self.STAR_FLUX_NAMES], dim=3
+        )
         star_fluxes = star_log_fluxes.exp()
+
+        # populate est_catalog_dict with source type
         galaxy_bools = pred["galaxy_prob"].mode
         star_bools = 1 - galaxy_bools
         source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
-        galsimflux_names = [f"flux_{bnd}" for bnd in self.sdss_bands]
-        galsim_names = galsimflux_names + [
-            "disk_frac",
-            "beta_radians",
-            "disk_q",
-            "a_d",
-            "bulge_q",
-            "a_b",
-        ]
-        galsim_dists = [pred[f"galsim_{name}"] for name in galsim_names]
+
+        # populate est_catalog_dict with galaxy parameters
+        galsim_dists = [pred[f"galsim_{name}"] for name in self.GALSIM_NAMES]
         # for params with transformed distribution mode and median aren't implemented.
         # instead, we compute median using inverse cdf 0.5
         galsim_param_lst = [d.icdf(torch.tensor(0.5)) for d in galsim_dists]
         galaxy_params = torch.stack(galsim_param_lst, dim=3)
 
+        # populate est_catalog_dict with per-band galaxy fluxes
+        galaxy_fluxes = torch.stack(
+            [pred[name].icdf(torch.tensor(0.5)) * tile_is_on_array for name in self.GAL_FLUX_NAMES],
+            dim=3,
+        )
+
         # we have to unsqueeze some tensors below because a TileCatalog can store multiple
         # light sources per tile, but we predict only one source per tile
         est_catalog_dict = {
             "locs": rearrange(pred["loc"].mode, "b ht wt d -> b ht wt 1 d"),
-            "star_log_fluxes": star_log_fluxes,
-            "star_fluxes": star_fluxes,
+            "star_log_fluxes": rearrange(star_log_fluxes, "b ht wt d -> b ht wt 1 d"),
+            "star_fluxes": rearrange(star_fluxes, "b ht wt d -> b ht wt 1 d"),
             "n_sources": tile_is_on_array,
             "source_type": rearrange(source_type, "b ht wt -> b ht wt 1 1"),
             "galaxy_params": rearrange(galaxy_params, "b ht wt d -> b ht wt 1 d"),
+            "galaxy_fluxes": rearrange(galaxy_fluxes, "b ht wt d -> b ht wt 1 d"),
         }
 
         est_tile_catalog = TileCatalog(self.tile_slen, est_catalog_dict)
@@ -284,28 +286,28 @@ class Encoder(pl.LightningModule):
         loss += binary_loss
         loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
 
-        # star flux losses
+        # flux losses
         true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
         star_log_fluxes = rearrange(
             true_tile_cat["star_log_fluxes"], "b ht wt 1 bnd -> b ht wt bnd"
         )
-        for i, bnd in enumerate(self.sdss_bands):
-            star_flux_loss = -pred[f"star_log_flux {bnd}"].log_prob(star_log_fluxes[:, :, :, i])
-            star_flux_loss *= true_star_bools
+        galaxy_fluxes = rearrange(true_tile_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
+        for i, (star_name, gal_name) in enumerate(zip(self.STAR_FLUX_NAMES, self.GAL_FLUX_NAMES)):
+            # star flux loss
+            star_flux_loss = -pred[star_name].log_prob(star_log_fluxes[..., i]) * true_star_bools
             loss += star_flux_loss
-            loss_with_components[f"star_flux_loss {bnd}"] = (
-                star_flux_loss.sum() / true_star_bools.sum()
-            )
+            loss_with_components[star_name] = star_flux_loss.sum() / true_star_bools.sum()
+
+            # galaxy flux loss
+            gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., i]) * true_gal_bools
+            loss += gal_flux_loss
+            loss_with_components[gal_name] = gal_flux_loss.sum() / true_gal_bools.sum()
 
         # galaxy properties loss
-        fluxes = [f"flux_{bnd}" for bnd in self.sdss_bands]
-        galsim_names = fluxes + ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
         galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
-        for i, param_name in enumerate(galsim_names):
+        for i, param_name in enumerate(self.GALSIM_NAMES):
             galsim_pn = f"galsim_{param_name}"
-            true_param_vals = galsim_true_vals[:, :, :, i]
-            loss_term = -pred[galsim_pn].log_prob(true_param_vals)
-            loss_term *= true_gal_bools
+            loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i]) * true_gal_bools
             loss += loss_term
             loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
 
