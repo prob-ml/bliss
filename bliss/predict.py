@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import torch
 from bokeh.models import TabPanel, Tabs
@@ -29,8 +31,9 @@ def align(img, sdss):
 
     # align with r-band WCS
     for bnd in range(img.shape[0]):
+        inputs = (img[bnd], sdss[0]["wcs"][bnd])
         reproj, footprint = reproject_interp(  # noqa: WPS317
-            (img[bnd], sdss[0]["wcs"][bnd]), sdss[0]["wcs"][2], order="bicubic"
+            inputs, sdss[0]["wcs"][2], order="bicubic", shape_out=img[bnd].shape
         )
         reproj_d[bnd] = reproj
         footprint_d[bnd] = footprint
@@ -191,6 +194,8 @@ def plot_predict(cfg, image, background, true_plocs, est_cat):
         title = "log-"
 
     if cfg.predict.plot.out_file_name is not None:
+        # Create parent folder
+        Path(cfg.predict.plot.out_file_name).parent.mkdir(parents=True, exist_ok=True)
         output_file(cfg.predict.plot.out_file_name)
 
     np_image = np.array(image)

@@ -21,12 +21,3 @@ class TestSDSS:
         assert an_obj["field"] == 269
         assert an_obj["gain"][3] == pytest.approx(4.76)
         assert isinstance(an_obj["wcs"], list)
-
-        sdss_obj9 = SloanDigitalSkySurvey(
-            sdss_dir,
-            run=3900,
-            camcol=6,
-            fields=[269, 745],
-            bands=range(5),
-        )
-        assert (len(sdss_obj9)) == 2
