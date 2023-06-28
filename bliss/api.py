@@ -162,7 +162,7 @@ class BlissClient:
         full_cat = est_cat.to_full_params()
         est_cat_table, galaxy_params_table = fullcat_to_astropy_table(full_cat)
         pred_table = pred_to_astropy_table(pred)
-        return est_cat, est_cat_table, galaxy_params_table, pred_table
+        return full_cat, est_cat_table, galaxy_params_table, pred_table
 
     def plot_predictions_in_notebook(self):
         """Plot predictions in notebook."""

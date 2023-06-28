@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 
 import torch
+from torch.utils.data import DataLoader, IterableDataset
 
 from bliss.catalog import TileCatalog
 
@@ -20,6 +21,30 @@ class MockPostResponse:
         return {"objects": [{"actions": {"download": {"href": "test"}}}]}
 
 
+class MockSimulator(IterableDataset):
+    def __iter__(self):
+        yield {}
+
+    def train_dataloader(self):
+        return DataLoader(self)
+
+
+class MockTrainer:
+    def __init__(self, *args, **kwargs):
+        self.logger = kwargs.get("logger", None)
+
+    def fit(self, *args, **kwargs):
+        pass
+
+    def test(self, *args, **kwargs):
+        pass
+
+
+class MockCallback:
+    def __init__(self, *args, **kwargs):
+        self.best_model_path = "data/tests/test_checkpoint.pt"
+
+
 def mock_get(*args, **kwargs):
     return MockGetResponse()
 
@@ -28,16 +53,24 @@ def mock_post(*args, **kwargs):
     return MockPostResponse()
 
 
-def mock_generate(cfg, *args, **kwargs):
-    Path(cfg.generate.cached_data_path).mkdir(parents=True, exist_ok=True)
+def mock_simulator(*args, **kwargs):
+    return MockSimulator()
 
 
-def mock_train(*args, **kwargs):
-    pass
+def mock_itemize_data(*args, **kwargs):
+    return []
+
+
+def mock_trainer(*args, **kwargs):
+    return MockTrainer(*args, **kwargs)
+
+
+def mock_checkpoint_callback(*args, **kwargs):
+    return MockCallback()
 
 
 def mock_predict_sdss(cfg, *args, **kwargs):
-    test_data_path = cfg.paths.data + "/tests"
+    test_data_path = "data/tests"
 
     # copy prediction file to temp directory so tests can find it
     Path(cfg.predict.plot.out_file_name).parent.mkdir(parents=True, exist_ok=True)
