@@ -206,10 +206,31 @@ class ImagePrior(pl.LightningModule):
             run = field_params["run"]
             camcol = field_params["camcol"]
             fields = field_params["fields"]
+            # load project SDSS dir
+            sdss_path = Path(self.sdss)
+
+            # Set photoField file Path
+            camcol_path = sdss_path.joinpath(str(run), str(camcol))
+            pf_file = f"photoField-{run:06d}-{camcol:d}.fits"
+            pf_path = camcol_path.joinpath(pf_file)
+            if not Path(pf_path).exists():
+                self.downloader.download_pf()
+            msg = (
+                f"{pf_path} does not exist. "
+                + "Make sure data files are available for specified fields."
+            )
+            assert Path(pf_path).exists(), msg
+
+            # Retrieve gains for fields
+            pf_fits = fits.getdata(pf_path)
+            fieldgains = pf_fits["GAIN"]
+
             for field in fields:
-                sdss_path = Path(self.sdss)
-                camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
-                po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+                gains = fieldgains[field]
+                # Set photoObj file path
+                field_dir = sdss_path / str(run) / str(camcol) / str(field)
+                po_path = field_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+
                 if not po_path.exists():
                     SDSSDownloader(run, camcol, field, str(sdss_path)).download_po()
                 msg = (
@@ -228,12 +249,14 @@ class ImagePrior(pl.LightningModule):
 
                 for obj, _ in enumerate(objc_type):
                     if objc_type[obj] == 6 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        # flux relative to r-band
-                        ratios = fluxes[obj] / fluxes[obj][2]  # noqa: WPS220
+                        ratios = self._compute_flux_ratio(  # noqa: WPS220
+                            fluxes[obj], run, camcol, field, field_dir, gains
+                        )
                         star_fluxes_rest.append(ratios)  # noqa: WPS220
                     elif objc_type[obj] == 3 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        # flux relative to r-band
-                        ratios = fluxes[obj] / fluxes[obj][2]  # noqa: WPS220
+                        ratios = self._compute_flux_ratio(  # noqa: WPS220
+                            fluxes[obj], run, camcol, field, field_dir, gains
+                        )
                         gal_fluxes_rest.append(ratios)  # noqa: WPS220
 
                 if star_fluxes_rest:
@@ -248,6 +271,45 @@ class ImagePrior(pl.LightningModule):
         u_max = 1 - (min_x / max_x) ** alpha
         uniform_samples = torch.rand(n_samples) * u_max
         return min_x / (1.0 - uniform_samples) ** (1 / alpha)
+
+    def _compute_flux_ratio(self, obj_fluxes, run, camcol, field, field_dir, gains):
+        """Query SDSS frames to compute relative flux ratios in units of nmgys.
+
+        Args:
+            obj_fluxes: tensor of electron counts for a particular SDSS object
+            run: specific scan
+            camcol: scanline within run
+            field: division of scanline
+            field_dir: directory containing frames corresponding to input field
+            gains: list containing band-specific gain values
+
+        Returns:
+            ratios (Tensor): Ratio of nmgys for each light source in field
+            relative to r-band
+        """
+        ratios = torch.zeros(obj_fluxes.size())
+
+        for i, bnd in enumerate("ugriz"):
+            # read frame corresponding to rcf and band
+            frame_path = field_dir / f"frame-{bnd}-{run:06d}-{camcol:d}-{field:04d}.fits"
+            frame = fits.open(frame_path)
+            calibration = frame[1].data  # pylint: disable=maybe-no-member
+            cal_mean = calibration.mean()
+
+            # gain varies across bands
+            bnd_gain = gains[i]
+            r_gain = gains[2]  # hard-code r-gain
+
+            # distribution of nelec_per_nmgy very clustered around mean
+            nelec_per_nmgy_bnd = bnd_gain / cal_mean
+            nelec_per_nmgy_r = r_gain / cal_mean
+            nelec_per_nmgy_rat = nelec_per_nmgy_bnd / nelec_per_nmgy_r
+
+            # (nelec ratio relative to r-band) / (nmgy/nelec ratio relative to r band)
+            # result: ratio in units of nmgys
+            ratios[i] = (obj_fluxes[i] / obj_fluxes[2]) / nelec_per_nmgy_rat
+
+        return ratios
 
     def _sample_galaxy_prior(self, gal_ratios):
         """Sample the latent galaxy params.
