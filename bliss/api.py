@@ -234,20 +234,31 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
             on_vals[k] = v[galaxy_params_mask].reshape(-1, v.shape[-1]).cpu()
         else:
             on_vals[k] = v[is_on_mask].cpu()
+    # Split to different columns for each band
+    for b, bl in enumerate("ugriz"):
+        on_vals[f"star_log_fluxes_{bl}"] = on_vals["star_log_fluxes"][..., b]
+        on_vals[f"star_fluxes_{bl}"] = on_vals["star_fluxes"][..., b]
+    # Remove star_fluxes and star_log_fluxes
+    on_vals.pop("star_fluxes")
+    on_vals.pop("star_log_fluxes")
     n = is_on_mask.sum()  # number of (predicted) objects
     rows = [{k: v[i].cpu() for k, v in on_vals.items()} for i in range(n)]
 
     # Convert to astropy table
     est_cat_table = Table(rows)
     # Convert all _fluxes columns to u.Quantity
-    log_nmgy = (u.LogUnit(u.nmgy),)
-    est_cat_table["star_log_fluxes"] = est_cat_table["star_log_fluxes"] * log_nmgy
-    est_cat_table["star_fluxes"] = est_cat_table["star_fluxes"] * (u.nmgy,)
+    for bl in "ugriz":
+        est_cat_table[f"star_log_fluxes_{bl}"].unit = u.LogUnit(u.nmgy)
+        est_cat_table[f"star_fluxes_{bl}"].unit = u.nmgy
 
     # Create inner table for galaxy_params
     # Convert list of tensors to list of dictionaries
     galaxy_params_names = [
-        "galaxy_flux",
+        "galaxy_flux_u",
+        "galaxy_flux_g",
+        "galaxy_flux_r",
+        "galaxy_flux_i",
+        "galaxy_flux_z",
         "galaxy_disk_frac",
         "galaxy_beta_radians",
         "galaxy_disk_q",
@@ -260,12 +271,12 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
         galaxy_params_dic = {}
         for i, name in enumerate(galaxy_params_names):
             galaxy_params_dic[name] = galaxy_params[i]
-        galaxy_params_dic["galaxy_flux"] = galaxy_params_dic["galaxy_flux"] * u.nmgy
-        galaxy_params_dic["galaxy_beta_radians"] = (
-            galaxy_params_dic["galaxy_beta_radians"] * u.radian
-        )
-        galaxy_params_dic["galaxy_a_d"] = galaxy_params_dic["galaxy_a_d"] * u.arcsec
-        galaxy_params_dic["galaxy_a_b"] = galaxy_params_dic["galaxy_a_b"] * u.arcsec
+        for key, value in galaxy_params_dic.items():
+            if "flux" in key:
+                value.unit = u.nmgy
+        galaxy_params_dic["galaxy_beta_radians"].unit = u.radian
+        galaxy_params_dic["galaxy_a_d"].unit = u.arcsec
+        galaxy_params_dic["galaxy_a_b"].unit = u.arcsec
         galaxy_params_list.append(galaxy_params_dic)
     galaxy_params_table = Table(galaxy_params_list)
     est_cat_table["galaxy_params"] = galaxy_params_table
@@ -313,21 +324,19 @@ def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
 
     pred_table = Table(dist_params_list)
     # convert values to astropy units
-    log_nmgy = u.LogUnit(u.nmgy)
-
     bands = ["u", "g", "r", "i", "z"]  # NOTE: SDSS-specific!
     for bnd in bands:
-        pred_table[f"star_log_flux {bnd}_mean"] = pred_table[f"star_log_flux {bnd}_mean"] * log_nmgy
-        pred_table[f"star_log_flux {bnd}_std"] = pred_table[f"star_log_flux {bnd}_std"] * log_nmgy
-        pred_table[f"galsim_flux_{bnd}_mean"] = pred_table[f"galsim_flux_{bnd}_mean"] * u.nmgy
-        pred_table[f"galsim_flux_{bnd}_std"] = pred_table[f"galsim_flux_{bnd}_std"] * u.nmgy
+        pred_table[f"star_log_flux {bnd}_mean"].unit = u.LogUnit(u.nmgy)
+        pred_table[f"star_log_flux {bnd}_std"].unit = u.LogUnit(u.nmgy)
+        pred_table[f"galsim_flux_{bnd}_mean"].unit = u.nmgy
+        pred_table[f"galsim_flux_{bnd}_std"].unit = u.nmgy
 
-    pred_table["galsim_beta_radians_mean"] = pred_table["galsim_beta_radians_mean"] * u.radian
-    pred_table["galsim_beta_radians_std"] = pred_table["galsim_beta_radians_std"] * u.radian
-    pred_table["galsim_a_d_mean"] = pred_table["galsim_a_d_mean"] * u.arcsec
-    pred_table["galsim_a_d_std"] = pred_table["galsim_a_d_std"] * u.arcsec
-    pred_table["galsim_a_b_mean"] = pred_table["galsim_a_b_mean"] * u.arcsec
-    pred_table["galsim_a_b_std"] = pred_table["galsim_a_b_std"] * u.arcsec
+    pred_table["galsim_beta_radians_mean"].unit = u.radian
+    pred_table["galsim_beta_radians_std"].unit = u.radian
+    pred_table["galsim_a_d_mean"].unit = u.arcsec
+    pred_table["galsim_a_d_std"].unit = u.arcsec
+    pred_table["galsim_a_b_mean"].unit = u.arcsec
+    pred_table["galsim_a_b_std"].unit = u.arcsec
 
     return pred_table
 

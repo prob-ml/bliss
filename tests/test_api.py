@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import mock_tests
+import numpy as np
 import pytest
 import torch
 from astropy.table import Table
@@ -127,6 +128,55 @@ class TestApi:
         bliss_client.plot_predictions_in_notebook()
         assert Path(bliss_client.base_cfg.predict.plot.out_file_name).exists()
 
+        # check that cat_table, gal_params_table contains all expected columns
+        expected_outer_columns = [
+            "star_log_fluxes_u",
+            "star_log_fluxes_g",
+            "star_log_fluxes_r",
+            "star_log_fluxes_i",
+            "star_log_fluxes_z",
+            "star_fluxes_u",
+            "star_fluxes_g",
+            "star_fluxes_r",
+            "star_fluxes_i",
+            "star_fluxes_z",
+            "source_type",
+            "galaxy_params",
+        ]
+        expected_galaxy_params_columns = [
+            "galaxy_flux_u",
+            "galaxy_flux_g",
+            "galaxy_flux_r",
+            "galaxy_flux_i",
+            "galaxy_flux_z",
+            "galaxy_disk_frac",
+            "galaxy_beta_radians",
+            "galaxy_disk_q",
+            "galaxy_a_d",
+            "galaxy_bulge_q",
+            "galaxy_a_b",
+        ]
+        assert all(
+            col in cat_table.colnames for col in expected_outer_columns
+        ), "cat_table missing columns"
+        assert all(
+            col in gal_params_table.colnames for col in expected_galaxy_params_columns
+        ), "gal_params_table missing columns"
+
+        # check that cat_table, gal_params_table fluxes and log_fluxes in correct order of
+        # magnitude (i.e., O(10^1) / O(10^2) for fluxes, O(10^0) for log_fluxes)
+        assert np.all(
+            np.log10(cat_table["star_fluxes_u"].value) <= 2
+        ), "star_fluxes_u not O(10^1); ensure units are in nmgy"
+        assert np.all(
+            np.log10(cat_table["star_log_fluxes_u"].value) <= 1
+        ), "star_log_fluxes_u not O(10^0); ensure units are in log(nmgy)"
+        assert np.all(
+            np.log10(gal_params_table["galaxy_flux_u"].value) <= 3
+        ), "galaxy_flux_u not O(10^1); ensure units are in nmgy"
+
+        # TODO: check that pred_table contains all expected columns
+
     def test_fullcat_to_astropy_table(self):
         # make 1 x 1 x 1 tensors in catalog
         d = {
@@ -136,10 +186,10 @@ class TestApi:
             "mags": torch.tensor([[[0.0]]]),
             "ra": torch.tensor([[[0.0]]]),
             "dec": torch.tensor([[[0.0]]]),
-            "star_log_fluxes": torch.tensor([[[0.0]]]),
-            "star_fluxes": torch.tensor([[[0.0]]]),
+            "star_log_fluxes": torch.tensor([[[0.0, 0.0, 0.0, 0.0, 0.0]]]),
+            "star_fluxes": torch.tensor([[[0.0, 0.0, 0.0, 0.0, 0.0]]]),
             "source_type": torch.tensor([[[SourceType.STAR]]]),
-            "galaxy_params": torch.rand(1, 1, 7),
+            "galaxy_params": torch.rand(1, 1, 5 + 6),  # 5 fluxes (one/band), 6 params
         }
         cat = FullCatalog(1, 1, d)
         est_cat_table, galaxy_params_table = api.fullcat_to_astropy_table(cat)

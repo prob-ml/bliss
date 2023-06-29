@@ -22,7 +22,7 @@ def prepare_image(x, device):
     return x  # noqa: WPS331
 
 
-def align(img, sdss):
+def align(img, ref_wcs):
     """Reproject images based on some reference WCS for pixel alignment."""
     reproj_d = {}
     footprint_d = {}
@@ -31,9 +31,9 @@ def align(img, sdss):
 
     # align with r-band WCS
     for bnd in range(img.shape[0]):
-        inputs = (img[bnd], sdss[0]["wcs"][bnd])
+        inputs = (img[bnd], ref_wcs[bnd])
         reproj, footprint = reproject_interp(  # noqa: WPS317
-            inputs, sdss[0]["wcs"][2], order="bicubic", shape_out=img[bnd].shape
+            inputs, ref_wcs[2], order="bicubic", shape_out=img[bnd].shape
         )
         reproj_d[bnd] = reproj
         footprint_d[bnd] = footprint
@@ -60,7 +60,7 @@ def align(img, sdss):
 def predict_sdss(cfg):
     sdss = instantiate(cfg.predict.dataset)
 
-    sdss_frame = PhotoFullCatalog.from_file(
+    sdss_cat = PhotoFullCatalog.from_file(
         cfg.paths.sdss,
         run=cfg.predict.dataset.run,
         camcol=cfg.predict.dataset.camcol,
@@ -68,11 +68,12 @@ def predict_sdss(cfg):
         sdss_obj=sdss,
     )
 
-    sdss_plocs = sdss_frame.plocs[0]
-    img = sdss[0]["image"]
-    bg = sdss[0]["background"]
-    img = align(img, sdss)
-    bg = align(bg, sdss)
+    sdss_plocs = sdss_cat.plocs[0]
+    sdss[0]["image"] = align(sdss[0]["image"], ref_wcs=sdss[0]["wcs"])
+    sdss[0]["background"] = align(sdss[0]["background"], ref_wcs=sdss[0]["wcs"])
+
+    # mean of the nelec_per_mgy per band
+    nelec_per_nmgy_per_band = np.mean(sdss[0]["nelec_per_nmgy_list"], axis=1)  # ugriz
 
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     enc_state_dict = torch.load(cfg.predict.weight_save_path)
@@ -80,6 +81,8 @@ def predict_sdss(cfg):
     encoder.eval()
     trainer = instantiate(cfg.predict.trainer)
     est_cat, images, background, pred = trainer.predict(encoder, datamodule=sdss)[0].values()
+
+    est_cat = nelec_to_nmgy(est_cat, nelec_per_nmgy_per_band)
     est_full = est_cat.to_full_params()
     if cfg.predict.plot.show_plot and (sdss_plocs is not None):
         ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
@@ -87,7 +90,24 @@ def predict_sdss(cfg):
         cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
         plot_predict(cfg, cropped_image, cropped_background, sdss_plocs, est_full)
 
-    return est_cat, images[0], background[0], sdss_plocs, pred
+    return est_full, images[0], background[0], sdss_plocs, pred
+
+
+def nelec_to_nmgy(est_cat, nelec_per_nmgy_per_band):
+    log_fluxes_suffix = "_log_fluxes"
+    fluxes_suffix = "_fluxes"
+    # reshape nelec_per_nmgy_per_band to (1, 5) to broadcast
+    nelec_per_nmgy_per_band = nelec_per_nmgy_per_band.reshape(1, -1)
+    for key in est_cat.keys():
+        if key.endswith(log_fluxes_suffix):
+            est_cat[key] = torch.tensor(np.array(est_cat[key]) - np.log(nelec_per_nmgy_per_band))
+        elif key.endswith(fluxes_suffix):
+            est_cat[key] = torch.tensor(np.array(est_cat[key]) / nelec_per_nmgy_per_band)
+        elif key == "galaxy_params":
+            clone = est_cat[key].clone()
+            clone[..., :5] = torch.tensor(np.array(clone[..., :5]) / nelec_per_nmgy_per_band)
+            est_cat[key] = clone
+    return est_cat
 
 
 def decal_plocs_from_sdss(cfg):
