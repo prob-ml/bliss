@@ -139,10 +139,10 @@ class Encoder(pl.LightningModule):
                 input transformations to use
         """
         input_bands = batch["images"].shape[1]
-        assert (
-            input_bands >= self.n_bands
-        ), f"Expected at least {self.n_bands} bands in the input but found only {input_bands}"
-
+        if input_bands < self.n_bands:
+            warnings.warn(
+                f"Expected at least {self.n_bands} bands in the input but found only {input_bands}"
+            )
         imgs = batch["images"][:, self.bands]
         bgs = batch["background"][:, self.bands]
         inputs = [imgs, bgs]

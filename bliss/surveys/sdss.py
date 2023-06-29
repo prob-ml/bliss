@@ -24,7 +24,6 @@ class SloanDigitalSkySurvey(pl.LightningDataModule, Dataset):
         run=3900,
         camcol=6,
         fields=(269,),
-        bands=(0, 1, 2, 3, 4),
         predict_device=None,
         predict_crop=None,
         # take a way to specify labels? e.g., from sdss PhotoFullCatalog or decals catalog
@@ -37,7 +36,7 @@ class SloanDigitalSkySurvey(pl.LightningDataModule, Dataset):
         self.run = run
         self.camcol = camcol
         self.fields = fields
-        self.bands = bands
+        self.bands = [0, 1, 2, 3, 4]
 
         self.downloader = SDSSDownloader(run, camcol, fields[0], download_dir=sdss_dir)
 
@@ -255,14 +254,19 @@ class PhotoFullCatalog(FullCatalog):
     """
 
     @classmethod
-    def from_file(cls, sdss_path, run, camcol, field, band):
+    def from_file(cls, sdss_path, run, camcol, field, sdss_obj):
+        """Instantiates PhotoFullCatalog with RCF and WCS information from disk."""
+        # Path to SDSS data directory
         sdss_path = Path(sdss_path)
         camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
+        # FITS file specific to RCF
         po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
         if not Path(po_path).exists():
             SDSSDownloader(run, camcol, field, download_dir=str(sdss_path)).download_po()
         assert Path(po_path).exists(), f"File {po_path} does not exist, even after download."
         po_fits = fits.getdata(po_path)
+
+        # Convert table entries to tensors
         objc_type = column_to_tensor(po_fits, "objc_type")
         thing_id = column_to_tensor(po_fits, "thing_id")
         ras = column_to_tensor(po_fits, "ra")
@@ -273,18 +277,26 @@ class PhotoFullCatalog(FullCatalog):
         star_mags = column_to_tensor(po_fits, "psfmag") * star_bools.reshape(-1, 1)
         galaxy_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
         galaxy_mags = column_to_tensor(po_fits, "cmodelmag") * galaxy_bools.reshape(-1, 1)
+
+        # Combine light source parameters to one tensor
         fluxes = star_fluxes + galaxy_fluxes
         mags = star_mags + galaxy_mags
+
+        # true light source mask
         keep = galaxy_bools | star_bools
+
         galaxy_bools = galaxy_bools[keep]
         star_bools = star_bools[keep]
         ras = ras[keep]
         decs = decs[keep]
-        fluxes = fluxes[keep][:, band]
-        mags = mags[keep][:, band]
+        fluxes = fluxes[keep]
+        mags = mags[keep]
 
-        sdss = SloanDigitalSkySurvey(str(sdss_path), run, camcol, fields=(field,), bands=(band,))
-        wcs: WCS = sdss[0]["wcs"][0]
+        # We require all 5 bands for computing loss on predictions.
+        n_bands = 5
+
+        # Take WCS specific to r-band as standard.
+        wcs: WCS = sdss_obj[0]["wcs"][2]
 
         # get pixel coordinates
         pts = []
@@ -298,6 +310,7 @@ class PhotoFullCatalog(FullCatalog):
         plocs = torch.stack((prs, pts), dim=-1)
         nobj = plocs.shape[0]
 
+        # Verify each tile contains either a star or a galaxy
         assert torch.all(star_bools + galaxy_bools)
         source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
 
@@ -305,14 +318,15 @@ class PhotoFullCatalog(FullCatalog):
             "plocs": plocs.reshape(1, nobj, 2),
             "n_sources": torch.tensor((nobj,)),
             "source_type": source_type.reshape(1, nobj, 1),
-            "fluxes": fluxes.reshape(1, nobj, 1),
-            "mags": mags.reshape(1, nobj, 1),
+            "fluxes": fluxes.reshape(1, nobj, n_bands),
+            "mags": mags.reshape(1, nobj, n_bands),
             "ra": ras.reshape(1, nobj, 1),
             "dec": decs.reshape(1, nobj, 1),
         }
 
-        height = sdss[0]["image"].shape[1]
-        width = sdss[0]["image"].shape[2]
+        # Collect required height, width by FullCatalog
+        height = sdss_obj[0]["image"].shape[1]
+        width = sdss_obj[0]["image"].shape[2]
 
         return cls(height, width, d)
 
