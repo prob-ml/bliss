@@ -273,7 +273,7 @@ class ImagePrior(pl.LightningModule):
         return min_x / (1.0 - uniform_samples) ** (1 / alpha)
 
     def _compute_flux_ratio(self, obj_fluxes, run, camcol, field, field_dir, gains):
-        """Query SDSS frames to compute relative flux ratios in units of nmgys.
+        """Query SDSS frames to get flux ratios in units of electron count.
 
         Args:
             obj_fluxes: tensor of electron counts for a particular SDSS object
@@ -284,7 +284,7 @@ class ImagePrior(pl.LightningModule):
             gains: list containing band-specific gain values
 
         Returns:
-            ratios (Tensor): Ratio of nmgys for each light source in field
+            ratios (Tensor): Ratio of electron counts for each light source in field
             relative to r-band
         """
         ratios = torch.zeros(obj_fluxes.size())
@@ -305,9 +305,9 @@ class ImagePrior(pl.LightningModule):
             nelec_per_nmgy_r = r_gain / cal_mean
             nelec_per_nmgy_rat = nelec_per_nmgy_bnd / nelec_per_nmgy_r
 
-            # (nelec ratio relative to r-band) / (nmgy/nelec ratio relative to r band)
-            # result: ratio in units of nmgys
-            ratios[i] = (obj_fluxes[i] / obj_fluxes[2]) / nelec_per_nmgy_rat
+            # (nelec ratio relative to r-band) * (nmgy/nelec ratio relative to r band)
+            # result: ratio in units of electron counts
+            ratios[i] = (obj_fluxes[i] / obj_fluxes[2]) * nelec_per_nmgy_rat
 
         return ratios
 
