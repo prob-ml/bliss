@@ -12,7 +12,6 @@ class TestSDSS:
             run=3900,
             camcol=6,
             fields=[269],
-            bands=range(5),
         )
         an_obj = sdss_obj[0]
         for k in ("image", "background", "gain", "nelec_per_nmgy_list", "calibration"):

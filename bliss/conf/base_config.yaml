@@ -165,7 +165,6 @@ predict:
         run: 94
         camcol: 1
         fields: [12]
-        bands: ${encoder.bands}
         predict_device: ${predict.device}
         predict_crop: ${predict.crop}
     photo_catalog:
@@ -174,7 +173,7 @@ predict:
         run: ${predict.dataset.run}
         camcol: ${predict.dataset.camcol}
         fields: ${predict.dataset.fields}
-        bands: ${predict.dataset.bands}
+        bands: ${encoder.bands}
     trainer: ${training.trainer}
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/zscore_five_band.pt
