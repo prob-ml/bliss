@@ -4,7 +4,6 @@
 from enum import Enum
 from typing import Dict, List, Union
 
-import numpy as np
 import torch
 from einops import rearrange, reduce
 from scipy.sparse import csr_matrix
@@ -52,18 +51,10 @@ class BlissMetrics(Metric):
     star_fp: Tensor
 
     # Classification metrics
+    gal_fluxes: List
+    star_fluxes: List
     disk_frac: List
     bulge_frac: List
-    u_flux_s: List
-    g_flux_s: List
-    r_flux_s: List
-    i_flux_s: List
-    z_flux_s: List
-    u_flux_g: List
-    g_flux_g: List
-    r_flux_g: List
-    i_flux_g: List
-    z_flux_g: List
     disk_q: List
     bulge_q: List
     disk_hlr: List
@@ -109,16 +100,8 @@ class BlissMetrics(Metric):
             "disk_hlr",
             "bulge_hlr",
             "beta_radians",
-            "u_flux_g",
-            "g_flux_g",
-            "r_flux_g",
-            "i_flux_g",
-            "z_flux_g",
-            "u_flux_s",
-            "g_flux_s",
-            "r_flux_s",
-            "i_flux_s",
-            "z_flux_s",
+            "gal_fluxes",
+            "star_fluxes",
         ]
         for metric in self.classification_metrics:
             self.add_state(metric, default=[], dist_reduce_fx="sum")
@@ -232,18 +215,11 @@ class BlissMetrics(Metric):
         est_star_fluxes = est_params["star_fluxes"]
         est_gal_params = est_params["galaxy_params"]
 
-        self.u_flux_g.append(torch.abs(true_gal_fluxes[:, 0] - est_gal_fluxes[:, 0]))
-        self.g_flux_g.append(torch.abs(true_gal_fluxes[:, 1] - est_gal_fluxes[:, 1]))
-        self.r_flux_g.append(torch.abs(true_gal_fluxes[:, 2] - est_gal_fluxes[:, 2]))
-        self.i_flux_g.append(torch.abs(true_gal_fluxes[:, 3] - est_gal_fluxes[:, 3]))
-        self.z_flux_g.append(torch.abs(true_gal_fluxes[:, 4] - est_gal_fluxes[:, 4]))
+        # fluxes
+        self.gal_fluxes.append(torch.abs(true_gal_fluxes - est_gal_fluxes))
+        self.star_fluxes.append(torch.abs(true_star_fluxes - est_star_fluxes))
 
-        self.u_flux_s.append(torch.abs(true_star_fluxes[:, 0] - est_star_fluxes[:, 0]))
-        self.g_flux_s.append(torch.abs(true_star_fluxes[:, 1] - est_star_fluxes[:, 1]))
-        self.r_flux_s.append(torch.abs(true_star_fluxes[:, 2] - est_star_fluxes[:, 2]))
-        self.i_flux_s.append(torch.abs(true_star_fluxes[:, 3] - est_star_fluxes[:, 3]))
-        self.z_flux_s.append(torch.abs(true_star_fluxes[:, 4] - est_star_fluxes[:, 4]))
-
+        # disk/bulge proportions
         self.disk_frac.append(torch.abs(true_gal_params[:, 0] - est_gal_params[:, 0]))
         self.bulge_frac.append((1 - torch.abs(true_gal_params[:, 0]) - (1 - est_gal_params[:, 0])))
 
@@ -331,11 +307,23 @@ class BlissMetrics(Metric):
         }
 
         # add classification metrics if computed
-        if self.disk_frac:
-            for metric in self.classification_metrics:
-                # flatten list of variable-size tensors and take the median
-                vals: List = sum([t.flatten().tolist() for t in getattr(self, metric)], [])
-                metrics[f"{metric}_mae"] = np.median(vals) if vals else np.nan
+        for metric in self.classification_metrics:
+            val_list = getattr(self, metric, None)
+            if not val_list:
+                continue
+
+            # take median along first dim of stacked tensors, i.e. across images
+            median_vals = torch.cat(val_list, dim=0).median(dim=0).values
+
+            if metric in {"gal_fluxes", "star_fluxes"}:
+                metrics.update(
+                    {
+                        f"{metric}_{band}_mae": median_vals[i].item()
+                        for i, band in enumerate("ugriz")
+                    }
+                )
+            else:
+                metrics[f"{metric}_mae"] = median_vals.item()
 
         return metrics
 
