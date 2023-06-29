@@ -82,7 +82,7 @@ def predict_sdss(cfg):
     trainer = instantiate(cfg.predict.trainer)
     est_cat, images, background, pred = trainer.predict(encoder, datamodule=sdss)[0].values()
 
-    est_cat = nelec_to_nmgy(est_cat, nelec_per_nmgy_per_band)
+    est_cat = nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band)
     est_full = est_cat.to_full_params()
     if cfg.predict.plot.show_plot and (sdss_plocs is not None):
         ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
@@ -93,7 +93,7 @@ def predict_sdss(cfg):
     return est_full, images[0], background[0], sdss_plocs, pred
 
 
-def nelec_to_nmgy(est_cat, nelec_per_nmgy_per_band):
+def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
     log_fluxes_suffix = "_log_fluxes"
     fluxes_suffix = "_fluxes"
     # reshape nelec_per_nmgy_per_band to (1, 5) to broadcast

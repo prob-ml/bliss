@@ -15,7 +15,7 @@ from bliss.catalog import FullCatalog
 from bliss.conf.igs import base_config
 from bliss.generate import generate as _generate
 from bliss.predict import predict_sdss as _predict_sdss
-from bliss.surveys.sdss import SDSSDownloader
+from bliss.surveys.sdss import SDSSDownloader, SloanDigitalSkySurvey
 from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
 
@@ -235,7 +235,7 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
         else:
             on_vals[k] = v[is_on_mask].cpu()
     # Split to different columns for each band
-    for b, bl in enumerate("ugriz"):
+    for b, bl in enumerate(SloanDigitalSkySurvey.BANDS):
         on_vals[f"star_log_fluxes_{bl}"] = on_vals["star_log_fluxes"][..., b]
         on_vals[f"star_fluxes_{bl}"] = on_vals["star_fluxes"][..., b]
     # Remove star_fluxes and star_log_fluxes
@@ -247,18 +247,14 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     # Convert to astropy table
     est_cat_table = Table(rows)
     # Convert all _fluxes columns to u.Quantity
-    for bl in "ugriz":
+    for bl in SloanDigitalSkySurvey.BANDS:
         est_cat_table[f"star_log_fluxes_{bl}"].unit = u.LogUnit(u.nmgy)
         est_cat_table[f"star_fluxes_{bl}"].unit = u.nmgy
 
     # Create inner table for galaxy_params
     # Convert list of tensors to list of dictionaries
-    galaxy_params_names = [
-        "galaxy_flux_u",
-        "galaxy_flux_g",
-        "galaxy_flux_r",
-        "galaxy_flux_i",
-        "galaxy_flux_z",
+    galaxy_flux_names = [f"galaxy_flux_{bl}" for bl in SloanDigitalSkySurvey.BANDS]
+    galaxy_params_names = galaxy_flux_names + [
         "galaxy_disk_frac",
         "galaxy_beta_radians",
         "galaxy_disk_q",
@@ -324,7 +320,7 @@ def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
 
     pred_table = Table(dist_params_list)
     # convert values to astropy units
-    bands = ["u", "g", "r", "i", "z"]  # NOTE: SDSS-specific!
+    bands = SloanDigitalSkySurvey.BANDS  # NOTE: SDSS-specific!
     for bnd in bands:
         pred_table[f"star_log_flux {bnd}_mean"].unit = u.LogUnit(u.nmgy)
         pred_table[f"star_log_flux {bnd}_std"].unit = u.LogUnit(u.nmgy)
