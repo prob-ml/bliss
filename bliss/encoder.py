@@ -139,6 +139,8 @@ class Encoder(pl.LightningModule):
                 input transformations to use
         """
         # If using five-band cached simulator, only select bands encoder is expecting
+        if batch["images"].shape[1] < self.n_bands:
+            warnings.warn("Encoder is expecting additional bands from input.")
         imgs = batch["images"][:, self.bands]
         bgs = batch["background"][:, self.bands]
         inputs = [imgs, bgs]

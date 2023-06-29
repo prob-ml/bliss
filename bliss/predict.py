@@ -58,15 +58,17 @@ def align(img, sdss):
 
 
 def predict_sdss(cfg):
+    sdss = instantiate(cfg.predict.dataset)
+
     sdss_frame = PhotoFullCatalog.from_file(
         cfg.paths.sdss,
         run=cfg.predict.dataset.run,
         camcol=cfg.predict.dataset.camcol,
         field=cfg.predict.dataset.fields[0],
-        band=cfg.predict.photo_catalog.bands[2],
+        sdss_obj=sdss,
     )
+
     sdss_plocs = sdss_frame.plocs[0]
-    sdss = instantiate(cfg.predict.dataset)
     img = sdss[0]["image"]
     bg = sdss[0]["background"]
     img = align(img, sdss)

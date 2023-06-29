@@ -35,8 +35,8 @@ class SimulatedSDSSBackground(nn.Module):
         backgrounds = []
         for param_obj in field_list:
             params: Dict = OmegaConf.to_container(param_obj)
-            sdss = SloanDigitalSkySurvey(sdss_dir=sdss_dir, bands=bands, **params)
-            backgrounds.extend([field["background"] for field in sdss])
+            sdss = SloanDigitalSkySurvey(sdss_dir=sdss_dir, **params)
+            backgrounds.extend([field["background"][bands] for field in sdss])
 
         background = torch.from_numpy(np.stack(backgrounds, axis=0))
 

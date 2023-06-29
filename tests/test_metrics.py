@@ -13,15 +13,15 @@ from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey
 class TestMetrics:
     def _get_sdss_data(self, cfg):
         """Loads SDSS frame and Photo Catalog."""
+        sdss = SloanDigitalSkySurvey(cfg.paths.sdss, 94, 1, (12,))
+
         photo_cat = PhotoFullCatalog.from_file(
             cfg.paths.sdss,
             run=cfg.predict.dataset.run,
             camcol=cfg.predict.dataset.camcol,
             field=cfg.predict.dataset.fields[0],
-            band=2,
+            sdss_obj=sdss,
         )
-        sdss = SloanDigitalSkySurvey(cfg.paths.sdss, 94, 1, (12,), (0, 1, 2, 3, 4))
-
         return photo_cat, sdss
 
     def _get_image_and_background(self, sdss):
@@ -71,36 +71,6 @@ class TestMetrics:
         bliss_cat.plocs += torch.tensor(
             [h_lim[0] + cfg.encoder.tile_slen, w_lim[0] + cfg.encoder.tile_slen]
         )  # coords in original image
-
-        return {"decals": decals_cat, "photo": photo_cat, "bliss": bliss_cat}
-
-    def _get_sliced_catalog(self, catalog, idx_to_keep):
-        """Creates a new FullCatalog using only certain indices from old catalog."""
-        d = {key: val[:, idx_to_keep, :] for key, val in catalog.items()}
-        d["n_sources"] = torch.tensor([len(idx_to_keep)])
-        d["plocs"] = catalog.plocs[:, idx_to_keep, :]
-        return FullCatalog(catalog.height, catalog.width, d)
-
-    @pytest.fixture(scope="class")
-    def brightest_catalogs(self, catalogs):
-        """Get catalogs restricted to only the brightest n sources."""
-        decals_cat = catalogs["decals"]
-        photo_cat = catalogs["photo"]
-        bliss_cat = catalogs["bliss"]
-
-        n = min(decals_cat.n_sources.item(), photo_cat.n_sources.item(), bliss_cat.n_sources.item())
-
-        top_n_decals = torch.argsort(decals_cat["fluxes"].squeeze())[-n:]
-        top_n_photo = torch.argsort(photo_cat["fluxes"].squeeze())[-n:]
-        bliss_fluxes = (
-            bliss_cat["star_fluxes"] * (bliss_cat["source_type"] is False)  # noqa: E712
-            + bliss_cat["galaxy_params"][:, :, 0, None] * bliss_cat["source_type"]
-        )  # galaxy fluxes
-        top_n_bliss = torch.argsort(torch.sum(bliss_fluxes, dim=2).squeeze())[-n:]
-
-        decals_cat = self._get_sliced_catalog(decals_cat, top_n_decals)
-        photo_cat = self._get_sliced_catalog(photo_cat, top_n_photo)
-        bliss_cat = self._get_sliced_catalog(bliss_cat, top_n_bliss)
 
         return {"decals": decals_cat, "photo": photo_cat, "bliss": bliss_cat}
 
@@ -206,23 +176,23 @@ class TestMetrics:
         results = metrics(catalogs["decals"], catalogs["photo"])
         assert results["detection_precision"] > 0.8
 
-    def test_bliss_photo_agree(self, brightest_catalogs):
+    def test_bliss_photo_agree(self, catalogs):
         """Compares metrics for agreement between BLISS-inferred catalog and Photo catalog."""
         slack = 1.0
         metrics = BlissMetrics(mode=MetricsMode.FULL, slack=slack)
-        results = metrics(brightest_catalogs["photo"], brightest_catalogs["bliss"])
+        results = metrics(catalogs["photo"], catalogs["bliss"])
         assert results["f1"] > 0.7
         assert results["avg_keep_distance"] < slack
 
-    def test_bliss_photo_agree_comp_decals(self, brightest_catalogs):
+    def test_bliss_photo_agree_comp_decals(self, catalogs):
         """Compares metrics between BLISS and Photo catalog with DECaLS as GT."""
-        decals_cat = brightest_catalogs["decals"]
-        photo_cat = brightest_catalogs["photo"]
-        bliss_cat = brightest_catalogs["bliss"]
+        decals_cat = catalogs["decals"]
+        photo_cat = catalogs["photo"]
+        bliss_cat = catalogs["bliss"]
 
         metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
 
         bliss_vs_decals = metrics(decals_cat, bliss_cat)
         photo_vs_decals = metrics(decals_cat, photo_cat)
 
-        assert np.isclose(bliss_vs_decals["f1"], photo_vs_decals["f1"], atol=0.1)
+        assert bliss_vs_decals["f1"] > photo_vs_decals["f1"]
