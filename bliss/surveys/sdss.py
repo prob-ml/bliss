@@ -295,7 +295,8 @@ class PhotoFullCatalog(FullCatalog):
         # We require all 5 bands for computing loss on predictions.
         n_bands = 5
 
-        wcs: WCS = sdss_obj[0]["wcs"][2]  # r-band WCS
+        # Take WCS specific to r-band as standard.
+        wcs: WCS = sdss_obj[0]["wcs"][2]
 
         # get pixel coordinates
         pts = []
