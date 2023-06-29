@@ -255,13 +255,18 @@ class PhotoFullCatalog(FullCatalog):
 
     @classmethod
     def from_file(cls, sdss_path, run, camcol, field, sdss_obj):
+        """Instantiates PhotoFullCatalog with RCF and WCS information from disk."""
+        # Path to SDSS data directory
         sdss_path = Path(sdss_path)
         camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
+        # FITS file specific to RCF
         po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
         if not Path(po_path).exists():
             SDSSDownloader(run, camcol, field, download_dir=str(sdss_path)).download_po()
         assert Path(po_path).exists(), f"File {po_path} does not exist, even after download."
         po_fits = fits.getdata(po_path)
+
+        # Convert table entries to tensors
         objc_type = column_to_tensor(po_fits, "objc_type")
         thing_id = column_to_tensor(po_fits, "thing_id")
         ras = column_to_tensor(po_fits, "ra")
@@ -272,15 +277,22 @@ class PhotoFullCatalog(FullCatalog):
         star_mags = column_to_tensor(po_fits, "psfmag") * star_bools.reshape(-1, 1)
         galaxy_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
         galaxy_mags = column_to_tensor(po_fits, "cmodelmag") * galaxy_bools.reshape(-1, 1)
+
+        # Combine light source parameters to one tensor
         fluxes = star_fluxes + galaxy_fluxes
         mags = star_mags + galaxy_mags
+
+        # true light source mask
         keep = galaxy_bools | star_bools
+
         galaxy_bools = galaxy_bools[keep]
         star_bools = star_bools[keep]
         ras = ras[keep]
         decs = decs[keep]
         fluxes = fluxes[keep]
         mags = mags[keep]
+
+        # We require all 5 bands for computing loss on predictions.
         n_bands = 5
 
         wcs: WCS = sdss_obj[0]["wcs"][2]  # r-band WCS
@@ -297,6 +309,7 @@ class PhotoFullCatalog(FullCatalog):
         plocs = torch.stack((prs, pts), dim=-1)
         nobj = plocs.shape[0]
 
+        # Verify each tile contains either a star or a galaxy
         assert torch.all(star_bools + galaxy_bools)
         source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
 
@@ -310,6 +323,7 @@ class PhotoFullCatalog(FullCatalog):
             "dec": decs.reshape(1, nobj, 1),
         }
 
+        # Collect required height, width by FullCatalog
         height = sdss_obj[0]["image"].shape[1]
         width = sdss_obj[0]["image"].shape[2]
 
