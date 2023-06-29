@@ -129,6 +129,7 @@ class Encoder(pl.LightningModule):
         in self.input_transform_params. Supported options are:
             use_deconv_channel: add channel for image deconvolved with PSF
             concat_psf_params: add each PSF parameter as a channel
+            z_score: z-score both the images and background
 
         Args:
             batch: input batch (as dictionary)
@@ -137,27 +138,27 @@ class Encoder(pl.LightningModule):
             Tensor: b x c x h x w tensor, where the number of input channels `c` is based on the
                 input transformations to use
         """
-        # Support single-band data with single band specified
-        if batch["images"].shape[1] == 1 and self.n_bands == 1:
-            imgs = batch["images"]
-            bgs = batch["background"]
-        # If using five-band cached simulator, only select bands encoder is expecting
-        else:
-            imgs = batch["images"][:, self.bands]
-            bgs = batch["background"][:, self.bands]
+        input_bands = batch["images"].shape[1]
+        assert (
+            input_bands >= self.n_bands
+        ), f"Expected at least {self.n_bands} bands in the input but found only {input_bands}"
+
+        imgs = batch["images"][:, self.bands]
+        bgs = batch["background"][:, self.bands]
         inputs = [imgs, bgs]
 
         if self.input_transform_params.get("use_deconv_channel"):
             assert (
                 "deconvolution" in batch
             ), "use_deconv_channel specified but deconvolution not present in data"
-            inputs.append(batch["deconvolution"])
+            inputs.append(batch["deconvolution"][:, self.bands])
         if self.input_transform_params.get("concat_psf_params"):
             assert (
                 "psf_params" in batch
             ), "concat_psf_params specified but psf params not present in data"
-            n, c, h, w = batch["images"].size()
-            inputs.append(batch["psf_params"].view(n, 6 * c, 1, 1).expand(n, 6 * c, h, w))
+            n, c, h, w = imgs.shape
+            psf_params = batch["psf_params"][:, self.bands]
+            inputs.append(psf_params.view(n, 6 * c, 1, 1).expand(n, 6 * c, h, w))
         if self.input_transform_params.get("z_score"):
             assert (
                 batch["background"][0, 0].std() > 0
@@ -292,7 +293,11 @@ class Encoder(pl.LightningModule):
             true_tile_cat["star_log_fluxes"], "b ht wt 1 bnd -> b ht wt bnd"
         )
         galaxy_fluxes = rearrange(true_tile_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
-        for i, (star_name, gal_name) in enumerate(zip(self.STAR_FLUX_NAMES, self.GAL_FLUX_NAMES)):
+
+        # only compute loss over bands we're using
+        star_bands = [self.STAR_FLUX_NAMES[band] for band in self.bands]
+        gal_bands = [self.GAL_FLUX_NAMES[band] for band in self.bands]
+        for i, (star_name, gal_name) in enumerate(zip(star_bands, gal_bands)):
             # star flux loss
             star_flux_loss = -pred[star_name].log_prob(star_log_fluxes[..., i]) * true_star_bools
             loss += star_flux_loss
