@@ -221,6 +221,7 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
         "star_fluxes",
         "source_type",
         "galaxy_params",
+        "galaxy_fluxes",
     ]
     assert all(k in est_cat.keys() for k in required_keys), "`est_cat` missing required keys"
 
@@ -243,11 +244,11 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     log_nmgy = (u.LogUnit(u.nmgy),)
     est_cat_table["star_log_fluxes"] = est_cat_table["star_log_fluxes"] * log_nmgy
     est_cat_table["star_fluxes"] = est_cat_table["star_fluxes"] * (u.nmgy,)
+    est_cat_table["galaxy_fluxes"] = est_cat_table["galaxy_fluxes"] * (u.nmgy,)
 
     # Create inner table for galaxy_params
     # Convert list of tensors to list of dictionaries
     galaxy_params_names = [
-        "galaxy_flux",
         "galaxy_disk_frac",
         "galaxy_beta_radians",
         "galaxy_disk_q",
@@ -260,7 +261,6 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
         galaxy_params_dic = {}
         for i, name in enumerate(galaxy_params_names):
             galaxy_params_dic[name] = galaxy_params[i]
-        galaxy_params_dic["galaxy_flux"] = galaxy_params_dic["galaxy_flux"] * u.nmgy
         galaxy_params_dic["galaxy_beta_radians"] = (
             galaxy_params_dic["galaxy_beta_radians"] * u.radian
         )
@@ -319,8 +319,8 @@ def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
     for bnd in bands:
         pred_table[f"star_log_flux {bnd}_mean"] = pred_table[f"star_log_flux {bnd}_mean"] * log_nmgy
         pred_table[f"star_log_flux {bnd}_std"] = pred_table[f"star_log_flux {bnd}_std"] * log_nmgy
-        pred_table[f"galsim_flux_{bnd}_mean"] = pred_table[f"galsim_flux_{bnd}_mean"] * u.nmgy
-        pred_table[f"galsim_flux_{bnd}_std"] = pred_table[f"galsim_flux_{bnd}_std"] * u.nmgy
+        pred_table[f"galaxy_flux_{bnd}_mean"] = pred_table[f"galaxy_flux_{bnd}_mean"] * u.nmgy
+        pred_table[f"galaxy_flux_{bnd}_std"] = pred_table[f"galaxy_flux_{bnd}_std"] * u.nmgy
 
     pred_table["galsim_beta_radians_mean"] = pred_table["galsim_beta_radians_mean"] * u.radian
     pred_table["galsim_beta_radians_std"] = pred_table["galsim_beta_radians_std"] * u.radian

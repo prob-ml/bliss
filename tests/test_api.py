@@ -139,7 +139,8 @@ class TestApi:
             "star_log_fluxes": torch.tensor([[[0.0]]]),
             "star_fluxes": torch.tensor([[[0.0]]]),
             "source_type": torch.tensor([[[SourceType.STAR]]]),
-            "galaxy_params": torch.rand(1, 1, 7),
+            "galaxy_params": torch.rand(1, 1, 6),
+            "galaxy_fluxes": torch.tensor([[[0.0]]]),
         }
         cat = FullCatalog(1, 1, d)
         est_cat_table, galaxy_params_table = api.fullcat_to_astropy_table(cat)

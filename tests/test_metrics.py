@@ -148,7 +148,11 @@ class TestMetrics:
         metrics = BlissMetrics(mode=MetricsMode.TILE, slack=1.0)
         results = metrics(tile_catalog, tile_catalog)
         for metric in metrics.classification_metrics:
-            assert results[f"{metric}_mae"] == 0
+            if metric in {"gal_fluxes", "star_fluxes"}:
+                for band in "ugriz":
+                    assert results[f"{metric}_{band}_mae"] == 0
+            else:
+                assert results[f"{metric}_mae"] == 0
 
     def test_classification_metrics_full(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
@@ -156,7 +160,11 @@ class TestMetrics:
         metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
         results = metrics(full_catalog, full_catalog)
         for metric in metrics.classification_metrics:
-            assert results[f"{metric}_mae"] == 0
+            if metric in {"gal_fluxes", "star_fluxes"}:
+                for band in "ugriz":
+                    assert results[f"{metric}_{band}_mae"] == 0
+            else:
+                assert results[f"{metric}_mae"] == 0
 
     def test_photo_self_agreement(self, catalogs):
         """Compares PhotoFullCatalog to itself as safety check for metrics."""
