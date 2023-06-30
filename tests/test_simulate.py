@@ -56,14 +56,12 @@ class TestSimulate:
         assert torch.equal(sim_star_bools, est_tile.star_bools)
 
         sim_star_fluxes = sim_tile["star_fluxes"] * sim_tile.star_bools
-        sim_galaxy_params = sim_tile["galaxy_params"] * sim_tile.galaxy_bools
-        sim_galaxy_fluxes = sim_galaxy_params[:, :, :, :, 0]
+        sim_galaxy_fluxes = (sim_tile["galaxy_fluxes"] * sim_tile.galaxy_bools)[..., 0]
         sim_fluxes = sim_star_fluxes[:, :, :, :, 0] + sim_galaxy_fluxes
         sim_fluxes_crop = sim_fluxes[0, ttc:-ttc, ttc:-ttc, 0]
 
         est_star_fluxes = est_tile["star_fluxes"] * est_tile.star_bools
-        est_galaxy_params = est_tile["galaxy_params"] * est_tile.galaxy_bools
-        est_galaxy_fluxes = est_galaxy_params[:, :, :, :, 0]
+        est_galaxy_fluxes = (est_tile["galaxy_fluxes"] * est_tile.galaxy_bools)[..., 0]
         est_fluxes = est_star_fluxes[0, :, :, 0, 0] + est_galaxy_fluxes[0, :, :, 0]
 
         # NOTE: Considers ALL 5 predicted fluxes and ALL four images in batch
