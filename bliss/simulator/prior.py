@@ -11,7 +11,7 @@ from torch import Tensor
 from torch.distributions import Gamma, Poisson, Uniform
 
 from bliss.catalog import SourceType, TileCatalog
-from bliss.surveys.sdss import SDSSDownloader, column_to_tensor
+from bliss.surveys.sdss import SDSSDownloader, SloanDigitalSkySurvey, column_to_tensor
 
 
 class ImagePrior(pl.LightningModule):
@@ -202,15 +202,24 @@ class ImagePrior(pl.LightningModule):
     def _load_color_distribution(self, sdss_fields):
         rcf_stars_rest = {}
         rcf_gals_rest = {}
+
         # load all star, galaxy fluxes relative to r-band required for sampling
         for field_params in sdss_fields:
             run = field_params["run"]
             camcol = field_params["camcol"]
             fields = field_params["fields"]
-            for field in fields:
-                sdss_path = Path(self.sdss)
-                camcol_dir = sdss_path / str(run) / str(camcol) / str(field)
-                po_path = camcol_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+
+            # load SDSS object to iterate over field frames
+            sdss = SloanDigitalSkySurvey(self.sdss, run, camcol, fields)
+
+            # load project SDSS dir
+            sdss_path = Path(self.sdss)
+
+            for i, field in enumerate(fields):
+                # Set photoObj file path
+                field_dir = sdss_path / str(run) / str(camcol) / str(field)
+                po_path = field_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+
                 if not po_path.exists():
                     SDSSDownloader(run, camcol, field, str(sdss_path)).download_po()
                 msg = (
@@ -220,22 +229,31 @@ class ImagePrior(pl.LightningModule):
                 assert Path(po_path).exists(), msg
                 po_fits = fits.getdata(po_path)
 
-                fluxes = column_to_tensor(po_fits, "psfflux")
+                # retrieve object-specific information for ratio computing
                 objc_type = column_to_tensor(po_fits, "objc_type").numpy()
                 thing_id = column_to_tensor(po_fits, "thing_id").numpy()
 
+                # mask fluxes based on object identity & validity
+                galaxy_bools = (objc_type == 3) & (thing_id != -1)
+                star_bools = (objc_type == 6) & (thing_id != -1)
+                star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
+                gal_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
+                fluxes = star_fluxes + gal_fluxes
+
+                # containers for light source ratios in current field
                 star_fluxes_rest = []
                 gal_fluxes_rest = []
 
+                # SDSS object for current field
+                sdss_obj = sdss[i]
+
                 for obj, _ in enumerate(objc_type):
-                    if objc_type[obj] == 6 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        # flux relative to r-band
-                        ratios = fluxes[obj] / fluxes[obj][2]  # noqa: WPS220
-                        star_fluxes_rest.append(ratios)  # noqa: WPS220
-                    elif objc_type[obj] == 3 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        # flux relative to r-band
-                        ratios = fluxes[obj] / fluxes[obj][2]  # noqa: WPS220
-                        gal_fluxes_rest.append(ratios)  # noqa: WPS220
+                    if thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
+                        ratios = self._compute_flux_ratio(fluxes[obj], sdss_obj)  # noqa: WPS220
+                        if objc_type[obj] == 6:  # noqa: WPS220
+                            star_fluxes_rest.append(ratios)  # noqa: WPS220
+                        elif objc_type[obj] == 3:  # noqa: WPS220
+                            gal_fluxes_rest.append(ratios)  # noqa: WPS220
 
                 if star_fluxes_rest:
                     rcf_stars_rest[(run, camcol, field)] = star_fluxes_rest
@@ -249,6 +267,33 @@ class ImagePrior(pl.LightningModule):
         u_max = 1 - (min_x / max_x) ** alpha
         uniform_samples = torch.rand(n_samples) * u_max
         return min_x / (1.0 - uniform_samples) ** (1 / alpha)
+
+    def _compute_flux_ratio(self, obj_fluxes, sdss_obj):
+        """Query SDSS frames to get flux ratios in units of electron count.
+
+        Args:
+            obj_fluxes: tensor of electron counts for a particular SDSS object
+            sdss_obj: SloanDigitalSkySurvey object entry for a particular field
+
+        Returns:
+            ratios (Tensor): Ratio of electron counts for each light source in field
+            relative to r-band
+        """
+        ratios = torch.zeros(obj_fluxes.size())
+
+        # distribution of nelec_per_nmgy very clustered around mean
+        nelec_per_nmgys = sdss_obj["nelec_per_nmgy_list"]
+        r_rat = nelec_per_nmgys[2].mean()  # fix r-band (count:nmgy) ratio
+
+        for i in range(self.max_bands):
+            # distribution of nelec_per_nmgy very clustered around mean
+            nelec_per_nmgy_rat = nelec_per_nmgys[i].mean() / r_rat
+
+            # (nmgy ratio relative to r-band) * (nelec/nmgy ratio relative to r band)
+            # result: ratio in units of electron counts
+            ratios[i] = (obj_fluxes[i] / obj_fluxes[2]) * nelec_per_nmgy_rat
+
+        return ratios
 
     def _sample_galaxy_prior(self, gal_ratios):
         """Sample the latent galaxy params.
