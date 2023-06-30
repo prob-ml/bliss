@@ -236,13 +236,14 @@ class TileCatalog(UserDict):
         Returns:
             Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
         """
-        fluxes = torch.where(
-            self.galaxy_bools, self["galaxy_params"][..., 0, None], self["star_fluxes"]
-        )
+        fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
-    def get_brightest_source_per_tile(self):
+    def get_brightest_source_per_tile(self, band=2):
         """Restrict TileCatalog to only the brightest 'on' source per tile.
+
+        Args:
+            band (int): The band to compare fluxes in. Defaults to 2 (r-band).
 
         Returns:
             TileCatalog: a new catalog with only one source per tile
@@ -251,9 +252,9 @@ class TileCatalog(UserDict):
             return self
 
         # sort by fluxes of "on" sources to get brightest source per tile
-        on_fluxes = self._get_fluxes_of_on_sources()
+        on_fluxes = self._get_fluxes_of_on_sources()[..., band]  # shape n x nth x ntw x d
         # 0:1 keeps dims right for slicing
-        top_idx = on_fluxes.argsort(dim=3, descending=True)[:, :, :, 0:1, 0]
+        top_idx = on_fluxes.argsort(dim=3, descending=True)[..., 0:1]
 
         d = {}
         for key, val in self.to_dict().items():
@@ -266,12 +267,13 @@ class TileCatalog(UserDict):
 
         return TileCatalog(self.tile_slen, d)
 
-    def filter_tile_catalog_by_flux(self, min_flux=0, max_flux=torch.inf):
+    def filter_tile_catalog_by_flux(self, min_flux=0, max_flux=torch.inf, band=2):
         """Restricts TileCatalog to sources that have a flux between min_flux and max_flux.
 
         Args:
             min_flux (float): Minimum flux value to keep. Defaults to 0.
             max_flux (float): Maximum flux value to keep. Defaults to infinity.
+            band (int): The band to compare fluxes in. Defaults to 2 (r-band).
 
         Returns:
             TileCatalog: a new catalog with only sources within the flux range. Note that the size
@@ -279,7 +281,7 @@ class TileCatalog(UserDict):
         """
 
         # get fluxes of "on" sources to mask by
-        on_fluxes = self._get_fluxes_of_on_sources()
+        on_fluxes = self._get_fluxes_of_on_sources()[..., band].unsqueeze(-1)
         flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
 
         d = {}

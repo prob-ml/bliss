@@ -175,12 +175,11 @@ class ImageDecoder(nn.Module):
         Returns:
             GSObject: a galsim representation of the rendered galaxy convolved with the PSF
         """
+        galaxy_fluxes = source_params["galaxy_fluxes"]
         galaxy_params = source_params["galaxy_params"]
-        total_flux = galaxy_params[band]
 
-        # the remaining parameters are the non-flux parameters for this galaxy
-        nonflux_params = galaxy_params[self.n_bands :]
-        disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = nonflux_params
+        total_flux = galaxy_fluxes[band]
+        disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
 
         disk_flux = total_flux * disk_frac
         bulge_frac = 1 - disk_frac

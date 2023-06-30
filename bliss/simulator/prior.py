@@ -132,7 +132,7 @@ class ImagePrior(pl.LightningModule):
                 else random.choice(list(self.rcf_stars_rest.values()))
             )
 
-        galaxy_params = self._sample_galaxy_prior(select_gal_rcfs)
+        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(select_gal_rcfs)
         star_fluxes = self._sample_star_fluxes(select_star_rcfs)
         star_log_fluxes = star_fluxes.log()
 
@@ -143,6 +143,7 @@ class ImagePrior(pl.LightningModule):
             "n_sources": n_sources,
             "source_type": source_type,
             "locs": locs,
+            "galaxy_fluxes": galaxy_fluxes,
             "galaxy_params": galaxy_params,
             "star_fluxes": star_fluxes,
             "star_log_fluxes": star_log_fluxes,
@@ -301,7 +302,7 @@ class ImagePrior(pl.LightningModule):
             gal_ratios: flux ratios for multiband galaxies (why is this an argument?)
 
         Returns:
-            source_params (Tensor): Tensor containing the following parameters:
+            Tuple[Tensor]: A tuple of galaxy fluxes (per band) and galsim parameters, including.
                 - total_flux: the total flux of the galaxy
                 - disk_frac: the fraction of flux attributed to the disk (rest goes to bulge)
                 - beta_radians: the angle of shear in radians
@@ -318,7 +319,7 @@ class ImagePrior(pl.LightningModule):
 
         total_flux = self.multiflux(gal_ratios, r_flux)
 
-        # select specified ban
+        # select fluxes from specified bands
         bands = np.array(self.bands)
         select_flux = total_flux[..., bands]
 
@@ -341,6 +342,6 @@ class ImagePrior(pl.LightningModule):
         bulge_q = torch.unsqueeze(bulge_q, 4)
         bulge_a = torch.unsqueeze(bulge_a, 4)
 
-        param_lst = [select_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
+        param_lst = [disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
 
-        return torch.cat(param_lst, dim=4)
+        return select_flux, torch.cat(param_lst, dim=4)

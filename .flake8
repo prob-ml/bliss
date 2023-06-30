@@ -91,6 +91,9 @@ ignore =
     # unfortunately pytorch convention is to import "functional" as F
     N812,
 
+    # so we can import survey objects with acronyms
+    N817,
+
     # it has to be empty
     WPS411,
 
