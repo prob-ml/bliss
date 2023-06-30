@@ -201,6 +201,7 @@ class ImagePrior(pl.LightningModule):
     def _load_color_distribution(self, sdss_fields):
         rcf_stars_rest = {}
         rcf_gals_rest = {}
+
         # load all star, galaxy fluxes relative to r-band required for sampling
         for field_params in sdss_fields:
             run = field_params["run"]
