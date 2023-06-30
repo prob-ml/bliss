@@ -17,6 +17,7 @@ from yolov5.models.yolo import DetectionModel
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
+from bliss.surveys.sdss import SloanDigitalSkySurvey
 from bliss.transforms import z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
@@ -63,7 +64,6 @@ class Encoder(pl.LightningModule):
         self.save_hyperparameters()
 
         self.bands = bands
-        self.sdss_bands = ["u", "g", "r", "i", "z"]  # NOTE: SDSS-specific naming conventions
         self.n_bands = len(self.bands)
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
@@ -91,8 +91,8 @@ class Encoder(pl.LightningModule):
     @property
     def dist_param_groups(self):
         # create a unique parameter for each per-band flux
-        star_fluxes = [f"star_log_flux {bnd}" for bnd in self.sdss_bands]
-        gal_fluxes = [f"galsim_flux_{bnd}" for bnd in self.sdss_bands]
+        star_fluxes = [f"star_log_flux {bnd}" for bnd in SloanDigitalSkySurvey.BANDS]
+        gal_fluxes = [f"galsim_flux_{bnd}" for bnd in SloanDigitalSkySurvey.BANDS]
 
         d = {
             "on_prob": UnconstrainedBernoulli(),
@@ -214,18 +214,20 @@ class Encoder(pl.LightningModule):
         est_catalog_dict = {}
 
         # populate est_catalog_dict with per-band (log) star fluxes
-        star_logflux_names = [f"star_log_flux {bnd}" for bnd in self.sdss_bands]
+        star_logflux_names = [f"star_log_flux {bnd}" for bnd in SloanDigitalSkySurvey.BANDS]
         flux_d = {}
         for flux in star_logflux_names:
             flux_d[flux] = pred[flux].mode  # type: ignore
             flux_d[flux] = torch.mul(flux_d[flux], tile_is_on_array)  # type: ignore
             flux_d[flux] = rearrange(flux_d[flux], "b ht wt -> b ht wt 1 1")
-        star_log_fluxes = torch.cat([flux_d[f"star_log_flux {bnd}"] for bnd in self.sdss_bands], 4)
+        star_log_fluxes = torch.cat(
+            [flux_d[f"star_log_flux {bnd}"] for bnd in SloanDigitalSkySurvey.BANDS], 4
+        )
         star_fluxes = star_log_fluxes.exp()
         galaxy_bools = pred["galaxy_prob"].mode
         star_bools = 1 - galaxy_bools
         source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
-        galsimflux_names = [f"flux_{bnd}" for bnd in self.sdss_bands]
+        galsimflux_names = [f"flux_{bnd}" for bnd in SloanDigitalSkySurvey.BANDS]
         galsim_names = galsimflux_names + [
             "disk_frac",
             "beta_radians",
@@ -291,7 +293,7 @@ class Encoder(pl.LightningModule):
         star_log_fluxes = rearrange(
             true_tile_cat["star_log_fluxes"], "b ht wt 1 bnd -> b ht wt bnd"
         )
-        for i, bnd in enumerate(self.sdss_bands):
+        for i, bnd in enumerate(SloanDigitalSkySurvey.BANDS):
             star_flux_loss = -pred[f"star_log_flux {bnd}"].log_prob(star_log_fluxes[:, :, :, i])
             star_flux_loss *= true_star_bools
             loss += star_flux_loss
@@ -300,7 +302,7 @@ class Encoder(pl.LightningModule):
             )
 
         # galaxy properties loss
-        fluxes = [f"flux_{bnd}" for bnd in self.sdss_bands]
+        fluxes = [f"flux_{bnd}" for bnd in SloanDigitalSkySurvey.BANDS]
         galsim_names = fluxes + ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
         galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
         for i, param_name in enumerate(galsim_names):

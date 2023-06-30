@@ -6,7 +6,7 @@ from typing import Dict, Literal, Optional, Tuple, TypeAlias
 import hydra
 import torch
 from astropy import units as u  # noqa: WPS347
-from astropy.table import Table
+from astropy.table import Table, hstack
 from einops import rearrange
 from omegaconf import OmegaConf
 from torch import Tensor
@@ -15,7 +15,7 @@ from bliss.catalog import FullCatalog
 from bliss.conf.igs import base_config
 from bliss.generate import generate as _generate
 from bliss.predict import predict_sdss as _predict_sdss
-from bliss.surveys.sdss import SDSSDownloader
+from bliss.surveys.sdss import SDSSDownloader, SloanDigitalSkySurvey
 from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
 
@@ -140,7 +140,7 @@ class BlissClient:
         self,
         weight_save_path: str,
         **kwargs,
-    ) -> Tuple[FullCatalog, Table, Table, Table]:
+    ) -> Tuple[FullCatalog, Table, Table]:
         """Predict on SDSS images.
 
         Args:
@@ -149,8 +149,9 @@ class BlissClient:
             **kwargs: Keyword arguments to override default configuration values.
 
         Returns:
-            Tuple[FullCatalog, Table, Table]: Tuple of predicted catalog, astropy.table
-            of predicted catalog, and astropy.table of predicted galaxy_params.
+            Tuple[FullCatalog, Table, Table]: Tuple of estimated catalog, estimated
+                catalog as an astropy table, and probabilistic predictions catalog as
+                an astropy table
         """
         cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
@@ -160,9 +161,9 @@ class BlissClient:
 
         est_cat, _, _, _, pred = _predict_sdss(cfg)
         full_cat = est_cat.to_full_params()
-        est_cat_table, galaxy_params_table = fullcat_to_astropy_table(full_cat)
+        est_cat_table = fullcat_to_astropy_table(full_cat)
         pred_table = pred_to_astropy_table(pred)
-        return full_cat, est_cat_table, galaxy_params_table, pred_table
+        return full_cat, est_cat_table, pred_table
 
     def plot_predictions_in_notebook(self):
         """Plot predictions in notebook."""
@@ -234,20 +235,27 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
             on_vals[k] = v[galaxy_params_mask].reshape(-1, v.shape[-1]).cpu()
         else:
             on_vals[k] = v[is_on_mask].cpu()
+    # Split to different columns for each band
+    for b, bl in enumerate(SloanDigitalSkySurvey.BANDS):
+        on_vals[f"star_log_fluxes_{bl}"] = on_vals["star_log_fluxes"][..., b]
+        on_vals[f"star_fluxes_{bl}"] = on_vals["star_fluxes"][..., b]
+    # Remove star_fluxes and star_log_fluxes
+    on_vals.pop("star_fluxes")
+    on_vals.pop("star_log_fluxes")
     n = is_on_mask.sum()  # number of (predicted) objects
     rows = [{k: v[i].cpu() for k, v in on_vals.items()} for i in range(n)]
 
     # Convert to astropy table
     est_cat_table = Table(rows)
     # Convert all _fluxes columns to u.Quantity
-    log_nmgy = (u.LogUnit(u.nmgy),)
-    est_cat_table["star_log_fluxes"] = est_cat_table["star_log_fluxes"] * log_nmgy
-    est_cat_table["star_fluxes"] = est_cat_table["star_fluxes"] * (u.nmgy,)
+    for bl in SloanDigitalSkySurvey.BANDS:
+        est_cat_table[f"star_log_fluxes_{bl}"].unit = u.LogUnit(u.nmgy)
+        est_cat_table[f"star_fluxes_{bl}"].unit = u.nmgy
 
     # Create inner table for galaxy_params
     # Convert list of tensors to list of dictionaries
-    galaxy_params_names = [
-        "galaxy_flux",
+    galaxy_flux_names = [f"galaxy_flux_{bl}" for bl in SloanDigitalSkySurvey.BANDS]
+    galaxy_params_names = galaxy_flux_names + [
         "galaxy_disk_frac",
         "galaxy_beta_radians",
         "galaxy_disk_q",
@@ -260,17 +268,17 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
         galaxy_params_dic = {}
         for i, name in enumerate(galaxy_params_names):
             galaxy_params_dic[name] = galaxy_params[i]
-        galaxy_params_dic["galaxy_flux"] = galaxy_params_dic["galaxy_flux"] * u.nmgy
-        galaxy_params_dic["galaxy_beta_radians"] = (
-            galaxy_params_dic["galaxy_beta_radians"] * u.radian
-        )
-        galaxy_params_dic["galaxy_a_d"] = galaxy_params_dic["galaxy_a_d"] * u.arcsec
-        galaxy_params_dic["galaxy_a_b"] = galaxy_params_dic["galaxy_a_b"] * u.arcsec
+        for key, value in galaxy_params_dic.items():
+            if "flux" in key:
+                value.unit = u.nmgy
+        galaxy_params_dic["galaxy_beta_radians"].unit = u.radian
+        galaxy_params_dic["galaxy_a_d"].unit = u.arcsec
+        galaxy_params_dic["galaxy_a_b"].unit = u.arcsec
         galaxy_params_list.append(galaxy_params_dic)
     galaxy_params_table = Table(galaxy_params_list)
-    est_cat_table["galaxy_params"] = galaxy_params_table
+    est_cat_table.remove_column("galaxy_params")
 
-    return est_cat_table, galaxy_params_table
+    return hstack([est_cat_table, galaxy_params_table])
 
 
 def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
@@ -313,21 +321,19 @@ def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
 
     pred_table = Table(dist_params_list)
     # convert values to astropy units
-    log_nmgy = u.LogUnit(u.nmgy)
-
-    bands = ["u", "g", "r", "i", "z"]  # NOTE: SDSS-specific!
+    bands = SloanDigitalSkySurvey.BANDS  # NOTE: SDSS-specific!
     for bnd in bands:
-        pred_table[f"star_log_flux {bnd}_mean"] = pred_table[f"star_log_flux {bnd}_mean"] * log_nmgy
-        pred_table[f"star_log_flux {bnd}_std"] = pred_table[f"star_log_flux {bnd}_std"] * log_nmgy
-        pred_table[f"galsim_flux_{bnd}_mean"] = pred_table[f"galsim_flux_{bnd}_mean"] * u.nmgy
-        pred_table[f"galsim_flux_{bnd}_std"] = pred_table[f"galsim_flux_{bnd}_std"] * u.nmgy
+        pred_table[f"star_log_flux {bnd}_mean"].unit = u.LogUnit(u.nmgy)
+        pred_table[f"star_log_flux {bnd}_std"].unit = u.LogUnit(u.nmgy)
+        pred_table[f"galsim_flux_{bnd}_mean"].unit = u.nmgy
+        pred_table[f"galsim_flux_{bnd}_std"].unit = u.nmgy
 
-    pred_table["galsim_beta_radians_mean"] = pred_table["galsim_beta_radians_mean"] * u.radian
-    pred_table["galsim_beta_radians_std"] = pred_table["galsim_beta_radians_std"] * u.radian
-    pred_table["galsim_a_d_mean"] = pred_table["galsim_a_d_mean"] * u.arcsec
-    pred_table["galsim_a_d_std"] = pred_table["galsim_a_d_std"] * u.arcsec
-    pred_table["galsim_a_b_mean"] = pred_table["galsim_a_b_mean"] * u.arcsec
-    pred_table["galsim_a_b_std"] = pred_table["galsim_a_b_std"] * u.arcsec
+    pred_table["galsim_beta_radians_mean"].unit = u.radian
+    pred_table["galsim_beta_radians_std"].unit = u.radian
+    pred_table["galsim_a_d_mean"].unit = u.arcsec
+    pred_table["galsim_a_d_std"].unit = u.arcsec
+    pred_table["galsim_a_b_mean"].unit = u.arcsec
+    pred_table["galsim_a_b_std"].unit = u.arcsec
 
     return pred_table
 
