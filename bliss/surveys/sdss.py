@@ -18,6 +18,8 @@ from bliss.catalog import FullCatalog, SourceType
 
 
 class SloanDigitalSkySurvey(pl.LightningDataModule, Dataset):
+    BANDS = ("u", "g", "r", "i", "z")
+
     def __init__(
         self,
         sdss_dir="data/sdss",
@@ -165,7 +167,6 @@ class SDSSDownloader:
     """Class for downloading SDSS data."""
 
     URLBASE = "https://data.sdss.org/sas/dr12/boss"
-    BANDS = ("u", "g", "r", "i", "z")
 
     def __init__(self, run, camcol, field, download_dir):
         self.run = run
@@ -228,7 +229,7 @@ class SDSSDownloader:
         self.download_pf()
         self.download_po()
 
-        for band in SDSSDownloader.BANDS:
+        for band in SloanDigitalSkySurvey.BANDS:
             self.download_frame(band)
 
         self.download_psfield()

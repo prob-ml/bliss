@@ -17,6 +17,7 @@ from yolov5.models.yolo import DetectionModel
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
+from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 from bliss.transforms import z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
@@ -35,9 +36,8 @@ class Encoder(pl.LightningModule):
     representation of this image.
     """
 
-    SDSS_BANDS = ["u", "g", "r", "i", "z"]  # NOTE: SDSS-specific naming conventions
-    STAR_FLUX_NAMES = [f"star_log_flux_{bnd}" for bnd in SDSS_BANDS]
-    GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in SDSS_BANDS]
+    STAR_FLUX_NAMES = [f"star_log_flux_{bnd}" for bnd in SDSS.BANDS]
+    GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in SDSS.BANDS]
     GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
 
     def __init__(
