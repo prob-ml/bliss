@@ -6,7 +6,7 @@ from typing import Dict, Literal, Optional, Tuple, TypeAlias
 import hydra
 import torch
 from astropy import units as u  # noqa: WPS347
-from astropy.table import Table
+from astropy.table import Table, hstack
 from einops import rearrange
 from omegaconf import OmegaConf
 from torch import Tensor
@@ -140,7 +140,7 @@ class BlissClient:
         self,
         weight_save_path: str,
         **kwargs,
-    ) -> Tuple[FullCatalog, Table, Table, Table]:
+    ) -> Tuple[FullCatalog, Table, Table]:
         """Predict on SDSS images.
 
         Args:
@@ -149,8 +149,9 @@ class BlissClient:
             **kwargs: Keyword arguments to override default configuration values.
 
         Returns:
-            Tuple[FullCatalog, Table, Table]: Tuple of predicted catalog, astropy.table
-            of predicted catalog, and astropy.table of predicted galaxy_params.
+            Tuple[FullCatalog, Table, Table]: Tuple of estimated catalog, estimated
+                catalog as an astropy table, and probabilistic predictions catalog as
+                an astropy table
         """
         cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
@@ -160,9 +161,9 @@ class BlissClient:
 
         est_cat, _, _, _, pred = _predict_sdss(cfg)
         full_cat = est_cat.to_full_params()
-        est_cat_table, galaxy_params_table = fullcat_to_astropy_table(full_cat)
+        est_cat_table = fullcat_to_astropy_table(full_cat)
         pred_table = pred_to_astropy_table(pred)
-        return full_cat, est_cat_table, galaxy_params_table, pred_table
+        return full_cat, est_cat_table, pred_table
 
     def plot_predictions_in_notebook(self):
         """Plot predictions in notebook."""
@@ -275,9 +276,9 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
         galaxy_params_dic["galaxy_a_b"].unit = u.arcsec
         galaxy_params_list.append(galaxy_params_dic)
     galaxy_params_table = Table(galaxy_params_list)
-    est_cat_table["galaxy_params"] = galaxy_params_table
+    est_cat_table.remove_column("galaxy_params")
 
-    return est_cat_table, galaxy_params_table
+    return hstack([est_cat_table, galaxy_params_table])
 
 
 def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:

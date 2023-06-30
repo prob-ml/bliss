@@ -119,9 +119,8 @@ class TestApi:
     def test_predict_sdss_default_rcf(self, bliss_client, monkeypatch):
         monkeypatch.setattr(api, "_predict_sdss", mock_tests.mock_predict_sdss)
         # cached predict data copied to temp dir in mock_tests.mock_predict_sdss
-        cat, cat_table, gal_params_table, pred_table = bliss_client.predict_sdss("test_path")
+        cat, cat_table, pred_table = bliss_client.predict_sdss("test_path")
         assert isinstance(cat, FullCatalog)
-        assert isinstance(gal_params_table, Table)
         assert isinstance(cat_table, Table)
         assert isinstance(pred_table, Table)
 
@@ -129,7 +128,7 @@ class TestApi:
         assert Path(bliss_client.base_cfg.predict.plot.out_file_name).exists()
 
         # check that cat_table, gal_params_table contains all expected columns
-        expected_outer_columns = [
+        expected_table_columns = [
             "star_log_fluxes_u",
             "star_log_fluxes_g",
             "star_log_fluxes_r",
@@ -141,9 +140,6 @@ class TestApi:
             "star_fluxes_i",
             "star_fluxes_z",
             "source_type",
-            "galaxy_params",
-        ]
-        expected_galaxy_params_columns = [
             "galaxy_flux_u",
             "galaxy_flux_g",
             "galaxy_flux_r",
@@ -157,11 +153,8 @@ class TestApi:
             "galaxy_a_b",
         ]
         assert all(
-            col in cat_table.colnames for col in expected_outer_columns
+            col in cat_table.colnames for col in expected_table_columns
         ), "cat_table missing columns"
-        assert all(
-            col in gal_params_table.colnames for col in expected_galaxy_params_columns
-        ), "gal_params_table missing columns"
 
         # check that cat_table, gal_params_table fluxes and log_fluxes in correct order of
         # magnitude (i.e., O(10^1) / O(10^2) for fluxes, O(10^0) for log_fluxes)
@@ -172,7 +165,7 @@ class TestApi:
             np.log10(cat_table["star_log_fluxes_u"].value) <= 1
         ), "star_log_fluxes_u not O(10^0); ensure units are in log(nmgy)"
         assert np.all(
-            np.log10(gal_params_table["galaxy_flux_u"].value) <= 3
+            np.log10(cat_table["galaxy_flux_u"].value) <= 3
         ), "galaxy_flux_u not O(10^1); ensure units are in nmgy"
 
         # TODO: check that pred_table contains all expected columns
@@ -192,6 +185,5 @@ class TestApi:
             "galaxy_params": torch.rand(1, 1, 5 + 6),  # 5 fluxes (one/band), 6 params
         }
         cat = FullCatalog(1, 1, d)
-        est_cat_table, galaxy_params_table = api.fullcat_to_astropy_table(cat)
+        est_cat_table = api.fullcat_to_astropy_table(cat)
         assert isinstance(est_cat_table, Table)
-        assert isinstance(galaxy_params_table, Table)
