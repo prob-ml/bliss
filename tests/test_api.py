@@ -129,16 +129,16 @@ class TestApi:
 
         # check that cat_table, gal_params_table contains all expected columns
         expected_table_columns = [
-            "star_log_fluxes_u",
-            "star_log_fluxes_g",
-            "star_log_fluxes_r",
-            "star_log_fluxes_i",
-            "star_log_fluxes_z",
-            "star_fluxes_u",
-            "star_fluxes_g",
-            "star_fluxes_r",
-            "star_fluxes_i",
-            "star_fluxes_z",
+            "star_log_flux_u",
+            "star_log_flux_g",
+            "star_log_flux_r",
+            "star_log_flux_i",
+            "star_log_flux_z",
+            "star_flux_u",
+            "star_flux_g",
+            "star_flux_r",
+            "star_flux_i",
+            "star_flux_z",
             "source_type",
             "galaxy_flux_u",
             "galaxy_flux_g",
@@ -159,10 +159,10 @@ class TestApi:
         # check that cat_table, gal_params_table fluxes and log_fluxes in correct order of
         # magnitude (i.e., O(10^1) / O(10^2) for fluxes, O(10^0) for log_fluxes)
         assert np.all(
-            np.log10(cat_table["star_fluxes_u"].value) <= 2
+            np.log10(cat_table["star_flux_u"].value) <= 2
         ), "star_fluxes_u not O(10^1); ensure units are in nmgy"
         assert np.all(
-            np.log10(cat_table["star_log_fluxes_u"].value) <= 1
+            np.log10(cat_table["star_log_flux_u"].value) <= 1
         ), "star_log_fluxes_u not O(10^0); ensure units are in log(nmgy)"
         assert np.all(
             np.log10(cat_table["galaxy_flux_u"].value) <= 3
@@ -182,7 +182,8 @@ class TestApi:
             "star_log_fluxes": torch.tensor([[[0.0, 0.0, 0.0, 0.0, 0.0]]]),
             "star_fluxes": torch.tensor([[[0.0, 0.0, 0.0, 0.0, 0.0]]]),
             "source_type": torch.tensor([[[SourceType.STAR]]]),
-            "galaxy_params": torch.rand(1, 1, 5 + 6),  # 5 fluxes (one/band), 6 params
+            "galaxy_params": torch.rand(1, 1, 6),
+            "galaxy_fluxes": torch.tensor([[[0.0, 0.0, 0.0, 0.0, 0.0]]]),
         }
         cat = FullCatalog(1, 1, d)
         est_cat_table = api.fullcat_to_astropy_table(cat)

@@ -4,7 +4,6 @@
 from enum import Enum
 from typing import Dict, List, Union
 
-import numpy as np
 import torch
 from einops import rearrange, reduce
 from scipy.sparse import csr_matrix
@@ -52,18 +51,10 @@ class BlissMetrics(Metric):
     star_fp: Tensor
 
     # Classification metrics
+    gal_fluxes: List
+    star_fluxes: List
     disk_frac: List
     bulge_frac: List
-    u_flux_s: List
-    g_flux_s: List
-    r_flux_s: List
-    i_flux_s: List
-    z_flux_s: List
-    u_flux_g: List
-    g_flux_g: List
-    r_flux_g: List
-    i_flux_g: List
-    z_flux_g: List
     disk_q: List
     bulge_q: List
     disk_hlr: List
@@ -109,16 +100,8 @@ class BlissMetrics(Metric):
             "disk_hlr",
             "bulge_hlr",
             "beta_radians",
-            "u_flux_g",
-            "g_flux_g",
-            "r_flux_g",
-            "i_flux_g",
-            "z_flux_g",
-            "u_flux_s",
-            "g_flux_s",
-            "r_flux_s",
-            "i_flux_s",
-            "z_flux_s",
+            "gal_fluxes",
+            "star_fluxes",
         ]
         for metric in self.classification_metrics:
             self.add_state(metric, default=[], dist_reduce_fx="sum")
@@ -219,41 +202,42 @@ class BlissMetrics(Metric):
 
         # get parameters depending on the kind of catalog
         if self.mode is MetricsMode.FULL:
-            params = self._get_classification_params_full(true, est, match_true, match_est)
+            true_params, est_params = self._get_classification_params_full(
+                true, est, match_true, match_est
+            )
         elif self.mode is MetricsMode.TILE:
-            params = self._get_classification_params_tile(true, est)
-        true_gal_params, est_gal_params, true_star_fluxes, est_star_fluxes = params
+            true_params, est_params = self._get_classification_params_tile(true, est)
 
-        self.u_flux_g.append(torch.abs(true_gal_params[:, 0] - est_gal_params[:, 0]))
-        self.g_flux_g.append(torch.abs(true_gal_params[:, 1] - est_gal_params[:, 1]))
-        self.r_flux_g.append(torch.abs(true_gal_params[:, 2] - est_gal_params[:, 2]))
-        self.i_flux_g.append(torch.abs(true_gal_params[:, 3] - est_gal_params[:, 3]))
-        self.z_flux_g.append(torch.abs(true_gal_params[:, 4] - est_gal_params[:, 4]))
+        true_gal_fluxes = true_params["galaxy_fluxes"]
+        true_star_fluxes = true_params["star_fluxes"]
+        true_gal_params = true_params["galaxy_params"]
+        est_gal_fluxes = est_params["galaxy_fluxes"]
+        est_star_fluxes = est_params["star_fluxes"]
+        est_gal_params = est_params["galaxy_params"]
 
-        self.u_flux_s.append(torch.abs(true_star_fluxes[:, 0] - est_star_fluxes[:, 0]))
-        self.g_flux_s.append(torch.abs(true_star_fluxes[:, 1] - est_star_fluxes[:, 1]))
-        self.r_flux_s.append(torch.abs(true_star_fluxes[:, 2] - est_star_fluxes[:, 2]))
-        self.i_flux_s.append(torch.abs(true_star_fluxes[:, 3] - est_star_fluxes[:, 3]))
-        self.z_flux_s.append(torch.abs(true_star_fluxes[:, 4] - est_star_fluxes[:, 4]))
+        # fluxes
+        self.gal_fluxes.append(torch.abs(true_gal_fluxes - est_gal_fluxes))
+        self.star_fluxes.append(torch.abs(true_star_fluxes - est_star_fluxes))
 
-        self.disk_frac.append(torch.abs(true_gal_params[:, 5] - est_gal_params[:, 5]))
-        self.bulge_frac.append((1 - torch.abs(true_gal_params[:, 5]) - (1 - est_gal_params[:, 5])))
+        # disk/bulge proportions
+        self.disk_frac.append(torch.abs(true_gal_params[:, 0] - est_gal_params[:, 0]))
+        self.bulge_frac.append((1 - torch.abs(true_gal_params[:, 0]) - (1 - est_gal_params[:, 0])))
 
         # angle
-        self.beta_radians.append(torch.abs(true_gal_params[:, 6] - est_gal_params[:, 6]))
+        self.beta_radians.append(torch.abs(true_gal_params[:, 1] - est_gal_params[:, 1]))
 
         # axis ratio
-        self.disk_q.append(torch.abs(true_gal_params[:, 7] - est_gal_params[:, 7]))
-        self.bulge_q.append(torch.abs(true_gal_params[:, 9] - est_gal_params[:, 9]))
+        self.disk_q.append(torch.abs(true_gal_params[:, 2] - est_gal_params[:, 2]))
+        self.bulge_q.append(torch.abs(true_gal_params[:, 4] - est_gal_params[:, 4]))
 
         # half-light radius
         # sqrt(a * b) = sqrt(a * a * q) = a * sqrt(q)
-        est_disk_hlr = est_gal_params[:, 8] * torch.sqrt(est_gal_params[:, 7])
-        true_disk_hlr = true_gal_params[:, 8] * torch.sqrt(true_gal_params[:, 7])
+        est_disk_hlr = est_gal_params[:, 3] * torch.sqrt(est_gal_params[:, 2])
+        true_disk_hlr = true_gal_params[:, 3] * torch.sqrt(true_gal_params[:, 2])
         self.disk_hlr.append(torch.abs(true_disk_hlr - est_disk_hlr))
 
-        est_bulge_hlr = est_gal_params[:, 10] * torch.sqrt(est_gal_params[:, 9])
-        true_bulge_hlr = true_gal_params[:, 10] * torch.sqrt(true_gal_params[:, 9])
+        est_bulge_hlr = est_gal_params[:, 5] * torch.sqrt(est_gal_params[:, 4])
+        true_bulge_hlr = true_gal_params[:, 5] * torch.sqrt(true_gal_params[:, 4])
         self.bulge_hlr.append(torch.abs(true_bulge_hlr - est_bulge_hlr))
 
     def _get_classification_params_full(self, true, est, match_true, match_est):
@@ -266,18 +250,17 @@ class BlissMetrics(Metric):
             true_mask[i][match_true[i]] = True
             est_mask[i][match_est[i]] = True
 
-        true_galaxy_params = true["galaxy_params"][true_mask]
-        est_galaxy_params = est["galaxy_params"][est_mask]
-        true_star_fluxes = true["star_fluxes"][true_mask]
-        est_star_fluxes = est["star_fluxes"][est_mask]
+        params = ["galaxy_fluxes", "star_fluxes", "galaxy_params"]
+        true_params = {param: true[param][true_mask] for param in params}
+        est_params = {param: est[param][est_mask] for param in params}
 
-        return true_galaxy_params, est_galaxy_params, true_star_fluxes, est_star_fluxes
+        return true_params, est_params
 
     def _get_classification_params_tile(self, true, est):
         """Get galaxy params in est catalog at tiles containing a galaxy in the true catalog."""
         true_indices, true_is_on = true.get_indices_of_on_sources()
 
-        # construct masks for true source type
+        # construct flattened masks for true source type
         true_st = true.gather_param_at_tiles("source_type", true_indices)
         true_gal_bools = true_st == SourceType.GALAXY
         gal_mask = true_gal_bools.squeeze() * true_is_on
@@ -286,12 +269,17 @@ class BlissMetrics(Metric):
         # gather parameters where source is present in true catalog AND source is actually a star
         # or galaxy respectively in true catalog
         # note that the boolean indexing collapses across batches to return a 1D tensor
-        true_gal_params = true.gather_param_at_tiles("galaxy_params", true_indices)[gal_mask]
-        est_gal_params = est.gather_param_at_tiles("galaxy_params", true_indices)[gal_mask]
-        true_star_fluxes = true.gather_param_at_tiles("star_fluxes", true_indices)[star_mask]
-        est_star_fluxes = est.gather_param_at_tiles("star_fluxes", true_indices)[star_mask]
+        params = {"galaxy_fluxes": gal_mask, "star_fluxes": star_mask, "galaxy_params": gal_mask}
+        true_params = {
+            param: true.gather_param_at_tiles(param, true_indices)[mask]
+            for param, mask in params.items()
+        }
+        est_params = {
+            param: est.gather_param_at_tiles(param, true_indices)[mask]
+            for param, mask in params.items()
+        }
 
-        return true_gal_params, est_gal_params, true_star_fluxes, est_star_fluxes
+        return true_params, est_params
 
     def compute(self) -> Dict[str, float]:
         precision = self.detection_tp / (self.detection_tp + self.detection_fp)
@@ -319,11 +307,23 @@ class BlissMetrics(Metric):
         }
 
         # add classification metrics if computed
-        if self.disk_frac:
-            for metric in self.classification_metrics:
-                # flatten list of variable-size tensors and take the median
-                vals: List = sum([t.flatten().tolist() for t in getattr(self, metric)], [])
-                metrics[f"{metric}_mae"] = np.median(vals) if vals else np.nan
+        for metric in self.classification_metrics:
+            val_list = getattr(self, metric, None)
+            if not val_list:
+                continue
+
+            # take median along first dim of stacked tensors, i.e. across images
+            median_vals = torch.cat(val_list, dim=0).median(dim=0).values
+
+            if metric in {"gal_fluxes", "star_fluxes"}:
+                metrics.update(
+                    {
+                        f"{metric}_{band}_mae": median_vals[i].item()
+                        for i, band in enumerate("ugriz")
+                    }
+                )
+            else:
+                metrics[f"{metric}_mae"] = median_vals.item()
 
         return metrics
 
