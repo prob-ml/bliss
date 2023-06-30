@@ -29,8 +29,8 @@ class TestMetrics:
         image = sdss[0]["image"]
         background = sdss[0]["background"]
 
-        image = align(image, sdss)
-        background = align(background, sdss)
+        image = align(image, sdss[0]["wcs"])
+        background = align(background, sdss[0]["wcs"])
 
         # crop to center fourth
         height, width = image[0].shape
