@@ -284,7 +284,7 @@ class ImagePrior(pl.LightningModule):
         nelec_per_nmgys = sdss_obj["nelec_per_nmgy_list"]
         r_rat = nelec_per_nmgys[2].mean()  # fix r-band (count:nmgy) ratio
 
-        for i in range(self.bands):
+        for i in range(self.n_bands):
             # distribution of nelec_per_nmgy very clustered around mean
             nelec_per_nmgy_rat = nelec_per_nmgys[i].mean() / r_rat
 
