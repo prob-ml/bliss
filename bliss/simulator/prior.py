@@ -11,7 +11,7 @@ from torch import Tensor
 from torch.distributions import Gamma, Poisson, Uniform
 
 from bliss.catalog import SourceType, TileCatalog
-from bliss.surveys.sdss import SDSSDownloader, column_to_tensor
+from bliss.surveys.sdss import SDSSDownloader, SloanDigitalSkySurvey, column_to_tensor
 
 
 class ImagePrior(pl.LightningModule):
@@ -206,27 +206,14 @@ class ImagePrior(pl.LightningModule):
             run = field_params["run"]
             camcol = field_params["camcol"]
             fields = field_params["fields"]
+
+            # load SDSS object to iterate over field frames
+            sdss = SloanDigitalSkySurvey(self.sdss, run, camcol, fields)
+
             # load project SDSS dir
             sdss_path = Path(self.sdss)
 
-            # Set photoField file Path
-            camcol_path = sdss_path.joinpath(str(run), str(camcol))
-            pf_file = f"photoField-{run:06d}-{camcol:d}.fits"
-            pf_path = camcol_path.joinpath(pf_file)
-            if not Path(pf_path).exists():
-                self.downloader.download_pf()
-            msg = (
-                f"{pf_path} does not exist. "
-                + "Make sure data files are available for specified fields."
-            )
-            assert Path(pf_path).exists(), msg
-
-            # Retrieve gains for fields
-            pf_fits = fits.getdata(pf_path)
-            fieldgains = pf_fits["GAIN"]
-
-            for field in fields:
-                gains = fieldgains[field]
+            for i, field in enumerate(fields):
                 # Set photoObj file path
                 field_dir = sdss_path / str(run) / str(camcol) / str(field)
                 po_path = field_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
@@ -240,24 +227,31 @@ class ImagePrior(pl.LightningModule):
                 assert Path(po_path).exists(), msg
                 po_fits = fits.getdata(po_path)
 
-                fluxes = column_to_tensor(po_fits, "psfflux")
+                # retrieve object-specific information for ratio computing
                 objc_type = column_to_tensor(po_fits, "objc_type").numpy()
                 thing_id = column_to_tensor(po_fits, "thing_id").numpy()
 
+                # mask fluxes based on object identity & validity
+                galaxy_bools = (objc_type == 3) & (thing_id != -1)
+                star_bools = (objc_type == 6) & (thing_id != -1)
+                star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
+                gal_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
+                fluxes = star_fluxes + gal_fluxes
+
+                # containers for light source ratios in current field
                 star_fluxes_rest = []
                 gal_fluxes_rest = []
 
+                # SDSS object for current field
+                sdss_obj = sdss[i]
+
                 for obj, _ in enumerate(objc_type):
-                    if objc_type[obj] == 6 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        ratios = self._compute_flux_ratio(  # noqa: WPS220
-                            fluxes[obj], run, camcol, field, field_dir, gains
-                        )
-                        star_fluxes_rest.append(ratios)  # noqa: WPS220
-                    elif objc_type[obj] == 3 and thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        ratios = self._compute_flux_ratio(  # noqa: WPS220
-                            fluxes[obj], run, camcol, field, field_dir, gains
-                        )
-                        gal_fluxes_rest.append(ratios)  # noqa: WPS220
+                    if thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
+                        ratios = self._compute_flux_ratio(fluxes[obj], sdss_obj)  # noqa: WPS220
+                        if objc_type[obj] == 6:  # noqa: WPS220
+                            star_fluxes_rest.append(ratios)  # noqa: WPS220
+                        elif objc_type[obj] == 3:  # noqa: WPS220
+                            gal_fluxes_rest.append(ratios)  # noqa: WPS220
 
                 if star_fluxes_rest:
                     rcf_stars_rest[(run, camcol, field)] = star_fluxes_rest
@@ -272,16 +266,12 @@ class ImagePrior(pl.LightningModule):
         uniform_samples = torch.rand(n_samples) * u_max
         return min_x / (1.0 - uniform_samples) ** (1 / alpha)
 
-    def _compute_flux_ratio(self, obj_fluxes, run, camcol, field, field_dir, gains):
+    def _compute_flux_ratio(self, obj_fluxes, sdss_obj):
         """Query SDSS frames to get flux ratios in units of electron count.
 
         Args:
             obj_fluxes: tensor of electron counts for a particular SDSS object
-            run: specific scan
-            camcol: scanline within run
-            field: division of scanline
-            field_dir: directory containing frames corresponding to input field
-            gains: list containing band-specific gain values
+            sdss_obj: SloanDigitalSkySurvey object entry for a particular field
 
         Returns:
             ratios (Tensor): Ratio of electron counts for each light source in field
@@ -289,23 +279,15 @@ class ImagePrior(pl.LightningModule):
         """
         ratios = torch.zeros(obj_fluxes.size())
 
-        for i, bnd in enumerate("ugriz"):
-            # read frame corresponding to rcf and band
-            frame_path = field_dir / f"frame-{bnd}-{run:06d}-{camcol:d}-{field:04d}.fits"
-            frame = fits.open(frame_path)
-            calibration = frame[1].data  # pylint: disable=maybe-no-member
-            cal_mean = calibration.mean()
+        # distribution of nelec_per_nmgy very clustered around mean
+        nelec_per_nmgys = sdss_obj["nelec_per_nmgy_list"]
+        r_rat = nelec_per_nmgys[2].mean()  # fix r-band (count:nmgy) ratio
 
-            # gain varies across bands
-            bnd_gain = gains[i]
-            r_gain = gains[2]  # hard-code r-gain
-
+        for i in range(self.bands):
             # distribution of nelec_per_nmgy very clustered around mean
-            nelec_per_nmgy_bnd = bnd_gain / cal_mean
-            nelec_per_nmgy_r = r_gain / cal_mean
-            nelec_per_nmgy_rat = nelec_per_nmgy_bnd / nelec_per_nmgy_r
+            nelec_per_nmgy_rat = nelec_per_nmgys[i].mean() / r_rat
 
-            # (nelec ratio relative to r-band) * (nmgy/nelec ratio relative to r band)
+            # (nmgy ratio relative to r-band) * (nelec/nmgy ratio relative to r band)
             # result: ratio in units of electron counts
             ratios[i] = (obj_fluxes[i] / obj_fluxes[2]) * nelec_per_nmgy_rat
 
