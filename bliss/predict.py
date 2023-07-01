@@ -76,7 +76,7 @@ def predict_sdss(cfg):
     sdss[0]["background"] = align(sdss[0]["background"], ref_wcs=sdss[0]["wcs"])
 
     # mean of the nelec_per_mgy per band
-    nelec_per_nmgy_per_band = np.mean(sdss[0]["nelec_per_nmgy_list"], axis=1)  # ugriz
+    nelec_per_nmgy_per_band = np.mean(sdss[0]["nelec_per_nmgy_list"], axis=1)
 
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     enc_state_dict = torch.load(cfg.predict.weight_save_path)
@@ -99,7 +99,7 @@ def predict_sdss(cfg):
 def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
     log_fluxes_suffix = "_log_fluxes"
     fluxes_suffix = "_fluxes"
-    # reshape nelec_per_nmgy_per_band to (1, 5) to broadcast
+    # reshape nelec_per_nmgy_per_band to (1, {n_bands}) to broadcast
     nelec_per_nmgy_per_band = nelec_per_nmgy_per_band.reshape(1, -1)
     for key in est_cat.keys():
         if key.endswith(log_fluxes_suffix):
@@ -108,25 +108,40 @@ def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
             est_cat[key] = torch.tensor(np.array(est_cat[key]) / nelec_per_nmgy_per_band)
         elif key == "galaxy_params":
             clone = est_cat[key].clone()
-            clone[..., :5] = torch.tensor(np.array(clone[..., :5]) / nelec_per_nmgy_per_band)
+            clone[..., :5] = torch.tensor(
+                np.array(clone[..., :5]) / nelec_per_nmgy_per_band
+            )  # TODO: remove magic number 5 with {n_bands}
             est_cat[key] = clone
     return est_cat
 
 
-def decals_plocs_from_decals(decals: DarkEnergyCameraLegacySurvey, cfg):
-    # get ra_lim, dec_lim corresponding to DECaLS image(s)
-    width_in_deg = DarkEnergyCameraLegacySurvey.pix_to_deg(cfg.predict.dataset.width)
-    height_in_deg = DarkEnergyCameraLegacySurvey.pix_to_deg(cfg.predict.dataset.height)
-    ra_lim = (
-        cfg.predict.dataset.ra - width_in_deg / 2,
-        cfg.predict.dataset.ra + width_in_deg / 2,
-    )
-    dec_lim = (
-        cfg.predict.dataset.dec - height_in_deg / 2,
-        cfg.predict.dataset.dec + height_in_deg / 2,
-    )
-    tractor_filename = cfg.paths.decals + f"/tractor-{decals.get_brick_name()}.fits"
-    return DecalsFullCatalog.from_file(tractor_filename, ra_lim, dec_lim).plocs[0]
+def decals_plocs_from_sdss(cfg):
+    """Use wcs to match sdss image with corresponding DECaLS catalog for futher plotting."""
+    sdss = instantiate(cfg.predict.dataset)
+    idx0 = cfg.predict.crop.left_upper_corner[0]
+    idx1 = cfg.predict.crop.left_upper_corner[1]
+    width = cfg.predict.crop.width
+    height = cfg.predict.crop.height
+    wcs = sdss[0]["wcs"][0]
+    ra_lim, dec_lim = wcs.all_pix2world((idx1, idx1 + width), (idx0, idx0 + height), 0)
+
+    # TODO: 3366m010 is hardcoded brick now. Map SDSS RCF -> DECaLS brick.
+    decals_path = cfg.paths.decals + "/tractor-3366m010.fits"
+    return DecalsFullCatalog.from_file(decals_path, ra_lim, dec_lim).plocs
+
+
+def decals_plocs_from_decals(decals, cfg):
+    idx0 = cfg.predict.crop.left_upper_corner[0]
+    idx1 = cfg.predict.crop.left_upper_corner[1]
+    width = cfg.predict.crop.width
+    height = cfg.predict.crop.height
+    wcs = decals[0]["wcs"][
+        cfg.predict.dataset.bands[0]
+    ]  # TODO: somehow use all bands, not just one
+    ra_lim, dec_lim = wcs.all_pix2world((idx1, idx1 + width), (idx0, idx0 + height), 0)
+
+    tractor_filename = cfg.paths.decals + f"/tractor-{decals.brickname}.fits"
+    return DecalsFullCatalog.from_file(tractor_filename, ra_lim, dec_lim).plocs
 
 
 def predict_decals(cfg):
@@ -149,22 +164,6 @@ def predict_decals(cfg):
         plot_predict(cfg, cropped_image, cropped_background, decals_plocs, est_cat)
 
     return est_cat, images[0], background[0], decals_plocs, pred
-
-
-def decals_plocs_from_sdss(cfg):
-    """Use wcs to match sdss image with corresponding DECaLS catalog for futher plotting."""
-    sdss = instantiate(cfg.predict.dataset)
-    idx0 = cfg.predict.crop.left_upper_corner[0]
-    idx1 = cfg.predict.crop.left_upper_corner[1]
-    width = cfg.predict.crop.width
-    height = cfg.predict.crop.height
-    wcs = sdss[0]["wcs"][0]
-    ra_lim, dec_lim = wcs.all_pix2world((idx1, idx1 + width), (idx0, idx0 + height), 0)
-
-    decals_path = cfg.paths.decals + "/tractor-3366m010.fits"
-    cat = DecalsFullCatalog.from_file(decals_path, ra_lim, dec_lim)
-
-    return cat.get_plocs_from_ra_dec(wcs)
 
 
 def crop_plocs(cfg, w, h, plocs, do_crop=False):
@@ -194,7 +193,7 @@ def add_cat(p, est_plocs, true_plocs, decals_plocs):
         est_plocs[:, 0],
         color="darksalmon",
         marker="circle",
-        legend_label="estimate catalog",
+        legend_label="estimated catalog",
         size=10,
         fill_color=None,
     )
