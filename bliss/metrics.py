@@ -221,7 +221,7 @@ class BlissMetrics(Metric):
 
         # disk/bulge proportions
         self.disk_frac.append(torch.abs(true_gal_params[:, 0] - est_gal_params[:, 0]))
-        self.bulge_frac.append((1 - torch.abs(true_gal_params[:, 0]) - (1 - est_gal_params[:, 0])))
+        self.bulge_frac.append(torch.abs((1 - true_gal_params[:, 0]) - (1 - est_gal_params[:, 0])))
 
         # angle
         self.beta_radians.append(torch.abs(true_gal_params[:, 1] - est_gal_params[:, 1]))
