@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import pytorch_lightning as pl
-import requests
 import torch
 from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
@@ -15,6 +14,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
 from bliss.catalog import FullCatalog, SourceType
+from bliss.utils.download_utils import download_file_to_dst
 
 
 class SloanDigitalSkySurvey(pl.LightningDataModule, Dataset):
@@ -182,14 +182,14 @@ class SDSSDownloader:
         self.subdir3 = f"{self.run_stripped}/{camcol}/{self.field_stripped}"
 
     def download_pf(self):
-        download_file(
+        download_file_to_dst(
             f"{SDSSDownloader.URLBASE}/photoObj/301/{self.run_stripped}/"
             f"photoField-{self.run6}-{self.camcol}.fits",
             f"{self.download_dir}/{self.subdir2}/" f"photoField-{self.run6}-{self.camcol}.fits",
         )
 
     def download_po(self):
-        download_file(
+        download_file_to_dst(
             f"{SDSSDownloader.URLBASE}/photoObj/301/{self.run_stripped}/{self.camcol}/"
             f"photoObj-{self.run6}-{self.camcol}-{self.field4}.fits",
             f"{self.download_dir}/{self.subdir3}/"
@@ -197,7 +197,7 @@ class SDSSDownloader:
         )
 
     def download_frame(self, band="r"):
-        download_file(
+        download_file_to_dst(
             f"{SDSSDownloader.URLBASE}/photo/redux/301/{self.run_stripped}/objcs/{self.camcol}/"
             f"fpM-{self.run6}-{band}{self.camcol}-{self.field4}.fit.gz",
             f"{self.download_dir}/{self.subdir3}/"
@@ -205,7 +205,7 @@ class SDSSDownloader:
             gzip.decompress,
         )
 
-        download_file(
+        download_file_to_dst(
             f"{SDSSDownloader.URLBASE}/photoObj/frames/301/{self.run_stripped}/{self.camcol}/"
             f"frame-{band}-{self.run6}-{self.camcol}-{self.field4}.fits.bz2",
             f"{self.download_dir}/{self.subdir3}/"
@@ -214,7 +214,7 @@ class SDSSDownloader:
         )
 
     def download_psfield(self):
-        download_file(
+        download_file_to_dst(
             f"{SDSSDownloader.URLBASE}/photo/redux/301/{self.run_stripped}/objcs/{self.camcol}/"
             f"psField-{self.run6}-{self.camcol}-{self.field4}.fit",
             f"{self.download_dir}/{self.subdir3}/"
@@ -408,11 +408,3 @@ def prepare_batch(images, background, crop_params):
     batch["images"] = batch["images"].squeeze(0)
     batch["background"] = batch["background"].squeeze(0)
     return batch
-
-
-# Downloader helpers
-def download_file(url, filename, preprocess_fn=lambda x: x):  # noqa: WPS404
-    Path(filename).parent.mkdir(parents=True, exist_ok=True)
-    response = requests.get(url, timeout=10)
-    with open(filename, "wb") as out_file:
-        out_file.write(preprocess_fn(response.content))
