@@ -47,19 +47,35 @@ class MockCallback:
 
 
 class MockSDSSDownloader(SDSSDownloader):
-    def __init__(self, run, camcol, field, download_dir):
+    def __init__(self, run, camcol, fields, download_dir):
+        """Create a mock SDSSDownloader that copies local data instead of downloading.
+        Inits SDSSDownloader for the first field in the list.
+
+        Args:
+            run (int): SDSS run number
+            camcol (int): SDSS camcol number
+            fields (list): List of fields to download
+            download_dir (str): Directory to download to
+        """
         # copy data from normal dir instead of downloading
-        shutil.copytree(
-            f"data/sdss/{run}/{camcol}/{field}",
-            f"{download_dir}/{run}/{camcol}/{field}",
-            dirs_exist_ok=True,
-        )
         pf_file = f"photoField-{run:06d}-{camcol:d}.fits"
+        file_dst = Path(f"{download_dir}/{run}/{camcol}/{pf_file}")
+        file_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(
-            f"data/sdss/{run}/{camcol}/{pf_file}", f"{download_dir}/{run}/{camcol}/{pf_file}"
+            f"data/sdss/{run}/{camcol}/{pf_file}",
+            file_dst,
         )
 
-        super().__init__(run, camcol, field, download_dir)
+        for field in fields:
+            dst = Path(f"{download_dir}/{run}/{camcol}/{field}")
+            dst.mkdir(parents=True, exist_ok=True)
+            shutil.copytree(
+                f"data/sdss/{run}/{camcol}/{field}",
+                dst,
+                dirs_exist_ok=True,
+            )
+
+        super().__init__(run, camcol, fields[0], download_dir)
 
 
 def mock_get(*args, **kwargs):

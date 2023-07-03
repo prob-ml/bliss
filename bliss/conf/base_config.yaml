@@ -159,21 +159,7 @@ training:
     use_cached_simulator: false
 
 predict:
-    dataset:
-        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
-        sdss_dir: ${paths.sdss}
-        run: 94
-        camcol: 1
-        fields: [12]
-        predict_device: ${predict.device}
-        predict_crop: ${predict.crop}
-    photo_catalog:
-        _target_: bliss.surveys.sdss.PhotoFullCatalog
-        sdss_dir: ${paths.sdss}
-        run: ${predict.dataset.run}
-        camcol: ${predict.dataset.camcol}
-        fields: ${predict.dataset.fields}
-        bands: ${encoder.bands}
+    dataset: ${datasets.sdss}
     trainer: ${training.trainer}
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/zscore_five_band.pt
@@ -189,4 +175,21 @@ predict:
         height: 1000
         out_file_name: ${paths.output}/predict.html
     is_simulated: false
-    plot_preds: false
+
+datasets:
+    sdss:
+        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
+        sdss_dir: ${paths.sdss}
+        run: 94
+        camcol: 1
+        fields: [12]
+        predict_device: ${predict.device}
+        predict_crop: ${predict.crop}
+    decals:
+        _target_: bliss.surveys.decals.DarkEnergyCameraLegacySurvey
+        decals_dir: ${paths.decals}
+        ra: 336.635 # in degrees
+        dec: -0.96 # in degrees
+        bands: ${encoder.bands}
+        predict_device: ${predict.device}
+        predict_crop: ${predict.crop}
