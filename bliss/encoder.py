@@ -36,8 +36,8 @@ class Encoder(pl.LightningModule):
     representation of this image.
     """
 
-    STAR_FLUX_NAMES = [f"star_log_flux_{bnd}" for bnd in SDSS.BANDS]
-    GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in SDSS.BANDS]
+    STAR_FLUX_NAMES = [f"star_log_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
+    GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
     GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
 
     def __init__(
@@ -78,6 +78,13 @@ class Encoder(pl.LightningModule):
 
         self.tile_slen = tile_slen
 
+        # filter out bands that are not used
+        self.star_flux_names = [
+            flux for i, flux in enumerate(self.STAR_FLUX_NAMES) if i in self.bands
+        ]
+        self.gal_flux_names = [
+            flux for i, flux in enumerate(self.GAL_FLUX_NAMES) if i in self.bands
+        ]
         # number of distributional parameters used to characterize each source
         self.n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
 
@@ -106,10 +113,10 @@ class Encoder(pl.LightningModule):
             "galsim_bulge_q": UnconstrainedLogitNormal(),
             "galsim_a_b": UnconstrainedLogNormal(),
         }
-        for flux in self.STAR_FLUX_NAMES:
-            d[flux] = UnconstrainedNormal(low_clamp=-6, high_clamp=3)
-        for flux in self.GAL_FLUX_NAMES:
-            d[flux] = UnconstrainedLogNormal()
+        for star_flux in self.star_flux_names:
+            d[star_flux] = UnconstrainedNormal(low_clamp=-6, high_clamp=3)
+        for gal_flux in self.gal_flux_names:
+            d[gal_flux] = UnconstrainedLogNormal()
         return d
 
     def _get_num_input_channels(self):
@@ -218,7 +225,7 @@ class Encoder(pl.LightningModule):
 
         # populate est_catalog_dict with per-band (log) star fluxes
         star_log_fluxes = torch.stack(
-            [pred[name].mode * tile_is_on_array for name in self.STAR_FLUX_NAMES], dim=3
+            [pred[name].mode * tile_is_on_array for name in self.star_flux_names], dim=3
         )
         star_fluxes = star_log_fluxes.exp()
 
@@ -236,7 +243,7 @@ class Encoder(pl.LightningModule):
 
         # populate est_catalog_dict with per-band galaxy fluxes
         galaxy_fluxes = torch.stack(
-            [pred[name].icdf(torch.tensor(0.5)) * tile_is_on_array for name in self.GAL_FLUX_NAMES],
+            [pred[name].icdf(torch.tensor(0.5)) * tile_is_on_array for name in self.gal_flux_names],
             dim=3,
         )
 
