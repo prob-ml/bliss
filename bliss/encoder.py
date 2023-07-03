@@ -325,7 +325,13 @@ class Encoder(pl.LightningModule):
         pred = self.encode_batch(batch)
         true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
-        loss_dict = self._get_loss(pred, true_tile_cat)
+
+        # If there are multiple sources per tile, evaluate based on the brightest.
+        target_cat = true_tile_cat
+        if true_tile_cat.max_sources > 1:
+            target_cat = true_tile_cat.get_brightest_source_per_tile(band=2)
+
+        loss_dict = self._get_loss(pred, target_cat)
         est_tile_cat = self.variational_mode(pred, return_full=False)  # get tile cat for metrics
 
         # log all losses
@@ -334,7 +340,7 @@ class Encoder(pl.LightningModule):
 
         # log all metrics
         if log_metrics:
-            metrics = self.metrics(true_tile_cat, est_tile_cat)
+            metrics = self.metrics(target_cat, est_tile_cat)
             for k, v in metrics.items():
                 self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
