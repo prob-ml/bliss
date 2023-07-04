@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 import torch
-from hydra.utils import instantiate
+from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
@@ -77,9 +77,11 @@ class TestMetrics:
     @pytest.fixture(scope="class")
     def tile_catalog(self, cfg):
         """Generate a tile catalog for testing classification metrics."""
-        simulator = instantiate(cfg.simulator, prior={"batch_size": 4})
-        batch = next(iter(simulator.train_dataloader()))
-        return TileCatalog(cfg.encoder.tile_slen, batch["tile_catalog"])
+        with open("data/tests/multiband_data/dataset_0.pt", "rb") as f:
+            data = torch.load(f)
+        dataloader = DataLoader(data, batch_size=cfg.simulator.prior.batch_size, shuffle=False)
+        tile_cat = next(iter(dataloader))["tile_catalog"]
+        return TileCatalog(cfg.simulator.prior.tile_slen, tile_cat)
 
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
