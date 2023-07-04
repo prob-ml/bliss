@@ -18,22 +18,12 @@ from pytorch_lightning.utilities import rank_zero_only
 def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-statements
     # setup paths and seed
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
-    assert isinstance(paths, dict)
-    for key in paths.keys():
-        path = Path(paths[key])
-        if not path.exists():
-            if key in ["data", "sdss", "decals", "output", "pretrained_models"]:  # noqa: WPS510
-                path.mkdir(parents=True)
-            else:
-                err = "path for {} ({}) does not exist".format(str(key), path.as_posix())
-                raise FileNotFoundError(err)
+    setup_paths(paths)
     pl.seed_everything(cfg.training.seed)
 
-    # setup dataset.
-    if cfg.training.use_cached_simulator:
-        dataset = instantiate(cfg.cached_simulator)
-    else:
-        dataset = instantiate(cfg.simulator)
+    # setup dataset
+    simulator_cfg = cfg.cached_simulator if cfg.training.use_cached_simulator else cfg.simulator
+    dataset = instantiate(simulator_cfg)
 
     # setup model
     encoder = instantiate(cfg.encoder)
@@ -68,30 +58,26 @@ def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-state
     toc = time_ns()
     train_time_sec = (toc - tic) * 1e-9
     # test!
-    if cfg.training.testing.file is not None:
+    if cfg.training.testing:
         trainer.test(encoder, datamodule=dataset)
 
-    # Load best weights from checkpoint
-    if cfg.training.weight_save_path is not None and (checkpoint_callback is not None):
-        model_checkpoint = torch.load(checkpoint_callback.best_model_path, map_location="cpu")
-        model_state_dict = model_checkpoint["state_dict"]
-        Path(cfg.training.weight_save_path).parent.mkdir(parents=True, exist_ok=True)
-        torch.save(model_state_dict, cfg.training.weight_save_path)
-        result_path = cfg.training.weight_save_path + ".log.json"
-        with open(result_path, "w", encoding="utf-8") as fp:
-            cp_data = model_checkpoint["callbacks"]
-            key = list(cp_data.keys())[0]
-            cp_data = cp_data[key]
-            data_to_write: Dict[str, Any] = {
-                "timestamp": str(dt.datetime.today()),
-                "train_time_sec": train_time_sec,
-            }
-            for k, v in cp_data.items():
-                if isinstance(v, torch.Tensor) and not v.shape:
-                    data_to_write[k] = v.item()
-                elif is_json_serializable(v):
-                    data_to_write[k] = v
-            fp.write(json.dumps(data_to_write))
+    # Save the best model to the final path
+    if cfg.training.weight_save_path and checkpoint_callback.best_model_path:
+        save_best_model(cfg, checkpoint_callback.best_model_path, train_time_sec)
+
+
+def setup_paths(paths):
+    """Ensures that necessary paths exist before training."""
+    assert isinstance(paths, dict)
+    for key in paths.keys():
+        path = Path(paths[key])
+        if path.exists():
+            continue
+        if key in {"data", "sdss", "decals", "output", "pretrained_models"}:
+            path.mkdir(parents=True)
+        else:
+            err = "path for {} ({}) does not exist".format(str(key), path.as_posix())
+            raise FileNotFoundError(err)
 
 
 def setup_logger(cfg, paths):
@@ -133,7 +119,7 @@ def setup_early_stopping(cfg):
 def setup_profiler(cfg):
     profiler = None
     if cfg.training.trainer.profiler:
-        profiler = AdvancedProfiler(filename="profile.txt")
+        profiler = AdvancedProfiler(filename="profile")
     return profiler
 
 
@@ -158,3 +144,31 @@ def is_json_serializable(x):
     except TypeError:
         ret = False
     return ret
+
+
+def save_best_model(cfg, best_model_path, train_time_sec):
+    """Saves the best checkpoint to the final model path."""
+    # load best weights from checkpoint
+    model_checkpoint = torch.load(best_model_path, map_location="cpu")
+    model_state_dict = model_checkpoint["state_dict"]
+
+    # save model
+    Path(cfg.training.weight_save_path).parent.mkdir(parents=True, exist_ok=True)
+    torch.save(model_state_dict, cfg.training.weight_save_path)
+
+    # save log
+    result_path = cfg.training.weight_save_path + ".log.json"
+    with open(result_path, "w", encoding="utf-8") as fp:
+        cp_data = model_checkpoint["callbacks"]
+        key = list(cp_data.keys())[0]
+        cp_data = cp_data[key]
+        data_to_write: Dict[str, Any] = {
+            "timestamp": str(dt.datetime.today()),
+            "train_time_sec": train_time_sec,
+        }
+        for k, v in cp_data.items():
+            if isinstance(v, torch.Tensor) and not v.shape:
+                data_to_write[k] = v.item()
+            elif is_json_serializable(v):
+                data_to_write[k] = v
+        fp.write(json.dumps(data_to_write))

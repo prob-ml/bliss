@@ -150,10 +150,7 @@ training:
         min_epochs: 1
         accelerator: "gpu"
         devices: 1
-    testing:
-        file: true
-        batch_size: 32
-        num_workers: 0
+    testing: true
     seed: 42
     weight_save_path: null
     use_cached_simulator: false
