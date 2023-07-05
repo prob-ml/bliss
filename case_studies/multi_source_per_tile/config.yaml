@@ -1,0 +1,17 @@
+---
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+paths:
+    project: ${paths.root}/case_studies/multi_source_per_tile
+    pretrained_models: ${paths.data}/pretrained_models
+
+encoder:
+    min_flux_threshold: 600
+    input_transform_params:
+        use_deconv_channel: false
+        concat_psf_params: false
+        z-score: false
+    bands: [2]
