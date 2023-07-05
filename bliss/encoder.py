@@ -47,6 +47,7 @@ class Encoder(pl.LightningModule):
         tile_slen: int,
         tiles_to_crop: int,
         slack: float = 1.0,
+        min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
         input_transform_params: Optional[dict] = None,
@@ -59,6 +60,7 @@ class Encoder(pl.LightningModule):
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
             slack: Slack to use when matching locations for validation metrics.
+            min_flux_threshold: Sources with a lower flux will not be considered when computing loss
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
             input_transform_params: used for determining what channels to use as input (e.g.
@@ -69,6 +71,7 @@ class Encoder(pl.LightningModule):
 
         self.bands = bands
         self.n_bands = len(self.bands)
+        self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.input_transform_params = input_transform_params
@@ -326,10 +329,12 @@ class Encoder(pl.LightningModule):
         true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
 
-        # If there are multiple sources per tile, evaluate based on the brightest.
+        # Filter by detectable sources and brightest source per tile
         target_cat = true_tile_cat
         if true_tile_cat.max_sources > 1:
-            target_cat = true_tile_cat.get_brightest_source_per_tile(band=2)
+            target_cat = target_cat.get_brightest_source_per_tile(band=2)
+        if self.min_flux_threshold > 0:
+            target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
         loss_dict = self._get_loss(pred, target_cat)
         est_tile_cat = self.variational_mode(pred, return_full=False)  # get tile cat for metrics
@@ -350,14 +355,14 @@ class Encoder(pl.LightningModule):
             n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
             nrows = int(n_samples**0.5)  # for figure
 
-            true_full_cat = true_tile_cat.to_full_params()
+            target_full_cat = target_cat.to_full_params()
             est_full_cat = est_tile_cat.to_full_params()
-            wrong_idx = (est_full_cat.n_sources != true_full_cat.n_sources).nonzero()
+            wrong_idx = (est_full_cat.n_sources != target_full_cat.n_sources).nonzero()
             wrong_idx = wrong_idx.view(-1)[:n_samples]
 
             margin_px = self.tiles_to_crop * self.tile_slen
             fig = plot_detections(
-                batch["images"], true_full_cat, est_full_cat, nrows, wrong_idx, margin_px
+                batch["images"], target_full_cat, est_full_cat, nrows, wrong_idx, margin_px
             )
             title_root = f"Epoch:{self.current_epoch}/"
             title = f"{title_root}{logging_name} images"
