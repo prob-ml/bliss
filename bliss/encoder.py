@@ -36,8 +36,8 @@ class Encoder(pl.LightningModule):
     representation of this image.
     """
 
-    STAR_FLUX_NAMES = [f"star_log_flux_{bnd}" for bnd in SDSS.BANDS]
-    GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in SDSS.BANDS]
+    STAR_FLUX_NAMES = [f"star_log_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
+    GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
     GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
 
     def __init__(
@@ -106,10 +106,10 @@ class Encoder(pl.LightningModule):
             "galsim_bulge_q": UnconstrainedLogitNormal(),
             "galsim_a_b": UnconstrainedLogNormal(),
         }
-        for flux in self.STAR_FLUX_NAMES:
-            d[flux] = UnconstrainedNormal(low_clamp=-6, high_clamp=3)
-        for flux in self.GAL_FLUX_NAMES:
-            d[flux] = UnconstrainedLogNormal()
+        for star_flux in self.STAR_FLUX_NAMES:
+            d[star_flux] = UnconstrainedNormal(low_clamp=-6, high_clamp=3)
+        for gal_flux in self.GAL_FLUX_NAMES:
+            d[gal_flux] = UnconstrainedLogNormal()
         return d
 
     def _get_num_input_channels(self):

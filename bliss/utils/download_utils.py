@@ -1,7 +1,10 @@
 import base64
+import shutil
+from pathlib import Path
 from typing import Dict, Optional
 
 import requests
+from astropy.utils.data import download_file
 
 
 def download_git_lfs_file(url, headers: Optional[Dict[str, str]] = None) -> bytes:
@@ -59,3 +62,16 @@ def download_git_lfs_file(url, headers: Optional[Dict[str, str]] = None) -> byte
     # Get and write weights to pretrained weights path
     file = requests.get(lfs_ptr_download_url, timeout=10)
     return file.content
+
+
+def download_file_to_dst(url, dst_filename, preprocess_fn=lambda x: x):  # noqa: WPS404
+    if Path(dst_filename).exists():
+        return
+
+    filename = download_file(url, cache=True, show_progress=False, timeout=10)
+    shutil.move(filename, dst_filename)
+    with open(dst_filename, "rb") as f:
+        file_contents = f.read()
+    file_contents = preprocess_fn(file_contents)
+    with open(dst_filename, "wb") as f:
+        f.write(file_contents)
