@@ -281,15 +281,15 @@ class TileCatalog(UserDict):
         """
 
         # get fluxes of "on" sources to mask by
-        on_fluxes = self._get_fluxes_of_on_sources()[..., band].unsqueeze(-1)
+        on_fluxes = self._get_fluxes_of_on_sources()[..., band]
         flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
 
         d = {}
         for key, val in self.to_dict().items():
             if key == "n_sources":
-                d[key] = flux_mask.sum(dim=3).squeeze()  # number of sources within range in tile
+                d[key] = flux_mask.sum(dim=3)  # number of sources within range in tile
             else:
-                d[key] = torch.where(flux_mask, val, torch.zeros_like(val))
+                d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
 
         return TileCatalog(self.tile_slen, d)
 
