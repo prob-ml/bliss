@@ -14,7 +14,14 @@ from bliss.catalog import FullCatalog, SourceType
 
 @pytest.fixture(scope="class")
 def bliss_client(cfg, tmpdir_factory):
-    client = BlissClient(str(tmpdir_factory.mktemp("cwd")))
+    cwd = str(tmpdir_factory.mktemp("cwd"))
+    client = BlissClient(cwd)
+    mock_tests.MockSDSSDownloader(
+        run=cfg.datasets.sdss.run,
+        camcol=cfg.datasets.sdss.camcol,
+        fields=cfg.datasets.sdss.fields,
+        download_dir=cwd + "/data/sdss",
+    )
     # Hack to apply select conftest.py overrides, since client.base_cfg should be private
     overrides = {
         "training.trainer.accelerator": cfg.training.trainer.accelerator,
@@ -102,7 +109,7 @@ class TestApi:
         monkeypatch.setattr("gzip.decompress", lambda x: x)
         monkeypatch.setattr("bz2.decompress", lambda x: x)
 
-        download_dir = "data"
+        download_dir = "data/sdss"
         bliss_client.load_survey("sdss", 94, 1, 12, download_dir)
         assert Path(f"{bliss_client.cwd}/{download_dir}/94/1/photoField-000094-1.fits").exists()
         assert Path(
