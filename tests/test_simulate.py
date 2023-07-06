@@ -2,12 +2,11 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
-from omegaconf.dictconfig import DictConfig
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
 from bliss.catalog import TileCatalog
-from bliss.simulator.background import SimulatedSDSSBackground
+from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 from bliss.surveys.sdss import prepare_batch
 
 
@@ -31,7 +30,9 @@ class TestSimulate:
         # NOTE: sim_tile is a batch of 4 images
         sim_tile = TileCatalog(4, sim_tile)
 
-        _, rcf_indices = sim_dataset.get_random_rcf(sim_tile.n_sources.size(0))  # noqa: WPS437
+        _, rcf_indices = sim_dataset.randomized_image_ids(
+            sim_tile.n_sources.size(0)
+        )  # noqa: WPS437
         image, background, _, _ = sim_dataset.simulate_image(sim_tile, rcf_indices)
 
         # move data to the device the encoder is on
@@ -67,31 +68,22 @@ class TestSimulate:
     def test_multi_background(self, cfg, monkeypatch):
         """Test loading backgrounds and PSFs from multiple fields works."""
         monkeypatch.delattr("requests.get")  # make sure we don't download anything
-        sdss_fields = {
-            "dir": cfg.simulator.sdss_fields.dir,
-            "bands": cfg.simulator.sdss_fields.bands,
-            "field_list": [
-                {"run": 94, "camcol": 1, "fields": [12]},
-                {"run": 3900, "camcol": 6, "fields": [269]},
-            ],
-        }
-        decoder = {"sdss_fields": sdss_fields}  # override isn't passed recursively
+        sdss_fields = [
+            {"run": 94, "camcol": 1, "fields": [12]},
+            {"run": 3900, "camcol": 6, "fields": [269]},
+        ]
 
-        simulator = instantiate(cfg.simulator, sdss_fields=sdss_fields, decoder=decoder)
-        assert np.all(simulator.rcf_list == np.array([[94, 1, 12], [3900, 6, 269]]))
+        simulator = instantiate(cfg.simulator, survey={"sdss_fields": sdss_fields})
+        assert np.all(simulator.image_ids == np.array([[94, 1, 12], [3900, 6, 269]]))
         assert (94, 1, 12) in simulator.image_decoder.psf_galsim.keys()
         assert (3900, 6, 269) in simulator.image_decoder.psf_galsim.keys()
 
-        # manually construct background since testing_config uses ConstantBackground
-        bg_cfg = DictConfig(sdss_fields)
-        background = SimulatedSDSSBackground(bg_cfg)
-        assert background.background.size()[0] == 2
+        assert simulator.background.background.size()[0] == 2
 
     def test_multi_band(self, cfg, monkeypatch):
         """Test simulating data with multiple bands."""
         monkeypatch.delattr("requests.get")  # make sure we don't download anything
-        cfg.simulator.sdss_fields.bands = [2, 3, 4]  # override default with multiple bands
         simulator = instantiate(cfg.simulator)
         batch = simulator.get_batch()
-        assert batch["images"].size(1) == 3
-        assert batch["background"].size(1) == 3
+        assert batch["images"].size(1) == len(SDSS.BANDS)
+        assert batch["background"].size(1) == len(SDSS.BANDS)

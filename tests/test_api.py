@@ -16,12 +16,14 @@ from bliss.catalog import FullCatalog, SourceType
 def bliss_client(cfg, tmpdir_factory):
     cwd = str(tmpdir_factory.mktemp("cwd"))
     client = BlissClient(cwd)
-    mock_tests.MockSDSSDownloader(
-        run=cfg.datasets.sdss.run,
-        camcol=cfg.datasets.sdss.camcol,
-        fields=cfg.datasets.sdss.fields,
-        download_dir=cwd + "/data/sdss",
-    )
+    for sdss_field in cfg.surveys.sdss.sdss_fields:
+        run, camcol, fields = sdss_field.values()
+        mock_tests.MockSDSSDownloader(
+            run=run,
+            camcol=camcol,
+            fields=fields,
+            download_dir=cwd + "/data/sdss",
+        )
     # Hack to apply select conftest.py overrides, since client.base_cfg should be private
     overrides = {
         "training.trainer.accelerator": cfg.training.trainer.accelerator,
@@ -85,7 +87,7 @@ class TestApi:
         assert Path(f"{model_path}.log.json").exists()
 
     def test_train_on_cached_data(self, bliss_client):
-        simulator_cfg = {"cached_data_path": "data/tests/multiband_data"}
+        cached_simulator_cfg = {"cached_data_path": "data/tests/multiband_data"}
         training_cfg = {
             "n_epochs": 1,
             "trainer": {"check_val_every_n_epoch": 1, "log_every_n_steps": 1},
@@ -97,7 +99,7 @@ class TestApi:
             batch_size=8,
             val_split_file_idxs=[1],
             test_split_file_idxs=[1],
-            cached_simulator=simulator_cfg,
+            cached_simulator=cached_simulator_cfg,
             training=training_cfg,
         )
 

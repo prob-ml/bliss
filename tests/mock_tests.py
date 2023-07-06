@@ -112,5 +112,5 @@ def mock_predict_sdss(cfg, *args, **kwargs):
     # return catalog and preds like predict_sdss
     with open(test_data_path + "/sdss_preds.pt", "rb") as f:
         data = torch.load(f)
-    tile_cat = TileCatalog(cfg.simulator.prior.tile_slen, data["catalog"])
+    tile_cat = TileCatalog(cfg.simulator.survey.prior_config.tile_slen, data["catalog"])
     return tile_cat, data["image"], data["background"], None, data["pred"]

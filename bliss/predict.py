@@ -63,11 +63,17 @@ def predict_sdss(cfg):
         sdss, SloanDigitalSkySurvey
     ), "sdss expected to be a SloanDigitalSkySurvey, but got {}".format(type(sdss))
 
+    sdss_fields = cfg.predict.dataset.sdss_fields
+    assert (
+        len(sdss_fields) == 1 and len(sdss_fields[0].fields) == 1
+    ), "Only one (run, camcol, field) is supported for prediction"
+    sdss_fields = cfg.predict.dataset.sdss_fields
+    run, camcol, fields = sdss_fields[0].values()
     sdss_cat = PhotoFullCatalog.from_file(
         cfg.paths.sdss,
-        run=cfg.predict.dataset.run,
-        camcol=cfg.predict.dataset.camcol,
-        field=cfg.predict.dataset.fields[0],
+        run=run,
+        camcol=camcol,
+        field=fields[0],
         sdss_obj=sdss,
     )
 
@@ -235,8 +241,11 @@ def plot_predict(cfg, image, background, true_plocs, est_cat):
     w, h = image.shape
 
     est_plocs = np.array(est_cat.plocs.cpu())[0]
-    decoder_obj = instantiate(cfg.simulator.decoder)
-    est_tile = est_cat.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
+    simulator = instantiate(cfg.simulator)
+    decoder_obj = simulator.image_decoder
+    est_tile = est_cat.to_tile_params(
+        cfg.encoder.tile_slen, cfg.simulator.survey.prior_config.max_sources
+    )
     rcfs = np.array([[94, 1, 12]])  # TODO: find corresponding SDSS RCF for this est_cat
     images, _, _ = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
     recon_img = images[0][0]  # first image in batch, first band in image

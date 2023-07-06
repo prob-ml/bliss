@@ -1,18 +1,13 @@
 import numpy as np
 import pytest
-
-from bliss.surveys.sdss import SloanDigitalSkySurvey
+from hydra.utils import instantiate
 
 
 class TestSDSS:
     def test_sdss(self, cfg):
-        sdss_dir = cfg.paths.sdss
-        sdss_obj = SloanDigitalSkySurvey(
-            sdss_dir,
-            run=3900,
-            camcol=6,
-            fields=[269],
-        )
+        the_cfg = cfg.copy()
+        the_cfg.surveys.sdss.sdss_fields = [{"run": 3900, "camcol": 6, "fields": [269]}]
+        sdss_obj = instantiate(the_cfg.surveys.sdss)
         an_obj = sdss_obj[0]
         for k in ("image", "background", "gain", "nelec_per_nmgy_list", "calibration"):
             assert isinstance(an_obj[k], np.ndarray)

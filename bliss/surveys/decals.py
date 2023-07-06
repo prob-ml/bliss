@@ -20,12 +20,14 @@ from bliss.utils.download_utils import download_file_to_dst, download_git_lfs_fi
 
 class DarkEnergyCameraLegacySurvey(pl.LightningDataModule, Dataset):
     BANDS = ("g", "r", "i", "z")
-    PIX_SCALE = 0.262  # arcsec/pixel
-    PIX_SIZE = 3600  # arcsec/degree
+    PIXEL_SCALE = 0.262
+    PIXEL_SIZE = 3600  # arcsec/degree
 
     @staticmethod
     def pix_to_deg(pix: int) -> float:
-        return pix * DarkEnergyCameraLegacySurvey.PIX_SCALE / DarkEnergyCameraLegacySurvey.PIX_SIZE
+        return (
+            pix * DarkEnergyCameraLegacySurvey.PIXEL_SCALE / DarkEnergyCameraLegacySurvey.PIXEL_SIZE
+        )
 
     @staticmethod
     def brick_for_radec(ra: float, dec: float) -> str:

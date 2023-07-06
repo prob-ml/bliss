@@ -2,87 +2,96 @@ import bz2
 import gzip
 import warnings
 from pathlib import Path
+from typing import List, Tuple, TypedDict
 
 import numpy as np
-import pytorch_lightning as pl
 import torch
 from astropy.io import fits
 from astropy.wcs import WCS, FITSFixedWarning
 from einops import rearrange
 from scipy.interpolate import RegularGridInterpolator
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, SourceType
+from bliss.simulator.background import ImageBackground
+from bliss.simulator.prior import ImagePrior, PriorConfig
+from bliss.simulator.psf import ImagePointSpreadFunction, PSFConfig
+from bliss.surveys.survey import Survey
 from bliss.utils.download_utils import download_file_to_dst
 
+SDSSFields = List[TypedDict("SDSSField", {"run": int, "camcol": int, "fields": List[int]})]
 
-class SloanDigitalSkySurvey(pl.LightningDataModule, Dataset):
+
+class SloanDigitalSkySurvey(Survey):
     BANDS = ("u", "g", "r", "i", "z")
+    BAND_IDXS = (0, 1, 2, 3, 4)
 
     def __init__(
         self,
+        psf_config,
+        prior_config: PriorConfig,
+        sdss_fields,
+        prior_flux_ref_band: int = 2,  # r-band
         sdss_dir="data/sdss",
-        run=3900,
-        camcol=6,
-        fields=(269,),
         predict_device=None,
         predict_crop=None,
-        # take a way to specify labels? e.g., from sdss PhotoFullCatalog or decals catalog
     ):
-        super().__init__()
+        super().__init__(predict_device, predict_crop)
 
         self.sdss_path = Path(sdss_dir)
         self.rcfgcs = []
 
-        self.run = run
-        self.camcol = camcol
-        self.fields = fields
-        self.bands = [0, 1, 2, 3, 4]
-
-        self.downloader = SDSSDownloader(run, camcol, fields[0], download_dir=sdss_dir)
+        self.sdss_fields = sdss_fields
+        self.bands = SloanDigitalSkySurvey.BAND_IDXS
 
         self.prepare_data()
-        assert self.items is not None, "No data found even after prepare_data()."
 
-        self.predict_device = predict_device
-        self.predict_crop = predict_crop
+        self.prior = SDSSPrior(
+            sdss_dir, self.image_ids(), self, self.bands, prior_flux_ref_band, prior_config
+        )
+        self.background = ImageBackground(items=self, bands=self.bands)
+        self.psf = SDSSPointSpreadFunction(sdss_dir, self.image_ids(), self.bands, psf_config)
 
     def prepare_data(self):
-        pf_file = f"photoField-{self.run:06d}-{self.camcol:d}.fits"
-        camcol_path = self.sdss_path.joinpath(str(self.run), str(self.camcol))
-        pf_path = camcol_path.joinpath(pf_file)
-        if not Path(pf_path).exists():
-            self.downloader.download_pf()
-        msg = (
-            f"{pf_path} does not exist. "
-            + "Make sure data files are available for specified fields."
-        )
-        assert Path(pf_path).exists(), msg
-        self.pf_fits = fits.getdata(pf_path)
+        for rcf_conf in self.sdss_fields:
+            run, camcol, fields = rcf_conf["run"], rcf_conf["camcol"], rcf_conf["fields"]
+            downloader = SDSSDownloader(run, camcol, fields[0], download_dir=str(self.sdss_path))
 
-        fieldnums = self.pf_fits["FIELD"]
-        fieldgains = self.pf_fits["GAIN"]
+            pf_file = f"photoField-{run:06d}-{camcol:d}.fits"
+            camcol_path = self.sdss_path.joinpath(str(run), str(camcol))
+            pf_path = camcol_path.joinpath(pf_file)
+            if not Path(pf_path).exists():
+                downloader.download_pf()
+            msg = (
+                f"{pf_path} does not exist. "
+                + "Make sure data files are available for specified fields."
+            )
+            assert Path(pf_path).exists(), msg
+            pf_fits = fits.getdata(pf_path)
 
-        # get desired field
-        for i, field in enumerate(fieldnums):
-            gain = fieldgains[i]
-            if (not self.fields) or field in self.fields:
-                self.rcfgcs.append((self.run, self.camcol, field, gain))
-        self.items = [None for _ in range(len(self.rcfgcs))]
+            assert pf_fits is not None, f"Could not load fits file {pf_path}."
+            fieldnums = pf_fits["FIELD"]  # type: ignore
+            fieldgains = pf_fits["GAIN"]  # type: ignore
+
+            # get desired field
+            for i, field in enumerate(fieldnums):
+                gain = fieldgains[i]
+                if (not fields) or field in fields:
+                    self.rcfgcs.append((run, camcol, field, gain))
 
         for rcfgc in self.rcfgcs:
-            _, _, field, _ = rcfgc
-            field_dir = camcol_path.joinpath(str(field))
-            self.downloader.field = field
-            for b, bl in enumerate("ugriz"):
-                if b not in self.bands:
-                    continue
-                frame_name = f"frame-{bl}-{self.run:06d}-{self.camcol:d}-{field:04d}.fits"
-                frame_path = str(field_dir.joinpath(frame_name))
+            run, camcol, field, _ = rcfgc
+            downloader = SDSSDownloader(run, camcol, field, download_dir=str(self.sdss_path))
+            field_path = self.sdss_path.joinpath(str(run), str(camcol), str(field))
+            for bl in SloanDigitalSkySurvey.BANDS:
+                frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
+                frame_path = str(field_path.joinpath(frame_name))
                 if not Path(frame_path).exists():
-                    self.downloader.download_frame(band=bl)
+                    downloader.download_frame(band=bl)
                 assert Path(frame_path).exists(), f"{frame_path} does not exist."
+
+        self.items = [None for _ in range(len(self.rcfgcs))]
 
     def __len__(self):
         return len(self.rcfgcs)
@@ -91,6 +100,30 @@ class SloanDigitalSkySurvey(pl.LightningDataModule, Dataset):
         if not self.items[idx]:
             self.items[idx] = self.get_from_disk(idx)
         return self.items[idx]
+
+    def image_id(self, idx) -> Tuple[int, int, int]:
+        """Return the image_id for the given index."""
+        return self.rcfgcs[idx][0], self.rcfgcs[idx][1], self.rcfgcs[idx][2]
+
+    def idx(self, image_id: Tuple[int, int, int]) -> int:
+        """Return the index for the given image_id."""
+        r, c, f = image_id
+        # Return first index that matches r, c, f
+        return next(
+            i
+            for i, (run, camcol, field, _) in enumerate(self.rcfgcs)
+            if (run, camcol, field) == (r, c, f)
+        )
+
+    def image_ids(self) -> List[Tuple[int, int, int]]:
+        """Return all image_ids.
+
+        Note: Parallel to `rcfgcs`.
+
+        Returns:
+            List[Tuple[int, int, int]]: List of (run, camcol, field) image_ids.
+        """
+        return [self.image_id(i) for i in range(len(self))]
 
     def get_from_disk(self, idx):
         if self.rcfgcs[idx] is None:
@@ -345,10 +378,155 @@ class PhotoFullCatalog(FullCatalog):
             d[key] = val[:, keep]
 
         return PhotoFullCatalog(
-            plocs[0, :, 0].max() - plocs[0, :, 0].min(),  # new height
-            plocs[0, :, 1].max() - plocs[0, :, 1].min(),  # new width
+            int(plocs[0, :, 0].max() - plocs[0, :, 0].min()),  # new height
+            int(plocs[0, :, 1].max() - plocs[0, :, 1].min()),  # new width
             d,
         )
+
+
+class SDSSPointSpreadFunction(ImagePointSpreadFunction):
+    def __init__(self, survey_data_dir, image_ids, bands, psf_config: PSFConfig):
+        super().__init__(bands, **psf_config)
+
+        self.psf_galsim = {}
+        self.psf_params = {}
+        for run, camcol, field in image_ids:
+            # load raw params from file
+            field_dir = f"{survey_data_dir}/{run}/{camcol}/{field}"
+            filename = f"{field_dir}/psField-{run:06}-{camcol}-{field:04}.fits"
+            if not Path(filename).exists():
+                SDSSDownloader(run, camcol, field, download_dir=survey_data_dir).download_psfield()
+            psf_params = self._get_fit_file_psf_params(filename, bands)
+
+            # load psf image from params
+            self.psf_params[(run, camcol, field)] = psf_params
+            self.psf_galsim[(run, camcol, field)] = self._get_psf(psf_params)
+
+    @staticmethod
+    def _get_fit_file_psf_params(psf_fit_file: str, bands: Tuple[int, ...]):
+        """Load psf parameters from fits file.
+
+        See https://data.sdss.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/psField.html
+        for details on the parameters.
+
+        Args:
+            psf_fit_file (str): file to load from
+            bands (Tuple[int, ...]): SDSS bands to load
+
+        Returns:
+            psf_params: tensor of parameters for each band
+        """
+        msg = (
+            f"{psf_fit_file} does not exist. "
+            + "Make sure data files are available for fields specified in config."
+        )
+        assert Path(psf_fit_file).exists(), msg
+        # HDU 6 contains the PSF header (after primary and eigenimages)
+        data = fits.open(psf_fit_file, ignore_missing_end=True).pop(6).data
+        psf_params = torch.zeros(len(bands), 6)
+        for i, band in enumerate(bands):
+            sigma1 = data["psf_sigma1"][0][band] ** 2
+            sigma2 = data["psf_sigma2"][0][band] ** 2
+            sigmap = data["psf_sigmap"][0][band] ** 2
+            beta = data["psf_beta"][0][band]
+            b = data["psf_b"][0][band]
+            p0 = data["psf_p0"][0][band]
+
+            psf_params[i] = torch.tensor([sigma1, sigma2, sigmap, beta, b, p0])
+
+        return psf_params
+
+
+class SDSSPrior(ImagePrior):
+    def __init__(
+        self, survey_data_dir, image_ids, image_items, bands, ref_band, prior_config: PriorConfig
+    ):
+        super().__init__(bands, **prior_config)
+        self.stars_fluxes, self.gals_fluxes = self._flux_ratios_against_b(
+            survey_data_dir, image_ids, image_items, b=ref_band
+        )
+
+    def _flux_ratios_against_b(self, survey_data_dir, image_ids, items, b) -> Tuple[dict, dict]:
+        stars_fluxes = {}
+        gals_fluxes = {}
+
+        for i, image_id in enumerate(image_ids):
+            run, camcol, field = image_id
+            image = items[i]
+
+            # load project SDSS dir
+            sdss_path = Path(survey_data_dir)
+
+            # Set photoObj file path
+            field_dir = sdss_path / str(run) / str(camcol) / str(field)
+            po_path = field_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+
+            if not po_path.exists():
+                SDSSDownloader(run, camcol, field, str(sdss_path)).download_po()
+            msg = (
+                f"{po_path} does not exist. "
+                + "Make sure data files are available for fields specified in config."
+            )
+            assert Path(po_path).exists(), msg
+            po_fits = fits.getdata(po_path)
+
+            # retrieve object-specific information for ratio computing
+            objc_type = column_to_tensor(po_fits, "objc_type").numpy()
+            thing_id = column_to_tensor(po_fits, "thing_id").numpy()
+
+            # mask fluxes based on object identity & validity
+            galaxy_bools = (objc_type == 3) & (thing_id != -1)
+            star_bools = (objc_type == 6) & (thing_id != -1)
+            star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
+            gal_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
+            fluxes = star_fluxes + gal_fluxes
+
+            # containers for light source ratios in current field
+            star_fluxes_ratios = []
+            gal_fluxes_ratios = []
+
+            for obj, _ in enumerate(objc_type):
+                if thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
+                    ratios = self._flux_ratios_in_nelec(fluxes[obj], image, b)  # noqa: WPS220
+                    if objc_type[obj] == 6:  # noqa: WPS220
+                        star_fluxes_ratios.append(ratios)  # noqa: WPS220
+                    elif objc_type[obj] == 3:  # noqa: WPS220
+                        gal_fluxes_ratios.append(ratios)  # noqa: WPS220
+
+            if star_fluxes_ratios:
+                stars_fluxes[(run, camcol, field)] = star_fluxes_ratios
+            if gal_fluxes_ratios:
+                gals_fluxes[(run, camcol, field)] = gal_fluxes_ratios
+
+        return stars_fluxes, gals_fluxes
+
+    def _flux_ratios_in_nelec(self, obj_fluxes, image_item, b):
+        """Query SDSS frames to get flux ratios in units of electron count.
+
+        Args:
+            obj_fluxes: tensor of electron counts for a particular SDSS object
+            image_item: SDSS image item for a particular field
+            b: index of reference band
+
+        Returns:
+            ratios (Tensor): Ratio of electron counts for each light source in field
+            relative to `b`-band
+        """
+        ratios = torch.zeros(obj_fluxes.size())
+
+        # distribution of nelec_per_nmgy very clustered around mean
+        nelec_per_nmgys = image_item["nelec_per_nmgy_list"]
+        b_rat = nelec_per_nmgys[b].mean()  # fix b-band (count:nmgy) ratio
+
+        for i in range(self.max_bands):
+            # distribution of nelec_per_nmgy very clustered around mean
+            nelec_per_nmgy_rat = nelec_per_nmgys[i].mean() / b_rat
+
+            # (nmgy ratio relative to r-band) * (nelec/nmgy ratio relative to r band)
+            # result: ratio in units of electron counts
+            ratios[i] = (obj_fluxes[i] / obj_fluxes[2]) * nelec_per_nmgy_rat
+
+        return ratios
 
 
 # Data type conversion helpers

@@ -1,11 +1,10 @@
 import os
 import warnings
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from omegaconf.listconfig import ListConfig
 from skimage.restoration import richardson_lucy
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset
@@ -13,9 +12,8 @@ from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.generate import FileDatum
-from bliss.simulator.background import ConstantBackground, SimulatedSDSSBackground
 from bliss.simulator.decoder import ImageDecoder
-from bliss.simulator.prior import ImagePrior
+from bliss.surveys.survey import Survey
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -26,54 +24,49 @@ warnings.filterwarnings(
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
         self,
-        prior: ImagePrior,
-        decoder: ImageDecoder,
-        background: Union[ConstantBackground, SimulatedSDSSBackground],
+        survey: Survey,
         n_batches: int,
-        sdss_fields: ListConfig,
         num_workers: int = 0,
-        fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
+        fix_validation_set: bool = False,
     ):
         super().__init__()
 
-        self.n_batches = n_batches
-        self.image_prior = prior
-        self.batch_size = self.image_prior.batch_size
-        self.image_decoder = decoder
-        self.background = background
+        self.survey = survey
+        self.image_prior = self.survey.prior
+        self.background = self.survey.background
+        assert self.image_prior is not None, "Survey prior cannot be None."
+        assert self.background is not None, "Survey background cannot be None."
         self.image_prior.requires_grad_(False)
         self.background.requires_grad_(False)
+
+        assert survey.psf is not None, "Survey psf cannot be None."
+        self.image_decoder = ImageDecoder(
+            psf=survey.psf,
+        )
+
+        self.n_batches = n_batches
+        self.batch_size = self.image_prior.batch_size
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
         self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
 
         # list of (run, camcol, field) tuples from config
-        self.rcf_list = self._get_rcf_list(sdss_fields)
+        self.image_ids = np.array(self.survey.image_ids())
 
-    def _get_rcf_list(self, sdss_fields):
-        """Converts dict of row, camcol, field params into list of tuples."""
-        rcf_list = []  # list of (run, camcol, field) pairs
-        for rcf_params in sdss_fields["field_list"]:
-            run = rcf_params["run"]
-            camcol = rcf_params["camcol"]
-            rcf_list.extend([(run, camcol, field) for field in rcf_params["fields"]])
-        return np.array(rcf_list)
-
-    def get_random_rcf(self, num_samples=1):
+    def randomized_image_ids(self, num_samples=1):
         """Get random run, camcol, field combination from loaded params.
 
         Args:
             num_samples (int, optional): number of random samples to get. Defaults to 1.
 
         Returns:
-            Array of (row, camcol, field) pairs and index of each pair in self.rcf_list.
+            Array of (row, camcol, field) pairs and index of each pair in self.image_ids.
         """
-        n = np.random.randint(len(self.rcf_list), size=(num_samples,), dtype=int)
-        return self.rcf_list[n], n
+        n = np.random.randint(len(self.image_ids), size=(num_samples,), dtype=int)
+        return self.image_ids[n], n
 
-    @staticmethod
-    def _apply_noise(images_mean):
+    def _apply_noise(self, images_mean):
         # add noise to images.
         assert torch.all(images_mean > 1e-8)
         images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
@@ -81,21 +74,22 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return images
 
     def simulate_image(
-        self, tile_catalog: TileCatalog, rcf_indices
+        self, tile_catalog: TileCatalog, image_id_indices
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """Simulate a batch of images.
 
         Args:
             tile_catalog (TileCatalog): The TileCatalog to render.
-            rcf_indices: Indices of row/camcol/field in self.rcf_list to sample from.
+            image_id_indices: Indices of row/camcol/field in self.image_ids to sample from.
 
         Returns:
             Tuple[Tensor, Tensor, Tensor, Tensor]: tuple of images, backgrounds, deconvolved images,
             and psf parameters
         """
-        rcf = self.rcf_list[rcf_indices]
-        images, psfs, psf_params = self.image_decoder.render_images(tile_catalog, rcf)
-        background = self.background.sample(images.shape, rcf_indices=rcf_indices)
+        image_ids = self.image_ids[image_id_indices]
+        images, psfs, psf_params = self.image_decoder.render_images(tile_catalog, image_ids)
+        assert self.background is not None, "Survey background cannot be None."
+        background = self.background.sample(images.shape, image_id_indices=image_id_indices)
         images += background
         images = self._apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
@@ -105,13 +99,15 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         """Deconvolve the synthetic images with the psf used to generate them.
 
         Args:
-            images (ndarray): batch of images
-            backgrounds (ndarray): batch of backgrounds
+            images (Tensor): batch of images
+            backgrounds (Tensor): batch of backgrounds
             psfs (ndarray): batch of psfs
 
         Returns:
             Tensor: batch of deconvolved images
         """
+        assert self.image_prior is not None, "Survey prior cannot be None."
+
         deconv_images = np.zeros_like(images)
         for i in range(images.shape[0]):
             for band in range(self.image_prior.n_bands):
@@ -149,10 +145,14 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             Dict: A dictionary of the simulated TileCatalog, (batch_size, bands, height, width)
             tensors for images and background, and a (batch_size, 1, 6) tensor for the psf params.
         """
-        rcfs, rcf_indices = self.get_random_rcf(self.image_prior.batch_size)
+        assert self.image_prior is not None, "Survey prior cannot be None."
+
+        image_ids, image_id_indices = self.randomized_image_ids(self.image_prior.batch_size)
         with torch.no_grad():
-            tile_catalog = self.image_prior.sample_prior(rcfs)
-            images, background, deconv, psf_params = self.simulate_image(tile_catalog, rcf_indices)
+            tile_catalog = self.image_prior.sample_prior(image_ids)
+            images, background, deconv, psf_params = self.simulate_image(
+                tile_catalog, image_id_indices
+            )
             return {
                 "tile_catalog": tile_catalog.to_dict(),
                 "images": images,

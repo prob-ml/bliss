@@ -6,19 +6,21 @@ from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode, three_way_matching
 from bliss.predict import align, prepare_image
 from bliss.surveys.decals import DecalsFullCatalog
-from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey
+from bliss.surveys.sdss import PhotoFullCatalog
 
 
 class TestMetrics:
     def _get_sdss_data(self, cfg):
         """Loads SDSS frame and Photo Catalog."""
-        sdss = SloanDigitalSkySurvey(cfg.paths.sdss, 94, 1, (12,))
+        sdss = instantiate(cfg.surveys.sdss)
 
+        sdss_fields = cfg.predict.dataset.sdss_fields
+        run, camcol, fields = sdss_fields[0].values()
         photo_cat = PhotoFullCatalog.from_file(
             cfg.paths.sdss,
-            run=cfg.predict.dataset.run,
-            camcol=cfg.predict.dataset.camcol,
-            field=cfg.predict.dataset.fields[0],
+            run=run,
+            camcol=camcol,
+            field=fields[0],
             sdss_obj=sdss,
         )
         return photo_cat, sdss
@@ -77,7 +79,7 @@ class TestMetrics:
     def tile_catalog(self, cfg, multiband_dataloader):
         """Generate a tile catalog for testing classification metrics."""
         tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
-        return TileCatalog(cfg.simulator.prior.tile_slen, tile_cat)
+        return TileCatalog(cfg.simulator.survey.prior_config.tile_slen, tile_cat)
 
     def test_metrics(self):
         """Tests basic computations using simple toy data."""

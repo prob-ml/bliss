@@ -42,7 +42,9 @@ def generate(cfg: DictConfig):
     # use SimulatedDataset to generate data in minibatches iteratively,
     # then concatenate before caching to disk via pickle
     simulator = instantiate(
-        cfg.simulator, num_workers=n_workers_per_process, prior={"batch_size": bs}
+        cfg.simulator,
+        num_workers=n_workers_per_process,
+        survey={"prior_config": {"batch_size": bs}},
     )
     simulated_dataset = simulator.train_dataloader().dataset
 
