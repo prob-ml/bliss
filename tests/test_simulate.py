@@ -24,7 +24,7 @@ class SDSSTest(pl.LightningDataModule):
 
 
 class TestSimulate:
-    def test_simulate(self, cfg):
+    def test_simulate(self, cfg, encoder):
         # loads single r-band model with correct number of outputs
         sim_dataset = instantiate(cfg.simulator)
         sim_tile = torch.load(cfg.paths.data + "/tests/test_image/dataset_0.pt")
@@ -40,9 +40,6 @@ class TestSimulate:
         background = background.to(cfg.predict.device)
 
         sdss_test = SDSSTest(image, background, cfg)
-        encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-        enc_state_dict = torch.load(cfg.predict.weight_save_path)
-        encoder.load_state_dict(enc_state_dict)
         encoder.eval()
         trainer = instantiate(cfg.predict.trainer)
         est_tile = trainer.predict(encoder, datamodule=sdss_test)[0]["est_cat"].to(

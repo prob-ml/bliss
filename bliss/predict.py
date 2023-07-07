@@ -97,14 +97,11 @@ def predict_sdss(cfg):
 
 
 def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
-    log_fluxes_suffix = "_log_fluxes"
     fluxes_suffix = "_fluxes"
     # reshape nelec_per_nmgy_per_band to (1, {n_bands}) to broadcast
     nelec_per_nmgy_per_band = nelec_per_nmgy_per_band.reshape(1, -1)
     for key in est_cat.keys():
-        if key.endswith(log_fluxes_suffix):
-            est_cat[key] = torch.tensor(np.array(est_cat[key]) - np.log(nelec_per_nmgy_per_band))
-        elif key.endswith(fluxes_suffix):
+        if key.endswith(fluxes_suffix):
             est_cat[key] = torch.tensor(np.array(est_cat[key]) / nelec_per_nmgy_per_band)
         elif key == "galaxy_params":
             clone = est_cat[key].clone()

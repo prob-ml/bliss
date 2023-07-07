@@ -1,16 +1,14 @@
 import numpy as np
-from hydra.utils import instantiate
 from mock_tests import mock_predict_sdss
 
 
 class TestSdssReconstruct:
-    def test_sdss_reconstruct(self, cfg):
+    def test_sdss_reconstruct(self, cfg, decoder):
         est_tile, true_img, true_bg, _, _ = mock_predict_sdss(cfg)
 
         # reconstruction test only considers r-band image/catalog params
-        decoder_obj = instantiate(cfg.simulator.decoder)
         rcfs = np.array([[94, 1, 12]])
-        imgs = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
+        imgs = decoder.render_images(est_tile.to("cpu"), rcfs)
         recon_img = imgs[0][0, 2]  # r_band
 
         ptc = cfg.encoder.tile_slen * cfg.encoder.tiles_to_crop

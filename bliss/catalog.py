@@ -6,7 +6,6 @@ from typing import Dict, Tuple
 
 import torch
 from einops import rearrange, reduce, repeat
-from matplotlib.pyplot import Axes
 from torch import Tensor
 
 
@@ -460,16 +459,3 @@ class FullCatalog(UserDict):
                 tile_n_sources[ii, coords[0], coords[1]] = source_idx + 1
         tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
-
-    def plot_plocs(self, ax: Axes, idx: int, object_type: str, bp: int = 0, **kwargs):
-        if object_type == "galaxy":
-            keep = self.galaxy_bools[idx, :].squeeze(-1).bool()
-        elif object_type == "star":
-            keep = self.star_bools[idx, :].squeeze(-1).bool()
-        elif object_type == "all":
-            keep = torch.ones(self.max_sources, dtype=torch.bool, device=self.plocs.device)
-        else:
-            raise NotImplementedError()
-        plocs = self.plocs[idx, keep] - 0.5 + bp
-        plocs = plocs.detach().cpu()
-        ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
