@@ -3,7 +3,7 @@ import pytest
 import torch
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.metrics import BlissMetrics, MetricsMode
+from bliss.metrics import BlissMetrics, MetricsMode, three_way_matching
 from bliss.predict import align, prepare_image
 from bliss.surveys.decals import DecalsFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey
@@ -202,3 +202,30 @@ class TestMetrics:
         photo_vs_decals = metrics(decals_cat, photo_cat)
 
         assert bliss_vs_decals["f1"] > photo_vs_decals["f1"]
+
+    def test_three_way_matching(self):
+        gt = {
+            "plocs": torch.arange(5, 30, 5, dtype=float).reshape(1, -1, 1).repeat(1, 1, 2) + 0.5,
+            "n_sources": torch.tensor([5]),
+        }
+        pred = {"plocs": gt["plocs"].clone(), "n_sources": gt["n_sources"].clone()}
+        pred["plocs"] = pred["plocs"][:, :-1]
+        pred["plocs"][0, 2] = torch.tensor([20.5, 15.5])
+        pred["n_sources"] = torch.tensor([4])
+
+        comp = {"plocs": gt["plocs"].clone(), "n_sources": gt["n_sources"].clone()}
+        comp["plocs"][0, 1] = torch.tensor([10.5, 20.5])
+        comp["plocs"] = comp["plocs"][:, :-1]
+        comp["n_sources"] = torch.tensor([4])
+
+        gt_cat = FullCatalog(30, 30, gt)
+        pred_cat = FullCatalog(30, 30, pred)
+        comp_cat = FullCatalog(30, 30, comp)
+
+        matches = three_way_matching(pred_cat, comp_cat, gt_cat)
+
+        assert matches["gt_all"] == {0, 1, 2, 3}
+        assert matches["gt_pred_only"] == {1}
+        assert matches["gt_comp_only"] == {2}
+        assert matches["pred_only"] == {2}
+        assert matches["comp_only"] == {1}

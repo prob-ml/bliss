@@ -4,6 +4,12 @@ defaults:
     - _self_
     - override hydra/job_logging: stdout
 
+encoder:
+    input_transform_params:
+        use_deconv_channel: true
+        concat_psf_params: true
+    bands: [2]
+
 predict:
-    weight_save_path: ${paths.pretrained_models}/sdss.pt
+    weight_save_path: ${paths.pretrained_models}/psf_aware.pt
     device: "cpu"
