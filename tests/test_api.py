@@ -136,6 +136,7 @@ class TestApi:
 
         # check that cat_table, gal_params_table contains all expected columns
         expected_table_columns = [
+            "plocs",
             "star_flux_u",
             "star_flux_g",
             "star_flux_r",

@@ -228,7 +228,9 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     # Convert dictionary of tensors to list of dictionaries
     on_vals = {}
     is_on_mask = est_cat.get_is_on_mask()
-    for k, v in est_cat.items():
+    for k, v in est_cat.to_dict().items():
+        if k == "n_sources":
+            continue
         if k == "galaxy_params":
             # reshape get_is_on_mask() to have same last dimension as galaxy_params
             galaxy_params_mask = is_on_mask.unsqueeze(-1).expand_as(v)
