@@ -9,8 +9,16 @@ class ImageBackground(nn.Module):
     def __init__(
         self,
         items,
-        bands: Tuple[int, ...] = (0, 1, 2, 3, 4),
+        bands: Tuple[int, ...],
     ):
+        """Construct a background image from a set of images.
+
+        Args:
+            items: list of survey image items from which to simulate the background.
+                Needs to contain a "background" key with a Tensor of background images.
+            bands: bands to use for constructing the background, passed from Survey
+        """
+
         super().__init__()
 
         # Add all backgrounds from specified run/col/field to list

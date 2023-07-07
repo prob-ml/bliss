@@ -1,8 +1,10 @@
+from abc import ABC, abstractmethod
+
 import pytorch_lightning as pl
 from torch.utils.data import Dataset
 
 
-class Survey(pl.LightningDataModule, Dataset):
+class Survey(pl.LightningDataModule, Dataset, ABC):
     def __init__(
         self,
         predict_device=None,
@@ -13,64 +15,35 @@ class Survey(pl.LightningDataModule, Dataset):
         self.predict_device = predict_device
         self.predict_crop = predict_crop
 
-        self._prior = None
-        self._background = None
-        self._psf = None
+        self.bands = None
+        self.prior = None
+        self.background = None
+        self.psf = None
 
+    @abstractmethod
     def prepare_data(self):
         """pl.LightningDataModule override."""
-        return NotImplemented
 
+    @abstractmethod
     def __len__(self):
         """Dataset override."""
-        raise NotImplementedError
 
+    @abstractmethod
     def __getitem__(self, idx):
         """Dataset override."""
-        return NotImplemented
 
+    @abstractmethod
     def image_id(self, idx: int):
         """Return the image_id for the given index."""
-        return NotImplemented
 
+    @abstractmethod
     def idx(self, image_id):
         """Return the index for the given image_id."""
-        return NotImplemented
 
+    @abstractmethod
     def image_ids(self):
         """Return a list of all image_ids."""
-        return NotImplemented
 
+    @abstractmethod
     def predict_dataloader(self):
         """pl.LightningDataModule override."""
-        return NotImplemented
-
-    @property
-    def prior(self):
-        """Get the prior."""
-        return self._prior
-
-    @prior.setter
-    def prior(self, prior):
-        """Set the prior."""
-        self._prior = prior
-
-    @property
-    def background(self):
-        """Get the image background."""
-        return self._background
-
-    @background.setter
-    def background(self, background):
-        """Set the image background."""
-        self._background = background
-
-    @property
-    def psf(self):
-        """Get the image PSF."""
-        return self._psf
-
-    @psf.setter
-    def psf(self, psf):
-        """Set the image PSF."""
-        self._psf = psf

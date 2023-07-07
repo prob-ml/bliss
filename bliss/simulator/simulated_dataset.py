@@ -41,8 +41,10 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.background.requires_grad_(False)
 
         assert survey.psf is not None, "Survey psf cannot be None."
+        assert survey.bands is not None, "Survey bands cannot be None."
         self.image_decoder = ImageDecoder(
             psf=survey.psf,
+            bands=survey.bands,
         )
 
         self.n_batches = n_batches
@@ -54,14 +56,15 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         # list of (run, camcol, field) tuples from config
         self.image_ids = np.array(self.survey.image_ids())
 
-    def randomized_image_ids(self, num_samples=1):
-        """Get random run, camcol, field combination from loaded params.
+    def randomized_image_ids(self, num_samples=1) -> Tuple[np.ndarray, np.ndarray]:
+        """Get random image_id from loaded params.
 
         Args:
             num_samples (int, optional): number of random samples to get. Defaults to 1.
 
         Returns:
-            Array of (row, camcol, field) pairs and index of each pair in self.image_ids.
+            Tuple[np.ndarray, np.ndarray]: tuple of image_ids and their corresponding
+                `self.image_ids` indices.
         """
         n = np.random.randint(len(self.image_ids), size=(num_samples,), dtype=int)
         return self.image_ids[n], n
@@ -80,7 +83,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         Args:
             tile_catalog (TileCatalog): The TileCatalog to render.
-            image_id_indices: Indices of row/camcol/field in self.image_ids to sample from.
+            image_id_indices: Indices in self.image_ids to sample from.
 
         Returns:
             Tuple[Tensor, Tensor, Tensor, Tensor]: tuple of images, backgrounds, deconvolved images,

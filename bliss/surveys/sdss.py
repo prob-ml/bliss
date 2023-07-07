@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.prior import ImagePrior, PriorConfig
-from bliss.simulator.psf import ImagePointSpreadFunction, PSFConfig
+from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.survey import Survey
 from bliss.utils.download_utils import download_file_to_dst
 
@@ -25,7 +25,6 @@ SDSSFields = List[TypedDict("SDSSField", {"run": int, "camcol": int, "fields": L
 
 class SloanDigitalSkySurvey(Survey):
     BANDS = ("u", "g", "r", "i", "z")
-    BAND_IDXS = (0, 1, 2, 3, 4)
 
     def __init__(
         self,
@@ -43,7 +42,7 @@ class SloanDigitalSkySurvey(Survey):
         self.rcfgcs = []
 
         self.sdss_fields = sdss_fields
-        self.bands = SloanDigitalSkySurvey.BAND_IDXS
+        self.bands = tuple(range(len(self.BANDS)))
 
         self.prepare_data()
 
@@ -51,7 +50,7 @@ class SloanDigitalSkySurvey(Survey):
             sdss_dir, self.image_ids(), self, self.bands, prior_flux_ref_band, prior_config
         )
         self.background = ImageBackground(items=self, bands=self.bands)
-        self.psf = SDSSPointSpreadFunction(sdss_dir, self.image_ids(), self.bands, psf_config)
+        self.psf = SDSSPSF(sdss_dir, self.image_ids(), self.bands, psf_config)
 
     def prepare_data(self):
         for rcf_conf in self.sdss_fields:
@@ -71,8 +70,8 @@ class SloanDigitalSkySurvey(Survey):
             pf_fits = fits.getdata(pf_path)
 
             assert pf_fits is not None, f"Could not load fits file {pf_path}."
-            fieldnums = pf_fits["FIELD"]  # type: ignore
-            fieldgains = pf_fits["GAIN"]  # type: ignore
+            fieldnums = pf_fits["FIELD"]
+            fieldgains = pf_fits["GAIN"]
 
             # get desired field
             for i, field in enumerate(fieldnums):
@@ -384,7 +383,7 @@ class PhotoFullCatalog(FullCatalog):
         )
 
 
-class SDSSPointSpreadFunction(ImagePointSpreadFunction):
+class SDSSPSF(ImagePSF):
     def __init__(self, survey_data_dir, image_ids, bands, psf_config: PSFConfig):
         super().__init__(bands, **psf_config)
 
@@ -435,6 +434,30 @@ class SDSSPointSpreadFunction(ImagePointSpreadFunction):
             psf_params[i] = torch.tensor([sigma1, sigma2, sigmap, beta, b, p0])
 
         return psf_params
+
+    def _psf_fun(self, r, sigma1, sigma2, sigmap, beta, b, p0):
+        """Generate the PSF from the parameters using the power-law model.
+
+        See https://data.sdss.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/psField.html
+        for details on the parameters and the equation used.
+
+        Args:
+            r: radius
+            sigma1: Inner gaussian sigma for the composite fit
+            sigma2: Outer gaussian sigma for the composite fit
+            sigmap: Width parameter for power law (pixels)
+            beta: Slope of power law.
+            b: Ratio of the outer PSF to the inner PSF at the origin
+            p0: The value of the power law at the origin.
+
+        Returns:
+            The psf function evaluated at r.
+        """
+
+        term1 = torch.exp(-(r**2) / (2 * sigma1))
+        term2 = b * torch.exp(-(r**2) / (2 * sigma2))
+        term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
+        return (term1 + term2 + term3) / (1 + b + p0)
 
 
 class SDSSPrior(ImagePrior):

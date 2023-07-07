@@ -14,7 +14,7 @@ PSFConfig = TypedDict(
 )
 
 
-class ImagePointSpreadFunction:
+class ImagePSF:
     def __init__(self, bands, pixel_scale, psf_slen):
         self.n_bands = len(bands)
         self.pixel_scale = pixel_scale
@@ -62,27 +62,14 @@ class ImagePointSpreadFunction:
         mgrid = torch.tensor(np.dstack((y, x))) / offset
         return mgrid.float()
 
-    @staticmethod
-    def _psf_fun(r, sigma1, sigma2, sigmap, beta, b, p0):
-        """Generate the PSF from the parameters using the power-law model.
-
-        See https://data.sdss.org/datamodel/files/PHOTO_REDUX/RERUN/RUN/objcs/CAMCOL/psField.html
-        for details on the parameters and the equation used.
+    def _psf_fun(self, r, **params):
+        """Generate the PSF from the parameters.
 
         Args:
             r: radius
-            sigma1: Inner gaussian sigma for the composite fit
-            sigma2: Outer gaussian sigma for the composite fit
-            sigmap: Width parameter for power law (pixels)
-            beta: Slope of power law.
-            b: Ratio of the outer PSF to the inner PSF at the origin
-            p0: The value of the power law at the origin.
+            **params: psf parameters (e.g., (sigma1, sigma2, sigmap, beta, b, p0) for SDSS)
 
-        Returns:
-            The psf function evaluated at r.
+        Raises:
+            NotImplementedError: if the psf function is not implemented
         """
-
-        term1 = torch.exp(-(r**2) / (2 * sigma1))
-        term2 = b * torch.exp(-(r**2) / (2 * sigma2))
-        term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
-        return (term1 + term2 + term3) / (1 + b + p0)
+        raise NotImplementedError

@@ -12,8 +12,15 @@ class ImageDecoder(nn.Module):
     def __init__(
         self,
         psf,
-        bands: Tuple[int, ...] = (0, 1, 2, 3, 4),
+        bands: Tuple[int, ...],
     ) -> None:
+        """Construct a decoder for a set of images.
+
+        Args:
+            psf: PSF object
+            bands: bands to use for constructing the decoder, passed from Survey
+        """
+
         super().__init__()
 
         self.n_bands = len(bands)

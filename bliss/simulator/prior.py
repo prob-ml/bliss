@@ -227,8 +227,8 @@ class ImagePrior(pl.LightningModule):
 
         Instead of pareto-sampling fluxes for each band, we pareto-sample `b`-band flux values,
         using prior `b`-band star/galaxy flux parameters, then apply other-band-to-`b`-band flux
-        ratios to get other-band flux values. This is primarily because Pareto distribution is
-        multimodal, and so it is not always the case that, e.g.,
+        ratios to get other-band flux values. This is primarily because it is not always the case
+        that, e.g.,
             flux_r ~ Pareto, flux_g ~ Pareto => flux_r | flux_g ~ Pareto.
 
         Args:
