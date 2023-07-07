@@ -1,10 +1,44 @@
 """Common functions to plot results."""
 import numpy as np
+import torch
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
+def plot_plocs(catalog, ax, idx, filter_by="all", bp=0, **kwargs):
+    """Plots pixel coordinates of sources on given axis.
+
+    Args:
+        catalog: FullCatalog to get sources from
+        ax: Matplotlib axes to plot on
+        idx: index of the image in the batch to plot sources of
+        filter_by: Which sources to plot. Can be either a string specifying the source type (either
+            'galaxy', 'star', or 'all'), or a list of indices. Defaults to "all".
+        bp: Offset added to locations, used for adjusting for cropped tiles. Defaults to 0.
+        **kwargs: Keyword arguments to pass to scatter plot.
+
+    Raises:
+        NotImplementedError: If object_type is not one of 'galaxy', 'star', 'all', or a List.
+    """
+    match filter_by:
+        case "galaxy":
+            keep = catalog.galaxy_bools[idx, :].squeeze(-1).bool()
+        case "star":
+            keep = catalog.star_bools[idx, :].squeeze(-1).bool()
+        case "all":
+            keep = torch.ones(catalog.max_sources, dtype=torch.bool, device=catalog.plocs.device)
+        case list():
+            keep = filter_by
+        case _:
+            raise NotImplementedError(f"Unknown filter option {filter} specified")
+
+    plocs = catalog.plocs[idx, keep] - 0.5 + bp
+    plocs = plocs.detach().cpu()
+    ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
+
+
 def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px):
+    """Plots an image of true and estimated sources."""
     fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(20, 20))
     axes = axes.flatten() if nrows > 1 else [axes]  # flatten
 
@@ -33,9 +67,9 @@ def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px):
         im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
         fig.colorbar(im, cax=cax, orientation="vertical")
 
-        true_cat.plot_plocs(ax, img_id, "galaxy", bp=margin_px, color="r", marker="x", s=20)
-        true_cat.plot_plocs(ax, img_id, "star", bp=margin_px, color="m", marker="x", s=20)
-        est_cat.plot_plocs(ax, img_id, "all", bp=margin_px, color="b", marker="+", s=30)
+        plot_plocs(true_cat, ax, img_id, "galaxy", bp=margin_px, color="r", marker="x", s=20)
+        plot_plocs(true_cat, ax, img_id, "star", bp=margin_px, color="m", marker="x", s=20)
+        plot_plocs(est_cat, ax, img_id, "all", bp=margin_px, color="b", marker="+", s=30)
 
         if ax_idx == 0:
             ax.scatter(None, None, color="r", marker="x", s=20, label="t.gal")

@@ -24,7 +24,6 @@ from bliss.unconstrained_dists import (
     UnconstrainedDiagonalBivariateNormal,
     UnconstrainedLogitNormal,
     UnconstrainedLogNormal,
-    UnconstrainedNormal,
 )
 
 
@@ -36,7 +35,7 @@ class Encoder(pl.LightningModule):
     representation of this image.
     """
 
-    STAR_FLUX_NAMES = [f"star_log_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
+    STAR_FLUX_NAMES = [f"star_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
     GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
     GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
 
@@ -110,7 +109,7 @@ class Encoder(pl.LightningModule):
             "galsim_a_b": UnconstrainedLogNormal(),
         }
         for star_flux in self.STAR_FLUX_NAMES:
-            d[star_flux] = UnconstrainedNormal(low_clamp=-6, high_clamp=3)
+            d[star_flux] = UnconstrainedLogNormal()
         for gal_flux in self.GAL_FLUX_NAMES:
             d[gal_flux] = UnconstrainedLogNormal()
         return d
@@ -208,22 +207,19 @@ class Encoder(pl.LightningModule):
 
         Args:
             pred (Dict[str, Tensor]): model predictions
-            return_full (bool, optional): If True, returns a FullCatalog instead of a TileCatalog.
-                Defaults to False.
+            return_full (bool, optional): Returns a FullCatalog if true, otherwise returns a
+                TileCatalog. Defaults to True.
 
         Returns:
             Union[FullCatalog, TileCatalog]: Catalog based on predictions.
         """
         # the mean would be better at minimizing squared error...should we return that instead?
         tile_is_on_array = pred["on_prob"].mode
-        # this is the mode of star_log_flux but not the mean of the star_flux distribution
-        est_catalog_dict = {}
 
         # populate est_catalog_dict with per-band (log) star fluxes
-        star_log_fluxes = torch.stack(
+        star_fluxes = torch.stack(
             [pred[name].mode * tile_is_on_array for name in self.STAR_FLUX_NAMES], dim=3
         )
-        star_fluxes = star_log_fluxes.exp()
 
         # populate est_catalog_dict with source type
         galaxy_bools = pred["galaxy_prob"].mode
@@ -247,7 +243,6 @@ class Encoder(pl.LightningModule):
         # light sources per tile, but we predict only one source per tile
         est_catalog_dict = {
             "locs": rearrange(pred["loc"].mode, "b ht wt d -> b ht wt 1 d"),
-            "star_log_fluxes": rearrange(star_log_fluxes, "b ht wt d -> b ht wt 1 d"),
             "star_fluxes": rearrange(star_fluxes, "b ht wt d -> b ht wt 1 d"),
             "n_sources": tile_is_on_array,
             "source_type": rearrange(source_type, "b ht wt -> b ht wt 1 1"),
@@ -292,9 +287,7 @@ class Encoder(pl.LightningModule):
 
         # flux losses
         true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
-        star_log_fluxes = rearrange(
-            true_tile_cat["star_log_fluxes"], "b ht wt 1 bnd -> b ht wt bnd"
-        )
+        star_fluxes = rearrange(true_tile_cat["star_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
         galaxy_fluxes = rearrange(true_tile_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
 
         # only compute loss over bands we're using
@@ -302,7 +295,7 @@ class Encoder(pl.LightningModule):
         gal_bands = [self.GAL_FLUX_NAMES[band] for band in self.bands]
         for i, (star_name, gal_name) in enumerate(zip(star_bands, gal_bands)):
             # star flux loss
-            star_flux_loss = -pred[star_name].log_prob(star_log_fluxes[..., i]) * true_star_bools
+            star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i]) * true_star_bools
             loss += star_flux_loss
             loss_with_components[star_name] = star_flux_loss.sum() / true_star_bools.sum()
 

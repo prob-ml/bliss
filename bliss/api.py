@@ -218,7 +218,6 @@ class BlissClient:
 
 def fullcat_to_astropy_table(est_cat: FullCatalog):
     required_keys = [
-        "star_log_fluxes",
         "star_fluxes",
         "source_type",
         "galaxy_params",
@@ -229,7 +228,9 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     # Convert dictionary of tensors to list of dictionaries
     on_vals = {}
     is_on_mask = est_cat.get_is_on_mask()
-    for k, v in est_cat.items():
+    for k, v in est_cat.to_dict().items():
+        if k == "n_sources":
+            continue
         if k == "galaxy_params":
             # reshape get_is_on_mask() to have same last dimension as galaxy_params
             galaxy_params_mask = is_on_mask.unsqueeze(-1).expand_as(v)
@@ -238,12 +239,10 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
             on_vals[k] = v[is_on_mask].cpu()
     # Split to different columns for each band
     for b, bl in enumerate(SloanDigitalSkySurvey.BANDS):
-        on_vals[f"star_log_flux_{bl}"] = on_vals["star_log_fluxes"][..., b]
         on_vals[f"star_flux_{bl}"] = on_vals["star_fluxes"][..., b]
         on_vals[f"galaxy_flux_{bl}"] = on_vals["galaxy_fluxes"][..., b]
     # Remove combined flux columns
     on_vals.pop("star_fluxes")
-    on_vals.pop("star_log_fluxes")
     on_vals.pop("galaxy_fluxes")
     n = is_on_mask.sum()  # number of (predicted) objects
     rows = [{k: v[i].cpu() for k, v in on_vals.items()} for i in range(n)]
@@ -252,7 +251,6 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     est_cat_table = Table(rows)
     # Convert all _fluxes columns to u.Quantity
     for bl in SloanDigitalSkySurvey.BANDS:
-        est_cat_table[f"star_log_flux_{bl}"].unit = u.LogUnit(u.nmgy)
         est_cat_table[f"star_flux_{bl}"].unit = u.nmgy
         est_cat_table[f"galaxy_flux_{bl}"].unit = u.nmgy
 
@@ -323,8 +321,8 @@ def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
     # convert values to astropy units
     bands = SloanDigitalSkySurvey.BANDS  # NOTE: SDSS-specific!
     for bnd in bands:
-        pred_table[f"star_log_flux {bnd}_mean"].unit = u.LogUnit(u.nmgy)
-        pred_table[f"star_log_flux {bnd}_std"].unit = u.LogUnit(u.nmgy)
+        pred_table[f"star_flux_{bnd}_mean"].unit = u.nmgy
+        pred_table[f"star_flux_{bnd}_std"].unit = u.nmgy
         pred_table[f"galaxy_flux_{bnd}_mean"].unit = u.nmgy
         pred_table[f"galaxy_flux_{bnd}_std"].unit = u.nmgy
 
