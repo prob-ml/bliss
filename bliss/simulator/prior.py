@@ -134,7 +134,6 @@ class ImagePrior(pl.LightningModule):
 
         galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(select_gal_rcfs)
         star_fluxes = self._sample_star_fluxes(select_star_rcfs)
-        star_log_fluxes = star_fluxes.log()
 
         n_sources = self._sample_n_sources()
         source_type = self._sample_source_type()
@@ -146,7 +145,6 @@ class ImagePrior(pl.LightningModule):
             "galaxy_fluxes": galaxy_fluxes,
             "galaxy_params": galaxy_params,
             "star_fluxes": star_fluxes,
-            "star_log_fluxes": star_log_fluxes,
         }
 
         return TileCatalog(self.tile_slen, catalog_params)
