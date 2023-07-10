@@ -1,17 +1,39 @@
 import itertools
 import random
-from pathlib import Path
+from typing import Tuple, TypedDict
 
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from astropy.io import fits
-from omegaconf.dictconfig import DictConfig
 from torch import Tensor
 from torch.distributions import Gamma, Poisson, Uniform
 
 from bliss.catalog import SourceType, TileCatalog
-from bliss.surveys.sdss import SDSSDownloader, SloanDigitalSkySurvey, column_to_tensor
+
+PriorConfig = TypedDict(
+    "PriorConfig",
+    {
+        "max_bands": int,
+        "n_tiles_h": int,
+        "n_tiles_w": int,
+        "tile_slen": int,
+        "batch_size": int,
+        "max_sources": int,
+        "mean_sources": float,
+        "min_sources": int,
+        "prob_galaxy": float,
+        "star_flux_min": float,
+        "star_flux_max": float,
+        "star_flux_alpha": float,
+        "galaxy_flux_min": float,
+        "galaxy_flux_max": float,
+        "galaxy_alpha": float,
+        "galaxy_a_concentration": float,
+        "galaxy_a_loc": float,
+        "galaxy_a_scale": float,
+        "galaxy_a_bd_ratio": float,
+    },
+)
 
 
 class ImagePrior(pl.LightningModule):
@@ -24,7 +46,8 @@ class ImagePrior(pl.LightningModule):
 
     def __init__(
         self,
-        sdss_fields: DictConfig,
+        bands,
+        max_bands,
         n_tiles_h: int,
         n_tiles_w: int,
         tile_slen: int,
@@ -47,7 +70,8 @@ class ImagePrior(pl.LightningModule):
         """Initializes ImagePrior.
 
         Args:
-            sdss_fields: sdss frames to sample from,
+            bands: List of bands
+            max_bands: Maximum number of bands
             n_tiles_h: Image height in tiles,
             n_tiles_w: Image width in tiles,
             tile_slen: Tile side length in pixels,
@@ -72,16 +96,11 @@ class ImagePrior(pl.LightningModule):
         self.n_tiles_w = n_tiles_w
         self.tile_slen = tile_slen
         # NOTE: bands have to be non-empty
-        assert sdss_fields["bands"]
-        self.bands = sdss_fields["bands"]
-        self.n_bands = len(self.bands)
-        self.max_bands = 5  # TODO: fix hard-coding just for SDSS
+        assert bands, "Need at least one band"
+        self.bands = bands
+        self.n_bands = len(bands)  # used in SimulatedDataset
+        self.max_bands = max_bands
         self.batch_size = batch_size
-        self.sdss = sdss_fields["dir"]
-
-        self.rcf_stars_rest, self.rcf_gals_rest = self._load_color_distribution(
-            sdss_fields["field_list"]
-        )
 
         self.min_sources = min_sources
         self.max_sources = max_sources
@@ -102,11 +121,11 @@ class ImagePrior(pl.LightningModule):
         self.galaxy_a_scale = galaxy_a_scale
         self.galaxy_a_bd_ratio = galaxy_a_bd_ratio
 
-    def sample_prior(self, batch_rcfs) -> TileCatalog:
+    def sample_prior(self, batch_image_ids) -> TileCatalog:
         """Samples latent variables from the prior of an astronomical image.
 
         Args:
-            batch_rcfs: run, camcol, field combinations needed for sampling.
+            batch_image_ids: image_ids needed for sampling.
 
         Returns:
             A dictionary of tensors. Each tensor is a particular per-tile quantity; i.e.
@@ -115,25 +134,25 @@ class ImagePrior(pl.LightningModule):
             The remaining dimensions are variable-specific.
         """
         locs = self._sample_locs()
-        select_gal_rcfs = []
-        select_star_rcfs = []
+        select_gal_flux_ratios = []
+        select_star_flux_ratios = []
 
-        for rcf in batch_rcfs:
-            rcf = tuple(rcf)
+        for batch_image_id in batch_image_ids:
+            image_id = tuple(batch_image_id)
             # get value if key exists, otherwise pick randomly
-            select_gal_rcfs.append(
-                self.rcf_gals_rest[rcf]
-                if rcf in self.rcf_gals_rest
-                else random.choice(list(self.rcf_gals_rest.values()))
+            select_gal_flux_ratios.append(
+                self.gals_fluxes[image_id]
+                if image_id in self.gals_fluxes
+                else random.choice(list(self.gals_fluxes.values()))
             )
-            select_star_rcfs.append(
-                self.rcf_stars_rest[rcf]
-                if rcf in self.rcf_stars_rest
-                else random.choice(list(self.rcf_stars_rest.values()))
+            select_star_flux_ratios.append(
+                self.stars_fluxes[image_id]
+                if image_id in self.stars_fluxes
+                else random.choice(list(self.stars_fluxes.values()))
             )
 
-        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(select_gal_rcfs)
-        star_fluxes = self._sample_star_fluxes(select_star_rcfs)
+        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(select_gal_flux_ratios)
+        star_fluxes = self._sample_star_fluxes(select_star_flux_ratios)
 
         n_sources = self._sample_n_sources()
         source_type = self._sample_source_type()
@@ -167,24 +186,30 @@ class ImagePrior(pl.LightningModule):
         star_bool = galaxy_bool.bitwise_not()
         return SourceType.STAR * star_bool + SourceType.GALAXY * galaxy_bool
 
+    def _draw_truncated_pareto(self, alpha, min_x, max_x, n_samples) -> Tensor:
+        # draw pareto conditioned on being less than f_max
+        u_max = 1 - (min_x / max_x) ** alpha
+        uniform_samples = torch.rand(n_samples) * u_max
+        return min_x / (1.0 - uniform_samples) ** (1 / alpha)
+
     def _sample_star_fluxes(self, star_ratios):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
-        r_flux = self._draw_truncated_pareto(
+        b_flux = self._draw_truncated_pareto(
             self.star_flux_alpha, self.star_flux_min, self.star_flux_max, latent_dims
         )
-        total_flux = self.multiflux(star_ratios, r_flux)
+        total_flux = self.multiflux(star_ratios, b_flux)
 
         # select specified bands
         bands = np.array(self.bands)
         return total_flux[..., bands]
 
-    def multiflux(self, rcf_ratios, flux_base) -> Tensor:
+    def multiflux(self, flux_ratios, flux_base) -> Tensor:
         """Generate flux values for remaining bands based on draw."""
         total_flux = torch.zeros(
             self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 5
         )
 
-        for b, obj_ratios in enumerate(rcf_ratios):
+        for b, obj_ratios in enumerate(flux_ratios):
             for h, w, s, bnd in itertools.product(  # noqa: WPS352
                 range(self.n_tiles_h),
                 range(self.n_tiles_w),
@@ -197,103 +222,33 @@ class ImagePrior(pl.LightningModule):
 
         return total_flux
 
-    def _load_color_distribution(self, sdss_fields):
-        rcf_stars_rest = {}
-        rcf_gals_rest = {}
+    def _flux_ratios_against_b(self, survey_data_dir, image_ids, items, b) -> Tuple[dict, dict]:
+        """Sample and compute all star, galaxy fluxes relative to `b`-band based on real image data.
 
-        # load all star, galaxy fluxes relative to r-band required for sampling
-        for field_params in sdss_fields:
-            run = field_params["run"]
-            camcol = field_params["camcol"]
-            fields = field_params["fields"]
-
-            # load SDSS object to iterate over field frames
-            sdss = SloanDigitalSkySurvey(self.sdss, run, camcol, fields)
-
-            # load project SDSS dir
-            sdss_path = Path(self.sdss)
-
-            for i, field in enumerate(fields):
-                # Set photoObj file path
-                field_dir = sdss_path / str(run) / str(camcol) / str(field)
-                po_path = field_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
-
-                if not po_path.exists():
-                    SDSSDownloader(run, camcol, field, str(sdss_path)).download_po()
-                msg = (
-                    f"{po_path} does not exist. "
-                    + "Make sure data files are available for fields specified in config."
-                )
-                assert Path(po_path).exists(), msg
-                po_fits = fits.getdata(po_path)
-
-                # retrieve object-specific information for ratio computing
-                objc_type = column_to_tensor(po_fits, "objc_type").numpy()
-                thing_id = column_to_tensor(po_fits, "thing_id").numpy()
-
-                # mask fluxes based on object identity & validity
-                galaxy_bools = (objc_type == 3) & (thing_id != -1)
-                star_bools = (objc_type == 6) & (thing_id != -1)
-                star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
-                gal_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
-                fluxes = star_fluxes + gal_fluxes
-
-                # containers for light source ratios in current field
-                star_fluxes_rest = []
-                gal_fluxes_rest = []
-
-                # SDSS object for current field
-                sdss_obj = sdss[i]
-
-                for obj, _ in enumerate(objc_type):
-                    if thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                        ratios = self._compute_flux_ratio(fluxes[obj], sdss_obj)  # noqa: WPS220
-                        if objc_type[obj] == 6:  # noqa: WPS220
-                            star_fluxes_rest.append(ratios)  # noqa: WPS220
-                        elif objc_type[obj] == 3:  # noqa: WPS220
-                            gal_fluxes_rest.append(ratios)  # noqa: WPS220
-
-                if star_fluxes_rest:
-                    rcf_stars_rest[(run, camcol, field)] = star_fluxes_rest
-                if gal_fluxes_rest:
-                    rcf_gals_rest[(run, camcol, field)] = gal_fluxes_rest
-        return rcf_stars_rest, rcf_gals_rest
-
-    @staticmethod
-    def _draw_truncated_pareto(alpha, min_x, max_x, n_samples) -> Tensor:
-        # draw pareto conditioned on being less than f_max
-        u_max = 1 - (min_x / max_x) ** alpha
-        uniform_samples = torch.rand(n_samples) * u_max
-        return min_x / (1.0 - uniform_samples) ** (1 / alpha)
-
-    def _compute_flux_ratio(self, obj_fluxes, sdss_obj):
-        """Query SDSS frames to get flux ratios in units of electron count.
+        Instead of pareto-sampling fluxes for each band, we pareto-sample `b`-band flux values,
+        using prior `b`-band star/galaxy flux parameters, then apply other-band-to-`b`-band flux
+        ratios to get other-band flux values. This is primarily because it is not always the case
+        that, e.g.,
+            flux_r ~ Pareto, flux_g ~ Pareto => flux_r | flux_g ~ Pareto.
 
         Args:
-            obj_fluxes: tensor of electron counts for a particular SDSS object
-            sdss_obj: SloanDigitalSkySurvey object entry for a particular field
+            survey_data_dir (str): path to survey data directory
+            image_ids (list): list of image ids corresponding to `items`
+            items (list): list of image items
+            b (int): index of reference band
 
         Returns:
-            ratios (Tensor): Ratio of electron counts for each light source in field
-            relative to r-band
+            stars_fluxes (dict): image_id-indexed dict of star flux ratios # noqa: DAR202
+                relative to `b`-band
+            gals_fluxes (dict): image_id-indexed dict of galaxy flux ratios   # noqa: DAR202
+                relative to `b`-band
+
+        Raises:
+            NotImplementedError: if this method is not implemented in a subclass
         """
-        ratios = torch.zeros(obj_fluxes.size())
+        raise NotImplementedError
 
-        # distribution of nelec_per_nmgy very clustered around mean
-        nelec_per_nmgys = sdss_obj["nelec_per_nmgy_list"]
-        r_rat = nelec_per_nmgys[2].mean()  # fix r-band (count:nmgy) ratio
-
-        for i in range(self.max_bands):
-            # distribution of nelec_per_nmgy very clustered around mean
-            nelec_per_nmgy_rat = nelec_per_nmgys[i].mean() / r_rat
-
-            # (nmgy ratio relative to r-band) * (nelec/nmgy ratio relative to r band)
-            # result: ratio in units of electron counts
-            ratios[i] = (obj_fluxes[i] / obj_fluxes[2]) * nelec_per_nmgy_rat
-
-        return ratios
-
-    def _sample_galaxy_prior(self, gal_ratios):
+    def _sample_galaxy_prior(self, gal_ratios) -> Tuple[Tensor, Tensor]:
         """Sample the latent galaxy params.
 
         Args:

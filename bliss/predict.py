@@ -1,14 +1,19 @@
 from pathlib import Path
+from typing import Any, Dict, Tuple
 
 import numpy as np
 import torch
+from astropy.wcs import WCS
 from bokeh.models import TabPanel, Tabs
 from bokeh.plotting import figure, output_file, show
 from hydra.utils import instantiate
 from reproject import reproject_interp
+from torch import Tensor
 
-from bliss.surveys.decals import DarkEnergyCameraLegacySurvey, DecalsFullCatalog
-from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey
+from bliss.catalog import FullCatalog
+from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
+from bliss.surveys.decals import DecalsDownloader, DecalsFullCatalog
+from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 
 def prepare_image(x, device):
@@ -17,12 +22,32 @@ def prepare_image(x, device):
     # image dimensions must be a multiple of 16
     height = x.size(2) - (x.size(2) % 16)
     width = x.size(3) - (x.size(3) % 16)
-    x = x[:, :, :height, :width]
-
-    return x  # noqa: WPS331
+    return x[:, :, :height, :width]
 
 
-def align(img, ref_wcs):
+def crop_image(image, background, crop_params):
+    """Crop the image (and background) to a subregion for prediction."""
+    if not crop_params.do_crop:
+        return image, background
+
+    idx0 = crop_params.left_upper_corner[0]
+    idx1 = crop_params.left_upper_corner[1]
+    width = crop_params.width
+    height = crop_params.height
+    if ((idx0 + height) <= image.shape[2]) and ((idx1 + width) <= image.shape[3]):
+        image = image[:, :, idx0 : idx0 + height, idx1 : idx1 + width]
+        background = background[:, :, idx0 : idx0 + height, idx1 : idx1 + width]
+    return image, background
+
+
+def prepare_batch(images, backgrounds):
+    batch = {"images": images, "background": backgrounds}
+    batch["images"] = batch["images"].squeeze(0)
+    batch["background"] = batch["background"].squeeze(0)
+    return batch
+
+
+def align(img, ref_wcs, ref_band):
     """Reproject images based on some reference WCS for pixel alignment."""
     reproj_d = {}
     footprint_d = {}
@@ -33,7 +58,7 @@ def align(img, ref_wcs):
     for bnd in range(img.shape[0]):
         inputs = (img[bnd], ref_wcs[bnd])
         reproj, footprint = reproject_interp(  # noqa: WPS317
-            inputs, ref_wcs[2], order="bicubic", shape_out=img[bnd].shape
+            inputs, ref_wcs[ref_band], order="bicubic", shape_out=img[bnd].shape
         )
         reproj_d[bnd] = reproj
         footprint_d[bnd] = footprint
@@ -57,45 +82,6 @@ def align(img, ref_wcs):
     return reproj_out
 
 
-def predict_sdss(cfg):
-    sdss = instantiate(cfg.predict.dataset)
-    assert isinstance(
-        sdss, SloanDigitalSkySurvey
-    ), "sdss expected to be a SloanDigitalSkySurvey, but got {}".format(type(sdss))
-
-    sdss_cat = PhotoFullCatalog.from_file(
-        cfg.paths.sdss,
-        run=cfg.predict.dataset.run,
-        camcol=cfg.predict.dataset.camcol,
-        field=cfg.predict.dataset.fields[0],
-        sdss_obj=sdss,
-    )
-
-    sdss_plocs = sdss_cat.plocs[0]
-    sdss[0]["image"] = align(sdss[0]["image"], ref_wcs=sdss[0]["wcs"])
-    sdss[0]["background"] = align(sdss[0]["background"], ref_wcs=sdss[0]["wcs"])
-
-    # mean of the nelec_per_mgy per band
-    nelec_per_nmgy_per_band = np.mean(sdss[0]["nelec_per_nmgy_list"], axis=1)
-
-    encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-    enc_state_dict = torch.load(cfg.predict.weight_save_path)
-    encoder.load_state_dict(enc_state_dict)
-    encoder.eval()
-    trainer = instantiate(cfg.predict.trainer)
-    est_cat, images, background, pred = trainer.predict(encoder, datamodule=sdss)[0].values()
-
-    est_cat = nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band)
-    est_full = est_cat.to_full_params()
-    if cfg.predict.plot.show_plot and (sdss_plocs is not None):
-        ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
-        cropped_image = images[0, 0, ptc:-ptc, ptc:-ptc]
-        cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
-        plot_predict(cfg, cropped_image, cropped_background, sdss_plocs, est_full)
-
-    return est_full, images[0], background[0], sdss_plocs, pred
-
-
 def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
     fluxes_suffix = "_fluxes"
     # reshape nelec_per_nmgy_per_band to (1, {n_bands}) to broadcast
@@ -112,55 +98,59 @@ def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
     return est_cat
 
 
-def decals_plocs_from_sdss(cfg):
-    """Use wcs to match sdss image with corresponding DECaLS catalog for futher plotting."""
-    sdss = instantiate(cfg.predict.dataset)
-    idx0 = cfg.predict.crop.left_upper_corner[0]
-    idx1 = cfg.predict.crop.left_upper_corner[1]
-    width = cfg.predict.crop.width
-    height = cfg.predict.crop.height
-    wcs = sdss[0]["wcs"][0]
-    ra_lim, dec_lim = wcs.all_pix2world((idx1, idx1 + width), (idx0, idx0 + height), 0)
+def predict(cfg) -> Tuple[FullCatalog, Tensor, Tensor, Any, Dict[str, Tensor]]:
+    survey = instantiate(cfg.predict.dataset)
+    assert (
+        len(survey) == 1
+    ), "Prediction only supported for one image_id (e.g., (run, camcol, field))"
+    survey_obj = survey[0]
+    survey_obj["image"] = align(
+        survey_obj["image"], ref_wcs=survey_obj["wcs"], ref_band=cfg.predict.dataset.reference_band
+    )
+    survey_obj["background"] = align(
+        survey_obj["background"],
+        ref_wcs=survey_obj["wcs"],
+        ref_band=cfg.predict.dataset.reference_band,
+    )
 
-    # TODO: 3366m010 is hardcoded brick now. Map SDSS RCF -> DECaLS brick.
-    decals_path = cfg.paths.decals + "/tractor-3366m010.fits"
-    return DecalsFullCatalog.from_file(decals_path, ra_lim, dec_lim).plocs
-
-
-def decals_plocs_from_decals(decals, cfg):
-    idx0 = cfg.predict.crop.left_upper_corner[0]
-    idx1 = cfg.predict.crop.left_upper_corner[1]
-    width = cfg.predict.crop.width
-    height = cfg.predict.crop.height
-    wcs = decals[0]["wcs"][
-        cfg.predict.dataset.bands[0]
-    ]  # TODO: somehow use all bands, not just one
-    ra_lim, dec_lim = wcs.all_pix2world((idx1, idx1 + width), (idx0, idx0 + height), 0)
-
-    tractor_filename = cfg.paths.decals + f"/tractor-{decals.brickname}.fits"
-    return DecalsFullCatalog.from_file(tractor_filename, ra_lim, dec_lim).plocs
-
-
-def predict_decals(cfg):
-    decals = instantiate(cfg.predict.dataset)
-    assert isinstance(
-        decals, DarkEnergyCameraLegacySurvey
-    ), "decals expected to be a DarkEnergyCameraLegacySurvey, but got {}".format(type(decals))
-    decals_plocs = decals_plocs_from_decals(decals, cfg)
+    cat_path = survey.downloader.download_catalog()
+    plocs = survey.catalog_cls.from_file(
+        cat_path=cat_path,
+        wcs=survey_obj["wcs"][cfg.predict.dataset.reference_band],
+        height=survey_obj["image"].shape[1],
+        width=survey_obj["image"].shape[2],
+    ).plocs[0]
 
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     enc_state_dict = torch.load(cfg.predict.weight_save_path)
     encoder.load_state_dict(enc_state_dict)
     encoder.eval()
     trainer = instantiate(cfg.predict.trainer)
-    est_cat, images, background, pred = trainer.predict(encoder, datamodule=decals)[0].values()
-    if cfg.predict.plot.show_plot and (decals_plocs is not None):
+    images = prepare_image(survey.predict_batch["images"], cfg.predict.device)
+    backgrounds = prepare_image(survey.predict_batch["background"], cfg.predict.device)
+    images, backgrounds = crop_image(images, backgrounds, cfg.predict.crop)
+    survey.predict_batch = prepare_batch(images, backgrounds)
+    est_cat, images, background, pred = trainer.predict(encoder, datamodule=survey)[0].values()
+
+    # mean of the nelec_per_mgy per band
+    nelec_per_nmgy_per_band = np.mean(survey_obj["nelec_per_nmgy_list"], axis=1)
+    est_cat = nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band)
+
+    est_full = est_cat.to_full_params()
+    if cfg.predict.plot.show_plot and (plocs is not None):
         ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
         cropped_image = images[0, 0, ptc:-ptc, ptc:-ptc]
         cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
-        plot_predict(cfg, cropped_image, cropped_background, decals_plocs, est_cat)
+        plot_predict(
+            cfg,
+            cropped_image,
+            cropped_background,
+            plocs,
+            est_full,
+            survey_obj["wcs"][SDSS.BANDS.index("r")],
+        )
 
-    return est_cat, images[0], background[0], decals_plocs, pred
+    return est_full, images[0], background[0], plocs, pred
 
 
 def crop_plocs(cfg, w, h, plocs, do_crop=False):
@@ -226,18 +216,38 @@ def plot_image(cfg, img, w, h, est_plocs, true_plocs, title):
     true_plocs = np.array(crop_plocs(cfg, w, h, true_plocs, do_crop).cpu())
     decals_plocs = None
     if do_crop and (not is_simulated):
-        decals_plocs = np.array(crop_plocs(cfg, w, h, decals_plocs_from_sdss(cfg)[0], do_crop))
+        sdss = instantiate(cfg.predict.dataset)
+        wcs = sdss[0]["wcs"][0]
+
+        # Map SDSS RCF to DECaLS brickname
+        sdss_fields = cfg.surveys.sdss.sdss_fields
+        run, camcol, fields = sdss_fields[0].values()
+        brickname = DECaLS.brick_for_radec(*SDSS.radec_for_rcf(run, camcol, fields[0]))
+
+        tractor_filename = DecalsDownloader(brickname, cfg.paths.decals).download_catalog()
+        decals_plocs_from_sdss = DecalsFullCatalog.from_file(
+            tractor_filename, wcs, height=sdss[0]["image"].shape[1], width=sdss[0]["image"].shape[2]
+        ).plocs[0]
+        decals_plocs = np.array(crop_plocs(cfg, w, h, decals_plocs_from_sdss, do_crop))
     return TabPanel(child=add_cat(p, est_plocs, true_plocs, decals_plocs), title=title)
 
 
-def plot_predict(cfg, image, background, true_plocs, est_cat):
+def plot_predict(cfg, image, background, true_plocs, est_cat: FullCatalog, wcs: WCS):
     """Function that uses bokeh to save generated plots to an html file."""
     w, h = image.shape
 
     est_plocs = np.array(est_cat.plocs.cpu())[0]
-    decoder_obj = instantiate(cfg.simulator.decoder)
-    est_tile = est_cat.to_tile_params(cfg.encoder.tile_slen, cfg.simulator.prior.max_sources)
-    rcfs = np.array([[94, 1, 12]])  # TODO: find corresponding SDSS RCF for this est_cat
+    simulator = instantiate(cfg.simulator)
+    decoder_obj = simulator.image_decoder
+    est_tile = est_cat.to_tile_params(
+        cfg.encoder.tile_slen, cfg.simulator.survey.prior_config.max_sources
+    )
+    # convert plocs to RA, Dec using wcs
+    # ras, decs = wcs.all_pix2world(est_plocs[:, 1], est_plocs[:, 0], 0) # noqa: E800
+    # ra_lim, dec_lim = (np.min(ras), np.max(ras)), (np.min(decs), np.max(decs)) # noqa: E800
+    # rcfs = np.array([SDSS.rcf_for_radec(ra_lim, dec_lim)]) # noqa: E800
+    # TODO: don't hardcode 94, 1, 12. Approach above yields different RCF...
+    rcfs = np.array([[94, 1, 12]])
     images, _, _ = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
     recon_img = images[0][0]  # first image in batch, first band in image
 

@@ -65,10 +65,12 @@ def download_git_lfs_file(url, headers: Optional[Dict[str, str]] = None) -> byte
 
 
 def download_file_to_dst(url, dst_filename, preprocess_fn=lambda x: x):  # noqa: WPS404
-    if Path(dst_filename).exists():
+    dst_path = Path(dst_filename)
+    if dst_path.exists():
         return
 
-    filename = download_file(url, cache=True, show_progress=False, timeout=10)
+    filename = download_file(url, cache=False, show_progress=False, timeout=10)
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(filename, dst_filename)
     with open(dst_filename, "rb") as f:
         file_contents = f.read()

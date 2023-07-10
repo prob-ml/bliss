@@ -7,19 +7,6 @@ simulator:
     valid_n_batches: 1
     n_batches: 2
     num_workers: 0
-    sdss_fields:
-        dir: ${paths.sdss}
-        bands: [0, 1, 2, 3, 4]
-        field_list:  # list of dictionaries, each with run, camcol, and list of fields
-          - run: 94
-            camcol: 1
-            fields: [12]
-    prior:
-        n_tiles_h: 4
-        n_tiles_w: 4
-        batch_size: 2
-        prob_galaxy: 0.5
-        star_flux_min: 1e5
 
 cached_simulator:
     num_workers: 0
@@ -61,3 +48,17 @@ predict:
         height: 160
     plot:
         show_plot: false
+
+surveys:
+    sdss:
+        sdss_dir: ${paths.sdss}
+        sdss_fields:  # list of dictionaries, each with run, camcol, and list of fields
+            - run: 94
+              camcol: 1
+              fields: [12]
+        prior_config:
+            n_tiles_h: 4
+            n_tiles_w: 4
+            batch_size: 2
+            prob_galaxy: 0.5
+            star_flux_min: 1e5

@@ -2,12 +2,11 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import requests
 import torch
-from mock_tests import mock_get, mock_post
+from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
-from bliss.surveys.decals import DecalsFullCatalog, download_decals_base
+from bliss.surveys.decals import DecalsFullCatalog
 
 # TODO: Add PhotoFullCatalog-specific tests (like loading, restricting by RA/DEC, downloading)
 
@@ -125,8 +124,17 @@ class TestBasicTileAndFullCatalogs:
 
 class TestDecalsCatalog:
     def test_load_decals_from_file(self, cfg):
-        sample_file = Path(cfg.paths.decals).joinpath("tractor-3366m010.fits")
-        decals_cat = DecalsFullCatalog.from_file(sample_file)
+        sample_file = Path(cfg.paths.decals) / "tractor-3366m010.fits"
+        the_cfg = cfg.copy()
+        the_cfg.predict.dataset = cfg.surveys.decals
+        the_cfg.encoder.bands = [2]
+        decals = instantiate(the_cfg.predict.dataset)
+        decals_cat = DecalsFullCatalog.from_file(
+            cat_path=sample_file,
+            wcs=decals[0]["wcs"][0],
+            height=decals[0]["image"].shape[1],
+            width=decals[0]["image"].shape[2],
+        )
 
         ras = decals_cat["ra"].numpy()
         decs = decals_cat["dec"].numpy()
@@ -135,27 +143,3 @@ class TestDecalsCatalog:
         assert np.isclose(np.max(ras), 336.75, atol=1e-4)
         assert np.isclose(np.min(decs), -1.125, atol=1e-4)
         assert np.isclose(np.max(decs), -0.875, atol=1e-4)
-
-    def test_load_decals_ranges(self, cfg):
-        sample_file = Path(cfg.paths.decals).joinpath("tractor-3366m010.fits")
-        ra_lim = (336.6, 336.7)
-        dec_lim = (-1.042, -0.92)
-        decals_cat = DecalsFullCatalog.from_file(sample_file, ra_lim, dec_lim)
-
-        ras = decals_cat["ra"].numpy()
-        decs = decals_cat["dec"].numpy()
-
-        assert np.min(ras) >= ra_lim[0]
-        assert np.max(ras) <= ra_lim[1]
-        assert np.min(decs) >= dec_lim[0]
-        assert np.max(decs) <= dec_lim[1]
-
-    def test_download_decals(self, tmpdir_factory, monkeypatch):
-        monkeypatch.setattr(requests, "get", mock_get)
-        monkeypatch.setattr(requests, "post", mock_post)
-
-        tmpdir = tmpdir_factory.mktemp("decals")
-        download_decals_base(tmpdir)
-
-        assert Path(tmpdir + "/cutout_336.635_-0.9600.fits").exists()
-        assert Path(tmpdir + "/tractor-3366m010.fits").exists()

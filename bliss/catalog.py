@@ -5,6 +5,7 @@ from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
+from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from torch import Tensor
 
@@ -295,6 +296,32 @@ class TileCatalog(UserDict):
 
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params
+
+    @staticmethod
+    def plocs_from_ra_dec(ras, decs, wcs: WCS):
+        """Converts RA/DEC coordinates into pixel coordinates.
+
+        Args:
+            ras (Tensor): (b, n) tensor of RA coordinates in degrees.
+            decs (Tensor): (b, n) tensor of DEC coordinates in degrees.
+            wcs (WCS): WCS object to use for transformation.
+
+        Returns:
+            A 1xNx2 tensor containing the locations of the light sources in pixel coordinates. This
+            function does not write self.plocs, so you should do that manually if necessary.
+        """
+        ras = ras.numpy().squeeze()
+        decs = decs.numpy().squeeze()
+
+        pt, pr = wcs.all_world2pix(ras, decs, 0)  # convert to pixel coordinates
+        pt = torch.tensor(pt) + 0.5  # For consistency with BLISS
+        pr = torch.tensor(pr) + 0.5
+        return torch.stack((pr, pt), dim=-1)
+
+    @classmethod
+    def from_file(cls, cat_path, wcs, height, width, **kwargs) -> "FullCatalog":
+        """Loads FullCatalog from disk."""
+        raise NotImplementedError
 
     def __init__(self, height: int, width: int, d: Dict[str, Tensor]) -> None:
         """Initialize FullCatalog.

@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from typing import Dict, List, TypedDict
 
 import torch
@@ -42,13 +42,15 @@ def generate(cfg: DictConfig):
     # use SimulatedDataset to generate data in minibatches iteratively,
     # then concatenate before caching to disk via pickle
     simulator = instantiate(
-        cfg.simulator, num_workers=n_workers_per_process, prior={"batch_size": bs}
+        cfg.simulator,
+        num_workers=n_workers_per_process,
+        survey={"prior_config": {"batch_size": bs}},
     )
     simulated_dataset = simulator.train_dataloader().dataset
 
     # create cached_data_path if it doesn't exist
-    if not os.path.exists(cached_data_path):
-        os.makedirs(cached_data_path)
+    if not Path(cached_data_path).exists():
+        Path(cached_data_path).mkdir(parents=True)
     print("Data will be saved to {}".format(cached_data_path))  # noqa: WPS421
 
     # Save Hydra config (used to generate data) to cached_data_path
