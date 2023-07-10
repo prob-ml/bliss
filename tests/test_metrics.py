@@ -1,25 +1,28 @@
 import numpy as np
 import pytest
 import torch
+from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode, three_way_matching
 from bliss.predict import align, prepare_image
 from bliss.surveys.decals import DecalsFullCatalog
-from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey
+from bliss.surveys.sdss import PhotoFullCatalog
+from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 
 class TestMetrics:
     def _get_sdss_data(self, cfg):
         """Loads SDSS frame and Photo Catalog."""
-        sdss = SloanDigitalSkySurvey(cfg.paths.sdss, 94, 1, (12,))
+        sdss = instantiate(cfg.surveys.sdss)
 
+        run, camcol, field = sdss.image_id(0)
         photo_cat = PhotoFullCatalog.from_file(
-            cfg.paths.sdss,
-            run=cfg.predict.dataset.run,
-            camcol=cfg.predict.dataset.camcol,
-            field=cfg.predict.dataset.fields[0],
-            sdss_obj=sdss,
+            cat_path=cfg.paths.sdss
+            + f"/{run}/{camcol}/{field}/photoObj-{run:06d}-{camcol}-{field:04d}.fits",
+            wcs=sdss[0]["wcs"][cfg.predict.dataset.reference_band],
+            height=sdss[0]["image"].shape[1],
+            width=sdss[0]["image"].shape[2],
         )
         return photo_cat, sdss
 
@@ -28,8 +31,8 @@ class TestMetrics:
         image = sdss[0]["image"]
         background = sdss[0]["background"]
 
-        image = align(image, sdss[0]["wcs"])
-        background = align(background, sdss[0]["wcs"])
+        image = align(image, sdss[0]["wcs"], SDSS.BANDS.index("r"))
+        background = align(background, sdss[0]["wcs"], SDSS.BANDS.index("r"))
 
         # crop to center fourth
         height, width = image[0].shape
@@ -49,11 +52,11 @@ class TestMetrics:
         wcs = sdss[0]["wcs"][2]
         image, background, w_lim, h_lim = self._get_image_and_background(sdss)
 
-        # get RA/DEC limits of cropped image and construct catalogs
+        # get RA/DEC limits of cropped image and construct d
         ra_lim, dec_lim = wcs.all_pix2world(w_lim, h_lim, 0)
         photo_cat = base_photo_cat.restrict_by_ra_dec(ra_lim, dec_lim).to(torch.device("cpu"))
         decals_path = cfg.predict.decals_frame
-        decals_cat = DecalsFullCatalog.from_file(decals_path, ra_lim, dec_lim, wcs=wcs)
+        decals_cat = DecalsFullCatalog.from_file(decals_path, wcs, image.shape[1], image.shape[2])
         decals_cat = decals_cat.to(torch.device("cpu"))
 
         # get predicted BLISS catalog
@@ -77,7 +80,7 @@ class TestMetrics:
     def tile_catalog(self, cfg, multiband_dataloader):
         """Generate a tile catalog for testing classification metrics."""
         tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
-        return TileCatalog(cfg.simulator.prior.tile_slen, tile_cat)
+        return TileCatalog(cfg.simulator.survey.prior_config.tile_slen, tile_cat)
 
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
