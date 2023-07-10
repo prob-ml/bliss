@@ -24,7 +24,6 @@ from bliss.unconstrained_dists import (
     UnconstrainedDiagonalBivariateNormal,
     UnconstrainedLogitNormal,
     UnconstrainedLogNormal,
-    UnconstrainedNormal,
 )
 
 
@@ -36,7 +35,7 @@ class Encoder(pl.LightningModule):
     representation of this image.
     """
 
-    STAR_FLUX_NAMES = [f"star_log_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
+    STAR_FLUX_NAMES = [f"star_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
     GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
     GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
 
@@ -47,6 +46,7 @@ class Encoder(pl.LightningModule):
         tile_slen: int,
         tiles_to_crop: int,
         slack: float = 1.0,
+        min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
         input_transform_params: Optional[dict] = None,
@@ -59,6 +59,7 @@ class Encoder(pl.LightningModule):
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
             slack: Slack to use when matching locations for validation metrics.
+            min_flux_threshold: Sources with a lower flux will not be considered when computing loss
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
             input_transform_params: used for determining what channels to use as input (e.g.
@@ -69,6 +70,7 @@ class Encoder(pl.LightningModule):
 
         self.bands = bands
         self.n_bands = len(self.bands)
+        self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.input_transform_params = input_transform_params
@@ -107,7 +109,7 @@ class Encoder(pl.LightningModule):
             "galsim_a_b": UnconstrainedLogNormal(),
         }
         for star_flux in self.STAR_FLUX_NAMES:
-            d[star_flux] = UnconstrainedNormal(low_clamp=-6, high_clamp=3)
+            d[star_flux] = UnconstrainedLogNormal()
         for gal_flux in self.GAL_FLUX_NAMES:
             d[gal_flux] = UnconstrainedLogNormal()
         return d
@@ -205,22 +207,19 @@ class Encoder(pl.LightningModule):
 
         Args:
             pred (Dict[str, Tensor]): model predictions
-            return_full (bool, optional): If True, returns a FullCatalog instead of a TileCatalog.
-                Defaults to False.
+            return_full (bool, optional): Returns a FullCatalog if true, otherwise returns a
+                TileCatalog. Defaults to True.
 
         Returns:
             Union[FullCatalog, TileCatalog]: Catalog based on predictions.
         """
         # the mean would be better at minimizing squared error...should we return that instead?
         tile_is_on_array = pred["on_prob"].mode
-        # this is the mode of star_log_flux but not the mean of the star_flux distribution
-        est_catalog_dict = {}
 
         # populate est_catalog_dict with per-band (log) star fluxes
-        star_log_fluxes = torch.stack(
+        star_fluxes = torch.stack(
             [pred[name].mode * tile_is_on_array for name in self.STAR_FLUX_NAMES], dim=3
         )
-        star_fluxes = star_log_fluxes.exp()
 
         # populate est_catalog_dict with source type
         galaxy_bools = pred["galaxy_prob"].mode
@@ -244,7 +243,6 @@ class Encoder(pl.LightningModule):
         # light sources per tile, but we predict only one source per tile
         est_catalog_dict = {
             "locs": rearrange(pred["loc"].mode, "b ht wt d -> b ht wt 1 d"),
-            "star_log_fluxes": rearrange(star_log_fluxes, "b ht wt d -> b ht wt 1 d"),
             "star_fluxes": rearrange(star_fluxes, "b ht wt d -> b ht wt 1 d"),
             "n_sources": tile_is_on_array,
             "source_type": rearrange(source_type, "b ht wt -> b ht wt 1 1"),
@@ -289,9 +287,7 @@ class Encoder(pl.LightningModule):
 
         # flux losses
         true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
-        star_log_fluxes = rearrange(
-            true_tile_cat["star_log_fluxes"], "b ht wt 1 bnd -> b ht wt bnd"
-        )
+        star_fluxes = rearrange(true_tile_cat["star_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
         galaxy_fluxes = rearrange(true_tile_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
 
         # only compute loss over bands we're using
@@ -299,7 +295,7 @@ class Encoder(pl.LightningModule):
         gal_bands = [self.GAL_FLUX_NAMES[band] for band in self.bands]
         for i, (star_name, gal_name) in enumerate(zip(star_bands, gal_bands)):
             # star flux loss
-            star_flux_loss = -pred[star_name].log_prob(star_log_fluxes[..., i]) * true_star_bools
+            star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i]) * true_star_bools
             loss += star_flux_loss
             loss_with_components[star_name] = star_flux_loss.sum() / true_star_bools.sum()
 
@@ -325,7 +321,15 @@ class Encoder(pl.LightningModule):
         pred = self.encode_batch(batch)
         true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
-        loss_dict = self._get_loss(pred, true_tile_cat)
+
+        # Filter by detectable sources and brightest source per tile
+        target_cat = true_tile_cat
+        if true_tile_cat.max_sources > 1:
+            target_cat = target_cat.get_brightest_source_per_tile(band=2)
+        if self.min_flux_threshold > 0:
+            target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+
+        loss_dict = self._get_loss(pred, target_cat)
         est_tile_cat = self.variational_mode(pred, return_full=False)  # get tile cat for metrics
 
         # log all losses
@@ -334,7 +338,7 @@ class Encoder(pl.LightningModule):
 
         # log all metrics
         if log_metrics:
-            metrics = self.metrics(true_tile_cat, est_tile_cat)
+            metrics = self.metrics(target_cat, est_tile_cat)
             for k, v in metrics.items():
                 self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
@@ -344,14 +348,14 @@ class Encoder(pl.LightningModule):
             n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
             nrows = int(n_samples**0.5)  # for figure
 
-            true_full_cat = true_tile_cat.to_full_params()
+            target_full_cat = target_cat.to_full_params()
             est_full_cat = est_tile_cat.to_full_params()
-            wrong_idx = (est_full_cat.n_sources != true_full_cat.n_sources).nonzero()
+            wrong_idx = (est_full_cat.n_sources != target_full_cat.n_sources).nonzero()
             wrong_idx = wrong_idx.view(-1)[:n_samples]
 
             margin_px = self.tiles_to_crop * self.tile_slen
             fig = plot_detections(
-                batch["images"], true_full_cat, est_full_cat, nrows, wrong_idx, margin_px
+                batch["images"], target_full_cat, est_full_cat, nrows, wrong_idx, margin_px
             )
             title_root = f"Epoch:{self.current_epoch}/"
             title = f"{title_root}{logging_name} images"

@@ -1,26 +1,28 @@
 import numpy as np
 import pytest
 import torch
-from torch.utils.data import DataLoader
+from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.metrics import BlissMetrics, MetricsMode
+from bliss.metrics import BlissMetrics, MetricsMode, three_way_matching
 from bliss.predict import align, prepare_image
 from bliss.surveys.decals import DecalsFullCatalog
-from bliss.surveys.sdss import PhotoFullCatalog, SloanDigitalSkySurvey
+from bliss.surveys.sdss import PhotoFullCatalog
+from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 
 class TestMetrics:
     def _get_sdss_data(self, cfg):
         """Loads SDSS frame and Photo Catalog."""
-        sdss = SloanDigitalSkySurvey(cfg.paths.sdss, 94, 1, (12,))
+        sdss = instantiate(cfg.surveys.sdss)
 
+        run, camcol, field = sdss.image_id(0)
         photo_cat = PhotoFullCatalog.from_file(
-            cfg.paths.sdss,
-            run=cfg.predict.dataset.run,
-            camcol=cfg.predict.dataset.camcol,
-            field=cfg.predict.dataset.fields[0],
-            sdss_obj=sdss,
+            cat_path=cfg.paths.sdss
+            + f"/{run}/{camcol}/{field}/photoObj-{run:06d}-{camcol}-{field:04d}.fits",
+            wcs=sdss[0]["wcs"][cfg.predict.dataset.reference_band],
+            height=sdss[0]["image"].shape[1],
+            width=sdss[0]["image"].shape[2],
         )
         return photo_cat, sdss
 
@@ -29,8 +31,8 @@ class TestMetrics:
         image = sdss[0]["image"]
         background = sdss[0]["background"]
 
-        image = align(image, sdss[0]["wcs"])
-        background = align(background, sdss[0]["wcs"])
+        image = align(image, sdss[0]["wcs"], SDSS.BANDS.index("r"))
+        background = align(background, sdss[0]["wcs"], SDSS.BANDS.index("r"))
 
         # crop to center fourth
         height, width = image[0].shape
@@ -50,11 +52,11 @@ class TestMetrics:
         wcs = sdss[0]["wcs"][2]
         image, background, w_lim, h_lim = self._get_image_and_background(sdss)
 
-        # get RA/DEC limits of cropped image and construct catalogs
+        # get RA/DEC limits of cropped image and construct d
         ra_lim, dec_lim = wcs.all_pix2world(w_lim, h_lim, 0)
         photo_cat = base_photo_cat.restrict_by_ra_dec(ra_lim, dec_lim).to(torch.device("cpu"))
         decals_path = cfg.predict.decals_frame
-        decals_cat = DecalsFullCatalog.from_file(decals_path, ra_lim, dec_lim, wcs=wcs)
+        decals_cat = DecalsFullCatalog.from_file(decals_path, wcs, image.shape[1], image.shape[2])
         decals_cat = decals_cat.to(torch.device("cpu"))
 
         # get predicted BLISS catalog
@@ -75,13 +77,10 @@ class TestMetrics:
         return {"decals": decals_cat, "photo": photo_cat, "bliss": bliss_cat}
 
     @pytest.fixture(scope="class")
-    def tile_catalog(self, cfg):
+    def tile_catalog(self, cfg, multiband_dataloader):
         """Generate a tile catalog for testing classification metrics."""
-        with open("data/tests/multiband_data/dataset_0.pt", "rb") as f:
-            data = torch.load(f)
-        dataloader = DataLoader(data, batch_size=cfg.simulator.prior.batch_size, shuffle=False)
-        tile_cat = next(iter(dataloader))["tile_catalog"]
-        return TileCatalog(cfg.simulator.prior.tile_slen, tile_cat)
+        tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
+        return TileCatalog(cfg.simulator.survey.prior_config.tile_slen, tile_cat)
 
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
@@ -206,3 +205,30 @@ class TestMetrics:
         photo_vs_decals = metrics(decals_cat, photo_cat)
 
         assert bliss_vs_decals["f1"] > photo_vs_decals["f1"]
+
+    def test_three_way_matching(self):
+        gt = {
+            "plocs": torch.arange(5, 30, 5, dtype=float).reshape(1, -1, 1).repeat(1, 1, 2) + 0.5,
+            "n_sources": torch.tensor([5]),
+        }
+        pred = {"plocs": gt["plocs"].clone(), "n_sources": gt["n_sources"].clone()}
+        pred["plocs"] = pred["plocs"][:, :-1]
+        pred["plocs"][0, 2] = torch.tensor([20.5, 15.5])
+        pred["n_sources"] = torch.tensor([4])
+
+        comp = {"plocs": gt["plocs"].clone(), "n_sources": gt["n_sources"].clone()}
+        comp["plocs"][0, 1] = torch.tensor([10.5, 20.5])
+        comp["plocs"] = comp["plocs"][:, :-1]
+        comp["n_sources"] = torch.tensor([4])
+
+        gt_cat = FullCatalog(30, 30, gt)
+        pred_cat = FullCatalog(30, 30, pred)
+        comp_cat = FullCatalog(30, 30, comp)
+
+        matches = three_way_matching(pred_cat, comp_cat, gt_cat)
+
+        assert matches["gt_all"] == {0, 1, 2, 3}
+        assert matches["gt_pred_only"] == {1}
+        assert matches["gt_comp_only"] == {2}
+        assert matches["pred_only"] == {2}
+        assert matches["comp_only"] == {1}

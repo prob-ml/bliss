@@ -5,8 +5,8 @@ from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
+from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
-from matplotlib.pyplot import Axes
 from torch import Tensor
 
 
@@ -281,21 +281,47 @@ class TileCatalog(UserDict):
         """
 
         # get fluxes of "on" sources to mask by
-        on_fluxes = self._get_fluxes_of_on_sources()[..., band].unsqueeze(-1)
+        on_fluxes = self._get_fluxes_of_on_sources()[..., band]
         flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
 
         d = {}
         for key, val in self.to_dict().items():
             if key == "n_sources":
-                d[key] = flux_mask.sum(dim=3).squeeze()  # number of sources within range in tile
+                d[key] = flux_mask.sum(dim=3)  # number of sources within range in tile
             else:
-                d[key] = torch.where(flux_mask, val, torch.zeros_like(val))
+                d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
 
         return TileCatalog(self.tile_slen, d)
 
 
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params
+
+    @staticmethod
+    def plocs_from_ra_dec(ras, decs, wcs: WCS):
+        """Converts RA/DEC coordinates into pixel coordinates.
+
+        Args:
+            ras (Tensor): (b, n) tensor of RA coordinates in degrees.
+            decs (Tensor): (b, n) tensor of DEC coordinates in degrees.
+            wcs (WCS): WCS object to use for transformation.
+
+        Returns:
+            A 1xNx2 tensor containing the locations of the light sources in pixel coordinates. This
+            function does not write self.plocs, so you should do that manually if necessary.
+        """
+        ras = ras.numpy().squeeze()
+        decs = decs.numpy().squeeze()
+
+        pt, pr = wcs.all_world2pix(ras, decs, 0)  # convert to pixel coordinates
+        pt = torch.tensor(pt) + 0.5  # For consistency with BLISS
+        pr = torch.tensor(pr) + 0.5
+        return torch.stack((pr, pt), dim=-1)
+
+    @classmethod
+    def from_file(cls, cat_path, wcs, height, width, **kwargs) -> "FullCatalog":
+        """Loads FullCatalog from disk."""
+        raise NotImplementedError
 
     def __init__(self, height: int, width: int, d: Dict[str, Tensor]) -> None:
         """Initialize FullCatalog.
@@ -460,16 +486,3 @@ class FullCatalog(UserDict):
                 tile_n_sources[ii, coords[0], coords[1]] = source_idx + 1
         tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
-
-    def plot_plocs(self, ax: Axes, idx: int, object_type: str, bp: int = 0, **kwargs):
-        if object_type == "galaxy":
-            keep = self.galaxy_bools[idx, :].squeeze(-1).bool()
-        elif object_type == "star":
-            keep = self.star_bools[idx, :].squeeze(-1).bool()
-        elif object_type == "all":
-            keep = torch.ones(self.max_sources, dtype=torch.bool, device=self.plocs.device)
-        else:
-            raise NotImplementedError()
-        plocs = self.plocs[idx, keep] - 0.5 + bp
-        plocs = plocs.detach().cpu()
-        ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)

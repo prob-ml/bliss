@@ -19,6 +19,7 @@ temp/
 trials_result/
 .vscode/
 .env
+.venv
 jupyter/
 output/
 hydra_temp/

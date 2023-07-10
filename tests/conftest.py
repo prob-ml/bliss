@@ -5,6 +5,7 @@ import pytest
 import torch
 from hydra import compose, initialize
 from hydra.utils import instantiate
+from torch.utils.data import DataLoader
 
 
 # command line arguments for tests
@@ -57,4 +58,19 @@ def encoder(cfg):
 
 @pytest.fixture(scope="session")
 def decoder(cfg):
-    return instantiate(cfg.simulator.decoder)
+    simulator = instantiate(cfg.simulator)
+    return simulator.image_decoder
+
+
+@pytest.fixture(scope="session")
+def multiband_dataloader(cfg):
+    with open(cfg.paths.data + "/tests/multiband_data/dataset_0.pt", "rb") as f:
+        data = torch.load(f)
+    return DataLoader(data, batch_size=8, shuffle=False)
+
+
+@pytest.fixture(scope="session")
+def multi_source_dataloader(cfg):
+    with open(cfg.paths.data + "/tests/test_multi_source.pt", "rb") as f:
+        data = torch.load(f)
+    return DataLoader(data, batch_size=8, shuffle=False)
