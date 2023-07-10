@@ -150,7 +150,7 @@ surveys:
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
-        prior_flux_ref_band: 2 # SDSS r-band
+        reference_band: 2 # SDSS r-band
         prior_config:
             max_bands: 5
             n_tiles_h: 20
@@ -171,13 +171,10 @@ surveys:
             galaxy_a_loc: 0.8371888967872619
             galaxy_a_scale: 4.432725319432478
             galaxy_a_bd_ratio: 2.0
-        predict_device: ${predict.device}
-        predict_crop: ${predict.crop}
     decals:
         _target_: bliss.surveys.decals.DarkEnergyCameraLegacySurvey
         decals_dir: ${paths.decals}
         ra: 336.635 # in degrees
         dec: -0.96 # in degrees
         bands: ${encoder.bands}
-        predict_device: ${predict.device}
-        predict_crop: ${predict.crop}
+        reference_band: 1 # DECaLS r-band, DECaLS-indexed (via header)

@@ -52,7 +52,7 @@ class TestApi:
         assert Path(f"{cached_data_path}/hparams.yaml").exists()
         assert Path(f"{cached_data_path}/dataset_0.pt").exists()
         assert Path(f"{cached_data_path}/dataset_1.pt").exists()
-        assert not Path(f"{cached_data_path}/dataset2.pt").exists()
+        assert not Path(f"{cached_data_path}/dataset_2.pt").exists()
 
         # need generated data to test get_dataset_file
         dataset0 = bliss_client.get_dataset_file(filename="dataset_0.pt")
@@ -126,7 +126,7 @@ class TestApi:
         ).exists()
 
     def test_predict_sdss_default_rcf(self, bliss_client, monkeypatch):
-        monkeypatch.setattr(api, "_predict_sdss", mock_tests.mock_predict_sdss)
+        monkeypatch.setattr(api, "_predict", mock_tests.mock_predict)
         # cached predict data copied to temp dir in mock_tests.mock_predict_sdss
         cat, cat_table, pred_table = bliss_client.predict_sdss("test_path")
         assert isinstance(cat, FullCatalog)

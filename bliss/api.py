@@ -14,7 +14,7 @@ from torch import Tensor
 from bliss.catalog import FullCatalog
 from bliss.conf.igs import base_config
 from bliss.generate import generate as _generate
-from bliss.predict import predict_sdss as _predict_sdss
+from bliss.predict import predict as _predict
 from bliss.surveys.sdss import SDSSDownloader, SloanDigitalSkySurvey
 from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
@@ -158,12 +158,10 @@ class BlissClient:
         cfg.predict.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
-
-        est_cat, _, _, _, pred = _predict_sdss(cfg)
-        full_cat = est_cat.to_full_params()
-        est_cat_table = fullcat_to_astropy_table(full_cat)
+        est_cat, _, _, _, pred = _predict(cfg)
+        est_cat_table = fullcat_to_astropy_table(est_cat)
         pred_table = pred_to_astropy_table(pred)
-        return full_cat, est_cat_table, pred_table
+        return est_cat, est_cat_table, pred_table
 
     def plot_predictions_in_notebook(self):
         """Plot predictions in notebook."""

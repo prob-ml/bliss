@@ -5,20 +5,15 @@ from torch.utils.data import Dataset
 
 
 class Survey(pl.LightningDataModule, Dataset, ABC):
-    def __init__(
-        self,
-        predict_device=None,
-        predict_crop=None,
-    ):
+    def __init__(self):
         super().__init__()
-
-        self.predict_device = predict_device
-        self.predict_crop = predict_crop
 
         self.bands = None
         self.prior = None
         self.background = None
         self.psf = None
+
+        self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
 
     @abstractmethod
     def prepare_data(self):
@@ -44,6 +39,18 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
     def image_ids(self):
         """Return a list of all image_ids."""
 
+    @property
     @abstractmethod
-    def predict_dataloader(self):
-        """pl.LightningDataModule override."""
+    def predict_batch(self):
+        """Return a batch of data for prediction."""
+
+    @predict_batch.setter
+    @abstractmethod
+    def predict_batch(self):
+        """Set a batch of data for prediction."""
+
+
+class SurveyDownloader:
+    def download_catalog(self) -> str:
+        """Download the catalog and return the path to the catalog file."""
+        raise NotImplementedError

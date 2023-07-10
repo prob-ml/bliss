@@ -6,8 +6,8 @@ from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
 from bliss.catalog import TileCatalog
+from bliss.predict import crop_image
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
-from bliss.surveys.sdss import prepare_batch
 
 
 class SDSSTest(pl.LightningDataModule):
@@ -18,7 +18,10 @@ class SDSSTest(pl.LightningDataModule):
 
     def predict_dataloader(self) -> EVAL_DATALOADERS:
         images, background = self.items[0].values()
-        batch = prepare_batch(images, background, self.cfg.predict.dataset.predict_crop)
+        images, background = crop_image(images, background, self.cfg.predict.crop)
+        batch = {"images": images, "background": background}
+        batch["images"] = batch["images"].squeeze(0)
+        batch["background"] = batch["background"].squeeze(0)
         return DataLoader([batch], batch_size=1)
 
 

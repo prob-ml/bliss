@@ -102,7 +102,7 @@ def mock_checkpoint_callback(*args, **kwargs):
     return MockCallback()
 
 
-def mock_predict_sdss(cfg, *args, **kwargs):
+def mock_predict(cfg, *args, **kwargs):
     test_data_path = "data/tests"
 
     # copy prediction file to temp directory so tests can find it
@@ -113,4 +113,4 @@ def mock_predict_sdss(cfg, *args, **kwargs):
     with open(test_data_path + "/sdss_preds.pt", "rb") as f:
         data = torch.load(f)
     tile_cat = TileCatalog(cfg.simulator.survey.prior_config.tile_slen, data["catalog"])
-    return tile_cat, data["image"], data["background"], None, data["pred"]
+    return tile_cat.to_full_params(), data["image"], data["background"], None, data["pred"]

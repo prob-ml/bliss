@@ -8,22 +8,21 @@ from torch import Tensor, nn
 class ImageBackground(nn.Module):
     def __init__(
         self,
-        items,
+        image_items,
         bands: Tuple[int, ...],
     ):
         """Construct a background image from a set of images.
 
         Args:
-            items: list of survey image items from which to simulate the background.
+            image_items: list of survey image items from which to simulate the background.
                 Needs to contain a "background" key with a Tensor of background images.
             bands: bands to use for constructing the background, passed from Survey
         """
 
         super().__init__()
 
-        # Add all backgrounds from specified run/col/field to list
         backgrounds = []
-        backgrounds.extend(item["background"][list(bands)] for item in items)
+        backgrounds.extend(item["background"][list(bands)] for item in image_items)
         background = torch.from_numpy(np.stack(backgrounds, axis=0))
 
         self.register_buffer("background", background, persistent=False)
