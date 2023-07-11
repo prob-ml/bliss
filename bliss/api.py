@@ -11,7 +11,7 @@ from einops import rearrange
 from omegaconf import OmegaConf
 from torch import Tensor
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, SourceType
 from bliss.conf.igs import base_config
 from bliss.generate import generate as _generate
 from bliss.predict import predict as _predict
@@ -243,7 +243,16 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     on_vals.pop("star_fluxes")
     on_vals.pop("galaxy_fluxes")
     n = is_on_mask.sum()  # number of (predicted) objects
-    rows = [{k: v[i].cpu() for k, v in on_vals.items()} for i in range(n)]
+    rows = []
+    for i in range(n):
+        row = {}
+        for k, v in on_vals.items():
+            row[k] = v[i].cpu()
+        # Convert `source_type` to string "star" or "galaxy" labels
+        row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
+        # Force `plocs` to be "({x}, {y})" tuple strings for readability
+        row["plocs"] = str(tuple(row["plocs"].tolist()))
+        rows.append(row)
 
     # Convert to astropy table
     est_cat_table = Table(rows)
