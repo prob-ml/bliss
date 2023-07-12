@@ -5,7 +5,6 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, IterableDataset
 
-from bliss.catalog import TileCatalog
 from bliss.surveys.sdss import SDSSDownloader
 
 
@@ -47,26 +46,25 @@ class MockCallback:
 
 
 class MockSDSSDownloader(SDSSDownloader):
-    def __init__(self, run, camcol, fields, download_dir):
+    def __init__(self, image_ids, download_dir):
         """Create a mock SDSSDownloader that copies local data instead of downloading.
         Inits SDSSDownloader for the first field in the list.
 
         Args:
-            run (int): SDSS run number
-            camcol (int): SDSS camcol number
-            fields (list): List of fields to download
+            image_ids (int, int, int): list of (run, camcol, field) to download
             download_dir (str): Directory to download to
         """
         # copy data from normal dir instead of downloading
-        pf_file = f"photoField-{run:06d}-{camcol:d}.fits"
-        file_dst = Path(f"{download_dir}/{run}/{camcol}/{pf_file}")
-        file_dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(
-            f"data/sdss/{run}/{camcol}/{pf_file}",
-            file_dst,
-        )
+        for image_id in image_ids:
+            run, camcol, field = image_id
+            pf_file = f"photoField-{run:06d}-{camcol:d}.fits"
+            file_dst = Path(f"{download_dir}/{run}/{camcol}/{pf_file}")
+            file_dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(
+                f"data/sdss/{run}/{camcol}/{pf_file}",
+                file_dst,
+            )
 
-        for field in fields:
             dst = Path(f"{download_dir}/{run}/{camcol}/{field}")
             dst.mkdir(parents=True, exist_ok=True)
             shutil.copytree(
@@ -75,7 +73,7 @@ class MockSDSSDownloader(SDSSDownloader):
                 dirs_exist_ok=True,
             )
 
-        super().__init__(run, camcol, fields[0], download_dir)
+        super().__init__(image_ids, download_dir)
 
 
 def mock_get(*args, **kwargs):
@@ -102,15 +100,22 @@ def mock_checkpoint_callback(*args, **kwargs):
     return MockCallback()
 
 
-def mock_predict(cfg, *args, **kwargs):
-    test_data_path = "data/tests"
+def cached_output_from_predict_fn(cfg, filename="sdss_preds.pt"):
+    test_data_path = Path("data/tests")
 
     # copy prediction file to temp directory so tests can find it
     Path(cfg.predict.plot.out_file_name).parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(test_data_path + "/predict.html", cfg.predict.plot.out_file_name)
+    shutil.copyfile(test_data_path / "predict.html", cfg.predict.plot.out_file_name)
 
     # return catalog and preds like predict_sdss
-    with open(test_data_path + "/sdss_preds.pt", "rb") as f:
+    with open(test_data_path / filename, "rb") as f:
         data = torch.load(f)
-    tile_cat = TileCatalog(cfg.simulator.survey.prior_config.tile_slen, data["catalog"])
-    return tile_cat.to_full_params(), data["image"], data["background"], None, data["pred"]
+    return data["catalog"], data["images"], data["backgrounds"], None, data["preds"]
+
+
+def mock_predict(cfg, *args, **kwargs):
+    return cached_output_from_predict_fn(cfg, filename="sdss_preds.pt")
+
+
+def mock_predict_bulk(cfg, *args, **kwargs):
+    return cached_output_from_predict_fn(cfg, filename="sdss_preds_bulk.pt")

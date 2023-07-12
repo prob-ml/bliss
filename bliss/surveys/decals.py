@@ -73,7 +73,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
                 image_filename = self.decals_path / f"legacysurvey-{self.brickname}-image-{bl}.fits"
                 if not Path(image_filename).exists():
                     self.downloader.download_image(bl)
-        self.downloader.download_catalog()
+        self.downloader.download_catalog(self.brickname)
 
     def __len__(self):
         return 1
@@ -208,19 +208,22 @@ class DecalsDownloader(SurveyDownloader):
             )
             raise e
 
-    def download_catalog(self) -> str:
+    def download_catalog(self, brickname) -> str:
         """Download tractor catalog for this brick.
+
+        Args:
+            brickname (str): brick name
 
         Returns:
             str: path to downloaded tractor catalog
         """
-        tractor_filename = Path(self.download_dir) / f"tractor-{self.brickname}.fits"
+        tractor_filename = Path(self.download_dir) / f"tractor-{brickname}.fits"
         download_file_to_dst(
-            f"{DecalsDownloader.URLBASE}/south/tractor/{self.brickname[:3]}/"
-            f"tractor-{self.brickname}.fits",
+            f"{DecalsDownloader.URLBASE}/south/tractor/{brickname[:3]}/"
+            f"tractor-{brickname}.fits",
             tractor_filename,
         )
-        return tractor_filename
+        return str(tractor_filename)
 
 
 class DecalsFullCatalog(FullCatalog):

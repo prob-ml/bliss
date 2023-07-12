@@ -18,6 +18,20 @@ class TestPredict:
 
         # TODO: test output of predictions plot
 
+    def test_predict_sdss_multiple_images(self, cfg):
+        the_cfg = cfg.copy()
+        the_cfg.surveys.sdss.sdss_fields = [
+            {"run": 94, "camcol": 1, "fields": [12]},
+            {"run": 3900, "camcol": 6, "fields": [269]},
+        ]
+        the_cfg.predict.plot.show_plot = True
+        _, _, _, _, preds = predict(the_cfg)
+
+        # TODO: check rest of the return values from predict
+        assert len(preds) == len(
+            the_cfg.surveys.sdss.sdss_fields
+        ), f"Expected {len(the_cfg.surveys.sdss.sdss_fields)} predictions, got {len(preds)}"
+
     def test_predict_decals(self, cfg):
         the_cfg = cfg.copy()
         the_cfg.predict.dataset = cfg.surveys.decals

@@ -1,9 +1,7 @@
 from pathlib import Path
-from typing import Any, Dict, Tuple
 
 import numpy as np
 import torch
-from astropy.wcs import WCS
 from bokeh.models import TabPanel, Tabs
 from bokeh.plotting import figure, output_file, show
 from hydra.utils import instantiate
@@ -98,59 +96,94 @@ def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
     return est_cat
 
 
-def predict(cfg) -> Tuple[FullCatalog, Tensor, Tensor, Any, Dict[str, Tensor]]:
+def predict(cfg):
     survey = instantiate(cfg.predict.dataset)
-    assert (
-        len(survey) == 1
-    ), "Prediction only supported for one image_id (e.g., (run, camcol, field))"
-    survey_obj = survey[0]
-    survey_obj["image"] = align(
-        survey_obj["image"], ref_wcs=survey_obj["wcs"], ref_band=cfg.predict.dataset.reference_band
-    )
-    survey_obj["background"] = align(
-        survey_obj["background"],
-        ref_wcs=survey_obj["wcs"],
-        ref_band=cfg.predict.dataset.reference_band,
-    )
 
-    cat_path = survey.downloader.download_catalog()
-    plocs = survey.catalog_cls.from_file(
-        cat_path=cat_path,
-        wcs=survey_obj["wcs"][cfg.predict.dataset.reference_band],
-        height=survey_obj["image"].shape[1],
-        width=survey_obj["image"].shape[2],
-    ).plocs[0]
+    # below collections indexed by image_id
+    images_for_frame = {}
+    radecs_for_frame = {}
+    backgrounds_for_frame = {}
+    preds_for_frame = {}
 
-    encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-    enc_state_dict = torch.load(cfg.predict.weight_save_path)
-    encoder.load_state_dict(enc_state_dict)
-    encoder.eval()
-    trainer = instantiate(cfg.predict.trainer)
-    images = prepare_image(survey.predict_batch["images"], cfg.predict.device)
-    backgrounds = prepare_image(survey.predict_batch["background"], cfg.predict.device)
-    images, backgrounds = crop_image(images, backgrounds, cfg.predict.crop)
-    survey.predict_batch = prepare_batch(images, backgrounds)
-    est_cat, images, background, pred = trainer.predict(encoder, datamodule=survey)[0].values()
-
-    # mean of the nelec_per_mgy per band
-    nelec_per_nmgy_per_band = np.mean(survey_obj["nelec_per_nmgy_list"], axis=1)
-    est_cat = nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band)
-
-    est_full = est_cat.to_full_params()
-    if cfg.predict.plot.show_plot and (plocs is not None):
-        ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
-        cropped_image = images[0, 0, ptc:-ptc, ptc:-ptc]
-        cropped_background = background[0, 0, ptc:-ptc, ptc:-ptc]
-        plot_predict(
-            cfg,
-            cropped_image,
-            cropped_background,
-            plocs,
-            est_full,
-            survey_obj["wcs"][SDSS.BANDS.index("r")],
+    plocs_all = None
+    est_full_all = None  # collated catalog for all images
+    survey_objs = [survey[i] for i in range(len(survey))]
+    for i, survey_obj in enumerate(survey_objs):
+        survey_obj["image"] = align(
+            survey_obj["image"],
+            ref_wcs=survey_obj["wcs"],
+            ref_band=cfg.predict.dataset.reference_band,
+        )
+        survey_obj["background"] = align(
+            survey_obj["background"],
+            ref_wcs=survey_obj["wcs"],
+            ref_band=cfg.predict.dataset.reference_band,
         )
 
-    return est_full, images[0], background[0], plocs, pred
+        cat_path = survey.downloader.download_catalog(survey.image_id(i))
+        plocs = survey.catalog_cls.from_file(
+            cat_path=cat_path,
+            wcs=survey_obj["wcs"][cfg.predict.dataset.reference_band],
+            height=survey_obj["image"].shape[1],
+            width=survey_obj["image"].shape[2],
+        ).plocs[0]
+
+        # get RA, Dec of the center of the image
+        ra, dec = survey_obj["wcs"][cfg.predict.dataset.reference_band].all_pix2world(
+            survey_obj["image"].shape[2] / 2, survey_obj["image"].shape[1] / 2, 0
+        )
+        radecs_for_frame[survey.image_id(i)] = (ra.item(), dec.item())
+
+        encoder = instantiate(cfg.encoder).to(cfg.predict.device)
+        enc_state_dict = torch.load(cfg.predict.weight_save_path)
+        encoder.load_state_dict(enc_state_dict)
+        encoder.eval()
+        trainer = instantiate(cfg.predict.trainer)
+        images = prepare_image(survey_obj["image"], cfg.predict.device).float()
+        backgrounds = prepare_image(survey_obj["background"], cfg.predict.device).float()
+        images, backgrounds = crop_image(images, backgrounds, cfg.predict.crop)
+        survey.predict_batch = prepare_batch(images, backgrounds)
+        est_cat, images, background, pred = trainer.predict(encoder, datamodule=survey)[0].values()
+
+        # mean of the nelec_per_mgy per band
+        nelec_per_nmgy_per_band = np.mean(survey_obj["nelec_per_nmgy_list"], axis=1)
+        est_cat = nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band)
+        est_full = est_cat.to_full_params()
+
+        images_for_frame[survey.image_id(i)] = images
+        backgrounds_for_frame[survey.image_id(i)] = background
+        preds_for_frame[survey.image_id(i)] = pred
+
+        if plocs_all is None:
+            plocs_all = plocs
+        else:
+            plocs_all = torch.cat((plocs_all, plocs), dim=0)
+            plocs_all = torch.unique(plocs_all, dim=0)
+
+        if not est_full_all:
+            est_full_all = est_full
+        else:
+            d = {}
+            d["plocs"] = torch.cat((est_full_all.plocs, est_full.plocs), dim=1)
+            d["n_sources"] = Tensor([est_full_all.n_sources + est_full.n_sources])
+            est_full_all_dict = est_full_all.to_dict()
+            for k, v in est_full.items():
+                d[k] = torch.cat((est_full_all_dict[k], v), dim=1)
+            est_full_all = FullCatalog(est_full_all.height, est_full_all.width, d)
+
+    assert est_full_all is not None and isinstance(
+        est_full_all, FullCatalog
+    ), "Should have estimated catalog for at least one image"
+    if cfg.predict.plot.show_plot and (plocs_all is not None):
+        plot_predict(
+            cfg,
+            images_for_frame,
+            backgrounds_for_frame,
+            radecs_for_frame,
+            plocs_all,
+            est_full_all,
+        )
+    return est_full_all, images_for_frame, backgrounds_for_frame, plocs_all, preds_for_frame
 
 
 def crop_plocs(cfg, w, h, plocs, do_crop=False):
@@ -224,7 +257,7 @@ def plot_image(cfg, img, w, h, est_plocs, true_plocs, title):
         run, camcol, fields = sdss_fields[0].values()
         brickname = DECaLS.brick_for_radec(*SDSS.radec_for_rcf(run, camcol, fields[0]))
 
-        tractor_filename = DecalsDownloader(brickname, cfg.paths.decals).download_catalog()
+        tractor_filename = DecalsDownloader(brickname, cfg.paths.decals).download_catalog(brickname)
         decals_plocs_from_sdss = DecalsFullCatalog.from_file(
             tractor_filename, wcs, height=sdss[0]["image"].shape[1], width=sdss[0]["image"].shape[2]
         ).plocs[0]
@@ -232,44 +265,67 @@ def plot_image(cfg, img, w, h, est_plocs, true_plocs, title):
     return TabPanel(child=add_cat(p, est_plocs, true_plocs, decals_plocs), title=title)
 
 
-def plot_predict(cfg, image, background, true_plocs, est_cat: FullCatalog, wcs: WCS):
+def plot_predict(
+    cfg, images_for_frame, backgrounds_for_frame, radecs_for_frame, true_plocs, est_cat: FullCatalog
+):
     """Function that uses bokeh to save generated plots to an html file."""
-    w, h = image.shape
+    if cfg.predict.plot.out_file_name is not None:
+        out_filepath = Path(cfg.predict.plot.out_file_name)
+        out_filepath.parent.mkdir(parents=True, exist_ok=True)
+        output_file(out_filepath)
 
     est_plocs = np.array(est_cat.plocs.cpu())[0]
     simulator = instantiate(cfg.simulator)
     decoder_obj = simulator.image_decoder
     est_tile = est_cat.to_tile_params(
-        cfg.encoder.tile_slen, cfg.simulator.survey.prior_config.max_sources
+        cfg.encoder.tile_slen,
+        cfg.simulator.survey.prior_config.max_sources,
+        ignore_extra_sources=True,
     )
-    # convert plocs to RA, Dec using wcs
-    # ras, decs = wcs.all_pix2world(est_plocs[:, 1], est_plocs[:, 0], 0) # noqa: E800
-    # ra_lim, dec_lim = (np.min(ras), np.max(ras)), (np.min(decs), np.max(decs)) # noqa: E800
-    # rcfs = np.array([SDSS.rcf_for_radec(ra_lim, dec_lim)]) # noqa: E800
-    # TODO: don't hardcode 94, 1, 12. Approach above yields different RCF...
-    rcfs = np.array([[94, 1, 12]])
-    images, _, _ = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
-    recon_img = images[0][0]  # first image in batch, first band in image
+    tabs = []
+    for image_id in images_for_frame.keys():
+        image = images_for_frame[image_id]
+        background = backgrounds_for_frame[image_id]
 
-    image = image.to("cpu")
-    background = background.to("cpu")
-    res = image - recon_img - background
+        ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
+        image = image[0, 0, ptc:-ptc, ptc:-ptc]
+        background = background[0, 0, ptc:-ptc, ptc:-ptc]
 
-    # normalize for big image
-    title = ""
-    if w >= 150:
-        image = np.log((image - image.min()) + 10)
-        recon_img = np.log((recon_img - recon_img.min()) + 10)
-        title = "log-"
+        w, h = image.shape
 
-    if cfg.predict.plot.out_file_name is not None:
-        # Create parent folder
-        Path(cfg.predict.plot.out_file_name).parent.mkdir(parents=True, exist_ok=True)
-        output_file(cfg.predict.plot.out_file_name)
+        ra, dec = radecs_for_frame[image_id]
+        rcfs = np.array([SDSS.rcf_for_radec(ra, dec)])
+        recon_images, _, _ = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
+        recon_img = recon_images[0][0]  # first image in batch, first band in image
 
-    np_image = np.array(image)
-    np_recon = np.array(recon_img)
-    tab1 = plot_image(cfg, np_image, w, h, est_plocs, true_plocs, title + "true image")
-    tab2 = plot_image(cfg, np_recon, w, h, est_plocs, true_plocs, title + "reconstruct image")
-    tab3 = plot_image(cfg, np.array(res), w, h, est_plocs, true_plocs, "residual")
-    show(Tabs(tabs=[tab1, tab2, tab3]))
+        image = image.to("cpu")
+        background = background.to("cpu")
+        res = image - recon_img - background
+
+        # normalize for big image
+        title = ""
+        if w >= 150:
+            image = np.log((image - image.min()) + 10)
+            recon_img = np.log((recon_img - recon_img.min()) + 10)
+            title = "log-"
+
+        np_image = np.array(image)
+        np_recon = np.array(recon_img)
+        tab1 = plot_image(
+            cfg, np_image, w, h, est_plocs, true_plocs, f"{title}true image (RA: {ra}, Dec: {dec})"
+        )
+        tab2 = plot_image(
+            cfg,
+            np_recon,
+            w,
+            h,
+            est_plocs,
+            true_plocs,
+            f"{title}reconstructed image (RA: {ra}, Dec: {dec})",
+        )
+        tab3 = plot_image(
+            cfg, np.array(res), w, h, est_plocs, true_plocs, f"residual (RA: {ra}, Dec: {dec})"
+        )
+        tabs.extend([tab1, tab2, tab3])
+
+    show(Tabs(tabs=tabs))

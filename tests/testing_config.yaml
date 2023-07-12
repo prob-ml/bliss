@@ -56,6 +56,9 @@ surveys:
             - run: 94
               camcol: 1
               fields: [12]
+            - run: 3900
+              camcol: 6
+              fields: [269]
         prior_config:
             n_tiles_h: 4
             n_tiles_w: 4

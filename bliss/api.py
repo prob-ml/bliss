@@ -1,7 +1,7 @@
 import logging
 from os import environ, getenv
 from pathlib import Path
-from typing import Dict, Literal, Optional, Tuple, TypeAlias
+from typing import Any, Dict, Literal, Optional, Tuple, TypeAlias
 
 import hydra
 import torch
@@ -26,8 +26,8 @@ class BlissClient:
     """Client for interacting with the BLISS API."""
 
     def __init__(self, cwd: str):
-        self._cwd = cwd
         self.base_cfg = base_config()
+        self._cwd = cwd
         self.base_cfg.paths.root = self.cwd
 
     def generate(
@@ -133,14 +133,14 @@ class BlissClient:
         _train(cfg)
 
     def load_survey(self, survey: SurveyType, run, camcol, field, download_dir: str):
-        SDSSDownloader(run, camcol, field, self.cwd + f"/{download_dir}").download_all()
+        SDSSDownloader([(run, camcol, field)], self.cwd + f"/{download_dir}").download_all()
         # assert files downloaded at download_dir
 
     def predict_sdss(
         self,
         weight_save_path: str,
         **kwargs,
-    ) -> Tuple[FullCatalog, Table, Table]:
+    ) -> Tuple[FullCatalog, Table, Dict[Any, Table]]:
         """Predict on SDSS images.
 
         Args:
@@ -158,10 +158,12 @@ class BlissClient:
         cfg.predict.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
-        est_cat, _, _, _, pred = _predict(cfg)
+        est_cat, _, _, _, pred_for_image_id = _predict(cfg)
         est_cat_table = fullcat_to_astropy_table(est_cat)
-        pred_table = pred_to_astropy_table(pred)
-        return est_cat, est_cat_table, pred_table
+        pred_tables = {}  # indexed by image_id
+        for image_id, pred in pred_for_image_id.items():
+            pred_tables[image_id] = pred_to_astropy_table(pred)
+        return est_cat, est_cat_table, pred_tables
 
     def plot_predictions_in_notebook(self):
         """Plot predictions in notebook."""
@@ -194,6 +196,7 @@ class BlissClient:
             cwd (str): Current working directory.
         """
         self._cwd = cwd
+        self.base_cfg.paths.root = self.cwd
 
     @property
     def cached_data_path(self) -> str:
