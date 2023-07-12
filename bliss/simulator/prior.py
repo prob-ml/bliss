@@ -1,5 +1,4 @@
 import itertools
-import random
 from typing import Tuple, TypedDict
 
 import numpy as np
@@ -134,25 +133,9 @@ class ImagePrior(pl.LightningModule):
             The remaining dimensions are variable-specific.
         """
         locs = self._sample_locs()
-        select_gal_flux_ratios = []
-        select_star_flux_ratios = []
 
-        for batch_image_id in batch_image_ids:
-            image_id = tuple(batch_image_id)
-            # get value if key exists, otherwise pick randomly
-            select_gal_flux_ratios.append(
-                self.gals_fluxes[image_id]
-                if image_id in self.gals_fluxes
-                else random.choice(list(self.gals_fluxes.values()))
-            )
-            select_star_flux_ratios.append(
-                self.stars_fluxes[image_id]
-                if image_id in self.stars_fluxes
-                else random.choice(list(self.stars_fluxes.values()))
-            )
-
-        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(select_gal_flux_ratios)
-        star_fluxes = self._sample_star_fluxes(select_star_flux_ratios)
+        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(self.gals_fluxes)
+        star_fluxes = self._sample_star_fluxes(self.stars_fluxes)
 
         n_sources = self._sample_n_sources()
         source_type = self._sample_source_type()
@@ -193,11 +176,11 @@ class ImagePrior(pl.LightningModule):
         return min_x / (1.0 - uniform_samples) ** (1 / alpha)
 
     def _sample_star_fluxes(self, star_ratios):
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
         b_flux = self._draw_truncated_pareto(
             self.star_flux_alpha, self.star_flux_min, self.star_flux_max, latent_dims
         )
-        total_flux = self.multiflux(star_ratios, b_flux)
+        total_flux = b_flux * star_ratios
 
         # select specified bands
         bands = np.array(self.bands)
@@ -222,7 +205,7 @@ class ImagePrior(pl.LightningModule):
 
         return total_flux
 
-    def _flux_ratios_against_b(self, survey_data_dir, image_ids, items, b) -> Tuple[dict, dict]:
+    def _flux_ratios_against_b(self, survey_data_dir) -> Tuple[dict, dict]:
         """Sample and compute all star, galaxy fluxes relative to `b`-band based on real image data.
 
         Instead of pareto-sampling fluxes for each band, we pareto-sample `b`-band flux values,
@@ -233,9 +216,6 @@ class ImagePrior(pl.LightningModule):
 
         Args:
             survey_data_dir (str): path to survey data directory
-            image_ids (list): list of image ids corresponding to `items`
-            items (list): list of image items
-            b (int): index of reference band
 
         Returns:
             stars_fluxes (dict): image_id-indexed dict of star flux ratios # noqa: DAR202
@@ -256,7 +236,6 @@ class ImagePrior(pl.LightningModule):
 
         Returns:
             Tuple[Tensor]: A tuple of galaxy fluxes (per band) and galsim parameters, including.
-                - total_flux: the total flux of the galaxy
                 - disk_frac: the fraction of flux attributed to the disk (rest goes to bulge)
                 - beta_radians: the angle of shear in radians
                 - disk_q: the minor-to-major axis ratio of the disk
@@ -264,17 +243,19 @@ class ImagePrior(pl.LightningModule):
                 - bulge_q: minor-to-major axis ratio of the bulge
                 - a_b: semi-major axis of bulge
         """
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
 
-        r_flux = self._draw_truncated_pareto(
+        b_flux = self._draw_truncated_pareto(
             self.galaxy_alpha, self.galaxy_flux_min, self.galaxy_flux_max, latent_dims
         )
 
-        total_flux = self.multiflux(gal_ratios, r_flux)
+        total_flux = gal_ratios * b_flux
 
         # select fluxes from specified bands
         bands = np.array(self.bands)
         select_flux = total_flux[..., bands]
+
+        latent_dims = latent_dims[:-1]
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
         beta_radians = Uniform(0, 2 * np.pi).sample(latent_dims)

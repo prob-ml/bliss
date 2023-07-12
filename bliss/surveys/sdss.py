@@ -1,5 +1,6 @@
 import bz2
 import gzip
+import pickle
 import warnings
 from pathlib import Path
 from typing import List, Tuple, TypedDict
@@ -507,63 +508,44 @@ class SDSSPrior(ImagePrior):
         self, survey_data_dir, image_ids, image_items, bands, ref_band, prior_config: PriorConfig
     ):
         super().__init__(bands, **prior_config)
-        self.stars_fluxes, self.gals_fluxes = self._flux_ratios_against_b(
-            survey_data_dir, image_ids, image_items, b=ref_band
-        )
+        self.stars_fluxes, self.gals_fluxes = self._flux_ratios_against_b(survey_data_dir, ref_band)
 
-    def _flux_ratios_against_b(self, survey_data_dir, image_ids, items, b) -> Tuple[dict, dict]:
-        stars_fluxes = {}
-        gals_fluxes = {}
+    def _flux_ratios_against_b(self, survey_data_dir, ref_band) -> Tuple[dict, dict]:
+        """Sample source ratios from Gaussian Mixture Model color prios.
 
-        for i, image_id in enumerate(image_ids):
-            run, camcol, field = image_id
-            image = items[i]
+        Args:
+            survey_data_dir: string filepath to survey data directory
+            ref_band: integer representing index of reference band
 
-            # load project SDSS dir
-            sdss_path = Path(survey_data_dir)
+        Returns:
+            star_ratios_b: tensor containing all star flux ratios for entire batch
+            gal_ratios_b: tensor containing all gal flux ratios for entire batch
+        """
 
-            # Set photoObj file path
-            field_dir = sdss_path / str(run) / str(camcol) / str(field)
-            po_path = field_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
+        # Load models from disk
+        with open(f"{survey_data_dir}/color_models/star_gmm.pkl", "rb") as f:
+            gmm_star = pickle.load(f)
+        with open(f"{survey_data_dir}/color_models/gal_gmm.pkl", "rb") as f:
+            gmm_gal = pickle.load(f)
 
-            if not po_path.exists():
-                SDSSDownloader(run, camcol, field, str(sdss_path)).download_catalog()
-            msg = (
-                f"{po_path} does not exist. "
-                + "Make sure data files are available for fields specified in config."
-            )
-            assert Path(po_path).exists(), msg
-            po_fits = fits.getdata(po_path)
+        # Sample from GMMs
+        samples = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+        star_ratios_flat = gmm_star.sample(np.prod(samples))[0]
+        gal_ratios_flat = gmm_gal.sample(np.prod(samples))[0]
 
-            # retrieve object-specific information for ratio computing
-            objc_type = column_to_tensor(po_fits, "objc_type").numpy()
-            thing_id = column_to_tensor(po_fits, "thing_id").numpy()
+        # Reshape drawn values into appropriate form
+        samples = samples + (self.n_bands - 1,)
+        star_ratios = np.reshape(star_ratios_flat, samples)
+        gal_ratios = np.reshape(gal_ratios_flat, samples)
 
-            # mask fluxes based on object identity & validity
-            galaxy_bools = (objc_type == 3) & (thing_id != -1)
-            star_bools = (objc_type == 6) & (thing_id != -1)
-            star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
-            gal_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
-            fluxes = star_fluxes + gal_fluxes
+        # Append r-band 'ratio' of 1's to sampled ratios
+        base = np.ones((self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1))
+        arrs = (star_ratios[..., :ref_band], base, star_ratios[..., ref_band:])
+        star_ratios_b = np.concatenate(arrs, axis=4)
+        arrs = (gal_ratios[..., :ref_band], base, gal_ratios[..., ref_band:])
+        gal_ratios_b = np.concatenate(arrs, axis=4)
 
-            # containers for light source ratios in current field
-            star_fluxes_ratios = []
-            gal_fluxes_ratios = []
-
-            for obj, _ in enumerate(objc_type):
-                if thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                    ratios = self._flux_ratios_in_nelec(fluxes[obj], image, b)  # noqa: WPS220
-                    if objc_type[obj] == 6:  # noqa: WPS220
-                        star_fluxes_ratios.append(ratios)  # noqa: WPS220
-                    elif objc_type[obj] == 3:  # noqa: WPS220
-                        gal_fluxes_ratios.append(ratios)  # noqa: WPS220
-
-            if star_fluxes_ratios:
-                stars_fluxes[(run, camcol, field)] = star_fluxes_ratios
-            if gal_fluxes_ratios:
-                gals_fluxes[(run, camcol, field)] = gal_fluxes_ratios
-
-        return stars_fluxes, gals_fluxes
+        return torch.from_numpy(star_ratios_b), torch.from_numpy(gal_ratios_b)
 
     def _flux_ratios_in_nelec(self, obj_fluxes, image_item, b):
         """Query SDSS frames to get flux ratios in units of electron count.
