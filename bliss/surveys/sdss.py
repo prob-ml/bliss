@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
-from bliss.simulator.prior import ImagePrior, PriorConfig
+from bliss.simulator.prior import CatalogPrior, PriorConfig
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.survey import Survey
 from bliss.utils.download_utils import download_file_to_dst
@@ -509,39 +509,11 @@ class SDSSPSF(ImagePSF):
         return (term1 + term2 + term3) / (1 + b + p0)
 
 
-class SDSSPrior(ImagePrior):
+class SDSSPrior(CatalogPrior):
     def __init__(self, survey_data_dir, bands, reference_band, prior_config: PriorConfig):
         super().__init__(bands, **prior_config)
         self.survey_data_dir = survey_data_dir
         self.reference_band = reference_band
-
-    def _flux_ratios_in_nelec(self, obj_fluxes, image_item, b):
-        """Query SDSS frames to get flux ratios in units of electron count.
-
-        Args:
-            obj_fluxes: tensor of electron counts for a particular SDSS object
-            image_item: SDSS image item for a particular field
-            b: index of reference band
-
-        Returns:
-            ratios (Tensor): Ratio of electron counts for each light source in field
-            relative to `b`-band
-        """
-        ratios = torch.zeros(obj_fluxes.size())
-
-        # distribution of nelec_per_nmgy very clustered around mean
-        nelec_per_nmgys = image_item["nelec_per_nmgy_list"]
-        b_rat = nelec_per_nmgys[b].mean()  # fix b-band (count:nmgy) ratio
-
-        for i in range(self.max_bands):
-            # distribution of nelec_per_nmgy very clustered around mean
-            nelec_per_nmgy_rat = nelec_per_nmgys[i].mean() / b_rat
-
-            # (nmgy ratio relative to r-band) * (nelec/nmgy ratio relative to r band)
-            # result: ratio in units of electron counts
-            ratios[i] = (obj_fluxes[i] / obj_fluxes[2]) * nelec_per_nmgy_rat
-
-        return ratios
 
 
 # Data type conversion helpers

@@ -37,10 +37,10 @@ PriorConfig = TypedDict(
 )
 
 
-class ImagePrior(pl.LightningModule):
+class CatalogPrior(pl.LightningModule):
     """Prior distribution of objects in an astronomical image.
 
-    After the module is initialized, sampling is done with the sample_prior method.
+    After the module is initialized, sampling is done with the sample method.
     The input parameters correspond to the number of sources, the fluxes, whether an
     object is a galaxy or star, and the distributions of galaxy and star shapes.
     """
@@ -130,7 +130,7 @@ class ImagePrior(pl.LightningModule):
         self.b_band = reference_band
         self.gmm_star, self.gmm_gal = self._load_color_models()
 
-    def sample_prior(self) -> TileCatalog:
+    def sample(self) -> TileCatalog:
         """Samples latent variables from the prior of an astronomical image.
 
         Returns:
@@ -224,12 +224,8 @@ class ImagePrior(pl.LightningModule):
 
         # Reshape drawn values into appropriate form
         samples = samples + (self.n_bands - 1,)
-        star_ratios_nmgy = np.exp(np.reshape(star_ratios_flat, samples))
-        gal_ratios_nmgy = np.exp(np.reshape(gal_ratios_flat, samples))
-
-        hardcoded_ratios = np.array([219, 1039, 747, 139])
-        star_ratios = star_ratios_nmgy * hardcoded_ratios
-        gal_ratios = gal_ratios_nmgy * hardcoded_ratios
+        star_ratios = np.exp(np.reshape(star_ratios_flat, samples))
+        gal_ratios = np.exp(np.reshape(gal_ratios_flat, samples))
 
         # Append r-band 'ratio' of 1's to sampled ratios
         base = np.ones((self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1))

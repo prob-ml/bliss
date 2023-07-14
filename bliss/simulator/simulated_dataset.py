@@ -151,7 +151,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         _, image_id_indices = self.randomized_image_ids(self.image_prior.batch_size)
         with torch.no_grad():
-            tile_catalog = self.image_prior.sample_prior()
+            tile_catalog = self.image_prior.sample()
             images, background, deconv, psf_params = self.simulate_image(
                 tile_catalog, image_id_indices
             )
