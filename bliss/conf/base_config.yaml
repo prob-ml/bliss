@@ -161,10 +161,10 @@ surveys:
             mean_sources: 0.2
             min_sources: 0
             prob_galaxy: 0.72
-            star_flux_min: 1
+            star_flux_min: 0.63094948
             star_flux_max: 1014
             star_flux_alpha: 0.43
-            galaxy_flux_min: 1
+            galaxy_flux_min: 0.6301037
             galaxy_flux_max: 1013
             galaxy_alpha: 0.47
             galaxy_a_concentration: 0.39330758068481686
