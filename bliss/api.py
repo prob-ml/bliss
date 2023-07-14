@@ -149,13 +149,44 @@ class BlissClient:
             **kwargs: Keyword arguments to override default configuration values.
 
         Returns:
-            Tuple[FullCatalog, Table, Table]: Tuple of estimated catalog, estimated
-                catalog as an astropy table, and probabilistic predictions catalog as
-                an astropy table
+            Tuple[FullCatalog, Table, Dict[Any, Table]]: Tuple of estimated catalog, estimated
+                catalog as an astropy table, and probabilistic predictions catalogs as astropy
+                tables
         """
         cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
         cfg.predict.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
+        for k, v in kwargs.items():
+            OmegaConf.update(cfg, k, v)
+        est_cat, _, _, _, pred_for_image_id = _predict(cfg)
+        est_cat_table = fullcat_to_astropy_table(est_cat)
+        pred_tables = {}  # indexed by image_id
+        for image_id, pred in pred_for_image_id.items():
+            pred_tables[image_id] = pred_to_astropy_table(pred)
+        return est_cat, est_cat_table, pred_tables
+
+    def predict_decals(
+        self,
+        weight_save_path: str,
+        **kwargs,
+    ) -> Tuple[FullCatalog, Table, Dict[Any, Table]]:
+        """Predict on DECaLS images.
+
+        Args:
+            weight_save_path (str): Path to directory after cwd where trained model
+                weights are stored.
+            **kwargs: Keyword arguments to override default configuration values.
+
+        Returns:
+            Tuple[FullCatalog, Table, Dict[Any, Table]]: Tuple of estimated catalog, estimated
+                catalog as an astropy table, and probabilistic predictions catalogs as astropy
+                tables
+        """
+        cfg = OmegaConf.create(self.base_cfg)
+        # apply overrides
+        cfg.predict.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
+        cfg.predict.dataset = "${surveys.decals}"
+        cfg.encoder.bands = [2]
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
         est_cat, _, _, _, pred_for_image_id = _predict(cfg)

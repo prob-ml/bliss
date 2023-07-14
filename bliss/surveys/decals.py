@@ -46,8 +46,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
     def __init__(
         self,
         decals_dir="data/decals",
-        ra=336.635,
-        dec=-0.96,
+        sky_coords=({"ra": 336.6643042496718, "dec": -0.9316385797930247},),
         # TODO: fix band-indexing after DECaLS E2E
         bands=(1, 2, 3, 4),  # SDSS.BANDS indexing, for SDSS-trained encoder
         reference_band: int = 1,  # r-band
@@ -55,12 +54,12 @@ class DarkEnergyCameraLegacySurvey(Survey):
         super().__init__()
 
         self.decals_path = Path(decals_dir)
-        self.ra = ra
-        self.dec = dec
         self.bands = bands
-        self.brickname = DarkEnergyCameraLegacySurvey.brick_for_radec(ra, dec)
+        self.bricknames = [
+            DarkEnergyCameraLegacySurvey.brick_for_radec(c["ra"], c["dec"]) for c in sky_coords
+        ]
 
-        self.downloader = DecalsDownloader(self.brickname, self.decals_path)
+        self.downloader = DecalsDownloader(self.bricknames, self.decals_path)
 
         self.prepare_data()
 
@@ -68,38 +67,43 @@ class DarkEnergyCameraLegacySurvey(Survey):
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
-        for b, bl in enumerate(SDSS.BANDS):
-            if b in self.bands:
-                image_filename = self.decals_path / f"legacysurvey-{self.brickname}-image-{bl}.fits"
-                if not Path(image_filename).exists():
-                    self.downloader.download_image(bl)
-        self.downloader.download_catalog(self.brickname)
+        self.downloader.download_images(self.bands)
+        self.downloader.download_catalogs()
+        for brickname in self.bricknames:
+            catalog_filename = self.decals_path / f"tractor-{brickname}.fits"
+            assert Path(catalog_filename).exists(), f"Catalog file {catalog_filename} not found"
+            for b, bl in enumerate(SDSS.BANDS):
+                if b in self.bands:
+                    image_filename = self.decals_path / f"legacysurvey-{brickname}-image-{bl}.fits"
+                    assert Path(image_filename).exists(), f"Image file {image_filename} not found"
 
     def __len__(self):
-        return 1
+        return len(self.bricknames)
 
     def __getitem__(self, idx):
         return self.get_from_disk(idx)
 
     def image_id(self, idx) -> str:
-        return self.brickname
+        return self.bricknames[idx]
 
     def idx(self, image_id: str) -> int:
-        return 0
+        return self.bricknames.index(image_id)
 
     def image_ids(self) -> List[str]:
-        return [self.brickname]
+        return self.bricknames
 
     def get_from_disk(self, idx):
+        brickname = self.bricknames[idx]
+
         image_list = []
         # first get structure of image data for present band
-        first_target_band_img = self.read_image_for_band(SDSS.BANDS[self.bands[0]])
+        first_target_band_img = self.read_image_for_band(brickname, SDSS.BANDS[self.bands[0]])
 
         # band-indexing important for encoder's filtering in Encoder::get_input_tensor,
         # so force to SDSS.BANDS indexing
         for b, bl in enumerate(SDSS.BANDS):
             if b in self.bands and b != self.bands[0]:
-                image_list.append(self.read_image_for_band(bl))
+                image_list.append(self.read_image_for_band(brickname, bl))
             elif b == self.bands[0]:
                 image_list.append(first_target_band_img)
             else:
@@ -122,8 +126,8 @@ class DarkEnergyCameraLegacySurvey(Survey):
 
         return ret
 
-    def read_image_for_band(self, band):
-        img_fits = fits.open(self.decals_path / f"legacysurvey-{self.brickname}-image-{band}.fits")
+    def read_image_for_band(self, brickname, band):
+        img_fits = fits.open(self.decals_path / f"legacysurvey-{brickname}-image-{band}.fits")
         image = img_fits[1].data  # pylint: disable=no-member
         hr = img_fits[1].header  # pylint: disable=no-member
         wcs = WCS(hr)
@@ -189,24 +193,36 @@ class DecalsDownloader(SurveyDownloader):
             cls.download_survey_bricks()
         return cls._survey_bricks  # pylint: disable=no-member
 
-    def __init__(self, brickname, download_dir):
-        self.brickname = brickname
+    def __init__(self, bricknames, download_dir):
+        self.bricknames = bricknames
         self.download_dir = download_dir
 
-    def download_image(self, band="r"):
+    def download_images(self, bands: List[int]):
+        """Download images for all bands, for all bricks."""
+        for brickname in self.bricknames:
+            for b, bl in enumerate(SDSS.BANDS):
+                if b in bands:
+                    self.download_image(brickname, bl)
+
+    def download_image(self, brickname, band="r"):
         """Download image for specified band, for this brick."""
-        image_filename = self.download_dir / f"legacysurvey-{self.brickname}-image-{band}.fits"
+        image_filename = self.download_dir / f"legacysurvey-{brickname}-image-{band}.fits"
         try:
             download_file_to_dst(
-                f"{DecalsDownloader.URLBASE}/south/coadd/{self.brickname[:3]}/{self.brickname}/"
-                f"legacysurvey-{self.brickname}-image-{band}.fits.fz",
+                f"{DecalsDownloader.URLBASE}/south/coadd/{brickname[:3]}/{brickname}/"
+                f"legacysurvey-{brickname}-image-{band}.fits.fz",
                 image_filename,
             )
         except HTTPError as e:
             warnings.warn(
-                f"No {band}-band image for brick {self.brickname}. Check cfg.datasets.decals.bands."
+                f"No {band}-band image for brick {brickname}. Check cfg.datasets.decals.bands."
             )
             raise e
+
+    def download_catalogs(self):
+        """Download tractor catalogs for all bricks."""
+        for brickname in self.bricknames:
+            self.download_catalog(brickname)
 
     def download_catalog(self, brickname) -> str:
         """Download tractor catalog for this brick.

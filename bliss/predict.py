@@ -10,7 +10,8 @@ from torch import Tensor
 
 from bliss.catalog import FullCatalog
 from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
-from bliss.surveys.decals import DecalsDownloader, DecalsFullCatalog
+from bliss.surveys.decals import DecalsFullCatalog
+from bliss.surveys.sdss import PhotoFullCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 
@@ -28,13 +29,15 @@ def crop_image(image, background, crop_params):
     if not crop_params.do_crop:
         return image, background
 
-    idx0 = crop_params.left_upper_corner[0]
-    idx1 = crop_params.left_upper_corner[1]
+    top_left_y = crop_params.left_upper_corner[0]
+    top_left_x = crop_params.left_upper_corner[1]
     width = crop_params.width
     height = crop_params.height
-    if ((idx0 + height) <= image.shape[2]) and ((idx1 + width) <= image.shape[3]):
-        image = image[:, :, idx0 : idx0 + height, idx1 : idx1 + width]
-        background = background[:, :, idx0 : idx0 + height, idx1 : idx1 + width]
+    if ((top_left_y + height) <= image.shape[2]) and ((top_left_x + width) <= image.shape[3]):
+        image = image[:, :, top_left_y : top_left_y + height, top_left_x : top_left_x + width]
+        background = background[
+            :, :, top_left_y : top_left_y + height, top_left_x : top_left_x + width
+        ]
     return image, background
 
 
@@ -143,7 +146,7 @@ def predict(cfg):
         backgrounds = prepare_image(survey_obj["background"], cfg.predict.device).float()
         images, backgrounds = crop_image(images, backgrounds, cfg.predict.crop)
         survey.predict_batch = prepare_batch(images, backgrounds)
-        est_cat, images, background, pred = trainer.predict(encoder, datamodule=survey)[0].values()
+        est_cat, images, backgrounds, pred = trainer.predict(encoder, datamodule=survey)[0].values()
 
         # mean of the nelec_per_mgy per band
         nelec_per_nmgy_per_band = np.mean(survey_obj["nelec_per_nmgy_list"], axis=1)
@@ -151,7 +154,7 @@ def predict(cfg):
         est_full = est_cat.to_full_params()
 
         images_for_frame[survey.image_id(i)] = images
-        backgrounds_for_frame[survey.image_id(i)] = background
+        backgrounds_for_frame[survey.image_id(i)] = backgrounds
         preds_for_frame[survey.image_id(i)] = pred
 
         if plocs_all is None:
@@ -183,6 +186,9 @@ def predict(cfg):
             plocs_all,
             est_full_all,
         )
+
+    images_for_frame = {k: v[0] for k, v in images_for_frame.items()}
+    backgrounds_for_frame = {k: v[0] for k, v in backgrounds_for_frame.items()}
     return est_full_all, images_for_frame, backgrounds_for_frame, plocs_all, preds_for_frame
 
 
@@ -206,7 +212,7 @@ def crop_plocs(cfg, w, h, plocs, do_crop=False):
     return plocs[x_mask].cpu() - torch.tensor([minh, minw])
 
 
-def add_cat(p, est_plocs, true_plocs, decals_plocs):
+def add_cat(p, est_plocs, survey_true_plocs, sdss_plocs, decals_plocs):
     """Function to overlay scatter plots on given image using different catalogs."""
     p.scatter(
         est_plocs[:, 1],
@@ -218,20 +224,30 @@ def add_cat(p, est_plocs, true_plocs, decals_plocs):
         fill_color=None,
     )
     p.scatter(
-        true_plocs[:, 1],
-        true_plocs[:, 0],
+        survey_true_plocs[:, 1],
+        survey_true_plocs[:, 0],
         marker="circle",
-        color="cyan",
-        legend_label="sdss catalog",
+        color="hotpink",
+        legend_label="consolidated survey catalog",
         size=20,
         fill_color=None,
     )
+    if sdss_plocs is not None:
+        p.scatter(
+            sdss_plocs[:, 1],
+            sdss_plocs[:, 0],
+            marker="circle",
+            color="lightgreen",
+            legend_label="sdss catalog",
+            size=5,
+            fill_color=None,
+        )
     if decals_plocs is not None:
         p.scatter(
             decals_plocs[:, 1],
             decals_plocs[:, 0],
             marker="circle",
-            color="lightgreen",
+            color="cyan",
             legend_label="decals catalog",
             size=5,
         )
@@ -239,34 +255,57 @@ def add_cat(p, est_plocs, true_plocs, decals_plocs):
     return p
 
 
-def plot_image(cfg, img, w, h, est_plocs, true_plocs, title):
+def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
     """Function that generate plots for images."""
     p = figure(width=cfg.predict.plot.width, height=cfg.predict.plot.height)
     p.image(image=[img], x=0, y=0, dw=w, dh=h, palette="Viridis256")
     do_crop = cfg.predict.crop.do_crop
     is_simulated = cfg.predict.is_simulated
 
-    true_plocs = np.array(crop_plocs(cfg, w, h, true_plocs, do_crop).cpu())
+    survey_true_plocs = np.array(crop_plocs(cfg, w, h, survey_true_plocs, do_crop).cpu())
+    sdss_plocs = None
     decals_plocs = None
     if do_crop and (not is_simulated):
-        sdss = instantiate(cfg.predict.dataset)
-        wcs = sdss[0]["wcs"][0]
+        # DECaLS one-instance catalog plocs
+        decals = instantiate(
+            cfg.surveys.decals, bands=[SDSS.BANDS.index("r")], sky_coords=[{"ra": ra, "dec": dec}]
+        )
 
-        # Map SDSS RCF to DECaLS brickname
-        sdss_fields = cfg.surveys.sdss.sdss_fields
-        run, camcol, fields = sdss_fields[0].values()
-        brickname = DECaLS.brick_for_radec(*SDSS.radec_for_rcf(run, camcol, fields[0]))
-
-        tractor_filename = DecalsDownloader(brickname, cfg.paths.decals).download_catalog(brickname)
-        decals_plocs_from_sdss = DecalsFullCatalog.from_file(
-            tractor_filename, wcs, height=sdss[0]["image"].shape[1], width=sdss[0]["image"].shape[2]
+        brickname = DECaLS.brick_for_radec(ra, dec)
+        tractor_filename = decals.downloader.download_catalog(brickname)
+        decals_plocs = DecalsFullCatalog.from_file(
+            tractor_filename,
+            wcs=decals[0]["wcs"][cfg.predict.dataset.reference_band],
+            height=decals[0]["image"].shape[1],
+            width=decals[0]["image"].shape[2],
         ).plocs[0]
-        decals_plocs = np.array(crop_plocs(cfg, w, h, decals_plocs_from_sdss, do_crop))
-    return TabPanel(child=add_cat(p, est_plocs, true_plocs, decals_plocs), title=title)
+        decals_plocs = np.array(crop_plocs(cfg, w, h, decals_plocs, do_crop).cpu())
+
+        # SDSS one-instance catalog plocs
+        run, camcol, field = SDSS.rcf_for_radec(ra, dec)
+        sdss = instantiate(
+            cfg.surveys.sdss, sdss_fields=[{"run": run, "camcol": camcol, "fields": [field]}]
+        )
+        photocat_filename = sdss.downloader.download_catalog((run, camcol, field))
+        sdss_plocs = PhotoFullCatalog.from_file(
+            photocat_filename,
+            wcs=sdss[0]["wcs"][cfg.predict.dataset.reference_band],
+            height=sdss[0]["image"].shape[1],
+            width=sdss[0]["image"].shape[2],
+        ).plocs[0]
+        sdss_plocs = np.array(crop_plocs(cfg, w, h, sdss_plocs, do_crop).cpu())
+    return TabPanel(
+        child=add_cat(p, est_plocs, survey_true_plocs, sdss_plocs, decals_plocs), title=title
+    )
 
 
 def plot_predict(
-    cfg, images_for_frame, backgrounds_for_frame, radecs_for_frame, true_plocs, est_cat: FullCatalog
+    cfg,
+    images_for_frame,
+    backgrounds_for_frame,
+    radecs_for_frame,
+    survey_true_plocs,
+    est_cat: FullCatalog,
 ):
     """Function that uses bokeh to save generated plots to an html file."""
     if cfg.predict.plot.out_file_name is not None:
@@ -275,13 +314,12 @@ def plot_predict(
         output_file(out_filepath)
 
     est_plocs = np.array(est_cat.plocs.cpu())[0]
-    simulator = instantiate(cfg.simulator)
-    decoder_obj = simulator.image_decoder
     est_tile = est_cat.to_tile_params(
         cfg.encoder.tile_slen,
         cfg.simulator.survey.prior_config.max_sources,
         ignore_extra_sources=True,
-    )
+    ).to("cpu")
+
     tabs = []
     for image_id in images_for_frame.keys():
         image = images_for_frame[image_id]
@@ -294,8 +332,13 @@ def plot_predict(
         w, h = image.shape
 
         ra, dec = radecs_for_frame[image_id]
-        rcfs = np.array([SDSS.rcf_for_radec(ra, dec)])
-        recon_images, _, _ = decoder_obj.render_images(est_tile.to("cpu"), rcfs)
+        run, camcol, field = SDSS.rcf_for_radec(ra, dec)
+        simulator = instantiate(
+            cfg.simulator,
+            survey={"sdss_fields": [{"run": run, "camcol": camcol, "fields": [field]}]},
+        )
+        decoder_obj = simulator.image_decoder
+        recon_images, _, _ = decoder_obj.render_images(est_tile, np.array([[run, camcol, field]]))
         recon_img = recon_images[0][0]  # first image in batch, first band in image
 
         image = image.to("cpu")
@@ -303,29 +346,22 @@ def plot_predict(
         res = image - recon_img - background
 
         # normalize for big image
-        title = ""
+        title_suffix = f" (RA: {float(ra):.2f}, Dec: {float(dec):.2f})"
+        title_prefix = ""
         if w >= 150:
             image = np.log((image - image.min()) + 10)
             recon_img = np.log((recon_img - recon_img.min()) + 10)
-            title = "log-"
+            title_prefix = "log-"
 
         np_image = np.array(image)
         np_recon = np.array(recon_img)
-        tab1 = plot_image(
-            cfg, np_image, w, h, est_plocs, true_plocs, f"{title}true image (RA: {ra}, Dec: {dec})"
-        )
-        tab2 = plot_image(
-            cfg,
-            np_recon,
-            w,
-            h,
-            est_plocs,
-            true_plocs,
-            f"{title}reconstructed image (RA: {ra}, Dec: {dec})",
-        )
-        tab3 = plot_image(
-            cfg, np.array(res), w, h, est_plocs, true_plocs, f"residual (RA: {ra}, Dec: {dec})"
-        )
+        np_res = np.array(res)
+        tab1_title = f"{title_prefix}true image{title_suffix}"
+        tab2_title = f"{title_prefix}reconstructed image{title_suffix}"
+        tab3_title = f"residual{title_suffix}"
+        tab1 = plot_image(cfg, ra, dec, np_image, w, h, est_plocs, survey_true_plocs, tab1_title)
+        tab2 = plot_image(cfg, ra, dec, np_recon, w, h, est_plocs, survey_true_plocs, tab2_title)
+        tab3 = plot_image(cfg, ra, dec, np_res, w, h, est_plocs, survey_true_plocs, tab3_title)
         tabs.extend([tab1, tab2, tab3])
 
     show(Tabs(tabs=tabs))

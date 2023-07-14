@@ -5,6 +5,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, IterableDataset
 
+from bliss.catalog import TileCatalog
 from bliss.surveys.sdss import SDSSDownloader
 
 
@@ -100,6 +101,20 @@ def mock_checkpoint_callback(*args, **kwargs):
     return MockCallback()
 
 
+def mock_predict_sdss_recon(cfg, *args, **kwargs):
+    test_data_path = Path("data/tests")
+
+    # copy prediction file to temp directory so tests can find it
+    Path(cfg.predict.plot.out_file_name).parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(test_data_path / "predict.html", cfg.predict.plot.out_file_name)
+
+    # return catalog and preds like predict_sdss
+    with open(test_data_path / "sdss_preds.pt", "rb") as f:
+        data = torch.load(f)
+    tile_cat = TileCatalog(cfg.simulator.survey.prior_config.tile_slen, data["catalog"])
+    return tile_cat.to_full_params(), data["image"], data["background"], None, data["pred"]
+
+
 def cached_output_from_predict_fn(cfg, filename="sdss_preds.pt"):
     test_data_path = Path("data/tests")
 
@@ -113,9 +128,13 @@ def cached_output_from_predict_fn(cfg, filename="sdss_preds.pt"):
     return data["catalog"], data["images"], data["backgrounds"], None, data["preds"]
 
 
-def mock_predict(cfg, *args, **kwargs):
-    return cached_output_from_predict_fn(cfg, filename="sdss_preds.pt")
+def mock_predict_decals_bulk(cfg, *args, **kwargs):
+    return cached_output_from_predict_fn(cfg, filename="decals_preds_bulk.pt")
 
 
-def mock_predict_bulk(cfg, *args, **kwargs):
+def mock_predict_sdss(cfg, *args, **kwargs):
+    return cached_output_from_predict_fn(cfg, filename="sdss_preds_single.pt")
+
+
+def mock_predict_sdss_bulk(cfg, *args, **kwargs):
     return cached_output_from_predict_fn(cfg, filename="sdss_preds_bulk.pt")
