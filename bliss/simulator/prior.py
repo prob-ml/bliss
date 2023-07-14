@@ -1,4 +1,4 @@
-import itertools
+import pickle
 from typing import Tuple, TypedDict
 
 import numpy as np
@@ -31,6 +31,8 @@ PriorConfig = TypedDict(
         "galaxy_a_loc": float,
         "galaxy_a_scale": float,
         "galaxy_a_bd_ratio": float,
+        "survey_data_dir": str,
+        "b_band": int,
     },
 )
 
@@ -65,6 +67,8 @@ class ImagePrior(pl.LightningModule):
         galaxy_a_loc: float,
         galaxy_a_scale: float,
         galaxy_a_bd_ratio: float,
+        survey_data_dir: str,
+        reference_band: int,
     ):
         """Initializes ImagePrior.
 
@@ -89,6 +93,8 @@ class ImagePrior(pl.LightningModule):
             galaxy_a_loc: ?
             galaxy_a_scale: galaxy scale
             galaxy_a_bd_ratio: galaxy bulge-to-disk ratio
+            survey_data_dir: directory containing survey data
+            reference_band: int denoting index of reference band
         """
         super().__init__()
         self.n_tiles_h = n_tiles_h
@@ -120,11 +126,12 @@ class ImagePrior(pl.LightningModule):
         self.galaxy_a_scale = galaxy_a_scale
         self.galaxy_a_bd_ratio = galaxy_a_bd_ratio
 
-    def sample_prior(self, batch_image_ids) -> TileCatalog:
-        """Samples latent variables from the prior of an astronomical image.
+        self.survey_data_dir = survey_data_dir
+        self.b_band = reference_band
+        self.gmm_star, self.gmm_gal = self._load_color_models()
 
-        Args:
-            batch_image_ids: image_ids needed for sampling.
+    def sample_prior(self) -> TileCatalog:
+        """Samples latent variables from the prior of an astronomical image.
 
         Returns:
             A dictionary of tensors. Each tensor is a particular per-tile quantity; i.e.
@@ -133,9 +140,9 @@ class ImagePrior(pl.LightningModule):
             The remaining dimensions are variable-specific.
         """
         locs = self._sample_locs()
-
-        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(self.gals_fluxes)
-        star_fluxes = self._sample_star_fluxes(self.stars_fluxes)
+        stars_fluxes, gals_fluxes = self._flux_ratios()
+        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(gals_fluxes)
+        star_fluxes = self._sample_star_fluxes(stars_fluxes)
 
         n_sources = self._sample_n_sources()
         source_type = self._sample_source_type()
@@ -186,47 +193,52 @@ class ImagePrior(pl.LightningModule):
         bands = np.array(self.bands)
         return total_flux[..., bands]
 
-    def multiflux(self, flux_ratios, flux_base) -> Tensor:
-        """Generate flux values for remaining bands based on draw."""
-        total_flux = torch.zeros(
-            self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 5
-        )
+    def _load_color_models(self):
+        # Load models from disk
+        with open(f"{self.survey_data_dir}/color_models/star_gmm_nmgy.pkl", "rb") as f:
+            gmm_star = pickle.load(f)
+        with open(f"{self.survey_data_dir}/color_models/gal_gmm_nmgy.pkl", "rb") as f:
+            gmm_gal = pickle.load(f)
+        return gmm_star, gmm_gal
 
-        for b, obj_ratios in enumerate(flux_ratios):
-            for h, w, s, bnd in itertools.product(  # noqa: WPS352
-                range(self.n_tiles_h),
-                range(self.n_tiles_w),
-                range(self.max_sources),
-                range(self.max_bands),
-            ):
-                # sample a light source
-                flux_sample = obj_ratios[np.random.randint(0, len(obj_ratios) - 1)]
-                total_flux[b, h, w, s, bnd] = flux_sample[bnd] * flux_base[b, h, w, s]
-
-        return total_flux
-
-    def _flux_ratios_against_b(self, survey_data_dir) -> Tuple[dict, dict]:
-        """Sample and compute all star, galaxy fluxes relative to `b`-band based on real image data.
+    def _flux_ratios(self) -> Tuple[Tensor, Tensor]:
+        """Sample and compute all star, galaxy fluxes based on real image data.
 
         Instead of pareto-sampling fluxes for each band, we pareto-sample `b`-band flux values,
         using prior `b`-band star/galaxy flux parameters, then apply other-band-to-`b`-band flux
         ratios to get other-band flux values. This is primarily because it is not always the case
         that, e.g.,
             flux_r ~ Pareto, flux_g ~ Pareto => flux_r | flux_g ~ Pareto.
-
-        Args:
-            survey_data_dir (str): path to survey data directory
+        This function is survey-specific as the 'b'-band index depends on the survey.
 
         Returns:
-            stars_fluxes (dict): image_id-indexed dict of star flux ratios # noqa: DAR202
-                relative to `b`-band
-            gals_fluxes (dict): image_id-indexed dict of galaxy flux ratios   # noqa: DAR202
-                relative to `b`-band
-
-        Raises:
-            NotImplementedError: if this method is not implemented in a subclass
+            stars_fluxes (Tensor): (b x th x tw x ms x nbands) Tensor containing all star flux
+                ratios for current batch
+            gals_fluxes (Tensor): (b x th x tw x ms x nbands) Tensor containing all gal fluxes
+                ratios for current batch
         """
-        raise NotImplementedError
+
+        samples = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+        star_ratios_flat = self.gmm_star.sample(np.prod(samples))[0]
+        gal_ratios_flat = self.gmm_gal.sample(np.prod(samples))[0]
+
+        # Reshape drawn values into appropriate form
+        samples = samples + (self.n_bands - 1,)
+        star_ratios_nmgy = np.exp(np.reshape(star_ratios_flat, samples))
+        gal_ratios_nmgy = np.exp(np.reshape(gal_ratios_flat, samples))
+
+        hardcoded_ratios = np.array([219, 1039, 747, 139])
+        star_ratios = star_ratios_nmgy * hardcoded_ratios
+        gal_ratios = gal_ratios_nmgy * hardcoded_ratios
+
+        # Append r-band 'ratio' of 1's to sampled ratios
+        base = np.ones((self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1))
+        arrs = (star_ratios[..., : self.b_band], base, star_ratios[..., self.b_band :])
+        star_ratios_b = np.concatenate(arrs, axis=4)
+        arrs = (gal_ratios[..., : self.b_band], base, gal_ratios[..., self.b_band :])
+        gal_ratios_b = np.concatenate(arrs, axis=4)
+
+        return torch.from_numpy(star_ratios_b), torch.from_numpy(gal_ratios_b)
 
     def _sample_galaxy_prior(self, gal_ratios) -> Tuple[Tensor, Tensor]:
         """Sample the latent galaxy params.

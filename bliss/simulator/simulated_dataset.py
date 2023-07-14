@@ -43,8 +43,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         assert survey.psf is not None, "Survey psf cannot be None."
         assert survey.bands is not None, "Survey bands cannot be None."
         self.image_decoder = ImageDecoder(
-            psf=survey.psf,
-            bands=survey.bands,
+            psf=survey.psf, bands=survey.bands, nmgy_to_nelec_dict=survey.nmgy_to_nelec_dict
         )
 
         self.n_batches = n_batches
@@ -150,9 +149,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         """
         assert self.image_prior is not None, "Survey prior cannot be None."
 
-        image_ids, image_id_indices = self.randomized_image_ids(self.image_prior.batch_size)
+        _, image_id_indices = self.randomized_image_ids(self.image_prior.batch_size)
         with torch.no_grad():
-            tile_catalog = self.image_prior.sample_prior(image_ids)
+            tile_catalog = self.image_prior.sample_prior()
             images, background, deconv, psf_params = self.simulate_image(
                 tile_catalog, image_id_indices
             )

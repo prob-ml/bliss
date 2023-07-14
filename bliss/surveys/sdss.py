@@ -1,6 +1,5 @@
 import bz2
 import gzip
-import pickle
 import warnings
 from pathlib import Path
 from typing import List, Tuple, TypedDict
@@ -76,11 +75,10 @@ class SloanDigitalSkySurvey(Survey):
         # TODO: remove this self.downloader
         self.downloader = SDSSDownloader(*self.image_id(0), download_dir=str(self.sdss_path))
 
-        self.prior = SDSSPrior(
-            sdss_dir, self.image_ids(), self, self.bands, reference_band, prior_config
-        )
+        self.prior = SDSSPrior(sdss_dir, self.bands, reference_band, prior_config)
         self.background = ImageBackground(self, bands=self.bands)
         self.psf = SDSSPSF(sdss_dir, self.image_ids(), self.bands, psf_config)
+        self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
 
         self.catalog_cls = PhotoFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -179,6 +177,14 @@ class SloanDigitalSkySurvey(Survey):
                 ret[k] = data_per_band
         ret.update({"field": field})
         return ret
+
+    def nmgy_to_nelec(self):
+        d = {}
+        for i, rcf in enumerate(self.image_ids()):
+            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
+            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
+            d[rcf] = avg_nelec_conv
+        return d
 
     def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
         frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
@@ -504,48 +510,10 @@ class SDSSPSF(ImagePSF):
 
 
 class SDSSPrior(ImagePrior):
-    def __init__(
-        self, survey_data_dir, image_ids, image_items, bands, ref_band, prior_config: PriorConfig
-    ):
+    def __init__(self, survey_data_dir, bands, reference_band, prior_config: PriorConfig):
         super().__init__(bands, **prior_config)
-        self.stars_fluxes, self.gals_fluxes = self._flux_ratios_against_b(survey_data_dir, ref_band)
-
-    def _flux_ratios_against_b(self, survey_data_dir, ref_band) -> Tuple[dict, dict]:
-        """Sample source ratios from Gaussian Mixture Model color prios.
-
-        Args:
-            survey_data_dir: string filepath to survey data directory
-            ref_band: integer representing index of reference band
-
-        Returns:
-            star_ratios_b: tensor containing all star flux ratios for entire batch
-            gal_ratios_b: tensor containing all gal flux ratios for entire batch
-        """
-
-        # Load models from disk
-        with open(f"{survey_data_dir}/color_models/star_gmm.pkl", "rb") as f:
-            gmm_star = pickle.load(f)
-        with open(f"{survey_data_dir}/color_models/gal_gmm.pkl", "rb") as f:
-            gmm_gal = pickle.load(f)
-
-        # Sample from GMMs
-        samples = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
-        star_ratios_flat = gmm_star.sample(np.prod(samples))[0]
-        gal_ratios_flat = gmm_gal.sample(np.prod(samples))[0]
-
-        # Reshape drawn values into appropriate form
-        samples = samples + (self.n_bands - 1,)
-        star_ratios = np.reshape(star_ratios_flat, samples)
-        gal_ratios = np.reshape(gal_ratios_flat, samples)
-
-        # Append r-band 'ratio' of 1's to sampled ratios
-        base = np.ones((self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1))
-        arrs = (star_ratios[..., :ref_band], base, star_ratios[..., ref_band:])
-        star_ratios_b = np.concatenate(arrs, axis=4)
-        arrs = (gal_ratios[..., :ref_band], base, gal_ratios[..., ref_band:])
-        gal_ratios_b = np.concatenate(arrs, axis=4)
-
-        return torch.from_numpy(star_ratios_b), torch.from_numpy(gal_ratios_b)
+        self.survey_data_dir = survey_data_dir
+        self.reference_band = reference_band
 
     def _flux_ratios_in_nelec(self, obj_fluxes, image_item, b):
         """Query SDSS frames to get flux ratios in units of electron count.
