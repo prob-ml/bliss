@@ -18,7 +18,7 @@ from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
-from bliss.transforms import z_score
+from bliss.transforms import log_transform
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
     UnconstrainedDiagonalBivariateNormal,
@@ -165,8 +165,7 @@ class Encoder(pl.LightningModule):
             assert (
                 batch["background"][0, 0].std() > 0
             ), "Constant backgrounds not supported for multi-band encoding"
-            inputs[0] = z_score(inputs[0])
-            inputs[1] = z_score(inputs[1])
+            inputs[0] = log_transform(torch.clamp(inputs[0] - inputs[1], min=1))
         return torch.cat(inputs, dim=1)
 
     def encode_batch(self, batch):
