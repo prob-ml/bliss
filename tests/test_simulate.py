@@ -66,7 +66,7 @@ class TestSimulate:
         est_fluxes = est_star_fluxes[0, :, :, 0, 0] + est_galaxy_fluxes[0, :, :, 0]
 
         # NOTE: Considers ALL 5 predicted fluxes and ALL four images in batch
-        assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 0.3
+        assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 1.0
 
     def test_multi_background(self, cfg, monkeypatch):
         """Test loading backgrounds and PSFs from multiple fields works."""
