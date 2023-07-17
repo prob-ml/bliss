@@ -114,7 +114,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         deconv_images = np.zeros_like(images)
         for i in range(images.shape[0]):
-            for band in range(self.catalog_prior.max_bands):
+            for band in range(self.catalog_prior.n_bands):
                 deconv_images[i][band] = self.deconvolve_image(
                     images[i][band], backgrounds[i][band], psfs[i][band]
                 )
