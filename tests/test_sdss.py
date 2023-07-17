@@ -22,8 +22,8 @@ class TestSDSS:
         the_cfg = cfg.copy()
         the_cfg.paths.root = str(tmpdir_factory.mktemp("root"))
         copytree(
-            cfg.surveys.sdss.sdss_dir + "/color_models",
-            the_cfg.surveys.sdss.sdss_dir + "/color_models",
+            cfg.surveys.sdss.dir_path + "/color_models",
+            the_cfg.surveys.sdss.dir_path + "/color_models",
         )
         sdss_obj = instantiate(the_cfg.surveys.sdss)[0]
         assert sdss_obj["image"].shape == (5, 1489, 2048)
