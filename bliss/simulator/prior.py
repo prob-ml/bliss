@@ -20,7 +20,7 @@ class CatalogPrior(pl.LightningModule):
 
     def __init__(
         self,
-        max_bands,
+        n_bands,
         n_tiles_h: int,
         n_tiles_w: int,
         tile_slen: int,
@@ -39,13 +39,14 @@ class CatalogPrior(pl.LightningModule):
         galaxy_a_loc: float,
         galaxy_a_scale: float,
         galaxy_a_bd_ratio: float,
-        color_model_dir: str,
+        star_color_model_path: str,
+        gal_color_model_path: str,
         reference_band: int,
     ):
         """Initializes ImagePrior.
 
         Args:
-            max_bands: Maximum number of bands
+            n_bands: Number of bands in survey
             n_tiles_h: Image height in tiles,
             n_tiles_w: Image width in tiles,
             tile_slen: Tile side length in pixels,
@@ -64,16 +65,17 @@ class CatalogPrior(pl.LightningModule):
             galaxy_a_loc: ?
             galaxy_a_scale: galaxy scale
             galaxy_a_bd_ratio: galaxy bulge-to-disk ratio
-            color_model_dir: directory containing color model files
+            star_color_model_path: path specifying star color model
+            gal_color_model_path: path specifying galaxy color model
             reference_band: int denoting index of reference band
         """
         super().__init__()
         self.n_tiles_h = n_tiles_h
         self.n_tiles_w = n_tiles_w
         self.tile_slen = tile_slen
-        self.max_bands = max_bands
+        self.n_bands = n_bands
         # NOTE: bands have to be non-empty
-        self.bands = range(self.max_bands)
+        self.bands = range(self.n_bands)
         self.batch_size = batch_size
 
         self.min_sources = min_sources
@@ -95,7 +97,8 @@ class CatalogPrior(pl.LightningModule):
         self.galaxy_a_scale = galaxy_a_scale
         self.galaxy_a_bd_ratio = galaxy_a_bd_ratio
 
-        self.color_model_dir = color_model_dir
+        self.star_color_model_path = star_color_model_path
+        self.gal_color_model_path = gal_color_model_path
         self.b_band = reference_band
         self.gmm_star, self.gmm_gal = self._load_color_models()
 
@@ -159,14 +162,14 @@ class CatalogPrior(pl.LightningModule):
         total_flux = b_flux * star_ratios
 
         # select specified bands
-        bands = np.array(range(self.max_bands))
+        bands = np.array(range(self.n_bands))
         return total_flux[..., bands]
 
     def _load_color_models(self):
         # Load models from disk
-        with open(f"{self.color_model_dir}/star_gmm_nmgy.pkl", "rb") as f:
+        with open(self.star_color_model_path, "rb") as f:
             gmm_star = pickle.load(f)
-        with open(f"{self.color_model_dir}/gal_gmm_nmgy.pkl", "rb") as f:
+        with open(self.gal_color_model_path, "rb") as f:
             gmm_gal = pickle.load(f)
         return gmm_star, gmm_gal
 
@@ -192,7 +195,7 @@ class CatalogPrior(pl.LightningModule):
         gal_ratios_flat = self.gmm_gal.sample(np.prod(samples))[0]
 
         # Reshape drawn values into appropriate form
-        samples = samples + (self.max_bands - 1,)
+        samples = samples + (self.n_bands - 1,)
         star_ratios = np.exp(np.reshape(star_ratios_flat, samples))
         gal_ratios = np.exp(np.reshape(gal_ratios_flat, samples))
 

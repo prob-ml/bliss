@@ -55,8 +55,7 @@ class SloanDigitalSkySurvey(Survey):
         self,
         psf_config,
         fields,
-        max_bands: int = 5,
-        reference_band: int = 2,  # r-band
+        n_bands: int = 5,
         dir_path="data/sdss",
     ):
         super().__init__()
@@ -73,7 +72,7 @@ class SloanDigitalSkySurvey(Survey):
         self.background = ImageBackground(self, bands=self.bands)
         self.psf = SDSSPSF(dir_path, self.image_ids(), self.bands, psf_config)
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
-        self.max_bands = max_bands
+        self.n_bands = n_bands
 
         self.catalog_cls = PhotoFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
