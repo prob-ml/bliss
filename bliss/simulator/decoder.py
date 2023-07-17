@@ -112,7 +112,7 @@ class ImageDecoder(nn.Module):
 
         full_cat = tile_cat.to_full_params()
 
-        # use the PSF from specified row/camcol/field
+        # use the PSF from specified image_id
         psfs = [self.psf_galsim[tuple(image_ids[b])] for b in range(batch_size)]
         param_list = [self.psf_params[tuple(image_ids[b])] for b in range(batch_size)]
         psf_params = torch.stack(param_list, dim=0)

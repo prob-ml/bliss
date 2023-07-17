@@ -52,6 +52,6 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
 
 
 class SurveyDownloader:
-    def download_catalog(self) -> str:
+    def download_catalog(self, **kwargs) -> str:
         """Download the catalog and return the path to the catalog file."""
         raise NotImplementedError

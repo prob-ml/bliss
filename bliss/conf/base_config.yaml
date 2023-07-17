@@ -176,7 +176,9 @@ surveys:
     decals:
         _target_: bliss.surveys.decals.DarkEnergyCameraLegacySurvey
         decals_dir: ${paths.decals}
-        ra: 336.635 # in degrees
-        dec: -0.96 # in degrees
+        sky_coords: # in degrees
+            # brick '3366m010' corresponds to SDSS RCF 94-1-12
+            - ra: 336.6643042496718
+              dec: -0.9316385797930247
         bands: ${encoder.bands}
         reference_band: 1 # DECaLS r-band, DECaLS-indexed (via header)
