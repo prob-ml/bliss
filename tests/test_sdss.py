@@ -24,6 +24,7 @@ class TestSDSS:
         copytree(
             cfg.surveys.sdss.dir_path + "/color_models",
             the_cfg.surveys.sdss.dir_path + "/color_models",
+            dirs_exist_ok=True,
         )
         sdss_obj = instantiate(the_cfg.surveys.sdss)[0]
         assert sdss_obj["image"].shape == (5, 1489, 2048)
