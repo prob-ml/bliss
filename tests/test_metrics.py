@@ -80,7 +80,7 @@ class TestMetrics:
     def tile_catalog(self, cfg, multiband_dataloader):
         """Generate a tile catalog for testing classification metrics."""
         tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
-        return TileCatalog(cfg.simulator.survey.prior_config.tile_slen, tile_cat)
+        return TileCatalog(cfg.simulator.prior.tile_slen, tile_cat)
 
     def test_metrics(self):
         """Tests basic computations using simple toy data."""

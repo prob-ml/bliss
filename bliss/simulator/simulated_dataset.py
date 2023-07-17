@@ -13,6 +13,7 @@ from tqdm import tqdm
 from bliss.catalog import TileCatalog
 from bliss.generate import FileDatum
 from bliss.simulator.decoder import ImageDecoder
+from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
@@ -25,6 +26,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
         self,
         survey: Survey,
+        prior: CatalogPrior,
         n_batches: int,
         num_workers: int = 0,
         valid_n_batches: Optional[int] = None,
@@ -33,11 +35,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         super().__init__()
 
         self.survey = survey
-        self.image_prior = self.survey.prior
+        self.catalog_prior = prior
         self.background = self.survey.background
-        assert self.image_prior is not None, "Survey prior cannot be None."
+        assert self.catalog_prior is not None, "Survey prior cannot be None."
         assert self.background is not None, "Survey background cannot be None."
-        self.image_prior.requires_grad_(False)
+        self.catalog_prior.requires_grad_(False)
         self.background.requires_grad_(False)
 
         assert survey.psf is not None, "Survey psf cannot be None."
@@ -47,7 +49,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         )
 
         self.n_batches = n_batches
-        self.batch_size = self.image_prior.batch_size
+        self.batch_size = self.catalog_prior.batch_size
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
         self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
@@ -108,11 +110,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         Returns:
             Tensor: batch of deconvolved images
         """
-        assert self.image_prior is not None, "Survey prior cannot be None."
+        assert self.catalog_prior is not None, "Survey prior cannot be None."
 
         deconv_images = np.zeros_like(images)
         for i in range(images.shape[0]):
-            for band in range(self.image_prior.n_bands):
+            for band in range(self.catalog_prior.max_bands):
                 deconv_images[i][band] = self.deconvolve_image(
                     images[i][band], backgrounds[i][band], psfs[i][band]
                 )
@@ -147,11 +149,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             Dict: A dictionary of the simulated TileCatalog, (batch_size, bands, height, width)
             tensors for images and background, and a (batch_size, 1, 6) tensor for the psf params.
         """
-        assert self.image_prior is not None, "Survey prior cannot be None."
+        assert self.catalog_prior is not None, "Survey prior cannot be None."
 
-        _, image_id_indices = self.randomized_image_ids(self.image_prior.batch_size)
+        _, image_id_indices = self.randomized_image_ids(self.catalog_prior.batch_size)
         with torch.no_grad():
-            tile_catalog = self.image_prior.sample()
+            tile_catalog = self.catalog_prior.sample()
             images, background, deconv, psf_params = self.simulate_image(
                 tile_catalog, image_id_indices
             )

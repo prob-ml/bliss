@@ -284,7 +284,7 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
         # SDSS one-instance catalog plocs
         run, camcol, field = SDSS.rcf_for_radec(ra, dec)
         sdss = instantiate(
-            cfg.surveys.sdss, sdss_fields=[{"run": run, "camcol": camcol, "fields": [field]}]
+            cfg.surveys.sdss, fields=[{"run": run, "camcol": camcol, "fields": [field]}]
         )
         photocat_filename = sdss.downloader.download_catalog((run, camcol, field))
         sdss_plocs = PhotoFullCatalog.from_file(
@@ -316,7 +316,7 @@ def plot_predict(
     est_plocs = np.array(est_cat.plocs.cpu())[0]
     est_tile = est_cat.to_tile_params(
         cfg.encoder.tile_slen,
-        cfg.simulator.survey.prior_config.max_sources,
+        cfg.simulator.prior.max_sources,
         ignore_extra_sources=True,
     ).to("cpu")
 
@@ -335,7 +335,7 @@ def plot_predict(
         run, camcol, field = SDSS.rcf_for_radec(ra, dec)
         simulator = instantiate(
             cfg.simulator,
-            survey={"sdss_fields": [{"run": run, "camcol": camcol, "fields": [field]}]},
+            survey={"fields": [{"run": run, "camcol": camcol, "fields": [field]}]},
         )
         decoder_obj = simulator.image_decoder
         recon_images, _, _ = decoder_obj.render_images(est_tile, np.array([[run, camcol, field]]))

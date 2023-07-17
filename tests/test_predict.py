@@ -20,7 +20,7 @@ class TestPredict:
 
     def test_predict_sdss_multiple_rcfs(self, cfg):
         the_cfg = cfg.copy()
-        the_cfg.surveys.sdss.sdss_fields = [
+        the_cfg.surveys.sdss.fields = [
             {"run": 94, "camcol": 1, "fields": [12]},
             {"run": 3635, "camcol": 1, "fields": [169]},
         ]
@@ -29,8 +29,8 @@ class TestPredict:
 
         # TODO: check rest of the return values from predict
         assert len(preds) == len(
-            the_cfg.surveys.sdss.sdss_fields
-        ), f"Expected {len(the_cfg.surveys.sdss.sdss_fields)} predictions, got {len(preds)}"
+            the_cfg.surveys.sdss.fields
+        ), f"Expected {len(the_cfg.surveys.sdss.fields)} predictions, got {len(preds)}"
 
     def test_predict_decals(self, cfg):
         the_cfg = cfg.copy()

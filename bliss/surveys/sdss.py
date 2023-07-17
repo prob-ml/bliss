@@ -18,7 +18,6 @@ from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
-from bliss.simulator.prior import CatalogPrior, PriorConfig
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.survey import Survey
 from bliss.utils.download_utils import download_file_to_dst
@@ -55,29 +54,26 @@ class SloanDigitalSkySurvey(Survey):
     def __init__(
         self,
         psf_config,
-        prior_config: PriorConfig,
-        sdss_fields,
+        fields,
+        max_bands: int = 5,
         reference_band: int = 2,  # r-band
-        sdss_dir="data/sdss",
+        dir_path="data/sdss",
     ):
         super().__init__()
 
-        self.sdss_path = Path(sdss_dir)
+        self.sdss_path = Path(dir_path)
         self.rcfgcs = []
 
-        self.sdss_fields = sdss_fields
+        self.sdss_fields = fields
         self.bands = tuple(range(len(self.BANDS)))
 
         self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
         self.prepare_data()
 
-        # TODO: remove this self.downloader
-        self.downloader = SDSSDownloader(*self.image_id(0), download_dir=str(self.sdss_path))
-
-        self.prior = SDSSPrior(sdss_dir, self.bands, reference_band, prior_config)
         self.background = ImageBackground(self, bands=self.bands)
-        self.psf = SDSSPSF(sdss_dir, self.image_ids(), self.bands, psf_config)
+        self.psf = SDSSPSF(dir_path, self.image_ids(), self.bands, psf_config)
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
+        self.max_bands = max_bands
 
         self.catalog_cls = PhotoFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -529,13 +525,6 @@ class SDSSPSF(ImagePSF):
         term2 = b * torch.exp(-(r**2) / (2 * sigma2))
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
-
-
-class SDSSPrior(CatalogPrior):
-    def __init__(self, survey_data_dir, bands, reference_band, prior_config: PriorConfig):
-        super().__init__(bands, **prior_config)
-        self.survey_data_dir = survey_data_dir
-        self.reference_band = reference_band
 
 
 # Data type conversion helpers
