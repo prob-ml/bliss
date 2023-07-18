@@ -21,9 +21,9 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 from bliss.transforms import z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
-    UnconstrainedTDBN,
     UnconstrainedLogitNormal,
     UnconstrainedLogNormal,
+    UnconstrainedTDBN,
 )
 
 

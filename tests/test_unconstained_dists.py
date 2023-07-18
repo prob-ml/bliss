@@ -25,7 +25,6 @@ class TestUnconstainedDists:
         approx_true = Normal(mu, sigma).log_prob(x).exp()
         assert torch.isclose(claimed, approx_true, atol=0.01)
 
-
     def test_tdbn_multivariate(self, cfg):
         # first check that a bivariate normal distribution with neglible probablity mass
         # outside of the unit box is equivalent to a truncated mvn with the same parameters

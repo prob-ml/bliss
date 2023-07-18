@@ -2,12 +2,12 @@ import torch
 from torch.distributions import (
     AffineTransform,
     Categorical,
+    Distribution,
     Independent,
     LogNormal,
     Normal,
     SigmoidTransform,
     TransformedDistribution,
-    Distribution
 )
 
 
@@ -34,8 +34,11 @@ class UnconstrainedNormal:
 
 
 class TruncatedDiagonalMVN(Distribution):
-    """A truncated diagonal multivariate normal distribution"""
+    """A truncated diagonal multivariate normal distribution."""
+
     def __init__(self, mu, sigma):
+        super().__init__()
+
         multiple_normals = Normal(mu, sigma)
         prob_in_unit_box_hw = multiple_normals.cdf(torch.ones_like(mu))
         prob_in_unit_box_hw -= multiple_normals.cdf(torch.zeros_like(mu))
@@ -43,10 +46,10 @@ class TruncatedDiagonalMVN(Distribution):
 
         self.base_dist = Independent(multiple_normals, 1)
 
-    def sample(**args):
+    def sample(self, **args):
         # some ideas for how to sample it here, if we need to:
         # https://cran.r-project.org/web/packages/truncnorm/
-        raise NotImplemented("sampling a truncated normal isn't straightforward")
+        raise NotImplementedError("sampling a truncated normal isn't straightforward")
 
     def log_prob(self, value):
         assert (value >= 0).all() and (value <= 1).all()
@@ -56,9 +59,8 @@ class TruncatedDiagonalMVN(Distribution):
 
 
 class UnconstrainedTDBN:
-    """A factory for truncated bivariate normal distributions with support on the unit square
-    and diagonal covariance
-    """
+    """Produces truncated bivariate normal distributions from unconstrained parameters."""
+
     def __init__(self):
         self.dim = 4
 
