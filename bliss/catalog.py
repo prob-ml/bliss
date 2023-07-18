@@ -41,6 +41,7 @@ class TileCatalog(UserDict):
         "loc_sd",
     }
 
+    # region Init+Accessors
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.tile_slen = tile_slen
         d = copy(d)  # shallow copy, so we don't mutate the argument
@@ -51,7 +52,7 @@ class TileCatalog(UserDict):
 
     def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
-            msg = f"The key '{key}' is not in the allowed parameters for TileCatalog"
+            msg = f"The key '{key}' is not in the allowed parameters for {self.__class__}"
             raise ValueError(msg)
         self._validate(item)
         super().__setitem__(key, item)
@@ -67,6 +68,9 @@ class TileCatalog(UserDict):
         assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
         assert x.device == self.device
 
+    # endregion
+
+    # region Properties
     @property
     def is_on_mask(self) -> Tensor:
         """Provides tensor which indicates how many sources are present for each batch.
@@ -99,15 +103,18 @@ class TileCatalog(UserDict):
         is_galaxy = self["source_type"] == SourceType.GALAXY
         return is_galaxy * self.is_on_mask.unsqueeze(-1)
 
+    @property
+    def device(self):
+        return self.locs.device
+
+    # endregion
+
+    # region Functions
     def to(self, device):
         out = {}
         for k, v in self.to_dict().items():
             out[k] = v.to(device)
         return type(self)(self.tile_slen, out)
-
-    @property
-    def device(self):
-        return self.locs.device
 
     def crop(self, hlims_tile, wlims_tile):
         out = {}
@@ -292,6 +299,8 @@ class TileCatalog(UserDict):
                 d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
 
         return TileCatalog(self.tile_slen, d)
+
+    # endregion
 
 
 class FullCatalog(UserDict):
@@ -486,3 +495,133 @@ class FullCatalog(UserDict):
                 tile_n_sources[ii, coords[0], coords[1]] = source_idx + 1
         tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
+
+
+class RegionCatalog(TileCatalog, UserDict):
+    # region Init
+    def __init__(self, interior_slen: int, overlap_slen: float, d: Dict[str, Tensor]):
+        super().__init__(interior_slen + overlap_slen / 2, d)
+
+        self._validate_n_sources()
+        assert self.max_sources == 1  # can only have one source per region
+
+        self.interior_slen = interior_slen
+        self.overlap_slen = overlap_slen
+        self.n_rows = self.n_tiles_h
+        self.n_cols = self.n_tiles_w
+
+    def _validate_n_sources(self):
+        """Ensure that n_sources is valid for a region-based catalog.
+
+        This validates both the shape and the constraint that there can be only one source per set
+        of regions in a padded tile. We check this by moving a 3x3 window across the whole array
+        and and checking that the sum of sources in that region is at most one.
+        """
+        _, n_h, n_w = self.n_sources.shape
+        assert (n_h % 2 == 1) and (n_w % 2 == 1)  # need odd number of rows/cols
+        # pad edges so each tile is 3x3, and stride by 2 to jump to next tile
+        sources_per_tile = torch.nn.functional.unfold(
+            self.n_sources.unsqueeze(1), kernel_size=(3, 3), padding=1, stride=2
+        ).sum(axis=1)
+        assert torch.all(sources_per_tile <= 1), "Some tiles contain more than one source"
+
+    # endregion
+
+    # region Properties
+    @property
+    def height(self) -> float:
+        h = self.interior_slen * ((self.n_rows + 1) // 2)  # interior regions
+        h += self.overlap_slen * ((self.n_rows + 1) // 2)  # boundary regions
+        return h
+
+    @property
+    def width(self) -> float:
+        w = self.interior_slen * ((self.n_cols + 1) // 2)  # interior regions
+        w += self.overlap_slen * ((self.n_cols + 1) // 2)  # boundary regions
+        return w
+
+    @property
+    def is_on_mask(self) -> Tensor:
+        # regions can only have one source, so we don't need to consider more than one
+        return (self.n_sources == 1)[..., None]
+
+    @property
+    def interior_mask(self) -> Tensor:
+        mask = torch.zeros(self.n_sources.shape).bool()
+        mask[:, ::2, ::2] = True
+        return mask
+
+    @property
+    def boundary_mask(self) -> Tensor:
+        mask = torch.ones(self.n_sources.shape).bool()
+        mask[:, ::2, ::2] = False
+        return mask
+
+    @property
+    def corner_mask(self) -> Tensor:
+        mask = torch.zeros(self.n_sources.shape).bool()
+        mask[:, 1::2, 1::2] = True
+        return mask
+
+    # endregion
+
+    # region Functions
+    def get_region_coords(self) -> Tensor:
+        """Get pixel coordinates of top-left corner of regions."""
+        x_coords = torch.arange(0, self.n_cols).float()
+        y_coords = torch.arange(0, self.n_rows).float()
+        coords = torch.cartesian_prod(y_coords, x_coords)
+
+        bias = self.interior_slen * torch.floor_divide(coords + 1, 2)  # interior regions
+        bias += self.overlap_slen * torch.floor_divide(coords, 2)  # overlap regions
+        # account for half-overlap in first row
+        bias[bias[..., 0] > 0] += torch.tensor([self.overlap_slen / 2, 0])
+        # account for half-overlap in first col
+        bias[bias[..., 1] > 0] += torch.tensor([0, self.overlap_slen / 2])
+
+        return rearrange(bias, "(nth ntw) d -> nth ntw d", nth=self.n_rows, ntw=self.n_cols)
+
+    def get_region_sizes(self) -> Tensor:
+        sizes = torch.ones(self.n_rows, self.n_cols, 2) * self.interior_slen
+        sizes[1::2, :, 0] = self.overlap_slen
+        sizes[:, 1::2, 1] = self.overlap_slen
+        sizes[0] += self.overlap_slen / 2  # half overlap region in first row/col
+        sizes[:, 0] += self.overlap_slen / 2
+        return sizes
+
+    def get_full_locs_from_regions(self) -> Tensor:
+        """Convert locations in each region to locations in the full image.
+
+        Returns:
+            Tensor: b x n x 2 tensor of locations in full coordinates
+        """
+        # get locs in pixel coords in each region
+        plocs = self.locs * rearrange(self.get_region_sizes(), "nth ntw d -> 1 nth ntw 1 d")
+        bias = rearrange(self.get_region_coords(), "nth ntw d -> 1 nth ntw 1 d").float()
+        return plocs + bias
+
+    def get_full_locs_from_tiles(self) -> Tensor:
+        """Here for compatibility with TileCatalog functions."""
+        return self.get_full_locs_from_regions()
+
+    def to_full_params(self):
+        plocs = self.get_full_locs_from_regions()
+        param_names_to_mask = {"plocs"}.union(set(self.keys()))
+        tile_params_to_gather = {"plocs": plocs}
+        tile_params_to_gather.update(self)
+
+        params = {}
+        indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()
+        for param_name, tile_param in tile_params_to_gather.items():
+            k = tile_param.shape[-1]
+            param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
+            indices_for_param = repeat(indices_to_retrieve, "b nth_ntw_s -> b nth_ntw_s k", k=k)
+            param = torch.gather(param, dim=1, index=indices_for_param)
+            if param_name in param_names_to_mask:
+                param = param * is_on_array.unsqueeze(-1)
+            params[param_name] = param
+
+        params["n_sources"] = reduce(self.n_sources, "b nth ntw -> b", "sum")
+        return FullCatalog(self.height, self.width, params)
+
+    # endregion
