@@ -116,7 +116,7 @@ class Encoder(pl.LightningModule):
 
     def _get_num_input_channels(self):
         """Determine number of input channels for model based on desired input transforms."""
-        num_channels = 2  # image + background
+        num_channels = 1  # image + background
         if self.input_transform_params.get("use_deconv_channel"):
             num_channels += 1
         if self.input_transform_params.get("concat_psf_params"):
@@ -137,9 +137,11 @@ class Encoder(pl.LightningModule):
             batch: input batch (as dictionary)
 
         Returns:
-            Tensor: b x c x h x w tensor, where the number of input channels `c` is based on the
+            Tensor: b x c x 2 x h x w tensor, where the number of input channels `c` is based on the
                 input transformations to use
         """
+        batch["images"] = rearrange(batch["images"], "b bnd h w -> b bnd 1 h w")
+        batch["background"] = rearrange(batch["background"], "b bnd h w -> b bnd 1 h w")
         input_bands = batch["images"].shape[1]
         if input_bands < self.n_bands:
             warnings.warn(
@@ -167,7 +169,7 @@ class Encoder(pl.LightningModule):
             ), "Constant backgrounds not supported for multi-band encoding"
             inputs[0] = z_score(inputs[0])
             inputs[1] = z_score(inputs[1])
-        return torch.cat(inputs, dim=1)
+        return torch.cat(inputs, dim=2)
 
     def encode_batch(self, batch):
         # get input tensor from batch with specified channels and transforms

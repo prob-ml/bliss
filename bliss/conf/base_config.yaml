@@ -88,8 +88,9 @@ encoder:
             - [4, 4]  # P3/8
         backbone: [
             # [from, number, module, args]
-            [-1, 1, Conv, [64, 5, 1]],
-            [-1, 3, Conv, [64, 1, 1]],
+            [-1, 1, Conv3d, [5, 64, 1]],  # (in-channels, out-channels, kernel size)
+            [-1, 1, Conv3d, [64, 5, 1]],
+            [-1, 1, Conv3d_down, [5, 1, 1]],
             [-1, 1, Conv, [128, 3, 2]],
             [-1, 1, Conv, [128, 3, 1]],
             [-1, 1, Conv, [256, 3, 2]],
@@ -121,8 +122,8 @@ generate:
     file_prefix: dataset
 
 training:
-    name: null
-    version: null
+    name: multi-band
+    version: testing
     n_epochs: 50
     save_top_k: 1
     enable_early_stopping: true
