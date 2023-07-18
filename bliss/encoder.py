@@ -12,8 +12,8 @@ from torch import Tensor
 from torch.distributions import Distribution
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
-from yolov5.models.yolo import DetectionModel
 
+from bliss.base_detect.base_detect import DetectionModel
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
