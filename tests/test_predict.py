@@ -2,7 +2,10 @@ from bliss.predict import predict
 
 
 class TestPredict:
-    def test_predict_sdss_multiple_rcfs(self, cfg):
+    def test_predict_sdss_multiple_rcfs(self, cfg, monkeypatch):
+        # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
+        monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+
         the_cfg = cfg.copy()
         the_cfg.surveys.sdss.fields = [
             {"run": 94, "camcol": 1, "fields": [12]},
@@ -18,7 +21,10 @@ class TestPredict:
 
         # TODO: somehow check plot output
 
-    def test_predict_decals_multiple_bricks(self, cfg):
+    def test_predict_decals_multiple_bricks(self, cfg, monkeypatch):
+        # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
+        monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+
         the_cfg = cfg.copy()
         the_cfg.predict.plot.show_plot = True
         the_cfg.predict.dataset = "${surveys.decals}"
