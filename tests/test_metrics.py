@@ -20,7 +20,7 @@ class TestMetrics:
         photo_cat = PhotoFullCatalog.from_file(
             cat_path=cfg.paths.sdss
             + f"/{run}/{camcol}/{field}/photoObj-{run:06d}-{camcol}-{field:04d}.fits",
-            wcs=sdss[0]["wcs"][cfg.predict.dataset.reference_band],
+            wcs=sdss[0]["wcs"][cfg.simulator.prior.reference_band],
             height=sdss[0]["image"].shape[1],
             width=sdss[0]["image"].shape[2],
         )
@@ -80,7 +80,7 @@ class TestMetrics:
     def tile_catalog(self, cfg, multiband_dataloader):
         """Generate a tile catalog for testing classification metrics."""
         tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
-        return TileCatalog(cfg.simulator.survey.prior_config.tile_slen, tile_cat)
+        return TileCatalog(cfg.simulator.prior.tile_slen, tile_cat)
 
     def test_metrics(self):
         """Tests basic computations using simple toy data."""

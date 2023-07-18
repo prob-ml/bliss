@@ -12,6 +12,7 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         self.prior = None
         self.background = None
         self.psf = None
+        self.nmgy_to_nelec_dict = None
 
         self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
 
@@ -51,6 +52,6 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
 
 
 class SurveyDownloader:
-    def download_catalog(self) -> str:
+    def download_catalog(self, **kwargs) -> str:
         """Download the catalog and return the path to the catalog file."""
         raise NotImplementedError

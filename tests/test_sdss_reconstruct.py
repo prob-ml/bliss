@@ -1,23 +1,27 @@
 import numpy as np
-from mock_tests import mock_predict
+from mock_tests import mock_predict_sdss_recon
+
+from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 
 class TestSdssReconstruct:
     def test_sdss_reconstruct(self, cfg, decoder):
-        est_tile, true_img, true_bg, _, _ = mock_predict(cfg)
+        # TODO: change to use mock_predict_sdss
+        est_tile, true_img, true_bg, _, _ = mock_predict_sdss_recon(cfg)
 
         # reconstruction test only considers r-band image/catalog params
         rcfs = np.array([[94, 1, 12]])
         tile_cat = est_tile.to_tile_params(
-            tile_slen=cfg.simulator.survey.prior_config.tile_slen,
-            max_sources_per_tile=cfg.simulator.survey.prior_config.max_sources,
+            tile_slen=cfg.simulator.prior.tile_slen,
+            max_sources_per_tile=cfg.simulator.prior.max_sources,
+            ignore_extra_sources=True,
         )
         imgs = decoder.render_images(tile_cat.to("cpu"), rcfs)
-        recon_img = imgs[0][0, 2]  # r_band
+        recon_img = imgs[0][0, SDSS.BANDS.index("r")]
 
         ptc = cfg.encoder.tile_slen * cfg.encoder.tiles_to_crop
-        true_img_crop = true_img[2][ptc:-ptc, ptc:-ptc]
-        true_bg_crop = true_bg[2][ptc:-ptc, ptc:-ptc]
+        true_img_crop = true_img[SDSS.BANDS.index("r")][ptc:-ptc, ptc:-ptc]
+        true_bg_crop = true_bg[SDSS.BANDS.index("r")][ptc:-ptc, ptc:-ptc]
         true_bright = true_img_crop - true_bg_crop
 
         bright_pix_mask = (recon_img - 100) > 0  # originally 100

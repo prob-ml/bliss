@@ -13,12 +13,14 @@ class ImageDecoder(nn.Module):
         self,
         psf,
         bands: Tuple[int, ...],
+        nmgy_to_nelec_dict: dict,
     ) -> None:
         """Construct a decoder for a set of images.
 
         Args:
             psf: PSF object
             bands: bands to use for constructing the decoder, passed from Survey
+            nmgy_to_nelec_dict: dicitonary specifying elec count conversions by imageid
         """
 
         super().__init__()
@@ -27,6 +29,7 @@ class ImageDecoder(nn.Module):
         self.psf_galsim = psf.psf_galsim  # Dictionary indexed by image_id
         self.psf_params = psf.psf_params  # Dictionary indexed by image_id
         self.pixel_scale = psf.pixel_scale
+        self.nmgy_to_nelec_dict = nmgy_to_nelec_dict
 
     def render_star(self, psf, band, source_params):
         """Render a star with given params and PSF.
@@ -109,14 +112,22 @@ class ImageDecoder(nn.Module):
 
         full_cat = tile_cat.to_full_params()
 
-        # use the PSF from specified row/camcol/field
+        # use the PSF from specified image_id
         psfs = [self.psf_galsim[tuple(image_ids[b])] for b in range(batch_size)]
         param_list = [self.psf_params[tuple(image_ids[b])] for b in range(batch_size)]
         psf_params = torch.stack(param_list, dim=0)
 
+        # use the specified nmgy_to_nelec ratios indexed by image_id
+        nmgy_to_nelec_rats = [
+            self.nmgy_to_nelec_dict[tuple(image_ids[b])] for b in range(batch_size)
+        ]
+
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             psf = psfs[b]
+            # Convert to electron counts
+            tile_cat["star_fluxes"][b] *= nmgy_to_nelec_rats[b]
+            tile_cat["galaxy_fluxes"][b] *= nmgy_to_nelec_rats[b]
             for band in range(self.n_bands):
                 gs_img = galsim.Image(array=images[b, band], scale=self.pixel_scale)
                 for s in range(n_sources):

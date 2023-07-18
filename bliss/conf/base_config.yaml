@@ -27,6 +27,30 @@ simulator:
     num_workers: 32
     valid_n_batches: 10  # 256
     fix_validation_set: true
+    prior:
+        _target_: bliss.simulator.prior.CatalogPrior
+        reference_band: 2  # r-band
+        n_bands: ${simulator.survey.n_bands}
+        star_color_model_path: ${simulator.survey.dir_path}/color_models/star_gmm_nmgy.pkl
+        gal_color_model_path: ${simulator.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
+        n_tiles_h: 20
+        n_tiles_w: 20
+        tile_slen: 4
+        batch_size: 64
+        max_sources: 1
+        mean_sources: 0.2
+        min_sources: 0
+        prob_galaxy: 0.72
+        star_flux_min: 0.63094948
+        star_flux_max: 1014
+        star_flux_alpha: 0.43
+        galaxy_flux_min: 0.6301037
+        galaxy_flux_max: 1013
+        galaxy_alpha: 0.47
+        galaxy_a_concentration: 0.39330758068481686
+        galaxy_a_loc: 0.8371888967872619
+        galaxy_a_scale: 4.432725319432478
+        galaxy_a_bd_ratio: 2.0
 
 cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
@@ -42,7 +66,7 @@ cached_simulator:
 encoder:
     _target_: bliss.encoder.Encoder
     bands: [0, 1, 2, 3, 4]
-    tile_slen: ${simulator.survey.prior_config.tile_slen}
+    tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
     slack: 1.0
     min_flux_threshold: 0  # default 0 to take all sources
@@ -91,7 +115,7 @@ encoder:
 generate:
     n_workers_per_process: 0
     n_batches: ${simulator.n_batches}
-    batch_size: ${simulator.survey.prior_config.batch_size}
+    batch_size: ${simulator.prior.batch_size}
     max_images_per_file: 4096
     cached_data_path: ${paths.data}/cached_dataset
     file_prefix: dataset
@@ -142,39 +166,21 @@ predict:
 surveys:
     sdss:
         _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
-        sdss_dir: ${paths.sdss}
-        sdss_fields:
+        dir_path: ${paths.sdss}
+        fields:  # TODO: better arbitary name for fields/bricks?
             - run: 94
               camcol: 1
               fields: [12]
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
-        reference_band: 2 # SDSS r-band
-        prior_config:
-            max_bands: 5
-            n_tiles_h: 20
-            n_tiles_w: 20
-            tile_slen: 4
-            batch_size: 64
-            max_sources: 1
-            mean_sources: 0.2
-            min_sources: 0
-            prob_galaxy: 0.72
-            star_flux_min: 622
-            star_flux_max: 1e6
-            star_flux_alpha: 0.43
-            galaxy_flux_min: 622.0
-            galaxy_flux_max: 1e6
-            galaxy_alpha: 0.47
-            galaxy_a_concentration: 0.39330758068481686
-            galaxy_a_loc: 0.8371888967872619
-            galaxy_a_scale: 4.432725319432478
-            galaxy_a_bd_ratio: 2.0
+        n_bands: 5
     decals:
         _target_: bliss.surveys.decals.DarkEnergyCameraLegacySurvey
         decals_dir: ${paths.decals}
-        ra: 336.635 # in degrees
-        dec: -0.96 # in degrees
+        sky_coords: # in degrees
+            # brick '3366m010' corresponds to SDSS RCF 94-1-12
+            - ra: 336.6643042496718
+              dec: -0.9316385797930247
         bands: ${encoder.bands}
         reference_band: 1 # DECaLS r-band, DECaLS-indexed (via header)

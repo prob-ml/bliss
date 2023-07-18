@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import mock_tests
-import numpy as np
 import pytest
 import torch
 from astropy.table import Table
@@ -16,14 +15,12 @@ from bliss.catalog import FullCatalog, SourceType
 def bliss_client(cfg, tmpdir_factory):
     cwd = str(tmpdir_factory.mktemp("cwd"))
     client = BlissClient(cwd)
-    for sdss_field in cfg.surveys.sdss.sdss_fields:
+    image_ids = []
+    for sdss_field in cfg.surveys.sdss.fields:
         run, camcol, fields = sdss_field.values()
-        mock_tests.MockSDSSDownloader(
-            run=run,
-            camcol=camcol,
-            fields=fields,
-            download_dir=cwd + "/data/sdss",
-        )
+        for field in fields:
+            image_ids.append((run, camcol, field))
+    mock_tests.MockSDSSDownloader(image_ids, client.cwd + "/data/sdss")
     # Hack to apply select conftest.py overrides, since client.base_cfg should be private
     overrides = {
         "training.trainer.accelerator": cfg.training.trainer.accelerator,
@@ -126,18 +123,18 @@ class TestApi:
         ).exists()
 
     def test_predict_sdss_default_rcf(self, bliss_client, monkeypatch):
-        monkeypatch.setattr(api, "_predict", mock_tests.mock_predict)
+        monkeypatch.setattr(api, "_predict", mock_tests.mock_predict_sdss)
         # cached predict data copied to temp dir in mock_tests.mock_predict_sdss
-        cat, cat_table, pred_table = bliss_client.predict_sdss("test_path")
+        cat, cat_table, pred_tables = bliss_client.predict_sdss("test_path")
         assert isinstance(cat, FullCatalog)
         assert isinstance(cat_table, Table)
-        assert isinstance(pred_table, Table)
+        assert all(isinstance(pred_table, Table) for pred_table in pred_tables.values())
 
         bliss_client.plot_predictions_in_notebook()
         assert Path(bliss_client.base_cfg.predict.plot.out_file_name).exists()
 
-        # check that cat_table, gal_params_table contains all expected columns
-        expected_table_columns = [
+        # check that cat_table contains all expected columns
+        expected_cat_table_columns = [
             "plocs",
             "star_flux_u",
             "star_flux_g",
@@ -158,18 +155,66 @@ class TestApi:
             "galaxy_a_b",
         ]
         assert all(
-            col in cat_table.colnames for col in expected_table_columns
+            col in cat_table.colnames for col in expected_cat_table_columns
         ), "cat_table missing columns"
 
-        # check that fluxes are in correct order of magnitude (i.e., O(10^1) / O(10^2))
-        assert np.all(
-            np.log10(cat_table["star_flux_u"].value) <= 2
-        ), "star_fluxes_u not O(10^1); ensure units are in nmgy"
-        assert np.all(
-            np.log10(cat_table["galaxy_flux_u"].value) <= 3
-        ), "galaxy_flux_u not O(10^1); ensure units are in nmgy"
+        # check that pred_table contains all expected columns
+        expected_pred_table_columns = [
+            "on_prob_false",
+            "on_prob_true",
+            "galaxy_prob_false",
+            "galaxy_prob_true",
+        ]
 
-        # TODO: check that pred_table contains all expected columns
+        dist_colnames = [
+            "galsim_disk_frac",
+            "galsim_beta_radians",
+            "galsim_disk_q",
+            "galsim_a_d",
+            "galsim_bulge_q",
+            "galsim_a_b",
+            "star_flux_u",
+            "star_flux_g",
+            "star_flux_r",
+            "star_flux_i",
+            "star_flux_z",
+            "galaxy_flux_u",
+            "galaxy_flux_g",
+            "galaxy_flux_r",
+            "galaxy_flux_i",
+            "galaxy_flux_z",
+        ]
+
+        expected_pred_table_columns.extend([f"{col}_mean" for col in dist_colnames])
+        expected_pred_table_columns.extend([f"{col}_std" for col in dist_colnames])
+
+        some_pred_table = next(iter(pred_tables.values()))
+        assert all(
+            col in some_pred_table.colnames for col in expected_pred_table_columns
+        ), "pred_table missing columns"
+
+    def test_predict_decals_default_brick(self, bliss_client, monkeypatch):
+        monkeypatch.setattr(api, "_predict", mock_tests.mock_predict_decals_bulk)
+        # cached predict data copied to temp dir in mock_tests.mock_predict_sdss
+        cat, cat_table, pred_tables = bliss_client.predict_decals(
+            "test_path",
+            surveys={
+                "decals": {
+                    "sky_coords": [
+                        # brick '3366m010' corresponds to SDSS RCF 94-1-12
+                        {"ra": 336.6643042496718, "dec": -0.9316385797930247},
+                        # brick '1358p297' corresponds to SDSS RCF 3635-1-169
+                        {"ra": 135.95496736941683, "dec": 29.646883837721347},
+                    ]
+                }
+            },
+        )
+        assert isinstance(cat, FullCatalog)
+        assert isinstance(cat_table, Table)
+        assert all(isinstance(pred_table, Table) for pred_table in pred_tables.values())
+
+        bliss_client.plot_predictions_in_notebook()
+        assert Path(bliss_client.base_cfg.predict.plot.out_file_name).exists()
 
     def test_fullcat_to_astropy_table(self):
         # make 1 x 1 x 1 tensors in catalog
