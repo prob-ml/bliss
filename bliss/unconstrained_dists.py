@@ -51,6 +51,14 @@ class TruncatedDiagonalMVN(Distribution):
         # https://cran.r-project.org/web/packages/truncnorm/
         raise NotImplementedError("sampling a truncated normal isn't straightforward")
 
+    @property
+    def mode(self):
+        mu = self.base_dist.mean
+        # a mode still exists if this assertion is false, but I haven't implemented code
+        # to compute it because I don't think we need it
+        assert (mu >= 0).all() and (mu <= 1).all()
+        return self.base_dist.mode
+
     def log_prob(self, value):
         assert (value >= 0).all() and (value <= 1).all()
         # subtracting log probability that the base RV is in the unit box
