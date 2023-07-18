@@ -12,6 +12,7 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         self.prior = None
         self.background = None
         self.psf = None
+        self.nmgy_to_nelec_dict = None
 
         self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
 

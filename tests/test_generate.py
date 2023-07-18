@@ -39,14 +39,10 @@ class TestGenerate:
                 len(cached_dataset[0]["images"]) == 5
             ), "cached_dataset[0]['images'] must be a 5-D tensor"
             assert cached_dataset[0]["images"][0].shape == (
-                cfg.simulator.survey.prior_config.n_tiles_h
-                * cfg.simulator.survey.prior_config.tile_slen,
-                cfg.simulator.survey.prior_config.n_tiles_w
-                * cfg.simulator.survey.prior_config.tile_slen,
+                cfg.simulator.prior.n_tiles_h * cfg.simulator.prior.tile_slen,
+                cfg.simulator.prior.n_tiles_w * cfg.simulator.prior.tile_slen,
             )
             assert cached_dataset[0]["background"][0].shape == (
-                cfg.simulator.survey.prior_config.n_tiles_h
-                * cfg.simulator.survey.prior_config.tile_slen,
-                cfg.simulator.survey.prior_config.n_tiles_w
-                * cfg.simulator.survey.prior_config.tile_slen,
+                cfg.simulator.prior.n_tiles_h * cfg.simulator.prior.tile_slen,
+                cfg.simulator.prior.n_tiles_w * cfg.simulator.prior.tile_slen,
             )

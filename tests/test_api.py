@@ -16,7 +16,7 @@ def bliss_client(cfg, tmpdir_factory):
     cwd = str(tmpdir_factory.mktemp("cwd"))
     client = BlissClient(cwd)
     image_ids = []
-    for sdss_field in cfg.surveys.sdss.sdss_fields:
+    for sdss_field in cfg.surveys.sdss.fields:
         run, camcol, fields = sdss_field.values()
         for field in fields:
             image_ids.append((run, camcol, field))

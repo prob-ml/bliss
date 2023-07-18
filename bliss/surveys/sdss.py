@@ -18,7 +18,6 @@ from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
-from bliss.simulator.prior import ImagePrior, PriorConfig
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.survey import Survey
 from bliss.utils.download_utils import download_file_to_dst
@@ -55,27 +54,25 @@ class SloanDigitalSkySurvey(Survey):
     def __init__(
         self,
         psf_config,
-        prior_config: PriorConfig,
-        sdss_fields,
-        reference_band: int = 2,  # r-band
-        sdss_dir="data/sdss",
+        fields,
+        n_bands: int = 5,
+        dir_path="data/sdss",
     ):
         super().__init__()
 
-        self.sdss_path = Path(sdss_dir)
+        self.sdss_path = Path(dir_path)
         self.rcfgcs = []
 
-        self.sdss_fields = sdss_fields
+        self.sdss_fields = fields
         self.bands = tuple(range(len(self.BANDS)))
 
         self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
         self.prepare_data()
 
-        self.prior = SDSSPrior(
-            sdss_dir, self.image_ids(), self, self.bands, reference_band, prior_config
-        )
         self.background = ImageBackground(self, bands=self.bands)
-        self.psf = SDSSPSF(sdss_dir, self.image_ids(), self.bands, psf_config)
+        self.psf = SDSSPSF(dir_path, self.image_ids(), self.bands, psf_config)
+        self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
+        self.n_bands = n_bands
 
         self.catalog_cls = PhotoFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -177,6 +174,14 @@ class SloanDigitalSkySurvey(Survey):
                 ret[k] = data_per_band
         ret.update({"field": field})
         return ret
+
+    def nmgy_to_nelec(self):
+        d = {}
+        for i, rcf in enumerate(self.image_ids()):
+            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
+            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
+            d[rcf] = avg_nelec_conv
+        return d
 
     def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
         frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
@@ -519,97 +524,6 @@ class SDSSPSF(ImagePSF):
         term2 = b * torch.exp(-(r**2) / (2 * sigma2))
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
-
-
-class SDSSPrior(ImagePrior):
-    def __init__(
-        self, survey_data_dir, image_ids, image_items, bands, ref_band, prior_config: PriorConfig
-    ):
-        super().__init__(bands, **prior_config)
-        self.stars_fluxes, self.gals_fluxes = self._flux_ratios_against_b(
-            survey_data_dir, image_ids, image_items, b=ref_band
-        )
-
-    def _flux_ratios_against_b(self, survey_data_dir, image_ids, items, b) -> Tuple[dict, dict]:
-        stars_fluxes = {}
-        gals_fluxes = {}
-
-        SDSSDownloader(image_ids, download_dir=survey_data_dir).download_catalogs()
-        for i, image_id in enumerate(image_ids):
-            run, camcol, field = image_id
-            image = items[i]
-
-            # load project SDSS dir
-            sdss_path = Path(survey_data_dir)
-
-            # Set photoObj file path
-            field_dir = sdss_path / str(run) / str(camcol) / str(field)
-            po_path = field_dir / f"photoObj-{run:06d}-{camcol:d}-{field:04d}.fits"
-
-            msg = (
-                f"{po_path} does not exist. "
-                + "Make sure data files are available for fields specified in config."
-            )
-            assert Path(po_path).exists(), msg
-            po_fits = fits.getdata(po_path)
-
-            # retrieve object-specific information for ratio computing
-            objc_type = column_to_tensor(po_fits, "objc_type").numpy()
-            thing_id = column_to_tensor(po_fits, "thing_id").numpy()
-
-            # mask fluxes based on object identity & validity
-            galaxy_bools = (objc_type == 3) & (thing_id != -1)
-            star_bools = (objc_type == 6) & (thing_id != -1)
-            star_fluxes = column_to_tensor(po_fits, "psfflux") * star_bools.reshape(-1, 1)
-            gal_fluxes = column_to_tensor(po_fits, "cmodelflux") * galaxy_bools.reshape(-1, 1)
-            fluxes = star_fluxes + gal_fluxes
-
-            # containers for light source ratios in current field
-            star_fluxes_ratios = []
-            gal_fluxes_ratios = []
-
-            for obj, _ in enumerate(objc_type):
-                if thing_id[obj] != -1 and torch.all(fluxes[obj] > 0):
-                    ratios = self._flux_ratios_in_nelec(fluxes[obj], image, b)  # noqa: WPS220
-                    if objc_type[obj] == 6:  # noqa: WPS220
-                        star_fluxes_ratios.append(ratios)  # noqa: WPS220
-                    elif objc_type[obj] == 3:  # noqa: WPS220
-                        gal_fluxes_ratios.append(ratios)  # noqa: WPS220
-
-            if star_fluxes_ratios:
-                stars_fluxes[(run, camcol, field)] = star_fluxes_ratios
-            if gal_fluxes_ratios:
-                gals_fluxes[(run, camcol, field)] = gal_fluxes_ratios
-
-        return stars_fluxes, gals_fluxes
-
-    def _flux_ratios_in_nelec(self, obj_fluxes, image_item, b):
-        """Query SDSS frames to get flux ratios in units of electron count.
-
-        Args:
-            obj_fluxes: tensor of electron counts for a particular SDSS object
-            image_item: SDSS image item for a particular field
-            b: index of reference band
-
-        Returns:
-            ratios (Tensor): Ratio of electron counts for each light source in field
-            relative to `b`-band
-        """
-        ratios = torch.zeros(obj_fluxes.size())
-
-        # distribution of nelec_per_nmgy very clustered around mean
-        nelec_per_nmgys = image_item["nelec_per_nmgy_list"]
-        b_rat = nelec_per_nmgys[b].mean()  # fix b-band (count:nmgy) ratio
-
-        for i in range(self.max_bands):
-            # distribution of nelec_per_nmgy very clustered around mean
-            nelec_per_nmgy_rat = nelec_per_nmgys[i].mean() / b_rat
-
-            # (nmgy ratio relative to r-band) * (nelec/nmgy ratio relative to r band)
-            # result: ratio in units of electron counts
-            ratios[i] = (obj_fluxes[i] / obj_fluxes[2]) * nelec_per_nmgy_rat
-
-        return ratios
 
 
 # Data type conversion helpers
