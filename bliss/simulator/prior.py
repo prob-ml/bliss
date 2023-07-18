@@ -1,6 +1,5 @@
-import itertools
-import random
-from typing import Tuple, TypedDict
+import pickle
+from typing import Tuple
 
 import numpy as np
 import pytorch_lightning as pl
@@ -10,44 +9,18 @@ from torch.distributions import Gamma, Poisson, Uniform
 
 from bliss.catalog import SourceType, TileCatalog
 
-PriorConfig = TypedDict(
-    "PriorConfig",
-    {
-        "max_bands": int,
-        "n_tiles_h": int,
-        "n_tiles_w": int,
-        "tile_slen": int,
-        "batch_size": int,
-        "max_sources": int,
-        "mean_sources": float,
-        "min_sources": int,
-        "prob_galaxy": float,
-        "star_flux_min": float,
-        "star_flux_max": float,
-        "star_flux_alpha": float,
-        "galaxy_flux_min": float,
-        "galaxy_flux_max": float,
-        "galaxy_alpha": float,
-        "galaxy_a_concentration": float,
-        "galaxy_a_loc": float,
-        "galaxy_a_scale": float,
-        "galaxy_a_bd_ratio": float,
-    },
-)
 
-
-class ImagePrior(pl.LightningModule):
+class CatalogPrior(pl.LightningModule):
     """Prior distribution of objects in an astronomical image.
 
-    After the module is initialized, sampling is done with the sample_prior method.
+    After the module is initialized, sampling is done with the sample method.
     The input parameters correspond to the number of sources, the fluxes, whether an
     object is a galaxy or star, and the distributions of galaxy and star shapes.
     """
 
     def __init__(
         self,
-        bands,
-        max_bands,
+        n_bands,
         n_tiles_h: int,
         n_tiles_w: int,
         tile_slen: int,
@@ -66,12 +39,14 @@ class ImagePrior(pl.LightningModule):
         galaxy_a_loc: float,
         galaxy_a_scale: float,
         galaxy_a_bd_ratio: float,
+        star_color_model_path: str,
+        gal_color_model_path: str,
+        reference_band: int,
     ):
         """Initializes ImagePrior.
 
         Args:
-            bands: List of bands
-            max_bands: Maximum number of bands
+            n_bands: Number of bands in survey
             n_tiles_h: Image height in tiles,
             n_tiles_w: Image width in tiles,
             tile_slen: Tile side length in pixels,
@@ -90,16 +65,17 @@ class ImagePrior(pl.LightningModule):
             galaxy_a_loc: ?
             galaxy_a_scale: galaxy scale
             galaxy_a_bd_ratio: galaxy bulge-to-disk ratio
+            star_color_model_path: path specifying star color model
+            gal_color_model_path: path specifying galaxy color model
+            reference_band: int denoting index of reference band
         """
         super().__init__()
         self.n_tiles_h = n_tiles_h
         self.n_tiles_w = n_tiles_w
         self.tile_slen = tile_slen
+        self.n_bands = n_bands
         # NOTE: bands have to be non-empty
-        assert bands, "Need at least one band"
-        self.bands = bands
-        self.n_bands = len(bands)  # used in SimulatedDataset
-        self.max_bands = max_bands
+        self.bands = range(self.n_bands)
         self.batch_size = batch_size
 
         self.min_sources = min_sources
@@ -121,11 +97,13 @@ class ImagePrior(pl.LightningModule):
         self.galaxy_a_scale = galaxy_a_scale
         self.galaxy_a_bd_ratio = galaxy_a_bd_ratio
 
-    def sample_prior(self, batch_image_ids) -> TileCatalog:
-        """Samples latent variables from the prior of an astronomical image.
+        self.star_color_model_path = star_color_model_path
+        self.gal_color_model_path = gal_color_model_path
+        self.b_band = reference_band
+        self.gmm_star, self.gmm_gal = self._load_color_models()
 
-        Args:
-            batch_image_ids: image_ids needed for sampling.
+    def sample(self) -> TileCatalog:
+        """Samples latent variables from the prior of an astronomical image.
 
         Returns:
             A dictionary of tensors. Each tensor is a particular per-tile quantity; i.e.
@@ -134,25 +112,9 @@ class ImagePrior(pl.LightningModule):
             The remaining dimensions are variable-specific.
         """
         locs = self._sample_locs()
-        select_gal_flux_ratios = []
-        select_star_flux_ratios = []
-
-        for batch_image_id in batch_image_ids:
-            image_id = tuple(batch_image_id)
-            # get value if key exists, otherwise pick randomly
-            select_gal_flux_ratios.append(
-                self.gals_fluxes[image_id]
-                if image_id in self.gals_fluxes
-                else random.choice(list(self.gals_fluxes.values()))
-            )
-            select_star_flux_ratios.append(
-                self.stars_fluxes[image_id]
-                if image_id in self.stars_fluxes
-                else random.choice(list(self.stars_fluxes.values()))
-            )
-
-        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(select_gal_flux_ratios)
-        star_fluxes = self._sample_star_fluxes(select_star_flux_ratios)
+        stars_fluxes, gals_fluxes = self._flux_ratios()
+        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(gals_fluxes)
+        star_fluxes = self._sample_star_fluxes(stars_fluxes)
 
         n_sources = self._sample_n_sources()
         source_type = self._sample_source_type()
@@ -193,60 +155,58 @@ class ImagePrior(pl.LightningModule):
         return min_x / (1.0 - uniform_samples) ** (1 / alpha)
 
     def _sample_star_fluxes(self, star_ratios):
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
         b_flux = self._draw_truncated_pareto(
             self.star_flux_alpha, self.star_flux_min, self.star_flux_max, latent_dims
         )
-        total_flux = self.multiflux(star_ratios, b_flux)
+        total_flux = b_flux * star_ratios
 
         # select specified bands
-        bands = np.array(self.bands)
+        bands = np.array(range(self.n_bands))
         return total_flux[..., bands]
 
-    def multiflux(self, flux_ratios, flux_base) -> Tensor:
-        """Generate flux values for remaining bands based on draw."""
-        total_flux = torch.zeros(
-            self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 5
-        )
+    def _load_color_models(self):
+        # Load models from disk
+        with open(self.star_color_model_path, "rb") as f:
+            gmm_star = pickle.load(f)
+        with open(self.gal_color_model_path, "rb") as f:
+            gmm_gal = pickle.load(f)
+        return gmm_star, gmm_gal
 
-        for b, obj_ratios in enumerate(flux_ratios):
-            for h, w, s, bnd in itertools.product(  # noqa: WPS352
-                range(self.n_tiles_h),
-                range(self.n_tiles_w),
-                range(self.max_sources),
-                range(self.max_bands),
-            ):
-                # sample a light source
-                flux_sample = obj_ratios[np.random.randint(0, len(obj_ratios) - 1)]
-                total_flux[b, h, w, s, bnd] = flux_sample[bnd] * flux_base[b, h, w, s]
-
-        return total_flux
-
-    def _flux_ratios_against_b(self, survey_data_dir, image_ids, items, b) -> Tuple[dict, dict]:
-        """Sample and compute all star, galaxy fluxes relative to `b`-band based on real image data.
+    def _flux_ratios(self) -> Tuple[Tensor, Tensor]:
+        """Sample and compute all star, galaxy fluxes based on real image data.
 
         Instead of pareto-sampling fluxes for each band, we pareto-sample `b`-band flux values,
         using prior `b`-band star/galaxy flux parameters, then apply other-band-to-`b`-band flux
         ratios to get other-band flux values. This is primarily because it is not always the case
         that, e.g.,
             flux_r ~ Pareto, flux_g ~ Pareto => flux_r | flux_g ~ Pareto.
-
-        Args:
-            survey_data_dir (str): path to survey data directory
-            image_ids (list): list of image ids corresponding to `items`
-            items (list): list of image items
-            b (int): index of reference band
+        This function is survey-specific as the 'b'-band index depends on the survey.
 
         Returns:
-            stars_fluxes (dict): image_id-indexed dict of star flux ratios # noqa: DAR202
-                relative to `b`-band
-            gals_fluxes (dict): image_id-indexed dict of galaxy flux ratios   # noqa: DAR202
-                relative to `b`-band
-
-        Raises:
-            NotImplementedError: if this method is not implemented in a subclass
+            stars_fluxes (Tensor): (b x th x tw x ms x nbands) Tensor containing all star flux
+                ratios for current batch
+            gals_fluxes (Tensor): (b x th x tw x ms x nbands) Tensor containing all gal fluxes
+                ratios for current batch
         """
-        raise NotImplementedError
+
+        samples = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+        star_ratios_flat = self.gmm_star.sample(np.prod(samples))[0]
+        gal_ratios_flat = self.gmm_gal.sample(np.prod(samples))[0]
+
+        # Reshape drawn values into appropriate form
+        samples = samples + (self.n_bands - 1,)
+        star_ratios = np.exp(np.reshape(star_ratios_flat, samples))
+        gal_ratios = np.exp(np.reshape(gal_ratios_flat, samples))
+
+        # Append r-band 'ratio' of 1's to sampled ratios
+        base = np.ones((self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1))
+        arrs = (star_ratios[..., : self.b_band], base, star_ratios[..., self.b_band :])
+        star_ratios_b = np.concatenate(arrs, axis=4)
+        arrs = (gal_ratios[..., : self.b_band], base, gal_ratios[..., self.b_band :])
+        gal_ratios_b = np.concatenate(arrs, axis=4)
+
+        return torch.from_numpy(star_ratios_b), torch.from_numpy(gal_ratios_b)
 
     def _sample_galaxy_prior(self, gal_ratios) -> Tuple[Tensor, Tensor]:
         """Sample the latent galaxy params.
@@ -256,7 +216,6 @@ class ImagePrior(pl.LightningModule):
 
         Returns:
             Tuple[Tensor]: A tuple of galaxy fluxes (per band) and galsim parameters, including.
-                - total_flux: the total flux of the galaxy
                 - disk_frac: the fraction of flux attributed to the disk (rest goes to bulge)
                 - beta_radians: the angle of shear in radians
                 - disk_q: the minor-to-major axis ratio of the disk
@@ -264,17 +223,19 @@ class ImagePrior(pl.LightningModule):
                 - bulge_q: minor-to-major axis ratio of the bulge
                 - a_b: semi-major axis of bulge
         """
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
 
-        r_flux = self._draw_truncated_pareto(
+        b_flux = self._draw_truncated_pareto(
             self.galaxy_alpha, self.galaxy_flux_min, self.galaxy_flux_max, latent_dims
         )
 
-        total_flux = self.multiflux(gal_ratios, r_flux)
+        total_flux = gal_ratios * b_flux
 
         # select fluxes from specified bands
         bands = np.array(self.bands)
         select_flux = total_flux[..., bands]
+
+        latent_dims = latent_dims[:-1]
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
         beta_radians = Uniform(0, 2 * np.pi).sample(latent_dims)
