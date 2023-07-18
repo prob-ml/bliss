@@ -21,3 +21,8 @@ def pixelwise_norm_source(img):
 def log_transform(img):
     """Perform pixel-wise log transformation of full image."""
     return torch.log(img)
+
+
+def tanh_mod(img, scale, shift):
+    """Perform pixel-wise hyperbolic tangent of full image."""
+    return scale * torch.nn.Tanh(img + shift)  # pylint: disable=E1121

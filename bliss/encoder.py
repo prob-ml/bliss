@@ -165,7 +165,8 @@ class Encoder(pl.LightningModule):
             assert (
                 batch["background"][0, 0].std() > 0
             ), "Constant backgrounds not supported for multi-band encoding"
-            inputs[0] = log_transform(torch.clamp(inputs[0] - inputs[1], min=1))
+            inputs[0] = log_transform(torch.clamp(inputs[0], min=1))
+            inputs[1] = log_transform(torch.clamp(inputs[1], min=1))
         return torch.cat(inputs, dim=1)
 
     def encode_batch(self, batch):
