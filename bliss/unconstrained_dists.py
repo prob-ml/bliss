@@ -7,6 +7,7 @@ from torch.distributions import (
     Normal,
     SigmoidTransform,
     TransformedDistribution,
+    Distribution
 )
 
 
@@ -32,15 +33,39 @@ class UnconstrainedNormal:
         return Normal(mean, sd)
 
 
-class UnconstrainedDiagonalBivariateNormal:
+class TruncatedDiagonalMVN(Distribution):
+    """A truncated diagonal multivariate normal distribution"""
+    def __init__(self, mu, sigma):
+        multiple_normals = Normal(mu, sigma)
+        prob_in_unit_box_hw = multiple_normals.cdf(torch.ones_like(mu))
+        prob_in_unit_box_hw -= multiple_normals.cdf(torch.zeros_like(mu))
+        self.log_prob_in_unit_box = prob_in_unit_box_hw.log().sum(dim=-1)
+
+        self.base_dist = Independent(multiple_normals, 1)
+
+    def sample(**args):
+        # some ideas for how to sample it here, if we need to:
+        # https://cran.r-project.org/web/packages/truncnorm/
+        raise NotImplemented("sampling a truncated normal isn't straightforward")
+
+    def log_prob(self, value):
+        assert (value >= 0).all() and (value <= 1).all()
+        # subtracting log probability that the base RV is in the unit box
+        # is equivalent in log space to dividing the normal pdf by the normalizing constant
+        return self.base_dist.log_prob(value) - self.log_prob_in_unit_box
+
+
+class UnconstrainedTDBN:
+    """A factory for truncated bivariate normal distributions with support on the unit square
+    and diagonal covariance
+    """
     def __init__(self):
         self.dim = 4
 
     def get_dist(self, params):
-        mean = params[:, :, :, :2].sigmoid()
-        sd = params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
-        base_dist = Normal(mean, sd)
-        return Independent(base_dist, 1)
+        mu = params[:, :, :, :2].sigmoid()
+        sigma = params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
+        return TruncatedDiagonalMVN(mu, sigma)
 
 
 class UnconstrainedLogNormal:

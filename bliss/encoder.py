@@ -21,7 +21,7 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 from bliss.transforms import z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
-    UnconstrainedDiagonalBivariateNormal,
+    UnconstrainedTDBN,
     UnconstrainedLogitNormal,
     UnconstrainedLogNormal,
 )
@@ -98,7 +98,7 @@ class Encoder(pl.LightningModule):
     def dist_param_groups(self):
         d = {
             "on_prob": UnconstrainedBernoulli(),
-            "loc": UnconstrainedDiagonalBivariateNormal(),
+            "loc": UnconstrainedTDBN(),
             "galaxy_prob": UnconstrainedBernoulli(),
             # galsim parameters
             "galsim_disk_frac": UnconstrainedLogitNormal(),
