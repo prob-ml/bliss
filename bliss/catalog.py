@@ -302,6 +302,21 @@ class TileCatalog(UserDict):
         return TileCatalog(self.tile_slen, d)
 
     def to_region_params(self, overlap_slen):
+        """Convert a TileCatalog to RegionCatalog.
+
+        We do this by checking if a location is within the interior or boundary, and copying the
+        parameters to that region index in the new catalog. The locations are kept in full
+        coordinates, and then rescaled to be between 0 and 1 within the region.
+
+        Since we need to check each source individually, we use a for loop over each source in each
+        tile in each batch in the original catalog.
+
+        Args:
+            overlap_slen: the overlap in pixels between tiles
+
+        Returns:
+            RegionCatalog: the region-based representation of this TileCatalog
+        """
         msg = "Only TileCatalogs with one source per tile can be converted to RegionCatalogs"
         assert self.max_sources == 1, msg
         n_rows = 2 * self.n_tiles_h - 1
@@ -318,7 +333,7 @@ class TileCatalog(UserDict):
         cols = list(range(self.n_tiles_h))
 
         for b, i, j in itertools.product(batch, rows, cols):
-            new_i, new_j = TileCatalog.get_pos_for_new_loc(
+            new_i, new_j = RegionCatalog.get_pos_for_new_loc(
                 i * 2,
                 j * 2,
                 self.locs[b, i, j, 0],
@@ -345,20 +360,6 @@ class TileCatalog(UserDict):
         region_cat.locs = ((region_cat.locs - offset) / region_sizes).clamp(0, 1)
 
         return region_cat
-
-    @staticmethod
-    def get_pos_for_new_loc(i, j, loc, overlap, tile_slen, n_rows, n_cols):
-        new_i, new_j = i, j
-        threshold = (overlap / 2 / tile_slen, 1 - overlap / 2 / tile_slen)
-        if loc[0] < threshold[0] and i > 0:  # don't go past top edge
-            new_i = i - 1
-        if loc[0] > threshold[1] and i < n_rows - 1:  # don't go past bottom edge
-            new_i = i + 1
-        if loc[1] < threshold[0] and j > 0:  # don't go past left edge
-            new_j = j - 1
-        if loc[1] > threshold[1] and j < n_cols + 1:  # don't go past right edge
-            new_j = j + 1
-        return new_i, new_j
 
     # endregion
 
@@ -642,6 +643,7 @@ class RegionCatalog(TileCatalog, UserDict):
         return rearrange(bias, "(nth ntw) d -> nth ntw d", nth=self.n_rows, ntw=self.n_cols)
 
     def get_region_sizes(self) -> Tensor:
+        """Get sizes of regions in pixel coordinates."""
         sizes = torch.ones(self.n_rows, self.n_cols, 2) * self.interior_slen
         sizes[1::2, :, 0] = self.overlap_slen
         sizes[:, 1::2, 1] = self.overlap_slen
@@ -656,7 +658,7 @@ class RegionCatalog(TileCatalog, UserDict):
         """Convert locations in each region to locations in the full image.
 
         Returns:
-            Tensor: b x n x 2 tensor of locations in full coordinates
+            Tensor: b x nth x ntw x 1 x 2 tensor of locations in full coordinates
         """
         # get locs in pixel coords in each region
         plocs = self.locs * rearrange(self.get_region_sizes(), "nth ntw d -> 1 nth ntw 1 d")
@@ -666,5 +668,33 @@ class RegionCatalog(TileCatalog, UserDict):
     def get_full_locs_from_tiles(self) -> Tensor:
         """Here for compatibility with TileCatalog functions."""
         return self.get_full_locs_from_regions()
+
+    @staticmethod
+    def get_pos_for_new_loc(i, j, loc, overlap, tile_slen, n_rows, n_cols):
+        """Determine which region a source falls in.
+
+        Args:
+            i: tile row
+            j: tile col
+            loc: location within tile, between 0 and 1
+            overlap: overlap in pixel coordinates between tiles
+            tile_slen: tile length in pixel coordinates
+            n_rows: number of rows in region catalog
+            n_cols: number of columns in region catalog
+
+        Returns:
+            tuple: indices of region to place source in the region-based catalog
+        """
+        new_i, new_j = i, j
+        threshold = (overlap / 2 / tile_slen, 1 - overlap / 2 / tile_slen)
+        if loc[0] < threshold[0] and i > 0:  # don't go past top edge
+            new_i = i - 1
+        if loc[0] > threshold[1] and i < n_rows - 1:  # don't go past bottom edge
+            new_i = i + 1
+        if loc[1] < threshold[0] and j > 0:  # don't go past left edge
+            new_j = j - 1
+        if loc[1] > threshold[1] and j < n_cols + 1:  # don't go past right edge
+            new_j = j + 1
+        return new_i, new_j
 
     # endregion
