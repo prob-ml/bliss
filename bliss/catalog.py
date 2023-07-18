@@ -1,3 +1,4 @@
+import itertools
 import math
 from collections import UserDict
 from copy import copy
@@ -299,6 +300,65 @@ class TileCatalog(UserDict):
                 d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
 
         return TileCatalog(self.tile_slen, d)
+
+    def to_region_params(self, overlap_slen):
+        msg = "Only TileCatalogs with one source per tile can be converted to RegionCatalogs"
+        assert self.max_sources == 1, msg
+        n_rows = 2 * self.n_tiles_h - 1
+        n_cols = 2 * self.n_tiles_w - 1
+
+        d = {
+            "locs": torch.zeros(self.batch_size, n_rows, n_cols, 1, 2),
+            "n_sources": torch.zeros(self.batch_size, n_rows, n_cols),
+        }
+        full_locs = self.get_full_locs_from_tiles()
+
+        batch = list(range(self.batch_size))
+        rows = list(range(self.n_tiles_h))
+        cols = list(range(self.n_tiles_h))
+
+        for b, i, j in itertools.product(batch, rows, cols):
+            new_i, new_j = TileCatalog.get_pos_for_new_loc(
+                i * 2,
+                j * 2,
+                self.locs[b, i, j, 0],
+                overlap_slen,
+                self.tile_slen,
+                n_rows,
+                n_cols,
+            )
+
+            d["locs"][b, new_i, new_j, 0] = full_locs[b, i, j, 0]
+            d["n_sources"][b, new_i, new_j] = self.n_sources[b, i, j]
+            for key, val in self.items():
+                # initialize empty tensor
+                if d.get(key) is None:
+                    d[key] = torch.zeros(
+                        self.batch_size, n_rows, n_cols, self.max_sources, val.shape[-1]
+                    )
+                d[key][b, new_i, new_j, 0] = val[b, i, j, 0]
+
+        region_cat = RegionCatalog(self.tile_slen - overlap_slen, overlap_slen, d)
+
+        offset = rearrange(region_cat.get_region_coords(), "nth ntw d -> 1 nth ntw 1 d")
+        region_sizes = rearrange(region_cat.get_region_sizes(), "nth ntw d -> 1 nth ntw 1 d")
+        region_cat.locs = ((region_cat.locs - offset) / region_sizes).clamp(0, 1)
+
+        return region_cat
+
+    @staticmethod
+    def get_pos_for_new_loc(i, j, loc, overlap, tile_slen, n_rows, n_cols):
+        new_i, new_j = i, j
+        threshold = (overlap / 2 / tile_slen, 1 - overlap / 2 / tile_slen)
+        if loc[0] < threshold[0] and i > 0:  # don't go past top edge
+            new_i = i - 1
+        if loc[0] > threshold[1] and i < n_rows - 1:  # don't go past bottom edge
+            new_i = i + 1
+        if loc[1] < threshold[0] and j > 0:  # don't go past left edge
+            new_j = j - 1
+        if loc[1] > threshold[1] and j < n_cols + 1:  # don't go past right edge
+            new_j = j + 1
+        return new_i, new_j
 
     # endregion
 
