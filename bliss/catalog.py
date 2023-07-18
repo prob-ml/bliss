@@ -645,8 +645,11 @@ class RegionCatalog(TileCatalog, UserDict):
         sizes = torch.ones(self.n_rows, self.n_cols, 2) * self.interior_slen
         sizes[1::2, :, 0] = self.overlap_slen
         sizes[:, 1::2, 1] = self.overlap_slen
-        sizes[0] += self.overlap_slen / 2  # half overlap region in first row/col
-        sizes[:, 0] += self.overlap_slen / 2
+        # additional half-overlap in first and last row and col
+        sizes[0, :, 0] += self.overlap_slen / 2
+        sizes[-1, :, 0] += self.overlap_slen / 2
+        sizes[:, 0, 1] += self.overlap_slen / 2
+        sizes[:, -1, 1] += self.overlap_slen / 2
         return sizes
 
     def get_full_locs_from_regions(self) -> Tensor:
@@ -663,25 +666,5 @@ class RegionCatalog(TileCatalog, UserDict):
     def get_full_locs_from_tiles(self) -> Tensor:
         """Here for compatibility with TileCatalog functions."""
         return self.get_full_locs_from_regions()
-
-    def to_full_params(self):
-        plocs = self.get_full_locs_from_regions()
-        param_names_to_mask = {"plocs"}.union(set(self.keys()))
-        tile_params_to_gather = {"plocs": plocs}
-        tile_params_to_gather.update(self)
-
-        params = {}
-        indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()
-        for param_name, tile_param in tile_params_to_gather.items():
-            k = tile_param.shape[-1]
-            param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
-            indices_for_param = repeat(indices_to_retrieve, "b nth_ntw_s -> b nth_ntw_s k", k=k)
-            param = torch.gather(param, dim=1, index=indices_for_param)
-            if param_name in param_names_to_mask:
-                param = param * is_on_array.unsqueeze(-1)
-            params[param_name] = param
-
-        params["n_sources"] = reduce(self.n_sources, "b nth ntw -> b", "sum")
-        return FullCatalog(self.height, self.width, params)
 
     # endregion

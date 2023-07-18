@@ -5,10 +5,27 @@ import pytest
 import torch
 from hydra.utils import instantiate
 
-from bliss.catalog import FullCatalog, SourceType, TileCatalog
+from bliss.catalog import FullCatalog, RegionCatalog, SourceType, TileCatalog
 from bliss.surveys.decals import DecalsFullCatalog
 
 # TODO: Add PhotoFullCatalog-specific tests (like loading, restricting by RA/DEC, downloading)
+
+
+@pytest.fixture(scope="module")
+def basic_tilecat():
+    d = {
+        "n_sources": torch.tensor([[[1, 1], [0, 1]]]),
+        "locs": torch.zeros(1, 2, 2, 1, 2),
+        "source_type": torch.ones((1, 2, 2, 1, 1)).bool(),
+        "galaxy_params": torch.zeros((1, 2, 2, 1, 6)),
+        "star_fluxes": torch.zeros((1, 2, 2, 1, 5)),
+        "galaxy_fluxes": torch.zeros(1, 2, 2, 1, 5),
+    }
+    d["locs"][0, 0, 0, 0] = torch.tensor([0.5, 0.5])
+    d["locs"][0, 0, 1, 0] = torch.tensor([0.5, 0.5])
+    d["locs"][0, 1, 1, 0] = torch.tensor([0.5, 0.02])
+
+    return TileCatalog(4, d)
 
 
 @pytest.fixture(scope="module")
@@ -27,6 +44,38 @@ def multi_source_tilecat():
     d["galaxy_fluxes"][0, 1, 1, :, 2] = torch.tensor([300, 600])
 
     return TileCatalog(4, d)
+
+
+@pytest.fixture(scope="module")
+def region_cat():
+    n_sources = torch.zeros(2, 5, 5)
+    n_sources[0, 0, 0] = 1
+    n_sources[0, 1, 3] = 1
+    n_sources[0, 4, 2] = 1
+    n_sources[1, 0, 0] = 1
+    n_sources[1, 2, 2] = 1
+    n_sources[1, 4, 4] = 1
+
+    locs = torch.zeros(2, 5, 5, 1, 2)
+    locs[0, 0, 0] = torch.tensor([0.8, 0.2])
+    locs[0, 1, 3] = torch.tensor([0.1, 0.5])
+    locs[0, 4, 2] = torch.tensor([0.3, 0.3])
+    locs[1, 0, 0] = torch.tensor([0.5, 0.5])
+    locs[1, 2, 2] = torch.tensor([0.5, 0.5])
+    locs[1, 4, 4] = torch.tensor([0.5, 0.5])
+
+    fluxes = torch.zeros(2, 5, 5, 1, 5)
+    fluxes[0, 0, 0] = torch.tensor([100, 100, 100, 100, 100])
+    fluxes[0, 1, 3] = torch.tensor([100, 100, 100, 100, 100]) * 2
+    fluxes[0, 4, 2] = torch.tensor([100, 100, 100, 100, 100]) * 5
+
+    d = {
+        "n_sources": n_sources,
+        "locs": locs,
+        "galaxy_fluxes": fluxes,
+    }
+
+    return RegionCatalog(3.5, 0.5, d)
 
 
 class TestBasicTileAndFullCatalogs:
@@ -143,3 +192,43 @@ class TestDecalsCatalog:
         assert np.isclose(np.max(ras), 336.75, atol=1e-4)
         assert np.isclose(np.min(decs), -1.125, atol=1e-4)
         assert np.isclose(np.max(decs), -0.875, atol=1e-4)
+
+
+class TestRegionCatalog:
+    def test_properties(self, region_cat):
+        assert region_cat.height == region_cat.width == 12
+        assert region_cat.is_on_mask.sum() == 6
+        assert torch.all(
+            region_cat.interior_mask + region_cat.boundary_mask + region_cat.corner_mask
+        )
+
+    def test_region_coords(self, region_cat):
+        coords = region_cat.get_region_coords()
+        assert coords.amax(dim=(0, 1))[0] < region_cat.height
+        assert coords.amax(dim=(0, 1))[1] < region_cat.width
+
+    def test_region_sizes(self, region_cat):
+        sizes = region_cat.get_region_sizes()
+        assert sizes[0].equal(
+            torch.tensor([[3.75, 3.75], [3.75, 0.5], [3.75, 3.5], [3.75, 0.5], [3.75, 3.75]])
+        )
+        assert sizes[1].equal(
+            torch.tensor([[0.5, 3.75], [0.5, 0.5], [0.5, 3.5], [0.5, 0.5], [0.5, 3.75]])
+        )
+        assert torch.all(sizes[..., 0].sum(dim=0) == region_cat.height)
+        assert torch.all(sizes[..., 1].sum(dim=1) == region_cat.width)
+
+    def test_convert_to_full(self, region_cat):
+        full_cat = region_cat.to_full_params()
+        true_locs = torch.tensor(
+            [
+                [[9.375, 5.3], [3.8, 8], [3, 0.75]],
+                [[6, 6], [10.125, 10.125], [1.875, 1.875]],
+            ]
+        )
+        assert full_cat.plocs.equal(true_locs)
+
+    def test_tile_cat_to_region(self, basic_tilecat):
+        region_cat = basic_tilecat.to_region_params(0.5)
+        full_cat = basic_tilecat.to_full_params()
+        assert region_cat.to_full_params().plocs.equal(full_cat.plocs)
