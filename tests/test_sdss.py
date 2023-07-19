@@ -1,3 +1,5 @@
+from shutil import copytree
+
 import numpy as np
 import pytest
 from hydra.utils import instantiate
@@ -6,7 +8,7 @@ from hydra.utils import instantiate
 class TestSDSS:
     def test_sdss(self, cfg):
         the_cfg = cfg.copy()
-        the_cfg.surveys.sdss.sdss_fields = [{"run": 3900, "camcol": 6, "fields": [269]}]
+        the_cfg.surveys.sdss.fields = [{"run": 3900, "camcol": 6, "fields": [269]}]
         sdss_obj = instantiate(the_cfg.surveys.sdss)
         an_obj = sdss_obj[0]
         for k in ("image", "background", "gain", "nelec_per_nmgy_list", "calibration"):
@@ -19,5 +21,7 @@ class TestSDSS:
     def test_sdss_custom_dir(self, cfg, tmpdir_factory):
         the_cfg = cfg.copy()
         the_cfg.paths.root = str(tmpdir_factory.mktemp("root"))
+        if cfg.surveys.sdss.dir_path != the_cfg.surveys.sdss.dir_path:
+            copytree(cfg.surveys.sdss.dir_path, the_cfg.surveys.sdss.dir_path, dirs_exist_ok=True)
         sdss_obj = instantiate(the_cfg.surveys.sdss)[0]
         assert sdss_obj["image"].shape == (5, 1489, 2048)
