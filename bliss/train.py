@@ -23,6 +23,7 @@ def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-state
 
     # setup dataset
     simulator_cfg = cfg.cached_simulator if cfg.training.use_cached_simulator else cfg.simulator
+    simulator_cfg = cfg.surveys.dc2 if cfg.training.use_dc2 else simulator_cfg
     dataset = instantiate(simulator_cfg)
 
     # setup model
@@ -172,3 +173,4 @@ def save_best_model(cfg, best_model_path, train_time_sec):
             elif is_json_serializable(v):
                 data_to_write[k] = v
         fp.write(json.dumps(data_to_write))
+        

@@ -102,7 +102,7 @@ class Encoder(pl.LightningModule):
             "galaxy_prob": UnconstrainedBernoulli(),
             # galsim parameters
             "galsim_disk_frac": UnconstrainedLogitNormal(),
-            "galsim_beta_radians": UnconstrainedLogitNormal(high=2 * torch.pi),
+            "galsim_beta_radians": UnconstrainedLogitNormal(high=torch.pi),
             "galsim_disk_q": UnconstrainedLogitNormal(),
             "galsim_a_d": UnconstrainedLogNormal(),
             "galsim_bulge_q": UnconstrainedLogitNormal(),
@@ -179,9 +179,7 @@ class Encoder(pl.LightningModule):
 
         assert inputs.size(2) % 16 == 0, "image dims must be multiples of 16"
         assert inputs.size(3) % 16 == 0, "image dims must be multiples of 16"
-        bn_warn = "batchnorm training requires a larger batch. did you mean to use eval mode?"
-        assert (not self.training) or batch["images"].size(0) > 4, bn_warn
-
+        
         output = self.model(inputs)
         # there's an extra dimension for channel that is always a singleton
         output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
@@ -295,11 +293,13 @@ class Encoder(pl.LightningModule):
         gal_bands = [self.GAL_FLUX_NAMES[band] for band in self.bands]
         for i, (star_name, gal_name) in enumerate(zip(star_bands, gal_bands)):
             # star flux loss
+            star_fluxes[star_fluxes == 0] = 1e-18
             star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i]) * true_star_bools
             loss += star_flux_loss
             loss_with_components[star_name] = star_flux_loss.sum() / true_star_bools.sum()
 
             # galaxy flux loss
+            galaxy_fluxes[galaxy_fluxes == 0] = 1e-18
             gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., i]) * true_gal_bools
             loss += gal_flux_loss
             loss_with_components[gal_name] = gal_flux_loss.sum() / true_gal_bools.sum()
@@ -308,6 +308,7 @@ class Encoder(pl.LightningModule):
         galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
         for i, param_name in enumerate(self.GALSIM_NAMES):
             galsim_pn = f"galsim_{param_name}"
+            galsim_true_vals[galsim_true_vals == 0] = 1e-18
             loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i]) * true_gal_bools
             loss += loss_term
             loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
@@ -373,11 +374,11 @@ class Encoder(pl.LightningModule):
         """Pytorch lightning method."""
         # only plot images on the first batch of epoch
         plot_images = batch_idx == 0
-        self._generic_step(batch, "val", log_metrics=True, plot_images=plot_images)
+        self._generic_step(batch, "val", log_metrics=False, plot_images=plot_images)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        self._generic_step(batch, "test", log_metrics=True)
+        self._generic_step(batch, "test", log_metrics=False)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""

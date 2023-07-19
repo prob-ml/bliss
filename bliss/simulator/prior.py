@@ -238,7 +238,7 @@ class CatalogPrior(pl.LightningModule):
         latent_dims = latent_dims[:-1]
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
-        beta_radians = Uniform(0, 2 * np.pi).sample(latent_dims)
+        beta_radians = Uniform(0, np.pi).sample(latent_dims)
         disk_q = Uniform(1e-8, 1).sample(latent_dims)
         bulge_q = Uniform(1e-8, 1).sample(latent_dims)
 
@@ -259,3 +259,4 @@ class CatalogPrior(pl.LightningModule):
         param_lst = [disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
 
         return select_flux, torch.cat(param_lst, dim=4)
+    
