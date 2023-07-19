@@ -19,7 +19,7 @@ from bliss.surveys.sdss import SDSSDownloader, SloanDigitalSkySurvey
 from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
 
-SurveyType: TypeAlias = Literal["decals", "hst", "lsst", "sdss"]
+SurveyType: TypeAlias = Literal["decals", "hst", "dc2", "sdss"]
 
 
 class BlissClient:

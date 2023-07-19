@@ -259,4 +259,3 @@ class CatalogPrior(pl.LightningModule):
         param_lst = [disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
 
         return select_flux, torch.cat(param_lst, dim=4)
-    

@@ -74,7 +74,7 @@ def setup_paths(paths):
         path = Path(paths[key])
         if path.exists():
             continue
-        if key in {"data", "sdss", "decals", "output", "pretrained_models"}:
+        if key in {"data", "sdss", "decals", "dc2", "output", "pretrained_models"}:
             path.mkdir(parents=True)
         else:
             err = "path for {} ({}) does not exist".format(str(key), path.as_posix())
@@ -173,4 +173,3 @@ def save_best_model(cfg, best_model_path, train_time_sec):
             elif is_json_serializable(v):
                 data_to_write[k] = v
         fp.write(json.dumps(data_to_write))
-        

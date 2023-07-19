@@ -64,7 +64,7 @@ cached_simulator:
 
 encoder:
     _target_: bliss.encoder.Encoder
-    bands: [0]
+    bands: [0, 1, 2, 3, 4]
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
     slack: 1.0
@@ -138,12 +138,12 @@ training:
         max_epochs: ${training.n_epochs}
         min_epochs: 1
         accelerator: "gpu"
-        devices: [2]
+        devices: 1
     testing: true
     seed: 42
     weight_save_path: null
     use_cached_simulator: false
-    use_dc2: true
+    use_dc2: false
 
 predict:
     dataset: ${surveys.sdss}
@@ -185,9 +185,6 @@ surveys:
         bands: ${encoder.bands}
         reference_band: 1 # DECaLS r-band, DECaLS-indexed (via header)
     dc2:
-        _target_: bliss.surveys.lsst.DC2
+        _target_: bliss.surveys.dc2.DC2
         data_dir: ${paths.dc2}/calibrated_exposures/r/
-        cat_path: ${paths.dc2}/merged_catalog_bright_all_
-        band: r
-        batch_size: 1
-
+        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_bright_bright_
