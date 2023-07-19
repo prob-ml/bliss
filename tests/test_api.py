@@ -92,10 +92,8 @@ class TestApi:
         weight_save_path = "tests/test_model.pt"
         bliss_client.train_on_cached_data(
             weight_save_path=weight_save_path,
-            train_n_batches=1,
+            splits="0:50/50:100/50:100",
             batch_size=8,
-            val_split_file_idxs=[1],
-            test_split_file_idxs=[1],
             cached_simulator=cached_simulator_cfg,
             training=training_cfg,
         )

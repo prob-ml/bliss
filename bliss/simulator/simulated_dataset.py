@@ -190,77 +190,75 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
     def __init__(
         self,
-        train_n_batches: int,
+        splits: str,
         batch_size: int,
         bands: List,
         num_workers: int,
         cached_data_path: str,
         file_prefix: str,
-        val_split_file_idxs: List[int],
-        test_split_file_idxs: List[int],
     ):
         super().__init__()
 
-        self.train_n_batches = train_n_batches
         self.num_workers = num_workers
         self.batch_size = batch_size
         self.cached_data_path = cached_data_path
         self.file_prefix = file_prefix
         self.bands = bands
-        self.val_split_file_idxs = val_split_file_idxs or []
-        self.test_split_file_idxs = test_split_file_idxs or []
-
-        self.data: List[FileDatum] = []
-        self.valid: List[FileDatum] = []
-        self.test: List[FileDatum] = []
 
         # assume cached image files exist, read from disk
+        self.data: List[FileDatum] = []
         for filename in os.listdir(self.cached_data_path):
             if not filename.endswith(".pt"):
                 continue
+            self.data += self.read_file(f"{self.cached_data_path}/{filename}")
 
-            file_idx = int(filename.split("_")[-1].split(".")[0])
-            if file_idx in self.val_split_file_idxs or file_idx in self.test_split_file_idxs:
-                continue
-            if filename.startswith(self.file_prefix) and filename.endswith(".pt"):
-                self.data += self.read_file(f"{self.cached_data_path}/{filename}")
+        # parse slices from percentages to indices
+        self.slices = self.parse_slices(splits, len(self.data))
 
-        # fix validation set
-        for idx in self.val_split_file_idxs:
-            filename = f"{self.file_prefix}_{idx}.pt"
-            self.valid += self.read_file(f"{self.cached_data_path}/{filename}")
+    def _percent_to_idx(self, x, length):
+        """Converts string in percent to an integer index."""
+        return int(float(x.strip()) / 100 * length) if x.strip() else None
 
-        # fix test set
-        for idx in self.test_split_file_idxs:
-            filename = f"{self.file_prefix}_{idx}.pt"
-            self.test += self.read_file(f"{self.cached_data_path}/{filename}")
+    def parse_slices(self, splits: str, length: int):
+        slices = [slice(0, 0) for _ in range(3)]  # default to empty slice for each split
+        for i, data_split in enumerate(splits.split("/")):
+            # map "start_percent:stop_percent" to slice(start_idx, stop_idx)
+            slices[i] = slice(*(self._percent_to_idx(val, length) for val in data_split.split(":")))
+        return slices
 
     def read_file(self, filename: str) -> List[FileDatum]:
         with open(filename, "rb") as f:
             return torch.load(f)
 
     def __len__(self):
-        return self.train_n_batches * self.batch_size
+        return len(self.data[self.slices[0]])
 
     def __getitem__(self, idx):
         return self.data[idx]
 
     def train_dataloader(self):
         assert self.data, "No cached train data loaded; run `generate.py` first"
-        assert len(self.data) >= self.train_n_batches * self.batch_size, (
+        assert len(self.data[self.slices[0]]) >= self.batch_size, (
             f"Insufficient cached data loaded; "
-            f"need at least {self.train_n_batches * self.batch_size} "
-            f"but only have {len(self.data)}. Re-run `generate.py` with "
+            f"need at least {self.batch_size} "
+            f"but only have {len(self.data[self.slices[0]])}. Re-run `generate.py` with "
             f"different generation `train_n_batches` and/or `batch_size`."
         )
         return DataLoader(
-            self, shuffle=True, batch_size=self.batch_size, num_workers=self.num_workers
+            self.data[self.slices[0]],
+            shuffle=True,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
         )
 
     def val_dataloader(self):
-        assert self.valid, "No cached validation data found; run `generate.py` first"
-        return DataLoader(self.valid, batch_size=self.batch_size, num_workers=self.num_workers)
+        assert self.data[self.slices[1]], "No cached validation data found; run `generate.py` first"
+        return DataLoader(
+            self.data[self.slices[1]], batch_size=self.batch_size, num_workers=self.num_workers
+        )
 
     def test_dataloader(self):
-        assert self.test, "No cached test data found; run `generate.py` first"
-        return DataLoader(self.test, batch_size=self.batch_size, num_workers=self.num_workers)
+        assert self.data[self.slices[2]], "No cached test data found; run `generate.py` first"
+        return DataLoader(
+            self.data[self.slices[2]], batch_size=self.batch_size, num_workers=self.num_workers
+        )
