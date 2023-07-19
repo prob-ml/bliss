@@ -9,6 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import torch
+from torch import nn  # pylint: disable=W0611
 
 from bliss.base_detect.base_common import autopad  # noqa: I001, F401  # pylint: disable=W0611
 from bliss.base_detect.base_common import (  # noqa: F401  # pylint: disable=W0611

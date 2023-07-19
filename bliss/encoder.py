@@ -179,8 +179,8 @@ class Encoder(pl.LightningModule):
         # give us output of the right dimension
         self.model.model[-1].training = True
 
-        assert inputs.size(2) % 16 == 0, "image dims must be multiples of 16"
         assert inputs.size(3) % 16 == 0, "image dims must be multiples of 16"
+        assert inputs.size(4) % 16 == 0, "image dims must be multiples of 16"
         bn_warn = "batchnorm training requires a larger batch. did you mean to use eval mode?"
         assert (not self.training) or batch["images"].size(0) > 4, bn_warn
 
@@ -357,7 +357,12 @@ class Encoder(pl.LightningModule):
 
             margin_px = self.tiles_to_crop * self.tile_slen
             fig = plot_detections(
-                batch["images"], target_full_cat, est_full_cat, nrows, wrong_idx, margin_px
+                torch.squeeze(batch["images"], 2),
+                target_full_cat,
+                est_full_cat,
+                nrows,
+                wrong_idx,
+                margin_px,
             )
             title_root = f"Epoch:{self.current_epoch}/"
             title = f"{title_root}{logging_name} images"
