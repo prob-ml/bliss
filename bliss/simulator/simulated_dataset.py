@@ -215,14 +215,15 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         # parse slices from percentages to indices
         self.slices = self.parse_slices(splits, len(self.data))
 
-    def pct_to_idx(self, x, length):
+    def _percent_to_idx(self, x, length):
+        """Converts string in percent to an integer index."""
         return int(float(x.strip()) / 100 * length) if x.strip() else None
 
     def parse_slices(self, splits: str, length: int):
         slices = [slice(0, 0) for _ in range(3)]  # default to empty slice for each split
         for i, data_split in enumerate(splits.split("/")):
-            # map "start_pct:stop_pct" to slice(start_idx, stop_idx)
-            slices[i] = slice(*(self.pct_to_idx(val, length) for val in data_split.split(":")))
+            # map "start_percent:stop_percent" to slice(start_idx, stop_idx)
+            slices[i] = slice(*(self._percent_to_idx(val, length) for val in data_split.split(":")))
         return slices
 
     def read_file(self, filename: str) -> List[FileDatum]:
