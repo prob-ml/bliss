@@ -334,8 +334,8 @@ class TileCatalog(UserDict):
 
         for b, i, j in itertools.product(batch, rows, cols):
             new_i, new_j = RegionCatalog.get_pos_for_new_loc(
-                i * 2,
-                j * 2,
+                i,
+                j,
                 self.locs[b, i, j, 0],
                 overlap_slen,
                 self.tile_slen,
@@ -674,9 +674,9 @@ class RegionCatalog(TileCatalog, UserDict):
         """Determine which region a source falls in.
 
         Args:
-            i: tile row
-            j: tile col
-            loc: location within tile, between 0 and 1
+            i: original tile row
+            j: original tile col
+            loc: location within tile, each coordinate between 0 and 1
             overlap: overlap in pixel coordinates between tiles
             tile_slen: tile length in pixel coordinates
             n_rows: number of rows in region catalog
@@ -685,16 +685,16 @@ class RegionCatalog(TileCatalog, UserDict):
         Returns:
             tuple: indices of region to place source in the region-based catalog
         """
-        new_i, new_j = i, j
+        new_i, new_j = i * 2, j * 2
         threshold = (overlap / 2 / tile_slen, 1 - overlap / 2 / tile_slen)
-        if loc[0] < threshold[0] and i > 0:  # don't go past top edge
-            new_i = i - 1
-        if loc[0] > threshold[1] and i < n_rows - 1:  # don't go past bottom edge
-            new_i = i + 1
-        if loc[1] < threshold[0] and j > 0:  # don't go past left edge
-            new_j = j - 1
-        if loc[1] > threshold[1] and j < n_cols + 1:  # don't go past right edge
-            new_j = j + 1
+        if loc[0] < threshold[0] and new_i > 0:  # don't go past top edge
+            new_i -= 1
+        if loc[0] > threshold[1] and new_i < n_rows - 1:  # don't go past bottom edge
+            new_i += 1
+        if loc[1] < threshold[0] and new_j > 0:  # don't go past left edge
+            new_j -= 1
+        if loc[1] > threshold[1] and new_j < n_cols - 1:  # don't go past right edge
+            new_j += 1
         return new_i, new_j
 
     # endregion
