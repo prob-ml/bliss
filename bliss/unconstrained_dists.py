@@ -101,7 +101,7 @@ class UnconstrainedLogNormal:
     def get_dist(self, params):
         mu = params[:, :, :, 0]
         sigma = params[:, :, :, 1].clamp(-6, 10).exp().sqrt()
-        return LogNormal(mu, sigma)  # we may evaluate at 0 for masked tiles
+        return LogNormal(mu, sigma, validate_args=False)  # we may evaluate at 0 for masked tiles
 
 
 class UnconstrainedLogitNormal:

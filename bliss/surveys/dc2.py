@@ -170,7 +170,7 @@ class Dc2FullCatalog(FullCatalog):
 
     @classmethod
     def load_dc2_catalog(cls, cat_path, band, wcs, plocs_lim):
-        data = pd.read_hdf(cat_path + band + ".hdf5", "df")
+        data = pd.read_pickle(cat_path + band + ".pkl")
         ra = torch.tensor(data["ra"].values)
         dec = torch.tensor(data["dec"].values)
         galaxy_bools = torch.tensor((data["truth_type"] == 1).values)
