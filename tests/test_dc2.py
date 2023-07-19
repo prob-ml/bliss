@@ -5,7 +5,6 @@ from hydra.utils import instantiate
 class TestDC2:
     def test_dc2(self, cfg):
         dataset = instantiate(cfg.surveys.dc2)
-        dataset.prepare_data()
         dc2_obj = dataset.dc2_data[0]
 
         dc2_tile = dc2_obj["tile_catalog"]

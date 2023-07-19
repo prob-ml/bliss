@@ -27,6 +27,7 @@ class DC2(Survey):
         self.data = []
         self.valid = []
         self.test = []
+        self.prepare_data()
 
     def __len__(self):
         return len(self.dc2_data)
@@ -71,7 +72,9 @@ class DC2(Survey):
             bg_frame.close()
 
             plocs_lim = image.shape
-            full_cat = Dc2FullCatalog.load_dc2_catalog(self.cat_path, self.band, wcs, plocs_lim)
+            height = plocs_lim[0]
+            width = plocs_lim[1]
+            full_cat = Dc2FullCatalog.from_file(self.cat_path, wcs, height, width, self.band)
             tile_cat = full_cat.to_tile_params(4, 2)
             tile_dict = tile_cat.to_dict()
 
@@ -169,7 +172,7 @@ class Dc2FullCatalog(FullCatalog):
     """
 
     @classmethod
-    def load_dc2_catalog(cls, cat_path, band, wcs, plocs_lim):
+    def from_file(cls, cat_path, wcs, height, width, band):
         data = pd.read_pickle(cat_path + band + ".pkl")
         ra = torch.tensor(data["ra"].values)
         dec = torch.tensor(data["dec"].values)
@@ -223,8 +226,8 @@ class Dc2FullCatalog(FullCatalog):
 
         plocs = (plocs.reshape(1, plocs.size()[0], 2))[0]
 
-        x0_mask = (plocs[:, 0] > 0) & (plocs[:, 0] < plocs_lim[1])
-        x1_mask = (plocs[:, 1] > 0) & (plocs[:, 1] < plocs_lim[0])
+        x0_mask = (plocs[:, 0] > 0) & (plocs[:, 0] < width)
+        x1_mask = (plocs[:, 1] > 0) & (plocs[:, 1] < height)
         x_mask = x0_mask * x1_mask
 
         star_fluxes = star_fluxes[x_mask]
@@ -249,7 +252,7 @@ class Dc2FullCatalog(FullCatalog):
             "star_log_fluxes": star_log_fluxes.reshape(1, nobj, 1),
         }
 
-        return cls(plocs_lim[0], plocs_lim[1], d)
+        return cls(height, width, d)
 
 
 def get_tile(split_lim, tile_cat):
