@@ -112,7 +112,6 @@ class BlissClient:
             **kwargs: Keyword arguments to override default configuration values.
         """
         cfg = OmegaConf.create(self.base_cfg)
-        cfg.training.use_cached_simulator = True
         # apply overrides
         cfg.training.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
         cfg.cached_simulator.splits = splits
@@ -123,6 +122,7 @@ class BlissClient:
             )
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
+        cfg.training.data_source = cfg.cached_simulator
 
         _train(cfg)
 

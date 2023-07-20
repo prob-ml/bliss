@@ -22,9 +22,8 @@ def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-state
     pl.seed_everything(cfg.training.seed)
 
     # setup dataset
-    simulator_cfg = cfg.cached_simulator if cfg.training.use_cached_simulator else cfg.simulator
-    simulator_cfg = cfg.surveys.dc2 if cfg.training.use_dc2 else simulator_cfg
-    dataset = instantiate(simulator_cfg)
+    data_source_cfg = cfg.training.data_source
+    dataset = instantiate(data_source_cfg)
 
     # setup model
     encoder = instantiate(cfg.encoder)

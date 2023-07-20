@@ -142,8 +142,7 @@ training:
     testing: true
     seed: 42
     weight_save_path: null
-    use_cached_simulator: false
-    use_dc2: false
+    data_source: ${simulator}
 
 predict:
     dataset: ${surveys.sdss}
