@@ -55,11 +55,18 @@ class TruncatedDiagonalMVN(Distribution):
         raise NotImplementedError("sampling a truncated normal isn't straightforward")
 
     @property
+    def mean(self):
+        return self.base_dist.mean
+
+    @property
+    def stddev(self):
+        return self.base_dist.stddev
+
+    @property
     def mode(self):
-        mu = self.base_dist.mean
         # a mode still exists if this assertion is false, but I haven't implemented code
         # to compute it because I don't think we need it
-        assert (mu >= 0).all() and (mu <= 1).all()
+        assert (self.mean >= 0).all() and (self.mean <= 1).all()
         return self.base_dist.mode
 
     def log_prob(self, value):
@@ -67,6 +74,12 @@ class TruncatedDiagonalMVN(Distribution):
         # subtracting log probability that the base RV is in the unit box
         # is equivalent in log space to dividing the normal pdf by the normalizing constant
         return self.base_dist.log_prob(value) - self.log_prob_in_unit_box
+
+    def cdf(self, value):
+        cdf_at_val = self.base_dist.base_dist.cdf(value)
+        cdf_at_lb = self.base_dist.base_dist.cdf(torch.zeros_like(self.mean))
+        log_cdf = (cdf_at_val - cdf_at_lb).log().sum(dim=-1) - self.log_prob_in_unit_box
+        return log_cdf.exp()
 
 
 class UnconstrainedTDBN:
