@@ -5,8 +5,16 @@ from hydra.utils import instantiate
 class TestDC2:
     def test_dc2(self, cfg):
         dataset = instantiate(cfg.surveys.dc2)
-        dc2_obj = dataset.dc2_data[0]
+        image = dataset.image_id(0)
+        assert image.shape[0] == 1
 
+        images = dataset.image_ids()
+        assert len(images) == 25
+
+        p_batch = dataset.predict_batch
+        assert p_batch["images"].shape[0] == 1
+
+        dc2_obj = dataset.idx(0)
         dc2_tile = dc2_obj["tile_catalog"]
         params = (
             "locs",
@@ -23,3 +31,7 @@ class TestDC2:
 
         for i in ("images", "background"):
             assert isinstance(dc2_obj[i], torch.Tensor)
+
+        assert dataset.train_dataloader() is not None
+        assert dataset.train_dataloader() is not None
+        assert dataset.test_dataloader() is not None

@@ -28,6 +28,12 @@ class DC2(Survey):
         self.valid = []
         self.test = []
         self.prepare_data()
+        self.setup()
+
+        self._predict_batch = {
+            "images": self.dc2_data[0]["images"],
+            "background": self.dc2_data[0]["background"],
+        }
 
     def __len__(self):
         return len(self.dc2_data)
@@ -39,7 +45,7 @@ class DC2(Survey):
         return self.dc2_data[idx]["images"]
 
     def idx(self, image_id: int) -> int:
-        return self.dc2_data(image_id)
+        return self.dc2_data[image_id]
 
     def image_ids(self):
         return [self.dc2_data[i]["images"] for i in range(len(self))]
