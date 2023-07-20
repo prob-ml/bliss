@@ -1,18 +1,23 @@
+import gzip
+import math
 import warnings
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 from urllib.error import HTTPError
 
+import galsim
 import numpy as np
 import torch
 from astropy.io import fits
 from astropy.table import Table
 from astropy.utils.data import download_file
 from astropy.wcs import WCS
+from einops import rearrange, reduce
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, SourceType
+from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 from bliss.surveys.sdss import column_to_tensor
 from bliss.surveys.survey import Survey, SurveyDownloader
@@ -21,14 +26,7 @@ from bliss.utils.download_utils import download_file_to_dst
 
 class DarkEnergyCameraLegacySurvey(Survey):
     BANDS = ("g", "r", "i", "z")
-    PIXEL_SCALE = 0.262
     PIXEL_SIZE = 3600  # arcsec/degree
-
-    @staticmethod
-    def pix_to_deg(pix: int) -> float:
-        return (
-            pix * DarkEnergyCameraLegacySurvey.PIXEL_SCALE / DarkEnergyCameraLegacySurvey.PIXEL_SIZE
-        )
 
     @staticmethod
     def brick_for_radec(ra: float, dec: float) -> str:
@@ -54,13 +52,15 @@ class DarkEnergyCameraLegacySurvey(Survey):
 
         self.decals_path = Path(dir_path)
         self.bands = bands
-        self.bricknames = [
-            DarkEnergyCameraLegacySurvey.brick_for_radec(c["ra"], c["dec"]) for c in sky_coords
-        ]
+        self.bricknames = [DECaLS.brick_for_radec(c["ra"], c["dec"]) for c in sky_coords]
 
         self.downloader = DecalsDownloader(self.bricknames, self.decals_path)
 
         self.prepare_data()
+
+        self.downloader.download_psfsizes(self.bands)
+        self.downloader.download_brick_ccds_all()
+        self.psf = DecalsPSF(decals_dir, self.image_ids(), self.bands, psf_config)
 
         self.catalog_cls = DecalsFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -99,7 +99,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
         first_target_band_img = self.read_image_for_band(brickname, SDSS.BANDS[self.bands[0]])
 
         # band-indexing important for encoder's filtering in Encoder::get_input_tensor,
-        # so force to SDSS.BANDS indexing
+        # so force to SDSS.BANDS indexing; TODO: switch to DECaLS indexing after DECaLS E2E
         for b, bl in enumerate(SDSS.BANDS):
             if b in self.bands and b != self.bands[0]:
                 image_list.append(self.read_image_for_band(brickname, bl))
@@ -170,6 +170,15 @@ class DecalsDownloader(SurveyDownloader):
     URLBASE = "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9"
 
     @staticmethod
+    def download_ccds_annotated(download_dir):
+        """Download CCDs annotated table."""
+        download_file_to_dst(
+            f"{DecalsDownloader.URLBASE}/ccds-annoated-decam-dr9.fits.gz",
+            Path(download_dir) / "ccds-annoated-decam-dr9.fits",
+            gzip.decompress,
+        )
+
+    @staticmethod
     def download_catalog_from_filename(tractor_filename: str):
         """Download tractor catalog given tractor-<brick_name>.fits filename."""
         basename = Path(tractor_filename).name
@@ -222,6 +231,28 @@ class DecalsDownloader(SurveyDownloader):
             )
             raise e
 
+    def download_psfsizes(self, bands: List[int]):
+        """Download psf sizes for all bricks."""
+        for brickname in self.bricknames:
+            for b, bl in enumerate(SDSS.BANDS):
+                if b in bands:
+                    self.download_psfsize(brickname, bl)
+
+    def download_psfsize(self, brickname, band="r"):
+        """Download psf size for this brick."""
+        psfsize_filename = self.download_dir / f"legacysurvey-{brickname}-psfsize-{band}.fits.fz"
+        try:
+            download_file_to_dst(
+                f"{DecalsDownloader.URLBASE}/south/coadd/{brickname[:3]}/{brickname}/"
+                f"legacysurvey-{brickname}-psfsize-{band}.fits.fz",
+                psfsize_filename,
+            )
+        except HTTPError as e:
+            warnings.warn(
+                f"No {band}-band psfsize for brick {brickname}. Check cfg.datasets.decals.bands."
+            )
+            raise e
+
     def download_catalogs(self):
         """Download tractor catalogs for all bricks."""
         for brickname in self.bricknames:
@@ -236,13 +267,26 @@ class DecalsDownloader(SurveyDownloader):
         Returns:
             str: path to downloaded tractor catalog
         """
-        tractor_filename = Path(self.download_dir) / f"tractor-{brickname}.fits"
+        tractor_filename = self.download_dir / f"tractor-{brickname}.fits"
         download_file_to_dst(
             f"{DecalsDownloader.URLBASE}/south/tractor/{brickname[:3]}/"
             f"tractor-{brickname}.fits",
             tractor_filename,
         )
         return str(tractor_filename)
+
+    def download_brick_ccds_all(self):
+        """Download CCDs table for all bricks."""
+        for brickname in self.bricknames:
+            self.download_brick_ccds(brickname)
+
+    def download_brick_ccds(self, brickname) -> str:
+        ccds_filename = self.download_dir / f"legacysurvey-{brickname}-ccds.fits"
+        download_file_to_dst(
+            f"{DecalsDownloader.URLBASE}/south/coadd/{brickname[:3]}/{brickname}/"
+            f"legacysurvey-{brickname}-ccds.fits",
+            ccds_filename,
+        )
 
 
 class DecalsFullCatalog(FullCatalog):
@@ -345,3 +389,167 @@ class DecalsFullCatalog(FullCatalog):
         }
 
         return cls(height, width, d)
+
+
+class DecalsPSF(ImagePSF):
+    @staticmethod
+    def _get_fit_file_psf_params(
+        psf_fit_file: str, bands: Tuple[int, ...], ccds_for_brick: Table, brick_fwhms
+    ):
+        msg = (
+            f"{psf_fit_file} does not exist. "
+            + "Make sure data files are available for bricks specified in config."
+        )
+        assert Path(psf_fit_file).exists(), msg
+
+        """
+        - psf_mx2: PSF model second moment in x (pixels^2)
+        - psf_my2: PSF model second moment in y (pixels^2)
+        - psf_mxy: PSF model second moment in x-y (pixels^2)
+        - psf_a: PSF model major axis (pixels)
+        - psf_b: PSF model minor axis (pixels)
+        - psf_theta: PSF position angle (deg)
+        - psf_ell: PSF ellipticity 1 - minor/major
+
+        - psfnorm_mean: PSF norm = 1/sqrt of N_eff = sqrt(sum(psf_i^2)) for normalized PSF pixels i; mean of the PSF model evaluated on a 5x5 grid of points across the image. Point-source detection standard deviation is sig1 / psfnorm
+        - psfnorm_std: Standard deviation of PSF norm
+
+        - psfdepth: 5-sigma PSF detection depth in AB mag, using PsfEx PSF model
+        - galdepth: 5-sigma galaxy (0.45" round exp) detection depth in AB mag
+        - gausspsfdepth: 5-sigma PSF detection depth in AB mag, using Gaussian PSF approximation (using seeing value)
+        - gaussgaldepth: 5-sigma galaxy detection depth in AB mag, using Gaussian PSF approximation
+        """
+
+        ccds_annotated = Table.read(psf_fit_file)
+        brick_ccds_mask = np.isin(ccds_annotated["ccdname"], ccds_for_brick)
+        psf_params = torch.zeros(len(SDSS.BANDS), 15)  # 15 parameters
+        psf_cols = [
+            col
+            for col in ccds_annotated.colnames
+            if col.startswith("psf") or col.startswith("gal") or col.startswith("gauss")
+        ]
+        for b, bl in enumerate(SDSS.BANDS):
+            if b in bands:
+                ccds_psf_band = ccds_annotated[brick_ccds_mask & (ccds_annotated["filter"] == bl)][
+                    psf_cols
+                ]
+                psf_mx2 = np.mean(ccds_psf_band["psf_mx2"])
+                psf_my2 = np.mean(ccds_psf_band["psf_my2"])
+                psf_mxy = np.mean(ccds_psf_band["psf_mxy"])
+                psf_a = np.mean(ccds_psf_band["psf_a"])
+                psf_b = np.mean(ccds_psf_band["psf_b"])
+                psf_theta = np.mean(ccds_psf_band["psf_theta"])
+                psf_ell = np.mean(ccds_psf_band["psf_ell"])
+
+                psfnorm_mean = np.mean(ccds_psf_band["psfnorm_mean"])
+                psfnorm_std = np.mean(ccds_psf_band["psfnorm_std"])
+
+                psfdepth = np.mean(ccds_psf_band["psfdepth"])
+                galdepth = np.mean(ccds_psf_band["galdepth"])
+                gausspsfdepth = np.mean(ccds_psf_band["gausspsfdepth"])
+                gaussgaldepth = np.mean(ccds_psf_band["gaussgaldepth"])
+
+                psf_fwhm = np.mean(brick_fwhms[b])
+                psf_params[b] = torch.tensor(
+                    [
+                        psf_mx2,
+                        psf_my2,
+                        psf_mxy,
+                        psf_a,
+                        psf_b,
+                        psf_theta,
+                        psf_ell,
+                        psfnorm_mean,
+                        psfnorm_std,
+                        psfdepth,
+                        galdepth,
+                        gausspsfdepth,
+                        gaussgaldepth,
+                        psf_fwhm,
+                    ]
+                )
+
+        return psf_params
+
+    def __init__(self, survey_data_dir, image_ids, bands, psf_config: PSFConfig):
+        super().__init__(bands, **psf_config)
+
+        self.psf_galsim = {}
+        self.psf_params = {}
+
+        DecalsDownloader.download_ccds_annotated(survey_data_dir)
+
+        ccds_annotated_filename = f"{survey_data_dir}/ccds-annoated-decam-dr9.fits"
+        for brickname in image_ids:
+            brick_ccds = Table.read(f"{survey_data_dir}/legacysurvey-{brickname}-ccds.fits")
+            ccds_for_brick = brick_ccds["ccdname"]
+            brick_fwhms = {}
+            for b in self.bands:
+                brick_fwhm_b_filename = (
+                    f"{survey_data_dir}/legacysurvey-{brickname}-psfsize-{DECaLS.BANDS[b]}.fits.fz"
+                )
+                brick_fwhms[b] = fits.open(brick_fwhm_b_filename)[1].data
+            psf_params = self._get_fit_file_psf_params(
+                ccds_annotated_filename, bands, ccds_for_brick, brick_fwhms
+            )
+
+            self.psf_params[brickname] = psf_params
+            self.psf_galsim[brickname] = self._get_psf(psf_params)
+
+    def _psf_fun(
+        self,
+        r,
+        mx2,
+        my2,
+        mxy,
+        a,
+        b,
+        theta,
+        ell,
+        norm_mean,
+        norm_std,
+        psfdepth,
+        galdepth,
+        gausspsfdepth,
+        gaussgaldepth,
+        fwhm,
+    ):
+        # Inner Moffat profile
+        psf_inner = galsim.Moffat(beta=b, fwhm=fwhm)
+
+        # Outer profile - Moffat or Power-law
+        for bnd in self.bands:
+            bl = DECaLS.BANDS[bnd]
+            if bl == "z":
+                alpha, beta, weight = 17.65, 1.7, 0.0145
+                # Create the first Moffat PSF component
+                moffat1 = galsim.Moffat(
+                    beta=beta,
+                    fwhm=2 * alpha * math.sqrt(2 ** (1 / beta) - 1),
+                )
+                # Create the second Moffat PSF component
+                moffat2 = galsim.Moffat(
+                    beta=beta,
+                    fwhm=2 * alpha * math.sqrt(2 ** (1 / beta) - 1) / weight,
+                )
+                # Combine the two Moffat components using Moffat weighting
+                weighted_moffat = weight * moffat1 + (1 - weight) * moffat2
+                outer = weighted_moffat
+            else:
+                assert bl in {"g", "r", "i"}
+                coeffs = {"g": 0.00045, "r": 0.00033, "i": 0.00033}
+                outer = coeffs[bl] * r ** (-2)
+
+        psf_outer = galsim.InterpolatedImage(
+            galsim.Image(outer.numpy(), scale=self.pixel_scale)
+        ).withFlux(1.0)
+
+        # Combine the inner and outer profiles
+        psf_combined = galsim.Convolve([psf_inner, psf_outer])
+
+        # Apply ellipticity and position angle to the PSF model
+        psf_combined = psf_combined.shear(e=ell, beta=theta * galsim.degrees)
+
+        psf_combined /= norm_mean
+
+        return psf_combined  # noqa: WPS331
