@@ -13,7 +13,7 @@ from torch.distributions import Distribution
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
-from bliss.base_detect.base_detect import DetectionModel
+from bliss.backbone import newModel
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
@@ -88,7 +88,7 @@ class Encoder(pl.LightningModule):
         arch_dict = OmegaConf.to_container(architecture)
 
         num_channels = self._get_num_input_channels()
-        self.model = DetectionModel(cfg=arch_dict, ch=num_channels)
+        self.model = newModel(cfg=arch_dict, ch=num_channels)
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
