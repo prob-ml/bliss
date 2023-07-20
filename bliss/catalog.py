@@ -16,6 +16,13 @@ class SourceType(IntEnum):
     GALAXY = 1
 
 
+class RegionType(IntEnum):
+    INTERIOR = 0
+    BOUNDARY_VERTICAL = 1
+    BOUNDARY_HORIZONTAL = 2
+    CORNER = 3
+
+
 class TileCatalog(UserDict):
     allowed_params = {
         "n_source_log_probs",
@@ -571,6 +578,8 @@ class RegionCatalog(TileCatalog, UserDict):
         self.n_rows = self.n_tiles_h
         self.n_cols = self.n_tiles_w
 
+        self.region_types = self._init_region_types()
+
     def _validate_n_sources(self):
         """Ensure that n_sources is valid for a region-based catalog.
 
@@ -585,6 +594,15 @@ class RegionCatalog(TileCatalog, UserDict):
             self.n_sources.unsqueeze(1), kernel_size=(3, 3), padding=1, stride=2
         ).sum(axis=1)
         assert torch.all(sources_per_tile <= 1), "Some tiles contain more than one source"
+
+    def _init_region_types(self) -> Tensor:
+        """Assign type to each region in n_rows x n_cols tensor (used for masking)."""
+        mask = torch.zeros(self.n_rows, self.n_cols)
+        mask[::2, ::2] = RegionType.INTERIOR
+        mask[::2, 1::2] = RegionType.BOUNDARY_VERTICAL
+        mask[1::2, ::2] = RegionType.BOUNDARY_HORIZONTAL
+        mask[1::2, 1::2] = RegionType.CORNER
+        return mask
 
     # endregion
 
@@ -608,21 +626,23 @@ class RegionCatalog(TileCatalog, UserDict):
 
     @property
     def interior_mask(self) -> Tensor:
-        mask = torch.zeros(self.n_sources.shape).bool()
-        mask[:, ::2, ::2] = True
-        return mask
+        return self.region_types == RegionType.INTERIOR
+
+    @property
+    def vertical_boundary_mask(self) -> Tensor:
+        return self.region_types == RegionType.BOUNDARY_VERTICAL
+
+    @property
+    def horizontal_boundary_mask(self) -> Tensor:
+        return self.region_types == RegionType.BOUNDARY_HORIZONTAL
 
     @property
     def boundary_mask(self) -> Tensor:
-        mask = torch.ones(self.n_sources.shape).bool()
-        mask[:, ::2, ::2] = False
-        return mask
+        return self.vertical_boundary_mask | self.horizontal_boundary_mask
 
     @property
     def corner_mask(self) -> Tensor:
-        mask = torch.zeros(self.n_sources.shape).bool()
-        mask[:, 1::2, 1::2] = True
-        return mask
+        return self.region_types == RegionType.CORNER
 
     # endregion
 

@@ -199,7 +199,10 @@ class TestRegionCatalog:
         assert region_cat.height == region_cat.width == 12
         assert region_cat.is_on_mask.sum() == 6
         assert torch.all(
-            region_cat.interior_mask + region_cat.boundary_mask + region_cat.corner_mask
+            region_cat.interior_mask + region_cat.boundary_mask + region_cat.corner_mask,
+        )
+        assert not torch.any(
+            region_cat.interior_mask * region_cat.boundary_mask * region_cat.corner_mask,
         )
 
     def test_region_coords(self, region_cat):
