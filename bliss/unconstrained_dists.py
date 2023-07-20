@@ -46,6 +46,9 @@ class TruncatedDiagonalMVN(Distribution):
 
         self.base_dist = Independent(multiple_normals, 1)
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.base_dist.base_dist})"
+
     def sample(self, **args):
         # some ideas for how to sample it here, if we need to:
         # https://cran.r-project.org/web/packages/truncnorm/
