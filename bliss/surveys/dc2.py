@@ -81,7 +81,7 @@ class DC2(Survey):
             height = plocs_lim[0]
             width = plocs_lim[1]
             full_cat = Dc2FullCatalog.from_file(self.cat_path, wcs, height, width, self.band)
-            tile_cat = full_cat.to_tile_params(4, 2)
+            tile_cat = full_cat.to_tile_params(4, 1)
             tile_dict = tile_cat.to_dict()
 
             tile_dict["locs"] = rearrange(tile_cat.to_dict()["locs"], "1 h w nh nw -> h w nh nw")

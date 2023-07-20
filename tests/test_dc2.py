@@ -1,6 +1,8 @@
 import torch
 from hydra.utils import instantiate
 
+from bliss.train import train
+
 
 class TestDC2:
     def test_dc2(self, cfg):
@@ -32,6 +34,9 @@ class TestDC2:
         for i in ("images", "background"):
             assert isinstance(dc2_obj[i], torch.Tensor)
 
-        assert dataset.train_dataloader() is not None
-        assert dataset.train_dataloader() is not None
-        assert dataset.test_dataloader() is not None
+    def test_train_on_dc2(self, cfg):
+        train_dc2_cfg = cfg.copy()
+        train_dc2_cfg.training.data_source = train_dc2_cfg.surveys.dc2
+        train_dc2_cfg.training.pretrained_weights = None
+        train_dc2_cfg.encoder.bands = [0]
+        train(train_dc2_cfg)

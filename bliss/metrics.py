@@ -309,7 +309,8 @@ class BlissMetrics(Metric):
         # add classification metrics if computed
         for metric in self.classification_metrics:
             val_list = getattr(self, metric, None)
-            if not val_list:
+            len_val = len(val_list[0])
+            if (len_val == 0) or (not val_list):
                 continue
 
             # take median along first dim of stacked tensors, i.e. across images
