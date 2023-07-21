@@ -80,6 +80,14 @@ class TileCatalog(UserDict):
 
     # region Properties
     @property
+    def height(self) -> int:
+        return self.n_tiles_h * self.tile_slen
+
+    @property
+    def width(self) -> int:
+        return self.n_tiles_w * self.tile_slen
+
+    @property
     def is_on_mask(self) -> Tensor:
         """Provides tensor which indicates how many sources are present for each batch.
 
@@ -166,8 +174,7 @@ class TileCatalog(UserDict):
             params[param_name] = param
 
         params["n_sources"] = reduce(self.n_sources, "b nth ntw -> b", "sum")
-        height, width = self.n_tiles_h * self.tile_slen, self.n_tiles_w * self.tile_slen
-        return FullCatalog(height, width, params)
+        return FullCatalog(self.height, self.width, params)
 
     def get_full_locs_from_tiles(self) -> Tensor:
         """Get the full image locations from tile locations.
@@ -360,7 +367,7 @@ class TileCatalog(UserDict):
                     )
                 d[key][b, new_i, new_j, 0] = val[b, i, j, 0]
 
-        region_cat = RegionCatalog(self.tile_slen - overlap_slen, overlap_slen, d)
+        region_cat = RegionCatalog(height=self.height, overlap_slen=overlap_slen, d=d)
 
         offset = rearrange(region_cat.get_region_coords(), "nth ntw d -> 1 nth ntw 1 d")
         region_sizes = rearrange(region_cat.get_region_sizes(), "nth ntw d -> 1 nth ntw 1 d")
@@ -567,16 +574,27 @@ class FullCatalog(UserDict):
 
 class RegionCatalog(TileCatalog, UserDict):
     # region Init
-    def __init__(self, interior_slen: int, overlap_slen: float, d: Dict[str, Tensor]):
-        super().__init__(interior_slen + overlap_slen / 2, d)
+    def __init__(
+        self,
+        height: int = None,
+        interior_slen: float = None,
+        overlap_slen: float = None,
+        d: Dict[str, Tensor] = None,
+    ):
+        super().__init__(None, d)
 
         self._validate_n_sources()
         assert self.max_sources == 1  # can only have one source per region
+        msg = "Either height or interior_slen must be specified"
+        assert height is not None or interior_slen is not None, msg
+        assert overlap_slen is not None, "overlap_slen must be specified"
 
-        self.interior_slen = interior_slen
-        self.overlap_slen = overlap_slen
         self.n_rows = self.n_tiles_h
         self.n_cols = self.n_tiles_w
+        self.nth = (self.n_rows + 1) // 2
+        self.ntw = (self.n_rows + 1) // 2
+        self.interior_slen = interior_slen if interior_slen else height / self.nth - overlap_slen
+        self.overlap_slen = overlap_slen
 
         self.region_types = self._init_region_types()
 
@@ -609,15 +627,11 @@ class RegionCatalog(TileCatalog, UserDict):
     # region Properties
     @property
     def height(self) -> float:
-        h = self.interior_slen * ((self.n_rows + 1) // 2)  # interior regions
-        h += self.overlap_slen * ((self.n_rows + 1) // 2)  # boundary regions
-        return h
+        return self.nth * (self.interior_slen + self.overlap_slen)
 
     @property
     def width(self) -> float:
-        w = self.interior_slen * ((self.n_cols + 1) // 2)  # interior regions
-        w += self.overlap_slen * ((self.n_cols + 1) // 2)  # boundary regions
-        return w
+        return self.ntw * (self.interior_slen + self.overlap_slen)
 
     @property
     def is_on_mask(self) -> Tensor:
@@ -655,9 +669,8 @@ class RegionCatalog(TileCatalog, UserDict):
 
         bias = self.interior_slen * torch.floor_divide(coords + 1, 2)  # interior regions
         bias += self.overlap_slen * torch.floor_divide(coords, 2)  # overlap regions
-        # account for half-overlap in first row
+        # account for half-overlap in first row/col
         bias[bias[..., 0] > 0] += torch.tensor([self.overlap_slen / 2, 0])
-        # account for half-overlap in first col
         bias[bias[..., 1] > 0] += torch.tensor([0, self.overlap_slen / 2])
 
         return rearrange(bias, "(nth ntw) d -> nth ntw d", nth=self.n_rows, ntw=self.n_cols)
@@ -716,5 +729,11 @@ class RegionCatalog(TileCatalog, UserDict):
         if loc[1] > threshold[1] and new_j < n_cols - 1:  # don't go past right edge
             new_j += 1
         return new_i, new_j
+
+    def crop(self, hlims_tile, wlims_tile):
+        d = {}
+        for k, v in self.to_dict().items():
+            d[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
+        return RegionCatalog(interior_slen=self.interior_slen, overlap_slen=self.overlap_slen, d=d)
 
     # endregion

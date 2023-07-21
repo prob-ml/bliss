@@ -75,7 +75,7 @@ def region_cat():
         "galaxy_fluxes": fluxes,
     }
 
-    return RegionCatalog(3.5, 0.5, d)
+    return RegionCatalog(interior_slen=3.5, overlap_slen=0.5, d=d)
 
 
 class TestBasicTileAndFullCatalogs:
