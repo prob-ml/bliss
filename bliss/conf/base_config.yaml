@@ -86,10 +86,10 @@ encoder:
             - [4, 4]  # P3/8
         backbone: [
             # [from, number, module, args]
-            [-1, 1, Conv3d, [5, 64, 1]],  # (in-channels, kernel size, stride)
-            [-1, 1, Conv3d, [64, 5, 1]],
+            [-1, 1, Conv3d, [5, 64, 5]],  # (in-channels, out-channels, kernel size)
+            [-1, 1, Conv3d, [64, 5, 3]],
             [-1, 1, Conv3d_down, [5, 1, 1]],
-            [-1, 1, Conv, [64, 3, 1]],
+            [-1, 1, Conv, [64, 3, 1]],  # (in-channels, kernel-size, stride)
             [-1, 1, Conv, [128, 3, 2]],
             [-1, 1, Conv, [128, 3, 1]],
             [-1, 1, Conv, [256, 3, 2]],
@@ -116,7 +116,7 @@ generate:
     n_workers_per_process: 0
     n_batches: ${simulator.n_batches}
     batch_size: ${simulator.prior.batch_size}
-    max_images_per_file: 4096
+    max_images_per_file: 2048
     cached_data_path: ${paths.data}/cached_dataset
     file_prefix: dataset
 
