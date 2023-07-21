@@ -34,3 +34,11 @@ class TestUnconstainedDists:
         claimed = tdmn.log_prob(mu)
         approx_true = Normal(mu, sigma).log_prob(mu).sum(-1)
         assert torch.isclose(claimed, approx_true).all()
+
+    def test_tdbn_cdf(self):
+        mu = torch.ones(32, 2) * 0.6
+        sigma = torch.ones(32, 2) * 1e-3
+        tdmn = TruncatedDiagonalMVN(mu, sigma)
+        assert torch.all(tdmn.cdf(torch.zeros_like(mu)) == 0)
+        assert torch.all(tdmn.cdf(torch.ones_like(mu)) == 1)
+        assert torch.all((tdmn.cdf(mu) >= 0).bool() & (tdmn.cdf(mu) <= 1).bool())
