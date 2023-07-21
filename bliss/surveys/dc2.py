@@ -36,13 +36,13 @@ class DC2(Survey):
         return len(self.dc2_data)
 
     def __getitem__(self, idx):
-        return self.dc2_data(idx)
+        return self.dc2_data[idx]
 
     def image_id(self, idx: int):
         return self.dc2_data[idx]["images"]
 
     def idx(self, image_id: int) -> int:
-        return self.dc2_data[image_id]
+        return self[image_id]
 
     def image_ids(self):
         return [self.dc2_data[i]["images"] for i in range(len(self))]

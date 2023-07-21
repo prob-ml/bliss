@@ -8,16 +8,22 @@ class TestDC2:
     def test_dc2(self, cfg):
         dataset = instantiate(cfg.surveys.dc2)
         image = dataset.image_id(0)
+        dc2_obj = dataset.idx(0)
+        dc2_tile = dc2_obj["tile_catalog"]
+
         assert image.shape[0] == 1
 
         images = dataset.image_ids()
         assert len(images) == 25
 
+        p_batch = {
+            "images": dc2_obj["images"],
+            "background": dc2_obj["background"],
+        }
         p_batch = dataset.predict_batch
+        dataset.predict_batch = p_batch
         assert p_batch["images"].shape[0] == 1
 
-        dc2_obj = dataset.idx(0)
-        dc2_tile = dc2_obj["tile_catalog"]
         params = (
             "locs",
             "n_sources",
