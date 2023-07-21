@@ -7,11 +7,11 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 class TestSdssReconstruct:
     def test_sdss_reconstruct(self, cfg, decoder):
         # TODO: change to use mock_predict_sdss
-        est_tile, true_img, true_bg, _, _ = mock_predict_sdss_recon(cfg)
+        est_full, true_img, true_bg, _, _ = mock_predict_sdss_recon(cfg)
 
         # reconstruction test only considers r-band image/catalog params
         rcfs = np.array([[94, 1, 12]])
-        tile_cat = est_tile.to_tile_params(
+        tile_cat = est_full.to_tile_params(
             tile_slen=cfg.simulator.prior.tile_slen,
             max_sources_per_tile=cfg.simulator.prior.max_sources,
             ignore_extra_sources=True,
