@@ -291,14 +291,14 @@ class Encoder(pl.LightningModule):
         # only compute loss over bands we're using
         star_bands = [self.STAR_FLUX_NAMES[band] for band in self.bands]
         gal_bands = [self.GAL_FLUX_NAMES[band] for band in self.bands]
-        for i, (star_name, gal_name) in enumerate(zip(star_bands, gal_bands)):
+        for i, star_name, gal_name in zip(self.bands, star_bands, gal_bands):
             # star flux loss
-            star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i]) * true_star_bools
+            star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i] + 1e-9) * true_star_bools
             loss += star_flux_loss
             loss_with_components[star_name] = star_flux_loss.sum() / true_star_bools.sum()
 
             # galaxy flux loss
-            gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., i]) * true_gal_bools
+            gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., i] + 1e-9) * true_gal_bools
             loss += gal_flux_loss
             loss_with_components[gal_name] = gal_flux_loss.sum() / true_gal_bools.sum()
 
@@ -306,7 +306,7 @@ class Encoder(pl.LightningModule):
         galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
         for i, param_name in enumerate(self.GALSIM_NAMES):
             galsim_pn = f"galsim_{param_name}"
-            loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i]) * true_gal_bools
+            loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
             loss += loss_term
             loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
 
