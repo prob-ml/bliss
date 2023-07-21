@@ -30,10 +30,7 @@ class DC2(Survey):
         self.prepare_data()
         self.setup()
 
-        self._predict_batch = {
-            "images": self.dc2_data[0]["images"],
-            "background": self.dc2_data[0]["background"],
-        }
+        self._predict_batch = None
 
     def __len__(self):
         return len(self.dc2_data)
