@@ -138,7 +138,7 @@ class DC2(Survey):
     def predict_batch(self):
         if not self._predict_batch:
             self._predict_batch = {
-                "images": self.dc2_data[0]["image"],
+                "images": self.dc2_data[0]["images"],
                 "background": self.dc2_data[0]["background"],
             }
         return self._predict_batch
