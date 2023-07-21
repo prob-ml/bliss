@@ -4,7 +4,7 @@ from typing import Dict, Optional, Union
 
 import pytorch_lightning as pl
 import torch
-from einops import rearrange
+from einops import rearrange, repeat
 from matplotlib import pyplot as plt
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
@@ -14,7 +14,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
-from bliss.catalog import FullCatalog, SourceType, TileCatalog
+from bliss.catalog import FullCatalog, RegionCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
@@ -256,6 +256,78 @@ class Encoder(pl.LightningModule):
         optimizer = Adam(self.parameters(), **self.optimizer_params)
         scheduler = MultiStepLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
+
+    def _get_masked_interior_param(self, cat: RegionCatalog, param_name: str):
+        param = cat[param_name]
+        b, nth, ntw, d = cat.batch_size, cat.nth, cat.ntw, param.shape[-1]
+        if param_name == "n_sources":
+            param = torch.masked_select(param, cat.interior_mask)
+            return rearrange(param, "(b nth ntw) -> b nth ntw", b=b, nth=nth, ntw=ntw)
+
+        param = param.squeeze(-2)  # remove max_sources dim
+        mask = repeat(cat.interior_mask, "r c -> b r c d", b=b, d=d)
+        param = torch.masked_select(param, mask)
+        masked_params = rearrange(param, "(b nth ntw d) -> b nth ntw d", b=b, nth=nth, ntw=ntw, d=d)
+
+        return masked_params.squeeze(-1) if d == 1 else masked_params
+
+    def _get_loss_interior(self, pred, cat: RegionCatalog):
+        loss_components = {}
+        loss = 0
+
+        # counter_loss
+        tile_n_sources = self._get_masked_interior_param(cat, "n_sources")
+        on_probs = pred["on_prob"].log_prob(tile_n_sources)
+        interior_ub = torch.ones_like(pred["loc"].mean) - (cat.overlap_slen / cat.tile_slen)
+        interior_lb = torch.zeros_like(pred["loc"].mean) + (cat.overlap_slen / cat.tile_slen)
+        prob_in_interior = pred["loc"].cdf(interior_ub) - pred["loc"].cdf(interior_lb)
+
+        counter_loss = -((tile_n_sources == 0) * torch.log(1 - on_probs.exp() * prob_in_interior))
+        counter_loss -= (tile_n_sources > 0) * pred["on_prob"].log_prob(tile_n_sources)
+        loss += counter_loss
+        loss_components["counter_loss"] = counter_loss.mean()
+
+        # location loss
+        locs = self._get_masked_interior_param(cat, "locs")
+        locs_loss = (-pred["loc"].log_prob(locs)) * tile_n_sources
+        loss += locs_loss
+        loss_components["locs_loss"] = locs_loss.sum() / tile_n_sources.sum()
+
+        # star/galaxy classification loss
+        gal_bools = self._get_masked_interior_param(cat, "galaxy_bools")
+        binary_loss = (-pred["galaxy_prob"].log_prob(gal_bools)) * tile_n_sources
+        loss += binary_loss
+        loss_components["binary_loss"] = binary_loss.sum() / tile_n_sources.sum()
+
+        # flux losses
+        star_bools = self._get_masked_interior_param(cat, "star_bools")
+        star_fluxes = self._get_masked_interior_param(cat, "star_fluxes")
+        galaxy_fluxes = self._get_masked_interior_param(cat, "galaxy_fluxes")
+
+        # only compute loss over bands we're using
+        star_bands = [self.STAR_FLUX_NAMES[band] for band in self.bands]
+        gal_bands = [self.GAL_FLUX_NAMES[band] for band in self.bands]
+        for band, star_name, gal_name in zip(self.bands, star_bands, gal_bands):
+            # star flux loss
+            star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., band] + 1e-9) * star_bools
+            loss += star_flux_loss
+            loss_components[star_name] = star_flux_loss.sum() / star_bools.sum()
+
+            # galaxy flux loss
+            gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., band] + 1e-9) * gal_bools
+            loss += gal_flux_loss
+            loss_components[gal_name] = gal_flux_loss.sum() / gal_bools.sum()
+
+        # galaxy properties loss
+        galsim_true_vals = self._get_masked_interior_param(cat, "galaxy_params")
+        for i, param_name in enumerate(self.GALSIM_NAMES):
+            galsim_pn = f"galsim_{param_name}"
+            gal_param_loss = -pred[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * gal_bools
+            loss += gal_param_loss
+            loss_components[galsim_pn] = gal_param_loss.sum() / gal_bools.sum()
+
+        loss_components["loss"] = loss.mean()
+        return loss_components
 
     def _get_loss(self, pred: Dict[str, Distribution], true_tile_cat: TileCatalog):
         loss_with_components = {}
