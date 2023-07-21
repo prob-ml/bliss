@@ -595,6 +595,7 @@ class RegionCatalog(TileCatalog, UserDict):
         self.ntw = (self.n_rows + 1) // 2
         self.interior_slen = interior_slen if interior_slen else height / self.nth - overlap_slen
         self.overlap_slen = overlap_slen
+        self.tile_slen = self.interior_slen + 2 * self.overlap_slen
 
         self.region_types = self._init_region_types()
 
