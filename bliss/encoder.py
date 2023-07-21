@@ -102,7 +102,7 @@ class Encoder(pl.LightningModule):
             "galaxy_prob": UnconstrainedBernoulli(),
             # galsim parameters
             "galsim_disk_frac": UnconstrainedLogitNormal(),
-            "galsim_beta_radians": UnconstrainedLogitNormal(high=2 * torch.pi),
+            "galsim_beta_radians": UnconstrainedLogitNormal(high=torch.pi),
             "galsim_disk_q": UnconstrainedLogitNormal(),
             "galsim_a_d": UnconstrainedLogNormal(),
             "galsim_bulge_q": UnconstrainedLogitNormal(),
@@ -179,8 +179,6 @@ class Encoder(pl.LightningModule):
 
         assert inputs.size(2) % 16 == 0, "image dims must be multiples of 16"
         assert inputs.size(3) % 16 == 0, "image dims must be multiples of 16"
-        bn_warn = "batchnorm training requires a larger batch. did you mean to use eval mode?"
-        assert (not self.training) or batch["images"].size(0) > 4, bn_warn
 
         output = self.model(inputs)
         # there's an extra dimension for channel that is always a singleton

@@ -22,8 +22,8 @@ def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-state
     pl.seed_everything(cfg.training.seed)
 
     # setup dataset
-    simulator_cfg = cfg.cached_simulator if cfg.training.use_cached_simulator else cfg.simulator
-    dataset = instantiate(simulator_cfg)
+    data_source_cfg = cfg.training.data_source
+    dataset = instantiate(data_source_cfg)
 
     # setup model
     encoder = instantiate(cfg.encoder)
@@ -73,7 +73,7 @@ def setup_paths(paths):
         path = Path(paths[key])
         if path.exists():
             continue
-        if key in {"data", "sdss", "decals", "output", "pretrained_models"}:
+        if key in {"data", "sdss", "decals", "dc2", "output", "pretrained_models"}:
             path.mkdir(parents=True)
         else:
             err = "path for {} ({}) does not exist".format(str(key), path.as_posix())

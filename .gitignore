@@ -9,7 +9,6 @@ fits/*
 .eggs
 .tox
 *lightning_logs
-*.pkl
 *.whl
 .idea
 htmlcov/
@@ -27,6 +26,7 @@ bin/
 .pytest_cache/
 data/sdss/rcf_list
 data/sdss_all
+data/dc2/lsstdesc-public
 case_studies/sdss_galaxies/models/simulated_blended_galaxies.pt
 case_studies/*/data/
 venv

@@ -60,3 +60,5 @@ surveys:
             - run: 94
               camcol: 1
               fields: [12]
+    dc2:
+        data_dir: ${paths.data}/tests/dc2/
