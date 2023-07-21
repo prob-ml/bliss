@@ -12,7 +12,6 @@ from astropy.io import fits
 from astropy.table import Table
 from astropy.utils.data import download_file
 from astropy.wcs import WCS
-from einops import rearrange, reduce
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
@@ -43,10 +42,11 @@ class DarkEnergyCameraLegacySurvey(Survey):
 
     def __init__(
         self,
+        psf_config: PSFConfig,
         dir_path="data/decals",
         sky_coords=({"ra": 336.6643042496718, "dec": -0.9316385797930247},),
         # TODO: fix band-indexing after DECaLS E2E
-        bands=(1, 2, 3, 4),  # SDSS.BANDS indexing, for SDSS-trained encoder
+        bands=(1, 2, 3, 4),  # NOTE: SDSS.BANDS indexing, for SDSS-trained encoder
     ):
         super().__init__()
 
@@ -59,8 +59,8 @@ class DarkEnergyCameraLegacySurvey(Survey):
         self.prepare_data()
 
         self.downloader.download_psfsizes(self.bands)
-        self.downloader.download_brick_ccds_all()
-        self.psf = DecalsPSF(decals_dir, self.image_ids(), self.bands, psf_config)
+        self.downloader.download_brick_ccds_all()  # contains background (sky level) info too
+        self.psf = DECaLS_PSF(dir_path, self.image_ids(), self.bands, psf_config)
 
         self.catalog_cls = DecalsFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -173,8 +173,8 @@ class DecalsDownloader(SurveyDownloader):
     def download_ccds_annotated(download_dir):
         """Download CCDs annotated table."""
         download_file_to_dst(
-            f"{DecalsDownloader.URLBASE}/ccds-annoated-decam-dr9.fits.gz",
-            Path(download_dir) / "ccds-annoated-decam-dr9.fits",
+            f"{DecalsDownloader.URLBASE}/ccds-annotated-decam-dr9.fits.gz",
+            Path(download_dir) / "ccds-annotated-decam-dr9.fits",
             gzip.decompress,
         )
 
@@ -391,7 +391,25 @@ class DecalsFullCatalog(FullCatalog):
         return cls(height, width, d)
 
 
-class DecalsPSF(ImagePSF):
+class DECaLS_PSF(ImagePSF):  # noqa: N801
+    # PSF parameters for encoder to learn
+    PARAM_NAMES = [
+        "psf_mx2",
+        "psf_my2",
+        "psf_mxy",
+        "psf_a",
+        "psf_b",
+        "psf_theta",
+        "psf_ell",
+        "psfnorm_mean",
+        "psfnorm_std",
+        "psfdepth",
+        "galdepth",
+        "gausspsfdepth",
+        "gaussgaldepth",
+        "psf_fwhm",
+    ]
+
     @staticmethod
     def _get_fit_file_psf_params(
         psf_fit_file: str, bands: Tuple[int, ...], ccds_for_brick: Table, brick_fwhms
@@ -402,27 +420,9 @@ class DecalsPSF(ImagePSF):
         )
         assert Path(psf_fit_file).exists(), msg
 
-        """
-        - psf_mx2: PSF model second moment in x (pixels^2)
-        - psf_my2: PSF model second moment in y (pixels^2)
-        - psf_mxy: PSF model second moment in x-y (pixels^2)
-        - psf_a: PSF model major axis (pixels)
-        - psf_b: PSF model minor axis (pixels)
-        - psf_theta: PSF position angle (deg)
-        - psf_ell: PSF ellipticity 1 - minor/major
-
-        - psfnorm_mean: PSF norm = 1/sqrt of N_eff = sqrt(sum(psf_i^2)) for normalized PSF pixels i; mean of the PSF model evaluated on a 5x5 grid of points across the image. Point-source detection standard deviation is sig1 / psfnorm
-        - psfnorm_std: Standard deviation of PSF norm
-
-        - psfdepth: 5-sigma PSF detection depth in AB mag, using PsfEx PSF model
-        - galdepth: 5-sigma galaxy (0.45" round exp) detection depth in AB mag
-        - gausspsfdepth: 5-sigma PSF detection depth in AB mag, using Gaussian PSF approximation (using seeing value)
-        - gaussgaldepth: 5-sigma galaxy detection depth in AB mag, using Gaussian PSF approximation
-        """
-
         ccds_annotated = Table.read(psf_fit_file)
         brick_ccds_mask = np.isin(ccds_annotated["ccdname"], ccds_for_brick)
-        psf_params = torch.zeros(len(SDSS.BANDS), 15)  # 15 parameters
+        psf_params = torch.zeros(len(SDSS.BANDS), len(DECaLS_PSF.PARAM_NAMES))
         psf_cols = [
             col
             for col in ccds_annotated.colnames
@@ -433,41 +433,14 @@ class DecalsPSF(ImagePSF):
                 ccds_psf_band = ccds_annotated[brick_ccds_mask & (ccds_annotated["filter"] == bl)][
                     psf_cols
                 ]
-                psf_mx2 = np.mean(ccds_psf_band["psf_mx2"])
-                psf_my2 = np.mean(ccds_psf_band["psf_my2"])
-                psf_mxy = np.mean(ccds_psf_band["psf_mxy"])
-                psf_a = np.mean(ccds_psf_band["psf_a"])
-                psf_b = np.mean(ccds_psf_band["psf_b"])
-                psf_theta = np.mean(ccds_psf_band["psf_theta"])
-                psf_ell = np.mean(ccds_psf_band["psf_ell"])
-
-                psfnorm_mean = np.mean(ccds_psf_band["psfnorm_mean"])
-                psfnorm_std = np.mean(ccds_psf_band["psfnorm_std"])
-
-                psfdepth = np.mean(ccds_psf_band["psfdepth"])
-                galdepth = np.mean(ccds_psf_band["galdepth"])
-                gausspsfdepth = np.mean(ccds_psf_band["gausspsfdepth"])
-                gaussgaldepth = np.mean(ccds_psf_band["gaussgaldepth"])
-
-                psf_fwhm = np.mean(brick_fwhms[b])
-                psf_params[b] = torch.tensor(
-                    [
-                        psf_mx2,
-                        psf_my2,
-                        psf_mxy,
-                        psf_a,
-                        psf_b,
-                        psf_theta,
-                        psf_ell,
-                        psfnorm_mean,
-                        psfnorm_std,
-                        psfdepth,
-                        galdepth,
-                        gausspsfdepth,
-                        gaussgaldepth,
-                        psf_fwhm,
-                    ]
-                )
+                band_params = [0.0 for _ in range(len(DECaLS_PSF.PARAM_NAMES))]
+                for i, param in enumerate(DECaLS_PSF.PARAM_NAMES):
+                    band_params[i] = (
+                        np.mean(brick_fwhms[b])
+                        if param == "psf_fwhm"
+                        else np.mean(ccds_psf_band[param])
+                    )
+                psf_params[b] = torch.tensor(band_params)
 
         return psf_params
 
@@ -479,16 +452,18 @@ class DecalsPSF(ImagePSF):
 
         DecalsDownloader.download_ccds_annotated(survey_data_dir)
 
-        ccds_annotated_filename = f"{survey_data_dir}/ccds-annoated-decam-dr9.fits"
+        ccds_annotated_filename = f"{survey_data_dir}/ccds-annotated-decam-dr9.fits"
         for brickname in image_ids:
             brick_ccds = Table.read(f"{survey_data_dir}/legacysurvey-{brickname}-ccds.fits")
             ccds_for_brick = brick_ccds["ccdname"]
             brick_fwhms = {}
             for b in self.bands:
                 brick_fwhm_b_filename = (
-                    f"{survey_data_dir}/legacysurvey-{brickname}-psfsize-{DECaLS.BANDS[b]}.fits.fz"
+                    f"{survey_data_dir}/legacysurvey-{brickname}-psfsize-{SDSS.BANDS[b]}.fits.fz"
                 )
-                brick_fwhms[b] = fits.open(brick_fwhm_b_filename)[1].data
+                brick_fwhms[b] = fits.open(brick_fwhm_b_filename)[  # pylint: disable=no-member
+                    1
+                ].data
             psf_params = self._get_fit_file_psf_params(
                 ccds_annotated_filename, bands, ccds_for_brick, brick_fwhms
             )

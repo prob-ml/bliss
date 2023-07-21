@@ -189,6 +189,9 @@ surveys:
             - ra: 336.6643042496718
               dec: -0.9316385797930247
         bands: ${encoder.bands}
+        psf_config:
+            pixel_scale: 0.262 # see https://github.com/legacysurvey/legacypipe/blob/6811e465cf1d6f0beb9824a2f1964de8a1a8cc12/py/legacyanalysis/deep-coadd.py#L20
+            psf_slen: 63 # see https://github.com/legacysurvey/legacypipe/blob/ba1ffd4969c1f920566e780118c542d103cbd9a5/py/legacypipe/config/common.psfex#L8
     des:
         _target_: bliss.surveys.des.DarkEnergySurvey
         dir_path: ${paths.des}

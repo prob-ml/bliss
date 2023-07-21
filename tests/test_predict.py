@@ -82,7 +82,6 @@ class TestPredict:
             {"ra": 135.95496736941683, "dec": 29.646883837721347},
         ]
         the_cfg.encoder.bands = [SDSS.BANDS.index("r")]
-        the_cfg.encoder.input_transform_params.log_transform = False
         the_cfg.predict.weight_save_path = "${paths.pretrained_models}/single_band_base_5d.pt"
         _, _, _, _, preds = predict(the_cfg)
 
