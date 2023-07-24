@@ -28,6 +28,7 @@ class ImageDecoder(nn.Module):
         self.n_bands = len(bands)
         self.psf_galsim = psf.psf_galsim  # Dictionary indexed by image_id
         self.psf_params = psf.psf_params  # Dictionary indexed by image_id
+        self.psf_draw_method = psf.psf_draw_method or "auto"
         self.pixel_scale = psf.pixel_scale
         self.nmgy_to_nelec_dict = nmgy_to_nelec_dict
 

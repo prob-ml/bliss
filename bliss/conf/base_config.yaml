@@ -17,6 +17,7 @@ paths:
     data: ${paths.root}/data
     sdss: ${paths.data}/sdss
     decals: ${paths.data}/decals
+    des: ${paths.data}/des
     dc2: ${paths.data}/dc2
     output: ${paths.root}/output
     pretrained_models: ${paths.data}/pretrained_models
@@ -186,6 +187,24 @@ surveys:
               dec: -0.9316385797930247
         bands: ${encoder.bands}
         reference_band: 1 # DECaLS r-band, DECaLS-indexed (via header)
+    des:
+        _target_: bliss.surveys.des.DarkEnergySurvey
+        des_dir: ${paths.des}
+        image_ids:
+            - sky_coord:
+                ra: 336.6643042496718
+                dec: -0.9316385797930247
+              decals_brickname: "3366m010"
+              ccdname: "S28"
+              g: "decam/CP/V4.8.2a/CP20171108/c4d_171109_002003_ooi_g_ls9"
+              r: "decam/CP/V4.8.2a/CP20170926/c4d_170927_025457_ooi_r_ls9"
+              i: ""
+              z: "decam/CP/V4.8.2a/CP20170926/c4d_170927_025655_ooi_z_ls9"
+        bands: ${encoder.bands}
+        reference_band: 1 # DES r-band, DES-indexed
+        psf_config:
+            pixel_scale: null
+            psf_slen: null
     dc2:
         _target_: bliss.surveys.dc2.DC2
         data_dir: ${paths.dc2}/calibrated_exposures/r/

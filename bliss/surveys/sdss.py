@@ -160,7 +160,7 @@ class SloanDigitalSkySurvey(Survey):
         field_dir = camcol_dir.joinpath(str(field))
         frame_list = []
 
-        for b, bl in enumerate("ugriz"):
+        for b, bl in enumerate(self.BANDS):
             if b in self.bands:
                 frame = self.read_frame_for_band(bl, field_dir, run, camcol, field, gain[b])
                 frame_list.append(frame)
