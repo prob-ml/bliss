@@ -5,22 +5,22 @@ from copy import deepcopy
 from pathlib import Path
 
 import torch
-from torch import nn  # noqa: F401  # pylint: disable=W0611
+import yaml
+from torch import nn  # noqa: F401  # pylint: disable=W0611  # needed to parse config
 from yolov5.models.yolo import C3, SPPF, BaseModel, Bottleneck, Concat, Conv, Detect
 from yolov5.utils.autoanchor import check_anchor_order
 from yolov5.utils.general import make_divisible
 
+# needed to parse config
 from bliss.modules import Conv3d, Conv3d_down  # pylint: disable=W0611  # noqa: F401
 
 
 class Backbone(BaseModel):
-    def __init__(self, cfg="yolov5s.yaml", ch=3, nc=None, anchors=None):
+    def __init__(self, cfg="yolov5s.yaml", ch=3, nc=None, anchors=None, n_imgs=2):
         super().__init__()
         if isinstance(cfg, dict):
             self.yaml = cfg  # model dict
         else:  # is *.yaml
-            import yaml  # for torch hub  # pylint: disable=C0415
-
             self.yaml_file = Path(cfg).name
             with open(cfg, encoding="ascii", errors="ignore") as f:
                 self.yaml = yaml.safe_load(f)  # model dict
@@ -28,7 +28,10 @@ class Backbone(BaseModel):
         # Define model
         # input channels
         ch = self.yaml["ch"] = self.yaml.get("ch", ch)  # noqa: WPS429
-        self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
+        self.num_imgs = n_imgs
+        self.model, self.save = parse_model(
+            deepcopy(self.yaml), ch=[ch], n_imgs=self.num_imgs
+        )  # model, savelist
         self.names = [str(i) for i in range(self.yaml["nc"])]  # default names
         self.inplace = self.yaml.get("inplace", True)
         # Build strides, anchors
@@ -39,7 +42,7 @@ class Backbone(BaseModel):
             forward = lambda x: self.forward(x)  # pylint: disable=C3001, W0108  # noqa: E731
 
             # NOTE: 5-D input
-            d = 2  # set d = 2 in 5-band case
+            d = self.num_imgs  # set d = 2 in 5-band case
             m.stride = torch.tensor([s / x.shape[-2] for x in forward(torch.zeros(1, ch, d, s, s))])
 
             check_anchor_order(m)
@@ -63,8 +66,8 @@ class Backbone(BaseModel):
             mi.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
 
-def parse_model(d, ch):  # model_dict, input_channels(3)
-    # pylint: disable=W1203, W0123, R0912
+def parse_model(d, ch, n_imgs):  # model_dict, input_channels(3)
+    # pylint: disable=W0123, R0912
     # Parse a YOLOv5 model.yaml dictionary
     anchors, nc, gd, gw, act = (
         d["anchors"],
@@ -87,7 +90,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             with contextlib.suppress(NameError):
                 args[j] = eval(a) if isinstance(a, str) else a  # eval strings  # noqa: S307, WPS421
 
-        n = n_ = (  # noqa: WPS429, WPS120, F841 # pylint: disable=W0612
+        n = (  # noqa: WPS429, WPS120, F841 # pylint: disable=W0612
             max(round(n * gd), 1) if n > 1 else n
         )  # depth gain
         if m in {Conv, Bottleneck, SPPF, C3, torch.nn.ConvTranspose2d}:  # noqa: WPS223
@@ -96,19 +99,19 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
                 c2 = make_divisible(c2 * gw, 8)
 
             args = [c1, c2, *args[1:]]
-            if m in {C3}:  # noqa: WPS525
+            if m is C3:  # noqa: WPS525
                 args.insert(2, n)  # number of repeats
                 n = 1
         elif m is torch.nn.BatchNorm2d:
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
-        elif m in {Detect}:  # noqa: WPS525
+        elif m is Detect:  # noqa: WPS525
             args.append([ch[x] for x in f])
             if isinstance(args[1], int):  # number of anchors
                 args[1] = [list(range(args[1] * 2))] * len(f)  # noqa: WPS435
         elif m in {Conv3d_down}:  # noqa: WPS525
-            c2 = 2
+            c2 = n_imgs
         else:
             c2 = ch[f]
 
@@ -127,9 +130,6 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
         layers.append(m_add)
         if i == 0:
             ch = []
-        if m in {"Conv_Mod"}:  # noqa: WPS525
-            ch.append(2)
-        else:
-            ch.append(c2)
+        ch.append(c2)
 
     return torch.nn.Sequential(*layers), sorted(save)

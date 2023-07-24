@@ -76,7 +76,8 @@ encoder:
     input_transform_params:
         use_deconv_channel: false
         concat_psf_params: false
-        z_score: true
+        log_transform: true
+        z_score: false
     architecture:
         # this architecture is based on yolov5l.yaml, see
         # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
