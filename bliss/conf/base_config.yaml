@@ -17,6 +17,7 @@ paths:
     data: ${paths.root}/data
     sdss: ${paths.data}/sdss
     decals: ${paths.data}/decals
+    dc2: ${paths.data}/dc2
     output: ${paths.root}/output
     pretrained_models: ${paths.data}/pretrained_models
 
@@ -144,7 +145,7 @@ training:
     testing: true
     seed: 42
     weight_save_path: null
-    use_cached_simulator: false
+    data_source: ${simulator}
 
 predict:
     dataset: ${surveys.sdss}
@@ -185,3 +186,7 @@ surveys:
               dec: -0.9316385797930247
         bands: ${encoder.bands}
         reference_band: 1 # DECaLS r-band, DECaLS-indexed (via header)
+    dc2:
+        _target_: bliss.surveys.dc2.DC2
+        data_dir: ${paths.dc2}/calibrated_exposures/r/
+        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_bright_bright_
