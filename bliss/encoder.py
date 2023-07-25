@@ -88,7 +88,7 @@ class Encoder(pl.LightningModule):
         arch_dict = OmegaConf.to_container(architecture)
 
         num_channels = len(self.bands)
-        num_features_per_band = self._get_num_images()
+        num_features_per_band = self._get_num_features()
         self.model = Backbone(cfg=arch_dict, ch=num_channels, n_imgs=num_features_per_band)
         self.tiles_to_crop = tiles_to_crop
 

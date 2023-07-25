@@ -151,7 +151,7 @@ predict:
     dataset: ${surveys.sdss}
     trainer: ${training.trainer}
     encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/zscore_five_band.pt
+    weight_save_path: ${paths.pretrained_models}/3d_conv_log.pt
     device: "cuda:0"
     crop:
         do_crop: true
