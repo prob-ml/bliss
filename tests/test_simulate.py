@@ -29,7 +29,7 @@ class TestSimulate:
     def test_simulate(self, cfg, encoder):
         # loads single r-band model with correct number of outputs
         sim_dataset = instantiate(cfg.simulator)
-        sim_tile = torch.load(cfg.paths.data + "/tests/test_image/dataset_1.pt")
+        sim_tile = torch.load(cfg.paths.data + "/tests/test_image/dataset_0.pt")
         sim_tile = TileCatalog(4, sim_tile)
 
         _, rcf_indices = sim_dataset.randomized_image_ids(
