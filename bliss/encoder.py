@@ -88,8 +88,8 @@ class Encoder(pl.LightningModule):
         arch_dict = OmegaConf.to_container(architecture)
 
         num_channels = len(self.bands)
-        num_imgs = self._get_num_images()
-        self.model = Backbone(cfg=arch_dict, ch=num_channels, n_imgs=num_imgs)
+        num_features_per_band = self._get_num_images()
+        self.model = Backbone(cfg=arch_dict, ch=num_channels, n_imgs=num_features_per_band)
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
@@ -115,14 +115,14 @@ class Encoder(pl.LightningModule):
             d[gal_flux] = UnconstrainedLogNormal()
         return d
 
-    def _get_num_images(self):
+    def _get_num_features(self):
         """Determine number of input channels for model based on desired input transforms."""
-        num_imgs = 2  # img + bg
+        num_features_per_band = 2  # img + bg
         if self.input_transform_params.get("use_deconv_channel"):
-            num_imgs += 1
+            num_features_per_band += 1
         if self.input_transform_params.get("concat_psf_params"):
-            num_imgs += 6
-        return num_imgs
+            num_features_per_band += 6
+        return num_features_per_band
 
     def get_input_tensor(self, batch):
         """Extracts data from batch and concatenates into a single tensor to be input into model.

@@ -118,13 +118,13 @@ generate:
     n_workers_per_process: 0
     n_batches: ${simulator.n_batches}
     batch_size: ${simulator.prior.batch_size}
-    max_images_per_file: 2048
+    max_images_per_file: 4096
     cached_data_path: ${paths.data}/cached_dataset
     file_prefix: dataset
 
 training:
-    name: multi-band
-    version: testing
+    name: null
+    version: null
     n_epochs: 50
     save_top_k: 1
     enable_early_stopping: true

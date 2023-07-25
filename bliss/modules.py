@@ -1,3 +1,5 @@
+"""Custom modules for the BLISS encoder."""
+
 import torch
 from yolov5.models.yolo import autopad
 
@@ -20,13 +22,16 @@ class Conv3d(torch.nn.Module):
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
         super().__init__()
+        # format taken from yolov5 Conv2d module
         self.conv = torch.nn.Conv3d(
             c1, c2, k, s, autopad(k, p, d), groups=g, dilation=d, bias=False
         )
         self.bn = torch.nn.BatchNorm3d(c2)
+
+        # Taken from yolov5 Conv2d module
         self.act = (
             self.default_act
-            if act is True
+            if act
             else act  # noqa: WPS509
             if isinstance(act, torch.nn.Module)
             else torch.nn.Identity()

@@ -1,3 +1,18 @@
+"""Backbone for BLISS Encoder which adapts the yolov5 DetectionModel class. We
+extend this model to allow for 3-D convolution layers and 5-D input support.
+See: https://github.com/ultralytics/yolov5
+
+We extend this class to allow for the separation of all band-specific features
+(e.g. image, background, deconvolved image, and PSF parameters) in the input
+to our model. We format our input to the BLISS encoder as:
+
+BatchSize x Bands x Features x H x W
+
+From here, we extend yolov5 to permit the addition of a 3-D convolution module
+that can learn across features. Changes are specifically made to the
+DetectionModel constructor, associated methods and parse_model.
+"""
+
 # flake8: noqa # pylint: disable-all
 import contextlib
 import math
