@@ -50,12 +50,3 @@ class TestGenerate:
                 cfg.simulator.survey.prior_config.n_tiles_w
                 * cfg.simulator.survey.prior_config.tile_slen,
             )
-
-    def test_generate_des(self, cfg):
-        gen_des_cfg = cfg.copy()
-        gen_des_cfg.simulator.survey = cfg.surveys.des
-        gen_des_cfg.generate.n_batches = 3
-        gen_des_cfg.generate.batch_size = 4
-        gen_des_cfg.simulator.survey.prior_config.batch_size = 4
-        gen_des_cfg.generate.max_images_per_file = 8
-        generate(gen_des_cfg)

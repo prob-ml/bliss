@@ -156,7 +156,7 @@ class DarkEnergySurvey(Survey):
         wcs = WCS(hr)
 
         return {
-            "image": image,
+            "image": image.astype(np.float32),
             "background": self.splinesky_level_for_band(
                 brickname,
                 ccdname,
@@ -212,13 +212,13 @@ class DarkEnergySurvey(Survey):
             zoom=(image_h / gridh, image_w / gridw),
             order=order,
             mode="nearest",
-        ).astype(np.float64)
+        ).astype(np.float32)
         background_values_y = zoom(
             background_values_grid_y,
             zoom=(image_h / gridh, image_w / gridw),
             order=order,
             mode="nearest",
-        ).astype(np.float64)
+        ).astype(np.float32)
 
         # Take the mean of the x and y components
         return (background_values_x + background_values_y) / 2

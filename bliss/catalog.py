@@ -190,7 +190,7 @@ class TileCatalog(UserDict):
             Each element of this tensor is an index of a particular source within a particular tile.
             For a particular sample i that had N detections,
             the first N indices of indices_sorted[i. :] will be the detected sources.
-            This is accomplishied by flattening the n_tiles_per_image and max_detections.
+            This is accomplished by flattening the n_tiles_per_image and max_detections.
             For example, if we had 3 tiles with a maximum of two sources each,
             the elements of this tensor would take values from 0 up to and including 5.
         """

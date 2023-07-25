@@ -6,6 +6,9 @@ defaults:
 
 mode: generate
 
+prior:
+    batch_size: 4
+
 simulator:
     survey: ${surveys.des}
 
