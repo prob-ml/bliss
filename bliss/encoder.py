@@ -185,8 +185,6 @@ class Encoder(pl.LightningModule):
 
         assert inputs.size(3) % 16 == 0, "image dims must be multiples of 16"
         assert inputs.size(4) % 16 == 0, "image dims must be multiples of 16"
-        bn_warn = "batchnorm training requires a larger batch. did you mean to use eval mode?"
-        assert (not self.training) or batch["images"].size(0) > 4, bn_warn
 
         output = self.model(inputs)
         # there's an extra dimension for channel that is always a singleton

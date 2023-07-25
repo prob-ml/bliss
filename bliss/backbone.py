@@ -1,4 +1,4 @@
-# flake8: noqa
+# flake8: noqa # pylint: disable-all
 import contextlib
 import math
 from copy import deepcopy
@@ -6,13 +6,13 @@ from pathlib import Path
 
 import torch
 import yaml
-from torch import nn  # noqa: F401  # pylint: disable=W0611  # needed to parse config
+from torch import nn  # needed to parse config
 from yolov5.models.yolo import C3, SPPF, BaseModel, Bottleneck, Concat, Conv, Detect
 from yolov5.utils.autoanchor import check_anchor_order
 from yolov5.utils.general import make_divisible
 
 # needed to parse config
-from bliss.modules import Conv3d, Conv3d_down  # pylint: disable=W0611  # noqa: F401
+from bliss.modules import Conv3d, Conv3d_down
 
 
 class Backbone(BaseModel):
@@ -27,7 +27,7 @@ class Backbone(BaseModel):
 
         # Define model
         # input channels
-        ch = self.yaml["ch"] = self.yaml.get("ch", ch)  # noqa: WPS429
+        ch = self.yaml["ch"] = self.yaml.get("ch", ch)
         self.num_imgs = n_imgs
         self.model, self.save = parse_model(
             deepcopy(self.yaml), ch=[ch], n_imgs=self.num_imgs
@@ -39,11 +39,12 @@ class Backbone(BaseModel):
         if isinstance(m, (Detect)):
             s = 256  # 2x min stride
             m.inplace = self.inplace
-            forward = lambda x: self.forward(x)  # pylint: disable=C3001, W0108  # noqa: E731
 
             # NOTE: 5-D input
             d = self.num_imgs  # set d = 2 in 5-band case
-            m.stride = torch.tensor([s / x.shape[-2] for x in forward(torch.zeros(1, ch, d, s, s))])
+            m.stride = torch.tensor(
+                [s / x.shape[-2] for x in self.forward(torch.zeros(1, ch, d, s, s))]
+            )
 
             check_anchor_order(m)
             m.anchors /= m.stride.view(-1, 1, 1)
@@ -51,7 +52,6 @@ class Backbone(BaseModel):
             self._initialize_biases()  # only run once
 
     def forward(self, x, profile=False, visualize=False):
-        # pylint: disable=W0237
         return self._forward_once(x, profile, visualize)  # single-scale inference, train
 
     def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
@@ -67,7 +67,6 @@ class Backbone(BaseModel):
 
 
 def parse_model(d, ch, n_imgs):  # model_dict, input_channels(3)
-    # pylint: disable=W0123, R0912
     # Parse a YOLOv5 model.yaml dictionary
     anchors, nc, gd, gw, act = (
         d["anchors"],
@@ -77,7 +76,7 @@ def parse_model(d, ch, n_imgs):  # model_dict, input_channels(3)
         d.get("activation"),
     )
     if act:
-        Conv.default_act = eval(  # noqa: S307, WPS421
+        Conv.default_act = eval(
             act
         )  # redefine default activation, i.e. Conv.default_act = nn.SiLU()
     na = (len(anchors[0]) // 2) if isinstance(anchors, list) else anchors  # number of anchors
@@ -85,35 +84,36 @@ def parse_model(d, ch, n_imgs):  # model_dict, input_channels(3)
 
     layers, save, c2 = [], [], ch[-1]  # layers, savelist, ch out
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
-        m = eval(m) if isinstance(m, str) else m  # eval strings  # noqa: S307, WPS421
+        m = eval(m) if isinstance(m, str) else m  # eval strings
         for j, a in enumerate(args):
             with contextlib.suppress(NameError):
-                args[j] = eval(a) if isinstance(a, str) else a  # eval strings  # noqa: S307, WPS421
+                args[j] = eval(a) if isinstance(a, str) else a  # eval strings
 
-        n = (  # noqa: WPS429, WPS120, F841 # pylint: disable=W0612
-            max(round(n * gd), 1) if n > 1 else n
-        )  # depth gain
-        if m in {Conv, Bottleneck, SPPF, C3, torch.nn.ConvTranspose2d}:  # noqa: WPS223
+        n = max(round(n * gd), 1) if n > 1 else n  # depth gain
+        if m in {Conv, Bottleneck, SPPF, C3, torch.nn.ConvTranspose2d}:
             c1, c2 = ch[f], args[0]  # ch tracks caluculated outputs from all layers
             if c2 != no:  # if not output
                 c2 = make_divisible(c2 * gw, 8)
 
             args = [c1, c2, *args[1:]]
-            if m is C3:  # noqa: WPS525
+            if m is C3:
                 args.insert(2, n)  # number of repeats
                 n = 1
         elif m is torch.nn.BatchNorm2d:
             args = [ch[f]]
         elif m is Concat:
             c2 = sum(ch[x] for x in f)
-        elif m is Detect:  # noqa: WPS525
+        elif m is Detect:
             args.append([ch[x] for x in f])
             if isinstance(args[1], int):  # number of anchors
-                args[1] = [list(range(args[1] * 2))] * len(f)  # noqa: WPS435
-        elif m in {Conv3d_down}:  # noqa: WPS525
+                args[1] = [list(range(args[1] * 2))] * len(f)
+        elif m in {Conv3d_down}:
             c2 = n_imgs
         else:
             c2 = ch[f]
+
+        if i == 0:
+            args[0] = ch[0]
 
         m_add = torch.nn.Sequential(*(m(*args) for _ in range(n))) if n > 1 else m(*args)
         t = str(m)[8:-2].replace("__main__.", "")  # module type
@@ -125,11 +125,11 @@ def parse_model(d, ch, n_imgs):  # model_dict, input_channels(3)
             np,
         )  # attach index, 'from' index, type, number params
         save.extend(
-            x % i for x in ([f] if isinstance(f, int) else f) if x != -1  # noqa: WPS509
+            x % i for x in ([f] if isinstance(f, int) else f) if x != -1
         )  # append to savelist
         layers.append(m_add)
         if i == 0:
-            ch = []
+            continue
         ch.append(c2)
 
     return torch.nn.Sequential(*layers), sorted(save)

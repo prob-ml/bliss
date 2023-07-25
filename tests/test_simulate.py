@@ -29,8 +29,7 @@ class TestSimulate:
     def test_simulate(self, cfg, encoder):
         # loads single r-band model with correct number of outputs
         sim_dataset = instantiate(cfg.simulator)
-        sim_tile = torch.load(cfg.paths.data + "/tests/test_image/dataset_0.pt")
-        # NOTE: sim_tile is a batch of 4 images
+        sim_tile = torch.load(cfg.paths.data + "/tests/test_image/dataset_1.pt")
         sim_tile = TileCatalog(4, sim_tile)
 
         _, rcf_indices = sim_dataset.randomized_image_ids(
@@ -57,15 +56,14 @@ class TestSimulate:
         assert torch.equal(sim_star_bools, est_tile.star_bools)
 
         sim_star_fluxes = sim_tile["star_fluxes"] * sim_tile.star_bools
-        sim_galaxy_fluxes = (sim_tile["galaxy_fluxes"] * sim_tile.galaxy_bools)[..., 0]
-        sim_fluxes = sim_star_fluxes[:, :, :, :, 0] + sim_galaxy_fluxes
+        sim_galaxy_fluxes = (sim_tile["galaxy_fluxes"] * sim_tile.galaxy_bools)[..., 2]
+        sim_fluxes = sim_star_fluxes[:, :, :, :, 2] + sim_galaxy_fluxes
         sim_fluxes_crop = sim_fluxes[0, ttc:-ttc, ttc:-ttc, 0]
 
         est_star_fluxes = est_tile["star_fluxes"] * est_tile.star_bools
-        est_galaxy_fluxes = (est_tile["galaxy_fluxes"] * est_tile.galaxy_bools)[..., 0]
-        est_fluxes = est_star_fluxes[0, :, :, 0, 0] + est_galaxy_fluxes[0, :, :, 0]
+        est_galaxy_fluxes = (est_tile["galaxy_fluxes"] * est_tile.galaxy_bools)[..., 2]
+        est_fluxes = est_star_fluxes[0, :, :, 0, 2] + est_galaxy_fluxes[0, :, :, 0]
 
-        # NOTE: Considers ALL 5 predicted fluxes and ALL four images in batch
         assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 1.0
 
     def test_multi_background(self, cfg, monkeypatch):
