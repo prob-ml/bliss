@@ -14,7 +14,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
-from bliss.catalog import FullCatalog, RegionCatalog, SourceType, TileCatalog
+from bliss.catalog import FullCatalog, RegionCatalog, RegionType, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
@@ -321,6 +321,76 @@ class Encoder(pl.LightningModule):
     # endregion
 
     # region Main Loss Functions
+    def _get_loss_interior(self, pred: Dict[str, Distribution], cat: RegionCatalog):
+        """Compute loss in interior regions.
+
+        Args:
+            pred (Dict[str, Distribution]): predicted distributions to evaluate
+            cat (RegionCatalog): true catalog
+
+        Returns:
+            Dict: dictionary of loss for each component and overall loss
+        """
+        loss, loss_components = 0, {}
+
+        # counter_loss
+        n_sources = self._get_interior_param(cat, "n_sources")
+        on_probs = pred["on_prob"].log_prob(n_sources)
+        interior_ub = torch.ones_like(pred["loc"].mean) - (cat.overlap_slen / cat.tile_slen)
+        interior_lb = torch.zeros_like(pred["loc"].mean) + (cat.overlap_slen / cat.tile_slen)
+        prob_in_interior = pred["loc"].cdf(interior_ub) - pred["loc"].cdf(interior_lb)
+
+        counter_loss = -((n_sources == 0) * torch.log(1 - on_probs.exp() * prob_in_interior))
+        counter_loss -= (n_sources > 0) * pred["on_prob"].log_prob(n_sources)
+        loss += counter_loss
+        loss_components["counter_loss"] = counter_loss.mean()
+
+        # location loss
+        locs = self._get_interior_param(cat, "locs")
+        # convert to coordinates in tile
+        locs = (locs * cat.interior_slen + cat.overlap_slen) / cat.tile_slen
+        locs_loss = (-pred["loc"].log_prob(locs)) * n_sources
+        loss += locs_loss
+        loss_components["locs_loss"] = self._average_loss(locs_loss, n_sources)
+
+        # star/galaxy classification loss
+        gal_bools = self._get_interior_param(cat, "galaxy_bools")
+        binary_loss = (-pred["galaxy_prob"].log_prob(gal_bools)) * n_sources
+        loss += binary_loss
+        loss_components["binary_loss"] = self._average_loss(binary_loss, n_sources)
+
+        # flux losses
+        star_bools = self._get_interior_param(cat, "star_bools")
+        star_fluxes = self._get_interior_param(cat, "star_fluxes")
+        galaxy_fluxes = self._get_interior_param(cat, "galaxy_fluxes")
+
+        # only compute loss over bands we're using
+        star_bands = [self.STAR_FLUX_NAMES[band] for band in self.bands]
+        gal_bands = [self.GAL_FLUX_NAMES[band] for band in self.bands]
+        for band, star_name, gal_name in zip(self.bands, star_bands, gal_bands):
+            # star flux loss
+            star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., band] + 1e-9) * star_bools
+            loss += star_flux_loss
+            loss_components[star_name] = self._average_loss(star_flux_loss, star_bools)
+
+            # galaxy flux loss
+            gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., band] + 1e-9) * gal_bools
+            loss += gal_flux_loss
+            loss_components[gal_name] = self._average_loss(gal_flux_loss, gal_bools)
+
+        # galaxy properties loss
+        galsim_true_vals = self._get_interior_param(cat, "galaxy_params")
+        for i, param_name in enumerate(self.GALSIM_NAMES):
+            galsim_pn = f"galsim_{param_name}"
+            gal_param_loss = -pred[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * gal_bools
+            loss += gal_param_loss
+            loss_components[galsim_pn] = self._average_loss(gal_param_loss, gal_bools)
+
+        loss_by_region = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols)
+        loss_by_region[:, ::2, ::2] = loss
+        loss_components["loss_by_region"] = loss_by_region
+        return loss_components
+
     def _get_param_loss_boundary(self, dist, val, cat, aux_vars, mask, bdry_type):
         """Compute the loss for a single param in boundary regions.
 
@@ -333,7 +403,8 @@ class Encoder(pl.LightningModule):
             cat: true catalog
             aux_vars: the auxiliary weights of the left and right tiles
             mask: the mask to apply to the final loss
-            bdry_type: type of boundary, "vertical" or "horizontal"
+            bdry_type: type of boundary, RegionType.BOUNDARY_VERTICAL or
+                RegionType.BOUNDARY_HORIZONTAL
 
         Returns:
             Tensor: a tensor of the loss for this param in each vertical boundary (and 0s in all
@@ -343,7 +414,7 @@ class Encoder(pl.LightningModule):
         c = 1e-12 if isinstance(dist, torch.distributions.LogNormal) else 0  # ensure val in support
 
         # get probs in left/right tile for vertical, above/below for horizontal
-        if bdry_type == "vertical":
+        if bdry_type == RegionType.BOUNDARY_VERTICAL:
             col = torch.zeros(b, h, 1)
             log_prob_i = dist.log_prob(torch.cat((val, col), dim=2) + c)[..., :-1]
             log_prob_j = dist.log_prob(torch.cat((col, val), dim=2) + c)[..., 1:]
@@ -359,7 +430,7 @@ class Encoder(pl.LightningModule):
 
         # construct loss array and add values to appropriate regions
         loss = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols)
-        if bdry_type == "vertical":
+        if bdry_type == RegionType.BOUNDARY_VERTICAL:
             loss[:, ::2, 1::2] = prob
         else:
             loss[:, 1::2, ::2] = prob
@@ -369,7 +440,7 @@ class Encoder(pl.LightningModule):
         """Get locs loss in vertical boundary regions with conversion to locs in each tile."""
         b, h, w, d = val.shape
         # convert boundary locs to coordinates in each tile
-        if bdry_type == "vertical":
+        if bdry_type == RegionType.BOUNDARY_VERTICAL:
             shape = torch.tensor([cat.interior_slen, cat.overlap_slen]).reshape(1, 1, 1, 2)
             offset_i = torch.tensor(
                 [cat.overlap_slen, cat.interior_slen + cat.overlap_slen]
@@ -385,7 +456,7 @@ class Encoder(pl.LightningModule):
         locs_i = ((val * shape) + offset_i) / cat.tile_slen
         locs_j = ((val * shape) + offset_j) / cat.tile_slen
 
-        if bdry_type == "vertical":
+        if bdry_type == RegionType.BOUNDARY_VERTICAL:
             col = torch.zeros(b, h, 1, d)
             log_prob_i = dist.log_prob(torch.cat((locs_i, col), dim=2))[..., :-1]
             log_prob_j = dist.log_prob(torch.cat((col, locs_j), dim=2))[..., 1:]
@@ -401,25 +472,29 @@ class Encoder(pl.LightningModule):
 
         # construct loss array and add values to appropriate regions
         loss = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols)
-        if bdry_type == "vertical":
+        if bdry_type == RegionType.BOUNDARY_VERTICAL:
             loss[:, ::2, 1::2] = prob
         else:
             loss[:, 1::2, ::2] = prob
         return loss * mask
 
-    def _get_loss_boundary(self, pred: Dict[str, Distribution], cat: RegionCatalog, bdry_type: str):
+    def _get_loss_boundary(
+        self, pred: Dict[str, Distribution], cat: RegionCatalog, bdry_type: RegionType
+    ):
         """Compute loss in boundary regions.
 
         Args:
             pred (Dict[str, Distribution]): predicted distributions to evaluate
             cat (RegionCatalog): true catalog
-            bdry_type (str): which regions to evaluate, either "vertical" or "horizontal"
+            bdry_type (RegionType): which regions to evaluate, either RegionType.BOUNDARY_VERTICAL
+                or RegionType.BOUNDARY_HORIZONTAL
 
         Returns:
             Dict: dictionary of loss for each component and overall loss
         """
+        assert bdry_type in {RegionType.BOUNDARY_VERTICAL, RegionType.BOUNDARY_HORIZONTAL}
         loss, loss_components = 0, {}
-        if bdry_type == "vertical":
+        if bdry_type == RegionType.BOUNDARY_VERTICAL:
             on_mask = cat.vertical_boundary_mask
             aux_vars = self._get_aux_vertical(pred, cat)
             get_param = self._get_vertical_boundary_param
@@ -497,13 +572,16 @@ class Encoder(pl.LightningModule):
 
     def _get_loss(self, pred: Dict[str, Distribution], true_cat: RegionCatalog):
         """Compute loss over the catalog."""
-        loss_components = self._get_loss_interior(pred, true_cat)  # interior
-        loss_v_boundary = self._get_loss_boundary(pred, true_cat, "vertical")  # vertical boundary
-        loss_h_boundary = self._get_loss_boundary(pred, true_cat, "horizontal")  # horizontal bdry
+        # interior
+        loss_components = self._get_loss_interior(pred, true_cat)
+        # vertical boundary
+        loss_v_boundary = self._get_loss_boundary(pred, true_cat, RegionType.BOUNDARY_VERTICAL)
+        # horizontal boundaryy
+        loss_h_boundary = self._get_loss_boundary(pred, true_cat, RegionType.BOUNDARY_HORIZONTAL)
         # TODO: corners
 
         # sum loss for all regions
-        for key in loss_components.keys():
+        for key in loss_components:
             loss_components[key] += loss_v_boundary[key]
             loss_components[key] += loss_h_boundary[key]
             # TODO: corner
