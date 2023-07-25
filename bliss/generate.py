@@ -44,7 +44,7 @@ def generate(cfg: DictConfig):
     simulator = instantiate(
         cfg.simulator,
         num_workers=n_workers_per_process,
-        prior={"batch_size": bs},
+        survey={"prior_config": {"batch_size": bs}},
     )
     simulated_dataset = simulator.train_dataloader().dataset
 

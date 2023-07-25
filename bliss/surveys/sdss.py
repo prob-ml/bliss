@@ -18,6 +18,7 @@ from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
+from bliss.simulator.prior import CatalogPrior, PriorConfig
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.survey import Survey
 from bliss.utils.download_utils import download_file_to_dst
@@ -53,26 +54,27 @@ class SloanDigitalSkySurvey(Survey):
 
     def __init__(
         self,
-        psf_config,
+        prior_config: PriorConfig,
+        psf_config: PSFConfig,
         fields,
-        n_bands: int = 5,
         dir_path="data/sdss",
     ):
         super().__init__()
 
         self.sdss_path = Path(dir_path)
-        self.rcfgcs = []
 
+        self.rcfgcs = []
         self.sdss_fields = fields
         self.bands = tuple(range(len(self.BANDS)))
+        self.n_bands = len(self.BANDS)
 
         self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
         self.prepare_data()
 
-        self.background = ImageBackground(self, bands=self.bands)
+        self.background = ImageBackground(self, bands=tuple(range(len(self.BANDS))))
         self.psf = SDSSPSF(dir_path, self.image_ids(), self.bands, psf_config)
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
-        self.n_bands = n_bands
+        self.prior = CatalogPrior(len(self.BANDS), **prior_config)
 
         self.catalog_cls = PhotoFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -151,6 +153,14 @@ class SloanDigitalSkySurvey(Survey):
                 rcfs.append((run, camcol, field))
         return rcfs
 
+    def nmgy_to_nelec(self):
+        d = {}
+        for i, rcf in enumerate(self.image_ids()):
+            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
+            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
+            d[rcf] = avg_nelec_conv
+        return d
+
     def get_from_disk(self, idx):
         if self.rcfgcs[idx] is None:
             return None
@@ -174,14 +184,6 @@ class SloanDigitalSkySurvey(Survey):
                 ret[k] = data_per_band
         ret.update({"field": field})
         return ret
-
-    def nmgy_to_nelec(self):
-        d = {}
-        for i, rcf in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
-            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
-            d[rcf] = avg_nelec_conv
-        return d
 
     def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
         frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"

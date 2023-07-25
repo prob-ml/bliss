@@ -3,15 +3,16 @@ defaults:
     - ../bliss/conf@_here_: base_config
     - _self_
 
+prior:
+    n_tiles_h: 4
+    n_tiles_w: 4
+    batch_size: 2
+    prob_galaxy: 0.5
+
 simulator:
     valid_n_batches: 1
     n_batches: 2
     num_workers: 0
-    prior:
-        n_tiles_h: 4
-        n_tiles_w: 4
-        batch_size: 2
-        prob_galaxy: 0.5
 
 cached_simulator:
     num_workers: 0

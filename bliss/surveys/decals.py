@@ -13,6 +13,7 @@ from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, SourceType
+from bliss.simulator.prior import CatalogPrior, PriorConfig
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 from bliss.surveys.sdss import column_to_tensor
 from bliss.surveys.survey import Survey, SurveyDownloader
@@ -45,7 +46,8 @@ class DarkEnergyCameraLegacySurvey(Survey):
 
     def __init__(
         self,
-        decals_dir="data/decals",
+        prior_config: PriorConfig,
+        dir_path="data/decals",
         sky_coords=({"ra": 336.6643042496718, "dec": -0.9316385797930247},),
         # TODO: fix band-indexing after DECaLS E2E
         bands=(1, 2, 3, 4),  # SDSS.BANDS indexing, for SDSS-trained encoder
@@ -53,7 +55,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
     ):
         super().__init__()
 
-        self.decals_path = Path(decals_dir)
+        self.decals_path = Path(dir_path)
         self.bands = bands
         self.bricknames = [
             DarkEnergyCameraLegacySurvey.brick_for_radec(c["ra"], c["dec"]) for c in sky_coords
@@ -62,6 +64,8 @@ class DarkEnergyCameraLegacySurvey(Survey):
         self.downloader = DecalsDownloader(self.bricknames, self.decals_path)
 
         self.prepare_data()
+
+        self.prior = CatalogPrior(len(self.BANDS), **prior_config)
 
         self.catalog_cls = DecalsFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}

@@ -28,7 +28,7 @@ class ImageDecoder(nn.Module):
         self.n_bands = len(bands)
         self.psf_galsim = psf.psf_galsim  # Dictionary indexed by image_id
         self.psf_params = psf.psf_params  # Dictionary indexed by image_id
-        self.psf_draw_method = psf.psf_draw_method or "auto"
+        self.psf_draw_method = getattr(psf, "psf_draw_method", "auto")
         self.pixel_scale = psf.pixel_scale
         self.nmgy_to_nelec_dict = nmgy_to_nelec_dict
 
@@ -105,21 +105,19 @@ class ImageDecoder(nn.Module):
             Tuple[Tensor, List, Tensor]: tensor of images, list of PSFs, tensor of PSF params
         """
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
-        assert image_ids.shape[0] == batch_size
+        assert len(image_ids) == batch_size
 
         slen_h = tile_cat.tile_slen * n_tiles_h
         slen_w = tile_cat.tile_slen * n_tiles_w
         images = np.zeros((batch_size, self.n_bands, slen_h, slen_w), dtype=np.float32)
 
         # use the PSF from specified image_id
-        psfs = [self.psf_galsim[tuple(image_ids[b])] for b in range(batch_size)]
-        param_list = [self.psf_params[tuple(image_ids[b])] for b in range(batch_size)]
+        psfs = [self.psf_galsim[image_ids[b]] for b in range(batch_size)]
+        param_list = [self.psf_params[image_ids[b]] for b in range(batch_size)]
         psf_params = torch.stack(param_list, dim=0)
 
         # use the specified nmgy_to_nelec ratios indexed by image_id
-        nmgy_to_nelec_rats = [
-            self.nmgy_to_nelec_dict[tuple(image_ids[b])] for b in range(batch_size)
-        ]
+        nmgy_to_nelec_rats = [self.nmgy_to_nelec_dict[image_ids[b]] for b in range(batch_size)]
 
         for b in range(batch_size):
             # Convert to electron counts
@@ -144,7 +142,10 @@ class ImageDecoder(nn.Module):
                     # essentially all the runtime of the simulator is incurred by this call
                     # to drawImage
                     galsim_obj.drawImage(
-                        offset=offset, method="auto", add_to_image=True, image=gs_img
+                        offset=offset,
+                        method=self.psf_draw_method,
+                        add_to_image=True,
+                        image=gs_img,
                     )
 
         # clamping here helps with an strange issue caused by galsim rendering
