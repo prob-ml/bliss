@@ -257,135 +257,263 @@ class Encoder(pl.LightningModule):
         scheduler = MultiStepLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
 
-    def _get_masked_interior_param(self, cat: RegionCatalog, param_name: str):
-        param = cat[param_name]
-        b, nth, ntw, d = cat.batch_size, cat.nth, cat.ntw, param.shape[-1]
-        if param_name == "n_sources":
-            param = torch.masked_select(param, cat.interior_mask)
-            return rearrange(param, "(b nth ntw) -> b nth ntw", b=b, nth=nth, ntw=ntw)
+    # region Loss Utility Functions
+    def _average_loss(self, loss, mask):
+        """Return the average loss in regions specified by mask."""
+        if mask.sum() == 0:
+            return 0
+        return loss.sum() / mask.sum()
 
+    def _get_masked_param(self, param, mask, shape):
+        """Get param in masked regions. `shape` controls output shape for different region types."""
+        if len(param.shape) == 3:
+            return torch.masked_select(param, mask).reshape(shape)
+
+        b, nth, ntw, d = *shape, param.shape[-1]
         param = param.squeeze(-2)  # remove max_sources dim
-        mask = repeat(cat.interior_mask, "r c -> b r c d", b=b, d=d)
+        mask = repeat(mask, "r c -> b r c d", b=b, d=d)
         param = torch.masked_select(param, mask)
         masked_params = rearrange(param, "(b nth ntw d) -> b nth ntw d", b=b, nth=nth, ntw=ntw, d=d)
 
         return masked_params.squeeze(-1) if d == 1 else masked_params
 
-    def _get_loss_interior(self, pred, cat: RegionCatalog):
-        loss_components = {}
-        loss = 0
+    def _get_interior_param(self, cat: RegionCatalog, param_name: str):
+        """Get param in interior regions."""
+        out_shape = (cat.batch_size, cat.nth, cat.ntw)
+        return self._get_masked_param(cat[param_name], cat.interior_mask, out_shape)
+
+    def _get_vertical_boundary_param(self, cat: RegionCatalog, param_name: str):
+        """Get param in vertical boundary regions."""
+        out_shape = (cat.batch_size, cat.nth, cat.ntw - 1)
+        return self._get_masked_param(cat[param_name], cat.vertical_boundary_mask, out_shape)
+
+    def _get_horizontal_boundary_param(self, cat: RegionCatalog, param_name: str):
+        """Get param in horizontal boundary regions."""
+        out_shape = (cat.batch_size, cat.nth - 1, cat.ntw)
+        return self._get_masked_param(cat[param_name], cat.horizontal_boundary_mask, out_shape)
+
+    def _get_aux_vertical(self, pred, cat):
+        """Get auxiliary variables in vertical boundary regions."""
+        idx_v = repeat(
+            cat.vertical_boundary_mask, "nth ntw -> b nth ntw", b=cat.batch_size
+        ).nonzero(as_tuple=True)
+        idx_vi = (idx_v[0], idx_v[1] // 2, idx_v[2] // 2)
+        idx_vj = (idx_v[0], idx_v[1] // 2, (idx_v[2] + 1) // 2)
+
+        probs = pred["on_prob"].probs[..., 1]  # prob of yes
+        aux_vars = torch.zeros(cat.batch_size, cat.nth, cat.ntw - 1)
+        aux_vars[idx_vi] = probs[idx_vi] / (probs[idx_vi] + probs[idx_vj])
+        return aux_vars
+
+    def _get_aux_horizontal(self, pred, cat):
+        """Get auxiliary variables in horizontal boundary regions."""
+        idx_h = repeat(
+            cat.horizontal_boundary_mask, "nth ntw -> b nth ntw", b=cat.batch_size
+        ).nonzero(as_tuple=True)
+        idx_hi = (idx_h[0], idx_h[1] // 2, idx_h[2] // 2)
+        idx_hj = (idx_h[0], (idx_h[1] + 1) // 2, idx_h[2] // 2)
+
+        probs = pred["on_prob"].probs[..., 1]  # prob of yes
+        aux_vars = torch.zeros(cat.batch_size, cat.nth - 1, cat.ntw)
+        aux_vars[idx_hi] = probs[idx_hi] / (probs[idx_hi] + probs[idx_hj])
+        return aux_vars
+
+    # endregion
+
+    # region Main Loss Functions
+    def _get_param_loss_boundary(self, dist, val, cat, aux_vars, mask, bdry_type):
+        """Compute the loss for a single param in boundary regions.
+
+        The loss is computed by evaluating the value of the param in the tiles to the left and
+        right of the boundary (or above and below). We use logsumexp for numerical stability.
+
+        Args:
+            dist: the distribution to evaluate
+            val: the value to evaluate at in the vertical boundary regions
+            cat: true catalog
+            aux_vars: the auxiliary weights of the left and right tiles
+            mask: the mask to apply to the final loss
+            bdry_type: type of boundary, "vertical" or "horizontal"
+
+        Returns:
+            Tensor: a tensor of the loss for this param in each vertical boundary (and 0s in all
+                other regions)
+        """
+        b, h, w = val.shape
+        c = 1e-12 if isinstance(dist, torch.distributions.LogNormal) else 0  # ensure val in support
+
+        # get probs in left/right tile for vertical, above/below for horizontal
+        if bdry_type == "vertical":
+            col = torch.zeros(b, h, 1)
+            log_prob_i = dist.log_prob(torch.cat((val, col), dim=2) + c)[..., :-1]
+            log_prob_j = dist.log_prob(torch.cat((col, val), dim=2) + c)[..., 1:]
+        else:
+            row = torch.zeros(b, 1, w)
+            log_prob_i = dist.log_prob(torch.cat((val, row), dim=1) + c)[:, :-1]
+            log_prob_j = dist.log_prob(torch.cat((row, val), dim=1) + c)[:, 1:]
+
+        # evaluate prob using logsumexp for stability
+        log_prob_i += torch.log(aux_vars)
+        log_prob_j += torch.log(1 - aux_vars)
+        prob = -torch.logsumexp(torch.stack((log_prob_i, log_prob_j), dim=3), dim=3)
+
+        # construct loss array and add values to appropriate regions
+        loss = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols)
+        if bdry_type == "vertical":
+            loss[:, ::2, 1::2] = prob
+        else:
+            loss[:, 1::2, ::2] = prob
+        return loss * mask
+
+    def _get_locs_loss_boundary(self, dist, val, cat, aux_vars, mask, bdry_type):
+        """Get locs loss in vertical boundary regions with conversion to locs in each tile."""
+        b, h, w, d = val.shape
+        # convert boundary locs to coordinates in each tile
+        if bdry_type == "vertical":
+            shape = torch.tensor([cat.interior_slen, cat.overlap_slen]).reshape(1, 1, 1, 2)
+            offset_i = torch.tensor(
+                [cat.overlap_slen, cat.interior_slen + cat.overlap_slen]
+            ).reshape(1, 1, 1, 2)
+            offset_j = torch.tensor([cat.overlap_slen, 0]).reshape(1, 1, 1, 2)
+        else:
+            shape = torch.tensor([cat.overlap_slen, cat.interior_slen]).reshape(1, 1, 1, 2)
+            offset_i = torch.tensor([cat.overlap_slen, cat.overlap_slen]).reshape(1, 1, 1, 2)
+            offset_j = torch.tensor(
+                [cat.overlap_slen + cat.interior_slen, cat.overlap_slen]
+            ).reshape(1, 1, 1, 2)
+
+        locs_i = ((val * shape) + offset_i) / cat.tile_slen
+        locs_j = ((val * shape) + offset_j) / cat.tile_slen
+
+        if bdry_type == "vertical":
+            col = torch.zeros(b, h, 1, d)
+            log_prob_i = dist.log_prob(torch.cat((locs_i, col), dim=2))[..., :-1]
+            log_prob_j = dist.log_prob(torch.cat((col, locs_j), dim=2))[..., 1:]
+        else:
+            row = torch.zeros(b, 1, w, d)
+            log_prob_i = dist.log_prob(torch.cat((locs_i, row), dim=1))[:, :-1]
+            log_prob_j = dist.log_prob(torch.cat((row, locs_j), dim=1))[:, 1:]
+
+        # evaluate prob using logsumexp for stability
+        log_prob_i += torch.log(aux_vars)
+        log_prob_j += torch.log(1 - aux_vars)
+        prob = -torch.logsumexp(torch.stack((log_prob_i, log_prob_j), dim=3), dim=3)
+
+        # construct loss array and add values to appropriate regions
+        loss = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols)
+        if bdry_type == "vertical":
+            loss[:, ::2, 1::2] = prob
+        else:
+            loss[:, 1::2, ::2] = prob
+        return loss * mask
+
+    def _get_loss_boundary(self, pred: Dict[str, Distribution], cat: RegionCatalog, bdry_type: str):
+        """Compute loss in boundary regions.
+
+        Args:
+            pred (Dict[str, Distribution]): predicted distributions to evaluate
+            cat (RegionCatalog): true catalog
+            bdry_type (str): which regions to evaluate, either "vertical" or "horizontal"
+
+        Returns:
+            Dict: dictionary of loss for each component and overall loss
+        """
+        loss, loss_components = 0, {}
+        if bdry_type == "vertical":
+            on_mask = cat.vertical_boundary_mask
+            aux_vars = self._get_aux_vertical(pred, cat)
+            get_param = self._get_vertical_boundary_param
+        else:
+            on_mask = cat.horizontal_boundary_mask
+            aux_vars = self._get_aux_horizontal(pred, cat)
+            get_param = self._get_horizontal_boundary_param
 
         # counter_loss
-        tile_n_sources = self._get_masked_interior_param(cat, "n_sources")
-        on_probs = pred["on_prob"].log_prob(tile_n_sources)
-        interior_ub = torch.ones_like(pred["loc"].mean) - (cat.overlap_slen / cat.tile_slen)
-        interior_lb = torch.zeros_like(pred["loc"].mean) + (cat.overlap_slen / cat.tile_slen)
-        prob_in_interior = pred["loc"].cdf(interior_ub) - pred["loc"].cdf(interior_lb)
-
-        counter_loss = -((tile_n_sources == 0) * torch.log(1 - on_probs.exp() * prob_in_interior))
-        counter_loss -= (tile_n_sources > 0) * pred["on_prob"].log_prob(tile_n_sources)
+        n_sources = get_param(cat, "n_sources")
+        counter_loss = self._get_param_loss_boundary(
+            pred["on_prob"], n_sources, cat, aux_vars, on_mask, bdry_type
+        )
         loss += counter_loss
-        loss_components["counter_loss"] = counter_loss.mean()
+        loss_components["counter_loss"] = self._average_loss(
+            counter_loss, cat.vertical_boundary_mask
+        )
 
         # location loss
-        locs = self._get_masked_interior_param(cat, "locs")
-        locs_loss = (-pred["loc"].log_prob(locs)) * tile_n_sources
+        locs = get_param(cat, "locs")
+        on_mask = on_mask * (cat.n_sources > 0)  # update mask to filter on sources
+        locs_loss = self._get_locs_loss_boundary(
+            pred["loc"], locs, cat, aux_vars, on_mask, bdry_type
+        )
         loss += locs_loss
-        loss_components["locs_loss"] = locs_loss.sum() / tile_n_sources.sum()
+        loss_components["locs_loss"] = self._average_loss(locs_loss, on_mask)
 
         # star/galaxy classification loss
-        gal_bools = self._get_masked_interior_param(cat, "galaxy_bools")
-        binary_loss = (-pred["galaxy_prob"].log_prob(gal_bools)) * tile_n_sources
+        gal_bools = get_param(cat, "galaxy_bools")
+        binary_loss = self._get_param_loss_boundary(
+            pred["galaxy_prob"], gal_bools, cat, aux_vars, on_mask, bdry_type
+        )
         loss += binary_loss
-        loss_components["binary_loss"] = binary_loss.sum() / tile_n_sources.sum()
+        loss_components["binary_loss"] = self._average_loss(binary_loss, on_mask)
 
         # flux losses
-        star_bools = self._get_masked_interior_param(cat, "star_bools")
-        star_fluxes = self._get_masked_interior_param(cat, "star_fluxes")
-        galaxy_fluxes = self._get_masked_interior_param(cat, "galaxy_fluxes")
+        star_fluxes = get_param(cat, "star_fluxes")
+        galaxy_fluxes = get_param(cat, "galaxy_fluxes")
+        star_mask = on_mask * cat.star_bools[..., 0, 0]
+        gal_mask = on_mask * cat.galaxy_bools[..., 0, 0]
 
-        # only compute loss over bands we're using
-        star_bands = [self.STAR_FLUX_NAMES[band] for band in self.bands]
-        gal_bands = [self.GAL_FLUX_NAMES[band] for band in self.bands]
-        for band, star_name, gal_name in zip(self.bands, star_bands, gal_bands):
+        for i, (star_name, gal_name) in enumerate(zip(self.STAR_FLUX_NAMES, self.GAL_FLUX_NAMES)):
+            if i not in self.bands:  # only compute loss over bands we're using
+                continue
             # star flux loss
-            star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., band] + 1e-9) * star_bools
+            star_flux_loss = self._get_param_loss_boundary(
+                pred[star_name], star_fluxes[..., i], cat, aux_vars, star_mask, bdry_type
+            )
             loss += star_flux_loss
-            loss_components[star_name] = star_flux_loss.sum() / star_bools.sum()
+            loss_components[star_name] = self._average_loss(star_flux_loss, star_mask)
 
             # galaxy flux loss
-            gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., band] + 1e-9) * gal_bools
-            loss += gal_flux_loss
-            loss_components[gal_name] = gal_flux_loss.sum() / gal_bools.sum()
+            galaxy_flux_loss = self._get_param_loss_boundary(
+                pred[gal_name], galaxy_fluxes[..., i], cat, aux_vars, gal_mask, bdry_type
+            )
+            loss += galaxy_flux_loss
+            loss_components[gal_name] = self._average_loss(galaxy_flux_loss, gal_mask)
 
         # galaxy properties loss
-        galsim_true_vals = self._get_masked_interior_param(cat, "galaxy_params")
+        galaxy_params = get_param(cat, "galaxy_params")
         for i, param_name in enumerate(self.GALSIM_NAMES):
             galsim_pn = f"galsim_{param_name}"
-            gal_param_loss = -pred[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * gal_bools
+            gal_param_loss = self._get_param_loss_boundary(
+                pred[galsim_pn], galaxy_params[..., i], cat, aux_vars, gal_mask, bdry_type
+            )
             loss += gal_param_loss
-            loss_components[galsim_pn] = gal_param_loss.sum() / gal_bools.sum()
+            loss_components[galsim_pn] = self._average_loss(gal_param_loss, gal_mask)
 
-        loss_components["loss"] = loss.mean()
+        loss_components["loss_by_region"] = loss
         return loss_components
 
-    def _get_loss(self, pred: Dict[str, Distribution], true_tile_cat: TileCatalog):
-        loss_with_components = {}
+    def _get_loss_corner(self, pred: Dict[str, Distribution], cat: RegionCatalog):
+        # TODO: implement this
+        pass
 
-        # counter loss
-        counter_loss = -pred["on_prob"].log_prob(true_tile_cat.n_sources)
-        loss = counter_loss
-        loss_with_components["counter_loss"] = counter_loss.mean()
+    def _get_loss(self, pred: Dict[str, Distribution], true_cat: RegionCatalog):
+        """Compute loss over the catalog."""
+        loss_components = self._get_loss_interior(pred, true_cat)  # interior
+        loss_v_boundary = self._get_loss_boundary(pred, true_cat, "vertical")  # vertical boundary
+        loss_h_boundary = self._get_loss_boundary(pred, true_cat, "horizontal")  # horizontal bdry
+        # TODO: corners
 
-        # all the squeezing/rearranging below is because a TileCatalog can store multiple
-        # light sources per tile, which is annoying here, but helpful for storing samples
-        # and real catalogs. Still, there may be a better way.
+        # sum loss for all regions
+        for key in loss_components.keys():
+            loss_components[key] += loss_v_boundary[key]
+            loss_components[key] += loss_h_boundary[key]
+            # TODO: corner
 
-        # location loss
-        true_locs = true_tile_cat.locs.squeeze(3)
-        locs_loss = -pred["loc"].log_prob(true_locs)
-        locs_loss *= true_tile_cat.n_sources
-        loss += locs_loss
-        loss_with_components["locs_loss"] = locs_loss.sum() / true_tile_cat.n_sources.sum()
+        loss_components["loss"] = loss_components.pop("loss_by_region").mean()
+        return loss_components
 
-        # star/galaxy classification loss
-        true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
-        binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
-        binary_loss *= true_tile_cat.n_sources
-        loss += binary_loss
-        loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
+    # endregion
 
-        # flux losses
-        true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
-        star_fluxes = rearrange(true_tile_cat["star_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
-        galaxy_fluxes = rearrange(true_tile_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
-
-        # only compute loss over bands we're using
-        star_bands = [self.STAR_FLUX_NAMES[band] for band in self.bands]
-        gal_bands = [self.GAL_FLUX_NAMES[band] for band in self.bands]
-        for i, star_name, gal_name in zip(self.bands, star_bands, gal_bands):
-            # star flux loss
-            star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i] + 1e-9) * true_star_bools
-            loss += star_flux_loss
-            loss_with_components[star_name] = star_flux_loss.sum() / true_star_bools.sum()
-
-            # galaxy flux loss
-            gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., i] + 1e-9) * true_gal_bools
-            loss += gal_flux_loss
-            loss_with_components[gal_name] = gal_flux_loss.sum() / true_gal_bools.sum()
-
-        # galaxy properties loss
-        galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
-        for i, param_name in enumerate(self.GALSIM_NAMES):
-            galsim_pn = f"galsim_{param_name}"
-            loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
-            loss += loss_term
-            loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
-
-        loss_with_components["loss"] = loss.mean()
-
-        return loss_with_components
-
+    # region Lightning Functions
     def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
         batch_size = batch["images"].size(0)
         pred = self.encode_batch(batch)
@@ -460,3 +588,5 @@ class Encoder(pl.LightningModule):
             "background": batch["background"],
             "pred": pred,
         }
+
+    # endregion

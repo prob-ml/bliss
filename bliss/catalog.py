@@ -347,6 +347,9 @@ class TileCatalog(UserDict):
         cols = list(range(self.n_tiles_h))
 
         for b, i, j in itertools.product(batch, rows, cols):
+            if self.n_sources[b, i, j] == 0:
+                continue
+
             new_i, new_j = RegionCatalog.get_pos_for_new_loc(
                 i,
                 j,
