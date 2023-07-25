@@ -312,6 +312,10 @@ class BlissMetrics(Metric):
             if not val_list:
                 continue
 
+            len_val = len(val_list[0])
+            if len_val == 0:
+                continue
+
             # take median along first dim of stacked tensors, i.e. across images
             median_vals = torch.cat(val_list, dim=0).median(dim=0).values
 
