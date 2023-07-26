@@ -326,8 +326,8 @@ def plot_predict(
         background = backgrounds_for_frame[image_id]
 
         ptc = cfg.encoder.tiles_to_crop * cfg.encoder.tile_slen
-        image = image[0, 0, ptc:-ptc, ptc:-ptc]
-        background = background[0, 0, ptc:-ptc, ptc:-ptc]
+        image = image[0, 0, 0, ptc:-ptc, ptc:-ptc]
+        background = background[0, 0, 0, ptc:-ptc, ptc:-ptc]
 
         w, h = image.shape
 
