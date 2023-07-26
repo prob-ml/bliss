@@ -20,7 +20,7 @@ class CatalogPrior(pl.LightningModule):
 
     def __init__(
         self,
-        n_bands,
+        survey_bands: list,
         n_tiles_h: int,
         n_tiles_w: int,
         tile_slen: int,
@@ -46,7 +46,7 @@ class CatalogPrior(pl.LightningModule):
         """Initializes ImagePrior.
 
         Args:
-            n_bands: Number of bands in survey
+            survey_bands: all band-pass filters available for this survey
             n_tiles_h: Image height in tiles,
             n_tiles_w: Image width in tiles,
             tile_slen: Tile side length in pixels,
@@ -73,7 +73,7 @@ class CatalogPrior(pl.LightningModule):
         self.n_tiles_h = n_tiles_h
         self.n_tiles_w = n_tiles_w
         self.tile_slen = tile_slen
-        self.n_bands = n_bands
+        self.n_bands = len(survey_bands)
         # NOTE: bands have to be non-empty
         self.bands = range(self.n_bands)
         self.batch_size = batch_size
@@ -196,8 +196,10 @@ class CatalogPrior(pl.LightningModule):
 
         # Reshape drawn values into appropriate form
         samples = samples + (self.n_bands - 1,)
-        star_ratios = np.exp(np.reshape(star_ratios_flat, samples))
-        gal_ratios = np.exp(np.reshape(gal_ratios_flat, samples))
+        # TODO: remove band-dimension coercing used for DES testing!
+        bands = range(star_ratios_flat.shape[-1] - self.n_bands + 1, star_ratios_flat.shape[-1])
+        star_ratios = np.exp(np.reshape(star_ratios_flat[..., bands], samples))
+        gal_ratios = np.exp(np.reshape(gal_ratios_flat[..., bands], samples))
 
         # Append r-band 'ratio' of 1's to sampled ratios
         base = np.ones((self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1))

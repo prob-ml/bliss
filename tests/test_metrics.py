@@ -85,7 +85,7 @@ class TestMetrics:
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
         slen = 50
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
 
         true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]])
         est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]])
@@ -120,7 +120,7 @@ class TestMetrics:
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=2.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=2.0, survey_bands=list(SDSS.BANDS))
 
         true_locs = torch.tensor(
             [[[10, 10]], [[20, 20]], [[30, 30]], [[40, 40]]], dtype=torch.float
@@ -146,7 +146,7 @@ class TestMetrics:
 
     def test_classification_metrics_tile(self, tile_catalog):
         """Test galaxy classification metrics on tile catalog."""
-        metrics = BlissMetrics(mode=MetricsMode.TILE, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.TILE, slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(tile_catalog, tile_catalog)
         for metric in metrics.classification_metrics:
             if metric in {"gal_fluxes", "star_fluxes"}:
@@ -158,7 +158,7 @@ class TestMetrics:
     def test_classification_metrics_full(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
         full_catalog = tile_catalog.to_full_params()
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(full_catalog, full_catalog)
         for metric in metrics.classification_metrics:
             if metric in {"gal_fluxes", "star_fluxes"}:
@@ -169,26 +169,26 @@ class TestMetrics:
 
     def test_photo_self_agreement(self, catalogs):
         """Compares PhotoFullCatalog to itself as safety check for metrics."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(catalogs["photo"], catalogs["photo"])
         assert results["f1"] == 1
 
     def test_decals_self_agreement(self, catalogs):
         """Compares Decals catalog to itself as safety check for metrics."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(catalogs["decals"], catalogs["decals"])
         assert results["f1"] == 1
 
     def test_photo_decals_agree(self, catalogs):
         """Compares metrics for agreement between Photo catalog and Decals catalog."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(catalogs["decals"], catalogs["photo"])
         assert results["detection_precision"] > 0.8
 
     def test_bliss_photo_agree(self, catalogs):
         """Compares metrics for agreement between BLISS-inferred catalog and Photo catalog."""
         slack = 1.0
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=slack)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=slack, survey_bands=list(SDSS.BANDS))
         results = metrics(catalogs["photo"], catalogs["bliss"])
         assert results["f1"] > 0.7
         assert results["avg_keep_distance"] < slack
@@ -199,7 +199,7 @@ class TestMetrics:
         photo_cat = catalogs["photo"]
         bliss_cat = catalogs["bliss"]
 
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0)
+        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
 
         bliss_vs_decals = metrics(decals_cat, bliss_cat)
         photo_vs_decals = metrics(decals_cat, photo_cat)

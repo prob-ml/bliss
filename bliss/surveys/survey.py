@@ -5,6 +5,8 @@ from torch.utils.data import Dataset
 
 
 class Survey(pl.LightningDataModule, Dataset, ABC):
+    BANDS = ()
+
     def __init__(self):
         super().__init__()
 

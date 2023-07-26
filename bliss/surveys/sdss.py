@@ -53,26 +53,25 @@ class SloanDigitalSkySurvey(Survey):
 
     def __init__(
         self,
-        psf_config,
+        psf_config: PSFConfig,
         fields,
-        n_bands: int = 5,
         dir_path="data/sdss",
     ):
         super().__init__()
 
         self.sdss_path = Path(dir_path)
-        self.rcfgcs = []
 
+        self.rcfgcs = []
         self.sdss_fields = fields
         self.bands = tuple(range(len(self.BANDS)))
+        self.n_bands = len(self.BANDS)
 
         self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
         self.prepare_data()
 
-        self.background = ImageBackground(self, bands=self.bands)
-        self.psf = SDSSPSF(dir_path, self.image_ids(), self.bands, psf_config)
+        self.background = ImageBackground(self, bands=tuple(range(len(self.BANDS))))
+        self.psf = SDSS_PSF(dir_path, self.image_ids(), self.bands, psf_config)
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
-        self.n_bands = n_bands
 
         self.catalog_cls = PhotoFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -151,6 +150,14 @@ class SloanDigitalSkySurvey(Survey):
                 rcfs.append((run, camcol, field))
         return rcfs
 
+    def nmgy_to_nelec(self):
+        d = {}
+        for i, rcf in enumerate(self.image_ids()):
+            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
+            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
+            d[rcf] = avg_nelec_conv
+        return d
+
     def get_from_disk(self, idx):
         if self.rcfgcs[idx] is None:
             return None
@@ -160,7 +167,7 @@ class SloanDigitalSkySurvey(Survey):
         field_dir = camcol_dir.joinpath(str(field))
         frame_list = []
 
-        for b, bl in enumerate("ugriz"):
+        for b, bl in enumerate(self.BANDS):
             if b in self.bands:
                 frame = self.read_frame_for_band(bl, field_dir, run, camcol, field, gain[b])
                 frame_list.append(frame)
@@ -174,14 +181,6 @@ class SloanDigitalSkySurvey(Survey):
                 ret[k] = data_per_band
         ret.update({"field": field})
         return ret
-
-    def nmgy_to_nelec(self):
-        d = {}
-        for i, rcf in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
-            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
-            d[rcf] = avg_nelec_conv
-        return d
 
     def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
         frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
@@ -239,6 +238,9 @@ class SloanDigitalSkySurvey(Survey):
     def predict_dataloader(self) -> EVAL_DATALOADERS:
         assert self.predict_batch is not None, "predict_batch must be set."
         return DataLoader([self.predict_batch], batch_size=1)
+
+
+SDSS = SloanDigitalSkySurvey
 
 
 class SDSSDownloader:
@@ -449,7 +451,7 @@ class PhotoFullCatalog(FullCatalog):
         )
 
 
-class SDSSPSF(ImagePSF):
+class SDSS_PSF(ImagePSF):  # noqa: N801
     def __init__(self, survey_data_dir, image_ids, bands, psf_config: PSFConfig):
         super().__init__(bands, **psf_config)
 

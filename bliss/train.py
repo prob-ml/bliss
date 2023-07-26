@@ -73,7 +73,7 @@ def setup_paths(paths):
         path = Path(paths[key])
         if path.exists():
             continue
-        if key in {"data", "sdss", "decals", "dc2", "output", "pretrained_models"}:
+        if key in {"data", "sdss", "decals", "des", "dc2", "output", "pretrained_models"}:
             path.mkdir(parents=True)
         else:
             err = "path for {} ({}) does not exist".format(str(key), path.as_posix())

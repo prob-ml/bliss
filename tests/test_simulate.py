@@ -32,10 +32,10 @@ class TestSimulate:
         sim_tile = torch.load(cfg.paths.data + "/tests/test_image/dataset_0.pt")
         sim_tile = TileCatalog(4, sim_tile)
 
-        _, rcf_indices = sim_dataset.randomized_image_ids(
+        rcfs, rcf_indices = sim_dataset.randomized_image_ids(
             sim_tile.n_sources.size(0)
         )  # noqa: WPS437
-        image, background, _, _ = sim_dataset.simulate_image(sim_tile, rcf_indices)
+        image, background, _, _ = sim_dataset.simulate_image(sim_tile, rcfs, rcf_indices)
 
         # move data to the device the encoder is on
         sim_tile = sim_tile.to(cfg.predict.device)

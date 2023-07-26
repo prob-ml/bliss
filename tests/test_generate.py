@@ -6,7 +6,7 @@ from bliss.generate import generate
 
 
 class TestGenerate:
-    def test_generate(self, cfg):
+    def test_generate_sdss(self, cfg):
         generate(cfg)
         # check that cached dataset exists
         cached_dataset_should_exist = cfg.generate.n_batches > 0 and (

@@ -45,15 +45,14 @@ class DarkEnergyCameraLegacySurvey(Survey):
 
     def __init__(
         self,
-        decals_dir="data/decals",
+        dir_path="data/decals",
         sky_coords=({"ra": 336.6643042496718, "dec": -0.9316385797930247},),
         # TODO: fix band-indexing after DECaLS E2E
         bands=(1, 2, 3, 4),  # SDSS.BANDS indexing, for SDSS-trained encoder
-        reference_band: int = 1,  # r-band
     ):
         super().__init__()
 
-        self.decals_path = Path(decals_dir)
+        self.decals_path = Path(dir_path)
         self.bands = bands
         self.bricknames = [
             DarkEnergyCameraLegacySurvey.brick_for_radec(c["ra"], c["dec"]) for c in sky_coords
@@ -162,6 +161,9 @@ class DarkEnergyCameraLegacySurvey(Survey):
         return DataLoader([self.predict_batch], batch_size=1)
 
 
+DECaLS = DarkEnergyCameraLegacySurvey
+
+
 class DecalsDownloader(SurveyDownloader):
     """Class for downloading DECaLS data."""
 
@@ -170,9 +172,10 @@ class DecalsDownloader(SurveyDownloader):
     @staticmethod
     def download_catalog_from_filename(tractor_filename: str):
         """Download tractor catalog given tractor-<brick_name>.fits filename."""
-        brickname = tractor_filename.split("-")[1].split(".")[0]
+        basename = Path(tractor_filename).name
+        brickname = basename.split("-")[1].split(".")[0]
         download_file_to_dst(
-            f"{DecalsDownloader.URLBASE}/south/tractor/{brickname[:3]}/{tractor_filename}",
+            f"{DecalsDownloader.URLBASE}/south/tractor/{brickname[:3]}/{basename}",
             tractor_filename,
         )
 
