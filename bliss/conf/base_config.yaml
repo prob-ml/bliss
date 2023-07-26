@@ -23,7 +23,9 @@ paths:
     pretrained_models: ${paths.data}/pretrained_models
 
 prior:
-    reference_band: 2  # r-band
+    _target_: bliss.simulator.prior.CatalogPrior
+    survey_bands: ["u", "g", "r", "i", "z"]  # SDSS available band filters
+    reference_band: 2  # SDSS r-band
     star_color_model_path: ${simulator.survey.dir_path}/color_models/star_gmm_nmgy.pkl
     gal_color_model_path: ${simulator.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 20
@@ -48,6 +50,7 @@ prior:
 simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
     survey: ${surveys.sdss}
+    prior: ${prior}
     n_batches: 128
     num_workers: 32
     valid_n_batches: 10  # 256
@@ -66,7 +69,7 @@ encoder:
     _target_: bliss.encoder.Encoder
     bands: [0, 1, 2, 3, 4]
     survey_bands: ["u", "g", "r", "i", "z"]
-    tile_slen: ${simulator.survey.prior_config.tile_slen}
+    tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
     slack: 1.0
     min_flux_threshold: 0  # default 0 to take all sources
@@ -118,7 +121,7 @@ encoder:
 generate:
     n_workers_per_process: 0
     n_batches: ${simulator.n_batches}
-    batch_size: ${simulator.survey.prior_config.batch_size}
+    batch_size: ${simulator.prior.batch_size}
     max_images_per_file: 4096
     cached_data_path: ${paths.data}/cached_dataset
     file_prefix: dataset
@@ -174,7 +177,6 @@ surveys:
             - run: 94
               camcol: 1
               fields: [12]
-        prior_config: ${prior}
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
@@ -186,8 +188,6 @@ surveys:
             - ra: 336.6643042496718
               dec: -0.9316385797930247
         bands: ${encoder.bands}
-        reference_band: 1 # DECaLS r-band, DECaLS-indexed (via header)
-        prior_config: ${prior}
     des:
         _target_: bliss.surveys.des.DarkEnergySurvey
         dir_path: ${paths.des}
@@ -201,8 +201,6 @@ surveys:
               r: "decam/CP/V4.8.2a/CP20170926/c4d_170927_025457_ooi_r_ls9"
               i: ""
               z: "decam/CP/V4.8.2a/CP20170926/c4d_170927_025655_ooi_z_ls9"
-        reference_band: 1 # DES r-band, DES-indexed
-        prior_config: ${prior}
         psf_config:
             pixel_scale: null
             psf_slen: null

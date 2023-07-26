@@ -1,4 +1,5 @@
 from bliss.predict import predict
+from bliss.surveys.decals import DECaLS
 
 
 class TestPredict:
@@ -26,6 +27,8 @@ class TestPredict:
         monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
 
         the_cfg = cfg.copy()
+        the_cfg.simulator.prior.reference_band = DECaLS.BANDS.index("r")
+
         the_cfg.predict.plot.show_plot = True
         the_cfg.predict.dataset = "${surveys.decals}"
         the_cfg.surveys.decals.sky_coords = [

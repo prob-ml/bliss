@@ -1,6 +1,7 @@
 import pytest
 
 from bliss.generate import generate
+from bliss.surveys.des import DES
 from bliss.train import train
 
 
@@ -14,7 +15,9 @@ def des_cached_data_path(cfg, tmpdir_factory):
     gen_des_cfg.simulator.survey = cfg.surveys.des
     gen_des_cfg.generate.n_batches = 3
     gen_des_cfg.generate.batch_size = 4
-    gen_des_cfg.simulator.survey.prior_config.batch_size = 4
+    gen_des_cfg.simulator.prior.batch_size = 4
+    gen_des_cfg.simulator.prior.reference_band = DES.BANDS.index("r")
+    gen_des_cfg.simulator.prior.survey_bands = DES.BANDS
     gen_des_cfg.generate.max_images_per_file = 8
     generate(gen_des_cfg)
 
@@ -28,6 +31,8 @@ class TestTrain:
     def test_train_des(self, cfg):
         train_des_cfg = cfg.copy()
         train_des_cfg.simulator.survey = "${surveys.des}"
+        train_des_cfg.simulator.prior.reference_band = DES.BANDS.index("r")
+        train_des_cfg.simulator.prior.survey_bands = DES.BANDS
 
         train_des_cfg.encoder.bands = [0, 1, 2, 3]
         train_des_cfg.encoder.survey_bands = ["g", "r", "i", "z"]

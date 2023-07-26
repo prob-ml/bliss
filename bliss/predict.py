@@ -115,24 +115,24 @@ def predict(cfg):
         survey_obj["image"] = align(
             survey_obj["image"],
             ref_wcs=survey_obj["wcs"],
-            ref_band=cfg.simulator.survey.prior_config.reference_band,
+            ref_band=cfg.simulator.prior.reference_band,
         )
         survey_obj["background"] = align(
             survey_obj["background"],
             ref_wcs=survey_obj["wcs"],
-            ref_band=cfg.simulator.survey.prior_config.reference_band,
+            ref_band=cfg.simulator.prior.reference_band,
         )
 
         cat_path = survey.downloader.download_catalog(survey.image_id(i))
         plocs = survey.catalog_cls.from_file(
             cat_path=cat_path,
-            wcs=survey_obj["wcs"][cfg.simulator.survey.prior_config.reference_band],
+            wcs=survey_obj["wcs"][cfg.simulator.prior.reference_band],
             height=survey_obj["image"].shape[1],
             width=survey_obj["image"].shape[2],
         ).plocs[0]
 
         # get RA, Dec of the center of the image
-        ra, dec = survey_obj["wcs"][cfg.simulator.survey.prior_config.reference_band].all_pix2world(
+        ra, dec = survey_obj["wcs"][cfg.simulator.prior.reference_band].all_pix2world(
             survey_obj["image"].shape[2] / 2, survey_obj["image"].shape[1] / 2, 0
         )
         radecs_for_frame[survey.image_id(i)] = (ra.item(), dec.item())
@@ -275,7 +275,7 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
         tractor_filename = decals.downloader.download_catalog(brickname)
         decals_plocs = DecalsFullCatalog.from_file(
             tractor_filename,
-            wcs=decals[0]["wcs"][cfg.simulator.survey.prior_config.reference_band],
+            wcs=decals[0]["wcs"][cfg.simulator.prior.reference_band],
             height=decals[0]["image"].shape[1],
             width=decals[0]["image"].shape[2],
         ).plocs[0]
@@ -289,7 +289,7 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
         photocat_filename = sdss.downloader.download_catalog((run, camcol, field))
         sdss_plocs = PhotoFullCatalog.from_file(
             photocat_filename,
-            wcs=sdss[0]["wcs"][cfg.simulator.survey.prior_config.reference_band],
+            wcs=sdss[0]["wcs"][cfg.simulator.prior.reference_band],
             height=sdss[0]["image"].shape[1],
             width=sdss[0]["image"].shape[2],
         ).plocs[0]
@@ -316,7 +316,7 @@ def plot_predict(
     est_plocs = np.array(est_cat.plocs.cpu())[0]
     est_tile = est_cat.to_tile_params(
         cfg.encoder.tile_slen,
-        cfg.simulator.survey.prior_config.max_sources,
+        cfg.simulator.prior.max_sources,
         ignore_extra_sources=True,
     ).to("cpu")
 

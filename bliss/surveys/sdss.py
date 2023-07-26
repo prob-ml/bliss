@@ -18,7 +18,6 @@ from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
-from bliss.simulator.prior import CatalogPrior, PriorConfig
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.survey import Survey
 from bliss.utils.download_utils import download_file_to_dst
@@ -54,7 +53,6 @@ class SloanDigitalSkySurvey(Survey):
 
     def __init__(
         self,
-        prior_config: PriorConfig,
         psf_config: PSFConfig,
         fields,
         dir_path="data/sdss",
@@ -72,9 +70,8 @@ class SloanDigitalSkySurvey(Survey):
         self.prepare_data()
 
         self.background = ImageBackground(self, bands=tuple(range(len(self.BANDS))))
-        self.psf = SDSSPSF(dir_path, self.image_ids(), self.bands, psf_config)
+        self.psf = SDSS_PSF(dir_path, self.image_ids(), self.bands, psf_config)
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
-        self.prior = CatalogPrior(len(self.BANDS), **prior_config)
 
         self.catalog_cls = PhotoFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -451,7 +448,7 @@ class PhotoFullCatalog(FullCatalog):
         )
 
 
-class SDSSPSF(ImagePSF):
+class SDSS_PSF(ImagePSF):  # noqa: N801
     def __init__(self, survey_data_dir, image_ids, bands, psf_config: PSFConfig):
         super().__init__(bands, **psf_config)
 

@@ -11,8 +11,8 @@ class TestSdssReconstruct:
         # reconstruction test only considers r-band image/catalog params
         rcfs = [(94, 1, 12)]
         tile_cat = est_full.to_tile_params(
-            tile_slen=cfg.simulator.survey.prior_config.tile_slen,
-            max_sources_per_tile=cfg.simulator.survey.prior_config.max_sources,
+            tile_slen=cfg.simulator.prior.tile_slen,
+            max_sources_per_tile=cfg.simulator.prior.max_sources,
             ignore_extra_sources=True,
         )
         imgs = decoder.render_images(tile_cat.to("cpu"), rcfs)

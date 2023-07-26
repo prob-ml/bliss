@@ -13,6 +13,7 @@ from tqdm import tqdm
 from bliss.catalog import TileCatalog
 from bliss.generate import FileDatum
 from bliss.simulator.decoder import ImageDecoder
+from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
@@ -25,6 +26,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
         self,
         survey: Survey,
+        prior: CatalogPrior,
         n_batches: int,
         num_workers: int = 0,
         valid_n_batches: Optional[int] = None,
@@ -33,7 +35,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         super().__init__()
 
         self.survey = survey
-        self.catalog_prior = self.survey.prior
+        self.catalog_prior = prior
         self.background = self.survey.background
         assert self.catalog_prior is not None, "Survey prior cannot be None."
         assert self.background is not None, "Survey background cannot be None."

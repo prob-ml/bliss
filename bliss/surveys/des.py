@@ -17,7 +17,6 @@ from scipy.ndimage import zoom
 from torch.utils.data import DataLoader
 
 from bliss.simulator.background import ImageBackground
-from bliss.simulator.prior import CatalogPrior, PriorConfig
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.survey import Survey, SurveyDownloader
 from bliss.utils.download_utils import download_file_to_dst
@@ -45,7 +44,6 @@ class DarkEnergySurvey(Survey):
 
     def __init__(
         self,
-        prior_config: PriorConfig,
         psf_config: PSFConfig,
         dir_path="data/des",
         image_ids: Tuple[DESImageID] = (
@@ -60,7 +58,6 @@ class DarkEnergySurvey(Survey):
                 "z": "decam/CP/V4.8.2a/CP20170926/c4d_170927_025655_ooi_z_ls9",
             },
         ),
-        reference_band: int = 1,  # r-band
     ):
         super().__init__()
 
@@ -77,11 +74,9 @@ class DarkEnergySurvey(Survey):
         self.background = ImageBackground(self, bands=tuple(range(len(self.BANDS))))
 
         self.downloader.download_psfexs(list(self.bands))
-        self.psf = DESPSF(dir_path, self.image_ids(), self.bands, psf_config)
+        self.psf = DES_PSF(dir_path, self.image_ids(), self.bands, psf_config)
 
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
-
-        self.prior = CatalogPrior(len(self.BANDS), **prior_config)
 
         # TODO: refactor to re-use DecalsFullCatalog for prediction
         # self.catalog_cls = DecalsFullCatalog # noqa: E800
@@ -117,24 +112,25 @@ class DarkEnergySurvey(Survey):
     def get_from_disk(self, idx):
         des_image_id = self.image_id(idx)
 
-        image_list = []
-        # first get structure of image data for present band
-        first_target_band_img = self.read_image_for_band(des_image_id, self.BANDS[self.bands[0]])
+        image_list = [{} for _ in self.BANDS]
+        # first get structure of image data for a present band
+        first_present_band = self.bands[0]
+        first_present_band_obj = self.read_image_for_band(
+            des_image_id, self.BANDS[first_present_band]
+        )
+        image_list[first_present_band] = first_present_band_obj
 
+        img_shape = first_present_band_obj["image"].shape
         for b, bl in enumerate(self.BANDS):
             if b in self.bands and b != self.bands[0]:
-                image_list.append(self.read_image_for_band(des_image_id, bl))
-            elif b == self.bands[0]:
-                image_list.append(first_target_band_img)
+                image_list[b] = self.read_image_for_band(des_image_id, bl)
             else:
-                image_list.append(
-                    {
-                        "image": np.zeros_like(first_target_band_img["image"]).astype(np.float32),
-                        "background": first_target_band_img["background"],
-                        "wcs": first_target_band_img["wcs"],
-                        "nelec_per_nmgy_list": first_target_band_img["nelec_per_nmgy_list"],
-                    }
-                )
+                image_list[b] = {
+                    "image": np.zeros(img_shape, dtype=np.float32),
+                    "background": np.random.rand(*img_shape).astype(np.float32),
+                    "wcs": first_present_band_obj["wcs"],
+                    "nelec_per_nmgy_list": np.ones((1, 1, 1)),
+                }
 
         ret = {}
         for k in image_list[0]:
@@ -150,7 +146,8 @@ class DarkEnergySurvey(Survey):
         brickname = des_image_id["decals_brickname"]
         ccdname = des_image_id["ccdname"]
         image_basename = DESDownloader.image_basename_from_filename(des_image_id[band], band)
-        image_hdu = fits.open(self.des_path / brickname[:3] / brickname / image_basename)[0]
+        image_fits = fits.open(self.des_path / brickname[:3] / brickname / f"{image_basename}.fits")
+        image_hdu = image_fits[0]
         image = image_hdu.data  # pylint: disable=no-member
         hr = image_hdu.header  # pylint: disable=no-member
         wcs = WCS(hr)
@@ -158,17 +155,13 @@ class DarkEnergySurvey(Survey):
         return {
             "image": image.astype(np.float32),
             "background": self.splinesky_level_for_band(
-                brickname,
-                ccdname,
-                des_image_id[band],
-                image.shape[0],
-                image.shape[1],
+                brickname, ccdname, des_image_id[band], image.shape
             ),
             "wcs": wcs,
-            "nelec_per_nmgy_list": np.ones((1, 1, 1)),
+            "nelec_per_nmgy_list": np.ones((1, 1, 1)),  # TODO: replace with actual values
         }
 
-    def splinesky_level_for_band(self, brickname, ccdname, image_filename, image_h, image_w):
+    def splinesky_level_for_band(self, brickname, ccdname, image_filename, image_shape):
         save_filename = DESDownloader.save_filename_from_image_filename(image_filename)
         background_fits_filename = (
             self.des_path / brickname[:3] / brickname / f"{save_filename}-splinesky.fits"
@@ -209,13 +202,13 @@ class DarkEnergySurvey(Survey):
         # bi-`order` interpolation
         background_values_x = zoom(
             background_values_grid_x,
-            zoom=(image_h / gridh, image_w / gridw),
+            zoom=(image_shape[0] / gridh, image_shape[1] / gridw),
             order=order,
             mode="nearest",
         ).astype(np.float32)
         background_values_y = zoom(
             background_values_grid_y,
-            zoom=(image_h / gridh, image_w / gridw),
+            zoom=(image_shape[0] / gridh, image_shape[1] / gridw),
             order=order,
             mode="nearest",
         ).astype(np.float32)
@@ -279,7 +272,9 @@ class DESDownloader(SurveyDownloader):
         image_table = self.svc.search((sky_coord["ra"], sky_coord["dec"])).to_table()
         sel = defchararray.find(image_table["access_url"].astype(str), image_basename) != -1
         b_access_url = image_table[sel][0]["access_url"]
-        image_dst_filename = self.download_dir / brickname[:3] / brickname / image_basename
+        image_dst_filename = (
+            self.download_dir / brickname[:3] / brickname / f"{image_basename}.fits"
+        )
         try:
             download_file_to_dst(b_access_url, image_dst_filename)
         except HTTPError as e:
@@ -334,10 +329,9 @@ class DESDownloader(SurveyDownloader):
 # NOTE: No DES catalog; re-use DecalsFullCatalog
 
 
-class DESPSF(ImagePSF):
+class DES_PSF(ImagePSF):  # noqa: N801
     # PSF parameters for encoder to learn
     PARAM_NAMES = [
-        # TODO: ensure these are the relevant parameters
         "chi2",
         "fit_original",
         "moffat_alpha",
@@ -362,7 +356,7 @@ class DESPSF(ImagePSF):
         self.psf_params = {}
 
         for image_id in image_ids:
-            psf_params = torch.zeros(len(DES.BANDS), len(DESPSF.PARAM_NAMES))
+            psf_params = torch.zeros(len(DES.BANDS), len(DES_PSF.PARAM_NAMES))
             for b, bl in enumerate(DES.BANDS):
                 if b in bands:
                     psf_params[b] = self._psf_params_for_band(image_id, bl)
@@ -392,8 +386,8 @@ class DESPSF(ImagePSF):
     def _psf_params_for_band(self, des_image_id, bl):
         band_psfex_table_hdu = self._psfex_hdu_for_band_image(des_image_id, bl)
 
-        psf_params = np.zeros(len(DESPSF.PARAM_NAMES))
-        for i, param in enumerate(DESPSF.PARAM_NAMES):
+        psf_params = np.zeros(len(DES_PSF.PARAM_NAMES))
+        for i, param in enumerate(DES_PSF.PARAM_NAMES):
             psf_params[i] = band_psfex_table_hdu.data[param]  # pylint: disable=no-member
 
         return torch.tensor(psf_params, dtype=torch.float32)
@@ -421,7 +415,10 @@ class DESPSF(ImagePSF):
 
                 image_basename = DESDownloader.image_basename_from_filename(des_image_id[bl], bl)
                 image_filename = (
-                    Path(self.survey_data_dir) / brickname[:3] / brickname / image_basename
+                    Path(self.survey_data_dir)
+                    / brickname[:3]
+                    / brickname
+                    / f"{image_basename}.fits"
                 )
                 des_psfex_band = galsim.des.DES_PSFEx(
                     fmt_psfex_table_hdu,
