@@ -619,7 +619,7 @@ class RegionCatalog(TileCatalog, UserDict):
 
     def _init_region_types(self) -> Tensor:
         """Assign type to each region in n_rows x n_cols tensor (used for masking)."""
-        mask = torch.zeros(self.n_rows, self.n_cols)
+        mask = torch.zeros(self.n_rows, self.n_cols, device=self.device)
         mask[::2, ::2] = RegionType.INTERIOR
         mask[::2, 1::2] = RegionType.BOUNDARY_VERTICAL
         mask[1::2, ::2] = RegionType.BOUNDARY_HORIZONTAL
@@ -665,6 +665,14 @@ class RegionCatalog(TileCatalog, UserDict):
     # endregion
 
     # region Functions
+    def to(self, device):
+        out = {}
+        for k, v in self.to_dict().items():
+            out[k] = v.to(device)
+        return RegionCatalog(
+            interior_slen=self.interior_slen, overlap_slen=self.overlap_slen, d=out
+        )
+
     def get_region_coords(self) -> Tensor:
         """Get pixel coordinates of top-left corner of regions."""
         x_coords = torch.arange(0, self.n_cols).float()

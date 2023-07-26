@@ -301,7 +301,7 @@ class Encoder(pl.LightningModule):
         idx_vj = (idx_v[0], idx_v[1] // 2, (idx_v[2] + 1) // 2)
 
         probs = pred["on_prob"].probs[..., 1]  # prob of yes
-        aux_vars = torch.zeros(cat.batch_size, cat.nth, cat.ntw - 1)
+        aux_vars = torch.zeros(cat.batch_size, cat.nth, cat.ntw - 1, device=cat.device)
         aux_vars[idx_vi] = probs[idx_vi] / (probs[idx_vi] + probs[idx_vj])
         return aux_vars
 
@@ -314,7 +314,7 @@ class Encoder(pl.LightningModule):
         idx_hj = (idx_h[0], (idx_h[1] + 1) // 2, idx_h[2] // 2)
 
         probs = pred["on_prob"].probs[..., 1]  # prob of yes
-        aux_vars = torch.zeros(cat.batch_size, cat.nth - 1, cat.ntw)
+        aux_vars = torch.zeros(cat.batch_size, cat.nth - 1, cat.ntw, device=cat.device)
         aux_vars[idx_hi] = probs[idx_hi] / (probs[idx_hi] + probs[idx_hj])
         return aux_vars
 
@@ -386,7 +386,7 @@ class Encoder(pl.LightningModule):
             loss += gal_param_loss
             loss_components[galsim_pn] = self._average_loss(gal_param_loss, gal_bools)
 
-        loss_by_region = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols)
+        loss_by_region = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols, device=cat.device)
         loss_by_region[:, ::2, ::2] = loss
         loss_components["loss_by_region"] = loss_by_region
         return loss_components
@@ -415,11 +415,11 @@ class Encoder(pl.LightningModule):
 
         # get probs in left/right tile for vertical, above/below for horizontal
         if bdry_type == RegionType.BOUNDARY_VERTICAL:
-            col = torch.zeros(b, h, 1)
+            col = torch.zeros(b, h, 1, device=cat.device)
             log_prob_i = dist.log_prob(torch.cat((val, col), dim=2) + c)[..., :-1]
             log_prob_j = dist.log_prob(torch.cat((col, val), dim=2) + c)[..., 1:]
         else:
-            row = torch.zeros(b, 1, w)
+            row = torch.zeros(b, 1, w, device=cat.device)
             log_prob_i = dist.log_prob(torch.cat((val, row), dim=1) + c)[:, :-1]
             log_prob_j = dist.log_prob(torch.cat((row, val), dim=1) + c)[:, 1:]
 
@@ -429,7 +429,7 @@ class Encoder(pl.LightningModule):
         prob = -torch.logsumexp(torch.stack((log_prob_i, log_prob_j), dim=3), dim=3)
 
         # construct loss array and add values to appropriate regions
-        loss = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols)
+        loss = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols, device=cat.device)
         if bdry_type == RegionType.BOUNDARY_VERTICAL:
             loss[:, ::2, 1::2] = prob
         else:
@@ -441,27 +441,31 @@ class Encoder(pl.LightningModule):
         b, h, w, d = val.shape
         # convert boundary locs to coordinates in each tile
         if bdry_type == RegionType.BOUNDARY_VERTICAL:
-            shape = torch.tensor([cat.interior_slen, cat.overlap_slen]).reshape(1, 1, 1, 2)
+            shape = torch.tensor([cat.interior_slen, cat.overlap_slen], device=cat.device)
+            shape = shape.reshape(1, 1, 1, 2)
             offset_i = torch.tensor(
-                [cat.overlap_slen, cat.interior_slen + cat.overlap_slen]
+                [cat.overlap_slen, cat.interior_slen + cat.overlap_slen], device=cat.device
             ).reshape(1, 1, 1, 2)
-            offset_j = torch.tensor([cat.overlap_slen, 0]).reshape(1, 1, 1, 2)
+            offset_j = torch.tensor([cat.overlap_slen, 0], device=cat.device).reshape(1, 1, 1, 2)
         else:
-            shape = torch.tensor([cat.overlap_slen, cat.interior_slen]).reshape(1, 1, 1, 2)
-            offset_i = torch.tensor([cat.overlap_slen, cat.overlap_slen]).reshape(1, 1, 1, 2)
+            shape = torch.tensor([cat.overlap_slen, cat.interior_slen], device=cat.device)
+            shape = shape.reshape(1, 1, 1, 2)
+            offset_i = torch.tensor(
+                [cat.overlap_slen, cat.overlap_slen], device=cat.device
+            ).reshape(1, 1, 1, 2)
             offset_j = torch.tensor(
-                [cat.overlap_slen + cat.interior_slen, cat.overlap_slen]
+                [cat.overlap_slen + cat.interior_slen, cat.overlap_slen], device=cat.device
             ).reshape(1, 1, 1, 2)
 
         locs_i = ((val * shape) + offset_i) / cat.tile_slen
         locs_j = ((val * shape) + offset_j) / cat.tile_slen
 
         if bdry_type == RegionType.BOUNDARY_VERTICAL:
-            col = torch.zeros(b, h, 1, d)
+            col = torch.zeros(b, h, 1, d, device=cat.device)
             log_prob_i = dist.log_prob(torch.cat((locs_i, col), dim=2))[..., :-1]
             log_prob_j = dist.log_prob(torch.cat((col, locs_j), dim=2))[..., 1:]
         else:
-            row = torch.zeros(b, 1, w, d)
+            row = torch.zeros(b, 1, w, d, device=cat.device)
             log_prob_i = dist.log_prob(torch.cat((locs_i, row), dim=1))[:, :-1]
             log_prob_j = dist.log_prob(torch.cat((row, locs_j), dim=1))[:, 1:]
 
@@ -471,7 +475,7 @@ class Encoder(pl.LightningModule):
         prob = -torch.logsumexp(torch.stack((log_prob_i, log_prob_j), dim=3), dim=3)
 
         # construct loss array and add values to appropriate regions
-        loss = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols)
+        loss = torch.zeros(cat.batch_size, cat.n_rows, cat.n_cols, device=cat.device)
         if bdry_type == RegionType.BOUNDARY_VERTICAL:
             loss[:, ::2, 1::2] = prob
         else:
