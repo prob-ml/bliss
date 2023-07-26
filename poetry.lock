@@ -4435,6 +4435,27 @@ files = [
 ]
 
 [[package]]
+name = "pyvo"
+version = "1.4.1"
+description = "Astropy affiliated package for accessing Virtual Observatory data and services"
+category = "main"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "pyvo-1.4.1-py3-none-any.whl", hash = "sha256:408ca0c06dc4e013ed0e0e236cb7c8362c958365746f762e7513b03c1d7e67dc"},
+    {file = "pyvo-1.4.1.tar.gz", hash = "sha256:07a4e7ddfe4b995b271e44440277542b9a23de0ed996e152d759860f7dd84c9d"},
+]
+
+[package.dependencies]
+astropy = ">=4.1"
+requests = "*"
+
+[package.extras]
+all = ["pillow"]
+docs = ["sphinx-astropy"]
+test = ["pytest-astropy", "requests-mock"]
+
+[[package]]
 name = "pywavelets"
 version = "1.4.1"
 description = "PyWavelets, wavelet transform module"
@@ -6336,4 +6357,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "82d1abad38dc13108ede43ca6c5a34620db2b5956e9dda01ed58f82eae65d682"
+content-hash = "ccd56e663347d50a8b338b63f48c4a29e37270d3a73cc0ef4b8971d7f85391f5"

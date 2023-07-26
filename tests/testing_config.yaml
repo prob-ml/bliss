@@ -3,21 +3,19 @@ defaults:
     - ../bliss/conf@_here_: base_config
     - _self_
 
+prior:
+    n_tiles_h: 4
+    n_tiles_w: 4
+    batch_size: 2
+    prob_galaxy: 0.5
+
 simulator:
     valid_n_batches: 1
     n_batches: 2
     num_workers: 0
-    prior:
-        n_tiles_h: 4
-        n_tiles_w: 4
-        batch_size: 2
-        prob_galaxy: 0.5
 
 cached_simulator:
     num_workers: 0
-    train_n_batches: 1
-    val_split_file_idxs: [1]
-    test_split_file_idxs: [2]
 
 generate:
     n_batches: 2
@@ -30,7 +28,6 @@ training:
     version: "version0"
     n_epochs: 1
     enable_early_stopping: true
-    pretrained_weights: ${paths.pretrained_models}/zscore_five_band.pt
     seed: 42
     weight_save_path: null
     trainer:
@@ -41,8 +38,7 @@ training:
         log_every_n_steps: 1
         accelerator: "cpu"
         devices: 1
-    testing:
-        file: True
+    testing: true
 
 predict:
     decals_frame: ${paths.decals}/tractor-3366m010.fits
