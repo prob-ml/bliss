@@ -12,18 +12,18 @@ from torch import Tensor
 from torch.distributions import Distribution
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
-from yolov5.models.yolo import DetectionModel
 
+from bliss.backbone import Backbone
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
-from bliss.transforms import log_transform
+from bliss.transforms import log_transform, z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
-    UnconstrainedDiagonalBivariateNormal,
     UnconstrainedLogitNormal,
     UnconstrainedLogNormal,
+    UnconstrainedTDBN,
 )
 
 
@@ -75,8 +75,8 @@ class Encoder(pl.LightningModule):
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.input_transform_params = input_transform_params
 
-        if not self.input_transform_params.get("z_score") and self.n_bands > 1:
-            warnings.warn("Performing multi-band encoding without z-scoring.")
+        if self.n_bands > 1:
+            warnings.warn("Ensure either log-transforming or z-scoring is enabled.")
 
         self.tile_slen = tile_slen
 
@@ -87,8 +87,9 @@ class Encoder(pl.LightningModule):
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
 
-        num_channels = self._get_num_input_channels()
-        self.model = DetectionModel(cfg=arch_dict, ch=num_channels)
+        num_channels = len(self.bands)
+        num_features_per_band = self._get_num_features()
+        self.model = Backbone(cfg=arch_dict, ch=num_channels, n_imgs=num_features_per_band)
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
@@ -98,11 +99,11 @@ class Encoder(pl.LightningModule):
     def dist_param_groups(self):
         d = {
             "on_prob": UnconstrainedBernoulli(),
-            "loc": UnconstrainedDiagonalBivariateNormal(),
+            "loc": UnconstrainedTDBN(),
             "galaxy_prob": UnconstrainedBernoulli(),
             # galsim parameters
             "galsim_disk_frac": UnconstrainedLogitNormal(),
-            "galsim_beta_radians": UnconstrainedLogitNormal(high=2 * torch.pi),
+            "galsim_beta_radians": UnconstrainedLogitNormal(high=torch.pi),
             "galsim_disk_q": UnconstrainedLogitNormal(),
             "galsim_a_d": UnconstrainedLogNormal(),
             "galsim_bulge_q": UnconstrainedLogitNormal(),
@@ -114,15 +115,14 @@ class Encoder(pl.LightningModule):
             d[gal_flux] = UnconstrainedLogNormal()
         return d
 
-    def _get_num_input_channels(self):
+    def _get_num_features(self):
         """Determine number of input channels for model based on desired input transforms."""
-        num_channels = 2  # image + background
+        num_features_per_band = 2  # img + bg
         if self.input_transform_params.get("use_deconv_channel"):
-            num_channels += 1
+            num_features_per_band += 1
         if self.input_transform_params.get("concat_psf_params"):
-            num_channels += 6
-        num_channels *= self.n_bands  # multi-band support
-        return num_channels
+            num_features_per_band += 6
+        return num_features_per_band
 
     def get_input_tensor(self, batch):
         """Extracts data from batch and concatenates into a single tensor to be input into model.
@@ -132,14 +132,17 @@ class Encoder(pl.LightningModule):
             use_deconv_channel: add channel for image deconvolved with PSF
             concat_psf_params: add each PSF parameter as a channel
             z_score: z-score both the images and background
+            log_transform: apply pixel-wise natural logarithm to background-subtracted image.
 
         Args:
             batch: input batch (as dictionary)
 
         Returns:
-            Tensor: b x c x h x w tensor, where the number of input channels `c` is based on the
+            Tensor: b x c x 2 x h x w tensor, where the number of input channels `c` is based on the
                 input transformations to use
         """
+        batch["images"] = rearrange(batch["images"], "b bnd h w -> b bnd 1 h w")
+        batch["background"] = rearrange(batch["background"], "b bnd h w -> b bnd 1 h w")
         input_bands = batch["images"].shape[1]
         if input_bands < self.n_bands:
             warnings.warn(
@@ -153,21 +156,24 @@ class Encoder(pl.LightningModule):
             assert (
                 "deconvolution" in batch
             ), "use_deconv_channel specified but deconvolution not present in data"
+            batch["deconvolution"] = rearrange(batch["deconvolution"], "b bnd h w -> b bnd 1 h w")
             inputs.append(batch["deconvolution"][:, self.bands])
         if self.input_transform_params.get("concat_psf_params"):
             assert (
                 "psf_params" in batch
             ), "concat_psf_params specified but psf params not present in data"
-            n, c, h, w = imgs.shape
+            n, c, i, h, w = imgs.shape
             psf_params = batch["psf_params"][:, self.bands]
-            inputs.append(psf_params.view(n, 6 * c, 1, 1).expand(n, 6 * c, h, w))
+            inputs.append(psf_params.view(n, c, 6 * i, 1, 1).expand(n, c, 6 * i, h, w))
         if self.input_transform_params.get("z_score"):
             assert (
                 batch["background"][0, 0].std() > 0
             ), "Constant backgrounds not supported for multi-band encoding"
-            inputs[0] = log_transform(torch.clamp(inputs[0], min=1))
-            inputs[1] = log_transform(torch.clamp(inputs[1], min=1))
-        return torch.cat(inputs, dim=1)
+            inputs[0] = z_score(inputs[0])
+            inputs[1] = z_score(inputs[1])
+        elif self.input_transform_params.get("log_transform"):
+            inputs[0] = log_transform(torch.clamp(inputs[0] - inputs[1], min=1))
+        return torch.cat(inputs, dim=2)
 
     def encode_batch(self, batch):
         # get input tensor from batch with specified channels and transforms
@@ -177,10 +183,8 @@ class Encoder(pl.LightningModule):
         # give us output of the right dimension
         self.model.model[-1].training = True
 
-        assert inputs.size(2) % 16 == 0, "image dims must be multiples of 16"
         assert inputs.size(3) % 16 == 0, "image dims must be multiples of 16"
-        bn_warn = "batchnorm training requires a larger batch. did you mean to use eval mode?"
-        assert (not self.training) or batch["images"].size(0) > 4, bn_warn
+        assert inputs.size(4) % 16 == 0, "image dims must be multiples of 16"
 
         output = self.model(inputs)
         # there's an extra dimension for channel that is always a singleton
@@ -293,14 +297,14 @@ class Encoder(pl.LightningModule):
         # only compute loss over bands we're using
         star_bands = [self.STAR_FLUX_NAMES[band] for band in self.bands]
         gal_bands = [self.GAL_FLUX_NAMES[band] for band in self.bands]
-        for i, (star_name, gal_name) in enumerate(zip(star_bands, gal_bands)):
+        for i, star_name, gal_name in zip(self.bands, star_bands, gal_bands):
             # star flux loss
-            star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i]) * true_star_bools
+            star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i] + 1e-9) * true_star_bools
             loss += star_flux_loss
             loss_with_components[star_name] = star_flux_loss.sum() / true_star_bools.sum()
 
             # galaxy flux loss
-            gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., i]) * true_gal_bools
+            gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., i] + 1e-9) * true_gal_bools
             loss += gal_flux_loss
             loss_with_components[gal_name] = gal_flux_loss.sum() / true_gal_bools.sum()
 
@@ -308,7 +312,7 @@ class Encoder(pl.LightningModule):
         galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
         for i, param_name in enumerate(self.GALSIM_NAMES):
             galsim_pn = f"galsim_{param_name}"
-            loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i]) * true_gal_bools
+            loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
             loss += loss_term
             loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
 
@@ -355,7 +359,12 @@ class Encoder(pl.LightningModule):
 
             margin_px = self.tiles_to_crop * self.tile_slen
             fig = plot_detections(
-                batch["images"], target_full_cat, est_full_cat, nrows, wrong_idx, margin_px
+                torch.squeeze(batch["images"], 2),
+                target_full_cat,
+                est_full_cat,
+                nrows,
+                wrong_idx,
+                margin_px,
             )
             title_root = f"Epoch:{self.current_epoch}/"
             title = f"{title_root}{logging_name} images"

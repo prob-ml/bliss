@@ -17,6 +17,7 @@ paths:
     data: ${paths.root}/data
     sdss: ${paths.data}/sdss
     decals: ${paths.data}/decals
+    dc2: ${paths.data}/dc2
     output: ${paths.root}/output
     pretrained_models: ${paths.data}/pretrained_models
 
@@ -55,13 +56,11 @@ simulator:
 cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
     batch_size: ${generate.batch_size} # 128 for large cached
+    splits: 0:80/80:90/90:100  # train/val/test splits as percent ranges
     num_workers: 0
     cached_data_path: ${generate.cached_data_path}
-    train_n_batches: null
     file_prefix: ${generate.file_prefix}
     bands: [0, 1, 2, 3, 4]
-    val_split_file_idxs: null # inclusive range
-    test_split_file_idxs: null # inclusive range
 
 encoder:
     _target_: bliss.encoder.Encoder
@@ -78,7 +77,8 @@ encoder:
     input_transform_params:
         use_deconv_channel: false
         concat_psf_params: false
-        z_score: true
+        log_transform: true
+        z_score: false
     architecture:
         # this architecture is based on yolov5l.yaml, see
         # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
@@ -88,8 +88,10 @@ encoder:
             - [4, 4]  # P3/8
         backbone: [
             # [from, number, module, args]
-            [-1, 1, Conv, [64, 5, 1]],
-            [-1, 3, Conv, [64, 1, 1]],
+            [-1, 1, Conv3d, [5, 64, 5]],  # (in-channels, out-channels, kernel size)
+            [-1, 1, Conv3d, [64, 5, 3]],
+            [-1, 1, Conv3d_down, [5, 1, 1]],
+            [-1, 1, Conv, [64, 3, 1]],  # (in-channels, kernel-size, stride)
             [-1, 1, Conv, [128, 3, 2]],
             [-1, 1, Conv, [128, 3, 1]],
             [-1, 1, Conv, [256, 3, 2]],
@@ -103,13 +105,13 @@ encoder:
         head: [
             [-1, 1, Conv, [512, 1, 1]],
             [-1, 1, nn.Upsample, [None, 2, 'nearest']],
-            [[-1, 6], 1, Concat, [1]],
+            [[-1, 8], 1, Concat, [1]],
             [-1, 3, C3, [512, false]],
             [-1, 1, Conv, [256, 1, 1]],
             [-1, 1, nn.Upsample, [None, 2, 'nearest']],
-            [[-1, 4, 5], 1, Concat, [1]],
+            [[-1, 6, 7], 1, Concat, [1]],
             [-1, 3, C3, [256, false]],
-            [[17], 1, Detect, [nc, anchors]],
+            [[-1], 1, Detect, [nc, anchors]],
         ]
 
 generate:
@@ -143,13 +145,13 @@ training:
     testing: true
     seed: 42
     weight_save_path: null
-    use_cached_simulator: false
+    data_source: ${simulator}
 
 predict:
     dataset: ${surveys.sdss}
     trainer: ${training.trainer}
     encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/zscore_five_band.pt
+    weight_save_path: ${paths.pretrained_models}/3d_conv_log.pt
     device: "cuda:0"
     crop:
         do_crop: true
@@ -184,3 +186,7 @@ surveys:
               dec: -0.9316385797930247
         bands: ${encoder.bands}
         reference_band: 1 # DECaLS r-band, DECaLS-indexed (via header)
+    dc2:
+        _target_: bliss.surveys.dc2.DC2
+        data_dir: ${paths.dc2}/calibrated_exposures/r/
+        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_bright_bright_

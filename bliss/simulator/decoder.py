@@ -110,8 +110,6 @@ class ImageDecoder(nn.Module):
         slen_w = tile_cat.tile_slen * n_tiles_w
         images = np.zeros((batch_size, self.n_bands, slen_h, slen_w), dtype=np.float32)
 
-        full_cat = tile_cat.to_full_params()
-
         # use the PSF from specified image_id
         psfs = [self.psf_galsim[tuple(image_ids[b])] for b in range(batch_size)]
         param_list = [self.psf_params[tuple(image_ids[b])] for b in range(batch_size)]
@@ -123,11 +121,15 @@ class ImageDecoder(nn.Module):
         ]
 
         for b in range(batch_size):
-            n_sources = int(full_cat.n_sources[b].item())
-            psf = psfs[b]
             # Convert to electron counts
             tile_cat["star_fluxes"][b] *= nmgy_to_nelec_rats[b]
             tile_cat["galaxy_fluxes"][b] *= nmgy_to_nelec_rats[b]
+
+        full_cat = tile_cat.to_full_params()
+
+        for b in range(batch_size):
+            n_sources = int(full_cat.n_sources[b].item())
+            psf = psfs[b]
             for band in range(self.n_bands):
                 gs_img = galsim.Image(array=images[b, band], scale=self.pixel_scale)
                 for s in range(n_sources):

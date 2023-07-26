@@ -19,7 +19,7 @@ from bliss.surveys.sdss import SDSSDownloader, SloanDigitalSkySurvey
 from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
 
-SurveyType: TypeAlias = Literal["decals", "hst", "lsst", "sdss"]
+SurveyType: TypeAlias = Literal["decals", "hst", "dc2", "sdss"]
 
 
 class BlissClient:
@@ -96,10 +96,8 @@ class BlissClient:
     def train_on_cached_data(
         self,
         weight_save_path,
-        train_n_batches,
+        splits,
         batch_size,
-        val_split_file_idxs,
-        test_split_file_idxs,
         pretrained_weights_filename: Optional[str] = None,
         **kwargs,
     ) -> None:
@@ -108,27 +106,23 @@ class BlissClient:
         Args:
             weight_save_path (str): Path to directory after cwd where trained model
                 weights will be stored.
-            train_n_batches (int): Number of batches to train on.
+            splits (str): train/val/test splits as percent ranges (e.g. "0:80/80:90/90:100")
             batch_size (int): Number of images per batch.
-            val_split_file_idxs (List[int]): List of file indices to use for validation.
-            test_split_file_idxs (List[int]): List of file indices to use for testing.
             pretrained_weights_filename (str): Name of pretrained weights file to load.
             **kwargs: Keyword arguments to override default configuration values.
         """
         cfg = OmegaConf.create(self.base_cfg)
-        cfg.training.use_cached_simulator = True
         # apply overrides
         cfg.training.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
-        cfg.cached_simulator.train_n_batches = train_n_batches
+        cfg.cached_simulator.splits = splits
         cfg.cached_simulator.batch_size = batch_size
-        cfg.cached_simulator.val_split_file_idxs = val_split_file_idxs
-        cfg.cached_simulator.test_split_file_idxs = test_split_file_idxs
         if pretrained_weights_filename is not None:
             cfg.training.pretrained_weights = (
                 cfg.paths.pretrained_models + f"/{pretrained_weights_filename}"
             )
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
+        cfg.training.data_source = cfg.cached_simulator
 
         _train(cfg)
 
