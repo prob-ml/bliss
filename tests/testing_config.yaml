@@ -28,7 +28,6 @@ training:
     version: "version0"
     n_epochs: 1
     enable_early_stopping: true
-    pretrained_weights: ${paths.pretrained_models}/zscore_five_band.pt
     seed: 42
     weight_save_path: null
     trainer:

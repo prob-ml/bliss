@@ -1,7 +1,7 @@
 import pytest
 
 from bliss.generate import generate
-from bliss.surveys.des import DES
+from bliss.surveys.des import DarkEnergySurvey as DES
 from bliss.train import train
 
 
@@ -34,9 +34,8 @@ class TestTrain:
         train_des_cfg.simulator.prior.reference_band = DES.BANDS.index("r")
         train_des_cfg.simulator.prior.survey_bands = DES.BANDS
 
-        train_des_cfg.encoder.bands = [0, 1, 2, 3]
-        train_des_cfg.encoder.survey_bands = ["g", "r", "i", "z"]
-        train_des_cfg.encoder.input_transform_params.z_score = False
+        train_des_cfg.encoder.bands = list(range(len(DES.BANDS)))
+        train_des_cfg.encoder.survey_bands = DES.BANDS
         train_des_cfg.training.pretrained_weights = None
         train_des_cfg.training.testing = True
         train(train_des_cfg)
@@ -47,9 +46,8 @@ class TestTrain:
         train_des_cfg.cached_simulator.cached_data_path = des_cached_data_path
         train_des_cfg.cached_simulator.batch_size = cfg.prior.batch_size
 
-        train_des_cfg.encoder.bands = [0, 1, 2, 3]
-        train_des_cfg.encoder.survey_bands = ["g", "r", "i", "z"]
-        train_des_cfg.encoder.input_transform_params.z_score = False
+        train_des_cfg.encoder.bands = list(range(len(DES.BANDS)))
+        train_des_cfg.encoder.survey_bands = DES.BANDS
         train_des_cfg.training.pretrained_weights = None
         train_des_cfg.training.testing = True
         train(train_des_cfg)

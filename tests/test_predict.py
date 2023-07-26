@@ -1,5 +1,5 @@
 from bliss.predict import predict
-from bliss.surveys.decals import DECaLS
+from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
 
 
 class TestPredict:
