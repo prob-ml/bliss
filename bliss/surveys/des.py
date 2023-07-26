@@ -42,6 +42,20 @@ DESImageID = TypedDict(
 class DarkEnergySurvey(Survey):
     BANDS = ("g", "r", "i", "z")
 
+    @staticmethod
+    def zpt_to_scale(zpt):
+        """Converts a magnitude zero point per sec to nelec/nmgy scale.
+
+        See also https://github.com/dstndstn/tractor/blob/cdb82000422e85c9c97b134edadff31d68bced0c/tractor/brightness.py#L217C6-L217C6. # noqa: E501 # pylint: disable=line-too-long
+
+        Args:
+            zpt (float): magnitude zero point per sec
+
+        Returns:
+            float: nelec/nmgy scale
+        """
+        return 10.0 ** ((zpt - 22.5) / 2.5)
+
     def __init__(
         self,
         psf_config: PSFConfig,
@@ -79,7 +93,7 @@ class DarkEnergySurvey(Survey):
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
 
         # TODO: refactor to re-use DecalsFullCatalog for prediction
-        # self.catalog_cls = DecalsFullCatalog # noqa: E800
+        # self.catalog_cls = DecalsFullCatalog  # noqa: E800
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
@@ -158,7 +172,7 @@ class DarkEnergySurvey(Survey):
                 brickname, ccdname, des_image_id[band], image.shape
             ),
             "wcs": wcs,
-            "nelec_per_nmgy_list": np.ones((1, 1, 1)),  # TODO: replace with actual values
+            "nelec_per_nmgy_list": np.array([[[DES.zpt_to_scale(hr["MAGZPT"])]]]),
         }
 
     def splinesky_level_for_band(self, brickname, ccdname, image_filename, image_shape):

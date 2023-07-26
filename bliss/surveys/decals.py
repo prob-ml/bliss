@@ -172,9 +172,10 @@ class DecalsDownloader(SurveyDownloader):
     @staticmethod
     def download_catalog_from_filename(tractor_filename: str):
         """Download tractor catalog given tractor-<brick_name>.fits filename."""
-        brickname = tractor_filename.split("-")[1].split(".")[0]
+        basename = Path(tractor_filename).name
+        brickname = basename.split("-")[1].split(".")[0]
         download_file_to_dst(
-            f"{DecalsDownloader.URLBASE}/south/tractor/{brickname[:3]}/{tractor_filename}",
+            f"{DecalsDownloader.URLBASE}/south/tractor/{brickname[:3]}/{basename}",
             tractor_filename,
         )
 

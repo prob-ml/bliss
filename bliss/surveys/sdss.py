@@ -240,6 +240,9 @@ class SloanDigitalSkySurvey(Survey):
         return DataLoader([self.predict_batch], batch_size=1)
 
 
+SDSS = SloanDigitalSkySurvey
+
+
 class SDSSDownloader:
     """Class for downloading SDSS data."""
 
