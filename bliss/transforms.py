@@ -16,3 +16,8 @@ def pixelwise_norm(img, bg):
 def pixelwise_norm_source(img):
     """Perform pixel-wise normalization of full image."""
     return img / torch.sqrt(img)
+
+
+def log_transform(img):
+    """Perform pixel-wise log transformation of full image."""
+    return torch.log(img)
