@@ -1,5 +1,6 @@
 import itertools
 import math
+import warnings
 from collections import UserDict
 from copy import copy
 from enum import IntEnum
@@ -372,8 +373,12 @@ class TileCatalog(UserDict):
 
         region_cat = RegionCatalog(height=self.height, overlap_slen=overlap_slen, d=d)
 
-        offset = rearrange(region_cat.get_region_coords(), "nth ntw d -> 1 nth ntw 1 d")
-        region_sizes = rearrange(region_cat.get_region_sizes(), "nth ntw d -> 1 nth ntw 1 d")
+        offset = repeat(
+            region_cat.get_region_coords(), "nth ntw d -> b nth ntw 1 d", b=self.batch_size
+        )
+        region_sizes = repeat(
+            region_cat.get_region_sizes(), "nth ntw d -> b nth ntw 1 d", b=self.batch_size
+        )
         region_cat.locs = ((region_cat.locs - offset) / region_sizes).clamp(0, 1)
 
         return region_cat
@@ -615,7 +620,8 @@ class RegionCatalog(TileCatalog, UserDict):
         sources_per_tile = torch.nn.functional.unfold(
             self.n_sources.unsqueeze(1), kernel_size=(3, 3), padding=1, stride=2
         ).sum(axis=1)
-        assert torch.all(sources_per_tile <= 1), "Some tiles contain more than one source"
+        if not torch.all(sources_per_tile <= 1):
+            warnings.warn("Some tiles contain more than one source.")
 
     def _init_region_types(self) -> Tensor:
         """Assign type to each region in n_rows x n_cols tensor (used for masking)."""
@@ -685,7 +691,8 @@ class RegionCatalog(TileCatalog, UserDict):
         bias[bias[..., 0] > 0] += torch.tensor([self.overlap_slen / 2, 0])
         bias[bias[..., 1] > 0] += torch.tensor([0, self.overlap_slen / 2])
 
-        return rearrange(bias, "(nth ntw) d -> nth ntw d", nth=self.n_rows, ntw=self.n_cols)
+        coords = rearrange(bias, "(nth ntw) d -> nth ntw d", nth=self.n_rows, ntw=self.n_cols)
+        return coords.to(self.device)
 
     def get_region_sizes(self) -> Tensor:
         """Get sizes of regions in pixel coordinates."""
@@ -697,7 +704,17 @@ class RegionCatalog(TileCatalog, UserDict):
         sizes[-1, :, 0] += self.overlap_slen / 2
         sizes[:, 0, 1] += self.overlap_slen / 2
         sizes[:, -1, 1] += self.overlap_slen / 2
-        return sizes
+        return sizes.to(self.device)
+
+    def get_tile_sizes(self) -> Tensor:
+        """Get sizes of each tile."""
+        tile_sizes = torch.ones(self.nth, self.ntw, 2, device=self.device) * self.tile_slen
+        # handle half-overlap in first and last row and col of tiles, i.e. two regions
+        tile_sizes[0, :, 0] -= self.overlap_slen / 2
+        tile_sizes[-1, :, 0] -= self.overlap_slen / 2
+        tile_sizes[:, 0, 1] -= self.overlap_slen / 2
+        tile_sizes[:, -1, 1] -= self.overlap_slen / 2
+        return tile_sizes
 
     def get_full_locs_from_regions(self) -> Tensor:
         """Convert locations in each region to locations in the full image.
@@ -706,13 +723,69 @@ class RegionCatalog(TileCatalog, UserDict):
             Tensor: b x nth x ntw x 1 x 2 tensor of locations in full coordinates
         """
         # get locs in pixel coords in each region
-        plocs = self.locs * rearrange(self.get_region_sizes(), "nth ntw d -> 1 nth ntw 1 d")
-        bias = rearrange(self.get_region_coords(), "nth ntw d -> 1 nth ntw 1 d").float()
+        plocs = self.locs * repeat(
+            self.get_region_sizes(), "nth ntw d -> b nth ntw 1 d", b=self.batch_size
+        )
+        bias = repeat(
+            self.get_region_coords(), "nth ntw d -> b nth ntw 1 d", b=self.batch_size
+        ).float()
         return plocs + bias
 
     def get_full_locs_from_tiles(self) -> Tensor:
         """Here for compatibility with TileCatalog functions."""
         return self.get_full_locs_from_regions()
+
+    def get_interior_locs_in_tile(self):
+        """Get locations of interior regions relative to the tile its in."""
+        b = self.batch_size
+        locs = self.locs * repeat(self.get_region_sizes(), "nth ntw d -> b nth ntw 1 d", b=b)
+        locs[:, 2::2, ::2, :, 0] += self.overlap_slen
+        locs[:, ::2, 2::2, :, 1] += self.overlap_slen
+
+        tile_sizes = self.get_tile_sizes().reshape(-1).to(locs.dtype)
+        mask = repeat(self.interior_mask, "nth ntw -> b nth ntw 1 d", b=b, d=2)
+        locs[mask] /= tile_sizes
+        return locs * mask
+
+    def get_vertical_boundary_locs_in_tiles(self):
+        """Get locations of boundary regions relative to tiles to left and right of the boundary."""
+        b = self.batch_size
+        locs = self.locs * repeat(self.get_region_sizes(), "nth ntw d -> b nth ntw 1 d", b=b)
+        locs_i, locs_j = locs.clone(), locs.clone()
+        tile_sizes = self.get_tile_sizes()
+
+        locs_i[:, 2::2, 1::2, :, 0] += self.overlap_slen
+        locs_j[:, 2::2, 1::2, :, 0] += self.overlap_slen
+        locs_i[:, :, 1, :, 1] += self.interior_slen + self.overlap_slen / 2  # half overlap
+        locs_i[:, :, 3::2, :, 1] += self.interior_slen + self.overlap_slen  # full overlap
+
+        mask = repeat(self.vertical_boundary_mask, "nth ntw -> b nth ntw 1 d", b=b, d=2)
+        locs_i[mask] /= tile_sizes[:, :-1].reshape(-1).to(locs.dtype)
+        locs_j[mask] /= tile_sizes[:, 1:].reshape(-1).to(locs.dtype)
+
+        return locs_i * mask, locs_j * mask
+
+    def get_horizontal_boundary_locs_in_tiles(self):
+        """Get locations of boundary regions relative to tiles above and below the boundary."""
+        b = self.batch_size
+        locs = self.locs * repeat(self.get_region_sizes(), "nth ntw d -> b nth ntw 1 d", b=b)
+        locs_i, locs_j = locs.clone(), locs.clone()
+        tile_sizes = self.get_tile_sizes()
+
+        locs_i[:, 1::2, 2::2, :, 1] += self.overlap_slen
+        locs_j[:, 1::2, 2::2, :, 1] += self.overlap_slen
+        locs_i[:, 1, :, :, 0] += self.interior_slen + self.overlap_slen / 2  # half overlap
+        locs_i[:, 3::2, :, :, 0] += self.interior_slen + self.overlap_slen  # full overlap
+
+        mask = repeat(self.horizontal_boundary_mask, "nth ntw -> b nth ntw 1 d", b=b, d=2)
+        locs_i[mask] /= tile_sizes[:-1].reshape(-1).to(locs.dtype)
+        locs_j[mask] /= tile_sizes[1:].reshape(-1).to(locs.dtype)
+
+        return locs_i * mask, locs_j * mask
+
+    def get_corner_locs_in_tiles(self):
+        """Get locations of corner regions relative to tiles around it."""
+        raise NotImplementedError("TODO: Implement this")
 
     @staticmethod
     def get_pos_for_new_loc(i, j, loc, overlap, tile_slen, n_rows, n_cols):
