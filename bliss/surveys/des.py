@@ -18,6 +18,7 @@ from torch.utils.data import DataLoader
 
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
+from bliss.surveys.decals import DecalsDownloader, DecalsFullCatalog  # NOTE: potentially circular
 from bliss.surveys.survey import Survey, SurveyDownloader
 from bliss.utils.download_utils import download_file_to_dst
 
@@ -88,8 +89,7 @@ class DarkEnergySurvey(Survey):
         self.psf = DES_PSF(dir_path, self.image_ids(), self.bands, psf_config)
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
 
-        # TODO: refactor to re-use DecalsFullCatalog for prediction
-        # self.catalog_cls = DecalsFullCatalog  # noqa: E800
+        self.catalog_cls = DecalsFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
@@ -350,6 +350,14 @@ class DESDownloader(SurveyDownloader):
             )
             raise e
         return str(background_filename)
+
+    def download_catalog(self, des_image_id) -> str:
+        brickname = des_image_id["decals_brickname"]
+        tractor_filename = str(
+            self.download_dir / brickname[:3] / brickname / f"tractor-{brickname}.fits"
+        )
+        DecalsDownloader.download_catalog_from_filename(tractor_filename)
+        return tractor_filename
 
 
 # NOTE: No DES catalog; re-use DecalsFullCatalog
