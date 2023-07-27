@@ -785,7 +785,23 @@ class RegionCatalog(TileCatalog, UserDict):
 
     def get_corner_locs_in_tiles(self):
         """Get locations of corner regions relative to tiles around it."""
-        raise NotImplementedError("TODO: Implement this")
+        b = self.batch_size
+        locs = self.locs * repeat(self.get_region_sizes(), "nth ntw d -> b nth ntw 1 d", b=b)
+        locs = locs.unsqueeze(0).repeat(4, 1, 1, 1, 1, 1)
+        tile_sizes = self.get_tile_sizes()
+
+        locs[0:2, :, 1, :, :, 0] += self.interior_slen + self.overlap_slen / 2  # half overlap
+        locs[0:2, :, 3::2, :, :, 0] += self.interior_slen + self.overlap_slen  # full overlap
+        locs[0::2, :, :, 1, :, 1] += self.interior_slen + self.overlap_slen / 2  # half overlap
+        locs[0::2, :, :, 3::2, :, 1] += self.interior_slen + self.overlap_slen  # full overlap
+
+        mask = repeat(self.corner_mask, "nth ntw -> b nth ntw 1 d", b=b, d=2)
+        locs[0][mask] /= tile_sizes[:-1, :-1].reshape(-1).to(locs.dtype)
+        locs[1][mask] /= tile_sizes[:-1, 1:].reshape(-1).to(locs.dtype)
+        locs[2][mask] /= tile_sizes[1:, :-1].reshape(-1).to(locs.dtype)
+        locs[3][mask] /= tile_sizes[1:, 1:].reshape(-1).to(locs.dtype)
+
+        return locs[0] * mask, locs[1] * mask, locs[2] * mask, locs[3] * mask
 
     @staticmethod
     def get_pos_for_new_loc(i, j, loc, overlap, tile_slen, n_rows, n_cols):

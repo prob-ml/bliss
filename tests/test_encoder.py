@@ -58,7 +58,9 @@ class TestEncoder:
         interior_locs = cat.get_interior_locs_in_tile()
         locs_left, locs_right = cat.get_vertical_boundary_locs_in_tiles()
         locs_up, locs_down = cat.get_horizontal_boundary_locs_in_tiles()
+        locs_ul, locs_ur, locs_bl, locs_br = cat.get_corner_locs_in_tiles()
 
+        # interior
         assert torch.allclose(
             interior_locs[0, 0, 0], torch.tensor([0.6 * 3.8 / 4.2, 0.6 * 3.8 / 4.2])
         )
@@ -70,6 +72,7 @@ class TestEncoder:
             torch.tensor([(0.6 * 3.6 + 0.4) / 4.4, ((0.6 * 3.6 + 0.4) / 4.4)]),
         )
 
+        # vertical boundary
         assert torch.allclose(
             locs_left[0, 0, 1], torch.tensor([0.6 * 3.8 / 4.2, (0.6 * 0.4 + 3.8) / 4.2])
         )
@@ -83,6 +86,7 @@ class TestEncoder:
             locs_right[0, 4, 3], torch.tensor([(0.6 * 3.8 + 0.4) / 4.2, (0.6 * 0.4) / 4.2])
         )
 
+        # horizontal boundary
         assert torch.allclose(
             locs_up[0, 1, 0], torch.tensor([(0.6 * 0.4 + 3.8) / 4.2, 0.6 * 3.8 / 4.2])
         )
@@ -93,3 +97,15 @@ class TestEncoder:
         assert torch.allclose(
             locs_down[0, 3, 2], torch.tensor([0.6 * 0.4 / 4.2, (0.6 * 3.6 + 0.4) / 4.4])
         )
+
+        # corner
+        assert torch.allclose(
+            locs_ul[0, 1, 3], torch.tensor([(0.4 * 0.6 + 3.8) / 4.2, (0.4 * 0.6 + 4) / 4.4])
+        )
+        assert torch.allclose(
+            locs_ur[0, 1, 3], torch.tensor([(0.4 * 0.6 + 3.8) / 4.2, 0.4 * 0.6 / 4.2])
+        )
+        assert torch.allclose(
+            locs_bl[0, 1, 3], torch.tensor([0.4 * 0.6 / 4.4, (0.4 * 0.6 + 4) / 4.4])
+        )
+        assert torch.allclose(locs_br[0, 1, 3], torch.tensor([0.4 * 0.6 / 4.4, 0.4 * 0.6 / 4.2]))
