@@ -17,7 +17,6 @@ from bliss.backbone import Backbone
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
-from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 from bliss.transforms import log_transform, z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
@@ -35,14 +34,13 @@ class Encoder(pl.LightningModule):
     representation of this image.
     """
 
-    STAR_FLUX_NAMES = [f"star_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
-    GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in SDSS.BANDS]  # ordered by BANDS
     GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
 
     def __init__(
         self,
         architecture: DictConfig,
         bands: list,
+        survey_bands: list,
         tile_slen: int,
         tiles_to_crop: int,
         slack: float = 1.0,
@@ -56,6 +54,7 @@ class Encoder(pl.LightningModule):
         Args:
             architecture: yaml to specifying the encoder network architecture
             bands: specified band-pass filters
+            survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
             slack: Slack to use when matching locations for validation metrics.
@@ -68,7 +67,11 @@ class Encoder(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters()
 
+        self.STAR_FLUX_NAMES = [f"star_flux_{bnd}" for bnd in survey_bands]  # ordered by BANDS
+        self.GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in survey_bands]  # ordered by BANDS
+
         self.bands = bands
+        self.survey_bands = survey_bands
         self.n_bands = len(self.bands)
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
@@ -93,7 +96,9 @@ class Encoder(pl.LightningModule):
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
-        self.metrics = BlissMetrics(mode=MetricsMode.TILE, slack=slack)
+        self.metrics = BlissMetrics(
+            mode=MetricsMode.TILE, slack=slack, survey_bands=self.survey_bands
+        )
 
     @property
     def dist_param_groups(self):
