@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.generate import FileDatum
+from bliss.predict import align
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
@@ -95,6 +96,14 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         images, psfs, psf_params = self.image_decoder.render_images(tile_catalog, image_ids)
         assert self.background is not None, "Survey background cannot be None."
         background = self.background.sample(images.shape, image_id_indices=image_id_indices)
+        for i in range(images.shape[0]):
+            images[i] = torch.from_numpy(
+                align(
+                    images[i].numpy(),
+                    self.survey[image_id_indices[i]]["wcs"],
+                    self.catalog_prior.b_band,
+                )
+            )
         images += background
         images = self._apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
