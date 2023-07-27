@@ -18,6 +18,7 @@ from torch.utils.data import DataLoader
 
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
+from bliss.surveys.decals import DecalsDownloader, DecalsFullCatalog  # NOTE: potentially circular
 from bliss.surveys.survey import Survey, SurveyDownloader
 from bliss.utils.download_utils import download_file_to_dst
 
@@ -78,27 +79,23 @@ class DarkEnergySurvey(Survey):
         self.des_path = Path(dir_path)
 
         self.image_id_list = list(image_ids)
-        self.bands = (self.BANDS.index("g"), self.BANDS.index("r"), self.BANDS.index("z"))
+        self.bands = tuple(range(len(self.BANDS)))
         self.n_bands = len(self.BANDS)
 
         self.downloader = DESDownloader(self.image_id_list, self.des_path)
-
         self.prepare_data()
 
-        self.background = ImageBackground(self, bands=tuple(range(len(self.BANDS))))
-
-        self.downloader.download_psfexs(list(self.bands))
+        self.background = ImageBackground(self, bands=self.bands)
         self.psf = DES_PSF(dir_path, self.image_ids(), self.bands, psf_config)
-
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
 
-        # TODO: refactor to re-use DecalsFullCatalog for prediction
-        # self.catalog_cls = DecalsFullCatalog  # noqa: E800
+        self.catalog_cls = DecalsFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
-        self.downloader.download_images(list(self.bands))
-        self.downloader.download_backgrounds(list(self.bands))
+        self.downloader.download_images()
+        self.downloader.download_backgrounds()
+        self.downloader.download_psfexs()
 
     def __len__(self):
         return len(self.image_id_list)
@@ -128,21 +125,20 @@ class DarkEnergySurvey(Survey):
 
         image_list = [{} for _ in self.BANDS]
         # first get structure of image data for a present band
-        first_present_band = self.bands[0]
-        first_present_band_obj = self.read_image_for_band(
-            des_image_id, self.BANDS[first_present_band]
-        )
-        image_list[first_present_band] = first_present_band_obj
+        # get first present band by checking des_image_id[bl] for bl in DES.BANDS
+        first_present_bl = next(bl for bl in DES.BANDS if des_image_id[bl])
+        first_present_bl_obj = self.read_image_for_band(des_image_id, first_present_bl)
+        image_list[DES.BANDS.index(first_present_bl)] = first_present_bl_obj
 
-        img_shape = first_present_band_obj["image"].shape
+        img_shape = first_present_bl_obj["image"].shape
         for b, bl in enumerate(self.BANDS):
-            if b in self.bands and b != self.bands[0]:
+            if bl != first_present_bl and des_image_id[bl]:
                 image_list[b] = self.read_image_for_band(des_image_id, bl)
             else:
                 image_list[b] = {
                     "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
-                    "wcs": first_present_band_obj["wcs"],
+                    "wcs": first_present_bl_obj["wcs"],
                     "nelec_per_nmgy_list": np.ones((1, 1, 1)),
                 }
 
@@ -272,12 +268,12 @@ class DESDownloader(SurveyDownloader):
 
         self.svc = sia.SIAService(self.DEF_ACCESS_URL)
 
-    def download_images(self, bands: List[int]):
+    def download_images(self):
         """Download images for all bands, for all image_ids."""
         for image_id in self.band_image_filenames:
             brickname = image_id["decals_brickname"]
-            for b, bl in enumerate(DES.BANDS):
-                if b in bands:
+            for bl in DES.BANDS:
+                if image_id[bl]:
                     image_basename = DESDownloader.image_basename_from_filename(image_id[bl], bl)
                     self.download_image(brickname, image_id["sky_coord"], image_basename)
 
@@ -294,17 +290,17 @@ class DESDownloader(SurveyDownloader):
         except HTTPError as e:
             warnings.warn(
                 f"No {image_dst_filename} image for brick {brickname} at sky position "
-                f"({sky_coord['ra']}, {sky_coord['dec']}). Check cfg.datasets.des.bands.",
+                f"({sky_coord['ra']}, {sky_coord['dec']}). Check cfg.datasets.des.image_ids.",
                 stacklevel=2,
             )
             raise e
 
-    def download_psfexs(self, bands: List[int]):
+    def download_psfexs(self):
         """Download psfex files for all image_ids."""
         for image_id in self.band_image_filenames:
             brickname = image_id["decals_brickname"]
-            for b, bl in enumerate(DES.BANDS):
-                if b in bands:
+            for bl in DES.BANDS:
+                if image_id[bl]:
                     self.download_psfex(brickname, image_id[bl])
 
     def download_psfex(self, brickname, image_filename_no_ext):
@@ -313,18 +309,26 @@ class DESDownloader(SurveyDownloader):
         psfex_filename = (
             self.download_dir / brickname[:3] / brickname / f"{save_filename}-psfex.fits"
         )
-        download_file_to_dst(
-            f"{DESDownloader.URLBASE}/calib/psfex/{image_filename_no_ext}-psfex.fits",
-            psfex_filename,
-        )
+        try:
+            download_file_to_dst(
+                f"{DESDownloader.URLBASE}/calib/psfex/{image_filename_no_ext}-psfex.fits",
+                psfex_filename,
+            )
+        except HTTPError as e:
+            warnings.warn(
+                f"No {psfex_filename} image for brick {brickname}. Check "
+                "cfg.datasets.des.image_ids.",
+                stacklevel=2,
+            )
+            raise e
         return str(psfex_filename)
 
-    def download_backgrounds(self, bands: List[int]):
+    def download_backgrounds(self):
         """Download sky params for all image_ids."""
         for image_id in self.band_image_filenames:
             brickname = image_id["decals_brickname"]
-            for b, bl in enumerate(DES.BANDS):
-                if b in bands:
+            for bl in DES.BANDS:
+                if image_id[bl]:
                     self.download_background(brickname, image_id[bl])
 
     def download_background(self, brickname, image_filename_no_ext):
@@ -333,11 +337,27 @@ class DESDownloader(SurveyDownloader):
         background_filename = (
             self.download_dir / brickname[:3] / brickname / f"{save_filename}-splinesky.fits"
         )
-        download_file_to_dst(
-            f"{DESDownloader.URLBASE}/calib/sky/{image_filename_no_ext}-splinesky.fits",
-            background_filename,
-        )
+        try:
+            download_file_to_dst(
+                f"{DESDownloader.URLBASE}/calib/sky/{image_filename_no_ext}-splinesky.fits",
+                background_filename,
+            )
+        except HTTPError as e:
+            warnings.warn(
+                f"No {background_filename} image for brick {brickname}. Check "
+                "cfg.datasets.des.image_ids.",
+                stacklevel=2,
+            )
+            raise e
         return str(background_filename)
+
+    def download_catalog(self, des_image_id) -> str:
+        brickname = des_image_id["decals_brickname"]
+        tractor_filename = str(
+            self.download_dir / brickname[:3] / brickname / f"tractor-{brickname}.fits"
+        )
+        DecalsDownloader.download_catalog_from_filename(tractor_filename)
+        return tractor_filename
 
 
 # NOTE: No DES catalog; re-use DecalsFullCatalog
@@ -372,11 +392,11 @@ class DES_PSF(ImagePSF):  # noqa: N801
         for image_id in image_ids:
             psf_params = torch.zeros(len(DES.BANDS), len(DES_PSF.PARAM_NAMES))
             for b, bl in enumerate(DES.BANDS):
-                if b in bands:
+                if image_id[bl]:
                     psf_params[b] = self._psf_params_for_band(image_id, bl)
 
             self.psf_params[image_id] = psf_params
-            self.psf_galsim[image_id] = self._get_psf(image_id, bands)
+            self.psf_galsim[image_id] = self._get_psf_via_despsfex(image_id)
 
     def _psfex_hdu_for_band_image(self, des_image_id, bl):
         brickname = des_image_id["decals_brickname"]
@@ -406,12 +426,11 @@ class DES_PSF(ImagePSF):  # noqa: N801
 
         return torch.tensor(psf_params, dtype=torch.float32)
 
-    def _get_psf(self, des_image_id, bands):
+    def _get_psf_via_despsfex(self, des_image_id):  # noqa: W0237
         """Construct PSF image from PSFEx FITS files.
 
         Args:
             des_image_id (DESImageID): image_id for this image
-            bands (List[int]): list of bands to get PSF images for
 
         Returns:
             images (List[InterpolatedImage]): list of psf transformations for each band
@@ -423,7 +442,7 @@ class DES_PSF(ImagePSF):  # noqa: N801
         fake_psf = galsim.InterpolatedImage(galsim.Image(np.random.rand(2, 2), scale=1)).withFlux(1)
         images = [fake_psf for _ in range(len(DES.BANDS))]
         for b, bl in enumerate(DES.BANDS):
-            if b in bands:
+            if des_image_id[bl]:
                 psfex_table_hdu = self._psfex_hdu_for_band_image(des_image_id, bl)
                 fmt_psfex_table_hdu = self._format_psfex_table_hdu_for_galsim(psfex_table_hdu)
 
