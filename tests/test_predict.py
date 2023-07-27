@@ -35,7 +35,7 @@ def des_weight_save_path(cfg, tmpdir_factory, des_cached_data_path):
     train_des_cfg.cached_simulator.cached_data_path = des_cached_data_path
     train_des_cfg.cached_simulator.batch_size = cfg.prior.batch_size
 
-    train_des_cfg.encoder.bands = [DES.BANDS.index("g"), DES.BANDS.index("r"), DES.BANDS.index("i")]
+    train_des_cfg.encoder.bands = list(range(len(DES.BANDS)))
     train_des_cfg.encoder.survey_bands = DES.BANDS
     train_des_cfg.encoder.input_transform_params.z_score = False
     train_des_cfg.training.pretrained_weights = None
@@ -102,7 +102,7 @@ class TestPredict:
 
         the_cfg.predict.plot.show_plot = False
         the_cfg.predict.dataset = "${surveys.des}"
-        the_cfg.encoder.bands = [DES.BANDS.index("g"), DES.BANDS.index("r"), DES.BANDS.index("z")]
+        the_cfg.encoder.bands = list(range(len(DES.BANDS)))
         the_cfg.encoder.survey_bands = DES.BANDS
         the_cfg.predict.weight_save_path = des_weight_save_path
         _, _, _, _, preds = predict(the_cfg)

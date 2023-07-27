@@ -451,23 +451,6 @@ class PhotoFullCatalog(FullCatalog):
 
 
 class SDSS_PSF(ImagePSF):  # noqa: N801
-    def __init__(self, survey_data_dir, image_ids, bands, psf_config: PSFConfig):
-        super().__init__(bands, **psf_config)
-
-        self.psf_galsim = {}
-        self.psf_params = {}
-        SDSSDownloader(image_ids, download_dir=survey_data_dir).download_psfields()
-        for run, camcol, field in image_ids:
-            # load raw params from file
-            field_dir = f"{survey_data_dir}/{run}/{camcol}/{field}"
-            filename = f"{field_dir}/psField-{run:06}-{camcol}-{field:04}.fits"
-            assert Path(filename).exists(), f"psField file {filename} not found"
-            psf_params = self._get_fit_file_psf_params(filename, bands)
-
-            # load psf image from params
-            self.psf_params[(run, camcol, field)] = psf_params
-            self.psf_galsim[(run, camcol, field)] = self._get_psf(psf_params)
-
     @staticmethod
     def _get_fit_file_psf_params(psf_fit_file: str, bands: Tuple[int, ...]):
         """Load psf parameters from fits file.
@@ -501,6 +484,23 @@ class SDSS_PSF(ImagePSF):  # noqa: N801
             psf_params[i] = torch.tensor([sigma1, sigma2, sigmap, beta, b, p0])
 
         return psf_params
+
+    def __init__(self, survey_data_dir, image_ids, bands, psf_config: PSFConfig):
+        super().__init__(bands, **psf_config)
+
+        self.psf_galsim = {}
+        self.psf_params = {}
+        SDSSDownloader(image_ids, download_dir=survey_data_dir).download_psfields()
+        for run, camcol, field in image_ids:
+            # load raw params from file
+            field_dir = f"{survey_data_dir}/{run}/{camcol}/{field}"
+            filename = f"{field_dir}/psField-{run:06}-{camcol}-{field:04}.fits"
+            assert Path(filename).exists(), f"psField file {filename} not found"
+            psf_params = self._get_fit_file_psf_params(filename, bands)
+
+            # load psf image from params
+            self.psf_params[(run, camcol, field)] = psf_params
+            self.psf_galsim[(run, camcol, field)] = self._get_psf(psf_params)
 
     def _psf_fun(self, r, sigma1, sigma2, sigmap, beta, b, p0):
         """Generate the PSF from the parameters using the power-law model.
