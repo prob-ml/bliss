@@ -69,7 +69,7 @@ class SloanDigitalSkySurvey(Survey):
         self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
         self.prepare_data()
 
-        self.background = ImageBackground(self, bands=tuple(range(len(self.BANDS))))
+        self.background = ImageBackground(self, bands=self.bands)
         self.psf = SDSS_PSF(dir_path, self.image_ids(), self.bands, psf_config)
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
 
@@ -168,9 +168,8 @@ class SloanDigitalSkySurvey(Survey):
         frame_list = []
 
         for b, bl in enumerate(self.BANDS):
-            if b in self.bands:
-                frame = self.read_frame_for_band(bl, field_dir, run, camcol, field, gain[b])
-                frame_list.append(frame)
+            frame = self.read_frame_for_band(bl, field_dir, run, camcol, field, gain[b])
+            frame_list.append(frame)
 
         ret = {}
         for k in frame_list[0]:
