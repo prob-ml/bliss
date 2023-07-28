@@ -388,8 +388,9 @@ class Encoder(pl.LightningModule):
         interior_lb = torch.zeros_like(pred["loc"].mean) + (cat.overlap_slen / cat.tile_slen)
         prob_in_interior = pred["loc"].cdf(interior_ub) - pred["loc"].cdf(interior_lb)
 
-        counter_loss = -((n_sources == 0) * torch.log(1 - on_probs.exp() * prob_in_interior))
-        counter_loss -= (n_sources > 0) * pred["on_prob"].log_prob(n_sources)
+        prob_empty = 1 - (on_probs.exp() * prob_in_interior) + 1e-9
+        counter_loss = -((n_sources == 0) * torch.log(prob_empty))
+        counter_loss -= (n_sources == 1) * pred["on_prob"].log_prob(n_sources)
         loss += counter_loss
         loss_components["counter_loss"] = counter_loss.mean()
 
@@ -579,7 +580,7 @@ class Encoder(pl.LightningModule):
         # create nth x ntw array and add vals to appropriate locations
         shape[2] += 1
         shape[3] += 1
-        padded_vals = torch.zeros(shape)
+        padded_vals = torch.zeros(shape, device=cat.device)
         padded_vals[0, :, :-1, :-1] = vals[0]
         padded_vals[1, :, :-1, 1:] = vals[1]
         padded_vals[2, :, 1:, :-1] = vals[2]
@@ -736,6 +737,9 @@ class Encoder(pl.LightningModule):
 
         return loss_dict["loss"]
 
+    # endregion
+
+    # region Lightning Functions
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
         return self._generic_step(batch, "train")

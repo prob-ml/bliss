@@ -742,7 +742,8 @@ class RegionCatalog(TileCatalog, UserDict):
         locs[:, 2::2, ::2, :, 0] += self.overlap_slen
         locs[:, ::2, 2::2, :, 1] += self.overlap_slen
 
-        tile_sizes = self.get_tile_sizes().reshape(-1).to(locs.dtype)
+        tile_sizes = repeat(self.get_tile_sizes(), "nth ntw d -> b nth ntw 1 d", b=b, d=2)
+        tile_sizes = tile_sizes.reshape(-1).to(locs.dtype)
         mask = repeat(self.interior_mask, "nth ntw -> b nth ntw 1 d", b=b, d=2)
         locs[mask] /= tile_sizes
         return locs * mask
@@ -752,7 +753,7 @@ class RegionCatalog(TileCatalog, UserDict):
         b = self.batch_size
         locs = self.locs * repeat(self.get_region_sizes(), "nth ntw d -> b nth ntw 1 d", b=b)
         locs_i, locs_j = locs.clone(), locs.clone()
-        tile_sizes = self.get_tile_sizes()
+        tile_sizes = repeat(self.get_tile_sizes(), "nth ntw d -> b nth ntw 1 d", b=b, d=2)
 
         locs_i[:, 2::2, 1::2, :, 0] += self.overlap_slen
         locs_j[:, 2::2, 1::2, :, 0] += self.overlap_slen
@@ -760,8 +761,8 @@ class RegionCatalog(TileCatalog, UserDict):
         locs_i[:, :, 3::2, :, 1] += self.interior_slen + self.overlap_slen  # full overlap
 
         mask = repeat(self.vertical_boundary_mask, "nth ntw -> b nth ntw 1 d", b=b, d=2)
-        locs_i[mask] /= tile_sizes[:, :-1].reshape(-1).to(locs.dtype)
-        locs_j[mask] /= tile_sizes[:, 1:].reshape(-1).to(locs.dtype)
+        locs_i[mask] /= tile_sizes[:, :, :-1].reshape(-1).to(locs.dtype)
+        locs_j[mask] /= tile_sizes[:, :, 1:].reshape(-1).to(locs.dtype)
 
         return locs_i * mask, locs_j * mask
 
@@ -770,7 +771,7 @@ class RegionCatalog(TileCatalog, UserDict):
         b = self.batch_size
         locs = self.locs * repeat(self.get_region_sizes(), "nth ntw d -> b nth ntw 1 d", b=b)
         locs_i, locs_j = locs.clone(), locs.clone()
-        tile_sizes = self.get_tile_sizes()
+        tile_sizes = repeat(self.get_tile_sizes(), "nth ntw d -> b nth ntw 1 d", b=b, d=2)
 
         locs_i[:, 1::2, 2::2, :, 1] += self.overlap_slen
         locs_j[:, 1::2, 2::2, :, 1] += self.overlap_slen
@@ -778,8 +779,8 @@ class RegionCatalog(TileCatalog, UserDict):
         locs_i[:, 3::2, :, :, 0] += self.interior_slen + self.overlap_slen  # full overlap
 
         mask = repeat(self.horizontal_boundary_mask, "nth ntw -> b nth ntw 1 d", b=b, d=2)
-        locs_i[mask] /= tile_sizes[:-1].reshape(-1).to(locs.dtype)
-        locs_j[mask] /= tile_sizes[1:].reshape(-1).to(locs.dtype)
+        locs_i[mask] /= tile_sizes[:, :-1].reshape(-1).to(locs.dtype)
+        locs_j[mask] /= tile_sizes[:, 1:].reshape(-1).to(locs.dtype)
 
         return locs_i * mask, locs_j * mask
 
@@ -788,7 +789,7 @@ class RegionCatalog(TileCatalog, UserDict):
         b = self.batch_size
         locs = self.locs * repeat(self.get_region_sizes(), "nth ntw d -> b nth ntw 1 d", b=b)
         locs = locs.unsqueeze(0).repeat(4, 1, 1, 1, 1, 1)
-        tile_sizes = self.get_tile_sizes()
+        tile_sizes = repeat(self.get_tile_sizes(), "nth ntw d -> b nth ntw 1 d", b=b, d=2)
 
         locs[0:2, :, 1, :, :, 0] += self.interior_slen + self.overlap_slen / 2  # half overlap
         locs[0:2, :, 3::2, :, :, 0] += self.interior_slen + self.overlap_slen  # full overlap
@@ -796,10 +797,10 @@ class RegionCatalog(TileCatalog, UserDict):
         locs[0::2, :, :, 3::2, :, 1] += self.interior_slen + self.overlap_slen  # full overlap
 
         mask = repeat(self.corner_mask, "nth ntw -> b nth ntw 1 d", b=b, d=2)
-        locs[0][mask] /= tile_sizes[:-1, :-1].reshape(-1).to(locs.dtype)
-        locs[1][mask] /= tile_sizes[:-1, 1:].reshape(-1).to(locs.dtype)
-        locs[2][mask] /= tile_sizes[1:, :-1].reshape(-1).to(locs.dtype)
-        locs[3][mask] /= tile_sizes[1:, 1:].reshape(-1).to(locs.dtype)
+        locs[0][mask] /= tile_sizes[:, :-1, :-1].reshape(-1).to(locs.dtype)
+        locs[1][mask] /= tile_sizes[:, :-1, 1:].reshape(-1).to(locs.dtype)
+        locs[2][mask] /= tile_sizes[:, 1:, :-1].reshape(-1).to(locs.dtype)
+        locs[3][mask] /= tile_sizes[:, 1:, 1:].reshape(-1).to(locs.dtype)
 
         return locs[0] * mask, locs[1] * mask, locs[2] * mask, locs[3] * mask
 
