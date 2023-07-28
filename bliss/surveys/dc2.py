@@ -17,11 +17,13 @@ from bliss.surveys.survey import Survey
 class DC2(Survey):
     BANDS = ("g", "i", "r", "u", "y", "z")
 
-    def __init__(self, data_dir, cat_path, n_split, image_lim):
+    def __init__(self, data_dir, cat_path, batch_size, n_split, image_lim):
         super().__init__()
         self.data_dir = data_dir
         self.cat_path = cat_path
-        self.band = self.BANDS
+        self.batch_size = batch_size
+        self.bands = self.BANDS
+        self.n_bands = len(self.BANDS)
         self.dc2_data = []
         self.data = []
         self.valid = []
@@ -52,7 +54,7 @@ class DC2(Survey):
         image_files = []
         bg_files = []
 
-        for band in self.band:
+        for band in self.bands:
             band_path = self.data_dir + str(band)
             img_file_list = list(pathlib.Path(band_path).glob(img_pattern))
             bg_file_list = list(pathlib.Path(band_path).glob(bg_pattern))
@@ -64,14 +66,16 @@ class DC2(Survey):
         data = []
 
         for n in range(n_image):
-            image_list, bg_list, wcs = read_frame_for_band(image_files, bg_files, n, self.image_lim)
+            image_list, bg_list, wcs = read_frame_for_band(
+                image_files, bg_files, n, self.n_bands, self.image_lim
+            )
             image = np.stack(image_list)
             bg = np.stack(bg_list)
 
             plocs_lim = image[0].shape
             height = plocs_lim[0]
             width = plocs_lim[1]
-            full_cat = Dc2FullCatalog.from_file(self.cat_path, wcs, height, width, self.band)
+            full_cat = Dc2FullCatalog.from_file(self.cat_path, wcs, height, width, self.bands)
             tile_cat = full_cat.to_tile_params(4, 1, 1)
             tile_dict = tile_cat.to_dict()
 
@@ -159,13 +163,13 @@ class DC2(Survey):
         self.test = self.dc2_data[train_len + val_len :]
 
     def train_dataloader(self):
-        return DataLoader(self.data, shuffle=True, batch_size=128)
+        return DataLoader(self.data, shuffle=True, batch_size=self.batch_size)
 
     def val_dataloader(self):
-        return DataLoader(self.valid, shuffle=True, batch_size=128)
+        return DataLoader(self.valid, batch_size=self.batch_size)
 
     def test_dataloader(self):
-        return DataLoader(self.test, shuffle=True, batch_size=128)
+        return DataLoader(self.test, batch_size=self.batch_size)
 
 
 class Dc2FullCatalog(FullCatalog):
@@ -178,28 +182,28 @@ class Dc2FullCatalog(FullCatalog):
 
     @classmethod
     def from_file(cls, cat_path, wcs, height, width, band):
-        data = pd.read_pickle(cat_path)
-        objid = torch.tensor(data["id"].values)
-        ra = torch.tensor(data["ra"].values)
-        dec = torch.tensor(data["dec"].values)
-        galaxy_bools = torch.tensor((data["truth_type"] == 1).values)
-        star_bools = torch.tensor((data["truth_type"] == 2).values)
+        catalog = pd.read_pickle(cat_path)
+        objid = torch.tensor(catalog["id"].values)
+        ra = torch.tensor(catalog["ra"].values)
+        dec = torch.tensor(catalog["dec"].values)
+        galaxy_bools = torch.tensor((catalog["truth_type"] == 1).values)
+        star_bools = torch.tensor((catalog["truth_type"] == 2).values)
         flux_list = []
         for b in band:
-            flux_list.append(torch.tensor((data["flux_" + b]).values))
+            flux_list.append(torch.tensor((catalog["flux_" + b]).values))
 
         flux = torch.stack(flux_list).t()
 
-        galaxy_bulge_frac = torch.tensor(data["bulge_to_total_ratio_i"].values)
+        galaxy_bulge_frac = torch.tensor(catalog["bulge_to_total_ratio_i"].values)
         galaxy_disk_frac = (1 - galaxy_bulge_frac) * galaxy_bools
 
-        position_angle = torch.tensor(data["position_angle_true"].values)
+        position_angle = torch.tensor(catalog["position_angle_true"].values)
         galaxy_beta_radians = (position_angle / 180) * math.pi * galaxy_bools
 
-        galaxy_a_d = torch.tensor(data["size_disk_true"].values) / 2
-        galaxy_a_b = torch.tensor(data["size_bulge_true"].values) / 2
-        galaxy_b_d = torch.tensor(data["size_minor_disk_true"].values) / 2
-        galaxy_b_b = torch.tensor(data["size_minor_bulge_true"].values) / 2
+        galaxy_a_d = torch.tensor(catalog["size_disk_true"].values) / 2
+        galaxy_a_b = torch.tensor(catalog["size_bulge_true"].values) / 2
+        galaxy_b_d = torch.tensor(catalog["size_minor_disk_true"].values) / 2
+        galaxy_b_b = torch.tensor(catalog["size_minor_bulge_true"].values) / 2
         galaxy_disk_q = (galaxy_b_d / galaxy_a_d) * galaxy_bools
         galaxy_bulge_q = (galaxy_b_b / galaxy_a_b) * galaxy_bools
 
@@ -218,7 +222,7 @@ class Dc2FullCatalog(FullCatalog):
         ).t()
 
         keep = galaxy_bools | star_bools
-        source_type = torch.from_numpy(np.array(data["truth_type"])[keep])
+        source_type = torch.from_numpy(np.array(catalog["truth_type"])[keep])
         source_type[source_type == 2] = 0
         ra = ra[keep]
         dec = dec[keep]
@@ -264,11 +268,11 @@ class Dc2FullCatalog(FullCatalog):
         return cls(height, width, d)
 
 
-def read_frame_for_band(image_files, bg_files, n, image_lim):
+def read_frame_for_band(image_files, bg_files, n, n_bands, image_lim):
     image_list = []
     bg_list = []
     wcs = None
-    for b in range(6):
+    for b in range(n_bands):
         image_frame = fits.open(image_files[b][n])
         bg_frame = fits.open(bg_files[b][n])
         image_data = image_frame[1].data  # pylint: disable=maybe-no-member
