@@ -127,6 +127,9 @@ class Encoder(pl.LightningModule):
             num_features_per_band += 1
         if self.input_transform_params.get("concat_psf_params"):
             num_features_per_band += 6
+        if self.input_transform_params.get("log_transform").get("use_log_transform"):
+            scales = self.input_transform_params.get("log_transform").get("scales")
+            num_features_per_band += len(scales)
         return num_features_per_band
 
     def get_input_tensor(self, batch):
@@ -174,10 +177,14 @@ class Encoder(pl.LightningModule):
             assert (
                 batch["background"][0, 0].std() > 0
             ), "Constant backgrounds not supported for multi-band encoding"
-            inputs[0] = z_score(inputs[0])
-            inputs[1] = z_score(inputs[1])
-        elif self.input_transform_params.get("log_transform"):
-            inputs[0] = log_transform(torch.clamp(inputs[0] - inputs[1], min=1))
+            inputs.append(z_score(inputs[0]))
+            inputs.append(z_score(inputs[1]))
+        elif self.input_transform_params.get("log_transform").get("use_log_transform"):
+            scales = self.input_transform_params.get("log_transform").get("use_log_transform")
+            for scale in scales:
+                inputs.append(
+                    log_transform(torch.clamp(inputs[0] - scale * torch.sqrt(inputs[1]), min=1))
+                )
         return torch.cat(inputs, dim=2)
 
     def encode_batch(self, batch):
