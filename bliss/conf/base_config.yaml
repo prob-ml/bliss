@@ -82,8 +82,7 @@ encoder:
         use_deconv_channel: false
         concat_psf_params: false
         log_transform:
-            use_log_transform: true
-            scales: [1]  # add new log transforms
+            scales: [10]  # add new log transforms
         z_score: false
     architecture:
         # this architecture is based on yolov5l.yaml, see

@@ -122,12 +122,12 @@ class Encoder(pl.LightningModule):
 
     def _get_num_features(self):
         """Determine number of input channels for model based on desired input transforms."""
-        num_features_per_band = 2  # img + bg
+        num_features_per_band = 1  # bg
         if self.input_transform_params.get("use_deconv_channel"):
             num_features_per_band += 1
         if self.input_transform_params.get("concat_psf_params"):
             num_features_per_band += 6
-        if self.input_transform_params.get("log_transform").get("use_log_transform"):
+        if self.input_transform_params.get("log_transform").get("scales"):
             scales = self.input_transform_params.get("log_transform").get("scales")
             num_features_per_band += len(scales)
         return num_features_per_band
@@ -158,8 +158,18 @@ class Encoder(pl.LightningModule):
             )
         imgs = batch["images"][:, self.bands]
         bgs = batch["background"][:, self.bands]
-        inputs = [imgs, bgs]
+        inputs = [bgs]
 
+        if self.input_transform_params.get("z_score"):
+            assert (
+                batch["background"][0, 0].std() > 0
+            ), "Constant backgrounds not supported for multi-band encoding"
+            inputs.append(z_score(imgs))
+            inputs.append(z_score(bgs))
+        elif self.input_transform_params.get("log_transform").get("scales"):
+            scales = self.input_transform_params.get("log_transform").get("scales")
+            for scale in scales:
+                inputs.append(log_transform(torch.clamp(imgs - scale * torch.sqrt(bgs), min=1)))
         if self.input_transform_params.get("use_deconv_channel"):
             assert (
                 "deconvolution" in batch
@@ -173,18 +183,6 @@ class Encoder(pl.LightningModule):
             n, c, i, h, w = imgs.shape
             psf_params = batch["psf_params"][:, self.bands]
             inputs.append(psf_params.view(n, c, 6 * i, 1, 1).expand(n, c, 6 * i, h, w))
-        if self.input_transform_params.get("z_score"):
-            assert (
-                batch["background"][0, 0].std() > 0
-            ), "Constant backgrounds not supported for multi-band encoding"
-            inputs.append(z_score(inputs[0]))
-            inputs.append(z_score(inputs[1]))
-        elif self.input_transform_params.get("log_transform").get("use_log_transform"):
-            scales = self.input_transform_params.get("log_transform").get("use_log_transform")
-            for scale in scales:
-                inputs.append(
-                    log_transform(torch.clamp(inputs[0] - scale * torch.sqrt(inputs[1]), min=1))
-                )
         return torch.cat(inputs, dim=2)
 
     def encode_batch(self, batch):
