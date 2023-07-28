@@ -111,6 +111,17 @@ encoder:
             [[17], 1, Detect, [nc, anchors]],
         ]
 
+region_encoder:
+    _target_: case_studies.prob_tile_suppression.region_encoder.RegionEncoder
+    bands: ${encoder.bands}
+    tile_slen: ${encoder.tile_slen}
+    overlap_slen: 0.4
+    slack: ${encoder.slack}
+    optimizer_params: ${encoder.optimizer_params}
+    scheduler_params: ${encoder.scheduler_params}
+    input_transform_params: ${encoder.input_transform_params}
+    architecture: ${encoder.architecture}
+
 generate:
     n_workers_per_process: 0
     n_batches: ${simulator.n_batches}
@@ -143,6 +154,7 @@ training:
     seed: 42
     weight_save_path: null
     data_source: ${simulator}
+    encoder_target: ${encoder}  # whether to use normal encoder or RegionEncoder
 
 predict:
     dataset: ${surveys.sdss}

@@ -1,7 +1,7 @@
 import torch
 from hydra.utils import instantiate
 
-from bliss.catalog import RegionCatalog
+from case_studies.prob_tile_suppression.region_catalog import RegionCatalog
 
 
 class TestEncoder:
@@ -27,7 +27,8 @@ class TestEncoder:
         pred = encoder.encode_batch(batch)
         encoder.variational_mode(pred)
 
-    def test_region_loss(self, cfg, encoder):
+    def test_region_loss(self, cfg):
+        encoder = instantiate(cfg.region_encoder).to(cfg.predict.device)
         d = {
             "n_sources": torch.zeros(1, 7, 7),
             "locs": torch.zeros(1, 7, 7, 1, 2),
