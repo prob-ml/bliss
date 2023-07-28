@@ -127,7 +127,7 @@ class Encoder(pl.LightningModule):
             num_features_per_band += 1
         if self.input_transform_params.get("concat_psf_params"):
             num_features_per_band += 6
-        if self.input_transform_params.get("log_transform").get("scales"):
+        if self.input_transform_params.get("log_transform"):
             scales = self.input_transform_params.get("log_transform").get("scales")
             num_features_per_band += len(scales)
         return num_features_per_band
@@ -166,7 +166,7 @@ class Encoder(pl.LightningModule):
             ), "Constant backgrounds not supported for multi-band encoding"
             inputs.append(z_score(imgs))
             inputs.append(z_score(bgs))
-        elif self.input_transform_params.get("log_transform").get("scales"):
+        elif self.input_transform_params.get("log_transform"):
             scales = self.input_transform_params.get("log_transform").get("scales")
             for scale in scales:
                 inputs.append(log_transform(torch.clamp(imgs - scale * torch.sqrt(bgs), min=1)))
