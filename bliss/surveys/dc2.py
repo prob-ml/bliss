@@ -1,13 +1,12 @@
-import glob
 import math
+import pathlib
 import random
-import warnings
 
 import numpy as np
 import pandas as pd
 import torch
 from astropy.io import fits
-from astropy.wcs import WCS, FITSFixedWarning
+from astropy.wcs import WCS
 from einops import rearrange
 from torch.utils.data import DataLoader
 
@@ -16,9 +15,9 @@ from bliss.surveys.survey import Survey
 
 
 class DC2(Survey):
-    BANDS = "r"
+    BANDS = ("g", "i", "r", "u", "y", "z")
 
-    def __init__(self, data_dir, cat_path):
+    def __init__(self, data_dir, cat_path, n_split, image_lim):
         super().__init__()
         self.data_dir = data_dir
         self.cat_path = cat_path
@@ -27,8 +26,8 @@ class DC2(Survey):
         self.data = []
         self.valid = []
         self.test = []
-        self.prepare_data()
-        self.setup()
+        self.n_split = n_split
+        self.image_lim = image_lim
 
         self._predict_batch = None
 
@@ -48,37 +47,32 @@ class DC2(Survey):
         return [self.dc2_data[i]["images"] for i in range(len(self))]
 
     def prepare_data(self):
-        bg_files = glob.glob(self.data_dir + "bkgd" + "*.fits")
-        image_files = glob.glob(self.data_dir + "calexp" + "*.fits")
+        img_pattern = "3828/*/calexp*.fits"
+        bg_pattern = "3828/*/bkgd*.fits"
+        image_files = []
+        bg_files = []
 
-        bg_files = sorted(bg_files)
-        image_files = sorted(image_files)
-        n_image = len(bg_files)
+        for band in self.band:
+            band_path = self.data_dir + str(band)
+            img_file_list = list(pathlib.Path(band_path).glob(img_pattern))
+            bg_file_list = list(pathlib.Path(band_path).glob(bg_pattern))
+
+            image_files.append(sorted(img_file_list))
+            bg_files.append(sorted(bg_file_list))
+        n_image = len(bg_files[0])
 
         data = []
 
-        for i in range(n_image):
-            image_frame = fits.open(image_files[i])
-            bg_frame = fits.open(bg_files[i])
-            image_data = image_frame[1].data  # pylint: disable=maybe-no-member
-            bg_data = bg_frame[0].data  # pylint: disable=maybe-no-member
-            image = image_data[:, 36:-36].astype(np.float32)
-            bg = np.repeat(np.repeat(bg_data, 128, axis=1), 128, axis=0)
-            bg_crop = bg[48:-48, 48:-48].astype(np.float32)
-            image += bg_crop
+        for n in range(n_image):
+            image_list, bg_list, wcs = read_frame_for_band(image_files, bg_files, n, self.image_lim)
+            image = np.stack(image_list)
+            bg = np.stack(bg_list)
 
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=FITSFixedWarning)
-                wcs = WCS(image_frame[0])
-
-            image_frame.close()
-            bg_frame.close()
-
-            plocs_lim = image.shape
+            plocs_lim = image[0].shape
             height = plocs_lim[0]
             width = plocs_lim[1]
             full_cat = Dc2FullCatalog.from_file(self.cat_path, wcs, height, width, self.band)
-            tile_cat = full_cat.to_tile_params(4, 1)
+            tile_cat = full_cat.to_tile_params(4, 1, 1)
             tile_dict = tile_cat.to_dict()
 
             tile_dict["locs"] = rearrange(tile_cat.to_dict()["locs"], "1 h w nh nw -> h w nh nw")
@@ -104,32 +98,40 @@ class DC2(Survey):
             tile_dict["galaxy_params"][..., 3] = tile_dict["galaxy_params"][..., 3].clamp(min=1e-18)
             tile_dict["galaxy_params"][..., 5] = tile_dict["galaxy_params"][..., 5].clamp(min=1e-18)
 
-            # split image to 25
-            split_h = np.linspace(0, plocs_lim[0], num=5, endpoint=False)
-            split_w = np.linspace(0, plocs_lim[1], num=5, endpoint=False)
-            image_h = plocs_lim[0] // 5
-            image_w = plocs_lim[1] // 5
+            # split image
+            split_lim = self.image_lim[0] // self.n_split
+            image = torch.from_numpy(image)
+            split1_image = torch.stack(torch.split(image, split_lim, dim=1))
+            split2_image = torch.stack(torch.split(split1_image, split_lim, dim=3))
+            split_image = list(torch.split(split2_image.flatten(0, 2), 6))
 
-            for i in split_h:
-                for j in split_w:
-                    image1 = image[int(i) : int(i) + image_h, int(j) : int(j) + image_w]
-                    bg1 = bg_crop[int(i) : int(i) + image_h, int(j) : int(j) + image_w]
+            bg = torch.from_numpy(bg)
+            split1_bg = torch.stack(torch.split(bg, split_lim, dim=1))
+            split2_bg = torch.stack(torch.split(split1_bg, split_lim, dim=3))
+            split_bg = list(torch.split(split2_bg.flatten(0, 2), 6))
 
-                    tlim = [
-                        int(i // 4),
-                        int((i + image_h) // 4),
-                        int(j // 4),
-                        int((j + image_w) // 4),
-                    ]
-                    tile1 = get_tile((tlim[0], tlim[1], tlim[2], tlim[3]), tile_dict)
+            tile_split = {}
+            param_list = [
+                "locs",
+                "n_sources",
+                "source_type",
+                "galaxy_fluxes",
+                "galaxy_params",
+                "star_fluxes",
+                "star_log_fluxes",
+            ]
+            for i in param_list:
+                split1_tile = torch.stack(torch.split(tile_dict[i], split_lim // 4, dim=0))
+                split2_tile = torch.stack(torch.split(split1_tile, split_lim // 4, dim=2))
+                tile_split[i] = torch.split(split2_tile.flatten(0, 2), split_lim // 4)
 
-                    data.append(
-                        {
-                            "tile_catalog": tile1,
-                            "images": rearrange(torch.from_numpy(image1), "h w -> 1 h w"),
-                            "background": rearrange(torch.from_numpy(bg1), "h w -> 1 h w"),
-                        }
-                    )
+            data_split = {
+                "tile_catalog": [dict(zip(tile_split, i)) for i in zip(*tile_split.values())],
+                "images": split_image,
+                "background": split_bg,
+            }
+
+            data.extend([dict(zip(data_split, i)) for i in zip(*data_split.values())])
 
         random.shuffle(data)
         self.dc2_data = data
@@ -157,13 +159,13 @@ class DC2(Survey):
         self.test = self.dc2_data[train_len + val_len :]
 
     def train_dataloader(self):
-        return DataLoader(self.data, batch_size=1)
+        return DataLoader(self.data, shuffle=True, batch_size=128)
 
     def val_dataloader(self):
-        return DataLoader(self.valid, batch_size=1)
+        return DataLoader(self.valid, shuffle=True, batch_size=128)
 
     def test_dataloader(self):
-        return DataLoader(self.test, batch_size=1)
+        return DataLoader(self.test, shuffle=True, batch_size=128)
 
 
 class Dc2FullCatalog(FullCatalog):
@@ -176,12 +178,17 @@ class Dc2FullCatalog(FullCatalog):
 
     @classmethod
     def from_file(cls, cat_path, wcs, height, width, band):
-        data = pd.read_pickle(cat_path + band + ".pkl")
+        data = pd.read_pickle(cat_path)
+        objid = torch.tensor(data["id"].values)
         ra = torch.tensor(data["ra"].values)
         dec = torch.tensor(data["dec"].values)
         galaxy_bools = torch.tensor((data["truth_type"] == 1).values)
         star_bools = torch.tensor((data["truth_type"] == 2).values)
-        flux = torch.tensor((data["flux_" + band]).values)
+        flux_list = []
+        for b in band:
+            flux_list.append(torch.tensor((data["flux_" + b]).values))
+
+        flux = torch.stack(flux_list).t()
 
         galaxy_bulge_frac = torch.tensor(data["bulge_to_total_ratio_i"].values)
         galaxy_disk_frac = (1 - galaxy_bulge_frac) * galaxy_bools
@@ -220,12 +227,12 @@ class Dc2FullCatalog(FullCatalog):
         star_log_fluxes = flux.log()[keep]
         galaxy_params = galaxy_params[keep]
         galaxy_fluxes = flux[keep]
+        objid = objid[keep]
 
         pt, pr = wcs.all_world2pix(ra, dec, 0)  # convert to pixel coordinates
         pt = torch.tensor(pt)
         pr = torch.tensor(pr)
         plocs = torch.stack((pr, pt), dim=-1)
-        plocs[:, 0] -= 36
 
         plocs = (plocs.reshape(1, plocs.size()[0], 2))[0]
 
@@ -237,38 +244,47 @@ class Dc2FullCatalog(FullCatalog):
         star_log_fluxes = star_log_fluxes[x_mask]
         galaxy_params = galaxy_params[x_mask]
         galaxy_fluxes = galaxy_fluxes[x_mask]
+        objid = objid[x_mask]
 
         plocs = plocs[x_mask]
-        plocs_rv = plocs.clone()
-        plocs_rv[:, 0] = plocs[:, 1]
-        plocs_rv[:, 1] = plocs[:, 0]
         source_type = source_type[x_mask]
 
         nobj = source_type.shape[0]
         d = {
+            "objid": objid.reshape(1, nobj, 1),
             "n_sources": torch.tensor((nobj,)),
             "source_type": source_type.reshape(1, nobj, 1),
-            "plocs": plocs_rv.reshape(1, nobj, 2),
-            "galaxy_fluxes": galaxy_fluxes.reshape(1, nobj, 1),
+            "plocs": plocs.reshape(1, nobj, 2),
+            "galaxy_fluxes": galaxy_fluxes.reshape(1, nobj, 6),
             "galaxy_params": galaxy_params.reshape(1, nobj, 6),
-            "star_fluxes": star_fluxes.reshape(1, nobj, 1),
-            "star_log_fluxes": star_log_fluxes.reshape(1, nobj, 1),
+            "star_fluxes": star_fluxes.reshape(1, nobj, 6),
+            "star_log_fluxes": star_log_fluxes.reshape(1, nobj, 6),
         }
 
         return cls(height, width, d)
 
 
-def get_tile(split_lim, tile_cat):
-    tile_dict = {}
-    param_list = [
-        "locs",
-        "n_sources",
-        "source_type",
-        "galaxy_fluxes",
-        "galaxy_params",
-        "star_fluxes",
-        "star_log_fluxes",
-    ]
-    for i in param_list:
-        tile_dict[i] = tile_cat[i][split_lim[0] : split_lim[1], split_lim[2] : split_lim[3]]
-    return tile_dict
+def read_frame_for_band(image_files, bg_files, n, image_lim):
+    image_list = []
+    bg_list = []
+    wcs = None
+    for b in range(6):
+        image_frame = fits.open(image_files[b][n])
+        bg_frame = fits.open(bg_files[b][n])
+        image_data = image_frame[1].data  # pylint: disable=maybe-no-member
+        bg_data = bg_frame[0].data  # pylint: disable=maybe-no-member
+
+        if wcs is None:
+            wcs = WCS(image_frame[1].header)  # pylint: disable=maybe-no-member
+
+        image_frame.close()
+        bg_frame.close()
+
+        image = torch.nan_to_num(torch.from_numpy(image_data)[: image_lim[0], : image_lim[1]])
+        bg = torch.from_numpy(bg_data.astype(np.float32)).expand(image_lim[0], image_lim[1])
+
+        image += bg
+        image_list.append(image)
+        bg_list.append(bg)
+
+    return image_list, bg_list, wcs
