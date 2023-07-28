@@ -93,18 +93,21 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             Tuple[Tensor, Tensor, Tensor, Tensor]: tuple of images, backgrounds, deconvolved images,
             and psf parameters
         """
-        images, psfs, psf_params = self.image_decoder.render_images(tile_catalog, image_ids)
+        images, psfs, psf_params, wcs_batch = self.image_decoder.render_images(
+            tile_catalog, image_ids
+        )
         assert self.background is not None, "Survey background cannot be None."
         background = self.background.sample(images.shape, image_id_indices=image_id_indices)
+        images += background
         for i in range(images.shape[0]):
             images[i] = torch.from_numpy(
                 align(
                     images[i].numpy(),
-                    self.survey[image_id_indices[i]]["wcs"],
+                    wcs_batch[i],
                     self.catalog_prior.b_band,
                 )
             )
-        images += background
+        images = torch.clamp(images, min=1e-6)
         images = self._apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
         return images, background, deconv_images, psf_params
