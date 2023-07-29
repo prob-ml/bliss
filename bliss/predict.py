@@ -92,9 +92,10 @@ def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
             est_cat[key] = torch.tensor(np.array(est_cat[key]) / nelec_per_nmgy_per_band)
         elif key == "galaxy_params":
             clone = est_cat[key].clone()
-            clone[..., :5] = torch.tensor(
-                np.array(clone[..., :5]) / nelec_per_nmgy_per_band
-            )  # TODO: remove magic number 5 with {n_bands}
+            n_bands = nelec_per_nmgy_per_band.shape[1]
+            clone[..., :n_bands] = torch.tensor(
+                np.array(clone[..., :n_bands]) / nelec_per_nmgy_per_band
+            )
             est_cat[key] = clone
     return est_cat
 
