@@ -7,11 +7,12 @@ from bliss.train import train
 class TestDC2:
     def test_dc2(self, cfg):
         dataset = instantiate(cfg.surveys.dc2)
+        dataset.prepare_data()
         image = dataset.image_id(0)
         dc2_obj = dataset.idx(0)
         dc2_tile = dc2_obj["tile_catalog"]
 
-        assert image.shape[0] == 1
+        assert image.shape[0] == 6
 
         images = dataset.image_ids()
         assert len(images) == 25
@@ -22,7 +23,7 @@ class TestDC2:
         }
         p_batch = dataset.predict_batch
         dataset.predict_batch = p_batch
-        assert p_batch["images"].shape[0] == 1
+        assert p_batch["images"].shape[0] == 6
 
         params = (
             "locs",
@@ -42,7 +43,8 @@ class TestDC2:
 
     def test_train_on_dc2(self, cfg):
         train_dc2_cfg = cfg.copy()
+        train_dc2_cfg.encoder.bands = [0, 1, 2, 3, 4, 5]
+        train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]
         train_dc2_cfg.training.data_source = train_dc2_cfg.surveys.dc2
         train_dc2_cfg.training.pretrained_weights = None
-        train_dc2_cfg.encoder.bands = [0]
         train(train_dc2_cfg)
