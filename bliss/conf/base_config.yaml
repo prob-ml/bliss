@@ -180,6 +180,7 @@ surveys:
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
+        pixel_shift: 2
     decals:
         _target_: bliss.surveys.decals.DarkEnergyCameraLegacySurvey
         dir_path: ${paths.decals}

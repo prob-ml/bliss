@@ -11,10 +11,7 @@ from bliss.catalog import SourceType, TileCatalog
 
 class ImageDecoder(nn.Module):
     def __init__(
-        self,
-        psf,
-        bands: Tuple[int, ...],
-        nmgy_to_nelec_dict: dict,
+        self, psf, bands: Tuple[int, ...], nmgy_to_nelec_dict: dict, pixel_shift: int
     ) -> None:
         """Construct a decoder for a set of images.
 
@@ -22,6 +19,7 @@ class ImageDecoder(nn.Module):
             psf: PSF object
             bands: bands to use for constructing the decoder, passed from Survey
             nmgy_to_nelec_dict: dicitonary specifying elec count conversions by imageid
+            pixel_shift: int indicating parameters for a Unif() to model pixel shifting
         """
 
         super().__init__()
@@ -31,6 +29,7 @@ class ImageDecoder(nn.Module):
         self.psf_params = psf.psf_params  # Dictionary indexed by image_id
         self.psf_draw_method = getattr(psf, "psf_draw_method", "auto")
         self.pixel_scale = psf.pixel_scale
+        self.shift = pixel_shift
         self.nmgy_to_nelec_dict = nmgy_to_nelec_dict
 
     def render_star(self, psf, band, source_params):
@@ -94,18 +93,16 @@ class ImageDecoder(nn.Module):
 
     def pixel_shift(self):
         """Generate random pixel shift and corresponding WCS list to undo shifts."""
-        shift = np.random.uniform(-2, 2, (self.n_bands, 2))
+        shift = np.random.uniform(-self.shift, self.shift, (self.n_bands, 2))
+        shift[0] = np.array([0.0, 0.0])
         wcs_base = WCS()
         base = np.array([5.0, 5.0])
         wcs_base.wcs.crpix = base
-        wcs = []
-        for i in range(self.n_bands):
-            if i == 2:
-                wcs.append(wcs_base.low_level_wcs)
-            else:
-                bnd_wcs = WCS()
-                bnd_wcs.wcs.crpix = base + shift[i]
-                wcs.append(bnd_wcs.low_level_wcs)
+        wcs = [wcs_base.low_level_wcs]
+        for i in range(1, self.n_bands):
+            bnd_wcs = WCS()
+            bnd_wcs.wcs.crpix = base + shift[i]
+            wcs.append(bnd_wcs.low_level_wcs)
         return shift, wcs
 
     def render_images(self, tile_cat: TileCatalog, image_ids):
