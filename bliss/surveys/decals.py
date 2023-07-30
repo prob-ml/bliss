@@ -1,5 +1,4 @@
 import gzip
-import math
 import warnings
 from pathlib import Path
 from typing import List, Tuple
@@ -17,6 +16,8 @@ from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.psf import ImagePSF, PSFConfig
+from bliss.surveys.des import DarkEnergySurvey as DES  # pylint: disable=cyclic-import
+from bliss.surveys.des import DESImageID, SkyCoord  # pylint: disable=cyclic-import
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 from bliss.surveys.sdss import column_to_tensor
 from bliss.surveys.survey import Survey, SurveyDownloader
@@ -40,6 +41,50 @@ class DarkEnergyCameraLegacySurvey(Survey):
             & (bricks["dec2"] >= dec)
         ]["brickname"][0]
 
+    @classmethod
+    def create_des_objs(cls, dir_path, ccds_table_for_brick) -> DES:
+        if getattr(cls, "des_objs", None):
+            return cls.des_objs
+
+        des_image_ids = []
+        for brickname, ccds_table in ccds_table_for_brick.items():
+            for ccd in ccds_table:
+                des_image_id = {
+                    "sky_coord": {"ra": ccd["ra"], "dec": ccd["dec"]},
+                    "decals_brickname": brickname,
+                    "ccdname": ccd["ccdname"],
+                    ccd["filter"]: ccd["image_filename"].split(".fits.fz")[0],
+                }
+                des_image_ids.append(des_image_id)
+        cls.des_objs = DES(
+            dir_path=dir_path,
+            image_ids=tuple(des_image_ids),
+            psf_config={"pixel_scale": 0.262, "psf_slen": 25},
+        )
+        return cls.des_objs
+
+    @classmethod
+    def des_obj(
+        cls, brickname: str, sky_coord: SkyCoord, ccdname: str, bl: str, image_filename: str
+    ):
+        des_image_id: DESImageID = {
+            "sky_coord": sky_coord,
+            "decals_brickname": brickname,
+            "ccdname": ccdname,
+            bl: image_filename,
+        }
+        for fltr in DES.BANDS:
+            des_image_id[fltr] = des_image_id.get(fltr, "")
+
+        try:  # noqa: WPS229
+            idx = cls.des_objs.idx(des_image_id)
+            return cls.des_objs[idx], idx
+        except AttributeError as e:
+            warnings.warn(
+                f"DES survey objects not created. Call {cls.__name__}.create_des_objs() first."
+            )
+            raise e
+
     def __init__(
         self,
         psf_config: PSFConfig,
@@ -55,12 +100,14 @@ class DarkEnergyCameraLegacySurvey(Survey):
         self.bricknames = [DECaLS.brick_for_radec(c["ra"], c["dec"]) for c in sky_coords]
 
         self.downloader = DecalsDownloader(self.bricknames, self.decals_path)
-
         self.prepare_data()
 
         self.downloader.download_psfsizes(self.bands)
-        self.downloader.download_brick_ccds_all()  # contains background (sky level) info too
-        self.psf = DECaLS_PSF(dir_path, self.image_ids(), self.bands, psf_config)
+        ccds_table_for_brick = self.single_exposure_ccds_for_bricks()
+        target_wcs = self.target_wcs_for_brick()
+        self.psf = DECaLS_PSF(
+            dir_path, self.image_ids(), self.bands, psf_config, ccds_table_for_brick, target_wcs
+        )
 
         self.catalog_cls = DecalsFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -69,11 +116,18 @@ class DarkEnergyCameraLegacySurvey(Survey):
         self.downloader.download_images(self.bands)
         self.downloader.download_catalogs()
         for brickname in self.bricknames:
-            catalog_filename = self.decals_path / f"tractor-{brickname}.fits"
+            catalog_filename = (
+                self.decals_path / brickname[:3] / brickname / f"tractor-{brickname}.fits"
+            )
             assert Path(catalog_filename).exists(), f"Catalog file {catalog_filename} not found"
             for b, bl in enumerate(SDSS.BANDS):
                 if b in self.bands:
-                    image_filename = self.decals_path / f"legacysurvey-{brickname}-image-{bl}.fits"
+                    image_filename = (
+                        self.decals_path
+                        / brickname[:3]
+                        / brickname
+                        / f"legacysurvey-{brickname}-image-{bl}.fits"
+                    )
                     assert Path(image_filename).exists(), f"Image file {image_filename} not found"
 
     def __len__(self):
@@ -125,23 +179,71 @@ class DarkEnergyCameraLegacySurvey(Survey):
 
         return ret
 
-    def read_image_for_band(self, brickname, band):
-        img_fits = fits.open(self.decals_path / f"legacysurvey-{brickname}-image-{band}.fits")
+    def read_image_for_band(self, brickname, bl):
+        img_fits = fits.open(
+            self.decals_path
+            / brickname[:3]
+            / brickname
+            / f"legacysurvey-{brickname}-image-{bl}.fits"
+        )
         image = img_fits[1].data  # pylint: disable=no-member
         hr = img_fits[1].header  # pylint: disable=no-member
         wcs = WCS(hr)
 
         return {
-            "image": image,
-            # random normal background, in double precision
-            "background": np.random.normal(size=image.shape).astype(
-                np.float32
-            ),  # TODO: replace with actual background
+            "image": image.astype(np.float32),
+            "background": np.full_like(
+                image, fill_value=hr[f"COSKY_{bl.upper()}"], dtype=np.float32
+            ),
             "wcs": wcs,
-            "nelec_per_nmgy_list": np.ones(
-                shape=(1, len(self.bands))
-            ),  # TODO: replace with actual ratios
+            "nelec_per_nmgy_list": DES.zpt_to_scale(hr["MAGZERO"]),
         }
+
+    def single_exposure_ccds_for_bricks(self):
+        ccds_table_for_brick = {}  # indexed by brickname
+
+        self.downloader.download_brick_ccds_all()
+        for brickname in self.image_ids():
+            brick_ccds_filename = (
+                self.decals_path / brickname[:3] / brickname / f"legacysurvey-{brickname}-ccds.fits"
+            )
+            assert Path(brick_ccds_filename).exists(), f"CCDs file {brick_ccds_filename} not found"
+
+            brick_ccds = Table.read(brick_ccds_filename)
+            # uniformly sample one exposure per band
+            all_expnums = {}
+            expnums = {}
+            for b in self.BANDS:
+                all_expnums[b] = np.unique(brick_ccds["expnum"][brick_ccds["filter"] == b])
+                expnums[b] = np.random.choice(all_expnums[b]) if expnums[b] else None
+            ccds_table_for_brick[brickname] = brick_ccds[
+                np.isin(brick_ccds["expnum"], list(expnums.values()))
+            ]
+        # TODO: remove this next hardcoded line used for testing:
+        ccds_table_for_brick = {
+            "3366m010": brick_ccds[
+                (
+                    brick_ccds["image_filename"]
+                    == "decam/CP/V4.8.2a/CP20141020/c4d_141021_015854_ooi_g_ls9.fits.fz"
+                )
+                | (
+                    brick_ccds["image_filename"]
+                    == "decam/CP/V4.8.2a/CP20151107/c4d_151108_003333_ooi_r_ls9.fits.fz"
+                )
+                | (
+                    brick_ccds["image_filename"]
+                    == "decam/CP/V4.8.2a/CP20130912/c4d_130913_040652_ooi_z_ls9.fits.fz"
+                )
+            ]
+        }
+
+        return ccds_table_for_brick  # noqa: WPS331
+
+    def target_wcs_for_brick(self):
+        target_wcs_for_brick = {}  # indexed by brickname
+        for brickname in self.bricknames:
+            target_wcs_for_brick[brickname] = self[self.idx(brickname)]["wcs"]
+        return target_wcs_for_brick
 
     @property
     def predict_batch(self):
@@ -218,7 +320,12 @@ class DecalsDownloader(SurveyDownloader):
 
     def download_image(self, brickname, band="r"):
         """Download image for specified band, for this brick."""
-        image_filename = self.download_dir / f"legacysurvey-{brickname}-image-{band}.fits"
+        image_filename = (
+            self.download_dir
+            / brickname[:3]
+            / brickname
+            / f"legacysurvey-{brickname}-image-{band}.fits"
+        )
         try:
             download_file_to_dst(
                 f"{DecalsDownloader.URLBASE}/south/coadd/{brickname[:3]}/{brickname}/"
@@ -240,7 +347,12 @@ class DecalsDownloader(SurveyDownloader):
 
     def download_psfsize(self, brickname, band="r"):
         """Download psf size for this brick."""
-        psfsize_filename = self.download_dir / f"legacysurvey-{brickname}-psfsize-{band}.fits.fz"
+        psfsize_filename = (
+            self.download_dir
+            / brickname[:3]
+            / brickname
+            / f"legacysurvey-{brickname}-psfsize-{band}.fits.fz"
+        )
         try:
             download_file_to_dst(
                 f"{DecalsDownloader.URLBASE}/south/coadd/{brickname[:3]}/{brickname}/"
@@ -267,7 +379,9 @@ class DecalsDownloader(SurveyDownloader):
         Returns:
             str: path to downloaded tractor catalog
         """
-        tractor_filename = self.download_dir / f"tractor-{brickname}.fits"
+        tractor_filename = (
+            self.download_dir / brickname[:3] / brickname / f"tractor-{brickname}.fits"
+        )
         download_file_to_dst(
             f"{DecalsDownloader.URLBASE}/south/tractor/{brickname[:3]}/"
             f"tractor-{brickname}.fits",
@@ -281,7 +395,9 @@ class DecalsDownloader(SurveyDownloader):
             self.download_brick_ccds(brickname)
 
     def download_brick_ccds(self, brickname) -> str:
-        ccds_filename = self.download_dir / f"legacysurvey-{brickname}-ccds.fits"
+        ccds_filename = (
+            self.download_dir / brickname[:3] / brickname / f"legacysurvey-{brickname}-ccds.fits"
+        )
         download_file_to_dst(
             f"{DecalsDownloader.URLBASE}/south/coadd/{brickname[:3]}/{brickname}/"
             f"legacysurvey-{brickname}-ccds.fits",
@@ -444,87 +560,78 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
 
         return psf_params
 
-    def __init__(self, survey_data_dir, image_ids, bands, psf_config: PSFConfig):
+    def __init__(
+        self,
+        survey_data_dir,
+        image_ids,
+        bands,
+        psf_config: PSFConfig,
+        ccds_table_for_brick,
+        target_wcs_for_brick,
+    ):
         super().__init__(bands, **psf_config)
 
+        self.survey_data_dir = survey_data_dir
         self.psf_galsim = {}
         self.psf_params = {}
 
         DecalsDownloader.download_ccds_annotated(survey_data_dir)
-
         ccds_annotated_filename = f"{survey_data_dir}/ccds-annotated-decam-dr9.fits"
         for brickname in image_ids:
-            brick_ccds = Table.read(f"{survey_data_dir}/legacysurvey-{brickname}-ccds.fits")
-            ccds_for_brick = brick_ccds["ccdname"]
+            ccds_for_brick = ccds_table_for_brick[brickname]["ccdname"]
             brick_fwhms = {}
             for b in self.bands:
                 brick_fwhm_b_filename = (
-                    f"{survey_data_dir}/legacysurvey-{brickname}-psfsize-{SDSS.BANDS[b]}.fits.fz"
+                    f"{survey_data_dir}/{brickname[:3]}/{brickname}/"
+                    + f"legacysurvey-{brickname}-psfsize-{SDSS.BANDS[b]}.fits.fz"
                 )
-                brick_fwhms[b] = fits.open(brick_fwhm_b_filename)[  # pylint: disable=no-member
-                    1
-                ].data
+                brick_fwhm_b = fits.open(brick_fwhm_b_filename)
+                brick_fwhms[b] = brick_fwhm_b[1].data  # pylint: disable=no-member
             psf_params = self._get_fit_file_psf_params(
                 ccds_annotated_filename, bands, ccds_for_brick, brick_fwhms
             )
 
             self.psf_params[brickname] = psf_params
-            self.psf_galsim[brickname] = self._get_psf(psf_params)
+            DECaLS.create_des_objs(self.survey_data_dir, ccds_table_for_brick)
+            self.psf_galsim[brickname] = self._get_psf_coadded(
+                brickname, ccds_table_for_brick[brickname], target_wcs_for_brick
+            )
 
-    def _psf_fun(
-        self,
-        r,
-        mx2,
-        my2,
-        mxy,
-        a,
-        b,
-        theta,
-        ell,
-        norm_mean,
-        norm_std,
-        psfdepth,
-        galdepth,
-        gausspsfdepth,
-        gaussgaldepth,
-        fwhm,
-    ):
-        # Inner Moffat profile
-        psf_inner = galsim.Moffat(beta=b, fwhm=fwhm)
+    def _get_psf_coadded(self, brickname, brick_ccds, target_wcs_for_brick):
+        """Get co-added PSF images for each band in brick, using CCDS in `brick_ccds`.
+        cf. https://github.com/legacysurvey/legacypipe/blob/ba1ffd4969c1f920566e780118c542d103cbd9a5/py/legacypipe/coadds.py#L486-L519 # noqa: E501 # pylint: disable=line-too-long
 
-        # Outer profile - Moffat or Power-law
-        for bnd in self.bands:
-            bl = DECaLS.BANDS[bnd]
-            if bl == "z":
-                alpha, beta, weight = 17.65, 1.7, 0.0145
-                # Create the first Moffat PSF component
-                moffat1 = galsim.Moffat(
-                    beta=beta,
-                    fwhm=2 * alpha * math.sqrt(2 ** (1 / beta) - 1),
-                )
-                # Create the second Moffat PSF component
-                moffat2 = galsim.Moffat(
-                    beta=beta,
-                    fwhm=2 * alpha * math.sqrt(2 ** (1 / beta) - 1) / weight,
-                )
-                # Combine the two Moffat components using Moffat weighting
-                weighted_moffat = weight * moffat1 + (1 - weight) * moffat2
-                outer = weighted_moffat
-            else:
-                assert bl in {"g", "r", "i"}
-                coeffs = {"g": 0.00045, "r": 0.00033, "i": 0.00033}
-                outer = coeffs[bl] * r ** (-2)
+        Args:
+            brickname (str): brick name
+            brick_ccds (Table): CCDs to use for coadd image simulation
+            target_wcs_for_brick (WCS): target WCS for brick
 
-        psf_outer = galsim.InterpolatedImage(
-            galsim.Image(outer.numpy(), scale=self.pixel_scale)
-        ).withFlux(1.0)
+        Returns:
+            np.ndarray: co-added PSF images for each band in brick
+        """
+        coadd_psf_image = np.full((len(DECaLS.BANDS), self.psf_slen, self.psf_slen), 1e-30)
+        for ccd in brick_ccds:
+            band = DES.BANDS.index(ccd["filter"])
+            des_obj, idx = DECaLS.des_obj(
+                brickname,
+                {"ra": ccd["ra"], "dec": ccd["dec"]},
+                ccd["ccdname"],
+                ccd["filter"],
+                ccd["image_filename"].split(".fits.fz")[0],
+            )
+            des_img = des_obj["image"]
+            _, image_h, image_w = des_img.shape
+            px, py = image_w // 2, image_h // 2
+            psf_patch = DECaLS.des_objs.psf.get_psf_via_despsfex(
+                des_image_id=DECaLS.des_objs.image_id(idx), px=px, py=py
+            )[band]
 
-        # Combine the inner and outer profiles
-        psf_combined = galsim.Convolve([psf_inner, psf_outer])
+            # TODO: fix always all-0 psf
+            coadd_psf_image[band] += psf_patch.original.image.array / (des_obj["sig1"][band] ** 2)
 
-        # Apply ellipticity and position angle to the PSF model
-        psf_combined = psf_combined.shear(e=ell, beta=theta * galsim.degrees)
-
-        psf_combined /= norm_mean
-
-        return psf_combined  # noqa: WPS331
+        # convert to image
+        images = []
+        for b, _bl in enumerate(DECaLS.BANDS):
+            psf_image = galsim.Image(coadd_psf_image[b], scale=self.pixel_scale)
+            images.append(galsim.InterpolatedImage(psf_image).withFlux(1.0))
+        return images

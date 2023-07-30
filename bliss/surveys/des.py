@@ -10,6 +10,7 @@ from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
 from numpy.core import defchararray
+from omegaconf import DictConfig
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from pyvo.dal import sia
 from scipy.interpolate import RectBivariateSpline
@@ -18,7 +19,6 @@ from torch.utils.data import DataLoader
 
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
-from bliss.surveys.decals import DecalsDownloader, DecalsFullCatalog  # NOTE: potentially circular
 from bliss.surveys.survey import Survey, SurveyDownloader
 from bliss.utils.download_utils import download_file_to_dst
 
@@ -37,6 +37,7 @@ DESImageID = TypedDict(
         "i": str,
         "z": str,
     },
+    total=False,
 )
 
 
@@ -75,11 +76,15 @@ class DarkEnergySurvey(Survey):
             },
         ),
     ):
+        from bliss.surveys.decals import (  # pylint: disable=import-outside-toplevel
+            DecalsFullCatalog,
+        )
+
         super().__init__()
 
         self.des_path = Path(dir_path)
 
-        self.image_id_list = list(image_ids)
+        self.image_id_list = self.process_image_ids(image_ids)
         self.bands = tuple(range(len(self.BANDS)))
         self.n_bands = len(self.BANDS)
         self.pixel_shift = pixel_shift
@@ -109,7 +114,7 @@ class DarkEnergySurvey(Survey):
         return self.image_id_list[idx]
 
     def idx(self, image_id: DESImageID) -> int:
-        return self.image_id_list.index(image_id)
+        return self.image_id_list.index(self.to_dictconfig(image_id))
 
     def image_ids(self) -> List[DESImageID]:
         return self.image_id_list
@@ -136,12 +141,13 @@ class DarkEnergySurvey(Survey):
         for b, bl in enumerate(self.BANDS):
             if bl != first_present_bl and des_image_id[bl]:
                 image_list[b] = self.read_image_for_band(des_image_id, bl)
-            else:
+            elif bl != first_present_bl:
                 image_list[b] = {
                     "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
                     "wcs": first_present_bl_obj["wcs"],
                     "nelec_per_nmgy_list": np.ones((1, 1, 1)),
+                    "sig1": 0.0,
                 }
 
         ret = {}
@@ -164,13 +170,20 @@ class DarkEnergySurvey(Survey):
         hr = image_hdu.header  # pylint: disable=no-member
         wcs = WCS(hr)
 
+        # compute sig1 (cf. https://github.com/dstndstn/tractor/blob/cdb82000422e85c9c97b134edadff31d68bced0c/projects/desi/decam.py#L313-L333) # noqa: E501 # pylint: disable=line-too-long
+        diffs = image[:-5:10, :-5:10] - image[5::10, 5::10]
+        mad = np.median(np.abs(diffs).ravel())
+        zpscale = DES.zpt_to_scale(hr["MAGZPT"])
+        sig1 = (1.4826 * mad / np.sqrt(2.0)) / zpscale
+
         return {
             "image": image.astype(np.float32),
             "background": self.splinesky_level_for_band(
                 brickname, ccdname, des_image_id[band], image.shape
             ),
             "wcs": wcs,
-            "nelec_per_nmgy_list": np.array([[[DES.zpt_to_scale(hr["MAGZPT"])]]]),
+            "nelec_per_nmgy_list": np.array([[[zpscale]]]),
+            "sig1": sig1,
         }
 
     def splinesky_level_for_band(self, brickname, ccdname, image_filename, image_shape):
@@ -228,6 +241,22 @@ class DarkEnergySurvey(Survey):
         # Take the mean of the x and y components
         return (background_values_x + background_values_y) / 2
 
+    def to_dictconfig(self, image_id):
+        # convert sky_coord["ra"], sky_coord["dec"] to np.float32
+        image_id["sky_coord"] = {
+            "ra": float(image_id["sky_coord"]["ra"]),
+            "dec": float(image_id["sky_coord"]["dec"]),
+        }
+        return DictConfig(image_id)
+
+    def process_image_ids(self, image_ids) -> List[DictConfig]:
+        im_ids = list(image_ids)
+        for im_id in im_ids:
+            for b in self.BANDS:
+                im_id[b] = im_id.get(b, "")
+        # convert to hashable DictConfig
+        return [self.to_dictconfig(im_id) for im_id in im_ids]
+
     @property
     def predict_batch(self):
         if not self._predict_batch:
@@ -283,12 +312,16 @@ class DESDownloader(SurveyDownloader):
         """Download image for specified band, for this brick/ccd."""
         image_table = self.svc.search((sky_coord["ra"], sky_coord["dec"])).to_table()
         sel = defchararray.find(image_table["access_url"].astype(str), image_basename) != -1
-        b_access_url = image_table[sel][0]["access_url"]
         image_dst_filename = (
             self.download_dir / brickname[:3] / brickname / f"{image_basename}.fits"
         )
         try:
-            download_file_to_dst(b_access_url, image_dst_filename)
+            download_file_to_dst(image_table[sel][0]["access_url"], image_dst_filename)
+        except IndexError as e:
+            warnings.warn(
+                f"Desired image with basename {image_basename} not found in SIA database."
+            )
+            raise e
         except HTTPError as e:
             warnings.warn(
                 f"No {image_dst_filename} image for brick {brickname} at sky position "
@@ -354,6 +387,8 @@ class DESDownloader(SurveyDownloader):
         return str(background_filename)
 
     def download_catalog(self, des_image_id) -> str:
+        from bliss.surveys.decals import DecalsDownloader  # pylint: disable=import-outside-toplevel
+
         brickname = des_image_id["decals_brickname"]
         tractor_filename = str(
             self.download_dir / brickname[:3] / brickname / f"tractor-{brickname}.fits"
@@ -398,7 +433,7 @@ class DES_PSF(ImagePSF):  # noqa: N801
                     psf_params[b] = self._psf_params_for_band(image_id, bl)
 
             self.psf_params[image_id] = psf_params
-            self.psf_galsim[image_id] = self._get_psf_via_despsfex(image_id)
+            self.psf_galsim[image_id] = self.get_psf_via_despsfex(image_id)
 
     def _psfex_hdu_for_band_image(self, des_image_id, bl):
         brickname = des_image_id["decals_brickname"]
@@ -428,11 +463,13 @@ class DES_PSF(ImagePSF):  # noqa: N801
 
         return torch.tensor(psf_params, dtype=torch.float32)
 
-    def _get_psf_via_despsfex(self, des_image_id):  # noqa: W0237
+    def get_psf_via_despsfex(self, des_image_id, px=0.0, py=0.0):  # noqa: W0237
         """Construct PSF image from PSFEx FITS files.
 
         Args:
             des_image_id (DESImageID): image_id for this image
+            px (float): x image pixel coordinate for PSF center
+            py (float): y image pixel coordinate for PSF center
 
         Returns:
             images (List[InterpolatedImage]): list of psf transformations for each band
@@ -460,7 +497,7 @@ class DES_PSF(ImagePSF):  # noqa: N801
                     str(image_filename),
                 )
                 # TODO: use an appropriate image position for the PSF
-                psf_image = des_psfex_band.getPSF(galsim.PositionD(0, 0))
+                psf_image = des_psfex_band.getPSF(galsim.PositionD(px, py))
                 images[b] = psf_image
 
         return images

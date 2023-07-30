@@ -1,8 +1,10 @@
 import os
 
 import torch
+from hydra.utils import instantiate
 
 from bliss.generate import generate
+from bliss.surveys.des import DarkEnergySurvey as DES
 
 
 class TestGenerate:
@@ -46,3 +48,20 @@ class TestGenerate:
                 cfg.simulator.prior.n_tiles_h * cfg.simulator.prior.tile_slen,
                 cfg.simulator.prior.n_tiles_w * cfg.simulator.prior.tile_slen,
             )
+
+    def test_generate_decals_coadd(self, cfg, tmpdir_factory):
+        decals_cached_data_path = str(tmpdir_factory.mktemp("decals_cached_data"))
+        gen_decals_cfg = cfg.copy()
+        gen_decals_cfg.generate.cached_data_path = decals_cached_data_path
+
+        gen_decals_cfg.simulator.survey = "${surveys.decals}"
+        gen_decals_cfg.generate.n_batches = 3
+        gen_decals_cfg.generate.batch_size = 4
+        gen_decals_cfg.simulator.prior.batch_size = 4
+        gen_decals_cfg.simulator.prior.reference_band = DES.BANDS.index("r")
+        gen_decals_cfg.simulator.prior.survey_bands = DES.BANDS
+        gen_decals_cfg.generate.max_images_per_file = 8
+        # generate(gen_decals_cfg) # noqa: E800
+
+        cfg.surveys.decals.bands = [1, 2, 4]  # g, r, z
+        instantiate(cfg.surveys.decals)
