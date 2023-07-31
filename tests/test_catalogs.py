@@ -5,8 +5,9 @@ import pytest
 import torch
 from hydra.utils import instantiate
 
-from bliss.catalog import FullCatalog, RegionCatalog, SourceType, TileCatalog
+from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.surveys.decals import DecalsFullCatalog
+from case_studies.prob_tile_suppression.region_catalog import RegionCatalog, tile_cat_to_region_cat
 
 # TODO: Add PhotoFullCatalog-specific tests (like loading, restricting by RA/DEC, downloading)
 
@@ -232,6 +233,6 @@ class TestRegionCatalog:
         assert full_cat.plocs.equal(true_locs)
 
     def test_tile_cat_to_region(self, basic_tilecat):
-        region_cat = basic_tilecat.to_region_params(0.5)
+        region_cat = tile_cat_to_region_cat(basic_tilecat, 0.5)
         full_cat = basic_tilecat.to_full_params()
         assert region_cat.to_full_params().plocs.equal(full_cat.plocs)

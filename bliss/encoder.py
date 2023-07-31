@@ -257,11 +257,11 @@ class Encoder(pl.LightningModule):
         scheduler = MultiStepLR(optimizer, **self.scheduler_params)
         return [optimizer], [scheduler]
 
-    def _get_loss(self, pred: Dict[str, Distribution], true_tile_cat: TileCatalog):
+    def _get_loss(self, pred: Dict[str, Distribution], true_cat: TileCatalog):
         loss_with_components = {}
 
         # counter loss
-        counter_loss = -pred["on_prob"].log_prob(true_tile_cat.n_sources)
+        counter_loss = -pred["on_prob"].log_prob(true_cat.n_sources)
         loss = counter_loss
         loss_with_components["counter_loss"] = counter_loss.mean()
 
@@ -270,23 +270,23 @@ class Encoder(pl.LightningModule):
         # and real catalogs. Still, there may be a better way.
 
         # location loss
-        true_locs = true_tile_cat.locs.squeeze(3)
+        true_locs = true_cat.locs.squeeze(3)
         locs_loss = -pred["loc"].log_prob(true_locs)
-        locs_loss *= true_tile_cat.n_sources
+        locs_loss *= true_cat.n_sources
         loss += locs_loss
-        loss_with_components["locs_loss"] = locs_loss.sum() / true_tile_cat.n_sources.sum()
+        loss_with_components["locs_loss"] = locs_loss.sum() / true_cat.n_sources.sum()
 
         # star/galaxy classification loss
-        true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
+        true_gal_bools = rearrange(true_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
         binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
-        binary_loss *= true_tile_cat.n_sources
+        binary_loss *= true_cat.n_sources
         loss += binary_loss
-        loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
+        loss_with_components["binary_loss"] = binary_loss.sum() / true_cat.n_sources.sum()
 
         # flux losses
-        true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
-        star_fluxes = rearrange(true_tile_cat["star_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
-        galaxy_fluxes = rearrange(true_tile_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
+        true_star_bools = rearrange(true_cat.star_bools, "b ht wt 1 1 -> b ht wt")
+        star_fluxes = rearrange(true_cat["star_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
+        galaxy_fluxes = rearrange(true_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
 
         # only compute loss over bands we're using
         star_bands = [self.STAR_FLUX_NAMES[band] for band in self.bands]
@@ -303,7 +303,7 @@ class Encoder(pl.LightningModule):
             loss_with_components[gal_name] = gal_flux_loss.sum() / true_gal_bools.sum()
 
         # galaxy properties loss
-        galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
+        galsim_true_vals = rearrange(true_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
         for i, param_name in enumerate(self.GALSIM_NAMES):
             galsim_pn = f"galsim_{param_name}"
             loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools

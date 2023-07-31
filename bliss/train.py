@@ -26,7 +26,7 @@ def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-state
     dataset = instantiate(data_source_cfg)
 
     # setup model
-    encoder = instantiate(cfg.encoder)
+    encoder = instantiate(cfg.training.encoder_target)
 
     # load pretrained weights
     if "pretrained_weights" in cfg.training and cfg.training.pretrained_weights is not None:
