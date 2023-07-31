@@ -119,14 +119,6 @@ class DarkEnergySurvey(Survey):
     def image_ids(self) -> List[DESImageID]:
         return self.image_id_list
 
-    def nmgy_to_nelec(self):
-        d = {}
-        for i, image_id in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
-            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
-            d[image_id] = avg_nelec_conv
-        return d
-
     def get_from_disk(self, idx):
         des_image_id = self.image_id(idx)
 
@@ -145,7 +137,7 @@ class DarkEnergySurvey(Survey):
                 image_list[b] = {
                     "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
-                    "wcs": first_present_bl_obj["wcs"],
+                    "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
                     "nelec_per_nmgy_list": np.ones((1, 1, 1)),
                     "sig1": 0.0,
                 }
@@ -324,7 +316,7 @@ class DESDownloader(SurveyDownloader):
             raise e
         except HTTPError as e:
             warnings.warn(
-                f"No {image_dst_filename} image for brick {brickname} at sky position "
+                f"No {image_basename} image for brick {brickname} at sky position "
                 f"({sky_coord['ra']}, {sky_coord['dec']}). Check cfg.datasets.des.image_ids.",
                 stacklevel=2,
             )

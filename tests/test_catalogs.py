@@ -6,6 +6,7 @@ import torch
 from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
+from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
 from bliss.surveys.decals import DecalsFullCatalog
 
 # TODO: Add PhotoFullCatalog-specific tests (like loading, restricting by RA/DEC, downloading)
@@ -124,14 +125,17 @@ class TestBasicTileAndFullCatalogs:
 
 class TestDecalsCatalog:
     def test_load_decals_from_file(self, cfg):
-        sample_file = Path(cfg.paths.decals) / "tractor-3366m010.fits"
+        brickname = "3366m010"
+        sample_file = (
+            Path(cfg.paths.decals) / brickname[:3] / brickname / f"tractor-{brickname}.fits"
+        )
         the_cfg = cfg.copy()
         the_cfg.predict.dataset = cfg.surveys.decals
-        the_cfg.encoder.bands = [2]
+        the_cfg.encoder.bands = [DECaLS.BANDS.index("r")]
         decals = instantiate(the_cfg.predict.dataset)
         decals_cat = DecalsFullCatalog.from_file(
             cat_path=sample_file,
-            wcs=decals[0]["wcs"][0],
+            wcs=decals[0]["wcs"][DECaLS.BANDS.index("r")],
             height=decals[0]["image"].shape[1],
             width=decals[0]["image"].shape[2],
         )

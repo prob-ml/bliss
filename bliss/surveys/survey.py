@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+import numpy as np
 import pytorch_lightning as pl
 from torch.utils.data import Dataset
 
@@ -18,6 +19,11 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         self.pixel_shift = None
 
         self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
+
+    @staticmethod
+    def coadd_images(constituent_images):
+        """Coadd the constituent images into a single image."""
+        raise NotImplementedError
 
     @abstractmethod
     def prepare_data(self):
@@ -40,7 +46,7 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         """Return the index for the given image_id."""
 
     @abstractmethod
-    def image_ids(self):
+    def image_ids(self) -> list:
         """Return a list of all image_ids."""
 
     @property
@@ -52,6 +58,14 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
     @abstractmethod
     def predict_batch(self):
         """Set a batch of data for prediction."""
+
+    def nmgy_to_nelec(self):
+        d = {}
+        for i, image_id in enumerate(self.image_ids()):
+            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
+            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
+            d[image_id] = avg_nelec_conv
+        return d
 
 
 class SurveyDownloader:

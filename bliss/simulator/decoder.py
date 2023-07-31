@@ -110,12 +110,32 @@ class ImageDecoder(nn.Module):
             wcs.append(bnd_wcs.low_level_wcs)
         return shift, wcs
 
-    def render_images(self, tile_cat: TileCatalog, image_ids):
+    def draw_sources_on_band_image(
+        self, band_img, n_sources, full_cat, batch, psf, band, image_dims, band_shift
+    ):
+        slen_h, slen_w = image_dims
+        for s in range(n_sources):
+            source_params = full_cat.one_source(batch, s)
+            source_type = source_params["source_type"].item()
+            renderer = self.source_renderers[source_type]
+            galsim_obj = renderer(psf, band, source_params)
+            plocs0, plocs1 = source_params["plocs"]
+            offset = np.array([plocs1 - (slen_w / 2), plocs0 - (slen_h / 2)])
+            offset += band_shift
+
+            # essentially all the runtime of the simulator is incurred by this call
+            # to drawImage
+            galsim_obj.drawImage(
+                offset=offset, method=self.psf_draw_method, add_to_image=True, image=band_img
+            )
+
+    def render_images(self, tile_cat: TileCatalog, image_ids, coadd_depth=1):
         """Render images from a tile catalog.
 
         Args:
             tile_cat (TileCatalog): the tile catalog to create images from
             image_ids (ndarray): array containing the image_ids of PSFs to use
+            coadd_depth (int): number of images (in each band) that will be co-added
 
         Raises:
             AssertionError: image_ids must contain `batch_size` values
@@ -124,11 +144,14 @@ class ImageDecoder(nn.Module):
             Tuple[Tensor, List, Tensor]: tensor of images, list of PSFs, tensor of PSF params
         """
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
-        assert len(image_ids) == batch_size
+        assert (
+            len(image_ids) == batch_size
+        ), "image_ids array should contain `batch_size` identical values"
 
         slen_h = tile_cat.tile_slen * n_tiles_h
         slen_w = tile_cat.tile_slen * n_tiles_w
-        images = np.zeros((batch_size, self.n_bands, slen_h, slen_w), dtype=np.float32)
+        image_shape = (self.n_bands, slen_h, slen_w)
+        images = np.zeros((batch_size, coadd_depth, *image_shape), dtype=np.float32)
 
         # use the PSF from specified image_id
         psfs = [self.psf_galsim[image_ids[b]] for b in range(batch_size)]
@@ -151,24 +174,18 @@ class ImageDecoder(nn.Module):
             psf = psfs[b]
             shift, wcs = self.pixel_shift()
             wcs_batch.append(wcs)
-            for band in range(self.n_bands):
-                gs_img = galsim.Image(array=images[b, band], scale=self.pixel_scale)
-                for s in range(n_sources):
-                    source_params = full_cat.one_source(b, s)
-                    source_type = source_params["source_type"].item()
-                    renderer = self.source_renderers[source_type]  # NOTE: SDSS-Specific!
-                    galsim_obj = renderer(psf, band, source_params)
-                    plocs0, plocs1 = source_params["plocs"]
-                    offset = np.array([plocs1 - (slen_w / 2), plocs0 - (slen_h / 2)])
-                    offset += shift[band]
-
-                    # essentially all the runtime of the simulator is incurred by this call
-                    # to drawImage
-                    galsim_obj.drawImage(
-                        offset=offset,
-                        method=self.psf_draw_method,
-                        add_to_image=True,
-                        image=gs_img,
+            for d in range(coadd_depth):
+                for band in range(self.n_bands):
+                    band_img = galsim.Image(array=images[b, d, band], scale=self.pixel_scale)
+                    self.draw_sources_on_band_image(
+                        band_img,
+                        n_sources,
+                        full_cat,
+                        b,
+                        psf,
+                        band,
+                        image_dims=(slen_h, slen_w),
+                        band_shift=shift[band],
                     )
 
         # clamping here helps with an strange issue caused by galsim rendering

@@ -269,7 +269,7 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
     if do_crop and (not is_simulated):
         # DECaLS one-instance catalog plocs
         decals = instantiate(
-            cfg.surveys.decals, bands=[SDSS.BANDS.index("r")], sky_coords=[{"ra": ra, "dec": dec}]
+            cfg.surveys.decals, bands=[DECaLS.BANDS.index("r")], sky_coords=[{"ra": ra, "dec": dec}]
         )
 
         brickname = DECaLS.brick_for_radec(ra, dec)
@@ -339,7 +339,9 @@ def plot_predict(
             survey={"fields": [{"run": run, "camcol": camcol, "fields": [field]}]},
         )
         decoder_obj = simulator.image_decoder
-        recon_images, _, _, _ = decoder_obj.render_images(est_tile, [(run, camcol, field)])
+        recon_images, _, _, _ = decoder_obj.render_images(
+            est_tile, [(run, camcol, field)]
+        )  # TODO: causes issue when weights saved for survey that has diff no. of bands as SDSS
         recon_img = recon_images[0][0]  # first image in batch, first band in image
 
         image = image.to("cpu")

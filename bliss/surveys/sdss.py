@@ -152,14 +152,6 @@ class SloanDigitalSkySurvey(Survey):
                 rcfs.append((run, camcol, field))
         return rcfs
 
-    def nmgy_to_nelec(self):
-        d = {}
-        for i, rcf in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
-            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
-            d[rcf] = avg_nelec_conv
-        return d
-
     def get_from_disk(self, idx):
         if self.rcfgcs[idx] is None:
             return None

@@ -29,6 +29,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         survey: Survey,
         prior: CatalogPrior,
         n_batches: int,
+        coadd_depth: int = 1,
         num_workers: int = 0,
         valid_n_batches: Optional[int] = None,
         fix_validation_set: bool = False,
@@ -44,7 +45,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.background.requires_grad_(False)
 
         assert survey.psf is not None, "Survey psf cannot be None."
-        assert survey.bands is not None, "Survey bands cannot be None."
+        assert survey.pixel_shift is not None, "Survey pixel_shift cannot be None."
+        assert survey.nmgy_to_nelec_dict is not None, "Survey nmgy_to_nelec_dict cannot be None."
         self.image_decoder = ImageDecoder(
             psf=survey.psf,
             bands=survey.BANDS,
@@ -55,11 +57,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         self.n_batches = n_batches
         self.batch_size = self.catalog_prior.batch_size
+        self.coadd_depth = coadd_depth
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
         self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
 
-        # list of (run, camcol, field) tuples from config
         self.image_ids = self.survey.image_ids()
 
     def randomized_image_ids(self, num_samples=1) -> Tuple[List[Any], np.ndarray]:
@@ -77,8 +79,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return [self.image_ids[i] for i in n], n
 
     def _apply_noise(self, images_mean):
-        # add noise to images.
-        assert torch.all(images_mean > 1e-8)
         images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
         images += images_mean
         return images
@@ -98,19 +98,31 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             and psf parameters
         """
         images, psfs, psf_params, wcs_batch = self.image_decoder.render_images(
-            tile_catalog, image_ids
+            tile_catalog, image_ids, self.coadd_depth
         )
+        batch_size = images.shape[0]
+        assert images.ndim == 5, f"Expected `images` to be 5D, got {images.ndim}D."
+        # (1) align
+        for b in range(batch_size):
+            first_batch_wcs = wcs_batch[b]
+            for d in range(self.coadd_depth):
+                images[b, d] = torch.from_numpy(
+                    align(
+                        images[b, d].numpy(),
+                        ref_wcs=first_batch_wcs,
+                        ref_band=self.catalog_prior.b_band,
+                    )
+                )
+        images = torch.squeeze(images, dim=1)  # remove coadd depth dimension if 1
+        # (2) coadd via inverse-variance weighting
+        if self.coadd_depth > 1:
+            coadded_images = np.zeros((batch_size, *images.shape[-3:]))  # 4D
+            for b in range(batch_size):
+                coadded_images[b] = self.survey.coadd_images(images[b])
+            images = torch.from_numpy(coadded_images).float()
         assert self.background is not None, "Survey background cannot be None."
         background = self.background.sample(images.shape, image_id_indices=image_id_indices)
         images += background
-        for i in range(images.shape[0]):
-            images[i] = torch.from_numpy(
-                align(
-                    images[i].numpy(),
-                    wcs_batch[i],
-                    self.catalog_prior.b_band,
-                )
-            )
         images = torch.clamp(images, min=1e-6)
         images = self._apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
