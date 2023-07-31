@@ -305,6 +305,11 @@ def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float):
         "locs": torch.zeros(tile_cat.batch_size, n_rows, n_cols, 1, 2),
         "n_sources": torch.zeros(tile_cat.batch_size, n_rows, n_cols),
     }
+    for key, val in tile_cat.items():
+        shape = list(val.shape)
+        shape[1] = n_rows
+        shape[2] = n_cols
+        d[key] = torch.zeros(*shape)
     full_locs = tile_cat.get_full_locs_from_tiles()
 
     batch = list(range(tile_cat.batch_size))
