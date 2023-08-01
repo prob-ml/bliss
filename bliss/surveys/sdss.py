@@ -55,6 +55,7 @@ class SloanDigitalSkySurvey(Survey):
         self,
         psf_config: PSFConfig,
         fields,
+        pixel_shift,
         dir_path="data/sdss",
     ):
         super().__init__()
@@ -65,6 +66,7 @@ class SloanDigitalSkySurvey(Survey):
         self.sdss_fields = fields
         self.bands = tuple(range(len(self.BANDS)))
         self.n_bands = len(self.BANDS)
+        self.pixel_shift = pixel_shift
 
         self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
         self.prepare_data()
