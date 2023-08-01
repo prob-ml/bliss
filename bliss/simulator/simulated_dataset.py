@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.generate import FileDatum
+from bliss.predict import align
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
@@ -45,7 +46,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         assert survey.psf is not None, "Survey psf cannot be None."
         assert survey.bands is not None, "Survey bands cannot be None."
         self.image_decoder = ImageDecoder(
-            psf=survey.psf, bands=survey.BANDS, nmgy_to_nelec_dict=survey.nmgy_to_nelec_dict
+            psf=survey.psf,
+            bands=survey.BANDS,
+            pixel_shift=survey.pixel_shift,
+            nmgy_to_nelec_dict=survey.nmgy_to_nelec_dict,
+            ref_band=prior.b_band,
         )
 
         self.n_batches = n_batches
@@ -92,10 +97,21 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             Tuple[Tensor, Tensor, Tensor, Tensor]: tuple of images, backgrounds, deconvolved images,
             and psf parameters
         """
-        images, psfs, psf_params = self.image_decoder.render_images(tile_catalog, image_ids)
+        images, psfs, psf_params, wcs_batch = self.image_decoder.render_images(
+            tile_catalog, image_ids
+        )
         assert self.background is not None, "Survey background cannot be None."
         background = self.background.sample(images.shape, image_id_indices=image_id_indices)
         images += background
+        for i in range(images.shape[0]):
+            images[i] = torch.from_numpy(
+                align(
+                    images[i].numpy(),
+                    wcs_batch[i],
+                    self.catalog_prior.b_band,
+                )
+            )
+        images = torch.clamp(images, min=1e-6)
         images = self._apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
         return images, background, deconv_images, psf_params
