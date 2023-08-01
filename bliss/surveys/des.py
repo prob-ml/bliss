@@ -60,6 +60,7 @@ class DarkEnergySurvey(Survey):
     def __init__(
         self,
         psf_config: PSFConfig,
+        pixel_shift,
         dir_path="data/des",
         image_ids: Tuple[DESImageID] = (
             # TODO: maybe find a better/more general image_id representation?
@@ -81,6 +82,7 @@ class DarkEnergySurvey(Survey):
         self.image_id_list = list(image_ids)
         self.bands = tuple(range(len(self.BANDS)))
         self.n_bands = len(self.BANDS)
+        self.pixel_shift = pixel_shift
 
         self.downloader = DESDownloader(self.image_id_list, self.des_path)
         self.prepare_data()

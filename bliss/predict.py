@@ -72,7 +72,7 @@ def align(img, ref_wcs, ref_band):
 
     out_print = np.expand_dims(out_print, axis=0)
 
-    reproj_out = np.zeros((5, orig_dim[1], orig_dim[2]))
+    reproj_out = np.zeros((orig_dim[0], orig_dim[1], orig_dim[2]))
 
     for i in range(img.shape[0]):
         reproj_d[i] = np.multiply(reproj_d[i], out_print)
@@ -339,7 +339,7 @@ def plot_predict(
             survey={"fields": [{"run": run, "camcol": camcol, "fields": [field]}]},
         )
         decoder_obj = simulator.image_decoder
-        recon_images, _, _ = decoder_obj.render_images(est_tile, [(run, camcol, field)])
+        recon_images, _, _, _ = decoder_obj.render_images(est_tile, [(run, camcol, field)])
         recon_img = recon_images[0][0]  # first image in batch, first band in image
 
         image = image.to("cpu")
