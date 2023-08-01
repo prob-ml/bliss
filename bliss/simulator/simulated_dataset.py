@@ -50,6 +50,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             bands=survey.BANDS,
             pixel_shift=survey.pixel_shift,
             nmgy_to_nelec_dict=survey.nmgy_to_nelec_dict,
+            ref_band=prior.b_band,
         )
 
         self.n_batches = n_batches
@@ -107,7 +108,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 align(
                     images[i].numpy(),
                     wcs_batch[i],
-                    0,
+                    self.catalog_prior.b_band,
                 )
             )
         images = torch.clamp(images, min=1e-6)
