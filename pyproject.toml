@@ -12,10 +12,17 @@ authors = [
 ]
 description = "Bayesian Light Source Separator"
 documentation = "https://prob-ml.github.io/bliss/"
-keywords = ["cosmology", "blending", "weak lensing", "bayesian", "ml", "pytorch"]
+keywords = [
+  "cosmology",
+  "blending",
+  "weak lensing",
+  "bayesian",
+  "ml",
+  "pytorch",
+]
 license = "MIT"
 name = "bliss-deblender"
-packages = [{include = "bliss"}]
+packages = [{ include = "bliss" }]
 readme = "README.md"
 repository = "https://github.com/prob-ml/bliss"
 version = "0.1.1"
@@ -35,13 +42,10 @@ scipy = ">=1.4.1"
 seaborn = ">=0.11.2"
 torch = ">=1.9"
 torchmetrics = ">=0.5.1"
-yolov5 = "^7.0.9"
 
 [tool.poetry.dev-dependencies]
 Cython = ">=0.29.21"
-Sphinx = ">=4.0.2"
 black = ">=22.3.0"
-darglint = ">=1.8.1"
 flake8 = ">=4.0.1"
 flake8-docstrings = ">=1.6.0"
 git-lfs = ">=1.6"
@@ -57,7 +61,6 @@ pylint = ">=2.6.0"
 pytest = ">=6.1.2"
 pytest-cov = ">=2.10"
 pytest-mypy = ">=0.9.1"
-sphinx-rtd-theme = ">=0.5.2"
 torch-tb-profiler = "^0.4.1"
 tqdm = ">=4.62.3"
 wemake-python-styleguide = ">=0.16.1"
@@ -80,6 +83,4 @@ filterwarnings = [
   "ignore:.*when logging on epoch level in distributed setting.*",
 ]
 minversion = "6.0"
-testpaths = [
-  "tests",
-]
+testpaths = ["tests"]
