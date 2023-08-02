@@ -40,9 +40,6 @@ class TileCatalog(UserDict):
         "matched",
         "mismatched",
         "detection_thresholds",
-        "lensed_galaxy_bools",
-        "lensed_galaxy_probs",
-        "lens_params",
         "log_flux_sd",
         "loc_sd",
     }
