@@ -76,6 +76,8 @@ class BinaryEncoder(pl.LightningModule):
         # grid for center cropped tiles
         self.center_ptiles = CenterPaddedTilesTransform(self.tile_slen, self.ptile_slen)
 
+        self.validation_step_outputs = []
+
     def forward(self, image_ptiles, locs):
         return self.encode(image_ptiles, locs)
 
@@ -159,7 +161,8 @@ class BinaryEncoder(pl.LightningModule):
         self.log("val/loss", pred["loss"], batch_size=batch_size)
         self.log("val/acc", pred["acc"], batch_size=batch_size)
         pred_out = {f"pred_{k}": v for k, v in pred.items()}
-        return {**batch, **pred_out}
+        self.validation_step_outputs.append({**batch, **pred_out})
+        return pred_out
 
     def on_validation_epoch_end(self):
         """Pytorch lightning method."""
@@ -174,6 +177,8 @@ class BinaryEncoder(pl.LightningModule):
 
         if self.n_bands == 1:
             self.make_plots(batch)
+
+        self.validation_step_outputs.clear()
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
