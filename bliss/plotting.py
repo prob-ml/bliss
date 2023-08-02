@@ -32,14 +32,14 @@ def plot_plocs(catalog, ax, idx, filter_by="all", bp=0, **kwargs):
         case _:
             raise NotImplementedError(f"Unknown filter option {filter} specified")
 
-    plocs = catalog.plocs[idx, keep] - 0.5 + bp
+    plocs = catalog.plocs[idx, keep] + bp
     plocs = plocs.detach().cpu()
     ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
 
 
-def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px):
+def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px, ticks=None):
     """Plots an image of true and estimated sources."""
-    fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(20, 20))
+    fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(10, 10))
     axes = axes.flatten() if nrows > 1 else [axes]  # flatten
 
     for ax_idx, ax in enumerate(axes):
@@ -47,15 +47,16 @@ def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px):
             break
 
         img_id = img_ids[ax_idx]
-        true_n_sources = true_cat.n_sources[img_id].item()
-        n_sources = est_cat.n_sources[img_id].item()
+        true_n_sources = int(true_cat.n_sources[img_id].item())
+        n_sources = int(est_cat.n_sources[img_id].item())
         ax.set_xlabel(f"True num: {true_n_sources}; Est num: {n_sources}")
 
         # add white border showing where centers of stars and galaxies can be
-        ax.axvline(margin_px, color="w")
-        ax.axvline(images.shape[-1] - margin_px, color="w")
-        ax.axhline(margin_px, color="w")
-        ax.axhline(images.shape[-2] - margin_px, color="w")
+        if margin_px > 0:
+            ax.axvline(margin_px, color="w")
+            ax.axvline(images.shape[-1] - margin_px, color="w")
+            ax.axhline(margin_px, color="w")
+            ax.axhline(images.shape[-2] - margin_px, color="w")
 
         # plot image first
         image = images[img_id].cpu().numpy()
@@ -64,7 +65,13 @@ def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px):
         vmax = image.max().item()
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("right", size="5%", pad=0.05)
-        im = ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
+        im = ax.matshow(
+            image,
+            vmin=vmin,
+            vmax=vmax,
+            cmap="viridis",
+            extent=(0, image.shape[0], image.shape[1], 0),
+        )
         fig.colorbar(im, cax=cax, orientation="vertical")
 
         plot_plocs(true_cat, ax, img_id, "galaxy", bp=margin_px, color="r", marker="x", s=20)
@@ -82,6 +89,14 @@ def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px):
                 mode="expand",
                 borderaxespad=0.0,
             )
+
+        if ticks is not None:
+            xticks = list(set(ticks[:, 1].tolist()))
+            yticks = list(set(ticks[:, 0].tolist()))
+
+            ax.set_xticks(xticks, [f"{val:.1f}" for val in xticks], fontsize=8)
+            ax.set_yticks(yticks, [f"{val:.1f}" for val in yticks], fontsize=8)
+            ax.grid(linestyle="dotted", which="major")
 
     fig.tight_layout()
     return fig

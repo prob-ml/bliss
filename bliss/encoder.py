@@ -369,8 +369,9 @@ class Encoder(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        # only plot images on the first batch of epoch
-        plot_images = batch_idx == 0
+        # only plot images on the first batch of every 10th epoch
+        epoch = self.trainer.current_epoch
+        plot_images = batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1)
         self._generic_step(batch, "val", log_metrics=True, plot_images=plot_images)
 
     def test_step(self, batch, batch_idx):
