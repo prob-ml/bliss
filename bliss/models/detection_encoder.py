@@ -467,12 +467,12 @@ class DetectionEncoder(pl.LightningModule):
 
         return batch["images"], true_cat, est_cat
 
-    def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
+    def on_validation_epoch_end(self, kind="validation", max_n_samples=16):
         """Pytorch lightning method."""
         if self.n_bands > 1 or not self.logger:
             return
 
-        batch: Dict[str, Tensor] = outputs[-1]
+        batch: Dict[str, Tensor] = self.validation_step_outputs[-1]
         images, true_cat, est_cat = self._parse_batch(batch)
 
         # log a grid of figures to the tensorboard
