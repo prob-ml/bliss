@@ -61,9 +61,10 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
             "u": u,
         }
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         """Validation epoch end (pytorch lightning)."""
 
+        outputs = self.validation_step_outputs
         output_tensors = {
             label: torch.cat([output[label] for output in outputs]) for label in outputs[0]
         }

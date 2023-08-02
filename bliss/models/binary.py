@@ -161,11 +161,11 @@ class BinaryEncoder(pl.LightningModule):
         pred_out = {f"pred_{k}": v for k, v in pred.items()}
         return {**batch, **pred_out}
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         """Pytorch lightning method."""
         # Put all outputs together into a single batch
         batch = {}
-        for b in outputs:
+        for b in self.validation_step_outputs:
             for k, v in b.items():
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
                 if not v.shape:

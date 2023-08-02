@@ -201,9 +201,10 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.log("val/max_residual", residuals.abs().max())
         return {"images": images, "recon_mean": recon_mean, "residuals": residuals}
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         """Validation epoch end (pytorch lightning)."""
 
+        outputs = self.validation_step_outputs
         # combine all images and recon_mean's into a single tensor
         images = torch.cat([output["images"] for output in outputs])
         recon_mean = torch.cat([output["recon_mean"] for output in outputs])

@@ -175,11 +175,11 @@ class GalaxyEncoder(pl.LightningModule):
             pq_divergence = pq_divergence_flat
         return galaxy_params, pq_divergence
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         """Pytorch lightning method run at end of validation epoch."""
         # put all outputs together into a single batch
         batch = {}
-        for b in outputs:
+        for b in self.validation_step_outputs:
             for k, v in b.items():
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
                 batch[k] = torch.cat([curr_val, v])
