@@ -78,6 +78,8 @@ filterwarnings = [
   "ignore:GPU available but not used.*:UserWarning",
   "ignore:numpy.ndarray size changed:RuntimeWarning",
   "ignore:.*when logging on epoch level in distributed setting.*",
+  "ignore:.*Deprecated call to `pkg_resources.declare_namespace.*:DeprecationWarning",
+  "ignore:.*distutils Version classes are deprecated.*:DeprecationWarning",
 ]
 minversion = "6.0"
 testpaths = ["tests"]
