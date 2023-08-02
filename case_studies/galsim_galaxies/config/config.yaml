@@ -184,7 +184,6 @@ training:
         _target_: pytorch_lightning.Trainer
         logger: True
         enable_checkpointing: False
-        profiler: null
         reload_dataloaders_every_n_epochs: 0
         max_epochs: ${training.n_epochs}
         min_epochs: ${training.n_epochs}
