@@ -1,13 +1,17 @@
+import math
 from typing import Dict, Optional
 
 import torch
 from einops import rearrange, repeat
+from matplotlib import pyplot as plt
 from omegaconf import DictConfig
 from torch import Tensor
-from torch.distributions import Distribution
+from torch.distributions import Distribution, TransformedDistribution
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.encoder import Encoder
+from bliss.plotting import plot_detections
+from bliss.unconstrained_dists import UnconstrainedBernoulli
 from case_studies.prob_tile_suppression.region_catalog import RegionCatalog, RegionType
 
 
@@ -16,7 +20,7 @@ class RegionEncoder(Encoder):
         self,
         architecture: DictConfig,
         bands: list,
-        tile_slen: int,
+        tile_slen: int,  # NOTE: this is the *unpadded* tile length!!
         overlap_slen: float,
         slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
@@ -35,10 +39,81 @@ class RegionEncoder(Encoder):
         )
         self.overlap_slen = overlap_slen
 
+    # region Properties
+    @property
+    def dist_param_groups(self):
+        d = super().dist_param_groups
+        d["aux_var"] = UnconstrainedBernoulli()  # add extra parameter for aux variables
+        return d
+
+    # endregion
+
+    # region General Functions
+    def convert_locs(self, locs):
+        pad_tile = self.tile_slen + self.overlap_slen
+        ol = self.overlap_slen
+
+        # central
+        locs[:, 1:-1, :, 0] = (locs[:, 1:-1, :, 0] * pad_tile - ol / 2) / self.tile_slen
+        locs[:, :, 1:-1, 1] = (locs[:, :, 1:-1, 1] * pad_tile - ol / 2) / self.tile_slen
+
+        # top/bottom
+        locs[:, 0, :, 0] = (locs[:, 0, :, 0] * (pad_tile - ol / 2)) / self.tile_slen
+        locs[:, -1, :, 0] = (locs[:, -1, :, 0] * (pad_tile - ol / 2) - ol / 2) / self.tile_slen
+
+        # left/right
+        locs[:, :, 0, 1] = (locs[:, :, 0, 1] * (pad_tile - ol / 2)) / self.tile_slen
+        locs[:, :, -1, 1] = (locs[:, :, -1, 1] * (pad_tile - ol / 2) - ol / 2) / self.tile_slen
+
+        return locs
+
     def variational_mode(
         self, pred: Dict[str, Tensor], return_full: bool | None = True
     ) -> FullCatalog | TileCatalog:
-        raise NotImplementedError("TODO: implement this")
+        """Compute the mode of the variational distribution.
+
+        Args:
+            pred (Dict[str, Tensor]): model predictions
+            return_full (bool, optional): Returns a FullCatalog if true, otherwise returns a
+                RegionCatalog. Defaults to True.
+
+        Returns:
+            Union[FullCatalog, TileCatalog]: Catalog based on predictions.
+        """
+        tile_is_on_array = pred["on_prob"].mode
+        locs = self.convert_locs(pred["loc"].mode.clone())
+
+        star_fluxes = [pred[name].mode * tile_is_on_array for name in self.STAR_FLUX_NAMES]
+        star_fluxes = torch.stack(star_fluxes, dim=3)
+        galaxy_fluxes = [pred[name].mode * tile_is_on_array for name in self.GAL_FLUX_NAMES]
+        galaxy_fluxes = torch.stack(galaxy_fluxes, dim=3)
+
+        galaxy_bools = pred["galaxy_prob"].mode
+        source_type = SourceType.STAR * (1 - galaxy_bools) + SourceType.GALAXY * galaxy_bools
+
+        galsim_dists = [pred[f"galsim_{name}"] for name in self.GALSIM_NAMES]
+        galsim_param_lst = []
+        for d in galsim_dists:
+            # use median for transformed distributions since mode isn't implemented
+            if isinstance(d, TransformedDistribution):
+                galsim_param_lst.append(d.icdf(torch.tensor(0.5)))
+            else:
+                galsim_param_lst.append(d.mode)
+        galaxy_params = torch.stack(galsim_param_lst, dim=3)
+
+        est_catalog_dict = {
+            "locs": rearrange(locs, "b ht wt d -> b ht wt 1 d"),
+            "star_fluxes": rearrange(star_fluxes, "b ht wt d -> b ht wt 1 d"),
+            "n_sources": tile_is_on_array,
+            "source_type": rearrange(source_type, "b ht wt -> b ht wt 1 1"),
+            "galaxy_params": rearrange(galaxy_params, "b ht wt d -> b ht wt 1 d"),
+            "galaxy_fluxes": rearrange(galaxy_fluxes, "b ht wt d -> b ht wt 1 d"),
+        }
+
+        est_cat = TileCatalog(self.tile_slen, est_catalog_dict)
+        return est_cat.to_full_params() if return_full else est_cat
+
+    # endregion
 
     # region Loss Utility Functions
     def _average_loss(self, loss, mask):
@@ -87,8 +162,8 @@ class RegionEncoder(Encoder):
         if param_name == "locs":
             locs_up, locs_down = cat.get_horizontal_boundary_locs_in_tiles()
             vals = (
-                self._get_masked_param(locs_up, cat.vertical_boundary_mask, out_shape),
-                self._get_masked_param(locs_down, cat.vertical_boundary_mask, out_shape),
+                self._get_masked_param(locs_up, cat.horizontal_boundary_mask, out_shape),
+                self._get_masked_param(locs_down, cat.horizontal_boundary_mask, out_shape),
             )
             return torch.stack(vals, dim=0)
 
@@ -119,7 +194,7 @@ class RegionEncoder(Encoder):
         idx_vi = (idx_v[0], idx_v[1] // 2, idx_v[2] // 2)
         idx_vj = (idx_v[0], idx_v[1] // 2, (idx_v[2] + 1) // 2)
 
-        probs = pred["on_prob"].probs[..., 1]  # prob of yes
+        probs = pred["aux_var"].probs[..., 1]  # prob of yes
         aux_vars = probs[idx_vi] / (probs[idx_vi] + probs[idx_vj])
         return aux_vars.reshape(cat.batch_size, cat.nth, cat.ntw - 1)
 
@@ -131,7 +206,7 @@ class RegionEncoder(Encoder):
         idx_hi = (idx_h[0], idx_h[1] // 2, idx_h[2] // 2)
         idx_hj = (idx_h[0], (idx_h[1] + 1) // 2, idx_h[2] // 2)
 
-        probs = pred["on_prob"].probs[..., 1]  # prob of yes
+        probs = pred["aux_var"].probs[..., 1]  # prob of yes
         aux_vars = probs[idx_hi] / (probs[idx_hi] + probs[idx_hj])
         return aux_vars.reshape(cat.batch_size, cat.nth - 1, cat.ntw)
 
@@ -144,7 +219,7 @@ class RegionEncoder(Encoder):
         idx_ck = (idx_c[0], (idx_c[1] + 1) // 2, idx_c[2] // 2)
         idx_cl = (idx_c[0], (idx_c[1] + 1) // 2, (idx_c[2] + 1) // 2)
 
-        probs = pred["on_prob"].probs[..., 1]  # prob of yes
+        probs = pred["aux_var"].probs[..., 1]  # prob of yes
         denom = probs[idx_ci] + probs[idx_cj] + probs[idx_ck] + probs[idx_cl]
         aux_vars = torch.stack((probs[idx_ci], probs[idx_cj], probs[idx_ck], probs[idx_cl]), dim=0)
         return (aux_vars / denom).reshape(4, cat.batch_size, cat.nth - 1, cat.ntw - 1)
@@ -163,19 +238,7 @@ class RegionEncoder(Encoder):
             Dict: dictionary of loss for each component and overall loss
         """
         loss, loss_components = 0, {}
-
-        # counter_loss
         n_sources = self._get_interior_param(cat, "n_sources")
-        on_probs = pred["on_prob"].log_prob(n_sources)
-        interior_ub = torch.ones_like(pred["loc"].mean) - (cat.overlap_slen / cat.tile_slen)
-        interior_lb = torch.zeros_like(pred["loc"].mean) + (cat.overlap_slen / cat.tile_slen)
-        prob_in_interior = pred["loc"].cdf(interior_ub) - pred["loc"].cdf(interior_lb)
-
-        prob_empty = 1 - (on_probs.exp() * prob_in_interior) + 1e-9
-        counter_loss = -((n_sources == 0) * torch.log(prob_empty))
-        counter_loss -= (n_sources == 1) * pred["on_prob"].log_prob(n_sources)
-        loss += counter_loss
-        loss_components["counter_loss"] = counter_loss.mean()
 
         # location loss
         locs = self._get_interior_param(cat, "locs")
@@ -294,14 +357,6 @@ class RegionEncoder(Encoder):
             aux_vars = self._get_aux_horizontal(pred, cat)
             get_param = self._get_horizontal_boundary_param
 
-        # counter_loss
-        n_sources = get_param(cat, "n_sources")
-        counter_loss = self._get_param_loss_boundary(
-            pred["on_prob"], n_sources, cat, aux_vars, on_mask, bdry_type
-        )
-        loss += counter_loss
-        loss_components["counter_loss"] = self._average_loss(counter_loss, on_mask)
-
         # location loss
         locs = get_param(cat, "locs")
         on_mask = on_mask * (cat.n_sources > 0)  # update mask to filter on sources
@@ -389,14 +444,6 @@ class RegionEncoder(Encoder):
         on_mask = cat.corner_mask
         aux_vars = self._get_aux_corner(pred, cat)
 
-        # counter_loss
-        n_sources = self._get_corner_param(cat, "n_sources")
-        counter_loss = self._get_param_loss_corner(
-            pred["on_prob"], n_sources, cat, aux_vars, on_mask
-        )
-        loss += counter_loss
-        loss_components["counter_loss"] = self._average_loss(counter_loss, on_mask)
-
         # location loss
         locs = self._get_corner_param(cat, "locs")
         on_mask = on_mask * (cat.n_sources > 0)  # update mask to filter on sources
@@ -450,23 +497,37 @@ class RegionEncoder(Encoder):
 
     def _get_loss(self, pred: Dict[str, Distribution], true_cat: RegionCatalog):
         """Compute loss over the catalog."""
+
+        # evaluate counter loss over all tiles together
+        n_sources = torch.nn.functional.unfold(
+            true_cat.n_sources.unsqueeze(1), kernel_size=(3, 3), padding=1, stride=2
+        ).sum(axis=1)
+        n_sources = n_sources.reshape(true_cat.batch_size, true_cat.nth, true_cat.ntw)
+        counter_loss = -pred["on_prob"].log_prob(n_sources)
+
         # interior
-        loss_components = self._get_loss_interior(pred, true_cat)
+        loss_interior = self._get_loss_interior(pred, true_cat)
+
         # vertical boundary
         loss_v_boundary = self._get_loss_boundary(pred, true_cat, RegionType.BOUNDARY_VERTICAL)
+
         # horizontal boundary
         loss_h_boundary = self._get_loss_boundary(pred, true_cat, RegionType.BOUNDARY_HORIZONTAL)
+
         # corners
         loss_corner = self._get_loss_corner(pred, true_cat)
 
         # sum loss for all regions
-        for key in loss_components:
-            loss_components[key] += loss_v_boundary[key]
-            loss_components[key] += loss_h_boundary[key]
-            loss_components[key] += loss_corner[key]
+        loss_dict = {
+            key: val + loss_v_boundary[key] + loss_h_boundary[key] + loss_corner[key]
+            for key, val in loss_interior.items()
+        }
+        loss_dict["counter_loss"] = counter_loss.mean()
 
-        loss_components["loss"] = loss_components.pop("loss_by_region").mean()
-        return loss_components
+        loss_by_region = loss_dict.pop("loss_by_region")
+        loss_by_region[:, ::2, ::2] += counter_loss
+        loss_dict["loss"] = loss_by_region.mean()
+        return loss_dict
 
     # endregion
 
@@ -475,16 +536,50 @@ class RegionEncoder(Encoder):
         batch_size = batch["images"].size(0)
         pred = self.encode_batch(batch)
         true_cat = RegionCatalog(
-            interior_slen=self.tile_slen - 2 * self.overlap_slen,
+            interior_slen=self.tile_slen - self.overlap_slen,
             overlap_slen=self.overlap_slen,
             d=batch["tile_catalog"],
         )
 
-        loss_dict = self._get_loss(pred, true_cat)
-
         # log all losses
+        loss_dict = self._get_loss(pred, true_cat)
         for k, v in loss_dict.items():
             self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+
+        if log_metrics or plot_images:
+            est_tile_cat = self.variational_mode(pred, return_full=False)
+
+        # log all metrics
+        if log_metrics:
+            metrics = self.metrics(true_cat.to_full_params(), est_tile_cat.to_full_params())
+            for k, v in metrics.items():
+                self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+
+        # log a grid of figures to the tensorboard
+        if plot_images:
+            batch_size = len(batch["images"])
+            n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
+            nrows = int(n_samples**0.5)  # for figure
+
+            target_full_cat = true_cat.to_full_params()
+            est_full_cat = est_tile_cat.to_full_params()
+            idx = est_full_cat.n_sources.nonzero().view(-1)[:n_samples]
+
+            margin_px = self.tiles_to_crop * self.tile_slen
+            fig = plot_detections(
+                batch["images"],
+                target_full_cat,
+                est_full_cat,
+                nrows,
+                idx,
+                margin_px,
+                ticks=true_cat.get_region_coords().reshape(-1, 2),
+            )
+            title_root = f"Epoch:{self.current_epoch}/"
+            title = f"{title_root}{logging_name} images"
+            if self.logger:
+                self.logger.experiment.add_figure(title, fig)
+            plt.close(fig)
 
         return loss_dict["loss"]
 
