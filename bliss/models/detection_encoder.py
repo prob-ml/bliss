@@ -126,6 +126,8 @@ class DetectionEncoder(pl.LightningModule):
         self.val_detection_metrics = DetectionMetrics(slack)
         self.test_detection_metrics = DetectionMetrics(slack)
 
+        self.validation_step_outputs = []
+
     def _final_encoding(self, enc_final_output):
         dim_out_all = enc_final_output.shape[1]
         dim_per_source_params = dim_out_all - (self.max_detections + 1)
@@ -399,7 +401,9 @@ class DetectionEncoder(pl.LightningModule):
         self.log("val/recall", metrics["recall"], batch_size=batch_size)
         self.log("val/f1", metrics["f1"], batch_size=batch_size)
         self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
-        return batch
+
+        self.validation_step_outputs.append(batch)
+        return out
 
     def plot_image_detections(self, images, true_cat, est_cat, nrows, img_ids):
         # setup figure and axes.
@@ -485,6 +489,8 @@ class DetectionEncoder(pl.LightningModule):
         title = f"{title_root}{kind} images"
         self.logger.experiment.add_figure(title, fig)
         plt.close(fig)
+
+        self.validation_step_outputs.clear()
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""

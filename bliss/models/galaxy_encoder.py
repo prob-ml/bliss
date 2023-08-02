@@ -76,6 +76,8 @@ class GalaxyEncoder(pl.LightningModule):
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
 
+        self.validation_step_outputs = []
+
     def sample(
         self, image_ptiles: Tensor, tile_locs: Tensor, deterministic: Optional[bool]
     ) -> Tensor:
@@ -106,7 +108,8 @@ class GalaxyEncoder(pl.LightningModule):
         batch_size = len(batch["images"])
         loss = self._get_loss(batch)
         self.log("val/loss", loss, batch_size=batch_size)
-        return batch
+        self.validation_step_outputs.append(batch)
+        return loss
 
     def _get_loss(self, batch):
         images: Tensor = batch["images"]
@@ -185,6 +188,8 @@ class GalaxyEncoder(pl.LightningModule):
                 batch[k] = torch.cat([curr_val, v])
         if self.n_bands == 1:
             self._make_plots(batch)
+
+        self.validation_step_outputs.clear()
 
     # pylint: disable=too-many-statements
     def _make_plots(self, batch, n_samples=5):
