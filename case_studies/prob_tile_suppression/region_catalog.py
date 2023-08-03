@@ -242,34 +242,6 @@ class RegionCatalog(TileCatalog, UserDict):
 
         return locs[0] * mask, locs[1] * mask, locs[2] * mask, locs[3] * mask
 
-    @staticmethod
-    def get_pos_for_new_loc(i, j, loc, overlap, tile_slen, n_rows, n_cols):
-        """Determine which region a source falls in.
-
-        Args:
-            i: original tile row
-            j: original tile col
-            loc: location within tile, each coordinate between 0 and 1
-            overlap: overlap in pixel coordinates between tiles
-            tile_slen: tile length in pixel coordinates
-            n_rows: number of rows in region catalog
-            n_cols: number of columns in region catalog
-
-        Returns:
-            tuple: indices of region to place source in the region-based catalog
-        """
-        new_i, new_j = i * 2, j * 2
-        threshold = (overlap / 2 / tile_slen, 1 - overlap / 2 / tile_slen)
-        if loc[0] < threshold[0] and new_i > 0:  # don't go past top edge
-            new_i -= 1
-        if loc[0] > threshold[1] and new_i < n_rows - 1:  # don't go past bottom edge
-            new_i += 1
-        if loc[1] < threshold[0] and new_j > 0:  # don't go past left edge
-            new_j -= 1
-        if loc[1] > threshold[1] and new_j < n_cols - 1:  # don't go past right edge
-            new_j += 1
-        return new_i, new_j
-
     def crop(self, hlims_tile, wlims_tile):
         d = {}
         for k, v in self.to_dict().items():
@@ -320,15 +292,20 @@ def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float):
         if tile_cat.n_sources[b, i, j] == 0:
             continue
 
-        new_i, new_j = RegionCatalog.get_pos_for_new_loc(
-            i,
-            j,
-            tile_cat.locs[b, i, j, 0],
-            overlap_slen,
-            tile_cat.tile_slen,
-            n_rows,
-            n_cols,
+        # Determine region to place source in based on
+        new_i, new_j = i * 2, j * 2
+        threshold = (
+            overlap_slen / 2 / tile_cat.tile_slen,
+            1 - overlap_slen / 2 / tile_cat.tile_slen,
         )
+        if tile_cat.locs[b, i, j, 0, 0] < threshold[0] and new_i > 0:  # top edge
+            new_i -= 1
+        elif tile_cat.locs[b, i, j, 0, 0] > threshold[1] and new_i < n_rows - 1:  # bottom edge
+            new_i += 1
+        if tile_cat.locs[b, i, j, 0, 1] < threshold[0] and new_j > 0:  # left edge
+            new_j -= 1
+        elif tile_cat.locs[b, i, j, 0, 1] > threshold[1] and new_j < n_cols - 1:  # right edge
+            new_j += 1
 
         d["locs"][b, new_i, new_j, 0] = full_locs[b, i, j, 0]
         d["n_sources"][b, new_i, new_j] = tile_cat.n_sources[b, i, j]
