@@ -53,26 +53,27 @@ class SloanDigitalSkySurvey(Survey):
 
     def __init__(
         self,
-        psf_config,
+        psf_config: PSFConfig,
         fields,
-        n_bands: int = 5,
+        pixel_shift,
         dir_path="data/sdss",
     ):
         super().__init__()
 
         self.sdss_path = Path(dir_path)
-        self.rcfgcs = []
 
+        self.rcfgcs = []
         self.sdss_fields = fields
         self.bands = tuple(range(len(self.BANDS)))
+        self.n_bands = len(self.BANDS)
+        self.pixel_shift = pixel_shift
 
         self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
         self.prepare_data()
 
         self.background = ImageBackground(self, bands=self.bands)
-        self.psf = SDSSPSF(dir_path, self.image_ids(), self.bands, psf_config)
+        self.psf = SDSS_PSF(dir_path, self.image_ids(), self.bands, psf_config)
         self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
-        self.n_bands = n_bands
 
         self.catalog_cls = PhotoFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -151,6 +152,14 @@ class SloanDigitalSkySurvey(Survey):
                 rcfs.append((run, camcol, field))
         return rcfs
 
+    def nmgy_to_nelec(self):
+        d = {}
+        for i, rcf in enumerate(self.image_ids()):
+            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
+            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
+            d[rcf] = avg_nelec_conv
+        return d
+
     def get_from_disk(self, idx):
         if self.rcfgcs[idx] is None:
             return None
@@ -160,10 +169,9 @@ class SloanDigitalSkySurvey(Survey):
         field_dir = camcol_dir.joinpath(str(field))
         frame_list = []
 
-        for b, bl in enumerate("ugriz"):
-            if b in self.bands:
-                frame = self.read_frame_for_band(bl, field_dir, run, camcol, field, gain[b])
-                frame_list.append(frame)
+        for b, bl in enumerate(self.BANDS):
+            frame = self.read_frame_for_band(bl, field_dir, run, camcol, field, gain[b])
+            frame_list.append(frame)
 
         ret = {}
         for k in frame_list[0]:
@@ -174,14 +182,6 @@ class SloanDigitalSkySurvey(Survey):
                 ret[k] = data_per_band
         ret.update({"field": field})
         return ret
-
-    def nmgy_to_nelec(self):
-        d = {}
-        for i, rcf in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
-            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
-            d[rcf] = avg_nelec_conv
-        return d
 
     def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
         frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
@@ -239,6 +239,9 @@ class SloanDigitalSkySurvey(Survey):
     def predict_dataloader(self) -> EVAL_DATALOADERS:
         assert self.predict_batch is not None, "predict_batch must be set."
         return DataLoader([self.predict_batch], batch_size=1)
+
+
+SDSS = SloanDigitalSkySurvey
 
 
 class SDSSDownloader:
@@ -449,24 +452,7 @@ class PhotoFullCatalog(FullCatalog):
         )
 
 
-class SDSSPSF(ImagePSF):
-    def __init__(self, survey_data_dir, image_ids, bands, psf_config: PSFConfig):
-        super().__init__(bands, **psf_config)
-
-        self.psf_galsim = {}
-        self.psf_params = {}
-        SDSSDownloader(image_ids, download_dir=survey_data_dir).download_psfields()
-        for run, camcol, field in image_ids:
-            # load raw params from file
-            field_dir = f"{survey_data_dir}/{run}/{camcol}/{field}"
-            filename = f"{field_dir}/psField-{run:06}-{camcol}-{field:04}.fits"
-            assert Path(filename).exists(), f"psField file {filename} not found"
-            psf_params = self._get_fit_file_psf_params(filename, bands)
-
-            # load psf image from params
-            self.psf_params[(run, camcol, field)] = psf_params
-            self.psf_galsim[(run, camcol, field)] = self._get_psf(psf_params)
-
+class SDSS_PSF(ImagePSF):  # noqa: N801
     @staticmethod
     def _get_fit_file_psf_params(psf_fit_file: str, bands: Tuple[int, ...]):
         """Load psf parameters from fits file.
@@ -500,6 +486,23 @@ class SDSSPSF(ImagePSF):
             psf_params[i] = torch.tensor([sigma1, sigma2, sigmap, beta, b, p0])
 
         return psf_params
+
+    def __init__(self, survey_data_dir, image_ids, bands, psf_config: PSFConfig):
+        super().__init__(bands, **psf_config)
+
+        self.psf_galsim = {}
+        self.psf_params = {}
+        SDSSDownloader(image_ids, download_dir=survey_data_dir).download_psfields()
+        for run, camcol, field in image_ids:
+            # load raw params from file
+            field_dir = f"{survey_data_dir}/{run}/{camcol}/{field}"
+            filename = f"{field_dir}/psField-{run:06}-{camcol}-{field:04}.fits"
+            assert Path(filename).exists(), f"psField file {filename} not found"
+            psf_params = self._get_fit_file_psf_params(filename, bands)
+
+            # load psf image from params
+            self.psf_params[(run, camcol, field)] = psf_params
+            self.psf_galsim[(run, camcol, field)] = self._get_psf(psf_params)
 
     def _psf_fun(self, r, sigma1, sigma2, sigmap, beta, b, p0):
         """Generate the PSF from the parameters using the power-law model.

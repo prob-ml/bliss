@@ -5,6 +5,8 @@ from torch.utils.data import Dataset
 
 
 class Survey(pl.LightningDataModule, Dataset, ABC):
+    BANDS = ()
+
     def __init__(self):
         super().__init__()
 
@@ -13,6 +15,7 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         self.background = None
         self.psf = None
         self.nmgy_to_nelec_dict = None
+        self.pixel_shift = None
 
         self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
 

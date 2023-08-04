@@ -65,6 +65,7 @@ class BlissMetrics(Metric):
 
     def __init__(
         self,
+        survey_bands: list,
         mode: MetricsMode = MetricsMode.FULL,
         slack: float = 1.0,
         dist_sync_on_step: bool = False,
@@ -75,6 +76,7 @@ class BlissMetrics(Metric):
         self.slack = slack
         self.disable_bar = disable_bar
         self.mode = mode
+        self.survey_bands = survey_bands
 
         self.detection_metrics = [
             "detection_tp",
@@ -219,6 +221,10 @@ class BlissMetrics(Metric):
         self.gal_fluxes.append(torch.abs(true_gal_fluxes - est_gal_fluxes))
         self.star_fluxes.append(torch.abs(true_star_fluxes - est_star_fluxes))
 
+        # skip if no galaxies in true or estimated catalog
+        if (true_gal_params.shape[0] == 0) or (est_gal_params.shape[0] == 0):
+            return
+
         # disk/bulge proportions
         self.disk_frac.append(torch.abs(true_gal_params[:, 0] - est_gal_params[:, 0]))
         self.bulge_frac.append(torch.abs((1 - true_gal_params[:, 0]) - (1 - est_gal_params[:, 0])))
@@ -263,21 +269,22 @@ class BlissMetrics(Metric):
         # construct flattened masks for true source type
         true_st = true.gather_param_at_tiles("source_type", true_indices)
         true_gal_bools = true_st == SourceType.GALAXY
-        gal_mask = true_gal_bools.squeeze() * true_is_on
-        star_mask = (~true_gal_bools).squeeze() * true_is_on
+        gal_mask = true_gal_bools.squeeze() * true_is_on.squeeze(1)
+        star_mask = (~true_gal_bools).squeeze() * true_is_on.squeeze(1)
 
         # gather parameters where source is present in true catalog AND source is actually a star
         # or galaxy respectively in true catalog
         # note that the boolean indexing collapses across batches to return a 1D tensor
-        params = {"galaxy_fluxes": gal_mask, "star_fluxes": star_mask, "galaxy_params": gal_mask}
-        true_params = {
-            param: true.gather_param_at_tiles(param, true_indices)[mask]
-            for param, mask in params.items()
+        param_masks = {
+            "galaxy_fluxes": gal_mask,
+            "star_fluxes": star_mask,
+            "galaxy_params": gal_mask,
         }
-        est_params = {
-            param: est.gather_param_at_tiles(param, true_indices)[mask]
-            for param, mask in params.items()
-        }
+        true_params = {}
+        est_params = {}
+        for param, mask in param_masks.items():
+            true_params[param] = true.gather_param_at_tiles(param, true_indices).squeeze(1)[mask]
+            est_params[param] = est.gather_param_at_tiles(param, true_indices).squeeze(1)[mask]
 
         return true_params, est_params
 
@@ -323,7 +330,7 @@ class BlissMetrics(Metric):
                 metrics.update(
                     {
                         f"{metric}_{band}_mae": median_vals[i].item()
-                        for i, band in enumerate("ugriz")
+                        for i, band in enumerate(self.survey_bands)
                     }
                 )
             else:
