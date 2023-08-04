@@ -5,7 +5,7 @@ from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode, three_way_matching
-from bliss.predict import align, prepare_image
+from bliss.predict import band_align, prepare_image
 from bliss.surveys.decals import DecalsFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
@@ -31,8 +31,8 @@ class TestMetrics:
         image = sdss[0]["image"]
         background = sdss[0]["background"]
 
-        image = align(image, sdss[0]["wcs"], SDSS.BANDS.index("r"))
-        background = align(background, sdss[0]["wcs"], SDSS.BANDS.index("r"))
+        image = band_align(image, sdss[0]["wcs"], SDSS.BANDS.index("r"))
+        background = band_align(background, sdss[0]["wcs"], SDSS.BANDS.index("r"))
 
         # crop to center fourth
         height, width = image[0].shape

@@ -38,6 +38,6 @@ class TestTrain:
         train_decals_cfg.training.pretrained_weights = None
         train_decals_cfg.training.testing = True
 
-        train_decals_cfg.encoder.input_transform_params.log_transform = False
+        train_decals_cfg.simulator.use_coaddition = True
         train_decals_cfg.simulator.coadd_depth = 2
         train(train_decals_cfg)

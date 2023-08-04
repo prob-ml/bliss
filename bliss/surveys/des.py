@@ -94,7 +94,7 @@ class DarkEnergySurvey(Survey):
 
         self.background = ImageBackground(self, bands=self.bands)
         self.psf = DES_PSF(dir_path, self.image_ids(), self.bands, psf_config)
-        self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
+        self.physical_to_nelec_dict = self.physical_to_nelec()
 
         self.catalog_cls = DecalsFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -138,7 +138,7 @@ class DarkEnergySurvey(Survey):
                     "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
                     "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
-                    "nelec_per_nmgy_list": np.ones((1, 1, 1)),
+                    "nelec_per_physical_unit_list": np.ones((1, 1, 1)),
                     "sig1": 0.0,
                 }
 
@@ -174,7 +174,7 @@ class DarkEnergySurvey(Survey):
                 brickname, ccdname, des_image_id[band], image.shape
             ),
             "wcs": wcs,
-            "nelec_per_nmgy_list": np.array([[[zpscale]]]),
+            "nelec_per_physical_unit_list": np.array([[[zpscale]]]),
             "sig1": sig1,
         }
 

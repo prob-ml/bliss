@@ -15,13 +15,13 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         self.prior = None
         self.background = None
         self.psf = None
-        self.nmgy_to_nelec_dict = None
+        self.physical_to_nelec_dict = None
         self.pixel_shift = None
 
         self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
 
     @staticmethod
-    def coadd_images(constituent_images):
+    def coadd_images(constituent_images, wcs_for_depth):
         """Coadd the constituent images into a single image."""
         raise NotImplementedError
 
@@ -59,10 +59,10 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
     def predict_batch(self):
         """Set a batch of data for prediction."""
 
-    def nmgy_to_nelec(self):
+    def physical_to_nelec(self):
         d = {}
         for i, image_id in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
+            nelec_conv_for_frame = self[i]["nelec_per_physical_unit_list"]
             avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
             d[image_id] = avg_nelec_conv
         return d

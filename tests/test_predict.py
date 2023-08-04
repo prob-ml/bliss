@@ -65,6 +65,7 @@ def decals_cached_data_path(cfg, tmpdir_factory):
     gen_decals_cfg.simulator.prior.survey_bands = DECaLS.BANDS
     gen_decals_cfg.generate.max_images_per_file = 8
 
+    gen_decals_cfg.simulator.use_coaddition = True  # NOTE: coadd configuration
     gen_decals_cfg.simulator.coadd_depth = 2  # NOTE: coadd configuration
     generate(gen_decals_cfg)
 
@@ -93,7 +94,7 @@ def decals_weight_save_path(cfg, tmpdir_factory, decals_cached_data_path):
 class TestPredict:
     def test_predict_sdss_multiple_rcfs(self, cfg, monkeypatch):
         # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
-        monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+        monkeypatch.setattr("bliss.predict.band_align", lambda x, **_args: x)
 
         the_cfg = cfg.copy()
         the_cfg.surveys.sdss.fields = [
@@ -112,7 +113,7 @@ class TestPredict:
 
     def test_predict_decals_single_brick(self, cfg, monkeypatch, decals_weight_save_path):
         # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
-        monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+        monkeypatch.setattr("bliss.predict.band_align", lambda x, **_args: x)
 
         the_cfg = cfg.copy()
         the_cfg.simulator.prior.reference_band = DECaLS.BANDS.index("r")
@@ -139,7 +140,7 @@ class TestPredict:
 
     def test_predict_decals_multiple_bricks(self, cfg, monkeypatch, decals_weight_save_path):
         # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
-        monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+        monkeypatch.setattr("bliss.predict.band_align", lambda x, **_args: x)
 
         the_cfg = cfg.copy()
         the_cfg.simulator.prior.reference_band = DECaLS.BANDS.index("r")
@@ -167,7 +168,8 @@ class TestPredict:
         # TODO: somehow check plot output
 
     def test_predict_des(self, cfg, monkeypatch, des_weight_save_path):
-        monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+        monkeypatch.setattr("bliss.predict.band_align", lambda x, **_args: x)
+        monkeypatch.setattr("bliss.predict.coadd_depth_align", lambda x, **_args: x)
 
         the_cfg = cfg.copy()
         the_cfg.simulator.prior.reference_band = DES.BANDS.index("r")

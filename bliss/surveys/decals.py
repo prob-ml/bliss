@@ -41,18 +41,21 @@ class DarkEnergyCameraLegacySurvey(Survey):
         ]["brickname"][0]
 
     @staticmethod
-    def coadd_images(constituent_images) -> torch.Tensor:
+    def coadd_images(constituent_images, wcs_for_depth) -> torch.Tensor:
         """Get coadd image for image_id, given constituent images."""
+        from bliss.predict import coadd_depth_align  # pylint: disable=import-outside-toplevel
+
         _, n_bands, height, width = constituent_images.shape
 
+        # (1) depth-align
+        images_aligned = coadd_depth_align(constituent_images.numpy(), wcs_for_depth, 0)
+        # (2) weight by inverse-variance
         cow = np.zeros(n_bands)  # inverse-variance weights
         cowimg = np.zeros((n_bands, height, width))
-        for image_aligned in constituent_images:
-            # (2) weight by inverse-variance
-            image_aligned = image_aligned.numpy()
-            invvar = 1 / image_aligned.var(axis=(1, 2))
+        for image in images_aligned:
+            invvar = 1 / image.var(axis=(1, 2))
             cow += invvar
-            cowimg += image_aligned * np.expand_dims(invvar, axis=(1, 2))
+            cowimg += image * np.expand_dims(invvar, axis=(1, 2))
 
         tinyw = 1e-30
         cowimg /= np.expand_dims(np.maximum(cow, tinyw), axis=(1, 2))
@@ -137,7 +140,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
             pixel_shift,
         )
 
-        self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
+        self.physical_to_nelec_dict = self.physical_to_nelec()
 
         self.catalog_cls = DecalsFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -195,7 +198,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
                     "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
                     "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
-                    "nelec_per_nmgy_list": np.ones((1, 1, 1)),
+                    "nelec_per_physical_unit_list": np.ones((1, 1, 1)),
                 }
 
         ret = {}
@@ -225,7 +228,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
                 image, fill_value=hr[f"COSKY_{bl.upper()}"], dtype=np.float32
             ),
             "wcs": wcs,
-            "nelec_per_nmgy_list": np.array([[[DES.zpt_to_scale(hr["MAGZERO"])]]]),
+            "nelec_per_physical_unit_list": np.array([[[DES.zpt_to_scale(hr["MAGZERO"])]]]),
         }
 
     def single_exposure_ccds_for_bricks(self):

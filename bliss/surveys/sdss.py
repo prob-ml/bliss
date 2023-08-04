@@ -73,7 +73,7 @@ class SloanDigitalSkySurvey(Survey):
 
         self.background = ImageBackground(self, bands=self.bands)
         self.psf = SDSS_PSF(dir_path, self.image_ids(), self.bands, psf_config)
-        self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
+        self.physical_to_nelec_dict = self.physical_to_nelec()
 
         self.catalog_cls = PhotoFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -210,7 +210,7 @@ class SloanDigitalSkySurvey(Survey):
             "image": pixels_nelec,
             "background": large_sky_nelec,
             "gain": np.array(gain),
-            "nelec_per_nmgy_list": nelec_per_nmgy,
+            "nelec_per_physical_unit_list": nelec_per_nmgy,
             "calibration": calibration,
             "wcs": wcs,
         }

@@ -11,14 +11,19 @@ from bliss.catalog import SourceType, TileCatalog
 
 class ImageDecoder(nn.Module):
     def __init__(
-        self, psf, bands: Tuple[int, ...], nmgy_to_nelec_dict: dict, pixel_shift: int, ref_band: int
+        self,
+        psf,
+        bands: Tuple[int, ...],
+        physical_to_nelec_dict: dict,
+        pixel_shift: int,
+        ref_band: int,
     ) -> None:
         """Construct a decoder for a set of images.
 
         Args:
             psf: PSF object
             bands: bands to use for constructing the decoder, passed from Survey
-            nmgy_to_nelec_dict: dicitonary specifying elec count conversions by imageid
+            physical_to_nelec_dict: dictionary specifying elec count conversions by imageid
             ref_band: reference band for pixel alignment
             pixel_shift: int indicating parameters for a Unif() to model pixel shifting
         """
@@ -32,7 +37,7 @@ class ImageDecoder(nn.Module):
         self.pixel_scale = psf.pixel_scale
         self.ref_band = ref_band
         self.shift = pixel_shift
-        self.nmgy_to_nelec_dict = nmgy_to_nelec_dict
+        self.physical_to_nelec_dict = physical_to_nelec_dict
 
     def render_star(self, psf, band, source_params):
         """Render a star with given params and PSF.
@@ -93,25 +98,36 @@ class ImageDecoder(nn.Module):
             SourceType.GALAXY: self.render_galaxy,
         }
 
-    def pixel_shift(self):
-        """Generate random pixel shift and corresponding WCS list to undo shifts."""
-        shift = np.random.uniform(-self.shift, self.shift, (self.n_bands, 2))
-        shift[self.ref_band] = np.array([0.0, 0.0])
+    def pixel_shifts(self, n_shifts: int, ref_idx: int):
+        """Generate random pixel shifts and corresponding WCS list.
+        This function generates `n_shifts` random pixel shifts `shifts` and corresponding WCS list
+        `wcs` to undo these shifts, relative to `wcs[ref_idx]`.
+
+        Args:
+            n_shifts (int): number of shifts to generate
+            ref_idx (int): index in returned `wcs` of reference WCS
+
+        Returns:
+            shifts (np.ndarray): array of pixel shifts
+            wcs (List[WCS]): list of WCS objects
+        """
+        shifts = np.random.uniform(-self.shift, self.shift, (n_shifts, 2))  # 2 for x, y
+        shifts[ref_idx] = np.array([0.0, 0.0])
         wcs_base = WCS()
         base = np.array([5.0, 5.0])
         wcs_base.wcs.crpix = base
         wcs = []
-        for i in range(self.n_bands):
-            if i == self.ref_band:
+        for i in range(n_shifts):
+            if i == ref_idx:
                 wcs.append(wcs_base.low_level_wcs)
                 continue
             bnd_wcs = WCS()
-            bnd_wcs.wcs.crpix = base + shift[i]
+            bnd_wcs.wcs.crpix = base + shifts[i]
             wcs.append(bnd_wcs.low_level_wcs)
-        return shift, wcs
+        return shifts, wcs
 
     def draw_sources_on_band_image(
-        self, band_img, n_sources, full_cat, batch, psf, band, image_dims, band_shift
+        self, band_img, n_sources, full_cat, batch, psf, band, image_dims, band_shift, depth_shift
     ):
         slen_h, slen_w = image_dims
         for s in range(n_sources):
@@ -122,6 +138,7 @@ class ImageDecoder(nn.Module):
             plocs0, plocs1 = source_params["plocs"]
             offset = np.array([plocs1 - (slen_w / 2), plocs0 - (slen_h / 2)])
             offset += band_shift
+            offset += depth_shift
 
             # essentially all the runtime of the simulator is incurred by this call
             # to drawImage
@@ -159,7 +176,7 @@ class ImageDecoder(nn.Module):
         psf_params = torch.stack(param_list, dim=0)
 
         # use the specified nmgy_to_nelec ratios indexed by image_id
-        nmgy_to_nelec_rats = [self.nmgy_to_nelec_dict[image_ids[b]] for b in range(batch_size)]
+        nmgy_to_nelec_rats = [self.physical_to_nelec_dict[image_ids[b]] for b in range(batch_size)]
 
         for b in range(batch_size):
             # Convert to electron counts
@@ -167,13 +184,16 @@ class ImageDecoder(nn.Module):
             tile_cat["galaxy_fluxes"][b] *= nmgy_to_nelec_rats[b]
 
         full_cat = tile_cat.to_full_params()
+
+        # generate random WCS shifts as manual image dithering via unaligning WCS
         wcs_batch = []
+        depth_shifts, wcs_for_depth = self.pixel_shifts(coadd_depth, 0)
 
         for b in range(batch_size):
             n_sources = int(full_cat.n_sources[b].item())
             psf = psfs[b]
-            shift, wcs = self.pixel_shift()
-            wcs_batch.append(wcs)
+            band_shifts, band_wcs_list = self.pixel_shifts(self.n_bands, self.ref_band)
+            wcs_batch.append(band_wcs_list)
             for d in range(coadd_depth):
                 for band in range(self.n_bands):
                     band_img = galsim.Image(array=images[b, d, band], scale=self.pixel_scale)
@@ -185,10 +205,11 @@ class ImageDecoder(nn.Module):
                         psf,
                         band,
                         image_dims=(slen_h, slen_w),
-                        band_shift=shift[band],
+                        band_shift=band_shifts[band],
+                        depth_shift=depth_shifts[d],
                     )
 
         # clamping here helps with an strange issue caused by galsim rendering
         images = torch.from_numpy(images).clamp(1e-8)
 
-        return images, psfs, psf_params, wcs_batch
+        return images, psfs, psf_params, wcs_batch, wcs_for_depth

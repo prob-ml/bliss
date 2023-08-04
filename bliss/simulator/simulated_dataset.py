@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.generate import FileDatum
-from bliss.predict import align
+from bliss.predict import band_align
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
@@ -29,6 +29,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         survey: Survey,
         prior: CatalogPrior,
         n_batches: int,
+        use_coaddition: bool = False,
         coadd_depth: int = 1,
         num_workers: int = 0,
         valid_n_batches: Optional[int] = None,
@@ -46,17 +47,20 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         assert survey.psf is not None, "Survey psf cannot be None."
         assert survey.pixel_shift is not None, "Survey pixel_shift cannot be None."
-        assert survey.nmgy_to_nelec_dict is not None, "Survey nmgy_to_nelec_dict cannot be None."
+        assert (
+            survey.physical_to_nelec_dict is not None
+        ), "Survey physical_to_nelec_dict cannot be None."
         self.image_decoder = ImageDecoder(
             psf=survey.psf,
             bands=survey.BANDS,
             pixel_shift=survey.pixel_shift,
-            nmgy_to_nelec_dict=survey.nmgy_to_nelec_dict,
+            physical_to_nelec_dict=survey.physical_to_nelec_dict,
             ref_band=prior.b_band,
         )
 
         self.n_batches = n_batches
         self.batch_size = self.catalog_prior.batch_size
+        self.use_coaddition = use_coaddition
         self.coadd_depth = coadd_depth
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
@@ -79,9 +83,33 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return [self.image_ids[i] for i in n], n
 
     def _apply_noise(self, images_mean):
+        images_mean = torch.clamp(images_mean, min=1e-6)
         images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
         images += images_mean
         return images
+
+    def coadd_images(self, images, wcs_for_depth):
+        batch_size = images.shape[0]
+        assert self.coadd_depth > 1, "Coadd depth must be > 1 to use coaddition."
+        coadded_images = np.zeros((batch_size, *images.shape[-3:]))  # 4D
+        for b in range(batch_size):
+            coadded_images[b] = self.survey.coadd_images(images[b], wcs_for_depth)
+        return torch.from_numpy(coadded_images).float()
+
+    def band_align_images(self, images, wcs_batch):
+        batch_size = images.shape[0]
+        assert images.ndim == 5, f"Expected `images` to be 5D, got {images.ndim}D."
+        # band-align for each batch
+        for b in range(batch_size):
+            for d in range(self.coadd_depth):
+                images[b, d] = torch.from_numpy(
+                    band_align(
+                        images[b, d].numpy(),
+                        wcs_for_band=wcs_batch[b],
+                        ref_band=self.catalog_prior.b_band,
+                    )
+                )
+        return torch.squeeze(images, dim=1)  # remove coadd depth dimension if 1
 
     def simulate_image(
         self, tile_catalog: TileCatalog, image_ids, image_id_indices
@@ -97,33 +125,16 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             Tuple[Tensor, Tensor, Tensor, Tensor]: tuple of images, backgrounds, deconvolved images,
             and psf parameters
         """
-        images, psfs, psf_params, wcs_batch = self.image_decoder.render_images(
+        images, psfs, psf_params, wcs_batch, wcs_for_depth = self.image_decoder.render_images(
             tile_catalog, image_ids, self.coadd_depth
         )
-        batch_size = images.shape[0]
-        assert images.ndim == 5, f"Expected `images` to be 5D, got {images.ndim}D."
-        # (1) align
-        for b in range(batch_size):
-            first_batch_wcs = wcs_batch[b]
-            for d in range(self.coadd_depth):
-                images[b, d] = torch.from_numpy(
-                    align(
-                        images[b, d].numpy(),
-                        ref_wcs=first_batch_wcs,
-                        ref_band=self.catalog_prior.b_band,
-                    )
-                )
-        images = torch.squeeze(images, dim=1)  # remove coadd depth dimension if 1
-        # (2) coadd via inverse-variance weighting
-        if self.coadd_depth > 1:
-            coadded_images = np.zeros((batch_size, *images.shape[-3:]))  # 4D
-            for b in range(batch_size):
-                coadded_images[b] = self.survey.coadd_images(images[b])
-            images = torch.from_numpy(coadded_images).float()
-        assert self.background is not None, "Survey background cannot be None."
+        images = self.band_align_images(images, wcs_batch)
+        if self.use_coaddition:
+            images = self.coadd_images(images, wcs_for_depth)
+
         background = self.background.sample(images.shape, image_id_indices=image_id_indices)
         images += background
-        images = torch.clamp(images, min=1e-6)
+
         images = self._apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
         return images, background, deconv_images, psf_params

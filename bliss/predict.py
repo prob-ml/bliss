@@ -9,8 +9,10 @@ from reproject import reproject_interp
 from torch import Tensor
 
 from bliss.catalog import FullCatalog
-from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
-from bliss.surveys.decals import DecalsFullCatalog
+from bliss.surveys.decals import (
+    DarkEnergyCameraLegacySurvey as DECaLS,  # pylint: disable=cyclic-import
+)
+from bliss.surveys.decals import DecalsFullCatalog  # pylint: disable=cyclic-import
 from bliss.surveys.sdss import PhotoFullCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
@@ -48,18 +50,18 @@ def prepare_batch(images, backgrounds):
     return batch
 
 
-def align(img, ref_wcs, ref_band):
+def band_align(img, wcs_for_band, ref_band):
     """Reproject images based on some reference WCS for pixel alignment."""
     reproj_d = {}
     footprint_d = {}
 
-    orig_dim = img.shape
+    n_bands, h, w = img.shape
 
-    # align with r-band WCS
+    # align with `ref_band`-band WCS
     for bnd in range(img.shape[0]):
-        inputs = (img[bnd], ref_wcs[bnd])
+        inputs = (img[bnd], wcs_for_band[bnd])
         reproj, footprint = reproject_interp(  # noqa: WPS317
-            inputs, ref_wcs[ref_band], order="bicubic", shape_out=img[bnd].shape
+            inputs, wcs_for_band[ref_band], order="bicubic", shape_out=img[bnd].shape
         )
         reproj_d[bnd] = reproj
         footprint_d[bnd] = footprint
@@ -72,11 +74,47 @@ def align(img, ref_wcs, ref_band):
 
     out_print = np.expand_dims(out_print, axis=0)
 
-    reproj_out = np.zeros((orig_dim[0], orig_dim[1], orig_dim[2]))
+    reproj_out = np.zeros((n_bands, h, w))
 
     for i in range(img.shape[0]):
         reproj_d[i] = np.multiply(reproj_d[i], out_print)
-        cropped = reproj_d[i][0, : orig_dim[1], : orig_dim[2]]
+        cropped = reproj_d[i][0, :h, :w]
+        cropped[np.isnan(cropped)] = 0
+        reproj_out[i] = cropped
+
+    return reproj_out
+
+
+def coadd_depth_align(img, wcs_for_depth, ref_depth):
+    """Reproject images based on some reference WCS for pixel alignment."""
+    reproj_d = {}
+    footprint_d = {}
+
+    coadd_depth, n_bands, h, w = img.shape
+
+    # align with `ref_depth` WCS
+    for d in range(coadd_depth):
+        for bnd in range(n_bands):
+            inputs = (img[d, bnd], wcs_for_depth[d])
+            reproj, footprint = reproject_interp(  # noqa: WPS317
+                inputs, wcs_for_depth[ref_depth], order="bicubic", shape_out=(h, w)
+            )
+            reproj_d[bnd] = reproj
+            footprint_d[bnd] = footprint
+
+    # use footprints to handle NaNs from reprojection
+    h, w = footprint_d[0].shape
+    out_print = np.ones((h, w))
+    for fp in footprint_d.values():
+        out_print = out_print * fp  # noqa: WPS350
+
+    out_print = np.expand_dims(out_print, axis=0)
+
+    reproj_out = np.zeros((coadd_depth, n_bands, h, w))
+
+    for i in range(img.shape[0]):
+        reproj_d[i] = np.multiply(reproj_d[i], out_print)
+        cropped = reproj_d[i][0, :h, :w]
         cropped[np.isnan(cropped)] = 0
         reproj_out[i] = cropped
 
@@ -113,14 +151,14 @@ def predict(cfg):
     est_full_all = None  # collated catalog for all images
     survey_objs = [survey[i] for i in range(len(survey))]
     for i, survey_obj in enumerate(survey_objs):
-        survey_obj["image"] = align(
+        survey_obj["image"] = band_align(
             survey_obj["image"],
-            ref_wcs=survey_obj["wcs"],
+            wcs_for_band=survey_obj["wcs"],
             ref_band=cfg.simulator.prior.reference_band,
         )
-        survey_obj["background"] = align(
+        survey_obj["background"] = band_align(
             survey_obj["background"],
-            ref_wcs=survey_obj["wcs"],
+            wcs_for_band=survey_obj["wcs"],
             ref_band=cfg.simulator.prior.reference_band,
         )
 
@@ -150,7 +188,7 @@ def predict(cfg):
         est_cat, images, backgrounds, pred = trainer.predict(encoder, datamodule=survey)[0].values()
 
         # mean of the nelec_per_mgy per band
-        nelec_per_nmgy_per_band = np.mean(survey_obj["nelec_per_nmgy_list"], axis=1)
+        nelec_per_nmgy_per_band = np.mean(survey_obj["nelec_per_physical_unit_list"], axis=1)
         est_cat = nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band)
         est_full = est_cat.to_full_params()
 
@@ -339,7 +377,7 @@ def plot_predict(
             survey={"fields": [{"run": run, "camcol": camcol, "fields": [field]}]},
         )
         decoder_obj = simulator.image_decoder
-        recon_images, _, _, _ = decoder_obj.render_images(
+        recon_images, _, _, _, _ = decoder_obj.render_images(
             est_tile, [(run, camcol, field)]
         )  # TODO: causes issue when weights saved for survey that has diff no. of bands as SDSS
         recon_img = recon_images[0][0]  # first image in batch, first band in image

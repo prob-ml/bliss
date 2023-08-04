@@ -52,6 +52,7 @@ simulator:
     survey: ${surveys.sdss}
     prior: ${prior}
     n_batches: 128
+    use_coaddition: false
     coadd_depth: 1
     num_workers: 32
     valid_n_batches: 10  # 256
