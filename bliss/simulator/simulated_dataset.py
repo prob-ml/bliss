@@ -1,6 +1,6 @@
 import os
 import warnings
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
@@ -12,6 +12,7 @@ from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.generate import FileDatum
+from bliss.predict import align
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
@@ -45,7 +46,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         assert survey.psf is not None, "Survey psf cannot be None."
         assert survey.bands is not None, "Survey bands cannot be None."
         self.image_decoder = ImageDecoder(
-            psf=survey.psf, bands=survey.bands, nmgy_to_nelec_dict=survey.nmgy_to_nelec_dict
+            psf=survey.psf,
+            bands=survey.BANDS,
+            pixel_shift=survey.pixel_shift,
+            nmgy_to_nelec_dict=survey.nmgy_to_nelec_dict,
+            ref_band=prior.b_band,
         )
 
         self.n_batches = n_batches
@@ -55,20 +60,21 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
 
         # list of (run, camcol, field) tuples from config
-        self.image_ids = np.array(self.survey.image_ids())
+        self.image_ids = self.survey.image_ids()
 
-    def randomized_image_ids(self, num_samples=1) -> Tuple[np.ndarray, np.ndarray]:
+    def randomized_image_ids(self, num_samples=1) -> Tuple[List[Any], np.ndarray]:
         """Get random image_id from loaded params.
 
         Args:
             num_samples (int, optional): number of random samples to get. Defaults to 1.
 
         Returns:
-            Tuple[np.ndarray, np.ndarray]: tuple of image_ids and their corresponding
+            Tuple[List[Any], np.ndarray]: tuple of image_ids and their corresponding
                 `self.image_ids` indices.
         """
         n = np.random.randint(len(self.image_ids), size=(num_samples,), dtype=int)
-        return self.image_ids[n], n
+        # reorder self.image_ids to match the order of the sampled indices
+        return [self.image_ids[i] for i in n], n
 
     def _apply_noise(self, images_mean):
         # add noise to images.
@@ -78,23 +84,34 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         return images
 
     def simulate_image(
-        self, tile_catalog: TileCatalog, image_id_indices
+        self, tile_catalog: TileCatalog, image_ids, image_id_indices
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """Simulate a batch of images.
 
         Args:
             tile_catalog (TileCatalog): The TileCatalog to render.
+            image_ids: List of image_ids to render, in `image_id_indices` order.
             image_id_indices: Indices in self.image_ids to sample from.
 
         Returns:
             Tuple[Tensor, Tensor, Tensor, Tensor]: tuple of images, backgrounds, deconvolved images,
             and psf parameters
         """
-        image_ids = self.image_ids[image_id_indices]
-        images, psfs, psf_params = self.image_decoder.render_images(tile_catalog, image_ids)
+        images, psfs, psf_params, wcs_batch = self.image_decoder.render_images(
+            tile_catalog, image_ids
+        )
         assert self.background is not None, "Survey background cannot be None."
         background = self.background.sample(images.shape, image_id_indices=image_id_indices)
         images += background
+        for i in range(images.shape[0]):
+            images[i] = torch.from_numpy(
+                align(
+                    images[i].numpy(),
+                    wcs_batch[i],
+                    self.catalog_prior.b_band,
+                )
+            )
+        images = torch.clamp(images, min=1e-6)
         images = self._apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
         return images, background, deconv_images, psf_params
@@ -151,11 +168,11 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         """
         assert self.catalog_prior is not None, "Survey prior cannot be None."
 
-        _, image_id_indices = self.randomized_image_ids(self.catalog_prior.batch_size)
+        image_ids, image_id_indices = self.randomized_image_ids(self.catalog_prior.batch_size)
         with torch.no_grad():
             tile_catalog = self.catalog_prior.sample()
             images, background, deconv, psf_params = self.simulate_image(
-                tile_catalog, image_id_indices
+                tile_catalog, image_ids, image_id_indices
             )
             return {
                 "tile_catalog": tile_catalog.to_dict(),

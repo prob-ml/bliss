@@ -69,7 +69,7 @@ def download_file_to_dst(url, dst_filename, preprocess_fn=lambda x: x):  # noqa:
     if dst_path.exists():
         return
 
-    filename = download_file(url, cache=False, show_progress=False, timeout=10)
+    filename = download_file(url, cache=False, show_progress=False, timeout=120)
     dst_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(filename, dst_filename)
     with open(dst_filename, "rb") as f:
