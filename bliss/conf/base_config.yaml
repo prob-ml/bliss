@@ -83,8 +83,6 @@ encoder:
         concat_psf_params: false
         log_transform: false
         rolling_z_score: true
-        z_score: false
-        clahe: false
     architecture:
         # this architecture is based on yolov5l.yaml, see
         # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml

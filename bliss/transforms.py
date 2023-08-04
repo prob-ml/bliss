@@ -1,26 +1,4 @@
-import cv2 as cv
-import numpy as np
 import torch
-
-
-def z_score(imgs):
-    """Perform z_score standardization on input images."""
-    mu = torch.mean(imgs, dim=(3, 4), keepdim=True)
-    sig = torch.std(imgs, dim=(3, 4), keepdim=True)
-    return (imgs - mu) / sig
-
-
-def clahe(imgs):
-    """Perform contrast-limited adaptive histogram equalization on images."""
-    clahe_imgs = torch.zeros_like(imgs)
-    clahe = cv.createCLAHE(climLimit=2.0, tileGridSize=(10, 10))  # pylint: disable=E1101
-    for i in range(imgs.shape[0]):
-        for j in range(imgs.shape[1]):
-            np_img = imgs[i, j, 0].cpu().numpy()
-            np_img /= np_img.max()
-            rescaled_np_img = (np_img * 255).astype(np.uint8)
-            clahe_imgs[i, j, 0] = clahe.apply(rescaled_np_img)
-    return torch.from_numpy(clahe_imgs.to("cuda:0"))
 
 
 def rolling_z_score(imgs, s, c, p):
@@ -67,8 +45,3 @@ def pixelwise_norm_source(img):
 def log_transform(img):
     """Perform pixel-wise log transformation of full image."""
     return torch.log(img)
-
-
-def tanh_mod(img, scale, shift):
-    """Perform pixel-wise hyperbolic tangent of full image."""
-    return scale * torch.nn.Tanh(img + shift)  # pylint: disable=E1121

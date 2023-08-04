@@ -17,7 +17,7 @@ from bliss.backbone import Backbone
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
-from bliss.transforms import clahe, log_transform, rolling_z_score, z_score
+from bliss.transforms import log_transform, rolling_z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
     UnconstrainedLogitNormal,
@@ -138,7 +138,7 @@ class Encoder(pl.LightningModule):
         in self.input_transform_params. Supported options are:
             use_deconv_channel: add channel for image deconvolved with PSF
             concat_psf_params: add each PSF parameter as a channel
-            z_score: z-score both the images and background
+            rolling_z_score: rolling z-score both the images and background
             log_transform: apply pixel-wise natural logarithm to background-subtracted image.
 
         Args:
@@ -172,21 +172,12 @@ class Encoder(pl.LightningModule):
             n, c, i, h, w = imgs.shape
             psf_params = batch["psf_params"][:, self.bands]
             inputs.append(psf_params.view(n, c, 6 * i, 1, 1).expand(n, c, 6 * i, h, w))
-        if self.input_transform_params.get("z_score"):
-            assert (
-                batch["background"][0, 0].std() > 0
-            ), "Constant backgrounds not supported for z-score encoding"
-            inputs[0] = z_score(inputs[0])
-            inputs[1] = z_score(inputs[1])
-        elif self.input_transform_params.get("log_transform"):
+        if self.input_transform_params.get("log_transform"):
             # untransformed background
             inputs[0] = log_transform(torch.clamp(inputs[0] - inputs[1], min=1))
         elif self.input_transform_params.get("rolling_z_score"):
             inputs[0] = rolling_z_score(inputs[0], 9, 200, 4)
             inputs[1] = rolling_z_score(inputs[1], 9, 200, 4)
-        elif self.input_transform_params.get("clahe"):
-            inputs[0] = clahe(inputs[0])
-            inputs[1] = clahe(inputs[1])
         return torch.cat(inputs, dim=2)
 
     def encode_batch(self, batch):
