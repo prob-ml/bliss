@@ -37,7 +37,6 @@ def des_weight_save_path(cfg, tmpdir_factory, des_cached_data_path):
 
     train_des_cfg.encoder.bands = list(range(len(DES.BANDS)))
     train_des_cfg.encoder.survey_bands = DES.BANDS
-    train_des_cfg.encoder.input_transform_params.z_score = False
     train_des_cfg.training.pretrained_weights = None
     train_des_cfg.training.testing = True
 
