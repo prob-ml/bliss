@@ -52,6 +52,8 @@ simulator:
     survey: ${surveys.sdss}
     prior: ${prior}
     n_batches: 128
+    use_coaddition: false
+    coadd_depth: 1
     num_workers: 32
     valid_n_batches: 10  # 256
     fix_validation_set: true
@@ -63,7 +65,6 @@ cached_simulator:
     num_workers: 0
     cached_data_path: ${generate.cached_data_path}
     file_prefix: ${generate.file_prefix}
-    bands: [0, 1, 2, 3, 4]
 
 encoder:
     _target_: bliss.encoder.Encoder
@@ -188,7 +189,11 @@ surveys:
             # brick '3366m010' corresponds to SDSS RCF 94-1-12
             - ra: 336.6643042496718
               dec: -0.9316385797930247
-        bands: ${encoder.bands}
+        bands: [0, 1, 3] # grz
+        psf_config:
+            pixel_scale: 0.262 # see https://github.com/legacysurvey/legacypipe/blob/6811e465cf1d6f0beb9824a2f1964de8a1a8cc12/py/legacyanalysis/deep-coadd.py#L20
+            psf_slen: 63 # see https://github.com/legacysurvey/legacypipe/blob/ba1ffd4969c1f920566e780118c542d103cbd9a5/py/legacypipe/config/common.psfex#L8
+        pixel_shift: 2
     des:
         _target_: bliss.surveys.des.DarkEnergySurvey
         dir_path: ${paths.des}

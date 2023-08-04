@@ -9,8 +9,6 @@ from reproject import reproject_interp
 from torch import Tensor
 
 from bliss.catalog import FullCatalog
-from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
-from bliss.surveys.decals import DecalsFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
@@ -48,38 +46,45 @@ def prepare_batch(images, backgrounds):
     return batch
 
 
-def align(img, ref_wcs, ref_band):
+def align(img, wcs_list, ref_band, ref_depth=0):
     """Reproject images based on some reference WCS for pixel alignment."""
     reproj_d = {}
     footprint_d = {}
 
-    orig_dim = img.shape
+    # coerce to 4D with coadd_depth trivially 1
+    if img.ndim == 3:
+        img = np.expand_dims(img, axis=0)
+    if not isinstance(wcs_list[0], list):
+        wcs_list = [wcs_list]
+    coadd_depth, n_bands, h, w = img.shape
 
-    # align with r-band WCS
-    for bnd in range(img.shape[0]):
-        inputs = (img[bnd], ref_wcs[bnd])
-        reproj, footprint = reproject_interp(  # noqa: WPS317
-            inputs, ref_wcs[ref_band], order="bicubic", shape_out=img[bnd].shape
-        )
-        reproj_d[bnd] = reproj
-        footprint_d[bnd] = footprint
+    # align with (`ref_depth`, `ref_band`) WCS
+    for d in range(coadd_depth):
+        for bnd in range(n_bands):
+            inputs = (img[d, bnd], wcs_list[d][bnd])
+            reproj, footprint = reproject_interp(  # noqa: WPS317
+                inputs, wcs_list[ref_depth][ref_band], order="bicubic", shape_out=(h, w)
+            )
+            reproj_d[(d, bnd)] = reproj
+            footprint_d[(d, bnd)] = footprint
 
     # use footprints to handle NaNs from reprojection
-    h, w = footprint_d[0].shape
+    h, w = footprint_d[(0, 0)].shape
     out_print = np.ones((h, w))
     for fp in footprint_d.values():
         out_print = out_print * fp  # noqa: WPS350
 
-    out_print = np.expand_dims(out_print, axis=0)
+    out_print = np.expand_dims(out_print, axis=(0, 1))
+    reproj_out = np.zeros((coadd_depth, n_bands, h, w))
+    for d in range(coadd_depth):
+        for bnd in range(n_bands):
+            reproj_d[(d, bnd)] = np.multiply(reproj_d[(d, bnd)], out_print)
+            cropped = reproj_d[(d, bnd)][0, 0, :h, :w]
+            cropped[np.isnan(cropped)] = 0
+            reproj_out[(d, bnd)] = cropped
 
-    reproj_out = np.zeros((orig_dim[0], orig_dim[1], orig_dim[2]))
-
-    for i in range(img.shape[0]):
-        reproj_d[i] = np.multiply(reproj_d[i], out_print)
-        cropped = reproj_d[i][0, : orig_dim[1], : orig_dim[2]]
-        cropped[np.isnan(cropped)] = 0
-        reproj_out[i] = cropped
-
+    if reproj_out.shape[0] == 1:
+        reproj_out = reproj_out.squeeze(axis=0)
     return reproj_out
 
 
@@ -115,12 +120,12 @@ def predict(cfg):
     for i, survey_obj in enumerate(survey_objs):
         survey_obj["image"] = align(
             survey_obj["image"],
-            ref_wcs=survey_obj["wcs"],
+            wcs_list=survey_obj["wcs"],
             ref_band=cfg.simulator.prior.reference_band,
         )
         survey_obj["background"] = align(
             survey_obj["background"],
-            ref_wcs=survey_obj["wcs"],
+            wcs_list=survey_obj["wcs"],
             ref_band=cfg.simulator.prior.reference_band,
         )
 
@@ -150,7 +155,7 @@ def predict(cfg):
         est_cat, images, backgrounds, pred = trainer.predict(encoder, datamodule=survey)[0].values()
 
         # mean of the nelec_per_mgy per band
-        nelec_per_nmgy_per_band = np.mean(survey_obj["nelec_per_nmgy_list"], axis=1)
+        nelec_per_nmgy_per_band = np.mean(survey_obj["nelec_per_physical_unit_list"], axis=1)
         est_cat = nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band)
         est_full = est_cat.to_full_params()
 
@@ -258,6 +263,9 @@ def add_cat(p, est_plocs, survey_true_plocs, sdss_plocs, decals_plocs):
 
 def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
     """Function that generate plots for images."""
+    from bliss.surveys.decals import DECaLS  # pylint: disable=import-outside-toplevel
+    from bliss.surveys.des import TractorFullCatalog  # pylint: disable=import-outside-toplevel
+
     p = figure(width=cfg.predict.plot.width, height=cfg.predict.plot.height)
     p.image(image=[img], x=0, y=0, dw=w, dh=h, palette="Viridis256")
     do_crop = cfg.predict.crop.do_crop
@@ -269,12 +277,12 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
     if do_crop and (not is_simulated):
         # DECaLS one-instance catalog plocs
         decals = instantiate(
-            cfg.surveys.decals, bands=[SDSS.BANDS.index("r")], sky_coords=[{"ra": ra, "dec": dec}]
+            cfg.surveys.decals, bands=[DECaLS.BANDS.index("r")], sky_coords=[{"ra": ra, "dec": dec}]
         )
 
         brickname = DECaLS.brick_for_radec(ra, dec)
         tractor_filename = decals.downloader.download_catalog(brickname)
-        decals_plocs = DecalsFullCatalog.from_file(
+        decals_plocs = TractorFullCatalog.from_file(
             tractor_filename,
             wcs=decals[0]["wcs"][cfg.simulator.prior.reference_band],
             height=decals[0]["image"].shape[1],
@@ -339,7 +347,9 @@ def plot_predict(
             survey={"fields": [{"run": run, "camcol": camcol, "fields": [field]}]},
         )
         decoder_obj = simulator.image_decoder
-        recon_images, _, _, _ = decoder_obj.render_images(est_tile, [(run, camcol, field)])
+        recon_images = decoder_obj.render_images(est_tile, [(run, camcol, field)])[
+            0
+        ]  # NOTE: causes issue when weights used were for survey that has diff no. of bands as SDSS
         recon_img = recon_images[0][0]  # first image in batch, first band in image
 
         image = image.to("cpu")

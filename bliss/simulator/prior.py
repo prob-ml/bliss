@@ -196,7 +196,7 @@ class CatalogPrior(pl.LightningModule):
 
         # Reshape drawn values into appropriate form
         samples = samples + (self.n_bands - 1,)
-        # TODO: remove band-dimension coercing used for DES testing!
+        # TODO: remove band-dimension coercing after building DES/DECaLS-specific GMMs
         bands = range(star_ratios_flat.shape[-1] - self.n_bands + 1, star_ratios_flat.shape[-1])
         star_ratios = np.exp(np.reshape(star_ratios_flat[..., bands], samples))
         gal_ratios = np.exp(np.reshape(gal_ratios_flat[..., bands], samples))

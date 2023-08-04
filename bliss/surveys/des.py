@@ -10,15 +10,17 @@ from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS
 from numpy.core import defchararray
+from omegaconf import DictConfig
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from pyvo.dal import sia
 from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage import zoom
 from torch.utils.data import DataLoader
 
+from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
-from bliss.surveys.decals import DecalsDownloader, DecalsFullCatalog  # NOTE: potentially circular
+from bliss.surveys.sdss import column_to_tensor
 from bliss.surveys.survey import Survey, SurveyDownloader
 from bliss.utils.download_utils import download_file_to_dst
 
@@ -37,6 +39,7 @@ DESImageID = TypedDict(
         "i": str,
         "z": str,
     },
+    total=False,
 )
 
 
@@ -79,7 +82,7 @@ class DarkEnergySurvey(Survey):
 
         self.des_path = Path(dir_path)
 
-        self.image_id_list = list(image_ids)
+        self.image_id_list = self.process_image_ids(image_ids)
         self.bands = tuple(range(len(self.BANDS)))
         self.n_bands = len(self.BANDS)
         self.pixel_shift = pixel_shift
@@ -89,9 +92,9 @@ class DarkEnergySurvey(Survey):
 
         self.background = ImageBackground(self, bands=self.bands)
         self.psf = DES_PSF(dir_path, self.image_ids(), self.bands, psf_config)
-        self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
+        self.flux_calibration_dict = self.get_flux_calibrations()
 
-        self.catalog_cls = DecalsFullCatalog
+        self.catalog_cls = TractorFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
@@ -109,18 +112,10 @@ class DarkEnergySurvey(Survey):
         return self.image_id_list[idx]
 
     def idx(self, image_id: DESImageID) -> int:
-        return self.image_id_list.index(image_id)
+        return self.image_id_list.index(self.to_dictconfig(image_id))
 
     def image_ids(self) -> List[DESImageID]:
         return self.image_id_list
-
-    def nmgy_to_nelec(self):
-        d = {}
-        for i, image_id in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
-            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
-            d[image_id] = avg_nelec_conv
-        return d
 
     def get_from_disk(self, idx):
         des_image_id = self.image_id(idx)
@@ -136,12 +131,13 @@ class DarkEnergySurvey(Survey):
         for b, bl in enumerate(self.BANDS):
             if bl != first_present_bl and des_image_id[bl]:
                 image_list[b] = self.read_image_for_band(des_image_id, bl)
-            else:
+            elif bl != first_present_bl:
                 image_list[b] = {
                     "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
-                    "wcs": first_present_bl_obj["wcs"],
-                    "nelec_per_nmgy_list": np.ones((1, 1, 1)),
+                    "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
+                    "nelec_per_physical_unit_list": np.ones((1, 1, 1)),
+                    "sig1": 0.0,
                 }
 
         ret = {}
@@ -164,13 +160,20 @@ class DarkEnergySurvey(Survey):
         hr = image_hdu.header  # pylint: disable=no-member
         wcs = WCS(hr)
 
+        # compute sig1 (cf. https://github.com/dstndstn/tractor/blob/cdb82000422e85c9c97b134edadff31d68bced0c/projects/desi/decam.py#L313-L333) # noqa: E501 # pylint: disable=line-too-long
+        diffs = image[:-5:10, :-5:10] - image[5::10, 5::10]
+        mad = np.median(np.abs(diffs).ravel())
+        zpscale = DES.zpt_to_scale(hr["MAGZPT"])
+        sig1 = (1.4826 * mad / np.sqrt(2.0)) / zpscale
+
         return {
             "image": image.astype(np.float32),
             "background": self.splinesky_level_for_band(
                 brickname, ccdname, des_image_id[band], image.shape
             ),
             "wcs": wcs,
-            "nelec_per_nmgy_list": np.array([[[DES.zpt_to_scale(hr["MAGZPT"])]]]),
+            "nelec_per_physical_unit_list": np.array([[[zpscale]]]),
+            "sig1": sig1,
         }
 
     def splinesky_level_for_band(self, brickname, ccdname, image_filename, image_shape):
@@ -228,6 +231,22 @@ class DarkEnergySurvey(Survey):
         # Take the mean of the x and y components
         return (background_values_x + background_values_y) / 2
 
+    def to_dictconfig(self, image_id):
+        # convert sky_coord["ra"], sky_coord["dec"] to np.float32
+        image_id["sky_coord"] = {
+            "ra": float(image_id["sky_coord"]["ra"]),
+            "dec": float(image_id["sky_coord"]["dec"]),
+        }
+        return DictConfig(image_id)
+
+    def process_image_ids(self, image_ids) -> List[DictConfig]:
+        im_ids = list(image_ids)
+        for im_id in im_ids:
+            for b in self.BANDS:
+                im_id[b] = im_id.get(b, "")
+        # convert to hashable DictConfig
+        return [self.to_dictconfig(im_id) for im_id in im_ids]
+
     @property
     def predict_batch(self):
         if not self._predict_batch:
@@ -254,6 +273,7 @@ class DESDownloader(SurveyDownloader):
 
     URLBASE = "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9"
     DEF_ACCESS_URL = "https://datalab.noirlab.edu/sia/calibrated_all"
+    DECaLS_URLBASE = "https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9"
 
     @staticmethod
     def image_basename_from_filename(image_filename, bl):
@@ -262,6 +282,16 @@ class DESDownloader(SurveyDownloader):
     @staticmethod
     def save_filename_from_image_filename(image_filename):
         return image_filename.split("/")[-1]
+
+    @staticmethod
+    def download_catalog_from_filename(tractor_filename: str):
+        """Download tractor catalog given tractor-<brick_name>.fits filename."""
+        basename = Path(tractor_filename).name
+        brickname = basename.split("-")[1].split(".")[0]
+        download_file_to_dst(
+            f"{DESDownloader.DECaLS_URLBASE}/south/tractor/{brickname[:3]}/{basename}",
+            tractor_filename,
+        )
 
     def __init__(self, image_ids: List[DESImageID], download_dir):
         self.band_image_filenames = image_ids
@@ -283,15 +313,19 @@ class DESDownloader(SurveyDownloader):
         """Download image for specified band, for this brick/ccd."""
         image_table = self.svc.search((sky_coord["ra"], sky_coord["dec"])).to_table()
         sel = defchararray.find(image_table["access_url"].astype(str), image_basename) != -1
-        b_access_url = image_table[sel][0]["access_url"]
         image_dst_filename = (
             self.download_dir / brickname[:3] / brickname / f"{image_basename}.fits"
         )
         try:
-            download_file_to_dst(b_access_url, image_dst_filename)
+            download_file_to_dst(image_table[sel][0]["access_url"], image_dst_filename)
+        except IndexError as e:
+            warnings.warn(
+                f"Desired image with basename {image_basename} not found in SIA database."
+            )
+            raise e
         except HTTPError as e:
             warnings.warn(
-                f"No {image_dst_filename} image for brick {brickname} at sky position "
+                f"No {image_basename} image for brick {brickname} at sky position "
                 f"({sky_coord['ra']}, {sky_coord['dec']}). Check cfg.datasets.des.image_ids.",
                 stacklevel=2,
             )
@@ -354,11 +388,16 @@ class DESDownloader(SurveyDownloader):
         return str(background_filename)
 
     def download_catalog(self, des_image_id) -> str:
+        """Download tractor catalog given tractor-<brick_name>.fits filename."""
         brickname = des_image_id["decals_brickname"]
         tractor_filename = str(
             self.download_dir / brickname[:3] / brickname / f"tractor-{brickname}.fits"
         )
-        DecalsDownloader.download_catalog_from_filename(tractor_filename)
+        basename = Path(tractor_filename).name
+        download_file_to_dst(
+            f"{DESDownloader.DECaLS_URLBASE}/south/tractor/{brickname[:3]}/{basename}",
+            tractor_filename,
+        )
         return tractor_filename
 
 
@@ -398,7 +437,7 @@ class DES_PSF(ImagePSF):  # noqa: N801
                     psf_params[b] = self._psf_params_for_band(image_id, bl)
 
             self.psf_params[image_id] = psf_params
-            self.psf_galsim[image_id] = self._get_psf_via_despsfex(image_id)
+            self.psf_galsim[image_id] = self.get_psf_via_despsfex(image_id)
 
     def _psfex_hdu_for_band_image(self, des_image_id, bl):
         brickname = des_image_id["decals_brickname"]
@@ -428,11 +467,13 @@ class DES_PSF(ImagePSF):  # noqa: N801
 
         return torch.tensor(psf_params, dtype=torch.float32)
 
-    def _get_psf_via_despsfex(self, des_image_id):  # noqa: W0237
+    def get_psf_via_despsfex(self, des_image_id, px=0.0, py=0.0):  # noqa: W0237
         """Construct PSF image from PSFEx FITS files.
 
         Args:
             des_image_id (DESImageID): image_id for this image
+            px (float): x image pixel coordinate for PSF center
+            py (float): y image pixel coordinate for PSF center
 
         Returns:
             images (List[InterpolatedImage]): list of psf transformations for each band
@@ -460,7 +501,7 @@ class DES_PSF(ImagePSF):  # noqa: N801
                     str(image_filename),
                 )
                 # TODO: use an appropriate image position for the PSF
-                psf_image = des_psfex_band.getPSF(galsim.PositionD(0, 0))
+                psf_image = des_psfex_band.getPSF(galsim.PositionD(px, py))
                 images[b] = psf_image
 
         return images
@@ -495,3 +536,105 @@ class DES_PSF(ImagePSF):  # noqa: N801
         psfex_table_hdu.header["NAXIS1"] = len(psfex_table_hdu.columns)
 
         return psfex_table_hdu
+
+
+class TractorFullCatalog(FullCatalog):
+    """Class for the DECaLS Tractor Catalog.
+
+    Some resources:
+    - https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/south/sweep/9.0/
+    - https://www.legacysurvey.org/dr9/files/#sweep-catalogs-region-sweep
+    - https://www.legacysurvey.org/dr5/description/#photometry
+    - https://www.legacysurvey.org/dr9/bitmasks/
+    """
+
+    @staticmethod
+    def _flux_to_mag(flux):
+        return 22.5 - 2.5 * torch.log10(flux)
+
+    @classmethod
+    def from_file(
+        cls,
+        cat_path,
+        wcs: WCS,
+        height,
+        width,
+        band: str = "r",
+    ):
+        """Loads DECaLS catalog from FITS file.
+
+        Args:
+            cat_path (str): Path to .fits file.
+            band (str): Band to read from. Defaults to "r".
+            wcs (WCS): WCS object for the image.
+            height (int): Height of the image.
+            width (int): Width of the image.
+
+        Returns:
+            A DecalsFullCatalog containing data from the provided file.
+        """
+        catalog_path = Path(cat_path)
+        if not catalog_path.exists():
+            DESDownloader.download_catalog_from_filename(catalog_path.name)
+        assert catalog_path.exists(), f"File {catalog_path} does not exist"
+
+        table = Table.read(catalog_path, format="fits", unit_parse_strict="silent")
+        table = {k.upper(): v for k, v in table.items()}  # uppercase keys
+        band = band.capitalize()
+
+        # filter out pixels that aren't in primary region, had issues with source fitting,
+        # in SGA large galaxy, or in a globular cluster. In the future this should probably
+        # be an input parameter.
+        bitmask = 0b0011010000000001  # noqa: WPS339
+
+        objid = column_to_tensor(table, "OBJID")
+        objc_type = table["TYPE"].data.astype(str)
+        bits = table["MASKBITS"].data.astype(int)
+        is_galaxy = torch.from_numpy(
+            (objc_type == "DEV")
+            | (objc_type == "REX")
+            | (objc_type == "EXP")
+            | (objc_type == "SER")
+        )
+        is_star = torch.from_numpy(objc_type == "PSF")
+        ras = column_to_tensor(table, "RA")
+        decs = column_to_tensor(table, "DEC")
+        fluxes = column_to_tensor(table, f"FLUX_{band}")
+        mask = torch.from_numpy((bits & bitmask) == 0).bool()
+
+        galaxy_bools = is_galaxy & mask & (fluxes > 0)
+        star_bools = is_star & mask & (fluxes > 0)
+
+        # true light source mask
+        keep = galaxy_bools | star_bools
+
+        # filter quantities
+        objid = objid[keep]
+
+        galaxy_bools = galaxy_bools[keep]
+        star_bools = star_bools[keep]
+        ras = ras[keep]
+        decs = decs[keep]
+        fluxes = fluxes[keep]
+        mags = cls._flux_to_mag(fluxes)
+        nobj = objid.shape[0]
+
+        # get pixel coordinates
+        plocs = cls.plocs_from_ra_dec(ras, decs, wcs)
+
+        # Verify each tile contains either a star or a galaxy
+        assert torch.all(star_bools + galaxy_bools)
+        source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
+
+        d = {
+            "plocs": plocs.reshape(1, nobj, 2),
+            "objid": objid.reshape(1, nobj, 1),
+            "n_sources": torch.tensor((nobj,)),
+            "source_type": source_type.reshape(1, nobj, 1),
+            "fluxes": fluxes.reshape(1, nobj, 1),
+            "mags": mags.reshape(1, nobj, 1),
+            "ra": ras.reshape(1, nobj, 1),
+            "dec": decs.reshape(1, nobj, 1),
+        }
+
+        return cls(height, width, d)
