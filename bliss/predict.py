@@ -9,10 +9,6 @@ from reproject import reproject_interp
 from torch import Tensor
 
 from bliss.catalog import FullCatalog
-from bliss.surveys.decals import (
-    DarkEnergyCameraLegacySurvey as DECaLS,  # pylint: disable=cyclic-import
-)
-from bliss.surveys.decals import DecalsFullCatalog  # pylint: disable=cyclic-import
 from bliss.surveys.sdss import PhotoFullCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
@@ -267,6 +263,9 @@ def add_cat(p, est_plocs, survey_true_plocs, sdss_plocs, decals_plocs):
 
 def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
     """Function that generate plots for images."""
+    from bliss.surveys.decals import DECaLS  # pylint: disable=import-outside-toplevel
+    from bliss.surveys.des import TractorFullCatalog  # pylint: disable=import-outside-toplevel
+
     p = figure(width=cfg.predict.plot.width, height=cfg.predict.plot.height)
     p.image(image=[img], x=0, y=0, dw=w, dh=h, palette="Viridis256")
     do_crop = cfg.predict.crop.do_crop
@@ -283,7 +282,7 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
 
         brickname = DECaLS.brick_for_radec(ra, dec)
         tractor_filename = decals.downloader.download_catalog(brickname)
-        decals_plocs = DecalsFullCatalog.from_file(
+        decals_plocs = TractorFullCatalog.from_file(
             tractor_filename,
             wcs=decals[0]["wcs"][cfg.simulator.prior.reference_band],
             height=decals[0]["image"].shape[1],

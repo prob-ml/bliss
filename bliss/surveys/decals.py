@@ -14,12 +14,10 @@ from astropy.wcs import WCS
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
-from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
-from bliss.surveys.des import DarkEnergySurvey as DES  # pylint: disable=cyclic-import
-from bliss.surveys.des import DESImageID, SkyCoord  # pylint: disable=cyclic-import
-from bliss.surveys.sdss import column_to_tensor
+from bliss.surveys.des import DarkEnergySurvey as DES
+from bliss.surveys.des import DESImageID, SkyCoord, TractorFullCatalog
 from bliss.surveys.survey import Survey, SurveyDownloader
 from bliss.utils.download_utils import download_file_to_dst
 
@@ -139,7 +137,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
 
         self.flux_calibration_dict = self.get_flux_calibrations()
 
-        self.catalog_cls = DecalsFullCatalog
+        self.catalog_cls = TractorFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
@@ -430,108 +428,6 @@ class DecalsDownloader(SurveyDownloader):
             f"legacysurvey-{brickname}-ccds.fits",
             ccds_filename,
         )
-
-
-class DecalsFullCatalog(FullCatalog):
-    """Class for the Decals Sweep Tractor Catalog.
-
-    Some resources:
-    - https://portal.nersc.gov/cfs/cosmo/data/legacysurvey/dr9/south/sweep/9.0/
-    - https://www.legacysurvey.org/dr9/files/#sweep-catalogs-region-sweep
-    - https://www.legacysurvey.org/dr5/description/#photometry
-    - https://www.legacysurvey.org/dr9/bitmasks/
-    """
-
-    @staticmethod
-    def _flux_to_mag(flux):
-        return 22.5 - 2.5 * torch.log10(flux)
-
-    @classmethod
-    def from_file(
-        cls,
-        cat_path,
-        wcs: WCS,
-        height,
-        width,
-        band: str = "r",
-    ):
-        """Loads DECaLS catalog from FITS file.
-
-        Args:
-            cat_path (str): Path to .fits file.
-            band (str): Band to read from. Defaults to "r".
-            wcs (WCS): WCS object for the image.
-            height (int): Height of the image.
-            width (int): Width of the image.
-
-        Returns:
-            A DecalsFullCatalog containing data from the provided file.
-        """
-        catalog_path = Path(cat_path)
-        if not catalog_path.exists():
-            DecalsDownloader.download_catalog_from_filename(catalog_path.name)
-        assert catalog_path.exists(), f"File {catalog_path} does not exist"
-
-        table = Table.read(catalog_path, format="fits", unit_parse_strict="silent")
-        table = {k.upper(): v for k, v in table.items()}  # uppercase keys
-        band = band.capitalize()
-
-        # filter out pixels that aren't in primary region, had issues with source fitting,
-        # in SGA large galaxy, or in a globular cluster. In the future this should probably
-        # be an input parameter.
-        bitmask = 0b0011010000000001  # noqa: WPS339
-
-        objid = column_to_tensor(table, "OBJID")
-        objc_type = table["TYPE"].data.astype(str)
-        bits = table["MASKBITS"].data.astype(int)
-        is_galaxy = torch.from_numpy(
-            (objc_type == "DEV")
-            | (objc_type == "REX")
-            | (objc_type == "EXP")
-            | (objc_type == "SER")
-        )
-        is_star = torch.from_numpy(objc_type == "PSF")
-        ras = column_to_tensor(table, "RA")
-        decs = column_to_tensor(table, "DEC")
-        fluxes = column_to_tensor(table, f"FLUX_{band}")
-        mask = torch.from_numpy((bits & bitmask) == 0).bool()
-
-        galaxy_bools = is_galaxy & mask & (fluxes > 0)
-        star_bools = is_star & mask & (fluxes > 0)
-
-        # true light source mask
-        keep = galaxy_bools | star_bools
-
-        # filter quantities
-        objid = objid[keep]
-
-        galaxy_bools = galaxy_bools[keep]
-        star_bools = star_bools[keep]
-        ras = ras[keep]
-        decs = decs[keep]
-        fluxes = fluxes[keep]
-        mags = cls._flux_to_mag(fluxes)
-        nobj = objid.shape[0]
-
-        # get pixel coordinates
-        plocs = cls.plocs_from_ra_dec(ras, decs, wcs)
-
-        # Verify each tile contains either a star or a galaxy
-        assert torch.all(star_bools + galaxy_bools)
-        source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
-
-        d = {
-            "plocs": plocs.reshape(1, nobj, 2),
-            "objid": objid.reshape(1, nobj, 1),
-            "n_sources": torch.tensor((nobj,)),
-            "source_type": source_type.reshape(1, nobj, 1),
-            "fluxes": fluxes.reshape(1, nobj, 1),
-            "mags": mags.reshape(1, nobj, 1),
-            "ra": ras.reshape(1, nobj, 1),
-            "dec": decs.reshape(1, nobj, 1),
-        }
-
-        return cls(height, width, d)
 
 
 class DECaLS_PSF(ImagePSF):  # noqa: N801
