@@ -37,9 +37,11 @@ def plot_plocs(catalog, ax, idx, filter_by="all", bp=0, **kwargs):
     ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
 
 
-def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px, ticks=None):
+def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px, ticks=None, figsize=None):
     """Plots an image of true and estimated sources."""
-    fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=(20, 20))
+    if figsize is None:
+        figsize = (20, 20)
+    fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=figsize)
     axes = axes.flatten() if nrows > 1 else [axes]  # flatten
 
     for ax_idx, ax in enumerate(axes):
