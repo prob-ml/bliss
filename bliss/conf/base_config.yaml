@@ -81,8 +81,8 @@ encoder:
     input_transform_params:
         use_deconv_channel: false
         concat_psf_params: false
-        log_transform: true
-        z_score: false
+        log_transform: false
+        rolling_z_score: true
     architecture:
         # this architecture is based on yolov5l.yaml, see
         # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
@@ -155,7 +155,7 @@ predict:
     dataset: ${surveys.sdss}
     trainer: ${training.trainer}
     encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/3d_conv_log.pt
+    weight_save_path: ${paths.pretrained_models}/rolling_z_10x10.pt
     device: "cuda:0"
     crop:
         do_crop: true
