@@ -65,7 +65,6 @@ cached_simulator:
     num_workers: 0
     cached_data_path: ${generate.cached_data_path}
     file_prefix: ${generate.file_prefix}
-    bands: [0, 1, 2, 3, 4]
 
 encoder:
     _target_: bliss.encoder.Encoder

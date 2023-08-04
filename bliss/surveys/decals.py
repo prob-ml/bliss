@@ -41,18 +41,15 @@ class DarkEnergyCameraLegacySurvey(Survey):
         ]["brickname"][0]
 
     @staticmethod
-    def coadd_images(constituent_images, wcs_for_depth) -> torch.Tensor:
+    def coadd_images(constituent_images) -> torch.Tensor:
         """Get coadd image for image_id, given constituent images."""
-        from bliss.predict import coadd_depth_align  # pylint: disable=import-outside-toplevel
-
         _, n_bands, height, width = constituent_images.shape
 
-        # (1) depth-align
-        images_aligned = coadd_depth_align(constituent_images.numpy(), wcs_for_depth, 0)
         # (2) weight by inverse-variance
         cow = np.zeros(n_bands)  # inverse-variance weights
         cowimg = np.zeros((n_bands, height, width))
-        for image in images_aligned:
+        for image in constituent_images:
+            image = image.numpy()
             invvar = 1 / image.var(axis=(1, 2))
             cow += invvar
             cowimg += image * np.expand_dims(invvar, axis=(1, 2))
@@ -140,7 +137,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
             pixel_shift,
         )
 
-        self.physical_to_nelec_dict = self.physical_to_nelec()
+        self.flux_calibration_dict = self.get_flux_calibrations()
 
         self.catalog_cls = DecalsFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}

@@ -50,74 +50,45 @@ def prepare_batch(images, backgrounds):
     return batch
 
 
-def band_align(img, wcs_for_band, ref_band):
+def align(img, wcs_list, ref_band, ref_depth=0):
     """Reproject images based on some reference WCS for pixel alignment."""
     reproj_d = {}
     footprint_d = {}
 
-    n_bands, h, w = img.shape
-
-    # align with `ref_band`-band WCS
-    for bnd in range(img.shape[0]):
-        inputs = (img[bnd], wcs_for_band[bnd])
-        reproj, footprint = reproject_interp(  # noqa: WPS317
-            inputs, wcs_for_band[ref_band], order="bicubic", shape_out=img[bnd].shape
-        )
-        reproj_d[bnd] = reproj
-        footprint_d[bnd] = footprint
-
-    # use footprints to handle NaNs from reprojection
-    h, w = footprint_d[0].shape
-    out_print = np.ones((h, w))
-    for fp in footprint_d.values():
-        out_print = out_print * fp  # noqa: WPS350
-
-    out_print = np.expand_dims(out_print, axis=0)
-
-    reproj_out = np.zeros((n_bands, h, w))
-
-    for i in range(img.shape[0]):
-        reproj_d[i] = np.multiply(reproj_d[i], out_print)
-        cropped = reproj_d[i][0, :h, :w]
-        cropped[np.isnan(cropped)] = 0
-        reproj_out[i] = cropped
-
-    return reproj_out
-
-
-def coadd_depth_align(img, wcs_for_depth, ref_depth):
-    """Reproject images based on some reference WCS for pixel alignment."""
-    reproj_d = {}
-    footprint_d = {}
-
+    # coerce to 4D with coadd_depth trivially 1
+    if img.ndim == 3:
+        img = np.expand_dims(img, axis=0)
+    if not isinstance(wcs_list[0], list):
+        wcs_list = [wcs_list]
     coadd_depth, n_bands, h, w = img.shape
 
-    # align with `ref_depth` WCS
+    # align with (`ref_depth`, `ref_band`) WCS
     for d in range(coadd_depth):
         for bnd in range(n_bands):
-            inputs = (img[d, bnd], wcs_for_depth[d])
+            inputs = (img[d, bnd], wcs_list[d][bnd])
             reproj, footprint = reproject_interp(  # noqa: WPS317
-                inputs, wcs_for_depth[ref_depth], order="bicubic", shape_out=(h, w)
+                inputs, wcs_list[ref_depth][ref_band], order="bicubic", shape_out=(h, w)
             )
-            reproj_d[bnd] = reproj
-            footprint_d[bnd] = footprint
+            reproj_d[(d, bnd)] = reproj
+            footprint_d[(d, bnd)] = footprint
 
     # use footprints to handle NaNs from reprojection
-    h, w = footprint_d[0].shape
+    h, w = footprint_d[(0, 0)].shape
     out_print = np.ones((h, w))
     for fp in footprint_d.values():
         out_print = out_print * fp  # noqa: WPS350
 
-    out_print = np.expand_dims(out_print, axis=0)
-
+    out_print = np.expand_dims(out_print, axis=(0, 1))
     reproj_out = np.zeros((coadd_depth, n_bands, h, w))
+    for d in range(coadd_depth):
+        for bnd in range(n_bands):
+            reproj_d[(d, bnd)] = np.multiply(reproj_d[(d, bnd)], out_print)
+            cropped = reproj_d[(d, bnd)][0, 0, :h, :w]
+            cropped[np.isnan(cropped)] = 0
+            reproj_out[(d, bnd)] = cropped
 
-    for i in range(img.shape[0]):
-        reproj_d[i] = np.multiply(reproj_d[i], out_print)
-        cropped = reproj_d[i][0, :h, :w]
-        cropped[np.isnan(cropped)] = 0
-        reproj_out[i] = cropped
-
+    if reproj_out.shape[0] == 1:
+        reproj_out = reproj_out.squeeze(axis=0)
     return reproj_out
 
 
@@ -151,14 +122,14 @@ def predict(cfg):
     est_full_all = None  # collated catalog for all images
     survey_objs = [survey[i] for i in range(len(survey))]
     for i, survey_obj in enumerate(survey_objs):
-        survey_obj["image"] = band_align(
+        survey_obj["image"] = align(
             survey_obj["image"],
-            wcs_for_band=survey_obj["wcs"],
+            wcs_list=survey_obj["wcs"],
             ref_band=cfg.simulator.prior.reference_band,
         )
-        survey_obj["background"] = band_align(
+        survey_obj["background"] = align(
             survey_obj["background"],
-            wcs_for_band=survey_obj["wcs"],
+            wcs_list=survey_obj["wcs"],
             ref_band=cfg.simulator.prior.reference_band,
         )
 
@@ -377,9 +348,9 @@ def plot_predict(
             survey={"fields": [{"run": run, "camcol": camcol, "fields": [field]}]},
         )
         decoder_obj = simulator.image_decoder
-        recon_images, _, _, _, _ = decoder_obj.render_images(
-            est_tile, [(run, camcol, field)]
-        )  # TODO: causes issue when weights saved for survey that has diff no. of bands as SDSS
+        recon_images = decoder_obj.render_images(est_tile, [(run, camcol, field)])[
+            0
+        ]  # NOTE: causes issue when weights used were for survey that has diff no. of bands as SDSS
         recon_img = recon_images[0][0]  # first image in batch, first band in image
 
         image = image.to("cpu")

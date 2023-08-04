@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.generate import FileDatum
-from bliss.predict import band_align
+from bliss.predict import align
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
@@ -48,13 +48,13 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         assert survey.psf is not None, "Survey psf cannot be None."
         assert survey.pixel_shift is not None, "Survey pixel_shift cannot be None."
         assert (
-            survey.physical_to_nelec_dict is not None
-        ), "Survey physical_to_nelec_dict cannot be None."
+            survey.flux_calibration_dict is not None
+        ), "Survey flux_calibration_dict cannot be None."
         self.image_decoder = ImageDecoder(
             psf=survey.psf,
             bands=survey.BANDS,
             pixel_shift=survey.pixel_shift,
-            physical_to_nelec_dict=survey.physical_to_nelec_dict,
+            flux_calibration_dict=survey.flux_calibration_dict,
             ref_band=prior.b_band,
         )
 
@@ -88,28 +88,27 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         images += images_mean
         return images
 
-    def coadd_images(self, images, wcs_for_depth):
+    def coadd_images(self, images):
         batch_size = images.shape[0]
         assert self.coadd_depth > 1, "Coadd depth must be > 1 to use coaddition."
         coadded_images = np.zeros((batch_size, *images.shape[-3:]))  # 4D
         for b in range(batch_size):
-            coadded_images[b] = self.survey.coadd_images(images[b], wcs_for_depth)
+            coadded_images[b] = self.survey.coadd_images(images[b])
         return torch.from_numpy(coadded_images).float()
 
-    def band_align_images(self, images, wcs_batch):
+    def align_images(self, images, wcs_batch):
+        """Align images to the reference depth and band."""
         batch_size = images.shape[0]
-        assert images.ndim == 5, f"Expected `images` to be 5D, got {images.ndim}D."
-        # band-align for each batch
         for b in range(batch_size):
-            for d in range(self.coadd_depth):
-                images[b, d] = torch.from_numpy(
-                    band_align(
-                        images[b, d].numpy(),
-                        wcs_for_band=wcs_batch[b],
-                        ref_band=self.catalog_prior.b_band,
-                    )
+            images[b] = torch.from_numpy(
+                align(
+                    images[b].numpy(),
+                    wcs_list=wcs_batch[b],
+                    ref_depth=0,
+                    ref_band=self.catalog_prior.b_band,
                 )
-        return torch.squeeze(images, dim=1)  # remove coadd depth dimension if 1
+            )
+        return images
 
     def simulate_image(
         self, tile_catalog: TileCatalog, image_ids, image_id_indices
@@ -125,12 +124,12 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             Tuple[Tensor, Tensor, Tensor, Tensor]: tuple of images, backgrounds, deconvolved images,
             and psf parameters
         """
-        images, psfs, psf_params, wcs_batch, wcs_for_depth = self.image_decoder.render_images(
+        images, psfs, psf_params, wcs_batch = self.image_decoder.render_images(
             tile_catalog, image_ids, self.coadd_depth
         )
-        images = self.band_align_images(images, wcs_batch)
+        images = self.align_images(images, wcs_batch)
         if self.use_coaddition:
-            images = self.coadd_images(images, wcs_for_depth)
+            images = self.coadd_images(images)
 
         background = self.background.sample(images.shape, image_id_indices=image_id_indices)
         images += background
@@ -232,7 +231,6 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         self,
         splits: str,
         batch_size: int,
-        bands: List,
         num_workers: int,
         cached_data_path: str,
         file_prefix: str,
@@ -243,7 +241,6 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         self.batch_size = batch_size
         self.cached_data_path = cached_data_path
         self.file_prefix = file_prefix
-        self.bands = bands
 
         # assume cached image files exist, read from disk
         self.data: List[FileDatum] = []

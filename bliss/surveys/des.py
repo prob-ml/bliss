@@ -94,7 +94,7 @@ class DarkEnergySurvey(Survey):
 
         self.background = ImageBackground(self, bands=self.bands)
         self.psf = DES_PSF(dir_path, self.image_ids(), self.bands, psf_config)
-        self.physical_to_nelec_dict = self.physical_to_nelec()
+        self.flux_calibration_dict = self.get_flux_calibrations()
 
         self.catalog_cls = DecalsFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
