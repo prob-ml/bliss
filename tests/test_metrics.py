@@ -6,7 +6,7 @@ from hydra.utils import instantiate
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode, three_way_matching
 from bliss.predict import align, prepare_image
-from bliss.surveys.decals import DecalsFullCatalog
+from bliss.surveys.decals import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
@@ -56,7 +56,7 @@ class TestMetrics:
         ra_lim, dec_lim = wcs.all_pix2world(w_lim, h_lim, 0)
         photo_cat = base_photo_cat.restrict_by_ra_dec(ra_lim, dec_lim).to(torch.device("cpu"))
         decals_path = cfg.predict.decals_frame
-        decals_cat = DecalsFullCatalog.from_file(decals_path, wcs, image.shape[1], image.shape[2])
+        decals_cat = TractorFullCatalog.from_file(decals_path, wcs, image.shape[1], image.shape[2])
         decals_cat = decals_cat.to(torch.device("cpu"))
 
         # get predicted BLISS catalog

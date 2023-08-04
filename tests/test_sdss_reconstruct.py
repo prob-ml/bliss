@@ -1,3 +1,4 @@
+import torch
 from mock_tests import mock_predict_sdss_recon
 
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
@@ -15,8 +16,9 @@ class TestSdssReconstruct:
             max_sources_per_tile=cfg.simulator.prior.max_sources,
             ignore_extra_sources=True,
         )
-        imgs = decoder.render_images(tile_cat.to("cpu"), rcfs)
-        recon_img = imgs[0][0, SDSS.BANDS.index("r")]
+        imgs = decoder.render_images(tile_cat.to("cpu"), rcfs)[0]
+        imgs = torch.squeeze(imgs, dim=1)
+        recon_img = imgs[0, SDSS.BANDS.index("r")]
 
         ptc = cfg.encoder.tile_slen * cfg.encoder.tiles_to_crop
         true_img_crop = true_img[SDSS.BANDS.index("r"), 0, ptc:-ptc, ptc:-ptc]

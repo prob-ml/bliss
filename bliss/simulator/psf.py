@@ -16,7 +16,7 @@ PSFConfig = TypedDict(
 
 class ImagePSF:
     def __init__(self, bands, pixel_scale, psf_slen):
-        self.n_bands = len(bands)
+        self.bands = bands
         self.pixel_scale = pixel_scale
         self.psf_slen = psf_slen
 
@@ -31,10 +31,10 @@ class ImagePSF:
         """
         # get psf in each band
         psf_list = []
-        for i in range(self.n_bands):
+        for b in self.bands:
             grid = self._get_mgrid() * (self.psf_slen - 1) / 2
             radii_grid = (grid**2).sum(2).sqrt()
-            band_psf = self._psf_fun(radii_grid, *params[i])
+            band_psf = self._psf_fun(radii_grid, *params[b])
             psf_list.append(band_psf.unsqueeze(0))
         psf = torch.cat(psf_list)
         assert (psf > 0).all()
@@ -45,12 +45,12 @@ class ImagePSF:
 
         # check format
         n_bands, psf_slen, _ = psf.shape
-        assert n_bands == self.n_bands and (psf_slen % 2) == 1 and psf_slen == psf.shape[2]
+        assert n_bands == len(self.bands) and (psf_slen % 2) == 1 and psf_slen == psf.shape[2]
 
         # convert to image
         images = []
-        for i in range(self.n_bands):
-            psf_image = galsim.Image(psf.detach().numpy()[i], scale=self.pixel_scale)
+        for b in self.bands:
+            psf_image = galsim.Image(psf.detach().numpy()[b], scale=self.pixel_scale)
             images.append(galsim.InterpolatedImage(psf_image).withFlux(1.0))
 
         return images

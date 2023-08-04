@@ -30,8 +30,8 @@ class ImageBackground(nn.Module):
 
     def sample(self, shape, image_id_indices) -> Tensor:
         assert isinstance(self.background, Tensor)
-        batch_size, c, hlen, wlen = shape
-        assert self.background.shape[1] == c
+        batch_size, n_bands, hlen, wlen = shape
+        assert self.background.shape[1] == n_bands
         assert image_id_indices.shape[0] == batch_size
 
         # select region to sample from (same for all images in batch for simplicity)
