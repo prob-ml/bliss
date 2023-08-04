@@ -1,7 +1,7 @@
 import torch
 from hydra.utils import instantiate
 
-from case_studies.prob_tile_suppression.region_catalog import RegionCatalog
+from case_studies.adaptive_tiling.region_catalog import RegionCatalog
 
 
 class TestEncoder:

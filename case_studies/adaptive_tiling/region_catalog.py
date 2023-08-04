@@ -226,13 +226,13 @@ class RegionCatalog(TileCatalog, UserDict):
         """Get locations of corner regions relative to tiles around it."""
         b = self.batch_size
         locs = self.locs * repeat(self.get_region_sizes(), "nth ntw d -> b nth ntw 1 d", b=b)
-        locs = locs.unsqueeze(0).repeat(4, 1, 1, 1, 1, 1)
+        locs = locs.clone().unsqueeze(0).repeat(4, 1, 1, 1, 1, 1)
         tile_sizes = repeat(self.get_tile_sizes(), "nth ntw d -> b nth ntw 1 d", b=b, d=2)
 
         locs[0:2, :, 1, :, :, 0] += self.interior_slen + self.overlap_slen / 2  # half overlap
-        locs[0:2, :, 3::2, :, :, 0] += self.interior_slen + self.overlap_slen  # full overlap
+        locs[0:2, :, 2:, :, :, 0] += self.interior_slen + self.overlap_slen  # full overlap
         locs[0::2, :, :, 1, :, 1] += self.interior_slen + self.overlap_slen / 2  # half overlap
-        locs[0::2, :, :, 3::2, :, 1] += self.interior_slen + self.overlap_slen  # full overlap
+        locs[0::2, :, :, 2:, :, 1] += self.interior_slen + self.overlap_slen  # full overlap
 
         mask = repeat(self.corner_mask, "nth ntw -> b nth ntw 1 d", b=b, d=2)
         locs[0][mask] /= tile_sizes[:, :-1, :-1].reshape(-1).to(locs.dtype)
@@ -293,19 +293,13 @@ def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float):
             continue
 
         # Determine region to place source in based on
-        new_i, new_j = i * 2, j * 2
         threshold = (
             overlap_slen / 2 / tile_cat.tile_slen,
             1 - overlap_slen / 2 / tile_cat.tile_slen,
         )
-        if tile_cat.locs[b, i, j, 0, 0] < threshold[0] and new_i > 0:  # top edge
-            new_i -= 1
-        elif tile_cat.locs[b, i, j, 0, 0] > threshold[1] and new_i < n_rows - 1:  # bottom edge
-            new_i += 1
-        if tile_cat.locs[b, i, j, 0, 1] < threshold[0] and new_j > 0:  # left edge
-            new_j -= 1
-        elif tile_cat.locs[b, i, j, 0, 1] > threshold[1] and new_j < n_cols - 1:  # right edge
-            new_j += 1
+        new_i, new_j = region_for_tile_source(  # noqa: WPS317
+            tile_cat.locs[b, i, j], (i, j), n_rows, n_cols, threshold
+        )
 
         d["locs"][b, new_i, new_j, 0] = full_locs[b, i, j, 0]
         d["n_sources"][b, new_i, new_j] = tile_cat.n_sources[b, i, j]
@@ -328,3 +322,18 @@ def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float):
     region_cat.locs = ((region_cat.locs - offset) / region_sizes).clamp(0, 1)
 
     return region_cat
+
+
+def region_for_tile_source(loc, pos, n_rows, n_cols, threshold):
+    """Determine which region index a tile-based location should be placed in."""
+    new_i, new_j = pos[0] * 2, pos[1] * 2
+
+    if loc[0] < threshold[0] and new_i > 0:  # top edge
+        new_i -= 1
+    elif loc[0] > threshold[1] and new_i < n_rows - 1:  # bottom edge
+        new_i += 1
+    if loc[1] < threshold[0] and new_j > 0:  # left edge
+        new_j -= 1
+    elif loc[1] > threshold[1] and new_j < n_cols - 1:  # right edge
+        new_j += 1
+    return new_i, new_j

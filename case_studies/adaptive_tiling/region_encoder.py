@@ -1,3 +1,4 @@
+import itertools
 import math
 from typing import Dict, Optional
 
@@ -10,9 +11,14 @@ from torch.distributions import Distribution, TransformedDistribution
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.encoder import Encoder
+from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
 from bliss.unconstrained_dists import UnconstrainedBernoulli
-from case_studies.prob_tile_suppression.region_catalog import RegionCatalog, RegionType
+from case_studies.adaptive_tiling.region_catalog import (
+    RegionCatalog,
+    RegionType,
+    region_for_tile_source,
+)
 
 
 class RegionEncoder(Encoder):
@@ -38,18 +44,22 @@ class RegionEncoder(Encoder):
             input_transform_params=input_transform_params,
         )
         self.overlap_slen = overlap_slen
+        self.metrics = BlissMetrics(mode=MetricsMode.FULL, slack=slack)
 
     # region Properties
     @property
     def dist_param_groups(self):
         d = super().dist_param_groups
-        d["aux_var"] = UnconstrainedBernoulli()  # add extra parameter for aux variables
+        # this isn't really a distribution itself, but it's a quick and easy way to get the value
+        # parametrizing the priority variable distribution
+        d["aux_var"] = UnconstrainedBernoulli()
         return d
 
     # endregion
 
     # region General Functions
-    def convert_locs(self, locs):
+    def convert_locs_padded_to_unpadded(self, locs):
+        """Convert locs from padded tile to unpadded tile coordinates."""
         pad_tile = self.tile_slen + self.overlap_slen
         ol = self.overlap_slen
 
@@ -80,13 +90,17 @@ class RegionEncoder(Encoder):
         Returns:
             Union[FullCatalog, TileCatalog]: Catalog based on predictions.
         """
+        # Get point estimate of each distribution
         tile_is_on_array = pred["on_prob"].mode
-        locs = self.convert_locs(pred["loc"].mode.clone())
+        locs = pred["loc"].mode
+        aux_var = pred["aux_var"].probs[..., 1]
 
-        star_fluxes = [pred[name].mode * tile_is_on_array for name in self.STAR_FLUX_NAMES]
-        star_fluxes = torch.stack(star_fluxes, dim=3)
-        galaxy_fluxes = [pred[name].mode * tile_is_on_array for name in self.GAL_FLUX_NAMES]
-        galaxy_fluxes = torch.stack(galaxy_fluxes, dim=3)
+        star_fluxes = torch.stack(
+            [pred[name].mode * tile_is_on_array for name in self.STAR_FLUX_NAMES], dim=3
+        )
+        galaxy_fluxes = torch.stack(
+            [pred[name].mode * tile_is_on_array for name in self.GAL_FLUX_NAMES], dim=3
+        )
 
         galaxy_bools = pred["galaxy_prob"].mode
         source_type = SourceType.STAR * (1 - galaxy_bools) + SourceType.GALAXY * galaxy_bools
@@ -95,12 +109,53 @@ class RegionEncoder(Encoder):
         galsim_param_lst = []
         for d in galsim_dists:
             # use median for transformed distributions since mode isn't implemented
-            if isinstance(d, TransformedDistribution):
-                galsim_param_lst.append(d.icdf(torch.tensor(0.5)))
-            else:
-                galsim_param_lst.append(d.mode)
+            est = d.icdf(torch.tensor(0.5)) if isinstance(d, TransformedDistribution) else d.mode
+            galsim_param_lst.append(est)
         galaxy_params = torch.stack(galsim_param_lst, dim=3)
 
+        # suppress tiles at boundaries/corners based on priority vars
+        batch_size, nth, ntw = tile_is_on_array.shape
+        threshold = (
+            self.overlap_slen / 2 / self.tile_slen,
+            1 - (self.overlap_slen / 2 / self.tile_slen),
+        )
+
+        n_rows, n_cols = nth * 2 - 1, ntw * 2 - 1
+        for b, i, j in itertools.product(range(batch_size), range(nth), range(ntw)):
+            if not tile_is_on_array[b, i, j]:
+                continue
+
+            new_i, new_j = region_for_tile_source(locs[b, i, j], (i, j), n_rows, n_cols, threshold)
+            int_i, int_j = i * 2, j * 2  # indices of the interior region of tile (i, j)
+
+            # vertical boundary
+            if new_i == int_i and new_j != int_j:
+                j_left, j_right = (new_j - 1) // 2, (new_j + 1) // 2
+                jj = j_left if aux_var[b, i, j_right] >= aux_var[b, i, j_left] else j_right
+                tile_is_on_array[b, i, jj] = 0
+
+            # horizontal boundary
+            elif new_j == int_j and new_i != int_i:
+                i_above, i_below = (new_i - 2) // 2, (new_i + 1) // 2
+                ii = i_above if aux_var[b, i_below, j] >= aux_var[b, i_above, j] else i_below
+                tile_is_on_array[b, ii, j] = 0
+
+            # corner
+            elif new_i != int_i and new_j != int_j:
+                i_above, i_below = (new_i - 1) // 2, (new_i + 1) // 2
+                j_left, j_right = (new_j - 1) // 2, (new_j + 1) // 2
+                c_idx = (
+                    (b, b, b, b),
+                    (i_above, i_above, i_below, i_below),
+                    (j_left, j_right, j_left, j_right),
+                )
+                if aux_var[b, i, j] == aux_var[c_idx].max():
+                    tile_is_on_array[c_idx] = 0  # turn off other tiles
+                    tile_is_on_array[b, i, j] = 1
+                else:
+                    tile_is_on_array[b, i, j] = 0
+
+        locs = self.convert_locs_padded_to_unpadded(locs.clone())
         est_catalog_dict = {
             "locs": rearrange(locs, "b ht wt d -> b ht wt 1 d"),
             "star_fluxes": rearrange(star_fluxes, "b ht wt d -> b ht wt 1 d"),
@@ -109,7 +164,6 @@ class RegionEncoder(Encoder):
             "galaxy_params": rearrange(galaxy_params, "b ht wt d -> b ht wt 1 d"),
             "galaxy_fluxes": rearrange(galaxy_fluxes, "b ht wt d -> b ht wt 1 d"),
         }
-
         est_cat = TileCatalog(self.tile_slen, est_catalog_dict)
         return est_cat.to_full_params() if return_full else est_cat
 
@@ -126,7 +180,7 @@ class RegionEncoder(Encoder):
         """Get param in masked regions. `shape` controls output shape for different region types."""
         b, nth, ntw, d = *shape, param.shape[-1]
         if len(param.shape) == 3:
-            mask = repeat(mask, "nth ntw -> b nth ntw", b=b)
+            mask = repeat(mask, "nrh nrw -> b nrh nrw", b=b)
             return param[mask].reshape(shape)
 
         param = param.squeeze(-2)  # remove max_sources dim
@@ -189,7 +243,7 @@ class RegionEncoder(Encoder):
     def _get_aux_vertical(self, pred: Dict[str, Distribution], cat: RegionCatalog):
         """Get auxiliary variables in vertical boundary regions."""
         idx_v = repeat(
-            cat.vertical_boundary_mask, "nth ntw -> b nth ntw", b=cat.batch_size
+            cat.vertical_boundary_mask, "nrh nrw -> b nrh nrw", b=cat.batch_size
         ).nonzero(as_tuple=True)
         idx_vi = (idx_v[0], idx_v[1] // 2, idx_v[2] // 2)
         idx_vj = (idx_v[0], idx_v[1] // 2, (idx_v[2] + 1) // 2)
@@ -201,7 +255,7 @@ class RegionEncoder(Encoder):
     def _get_aux_horizontal(self, pred: Dict[str, Distribution], cat: RegionCatalog):
         """Get auxiliary variables in horizontal boundary regions."""
         idx_h = repeat(
-            cat.horizontal_boundary_mask, "nth ntw -> b nth ntw", b=cat.batch_size
+            cat.horizontal_boundary_mask, "nrh nrw -> b nrh nrw", b=cat.batch_size
         ).nonzero(as_tuple=True)
         idx_hi = (idx_h[0], idx_h[1] // 2, idx_h[2] // 2)
         idx_hj = (idx_h[0], (idx_h[1] + 1) // 2, idx_h[2] // 2)
@@ -212,17 +266,20 @@ class RegionEncoder(Encoder):
 
     def _get_aux_corner(self, pred: Dict[str, Distribution], cat: RegionCatalog):
         """Get auxiliary variables in corner regions."""
-        idx_c = repeat(cat.corner_mask, "nth ntw -> b nth ntw", b=cat.batch_size)
-        idx_c = idx_c.nonzero(as_tuple=True)
-        idx_ci = (idx_c[0], idx_c[1] // 2, idx_c[2] // 2)
-        idx_cj = (idx_c[0], idx_c[1] // 2, (idx_c[2] + 1) // 2)
-        idx_ck = (idx_c[0], (idx_c[1] + 1) // 2, idx_c[2] // 2)
-        idx_cl = (idx_c[0], (idx_c[1] + 1) // 2, (idx_c[2] + 1) // 2)
+        b, nth, ntw = cat.batch_size, cat.nth, cat.ntw
+        idx_c = repeat(cat.corner_mask, "nrh nrw -> b nrh nrw", b=cat.batch_size).nonzero(
+            as_tuple=True
+        )
 
         probs = pred["aux_var"].probs[..., 1]  # prob of yes
-        denom = probs[idx_ci] + probs[idx_cj] + probs[idx_ck] + probs[idx_cl]
-        aux_vars = torch.stack((probs[idx_ci], probs[idx_cj], probs[idx_ck], probs[idx_cl]), dim=0)
-        return (aux_vars / denom).reshape(4, cat.batch_size, cat.nth - 1, cat.ntw - 1)
+        shape = (b, nth - 1, ntw - 1)
+        probs_ci = probs[(idx_c[0], idx_c[1] // 2, idx_c[2] // 2)].reshape(shape)
+        probs_cj = probs[(idx_c[0], idx_c[1] // 2, (idx_c[2] + 1) // 2)].reshape(shape)
+        probs_ck = probs[(idx_c[0], (idx_c[1] + 1) // 2, idx_c[2] // 2)].reshape(shape)
+        probs_cl = probs[(idx_c[0], (idx_c[1] + 1) // 2, (idx_c[2] + 1) // 2)].reshape(shape)
+
+        aux_vars = torch.stack((probs_ci, probs_cj, probs_ck, probs_cl), dim=0)
+        return aux_vars / aux_vars.sum(dim=0, keepdim=True)
 
     # endregion
 
@@ -349,17 +406,16 @@ class RegionEncoder(Encoder):
         assert bdry_type in {RegionType.BOUNDARY_VERTICAL, RegionType.BOUNDARY_HORIZONTAL}
         loss, loss_components = 0, {}
         if bdry_type == RegionType.BOUNDARY_VERTICAL:
-            on_mask = cat.vertical_boundary_mask
+            on_mask = cat.vertical_boundary_mask * (cat.n_sources > 0)
             aux_vars = self._get_aux_vertical(pred, cat)
             get_param = self._get_vertical_boundary_param
         else:
-            on_mask = cat.horizontal_boundary_mask
+            on_mask = cat.horizontal_boundary_mask * (cat.n_sources > 0)
             aux_vars = self._get_aux_horizontal(pred, cat)
             get_param = self._get_horizontal_boundary_param
 
         # location loss
         locs = get_param(cat, "locs")
-        on_mask = on_mask * (cat.n_sources > 0)  # update mask to filter on sources
         locs_loss = self._get_param_loss_boundary(
             pred["loc"], locs, cat, aux_vars, on_mask, bdry_type
         )
@@ -441,12 +497,11 @@ class RegionEncoder(Encoder):
 
     def _get_loss_corner(self, pred: Dict[str, Distribution], cat: RegionCatalog):
         loss, loss_components = 0, {}
-        on_mask = cat.corner_mask
+        on_mask = cat.corner_mask * (cat.n_sources > 0)
         aux_vars = self._get_aux_corner(pred, cat)
 
         # location loss
         locs = self._get_corner_param(cat, "locs")
-        on_mask = on_mask * (cat.n_sources > 0)  # update mask to filter on sources
         locs_loss = self._get_param_loss_corner(pred["loc"], locs, cat, aux_vars, on_mask)
         loss += locs_loss
         loss_components["locs_loss"] = self._average_loss(locs_loss, on_mask)
@@ -549,16 +604,10 @@ class RegionEncoder(Encoder):
         if log_metrics or plot_images:
             est_tile_cat = self.variational_mode(pred, return_full=False)
 
-        # log all metrics
-        if log_metrics:
-            metrics = self.metrics(true_cat.to_full_params(), est_tile_cat.to_full_params())
-            for k, v in metrics.items():
-                self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
-
         # log a grid of figures to the tensorboard
         if plot_images:
             batch_size = len(batch["images"])
-            n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
+            n_samples = min(int(math.sqrt(batch_size)) ** 2, 4)
             nrows = int(n_samples**0.5)  # for figure
 
             target_full_cat = true_cat.to_full_params()
