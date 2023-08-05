@@ -59,7 +59,7 @@ class RegionCatalog(TileCatalog, UserDict):
             self.n_sources.unsqueeze(1), kernel_size=(3, 3), padding=1, stride=2
         ).sum(axis=1)
         if not torch.all(sources_per_tile <= 1):
-            warnings.warn("Some tiles contain more than one source.")
+            warnings.warn("Some tiles contain more than one source.", stacklevel=2)
 
     def _init_region_types(self) -> Tensor:
         """Assign type to each region in n_rows x n_cols tensor (used for masking)."""

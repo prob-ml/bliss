@@ -26,6 +26,7 @@ class RegionEncoder(Encoder):
         self,
         architecture: DictConfig,
         bands: list,
+        survey_bands: list,
         tile_slen: int,  # NOTE: this is the *unpadded* tile length!!
         overlap_slen: float,
         slack: float = 1.0,
@@ -36,6 +37,7 @@ class RegionEncoder(Encoder):
         super().__init__(
             architecture=architecture,
             bands=bands,
+            survey_bands=survey_bands,
             tile_slen=tile_slen,
             tiles_to_crop=0,
             slack=slack,
@@ -44,7 +46,7 @@ class RegionEncoder(Encoder):
             input_transform_params=input_transform_params,
         )
         self.overlap_slen = overlap_slen
-        self.metrics = BlissMetrics(mode=MetricsMode.FULL, slack=slack)
+        self.metrics = BlissMetrics(survey_bands=survey_bands, mode=MetricsMode.FULL, slack=slack)
 
     # region Properties
     @property
@@ -550,7 +552,9 @@ class RegionEncoder(Encoder):
         loss_components["loss_by_region"] = loss
         return loss_components
 
-    def _get_loss(self, pred: Dict[str, Distribution], true_cat: RegionCatalog):
+    def _get_loss(
+        self, pred: Dict[str, Distribution], true_cat: RegionCatalog
+    ):  # pylint: disable=arguments-renamed
         """Compute loss over the catalog."""
 
         # evaluate counter loss over all tiles together

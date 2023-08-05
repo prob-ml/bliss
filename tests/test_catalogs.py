@@ -6,7 +6,6 @@ import torch
 from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
-from bliss.surveys.decals import DecalsFullCatalog
 from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
 from bliss.surveys.decals import TractorFullCatalog
 from case_studies.adaptive_tiling.region_catalog import RegionCatalog, tile_cat_to_region_cat
