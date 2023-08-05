@@ -7,7 +7,7 @@ from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.surveys.decals import DecalsFullCatalog
-from case_studies.prob_tile_suppression.region_catalog import RegionCatalog, tile_cat_to_region_cat
+from case_studies.adaptive_tiling.region_catalog import RegionCatalog, tile_cat_to_region_cat
 
 # TODO: Add PhotoFullCatalog-specific tests (like loading, restricting by RA/DEC, downloading)
 
