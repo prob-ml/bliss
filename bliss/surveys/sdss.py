@@ -73,7 +73,7 @@ class SloanDigitalSkySurvey(Survey):
 
         self.background = ImageBackground(self, bands=self.bands)
         self.psf = SDSS_PSF(dir_path, self.image_ids(), self.bands, psf_config)
-        self.nmgy_to_nelec_dict = self.nmgy_to_nelec()
+        self.flux_calibration_dict = self.get_flux_calibrations()
 
         self.catalog_cls = PhotoFullCatalog
         self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
@@ -152,14 +152,6 @@ class SloanDigitalSkySurvey(Survey):
                 rcfs.append((run, camcol, field))
         return rcfs
 
-    def nmgy_to_nelec(self):
-        d = {}
-        for i, rcf in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["nelec_per_nmgy_list"]
-            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
-            d[rcf] = avg_nelec_conv
-        return d
-
     def get_from_disk(self, idx):
         if self.rcfgcs[idx] is None:
             return None
@@ -218,7 +210,7 @@ class SloanDigitalSkySurvey(Survey):
             "image": pixels_nelec,
             "background": large_sky_nelec,
             "gain": np.array(gain),
-            "nelec_per_nmgy_list": nelec_per_nmgy,
+            "nelec_per_physical_unit_list": nelec_per_nmgy,
             "calibration": calibration,
             "wcs": wcs,
         }
