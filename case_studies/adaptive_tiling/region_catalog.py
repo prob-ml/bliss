@@ -298,7 +298,7 @@ def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float):
             1 - overlap_slen / 2 / tile_cat.tile_slen,
         )
         new_i, new_j = region_for_tile_source(  # noqa: WPS317
-            tile_cat.locs[b, i, j], (i, j), n_rows, n_cols, threshold
+            tile_cat.locs[b, i, j].squeeze(), (i, j), n_rows, n_cols, threshold
         )
 
         d["locs"][b, new_i, new_j, 0] = full_locs[b, i, j, 0]

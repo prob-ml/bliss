@@ -620,7 +620,7 @@ class RegionEncoder(Encoder):
 
             margin_px = self.tiles_to_crop * self.tile_slen
             fig = plot_detections(
-                batch["images"],
+                batch["images"].squeeze(2),  # squeeze out extra dim
                 target_full_cat,
                 est_full_cat,
                 nrows,

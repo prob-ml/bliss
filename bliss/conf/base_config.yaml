@@ -120,8 +120,9 @@ encoder:
         ]
 
 region_encoder:
-    _target_: case_studies.prob_tile_suppression.region_encoder.RegionEncoder
+    _target_: case_studies.adaptive_tiling.region_encoder.RegionEncoder
     bands: ${encoder.bands}
+    survey_bands: ${encoder.survey_bands}
     tile_slen: ${encoder.tile_slen}
     overlap_slen: 0.4
     slack: ${encoder.slack}
