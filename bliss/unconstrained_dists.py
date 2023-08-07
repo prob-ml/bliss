@@ -78,7 +78,7 @@ class TruncatedDiagonalMVN(Distribution):
     def cdf(self, value):
         cdf_at_val = self.base_dist.base_dist.cdf(value)
         cdf_at_lb = self.base_dist.base_dist.cdf(torch.zeros_like(self.mean))
-        log_cdf = (cdf_at_val - cdf_at_lb).log().sum(dim=-1) - self.log_prob_in_unit_box
+        log_cdf = (cdf_at_val - cdf_at_lb + 1e-9).log().sum(dim=-1) - self.log_prob_in_unit_box
         return log_cdf.exp()
 
 

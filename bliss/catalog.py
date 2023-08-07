@@ -41,6 +41,7 @@ class TileCatalog(UserDict):
         "loc_sd",
     }
 
+    # region Init+Accessors
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.tile_slen = tile_slen
         d = copy(d)  # shallow copy, so we don't mutate the argument
@@ -51,7 +52,7 @@ class TileCatalog(UserDict):
 
     def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
-            msg = f"The key '{key}' is not in the allowed parameters for TileCatalog"
+            msg = f"The key '{key}' is not in the allowed parameters for {self.__class__}"
             raise ValueError(msg)
         self._validate(item)
         super().__setitem__(key, item)
@@ -66,6 +67,17 @@ class TileCatalog(UserDict):
         assert isinstance(x, Tensor)
         assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
         assert x.device == self.device
+
+    # endregion
+
+    # region Properties
+    @property
+    def height(self) -> int:
+        return self.n_tiles_h * self.tile_slen
+
+    @property
+    def width(self) -> int:
+        return self.n_tiles_w * self.tile_slen
 
     @property
     def is_on_mask(self) -> Tensor:
@@ -99,15 +111,18 @@ class TileCatalog(UserDict):
         is_galaxy = self["source_type"] == SourceType.GALAXY
         return is_galaxy * self.is_on_mask.unsqueeze(-1)
 
+    @property
+    def device(self):
+        return self.locs.device
+
+    # endregion
+
+    # region Functions
     def to(self, device):
         out = {}
         for k, v in self.to_dict().items():
             out[k] = v.to(device)
         return type(self)(self.tile_slen, out)
-
-    @property
-    def device(self):
-        return self.locs.device
 
     def crop(self, hlims_tile, wlims_tile):
         out = {}
@@ -151,8 +166,7 @@ class TileCatalog(UserDict):
             params[param_name] = param
 
         params["n_sources"] = reduce(self.n_sources, "b nth ntw -> b", "sum")
-        height, width = self.n_tiles_h * self.tile_slen, self.n_tiles_w * self.tile_slen
-        return FullCatalog(height, width, params)
+        return FullCatalog(self.height, self.width, params)
 
     def get_full_locs_from_tiles(self) -> Tensor:
         """Get the full image locations from tile locations.
@@ -292,6 +306,8 @@ class TileCatalog(UserDict):
                 d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
 
         return TileCatalog(self.tile_slen, d)
+
+    # endregion
 
 
 class FullCatalog(UserDict):
