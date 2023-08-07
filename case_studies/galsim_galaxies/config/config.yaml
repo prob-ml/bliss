@@ -57,13 +57,9 @@ datasets:
         n_tiles_h: 10
         n_tiles_w: 10
         background:
-            _target_: bliss.datasets.background.SimulatedSDSSBackground
-            sdss_dir: ${paths.sdss}
-            run: 94
-            camcol: 1
-            field: 12
-            bands:
-                - 2
+            _target_: bliss.datasets.background.ConstantBackground
+            background:
+                - 865.0
         n_batches: 50
         batch_size: 32
         generate_device: "cuda:0"

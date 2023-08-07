@@ -24,7 +24,4 @@ output/
 hydra_temp/
 bin/
 .pytest_cache/
-data/sdss/rcf_list
-data/sdss_all
-case_studies/sdss_galaxies/models/simulated_blended_galaxies.pt
 venv

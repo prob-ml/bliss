@@ -1,5 +1,5 @@
 """Scripts to produce BLISS estimates on astronomical images."""
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn

@@ -1016,7 +1016,7 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
 
 
 def _load_models(cfg, device):
-    # load models required for SDSS reconstructions.
+    # load models required for reconstructions.
 
     location = instantiate(cfg.models.detection_encoder).to(device).eval()
     location.load_state_dict(
