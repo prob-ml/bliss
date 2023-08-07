@@ -2,7 +2,6 @@ from pathlib import Path
 from typing import Optional
 from warnings import warn
 
-import numpy as np
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
@@ -75,7 +74,6 @@ class ImagePrior(pl.LightningModule):
         f_max: Prior parameter on fluxes
         alpha: Prior parameter on fluxes
         prob_galaxy: Prior probability a source is a galaxy
-        prob_lensed_galaxy: Prior probability a galaxy is lensed
     """
 
     def __init__(
@@ -88,9 +86,7 @@ class ImagePrior(pl.LightningModule):
         f_max: float,
         alpha: float,
         prob_galaxy: float,
-        prob_lensed_galaxy: float = 0.0,
         galaxy_prior: Optional[GalaxyPrior] = None,
-        lensed_galaxy_prior: Optional[GalaxyPrior] = None,
     ):
         """Initializes ImagePrior.
 
@@ -102,10 +98,8 @@ class ImagePrior(pl.LightningModule):
             f_min: Prior parameter on fluxes
             f_max: Prior parameter on fluxes
             alpha: Prior parameter on fluxes (pareto parameter)
-            prob_lensed_galaxy: Prior probability a galaxy is lensed
             prob_galaxy: Prior probability a source is a galaxy
             galaxy_prior: Object from which galaxy latents are sampled
-            lensed_galaxy_prior: Object from which lens galaxy latents are sampled
         """
         super().__init__()
         self.n_bands = n_bands
@@ -121,11 +115,6 @@ class ImagePrior(pl.LightningModule):
         self.galaxy_prior = galaxy_prior
         if self.prob_galaxy > 0.0:
             assert self.galaxy_prior is not None
-
-        self.prob_lensed_galaxy = prob_lensed_galaxy
-        self.lensed_galaxy_prior = lensed_galaxy_prior
-        if self.prob_lensed_galaxy > 0.0:
-            assert self.lensed_galaxy_prior is not None
 
     def sample_prior(
         self, tile_slen: int, batch_size: int, n_tiles_h: int, n_tiles_w: int
@@ -151,7 +140,6 @@ class ImagePrior(pl.LightningModule):
         locs = self._sample_locs(is_on_array)
 
         galaxy_bools, star_bools = self._sample_n_galaxies_and_stars(is_on_array)
-        lensed_galaxy_bools = self._sample_n_lenses(is_on_array, galaxy_bools)
         galaxy_params = self._sample_galaxy_params(self.galaxy_prior, galaxy_bools)
         star_fluxes = self._sample_star_fluxes(star_bools)
         star_log_fluxes = self._get_log_fluxes(star_fluxes)
@@ -165,16 +153,6 @@ class ImagePrior(pl.LightningModule):
             "star_fluxes": star_fluxes,
             "star_log_fluxes": star_log_fluxes,
         }
-
-        if self.lensed_galaxy_prior is not None:
-            lensed_galaxy_params = self._sample_galaxy_params(
-                self.lensed_galaxy_prior, lensed_galaxy_bools
-            )
-            pure_lens_params = self._sample_lens_params(lensed_galaxy_bools)
-            lens_params = torch.cat((lensed_galaxy_params, pure_lens_params), dim=-1)
-
-            catalog_params["lensed_galaxy_bools"] = lensed_galaxy_bools
-            catalog_params["lens_params"] = lens_params
 
         return TileCatalog(tile_slen, catalog_params)
 
@@ -229,21 +207,6 @@ class ImagePrior(pl.LightningModule):
         star_bools = (1 - galaxy_bools) * is_on_array.unsqueeze(-1)
 
         return galaxy_bools, star_bools
-
-    def _sample_n_lenses(self, is_on_array, galaxy_bools):
-        batch_size, n_tiles_h, n_tiles_w, max_sources = is_on_array.shape
-        uniform = torch.rand(
-            batch_size,
-            n_tiles_h,
-            n_tiles_w,
-            max_sources,
-            1,
-            device=is_on_array.device,
-        )
-        # currently only support lensing where galaxy is present
-        lensed_galaxy_bools = uniform < self.prob_lensed_galaxy
-        lensed_galaxy_bools = lensed_galaxy_bools * galaxy_bools * is_on_array.unsqueeze(-1)
-        return lensed_galaxy_bools.float()
 
     def _sample_star_fluxes(self, star_bools: Tensor):
         """Samples star fluxes.
@@ -316,25 +279,3 @@ class ImagePrior(pl.LightningModule):
             n,
             device=device,
         )
-
-    def _sample_lens_params(self, lensed_galaxy_bools):
-        """Sample latent galaxy params from GalaxyPrior object."""
-        base_shape = list(lensed_galaxy_bools.shape)[:-1]
-        device = lensed_galaxy_bools.device
-        lens_params = self._sample_param_from_dist(base_shape, 5, torch.rand, device)
-        if self.prob_lensed_galaxy > 0.0:
-            # latents are: theta_E, center_x/y, e_1/2
-            base_radii = self._sample_param_from_dist(base_shape, 1, torch.rand, device)
-            base_centers = self._sample_param_from_dist(base_shape, 2, torch.randn, device)
-            base_qs = self._sample_param_from_dist(base_shape, 1, torch.rand, device)
-            base_betas = self._sample_param_from_dist(base_shape, 1, torch.rand, device)
-
-            lens_params[..., 0:1] = base_radii * 25.0 + 5.0
-            lens_params[..., 1:3] = base_centers * 1.0
-
-            # ellipticities must satisfy some angle relationships
-            beta_radians = (base_betas - 0.5) * (np.pi / 2)  # [-pi / 4, pi / 4]
-            ell_factors = (1 - base_qs) / (1 + base_qs)
-            lens_params[..., 3:4] = ell_factors * torch.cos(beta_radians)
-            lens_params[..., 4:5] = ell_factors * torch.sin(beta_radians)
-        return lens_params * lensed_galaxy_bools

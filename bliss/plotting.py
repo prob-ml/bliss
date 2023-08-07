@@ -52,6 +52,7 @@ def set_rc_params(
     major_tick_width=0.8,
     minor_tick_width=0.6,
     lines_marker_size=8,
+    legend_loc="best",
 ):
     # named size options: 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
     rc_params = {
@@ -82,6 +83,7 @@ def set_rc_params(
         "lines.markersize": lines_marker_size,
         # legend
         "legend.fontsize": legend_fontsize,
+        "legend.loc": legend_loc,
         # colors
         "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
         # images

@@ -62,10 +62,6 @@ jobs:
         run: |
           poetry run pylint bliss/ tests/
 
-      - name: Run darglint
-        run: |
-          poetry run darglint bliss/ tests/
-
       - name: Run Tests
         run: |
           poetry run pytest --cov=./bliss --cov-report=xml --durations=0

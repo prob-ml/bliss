@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -125,6 +125,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         if ckpt is not None:
             self.load_state_dict(torch.load(ckpt, map_location=self.device))  # type: ignore
 
+        self.validation_step_outputs: List[dict] = []
+
     def forward(self, image, background):
         return self.reconstruct(image, background)
 
@@ -199,11 +201,15 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         # metrics
         self.log("val/loss", loss)
         self.log("val/max_residual", residuals.abs().max())
-        return {"images": images, "recon_mean": recon_mean, "residuals": residuals}
 
-    def validation_epoch_end(self, outputs):
+        d = {"images": images, "recon_mean": recon_mean, "residuals": residuals}
+        self.validation_step_outputs.append(d)
+        return loss
+
+    def on_validation_epoch_end(self):
         """Validation epoch end (pytorch lightning)."""
 
+        outputs = self.validation_step_outputs
         # combine all images and recon_mean's into a single tensor
         images = torch.cat([output["images"] for output in outputs])
         recon_mean = torch.cat([output["recon_mean"] for output in outputs])
@@ -214,6 +220,8 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         if self.logger:
             self.logger.experiment.add_figure(f"Random Images {self.current_epoch}", fig_random)
             self.logger.experiment.add_figure(f"Worst Images {self.current_epoch}", fig_worst)
+
+        self.validation_step_outputs.clear()
 
     def plot_reconstruction(
         self, images, recon_mean, residuals, n_examples=10, mode="random", width=10, pad=6.0

@@ -121,7 +121,6 @@ models:
         optimizer_params:
             lr: 1e-4
 
-
 training:
     n_epochs: 1001
     experiment: encoder
@@ -132,7 +131,6 @@ training:
         _target_: pytorch_lightning.Trainer
         logger: True
         enable_checkpointing: True
-        profiler: null
         reload_dataloaders_every_n_epochs: 0
         max_epochs: ${training.n_epochs}
         min_epochs: ${training.n_epochs}

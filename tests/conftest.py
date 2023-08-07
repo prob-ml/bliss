@@ -54,7 +54,6 @@ class ModelSetup:
                 "training.trainer.check_val_every_n_epoch": 1001,
                 "training.trainer.enable_checkpointing": False,
                 "training.weight_save_path": None,
-                "training.trainer.profiler": None,
                 "training.trainer.accelerator": self.devices.accelerator,
             }
         )
