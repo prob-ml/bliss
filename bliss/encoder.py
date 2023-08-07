@@ -148,23 +148,20 @@ class Encoder(pl.LightningModule):
             Tensor: b x c x 2 x h x w tensor, where the number of input channels `c` is based on the
                 input transformations to use
         """
-        batch["images"] = rearrange(batch["images"], "b bnd h w -> b bnd 1 h w")
-        batch["background"] = rearrange(batch["background"], "b bnd h w -> b bnd 1 h w")
         input_bands = batch["images"].shape[1]
         if input_bands < self.n_bands:
             warnings.warn(
                 f"Expected at least {self.n_bands} bands in the input but found only {input_bands}"
             )
-        imgs = batch["images"][:, self.bands]
-        bgs = batch["background"][:, self.bands]
+        imgs = batch["images"][:, self.bands].unsqueeze(2)  # add extra dim for 5d input
+        bgs = batch["background"][:, self.bands].unsqueeze(2)
         inputs = [imgs, bgs]
 
         if self.input_transform_params.get("use_deconv_channel"):
             assert (
                 "deconvolution" in batch
             ), "use_deconv_channel specified but deconvolution not present in data"
-            batch["deconvolution"] = rearrange(batch["deconvolution"], "b bnd h w -> b bnd 1 h w")
-            inputs.append(batch["deconvolution"][:, self.bands])
+            inputs.append(batch["deconvolution"][:, self.bands].unsqueeze(2))
         if self.input_transform_params.get("concat_psf_params"):
             assert (
                 "psf_params" in batch
@@ -385,8 +382,9 @@ class Encoder(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        # only plot images on the first batch of epoch
-        plot_images = batch_idx == 0
+        # only plot images on the first batch of every 10th epoch
+        epoch = self.trainer.current_epoch
+        plot_images = batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1)
         self._generic_step(batch, "val", log_metrics=True, plot_images=plot_images)
 
     def test_step(self, batch, batch_idx):
