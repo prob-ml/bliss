@@ -51,7 +51,7 @@ def _reconstruction_figure(
         if i == 0:
             ax_true.set_title("Images $x$", pad=pad)
             ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
-            ax_res.set_title(r"Residual $\left(x - \tilde{x}\right) / \sqrt{\tilde{x}}$", pad=pad)
+            ax_res.set_title(r"Residual $\left(\tilde{x} - x\right) / \sqrt{\tilde{x}}$", pad=pad)
 
         # standarize ranges of true and reconstruction
         image = images[i, 0]
@@ -114,10 +114,11 @@ def _make_pr_figure(
     ax2.plot(bins, recall, "-o", color=c2, label=r"\rm Recall", markersize=6)
     ax2.fill_between(bins, recall1, recall2, color=c2, alpha=0.5)
 
-    ax2.legend(loc="lower left")
+    ax2.legend()
     ax2.set_xlabel(xlabel)
     ax2.set_ylabel(rf"\rm {metric_type} Metric")
     ax2.set_yticks(yticks)
+    ax2.grid(linestyle="-", linewidth=0.5, which="major", axis="both")
 
     if xlims is not None:
         ax2.set_xlim(xlims)
@@ -133,11 +134,12 @@ def _make_pr_figure(
     ax1.step(bins, tscount, label="True stars", where=where_step, color=c2)
     ax1.step(bins, egcount, label="Pred. galaxies", ls="--", where=where_step, color=c1)
     ax1.step(bins, escount, label="Pred. stars", ls="--", where=where_step, color=c2)
-    ymax = max(max(tgcount), max(tscount), max(egcount), max(escount))
+    ymax = max(tgcount.max(), tscount.max(), egcount.max(), escount.max())
     yticks = np.round(np.linspace(0, ymax, n_ticks), -ordmag)
     ax1.set_yticks(yticks)
     ax1.set_ylabel(r"\rm Counts")
     ax1.legend(loc="best", prop={"size": legend_size_hist})
+    ax1.grid(linestyle="-", linewidth=0.5, which="major", axis="both")
     plt.subplots_adjust(hspace=0)
     return fig
 
@@ -184,7 +186,7 @@ class AutoEncoderReconRandom(BlissFigure):
             recon_mean, _ = autoencoder.forward(bimages, background)
             recon_mean = recon_mean.detach().to("cpu")
             recon_means = torch.cat((recon_means, recon_mean))
-        residuals = (images - recon_means) / recon_means.sqrt()
+        residuals = (recon_means - images) / recon_means.sqrt()
         assert recon_means.shape[0] == noiseless_images.shape[0]
 
         # random
@@ -229,47 +231,6 @@ class AutoEncoderReconRandom(BlissFigure):
             "true_params": true_params,
         }
 
-    def _reconstruction_figure(self, images, recons, residuals) -> Figure:
-        pad = 6.0
-        fig, axes = plt.subplots(nrows=self.n_examples, ncols=3, figsize=(12, 20))
-        assert images.shape[0] == recons.shape[0] == residuals.shape[0] == self.n_examples
-        assert images.shape[1] == recons.shape[1] == residuals.shape[1] == 1, "1 band only."
-
-        # pick standard ranges for residuals
-        vmin_res = residuals.min().item()
-        vmax_res = residuals.max().item()
-
-        for i in range(self.n_examples):
-            ax_true = axes[i, 0]
-            ax_recon = axes[i, 1]
-            ax_res = axes[i, 2]
-
-            # only add titles to the first axes.
-            if i == 0:
-                ax_true.set_title("Images $x$", pad=pad)
-                ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
-                ax_res.set_title(
-                    r"Residual $\left(x - \tilde{x}\right) / \sqrt{\tilde{x}}$", pad=pad
-                )
-
-            # standarize ranges of true and reconstruction
-            image = images[i, 0]
-            recon = recons[i, 0]
-            residual = residuals[i, 0]
-
-            vmin = min(image.min().item(), recon.min().item())
-            vmax = max(image.max().item(), recon.max().item())
-
-            # plot images
-            plot_image(fig, ax_true, image, vrange=(vmin, vmax))
-            plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
-            plot_image(fig, ax_res, residual, vrange=(vmin_res, vmax_res))
-
-        plt.subplots_adjust(hspace=-0.4)
-        plt.tight_layout()
-
-        return fig
-
     def create_figure(self, data) -> Figure:
         return _reconstruction_figure(self.n_examples, *data["random"].values())
 
@@ -295,30 +256,30 @@ class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
 
         # fluxes
         true_fluxes, recon_fluxes = meas["true_fluxes"], meas["recon_fluxes"]
-        x, y = np.log10(snr), (true_fluxes - recon_fluxes) / true_fluxes
+        x, y = np.log10(snr), (recon_fluxes - true_fluxes) / true_fluxes
         scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
         ax1.set_xlim(xlims)
         ax1.set_xlabel(xlabel)
-        ax1.set_ylabel(r"\rm $(f^{\rm true} - f^{\rm recon}) / f^{\rm true}$")
+        ax1.set_ylabel(r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
         ax1.set_xticks(xticks)
         ax1.axhline(0, ls="--", color="k")
 
         # ellipticities
         true_ellip1, recon_ellip1 = meas["true_ellips"][:, 0], meas["recon_ellips"][:, 0]
-        x, y = np.log10(snr), true_ellip1 - recon_ellip1
+        x, y = np.log10(snr), recon_ellip1 - true_ellip1
         scatter_shade_plot(ax2, x, y, xlims, delta=0.2)
         ax2.set_xlim(xlims)
         ax2.set_xlabel(xlabel)
-        ax2.set_ylabel(r"$g_{1}^{\rm true} - g_{1}^{\rm recon}$")
+        ax2.set_ylabel(r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$")
         ax2.set_xticks(xticks)
         ax2.axhline(0, ls="--", color="k")
 
         true_ellip2, recon_ellip2 = meas["true_ellips"][:, 1], meas["recon_ellips"][:, 1]
-        x, y = np.log10(snr), true_ellip2 - recon_ellip2
+        x, y = np.log10(snr), recon_ellip2 - true_ellip2
         scatter_shade_plot(ax3, x, y, xlims, delta=0.2)
         ax3.set_xlim(xlims)
         ax3.set_xlabel(xlabel)
-        ax3.set_ylabel(r"$g_{2}^{\rm true} - g_{2}^{\rm recon}$")
+        ax3.set_ylabel(r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$")
         ax3.set_xticks(xticks)
         ax3.axhline(0, ls="--", color="k")
 
@@ -506,73 +467,55 @@ class BlendResidualFigure(BlissFigure):
 
     def create_figure(self, data) -> Figure:
         snr, blendedness, tfluxes, efluxes, true_ellips, est_ellips = data["residuals"].values()
-        fig, axes = plt.subplots(3, 2, figsize=(12, 18))
+        fig, axes = plt.subplots(3, 2, figsize=(12, 18), sharex="col", sharey="row")
         ax1, ax2, ax3, ax4, ax5, ax6 = axes.flatten()
 
-        xticks = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0.5, 3)
         xlabel = r"$\log_{10} \rm SNR$"
-        ylabel = r"\rm $(f^{\rm true} - f^{\rm recon}) / f^{\rm true}$"
-
-        x, y = np.log10(snr), (tfluxes - efluxes) / tfluxes
+        ylabel = r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$"
+        x, y = np.log10(snr), (efluxes - tfluxes) / tfluxes
         scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
-        ax1.set_xlabel(xlabel)
         ax1.set_ylabel(ylabel)
-        ax1.set_xticks(xticks)
         ax1.axhline(0, ls="--", color="k")
+        ax1.set_ylim(-1, 2.5)
 
-        xticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
         xlims = (0, 1)
-        xlabel = "$B$"
-        ylabel = r"\rm $(f^{\rm true} - f^{\rm recon}) / f^{\rm true}$"
-        x, y = blendedness, (tfluxes - efluxes) / tfluxes
+        x, y = blendedness, (efluxes - tfluxes) / tfluxes
         scatter_shade_plot(ax2, x, y, xlims, delta=0.1)
-        ax2.set_xlabel(xlabel)
-        ax2.set_ylabel(ylabel)
-        ax2.set_xticks(xticks)
         ax2.axhline(0, ls="--", color="k")
+        ax2.set_ylim(-1, 2.5)
 
-        xticks = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0.5, 3)
-        xlabel = r"$\log_{10} \rm SNR$"
-        ylabel = r"$g_{1}^{\rm true} - g_{1}^{\rm recon}$"
-        x, y = np.log10(snr), true_ellips[:, 0] - est_ellips[:, 0]
+        ylabel = r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$"
+        x, y = np.log10(snr), est_ellips[:, 0] - true_ellips[:, 0]
         scatter_shade_plot(ax3, x, y, xlims, delta=0.2)
-        ax3.set_xlabel(xlabel)
         ax3.set_ylabel(ylabel)
-        ax3.set_xticks(xticks)
         ax3.axhline(0, ls="--", color="k")
+        ax3.set_ylim(-1.5, 0.5)
 
-        xticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
         xlims = (0, 1)
-        xlabel = "$B$"
-        ylabel = r"$g_{1}^{\rm true} - g_{1}^{\rm recon}$"
-        x, y = blendedness, true_ellips[:, 0] - est_ellips[:, 0]
+        x, y = blendedness, est_ellips[:, 0] - true_ellips[:, 0]
         scatter_shade_plot(ax4, x, y, xlims, delta=0.1)
-        ax4.set_xlabel(xlabel)
-        ax4.set_ylabel(ylabel)
-        ax4.set_xticks(xticks)
         ax4.axhline(0, ls="--", color="k")
 
         xticks = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0.5, 3)
         xlabel = r"$\log_{10} \rm SNR$"
-        ylabel = r"$g_{2}^{\rm true} - g_{2}^{\rm recon}$"
-        x, y = np.log10(snr), true_ellips[:, 1] - est_ellips[:, 1]
+        ylabel = r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$"
+        x, y = np.log10(snr), est_ellips[:, 1] - true_ellips[:, 1]
         scatter_shade_plot(ax5, x, y, xlims, delta=0.2)
         ax5.set_xlabel(xlabel)
         ax5.set_ylabel(ylabel)
         ax5.set_xticks(xticks)
         ax5.axhline(0, ls="--", color="k")
+        ax5.set_ylim(-1.5, 0.5)
 
         xticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
         xlims = (0, 1)
         xlabel = "$B$"
-        ylabel = r"$g_{2}^{\rm true} - g_{2}^{\rm recon}$"
-        x, y = blendedness, true_ellips[:, 1] - est_ellips[:, 1]
+        x, y = blendedness, est_ellips[:, 1] - true_ellips[:, 1]
         scatter_shade_plot(ax6, x, y, xlims=xlims, delta=0.1)
         ax6.set_xlabel(xlabel)
-        ax6.set_ylabel(ylabel)
         ax6.set_xticks(xticks)
         ax6.axhline(0, ls="--", color="k")
 
@@ -794,7 +737,7 @@ class ToySeparationFigure(BlissFigure):
         tile_est.set_all_fluxes_and_mags(decoder)
         tile_est = tile_est.cpu()
         recon = recon.detach().cpu() + background
-        residuals = (images - recon) / recon.sqrt()
+        residuals = (recon - images) / recon.sqrt()
 
         # now we need to obtain flux, pred. ploc, prob. of detection in tile and std. of ploc
         # for each source
@@ -862,7 +805,7 @@ class ToySeparationFigure(BlissFigure):
         fig, axes = plt.subplots(1, 3, figsize=(12, 7))
         axes = axes.flatten()
         seps_to_plot = self.separations_to_plot
-        trim = 20  # zoom into relevant part of the image
+        trim = 25  # zoom into relevant part of the image
 
         c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]  # true
         c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]  # predicted
@@ -877,8 +820,8 @@ class ToySeparationFigure(BlissFigure):
             axes[ii].imshow(image, cmap="gray")
             axes[ii].scatter(x1, y1, marker="x", color="r", s=30, label=None if ii else "Truth")
             axes[ii].scatter(x2, y2, marker="+", color="b", s=50, label=None if ii else "Predicted")
-            axes[ii].set_xticks([0, 10, 20, 30, 40, 50])
-            axes[ii].set_yticks([0, 10, 20, 30, 40, 50])
+            axes[ii].set_xticks([0, 10, 20, 30, 40])
+            axes[ii].set_yticks([0, 10, 20, 30, 40])
             axes[ii].set_title(rf"\rm Separation: {psep} pixels")
 
             if ii == 0:
@@ -911,15 +854,19 @@ class ToySeparationFigureResiduals(ToySeparationFigure):
 
     def create_figure(self, data) -> Figure:
         n_examples = 3
+        bp = 24
         seps_to_plot = [4, 8, 12]
         seps = data["seps"]
+        tplocs: np.ndarray = data["truth"]["ploc"]
         images_all, recon_all, res_all = data["images"], data["recon"], data["resid"]
         trim = 20
         indices = np.array([list(seps).index(psep) for psep in seps_to_plot]).astype(int)
 
-        images = images_all[indices, 0, trim:-trim, trim:-trim]
-        recons = recon_all[indices, 0, trim:-trim, trim:-trim]
-        residuals = res_all[indices, 0, trim:-trim, trim:-trim]
+        images = images_all[indices, 0, trim + 10 : -trim - 10, trim + 15 : -trim - 5]
+        recons = recon_all[indices, 0, trim + 10 : -trim - 10, trim + 15 : -trim - 5]
+        residuals = res_all[indices, 0, trim + 10 : -trim - 10, trim + 15 : -trim - 5]
+        x1 = tplocs[indices, :, 1] + bp - 0.5 - trim - 15
+        y1 = tplocs[indices, :, 0] + bp - 0.5 - trim - 10
 
         pad = 6.0
         fig, axes = plt.subplots(nrows=n_examples, ncols=3, figsize=(11, 18))
@@ -934,8 +881,12 @@ class ToySeparationFigureResiduals(ToySeparationFigure):
                 ax_true.set_title("Images $x$", pad=pad)
                 ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
                 ax_res.set_title(
-                    r"Residual $\left(x - \tilde{x}\right) / \sqrt{\tilde{x}}$", pad=pad
+                    r"Residual $\left(\tilde{x} - x\right) / \sqrt{\tilde{x}}$", pad=pad
                 )
+
+            ax_true.scatter(x1[i], y1[i], color="r", alpha=0.5, s=40, marker="x", label="Truth")
+            ax_recon.scatter(x1[i], y1[i], color="r", alpha=0.5, s=40, marker="x")
+            ax_res.scatter(x1[i], y1[i], color="r", alpha=0.5, s=40, marker="x")
 
             # standarize ranges of true and reconstruction
             image = images[i]
@@ -951,6 +902,16 @@ class ToySeparationFigureResiduals(ToySeparationFigure):
             plot_image(fig, ax_true, image, vrange=(vmin, vmax))
             plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
             plot_image(fig, ax_res, res, vrange=(vmin_res, vmax_res))
+
+            ax_true.set_xticks([0, 10, 20, 30])
+            ax_true.set_yticks([0, 10, 20, 30])
+            ax_recon.set_xticks([0, 10, 20, 30])
+            ax_recon.set_yticks([0, 10, 20, 30])
+            ax_res.set_xticks([0, 10, 20, 30])
+            ax_res.set_yticks([0, 10, 20, 30])
+
+            if i == 0:
+                ax_true.legend(loc="best", prop={"size": 14}, markerscale=2)
 
         plt.subplots_adjust(hspace=-0.9)
         plt.tight_layout()
@@ -985,10 +946,10 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
 
         axs[0].plot(seps, prob_n1, "-", label="Galaxy 1", color=c1)
         axs[0].plot(seps, prob_n2, "-", label="Galaxy 2", color=c2)
-        axs[0].axvline(2, color="k", ls="--", label=r"\rm Tile boundary")
-        axs[0].axvline(6, ls="--", color="k")
-        axs[0].axvline(10, ls="--", color="k")
-        axs[0].axvline(14, ls="--", color="k")
+        axs[0].axvline(2, color="k", ls="--", label=r"\rm Tile boundary", alpha=0.5)
+        axs[0].axvline(6, ls="--", color="k", alpha=0.5)
+        axs[0].axvline(10, ls="--", color="k", alpha=0.5)
+        axs[0].axvline(14, ls="--", color="k", alpha=0.5)
         axs[0].legend(loc="best")
         axs[0].set_xticks(xticks)
         axs[0].set_xlim(0, 16)
@@ -1005,26 +966,26 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
 
         axs[1].plot(seps, dist1, "-", color=c1)
         axs[1].plot(seps, dist2, "-", color=c2)
-        axs[1].axhline(0, ls="-", color="k")
-        axs[1].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
-        axs[1].axvline(6, ls="--", color="k")
-        axs[1].axvline(10, ls="--", color="k")
-        axs[1].axvline(14, ls="--", color="k")
+        axs[1].axhline(0, color="k", ls="-", alpha=1.0)
+        axs[1].axvline(2, ls="--", color="k", label=r"\rm Tile boundary", alpha=0.5)
+        axs[1].axvline(6, ls="--", color="k", alpha=0.5)
+        axs[1].axvline(10, ls="--", color="k", alpha=0.5)
+        axs[1].axvline(14, ls="--", color="k", alpha=0.5)
         axs[1].set_xticks(xticks)
         axs[1].set_xlim(0, 16)
         axs[1].set_xlabel(r"\rm Separation (pixels)")
-        axs[1].set_ylabel(r"\rm Distance residual (pixels)")
+        axs[1].set_ylabel(r"\rm Centroid location residual (pixels)")
 
         # location error (squared sum) estimate
         eploc_sd1 = (data["est"]["ploc_sd"][:, 0] ** 2).sum(1) ** (1 / 2)
         eploc_sd2 = (data["est"]["ploc_sd"][:, 1] ** 2).sum(1) ** (1 / 2)
         axs[3].plot(seps, eploc_sd1, "-", color=c1)
         axs[3].plot(seps, eploc_sd2, "-", color=c2)
-        axs[3].axhline(0, ls="-", color="k")
-        axs[3].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
-        axs[3].axvline(6, ls="--", color="k")
-        axs[3].axvline(10, ls="--", color="k")
-        axs[3].axvline(14, ls="--", color="k")
+        axs[3].axhline(0, color="k", ls="-", alpha=1.0)
+        axs[3].axvline(2, ls="--", color="k", label=r"\rm Tile boundary", alpha=0.5)
+        axs[3].axvline(6, ls="--", color="k", alpha=0.5)
+        axs[3].axvline(10, ls="--", color="k", alpha=0.5)
+        axs[3].axvline(14, ls="--", color="k", alpha=0.5)
         axs[3].set_xticks(xticks)
         axs[3].set_xlim(0, 16)
         axs[3].set_ylim(axs[1].get_ylim())
@@ -1036,26 +997,26 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
         tflux2 = data["truth"]["flux"][:, 1]
         eflux1 = data["est"]["flux"][:, 0]
         eflux2 = data["est"]["flux"][:, 1]
-        rflux1 = (tflux1 - eflux1) / tflux1
-        rflux2 = (tflux2 - eflux2) / tflux2
+        rflux1 = (eflux1 - tflux1) / tflux1
+        rflux2 = (eflux2 - tflux2) / tflux2
 
         axs[2].plot(seps, rflux1, "-", color=c1)
         axs[2].plot(seps, rflux2, "-", color=c2)
-        axs[2].axhline(0, ls="-", color="k")
-        axs[2].axvline(2, ls="--", color="k", label=r"\rm Tile boundary")
-        axs[2].axvline(6, ls="--", color="k")
-        axs[2].axvline(10, ls="--", color="k")
-        axs[2].axvline(14, ls="--", color="k")
+        axs[2].axhline(0, color="k", ls="-", alpha=1.0)
+        axs[2].axvline(2, ls="--", color="k", label=r"\rm Tile boundary", alpha=0.5)
+        axs[2].axvline(6, ls="--", color="k", alpha=0.5)
+        axs[2].axvline(10, ls="--", color="k", alpha=0.5)
+        axs[2].axvline(14, ls="--", color="k", alpha=0.5)
         axs[2].set_xticks(xticks)
         axs[2].set_xlim(0, 16)
         axs[2].set_xlabel(r"\rm Separation (pixels)")
-        axs[2].set_ylabel(r"\rm $(f^{\rm true} - f^{\rm recon}) / f^{\rm true}$")
+        axs[2].set_ylabel(r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
 
         return fig
 
 
 def _load_models(cfg, device):
-    # load models required for SDSS reconstructions.
+    # load models required for reconstructions.
 
     location = instantiate(cfg.models.detection_encoder).to(device).eval()
     location.load_state_dict(

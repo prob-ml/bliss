@@ -1,6 +1,6 @@
 import itertools
 import math
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -125,6 +125,8 @@ class DetectionEncoder(pl.LightningModule):
         # metrics
         self.val_detection_metrics = DetectionMetrics(slack)
         self.test_detection_metrics = DetectionMetrics(slack)
+
+        self.validation_step_outputs: List[dict] = []
 
     def _final_encoding(self, enc_final_output):
         dim_out_all = enc_final_output.shape[1]
@@ -399,7 +401,9 @@ class DetectionEncoder(pl.LightningModule):
         self.log("val/recall", metrics["recall"], batch_size=batch_size)
         self.log("val/f1", metrics["f1"], batch_size=batch_size)
         self.log("val/avg_distance", metrics["avg_distance"], batch_size=batch_size)
-        return batch
+
+        self.validation_step_outputs.append(batch)
+        return out
 
     def plot_image_detections(self, images, true_cat, est_cat, nrows, img_ids):
         # setup figure and axes.
@@ -467,12 +471,12 @@ class DetectionEncoder(pl.LightningModule):
 
         return batch["images"], true_cat, est_cat
 
-    def validation_epoch_end(self, outputs, kind="validation", max_n_samples=16):
+    def on_validation_epoch_end(self, kind="validation", max_n_samples=16):
         """Pytorch lightning method."""
         if self.n_bands > 1 or not self.logger:
             return
 
-        batch: Dict[str, Tensor] = outputs[-1]
+        batch: Dict[str, Tensor] = self.validation_step_outputs[-1]
         images, true_cat, est_cat = self._parse_batch(batch)
 
         # log a grid of figures to the tensorboard
@@ -485,6 +489,8 @@ class DetectionEncoder(pl.LightningModule):
         title = f"{title_root}{kind} images"
         self.logger.experiment.add_figure(title, fig)
         plt.close(fig)
+
+        self.validation_step_outputs.clear()
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""

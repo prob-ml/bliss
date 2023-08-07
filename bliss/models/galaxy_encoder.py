@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -76,6 +76,8 @@ class GalaxyEncoder(pl.LightningModule):
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
 
+        self.validation_step_outputs: List[dict] = []
+
     def sample(
         self, image_ptiles: Tensor, tile_locs: Tensor, deterministic: Optional[bool]
     ) -> Tensor:
@@ -106,7 +108,8 @@ class GalaxyEncoder(pl.LightningModule):
         batch_size = len(batch["images"])
         loss = self._get_loss(batch)
         self.log("val/loss", loss, batch_size=batch_size)
-        return batch
+        self.validation_step_outputs.append(batch)
+        return loss
 
     def _get_loss(self, batch):
         images: Tensor = batch["images"]
@@ -175,16 +178,18 @@ class GalaxyEncoder(pl.LightningModule):
             pq_divergence = pq_divergence_flat
         return galaxy_params, pq_divergence
 
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         """Pytorch lightning method run at end of validation epoch."""
         # put all outputs together into a single batch
         batch = {}
-        for b in outputs:
+        for b in self.validation_step_outputs:
             for k, v in b.items():
                 curr_val = batch.get(k, torch.tensor([], device=v.device))
                 batch[k] = torch.cat([curr_val, v])
         if self.n_bands == 1:
             self._make_plots(batch)
+
+        self.validation_step_outputs.clear()
 
     # pylint: disable=too-many-statements
     def _make_plots(self, batch, n_samples=5):

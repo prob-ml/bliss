@@ -57,13 +57,9 @@ datasets:
         n_tiles_h: 10
         n_tiles_w: 10
         background:
-            _target_: bliss.datasets.background.SimulatedSDSSBackground
-            sdss_dir: ${paths.sdss}
-            run: 94
-            camcol: 1
-            field: 12
-            bands:
-                - 2
+            _target_: bliss.datasets.background.ConstantBackground
+            background:
+                - 865.0
         n_batches: 50
         batch_size: 32
         generate_device: "cuda:0"
@@ -184,7 +180,6 @@ training:
         _target_: pytorch_lightning.Trainer
         logger: True
         enable_checkpointing: False
-        profiler: null
         reload_dataloaders_every_n_epochs: 0
         max_epochs: ${training.n_epochs}
         min_epochs: ${training.n_epochs}

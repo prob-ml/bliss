@@ -25,8 +25,8 @@ class PSFDecoder(nn.Module):
     """Abstract decoder class to subclass whenever the decoded result will go through a PSF.
 
     PSF (point-spread function) use is common for decoding the final realistic astronomical
-    image to account for sensor lens effects. PSF loading is suppported as a direct image (npy)
-    or through attributes (npy or fits) file.
+    image to account for atmospheric and camera lens effects.
+    PSF loading is suppported as a direct image (npy) or through attributes (npy or fits) file.
 
     For parameter loading, a psf_params_file should be indicated, with the corresponding
     psf_slen and sdss_bands.

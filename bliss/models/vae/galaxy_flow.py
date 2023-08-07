@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 import pytorch_lightning as pl
 import torch
@@ -31,6 +31,7 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
 
         self.latent_dim = vae.latent_dim
         self.flow = make_flow(self.latent_dim, n_layers)
+        self.validation_step_outputs: List[dict] = []
 
     def forward(self, image, background):
         latent, _ = self.encoder(image - background)
@@ -55,15 +56,13 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
         loss, latent = self(images, background)
         self.log("val/loss", loss, prog_bar=True)
         u = self.flow.transform_to_noise(latent)
+        self.validation_step_outputs.append({"latent": latent, "u": u})
+        return loss
 
-        return {
-            "latent": latent,
-            "u": u,
-        }
-
-    def validation_epoch_end(self, outputs):
+    def on_validation_epoch_end(self):
         """Validation epoch end (pytorch lightning)."""
 
+        outputs = self.validation_step_outputs
         output_tensors = {
             label: torch.cat([output[label] for output in outputs]) for label in outputs[0]
         }
@@ -85,6 +84,7 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
             self.logger.experiment.add_figure(
                 f"{heading}/Aggregate posterior (after transform)", agg_posterior_after
             )
+        self.validation_step_outputs.clear()
 
     def configure_optimizers(self):
         assert self.optimizer_params is not None

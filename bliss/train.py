@@ -10,7 +10,6 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.profiler import AdvancedProfiler
 from pytorch_lightning.utilities import rank_zero_only
 
 
@@ -37,13 +36,10 @@ def train(cfg: DictConfig):
     # setup trainer
     logger = setup_logger(cfg, paths)
     checkpoint_callback = setup_callbacks(cfg)
-    profiler = setup_profiler(cfg)
 
     callbacks = [] if checkpoint_callback is None else [checkpoint_callback]
 
-    trainer = instantiate(
-        cfg.training.trainer, logger=logger, profiler=profiler, callbacks=callbacks
-    )
+    trainer = instantiate(cfg.training.trainer, logger=logger, callbacks=callbacks)
 
     if logger:
         log_hyperparameters(config=cfg, model=model, trainer=trainer)
@@ -106,13 +102,6 @@ def setup_callbacks(cfg) -> Optional[ModelCheckpoint]:
     else:
         checkpoint_callback = None
     return checkpoint_callback
-
-
-def setup_profiler(cfg):
-    profiler = None
-    if cfg.training.trainer.profiler:
-        profiler = AdvancedProfiler(filename="profile.txt")
-    return profiler
 
 
 # https://github.com/ashleve/lightning-hydra-template/blob/main/src/utils/utils.py
