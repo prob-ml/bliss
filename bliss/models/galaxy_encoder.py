@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import pytorch_lightning as pl
@@ -76,7 +76,7 @@ class GalaxyEncoder(pl.LightningModule):
                 torch.load(Path(checkpoint_path), map_location=torch.device("cpu"))
             )
 
-        self.validation_step_outputs = []
+        self.validation_step_outputs: List[dict] = []
 
     def sample(
         self, image_ptiles: Tensor, tile_locs: Tensor, deterministic: Optional[bool]

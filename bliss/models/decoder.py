@@ -357,10 +357,8 @@ def fit_source_to_ptile(source: Tensor, ptile_slen: int):
 def expand_source(source: Tensor, ptile_slen: int):
     """Pad the source with zeros so that it is size ptile_slen."""
     assert len(source.shape) == 3
-
-    slen = ptile_slen + ((ptile_slen % 2) == 0) * 1
     assert len(source.shape) == 3
-
+    slen = ptile_slen + ((ptile_slen % 2) == 0) * 1
     source_slen = source.shape[2]
 
     assert source_slen <= slen, "Should be using trim source."

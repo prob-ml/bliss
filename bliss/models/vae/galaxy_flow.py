@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 import pytorch_lightning as pl
 import torch
@@ -31,7 +31,7 @@ class CenteredGalaxyLatentFlow(pl.LightningModule):
 
         self.latent_dim = vae.latent_dim
         self.flow = make_flow(self.latent_dim, n_layers)
-        self.validation_step_outputs = []
+        self.validation_step_outputs: List[dict] = []
 
     def forward(self, image, background):
         latent, _ = self.encoder(image - background)
