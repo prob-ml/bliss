@@ -1,5 +1,5 @@
 import warnings
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
-from bliss.datasets.background import ConstantBackground, SimulatedSDSSBackground
+from bliss.datasets.background import ConstantBackground
 from bliss.models.decoder import ImageDecoder
 from bliss.models.prior import ImagePrior
 
@@ -23,7 +23,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self,
         prior: ImagePrior,
         decoder: ImageDecoder,
-        background: Union[ConstantBackground, SimulatedSDSSBackground],
+        background: ConstantBackground,
         n_tiles_h: int,
         n_tiles_w: int,
         n_batches: int,
@@ -61,9 +61,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def to(self, generate_device):
         self.image_prior: ImagePrior = self.image_prior.to(generate_device)
         self.image_decoder: ImageDecoder = self.image_decoder.to(generate_device)
-        self.background: Union[ConstantBackground, SimulatedSDSSBackground] = self.background.to(
-            generate_device
-        )
+        self.background: ConstantBackground = self.background.to(generate_device)
 
     def sample_prior(self, batch_size: int, n_tiles_h: int, n_tiles_w: int) -> TileCatalog:
         return self.image_prior.sample_prior(self.tile_slen, batch_size, n_tiles_h, n_tiles_w)

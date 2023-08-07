@@ -1,12 +1,8 @@
-from pathlib import Path
-
 import galsim
 import torch
-from astropy.table import Table
 
 from bliss import reporting
 from bliss.catalog import FullCatalog
-from bliss.datasets import sdss
 
 
 def test_scene_metrics():
@@ -37,35 +33,6 @@ def test_catalog_conversion():
     true_tile_params = true_params.to_tile_params(tile_slen=4, max_sources_per_tile=1)
     tile_params_tilde = true_tile_params.to_full_params()
     assert true_params.equals(tile_params_tilde)
-
-
-def test_coadd(get_galsim_galaxies_config):
-    # get psf
-    cfg = get_galsim_galaxies_config({})
-    data_path = Path(cfg.paths.data)
-
-    # read file and get flux / hlr
-    coadd_cat_file = data_path / "sdss/coadd_catalog_94_1_12.fits"
-    coadd_cat = Table.read(coadd_cat_file)
-
-    run = 94
-    camcol = 1
-    field = 12
-    bands = (2,)
-    sdss_data = sdss.SloanDigitalSkySurvey(
-        sdss_dir=data_path / "sdss",
-        run=run,
-        camcol=camcol,
-        fields=(field,),
-        bands=bands,
-    )
-    wcs = sdss_data[0]["wcs"][0]
-
-    # params for calculating metrics
-    h = 1489
-    w = 2048
-    bp = 24
-    reporting.CoaddFullCatalog.from_table(coadd_cat, wcs, (bp, h - bp), (bp, w - bp), band="r")
 
 
 def test_measurements():
