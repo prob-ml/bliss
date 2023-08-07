@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import pytorch_lightning as pl
 import torch
@@ -125,7 +125,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         if ckpt is not None:
             self.load_state_dict(torch.load(ckpt, map_location=self.device))  # type: ignore
 
-        self.validation_step_outputs = []
+        self.validation_step_outputs: List[dict] = []
 
     def forward(self, image, background):
         return self.reconstruct(image, background)

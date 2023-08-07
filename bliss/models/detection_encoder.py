@@ -1,6 +1,6 @@
 import itertools
 import math
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -126,7 +126,7 @@ class DetectionEncoder(pl.LightningModule):
         self.val_detection_metrics = DetectionMetrics(slack)
         self.test_detection_metrics = DetectionMetrics(slack)
 
-        self.validation_step_outputs = []
+        self.validation_step_outputs: List[dict] = []
 
     def _final_encoding(self, enc_final_output):
         dim_out_all = enc_final_output.shape[1]

@@ -78,7 +78,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         # add noise to images.
 
         if torch.any(images_mean <= 0):
-            warnings.warn("image mean less than 0")
+            warnings.warn("image mean less than 0", stacklevel=2)
             images_mean = images_mean.clamp(min=1.0)
 
         images = torch.sqrt(images_mean) * torch.randn_like(images_mean)

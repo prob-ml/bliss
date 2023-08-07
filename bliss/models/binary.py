@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import pytorch_lightning as pl
 import torch
@@ -76,7 +76,7 @@ class BinaryEncoder(pl.LightningModule):
         # grid for center cropped tiles
         self.center_ptiles = CenterPaddedTilesTransform(self.tile_slen, self.ptile_slen)
 
-        self.validation_step_outputs = []
+        self.validation_step_outputs: List[dict] = []
 
     def forward(self, image_ptiles, locs):
         return self.encode(image_ptiles, locs)
