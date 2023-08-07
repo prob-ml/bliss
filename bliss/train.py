@@ -11,7 +11,7 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.profiler import AdvancedProfiler
+from pytorch_lightning.profilers import AdvancedProfiler
 from pytorch_lightning.utilities import rank_zero_only
 
 
@@ -26,7 +26,7 @@ def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-state
     dataset = instantiate(data_source_cfg)
 
     # setup model
-    encoder = instantiate(cfg.encoder)
+    encoder = instantiate(cfg.training.encoder_target)
 
     # load pretrained weights
     if "pretrained_weights" in cfg.training and cfg.training.pretrained_weights is not None:
