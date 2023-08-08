@@ -1055,7 +1055,9 @@ def _setup(cfg):
     }
 
     if not Path(cachedir).exists():
-        warnings.warn("Specified cache directory does not exist, will attempt to create it.")
+        warnings.warn(
+            "Specified cache directory does not exist, will attempt to create it.", stacklevel=2
+        )
         Path(cachedir).mkdir(exist_ok=True, parents=True)
 
     assert set(figs).issubset(set(ALL_FIGS))
