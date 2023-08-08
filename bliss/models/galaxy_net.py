@@ -30,6 +30,8 @@ def _identity(x):
 
 
 class CenteredGalaxyEncoder(nn.Module):
+    """Encodes single galaxies with noise but no background."""
+
     def __init__(self, slen, latent_dim, n_bands, hidden, use_weight_norm=False):
         super().__init__()
 
@@ -61,6 +63,8 @@ class CenteredGalaxyEncoder(nn.Module):
 
 
 class CenteredGalaxyDecoder(nn.Module):
+    """Reconstructs noiseless galaxies from encoding with no background."""
+
     def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256, use_weight_norm=False):
         super().__init__()
 
