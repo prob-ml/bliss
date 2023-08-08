@@ -279,7 +279,6 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
         decals = instantiate(
             cfg.surveys.decals, bands=[DECaLS.BANDS.index("r")], sky_coords=[{"ra": ra, "dec": dec}]
         )
-
         brickname = DECaLS.brick_for_radec(ra, dec)
         tractor_filename = decals.downloader.download_catalog(brickname)
         decals_plocs = TractorFullCatalog.from_file(

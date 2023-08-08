@@ -174,7 +174,9 @@ class TestBasicTileAndFullCatalogs:
 
 
 class TestDecalsCatalog:
-    def test_load_decals_from_file(self, cfg):
+    def test_load_decals_from_file(self, cfg, monkeypatch):
+        monkeypatch.setattr("bliss.surveys.decals.DECaLS_PSF.__init__", lambda *_args: None)
+
         brickname = "3366m010"
         sample_file = (
             Path(cfg.paths.decals) / brickname[:3] / brickname / f"tractor-{brickname}.fits"
