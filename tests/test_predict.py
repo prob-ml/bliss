@@ -95,6 +95,7 @@ class TestPredict:
     def test_predict_sdss_multiple_rcfs(self, cfg, monkeypatch):
         # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
         monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+        monkeypatch.setattr("bliss.surveys.decals.DECaLS_PSF.__init__", lambda *_args: None)
 
         the_cfg = cfg.copy()
         the_cfg.surveys.sdss.fields = [
