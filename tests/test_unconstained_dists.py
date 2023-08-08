@@ -39,6 +39,7 @@ class TestUnconstainedDists:
         mu = torch.ones(32, 2) * 0.6
         sigma = torch.ones(32, 2) * 1e-3
         tdmn = TruncatedDiagonalMVN(mu, sigma)
-        assert torch.all(tdmn.cdf(torch.zeros_like(mu)) == 0)
-        assert torch.all(tdmn.cdf(torch.ones_like(mu)) == 1)
+        # not exactly 0/1 because of the +1e-9 in the log
+        assert torch.allclose(tdmn.cdf(torch.zeros_like(mu)), torch.zeros(32))
+        assert torch.allclose(tdmn.cdf(torch.ones_like(mu)), torch.ones(32))
         assert torch.all((tdmn.cdf(mu) >= 0).bool() & (tdmn.cdf(mu) <= 1).bool())
