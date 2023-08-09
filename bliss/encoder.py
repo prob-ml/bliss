@@ -78,8 +78,15 @@ class Encoder(pl.LightningModule):
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.input_transform_params = input_transform_params
 
-        if self.n_bands > 1:
-            warnings.warn("Ensure either log-transforming or z-scoring is enabled.")
+        transform_enabled = (
+            "log_transform" in self.input_transform_params
+            or "rolling_z_score" in self.input_transform_params
+        )
+        if self.n_bands > 1 and not transform_enabled:
+            warnings.warn(
+                "For multiband data, it is recommended that either"
+                + " log transform or rolling z-score is enabled."
+            )
 
         self.tile_slen = tile_slen
 
