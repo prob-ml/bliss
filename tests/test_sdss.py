@@ -11,7 +11,7 @@ class TestSDSS:
         the_cfg.surveys.sdss.fields = [{"run": 3900, "camcol": 6, "fields": [269]}]
         sdss_obj = instantiate(the_cfg.surveys.sdss)
         an_obj = sdss_obj[0]
-        for k in ("image", "background", "gain", "nelec_per_physical_unit_list", "calibration"):
+        for k in ("image", "background", "gain", "flux_calibration_list", "calibration"):
             assert isinstance(an_obj[k], np.ndarray)
 
         assert an_obj["field"] == 269

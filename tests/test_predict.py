@@ -1,3 +1,6 @@
+import shutil
+from pathlib import Path
+
 import pytest
 
 from bliss.generate import generate
@@ -5,6 +8,21 @@ from bliss.predict import predict
 from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
 from bliss.surveys.des import DarkEnergySurvey as DES
 from bliss.train import train
+
+
+@pytest.fixture(autouse=True)
+def setup_teardown(cfg, monkeypatch):
+    # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
+    monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+
+    checkpoint_dir = cfg.paths.root + "/checkpoints"
+    if Path(checkpoint_dir).exists():
+        shutil.rmtree(checkpoint_dir)
+
+    yield
+
+    if Path(checkpoint_dir).exists():
+        shutil.rmtree(checkpoint_dir)
 
 
 @pytest.fixture
@@ -93,8 +111,7 @@ def decals_weight_save_path(cfg, tmpdir_factory, decals_cached_data_path):
 
 class TestPredict:
     def test_predict_sdss_multiple_rcfs(self, cfg, monkeypatch):
-        # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
-        monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+        # NOTE: DECaLS PSF not needed for plotting reference catalog in predict
         monkeypatch.setattr("bliss.surveys.decals.DECaLS_PSF.__init__", lambda *_args: None)
 
         the_cfg = cfg.copy()
@@ -112,10 +129,7 @@ class TestPredict:
 
         # TODO: somehow check plot output
 
-    def test_predict_decals_multiple_bricks(self, cfg, monkeypatch, decals_weight_save_path):
-        # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
-        monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
-
+    def test_predict_decals_multiple_bricks(self, cfg, decals_weight_save_path):
         the_cfg = cfg.copy()
         the_cfg.simulator.prior.reference_band = DECaLS.BANDS.index("r")
 
@@ -141,9 +155,7 @@ class TestPredict:
 
         # TODO: somehow check plot output
 
-    def test_predict_des(self, cfg, monkeypatch, des_weight_save_path):
-        monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
-
+    def test_predict_des(self, cfg, des_weight_save_path):
         the_cfg = cfg.copy()
         the_cfg.simulator.prior.reference_band = DES.BANDS.index("r")
 
