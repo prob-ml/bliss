@@ -6,7 +6,7 @@ from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
 from bliss.catalog import TileCatalog
-from bliss.predict import crop_image
+from bliss.predict import crop_image, nelec_to_nmgy_for_catalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 
@@ -27,17 +27,17 @@ class SDSSTest(pl.LightningDataModule):
 
 class TestSimulate:
     def test_simulate(self, cfg, encoder):
-        # loads single r-band model with correct number of outputs
+        """Test simulating an image from a fixed catalog and making predictions on that catalog."""
+        # load cached simulated catalog
         sim_dataset = instantiate(cfg.simulator)
         sim_tile = torch.load(cfg.paths.data + "/tests/test_image/dataset_0.pt")
         sim_tile = TileCatalog(4, sim_tile)
 
-        rcfs, rcf_indices = sim_dataset.randomized_image_ids(
-            sim_tile.n_sources.size(0)
-        )  # noqa: WPS437
+        # simulate image from catalog
+        rcfs, rcf_indices = sim_dataset.randomized_image_ids(sim_tile.n_sources.size(0))
         image, background, _, _ = sim_dataset.simulate_image(sim_tile, rcfs, rcf_indices)
 
-        # move data to the device the encoder is on
+        # make predictions on simulated image
         sim_tile = sim_tile.to(cfg.predict.device)
         image = image.to(cfg.predict.device)
         background = background.to(cfg.predict.device)
@@ -48,6 +48,8 @@ class TestSimulate:
         est_tile = trainer.predict(encoder, datamodule=sdss_test)[0]["est_cat"].to(
             cfg.predict.device
         )
+
+        # Compare predicted and true source types
         ttc = cfg.encoder.tiles_to_crop
         sim_galaxy_bools = sim_tile.galaxy_bools[:, ttc:-ttc, ttc:-ttc]
         sim_star_bools = sim_tile.star_bools[:, ttc:-ttc, ttc:-ttc]
@@ -55,14 +57,20 @@ class TestSimulate:
         assert torch.equal(sim_galaxy_bools, est_tile.galaxy_bools)
         assert torch.equal(sim_star_bools, est_tile.star_bools)
 
+        # Convert predicted fluxes from electron counts to nanomaggies for comparison
+        flux_ratios = sim_dataset.survey.flux_calibration_dict[(94, 1, 12)]
+        est_tile = nelec_to_nmgy_for_catalog(est_tile, flux_ratios)
+
+        # Compare predicted and true fluxes
         sim_star_fluxes = sim_tile["star_fluxes"] * sim_tile.star_bools
-        sim_galaxy_fluxes = (sim_tile["galaxy_fluxes"] * sim_tile.galaxy_bools)[..., 2]
-        sim_fluxes = sim_star_fluxes[:, :, :, :, 2] + sim_galaxy_fluxes
-        sim_fluxes_crop = sim_fluxes[0, ttc:-ttc, ttc:-ttc, 0]
+        sim_galaxy_fluxes = sim_tile["galaxy_fluxes"] * sim_tile.galaxy_bools
+        sim_fluxes = sim_star_fluxes + sim_galaxy_fluxes
+        sim_fluxes_crop = sim_fluxes[0, ttc:-ttc, ttc:-ttc, 0, 2]
 
         est_star_fluxes = est_tile["star_fluxes"] * est_tile.star_bools
-        est_galaxy_fluxes = (est_tile["galaxy_fluxes"] * est_tile.galaxy_bools)[..., 2]
-        est_fluxes = est_star_fluxes[0, :, :, 0, 2] + est_galaxy_fluxes[0, :, :, 0]
+        est_galaxy_fluxes = est_tile["galaxy_fluxes"] * est_tile.galaxy_bools
+        est_fluxes = est_star_fluxes + est_galaxy_fluxes
+        est_fluxes = est_fluxes[0, :, :, 0, 2]
 
         assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 1.0
 

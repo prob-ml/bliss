@@ -1,3 +1,4 @@
+import copy
 from typing import Tuple
 
 import galsim
@@ -162,6 +163,7 @@ class ImageDecoder(nn.Module):
         Returns:
             Tuple[Tensor, List, Tensor]: tensor of images, list of PSFs, tensor of PSF params
         """
+        tile_cat = copy.deepcopy(tile_cat)  # make a copy to avoid modifying input
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
         assert (
             len(image_ids) == batch_size

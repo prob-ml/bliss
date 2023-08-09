@@ -138,7 +138,7 @@ class RegionEncoder(Encoder):
 
             # horizontal boundary
             elif new_j == int_j and new_i != int_i:
-                i_above, i_below = (new_i - 2) // 2, (new_i + 1) // 2
+                i_above, i_below = (new_i - 1) // 2, (new_i + 1) // 2
                 ii = i_above if aux_var[b, i_below, j] >= aux_var[b, i_above, j] else i_below
                 tile_is_on_array[b, ii, j] = 0
 
