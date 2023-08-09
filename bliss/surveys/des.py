@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from astropy.io import fits
 from astropy.table import Table
-from astropy.wcs import WCS
+from astropy.wcs import WCS, FITSFixedWarning
 from numpy.core import defchararray
 from omegaconf import DictConfig
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
@@ -158,7 +158,9 @@ class DarkEnergySurvey(Survey):
         image_hdu = image_fits[0]
         image = image_hdu.data  # pylint: disable=no-member
         hr = image_hdu.header  # pylint: disable=no-member
-        wcs = WCS(hr)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=FITSFixedWarning)
+            wcs = WCS(hr)
 
         # compute sig1 (cf. https://github.com/dstndstn/tractor/blob/cdb82000422e85c9c97b134edadff31d68bced0c/projects/desi/decam.py#L313-L333) # noqa: E501 # pylint: disable=line-too-long
         diffs = image[:-5:10, :-5:10] - image[5::10, 5::10]
@@ -482,7 +484,9 @@ class DES_PSF(ImagePSF):  # noqa: N801
         brickname = des_image_id["decals_brickname"]
 
         # Filler PSF for bands not in `bands`
-        fake_psf = galsim.InterpolatedImage(galsim.Image(np.random.rand(2, 2), scale=1)).withFlux(1)
+        fake_psf = galsim.InterpolatedImage(
+            galsim.Image(np.random.rand(self.psf_slen, self.psf_slen), scale=1)
+        ).withFlux(1)
         images = [fake_psf for _ in range(len(DES.BANDS))]
         for b, bl in enumerate(DES.BANDS):
             if des_image_id[bl]:
