@@ -220,13 +220,13 @@ class DarkEnergyCameraLegacySurvey(Survey):
             warnings.filterwarnings("ignore", category=FITSFixedWarning)
             wcs = WCS(hr)
 
+        flux_calibration = DES.GAIN * DES.EXPTIME
+        const_sky_nelec = hr[f"COSKY_{bl.upper()}"] * flux_calibration
         return {
             "image": image.astype(np.float32),
-            "background": np.full_like(
-                image, fill_value=hr[f"COSKY_{bl.upper()}"], dtype=np.float32
-            ),
+            "background": np.full_like(image, fill_value=const_sky_nelec, dtype=np.float32),
             "wcs": wcs,
-            "flux_calibration_list": np.array([[[DES.zpt_to_scale(hr["MAGZERO"])]]]),
+            "flux_calibration_list": np.array([[[flux_calibration]]]),
         }
 
     def single_exposure_ccds_for_bricks(self):

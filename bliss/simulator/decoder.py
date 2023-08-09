@@ -99,7 +99,7 @@ class ImageDecoder(nn.Module):
             SourceType.GALAXY: self.render_galaxy,
         }
 
-    def pixel_shifts(self, coadd_depth: int, ref_depth: int, n_bands: int, ref_band: int):
+    def pixel_shifts(self, coadd_depth: int, n_bands: int, ref_band: int, ref_depth: int = 0):
         """Generate random pixel shifts and corresponding WCS list.
         This function generates `n_shifts` random pixel shifts `shifts` and corresponding WCS list
         `wcs` to undo these shifts, relative to `wcs[ref_band]`.
@@ -199,7 +199,7 @@ class ImageDecoder(nn.Module):
             psf = psfs[b]
             for d in range(coadd_depth):
                 depth_band_shifts, depth_band_wcs_list = self.pixel_shifts(
-                    coadd_depth, d, self.n_bands, self.ref_band
+                    coadd_depth, self.n_bands, self.ref_band
                 )
                 wcs_batch.append(depth_band_wcs_list)
                 for band in range(self.n_bands):

@@ -46,6 +46,9 @@ DESImageID = TypedDict(
 class DarkEnergySurvey(Survey):
     BANDS = ("g", "r", "i", "z")
 
+    GAIN = 4.0  # e-/ADU (cf. https://noirlab.edu/science/programs/ctio/instruments/Dark-Energy-Camera/characteristics) # noqa: E501 # pylint: disable=line-too-long
+    EXPTIME = 90.0  # s
+
     @staticmethod
     def zpt_to_scale(zpt):
         """Converts a magnitude zero point per sec to nelec/nmgy scale.
@@ -168,13 +171,15 @@ class DarkEnergySurvey(Survey):
         zpscale = DES.zpt_to_scale(hr["MAGZPT"])
         sig1 = (1.4826 * mad / np.sqrt(2.0)) / zpscale
 
+        flux_calibration = self.GAIN * hr["EXPTIME"]
         return {
             "image": image.astype(np.float32),
             "background": self.splinesky_level_for_band(
                 brickname, ccdname, des_image_id[band], image.shape
-            ),
+            )
+            * flux_calibration,
             "wcs": wcs,
-            "flux_calibration_list": np.array([[[zpscale]]]),
+            "flux_calibration_list": np.array([[[flux_calibration]]]),
             "sig1": sig1,
         }
 
