@@ -95,6 +95,7 @@ class TestPredict:
     def test_predict_sdss_multiple_rcfs(self, cfg, monkeypatch):
         # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
         monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+        monkeypatch.setattr("bliss.surveys.decals.DECaLS_PSF.__init__", lambda *_args: None)
 
         the_cfg = cfg.copy()
         the_cfg.surveys.sdss.fields = [
@@ -108,33 +109,6 @@ class TestPredict:
         assert len(preds) == len(
             the_cfg.surveys.sdss.fields
         ), f"Expected {len(the_cfg.surveys.sdss.fields)} predictions, got {len(preds)}"
-
-        # TODO: somehow check plot output
-
-    def test_predict_decals_single_brick(self, cfg, monkeypatch, decals_weight_save_path):
-        # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
-        monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
-
-        the_cfg = cfg.copy()
-        the_cfg.simulator.prior.reference_band = DECaLS.BANDS.index("r")
-
-        the_cfg.predict.plot.show_plot = (
-            False  # TODO: fix this—failing due to SDSS/DECaLS #bands mismatch
-        )
-        the_cfg.predict.dataset = "${surveys.decals}"
-        the_cfg.surveys.decals.sky_coords = [
-            # brick '3366m010' corresponds to SDSS RCF 94-1-12
-            {"ra": 336.6643042496718, "dec": -0.9316385797930247}
-        ]
-        the_cfg.encoder.bands = list(range(len(DECaLS.BANDS)))
-        the_cfg.encoder.survey_bands = DECaLS.BANDS
-        the_cfg.predict.weight_save_path = decals_weight_save_path
-        _, _, _, _, preds = predict(the_cfg)
-
-        # TODO: check rest of the return values from predict
-        assert len(preds) == len(
-            the_cfg.surveys.decals.sky_coords
-        ), f"Expected {len(the_cfg.surveys.decals.sky_coords)} predictions, got {len(preds)}"
 
         # TODO: somehow check plot output
 

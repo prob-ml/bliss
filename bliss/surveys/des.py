@@ -571,7 +571,7 @@ class TractorFullCatalog(FullCatalog):
             width (int): Width of the image.
 
         Returns:
-            A DecalsFullCatalog containing data from the provided file.
+            A TractorFullCatalog containing data from the provided file.
         """
         catalog_path = Path(cat_path)
         if not catalog_path.exists():

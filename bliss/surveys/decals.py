@@ -459,7 +459,7 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
         )
         assert Path(psf_fit_file).exists(), msg
 
-        ccds_annotated = Table.read(psf_fit_file)
+        ccds_annotated = Table.read(psf_fit_file)  # NOTE: runtime bottleneck, fits file is few GB
         brick_ccds_mask = np.isin(ccds_annotated["ccdname"], ccds_for_brick)
         psf_params = torch.zeros(len(DECaLS.BANDS), len(DECaLS_PSF.PARAM_NAMES))
         psf_cols = [
