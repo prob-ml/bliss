@@ -194,7 +194,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
                     "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
                     "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
-                    "nelec_per_physical_unit_list": np.ones((1, 1, 1)),
+                    "flux_calibration_list": np.ones((1, 1, 1)),
                 }
 
         ret = {}
@@ -226,7 +226,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
                 image, fill_value=hr[f"COSKY_{bl.upper()}"], dtype=np.float32
             ),
             "wcs": wcs,
-            "nelec_per_physical_unit_list": np.array([[[DES.zpt_to_scale(hr["MAGZERO"])]]]),
+            "flux_calibration_list": np.array([[[DES.zpt_to_scale(hr["MAGZERO"])]]]),
         }
 
     def single_exposure_ccds_for_bricks(self):

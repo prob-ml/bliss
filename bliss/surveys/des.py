@@ -136,7 +136,7 @@ class DarkEnergySurvey(Survey):
                     "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
                     "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
-                    "nelec_per_physical_unit_list": np.ones((1, 1, 1)),
+                    "flux_calibration_list": np.ones((1, 1, 1)),
                     "sig1": 0.0,
                 }
 
@@ -174,7 +174,7 @@ class DarkEnergySurvey(Survey):
                 brickname, ccdname, des_image_id[band], image.shape
             ),
             "wcs": wcs,
-            "nelec_per_physical_unit_list": np.array([[[zpscale]]]),
+            "flux_calibration_list": np.array([[[zpscale]]]),
             "sig1": sig1,
         }
 
