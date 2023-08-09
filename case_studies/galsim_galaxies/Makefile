@@ -8,6 +8,7 @@ all: models/sdss_autoencoder.pt models/sdss_binary.pt models/sdss_galaxy_encoder
 models/sdss_autoencoder.pt:
 	./run_experiment.sh sdss_autoencoder $(GPU)
 	rm -f models/latents_simulated_sdss_galaxies.pt
+	./get_latents.py
 
 models/sdss_binary.pt: models/sdss_autoencoder.pt
 	./run_experiment.sh sdss_binary $(GPU_BINARY)
