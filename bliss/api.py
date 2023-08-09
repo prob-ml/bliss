@@ -137,6 +137,10 @@ class BlissClient:
     ) -> Tuple[FullCatalog, Table, Dict[Any, Table]]:
         """Predict on SDSS images.
 
+        Note that by default, one tile (4 pixels) is cropped from the edges of the image before
+        making predictions, so the predicted locations will be systematically offset compared to
+        the original image.
+
         Args:
             weight_save_path (str): Path to directory after cwd where trained model
                 weights are stored.
@@ -165,6 +169,10 @@ class BlissClient:
         **kwargs,
     ) -> Tuple[FullCatalog, Table, Dict[Any, Table]]:
         """Predict on DECaLS images.
+
+        Note that by default, one tile (4 pixels) is cropped from the edges of the image before
+        making predictions, so the predicted locations will be systematically offset compared to
+        the original image.
 
         Args:
             weight_save_path (str): Path to directory after cwd where trained model

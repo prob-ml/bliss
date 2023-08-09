@@ -37,7 +37,7 @@ class TruncatedDiagonalMVN(Distribution):
     """A truncated diagonal multivariate normal distribution."""
 
     def __init__(self, mu, sigma):
-        super().__init__()
+        super().__init__(validate_args=False)
 
         multiple_normals = Normal(mu, sigma)
         prob_in_unit_box_hw = multiple_normals.cdf(torch.ones_like(mu))

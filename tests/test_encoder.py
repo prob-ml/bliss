@@ -1,3 +1,5 @@
+import warnings
+
 import torch
 from hydra.utils import instantiate
 
@@ -54,7 +56,9 @@ class TestEncoder:
             "n_sources": torch.ones(1, 5, 5),
             "locs": torch.ones(1, 5, 5, 1, 2) * 0.6,
         }
-        cat = RegionCatalog(interior_slen=3.6, overlap_slen=0.4, d=d)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            cat = RegionCatalog(interior_slen=3.6, overlap_slen=0.4, d=d)
 
         interior_locs = cat.get_interior_locs_in_tile()
         locs_left, locs_right = cat.get_vertical_boundary_locs_in_tiles()
