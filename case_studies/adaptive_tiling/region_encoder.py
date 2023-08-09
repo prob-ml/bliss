@@ -606,7 +606,13 @@ class RegionEncoder(Encoder):
             self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
         if log_metrics or plot_images:
-            est_tile_cat = self.variational_mode(pred, return_full=False)
+            est_full_cat = self.variational_mode(pred, return_full=True)
+
+        # log all metrics
+        if log_metrics:
+            metrics = self.metrics(true_cat.to_full_params(), est_full_cat)
+            for k, v in metrics.items():
+                self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
         if plot_images:
@@ -615,7 +621,6 @@ class RegionEncoder(Encoder):
             nrows = int(n_samples**0.5)  # for figure
 
             target_full_cat = true_cat.to_full_params()
-            est_full_cat = est_tile_cat.to_full_params()
             idx = est_full_cat.n_sources.nonzero().view(-1)[:n_samples]
 
             margin_px = self.tiles_to_crop * self.tile_slen

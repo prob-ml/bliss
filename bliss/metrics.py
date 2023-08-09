@@ -154,6 +154,8 @@ class BlissMetrics(Metric):
             if ntrue == 0 or nest == 0:
                 if nest > 0:
                     self.detection_fp += nest
+                match_true.append([])
+                match_est.append([])
                 continue
 
             mtrue, mest, dkeep, avg_distance, avg_keep_distance = match_by_locs(
@@ -204,6 +206,8 @@ class BlissMetrics(Metric):
 
         # get parameters depending on the kind of catalog
         if self.mode is MetricsMode.FULL:
+            if not (match_true and match_est):
+                return  # need matches to compute classification metrics on full catalog
             true_params, est_params = self._get_classification_params_full(
                 true, est, match_true, match_est
             )
