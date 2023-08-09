@@ -10,7 +10,8 @@ import torch
 from astropy.io import fits
 from astropy.table import Table
 from astropy.utils.data import download_file
-from astropy.wcs import WCS
+from astropy.wcs import WCS, FITSFixedWarning
+from numpy import ma
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
@@ -193,7 +194,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
                     "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
                     "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
-                    "nelec_per_physical_unit_list": np.ones((1, 1, 1)),
+                    "flux_calibration_list": np.ones((1, 1, 1)),
                 }
 
         ret = {}
@@ -215,7 +216,9 @@ class DarkEnergyCameraLegacySurvey(Survey):
         )
         image = img_fits[1].data  # pylint: disable=no-member
         hr = img_fits[1].header  # pylint: disable=no-member
-        wcs = WCS(hr)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=FITSFixedWarning)
+            wcs = WCS(hr)
 
         return {
             "image": image.astype(np.float32),
@@ -223,7 +226,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
                 image, fill_value=hr[f"COSKY_{bl.upper()}"], dtype=np.float32
             ),
             "wcs": wcs,
-            "nelec_per_physical_unit_list": np.array([[[DES.zpt_to_scale(hr["MAGZERO"])]]]),
+            "flux_calibration_list": np.array([[[DES.zpt_to_scale(hr["MAGZERO"])]]]),
         }
 
     def single_exposure_ccds_for_bricks(self):
@@ -474,11 +477,8 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
                 ]
                 band_params = [0.0 for _ in range(len(DECaLS_PSF.PARAM_NAMES))]
                 for i, param in enumerate(DECaLS_PSF.PARAM_NAMES):
-                    band_params[i] = (
-                        np.mean(brick_fwhms[b])
-                        if param == "psf_fwhm"
-                        else np.mean(ccds_psf_band[param])
-                    )
+                    vals = brick_fwhms[b] if param == "psf_fwhm" else ccds_psf_band[param]
+                    band_params[i] = np.mean(vals) if not np.any(ma.getmask(vals)) else np.nan
                 psf_params[b] = torch.tensor(np.array(band_params))
 
         return psf_params
@@ -521,7 +521,7 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
             )
 
     def _get_psf_coadded(self, brickname, brick_ccds, target_wcs_for_brick):
-        """Get co-added PSF images for each band in brick, using CCDS in `brick_ccds`.
+        """Get co-added PSF images for each band in brick, using CCDs in `brick_ccds`.
         cf. https://github.com/legacysurvey/legacypipe/blob/ba1ffd4969c1f920566e780118c542d103cbd9a5/py/legacypipe/coadds.py#L486-L519 # noqa: E501 # pylint: disable=line-too-long
 
         Args:

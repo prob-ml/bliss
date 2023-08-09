@@ -210,7 +210,7 @@ class SloanDigitalSkySurvey(Survey):
             "image": pixels_nelec,
             "background": large_sky_nelec,
             "gain": np.array(gain),
-            "nelec_per_physical_unit_list": nelec_per_nmgy,
+            "flux_calibration_list": nelec_per_nmgy,
             "calibration": calibration,
             "wcs": wcs,
         }

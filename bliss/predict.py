@@ -149,7 +149,7 @@ def predict(cfg):
         est_cat, images, backgrounds, pred = trainer.predict(encoder, datamodule=survey)[0].values()
 
         # mean of the nelec_per_mgy per band
-        nelec_per_nmgy_per_band = np.mean(survey_obj["nelec_per_physical_unit_list"], axis=1)
+        nelec_per_nmgy_per_band = np.mean(survey_obj["flux_calibration_list"], axis=1)
         est_cat = nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band)
         est_full = est_cat.to_full_params()
 

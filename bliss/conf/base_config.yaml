@@ -221,8 +221,8 @@ surveys:
               i: ""
               z: "decam/CP/V4.8.2a/CP20170926/c4d_170927_025655_ooi_z_ls9"
         psf_config:
-            pixel_scale: null
-            psf_slen: null
+            pixel_scale: 0.262
+            psf_slen: 63
         pixel_shift: 2
     dc2:
         _target_: bliss.surveys.dc2.DC2

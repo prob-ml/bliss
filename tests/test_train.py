@@ -1,6 +1,23 @@
+import shutil
+from pathlib import Path
+
+import pytest
+
 from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
 from bliss.surveys.des import DarkEnergySurvey as DES
 from bliss.train import train
+
+
+@pytest.fixture(autouse=True)
+def clear_checkpoints(cfg):
+    checkpoints_dir = cfg.paths.root + "/checkpoints"
+    if Path(checkpoints_dir).exists():
+        shutil.rmtree(checkpoints_dir)
+
+    yield
+
+    if Path(checkpoints_dir).exists():
+        shutil.rmtree(checkpoints_dir)
 
 
 class TestTrain:
