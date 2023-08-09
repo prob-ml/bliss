@@ -90,18 +90,12 @@ def align(img, wcs_list, ref_band, ref_depth=0):
 
 def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
     fluxes_suffix = "_fluxes"
-    # reshape nelec_per_nmgy_per_band to (1, {n_bands}) to broadcast
-    nelec_per_nmgy_per_band = nelec_per_nmgy_per_band.reshape(1, -1)
+    # reshape nelec_per_nmgy_per_band to (1, 1, 1, 1, {n_bands}) to broadcast
+    nelec_per_nmgy_per_band = torch.tensor(nelec_per_nmgy_per_band, device=est_cat.device)
+    nelec_per_nmgy_per_band = nelec_per_nmgy_per_band.view(1, 1, 1, 1, -1)
     for key in est_cat.keys():
         if key.endswith(fluxes_suffix):
-            est_cat[key] = torch.tensor(np.array(est_cat[key]) / nelec_per_nmgy_per_band)
-        elif key == "galaxy_params":
-            clone = est_cat[key].clone()
-            n_bands = nelec_per_nmgy_per_band.shape[1]
-            clone[..., :n_bands] = torch.tensor(
-                np.array(clone[..., :n_bands]) / nelec_per_nmgy_per_band
-            )
-            est_cat[key] = clone
+            est_cat[key] = est_cat[key] / nelec_per_nmgy_per_band
     return est_cat
 
 
