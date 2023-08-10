@@ -8,14 +8,14 @@ hydra:
     run:
         dir: .
 
-mode: train
-
 paths:
     root: ${oc.env:BLISS_HOME}
     sdss: ${paths.root}/data/sdss
     data: ${paths.root}/data
     project: ${paths.root}/case_studies/galsim_galaxies
     output: ${paths.project}/output
+
+mode: train
 
 datasets:
     sdss_galaxies:
@@ -64,27 +64,7 @@ datasets:
         batch_size: 32
         generate_device: "cuda:0"
         fix_validation_set: true
-        valid_n_batches: 256
-    galsim_blends:
-        _target_: bliss.datasets.galsim_galaxies.GalsimBlends
-        prior:
-            _target_: bliss.models.galsim_decoder.DefaultGalsimPrior
-            single_galaxy_prior: ${datasets.sdss_galaxies.prior}
-            max_n_sources: 8
-            mean_sources: 3
-            max_shift: 0.375
-            galaxy_prob: 0.7
-        decoder:
-            _target_: bliss.models.galsim_decoder.FullCatalogDecoder
-            single_galaxy_decoder: ${datasets.sdss_galaxies.decoder}
-            slen: 40
-            bp: 24
-        background: ${datasets.sdss_galaxies.background}
-        tile_slen: 4
-        max_sources_per_tile: 1
-        num_workers: 20
-        batch_size: 512
-        n_batches: 20
+        valid_n_batches: 350
 
 models:
     binary:
@@ -147,12 +127,12 @@ models:
         hidden: 256
         n_bands: 1
         optimizer_params:
-            lr: 1e-4
+            lr: 1e-3
     prior:
         _target_: bliss.models.prior.ImagePrior
         n_bands: 1
         max_sources: 1
-        mean_sources: 0.03
+        mean_sources: 0.05
         min_sources: 0
         f_min: 622.0
         f_max: 1e6
@@ -165,11 +145,6 @@ models:
             autoencoder_ckpt: ${paths.project}/models/sdss_autoencoder.pt
             latents_file: ${paths.project}/models/latents_simulated_sdss_galaxies.pt
             galaxy_dataset: ${datasets.sdss_galaxies}
-
-generate:
-    dataset:
-    file:
-    n_plots:
 
 training:
     n_epochs: 121
