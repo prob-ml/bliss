@@ -1,8 +1,4 @@
 # @package _global_
-models:
-  prior:
-    mean_sources: 0.03
-
 training:
   name: "sdss_binary"
   model: ${models.binary}
