@@ -1,4 +1,5 @@
 import pickle
+import warnings
 from typing import Tuple
 
 import numpy as np
@@ -167,10 +168,12 @@ class CatalogPrior(pl.LightningModule):
 
     def _load_color_models(self):
         # Load models from disk
-        with open(self.star_color_model_path, "rb") as f:
-            gmm_star = pickle.load(f)
-        with open(self.gal_color_model_path, "rb") as f:
-            gmm_gal = pickle.load(f)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore")
+            with open(self.star_color_model_path, "rb") as f:
+                gmm_star = pickle.load(f)
+            with open(self.gal_color_model_path, "rb") as f:
+                gmm_gal = pickle.load(f)
         return gmm_star, gmm_gal
 
     def _flux_ratios(self) -> Tuple[Tensor, Tensor]:
