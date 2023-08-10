@@ -701,7 +701,9 @@ class ToySeparationFigure(BlissFigure):
         # Params: total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a
         # first centered galaxy, then moving one.
         n_sources = 2
-        flux1, flux2 = 2e5, 1e5
+        # flux1, flux2 = 2e4, 1e4  # 0.75 flux quantile from pareto
+        # flux1, flux2 = 2e5, 1e5
+        flux1, flux2 = 8e4, 4e4
         gparams = torch.tensor(
             [
                 [flux1, 1.0, torch.pi / 4, 0.7, 1.5, 0, 0],
