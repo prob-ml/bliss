@@ -1118,12 +1118,14 @@ def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dic
 @hydra.main(config_path="./config", config_name="config", version_base=None)
 def main(cfg):
     figs, device, bfig_kwargs = _setup(cfg)
-    encoder, decoder = _load_models(cfg, device)
     overwrite = cfg.plots.overwrite
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
     if "single_gal" in figs:
         _make_autoencoder_figures(cfg, device, overwrite, bfig_kwargs)
+
+    if "toy" or "blend_gal" in figs:
+        encoder, decoder = _load_models(cfg, device)
 
     if "blend_gal" in figs:
         _make_blend_figures(cfg, encoder, decoder, overwrite, bfig_kwargs)
