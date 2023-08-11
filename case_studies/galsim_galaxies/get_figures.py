@@ -1124,7 +1124,7 @@ def main(cfg):
     if "single_gal" in figs:
         _make_autoencoder_figures(cfg, device, overwrite, bfig_kwargs)
 
-    if "toy" or "blend_gal" in figs:
+    if "toy" in figs or "blend_gal" in figs:
         encoder, decoder = _load_models(cfg, device)
 
     if "blend_gal" in figs:
