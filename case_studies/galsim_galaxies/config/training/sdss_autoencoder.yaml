@@ -1,7 +1,10 @@
-name: "sdss_autoencoder"
-model: ${models.galaxy_net}
-dataset: ${datasets.sdss_galaxies}
-n_epochs: 1001
-trainer:
-  check_val_every_n_epoch: 10
-  enable_checkpointing: True
+# @package _global_
+training:
+  name: "sdss_autoencoder"
+  model: ${models.galaxy_net}
+  dataset: ${datasets.sdss_galaxies}
+  n_epochs: 2001
+  save_top_k: 5
+  trainer:
+    check_val_every_n_epoch: 20
+    enable_checkpointing: True
