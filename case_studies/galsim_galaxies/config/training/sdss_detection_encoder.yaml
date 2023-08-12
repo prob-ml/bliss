@@ -4,6 +4,5 @@ training:
   model: ${models.detection_encoder}
   dataset: ${datasets.simulated}
   n_epochs: 3001
-  save_top_k: 10
   trainer:
     enable_checkpointing: True

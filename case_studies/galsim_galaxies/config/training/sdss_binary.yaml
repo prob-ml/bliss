@@ -4,6 +4,5 @@ training:
   model: ${models.binary}
   dataset: ${datasets.simulated}
   n_epochs: 501
-  save_top_k: 5
   trainer:
     enable_checkpointing: True
