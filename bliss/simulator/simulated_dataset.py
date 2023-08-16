@@ -124,7 +124,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             Tuple[Tensor, Tensor, Tensor, Tensor]: tuple of images, backgrounds, deconvolved images,
             and psf parameters
         """
-        images, psfs, psf_params, wcs_batch = self.image_decoder.render_images(
+        images, psfs, psf_params, wcs_batch, tc = self.image_decoder.render_images(
             tile_catalog, image_ids, self.coadd_depth
         )
         images = self.align_images(images, wcs_batch)
@@ -136,7 +136,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         images = self._apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
-        return images, background, deconv_images, psf_params
+        return images, background, deconv_images, psf_params, tc
 
     def get_deconvolved_images(self, images, backgrounds, psfs) -> Tensor:
         """Deconvolve the synthetic images with the psf used to generate them.
@@ -193,7 +193,13 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         image_ids, image_id_indices = self.randomized_image_ids(self.catalog_prior.batch_size)
         with torch.no_grad():
             tile_catalog = self.catalog_prior.sample()
-            images, background, deconv, psf_params = self.simulate_image(
+            (
+                images,
+                background,
+                deconv,
+                psf_params,
+                _,
+            ) = self.simulate_image(  # pylint: disable=W0632
                 tile_catalog, image_ids, image_id_indices
             )
             return {

@@ -219,4 +219,4 @@ class ImageDecoder(nn.Module):
         images = torch.from_numpy(images).clamp(1e-8)
         images = torch.squeeze(images, dim=1)  # remove coadd depth dimension if 1
 
-        return images, psfs, psf_params, wcs_batch
+        return images, psfs, psf_params, wcs_batch, tile_cat
