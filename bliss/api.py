@@ -17,7 +17,6 @@ from bliss.generate import generate as _generate
 from bliss.predict import predict as _predict
 from bliss.surveys.sdss import SDSSDownloader
 from bliss.train import train as _train
-from bliss.utils.deprecation_utils import deprecated
 from bliss.utils.download_utils import download_git_lfs_file
 
 SurveyType: TypeAlias = Literal["decals", "hst", "dc2", "sdss"]
@@ -130,54 +129,6 @@ class BlissClient:
     def load_survey(self, survey: SurveyType, run, camcol, field, download_dir: str):
         SDSSDownloader([(run, camcol, field)], self.cwd + f"/{download_dir}").download_all()
         # assert files downloaded at download_dir
-
-    @deprecated(deprecated_in_version="0.3.1", message="Use the general predict function instead")
-    def predict_sdss(
-        self,
-        weight_save_path: str,
-        **kwargs,
-    ) -> Tuple[FullCatalog, Table, Dict[Any, Table]]:
-        """Predict on SDSS images.
-
-        Note that by default, one tile (4 pixels) is cropped from the edges of the image before
-        making predictions, so the predicted locations will be systematically offset compared to
-        the original image.
-
-        Args:
-            weight_save_path (str): Path to directory after cwd where trained model
-                weights are stored.
-            **kwargs: Keyword arguments to override default configuration values.
-
-        Returns:
-            Tuple[FullCatalog, Table, Dict[Any, Table]]: Tuple of estimated catalog, estimated
-                catalog as an astropy table, and probabilistic predictions catalogs as astropy
-                tables
-        """
-        return self.predict("sdss", weight_save_path, **kwargs)
-
-    @deprecated(deprecated_in_version="0.3.1", message="Use the general predict function instead")
-    def predict_decals(
-        self,
-        weight_save_path: str,
-        **kwargs,
-    ) -> Tuple[FullCatalog, Table, Dict[Any, Table]]:
-        """Predict on DECaLS images.
-
-        Note that by default, one tile (4 pixels) is cropped from the edges of the image before
-        making predictions, so the predicted locations will be systematically offset compared to
-        the original image.
-
-        Args:
-            weight_save_path (str): Path to directory after cwd where trained model
-                weights are stored.
-            **kwargs: Keyword arguments to override default configuration values.
-
-        Returns:
-            Tuple[FullCatalog, Table, Dict[Any, Table]]: Tuple of estimated catalog, estimated
-                catalog as an astropy table, and probabilistic predictions catalogs as astropy
-                tables
-        """
-        return self.predict("decals", weight_save_path, **kwargs)
 
     def predict(
         self,
