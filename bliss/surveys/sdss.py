@@ -108,15 +108,14 @@ class SloanDigitalSkySurvey(Survey):
                 for field, gain in zip(fieldnums, fieldgains):
                     self.rcfgcs.append((run, camcol, field, gain))
 
-        if self.load_image_data:
-            self.downloader.download_images()
-            for rcfgc in self.rcfgcs:
-                run, camcol, field, _ = rcfgc
-                field_path = self.sdss_path / f"{run}/{camcol}/{field}"
-                for bl in SloanDigitalSkySurvey.BANDS:
-                    frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
-                    frame_path = field_path / frame_name
-                    assert Path(frame_path).exists(), f"{frame_path} does not exist."
+        self.downloader.download_images()
+        for rcfgc in self.rcfgcs:
+            run, camcol, field, _ = rcfgc
+            field_path = self.sdss_path / f"{run}/{camcol}/{field}"
+            for bl in SloanDigitalSkySurvey.BANDS:
+                frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
+                frame_path = field_path / frame_name
+                assert Path(frame_path).exists(), f"{frame_path} does not exist."
 
         self.items = [None for _ in range(len(self.rcfgcs))]
 

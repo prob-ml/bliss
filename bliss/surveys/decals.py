@@ -148,8 +148,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
             self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
-        if self.load_image_data:
-            self.downloader.download_images(self.bands)
+        self.downloader.download_images(self.bands)
         self.downloader.download_catalogs()
         for brickname in self.bricknames:
             catalog_filename = (
@@ -222,8 +221,6 @@ class DarkEnergyCameraLegacySurvey(Survey):
             / brickname
             / f"legacysurvey-{brickname}-image-{bl}.fits"
         )
-        if self.load_image_data:
-            image = fits.getdata(img_fits_filename, 1)  # pylint: disable=no-member
         hr = fits.getheader(img_fits_filename, 1)  # pylint: disable=no-member
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=FITSFixedWarning)
@@ -232,13 +229,14 @@ class DarkEnergyCameraLegacySurvey(Survey):
 
         flux_calibration = DES.GAIN * DES.EXPTIME
         const_sky_nelec = hr[f"COSKY_{bl.upper()}"] * flux_calibration
-        image_nelec = image.astype(np.float32) * flux_calibration
         d = {
             "background": np.full(image_shape, fill_value=const_sky_nelec, dtype=np.float32),
             "wcs": wcs,
             "flux_calibration_list": np.array([[[flux_calibration]]]),
         }
         if self.load_image_data:
+            image = fits.getdata(img_fits_filename, 1)  # pylint: disable=no-member
+            image_nelec = image.astype(np.float32) * flux_calibration
             d.update({"image": image_nelec})
         return d
 

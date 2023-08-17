@@ -105,8 +105,7 @@ class DarkEnergySurvey(Survey):
             self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
-        if self.load_image_data:
-            self.downloader.download_images()
+        self.downloader.download_images()
         self.downloader.download_backgrounds()
         self.downloader.download_psfexs()
 
@@ -173,7 +172,7 @@ class DarkEnergySurvey(Survey):
 
         flux_calibration = self.GAIN * hr["EXPTIME"]
         background_nelec = (
-            self.splinesky_level_for_band(brickname, ccdname, des_image_id[band], image.shape)
+            self.splinesky_level_for_band(brickname, ccdname, des_image_id[band], image_shape)
             * flux_calibration
         )
         d = {
@@ -190,7 +189,7 @@ class DarkEnergySurvey(Survey):
             mad = np.median(np.abs(diffs).ravel())
             zpscale = DES.zpt_to_scale(hr["MAGZPT"])
             sig1 = (1.4826 * mad / np.sqrt(2.0)) / zpscale
-                
+
             image_nelec = image.astype(np.float32) * flux_calibration
             d.update({"image": image_nelec, "sig1": sig1})
         return d
