@@ -172,12 +172,14 @@ class DarkEnergySurvey(Survey):
         sig1 = (1.4826 * mad / np.sqrt(2.0)) / zpscale
 
         flux_calibration = self.GAIN * hr["EXPTIME"]
+        image_nelec = image.astype(np.float32) * flux_calibration
+        background_nelec = (
+            self.splinesky_level_for_band(brickname, ccdname, des_image_id[band], image.shape)
+            * flux_calibration
+        )
         return {
-            "image": image.astype(np.float32),
-            "background": self.splinesky_level_for_band(
-                brickname, ccdname, des_image_id[band], image.shape
-            )
-            * flux_calibration,
+            "image": image_nelec,
+            "background": background_nelec,
             "wcs": wcs,
             "flux_calibration_list": np.array([[[flux_calibration]]]),
             "sig1": sig1,
