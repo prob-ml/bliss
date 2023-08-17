@@ -12,7 +12,6 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         super().__init__()
 
         self.bands = None
-        self.prior = None
         self.background = None
         self.psf = None
         self.flux_calibration_dict = None

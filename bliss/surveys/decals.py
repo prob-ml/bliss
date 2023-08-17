@@ -222,8 +222,9 @@ class DarkEnergyCameraLegacySurvey(Survey):
 
         flux_calibration = DES.GAIN * DES.EXPTIME
         const_sky_nelec = hr[f"COSKY_{bl.upper()}"] * flux_calibration
+        image_nelec = image.astype(np.float32) * flux_calibration
         return {
-            "image": image.astype(np.float32),
+            "image": image_nelec,
             "background": np.full_like(image, fill_value=const_sky_nelec, dtype=np.float32),
             "wcs": wcs,
             "flux_calibration_list": np.array([[[flux_calibration]]]),
