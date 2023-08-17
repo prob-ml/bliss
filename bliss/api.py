@@ -15,7 +15,7 @@ from bliss.catalog import FullCatalog, SourceType
 from bliss.conf.igs import base_config
 from bliss.generate import generate as _generate
 from bliss.predict import predict as _predict
-from bliss.surveys.sdss import SDSSDownloader, SloanDigitalSkySurvey
+from bliss.surveys.sdss import SDSSDownloader
 from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
 
@@ -130,18 +130,20 @@ class BlissClient:
         SDSSDownloader([(run, camcol, field)], self.cwd + f"/{download_dir}").download_all()
         # assert files downloaded at download_dir
 
-    def predict_sdss(
+    def predict(
         self,
+        survey: SurveyType,
         weight_save_path: str,
         **kwargs,
     ) -> Tuple[FullCatalog, Table, Dict[Any, Table]]:
-        """Predict on SDSS images.
+        """Predict on `survey` images.
 
         Note that by default, one tile (4 pixels) is cropped from the edges of the image before
         making predictions, so the predicted locations will be systematically offset compared to
         the original image.
 
         Args:
+            survey (SurveyType): Survey of image to predict on.
             weight_save_path (str): Path to directory after cwd where trained model
                 weights are stored.
             **kwargs: Keyword arguments to override default configuration values.
@@ -154,48 +156,14 @@ class BlissClient:
         cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
         cfg.predict.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
+        cfg.predict.dataset = "${surveys." + survey + "}"
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
         est_cat, _, _, _, pred_for_image_id = _predict(cfg)
-        est_cat_table = fullcat_to_astropy_table(est_cat)
+        est_cat_table = fullcat_to_astropy_table(est_cat, cfg.encoder.survey_bands)
         pred_tables = {}  # indexed by image_id
         for image_id, pred in pred_for_image_id.items():
-            pred_tables[image_id] = pred_to_astropy_table(pred)
-        return est_cat, est_cat_table, pred_tables
-
-    def predict_decals(
-        self,
-        weight_save_path: str,
-        **kwargs,
-    ) -> Tuple[FullCatalog, Table, Dict[Any, Table]]:
-        """Predict on DECaLS images.
-
-        Note that by default, one tile (4 pixels) is cropped from the edges of the image before
-        making predictions, so the predicted locations will be systematically offset compared to
-        the original image.
-
-        Args:
-            weight_save_path (str): Path to directory after cwd where trained model
-                weights are stored.
-            **kwargs: Keyword arguments to override default configuration values.
-
-        Returns:
-            Tuple[FullCatalog, Table, Dict[Any, Table]]: Tuple of estimated catalog, estimated
-                catalog as an astropy table, and probabilistic predictions catalogs as astropy
-                tables
-        """
-        cfg = OmegaConf.create(self.base_cfg)
-        # apply overrides
-        cfg.predict.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
-        cfg.predict.dataset = "${surveys.decals}"
-        cfg.encoder.bands = [2]
-        for k, v in kwargs.items():
-            OmegaConf.update(cfg, k, v)
-        est_cat, _, _, _, pred_for_image_id = _predict(cfg)
-        est_cat_table = fullcat_to_astropy_table(est_cat)
-        pred_tables = {}  # indexed by image_id
-        for image_id, pred in pred_for_image_id.items():
-            pred_tables[image_id] = pred_to_astropy_table(pred)
+            pred_tables[image_id] = pred_to_astropy_table(pred, cfg.encoder.survey_bands)
         return est_cat, est_cat_table, pred_tables
 
     def plot_predictions_in_notebook(self):
@@ -250,7 +218,7 @@ class BlissClient:
         self.base_cfg.generate.cached_data_path = cached_data_path
 
 
-def fullcat_to_astropy_table(est_cat: FullCatalog):
+def fullcat_to_astropy_table(est_cat: FullCatalog, encoder_survey_bands: Tuple[str]) -> Table:
     required_keys = [
         "star_fluxes",
         "source_type",
@@ -272,7 +240,7 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
         else:
             on_vals[k] = v[is_on_mask].cpu()
     # Split to different columns for each band
-    for b, bl in enumerate(SloanDigitalSkySurvey.BANDS):
+    for b, bl in enumerate(encoder_survey_bands):
         on_vals[f"star_flux_{bl}"] = on_vals["star_fluxes"][..., b]
         on_vals[f"galaxy_flux_{bl}"] = on_vals["galaxy_fluxes"][..., b]
     # Remove combined flux columns
@@ -293,7 +261,7 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     # Convert to astropy table
     est_cat_table = Table(rows)
     # Convert all _fluxes columns to u.Quantity
-    for bl in SloanDigitalSkySurvey.BANDS:
+    for bl in encoder_survey_bands:
         est_cat_table[f"star_flux_{bl}"].unit = u.nmgy
         est_cat_table[f"galaxy_flux_{bl}"].unit = u.nmgy
 
@@ -322,7 +290,7 @@ def fullcat_to_astropy_table(est_cat: FullCatalog):
     return hstack([est_cat_table, galaxy_params_table])
 
 
-def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
+def pred_to_astropy_table(pred: Dict[str, Tensor], encoder_survey_bands: Tuple[str]) -> Table:
     pred.pop("loc")
 
     # extract parameters from distributions
@@ -362,7 +330,7 @@ def pred_to_astropy_table(pred: Dict[str, Tensor]) -> Table:
 
     pred_table = Table(dist_params_list)
     # convert values to astropy units
-    bands = SloanDigitalSkySurvey.BANDS  # NOTE: SDSS-specific!
+    bands = encoder_survey_bands
     for bnd in bands:
         pred_table[f"star_flux_{bnd}_mean"].unit = u.nmgy
         pred_table[f"star_flux_{bnd}_std"].unit = u.nmgy
@@ -410,7 +378,8 @@ def main(cfg):
     elif cfg.mode == "train":
         bliss_client.train(weight_save_path=cfg.training.weight_save_path, **cfg)
     elif cfg.mode == "predict":
-        bliss_client.predict_sdss(weight_save_path=cfg.predict.weight_save_path, **cfg)
+        # survey="sdss" is hack since OmegaConf.update overwrites predict.dataset
+        bliss_client.predict(survey="sdss", weight_save_path=cfg.predict.weight_save_path, **cfg)
     else:
         raise KeyError
 
