@@ -57,10 +57,13 @@ class SloanDigitalSkySurvey(Survey):
         fields,
         pixel_shift,
         dir_path="data/sdss",
+        load_image_data: bool = False,
     ):
         super().__init__()
 
         self.sdss_path = Path(dir_path)
+
+        self.load_image_data = load_image_data
 
         self.rcfgcs = []
         self.sdss_fields = fields
@@ -76,7 +79,8 @@ class SloanDigitalSkySurvey(Survey):
         self.flux_calibration_dict = self.get_flux_calibrations()
 
         self.catalog_cls = PhotoFullCatalog
-        self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
+        if self.load_image_data:
+            self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
         self.downloader.download_pfs()
@@ -104,14 +108,15 @@ class SloanDigitalSkySurvey(Survey):
                 for field, gain in zip(fieldnums, fieldgains):
                     self.rcfgcs.append((run, camcol, field, gain))
 
-        self.downloader.download_images()
-        for rcfgc in self.rcfgcs:
-            run, camcol, field, _ = rcfgc
-            field_path = self.sdss_path / f"{run}/{camcol}/{field}"
-            for bl in SloanDigitalSkySurvey.BANDS:
-                frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
-                frame_path = field_path / frame_name
-                assert Path(frame_path).exists(), f"{frame_path} does not exist."
+        if self.load_image_data:
+            self.downloader.download_images()
+            for rcfgc in self.rcfgcs:
+                run, camcol, field, _ = rcfgc
+                field_path = self.sdss_path / f"{run}/{camcol}/{field}"
+                for bl in SloanDigitalSkySurvey.BANDS:
+                    frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
+                    frame_path = field_path / frame_name
+                    assert Path(frame_path).exists(), f"{frame_path} does not exist."
 
         self.items = [None for _ in range(len(self.rcfgcs))]
 
@@ -178,13 +183,13 @@ class SloanDigitalSkySurvey(Survey):
     def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
         frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
         frame_path = str(field_dir.joinpath(frame_name))
-        frame = fits.open(frame_path)
-        calibration = frame[1].data  # pylint: disable=maybe-no-member
+        calibration = fits.getdata(frame_path, 1)  # pylint: disable=maybe-no-member
         nelec_per_nmgy = gain / calibration
 
-        sky_small = frame[2].data["ALLSKY"][0]  # pylint: disable=maybe-no-member
-        sky_x = frame[2].data["XINTERP"][0]  # pylint: disable=maybe-no-member
-        sky_y = frame[2].data["YINTERP"][0]  # pylint: disable=maybe-no-member
+        sky_data = fits.getdata(frame_path, 2)  # pylint: disable=maybe-no-member
+        sky_small = sky_data["ALLSKY"][0]  # pylint: disable=maybe-no-member
+        sky_x = sky_data["XINTERP"][0]  # pylint: disable=maybe-no-member
+        sky_y = sky_data["YINTERP"][0]  # pylint: disable=maybe-no-member
 
         small_rows = np.mgrid[0 : sky_small.shape[0]]
         small_cols = np.mgrid[0 : sky_small.shape[1]]
@@ -197,23 +202,25 @@ class SloanDigitalSkySurvey(Survey):
         large_sky = sky_interp(large_points)
         large_sky_nelec = large_sky * gain
 
-        pixels_ss_nmgy = frame[0].data  # pylint: disable=maybe-no-member
-        pixels_ss_nelec = pixels_ss_nmgy * nelec_per_nmgy
-        pixels_nelec = pixels_ss_nelec + large_sky_nelec
+        if self.load_image_data:
+            pixels_ss_nmgy = fits.getdata(frame_path, 0)  # pylint: disable=maybe-no-member
+            pixels_ss_nelec = pixels_ss_nmgy * nelec_per_nmgy
+            pixels_nelec = pixels_ss_nelec + large_sky_nelec
 
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=FITSFixedWarning)
-            wcs = WCS(frame[0])
+            wcs = WCS(fits.getheader(frame_path, 0))
 
-        frame.close()
-        return {
-            "image": pixels_nelec,
+        d = {
             "background": large_sky_nelec,
             "gain": np.array(gain),
             "flux_calibration_list": nelec_per_nmgy,
             "calibration": calibration,
             "wcs": wcs,
         }
+        if self.load_image_data:
+            d.update({"image": pixels_nelec})
+        return d
 
     @property
     def predict_batch(self):
