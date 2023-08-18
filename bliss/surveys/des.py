@@ -80,10 +80,13 @@ class DarkEnergySurvey(Survey):
                 "z": "decam/CP/V4.8.2a/CP20170926/c4d_170927_025655_ooi_z_ls9",
             },
         ),
+        load_image_data: bool = False,
     ):
         super().__init__()
 
         self.des_path = Path(dir_path)
+
+        self.load_image_data = load_image_data
 
         self.image_id_list = self.process_image_ids(image_ids)
         self.bands = tuple(range(len(self.BANDS)))
@@ -98,7 +101,8 @@ class DarkEnergySurvey(Survey):
         self.flux_calibration_dict = self.get_flux_calibrations()
 
         self.catalog_cls = TractorFullCatalog
-        self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
+        if self.load_image_data:
+            self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
         self.downloader.download_images()
@@ -130,18 +134,20 @@ class DarkEnergySurvey(Survey):
         first_present_bl_obj = self.read_image_for_band(des_image_id, first_present_bl)
         image_list[DES.BANDS.index(first_present_bl)] = first_present_bl_obj
 
-        img_shape = first_present_bl_obj["image"].shape
+        img_shape = first_present_bl_obj["background"].shape
         for b, bl in enumerate(self.BANDS):
             if bl != first_present_bl and des_image_id[bl]:
                 image_list[b] = self.read_image_for_band(des_image_id, bl)
             elif bl != first_present_bl:
                 image_list[b] = {
-                    "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
                     "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
                     "flux_calibration_list": np.ones((1, 1, 1)),
-                    "sig1": 0.0,
                 }
+                if self.load_image_data:
+                    image_list[b].update(
+                        {"image": np.zeros(img_shape).astype(np.float32), "sig1": 0.0}
+                    )
 
         ret = {}
         for k in image_list[0]:
@@ -157,33 +163,36 @@ class DarkEnergySurvey(Survey):
         brickname = des_image_id["decals_brickname"]
         ccdname = des_image_id["ccdname"]
         image_basename = DESDownloader.image_basename_from_filename(des_image_id[band], band)
-        image_fits = fits.open(self.des_path / brickname[:3] / brickname / f"{image_basename}.fits")
-        image_hdu = image_fits[0]
-        image = image_hdu.data  # pylint: disable=no-member
-        hr = image_hdu.header  # pylint: disable=no-member
+        img_fits_filename = self.des_path / brickname[:3] / brickname / f"{image_basename}.fits"
+        hr = fits.getheader(img_fits_filename, 0)  # pylint: disable=no-member
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=FITSFixedWarning)
             wcs = WCS(hr)
-
-        # compute sig1 (cf. https://github.com/dstndstn/tractor/blob/cdb82000422e85c9c97b134edadff31d68bced0c/projects/desi/decam.py#L313-L333) # noqa: E501 # pylint: disable=line-too-long
-        diffs = image[:-5:10, :-5:10] - image[5::10, 5::10]
-        mad = np.median(np.abs(diffs).ravel())
-        zpscale = DES.zpt_to_scale(hr["MAGZPT"])
-        sig1 = (1.4826 * mad / np.sqrt(2.0)) / zpscale
+        image_shape = (hr["NAXIS2"], hr["NAXIS1"])
 
         flux_calibration = self.GAIN * hr["EXPTIME"]
-        image_nelec = image.astype(np.float32) * flux_calibration
         background_nelec = (
-            self.splinesky_level_for_band(brickname, ccdname, des_image_id[band], image.shape)
+            self.splinesky_level_for_band(brickname, ccdname, des_image_id[band], image_shape)
             * flux_calibration
         )
-        return {
-            "image": image_nelec,
+        d = {
             "background": background_nelec,
             "wcs": wcs,
             "flux_calibration_list": np.array([[[flux_calibration]]]),
-            "sig1": sig1,
         }
+        if self.load_image_data:
+            # compute sig1 (cf. https://github.com/dstndstn/tractor/blob/cdb82000422e85c9c97b134edadff31d68bced0c/projects/desi/decam.py#L313-L333) # noqa: E501 # pylint: disable=line-too-long
+            image = fits.getdata(img_fits_filename, 0)  # pylint: disable=no-member
+
+            # TODO: don't use image data to compute sig1 - so DECaLS gen won't load DES images
+            diffs = image[:-5:10, :-5:10] - image[5::10, 5::10]
+            mad = np.median(np.abs(diffs).ravel())
+            zpscale = DES.zpt_to_scale(hr["MAGZPT"])
+            sig1 = (1.4826 * mad / np.sqrt(2.0)) / zpscale
+
+            image_nelec = image.astype(np.float32) * flux_calibration
+            d.update({"image": image_nelec, "sig1": sig1})
+        return d
 
     def splinesky_level_for_band(self, brickname, ccdname, image_filename, image_shape):
         save_filename = DESDownloader.save_filename_from_image_filename(image_filename)
