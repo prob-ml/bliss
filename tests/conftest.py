@@ -1,4 +1,6 @@
 # pylint: skip-file
+import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -45,6 +47,27 @@ def cfg(pytestconfig, cached_data_path, output_path):
     with initialize(config_path=".", version_base=None):
         the_cfg = compose("testing_config", overrides=overrides)
     return the_cfg
+
+
+@pytest.fixture(scope="session")
+def decals_setup_teardown(cfg):
+    # replace if needed
+    original_ccds_annotated_path = cfg.paths.decals + "/ccds-annotated-decam-dr9.fits"
+    temp_ccds_annotated_path = cfg.paths.decals + "/ccds-annotated-decam-dr9-large.fits"
+    large_file_existed = os.path.exists(original_ccds_annotated_path)
+    if large_file_existed:
+        shutil.move(original_ccds_annotated_path, temp_ccds_annotated_path)
+    shutil.copyfile(
+        cfg.paths.data + "/tests/decals/ccds-annotated-decam-dr9-small.fits",
+        original_ccds_annotated_path,
+    )
+
+    yield
+
+    # restore
+    os.remove(original_ccds_annotated_path)
+    if large_file_existed:
+        shutil.move(temp_ccds_annotated_path, original_ccds_annotated_path)
 
 
 @pytest.fixture(scope="session")
