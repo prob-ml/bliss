@@ -489,7 +489,9 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
                 band_params = [0.0 for _ in range(len(DECaLS_PSF.PARAM_NAMES))]
                 for i, param in enumerate(DECaLS_PSF.PARAM_NAMES):
                     vals = brick_fwhms[b] if param == "psf_fwhm" else ccds_psf_band[param]
-                    band_params[i] = np.mean(vals) if not np.any(ma.getmask(vals)) else np.nan
+                    vals = ma.masked_invalid(vals).compressed()  # get rid of nans in vals
+                    vals = vals if len(vals) > 0 else [0.0]  # noqa: WPS507
+                    band_params[i] = np.clip(np.mean(vals), 1e-30, None)
                 psf_params[b] = torch.tensor(np.array(band_params))
 
         return psf_params
