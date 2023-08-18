@@ -101,7 +101,7 @@ def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
 
 
 def predict(cfg):
-    survey = instantiate(cfg.predict.dataset)
+    survey = instantiate(cfg.predict.dataset, load_image_data=True)
 
     # below collections indexed by image_id
     images_for_frame = {}
@@ -279,8 +279,8 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
         decals_plocs = TractorFullCatalog.from_file(
             tractor_filename,
             wcs=decals[0]["wcs"][cfg.simulator.prior.reference_band],
-            height=decals[0]["image"].shape[1],
-            width=decals[0]["image"].shape[2],
+            height=decals[0]["background"].shape[1],
+            width=decals[0]["background"].shape[2],
         ).plocs[0]
         decals_plocs = np.array(crop_plocs(cfg, w, h, decals_plocs, do_crop).cpu())
 
@@ -293,8 +293,8 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
         sdss_plocs = PhotoFullCatalog.from_file(
             photocat_filename,
             wcs=sdss[0]["wcs"][cfg.simulator.prior.reference_band],
-            height=sdss[0]["image"].shape[1],
-            width=sdss[0]["image"].shape[2],
+            height=sdss[0]["background"].shape[1],
+            width=sdss[0]["background"].shape[2],
         ).plocs[0]
         sdss_plocs = np.array(crop_plocs(cfg, w, h, sdss_plocs, do_crop).cpu())
     return TabPanel(
