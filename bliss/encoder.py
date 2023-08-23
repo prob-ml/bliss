@@ -338,6 +338,23 @@ class Encoder(pl.LightningModule):
         return loss_with_components
 
     def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
+        do_data_augmentation = self.data_augmentation.get("do_data_augmentation")
+        data_augmentation_start = self.current_epoch >= self.data_augmentation.get("epoch_start")
+
+        if data_augmentation_start and (logging_name == "train") and do_data_augmentation:
+            deconv_image = None
+            if self.input_transform_params.get("use_deconv_channel"):
+                assert (
+                    "deconvolution" in batch
+                ), "use_deconv_channel specified but deconvolution not present in data"
+                deconv_image = batch["deconvolution"]
+
+            image, tile, deconv = augment_data(batch["tile_catalog"], batch["images"], deconv_image)
+            batch["images"] = image
+            batch["tile_catalog"] = tile
+            if self.input_transform_params.get("use_deconv_channel"):
+                batch["deconvolution"] = deconv
+
         batch_size = batch["images"].size(0)
         pred = self.encode_batch(batch)
         true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
