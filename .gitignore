@@ -28,6 +28,8 @@ data/sdss/rcf_list
 data/sdss_all
 data/dc2/lsstdesc-public
 data/dc2/calibrated_exposures
+data/dc2/coadd_deconv_image
+data/dc2/merged_catalog
 case_studies/sdss_galaxies/models/simulated_blended_galaxies.pt
 case_studies/*/data/
 venv

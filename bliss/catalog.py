@@ -488,6 +488,10 @@ class FullCatalog(UserDict):
         for ii in range(self.batch_size):
             n_sources = int(self.n_sources[ii].item())
             for idx, coords in enumerate(tile_coords[ii][:n_sources]):
+                if coords[0] >= tile_n_sources.shape[1] or coords[1] >= tile_n_sources.shape[2]:
+                    continue
+                # ignore sources outside of the image (usually caused by data augmentation - shift)
+
                 source_idx = tile_n_sources[ii, coords[0], coords[1]].item()
                 if source_idx >= max_sources_per_tile:
                     if not ignore_extra_sources:
