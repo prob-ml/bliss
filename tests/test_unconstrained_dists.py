@@ -43,3 +43,10 @@ class TestUnconstrainedDists:
         assert torch.allclose(tdmn.cdf(torch.zeros_like(mu)), torch.zeros(32))
         assert torch.allclose(tdmn.cdf(torch.ones_like(mu)), torch.ones(32))
         assert torch.all((tdmn.cdf(mu) >= 0).bool() & (tdmn.cdf(mu) <= 1).bool())
+
+    def test_tdbn_sample(self):
+        mu = torch.ones(32, 2) * 0.6
+        sigma = torch.ones(32, 2) * 1e-3
+        tdmn = TruncatedDiagonalMVN(mu, sigma)
+        samples = tdmn.sample((10,))
+        assert torch.allclose(samples.mean(dim=0), tdmn.mean, atol=0.01)

@@ -325,7 +325,25 @@ def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float):
 
 
 def region_for_tile_source(loc, pos, n_rows, n_cols, threshold):
-    """Determine which region index a tile-based location should be placed in."""
+    """Determine which region index a tile-based location should be placed in in a RegionCatalog.
+
+    The starting location for a source is always the interior of a corresponding tile. Then based on
+    the location, we decide if the source actually falls in a boundary or corner region.
+
+    For example, if a source in tile (1, 1) has location (0.5, 0.99), we start by assigning it
+    region (2, 2), which is the interior of tile (1, 1). Then we check the location and see
+    it's past the right edge of (2, 2), so we move it to boundary region (2, 3) instead.
+
+    Args:
+        loc: The (y, x) coordinates of the location in the unpadded tile
+        pos: The (i, j) indices of the row and column of the tile the source was originally in
+        n_rows: Number of rows in the tile catalog
+        n_cols: Number of columns in the tile catalog
+        threshold: The fractional threshold on either side of the tile
+
+    Returns:
+        Tuple: The (i, j) index of the row and column to place the source in the RegionCatalog
+    """
     new_i, new_j = pos[0] * 2, pos[1] * 2
 
     if loc[0] < threshold[0] and new_i > 0:  # top edge
