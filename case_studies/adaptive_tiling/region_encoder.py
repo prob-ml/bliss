@@ -79,6 +79,64 @@ class RegionEncoder(Encoder):
 
         return locs
 
+    def suppress_tiles(self, d):
+        # suppress tiles at boundaries/corners based on priority vars
+        batch_size, nth, ntw = d["tile_is_on_array"].shape
+        threshold = (
+            self.overlap_slen / 2 / self.tile_slen,
+            1 - (self.overlap_slen / 2 / self.tile_slen),
+        )
+
+        locs = d["locs"]
+        n_rows, n_cols = nth * 2 - 1, ntw * 2 - 1
+        for b, i, j in itertools.product(range(batch_size), range(nth), range(ntw)):
+            if not d["tile_is_on_array"][b, i, j]:
+                continue
+
+            new_i, new_j = region_for_tile_source(locs[b, i, j], (i, j), n_rows, n_cols, threshold)
+            int_i, int_j = i * 2, j * 2  # indices of the interior region of tile (i, j)
+
+            # vertical boundary
+            if new_i == int_i and new_j != int_j:
+                j_left, j_right = (new_j - 1) // 2, (new_j + 1) // 2
+                if d["aux_var"][b, i, j_right] >= d["aux_var"][b, i, j_left]:
+                    d["tile_is_on_array"][b, i, j_left] = 0
+                else:
+                    d["tile_is_on_array"][b, i, j_right] = 0
+
+            # horizontal boundary
+            elif new_j == int_j and new_i != int_i:
+                i_above, i_below = (new_i - 1) // 2, (new_i + 1) // 2
+                if d["aux_var"][b, i_below, j] >= d["aux_var"][b, i_above, j]:
+                    d["tile_is_on_array"][b, i_above, j] = 0
+                else:
+                    d["tile_is_on_array"][b, i_below, j] = 0
+
+            # corner
+            elif new_i != int_i and new_j != int_j:
+                i_above, i_below = (new_i - 1) // 2, (new_i + 1) // 2
+                j_left, j_right = (new_j - 1) // 2, (new_j + 1) // 2
+                c_idx = (
+                    (b, b, b, b),
+                    (i_above, i_above, i_below, i_below),
+                    (j_left, j_right, j_left, j_right),
+                )
+                if d["aux_var"][b, i, j] == d["aux_var"][c_idx].max():
+                    d["tile_is_on_array"][c_idx] = 0  # turn off other tiles
+                    d["tile_is_on_array"][b, i, j] = 1
+                else:
+                    d["tile_is_on_array"][b, i, j] = 0
+
+        locs = self.convert_locs_padded_to_unpadded(locs.clone())
+        return {
+            "locs": rearrange(locs, "b ht wt d -> b ht wt 1 d"),
+            "star_fluxes": rearrange(d["star_fluxes"], "b ht wt d -> b ht wt 1 d"),
+            "n_sources": d["tile_is_on_array"],
+            "source_type": rearrange(d["source_type"], "b ht wt -> b ht wt 1 1"),
+            "galaxy_params": rearrange(d["galaxy_params"], "b ht wt d -> b ht wt 1 d"),
+            "galaxy_fluxes": rearrange(d["galaxy_fluxes"], "b ht wt d -> b ht wt 1 d"),
+        }
+
     def variational_mode(
         self, pred: Dict[str, Tensor], return_full: bool | None = True
     ) -> FullCatalog | TileCatalog:
@@ -93,19 +151,18 @@ class RegionEncoder(Encoder):
             Union[FullCatalog, TileCatalog]: Catalog based on predictions.
         """
         # Get point estimate of each distribution
-        tile_is_on_array = pred["on_prob"].mode
-        locs = pred["loc"].mode
-        aux_var = pred["aux_var"].probs[..., 1]
+        d = {}
+        d["tile_is_on_array"] = pred["on_prob"].mode
+        d["locs"] = pred["loc"].mode
+        d["aux_var"] = pred["aux_var"].probs[..., 1]
 
-        star_fluxes = torch.stack(
-            [pred[name].mode * tile_is_on_array for name in self.STAR_FLUX_NAMES], dim=3
-        )
-        galaxy_fluxes = torch.stack(
-            [pred[name].mode * tile_is_on_array for name in self.GAL_FLUX_NAMES], dim=3
-        )
+        star_fluxes = [pred[name].mode * d["tile_is_on_array"] for name in self.STAR_FLUX_NAMES]
+        d["star_fluxes"] = torch.stack(star_fluxes, dim=3)
+        galaxy_fluxes = [pred[name].mode * d["tile_is_on_array"] for name in self.GAL_FLUX_NAMES]
+        d["galaxy_fluxes"] = torch.stack(galaxy_fluxes, dim=3)
 
         galaxy_bools = pred["galaxy_prob"].mode
-        source_type = SourceType.STAR * (1 - galaxy_bools) + SourceType.GALAXY * galaxy_bools
+        d["source_type"] = SourceType.STAR * (1 - galaxy_bools) + SourceType.GALAXY * galaxy_bools
 
         galsim_dists = [pred[f"galsim_{name}"] for name in self.GALSIM_NAMES]
         galsim_param_lst = []
@@ -113,61 +170,33 @@ class RegionEncoder(Encoder):
             # use median for transformed distributions since mode isn't implemented
             est = d.icdf(torch.tensor(0.5)) if isinstance(d, TransformedDistribution) else d.mode
             galsim_param_lst.append(est)
-        galaxy_params = torch.stack(galsim_param_lst, dim=3)
+        d["galaxy_params"] = torch.stack(galsim_param_lst, dim=3)
 
-        # suppress tiles at boundaries/corners based on priority vars
-        batch_size, nth, ntw = tile_is_on_array.shape
-        threshold = (
-            self.overlap_slen / 2 / self.tile_slen,
-            1 - (self.overlap_slen / 2 / self.tile_slen),
-        )
-
-        n_rows, n_cols = nth * 2 - 1, ntw * 2 - 1
-        for b, i, j in itertools.product(range(batch_size), range(nth), range(ntw)):
-            if not tile_is_on_array[b, i, j]:
-                continue
-
-            new_i, new_j = region_for_tile_source(locs[b, i, j], (i, j), n_rows, n_cols, threshold)
-            int_i, int_j = i * 2, j * 2  # indices of the interior region of tile (i, j)
-
-            # vertical boundary
-            if new_i == int_i and new_j != int_j:
-                j_left, j_right = (new_j - 1) // 2, (new_j + 1) // 2
-                jj = j_left if aux_var[b, i, j_right] >= aux_var[b, i, j_left] else j_right
-                tile_is_on_array[b, i, jj] = 0
-
-            # horizontal boundary
-            elif new_j == int_j and new_i != int_i:
-                i_above, i_below = (new_i - 1) // 2, (new_i + 1) // 2
-                ii = i_above if aux_var[b, i_below, j] >= aux_var[b, i_above, j] else i_below
-                tile_is_on_array[b, ii, j] = 0
-
-            # corner
-            elif new_i != int_i and new_j != int_j:
-                i_above, i_below = (new_i - 1) // 2, (new_i + 1) // 2
-                j_left, j_right = (new_j - 1) // 2, (new_j + 1) // 2
-                c_idx = (
-                    (b, b, b, b),
-                    (i_above, i_above, i_below, i_below),
-                    (j_left, j_right, j_left, j_right),
-                )
-                if aux_var[b, i, j] == aux_var[c_idx].max():
-                    tile_is_on_array[c_idx] = 0  # turn off other tiles
-                    tile_is_on_array[b, i, j] = 1
-                else:
-                    tile_is_on_array[b, i, j] = 0
-
-        locs = self.convert_locs_padded_to_unpadded(locs.clone())
-        est_catalog_dict = {
-            "locs": rearrange(locs, "b ht wt d -> b ht wt 1 d"),
-            "star_fluxes": rearrange(star_fluxes, "b ht wt d -> b ht wt 1 d"),
-            "n_sources": tile_is_on_array,
-            "source_type": rearrange(source_type, "b ht wt -> b ht wt 1 1"),
-            "galaxy_params": rearrange(galaxy_params, "b ht wt d -> b ht wt 1 d"),
-            "galaxy_fluxes": rearrange(galaxy_fluxes, "b ht wt d -> b ht wt 1 d"),
-        }
+        est_catalog_dict = self.suppress_tiles(d)
         est_cat = TileCatalog(self.tile_slen, est_catalog_dict)
         return est_cat.to_full_params() if return_full else est_cat
+
+    def sample(self, pred):
+        # Sample point estimate of each distribution
+        d = {}
+        d["tile_is_on_array"] = pred["on_prob"].sample()
+        d["locs"] = pred["loc"].sample()[0]
+        d["aux_var"] = pred["aux_var"].probs[..., 1]  # TODO: actually sample these properly
+
+        star_fluxes = [pred[name].sample() * d["tile_is_on_array"] for name in self.STAR_FLUX_NAMES]
+        d["star_fluxes"] = torch.stack(star_fluxes, dim=3)
+        gal_fluxes = [pred[name].sample() * d["tile_is_on_array"] for name in self.GAL_FLUX_NAMES]
+        d["galaxy_fluxes"] = torch.stack(gal_fluxes, dim=3)
+
+        galaxy_bools = pred["galaxy_prob"].sample()
+        d["source_type"] = SourceType.STAR * (1 - galaxy_bools) + SourceType.GALAXY * galaxy_bools
+
+        galsim_dists = [pred[f"galsim_{name}"] for name in self.GALSIM_NAMES]
+        galsim_param_lst = [d.sample() for d in galsim_dists]
+        d["galaxy_params"] = torch.stack(galsim_param_lst, dim=3)
+
+        est_catalog_dict = self.suppress_tiles(d)
+        return TileCatalog(self.tile_slen, est_catalog_dict)
 
     # endregion
 
