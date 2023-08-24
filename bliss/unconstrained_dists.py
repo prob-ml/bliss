@@ -48,8 +48,18 @@ class TruncatedDiagonalMVN(Distribution):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.base_dist.base_dist})"
 
-    def sample(self, sample_shape=(1,), **args):
-        """Generate sample using rejection sampling."""
+    def sample(self, sample_shape=(1,)):
+        """Generate sample using rejection sampling.
+
+        This isn't very efficient, but it's good enough for sampling one catalog at a time. A more
+        efficient method could be to use inverse cdf sampling on each dimension independently.
+
+        Args:
+            sample_shape (Tuple): Shape of samples to draw
+
+        Returns:
+            Tensor: (sample_shape, self.batch_shape, self.event_shape) shaped sample
+        """
         q = Independent(Normal(self.base_dist.mean, self.base_dist.stddev), 1)
         samples = q.sample(sample_shape)
         valid = (samples.min(dim=-1)[0] >= 0) & (samples.max(dim=-1)[0] < 1)
@@ -72,12 +82,14 @@ class TruncatedDiagonalMVN(Distribution):
         mu = self.base_dist.mean
         offset = self.base_dist.log_prob(self.a).exp() - self.base_dist.log_prob(self.b).exp()
         offset /= self.log_prob_in_unit_box.exp()
-        return mu + offset.unsqueeze(-1)
+        return mu + (offset.unsqueeze(-1) * self.base_dist.stddev)
 
     @property
     def stddev(self):
-        # TODO: add offset term https://en.wikipedia.org/wiki/Truncated_normal_distribution
-        return self.base_dist.stddev
+        # See https://arxiv.org/pdf/1206.5387.pdf for the formula for the variance of a truncated
+        # multivariate normal. The covariance terms simplify since our dimensions are independent,
+        # but it's still tricky to compute.
+        raise NotImplementedError("Standard deviation for truncated normal is not implemented yet")
 
     @property
     def mode(self):
@@ -107,7 +119,7 @@ class UnconstrainedTDBN:
 
     def get_dist(self, params):
         mu = params[:, :, :, :2].sigmoid()
-        sigma = params[:, :, :, 2:].clamp(-10, 3).exp().sqrt()
+        sigma = params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
         return TruncatedDiagonalMVN(mu, sigma)
 
 
