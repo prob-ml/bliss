@@ -188,8 +188,8 @@ class TestDecalsCatalog:
         decals_cat = TractorFullCatalog.from_file(
             cat_path=sample_file,
             wcs=decals[0]["wcs"][DECaLS.BANDS.index("r")],
-            height=decals[0]["image"].shape[1],
-            width=decals[0]["image"].shape[2],
+            height=decals[0]["background"].shape[1],
+            width=decals[0]["background"].shape[2],
         )
 
         ras = decals_cat["ra"].numpy()

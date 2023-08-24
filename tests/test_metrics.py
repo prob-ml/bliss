@@ -14,7 +14,7 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 class TestMetrics:
     def _get_sdss_data(self, cfg):
         """Loads SDSS frame and Photo Catalog."""
-        sdss = instantiate(cfg.surveys.sdss)
+        sdss = instantiate(cfg.surveys.sdss, load_image_data=True)
 
         run, camcol, field = sdss.image_id(0)
         photo_cat = PhotoFullCatalog.from_file(
