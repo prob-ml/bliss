@@ -83,7 +83,7 @@ class TruncatedDiagonalMVN(Distribution):
     def mode(self):
         # a mode still exists if this assertion is false, but I haven't implemented code
         # to compute it because I don't think we need it
-        assert (self.mean >= 0).all() and (self.mean <= 1).all()
+        assert (self.base_dist.mean >= 0).all() and (self.base_dist.mean <= 1).all()
         return self.base_dist.mode
 
     def log_prob(self, value):
@@ -107,7 +107,7 @@ class UnconstrainedTDBN:
 
     def get_dist(self, params):
         mu = params[:, :, :, :2].sigmoid()
-        sigma = params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
+        sigma = params[:, :, :, 2:].clamp(-10, 3).exp().sqrt()
         return TruncatedDiagonalMVN(mu, sigma)
 
 
