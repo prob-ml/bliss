@@ -50,7 +50,7 @@ class TestDC2:
         train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]
         train_dc2_cfg.training.data_source = train_dc2_cfg.surveys.dc2
         train_dc2_cfg.encoder.input_transform_params.use_deconv_channel = True
-        train_dc2_cfg.encoder.data_augmentation.epoch_start = 0
+        train_dc2_cfg.encoder.do_data_augmentation = True
         train_dc2_cfg.training.pretrained_weights = None
         train(train_dc2_cfg)
 
@@ -80,20 +80,24 @@ class TestDC2:
         origin_tile = TileCatalog(4, tile_dict)
         origin_full = origin_tile.to_full_params()
 
-        image = rearrange(dc2_obj["images"], "b h w -> 1 b h w")
-        deconv_image = rearrange(dc2_obj["deconvolution"], "b h w -> 1 b h w")
+        imgs = rearrange(dc2_obj["images"], "b h w -> 1 b 1 h w")
+        bgs = rearrange(dc2_obj["background"], "b h w -> 1 b 1 h w")
+        deconv_image = rearrange(dc2_obj["deconvolution"], "b h w -> 1 b 1 h w")
+
+        aug_input_images = [imgs, bgs, deconv_image]
+        aug_input_images = torch.cat(aug_input_images, dim=2)
 
         aug_list = [
             data_augmentation.aug_vflip,
-            data_augmentation.aug_hflip,
             data_augmentation.aug_rotate90,
             data_augmentation.aug_rotate180,
             data_augmentation.aug_rotate270,
             data_augmentation.aug_shift,
         ]
 
-        for i in aug_list:
-            aug_image, aug_tile, aug_deconv = i(origin_full, image, deconv_image)
-            assert aug_image.shape == image.shape
-            assert aug_deconv.shape == deconv_image.shape
-            assert aug_tile["n_sources"].sum() <= origin_full.n_sources
+        for aug_method in aug_list:
+            aug_image, aug_full = aug_method(origin_full, aug_input_images)
+            assert aug_image[0, :, 0, :, :].shape == dc2_obj["images"].shape
+            assert aug_image[0, :, 1, :, :].shape == dc2_obj["background"].shape
+            assert aug_image[0, :, 2, :, :].shape == dc2_obj["deconvolution"].shape
+            assert aug_full["n_sources"] <= origin_full.n_sources

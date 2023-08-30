@@ -84,9 +84,7 @@ encoder:
         concat_psf_params: false
         log_transform: false
         rolling_z_score: true
-    data_augmentation:
-        do_data_augmentation: true
-        epoch_start: 1
+    do_data_augmentation: false
     architecture:
         # this architecture is based on yolov5l.yaml, see
         # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
