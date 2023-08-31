@@ -1,6 +1,6 @@
 import random
 
-import torch
+from einops import rearrange
 from torchvision.transforms import functional as TF
 
 from bliss.catalog import TileCatalog
@@ -34,13 +34,7 @@ def aug_vflip(origin_full, image):
 
 
 def aug_rotate90(origin_full, image):
-    num_channel = image.size(2)
-    aug_images = []
-    for i in range(num_channel):
-        rotated_slice = TF.rotate(image[:, :, i, :, :], 90)
-        aug_images.append(rotated_slice)
-    aug_image = torch.stack(aug_images, dim=2)
-
+    aug_image = rotate_images(image, 90)
     image_size = image.size(3)
     plocs = origin_full["plocs"].clone()
     origin_full["plocs"][:, :, 1] = plocs[:, :, 0]
@@ -49,13 +43,7 @@ def aug_rotate90(origin_full, image):
 
 
 def aug_rotate180(origin_full, image):
-    num_channel = image.size(2)
-    aug_images = []
-    for i in range(num_channel):
-        rotated_slice = TF.rotate(image[:, :, i, :, :], 180)
-        aug_images.append(rotated_slice)
-    aug_image = torch.stack(aug_images, dim=2)
-
+    aug_image = rotate_images(image, 180)
     image_size = image.size(3)
     plocs = origin_full["plocs"].clone()
     origin_full["plocs"][:, :, 1] = image_size - plocs[:, :, 1] - 1
@@ -64,18 +52,19 @@ def aug_rotate180(origin_full, image):
 
 
 def aug_rotate270(origin_full, image):
-    num_channel = image.size(2)
-    aug_images = []
-    for i in range(num_channel):
-        rotated_slice = TF.rotate(image[:, :, i, :, :], 270)
-        aug_images.append(rotated_slice)
-    aug_image = torch.stack(aug_images, dim=2)
-
+    aug_image = rotate_images(image, 270)
     image_size = image.size(3)
     plocs = origin_full["plocs"].clone()
     origin_full["plocs"][:, :, 1] = image_size - plocs[:, :, 0] - 1
     origin_full["plocs"][:, :, 0] = plocs[:, :, 1]
     return aug_image, origin_full
+
+
+def rotate_images(image, degree):
+    num_batch = image.size(0)
+    combined_image = rearrange(image, "bt bd ch h w -> (bt bd) ch h w")
+    rotated_image = TF.rotate(combined_image, degree)
+    return rearrange(rotated_image, "(bt bd) ch h w -> bt bd ch h w", bt=num_batch)
 
 
 def aug_shift(origin_full, image):
@@ -84,15 +73,14 @@ def aug_shift(origin_full, image):
     image_size = image.size(3)
     image_lim = [2 - shift_x, 2 - shift_x + image_size, 2 - shift_y, 2 - shift_y + image_size]
 
-    num_channel = image.size(2)
-    aug_images = []
-    for i in range(num_channel):
-        pad_slice = TF.pad(image[:, :, i, :, :], (2, 2), padding_mode="reflect")
-        aug_images.append(pad_slice[:, :, image_lim[0] : image_lim[1], image_lim[2] : image_lim[3]])
-    aug_image = torch.stack(aug_images, dim=2)
+    num_batch = image.size(0)
+    combined_image = rearrange(image, "bt bd ch h w -> (bt bd) ch h w")
+    pad_combined_image = TF.pad(combined_image, (2, 2), padding_mode="reflect")
+    pad_image = rearrange(pad_combined_image, "(bt bd) ch h w -> bt bd ch h w", bt=num_batch)
+    aug_image = pad_image[:, :, :, image_lim[0] : image_lim[1], image_lim[2] : image_lim[3]]
 
     plocs = origin_full["plocs"].clone()
-    origin_full["plocs"][:, :, 1] = plocs[:, :, 1] + shift_x
-    origin_full["plocs"][:, :, 0] = plocs[:, :, 0] + shift_y
+    origin_full["plocs"][:, :, 1] = plocs[:, :, 1] + shift_y
+    origin_full["plocs"][:, :, 0] = plocs[:, :, 0] + shift_x
 
     return aug_image, origin_full
