@@ -337,27 +337,7 @@ class Encoder(pl.LightningModule):
 
         return loss_with_components
 
-    def _generic_step(
-        self, batch, logging_name, do_data_augmentation=False, log_metrics=False, plot_images=False
-    ):
-        if do_data_augmentation:
-            imgs = batch["images"][:, self.bands].unsqueeze(2)  # add extra dim for 5d input
-            bgs = batch["background"][:, self.bands].unsqueeze(2)
-            aug_input_images = [imgs, bgs]
-            if self.input_transform_params.get("use_deconv_channel"):
-                assert (
-                    "deconvolution" in batch
-                ), "use_deconv_channel specified but deconvolution not present in data"
-                aug_input_images.append(batch["background"][:, self.bands].unsqueeze(2))
-            aug_input_image = torch.cat(aug_input_images, dim=2)
-
-            aug_output_image, tile = augment_data(batch["tile_catalog"], aug_input_image)
-            batch["images"] = aug_output_image[:, :, 0, :, :]
-            batch["background"] = aug_output_image[:, :, 1, :, :]
-            batch["tile_catalog"] = tile
-            if self.input_transform_params.get("use_deconv_channel"):
-                batch["deconvolution"] = aug_output_image[:, :, 2, :, :]
-
+    def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
         batch_size = batch["images"].size(0)
         pred = self.encode_batch(batch)
         true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
