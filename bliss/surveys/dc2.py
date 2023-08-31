@@ -17,7 +17,9 @@ from bliss.surveys.survey import Survey
 class DC2(Survey):
     BANDS = ("g", "i", "r", "u", "y", "z")
 
-    def __init__(self, data_dir, cat_path, batch_size, n_split, image_lim):
+    def __init__(
+        self, data_dir, cat_path, batch_size, n_split, image_lim, use_deconv_channel, deconv_path
+    ):
         super().__init__()
         self.data_dir = data_dir
         self.cat_path = cat_path
@@ -30,6 +32,8 @@ class DC2(Survey):
         self.test = []
         self.n_split = n_split
         self.image_lim = image_lim
+        self.use_deconv_channel = use_deconv_channel
+        self.deconv_path = deconv_path
 
         self._predict_batch = None
 
@@ -49,8 +53,8 @@ class DC2(Survey):
         return [self.dc2_data[i]["images"] for i in range(len(self))]
 
     def prepare_data(self):
-        img_pattern = "3828/*/calexp*.fits"
-        bg_pattern = "3828/*/bkgd*.fits"
+        img_pattern = "**/*/calexp*.fits"
+        bg_pattern = "**/*/bkgd*.fits"
         image_files = []
         bg_files = []
 
@@ -75,8 +79,10 @@ class DC2(Survey):
             plocs_lim = image[0].shape
             height = plocs_lim[0]
             width = plocs_lim[1]
-            full_cat = Dc2FullCatalog.from_file(self.cat_path, wcs, height, width, self.bands)
-            tile_cat = full_cat.to_tile_params(4, 1, 1)
+            full_cat, psf_params = Dc2FullCatalog.from_file(
+                self.cat_path, wcs, height, width, self.bands
+            )
+            tile_cat = full_cat.to_tile_params(4, 5).get_brightest_source_per_tile()
             tile_dict = tile_cat.to_dict()
 
             tile_dict["locs"] = rearrange(tile_cat.to_dict()["locs"], "1 h w nh nw -> h w nh nw")
@@ -105,14 +111,9 @@ class DC2(Survey):
             # split image
             split_lim = self.image_lim[0] // self.n_split
             image = torch.from_numpy(image)
-            split1_image = torch.stack(torch.split(image, split_lim, dim=1))
-            split2_image = torch.stack(torch.split(split1_image, split_lim, dim=3))
-            split_image = list(torch.split(split2_image.flatten(0, 2), 6))
-
+            split_image = split_full_image(image, split_lim)
             bg = torch.from_numpy(bg)
-            split1_bg = torch.stack(torch.split(bg, split_lim, dim=1))
-            split2_bg = torch.stack(torch.split(split1_bg, split_lim, dim=3))
-            split_bg = list(torch.split(split2_bg.flatten(0, 2), 6))
+            split_bg = split_full_image(bg, split_lim)
 
             tile_split = {}
             param_list = [
@@ -133,7 +134,13 @@ class DC2(Survey):
                 "tile_catalog": [dict(zip(tile_split, i)) for i in zip(*tile_split.values())],
                 "images": split_image,
                 "background": split_bg,
+                "psf_params": [psf_params for _ in range(self.n_split**2)],
             }
+
+            if self.use_deconv_channel:
+                file_path = self.deconv_path + "/" + str(image_files[0][n])[-15:-5] + ".pt"
+                deconv_images = torch.load(file_path)
+                data_split["deconvolution"] = split_full_image(deconv_images, split_lim)
 
             data.extend([dict(zip(data_split, i)) for i in zip(*data_split.values())])
 
@@ -188,9 +195,7 @@ class Dc2FullCatalog(FullCatalog):
         dec = torch.tensor(catalog["dec"].values)
         galaxy_bools = torch.tensor((catalog["truth_type"] == 1).values)
         star_bools = torch.tensor((catalog["truth_type"] == 2).values)
-        flux_list = []
-        for b in band:
-            flux_list.append(torch.tensor((catalog["flux_" + b]).values))
+        flux_list, psf_params = get_band(band, catalog)
 
         flux = torch.stack(flux_list).t()
 
@@ -265,7 +270,7 @@ class Dc2FullCatalog(FullCatalog):
             "star_log_fluxes": star_log_fluxes.reshape(1, nobj, 6),
         }
 
-        return cls(height, width, d)
+        return cls(height, width, d), torch.stack(psf_params)
 
 
 def read_frame_for_band(image_files, bg_files, n, n_bands, image_lim):
@@ -292,3 +297,24 @@ def read_frame_for_band(image_files, bg_files, n, n_bands, image_lim):
         bg_list.append(bg)
 
     return image_list, bg_list, wcs
+
+
+def split_full_image(image, split_lim):
+    split1_image = torch.stack(torch.split(image, split_lim, dim=1))
+    split2_image = torch.stack(torch.split(split1_image, split_lim, dim=3))
+    return list(torch.split(split2_image.flatten(0, 2), 6))
+
+
+def get_band(band, catalog):
+    flux_list = []
+    psf_params = []
+    for b in band:
+        flux_list.append(torch.tensor((catalog["flux_" + b]).values))
+        psf_params_name = ["IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_"]
+        psf_params_band = []
+        for i in psf_params_name:
+            median_psf = np.nanmedian((catalog[i + b]).values).astype(np.float32)
+            psf_params_band.append(torch.tensor(median_psf))
+        psf_params.append(torch.stack(psf_params_band).t())
+
+    return flux_list, psf_params

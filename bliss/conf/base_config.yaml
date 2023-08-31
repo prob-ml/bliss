@@ -84,6 +84,7 @@ encoder:
         concat_psf_params: false
         log_transform: false
         rolling_z_score: true
+    do_data_augmentation: false
     architecture:
         # this architecture is based on yolov5l.yaml, see
         # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
@@ -227,7 +228,9 @@ surveys:
     dc2:
         _target_: bliss.surveys.dc2.DC2
         data_dir: /nfs/turbo/lsa-regier/lsstdesc-public/dc2/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
-        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_622.pkl
-        batch_size: 128
+        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100.pkl
+        batch_size: 64
         n_split: 50
         image_lim: [4000, 4000]
+        use_deconv_channel: ${encoder.input_transform_params.use_deconv_channel}
+        deconv_path: ${paths.dc2}/coadd_deconv_image
