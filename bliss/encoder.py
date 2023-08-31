@@ -15,6 +15,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.backbone import Backbone
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
+from bliss.data_augmentation import augment_data
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
 from bliss.transforms import log_transform, rolling_z_score
@@ -48,6 +49,7 @@ class Encoder(pl.LightningModule):
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
         input_transform_params: Optional[dict] = None,
+        do_data_augmentation: bool = False,
     ):
         """Initializes DetectionEncoder.
 
@@ -63,6 +65,7 @@ class Encoder(pl.LightningModule):
             scheduler_params: arguments passed to the learning rate scheduler
             input_transform_params: used for determining what channels to use as input (e.g.
                 deconvolution, concatenate PSF parameters, z-score inputs, etc.)
+            do_data_augmentation: used for determining whether or not do data augmentation
         """
         super().__init__()
         self.save_hyperparameters()
@@ -77,6 +80,7 @@ class Encoder(pl.LightningModule):
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.input_transform_params = input_transform_params
+        self.do_data_augmentation = do_data_augmentation
 
         transform_enabled = (
             "log_transform" in self.input_transform_params
@@ -385,6 +389,24 @@ class Encoder(pl.LightningModule):
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
+        if self.do_data_augmentation:
+            imgs = batch["images"][:, self.bands].unsqueeze(2)  # add extra dim for 5d input
+            bgs = batch["background"][:, self.bands].unsqueeze(2)
+            aug_input_images = [imgs, bgs]
+            if self.input_transform_params.get("use_deconv_channel"):
+                assert (
+                    "deconvolution" in batch
+                ), "use_deconv_channel specified but deconvolution not present in data"
+                aug_input_images.append(batch["background"][:, self.bands].unsqueeze(2))
+            aug_input_image = torch.cat(aug_input_images, dim=2)
+
+            aug_output_image, tile = augment_data(batch["tile_catalog"], aug_input_image)
+            batch["images"] = aug_output_image[:, :, 0, :, :]
+            batch["background"] = aug_output_image[:, :, 1, :, :]
+            batch["tile_catalog"] = tile
+            if self.input_transform_params.get("use_deconv_channel"):
+                batch["deconvolution"] = aug_output_image[:, :, 2, :, :]
+
         return self._generic_step(batch, "train")
 
     def validation_step(self, batch, batch_idx):
