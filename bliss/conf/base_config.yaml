@@ -85,6 +85,7 @@ encoder:
         log_transform: false
         rolling_z_score: true
     do_data_augmentation: false
+    compile_model: false  # if true, compile model for potential performance
     architecture:
         # this architecture is based on yolov5l.yaml, see
         # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
