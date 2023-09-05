@@ -174,7 +174,9 @@ class TestBasicTileAndFullCatalogs:
 
 
 class TestDecalsCatalog:
-    def test_load_decals_from_file(self, cfg):
+    def test_load_decals_from_file(self, cfg, monkeypatch):
+        monkeypatch.setattr("bliss.surveys.decals.DECaLS_PSF.__init__", lambda *_args: None)
+
         brickname = "3366m010"
         sample_file = (
             Path(cfg.paths.decals) / brickname[:3] / brickname / f"tractor-{brickname}.fits"
@@ -186,8 +188,8 @@ class TestDecalsCatalog:
         decals_cat = TractorFullCatalog.from_file(
             cat_path=sample_file,
             wcs=decals[0]["wcs"][DECaLS.BANDS.index("r")],
-            height=decals[0]["image"].shape[1],
-            width=decals[0]["image"].shape[2],
+            height=decals[0]["background"].shape[1],
+            width=decals[0]["background"].shape[2],
         )
 
         ras = decals_cat["ra"].numpy()

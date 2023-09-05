@@ -11,7 +11,7 @@ class TestSDSS:
         the_cfg.surveys.sdss.fields = [{"run": 3900, "camcol": 6, "fields": [269]}]
         sdss_obj = instantiate(the_cfg.surveys.sdss)
         an_obj = sdss_obj[0]
-        for k in ("image", "background", "gain", "nelec_per_physical_unit_list", "calibration"):
+        for k in ("background", "gain", "flux_calibration_list", "calibration"):
             assert isinstance(an_obj[k], np.ndarray)
 
         assert an_obj["field"] == 269
@@ -23,5 +23,6 @@ class TestSDSS:
         the_cfg.paths.root = str(tmpdir_factory.mktemp("root"))
         if cfg.surveys.sdss.dir_path != the_cfg.surveys.sdss.dir_path:
             copytree(cfg.surveys.sdss.dir_path, the_cfg.surveys.sdss.dir_path, dirs_exist_ok=True)
-        sdss_obj = instantiate(the_cfg.surveys.sdss)[0]
+        # Also tests images loaded
+        sdss_obj = instantiate(the_cfg.surveys.sdss, load_image_data=True)[0]
         assert sdss_obj["image"].shape == (5, 1489, 2048)

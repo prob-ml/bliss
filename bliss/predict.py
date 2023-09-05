@@ -59,23 +59,24 @@ def align(img, wcs_list, ref_band, ref_depth=0):
     coadd_depth, n_bands, h, w = img.shape
 
     # align with (`ref_depth`, `ref_band`) WCS
+    target_wcs = wcs_list[ref_depth][ref_band]
     for d in range(coadd_depth):
         for bnd in range(n_bands):
             inputs = (img[d, bnd], wcs_list[d][bnd])
-            reproj, footprint = reproject_interp(  # noqa: WPS317
-                inputs, wcs_list[ref_depth][ref_band], order="bicubic", shape_out=(h, w)
+            reproj, footprint = reproject_interp(
+                inputs, target_wcs, order="bicubic", shape_out=(h, w)
             )
             reproj_d[(d, bnd)] = reproj
             footprint_d[(d, bnd)] = footprint
 
     # use footprints to handle NaNs from reprojection
-    h, w = footprint_d[(0, 0)].shape
-    out_print = np.ones((h, w))
+    fp_h, fp_w = footprint_d[(0, 0)].shape
+    out_print = np.ones((fp_h, fp_w))
     for fp in footprint_d.values():
-        out_print = out_print * fp  # noqa: WPS350
+        out_print *= fp
 
     out_print = np.expand_dims(out_print, axis=(0, 1))
-    reproj_out = np.zeros((coadd_depth, n_bands, h, w))
+    reproj_out = np.zeros(img.shape)
     for d in range(coadd_depth):
         for bnd in range(n_bands):
             reproj_d[(d, bnd)] = np.multiply(reproj_d[(d, bnd)], out_print)
@@ -90,23 +91,17 @@ def align(img, wcs_list, ref_band, ref_depth=0):
 
 def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
     fluxes_suffix = "_fluxes"
-    # reshape nelec_per_nmgy_per_band to (1, {n_bands}) to broadcast
-    nelec_per_nmgy_per_band = nelec_per_nmgy_per_band.reshape(1, -1)
+    # reshape nelec_per_nmgy_per_band to (1, 1, 1, 1, {n_bands}) to broadcast
+    nelec_per_nmgy_per_band = torch.tensor(nelec_per_nmgy_per_band, device=est_cat.device)
+    nelec_per_nmgy_per_band = nelec_per_nmgy_per_band.view(1, 1, 1, 1, -1)
     for key in est_cat.keys():
         if key.endswith(fluxes_suffix):
-            est_cat[key] = torch.tensor(np.array(est_cat[key]) / nelec_per_nmgy_per_band)
-        elif key == "galaxy_params":
-            clone = est_cat[key].clone()
-            n_bands = nelec_per_nmgy_per_band.shape[1]
-            clone[..., :n_bands] = torch.tensor(
-                np.array(clone[..., :n_bands]) / nelec_per_nmgy_per_band
-            )
-            est_cat[key] = clone
+            est_cat[key] = est_cat[key] / nelec_per_nmgy_per_band
     return est_cat
 
 
 def predict(cfg):
-    survey = instantiate(cfg.predict.dataset)
+    survey = instantiate(cfg.predict.dataset, load_image_data=True)
 
     # below collections indexed by image_id
     images_for_frame = {}
@@ -155,7 +150,7 @@ def predict(cfg):
         est_cat, images, backgrounds, pred = trainer.predict(encoder, datamodule=survey)[0].values()
 
         # mean of the nelec_per_mgy per band
-        nelec_per_nmgy_per_band = np.mean(survey_obj["nelec_per_physical_unit_list"], axis=1)
+        nelec_per_nmgy_per_band = np.mean(survey_obj["flux_calibration_list"], axis=1)
         est_cat = nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band)
         est_full = est_cat.to_full_params()
 
@@ -279,14 +274,13 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
         decals = instantiate(
             cfg.surveys.decals, bands=[DECaLS.BANDS.index("r")], sky_coords=[{"ra": ra, "dec": dec}]
         )
-
         brickname = DECaLS.brick_for_radec(ra, dec)
         tractor_filename = decals.downloader.download_catalog(brickname)
         decals_plocs = TractorFullCatalog.from_file(
             tractor_filename,
             wcs=decals[0]["wcs"][cfg.simulator.prior.reference_band],
-            height=decals[0]["image"].shape[1],
-            width=decals[0]["image"].shape[2],
+            height=decals[0]["background"].shape[1],
+            width=decals[0]["background"].shape[2],
         ).plocs[0]
         decals_plocs = np.array(crop_plocs(cfg, w, h, decals_plocs, do_crop).cpu())
 
@@ -299,8 +293,8 @@ def plot_image(cfg, ra, dec, img, w, h, est_plocs, survey_true_plocs, title):
         sdss_plocs = PhotoFullCatalog.from_file(
             photocat_filename,
             wcs=sdss[0]["wcs"][cfg.simulator.prior.reference_band],
-            height=sdss[0]["image"].shape[1],
-            width=sdss[0]["image"].shape[2],
+            height=sdss[0]["background"].shape[1],
+            width=sdss[0]["background"].shape[2],
         ).plocs[0]
         sdss_plocs = np.array(crop_plocs(cfg, w, h, sdss_plocs, do_crop).cpu())
     return TabPanel(

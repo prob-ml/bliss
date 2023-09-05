@@ -12,7 +12,6 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         super().__init__()
 
         self.bands = None
-        self.prior = None
         self.background = None
         self.psf = None
         self.flux_calibration_dict = None
@@ -62,8 +61,8 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
     def get_flux_calibrations(self):
         d = {}
         for i, image_id in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["nelec_per_physical_unit_list"]
-            avg_nelec_conv = np.mean(nelec_conv_for_frame, axis=1)
+            nelec_conv_for_frame = self[i]["flux_calibration_list"]
+            avg_nelec_conv = np.squeeze(np.mean(nelec_conv_for_frame, axis=1))
             d[image_id] = avg_nelec_conv
         return d
 

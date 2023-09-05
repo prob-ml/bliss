@@ -33,7 +33,7 @@ def bliss_client(cfg, tmpdir_factory):
 
 @pytest.mark.usefixtures("bliss_client")
 class TestApi:
-    """Basic tests for API functions like generate, train, and predict_sdss.
+    """Basic tests for API functions like generate, train, and predict.
 
     Note that these tests are mostly focused on interface and output directory structure, instead
     of the general behavior of those functions (which is tested in other files).
@@ -123,7 +123,9 @@ class TestApi:
     def test_predict_sdss_default_rcf(self, bliss_client, monkeypatch):
         monkeypatch.setattr(api, "_predict", mock_tests.mock_predict_sdss)
         # cached predict data copied to temp dir in mock_tests.mock_predict_sdss
-        cat, cat_table, pred_tables = bliss_client.predict_sdss("test_path")
+        cat, cat_table, pred_tables = bliss_client.predict(
+            survey="sdss", weight_save_path="test_path"
+        )
         assert isinstance(cat, FullCatalog)
         assert isinstance(cat_table, Table)
         assert all(isinstance(pred_table, Table) for pred_table in pred_tables.values())
@@ -194,8 +196,9 @@ class TestApi:
     def test_predict_decals_default_brick(self, bliss_client, monkeypatch):
         monkeypatch.setattr(api, "_predict", mock_tests.mock_predict_decals_bulk)
         # cached predict data copied to temp dir in mock_tests.mock_predict_sdss
-        cat, cat_table, pred_tables = bliss_client.predict_decals(
-            "test_path",
+        cat, cat_table, pred_tables = bliss_client.predict(
+            survey="decals",
+            weight_save_path="test_path",
             surveys={
                 "decals": {
                     "sky_coords": [
@@ -229,5 +232,5 @@ class TestApi:
             "galaxy_fluxes": torch.tensor([[[0.0, 0.0, 0.0, 0.0, 0.0]]]),
         }
         cat = FullCatalog(1, 1, d)
-        est_cat_table = api.fullcat_to_astropy_table(cat)
+        est_cat_table = api.fullcat_to_astropy_table(cat, ["u", "g", "r", "i", "z"])
         assert isinstance(est_cat_table, Table)

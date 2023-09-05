@@ -10,7 +10,8 @@ import torch
 from astropy.io import fits
 from astropy.table import Table
 from astropy.utils.data import download_file
-from astropy.wcs import WCS
+from astropy.wcs import WCS, FITSFixedWarning
+from numpy import ma
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
@@ -76,6 +77,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
             image_ids=tuple(des_image_ids),
             psf_config={"pixel_scale": 0.262, "psf_slen": 25},
             pixel_shift=pixel_shift,
+            load_image_data=True,  # TODO: make False once sig1 does not require image data
         )
         return cls.constituent_objs
 
@@ -109,10 +111,14 @@ class DarkEnergyCameraLegacySurvey(Survey):
         sky_coords=({"ra": 336.6643042496718, "dec": -0.9316385797930247},),
         bands=(0, 1, 2, 3),
         pixel_shift: int = 2,
+        load_image_data: bool = False,
     ):
         super().__init__()
 
         self.decals_path = Path(dir_path)
+
+        self.load_image_data = load_image_data
+
         self.bands = bands
         self.bricknames = [DECaLS.brick_for_radec(c["ra"], c["dec"]) for c in sky_coords]
         self.pixel_shift = pixel_shift
@@ -138,7 +144,8 @@ class DarkEnergyCameraLegacySurvey(Survey):
         self.flux_calibration_dict = self.get_flux_calibrations()
 
         self.catalog_cls = TractorFullCatalog
-        self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
+        if self.load_image_data:
+            self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
         self.downloader.download_images(self.bands)
@@ -184,17 +191,18 @@ class DarkEnergyCameraLegacySurvey(Survey):
         image_list[self.bands[0]] = first_present_bl_obj
 
         # band-indexing important for encoder's filtering in Encoder::get_input_tensor
-        img_shape = first_present_bl_obj["image"].shape
+        img_shape = first_present_bl_obj["background"].shape
         for b, bl in enumerate(self.BANDS):
             if bl != first_present_bl and b in self.bands:
                 image_list[b] = self.read_image_for_band(brickname, bl)
             elif bl != first_present_bl:
                 image_list[b] = {
-                    "image": np.zeros(img_shape, dtype=np.float32),
                     "background": np.random.rand(*img_shape).astype(np.float32),
                     "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
-                    "nelec_per_physical_unit_list": np.ones((1, 1, 1)),
+                    "flux_calibration_list": np.ones((1, 1, 1)),
                 }
+                if self.load_image_data:
+                    image_list[b].update({"image": np.zeros(img_shape).astype(np.float32)})
 
         ret = {}
         for k in image_list[0]:
@@ -207,24 +215,30 @@ class DarkEnergyCameraLegacySurvey(Survey):
         return ret
 
     def read_image_for_band(self, brickname, bl):
-        img_fits = fits.open(
+        img_fits_filename = (
             self.decals_path
             / brickname[:3]
             / brickname
             / f"legacysurvey-{brickname}-image-{bl}.fits"
         )
-        image = img_fits[1].data  # pylint: disable=no-member
-        hr = img_fits[1].header  # pylint: disable=no-member
-        wcs = WCS(hr)
+        hr = fits.getheader(img_fits_filename, 1)  # pylint: disable=no-member
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=FITSFixedWarning)
+            wcs = WCS(hr)
+        image_shape = (hr["NAXIS2"], hr["NAXIS1"])
 
-        return {
-            "image": image.astype(np.float32),
-            "background": np.full_like(
-                image, fill_value=hr[f"COSKY_{bl.upper()}"], dtype=np.float32
-            ),
+        flux_calibration = DES.GAIN * DES.EXPTIME
+        const_sky_nelec = hr[f"COSKY_{bl.upper()}"] * flux_calibration
+        d = {
+            "background": np.full(image_shape, fill_value=const_sky_nelec, dtype=np.float32),
             "wcs": wcs,
-            "nelec_per_physical_unit_list": np.array([[[DES.zpt_to_scale(hr["MAGZERO"])]]]),
+            "flux_calibration_list": np.array([[[flux_calibration]]]),
         }
+        if self.load_image_data:
+            image = fits.getdata(img_fits_filename, 1)  # pylint: disable=no-member
+            image_nelec = image.astype(np.float32) * flux_calibration
+            d.update({"image": image_nelec})
+        return d
 
     def single_exposure_ccds_for_bricks(self):
         ccds_table_for_brick = {}  # indexed by brickname
@@ -459,7 +473,7 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
         )
         assert Path(psf_fit_file).exists(), msg
 
-        ccds_annotated = Table.read(psf_fit_file)
+        ccds_annotated = Table.read(psf_fit_file)  # NOTE: runtime bottleneck, fits file is few GB
         brick_ccds_mask = np.isin(ccds_annotated["ccdname"], ccds_for_brick)
         psf_params = torch.zeros(len(DECaLS.BANDS), len(DECaLS_PSF.PARAM_NAMES))
         psf_cols = [
@@ -474,11 +488,10 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
                 ]
                 band_params = [0.0 for _ in range(len(DECaLS_PSF.PARAM_NAMES))]
                 for i, param in enumerate(DECaLS_PSF.PARAM_NAMES):
-                    band_params[i] = (
-                        np.mean(brick_fwhms[b])
-                        if param == "psf_fwhm"
-                        else np.mean(ccds_psf_band[param])
-                    )
+                    vals = brick_fwhms[b] if param == "psf_fwhm" else ccds_psf_band[param]
+                    vals = ma.masked_invalid(vals).compressed()  # get rid of nans in vals
+                    vals = vals if len(vals) > 0 else [0.0]  # noqa: WPS507
+                    band_params[i] = np.clip(np.mean(vals), 1e-30, None)
                 psf_params[b] = torch.tensor(np.array(band_params))
 
         return psf_params
@@ -521,7 +534,7 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
             )
 
     def _get_psf_coadded(self, brickname, brick_ccds, target_wcs_for_brick):
-        """Get co-added PSF images for each band in brick, using CCDS in `brick_ccds`.
+        """Get co-added PSF images for each band in brick, using CCDs in `brick_ccds`.
         cf. https://github.com/legacysurvey/legacypipe/blob/ba1ffd4969c1f920566e780118c542d103cbd9a5/py/legacypipe/coadds.py#L486-L519 # noqa: E501 # pylint: disable=line-too-long
 
         Args:
@@ -542,8 +555,7 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
                 ccd["filter"],
                 ccd["image_filename"].split(".fits.fz")[0],
             )
-            des_img = des_obj["image"]
-            _, image_h, image_w = des_img.shape
+            _, image_h, image_w = des_obj["background"].shape
             px, py = image_w // 2, image_h // 2
             psf_patch = DECaLS.constituent_objs.psf.get_psf_via_despsfex(
                 des_image_id=DECaLS.constituent_objs.image_id(idx), px=px, py=py
