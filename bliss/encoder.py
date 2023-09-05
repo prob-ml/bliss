@@ -103,7 +103,8 @@ class Encoder(pl.LightningModule):
 
         num_channels = len(self.bands)
         num_features_per_band = self._get_num_features()
-        self.model = Backbone(cfg=arch_dict, ch=num_channels, n_imgs=num_features_per_band)
+        model = Backbone(cfg=arch_dict, ch=num_channels, n_imgs=num_features_per_band)
+        self.model = torch.compile(model)
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
