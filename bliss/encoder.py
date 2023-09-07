@@ -50,6 +50,7 @@ class Encoder(pl.LightningModule):
         scheduler_params: Optional[dict] = None,
         input_transform_params: Optional[dict] = None,
         do_data_augmentation: bool = False,
+        compile_model: bool = False,
     ):
         """Initializes DetectionEncoder.
 
@@ -66,6 +67,7 @@ class Encoder(pl.LightningModule):
             input_transform_params: used for determining what channels to use as input (e.g.
                 deconvolution, concatenate PSF parameters, z-score inputs, etc.)
             do_data_augmentation: used for determining whether or not do data augmentation
+            compile_model: compile model for potential performance improvements
         """
         super().__init__()
         self.save_hyperparameters()
@@ -104,6 +106,8 @@ class Encoder(pl.LightningModule):
         num_channels = len(self.bands)
         num_features_per_band = self._get_num_features()
         self.model = Backbone(cfg=arch_dict, ch=num_channels, n_imgs=num_features_per_band)
+        if compile_model:
+            self.model = torch.compile(self.model)
         self.tiles_to_crop = tiles_to_crop
 
         # metrics
