@@ -3,12 +3,12 @@ import warnings
 from pathlib import Path
 
 import torch
-from region_catalog import tile_cat_to_region_cat
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.generate import itemize_data
+from case_studies.adaptive_tiling.region_catalog import tile_cat_to_region_cat
 
 parser = argparse.ArgumentParser()
 parser.add_argument("input_path", type=str, help="Path to directory containing tile-based data")
