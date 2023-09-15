@@ -8,7 +8,7 @@ import torch
 from einops import rearrange, repeat
 from torch import Tensor
 
-from bliss.catalog import TileCatalog
+from bliss.catalog import SourceType, TileCatalog
 
 
 class RegionType(IntEnum):
@@ -251,7 +251,7 @@ class RegionCatalog(TileCatalog, UserDict):
     # endregion
 
 
-def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float):
+def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float, discard_extra_sources=True):
     """Convert a TileCatalog to RegionCatalog.
 
     We do this by checking if a location is within the interior or boundary, and copying the
@@ -264,6 +264,8 @@ def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float):
     Args:
         tile_cat: the tile catalog to convert
         overlap_slen: the overlap in pixels between tiles
+        discard_extra_sources: if True, only keep the brightest source in each padded tile. If this
+            is False and there are multiple sources, an warning will occur.
 
     Returns:
         RegionCatalog: the region-based representation of this TileCatalog
@@ -311,6 +313,14 @@ def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float):
                 )
             d[key][b, new_i, new_j, 0] = val[b, i, j, 0]
 
+    # If there are multiple sources in a tile, only keep the brightest one
+    if discard_extra_sources:
+        fluxes = torch.where(
+            d["source_type"] == SourceType.GALAXY, d["galaxy_fluxes"], d["star_fluxes"]
+        )
+        fluxes = torch.where(d["n_sources"][..., None, None] > 0, fluxes, 0)
+        d["n_sources"] = filter_regions_by_flux(d["n_sources"], fluxes)
+
     region_cat = RegionCatalog(height=tile_cat.height, overlap_slen=overlap_slen, d=d)
 
     offset = repeat(
@@ -322,6 +332,50 @@ def tile_cat_to_region_cat(tile_cat: TileCatalog, overlap_slen: float):
     region_cat.locs = ((region_cat.locs - offset) / region_sizes).clamp(0, 1)
 
     return region_cat
+
+
+def filter_regions_by_flux(n_sources, fluxes, band=2):
+    """Mask out extra sources in each region.
+
+    Args:
+        n_sources: tensor containing number of sources in each region
+        fluxes: tensor containing fluxes
+        band (int, optional): Flux band to filter by. Defaults to 2 (r band).
+
+    Returns:
+        New tensor of number of sources in each region with extra sources masked out.
+    """
+    # Construct a tensor of integer indices to each region in n_sources. We increment by 1 before
+    # unfolding and then subtract 1 to differentiate index 0 from the 0 padding.
+    int_idx = torch.arange(n_sources.numel()).reshape(n_sources.shape)
+    unfolded_idx = torch.nn.functional.unfold(
+        (int_idx + 1).unsqueeze(1).float(), kernel_size=(3, 3), padding=1, stride=2
+    )
+    unfolded_idx = (unfolded_idx - 1).long()
+
+    # Find indices of regions where tile contains more than one sources
+    sources_per_tile = torch.nn.functional.unfold(
+        n_sources.unsqueeze(1), kernel_size=(3, 3), padding=1, stride=2
+    ).sum(axis=1)
+    b, c = (sources_per_tile > 1).nonzero(as_tuple=True)
+    check_idx = unfolded_idx[b, :, c]  # int idx of 9 regions for each problematic tile
+
+    # Flatten fluxes to index by
+    fluxes = fluxes[..., band].reshape(-1, 1)
+    fluxes = torch.vstack(
+        (fluxes, torch.ones(fluxes.shape[-1]) * -torch.inf)  # add -inf in last row for -1 indices
+    )
+
+    # Get flux in each region of problematic tiles
+    check_flux = fluxes[check_idx.flatten()].reshape(check_idx.shape)
+    argmax_flux = torch.argmax(check_flux, dim=1)
+    max_flux_idx = check_idx[torch.arange(len(argmax_flux)), argmax_flux]  # idx of max flux regions
+
+    # Turn off all regions in problematic tiles, then turn max flux regions back on
+    new_n_sources = torch.hstack((n_sources.flatten(), torch.zeros(1)))  # extra val for -1 idx
+    new_n_sources[check_idx.flatten()] = 0  # all off
+    new_n_sources[max_flux_idx] = 1  # turn max back on
+    return new_n_sources[:-1].reshape(n_sources.shape)  # remove extra val and unflatten
 
 
 def region_for_tile_source(loc, pos, n_rows, n_cols, threshold):
