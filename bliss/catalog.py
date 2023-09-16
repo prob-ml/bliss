@@ -512,7 +512,6 @@ class FullCatalog(UserDict):
                     )
 
             for k, v in tile_params.items():
-                # add 1 to avoid zero params being left out in selection
                 if k == "locs":
                     k = "plocs"
                 source_matrix = self[k][ii][:n_sources]
@@ -520,14 +519,17 @@ class FullCatalog(UserDict):
                 source_matrix_expand = source_matrix.unsqueeze(0).expand(num_tile, -1, -1)
 
                 masked_params = source_matrix_expand * mask_sources.unsqueeze(2)
+                # gather params values
                 gathered_params = masked_params.reshape(
                     n_tiles_h, n_tiles_w, n_sources, v[ii].shape[-1]
                 ).to(v[ii].dtype)
 
-                # Find the indices where non-zero values should be inserted
+                # move nonzero ahead (eg. [0, 1, 0, 2] --> [1, 2, 0, 0]) for later used
                 fill_indice = min(n_sources, max_sources_per_tile)
                 index = torch.sort((gathered_params != 0).long(), dim=2, descending=True)[1]
                 v[ii][:, :, :fill_indice] = gathered_params.gather(2, index)[:, :, :fill_indice]
+
+            # modify tile location
             tile_params["locs"][ii] = (tile_params["locs"][ii] % tile_slen) / tile_slen
         tile_params.update({"n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
