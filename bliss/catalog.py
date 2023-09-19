@@ -489,7 +489,13 @@ class FullCatalog(UserDict):
 
         for ii in range(self.batch_size):
             n_sources = int(self.n_sources[ii].item())
-            source_indices = tile_coords[ii][:n_sources]
+            plocs_ii = self.plocs[ii][:n_sources]
+            x0_mask = (plocs_ii[:, 0] > 0) & (plocs_ii[:, 0] < self.height)
+            x1_mask = (plocs_ii[:, 1] > 0) & (plocs_ii[:, 1] < self.width)
+            x_mask = x0_mask * x1_mask
+            n_filter_sources = x_mask.sum()
+
+            source_indices = tile_coords[ii][:n_sources][x_mask]
             source_indices = source_indices[:, 0] * n_tiles_w + source_indices[:, 1].unsqueeze(0)
             tile_range = torch.arange(n_tiles_h * n_tiles_w, device=self.device).unsqueeze(1)
             # get mask, for tiles
@@ -504,7 +510,9 @@ class FullCatalog(UserDict):
             mask_sources = mask_sources.scatter_(1, top_indices, 1) & source_mask
 
             # get n_sources for each tile
-            tile_n_sources[ii] = mask_sources.reshape(n_tiles_h, n_tiles_w, n_sources).sum(-1)
+            tile_n_sources[ii] = mask_sources.reshape(n_tiles_h, n_tiles_w, n_filter_sources).sum(
+                -1
+            )
             if tile_n_sources[ii].max() >= max_sources_per_tile:
                 if not ignore_extra_sources:
                     raise ValueError(  # noqa: WPS220
@@ -514,18 +522,18 @@ class FullCatalog(UserDict):
             for k, v in tile_params.items():
                 if k == "locs":
                     k = "plocs"
-                source_matrix = self[k][ii][:n_sources]
+                source_matrix = self[k][ii][:n_sources][x_mask]
                 num_tile = n_tiles_h * n_tiles_w
                 source_matrix_expand = source_matrix.unsqueeze(0).expand(num_tile, -1, -1)
 
                 masked_params = source_matrix_expand * mask_sources.unsqueeze(2)
                 # gather params values
                 gathered_params = masked_params.reshape(
-                    n_tiles_h, n_tiles_w, n_sources, v[ii].shape[-1]
+                    n_tiles_h, n_tiles_w, n_filter_sources, v[ii].shape[-1]
                 ).to(v[ii].dtype)
 
                 # move nonzero ahead (eg. [0, 1, 0, 2] --> [1, 2, 0, 0]) for later used
-                fill_indice = min(n_sources, max_sources_per_tile)
+                fill_indice = min(n_filter_sources, max_sources_per_tile)
                 index = torch.sort((gathered_params != 0).long(), dim=2, descending=True)[1]
                 v[ii][:, :, :fill_indice] = gathered_params.gather(2, index)[:, :, :fill_indice]
 
