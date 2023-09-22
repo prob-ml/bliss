@@ -8,12 +8,12 @@ from einops import rearrange
 from matplotlib import pyplot as plt
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from torch import Tensor
+from torch import Tensor, nn
 from torch.distributions import Distribution
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
+from yolov5.models.yolo import DetectionModel
 
-from bliss.backbone import Backbone
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.data_augmentation import augment_data
 from bliss.metrics import BlissMetrics, MetricsMode
@@ -51,6 +51,7 @@ class Encoder(pl.LightningModule):
         input_transform_params: Optional[dict] = None,
         do_data_augmentation: bool = False,
         compile_model: bool = False,
+        checkerboard_prediction: bool = False,
     ):
         """Initializes DetectionEncoder.
 
@@ -68,6 +69,7 @@ class Encoder(pl.LightningModule):
                 deconvolution, concatenate PSF parameters, z-score inputs, etc.)
             do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
+            checkerboard_prediction: make predictions using a white-black checkerboard pattern
         """
         super().__init__()
         self.save_hyperparameters()
@@ -78,11 +80,13 @@ class Encoder(pl.LightningModule):
         self.bands = bands
         self.survey_bands = survey_bands
         self.n_bands = len(self.bands)
+        self.tiles_to_crop = tiles_to_crop
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.input_transform_params = input_transform_params
         self.do_data_augmentation = do_data_augmentation
+        self.checkerboard_prediction = checkerboard_prediction
 
         transform_enabled = (
             "log_transform" in self.input_transform_params
@@ -99,21 +103,43 @@ class Encoder(pl.LightningModule):
         # number of distributional parameters used to characterize each source
         self.n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
 
+        nch_in = self._num_channels_per_band()
+        nch_hidden = 8
+        self.preprocess_per_band = nn.Sequential(
+            nn.Conv2d(nch_in, nch_hidden, 3, padding=1, bias=False),
+            nn.BatchNorm2d(nch_hidden),
+            nn.SiLU(),
+            nn.Conv2d(nch_hidden, nch_hidden, 3, padding=1, bias=False),
+            nn.BatchNorm2d(nch_hidden),
+            nn.SiLU(),
+            nn.Conv2d(nch_hidden, nch_hidden, 3, padding=1, bias=False),
+            nn.BatchNorm2d(nch_hidden),
+            nn.SiLU(),
+        )
+
         # a hack to get the right number of outputs from yolo
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
-
-        num_channels = len(self.bands)
-        num_features_per_band = self._get_num_features()
-        self.model = Backbone(cfg=arch_dict, ch=num_channels, n_imgs=num_features_per_band)
+        bb_ch_in = self.n_bands * nch_hidden + (2 * self.checkerboard_prediction)
+        self.backbone = DetectionModel(cfg=arch_dict, ch=bb_ch_in)
         if compile_model:
-            self.model = torch.compile(self.model)
-        self.tiles_to_crop = tiles_to_crop
+            self.backbone = torch.compile(self.backbone)
 
         # metrics
         self.metrics = BlissMetrics(
             mode=MetricsMode.TILE, slack=slack, survey_bands=self.survey_bands
         )
+
+        if self.checkerboard_prediction:
+            # https://stackoverflow.com/questions/72874737/how-to-make-a-checkerboard-in-pytorch
+            ht = 20
+            arange = torch.arange(ht, device=self.device)
+            mg = torch.meshgrid(arange, arange, indexing="ij")
+            indices = torch.stack(mg)
+            tile_cb = indices.sum(axis=0) % 2
+            self.register_buffer("tile_cb", tile_cb)
+            pixel_cb = tile_cb.repeat_interleave(4, dim=1).repeat_interleave(4, dim=0)
+            self.register_buffer("pixel_cb", pixel_cb)
 
     @property
     def dist_param_groups(self):
@@ -135,16 +161,20 @@ class Encoder(pl.LightningModule):
             d[gal_flux] = UnconstrainedLogNormal()
         return d
 
-    def _get_num_features(self):
+    def _num_channels_per_band(self):
         """Determine number of input channels for model based on desired input transforms."""
-        num_features_per_band = 2  # img + bg
+        nch = 1  # img + bg
+        if self.input_transform_params.get("include_original"):
+            nch += 1
         if self.input_transform_params.get("use_deconv_channel"):
-            num_features_per_band += 1
+            nch += 1
         if self.input_transform_params.get("concat_psf_params"):
-            num_features_per_band += 6
+            nch += 6
+        if self.input_transform_params.get("log_transform"):
+            nch += len(self.input_transform_params.get("log_transform"))
         if self.input_transform_params.get("clahe"):
-            num_features_per_band += 1
-        return num_features_per_band
+            nch += 1
+        return nch
 
     def get_input_tensor(self, batch):
         """Extracts data from batch and concatenates into a single tensor to be input into model.
@@ -163,49 +193,87 @@ class Encoder(pl.LightningModule):
             Tensor: b x c x 2 x h x w tensor, where the number of input channels `c` is based on the
                 input transformations to use
         """
+        assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
+        assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
+
         input_bands = batch["images"].shape[1]
         if input_bands < self.n_bands:
-            warnings.warn(
-                f"Expected at least {self.n_bands} bands in the input but found only {input_bands}"
-            )
-        imgs = batch["images"][:, self.bands].unsqueeze(2)  # add extra dim for 5d input
-        bgs = batch["background"][:, self.bands].unsqueeze(2)
-        inputs = [imgs, bgs]
+            msg = f"Expected >= {self.n_bands} bands in the input but found only {input_bands}"
+            warnings.warn(msg)
+
+        raw_images = batch["images"][:, self.bands].unsqueeze(2)
+        backgrounds = batch["background"][:, self.bands].unsqueeze(2)
+        inputs = [backgrounds]
+
+        if self.input_transform_params.get("include_original"):
+            inputs.insert(0, raw_images)  # add extra dim for 5d input
 
         if self.input_transform_params.get("use_deconv_channel"):
-            assert (
-                "deconvolution" in batch
-            ), "use_deconv_channel specified but deconvolution not present in data"
+            msg = "use_deconv_channel specified but deconvolution not present in data"
+            assert "deconvolution" in batch, msg
             inputs.append(batch["deconvolution"][:, self.bands].unsqueeze(2))
+
         if self.input_transform_params.get("concat_psf_params"):
-            assert (
-                "psf_params" in batch
-            ), "concat_psf_params specified but psf params not present in data"
-            n, c, i, h, w = imgs.shape
+            msg = "concat_psf_params specified but psf params not present in data"
+            assert "psf_params" in batch, msg
+            n, c, i, h, w = raw_images.shape
             psf_params = batch["psf_params"][:, self.bands]
             inputs.append(psf_params.view(n, c, 6 * i, 1, 1).expand(n, c, 6 * i, h, w))
-        if self.input_transform_params.get("log_transform"):
-            # untransformed background
-            inputs[0] = log_transform(torch.clamp(inputs[0] - inputs[1], min=1))
-        elif self.input_transform_params.get("rolling_z_score"):
-            inputs[0] = rolling_z_score(inputs[0], 9, 200, 4)
-            inputs[1] = rolling_z_score(inputs[1], 9, 200, 4)
+
+        for threshold in self.input_transform_params.get("log_transform"):
+            assert threshold >= 1.0, "log transform threshold must exceed 1"
+            transformed_img = log_transform(torch.clamp(raw_images - backgrounds, min=threshold))
+            inputs.append(transformed_img)
+
+        if self.input_transform_params.get("clahe"):
+            renormalized_img = rolling_z_score(raw_images, 9, 200, 4)
+            inputs.append(renormalized_img)
+
         return torch.cat(inputs, dim=2)
 
-    def encode_batch(self, batch):
+    def encode_batch(self, batch, n_sources=None):
         # get input tensor from batch with specified channels and transforms
         inputs = self.get_input_tensor(batch)
 
+        inputs4d = rearrange(inputs, "bs bands nf h w -> (bs bands) nf h w")
+        x_per_band = self.preprocess_per_band(inputs4d)
+        x_per_b = rearrange(x_per_band, "(b bd) ch h w -> b (bd ch) h w", bd=len(self.bands))
+
+        x_per_b_r1 = x_per_b
+        if self.checkerboard_prediction:
+            potential_detections = torch.zeros_like(x_per_b[:, :1])
+            detections = torch.zeros_like(x_per_b[:, :1])
+            x_per_b_r1 = torch.cat([x_per_b, potential_detections, detections], dim=1)
+
         # setting this to true every time is a hack to make yolo DetectionModel
         # give us output of the right dimension
-        self.model.model[-1].training = True
+        self.backbone.model[-1].training = True
+        output = self.backbone(x_per_b_r1)
 
-        assert inputs.size(3) % 16 == 0, "image dims must be multiples of 16"
-        assert inputs.size(4) % 16 == 0, "image dims must be multiples of 16"
-
-        output = self.model(inputs)
         # there's an extra dimension for channel that is always a singleton
         output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
+
+        if self.checkerboard_prediction:
+            if n_sources is not None:
+                tile_detects = (n_sources > 0).float()
+            else:
+                output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
+                on_dist = self.dist_param_groups["on_prob"].get_dist(output4d[:, :, :, 0:1])
+                tile_detects = on_dist.sample().float()
+                tile_detects *= self.tile_cb.unsqueeze(0)
+            pixel_detections = tile_detects.repeat_interleave(4, dim=2).repeat_interleave(4, dim=1)
+
+            to_cat = [
+                x_per_b,
+                rearrange(self.pixel_cb, "h w -> 1 1 h w").expand([inputs.size(0), -1, -1, -1]),
+                rearrange(pixel_detections, "b h w -> b 1 h w")
+            ]
+            x_per_b_r2 = torch.cat(to_cat, dim=1)
+            output2 = self.backbone(x_per_b_r2)
+            output2_4d = rearrange(output2[0], "b 1 ht wt pps -> b ht wt pps")
+
+            tilecb4d = rearrange(self.tile_cb, "ht wt -> 1 ht wt 1")
+            output4d = output4d * tilecb4d + output2_4d * (1 - tilecb4d)
 
         ttc = self.tiles_to_crop
         if ttc > 0:
@@ -234,8 +302,10 @@ class Encoder(pl.LightningModule):
         Returns:
             Union[FullCatalog, TileCatalog]: Catalog based on predictions.
         """
-        # the mean would be better at minimizing squared error...should we return that instead?
         tile_is_on_array = pred["on_prob"].mode
+        if self.checkerboard_prediction:
+            pass
+            # pred2 = self.encode_batch(batch, n_sources=tile_is_on_array)
 
         # populate est_catalog_dict with per-band (log) star fluxes
         star_fluxes = torch.stack(
@@ -339,7 +409,6 @@ class Encoder(pl.LightningModule):
 
     def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
         batch_size = batch["images"].size(0)
-        pred = self.encode_batch(batch)
         true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
 
@@ -349,6 +418,8 @@ class Encoder(pl.LightningModule):
             target_cat = target_cat.get_brightest_source_per_tile(band=2)
         if self.min_flux_threshold > 0:
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+
+        pred = self.encode_batch(batch)
 
         loss_dict = self._get_loss(pred, target_cat)
         est_tile_cat = self.variational_mode(pred, return_full=False)  # get tile cat for metrics
