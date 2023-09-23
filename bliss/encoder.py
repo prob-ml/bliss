@@ -104,26 +104,20 @@ class Encoder(pl.LightningModule):
         self.n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
 
         nch_in = self._num_channels_per_band()
-        nch_hidden = 8
-        self.preprocess_per_band = nn.Sequential(
-            nn.Conv2d(nch_in, nch_hidden, 3, padding=1, bias=False),
-            nn.BatchNorm2d(nch_hidden),
-            nn.SiLU(),
-            nn.Conv2d(nch_hidden, nch_hidden, 3, padding=1, bias=False),
-            nn.BatchNorm2d(nch_hidden),
-            nn.SiLU(),
-            nn.Conv2d(nch_hidden, nch_hidden, 3, padding=1, bias=False),
-            nn.BatchNorm2d(nch_hidden),
+        nch_hidden = 64
+        self.preprocess3d = nn.Sequential(
+            nn.Conv3d(self.n_bands, nch_hidden, [nch_in, 5, 5], padding=[0, 2, 2], bias=True),
+            nn.BatchNorm3d(nch_hidden),
             nn.SiLU(),
         )
 
         # a hack to get the right number of outputs from yolo
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
-        bb_ch_in = self.n_bands * nch_hidden + (2 * self.checkerboard_prediction)
-        self.backbone = DetectionModel(cfg=arch_dict, ch=bb_ch_in)
+        bb_ch_in = nch_hidden + (2 * self.checkerboard_prediction)
+        self.yolo = DetectionModel(cfg=arch_dict, ch=bb_ch_in)
         if compile_model:
-            self.backbone = torch.compile(self.backbone)
+            self.yolo = torch.compile(self.yolo)
 
         # metrics
         self.metrics = BlissMetrics(
@@ -221,13 +215,25 @@ class Encoder(pl.LightningModule):
             inputs.append(psf_params.view(n, c, 6 * i, 1, 1).expand(n, c, 6 * i, h, w))
 
         for threshold in self.input_transform_params.get("log_transform"):
-            assert threshold >= 1.0, "log transform threshold must exceed 1"
-            transformed_img = log_transform(torch.clamp(raw_images - backgrounds, min=threshold))
+            transformed_img = log_transform(torch.clamp(raw_images - backgrounds - threshold, min=1.0))
             inputs.append(transformed_img)
 
         if self.input_transform_params.get("clahe"):
             renormalized_img = rolling_z_score(raw_images, 9, 200, 4)
             inputs.append(renormalized_img)
+            inputs[0] = rolling_z_score(backgrounds, 9, 200, 4)
+
+# version16 no background clahe, no bias
+# version17 background clahe, no bias
+# version18 no background clahe, bias, 5x5 kernel x 3
+# version19 background clahe, no bias, 5x5 kernel x 5
+# version20 background clahe, no bias, 3x3 kernel x 9
+# version21 background clahe, no bias, 3x3 kernel x 9, no layers 7--12
+# version22 background clahe, no bias, 5x5 kernel x 9, no layers 7--12
+# version23 no background clahe, bias, 5x5 kernel x 9, no layers 7--12
+# version24 background clahe, no bias, 5x5 kernel x 9, no layers 7--12, 4 log transforms
+# version25 background clahe, no bias, 5x5 kernel x 9, no layers 7--12, 4 log transforms subtracted
+# version26 background clahe, bias, 5x5 kernel x 9, no layers 7--12, 4 log transforms subtracted
 
         return torch.cat(inputs, dim=2)
 
@@ -235,9 +241,8 @@ class Encoder(pl.LightningModule):
         # get input tensor from batch with specified channels and transforms
         inputs = self.get_input_tensor(batch)
 
-        inputs4d = rearrange(inputs, "bs bands nf h w -> (bs bands) nf h w")
-        x_per_band = self.preprocess_per_band(inputs4d)
-        x_per_b = rearrange(x_per_band, "(b bd) ch h w -> b (bd ch) h w", bd=len(self.bands))
+        x_per_band = self.preprocess3d(inputs)
+        x_per_b = rearrange(x_per_band, "b hidden 1 h w -> b hidden h w")
 
         x_per_b_r1 = x_per_b
         if self.checkerboard_prediction:
@@ -247,8 +252,8 @@ class Encoder(pl.LightningModule):
 
         # setting this to true every time is a hack to make yolo DetectionModel
         # give us output of the right dimension
-        self.backbone.model[-1].training = True
-        output = self.backbone(x_per_b_r1)
+        self.yolo.model[-1].training = True
+        output = self.yolo(x_per_b_r1)
 
         # there's an extra dimension for channel that is always a singleton
         output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
@@ -269,7 +274,7 @@ class Encoder(pl.LightningModule):
                 rearrange(pixel_detections, "b h w -> b 1 h w")
             ]
             x_per_b_r2 = torch.cat(to_cat, dim=1)
-            output2 = self.backbone(x_per_b_r2)
+            output2 = self.yolo(x_per_b_r2)
             output2_4d = rearrange(output2[0], "b 1 ht wt pps -> b ht wt pps")
 
             tilecb4d = rearrange(self.tile_cb, "ht wt -> 1 ht wt 1")
