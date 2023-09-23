@@ -215,7 +215,8 @@ class Encoder(pl.LightningModule):
             inputs.append(psf_params.view(n, c, 6 * i, 1, 1).expand(n, c, 6 * i, h, w))
 
         for threshold in self.input_transform_params.get("log_transform"):
-            transformed_img = log_transform(torch.clamp(raw_images - backgrounds - threshold, min=1.0))
+            image_offsets = raw_images - backgrounds - threshold
+            transformed_img = log_transform(torch.clamp(image_offsets, min=1.0))
             inputs.append(transformed_img)
 
         if self.input_transform_params.get("clahe"):
@@ -223,62 +224,44 @@ class Encoder(pl.LightningModule):
             inputs.append(renormalized_img)
             inputs[0] = rolling_z_score(backgrounds, 9, 200, 4)
 
-# version16 no background clahe, no bias
-# version17 background clahe, no bias
-# version18 no background clahe, bias, 5x5 kernel x 3
-# version19 background clahe, no bias, 5x5 kernel x 5
-# version20 background clahe, no bias, 3x3 kernel x 9
-# version21 background clahe, no bias, 3x3 kernel x 9, no layers 7--12
-# version22 background clahe, no bias, 5x5 kernel x 9, no layers 7--12
-# version23 no background clahe, bias, 5x5 kernel x 9, no layers 7--12
-# version24 background clahe, no bias, 5x5 kernel x 9, no layers 7--12, 4 log transforms
-# version25 background clahe, no bias, 5x5 kernel x 9, no layers 7--12, 4 log transforms subtracted
-# version26 background clahe, bias, 5x5 kernel x 9, no layers 7--12, 4 log transforms subtracted
-
         return torch.cat(inputs, dim=2)
 
     def encode_batch(self, batch, n_sources=None):
         # get input tensor from batch with specified channels and transforms
         inputs = self.get_input_tensor(batch)
 
-        x_per_band = self.preprocess3d(inputs)
-        x_per_b = rearrange(x_per_band, "b hidden 1 h w -> b hidden h w")
+        x_per_band = self.preprocess3d(inputs).squeeze(2)
 
-        x_per_b_r1 = x_per_b
+        x_round1 = x_per_band
         if self.checkerboard_prediction:
-            potential_detections = torch.zeros_like(x_per_b[:, :1])
-            detections = torch.zeros_like(x_per_b[:, :1])
-            x_per_b_r1 = torch.cat([x_per_b, potential_detections, detections], dim=1)
+            potential_detections = torch.zeros_like(x_per_band[:, :1])
+            detections = torch.zeros_like(x_per_band[:, :1])
+            x_round1 = torch.cat([x_per_band, potential_detections, detections], dim=1)
 
         # setting this to true every time is a hack to make yolo DetectionModel
         # give us output of the right dimension
         self.yolo.model[-1].training = True
-        output = self.yolo(x_per_b_r1)
-
         # there's an extra dimension for channel that is always a singleton
-        output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
+        output4d = self.yolo(x_round1)[0].squeeze(1)
 
         if self.checkerboard_prediction:
             if n_sources is not None:
                 tile_detects = (n_sources > 0).float()
             else:
-                output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
                 on_dist = self.dist_param_groups["on_prob"].get_dist(output4d[:, :, :, 0:1])
                 tile_detects = on_dist.sample().float()
                 tile_detects *= self.tile_cb.unsqueeze(0)
-            pixel_detections = tile_detects.repeat_interleave(4, dim=2).repeat_interleave(4, dim=1)
 
-            to_cat = [
-                x_per_b,
-                rearrange(self.pixel_cb, "h w -> 1 1 h w").expand([inputs.size(0), -1, -1, -1]),
-                rearrange(pixel_detections, "b h w -> b 1 h w")
-            ]
-            x_per_b_r2 = torch.cat(to_cat, dim=1)
-            output2 = self.yolo(x_per_b_r2)
-            output2_4d = rearrange(output2[0], "b 1 ht wt pps -> b ht wt pps")
+            pixel_detections = tile_detects.repeat_interleave(4, dim=2).repeat_interleave(4, dim=1)
+            batch_detections = rearrange(pixel_detections, "b h w -> b 1 h w")
+            batch_cb = rearrange(self.pixel_cb, "h w -> 1 1 h w")
+            batch_cb = batch_cb.expand([inputs.size(0), -1, -1, -1])
+            x_round2 = torch.cat([x_per_band, batch_detections, batch_cb], dim=1)
+
+            output4d_r2 = self.yolo(x_round2)[0].squeeze(1)
 
             tilecb4d = rearrange(self.tile_cb, "ht wt -> 1 ht wt 1")
-            output4d = output4d * tilecb4d + output2_4d * (1 - tilecb4d)
+            output4d = output4d * tilecb4d + output4d_r2 * (1 - tilecb4d)
 
         ttc = self.tiles_to_crop
         if ttc > 0:
