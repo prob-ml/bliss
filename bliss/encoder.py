@@ -1,6 +1,6 @@
 import math
 import warnings
-from typing import Dict, Optional, Union
+from typing import Dict, Optional
 
 import pytorch_lightning as pl
 import torch
@@ -8,13 +8,13 @@ from einops import rearrange
 from matplotlib import pyplot as plt
 from omegaconf import OmegaConf
 from omegaconf.dictconfig import DictConfig
-from torch import Tensor, nn
+from torch import nn
 from torch.distributions import Distribution
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
-from bliss.catalog import FullCatalog, SourceType, TileCatalog
+from bliss.catalog import SourceType, TileCatalog
 from bliss.data_augmentation import augment_data
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
@@ -226,7 +226,7 @@ class Encoder(pl.LightningModule):
 
         return torch.cat(inputs, dim=2)
 
-    def encode_batch(self, batch, n_sources=None):
+    def encode_batch(self, batch, train=False, target_cat=None, vmode=False):
         # get input tensor from batch with specified channels and transforms
         inputs = self.get_input_tensor(batch)
 
@@ -245,14 +245,17 @@ class Encoder(pl.LightningModule):
         output4d = self.convnet(x_round1)[0].squeeze(1)
 
         if self.checkerboard_prediction:
-            if n_sources is not None:
-                tile_detects = (n_sources > 0).float()
-            else:
+            if train:  # training
+                tile_detections = target_cat.n_sources > 0
+            else:  # prediction
                 on_dist = self.dist_param_groups["on_prob"].get_dist(output4d[:, :, :, 0:1])
-                tile_detects = on_dist.sample().float()
-                tile_detects *= self.tile_cb.unsqueeze(0)
+                if vmode:  # like maximum a posteriori estimation
+                    tile_detections = on_dist.mode
+                else:  # sample
+                    tile_detections = on_dist.sample()
 
-            pixel_detections = tile_detects.repeat_interleave(4, dim=2).repeat_interleave(4, dim=1)
+            td_masked = tile_detections.float() * self.tile_cb.unsqueeze(0)
+            pixel_detections = td_masked.repeat_interleave(4, dim=2).repeat_interleave(4, dim=1)
             batch_detections = rearrange(pixel_detections, "b h w -> b 1 h w")
             batch_cb = rearrange(self.pixel_cb, "h w -> 1 1 h w")
             batch_cb = batch_cb.expand([inputs.size(0), -1, -1, -1])
@@ -277,23 +280,17 @@ class Encoder(pl.LightningModule):
 
         return pred
 
-    def variational_mode(
-        self, pred: Dict[str, Tensor], return_full: Optional[bool] = True
-    ) -> Union[FullCatalog, TileCatalog]:
+    def variational_mode(self, batch) -> TileCatalog:
         """Compute the mode of the variational distribution.
 
         Args:
-            pred (Dict[str, Tensor]): model predictions
-            return_full (bool, optional): Returns a FullCatalog if true, otherwise returns a
-                TileCatalog. Defaults to True.
+            batch: model predictions
 
         Returns:
-            Union[FullCatalog, TileCatalog]: Catalog based on predictions.
+            TileCatalog: Catalog based on predictions.
         """
+        pred = self.encode_batch(batch, vmode=True)
         tile_is_on_array = pred["on_prob"].mode
-        if self.checkerboard_prediction:
-            pass
-            # pred2 = self.encode_batch(batch, n_sources=tile_is_on_array)
 
         # populate est_catalog_dict with per-band (log) star fluxes
         star_fluxes = torch.stack(
@@ -329,8 +326,7 @@ class Encoder(pl.LightningModule):
             "galaxy_fluxes": rearrange(galaxy_fluxes, "b ht wt d -> b ht wt 1 d"),
         }
 
-        est_tile_catalog = TileCatalog(self.tile_slen, est_catalog_dict)
-        return est_tile_catalog if not return_full else est_tile_catalog.to_full_params()
+        return TileCatalog(self.tile_slen, est_catalog_dict)
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
@@ -395,26 +391,27 @@ class Encoder(pl.LightningModule):
 
         return loss_with_components
 
-    def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
+    def _generic_step(self, batch, logging_name, train=False, log_metrics=False, plot_images=False):
         batch_size = batch["images"].size(0)
-        true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
+        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
         # Filter by detectable sources and brightest source per tile
-        target_cat = true_tile_cat
-        if true_tile_cat.max_sources > 1:
+        if target_cat.max_sources > 1:
             target_cat = target_cat.get_brightest_source_per_tile(band=2)
         if self.min_flux_threshold > 0:
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
-        pred = self.encode_batch(batch)
+        pred = self.encode_batch(batch, train=train, target_cat=target_cat)
 
+        target_cat = target_cat.symmetric_crop(self.tiles_to_crop)
         loss_dict = self._get_loss(pred, target_cat)
-        est_tile_cat = self.variational_mode(pred, return_full=False)  # get tile cat for metrics
 
         # log all losses
         for k, v in loss_dict.items():
             self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+
+        if log_metrics or plot_images:
+            est_tile_cat = self.variational_mode(batch)  # get tile cat for metrics
 
         # log all metrics
         if log_metrics:
@@ -470,7 +467,7 @@ class Encoder(pl.LightningModule):
             if self.input_transform_params.get("use_deconv_channel"):
                 batch["deconvolution"] = aug_output_image[:, :, 2, :, :]
 
-        return self._generic_step(batch, "train")
+        return self._generic_step(batch, "train", train=True)
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
@@ -487,7 +484,7 @@ class Encoder(pl.LightningModule):
         """Pytorch lightning method."""
         with torch.no_grad():
             pred = self.encode_batch(batch)
-            est_cat = self.variational_mode(pred, return_full=False)
+            est_cat = self.variational_mode(batch)
         return {
             "est_cat": est_cat,
             "images": batch["images"],

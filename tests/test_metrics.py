@@ -68,7 +68,7 @@ class TestMetrics:
             encoder.eval()
             encoder = encoder.float()
             pred = encoder.encode_batch(batch)
-            bliss_cat = encoder.variational_mode(pred).to(torch.device("cpu"))
+            bliss_cat = encoder.variational_mode(pred).to(torch.device("cpu")).to_full_params()
 
         bliss_cat.plocs += torch.tensor(
             [h_lim[0] + cfg.encoder.tile_slen, w_lim[0] + cfg.encoder.tile_slen]
