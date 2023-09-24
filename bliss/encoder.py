@@ -115,9 +115,9 @@ class Encoder(pl.LightningModule):
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
         bb_ch_in = nch_hidden + (2 * self.checkerboard_prediction)
-        self.yolo = DetectionModel(cfg=arch_dict, ch=bb_ch_in)
+        self.convnet = DetectionModel(cfg=arch_dict, ch=bb_ch_in)
         if compile_model:
-            self.yolo = torch.compile(self.yolo)
+            self.convnet = torch.compile(self.convnet)
 
         # metrics
         self.metrics = BlissMetrics(
@@ -240,9 +240,9 @@ class Encoder(pl.LightningModule):
 
         # setting this to true every time is a hack to make yolo DetectionModel
         # give us output of the right dimension
-        self.yolo.model[-1].training = True
+        self.convnet.model[-1].training = True
         # there's an extra dimension for channel that is always a singleton
-        output4d = self.yolo(x_round1)[0].squeeze(1)
+        output4d = self.convnet(x_round1)[0].squeeze(1)
 
         if self.checkerboard_prediction:
             if n_sources is not None:
@@ -258,7 +258,7 @@ class Encoder(pl.LightningModule):
             batch_cb = batch_cb.expand([inputs.size(0), -1, -1, -1])
             x_round2 = torch.cat([x_per_band, batch_detections, batch_cb], dim=1)
 
-            output4d_r2 = self.yolo(x_round2)[0].squeeze(1)
+            output4d_r2 = self.convnet(x_round2)[0].squeeze(1)
 
             tilecb4d = rearrange(self.tile_cb, "ht wt -> 1 ht wt 1")
             output4d = output4d * tilecb4d + output4d_r2 * (1 - tilecb4d)
