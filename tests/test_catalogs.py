@@ -167,6 +167,10 @@ class TestBasicTileAndFullCatalogs:
         tile_cat = full_cat.to_tile_params(1, 1, ignore_extra_sources=True)
         assert torch.equal(tile_cat.n_sources, torch.tensor([[[1, 0], [0, 0]]]))
 
+        # test to_tile_coords and to_full_coords (set max_sources_per_tile to 2)
+        convert_full_cat = full_cat.to_tile_params(1, 2).to_full_params()
+        assert torch.allclose(convert_full_cat.plocs, full_cat.plocs)
+
         correct_locs = torch.tensor([[[0.5, 0.5], [0, 0]], [[0, 0], [0, 0]]]).reshape(1, 2, 2, 1, 2)
         assert torch.allclose(tile_cat.locs, correct_locs)
 

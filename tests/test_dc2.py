@@ -2,8 +2,8 @@ import torch
 from einops import rearrange
 from hydra.utils import instantiate
 
-from bliss import data_augmentation
 from bliss.catalog import TileCatalog
+from bliss.data_augmentation import aug_rotate90, aug_rotate180, aug_rotate270, aug_shift, aug_vflip
 from bliss.train import train
 
 
@@ -87,13 +87,7 @@ class TestDC2:
         aug_input_images = [imgs, bgs, deconv_image]
         aug_input_images = torch.cat(aug_input_images, dim=2)
 
-        aug_list = [
-            data_augmentation.aug_vflip,
-            data_augmentation.aug_rotate90,
-            data_augmentation.aug_rotate180,
-            data_augmentation.aug_rotate270,
-            data_augmentation.aug_shift,
-        ]
+        aug_list = [aug_vflip, aug_rotate90, aug_rotate180, aug_rotate270, aug_shift]
 
         for aug_method in aug_list:
             aug_image, aug_full = aug_method(origin_full, aug_input_images)
@@ -101,3 +95,13 @@ class TestDC2:
             assert aug_image[0, :, 1, :, :].shape == dc2_obj["background"].shape
             assert aug_image[0, :, 2, :, :].shape == dc2_obj["deconvolution"].shape
             assert aug_full["n_sources"] <= origin_full.n_sources
+
+        # test rotatation
+        aug_image90, aug_full90 = aug_rotate90(origin_full, aug_input_images)
+        _, aug_full270 = aug_rotate270(origin_full, aug_input_images)
+
+        _, aug_full90180 = aug_rotate180(aug_full90, aug_image90)
+        _, aug_full90270 = aug_rotate270(aug_full90, aug_image90)
+
+        assert aug_full90270 == origin_full
+        assert aug_full90180 == aug_full270
