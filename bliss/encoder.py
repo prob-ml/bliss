@@ -15,6 +15,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from yolov5.models.yolo import DetectionModel
 
 from bliss.catalog import SourceType, TileCatalog
+from bliss.convnet import ConvNet
 from bliss.data_augmentation import augment_data
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
@@ -115,7 +116,8 @@ class Encoder(pl.LightningModule):
         architecture["nc"] = self.n_params_per_source - 5
         arch_dict = OmegaConf.to_container(architecture)
         bb_ch_in = nch_hidden + (2 * self.checkerboard_prediction)
-        self.convnet = DetectionModel(cfg=arch_dict, ch=bb_ch_in)
+        # self.convnet = DetectionModel(cfg=arch_dict, ch=bb_ch_in)
+        self.convnet = ConvNet(bb_ch_in, self.n_params_per_source)
         if compile_model:
             self.convnet = torch.compile(self.convnet)
 
@@ -238,11 +240,7 @@ class Encoder(pl.LightningModule):
             detections = torch.zeros_like(x_per_band[:, :1])
             x_round1 = torch.cat([x_per_band, potential_detections, detections], dim=1)
 
-        # setting this to true every time is a hack to make yolo DetectionModel
-        # give us output of the right dimension
-        self.convnet.model[-1].training = True
-        # there's an extra dimension for channel that is always a singleton
-        output4d = self.convnet(x_round1)[0].squeeze(1)
+        output4d = self.convnet(x_round1).permute([0, 2, 3, 1])
 
         if self.checkerboard_prediction:
             if train:  # training
@@ -261,7 +259,7 @@ class Encoder(pl.LightningModule):
             batch_cb = batch_cb.expand([inputs.size(0), -1, -1, -1])
             x_round2 = torch.cat([x_per_band, batch_detections, batch_cb], dim=1)
 
-            output4d_r2 = self.convnet(x_round2)[0].squeeze(1)
+            output4d_r2 = self.convnet(x_round2).permute([0, 2, 3, 1])
 
             tilecb4d = rearrange(self.tile_cb, "ht wt -> 1 ht wt 1")
             output4d = output4d * tilecb4d + output4d_r2 * (1 - tilecb4d)
