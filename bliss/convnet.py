@@ -52,14 +52,14 @@ class ConvNet(nn.Module):
             block0.append(ConvBlock(in_channels, 64, kernel_size=5, padding=2))
         self.backbone.append(nn.Sequential(*block0))
 
-        self.backbone.append(ConvBlock(64, 128, stride=2))                   # 1
-        self.backbone.append(ConvBlock(128, 128))                            # 2
-        self.backbone.append(ConvBlock(128, 256, stride=2))                  # 3
-        self.backbone.append(C3(256, 256, n=6))                              # 4
-        self.backbone.append(ConvBlock(256, 512, stride=2))                  # 5
-        self.backbone.append(C3(512, 512, n=3, shortcut=False))              # 6
+        self.backbone.append(ConvBlock(64, 128, stride=2))  # 1
+        self.backbone.append(ConvBlock(128, 128))  # 2
+        self.backbone.append(ConvBlock(128, 256, stride=2))  # 3
+        self.backbone.append(C3(256, 256, n=6))  # 4
+        self.backbone.append(ConvBlock(256, 512, stride=2))  # 5
+        self.backbone.append(C3(512, 512, n=3, shortcut=False))  # 6
         self.backbone.append(ConvBlock(512, 256, kernel_size=1, padding=0))  # 7
-        self.backbone.append(nn.Upsample(scale_factor=2, mode="nearest"))    # 8
+        self.backbone.append(nn.Upsample(scale_factor=2, mode="nearest"))  # 8
 
         self.head = nn.ModuleList()
         self.head.append(C3(768, 256, n=3, shortcut=False))
