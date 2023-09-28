@@ -43,11 +43,11 @@ class C3(nn.Module):
 
 
 class ConvNet(nn.Module):
-    def __init__(self, c_in, c_out):
+    def __init__(self, ch_in, ch_out):
         super().__init__()
 
         backbone_layers = [
-            nn.Sequential(*[ConvBlock(c_in, 64, kernel_size=5, padding=2) for _ in range(10)]),
+            nn.Sequential(*[ConvBlock(ch_in, 64, kernel_size=5, padding=2) for _ in range(10)]),
             ConvBlock(64, 128, stride=2),
             ConvBlock(128, 128),
             ConvBlock(128, 256, stride=2),
@@ -61,7 +61,7 @@ class ConvNet(nn.Module):
 
         head_layers = [
             C3(768, 256, n=3, shortcut=False),
-            ConvBlock(256, c_out, kernel_size=1, padding=0),
+            ConvBlock(256, ch_out, kernel_size=1, padding=0),
         ]
         self.head = nn.ModuleList(head_layers)
 
