@@ -10,10 +10,10 @@ class ConvBlock(nn.Module):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
         self.bn = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0.03)
-        self.activiation = nn.SiLU(inplace=True)
+        self.activation = nn.SiLU(inplace=True)
 
     def forward(self, x):
-        return self.activiation(self.bn(self.conv(x)))
+        return self.activation(self.bn(self.conv(x)))
 
 
 class Bottleneck(nn.Module):
