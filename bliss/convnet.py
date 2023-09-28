@@ -22,11 +22,11 @@ class Bottleneck(nn.Module):
         ch = int(c2 * e)
         self.cv1 = ConvBlock(c1, ch, kernel_size=1, padding=0)
         self.cv2 = ConvBlock(ch, c2, kernel_size=3, padding=1, stride=1)
-        self.shortcut = shortcut and c1 == c2
+        self.add = shortcut and c1 == c2
 
     def forward(self, x):
         out = self.cv2(self.cv1(x))
-        return x + out if self.shortcut else out
+        return x + out if self.add else out
 
 
 class C3(nn.Module):
