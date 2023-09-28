@@ -6,13 +6,10 @@ import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
-from omegaconf import OmegaConf
-from omegaconf.dictconfig import DictConfig
 from torch import nn
 from torch.distributions import Distribution
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
-from yolov5.models.yolo import DetectionModel
 
 from bliss.catalog import SourceType, TileCatalog
 from bliss.convnet import ConvNet
@@ -40,7 +37,6 @@ class Encoder(pl.LightningModule):
 
     def __init__(
         self,
-        architecture: DictConfig,
         bands: list,
         survey_bands: list,
         tile_slen: int,
@@ -57,7 +53,6 @@ class Encoder(pl.LightningModule):
         """Initializes DetectionEncoder.
 
         Args:
-            architecture: yaml to specifying the encoder network architecture
             bands: specified band-pass filters
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
@@ -112,11 +107,7 @@ class Encoder(pl.LightningModule):
             nn.SiLU(),
         )
 
-        # a hack to get the right number of outputs from yolo
-        architecture["nc"] = self.n_params_per_source - 5
-        arch_dict = OmegaConf.to_container(architecture)
         bb_ch_in = nch_hidden + (2 * self.checkerboard_prediction)
-        # self.convnet = DetectionModel(cfg=arch_dict, ch=bb_ch_in)
         self.convnet = ConvNet(bb_ch_in, self.n_params_per_source)
         if compile_model:
             self.convnet = torch.compile(self.convnet)

@@ -5,7 +5,6 @@ from typing import Dict, Optional
 import torch
 from einops import rearrange, repeat
 from matplotlib import pyplot as plt
-from omegaconf import DictConfig
 from torch import Tensor
 from torch.distributions import Distribution, TransformedDistribution
 
@@ -24,7 +23,6 @@ from case_studies.adaptive_tiling.region_catalog import (
 class RegionEncoder(Encoder):
     def __init__(
         self,
-        architecture: DictConfig,
         bands: list,
         survey_bands: list,
         tile_slen: int,  # NOTE: this is the *unpadded* tile length!!
@@ -35,7 +33,6 @@ class RegionEncoder(Encoder):
         input_transform_params: Optional[dict] = None,
     ):
         super().__init__(
-            architecture=architecture,
             bands=bands,
             survey_bands=survey_bands,
             tile_slen=tile_slen,

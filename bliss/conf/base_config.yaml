@@ -88,31 +88,6 @@ encoder:
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
     checkerboard_prediction: false
-    architecture:
-        # this architecture is based on yolov5l.yaml, see
-        # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
-        depth_multiple: 1.0  # model depth multiple
-        width_multiple: 1.0  # layer channel multiple
-        anchors:
-            - [4, 4]  # P3/8
-        backbone: [
-            # [from, number, module, args]
-            [-1, 1, Conv, [64, 5, 1]],  # 0
-            [-1, 9, Conv, [64, 5, 1]],  # 1
-            [-1, 1, Conv, [128, 3, 2]], # 2
-            [-1, 1, Conv, [128, 3, 1]], # 3
-            [-1, 1, Conv, [256, 3, 2]], # 4
-            [-1, 6, C3, [256]],         # 5
-            [-1, 1, Conv, [512, 3, 2]], # 6
-            [-1, 3, C3, [512, false]],  # 7
-            [-1, 1, Conv, [256, 1, 1]], # 8
-            [-1, 1, nn.Upsample, [None, 2, 'nearest']],
-        ]
-        head: [
-            [[-1, 4, 5], 1, Concat, [1]],
-            [-1, 3, C3, [256, false]],
-            [-1, 1, Conv, [38, 1, 1]]
-        ]
 
 region_encoder:
     _target_: case_studies.adaptive_tiling.region_encoder.RegionEncoder
@@ -124,7 +99,6 @@ region_encoder:
     optimizer_params: ${encoder.optimizer_params}
     scheduler_params: ${encoder.scheduler_params}
     input_transform_params: ${encoder.input_transform_params}
-    architecture: ${encoder.architecture}
 
 generate:
     n_workers_per_process: 0
