@@ -6,9 +6,9 @@ from torch import nn
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
+    def __init__(self, in_channels, out_channels, bias=False, kernel_size=3, stride=1, padding=1):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=bias)
         self.bn = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0.03)
         self.activation = nn.SiLU(inplace=True)
 
@@ -61,7 +61,7 @@ class ConvNet(nn.Module):
 
         head_layers = [
             C3(768, 256, n=3, shortcut=False),
-            ConvBlock(256, ch_out, kernel_size=1, padding=0),
+            ConvBlock(256, ch_out, kernel_size=1, padding=0, bias=True),
         ]
         self.head = nn.ModuleList(head_layers)
 
