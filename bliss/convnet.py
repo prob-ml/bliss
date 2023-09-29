@@ -1,3 +1,5 @@
+import math
+
 import torch
 from torch import nn
 
@@ -11,6 +13,17 @@ class ConvBlock(nn.Module):
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=bias)
         self.bn = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0.03)
         self.activation = nn.SiLU(inplace=True)
+        if bias:
+            self._initialize_biases()
+
+    def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
+        # https://arxiv.org/abs/1708.02002 section 3.3
+        # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1.
+        s = 4  # stride s is considered by yolo to be 4 for bliss tiles
+        b = self.conv.bias.view(m.na, -1)  # conv.bias(255) to (3,85)
+        b.data[:, 4] += math.log(8 / (640 / s) ** 2)  # obj (8 objects per 640 image)
+        b.data[:, 5:5 + m.nc] += math.log(0.6 / (m.nc - 0.99999)) if cf is None else torch.log(cf / cf.sum())  # cls
+        self.conv.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def forward(self, x):
         return self.activation(self.bn(self.conv(x)))
