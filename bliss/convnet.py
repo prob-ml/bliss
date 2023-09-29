@@ -8,15 +8,23 @@ from torch import nn
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, bias=False, kernel_size=3, stride=1, padding=1):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=bias)
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
         self.bn = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0.03)
         self.activation = nn.SiLU(inplace=True)
-        if bias:
-            self._initialize_biases()
 
-    def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
+    def forward(self, x):
+        return self.activation(self.bn(self.conv(x)))
+
+
+class Detect(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=True)
+        self._initialize_biases()
+
+    def _initialize_biases(self, cf=None):
         # https://arxiv.org/abs/1708.02002 section 3.3
         s = 4  # stride s is considered by yolo to be 4 for bliss tiles
         num_anchors = 1
@@ -27,7 +35,7 @@ class ConvBlock(nn.Module):
         self.conv.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def forward(self, x):
-        return self.activation(self.bn(self.conv(x)))
+        return self.conv(x).permute([0, 2, 3, 1])
 
 
 class Bottleneck(nn.Module):
@@ -57,11 +65,12 @@ class C3(nn.Module):
 
 
 class ConvNet(nn.Module):
-    def __init__(self, ch_in, ch_out):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
 
+        block0 = [ConvBlock(in_channels, 64, kernel_size=5, padding=2) for _ in range(10)]
         backbone_layers = [
-            nn.Sequential(*[ConvBlock(ch_in, 64, kernel_size=5, padding=2) for _ in range(10)]),
+            nn.Sequential(*block0),
             ConvBlock(64, 128, stride=2),
             ConvBlock(128, 128),
             ConvBlock(128, 256, stride=2),
@@ -75,7 +84,7 @@ class ConvNet(nn.Module):
 
         head_layers = [
             C3(768, 256, n=3, shortcut=False),
-            ConvBlock(256, ch_out, kernel_size=1, padding=0, bias=True),
+            Detect(256, out_channels),
         ]
         self.head = nn.ModuleList(head_layers)
 

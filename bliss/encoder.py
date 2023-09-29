@@ -231,8 +231,7 @@ class Encoder(pl.LightningModule):
             detections = torch.zeros_like(x_per_band[:, :1])
             x_round1 = torch.cat([x_per_band, potential_detections, detections], dim=1)
 
-        output4d = self.convnet(x_round1).permute([0, 2, 3, 1])
-
+        output4d = self.convnet(x_round1)
         if self.checkerboard_prediction:
             if train:  # training
                 tile_detections = target_cat.n_sources > 0
@@ -250,7 +249,7 @@ class Encoder(pl.LightningModule):
             batch_cb = batch_cb.expand([inputs.size(0), -1, -1, -1])
             x_round2 = torch.cat([x_per_band, batch_detections, batch_cb], dim=1)
 
-            output4d_r2 = self.convnet(x_round2).permute([0, 2, 3, 1])
+            output4d_r2 = self.convnet(x_round2)
 
             tilecb4d = rearrange(self.tile_cb, "ht wt -> 1 ht wt 1")
             output4d = output4d * tilecb4d + output4d_r2 * (1 - tilecb4d)
