@@ -1,5 +1,3 @@
-import math
-
 import torch
 from torch import nn
 
@@ -22,17 +20,6 @@ class Detect(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=True)
-        self._initialize_biases()
-
-    def _initialize_biases(self, cf=None):
-        # https://arxiv.org/abs/1708.02002 section 3.3
-        s = 4  # stride s is considered by yolo to be 4 for bliss tiles
-        num_anchors = 1
-        num_classes = 33  # 38 - 5
-        b = self.conv.bias.view(num_anchors, -1)
-        b.data[:, 4] += math.log(8 / (640 / s) ** 2)  # obj (8 objects per 640 image)
-        b.data[:, 5 : 5 + num_classes] += math.log(0.6 / (num_classes - 0.99999))
-        self.conv.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def forward(self, x):
         return self.conv(x).permute([0, 2, 3, 1])
