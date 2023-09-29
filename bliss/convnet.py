@@ -55,36 +55,28 @@ class ConvNet(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
 
-        block0 = [ConvBlock(in_channels, 64, kernel_size=5, padding=2) for _ in range(10)]
         backbone_layers = [
-            nn.Sequential(*block0),
+            ConvBlock(in_channels, 64, kernel_size=5, padding=2),
+            nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(9)]),
             ConvBlock(64, 128, stride=2),
             ConvBlock(128, 128),
-            ConvBlock(128, 256, stride=2),
-            C3(256, 256, n=6),
+            ConvBlock(128, 256, stride=2),  # 3
+            C3(256, 256, n=6),  # 4
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),
             ConvBlock(512, 256, kernel_size=1, padding=0),
-            nn.Upsample(scale_factor=2, mode="nearest"),
-        ]
-        self.backbone = nn.ModuleList(backbone_layers)
-
-        head_layers = [
+            nn.Upsample(scale_factor=2, mode="nearest"),  # 8
             C3(768, 256, n=3, shortcut=False),
             Detect(256, out_channels),
         ]
-        self.head = nn.ModuleList(head_layers)
+        self.backbone = nn.ModuleList(backbone_layers)
 
     def forward(self, x):
         save_lst = []
         for i, m in enumerate(self.backbone):
             x = m(x)
-            if i in {3, 4, 8}:
+            if i in {4, 5, 9}:
                 save_lst.append(x)
-
-        x = torch.cat(save_lst, dim=1)
-
-        for m in self.head:
-            x = m(x)
-
+            if i == 9:
+                x = torch.cat(save_lst, dim=1)
         return x
