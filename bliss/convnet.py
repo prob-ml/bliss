@@ -18,11 +18,12 @@ class ConvBlock(nn.Module):
 
     def _initialize_biases(self, cf=None):  # initialize biases into Detect(), cf is class frequency
         # https://arxiv.org/abs/1708.02002 section 3.3
-        # cf = torch.bincount(torch.tensor(np.concatenate(dataset.labels, 0)[:, 0]).long(), minlength=nc) + 1.
         s = 4  # stride s is considered by yolo to be 4 for bliss tiles
-        b = self.conv.bias.view(m.na, -1)  # conv.bias(255) to (3,85)
+        num_anchors = 1
+        num_classes = 33  # 38 - 5
+        b = self.conv.bias.view(num_anchors, -1)
         b.data[:, 4] += math.log(8 / (640 / s) ** 2)  # obj (8 objects per 640 image)
-        b.data[:, 5:5 + m.nc] += math.log(0.6 / (m.nc - 0.99999)) if cf is None else torch.log(cf / cf.sum())  # cls
+        b.data[:, 5 : 5 + num_classes] += math.log(0.6 / (num_classes - 0.99999))
         self.conv.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
     def forward(self, x):
