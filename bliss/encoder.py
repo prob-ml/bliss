@@ -11,7 +11,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.catalog import SourceType, TileCatalog
-from bliss.convnet import CatalogNet, FeaturesNet
+from bliss.convnet import CatalogNet1, CatalogNet2, FeaturesNet
 from bliss.data_augmentation import augment_data
 from bliss.image_normalizer import ImageNormalizer
 from bliss.metrics import BlissMetrics, MetricsMode
@@ -94,13 +94,15 @@ class Encoder(pl.LightningModule):
             nn.SiLU(),
         )
         self.features_net = FeaturesNet(nch_hidden)
-        bb_ch_in = 256 + 2  # 2 extra channels for detections and potential detections
-        self.catalog_net = CatalogNet(bb_ch_in, self.n_params_per_source)
+        self.catalog_net1 = CatalogNet1(256, self.n_params_per_source)
+        # add two new channels for detections and potential detections
+        self.catalog_net2 = CatalogNet2(256 + 2, self.n_params_per_source)
 
         if compile_model:
             self.preprocess3d = torch.compile(self.preprocess3d)
             self.features_net = torch.compile(self.features_net)
-            self.catalog_net = torch.compile(self.catalog_net)
+            self.catalog_net1 = torch.compile(self.catalog_net1)
+            self.catalog_net2 = torch.compile(self.catalog_net2)
 
         # metrics
         self.metrics = BlissMetrics(
@@ -137,37 +139,13 @@ class Encoder(pl.LightningModule):
             d[gal_flux] = UnconstrainedLogNormal()
         return d
 
-    def encode_batch(self, batch, train=False, target_cat=None, vmode=False):
+    def get_batch_features(self, batch):
         # get input tensor from batch with specified channels and transforms
         x = self.image_normalizer.get_input_tensor(batch)
         x = self.preprocess3d(x).squeeze(2)
-        x_features = self.features_net(x)
+        return self.features_net(x)
 
-        # add two new channels for detections and potential detections
-        x = nn.functional.pad(x_features, [0, 0, 0, 0, 0, 2, 0, 0])
-
-        x_cat1 = self.catalog_net(x)
-
-        if self.checkerboard_prediction:
-            if train:  # training
-                detections = target_cat.n_sources > 0
-            else:  # prediction
-                on_dist = self.dist_param_groups["on_prob"].get_dist(x_cat1[:, :, :, 0:1])
-                if vmode:  # mode (of the variational distribution)
-                    detections = on_dist.mode
-                else:  # sample
-                    detections = on_dist.sample()
-
-            masked_detections = detections.float().unsqueeze(1) * self.tile_cb
-            potential_detections = self.tile_cb.expand([x.size(0), -1, -1, -1])
-            x = torch.cat([x_features, masked_detections, potential_detections], dim=1)
-            x_cat2 = self.catalog_net(x)
-
-            tile_cb_view = rearrange(self.tile_cb, "1 1 ht wt -> 1 ht wt 1")
-            x = x_cat1 * tile_cb_view + x_cat2 * (1 - tile_cb_view)
-        else:
-            x = x_cat1
-
+    def get_predicted_dist(self, x):
         ttc = self.tiles_to_crop
         if ttc > 0:
             x = x[:, ttc:-ttc, ttc:-ttc, :]
@@ -182,16 +160,48 @@ class Encoder(pl.LightningModule):
 
         return pred
 
-    def variational_mode(self, batch) -> TileCatalog:
+    def encode_batch(self, batch, target_cat=None, vmode=False):
+        x_features = self.get_batch_features(batch)
+        x_cat_marginal = self.catalog_net1(x_features)
+
+        if target_cat:  # training and validation loss
+            detections = target_cat.n_sources > 0
+        else:  # prediction and validation metrics
+            on_dist = self.dist_param_groups["on_prob"].get_dist(x_cat_marginal[:, :, :, 0:1])
+            if vmode:  # mode (of the variational distribution)
+                detections = on_dist.mode
+            else:  # sample
+                detections = on_dist.sample()
+
+        detections = detections.float().unsqueeze(1)
+        detections1 = detections * self.tile_cb
+        mask1 = self.tile_cb.expand([x_features.size(0), -1, -1, -1])
+        x1 = torch.cat([x_features, detections1, mask1], dim=1)
+        x_cat1 = self.catalog_net2(x1)
+
+        detections2 = detections * (1 - self.tile_cb)
+        x2 = torch.cat([x_features, detections2, 1 - mask1], dim=1)
+        x_cat2 = self.catalog_net2(x2)
+
+        tile_cb_view = rearrange(self.tile_cb, "1 1 ht wt -> 1 ht wt 1")
+        x_cat_conditional = x_cat1 * (1 - tile_cb_view) + x_cat2 * tile_cb_view
+
+        return self.get_predicted_dist(x_cat_marginal), self.get_predicted_dist(x_cat_conditional)
+
+    def variational_mode(self, batch, use_marginal=True) -> TileCatalog:
         """Compute the mode of the variational distribution.
 
         Args:
             batch: model predictions
+            use_marginal: whether to use the marginal or conditional predictions
 
         Returns:
             TileCatalog: Catalog based on predictions.
         """
-        pred = self.encode_batch(batch, vmode=True)
+        pred_marginal, pred_conditional = self.encode_batch(batch, vmode=True)
+        # TODO: combine marginal and conditional, don't pick one or the other
+        pred = pred_marginal if use_marginal else pred_conditional
+
         tile_is_on_array = pred["on_prob"].mode
 
         # populate est_catalog_dict with per-band (log) star fluxes
@@ -293,7 +303,7 @@ class Encoder(pl.LightningModule):
 
         return loss_with_components
 
-    def _generic_step(self, batch, logging_name, train=False, log_metrics=False, plot_images=False):
+    def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
         batch_size = batch["images"].size(0)
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
@@ -303,23 +313,34 @@ class Encoder(pl.LightningModule):
         if self.min_flux_threshold > 0:
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
-        pred = self.encode_batch(batch, train=train, target_cat=target_cat)
+        pred_marginal, pred_conditional = self.encode_batch(batch, target_cat=target_cat)
 
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop)
-        loss_dict = self._get_loss(pred, target_cat)
+        marginal_loss_dict = self._get_loss(pred_marginal, target_cat)
+        conditional_loss_dict = self._get_loss(pred_conditional, target_cat)
 
         # log all losses
-        for k, v in loss_dict.items():
-            self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+        for k, v in marginal_loss_dict.items():
+            self.log("{}-marginal/{}".format(logging_name, k), v, batch_size=batch_size)
+
+        for k, v in conditional_loss_dict.items():
+            self.log("{}-conditional/{}".format(logging_name, k), v, batch_size=batch_size)
+
+        if logging_name == "val":
+            self.log("val/loss", marginal_loss_dict["loss"] + conditional_loss_dict["loss"])
 
         if log_metrics or plot_images:
-            est_tile_cat = self.variational_mode(batch)  # get tile cat for metrics
+            est_tile_cat_marginal = self.variational_mode(batch, use_marginal=True)
+            est_tile_cat_conditional = self.variational_mode(batch, use_marginal=False)
 
         # log all metrics
         if log_metrics:
-            metrics = self.metrics(target_cat, est_tile_cat)
+            metrics = self.metrics(target_cat, est_tile_cat_marginal)
             for k, v in metrics.items():
-                self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+                self.log("{}-marginal/{}".format(logging_name, k), v, batch_size=batch_size)
+            metrics = self.metrics(target_cat, est_tile_cat_conditional)
+            for k, v in metrics.items():
+                self.log("{}-conditional/{}".format(logging_name, k), v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
         if plot_images:
@@ -328,7 +349,7 @@ class Encoder(pl.LightningModule):
             nrows = int(n_samples**0.5)  # for figure
 
             target_full_cat = target_cat.to_full_params()
-            est_full_cat = est_tile_cat.to_full_params()
+            est_full_cat = est_tile_cat_marginal.to_full_params()
             wrong_idx = (est_full_cat.n_sources != target_full_cat.n_sources).nonzero()
             wrong_idx = wrong_idx.view(-1)[:n_samples]
 
@@ -347,7 +368,7 @@ class Encoder(pl.LightningModule):
                 self.logger.experiment.add_figure(title, fig)
             plt.close(fig)
 
-        return loss_dict["loss"]
+        return marginal_loss_dict["loss"] + conditional_loss_dict["loss"]
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
@@ -369,7 +390,7 @@ class Encoder(pl.LightningModule):
             if self.image_normalizer.use_deconv_channel:
                 batch["deconvolution"] = aug_output_image[:, :, 2, :, :]
 
-        return self._generic_step(batch, "train", train=True)
+        return self._generic_step(batch, "train")
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
@@ -385,11 +406,11 @@ class Encoder(pl.LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
         with torch.no_grad():
-            pred = self.encode_batch(batch)
-            est_cat = self.variational_mode(batch)
+            pred_marginal, _ = self.encode_batch(batch)
+            est_cat = self.variational_mode(batch, use_marginal=True)
         return {
             "est_cat": est_cat,
             "images": batch["images"],
             "background": batch["background"],
-            "pred": pred,
+            "pred": pred_marginal,
         }
