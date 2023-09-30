@@ -1,5 +1,4 @@
 import math
-import warnings
 from typing import Dict, Optional
 
 import pytorch_lightning as pl
@@ -14,9 +13,9 @@ from torch.optim.lr_scheduler import MultiStepLR
 from bliss.catalog import SourceType, TileCatalog
 from bliss.convnet import CatalogNet, FeaturesNet
 from bliss.data_augmentation import augment_data
+from bliss.image_normalizer import ImageNormalizer
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
-from bliss.transforms import log_transform, rolling_z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
     UnconstrainedLogitNormal,
@@ -41,11 +40,11 @@ class Encoder(pl.LightningModule):
         survey_bands: list,
         tile_slen: int,
         tiles_to_crop: int,
+        image_normalizer: ImageNormalizer,
         slack: float = 1.0,
         min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
-        input_transform_params: Optional[dict] = None,
         do_data_augmentation: bool = False,
         compile_model: bool = False,
         checkerboard_prediction: bool = False,
@@ -57,12 +56,11 @@ class Encoder(pl.LightningModule):
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
+            image_normalizer: object that applies input transforms to images
             slack: Slack to use when matching locations for validation metrics.
             min_flux_threshold: Sources with a lower flux will not be considered when computing loss
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
-            input_transform_params: used for determining what channels to use as input (e.g.
-                deconvolution, concatenate PSF parameters, z-score inputs, etc.)
             do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
             checkerboard_prediction: make predictions using a white-black checkerboard pattern
@@ -75,36 +73,28 @@ class Encoder(pl.LightningModule):
 
         self.bands = bands
         self.survey_bands = survey_bands
-        self.n_bands = len(self.bands)
         self.tiles_to_crop = tiles_to_crop
+        self.image_normalizer = image_normalizer
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
-        self.input_transform_params = input_transform_params
         self.do_data_augmentation = do_data_augmentation
         self.checkerboard_prediction = checkerboard_prediction
-
-        transform_enabled = (
-            "log_transform" in self.input_transform_params
-            or "rolling_z_score" in self.input_transform_params
-        )
-        if not transform_enabled:
-            warnings.warn("Either log transform or rolling z-score should be enabled.")
 
         self.tile_slen = tile_slen
 
         # number of distributional parameters used to characterize each source
         self.n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
 
-        nch_in = self._num_channels_per_band()
+        nch_in = self.image_normalizer.num_channels_per_band()
         nch_hidden = 64
         self.preprocess3d = nn.Sequential(
-            nn.Conv3d(self.n_bands, nch_hidden, [nch_in, 5, 5], padding=[0, 2, 2], bias=True),
+            nn.Conv3d(len(self.bands), nch_hidden, [nch_in, 5, 5], padding=[0, 2, 2], bias=True),
             nn.BatchNorm3d(nch_hidden),
             nn.SiLU(),
         )
         self.features_net = FeaturesNet(nch_hidden)
-        bb_ch_in = 256 + (2 * self.checkerboard_prediction)
+        bb_ch_in = 256 + 2  # 2 extra channels for detections and potential detections
         self.catalog_net = CatalogNet(bb_ch_in, self.n_params_per_source)
 
         if compile_model:
@@ -147,88 +137,17 @@ class Encoder(pl.LightningModule):
             d[gal_flux] = UnconstrainedLogNormal()
         return d
 
-    def _num_channels_per_band(self):
-        """Determine number of input channels for model based on desired input transforms."""
-        nch = 1  # img + bg
-        if self.input_transform_params.get("include_original"):
-            nch += 1
-        if self.input_transform_params.get("use_deconv_channel"):
-            nch += 1
-        if self.input_transform_params.get("concat_psf_params"):
-            nch += 6
-        if self.input_transform_params.get("log_transform"):
-            nch += len(self.input_transform_params.get("log_transform"))
-        if self.input_transform_params.get("clahe"):
-            nch += 1
-        return nch
-
-    def get_input_tensor(self, batch):
-        """Extracts data from batch and concatenates into a single tensor to be input into model.
-
-        By default, only the image and background are used. Other input transforms can be specified
-        in self.input_transform_params. Supported options are:
-            use_deconv_channel: add channel for image deconvolved with PSF
-            concat_psf_params: add each PSF parameter as a channel
-            rolling_z_score: rolling z-score both the images and background
-            log_transform: apply pixel-wise natural logarithm to background-subtracted image.
-
-        Args:
-            batch: input batch (as dictionary)
-
-        Returns:
-            Tensor: b x c x 2 x h x w tensor, where the number of input channels `c` is based on the
-                input transformations to use
-        """
-        assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
-        assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
-
-        input_bands = batch["images"].shape[1]
-        if input_bands < self.n_bands:
-            msg = f"Expected >= {self.n_bands} bands in the input but found only {input_bands}"
-            warnings.warn(msg)
-
-        raw_images = batch["images"][:, self.bands].unsqueeze(2)
-        backgrounds = batch["background"][:, self.bands].unsqueeze(2)
-        inputs = [backgrounds]
-
-        if self.input_transform_params.get("include_original"):
-            inputs.insert(0, raw_images)  # add extra dim for 5d input
-
-        if self.input_transform_params.get("use_deconv_channel"):
-            msg = "use_deconv_channel specified but deconvolution not present in data"
-            assert "deconvolution" in batch, msg
-            inputs.append(batch["deconvolution"][:, self.bands].unsqueeze(2))
-
-        if self.input_transform_params.get("concat_psf_params"):
-            msg = "concat_psf_params specified but psf params not present in data"
-            assert "psf_params" in batch, msg
-            n, c, i, h, w = raw_images.shape
-            psf_params = batch["psf_params"][:, self.bands]
-            inputs.append(psf_params.view(n, c, 6 * i, 1, 1).expand(n, c, 6 * i, h, w))
-
-        for threshold in self.input_transform_params.get("log_transform"):
-            image_offsets = raw_images - backgrounds - threshold
-            transformed_img = log_transform(torch.clamp(image_offsets, min=1.0))
-            inputs.append(transformed_img)
-
-        if self.input_transform_params.get("clahe"):
-            renormalized_img = rolling_z_score(raw_images, 9, 200, 4)
-            inputs.append(renormalized_img)
-            inputs[0] = rolling_z_score(backgrounds, 9, 200, 4)
-
-        return torch.cat(inputs, dim=2)
-
     def encode_batch(self, batch, train=False, target_cat=None, vmode=False):
         # get input tensor from batch with specified channels and transforms
-        x = self.get_input_tensor(batch)
+        x = self.image_normalizer.get_input_tensor(batch)
         x = self.preprocess3d(x).squeeze(2)
         x_features = self.features_net(x)
 
-        if self.checkerboard_prediction:
-            # add two new channels for detections and potential detections
-            x = nn.functional.pad(x_features, [0, 0, 0, 0, 0, 2, 0, 0])
+        # add two new channels for detections and potential detections
+        x = nn.functional.pad(x_features, [0, 0, 0, 0, 0, 2, 0, 0])
 
         x_cat1 = self.catalog_net(x)
+
         if self.checkerboard_prediction:
             if train:  # training
                 detections = target_cat.n_sources > 0
@@ -246,6 +165,8 @@ class Encoder(pl.LightningModule):
 
             tile_cb_view = rearrange(self.tile_cb, "1 1 ht wt -> 1 ht wt 1")
             x = x_cat1 * tile_cb_view + x_cat2 * (1 - tile_cb_view)
+        else:
+            x = x_cat1
 
         ttc = self.tiles_to_crop
         if ttc > 0:
@@ -434,7 +355,7 @@ class Encoder(pl.LightningModule):
             imgs = batch["images"][:, self.bands].unsqueeze(2)  # add extra dim for 5d input
             bgs = batch["background"][:, self.bands].unsqueeze(2)
             aug_input_images = [imgs, bgs]
-            if self.input_transform_params.get("use_deconv_channel"):
+            if self.image_normalizer.use_deconv_channel:
                 assert (
                     "deconvolution" in batch
                 ), "use_deconv_channel specified but deconvolution not present in data"
@@ -445,7 +366,7 @@ class Encoder(pl.LightningModule):
             batch["images"] = aug_output_image[:, :, 0, :, :]
             batch["background"] = aug_output_image[:, :, 1, :, :]
             batch["tile_catalog"] = tile
-            if self.input_transform_params.get("use_deconv_channel"):
+            if self.image_normalizer.use_deconv_channel:
                 batch["deconvolution"] = aug_output_image[:, :, 2, :, :]
 
         return self._generic_step(batch, "train", train=True)
