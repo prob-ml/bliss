@@ -176,11 +176,11 @@ class Encoder(pl.LightningModule):
         detections = detections.float().unsqueeze(1)
         detections1 = detections * self.tile_cb
         mask1 = self.tile_cb.expand([x_features.size(0), -1, -1, -1])
-        x1 = torch.cat([x_features, detections1, mask1], dim=1)
+        x1 = torch.cat([x_features.detach(), detections1, mask1], dim=1)
         x_cat1 = self.catalog_net2(x1)
 
         detections2 = detections * (1 - self.tile_cb)
-        x2 = torch.cat([x_features, detections2, 1 - mask1], dim=1)
+        x2 = torch.cat([x_features.detach(), detections2, 1 - mask1], dim=1)
         x_cat2 = self.catalog_net2(x2)
 
         tile_cb_view = rearrange(self.tile_cb, "1 1 ht wt -> 1 ht wt 1")
