@@ -51,32 +51,45 @@ class C3(nn.Module):
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
 
 
-class ConvNet(nn.Module):
-    def __init__(self, in_channels, out_channels):
+class FeaturesNet(nn.Module):
+    def __init__(self, in_channels):
         super().__init__()
 
-        backbone_layers = [
+        net_layers = [
             ConvBlock(in_channels, 64, kernel_size=5, padding=2),
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(9)]),
             ConvBlock(64, 128, stride=2),
             ConvBlock(128, 128),
             ConvBlock(128, 256, stride=2),  # 3
-            C3(256, 256, n=6),  # 4
+        ]
+        self.net = nn.Sequential(*net_layers)
+
+    def forward(self, x):
+        return self.net(x)
+
+
+class CatalogNet(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+
+        net_layers = [
+            ConvBlock(in_channels, 256),
+            C3(256, 256, n=6),  # 1
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),
-            ConvBlock(512, 256, kernel_size=1, padding=0),
-            nn.Upsample(scale_factor=2, mode="nearest"),  # 8
+            ConvBlock(512, 256, kernel_size=1, padding=0),  # 4
+            nn.Upsample(scale_factor=2, mode="nearest"),  # 5
             C3(768, 256, n=3, shortcut=False),
             Detect(256, out_channels),
         ]
-        self.backbone = nn.ModuleList(backbone_layers)
+        self.net_ml = nn.ModuleList(net_layers)
 
     def forward(self, x):
         save_lst = []
-        for i, m in enumerate(self.backbone):
+        for i, m in enumerate(self.net_ml):
             x = m(x)
-            if i in {4, 5, 9}:
+            if i in {0, 1, 5}:
                 save_lst.append(x)
-            if i == 9:
+            if i == 5:
                 x = torch.cat(save_lst, dim=1)
         return x

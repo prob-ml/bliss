@@ -12,7 +12,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.catalog import SourceType, TileCatalog
-from bliss.convnet import ConvNet
+from bliss.convnet import CatalogNet, FeaturesNet
 from bliss.data_augmentation import augment_data
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
@@ -88,11 +88,8 @@ class Encoder(pl.LightningModule):
             "log_transform" in self.input_transform_params
             or "rolling_z_score" in self.input_transform_params
         )
-        if self.n_bands > 1 and not transform_enabled:
-            warnings.warn(
-                "For multiband data, it is recommended that either"
-                + " log transform or rolling z-score is enabled."
-            )
+        if not transform_enabled:
+            warnings.warn("Either log transform or rolling z-score should be enabled.")
 
         self.tile_slen = tile_slen
 
@@ -106,11 +103,14 @@ class Encoder(pl.LightningModule):
             nn.BatchNorm3d(nch_hidden),
             nn.SiLU(),
         )
+        self.features_net = FeaturesNet(nch_hidden)
+        bb_ch_in = 256 + (2 * self.checkerboard_prediction)
+        self.catalog_net = CatalogNet(bb_ch_in, self.n_params_per_source)
 
-        bb_ch_in = nch_hidden + (2 * self.checkerboard_prediction)
-        self.convnet = ConvNet(bb_ch_in, self.n_params_per_source)
         if compile_model:
-            self.convnet = torch.compile(self.convnet)
+            self.preprocess3d = torch.compile(self.preprocess3d)
+            self.features_net = torch.compile(self.features_net)
+            self.catalog_net = torch.compile(self.catalog_net)
 
         # metrics
         self.metrics = BlissMetrics(
@@ -124,9 +124,8 @@ class Encoder(pl.LightningModule):
             mg = torch.meshgrid(arange, arange, indexing="ij")
             indices = torch.stack(mg)
             tile_cb = indices.sum(axis=0) % 2
+            tile_cb = rearrange(tile_cb, "ht wt -> 1 1 ht wt")
             self.register_buffer("tile_cb", tile_cb)
-            pixel_cb = tile_cb.repeat_interleave(4, dim=1).repeat_interleave(4, dim=0)
-            self.register_buffer("pixel_cb", pixel_cb)
 
     @property
     def dist_param_groups(self):
@@ -221,45 +220,39 @@ class Encoder(pl.LightningModule):
 
     def encode_batch(self, batch, train=False, target_cat=None, vmode=False):
         # get input tensor from batch with specified channels and transforms
-        inputs = self.get_input_tensor(batch)
+        x = self.get_input_tensor(batch)
+        x = self.preprocess3d(x).squeeze(2)
+        x_features = self.features_net(x)
 
-        x_per_band = self.preprocess3d(inputs).squeeze(2)
-
-        x_round1 = x_per_band
         if self.checkerboard_prediction:
-            potential_detections = torch.zeros_like(x_per_band[:, :1])
-            detections = torch.zeros_like(x_per_band[:, :1])
-            x_round1 = torch.cat([x_per_band, potential_detections, detections], dim=1)
+            # add two new channels for detections and potential detections
+            x = nn.functional.pad(x_features, [0, 0, 0, 0, 0, 2, 0, 0])
 
-        output4d = self.convnet(x_round1)
+        x_cat1 = self.catalog_net(x)
         if self.checkerboard_prediction:
             if train:  # training
-                tile_detections = target_cat.n_sources > 0
+                detections = target_cat.n_sources > 0
             else:  # prediction
-                on_dist = self.dist_param_groups["on_prob"].get_dist(output4d[:, :, :, 0:1])
-                if vmode:  # like maximum a posteriori estimation
-                    tile_detections = on_dist.mode
+                on_dist = self.dist_param_groups["on_prob"].get_dist(x_cat1[:, :, :, 0:1])
+                if vmode:  # mode (of the variational distribution)
+                    detections = on_dist.mode
                 else:  # sample
-                    tile_detections = on_dist.sample()
+                    detections = on_dist.sample()
 
-            td_masked = tile_detections.float() * self.tile_cb.unsqueeze(0)
-            pixel_detections = td_masked.repeat_interleave(4, dim=2).repeat_interleave(4, dim=1)
-            batch_detections = rearrange(pixel_detections, "b h w -> b 1 h w")
-            batch_cb = rearrange(self.pixel_cb, "h w -> 1 1 h w")
-            batch_cb = batch_cb.expand([inputs.size(0), -1, -1, -1])
-            x_round2 = torch.cat([x_per_band, batch_detections, batch_cb], dim=1)
+            masked_detections = detections.float().unsqueeze(1) * self.tile_cb
+            potential_detections = self.tile_cb.expand([x.size(0), -1, -1, -1])
+            x = torch.cat([x_features, masked_detections, potential_detections], dim=1)
+            x_cat2 = self.catalog_net(x)
 
-            output4d_r2 = self.convnet(x_round2)
-
-            tilecb4d = rearrange(self.tile_cb, "ht wt -> 1 ht wt 1")
-            output4d = output4d * tilecb4d + output4d_r2 * (1 - tilecb4d)
+            tile_cb_view = rearrange(self.tile_cb, "1 1 ht wt -> 1 ht wt 1")
+            x = x_cat1 * tile_cb_view + x_cat2 * (1 - tile_cb_view)
 
         ttc = self.tiles_to_crop
         if ttc > 0:
-            output4d = output4d[:, ttc:-ttc, ttc:-ttc, :]
+            x = x[:, ttc:-ttc, ttc:-ttc, :]
 
         split_sizes = [v.dim for v in self.dist_param_groups.values()]
-        dist_params_split = torch.split(output4d, split_sizes, 3)
+        dist_params_split = torch.split(x, split_sizes, 3)
         names = self.dist_param_groups.keys()
         pred = dict(zip(names, dist_params_split))
 
