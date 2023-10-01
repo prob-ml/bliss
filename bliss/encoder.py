@@ -46,7 +46,6 @@ class Encoder(pl.LightningModule):
         scheduler_params: Optional[dict] = None,
         do_data_augmentation: bool = False,
         compile_model: bool = False,
-        checkerboard_prediction: bool = False,
     ):
         """Initializes DetectionEncoder.
 
@@ -62,7 +61,6 @@ class Encoder(pl.LightningModule):
             scheduler_params: arguments passed to the learning rate scheduler
             do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
-            checkerboard_prediction: make predictions using a white-black checkerboard pattern
         """
         super().__init__()
         self.save_hyperparameters()
@@ -78,7 +76,6 @@ class Encoder(pl.LightningModule):
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
-        self.checkerboard_prediction = checkerboard_prediction
 
         self.tile_slen = tile_slen
 
@@ -97,15 +94,15 @@ class Encoder(pl.LightningModule):
             mode=MetricsMode.TILE, slack=slack, survey_bands=self.survey_bands
         )
 
-        if self.checkerboard_prediction:
-            # https://stackoverflow.com/questions/72874737/how-to-make-a-checkerboard-in-pytorch
-            ht = 20
-            arange = torch.arange(ht, device=self.device)
-            mg = torch.meshgrid(arange, arange, indexing="ij")
-            indices = torch.stack(mg)
-            tile_cb = indices.sum(axis=0) % 2
-            tile_cb = rearrange(tile_cb, "ht wt -> 1 1 ht wt")
-            self.register_buffer("tile_cb", tile_cb)
+        # make/store a checkerboard of tiles
+        # https://stackoverflow.com/questions/72874737/how-to-make-a-checkerboard-in-pytorch
+        ht = 20
+        arange = torch.arange(ht, device=self.device)
+        mg = torch.meshgrid(arange, arange, indexing="ij")
+        indices = torch.stack(mg)
+        tile_cb = indices.sum(axis=0) % 2
+        tile_cb = rearrange(tile_cb, "ht wt -> 1 1 ht wt")
+        self.register_buffer("tile_cb", tile_cb)
 
     @property
     def dist_param_groups(self):
