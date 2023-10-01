@@ -5,13 +5,12 @@ import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
-from torch import nn
 from torch.distributions import Distribution
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.catalog import SourceType, TileCatalog
-from bliss.convnet import CatalogNet1, CatalogNet2, FeaturesNet
+from bliss.convnet import ConditionalNet, MarginalNet
 from bliss.data_augmentation import augment_data
 from bliss.image_normalizer import ImageNormalizer
 from bliss.metrics import BlissMetrics, MetricsMode
@@ -83,26 +82,15 @@ class Encoder(pl.LightningModule):
 
         self.tile_slen = tile_slen
 
-        # number of distributional parameters used to characterize each source
-        self.n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
-
-        nch_in = self.image_normalizer.num_channels_per_band()
-        nch_hidden = 64
-        self.preprocess3d = nn.Sequential(
-            nn.Conv3d(len(self.bands), nch_hidden, [nch_in, 5, 5], padding=[0, 2, 2], bias=True),
-            nn.BatchNorm3d(nch_hidden),
-            nn.SiLU(),
-        )
-        self.features_net = FeaturesNet(nch_hidden)
-        self.catalog_net1 = CatalogNet1(256, self.n_params_per_source)
-        # add two new channels for detections and potential detections
-        self.catalog_net2 = CatalogNet2(256 + 2, self.n_params_per_source)
+        ch_per_band = self.image_normalizer.num_channels_per_band()
+        n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
+        self.marginal_net = MarginalNet(len(bands), ch_per_band, n_params_per_source)
+        self.conditional_net = ConditionalNet(n_params_per_source)
 
         if compile_model:
             self.preprocess3d = torch.compile(self.preprocess3d)
-            self.features_net = torch.compile(self.features_net)
-            self.catalog_net1 = torch.compile(self.catalog_net1)
-            self.catalog_net2 = torch.compile(self.catalog_net2)
+            self.marginal_net = torch.compile(self.marginal_net)
+            self.conditional_net = torch.compile(self.conditional_net)
 
         # metrics
         self.metrics = BlissMetrics(
@@ -139,12 +127,6 @@ class Encoder(pl.LightningModule):
             d[gal_flux] = UnconstrainedLogNormal()
         return d
 
-    def get_batch_features(self, batch):
-        # get input tensor from batch with specified channels and transforms
-        x = self.image_normalizer.get_input_tensor(batch)
-        x = self.preprocess3d(x).squeeze(2)
-        return self.features_net(x)
-
     def get_predicted_dist(self, x):
         ttc = self.tiles_to_crop
         if ttc > 0:
@@ -161,8 +143,9 @@ class Encoder(pl.LightningModule):
         return pred
 
     def encode_batch(self, batch, target_cat=None, vmode=False):
-        x_features = self.get_batch_features(batch)
-        x_cat_marginal = self.catalog_net1(x_features)
+        x = self.image_normalizer.get_input_tensor(batch)
+        x_cat_marginal, x_features = self.marginal_net(x)
+        x_features = x_features.detach()  # helps with training stability
 
         if target_cat:  # training and validation loss
             detections = target_cat.n_sources > 0
@@ -174,14 +157,13 @@ class Encoder(pl.LightningModule):
                 detections = on_dist.sample()
 
         detections = detections.float().unsqueeze(1)
+
         detections1 = detections * self.tile_cb
         mask1 = self.tile_cb.expand([x_features.size(0), -1, -1, -1])
-        x1 = torch.cat([x_features.detach(), detections1, mask1], dim=1)
-        x_cat1 = self.catalog_net2(x1)
+        x_cat1 = self.conditional_net(x_features, detections1, mask1)
 
         detections2 = detections * (1 - self.tile_cb)
-        x2 = torch.cat([x_features.detach(), detections2, 1 - mask1], dim=1)
-        x_cat2 = self.catalog_net2(x2)
+        x_cat2 = self.conditional_net(x_features, detections2, 1 - mask1)
 
         tile_cb_view = rearrange(self.tile_cb, "1 1 ht wt -> 1 ht wt 1")
         x_cat_conditional = x_cat1 * (1 - tile_cb_view) + x_cat2 * tile_cb_view
