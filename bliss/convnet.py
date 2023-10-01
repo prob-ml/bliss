@@ -65,9 +65,9 @@ class MarginalNet(nn.Module):
         )
         backbone_layers = [
             ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
-            nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(9)]),
+            nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
-            ConvBlock(128, 128),
+            nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
             ConvBlock(128, NUM_FEATURES, stride=2),  # 4
             C3(256, 256, n=6),  # 5
             ConvBlock(256, 512, stride=2),
