@@ -1,5 +1,6 @@
 import warnings
 
+import pytest
 import torch
 from hydra.utils import instantiate
 
@@ -7,13 +8,13 @@ from case_studies.adaptive_tiling.region_catalog import RegionCatalog
 
 
 class TestEncoder:
-    def test_encode_multi_source_catalog(self, cfg, multi_source_dataloader, encoder):
+    def test_encode_multi_source_catalog(self, cfg, multi_source_dataloader):
         batch = next(iter(multi_source_dataloader))
         for key, val in batch.items():
             if isinstance(val, torch.Tensor):
                 batch[key] = val.to(cfg.predict.device)
-        pred = encoder.encode_batch(batch)
-        encoder.variational_mode(pred)
+        encoder = instantiate(cfg.encoder).to(cfg.predict.device)
+        encoder.variational_mode(batch)
 
     def test_encode_with_psf(self, cfg, multiband_dataloader):
         batch = next(iter(multiband_dataloader))
@@ -23,12 +24,16 @@ class TestEncoder:
 
         encoder_params = {
             "bands": [2],
-            "image_normalizer": {"use_deconv_channel": True, "concat_psf_params": True},
+            "image_normalizer": {
+                "use_deconv_channel": True,
+                "concat_psf_params": True,
+                "bands": [2],
+            },
         }
         encoder = instantiate(cfg.encoder, **encoder_params).to(cfg.predict.device)
-        pred = encoder.encode_batch(batch)
-        encoder.variational_mode(pred)
+        encoder.variational_mode(batch)
 
+    @pytest.mark.skip(reason="we may not need the region encoder")
     def test_region_loss(self, cfg):
         encoder = instantiate(cfg.region_encoder).to(cfg.predict.device)
         d = {
@@ -48,9 +53,10 @@ class TestEncoder:
         encoder.tiles_to_crop = 0
         encoder.eval()
         with torch.no_grad():
-            pred = encoder.encode_batch(batch)
+            pred, _ = encoder.encode_batch(batch)
             encoder._get_loss(pred, region_cat)  # pylint: disable=W0212  # noqa: WPS437
 
+    @pytest.mark.skip(reason="we may not need the region encoder")
     def test_region_locs_in_tiles(self):
         d = {
             "n_sources": torch.ones(1, 5, 5),

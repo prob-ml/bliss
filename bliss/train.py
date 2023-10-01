@@ -8,11 +8,16 @@ import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.profilers import AdvancedProfiler
 from pytorch_lightning.utilities import rank_zero_only
+
+
+class ClearGPUMemoryCallback(Callback):
+    def on_train_epoch_end(self, trainer, pl_module):
+        torch.cuda.empty_cache()
 
 
 def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-statements
@@ -39,7 +44,7 @@ def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-state
     early_stopping = setup_early_stopping(cfg)
     profiler = setup_profiler(cfg)
 
-    callbacks = []
+    callbacks = [ClearGPUMemoryCallback()]
     if checkpoint_callback:
         callbacks.append(checkpoint_callback)
     if early_stopping:

@@ -38,7 +38,6 @@ class Encoder(pl.LightningModule):
         bands: list,
         survey_bands: list,
         tile_slen: int,
-        image_slen_in_tiles: int,
         tiles_to_crop: int,
         image_normalizer: ImageNormalizer,
         slack: float = 1.0,
@@ -54,7 +53,6 @@ class Encoder(pl.LightningModule):
             bands: specified band-pass filters
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
-            image_slen_in_tiles: image height and width in tiles
             tiles_to_crop: margin of tiles not to use for computing loss
             image_normalizer: object that applies input transforms to images
             slack: Slack to use when matching locations for validation metrics.
@@ -96,14 +94,15 @@ class Encoder(pl.LightningModule):
             mode=MetricsMode.TILE, slack=slack, survey_bands=self.survey_bands
         )
 
+    def _get_checkboard(self, ht, wt):
         # make/store a checkerboard of tiles
         # https://stackoverflow.com/questions/72874737/how-to-make-a-checkerboard-in-pytorch
-        arange = torch.arange(image_slen_in_tiles, device=self.device)
-        mg = torch.meshgrid(arange, arange, indexing="ij")
+        arange_ht = torch.arange(ht, device=self.device)
+        arange_wt = torch.arange(wt, device=self.device)
+        mg = torch.meshgrid(arange_ht, arange_wt, indexing="ij")
         indices = torch.stack(mg)
         tile_cb = indices.sum(axis=0) % 2
-        tile_cb = rearrange(tile_cb, "ht wt -> 1 1 ht wt")
-        self.register_buffer("tile_cb", tile_cb)
+        return rearrange(tile_cb, "ht wt -> 1 1 ht wt")
 
     @property
     def dist_param_groups(self):
@@ -156,14 +155,15 @@ class Encoder(pl.LightningModule):
 
         detections = detections.float().unsqueeze(1)
 
-        detections1 = detections * self.tile_cb
-        mask1 = self.tile_cb.expand([x_features.size(0), -1, -1, -1])
+        tile_cb = self._get_checkboard(detections.size(2), detections.size(3))
+        detections1 = detections * tile_cb
+        mask1 = tile_cb.expand([x_features.size(0), -1, -1, -1])
         x_cat1 = self.conditional_net(x_features, detections1, mask1)
 
-        detections2 = detections * (1 - self.tile_cb)
+        detections2 = detections * (1 - tile_cb)
         x_cat2 = self.conditional_net(x_features, detections2, 1 - mask1)
 
-        tile_cb_view = rearrange(self.tile_cb, "1 1 ht wt -> 1 ht wt 1")
+        tile_cb_view = rearrange(tile_cb, "1 1 ht wt -> 1 ht wt 1")
         x_cat_conditional = x_cat1 * (1 - tile_cb_view) + x_cat2 * tile_cb_view
 
         return self.get_predicted_dist(x_cat_marginal), self.get_predicted_dist(x_cat_conditional)

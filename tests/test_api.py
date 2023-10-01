@@ -25,7 +25,6 @@ def bliss_client(cfg, tmpdir_factory):
     overrides = {
         "training.trainer.accelerator": cfg.training.trainer.accelerator,
         "predict.device": cfg.predict.device,
-        "encoder.image_slen_in_tiles": 4,
     }
     for k, v in overrides.items():
         OmegaConf.update(client.base_cfg, k, v)

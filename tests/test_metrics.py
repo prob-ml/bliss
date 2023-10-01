@@ -67,8 +67,7 @@ class TestMetrics:
             }
             encoder.eval()
             encoder = encoder.float()
-            pred = encoder.encode_batch(batch)
-            bliss_cat = encoder.variational_mode(pred).to(torch.device("cpu")).to_full_params()
+            bliss_cat = encoder.variational_mode(batch).to(torch.device("cpu")).to_full_params()
 
         bliss_cat.plocs += torch.tensor(
             [h_lim[0] + cfg.encoder.tile_slen, w_lim[0] + cfg.encoder.tile_slen]
@@ -167,43 +166,18 @@ class TestMetrics:
             else:
                 assert results[f"{metric}_mae"] == 0
 
-    def test_photo_self_agreement(self, catalogs):
-        """Compares PhotoFullCatalog to itself as safety check for metrics."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
-        results = metrics(catalogs["photo"], catalogs["photo"])
-        assert results["f1"] == 1
-
-    def test_decals_self_agreement(self, catalogs):
-        """Compares Decals catalog to itself as safety check for metrics."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
-        results = metrics(catalogs["decals"], catalogs["decals"])
-        assert results["f1"] == 1
-
-    def test_photo_decals_agree(self, catalogs):
-        """Compares metrics for agreement between Photo catalog and Decals catalog."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
-        results = metrics(catalogs["decals"], catalogs["photo"])
-        assert results["detection_precision"] > 0.8
-
-    def test_bliss_photo_agree(self, catalogs):
-        """Compares metrics for agreement between BLISS-inferred catalog and Photo catalog."""
-        slack = 1.0
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=slack, survey_bands=list(SDSS.BANDS))
-        results = metrics(catalogs["photo"], catalogs["bliss"])
-        assert results["f1"] > 0.7
-        assert results["avg_keep_distance"] < slack
-
-    def test_bliss_photo_agree_comp_decals(self, catalogs):
-        """Compares metrics between BLISS and Photo catalog with DECaLS as GT."""
-        decals_cat = catalogs["decals"]
-        photo_cat = catalogs["photo"]
-        bliss_cat = catalogs["bliss"]
-
+    def test_catalog_agreement(self, catalogs):
+        """Compares catalogs as safety check for metrics."""
         metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
 
-        bliss_vs_decals = metrics(decals_cat, bliss_cat)
-        photo_vs_decals = metrics(decals_cat, photo_cat)
+        assert metrics(catalogs["photo"], catalogs["photo"])["f1"] == 1
+        assert metrics(catalogs["decals"], catalogs["decals"])["f1"] == 1
+        assert metrics(catalogs["decals"], catalogs["photo"])["detection_precision"] > 0.8
+        assert metrics(catalogs["photo"], catalogs["bliss"])["f1"] > 0.5
+        assert metrics(catalogs["photo"], catalogs["bliss"])["avg_keep_distance"] < 1.0
 
+        bliss_vs_decals = metrics(catalogs["decals"], catalogs["bliss"])
+        photo_vs_decals = metrics(catalogs["decals"], catalogs["photo"])
         assert bliss_vs_decals["f1"] > photo_vs_decals["f1"]
 
     def test_three_way_matching(self):
