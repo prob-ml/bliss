@@ -71,6 +71,7 @@ encoder:
     bands: [0, 1, 2, 3, 4]
     survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: ${simulator.prior.tile_slen}
+    image_slen_in_tiles: 20
     tiles_to_crop: 1
     slack: 1.0
     min_flux_threshold: 0  # default 0 to take all sources
@@ -200,4 +201,5 @@ surveys:
         batch_size: 64
         n_split: 50
         image_lim: [4000, 4000]
+        use_deconv_channel: ${encoder.image_normalizer.use_deconv_channel}
         deconv_path: ${paths.dc2}/coadd_deconv_image

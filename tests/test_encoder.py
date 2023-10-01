@@ -23,7 +23,7 @@ class TestEncoder:
 
         encoder_params = {
             "bands": [2],
-            "input_transform_params": {"use_deconv_channel": True, "concat_psf_params": True},
+            "image_normalizer": {"use_deconv_channel": True, "concat_psf_params": True},
         }
         encoder = instantiate(cfg.encoder, **encoder_params).to(cfg.predict.device)
         pred = encoder.encode_batch(batch)

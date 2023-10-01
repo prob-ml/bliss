@@ -38,6 +38,7 @@ class Encoder(pl.LightningModule):
         bands: list,
         survey_bands: list,
         tile_slen: int,
+        image_slen_in_tiles: int,
         tiles_to_crop: int,
         image_normalizer: ImageNormalizer,
         slack: float = 1.0,
@@ -53,6 +54,7 @@ class Encoder(pl.LightningModule):
             bands: specified band-pass filters
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
+            image_slen_in_tiles: image height and width in tiles
             tiles_to_crop: margin of tiles not to use for computing loss
             image_normalizer: object that applies input transforms to images
             slack: Slack to use when matching locations for validation metrics.
@@ -63,7 +65,7 @@ class Encoder(pl.LightningModule):
             compile_model: compile model for potential performance improvements
         """
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["image_normalizer"])
 
         self.STAR_FLUX_NAMES = [f"star_flux_{bnd}" for bnd in survey_bands]  # ordered by BANDS
         self.GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in survey_bands]  # ordered by BANDS
@@ -96,8 +98,7 @@ class Encoder(pl.LightningModule):
 
         # make/store a checkerboard of tiles
         # https://stackoverflow.com/questions/72874737/how-to-make-a-checkerboard-in-pytorch
-        ht = 20
-        arange = torch.arange(ht, device=self.device)
+        arange = torch.arange(image_slen_in_tiles, device=self.device)
         mg = torch.meshgrid(arange, arange, indexing="ij")
         indices = torch.stack(mg)
         tile_cb = indices.sum(axis=0) % 2

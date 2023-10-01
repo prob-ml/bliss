@@ -46,17 +46,18 @@ class TestDC2:
 
     def test_train_on_dc2(self, cfg):
         train_dc2_cfg = cfg.copy()
+        train_dc2_cfg.encoder.image_slen_in_tiles = 40
         train_dc2_cfg.encoder.bands = [0, 1, 2, 3, 4, 5]
         train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]
         train_dc2_cfg.training.data_source = train_dc2_cfg.surveys.dc2
-        train_dc2_cfg.encoder.input_transform_params.use_deconv_channel = True
+        train_dc2_cfg.encoder.image_normalizer.use_deconv_channel = True
         train_dc2_cfg.encoder.do_data_augmentation = True
         train_dc2_cfg.training.pretrained_weights = None
         train(train_dc2_cfg)
 
     def test_dc2_augmentation(self, cfg):
         train_dc2_cfg = cfg.copy()
-        train_dc2_cfg.encoder.input_transform_params.use_deconv_channel = True
+        train_dc2_cfg.encoder.image_normalizer.use_deconv_channel = True
 
         dataset = instantiate(train_dc2_cfg.surveys.dc2)
         dataset.prepare_data()
