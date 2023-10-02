@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.catalog import SourceType, TileCatalog
 from bliss.convnet import ConditionalNet, MarginalNet
-from bliss.data_augmentation import augment_data
+from bliss.data_augmentation import augment_batch
 from bliss.image_normalizer import ImageNormalizer
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
@@ -85,7 +85,6 @@ class Encoder(pl.LightningModule):
         self.conditional_net = ConditionalNet(n_params_per_source)
 
         if compile_model:
-            self.preprocess3d = torch.compile(self.preprocess3d)
             self.marginal_net = torch.compile(self.marginal_net)
             self.conditional_net = torch.compile(self.conditional_net)
 
@@ -166,21 +165,28 @@ class Encoder(pl.LightningModule):
         tile_cb_view = rearrange(tile_cb, "1 1 ht wt -> 1 ht wt 1")
         x_cat_conditional = x_cat1 * (1 - tile_cb_view) + x_cat2 * tile_cb_view
 
-        return self.get_predicted_dist(x_cat_marginal), self.get_predicted_dist(x_cat_conditional)
+        x_cat_joint1 = x_cat_marginal * tile_cb_view + x_cat1 * (1 - tile_cb_view)
+        x_cat_joint2 = x_cat_marginal * (1 - tile_cb_view) + x_cat2 * tile_cb_view
 
-    def variational_mode(self, batch, use_marginal=True) -> TileCatalog:
+        return {
+            "marginal": self.get_predicted_dist(x_cat_marginal),
+            "conditional": self.get_predicted_dist(x_cat_conditional),
+            "joint1": self.get_predicted_dist(x_cat_joint1),
+            "joint2": self.get_predicted_dist(x_cat_joint2),
+        }
+
+    def variational_mode(self, batch, cat_type="joint1") -> TileCatalog:
         """Compute the mode of the variational distribution.
 
         Args:
             batch: model predictions
-            use_marginal: whether to use the marginal or conditional predictions
+            cat_type: whether to use the marginal or joint predictions
 
         Returns:
             TileCatalog: Catalog based on predictions.
         """
-        pred_marginal, pred_conditional = self.encode_batch(batch, vmode=True)
-        # TODO: combine marginal and conditional, don't pick one or the other
-        pred = pred_marginal if use_marginal else pred_conditional
+        preds = self.encode_batch(batch, vmode=True)
+        pred = preds[cat_type]
 
         tile_is_on_array = pred["on_prob"].mode
 
@@ -293,11 +299,11 @@ class Encoder(pl.LightningModule):
         if self.min_flux_threshold > 0:
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
-        pred_marginal, pred_conditional = self.encode_batch(batch, target_cat=target_cat)
+        preds = self.encode_batch(batch, target_cat=target_cat)
 
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop)
-        marginal_loss_dict = self._get_loss(pred_marginal, target_cat)
-        conditional_loss_dict = self._get_loss(pred_conditional, target_cat)
+        marginal_loss_dict = self._get_loss(preds["marginal"], target_cat)
+        conditional_loss_dict = self._get_loss(preds["conditional"], target_cat)
 
         # log all losses
         for k, v in marginal_loss_dict.items():
@@ -309,18 +315,14 @@ class Encoder(pl.LightningModule):
         if logging_name == "val":
             self.log("val/loss", marginal_loss_dict["loss"] + conditional_loss_dict["loss"])
 
-        if log_metrics or plot_images:
-            est_tile_cat_marginal = self.variational_mode(batch, use_marginal=True)
-            est_tile_cat_conditional = self.variational_mode(batch, use_marginal=False)
-
         # log all metrics
         if log_metrics:
-            metrics = self.metrics(target_cat, est_tile_cat_marginal)
-            for k, v in metrics.items():
-                self.log("{}-marginal/{}".format(logging_name, k), v, batch_size=batch_size)
-            metrics = self.metrics(target_cat, est_tile_cat_conditional)
-            for k, v in metrics.items():
-                self.log("{}-conditional/{}".format(logging_name, k), v, batch_size=batch_size)
+            cat_types = ["marginal", "conditional", "joint1", "joint2"]
+            for ct in cat_types:
+                est_tile_cat = self.variational_mode(batch, cat_type=ct)
+                metrics = self.metrics(target_cat, est_tile_cat)
+                for k, v in metrics.items():
+                    self.log("{}-{}/{}".format(logging_name, ct, k), v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
         if plot_images:
@@ -329,6 +331,7 @@ class Encoder(pl.LightningModule):
             nrows = int(n_samples**0.5)  # for figure
 
             target_full_cat = target_cat.to_full_params()
+            est_tile_cat_marginal = self.variational_mode(batch, cat_type="marginal")
             est_full_cat = est_tile_cat_marginal.to_full_params()
             wrong_idx = (est_full_cat.n_sources != target_full_cat.n_sources).nonzero()
             wrong_idx = wrong_idx.view(-1)[:n_samples]
@@ -353,22 +356,7 @@ class Encoder(pl.LightningModule):
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
         if self.do_data_augmentation:
-            imgs = batch["images"][:, self.bands].unsqueeze(2)  # add extra dim for 5d input
-            bgs = batch["background"][:, self.bands].unsqueeze(2)
-            aug_input_images = [imgs, bgs]
-            if self.image_normalizer.use_deconv_channel:
-                assert (
-                    "deconvolution" in batch
-                ), "use_deconv_channel specified but deconvolution not present in data"
-                aug_input_images.append(batch["background"][:, self.bands].unsqueeze(2))
-            aug_input_image = torch.cat(aug_input_images, dim=2)
-
-            aug_output_image, tile = augment_data(batch["tile_catalog"], aug_input_image)
-            batch["images"] = aug_output_image[:, :, 0, :, :]
-            batch["background"] = aug_output_image[:, :, 1, :, :]
-            batch["tile_catalog"] = tile
-            if self.image_normalizer.use_deconv_channel:
-                batch["deconvolution"] = aug_output_image[:, :, 2, :, :]
+            augment_batch(batch)
 
         return self._generic_step(batch, "train")
 
@@ -386,11 +374,11 @@ class Encoder(pl.LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
         with torch.no_grad():
-            pred_marginal, _ = self.encode_batch(batch)
-            est_cat = self.variational_mode(batch, use_marginal=True)
+            preds = self.encode_batch(batch)
+            est_cat = self.variational_mode(batch, cat_type="marginal")
         return {
             "est_cat": est_cat,
             "images": batch["images"],
             "background": batch["background"],
-            "pred": pred_marginal,
+            "pred": preds["marginal"],
         }

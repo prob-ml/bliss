@@ -1,6 +1,5 @@
 import warnings
 
-import pytest
 import torch
 from hydra.utils import instantiate
 
@@ -33,7 +32,6 @@ class TestEncoder:
         encoder = instantiate(cfg.encoder, **encoder_params).to(cfg.predict.device)
         encoder.variational_mode(batch)
 
-    @pytest.mark.skip(reason="we may not need the region encoder")
     def test_region_loss(self, cfg):
         encoder = instantiate(cfg.region_encoder).to(cfg.predict.device)
         d = {
@@ -53,10 +51,9 @@ class TestEncoder:
         encoder.tiles_to_crop = 0
         encoder.eval()
         with torch.no_grad():
-            pred, _ = encoder.encode_batch(batch)
+            pred = encoder.encode_batch(batch)["marginal"]
             encoder._get_loss(pred, region_cat)  # pylint: disable=W0212  # noqa: WPS437
 
-    @pytest.mark.skip(reason="we may not need the region encoder")
     def test_region_locs_in_tiles(self):
         d = {
             "n_sources": torch.ones(1, 5, 5),
