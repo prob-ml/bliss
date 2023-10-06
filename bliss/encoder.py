@@ -1,4 +1,5 @@
 import math
+from copy import deepcopy
 from typing import Dict, Optional
 
 import pytorch_lightning as pl
@@ -138,21 +139,14 @@ class Encoder(pl.LightningModule):
 
         return pred
 
-    def encode_batch(self, batch, target_cat=None, vmode=False):
+    def get_marginal(self, batch):
         x = self.image_normalizer.get_input_tensor(batch)
         x_cat_marginal, x_features = self.marginal_net(x)
         x_features = x_features.detach()  # helps with training stability
+        return x_cat_marginal, x_features
 
-        if target_cat:  # training and validation loss
-            detections = target_cat.n_sources > 0
-        else:  # prediction and validation metrics
-            on_dist = self.dist_param_groups["on_prob"].get_dist(x_cat_marginal[:, :, :, 0:1])
-            if vmode:  # mode (of the variational distribution)
-                detections = on_dist.mode
-            else:  # sample
-                detections = on_dist.sample()
-
-        detections = detections.float().unsqueeze(1)
+    def get_conditional(self, x_cat_marginal, x_features, marginal_detections):
+        detections = marginal_detections.float().unsqueeze(1)
 
         tile_cb = self._get_checkboard(detections.size(2), detections.size(3))
         detections1 = detections * tile_cb
@@ -173,58 +167,116 @@ class Encoder(pl.LightningModule):
             "conditional": self.get_predicted_dist(x_cat_conditional),
             "joint1": self.get_predicted_dist(x_cat_joint1),
             "joint2": self.get_predicted_dist(x_cat_joint2),
+            "tile_cb": tile_cb,
         }
 
-    def variational_mode(self, batch, cat_type="joint1") -> TileCatalog:
-        """Compute the mode of the variational distribution.
+    def point_estimate(self, batch, cat_type="joint1") -> TileCatalog:
+        """Form a point estimate based on the variational distribution.
 
         Args:
-            batch: model predictions
+            batch: (transformed) input data
             cat_type: whether to use the marginal or joint predictions
 
         Returns:
-            TileCatalog: Catalog based on predictions.
+            TileCatalog: Estimated catalog
         """
-        preds = self.encode_batch(batch, vmode=True)
+        x_cat_marginal, x_features = self.get_marginal(batch)
+        on_dist = self.dist_param_groups["on_prob"].get_dist(x_cat_marginal[:, :, :, 0:1])
+        marginal_detections = on_dist.mode
+        preds = self.get_conditional(x_cat_marginal, x_features, marginal_detections)
         pred = preds[cat_type]
 
-        tile_is_on_array = pred["on_prob"].mode
+        est_cat = {"locs": pred["loc"].mode.squeeze(0)}
 
-        # populate est_catalog_dict with per-band (log) star fluxes
-        star_fluxes = torch.stack(
-            [pred[name].mode * tile_is_on_array for name in self.STAR_FLUX_NAMES], dim=3
+        # populate catalog with per-band (log) star fluxes
+        est_cat["star_fluxes"] = torch.stack(
+            [pred[name].mode for name in self.STAR_FLUX_NAMES], dim=3
         )
 
-        # populate est_catalog_dict with source type
-        galaxy_bools = pred["galaxy_prob"].mode
+        # populate catalog with source type
+        galaxy_bools = pred["galaxy_prob"].mode.unsqueeze(3)
         star_bools = 1 - galaxy_bools
-        source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
+        est_cat["source_type"] = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
 
-        # populate est_catalog_dict with galaxy parameters
+        # populate catalog with galaxy parameters
         galsim_dists = [pred[f"galsim_{name}"] for name in self.GALSIM_NAMES]
         # for params with transformed distribution mode and median aren't implemented.
         # instead, we compute median using inverse cdf 0.5
         galsim_param_lst = [d.icdf(torch.tensor(0.5)) for d in galsim_dists]
-        galaxy_params = torch.stack(galsim_param_lst, dim=3)
+        est_cat["galaxy_params"] = torch.stack(galsim_param_lst, dim=3)
 
-        # populate est_catalog_dict with per-band galaxy fluxes
-        galaxy_fluxes = torch.stack(
-            [pred[name].icdf(torch.tensor(0.5)) * tile_is_on_array for name in self.GAL_FLUX_NAMES],
-            dim=3,
+        # populate catalog with per-band galaxy fluxes
+        gal_flux_lst = [pred[name].icdf(torch.tensor(0.5)) for name in self.GAL_FLUX_NAMES]
+        est_cat["galaxy_fluxes"] = torch.stack(gal_flux_lst, dim=3)
+
+        # we have to unsqueeze these tensors because a TileCatalog can store multiple
+        # light sources per tile, but we sample only one source per tile
+        for k, v in est_cat.items():
+            est_cat[k] = v.unsqueeze(3)
+
+        # n_sources is not unsqueezed because it is a single integer per tile regardless of
+        # how many light sources are stored per tile
+        est_cat["n_sources"] = pred["on_prob"].mode
+        tile_cb = preds["tile_cb"].squeeze(1)
+        if cat_type == "joint1":
+            est_cat["n_sources"] *= 1 - tile_cb[:, 1:19, 1:19]
+            est_cat["n_sources"] += (tile_cb * marginal_detections)[:, 1:19, 1:19]
+
+        return TileCatalog(self.tile_slen, est_cat)
+
+    def sample(self, batch, cat_type="joint1") -> TileCatalog:
+        """Sample the variational distribution.
+
+        Args:
+            batch: (transformed) input data
+            cat_type: whether to use the marginal or joint predictions
+
+        Returns:
+            TileCatalog: Sampled catalog
+        """
+
+        x_cat_marginal, x_features = self.get_marginal(batch)
+        on_dist = self.dist_param_groups["on_prob"].get_dist(x_cat_marginal[:, :, :, 0:1])
+        marginal_detections = on_dist.sample()
+        preds = self.get_conditional(x_cat_marginal, x_features, marginal_detections)
+
+        pred = preds[cat_type]
+
+        est_cat = {"locs": pred["loc"].sample().squeeze(0)}
+
+        # populate catalog with per-band (log) star fluxes
+        est_cat["star_fluxes"] = torch.stack(
+            [pred[name].sample() for name in self.STAR_FLUX_NAMES], dim=3
         )
 
-        # we have to unsqueeze some tensors below because a TileCatalog can store multiple
-        # light sources per tile, but we predict only one source per tile
-        est_catalog_dict = {
-            "locs": rearrange(pred["loc"].mode, "b ht wt d -> b ht wt 1 d"),
-            "star_fluxes": rearrange(star_fluxes, "b ht wt d -> b ht wt 1 d"),
-            "n_sources": tile_is_on_array,
-            "source_type": rearrange(source_type, "b ht wt -> b ht wt 1 1"),
-            "galaxy_params": rearrange(galaxy_params, "b ht wt d -> b ht wt 1 d"),
-            "galaxy_fluxes": rearrange(galaxy_fluxes, "b ht wt d -> b ht wt 1 d"),
-        }
+        # populate catalog with source type
+        galaxy_bools = pred["galaxy_prob"].sample().unsqueeze(3)
+        star_bools = 1 - galaxy_bools
+        est_cat["source_type"] = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
 
-        return TileCatalog(self.tile_slen, est_catalog_dict)
+        # populate catalog with galaxy parameters
+        galsim_dists = [pred[f"galsim_{name}"] for name in self.GALSIM_NAMES]
+        galsim_param_lst = [d.sample() for d in galsim_dists]
+        est_cat["galaxy_params"] = torch.stack(galsim_param_lst, dim=3)
+
+        # populate catalog with per-band galaxy fluxes
+        gal_flux_lst = [pred[name].sample() for name in self.GAL_FLUX_NAMES]
+        est_cat["galaxy_fluxes"] = torch.stack(gal_flux_lst, dim=3)
+
+        # we have to unsqueeze these tensors because a TileCatalog can store multiple
+        # light sources per tile, but we sample only one source per tile
+        for k, v in est_cat.items():
+            est_cat[k] = v.unsqueeze(3)
+
+        # n_sources is not unsqueezed because it is a single integer per tile regardless of
+        # how many light sources are stored per tile
+        est_cat["n_sources"] = pred["on_prob"].sample()
+        tile_cb = preds["tile_cb"].squeeze(1)
+        if cat_type == "joint1":
+            est_cat["n_sources"] *= 1 - tile_cb[:, 1:19, 1:19]
+            est_cat["n_sources"] += (tile_cb * marginal_detections)[:, 1:19, 1:19]
+
+        return TileCatalog(self.tile_slen, est_cat)
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
@@ -299,7 +351,9 @@ class Encoder(pl.LightningModule):
         if self.min_flux_threshold > 0:
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
-        preds = self.encode_batch(batch, target_cat=target_cat)
+        x_cat_marginal, x_features = self.get_marginal(batch)
+        detection_truth = target_cat.n_sources > 0
+        preds = self.get_conditional(x_cat_marginal, x_features, detection_truth)
 
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop)
         marginal_loss_dict = self._get_loss(preds["marginal"], target_cat)
@@ -317,33 +371,34 @@ class Encoder(pl.LightningModule):
 
         # log all metrics
         if log_metrics:
-            cat_types = ["marginal", "conditional", "joint1", "joint2"]
-            for ct in cat_types:
-                est_tile_cat = self.variational_mode(batch, cat_type=ct)
-                metrics = self.metrics(target_cat, est_tile_cat)
-                for k, v in metrics.items():
-                    self.log("{}-{}/{}".format(logging_name, ct, k), v, batch_size=batch_size)
+            for region_left in ["interior", "margin"]:
+                cat_types = ["marginal", "conditional", "joint1", "joint2"]
+                for ct in cat_types:
+                    est_tile_cat = self.point_estimate(batch, cat_type=ct)
+                    target_cat_cropped = deepcopy(target_cat)
+                    target_cat_cropped.crop_within_tiles(region_left=region_left)
+                    # est_tile_cat.crop_within_tiles(region_left=region_left)
+                    metrics = self.metrics(target_cat_cropped, est_tile_cat)
+                    for k, v in metrics.items():
+                        metric_name = "{}-{}-{}/{}".format(logging_name, ct, region_left, k)
+                        self.log(metric_name, v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
         if plot_images:
             batch_size = len(batch["images"])
             n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
-            nrows = int(n_samples**0.5)  # for figure
 
             target_full_cat = target_cat.to_full_params()
-            est_tile_cat_marginal = self.variational_mode(batch, cat_type="marginal")
-            est_full_cat = est_tile_cat_marginal.to_full_params()
-            wrong_idx = (est_full_cat.n_sources != target_full_cat.n_sources).nonzero()
-            wrong_idx = wrong_idx.view(-1)[:n_samples]
+            est_tile_cat = self.sample(batch, cat_type="joint1")
+            est_full_cat = est_tile_cat.to_full_params()
 
-            margin_px = self.tiles_to_crop * self.tile_slen
             fig = plot_detections(
                 torch.squeeze(batch["images"], 2),
                 target_full_cat,
                 est_full_cat,
-                nrows,
-                wrong_idx,
-                margin_px,
+                nrows=int(n_samples**0.5),
+                img_ids=torch.arange(n_samples, device=self.device),
+                margin_px=(self.tiles_to_crop * self.tile_slen),
             )
             title_root = f"Epoch:{self.current_epoch}/"
             title = f"{title_root}{logging_name} images"
@@ -375,7 +430,7 @@ class Encoder(pl.LightningModule):
         """Pytorch lightning method."""
         with torch.no_grad():
             preds = self.encode_batch(batch)
-            est_cat = self.variational_mode(batch, cat_type="marginal")
+            est_cat = self.sample(batch, cat_type="joint1")
         return {
             "est_cat": est_cat,
             "images": batch["images"],

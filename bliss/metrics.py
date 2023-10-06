@@ -41,7 +41,6 @@ class BlissMetrics(Metric):
     detection_tp: Tensor
     detection_fp: Tensor
     total_true_n_sources: Tensor
-    total_distance: Tensor
     total_distance_keep: Tensor
     match_count: Tensor
     match_count_keep: Tensor
@@ -82,7 +81,6 @@ class BlissMetrics(Metric):
             "detection_tp",
             "detection_fp",
             "total_true_n_sources",
-            "total_distance",
             "total_distance_keep",
             "match_count",
             "match_count_keep",
@@ -158,7 +156,7 @@ class BlissMetrics(Metric):
                 match_est.append([])
                 continue
 
-            mtrue, mest, dkeep, avg_distance, avg_keep_distance = match_by_locs(
+            mtrue, mest, dkeep, avg_keep_distance = match_by_locs(
                 true_locs[b, 0:ntrue], est_locs[b, 0:nest], self.slack
             )
             match_true.append(mtrue[dkeep])
@@ -169,7 +167,6 @@ class BlissMetrics(Metric):
             self.detection_tp += tp
             self.detection_fp += nest - tp
 
-            self.total_distance += avg_distance
             self.match_count += 1
             if not torch.isnan(avg_keep_distance):
                 self.total_distance_keep += avg_keep_distance
@@ -297,7 +294,6 @@ class BlissMetrics(Metric):
         recall = self.detection_tp / self.total_true_n_sources
         f1 = 2 * precision * recall / (precision + recall)
 
-        avg_distance = self.total_distance / self.match_count.item()
         avg_keep_distance = self.total_distance_keep / self.match_count_keep.item()
 
         class_acc = (self.gal_tp + self.star_tp) / (
@@ -308,7 +304,6 @@ class BlissMetrics(Metric):
             "detection_precision": precision.item(),
             "detection_recall": recall.item(),
             "f1": f1.item(),
-            "avg_distance": avg_distance.item(),
             "avg_keep_distance": avg_keep_distance.item(),
             "gal_tp": self.gal_tp.item(),
             "gal_fp": self.gal_fp.item(),
@@ -329,14 +324,9 @@ class BlissMetrics(Metric):
 
             # take median along first dim of stacked tensors, i.e. across images
             median_vals = torch.cat(val_list, dim=0).median(dim=0).values
-
             if metric in {"gal_fluxes", "star_fluxes"}:
-                metrics.update(
-                    {
-                        f"{metric}_{band}_mae": median_vals[i].item()
-                        for i, band in enumerate(self.survey_bands)
-                    }
-                )
+                for i, band in enumerate(self.survey_bands):
+                    metrics[f"{metric}_{band}_mae"] = median_vals[i].item()
             else:
                 metrics[f"{metric}_mae"] = median_vals.item()
 
@@ -364,7 +354,6 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
         - row_indx: Indicies of true objects matched to estimated objects.
         - col_indx: Indicies of estimated objects matched to true objects.
         - dist_keep: Matched objects to keep based on l1 distances.
-        - avg_distance: Average l-infinity distance over all matched objects.
         - avg_keep_distance: Average l-infinity distance over matched objects to keep.
     """
     assert len(true_locs.shape) == len(est_locs.shape) == 2
@@ -396,13 +385,12 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 
     # GOOD match condition: L-infinity distance is less than slack
     dist_keep = (dist < slack).bool()
-    avg_distance = dist.mean()
     avg_keep_distance = dist[dist < slack].mean()
 
     if dist_keep.sum() > 0:
         assert dist[dist_keep].max() <= slack
 
-    return row_indx, col_indx, dist_keep.cpu().numpy(), avg_distance, avg_keep_distance
+    return row_indx, col_indx, dist_keep.cpu().numpy(), avg_keep_distance
 
 
 def three_way_matching(pred_cat, comp_cat, gt_cat, slack=1):

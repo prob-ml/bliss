@@ -137,6 +137,23 @@ class TileCatalog(UserDict):
             [tiles_to_crop, tile_width - tiles_to_crop],
         )
 
+    def crop_within_tiles(self, margin_px=0.2, region_left="interior"):
+        """Crop the catalog within the tiles.
+
+        Args:
+            margin_px (float): Margin in pixels to crop the catalog.
+            region_left (str): "interior" or "exterior". If "interior", the catalog is cropped
+                within the tiles. If "exterior", the catalog is cropped outside the tiles.
+        """
+        assert region_left in {"interior", "margin"}
+
+        margin_tile_prop = margin_px / self.tile_slen
+        too_low = self.locs < margin_tile_prop
+        too_high = self.locs > (1 - margin_tile_prop)
+        in_margin = (too_low | too_high).any(dim=-1)
+        in_margin = rearrange(in_margin, "b ht wt 1 -> b ht wt")  # only works is max_sources == 1
+        self.n_sources *= in_margin if region_left == "margin" else ~in_margin
+
     def to_full_params(self):
         """Converts image parameters in tiles to parameters of full image.
 
