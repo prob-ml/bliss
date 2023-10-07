@@ -170,7 +170,7 @@ class Encoder(pl.LightningModule):
             "tile_cb": tile_cb,
         }
 
-    def point_estimate(self, batch, cat_type="joint1") -> TileCatalog:
+    def point_estimate(self, batch, cat_type="joint1", include_middles=True) -> TileCatalog:
         """Form a point estimate based on the variational distribution.
 
         Args:
@@ -221,6 +221,30 @@ class Encoder(pl.LightningModule):
         if cat_type == "joint1":
             est_cat["n_sources"] *= 1 - tile_cb[:, 1:19, 1:19]
             est_cat["n_sources"] += (tile_cb * marginal_detections)[:, 1:19, 1:19]
+
+        if include_middles:
+            pred = preds["marginal"]
+            both_off = est_cat["n_sources"].unfold(dimension=1, size=2, step=1).sum(3) == 0
+            on_prob = pred["on_prob"].probs[:, :, :, 1]
+            together_on = on_prob.unfold(dimension=1, size=2, step=1).sum(3) > 0.6
+            large_loc = pred["loc"].mode[:, :17, :, 0] > (1 - 1 / 3)
+            small_loc = pred["loc"].mode[:, 1:, :, 0] < 1 / 3
+            nearby_locs = large_loc * small_loc
+            turn_these_on = together_on * both_off * nearby_locs
+            tto_left = torch.nn.functional.pad(turn_these_on, [0, 0, 0, 1, 0, 0])
+            est_cat["n_sources"] += tto_left
+            est_cat["locs"][:, :, :, 0, 0][tto_left] = 1.0
+
+            both_off = est_cat["n_sources"].unfold(dimension=2, size=2, step=1).sum(3) == 0
+            on_prob = pred["on_prob"].probs[:, :, :, 1]
+            together_on = on_prob.unfold(dimension=2, size=2, step=1).sum(3) > 0.6
+            large_loc = pred["loc"].mode[:, :, :17, 1] > (1 - 1 / 3)
+            small_loc = pred["loc"].mode[:, :, 1:, 1] < 1 / 3
+            nearby_locs = large_loc * small_loc
+            turn_these_on = together_on * both_off * nearby_locs
+            tto_left = torch.nn.functional.pad(turn_these_on, [0, 1, 0, 0, 0, 0])
+            est_cat["n_sources"] += tto_left
+            est_cat["locs"][:, :, :, 0, 1][tto_left] = 1.0
 
         return TileCatalog(self.tile_slen, est_cat)
 
@@ -374,13 +398,14 @@ class Encoder(pl.LightningModule):
             for region_left in ["interior", "margin"]:
                 cat_types = ["marginal", "conditional", "joint1", "joint2"]
                 for ct in cat_types:
-                    est_tile_cat = self.point_estimate(batch, cat_type=ct)
+                    est_tile_cat = self.point_estimate(batch, cat_type=ct, include_middles=True)
                     target_cat_cropped = deepcopy(target_cat)
-                    target_cat_cropped.crop_within_tiles(region_left=region_left)
+                    # target_cat_cropped.crop_within_tiles(region_left=region_left)
                     # est_tile_cat.crop_within_tiles(region_left=region_left)
                     metrics = self.metrics(target_cat_cropped, est_tile_cat)
                     for k, v in metrics.items():
                         metric_name = "{}-{}-{}/{}".format(logging_name, ct, region_left, k)
+                        # metric_name = "{}-{}/{}".format(logging_name, ct, k)
                         self.log(metric_name, v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
