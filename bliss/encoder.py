@@ -1,5 +1,4 @@
 import math
-from copy import deepcopy
 from typing import Dict, Optional
 
 import pytorch_lightning as pl
@@ -190,8 +189,8 @@ class Encoder(pl.LightningModule):
 
         pred = preds[cat_type]
 
-        locs = pred["loc"].mode if use_mode else pred["loc"].sample()
-        est_cat = {"locs": locs.squeeze(0)}
+        locs = pred["loc"].mode if use_mode else pred["loc"].sample().squeeze(0)
+        est_cat = {"locs": locs}
 
         # populate catalog with per-band (log) star fluxes
         sf_preds = [pred[name] for name in self.STAR_FLUX_NAMES]
@@ -326,17 +325,28 @@ class Encoder(pl.LightningModule):
 
         # log all metrics
         if log_metrics:
-            for region_left in ["interior", "margin"]:
-                for ct in ["marginal", "joint1"]:
-                    est_tile_cat = self.sample(batch, cat_type=ct, use_mode=True)
-                    target_cat_cropped = deepcopy(target_cat)
-                    # target_cat_cropped.crop_within_tiles(region_left=region_left)
-                    # est_tile_cat.crop_within_tiles(region_left=region_left)
+            est_tile_cat = self.sample(batch, use_mode=True)
+
+            metrics = self.metrics(target_cat, est_tile_cat)
+            for k, v in metrics.items():
+                metric_name = "{}/{}".format(logging_name, k)
+                self.log(metric_name, v, batch_size=batch_size)
+
+            # compare the old method ("marginal") and the new one ("joint1") in terms of
+            # detection precision and recall in the interiors and margins of tiles
+            for region in ("interior", "margin"):
+                for ct in ("marginal", "joint1"):
+                    est_tile_cat = self.sample(batch, use_mode=True)
+
+                    target_cat_cropped = target_cat.crop_within_tiles(region_left=region)
                     metrics = self.metrics(target_cat_cropped, est_tile_cat)
-                    for k, v in metrics.items():
-                        metric_name = "{}-{}-{}/{}".format(logging_name, ct, region_left, k)
-                        # metric_name = "{}-{}/{}".format(logging_name, ct, k)
-                        self.log(metric_name, v, batch_size=batch_size)
+                    metric_name = "{}-compare/{}-{}-recall".format(logging_name, ct, region)
+                    self.log(metric_name, metrics["detection_recall"], batch_size=batch_size)
+
+                    est_cat_cropped = est_tile_cat.crop_within_tiles(region_left=region)
+                    metrics = self.metrics(target_cat, est_cat_cropped)
+                    metric_name = "{}-compare/{}-{}-precision".format(logging_name, ct, region)
+                    self.log(metric_name, metrics["detection_precision"], batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
         if plot_images:

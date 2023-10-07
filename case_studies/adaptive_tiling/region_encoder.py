@@ -636,7 +636,8 @@ class RegionEncoder(Encoder):
     # region Lightning Functions
     def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
         batch_size = batch["images"].size(0)
-        pred = self.encode_batch(batch)["marginal"]
+        x_cat_marginal, _ = self.get_marginal(batch)
+        pred = self.get_predicted_dist(x_cat_marginal)
         true_cat = RegionCatalog(
             interior_slen=self.tile_slen - self.overlap_slen,
             overlap_slen=self.overlap_slen,

@@ -51,7 +51,8 @@ class TestEncoder:
         encoder.tiles_to_crop = 0
         encoder.eval()
         with torch.no_grad():
-            pred = encoder.encode_batch(batch)["marginal"]
+            x_cat_marginal, _ = encoder.get_marginal(batch)
+            pred = encoder.get_predicted_dist(x_cat_marginal)
             encoder._get_loss(pred, region_cat)  # pylint: disable=W0212  # noqa: WPS437
 
     def test_region_locs_in_tiles(self):
