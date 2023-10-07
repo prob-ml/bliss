@@ -174,8 +174,14 @@ class TestMetrics:
         assert metrics(catalogs["photo"], catalogs["photo"])["f1"] == 1
         assert metrics(catalogs["decals"], catalogs["decals"])["f1"] == 1
         assert metrics(catalogs["decals"], catalogs["photo"])["detection_precision"] > 0.8
-        assert metrics(catalogs["photo"], catalogs["bliss"])["f1"] > 0.5
         assert metrics(catalogs["photo"], catalogs["bliss"])["avg_keep_distance"] < 1.0
+
+        # bliss finds many more sources than photo. recall here measures the fraction of sources
+        # photo finds that bliss also finds
+        assert metrics(catalogs["photo"], catalogs["bliss"])["detection_recall"] > 0.8
+
+        # with the arguments reversed, precision below measures that same thing as recall did above
+        assert metrics(catalogs["bliss"], catalogs["photo"])["detection_precision"] > 0.8
 
         bliss_vs_decals = metrics(catalogs["decals"], catalogs["bliss"])
         photo_vs_decals = metrics(catalogs["decals"], catalogs["photo"])

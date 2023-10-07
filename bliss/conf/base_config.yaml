@@ -139,7 +139,7 @@ predict:
     dataset: ${surveys.sdss}
     trainer: ${training.trainer}
     encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/clahed_logged_20percent.pt
+    weight_save_path: ${paths.pretrained_models}/clahed_logged_2percent.pt
     device: "cuda:0"
     crop:
         do_crop: true

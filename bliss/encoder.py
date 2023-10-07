@@ -393,6 +393,12 @@ class Encoder(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
+        # do we need this? wouldn't pl call predict_step in a no_grad context?
         with torch.no_grad():
-            # alternatively, we could return samples here
-            return self.sample(batch, use_mode=True)
+            x_cat_marginal, _ = self.get_marginal(batch)
+            return {
+                "est_cat": self.sample(batch, use_mode=True),
+                # a marginal catalog isn't really what we want here, perhaps
+                # we should return samples from the variation distribution instead
+                "pred": self.get_predicted_dist(x_cat_marginal),
+            }

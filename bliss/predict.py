@@ -147,7 +147,8 @@ def predict(cfg):
         backgrounds = prepare_image(survey_obj["background"], cfg.predict.device).float()
         images, backgrounds = crop_image(images, backgrounds, cfg.predict.crop)
         survey.predict_batch = prepare_batch(images, backgrounds)
-        est_cat, images, backgrounds, pred = trainer.predict(encoder, datamodule=survey)[0].values()
+        predictions = trainer.predict(encoder, datamodule=survey)[0]
+        est_cat, pred = predictions["est_cat"], predictions["pred"]
 
         # mean of the nelec_per_mgy per band
         nelec_per_nmgy_per_band = np.mean(survey_obj["flux_calibration_list"], axis=1)
@@ -161,8 +162,7 @@ def predict(cfg):
         if plocs_all is None:
             plocs_all = plocs
         else:
-            plocs_all = torch.cat((plocs_all, plocs), dim=0)
-            plocs_all = torch.unique(plocs_all, dim=0)
+            plocs_all = torch.cat((plocs_all, plocs), dim=0).unique(plocs_all, dim=0)
 
         if not est_full_all:
             est_full_all = est_full
