@@ -13,7 +13,7 @@ class TestEncoder:
             if isinstance(val, torch.Tensor):
                 batch[key] = val.to(cfg.predict.device)
         encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-        encoder.variational_mode(batch)
+        encoder.sample(batch, use_mode=True)
 
     def test_encode_with_psf(self, cfg, multiband_dataloader):
         batch = next(iter(multiband_dataloader))
@@ -30,7 +30,7 @@ class TestEncoder:
             },
         }
         encoder = instantiate(cfg.encoder, **encoder_params).to(cfg.predict.device)
-        encoder.variational_mode(batch)
+        encoder.sample(batch, use_mode=True)
 
     def test_region_loss(self, cfg):
         encoder = instantiate(cfg.region_encoder).to(cfg.predict.device)
