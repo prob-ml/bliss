@@ -162,7 +162,7 @@ def predict(cfg):
         if plocs_all is None:
             plocs_all = plocs
         else:
-            plocs_all = torch.cat((plocs_all, plocs), dim=0).unique(plocs_all, dim=0)
+            plocs_all = torch.cat((plocs_all, plocs), dim=0).unique(dim=0)
 
         if not est_full_all:
             est_full_all = est_full
