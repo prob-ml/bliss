@@ -70,14 +70,13 @@ class Encoder(pl.LightningModule):
 
         self.bands = bands
         self.survey_bands = survey_bands
+        self.tile_slen = tile_slen
         self.tiles_to_crop = tiles_to_crop
         self.image_normalizer = image_normalizer
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
-
-        self.tile_slen = tile_slen
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
         n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())

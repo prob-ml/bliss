@@ -95,7 +95,15 @@ region_encoder:
     bands: ${encoder.bands}
     survey_bands: ${encoder.survey_bands}
     tile_slen: ${encoder.tile_slen}
-    image_normalizer: ${encoder.image_normalizer}
+    # mysterious test failures if I write `image_normalizer: ${encoder.image_normalizer}` instead
+    image_normalizer:
+        _target_: bliss.image_normalizer.ImageNormalizer
+        bands: ${encoder.bands}
+        include_original: false
+        use_deconv_channel: false
+        concat_psf_params: false
+        log_transform_thresholds: [-100, 0, 100, 500, 1000]
+        use_clahe: true
     overlap_slen: 0.4
     slack: ${encoder.slack}
     optimizer_params: ${encoder.optimizer_params}
