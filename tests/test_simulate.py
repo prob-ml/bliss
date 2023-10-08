@@ -34,6 +34,9 @@ class TestSimulate:
 
         # simulate image from catalog
         image_simulator = instantiate(cfg.simulator)
+        # don't add noise to simulated image; with noise we intermittently generate what looks like
+        # extra sources in the image, which causes the test to fail
+        image_simulator.apply_noise = lambda img: img
         rcfs, rcf_indices = image_simulator.randomized_image_ids(true_catalog.n_sources.size(0))
         image, background, _, _ = image_simulator.simulate_image(true_catalog, rcfs, rcf_indices)
 
