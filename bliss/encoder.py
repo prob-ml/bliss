@@ -313,14 +313,10 @@ class Encoder(pl.LightningModule):
         conditional_loss_dict = self._get_loss(preds["conditional"], target_cat)
 
         # log all losses
-        for k, v in marginal_loss_dict.items():
-            self.log("{}-marginal/{}".format(logging_name, k), v, batch_size=batch_size)
-
-        for k, v in conditional_loss_dict.items():
-            self.log("{}-conditional/{}".format(logging_name, k), v, batch_size=batch_size)
-
-        if logging_name == "val":
-            self.log("val/loss", marginal_loss_dict["loss"] + conditional_loss_dict["loss"])
+        for k, ml in marginal_loss_dict.items():
+            v = (ml + conditional_loss_dict[k]) / 2  # we make two predictions for each tile
+            self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+            self.log("{}-marginal/{}".format(logging_name, k), ml, batch_size=batch_size)
 
         # log all metrics
         if log_metrics:
@@ -331,29 +327,13 @@ class Encoder(pl.LightningModule):
                 metric_name = "{}/{}".format(logging_name, k)
                 self.log(metric_name, v, batch_size=batch_size)
 
-            # compare the old method ("marginal") and the new one ("joint1") in terms of
-            # detection precision and recall in the interiors and margins of tiles
-            for region in ("interior", "margin"):
-                for ct in ("marginal", "joint1"):
-                    est_tile_cat = self.sample(batch, use_mode=True)
-
-                    target_cat_cropped = target_cat.crop_within_tiles(region_left=region)
-                    metrics = self.metrics(target_cat_cropped, est_tile_cat)
-                    metric_name = "{}-compare/{}-{}-recall".format(logging_name, ct, region)
-                    self.log(metric_name, metrics["detection_recall"], batch_size=batch_size)
-
-                    est_cat_cropped = est_tile_cat.crop_within_tiles(region_left=region)
-                    metrics = self.metrics(target_cat, est_cat_cropped)
-                    metric_name = "{}-compare/{}-{}-precision".format(logging_name, ct, region)
-                    self.log(metric_name, metrics["detection_precision"], batch_size=batch_size)
-
         # log a grid of figures to the tensorboard
         if plot_images:
             batch_size = len(batch["images"])
             n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
 
             target_full_cat = target_cat.to_full_params()
-            est_tile_cat = self.sample(batch, cat_type="joint1")
+            est_tile_cat = self.sample(batch, cat_type="joint1", use_mode=True)
             est_full_cat = est_tile_cat.to_full_params()
 
             fig = plot_detections(
@@ -370,7 +350,7 @@ class Encoder(pl.LightningModule):
                 self.logger.experiment.add_figure(title, fig)
             plt.close(fig)
 
-        return marginal_loss_dict["loss"] + conditional_loss_dict["loss"]
+        return (marginal_loss_dict["loss"] + conditional_loss_dict["loss"]) / 2
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
