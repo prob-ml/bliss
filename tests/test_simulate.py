@@ -26,53 +26,53 @@ class SDSSTest(pl.LightningDataModule):
 
 
 class TestSimulate:
-    def test_simulate(self, cfg, encoder):
+    def test_simulate_and_predict(self, cfg, encoder):
         """Test simulating an image from a fixed catalog and making predictions on that catalog."""
         # load cached simulated catalog
-        sim_dataset = instantiate(cfg.simulator)
-        sim_tile = torch.load(cfg.paths.data + "/tests/test_image/dataset_0.pt")
-        sim_tile = TileCatalog(4, sim_tile)
+        true_catalog = torch.load(cfg.paths.data + "/tests/test_image/dataset_0.pt")
+        true_catalog = TileCatalog(4, true_catalog)
 
         # simulate image from catalog
-        rcfs, rcf_indices = sim_dataset.randomized_image_ids(sim_tile.n_sources.size(0))
-        image, background, _, _ = sim_dataset.simulate_image(sim_tile, rcfs, rcf_indices)
+        image_simulator = instantiate(cfg.simulator)
+        rcfs, rcf_indices = image_simulator.randomized_image_ids(true_catalog.n_sources.size(0))
+        image, background, _, _ = image_simulator.simulate_image(true_catalog, rcfs, rcf_indices)
 
         # make predictions on simulated image
-        sim_tile = sim_tile.to(cfg.predict.device)
+        true_catalog = true_catalog.to(cfg.predict.device)
         image = image.to(cfg.predict.device)
         background = background.to(cfg.predict.device)
 
         sdss_test = SDSSTest(image, background, cfg)
         encoder.eval()
         trainer = instantiate(cfg.predict.trainer)
-        est_tile = trainer.predict(encoder, datamodule=sdss_test)[0]["est_cat"].to(
+        est_catalog = trainer.predict(encoder, datamodule=sdss_test)[0]["est_cat"].to(
             cfg.predict.device
         )
 
         # Compare predicted and true source types
         ttc = cfg.encoder.tiles_to_crop
-        sim_galaxy_bools = sim_tile.galaxy_bools[:, ttc:-ttc, ttc:-ttc]
-        sim_star_bools = sim_tile.star_bools[:, ttc:-ttc, ttc:-ttc]
+        true_galaxy_bools = true_catalog.galaxy_bools[:, ttc:-ttc, ttc:-ttc]
+        true_star_bools = true_catalog.star_bools[:, ttc:-ttc, ttc:-ttc]
 
-        assert torch.equal(sim_galaxy_bools, est_tile.galaxy_bools)
-        assert torch.equal(sim_star_bools, est_tile.star_bools)
+        assert torch.equal(true_galaxy_bools, est_catalog.galaxy_bools)
+        assert torch.equal(true_star_bools, est_catalog.star_bools)
 
         # Convert predicted fluxes from electron counts to nanomaggies for comparison
-        flux_ratios = sim_dataset.survey.flux_calibration_dict[(94, 1, 12)]
-        est_tile = nelec_to_nmgy_for_catalog(est_tile, flux_ratios)
+        flux_ratios = image_simulator.survey.flux_calibration_dict[(94, 1, 12)]
+        est_catalog = nelec_to_nmgy_for_catalog(est_catalog, flux_ratios)
 
         # Compare predicted and true fluxes
-        sim_star_fluxes = sim_tile["star_fluxes"] * sim_tile.star_bools
-        sim_galaxy_fluxes = sim_tile["galaxy_fluxes"] * sim_tile.galaxy_bools
-        sim_fluxes = sim_star_fluxes + sim_galaxy_fluxes
-        sim_fluxes_crop = sim_fluxes[0, ttc:-ttc, ttc:-ttc, 0, 2]
+        true_star_fluxes = true_catalog["star_fluxes"] * true_catalog.star_bools
+        true_galaxy_fluxes = true_catalog["galaxy_fluxes"] * true_catalog.galaxy_bools
+        true_fluxes = true_star_fluxes + true_galaxy_fluxes
+        true_fluxes_crop = true_fluxes[0, ttc:-ttc, ttc:-ttc, 0, 2]
 
-        est_star_fluxes = est_tile["star_fluxes"] * est_tile.star_bools
-        est_galaxy_fluxes = est_tile["galaxy_fluxes"] * est_tile.galaxy_bools
+        est_star_fluxes = est_catalog["star_fluxes"] * est_catalog.star_bools
+        est_galaxy_fluxes = est_catalog["galaxy_fluxes"] * est_catalog.galaxy_bools
         est_fluxes = est_star_fluxes + est_galaxy_fluxes
         est_fluxes = est_fluxes[0, :, :, 0, 2]
 
-        assert (est_fluxes - sim_fluxes_crop).abs().sum() / (sim_fluxes_crop.abs().sum()) < 1.0
+        assert (est_fluxes - true_fluxes_crop).abs().sum() / (true_fluxes_crop.abs().sum()) < 1.0
 
     def test_multi_background(self, cfg, monkeypatch):
         """Test loading backgrounds and PSFs from multiple fields works."""
