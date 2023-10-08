@@ -219,7 +219,7 @@ class Encoder(pl.LightningModule):
 
         # n_sources is not unsqueezed because it is a single integer per tile regardless of
         # how many light sources are stored per tile
-        est_cat["n_sources"] = pred["on_prob"].sample()
+        est_cat["n_sources"] = pred["on_prob"].mode if use_mode else pred["on_prob"].sample()
         tile_cb = preds["tile_cb"].squeeze(1)
         if cat_type == "joint1":
             ttc = self.tiles_to_crop

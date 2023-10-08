@@ -54,6 +54,8 @@ class TestSimulate:
         true_galaxy_bools = true_catalog.galaxy_bools[:, ttc:-ttc, ttc:-ttc]
         true_star_bools = true_catalog.star_bools[:, ttc:-ttc, ttc:-ttc]
 
+        assert est_catalog.n_sources.sum() == 1
+        assert est_catalog.star_bools.sum() == 1
         assert torch.equal(true_galaxy_bools, est_catalog.galaxy_bools)
         assert torch.equal(true_star_bools, est_catalog.star_bools)
 
