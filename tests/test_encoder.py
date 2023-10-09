@@ -31,6 +31,7 @@ class TestEncoder:
         }
         encoder = instantiate(cfg.encoder, **encoder_params).to(cfg.predict.device)
         encoder.sample(batch, use_mode=True)
+        encoder.sample(batch, use_mode=False)
 
     def test_region_loss(self, cfg):
         encoder = instantiate(cfg.region_encoder).to(cfg.predict.device)
