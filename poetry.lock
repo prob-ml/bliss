@@ -4613,6 +4613,55 @@ objc = ["pyobjc-framework-Cocoa"]
 win32 = ["pywin32"]
 
 [[package]]
+name = "sep"
+version = "1.2.1"
+description = "Astronomical source extraction and photometry library"
+optional = false
+python-versions = ">=3.5"
+files = [
+    {file = "sep-1.2.1-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:b8253cc1c078ee98b007023edbd9ae2602586dc6b44e225339160509d687df64"},
+    {file = "sep-1.2.1-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:93d2b9e30ab3f4abc7ebf005221285a641aad4ee22e41e7309b59b4a8b173d14"},
+    {file = "sep-1.2.1-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:0f5650a120f0e5c6c2be04cba87f5fb2ba46256c72a4b2cf90a39bb21ee871f3"},
+    {file = "sep-1.2.1-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:501600d7ac027f7249675340d04e312b007c31026a3a8572ab77c4037888a928"},
+    {file = "sep-1.2.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3983ba16f89172aa81967fdceb362efc709d1ca909ff0dceefdc194ebc45817c"},
+    {file = "sep-1.2.1-cp310-cp310-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:f9a726c488364882c8a1625e333b17f15d18e5b6c4c747386fc6a77854ae0eaf"},
+    {file = "sep-1.2.1-cp310-cp310-win32.whl", hash = "sha256:87d8003c9a78d2e7f9e9b6eda66f2936e706496a9bd8543b3a7eeed68b75394b"},
+    {file = "sep-1.2.1-cp310-cp310-win_amd64.whl", hash = "sha256:4d5c4431ed676a8916b748fa0dcce84532ad6c0028a957269dfe066f7bbe0cdd"},
+    {file = "sep-1.2.1-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:0292f0794ebbd3acd5f152d04b8e883a99ed34bdf3c443310f42aa613e09525b"},
+    {file = "sep-1.2.1-cp36-cp36m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:fb32fa39696a20841e8c6768d36f67bf450c849b93be14ba830e1d71a4f7123d"},
+    {file = "sep-1.2.1-cp36-cp36m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5eb6ff6ad8d592aaa105cb321ebba3a9c2f31108a91b5789cfb614d3225d9c16"},
+    {file = "sep-1.2.1-cp36-cp36m-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:b3b16d7953dc17c06fae4bdde364ea0fa672b530feb4a57f487fa3984fde3294"},
+    {file = "sep-1.2.1-cp36-cp36m-win32.whl", hash = "sha256:809acc721b97c7d6a9033d7590e35f84c3a006fc51567c99419e8e94cd40866e"},
+    {file = "sep-1.2.1-cp36-cp36m-win_amd64.whl", hash = "sha256:61a209bdc762bdaa2bd4cdb197992a4e5b55a4649622d02e4fc672a43022cccf"},
+    {file = "sep-1.2.1-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:a18c9821845b94656b17de937604f68c76cf7511b3d3784732ff7e5be236d15b"},
+    {file = "sep-1.2.1-cp37-cp37m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:75f0fcd52a2e8146c906b6f86564d06c4a112dd46afd7675a02cb89e3cc72fb3"},
+    {file = "sep-1.2.1-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0e51dc4ba0652976a83622605105f86df3d453618db907880b2254545e2f300e"},
+    {file = "sep-1.2.1-cp37-cp37m-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:bdebdc1b0e0d09114cf6711944b08b5a52579f335047ad94747384092f47a32a"},
+    {file = "sep-1.2.1-cp37-cp37m-win32.whl", hash = "sha256:1d08e741ca917da37c43ec3a88a21a84809e0f95ae628aa969d19533e72bc85b"},
+    {file = "sep-1.2.1-cp37-cp37m-win_amd64.whl", hash = "sha256:ff16e041fd9783582bcca1858e2738a04371ed669a9ce7285fe12059d3a7d0b3"},
+    {file = "sep-1.2.1-cp38-cp38-macosx_10_9_universal2.whl", hash = "sha256:6f478ee397dfb1bdbe4dab328cea9003c22a6a3f36be0f05d1ff7915370661cd"},
+    {file = "sep-1.2.1-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:778edb14e1c4b392bca449f8c7bdc2df5e8874d8803032266d12248b02714cd4"},
+    {file = "sep-1.2.1-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:f6d6254230e48339ade4ae378e58236db1b1f4b8b2113e0d480b31bd8784b901"},
+    {file = "sep-1.2.1-cp38-cp38-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:81ff6ab51845b1c76d73354a825c6403d82cce1abe602b8ae17429279870b612"},
+    {file = "sep-1.2.1-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4eca3045a04aaa238b468fc07230b38b485ef551423f43df2c0124ded105bb93"},
+    {file = "sep-1.2.1-cp38-cp38-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:904bc369ff716d7302684572e40f38ea052bf97aeb4c1a7a8e645037ad5dfd5f"},
+    {file = "sep-1.2.1-cp38-cp38-win32.whl", hash = "sha256:da32d2473cbb506f822b67c94eedcc2ed8dfa3a90b4d60561a7f6b639281c344"},
+    {file = "sep-1.2.1-cp38-cp38-win_amd64.whl", hash = "sha256:d43606c462d7bdb40e53c4a40d0e9f7695558d020679808c900440083932bec2"},
+    {file = "sep-1.2.1-cp39-cp39-macosx_10_9_universal2.whl", hash = "sha256:519ea02b0dd6ad6379da468829368e123555e833839ec7f86722f69254e92d19"},
+    {file = "sep-1.2.1-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:cd9438d92318557eeb4df4f56e6d579914438ca95745dab26d731dc269d5f541"},
+    {file = "sep-1.2.1-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:3f04065e02e76ceb81a15a9ca7f85794a7691fdec1e602e4505b8045c185e19e"},
+    {file = "sep-1.2.1-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3a7c0b92870562a3f9d16d3b28eab200d9d19cbc4520ee18174883d126a8edf3"},
+    {file = "sep-1.2.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3c7587ef1d438c830ae138649ba05d30a179614d2960c9d4cabe592718759843"},
+    {file = "sep-1.2.1-cp39-cp39-manylinux_2_5_i686.manylinux1_i686.manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:49d03e8deaed458d563622520bb29cf1e80ebd8c64dab0c04cc116e14b6101b5"},
+    {file = "sep-1.2.1-cp39-cp39-win32.whl", hash = "sha256:2b4e6c2dc29dd2640bc9a940109a2ea14bb99ff6b9f837fb1abb0f777b542515"},
+    {file = "sep-1.2.1-cp39-cp39-win_amd64.whl", hash = "sha256:852cbd83a2f56ae63f32c9e01b756d407497a36f85d8b27407b27fb6e9d7fdac"},
+    {file = "sep-1.2.1.tar.gz", hash = "sha256:1b6a36a554b3b315a9a96d19159f1ae39d9dad75bef510b1dc084c5aa9a4489b"},
+]
+
+[package.dependencies]
+numpy = "*"
+
+[[package]]
 name = "setuptools"
 version = "68.0.0"
 description = "Easily download, build, install, upgrade, and uninstall Python packages"
@@ -5334,4 +5383,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10,<3.13"
-content-hash = "ec3a20c6defe83aa4827144f01d3394ad2103eec0646095708f123370a1973ff"
+content-hash = "8160b38c8902930fe5ccfadada2f134cb5229475b626e0dabbfd6b0347e5aacf"
