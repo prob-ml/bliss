@@ -104,7 +104,9 @@ class BlissMetrics(Metric):
             "star_fluxes",
         ]
         for metric in self.classification_metrics:
-            self.add_state(metric, default=torch.tensor(0.0), dist_reduce_fx="sum")
+            num_zeros = len(self.survey_bands) if metric in {"gal_fluxes", "star_fluxes"} else 1
+            default = torch.zeros(num_zeros)
+            self.add_state(metric, default=default, dist_reduce_fx="sum")
 
     def update(self, true: Catalog, est: Catalog) -> None:
         assert true.batch_size == est.batch_size
