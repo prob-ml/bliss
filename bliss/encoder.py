@@ -140,7 +140,9 @@ class Encoder(pl.LightningModule):
     def get_marginal(self, batch):
         x = self.image_normalizer.get_input_tensor(batch)
         x_cat_marginal, x_features = self.marginal_net(x)
-        x_features = x_features.detach()  # helps with training stability
+        # detach here simplifies comparison between the joint and marginal models;
+        # this way training the conditional model wont't effect the marginal model
+        x_features = x_features.detach()
         return x_cat_marginal, x_features
 
     def get_conditional(self, x_cat_marginal, x_features, marginal_detections):
@@ -324,7 +326,7 @@ class Encoder(pl.LightningModule):
 
             metrics = self.metrics(target_cat, est_tile_cat)
             for k, v in metrics.items():
-                metric_name = "{}/{}".format(logging_name, k)
+                metric_name = "{}-metrics/{}".format(logging_name, k)
                 self.log(metric_name, v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
