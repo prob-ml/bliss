@@ -29,7 +29,7 @@ def train(cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-state
     encoder = instantiate(cfg.training.encoder_target)
 
     # load pretrained weights
-    if "pretrained_weights" in cfg.training and cfg.training.pretrained_weights is not None:
+    if cfg.training.pretrained_weights is not None:
         enc_state_dict = torch.load(cfg.training.pretrained_weights)
         encoder.load_state_dict(enc_state_dict)
 

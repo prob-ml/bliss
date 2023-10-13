@@ -43,7 +43,7 @@ for filename in tqdm(files):
         batch["tile_catalog"] = region_cat.to_dict()
         region_data.append(batch)
 
-    print("Skipped {skip_count} out of {len(dataloader)} total images")  # noqa: WPS421
+    print(f"Skipped {skip_count} out of {len(dataloader)} total images")  # noqa: WPS421
 
     # Save converted data to new file
     output_filename = OUTPUT_PATH / filename.parts[-1]

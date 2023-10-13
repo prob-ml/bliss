@@ -41,7 +41,6 @@ class BlissMetrics(Metric):
     detection_tp: Tensor
     detection_fp: Tensor
     total_true_n_sources: Tensor
-    total_distance: Tensor
     total_distance_keep: Tensor
     match_count: Tensor
     match_count_keep: Tensor
@@ -51,15 +50,15 @@ class BlissMetrics(Metric):
     star_fp: Tensor
 
     # Classification metrics
-    gal_fluxes: List
-    star_fluxes: List
-    disk_frac: List
-    bulge_frac: List
-    disk_q: List
-    bulge_q: List
-    disk_hlr: List
-    bulge_hlr: List
-    beta_radians: List
+    gal_fluxes: Tensor
+    star_fluxes: Tensor
+    disk_frac: Tensor
+    bulge_frac: Tensor
+    disk_q: Tensor
+    bulge_q: Tensor
+    disk_hlr: Tensor
+    bulge_hlr: Tensor
+    beta_radians: Tensor
 
     full_state_update: bool = False
 
@@ -82,7 +81,6 @@ class BlissMetrics(Metric):
             "detection_tp",
             "detection_fp",
             "total_true_n_sources",
-            "total_distance",
             "total_distance_keep",
             "match_count",
             "match_count_keep",
@@ -106,7 +104,9 @@ class BlissMetrics(Metric):
             "star_fluxes",
         ]
         for metric in self.classification_metrics:
-            self.add_state(metric, default=[], dist_reduce_fx="sum")
+            num_zeros = len(self.survey_bands) if metric in {"gal_fluxes", "star_fluxes"} else 1
+            default = torch.zeros(num_zeros)
+            self.add_state(metric, default=default, dist_reduce_fx="sum")
 
     def update(self, true: Catalog, est: Catalog) -> None:
         assert true.batch_size == est.batch_size
@@ -158,7 +158,7 @@ class BlissMetrics(Metric):
                 match_est.append([])
                 continue
 
-            mtrue, mest, dkeep, avg_distance, avg_keep_distance = match_by_locs(
+            mtrue, mest, dkeep, avg_keep_distance = match_by_locs(
                 true_locs[b, 0:ntrue], est_locs[b, 0:nest], self.slack
             )
             match_true.append(mtrue[dkeep])
@@ -169,7 +169,6 @@ class BlissMetrics(Metric):
             self.detection_tp += tp
             self.detection_fp += nest - tp
 
-            self.total_distance += avg_distance
             self.match_count += 1
             if not torch.isnan(avg_keep_distance):
                 self.total_distance_keep += avg_keep_distance
@@ -221,34 +220,33 @@ class BlissMetrics(Metric):
         est_star_fluxes = est_params["star_fluxes"]
         est_gal_params = est_params["galaxy_params"]
 
-        # fluxes
-        self.gal_fluxes.append(torch.abs(true_gal_fluxes - est_gal_fluxes))
-        self.star_fluxes.append(torch.abs(true_star_fluxes - est_star_fluxes))
+        self.gal_fluxes = (true_gal_fluxes - est_gal_fluxes).abs().mean(dim=0)
+        self.star_fluxes = (true_star_fluxes - est_star_fluxes).abs().mean(dim=0)
 
         # skip if no galaxies in true or estimated catalog
         if (true_gal_params.shape[0] == 0) or (est_gal_params.shape[0] == 0):
             return
 
         # disk/bulge proportions
-        self.disk_frac.append(torch.abs(true_gal_params[:, 0] - est_gal_params[:, 0]))
-        self.bulge_frac.append(torch.abs((1 - true_gal_params[:, 0]) - (1 - est_gal_params[:, 0])))
+        self.disk_frac = (true_gal_params[:, 0] - est_gal_params[:, 0]).abs().mean()
+        self.bulge_frac = ((1 - true_gal_params[:, 0]) - (1 - est_gal_params[:, 0])).abs().mean()
 
         # angle
-        self.beta_radians.append(torch.abs(true_gal_params[:, 1] - est_gal_params[:, 1]))
+        self.beta_radians = (true_gal_params[:, 1] - est_gal_params[:, 1]).abs().mean()
 
         # axis ratio
-        self.disk_q.append(torch.abs(true_gal_params[:, 2] - est_gal_params[:, 2]))
-        self.bulge_q.append(torch.abs(true_gal_params[:, 4] - est_gal_params[:, 4]))
+        self.disk_q = (true_gal_params[:, 2] - est_gal_params[:, 2]).abs().mean()
+        self.bulge_q = (true_gal_params[:, 4] - est_gal_params[:, 4]).abs().mean()
 
         # half-light radius
         # sqrt(a * b) = sqrt(a * a * q) = a * sqrt(q)
         est_disk_hlr = est_gal_params[:, 3] * torch.sqrt(est_gal_params[:, 2])
         true_disk_hlr = true_gal_params[:, 3] * torch.sqrt(true_gal_params[:, 2])
-        self.disk_hlr.append(torch.abs(true_disk_hlr - est_disk_hlr))
+        self.disk_hlr = (true_disk_hlr - est_disk_hlr).abs().mean()
 
         est_bulge_hlr = est_gal_params[:, 5] * torch.sqrt(est_gal_params[:, 4])
         true_bulge_hlr = true_gal_params[:, 5] * torch.sqrt(true_gal_params[:, 4])
-        self.bulge_hlr.append(torch.abs(true_bulge_hlr - est_bulge_hlr))
+        self.bulge_hlr = (true_bulge_hlr - est_bulge_hlr).abs().mean()
 
     def _get_classification_params_full(self, true, est, match_true, match_est):
         """Get galaxy params in true and est catalogs based on matches."""
@@ -297,7 +295,6 @@ class BlissMetrics(Metric):
         recall = self.detection_tp / self.total_true_n_sources
         f1 = 2 * precision * recall / (precision + recall)
 
-        avg_distance = self.total_distance / self.match_count.item()
         avg_keep_distance = self.total_distance_keep / self.match_count_keep.item()
 
         class_acc = (self.gal_tp + self.star_tp) / (
@@ -308,7 +305,6 @@ class BlissMetrics(Metric):
             "detection_precision": precision.item(),
             "detection_recall": recall.item(),
             "f1": f1.item(),
-            "avg_distance": avg_distance.item(),
             "avg_keep_distance": avg_keep_distance.item(),
             "gal_tp": self.gal_tp.item(),
             "gal_fp": self.gal_fp.item(),
@@ -319,26 +315,14 @@ class BlissMetrics(Metric):
 
         # add classification metrics if computed
         for metric in self.classification_metrics:
-            val_list = getattr(self, metric, None)
-            if not val_list:
-                continue
-
-            len_val = len(val_list[0])
-            if len_val == 0:
-                continue
+            v = getattr(self, metric, None)
 
             # take median along first dim of stacked tensors, i.e. across images
-            median_vals = torch.cat(val_list, dim=0).median(dim=0).values
-
             if metric in {"gal_fluxes", "star_fluxes"}:
-                metrics.update(
-                    {
-                        f"{metric}_{band}_mae": median_vals[i].item()
-                        for i, band in enumerate(self.survey_bands)
-                    }
-                )
+                for i, band in enumerate(self.survey_bands):
+                    metrics[f"{metric}_{band}_mae"] = v[i].item()
             else:
-                metrics[f"{metric}_mae"] = median_vals.item()
+                metrics[f"{metric}_mae"] = v.item()
 
         return metrics
 
@@ -364,7 +348,6 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
         - row_indx: Indicies of true objects matched to estimated objects.
         - col_indx: Indicies of estimated objects matched to true objects.
         - dist_keep: Matched objects to keep based on l1 distances.
-        - avg_distance: Average l-infinity distance over all matched objects.
         - avg_keep_distance: Average l-infinity distance over matched objects to keep.
     """
     assert len(true_locs.shape) == len(est_locs.shape) == 2
@@ -396,13 +379,12 @@ def match_by_locs(true_locs, est_locs, slack=1.0):
 
     # GOOD match condition: L-infinity distance is less than slack
     dist_keep = (dist < slack).bool()
-    avg_distance = dist.mean()
     avg_keep_distance = dist[dist < slack].mean()
 
     if dist_keep.sum() > 0:
         assert dist[dist_keep].max() <= slack
 
-    return row_indx, col_indx, dist_keep.cpu().numpy(), avg_distance, avg_keep_distance
+    return row_indx, col_indx, dist_keep.cpu().numpy(), avg_keep_distance
 
 
 def three_way_matching(pred_cat, comp_cat, gt_cat, slack=1):

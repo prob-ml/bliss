@@ -147,7 +147,7 @@ def predict(cfg):
         backgrounds = prepare_image(survey_obj["background"], cfg.predict.device).float()
         images, backgrounds = crop_image(images, backgrounds, cfg.predict.crop)
         survey.predict_batch = prepare_batch(images, backgrounds)
-        est_cat, images, backgrounds, pred = trainer.predict(encoder, datamodule=survey)[0].values()
+        est_cat, pred = trainer.predict(encoder, datamodule=survey)[0].values()
 
         # mean of the nelec_per_mgy per band
         nelec_per_nmgy_per_band = np.mean(survey_obj["flux_calibration_list"], axis=1)

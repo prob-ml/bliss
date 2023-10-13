@@ -1,24 +1,20 @@
 import math
-import warnings
-from typing import Dict, Optional, Union
+from typing import Dict, Optional
 
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
-from omegaconf import OmegaConf
-from omegaconf.dictconfig import DictConfig
-from torch import Tensor
 from torch.distributions import Distribution
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
-from bliss.backbone import Backbone
-from bliss.catalog import FullCatalog, SourceType, TileCatalog
-from bliss.data_augmentation import augment_data
+from bliss.catalog import SourceType, TileCatalog
+from bliss.convnet import ConditionalNet, MarginalNet
+from bliss.data_augmentation import augment_batch
+from bliss.image_normalizer import ImageNormalizer
 from bliss.metrics import BlissMetrics, MetricsMode
 from bliss.plotting import plot_detections
-from bliss.transforms import log_transform, rolling_z_score
 from bliss.unconstrained_dists import (
     UnconstrainedBernoulli,
     UnconstrainedLogitNormal,
@@ -39,81 +35,72 @@ class Encoder(pl.LightningModule):
 
     def __init__(
         self,
-        architecture: DictConfig,
         bands: list,
         survey_bands: list,
         tile_slen: int,
         tiles_to_crop: int,
+        image_normalizer: ImageNormalizer,
         slack: float = 1.0,
         min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
-        input_transform_params: Optional[dict] = None,
         do_data_augmentation: bool = False,
         compile_model: bool = False,
     ):
         """Initializes DetectionEncoder.
 
         Args:
-            architecture: yaml to specifying the encoder network architecture
             bands: specified band-pass filters
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
+            image_normalizer: object that applies input transforms to images
             slack: Slack to use when matching locations for validation metrics.
             min_flux_threshold: Sources with a lower flux will not be considered when computing loss
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
-            input_transform_params: used for determining what channels to use as input (e.g.
-                deconvolution, concatenate PSF parameters, z-score inputs, etc.)
             do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
         """
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["image_normalizer"])
 
         self.STAR_FLUX_NAMES = [f"star_flux_{bnd}" for bnd in survey_bands]  # ordered by BANDS
         self.GAL_FLUX_NAMES = [f"galaxy_flux_{bnd}" for bnd in survey_bands]  # ordered by BANDS
 
         self.bands = bands
         self.survey_bands = survey_bands
-        self.n_bands = len(self.bands)
+        self.tile_slen = tile_slen
+        self.tiles_to_crop = tiles_to_crop
+        self.image_normalizer = image_normalizer
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
-        self.input_transform_params = input_transform_params
         self.do_data_augmentation = do_data_augmentation
 
-        transform_enabled = (
-            "log_transform" in self.input_transform_params
-            or "rolling_z_score" in self.input_transform_params
-        )
-        if self.n_bands > 1 and not transform_enabled:
-            warnings.warn(
-                "For multiband data, it is recommended that either"
-                + " log transform or rolling z-score is enabled."
-            )
+        ch_per_band = self.image_normalizer.num_channels_per_band()
+        n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
+        self.marginal_net = MarginalNet(len(bands), ch_per_band, n_params_per_source)
+        self.conditional_net = ConditionalNet(n_params_per_source)
 
-        self.tile_slen = tile_slen
-
-        # number of distributional parameters used to characterize each source
-        self.n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
-
-        # a hack to get the right number of outputs from yolo
-        architecture["nc"] = self.n_params_per_source - 5
-        arch_dict = OmegaConf.to_container(architecture)
-
-        num_channels = len(self.bands)
-        num_features_per_band = self._get_num_features()
-        self.model = Backbone(cfg=arch_dict, ch=num_channels, n_imgs=num_features_per_band)
         if compile_model:
-            self.model = torch.compile(self.model)
-        self.tiles_to_crop = tiles_to_crop
+            self.marginal_net = torch.compile(self.marginal_net)
+            self.conditional_net = torch.compile(self.conditional_net)
 
         # metrics
         self.metrics = BlissMetrics(
             mode=MetricsMode.TILE, slack=slack, survey_bands=self.survey_bands
         )
+
+    def _get_checkboard(self, ht, wt):
+        # make/store a checkerboard of tiles
+        # https://stackoverflow.com/questions/72874737/how-to-make-a-checkerboard-in-pytorch
+        arange_ht = torch.arange(ht, device=self.device)
+        arange_wt = torch.arange(wt, device=self.device)
+        mg = torch.meshgrid(arange_ht, arange_wt, indexing="ij")
+        indices = torch.stack(mg)
+        tile_cb = indices.sum(axis=0) % 2
+        return rearrange(tile_cb, "ht wt -> 1 1 ht wt")
 
     @property
     def dist_param_groups(self):
@@ -135,84 +122,13 @@ class Encoder(pl.LightningModule):
             d[gal_flux] = UnconstrainedLogNormal()
         return d
 
-    def _get_num_features(self):
-        """Determine number of input channels for model based on desired input transforms."""
-        num_features_per_band = 2  # img + bg
-        if self.input_transform_params.get("use_deconv_channel"):
-            num_features_per_band += 1
-        if self.input_transform_params.get("concat_psf_params"):
-            num_features_per_band += 6
-        if self.input_transform_params.get("clahe"):
-            num_features_per_band += 1
-        return num_features_per_band
-
-    def get_input_tensor(self, batch):
-        """Extracts data from batch and concatenates into a single tensor to be input into model.
-
-        By default, only the image and background are used. Other input transforms can be specified
-        in self.input_transform_params. Supported options are:
-            use_deconv_channel: add channel for image deconvolved with PSF
-            concat_psf_params: add each PSF parameter as a channel
-            rolling_z_score: rolling z-score both the images and background
-            log_transform: apply pixel-wise natural logarithm to background-subtracted image.
-
-        Args:
-            batch: input batch (as dictionary)
-
-        Returns:
-            Tensor: b x c x 2 x h x w tensor, where the number of input channels `c` is based on the
-                input transformations to use
-        """
-        input_bands = batch["images"].shape[1]
-        if input_bands < self.n_bands:
-            warnings.warn(
-                f"Expected at least {self.n_bands} bands in the input but found only {input_bands}"
-            )
-        imgs = batch["images"][:, self.bands].unsqueeze(2)  # add extra dim for 5d input
-        bgs = batch["background"][:, self.bands].unsqueeze(2)
-        inputs = [imgs, bgs]
-
-        if self.input_transform_params.get("use_deconv_channel"):
-            assert (
-                "deconvolution" in batch
-            ), "use_deconv_channel specified but deconvolution not present in data"
-            inputs.append(batch["deconvolution"][:, self.bands].unsqueeze(2))
-        if self.input_transform_params.get("concat_psf_params"):
-            assert (
-                "psf_params" in batch
-            ), "concat_psf_params specified but psf params not present in data"
-            n, c, i, h, w = imgs.shape
-            psf_params = batch["psf_params"][:, self.bands]
-            inputs.append(psf_params.view(n, c, 6 * i, 1, 1).expand(n, c, 6 * i, h, w))
-        if self.input_transform_params.get("log_transform"):
-            # untransformed background
-            inputs[0] = log_transform(torch.clamp(inputs[0] - inputs[1], min=1))
-        elif self.input_transform_params.get("rolling_z_score"):
-            inputs[0] = rolling_z_score(inputs[0], 9, 200, 4)
-            inputs[1] = rolling_z_score(inputs[1], 9, 200, 4)
-        return torch.cat(inputs, dim=2)
-
-    def encode_batch(self, batch):
-        # get input tensor from batch with specified channels and transforms
-        inputs = self.get_input_tensor(batch)
-
-        # setting this to true every time is a hack to make yolo DetectionModel
-        # give us output of the right dimension
-        self.model.model[-1].training = True
-
-        assert inputs.size(3) % 16 == 0, "image dims must be multiples of 16"
-        assert inputs.size(4) % 16 == 0, "image dims must be multiples of 16"
-
-        output = self.model(inputs)
-        # there's an extra dimension for channel that is always a singleton
-        output4d = rearrange(output[0], "b 1 ht wt pps -> b ht wt pps")
-
+    def get_predicted_dist(self, x):
         ttc = self.tiles_to_crop
         if ttc > 0:
-            output4d = output4d[:, ttc:-ttc, ttc:-ttc, :]
+            x = x[:, ttc:-ttc, ttc:-ttc, :]
 
         split_sizes = [v.dim for v in self.dist_param_groups.values()]
-        dist_params_split = torch.split(output4d, split_sizes, 3)
+        dist_params_split = torch.split(x, split_sizes, 3)
         names = self.dist_param_groups.keys()
         pred = dict(zip(names, dist_params_split))
 
@@ -221,58 +137,101 @@ class Encoder(pl.LightningModule):
 
         return pred
 
-    def variational_mode(
-        self, pred: Dict[str, Tensor], return_full: Optional[bool] = True
-    ) -> Union[FullCatalog, TileCatalog]:
-        """Compute the mode of the variational distribution.
+    def get_marginal(self, batch):
+        x = self.image_normalizer.get_input_tensor(batch)
+        x_cat_marginal, x_features = self.marginal_net(x)
+        # detach here simplifies comparison between the joint and marginal models;
+        # this way training the conditional model wont't effect the marginal model
+        x_features = x_features.detach()
+        return x_cat_marginal, x_features
 
-        Args:
-            pred (Dict[str, Tensor]): model predictions
-            return_full (bool, optional): Returns a FullCatalog if true, otherwise returns a
-                TileCatalog. Defaults to True.
+    def get_conditional(self, x_cat_marginal, x_features, marginal_detections):
+        detections = marginal_detections.float().unsqueeze(1)
 
-        Returns:
-            Union[FullCatalog, TileCatalog]: Catalog based on predictions.
-        """
-        # the mean would be better at minimizing squared error...should we return that instead?
-        tile_is_on_array = pred["on_prob"].mode
+        tile_cb = self._get_checkboard(detections.size(2), detections.size(3))
+        detections1 = detections * tile_cb
+        mask1 = tile_cb.expand([x_features.size(0), -1, -1, -1])
+        x_cat1 = self.conditional_net(x_features, detections1, mask1)
 
-        # populate est_catalog_dict with per-band (log) star fluxes
-        star_fluxes = torch.stack(
-            [pred[name].mode * tile_is_on_array for name in self.STAR_FLUX_NAMES], dim=3
-        )
+        detections2 = detections * (1 - tile_cb)
+        x_cat2 = self.conditional_net(x_features, detections2, 1 - mask1)
 
-        # populate est_catalog_dict with source type
-        galaxy_bools = pred["galaxy_prob"].mode
-        star_bools = 1 - galaxy_bools
-        source_type = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
+        tile_cb_view = rearrange(tile_cb, "1 1 ht wt -> 1 ht wt 1")
+        x_cat_conditional = x_cat1 * (1 - tile_cb_view) + x_cat2 * tile_cb_view
 
-        # populate est_catalog_dict with galaxy parameters
-        galsim_dists = [pred[f"galsim_{name}"] for name in self.GALSIM_NAMES]
-        # for params with transformed distribution mode and median aren't implemented.
-        # instead, we compute median using inverse cdf 0.5
-        galsim_param_lst = [d.icdf(torch.tensor(0.5)) for d in galsim_dists]
-        galaxy_params = torch.stack(galsim_param_lst, dim=3)
+        x_cat_joint1 = x_cat_marginal * tile_cb_view + x_cat1 * (1 - tile_cb_view)
+        x_cat_joint2 = x_cat_marginal * (1 - tile_cb_view) + x_cat2 * tile_cb_view
 
-        # populate est_catalog_dict with per-band galaxy fluxes
-        galaxy_fluxes = torch.stack(
-            [pred[name].icdf(torch.tensor(0.5)) * tile_is_on_array for name in self.GAL_FLUX_NAMES],
-            dim=3,
-        )
-
-        # we have to unsqueeze some tensors below because a TileCatalog can store multiple
-        # light sources per tile, but we predict only one source per tile
-        est_catalog_dict = {
-            "locs": rearrange(pred["loc"].mode, "b ht wt d -> b ht wt 1 d"),
-            "star_fluxes": rearrange(star_fluxes, "b ht wt d -> b ht wt 1 d"),
-            "n_sources": tile_is_on_array,
-            "source_type": rearrange(source_type, "b ht wt -> b ht wt 1 1"),
-            "galaxy_params": rearrange(galaxy_params, "b ht wt d -> b ht wt 1 d"),
-            "galaxy_fluxes": rearrange(galaxy_fluxes, "b ht wt d -> b ht wt 1 d"),
+        return {
+            "marginal": self.get_predicted_dist(x_cat_marginal),
+            "conditional": self.get_predicted_dist(x_cat_conditional),
+            "joint1": self.get_predicted_dist(x_cat_joint1),
+            "joint2": self.get_predicted_dist(x_cat_joint2),
+            "tile_cb": tile_cb,
         }
 
-        est_tile_catalog = TileCatalog(self.tile_slen, est_catalog_dict)
-        return est_tile_catalog if not return_full else est_tile_catalog.to_full_params()
+    def sample(self, batch, cat_type="joint1", use_mode=False) -> TileCatalog:
+        """Sample the variational distribution.
+
+        Args:
+            batch: (transformed) input data
+            cat_type: whether to use the marginal or joint predictions
+            use_mode: whether to use the mode of the distribution instead of random sampling
+
+        Returns:
+            TileCatalog: Sampled catalog
+        """
+        assert cat_type in {"marginal", "conditional", "joint1"}, "joint2 not supported"
+
+        x_cat_marginal, x_features = self.get_marginal(batch)
+        on_dist = self.dist_param_groups["on_prob"].get_dist(x_cat_marginal[:, :, :, 0:1])
+        marginal_detections = on_dist.mode if use_mode else on_dist.sample()
+        preds = self.get_conditional(x_cat_marginal, x_features, marginal_detections)
+
+        pred = preds[cat_type]
+
+        locs = pred["loc"].mode if use_mode else pred["loc"].sample().squeeze(0)
+        est_cat = {"locs": locs}
+
+        # populate catalog with per-band (log) star fluxes
+        sf_preds = [pred[name] for name in self.STAR_FLUX_NAMES]
+        sf_lst = [p.mode if use_mode else p.sample() for p in sf_preds]
+        est_cat["star_fluxes"] = torch.stack(sf_lst, dim=3)
+
+        # populate catalog with source type
+        galaxy_bools = pred["galaxy_prob"].mode if use_mode else pred["galaxy_prob"].sample()
+        galaxy_bools = galaxy_bools.unsqueeze(3)
+        star_bools = 1 - galaxy_bools
+        est_cat["source_type"] = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
+
+        # populate catalog with galaxy parameters
+        gs_dists = [pred[f"galsim_{name}"] for name in self.GALSIM_NAMES]
+        gs_param_lst = [d.icdf(torch.tensor(0.5)) if use_mode else d.sample() for d in gs_dists]
+        est_cat["galaxy_params"] = torch.stack(gs_param_lst, dim=3)
+
+        # populate catalog with per-band galaxy fluxes
+        gf_dists = [pred[name] for name in self.GAL_FLUX_NAMES]
+        gf_lst = [d.icdf(torch.tensor(0.5)) if use_mode else d.sample() for d in gf_dists]
+        est_cat["galaxy_fluxes"] = torch.stack(gf_lst, dim=3)
+
+        # we have to unsqueeze these tensors because a TileCatalog can store multiple
+        # light sources per tile, but we sample only one source per tile
+        for k, v in est_cat.items():
+            est_cat[k] = v.unsqueeze(3)
+
+        # n_sources is not unsqueezed because it is a single integer per tile regardless of
+        # how many light sources are stored per tile
+        est_cat["n_sources"] = pred["on_prob"].mode if use_mode else pred["on_prob"].sample()
+        tile_cb = preds["tile_cb"].squeeze(1)
+        if cat_type == "joint1":
+            ttc = self.tiles_to_crop
+            if ttc > 0:
+                tile_cb = tile_cb[:, ttc:-ttc, ttc:-ttc]
+                marginal_detections = marginal_detections[:, ttc:-ttc, ttc:-ttc]
+            est_cat["n_sources"] *= 1 - tile_cb
+            est_cat["n_sources"] += tile_cb * marginal_detections
+
+        return TileCatalog(self.tile_slen, est_cat)
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
@@ -339,49 +298,53 @@ class Encoder(pl.LightningModule):
 
     def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
         batch_size = batch["images"].size(0)
-        pred = self.encode_batch(batch)
-        true_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        true_tile_cat = true_tile_cat.symmetric_crop(self.tiles_to_crop)
+        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
         # Filter by detectable sources and brightest source per tile
-        target_cat = true_tile_cat
-        if true_tile_cat.max_sources > 1:
+        if target_cat.max_sources > 1:
             target_cat = target_cat.get_brightest_source_per_tile(band=2)
         if self.min_flux_threshold > 0:
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
-        loss_dict = self._get_loss(pred, target_cat)
-        est_tile_cat = self.variational_mode(pred, return_full=False)  # get tile cat for metrics
+        x_cat_marginal, x_features = self.get_marginal(batch)
+        detection_truth = target_cat.n_sources > 0
+        preds = self.get_conditional(x_cat_marginal, x_features, detection_truth)
+
+        target_cat = target_cat.symmetric_crop(self.tiles_to_crop)
+        marginal_loss_dict = self._get_loss(preds["marginal"], target_cat)
+        conditional_loss_dict = self._get_loss(preds["conditional"], target_cat)
 
         # log all losses
-        for k, v in loss_dict.items():
+        for k, ml in marginal_loss_dict.items():
+            v = (ml + conditional_loss_dict[k]) / 2  # we make two predictions for each tile
             self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+            self.log("{}-marginal/{}".format(logging_name, k), ml, batch_size=batch_size)
 
         # log all metrics
         if log_metrics:
+            est_tile_cat = self.sample(batch, use_mode=True)
+
             metrics = self.metrics(target_cat, est_tile_cat)
             for k, v in metrics.items():
-                self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
+                metric_name = "{}-metrics/{}".format(logging_name, k)
+                self.log(metric_name, v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
         if plot_images:
             batch_size = len(batch["images"])
             n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
-            nrows = int(n_samples**0.5)  # for figure
 
             target_full_cat = target_cat.to_full_params()
+            est_tile_cat = self.sample(batch, cat_type="joint1", use_mode=True)
             est_full_cat = est_tile_cat.to_full_params()
-            wrong_idx = (est_full_cat.n_sources != target_full_cat.n_sources).nonzero()
-            wrong_idx = wrong_idx.view(-1)[:n_samples]
 
-            margin_px = self.tiles_to_crop * self.tile_slen
             fig = plot_detections(
                 torch.squeeze(batch["images"], 2),
                 target_full_cat,
                 est_full_cat,
-                nrows,
-                wrong_idx,
-                margin_px,
+                nrows=int(n_samples**0.5),
+                img_ids=torch.arange(n_samples, device=self.device),
+                margin_px=(self.tiles_to_crop * self.tile_slen),
             )
             title_root = f"Epoch:{self.current_epoch}/"
             title = f"{title_root}{logging_name} images"
@@ -389,27 +352,12 @@ class Encoder(pl.LightningModule):
                 self.logger.experiment.add_figure(title, fig)
             plt.close(fig)
 
-        return loss_dict["loss"]
+        return (marginal_loss_dict["loss"] + conditional_loss_dict["loss"]) / 2
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
         if self.do_data_augmentation:
-            imgs = batch["images"][:, self.bands].unsqueeze(2)  # add extra dim for 5d input
-            bgs = batch["background"][:, self.bands].unsqueeze(2)
-            aug_input_images = [imgs, bgs]
-            if self.input_transform_params.get("use_deconv_channel"):
-                assert (
-                    "deconvolution" in batch
-                ), "use_deconv_channel specified but deconvolution not present in data"
-                aug_input_images.append(batch["background"][:, self.bands].unsqueeze(2))
-            aug_input_image = torch.cat(aug_input_images, dim=2)
-
-            aug_output_image, tile = augment_data(batch["tile_catalog"], aug_input_image)
-            batch["images"] = aug_output_image[:, :, 0, :, :]
-            batch["background"] = aug_output_image[:, :, 1, :, :]
-            batch["tile_catalog"] = tile
-            if self.input_transform_params.get("use_deconv_channel"):
-                batch["deconvolution"] = aug_output_image[:, :, 2, :, :]
+            augment_batch(batch)
 
         return self._generic_step(batch, "train")
 
@@ -426,12 +374,12 @@ class Encoder(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
+        # do we need this? wouldn't pl call predict_step in a no_grad context?
         with torch.no_grad():
-            pred = self.encode_batch(batch)
-            est_cat = self.variational_mode(pred, return_full=False)
-        return {
-            "est_cat": est_cat,
-            "images": batch["images"],
-            "background": batch["background"],
-            "pred": pred,
-        }
+            x_cat_marginal, _ = self.get_marginal(batch)
+            return {
+                "est_cat": self.sample(batch, use_mode=True),
+                # a marginal catalog isn't really what we want here, perhaps
+                # we should return samples from the variation distribution instead
+                "pred": self.get_predicted_dist(x_cat_marginal),
+            }
