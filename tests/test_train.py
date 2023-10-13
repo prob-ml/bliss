@@ -22,7 +22,8 @@ def clear_checkpoints(cfg):
 
 class TestTrain:
     def test_train_sdss(self, cfg):
-        train(cfg)
+        train_sdss_cfg = cfg.copy()
+        train(train_sdss_cfg)
 
     def test_train_des(self, cfg):
         train_des_cfg = cfg.copy()

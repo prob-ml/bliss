@@ -39,6 +39,7 @@ training:
         accelerator: "cpu"
         devices: 1
     testing: true
+    data_source: ${simulator}
 
 predict:
     decals_frame: ${paths.decals}/336/3366m010/tractor-3366m010.fits

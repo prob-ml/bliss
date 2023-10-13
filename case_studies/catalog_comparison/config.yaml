@@ -5,7 +5,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 encoder:
-    input_transform_params:
+    image_normalizer:
         use_deconv_channel: true
         concat_psf_params: true
     bands: [2]

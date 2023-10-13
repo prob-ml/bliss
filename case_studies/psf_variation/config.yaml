@@ -11,7 +11,7 @@ paths:
     pretrained_models: ${paths.data}/pretrained_models
 
 encoder:
-    input_transform_params:
+    image_normalizer:
         use_deconv_channel: true
         concat_psf_params: true
         z-score: false
