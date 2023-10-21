@@ -197,10 +197,10 @@ class CatalogPrior(pl.LightningModule):
         star_ratios_flat = self.gmm_star.sample(np.prod(samples))[0]
         gal_ratios_flat = self.gmm_gal.sample(np.prod(samples))[0]
 
-        # a ratio 6.3 correpsonds to a 2 magnitude difference (e.g. 23 vs 21),
-        # it's unlikely that we'll see a ratio larger than this, though from the GMM
-        # ratios as large in magnitude as 23 (!!!) are sampled.
-        # Currently these clamps moderate the flux ratios for just 0.2% of objects,
+        # a ratio of 6.3 correpsonds to a 2 magnitude difference (e.g. 23 vs 21).
+        # it's unlikely that we'll see a ratio larger than this, though in samples from the
+        # GMM ratios as large in magnitude as 23 (!!!) are sampled.
+        # These clamps moderate the flux ratios for just 0.2% of objects,
         # yet have a major impact on the mean flux per pixel in images.
         star_ratios_flat = np.clip(star_ratios_flat, -6.3, 6.3)
         gal_ratios_flat = np.clip(gal_ratios_flat, -6.3, 6.3)
