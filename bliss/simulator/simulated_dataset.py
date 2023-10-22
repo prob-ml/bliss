@@ -55,7 +55,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             bands=survey.BANDS,
             pixel_shift=survey.pixel_shift,
             flux_calibration_dict=survey.flux_calibration_dict,
-            ref_band=prior.b_band,
+            ref_band=prior.reference_band,
         )
 
         self.n_batches = n_batches
@@ -105,7 +105,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                     images[b].numpy(),
                     wcs_list=wcs_batch[b],
                     ref_depth=0,
-                    ref_band=self.catalog_prior.b_band,
+                    ref_band=self.catalog_prior.reference_band,
                 )
             )
         return images

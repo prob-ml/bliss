@@ -55,7 +55,7 @@ class SloanDigitalSkySurvey(Survey):
         self,
         psf_config: PSFConfig,
         fields,
-        pixel_shift,
+        pixel_shift=0.0,
         dir_path="data/sdss",
         load_image_data: bool = False,
     ):

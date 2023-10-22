@@ -100,7 +100,7 @@ class CatalogPrior(pl.LightningModule):
 
         self.star_color_model_path = star_color_model_path
         self.gal_color_model_path = gal_color_model_path
-        self.b_band = reference_band
+        self.reference_band = reference_band
         self.gmm_star, self.gmm_gal = self._load_color_models()
 
     def sample(self) -> TileCatalog:
@@ -113,9 +113,8 @@ class CatalogPrior(pl.LightningModule):
             The remaining dimensions are variable-specific.
         """
         locs = self._sample_locs()
-        stars_fluxes, gals_fluxes = self._flux_ratios()
-        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior(gals_fluxes)
-        star_fluxes = self._sample_star_fluxes(stars_fluxes)
+        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior()
+        star_fluxes = self._sample_star_fluxes()
 
         n_sources = self._sample_n_sources()
         source_type = self._sample_source_type()
@@ -155,12 +154,14 @@ class CatalogPrior(pl.LightningModule):
         uniform_samples = torch.rand(n_samples) * u_max
         return min_x / (1.0 - uniform_samples) ** (1 / alpha)
 
-    def _sample_star_fluxes(self, star_ratios):
+    def _sample_star_fluxes(self):
+        flux_prop = self._sample_flux_ratios(self.gmm_star)
+
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        b_flux = self._draw_truncated_pareto(
+        ref_band_flux = self._draw_truncated_pareto(
             self.star_flux_alpha, self.star_flux_min, self.star_flux_max, latent_dims
         )
-        total_flux = b_flux * star_ratios
+        total_flux = ref_band_flux * flux_prop
 
         # select specified bands
         bands = np.array(range(self.n_bands))
@@ -176,7 +177,7 @@ class CatalogPrior(pl.LightningModule):
                 gmm_gal = pickle.load(f)
         return gmm_star, gmm_gal
 
-    def _flux_ratios(self) -> Tuple[Tensor, Tensor]:
+    def _sample_flux_ratios(self, gmm) -> Tuple[Tensor, Tensor]:
         """Sample and compute all star, galaxy fluxes based on real image data.
 
         Instead of pareto-sampling fluxes for each band, we pareto-sample `b`-band flux values,
@@ -186,6 +187,9 @@ class CatalogPrior(pl.LightningModule):
             flux_r ~ Pareto, flux_g ~ Pareto => flux_r | flux_g ~ Pareto.
         This function is survey-specific as the 'b'-band index depends on the survey.
 
+        Args:
+            gmm: Gaussian mixture model of flux ratios (either star or galaxy)
+
         Returns:
             stars_fluxes (Tensor): (b x th x tw x ms x nbands) Tensor containing all star flux
                 ratios for current batch
@@ -193,39 +197,28 @@ class CatalogPrior(pl.LightningModule):
                 ratios for current batch
         """
 
-        samples = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
-        star_ratios_flat = self.gmm_star.sample(np.prod(samples))[0]
-        gal_ratios_flat = self.gmm_gal.sample(np.prod(samples))[0]
+        sample_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
+        flux_logdiff, _ = gmm.sample(np.prod(sample_dims))
 
-        # a ratio of 6.3 correpsonds to a 2 magnitude difference (e.g. 23 vs 21).
-        # it's unlikely that we'll see a ratio larger than this, though in samples from the
-        # GMM ratios as large in magnitude as 23 (!!!) are sampled.
-        # These clamps moderate the flux ratios for just 0.2% of objects,
-        # yet have a major impact on the mean flux per pixel in images.
-        star_ratios_flat = np.clip(star_ratios_flat, -6.3, 6.3)
-        gal_ratios_flat = np.clip(gal_ratios_flat, -6.3, 6.3)
+        # A log difference of +/- 2.76 correpsonds to a 3 magnitude difference (e.g. 18 vs 21),
+        # or equivalently an 15.8x flux ratio.
+        # It's unlikely that objects will have a ratio larger than this.
+        flux_logdiff = np.clip(flux_logdiff, -2.76, 2.76)
+        flux_ratio = np.exp(flux_logdiff)
+
+        # Computes the flux in each band as a proportion of the reference band flux
+        flux_prop = torch.ones(flux_logdiff.shape[0], self.n_bands)
+        for band in range(self.reference_band - 1, -1, -1):
+            flux_prop[:, band] = flux_prop[:, band + 1] / flux_ratio[:, band]
+        for band in range(self.reference_band + 1, self.n_bands):
+            flux_prop[:, band] = flux_prop[:, band - 1] * flux_ratio[:, band - 1]
 
         # Reshape drawn values into appropriate form
-        samples = samples + (self.n_bands - 1,)
-        # TODO: remove band-dimension coercing after building DES/DECaLS-specific GMMs
-        bands = range(star_ratios_flat.shape[-1] - self.n_bands + 1, star_ratios_flat.shape[-1])
-        star_ratios = np.exp(np.reshape(star_ratios_flat[..., bands], samples))
-        gal_ratios = np.exp(np.reshape(gal_ratios_flat[..., bands], samples))
+        sample_dims = sample_dims + (self.n_bands,)
+        return flux_prop.view(sample_dims)
 
-        # Append r-band 'ratio' of 1's to sampled ratios
-        base = np.ones((self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1))
-        arrs = (star_ratios[..., : self.b_band], base, star_ratios[..., self.b_band :])
-        star_ratios_b = np.concatenate(arrs, axis=4)
-        arrs = (gal_ratios[..., : self.b_band], base, gal_ratios[..., self.b_band :])
-        gal_ratios_b = np.concatenate(arrs, axis=4)
-
-        return torch.from_numpy(star_ratios_b), torch.from_numpy(gal_ratios_b)
-
-    def _sample_galaxy_prior(self, gal_ratios) -> Tuple[Tensor, Tensor]:
+    def _sample_galaxy_prior(self) -> Tuple[Tensor, Tensor]:
         """Sample the latent galaxy params.
-
-        Args:
-            gal_ratios: flux ratios for multiband galaxies (why is this an argument?)
 
         Returns:
             Tuple[Tensor]: A tuple of galaxy fluxes (per band) and galsim parameters, including.
@@ -236,13 +229,15 @@ class CatalogPrior(pl.LightningModule):
                 - bulge_q: minor-to-major axis ratio of the bulge
                 - a_b: semi-major axis of bulge
         """
+        flux_prop = self._sample_flux_ratios(self.gmm_gal)
+
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
 
-        b_flux = self._draw_truncated_pareto(
+        ref_band_flux = self._draw_truncated_pareto(
             self.galaxy_alpha, self.galaxy_flux_min, self.galaxy_flux_max, latent_dims
         )
 
-        total_flux = gal_ratios * b_flux
+        total_flux = flux_prop * ref_band_flux
 
         # select fluxes from specified bands
         bands = np.array(self.bands)
