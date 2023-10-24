@@ -44,7 +44,7 @@ class CatalogPrior(pl.LightningModule):
         gal_color_model_path: str,
         reference_band: int,
     ):
-        """Initializes ImagePrior.
+        """Initializes CatalogPrior.
 
         Args:
             survey_bands: all band-pass filters available for this survey
