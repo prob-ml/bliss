@@ -63,6 +63,9 @@ class ImageNormalizer(torch.nn.Module):
         assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
         assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
 
+        if self.log_transform_stdevs:
+            assert batch["background"].min() > 1e-6, "background must be positive"
+
         input_bands = batch["images"].shape[1]
         if input_bands < len(self.bands):
             msg = f"Expected >= {len(self.bands)} bands in the input but found only {input_bands}"

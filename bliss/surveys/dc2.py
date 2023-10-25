@@ -15,6 +15,7 @@ from bliss.surveys.survey import Survey
 
 
 class DC2(Survey):
+    # why are these bands out of order? why does a test break if they are ordered correctly?
     BANDS = ("g", "i", "r", "u", "y", "z")
 
     def __init__(

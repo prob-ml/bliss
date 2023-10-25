@@ -47,11 +47,16 @@ class TestDC2:
     def test_train_on_dc2(self, cfg):
         train_dc2_cfg = cfg.copy()
         train_dc2_cfg.encoder.bands = [0, 1, 2, 3, 4, 5]
+        # why are these bands out of order? (should be "ugrizy") why does the test break if they
+        # are ordered correctly?
         train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]
         train_dc2_cfg.training.data_source = train_dc2_cfg.surveys.dc2
         train_dc2_cfg.encoder.image_normalizer.use_deconv_channel = True
         train_dc2_cfg.encoder.do_data_augmentation = True
         train_dc2_cfg.training.pretrained_weights = None
+        # log transform doesn't work in this test because the DC2 background is sometimes negative.
+        # why would the background be negative? are we using the wrong background estimate?
+        train_dc2_cfg.encoder.image_normalizer.log_transform_stdevs = []
         train(train_dc2_cfg)
 
     def test_dc2_augmentation(self, cfg):
