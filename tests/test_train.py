@@ -47,6 +47,7 @@ class TestTrain:
         train_decals_cfg.simulator.prior.reference_band = DECaLS.BANDS.index("r")
         train_decals_cfg.simulator.prior.survey_bands = DECaLS.BANDS
 
+        train_decals_cfg.encoder.image_normalizer.log_transform_stdevs = []
         train_decals_cfg.encoder.bands = [
             DECaLS.BANDS.index("g"),
             DECaLS.BANDS.index("r"),

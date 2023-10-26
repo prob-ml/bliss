@@ -54,7 +54,7 @@ class C3(nn.Module):
 
 
 class MarginalNet(nn.Module):
-    def __init__(self, n_bands, ch_per_band, out_channels):
+    def __init__(self, n_bands, ch_per_band, out_channels, double_downsample=True):
         super().__init__()
 
         nch_hidden = 64
@@ -68,7 +68,7 @@ class MarginalNet(nn.Module):
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
-            ConvBlock(128, NUM_FEATURES, stride=2),  # 4
+            ConvBlock(128, NUM_FEATURES, stride=(2 if double_downsample else 1)),  # 4
             C3(256, 256, n=6),  # 5
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),

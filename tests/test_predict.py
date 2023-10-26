@@ -100,6 +100,7 @@ def decals_weight_save_path(cfg, tmpdir_factory, decals_cached_data_path):
 
     train_decals_cfg.encoder.bands = list(range(len(DECaLS.BANDS)))
     train_decals_cfg.encoder.survey_bands = DECaLS.BANDS
+    train_decals_cfg.encoder.image_normalizer.log_transform_stdevs = []
     train_decals_cfg.training.pretrained_weights = None
     train_decals_cfg.training.testing = True
 
@@ -133,9 +134,8 @@ class TestPredict:
         the_cfg = cfg.copy()
         the_cfg.simulator.prior.reference_band = DECaLS.BANDS.index("r")
 
-        the_cfg.predict.plot.show_plot = (
-            False  # TODO: fix this—failing due to SDSS/DECaLS #bands mismatch
-        )
+        # TODO: fix the plotting: failing due to SDSS/DECaLS bands mismatch
+        the_cfg.predict.plot.show_plot = False
         the_cfg.predict.dataset = "${surveys.decals}"
         the_cfg.surveys.decals.sky_coords = [
             # brick '3366m010' corresponds to SDSS RCF 94-1-12
@@ -145,6 +145,7 @@ class TestPredict:
         ]
         the_cfg.encoder.bands = list(range(len(DECaLS.BANDS)))
         the_cfg.encoder.survey_bands = DECaLS.BANDS
+        the_cfg.encoder.image_normalizer.log_transform_stdevs = []
         the_cfg.predict.weight_save_path = decals_weight_save_path
         _, _, _, _, preds = predict(the_cfg)
 

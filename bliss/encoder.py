@@ -80,7 +80,13 @@ class Encoder(pl.LightningModule):
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
         n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
-        self.marginal_net = MarginalNet(len(bands), ch_per_band, n_params_per_source)
+        assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
+        self.marginal_net = MarginalNet(
+            len(bands),
+            ch_per_band,
+            n_params_per_source,
+            double_downsample=(tile_slen == 4),
+        )
         self.conditional_net = ConditionalNet(n_params_per_source)
 
         if compile_model:
