@@ -10,7 +10,7 @@ class ImageNormalizer(torch.nn.Module):
         include_original: bool,
         use_deconv_channel: bool,
         concat_psf_params: bool,
-        log_transform_thresholds: list,
+        log_transform_stdevs: list,
         use_clahe: bool,
     ):
         """Initializes DetectionEncoder.
@@ -20,7 +20,7 @@ class ImageNormalizer(torch.nn.Module):
             include_original: whether to include the original image as an input channel
             use_deconv_channel: whether to include the deconvolved image as an input channel
             concat_psf_params: whether to include the PSF parameters as input channels
-            log_transform_thresholds: list of thresholds to apply log transform to (can be empty)
+            log_transform_stdevs: list of thresholds to apply log transform to (can be empty)
             use_clahe: whether to apply Contrast Limited Adaptive Histogram Equalization to images
         """
         super().__init__()
@@ -29,11 +29,11 @@ class ImageNormalizer(torch.nn.Module):
         self.include_original = include_original
         self.use_deconv_channel = use_deconv_channel
         self.concat_psf_params = concat_psf_params
-        self.log_transform_thresholds = log_transform_thresholds
+        self.log_transform_stdevs = log_transform_stdevs
         self.use_clahe = use_clahe
 
-        if not (log_transform_thresholds or use_clahe):
-            warnings.warn("Either log transform or rolling z-score should be enabled.")
+        if not (log_transform_stdevs or use_clahe):
+            warnings.warn("Either log transform or clahe should be enabled.")
 
     def num_channels_per_band(self):
         """Determine number of input channels for model based on desired input transforms."""
@@ -44,8 +44,8 @@ class ImageNormalizer(torch.nn.Module):
             nch += 1
         if self.concat_psf_params:
             nch += 6  # number of PSF parameters for SDSS, may vary for other surveys
-        if self.log_transform_thresholds:
-            nch += len(self.log_transform_thresholds)
+        if self.log_transform_stdevs:
+            nch += len(self.log_transform_stdevs)
         if self.use_clahe:
             nch += 1
         return nch
@@ -62,6 +62,9 @@ class ImageNormalizer(torch.nn.Module):
         """
         assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
         assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
+
+        if self.log_transform_stdevs:
+            assert batch["background"].min() > 1e-6, "background must be positive"
 
         input_bands = batch["images"].shape[1]
         if input_bands < len(self.bands):
@@ -87,21 +90,21 @@ class ImageNormalizer(torch.nn.Module):
             psf_params = batch["psf_params"][:, self.bands]
             inputs.append(psf_params.view(n, c, 6 * i, 1, 1).expand(n, c, 6 * i, h, w))
 
-        for threshold in self.log_transform_thresholds:
-            image_offsets = raw_images - backgrounds - threshold
-            transformed_img = torch.log(torch.clamp(image_offsets, min=1.0))
+        for threshold in self.log_transform_stdevs:
+            image_offsets = (raw_images - backgrounds) / backgrounds.sqrt() - threshold
+            transformed_img = torch.log(torch.clamp(image_offsets + 1.0, min=1.0))
             inputs.append(transformed_img)
 
         if self.use_clahe:
-            renormalized_img = self.rolling_z_score(raw_images, 9, 200, 4)
+            renormalized_img = self.clahe(raw_images, 9, 200, 4)
             inputs.append(renormalized_img)
-            inputs[0] = self.rolling_z_score(backgrounds, 9, 200, 4)
+            inputs[0] = self.clahe(backgrounds, 9, 200, 4)
 
         return torch.cat(inputs, dim=2)
 
     @classmethod
-    def rolling_z_score(cls, imgs, s, c, p):
-        """Perform a rolling z_score transform on input images."""
+    def clahe(cls, imgs, s, c, p):
+        """Perform Contrast Limited Adaptive Histogram Equalization (CLAHE) on input images."""
         imgs4d = torch.squeeze(imgs, dim=2)
         padding = (p, p, p, p)
         orig_shape = imgs4d.shape

@@ -85,7 +85,7 @@ encoder:
         include_original: false
         use_deconv_channel: false
         concat_psf_params: false
-        log_transform_thresholds: [-100, 0, 100, 500, 1000]
+        log_transform_stdevs: [-3, 0, 1, 3]
         use_clahe: true
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
@@ -102,7 +102,7 @@ region_encoder:
         include_original: false
         use_deconv_channel: false
         concat_psf_params: false
-        log_transform_thresholds: [-100, 0, 100, 500, 1000]
+        log_transform_stdevs: [-3, 0, 1, 3]
         use_clahe: true
     overlap_slen: 0.4
     slack: ${encoder.slack}
@@ -147,7 +147,7 @@ predict:
     dataset: ${surveys.sdss}
     trainer: ${training.trainer}
     encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/clahed_logged_2percent.pt
+    weight_save_path: ${paths.pretrained_models}/clahed_logged_20percent.pt
     device: "cuda:0"
     crop:
         do_crop: true
