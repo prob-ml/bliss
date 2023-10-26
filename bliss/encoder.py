@@ -10,7 +10,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.catalog import SourceType, TileCatalog
-from bliss.convnet import ConditionalNet, MarginalNet
+from bliss.convnet import DetectionNet, FeaturesNet
 from bliss.data_augmentation import augment_batch
 from bliss.image_normalizer import ImageNormalizer
 from bliss.metrics import BlissMetrics, MetricsMode
@@ -81,17 +81,17 @@ class Encoder(pl.LightningModule):
         ch_per_band = self.image_normalizer.num_channels_per_band()
         n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
         assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
-        self.marginal_net = MarginalNet(
+        self.features_net = FeaturesNet(
             len(bands),
             ch_per_band,
             n_params_per_source,
             double_downsample=(tile_slen == 4),
         )
-        self.conditional_net = ConditionalNet(n_params_per_source)
+        self.detection_net = DetectionNet(n_params_per_source)
 
         if compile_model:
-            self.marginal_net = torch.compile(self.marginal_net)
-            self.conditional_net = torch.compile(self.conditional_net)
+            self.features_net = torch.compile(self.features_net)
+            self.detection_net = torch.compile(self.detection_net)
 
         # metrics
         self.metrics = BlissMetrics(
@@ -145,10 +145,9 @@ class Encoder(pl.LightningModule):
 
     def get_marginal(self, batch):
         x = self.image_normalizer.get_input_tensor(batch)
-        x_cat_marginal, x_features = self.marginal_net(x)
-        # detach here simplifies comparison between the joint and marginal models;
-        # this way training the conditional model wont't effect the marginal model
-        x_features = x_features.detach()
+        x_features = self.features_net(x)
+        context = torch.zeros_like(x_features[:, 0:2, :, :])
+        x_cat_marginal = self.detection_net(x_features, context)
         return x_cat_marginal, x_features
 
     def get_conditional(self, x_cat_marginal, x_features, marginal_detections):
@@ -157,10 +156,12 @@ class Encoder(pl.LightningModule):
         tile_cb = self._get_checkboard(detections.size(2), detections.size(3))
         detections1 = detections * tile_cb
         mask1 = tile_cb.expand([x_features.size(0), -1, -1, -1])
-        x_cat1 = self.conditional_net(x_features, detections1, mask1)
+        context1 = torch.cat([detections1, mask1], dim=1)
+        x_cat1 = self.detection_net(x_features, context1)
 
         detections2 = detections * (1 - tile_cb)
-        x_cat2 = self.conditional_net(x_features, detections2, 1 - mask1)
+        context2 = torch.cat([detections2, 1 - mask1], dim=1)
+        x_cat2 = self.detection_net(x_features, context2)
 
         tile_cb_view = rearrange(tile_cb, "1 1 ht wt -> 1 ht wt 1")
         x_cat_conditional = x_cat1 * (1 - tile_cb_view) + x_cat2 * tile_cb_view
@@ -308,7 +309,7 @@ class Encoder(pl.LightningModule):
 
         # Filter by detectable sources and brightest source per tile
         if target_cat.max_sources > 1:
-            target_cat = target_cat.get_brightest_source_per_tile(band=2)
+            target_cat = target_cat.get_brightest_sources_per_tile(band=2)
         if self.min_flux_threshold > 0:
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 

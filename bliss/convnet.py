@@ -53,7 +53,7 @@ class C3(nn.Module):
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
 
 
-class MarginalNet(nn.Module):
+class FeaturesNet(nn.Module):
     def __init__(self, n_bands, ch_per_band, out_channels, double_downsample=True):
         super().__init__()
 
@@ -63,53 +63,32 @@ class MarginalNet(nn.Module):
             nn.BatchNorm3d(nch_hidden),
             nn.SiLU(),
         )
-        backbone_layers = [
+        self.backbone = nn.Sequential(
             ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
             ConvBlock(128, NUM_FEATURES, stride=(2 if double_downsample else 1)),  # 4
-            C3(256, 256, n=6),  # 5
-            ConvBlock(256, 512, stride=2),
-            C3(512, 512, n=3, shortcut=False),
-            ConvBlock(512, 256, kernel_size=1, padding=0),
-            nn.Upsample(scale_factor=2, mode="nearest"),  # 9
-            C3(768, 256, n=3, shortcut=False),
-            Detect(256, out_channels),
-        ]
-        self.backbone = nn.ModuleList(backbone_layers)
+        )
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
-
-        save_for_cat = []
-        save_as_features = None
-        for i, m in enumerate(self.backbone):
-            x = m(x)
-            if i == 4:
-                save_as_features = x
-            if i in {4, 5, 9}:
-                save_for_cat.append(x)
-            if i == 9:
-                x = torch.cat(save_for_cat, dim=1)
-
-        return x, save_as_features
+        return self.backbone(x)
 
 
-class ConditionalNet(nn.Module):
+class DetectionNet(nn.Module):
     def __init__(self, out_channels):
         super().__init__()
 
-        neighbor_dim = 64
-        preprocess_neighbors = [
+        context_dim = 64
+        self.encode_context = nn.Sequential(
             ConvBlock(2, 64),
             ConvBlock(64, 64),
-            ConvBlock(64, neighbor_dim),
-        ]
-        self.pn_net = nn.Sequential(*preprocess_neighbors)
+            ConvBlock(64, context_dim),
+        )
 
         net_layers = [
-            ConvBlock(NUM_FEATURES + neighbor_dim, 256),  # 0
+            ConvBlock(NUM_FEATURES + context_dim, 256),  # 0
             C3(256, 256, n=6),  # 1
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),
@@ -120,11 +99,10 @@ class ConditionalNet(nn.Module):
         ]
         self.net_ml = nn.ModuleList(net_layers)
 
-    def forward(self, x_features, detections, mask):
-        neighbors = torch.cat([detections, mask], dim=1)
-        x_neighbors = self.pn_net(neighbors)
+    def forward(self, x_features, context):
+        x_context = self.encode_context(context)
 
-        x = torch.cat((x_features, x_neighbors), dim=1)
+        x = torch.cat((x_features, x_context), dim=1)
 
         save_lst = []
         for i, m in enumerate(self.net_ml):
