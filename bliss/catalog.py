@@ -253,10 +253,11 @@ class TileCatalog(UserDict):
         fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
-    def get_brightest_source_per_tile(self, band=2):
+    def get_brightest_sources_per_tile(self, top_k=1, band=2):
         """Restrict TileCatalog to only the brightest 'on' source per tile.
 
         Args:
+            top_k (int): The number of sources to keep per tile. Defaults to 1.
             band (int): The band to compare fluxes in. Defaults to 2 (r-band).
 
         Returns:
@@ -268,15 +269,15 @@ class TileCatalog(UserDict):
         # sort by fluxes of "on" sources to get brightest source per tile
         on_fluxes = self._get_fluxes_of_on_sources()[..., band]  # shape n x nth x ntw x d
         # 0:1 keeps dims right for slicing
-        top_idx = on_fluxes.argsort(dim=3, descending=True)[..., 0:1]
+        top_indexes = on_fluxes.argsort(dim=3, descending=True)[..., 0:top_k]
 
         d = {}
         for key, val in self.to_dict().items():
             if key == "n_sources":
-                d[key] = self.n_sources.bool().int()  # send all positive values to 1, 0 to 0
+                d[key] = self.n_sources.clamp(max=top_k)  # send all positive values to 1, 0 to 0
             else:
                 param_dim = val.size(-1)
-                idx_to_gather = repeat(top_idx, "... -> ... k", k=param_dim)
+                idx_to_gather = repeat(top_indexes, "... -> ... pd", pd=param_dim)
                 d[key] = torch.take_along_dim(val, idx_to_gather, dim=3)
 
         return TileCatalog(self.tile_slen, d)
@@ -308,6 +309,16 @@ class TileCatalog(UserDict):
         return TileCatalog(self.tile_slen, d)
 
     # endregion
+
+    def __repr__(self):
+        """A computationally efficient representation of a TileCatalog.
+        By defining this method, we no longer get warnings from the debugger that says
+        'pydevd warning: Computing repr of self (TileCatalog) was slow'.
+
+        Returns:
+            string: a representation of a tile catalog
+        """
+        return f"TileCatalog({self.batch_size}, {self.n_tiles_h}, {self.n_tiles_w})"
 
 
 class FullCatalog(UserDict):
