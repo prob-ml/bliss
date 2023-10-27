@@ -239,12 +239,6 @@ class Encoder(pl.LightningModule):
 
         return TileCatalog(self.tile_slen, est_cat)
 
-    def configure_optimizers(self):
-        """Configure optimizers for training (pytorch lightning)."""
-        optimizer = Adam(self.parameters(), **self.optimizer_params)
-        scheduler = MultiStepLR(optimizer, **self.scheduler_params)
-        return [optimizer], [scheduler]
-
     def _get_loss(self, pred: Dict[str, Distribution], true_tile_cat: TileCatalog):
         loss_with_components = {}
 
@@ -382,3 +376,9 @@ class Encoder(pl.LightningModule):
                 # we should return samples from the variation distribution instead
                 "pred": self.get_predicted_dist(x_cat_marginal),
             }
+
+    def configure_optimizers(self):
+        """Configure optimizers for training (pytorch lightning)."""
+        optimizer = Adam(self.parameters(), **self.optimizer_params)
+        scheduler = MultiStepLR(optimizer, **self.scheduler_params)
+        return [optimizer], [scheduler]
