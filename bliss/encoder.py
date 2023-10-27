@@ -1,4 +1,3 @@
-import math
 from typing import Dict, Optional
 
 import pytorch_lightning as pl
@@ -338,21 +337,14 @@ class Encoder(pl.LightningModule):
 
         # log a grid of figures to the tensorboard
         if plot_images:
-            batch_size = len(batch["images"])
-            n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
-
             target_full_cat = target_cat.to_full_params()
+
             est_tile_cat = self.sample(batch, cat_type="joint1", use_mode=True)
             est_full_cat = est_tile_cat.to_full_params()
 
-            fig = plot_detections(
-                torch.squeeze(batch["images"], 2),
-                target_full_cat,
-                est_full_cat,
-                nrows=int(n_samples**0.5),
-                img_ids=torch.arange(n_samples, device=self.device),
-                margin_px=(self.tiles_to_crop * self.tile_slen),
-            )
+            mp = self.tiles_to_crop * self.tile_slen
+            fig = plot_detections(batch["images"], target_full_cat, est_full_cat, margin_px=mp)
+
             title_root = f"Epoch:{self.current_epoch}/"
             title = f"{title_root}{logging_name} images"
             if self.logger:
