@@ -11,7 +11,7 @@ class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
-        self.bn = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0.03)
+        self.bn = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0.03, track_running_stats=False)
         self.activation = nn.SiLU(inplace=True)
 
     def forward(self, x):
@@ -60,7 +60,7 @@ class FeaturesNet(nn.Module):
         nch_hidden = 64
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, nch_hidden, [ch_per_band, 5, 5], padding=[0, 2, 2]),
-            nn.BatchNorm3d(nch_hidden),
+            nn.BatchNorm3d(nch_hidden, track_running_stats=False),
             nn.SiLU(),
         )
         self.backbone = nn.Sequential(
@@ -82,7 +82,7 @@ class DetectionNet(nn.Module):
 
         context_dim = 64
         self.encode_context = nn.Sequential(
-            ConvBlock(2, 64),
+            ConvBlock(3, 64),
             ConvBlock(64, 64),
             ConvBlock(64, context_dim),
         )
