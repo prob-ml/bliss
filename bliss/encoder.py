@@ -314,7 +314,6 @@ class Encoder(pl.LightningModule):
         # predict first layer (brightest) of light sources
         target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
         preds1 = self.infer(batch, lambda _: target_cat1.n_sources > 0)
-
         target_cat1 = target_cat1.symmetric_crop(self.tiles_to_crop)
         marginal_loss_dict1 = self._get_loss(preds1["marginal"], target_cat1)
         conditional_loss_dict1 = self._get_loss(preds1["conditional"], target_cat1)
@@ -322,7 +321,6 @@ class Encoder(pl.LightningModule):
         # predict second layer (next brightest) of light sources
         target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
         preds2 = self.infer(batch, lambda _: target_cat2.n_sources > 0, layer2=True)
-
         target_cat2 = target_cat2.symmetric_crop(self.tiles_to_crop)
         marginal_loss_dict2 = self._get_loss(preds2["marginal"], target_cat2)
         conditional_loss_dict2 = self._get_loss(preds2["conditional"], target_cat2)
