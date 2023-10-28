@@ -96,7 +96,7 @@ def setup_checkpoint_callback(cfg):
     checkpoint_callback = None
     if cfg.training.trainer.enable_checkpointing:
         checkpoint_callback = ModelCheckpoint(
-            filename="epoch={epoch}-val_loss={val/loss:.3f}",
+            filename="epoch{epoch}",
             save_top_k=cfg.training.save_top_k,
             verbose=True,
             monitor="val/loss",

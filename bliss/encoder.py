@@ -142,24 +142,28 @@ class Encoder(pl.LightningModule):
 
         return pred
 
-    def get_marginal(self, batch):
+    def infer(self, batch, detection_callback, layer2=False):
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
-        context = torch.zeros_like(x_features[:, 0:2, :, :])
-        x_cat_marginal = self.detection_net(x_features, context)
-        return x_cat_marginal, x_features
 
-    def get_conditional(self, x_cat_marginal, x_features, marginal_detections):
+        context = torch.zeros_like(x_features[:, 0:3, :, :])
+        if layer2:
+            context[:, 2] = 1.0
+
+        x_cat_marginal = self.detection_net(x_features, context)
+
+        marginal_detections = detection_callback(x_cat_marginal)
         detections = marginal_detections.float().unsqueeze(1)
 
         tile_cb = self._get_checkboard(detections.size(2), detections.size(3))
         detections1 = detections * tile_cb
         mask1 = tile_cb.expand([x_features.size(0), -1, -1, -1])
-        context1 = torch.cat([detections1, mask1], dim=1)
+        pass_context = torch.ones_like(mask1) if layer2 else torch.zeros_like(mask1)
+        context1 = torch.cat([detections1, mask1, pass_context], dim=1)
         x_cat1 = self.detection_net(x_features, context1)
 
         detections2 = detections * (1 - tile_cb)
-        context2 = torch.cat([detections2, 1 - mask1], dim=1)
+        context2 = torch.cat([detections2, 1 - mask1, pass_context], dim=1)
         x_cat2 = self.detection_net(x_features, context2)
 
         tile_cb_view = rearrange(tile_cb, "1 1 ht wt -> 1 ht wt 1")
@@ -174,25 +178,28 @@ class Encoder(pl.LightningModule):
             "joint1": self.get_predicted_dist(x_cat_joint1),
             "joint2": self.get_predicted_dist(x_cat_joint2),
             "tile_cb": tile_cb,
+            "marginal_detections": marginal_detections,
         }
 
-    def sample(self, batch, cat_type="joint1", use_mode=False) -> TileCatalog:
+    def sample(self, batch, cat_type="joint1", use_mode=False, layer2=False) -> TileCatalog:
         """Sample the variational distribution.
 
         Args:
             batch: (transformed) input data
             cat_type: whether to use the marginal or joint predictions
             use_mode: whether to use the mode of the distribution instead of random sampling
+            layer2: whether to sample the second layer of light sources
 
         Returns:
             TileCatalog: Sampled catalog
         """
         assert cat_type in {"marginal", "conditional", "joint1"}, "joint2 not supported"
 
-        x_cat_marginal, x_features = self.get_marginal(batch)
-        on_dist = self.dist_param_groups["on_prob"].get_dist(x_cat_marginal[:, :, :, 0:1])
-        marginal_detections = on_dist.mode if use_mode else on_dist.sample()
-        preds = self.get_conditional(x_cat_marginal, x_features, marginal_detections)
+        def detection_callback(x_cat_marginal):  # noqa: WPS430
+            on_dist = self.dist_param_groups["on_prob"].get_dist(x_cat_marginal[:, :, :, 0:1])
+            return on_dist.mode if use_mode else on_dist.sample()
+
+        preds = self.infer(batch, detection_callback, layer2=layer2)
 
         pred = preds[cat_type]
 
@@ -233,9 +240,9 @@ class Encoder(pl.LightningModule):
             ttc = self.tiles_to_crop
             if ttc > 0:
                 tile_cb = tile_cb[:, ttc:-ttc, ttc:-ttc]
-                marginal_detections = marginal_detections[:, ttc:-ttc, ttc:-ttc]
+                md = preds["marginal_detections"][:, ttc:-ttc, ttc:-ttc]
             est_cat["n_sources"] *= 1 - tile_cb
-            est_cat["n_sources"] += tile_cb * marginal_detections
+            est_cat["n_sources"] += tile_cb * md
 
         return TileCatalog(self.tile_slen, est_cat)
 
@@ -301,37 +308,61 @@ class Encoder(pl.LightningModule):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
         # Filter by detectable sources and brightest source per tile
-        if target_cat.max_sources > 1:
-            target_cat = target_cat.get_brightest_sources_per_tile(band=2)
         if self.min_flux_threshold > 0:
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
-        x_cat_marginal, x_features = self.get_marginal(batch)
-        detection_truth = target_cat.n_sources > 0
-        preds = self.get_conditional(x_cat_marginal, x_features, detection_truth)
+        # predict first layer (brightest) of light sources
+        target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
+        preds1 = self.infer(batch, lambda _: target_cat1.n_sources > 0)
 
-        target_cat = target_cat.symmetric_crop(self.tiles_to_crop)
-        marginal_loss_dict = self._get_loss(preds["marginal"], target_cat)
-        conditional_loss_dict = self._get_loss(preds["conditional"], target_cat)
+        target_cat1 = target_cat1.symmetric_crop(self.tiles_to_crop)
+        marginal_loss_dict1 = self._get_loss(preds1["marginal"], target_cat1)
+        conditional_loss_dict1 = self._get_loss(preds1["conditional"], target_cat1)
+
+        # predict second layer (next brightest) of light sources
+        target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
+        preds2 = self.infer(batch, lambda _: target_cat2.n_sources > 0, layer2=True)
+
+        target_cat2 = target_cat2.symmetric_crop(self.tiles_to_crop)
+        marginal_loss_dict2 = self._get_loss(preds2["marginal"], target_cat2)
+        conditional_loss_dict2 = self._get_loss(preds2["conditional"], target_cat2)
 
         # log all losses
-        for k, ml in marginal_loss_dict.items():
-            v = (ml + conditional_loss_dict[k]) / 2  # we make two predictions for each tile
+        for k, ml in marginal_loss_dict1.items():
+            v = (ml + conditional_loss_dict1[k]) / 2  # we make two predictions for each tile
+            self.log("{}-layer1/{}".format(logging_name, k), v, batch_size=batch_size)
+            self.log("{}-layer1-marginal/{}".format(logging_name, k), ml, batch_size=batch_size)
+
+        # log all losses
+        for k, ml in marginal_loss_dict2.items():
+            v = (ml + conditional_loss_dict2[k]) / 2  # we make two predictions for each tile
+            self.log("{}-layer2/{}".format(logging_name, k), v, batch_size=batch_size)
+            self.log("{}-layer2-marginal/{}".format(logging_name, k), ml, batch_size=batch_size)
+
+        # log sum
+        for k, ml in marginal_loss_dict1.items():
+            v = ml + conditional_loss_dict1[k]
+            v += marginal_loss_dict2[k] + conditional_loss_dict2[k]
+            v /= 2
             self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
-            self.log("{}-marginal/{}".format(logging_name, k), ml, batch_size=batch_size)
 
         # log all metrics
         if log_metrics:
-            est_tile_cat = self.sample(batch, use_mode=True)
-
-            metrics = self.metrics(target_cat, est_tile_cat)
+            est_tile_cat = self.sample(batch, use_mode=True, layer2=False)
+            metrics = self.metrics(target_cat1, est_tile_cat)
             for k, v in metrics.items():
-                metric_name = "{}-metrics/{}".format(logging_name, k)
+                metric_name = "{}-layer1-metrics/{}".format(logging_name, k)
+                self.log(metric_name, v, batch_size=batch_size)
+
+            est_tile_cat = self.sample(batch, use_mode=True, layer2=True)
+            metrics = self.metrics(target_cat2, est_tile_cat)
+            for k, v in metrics.items():
+                metric_name = "{}-layer2-metrics/{}".format(logging_name, k)
                 self.log(metric_name, v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
         if plot_images:
-            target_full_cat = target_cat.to_full_params()
+            target_full_cat = target_cat1.to_full_params()
 
             est_tile_cat = self.sample(batch, cat_type="joint1", use_mode=True)
             est_full_cat = est_tile_cat.to_full_params()
@@ -339,13 +370,17 @@ class Encoder(pl.LightningModule):
             mp = self.tiles_to_crop * self.tile_slen
             fig = plot_detections(batch["images"], target_full_cat, est_full_cat, margin_px=mp)
 
-            title_root = f"Epoch:{self.current_epoch}/"
-            title = f"{title_root}{logging_name} images"
+            title = f"Epoch:{self.current_epoch}/{logging_name} images"
             if self.logger:
                 self.logger.experiment.add_figure(title, fig)
             plt.close(fig)
 
-        return (marginal_loss_dict["loss"] + conditional_loss_dict["loss"]) / 2
+        return (
+            marginal_loss_dict1["loss"]
+            + conditional_loss_dict1["loss"]
+            + marginal_loss_dict2["loss"]
+            + conditional_loss_dict2["loss"]
+        ) / 2
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
@@ -369,12 +404,16 @@ class Encoder(pl.LightningModule):
         """Pytorch lightning method."""
         # do we need this? wouldn't pl call predict_step in a no_grad context?
         with torch.no_grad():
-            x_cat_marginal, _ = self.get_marginal(batch)
+
+            def marginal_detections(x_cat_marginal):  # noqa: WPS430
+                return self.dist_param_groups["on_prob"].get_dist(x_cat_marginal[:, :, :, 0:1]).mode
+
+            preds = self.infer(batch, marginal_detections, layer2=False)
             return {
                 "est_cat": self.sample(batch, use_mode=True),
                 # a marginal catalog isn't really what we want here, perhaps
                 # we should return samples from the variation distribution instead
-                "pred": self.get_predicted_dist(x_cat_marginal),
+                "pred": preds["marginal"],
             }
 
     def configure_optimizers(self):

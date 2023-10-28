@@ -253,11 +253,12 @@ class TileCatalog(UserDict):
         fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
-    def get_brightest_sources_per_tile(self, top_k=1, band=2):
+    def get_brightest_sources_per_tile(self, top_k=1, exclude_num=0, band=2):
         """Restrict TileCatalog to only the brightest 'on' source per tile.
 
         Args:
             top_k (int): The number of sources to keep per tile. Defaults to 1.
+            exclude_num (int): A number of the brightest sources to exclude. Defaults to 0.
             band (int): The band to compare fluxes in. Defaults to 2 (r-band).
 
         Returns:
@@ -269,12 +270,13 @@ class TileCatalog(UserDict):
         # sort by fluxes of "on" sources to get brightest source per tile
         on_fluxes = self._get_fluxes_of_on_sources()[..., band]  # shape n x nth x ntw x d
         # 0:1 keeps dims right for slicing
-        top_indexes = on_fluxes.argsort(dim=3, descending=True)[..., 0:top_k]
+        top_indexes = on_fluxes.argsort(dim=3, descending=True)
+        top_indexes = top_indexes[..., exclude_num : (exclude_num + top_k)]
 
         d = {}
         for key, val in self.to_dict().items():
             if key == "n_sources":
-                d[key] = self.n_sources.clamp(max=top_k)  # send all positive values to 1, 0 to 0
+                d[key] = (self.n_sources - exclude_num).clamp(min=0, max=top_k)
             else:
                 param_dim = val.size(-1)
                 idx_to_gather = repeat(top_indexes, "... -> ... pd", pd=param_dim)
