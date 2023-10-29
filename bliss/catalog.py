@@ -244,7 +244,7 @@ class TileCatalog(UserDict):
         idx_to_gather = repeat(indices, "... -> ... k", k=param.size(-1))
         return torch.gather(param, dim=1, index=idx_to_gather)
 
-    def _get_fluxes_of_on_sources(self):
+    def get_fluxes_of_on_sources(self):
         """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
 
         Returns:
@@ -268,7 +268,7 @@ class TileCatalog(UserDict):
             return self
 
         # sort by fluxes of "on" sources to get brightest source per tile
-        on_fluxes = self._get_fluxes_of_on_sources()[..., band]  # shape n x nth x ntw x d
+        on_fluxes = self.get_fluxes_of_on_sources()[..., band]  # shape n x nth x ntw x d
         # 0:1 keeps dims right for slicing
         top_indexes = on_fluxes.argsort(dim=3, descending=True)
         top_indexes = top_indexes[..., exclude_num : (exclude_num + top_k)]
@@ -298,7 +298,7 @@ class TileCatalog(UserDict):
         """
 
         # get fluxes of "on" sources to mask by
-        on_fluxes = self._get_fluxes_of_on_sources()[..., band]
+        on_fluxes = self.get_fluxes_of_on_sources()[..., band]
         flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
 
         d = {}

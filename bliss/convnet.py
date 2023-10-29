@@ -76,13 +76,13 @@ class FeaturesNet(nn.Module):
         return self.backbone(x)
 
 
-class DetectionNet(nn.Module):
+class CatalogNet(nn.Module):
     def __init__(self, out_channels):
         super().__init__()
 
         context_dim = 64
         self.encode_context = nn.Sequential(
-            ConvBlock(3, 64),
+            ConvBlock(4, 64),
             ConvBlock(64, 64),
             ConvBlock(64, context_dim),
         )
