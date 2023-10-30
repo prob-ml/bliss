@@ -41,4 +41,4 @@ generate:
 
 cached_simulator:
     cached_data_path: /data/scratch/regier/m2
-    batch_size: 64
+    batch_size: 96

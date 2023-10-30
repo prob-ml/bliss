@@ -59,13 +59,14 @@ class VariationalLayer(torch.nn.Module):
 
         return TileCatalog(self.tile_slen, est_cat)
 
-    def compute_nll(self, true_tile_cat: TileCatalog):
+    def compute_nll(self, true_tile_cat: TileCatalog, tile_mask: torch.Tensor) -> dict:
         pred = self.pred
 
         loss_with_components = {}
 
         # counter loss
         counter_loss = -pred["on_prob"].log_prob(true_tile_cat.n_sources)
+        counter_loss *= tile_mask
         loss = counter_loss
         loss_with_components["counter_loss"] = counter_loss.mean()
 
@@ -77,42 +78,51 @@ class VariationalLayer(torch.nn.Module):
         true_locs = true_tile_cat.locs.squeeze(3)
         locs_loss = -pred["loc"].log_prob(true_locs)
         locs_loss *= true_tile_cat.n_sources
+        locs_loss *= tile_mask
         loss += locs_loss
-        loss_with_components["locs_loss"] = locs_loss.sum() / true_tile_cat.n_sources.sum()
+        true_num_sources = (true_tile_cat.n_sources * tile_mask).sum()
+        loss_with_components["locs_loss"] = locs_loss.sum() / true_num_sources
 
         # star/galaxy classification loss
         true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
         binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
         binary_loss *= true_tile_cat.n_sources
+        binary_loss *= tile_mask
         loss += binary_loss
-        loss_with_components["binary_loss"] = binary_loss.sum() / true_tile_cat.n_sources.sum()
+        loss_with_components["binary_loss"] = binary_loss.sum() / true_num_sources
 
         # flux losses
         true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
         star_fluxes = rearrange(true_tile_cat["star_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
         galaxy_fluxes = rearrange(true_tile_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
 
+        true_num_stars = (true_star_bools * tile_mask).sum()
+        true_num_gals = (true_gal_bools * tile_mask).sum()
+
         # only compute loss over bands we're using
         for i, band in enumerate(self.survey_bands):
             # star flux loss
             star_name = f"star_flux_{band}"
             star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i] + 1e-9) * true_star_bools
+            star_flux_loss *= tile_mask
             loss += star_flux_loss
-            loss_with_components[star_name] = star_flux_loss.sum() / true_star_bools.sum()
+            loss_with_components[star_name] = star_flux_loss.sum() / true_num_stars
 
             # galaxy flux loss
             gal_name = f"galaxy_flux_{band}"
             gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., i] + 1e-9) * true_gal_bools
+            gal_flux_loss *= tile_mask
             loss += gal_flux_loss
-            loss_with_components[gal_name] = gal_flux_loss.sum() / true_gal_bools.sum()
+            loss_with_components[gal_name] = gal_flux_loss.sum() / true_num_gals
 
         # galaxy properties loss
         galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
         for i, param_name in enumerate(self.GALSIM_NAMES):
             galsim_pn = f"galsim_{param_name}"
             loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
+            loss_term *= tile_mask
             loss += loss_term
-            loss_with_components[galsim_pn] = loss_term.sum() / true_gal_bools.sum()
+            loss_with_components[galsim_pn] = loss_term.sum() / true_num_gals
 
         loss_with_components["loss"] = loss.mean()
 

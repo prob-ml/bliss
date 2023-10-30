@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
+from torch.nn.functional import pad
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
@@ -160,10 +161,6 @@ class Encoder(pl.LightningModule):
         return est_cat
 
     def make_layer(self, x_cat):
-        ttc = self.tiles_to_crop
-        if ttc > 0:
-            x_cat = x_cat[:, ttc:-ttc, ttc:-ttc, :]
-
         split_sizes = [v.dim for v in self.dist_param_groups.values()]
         dist_params_split = torch.split(x_cat, split_sizes, 3)
         names = self.dist_param_groups.keys()
@@ -227,48 +224,56 @@ class Encoder(pl.LightningModule):
         context_marginal = self.get_context("marginal", empty_cat)
         x_cat_marginal = self.catalog_net(x_features, context_marginal)
         pred_marginal = self.make_layer(x_cat_marginal)
-        target_cat1_cropped = target_cat1.symmetric_crop(self.tiles_to_crop)
-        marginal_loss_dict = pred_marginal.compute_nll(target_cat1_cropped)
+        border_mask = torch.ones_like(target_cat.n_sources)
+        border_mask = pad(pad(border_mask, [-self.tiles_to_crop] * 4), [self.tiles_to_crop] * 4)
+        marginal_loss_dict = pred_marginal.compute_nll(target_cat1, border_mask)
 
         if self.training:
             opt = self.optimizers()
             self.manual_backward(marginal_loss_dict["loss"] / 2)
-            opt.step()
-            opt.zero_grad()
+            # opt.step()
+            # opt.zero_grad()
+            x_features = self.get_features(batch)
 
         # predict first layer (brightest) of light sources; conditional
-        x_features = self.get_features(batch)
 
         target_cat_white = deepcopy(target_cat1)
         tile_cb = self._get_checkboard(target_cat.n_tiles_h, target_cat.n_tiles_w).squeeze(1)
         target_cat_white.n_sources *= tile_cb
         context_white = self.get_context("white", target_cat_white)
         x_cat_white = self.catalog_net(x_features, context_white)
+        pred_white = self.make_layer(x_cat_white)
+        white_mask = border_mask * 1 - tile_cb
+        white_loss_dict = pred_white.compute_nll(target_cat1, white_mask)
+
+        if self.training:
+            opt = self.optimizers()
+            self.manual_backward(white_loss_dict["loss"] / 2)
+            # opt.step()
+            # opt.zero_grad()
+            x_features = self.get_features(batch)
 
         target_cat_black = deepcopy(target_cat1)
         target_cat_black.n_sources *= 1 - tile_cb
         context_black = self.get_context("black", target_cat_black)
         x_cat_black = self.catalog_net(x_features, context_black)
-
-        x_cat_cond = self.interleave_catalogs(x_cat_white, x_cat_black)
-        pred_cond = self.make_layer(x_cat_cond)
-        conditional_loss_dict = pred_cond.compute_nll(target_cat1_cropped)
+        pred_black = self.make_layer(x_cat_black)
+        black_mask = border_mask * tile_cb
+        black_loss_dict = pred_black.compute_nll(target_cat1, black_mask)
 
         if self.training:
             opt = self.optimizers()
-            self.manual_backward(conditional_loss_dict["loss"] / 2)
-            opt.step()
-            opt.zero_grad()
+            self.manual_backward(black_loss_dict["loss"] / 2)
+            # opt.step()
+            # opt.zero_grad()
+            x_features = self.get_features(batch)
 
         # predict second layer (next brightest) of light sources; marginal
-        x_features = self.get_features(batch)
-
         target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
         context2 = self.get_context("second", target_cat1)
         x_cat_second = self.catalog_net(x_features, context2)
         pred_second = self.make_layer(x_cat_second)
-        target_cat2_cropped = target_cat2.symmetric_crop(self.tiles_to_crop)
-        second_loss_dict = pred_second.compute_nll(target_cat2_cropped)
+        second_loss_dict = pred_second.compute_nll(target_cat2, border_mask)
 
         if self.training:
             opt = self.optimizers()
@@ -277,9 +282,8 @@ class Encoder(pl.LightningModule):
 
         # log layer1 losses
         for k, v in marginal_loss_dict.items():
-            loss = (v + conditional_loss_dict[k]) / 2  # we make two predictions for each tile
+            loss = (v + white_loss_dict[k] + black_loss_dict[k]) / 2  # we make two predictions for each tile
             self.log("{}-layer1/{}".format(logging_name, k), loss, batch_size=batch_size)
-            self.log("{}-layer1-marginal/{}".format(logging_name, k), v, batch_size=batch_size)
 
         # log layer2 losses
         for k, v in second_loss_dict.items():
@@ -287,41 +291,38 @@ class Encoder(pl.LightningModule):
 
         # log sum of losses
         for k, v in marginal_loss_dict.items():
-            loss = (v + conditional_loss_dict[k]) / 2
+            loss = (v + white_loss_dict[k] + black_loss_dict[k]) / 2
             loss += second_loss_dict[k]
             self.log("{}/{}".format(logging_name, k), loss, batch_size=batch_size)
 
+        target_cat1_cropped = target_cat1.symmetric_crop(self.tiles_to_crop)
+        target_cat2_cropped = target_cat2.symmetric_crop(self.tiles_to_crop)
+
         # log metrics
         if log_metrics:
-            est_tile_cat = pred_marginal.sample(use_mode=True)
-            metrics = self.metrics(target_cat1_cropped, est_tile_cat)
+            est_cat = pred_marginal.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
+            metrics = self.metrics(target_cat1_cropped, est_cat)
             for k, v in metrics.items():
                 metric_name = "{}-metrics-marginal/{}".format(logging_name, k)
                 self.log(metric_name, v, batch_size=batch_size)
 
-            est_tile_cat = pred_cond.sample(use_mode=True)
-            metrics = self.metrics(target_cat1_cropped, est_tile_cat)
-            for k, v in metrics.items():
-                metric_name = "{}-metrics-cond/{}".format(logging_name, k)
-                self.log(metric_name, v, batch_size=batch_size)
-
-            est_tile_cat = pred_second.sample(use_mode=True)
-            metrics = self.metrics(target_cat1_cropped, est_tile_cat)
+            est_cat = pred_second.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
+            metrics = self.metrics(target_cat2_cropped, est_cat)
             for k, v in metrics.items():
                 metric_name = "{}-metrics-second/{}".format(logging_name, k)
                 self.log(metric_name, v, batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
         if plot_images:
-            est_tile_cat = pred_marginal.sample(use_mode=True)
+            est_cat = pred_marginal.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
             mp = self.tiles_to_crop * self.tile_slen
-            fig = plot_detections(batch["images"], target_cat1_cropped, est_tile_cat, margin_px=mp)
+            fig = plot_detections(batch["images"], target_cat1_cropped, est_cat, margin_px=mp)
             title = f"Epoch:{self.current_epoch}/{logging_name} images"
             if self.logger:
                 self.logger.experiment.add_figure(title, fig)
             plt.close(fig)
 
-        first_pass_loss = (marginal_loss_dict["loss"] + conditional_loss_dict["loss"]) / 2
+        first_pass_loss = (marginal_loss_dict["loss"] + white_loss_dict["loss"] + black_loss_dict["loss"]) / 2
         return first_pass_loss + second_loss_dict["loss"]
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
