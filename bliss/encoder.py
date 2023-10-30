@@ -93,6 +93,8 @@ class Encoder(pl.LightningModule):
             mode=MetricsMode.TILE, slack=slack, survey_bands=self.survey_bands
         )
 
+        self.automatic_optimization = False
+
     @property
     def dist_param_groups(self):
         d = {
@@ -212,6 +214,10 @@ class Encoder(pl.LightningModule):
         if self.min_flux_threshold > 0:
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
+        if self.training:
+            opt = self.optimizers()
+            opt.zero_grad()
+
         x_features = self.get_features(batch)
 
         # predict first layer (brightest) of light sources; marginal
@@ -224,7 +230,15 @@ class Encoder(pl.LightningModule):
         target_cat1_cropped = target_cat1.symmetric_crop(self.tiles_to_crop)
         marginal_loss_dict = pred_marginal.compute_nll(target_cat1_cropped)
 
+        if self.training:
+            opt = self.optimizers()
+            self.manual_backward(marginal_loss_dict["loss"] / 2)
+            opt.step()
+            opt.zero_grad()
+
         # predict first layer (brightest) of light sources; conditional
+        x_features = self.get_features(batch)
+
         target_cat_white = deepcopy(target_cat1)
         tile_cb = self._get_checkboard(target_cat.n_tiles_h, target_cat.n_tiles_w).squeeze(1)
         target_cat_white.n_sources *= tile_cb
@@ -240,13 +254,26 @@ class Encoder(pl.LightningModule):
         pred_cond = self.make_layer(x_cat_cond)
         conditional_loss_dict = pred_cond.compute_nll(target_cat1_cropped)
 
+        if self.training:
+            opt = self.optimizers()
+            self.manual_backward(conditional_loss_dict["loss"] / 2)
+            opt.step()
+            opt.zero_grad()
+
         # predict second layer (next brightest) of light sources; marginal
+        x_features = self.get_features(batch)
+
         target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
         context2 = self.get_context("second", target_cat1)
         x_cat_second = self.catalog_net(x_features, context2)
         pred_second = self.make_layer(x_cat_second)
         target_cat2_cropped = target_cat2.symmetric_crop(self.tiles_to_crop)
         second_loss_dict = pred_second.compute_nll(target_cat2_cropped)
+
+        if self.training:
+            opt = self.optimizers()
+            self.manual_backward(second_loss_dict["loss"])
+            opt.step()
 
         # log layer1 losses
         for k, v in marginal_loss_dict.items():
