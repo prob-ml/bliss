@@ -95,6 +95,9 @@ class ImageNormalizer(torch.nn.Module):
             transformed_img = torch.log(torch.clamp(image_offsets + 1.0, min=1.0))
             inputs.append(transformed_img)
 
+        # we should revising normalizing the whole 80x80 image to see if that still performs
+        # better than CLAHE. if so, we can remove CLAHE and for large images partition them
+        # into 80x80 images before prediction
         if self.use_clahe:
             renormalized_img = self.clahe(raw_images, 9, 200, 4)
             inputs.append(renormalized_img)

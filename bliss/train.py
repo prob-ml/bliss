@@ -99,7 +99,7 @@ def setup_checkpoint_callback(cfg):
             filename="epoch{epoch}",
             save_top_k=cfg.training.save_top_k,
             verbose=True,
-            monitor="val/loss",
+            monitor="val-layer1/_loss",
             mode="min",
             save_on_train_epoch_end=False,
             auto_insert_metric_name=False,
@@ -111,7 +111,7 @@ def setup_early_stopping(cfg):
     early_stopping = None
     if cfg.training.enable_early_stopping:
         early_stopping = EarlyStopping(
-            monitor="val/loss", mode="min", patience=cfg.training.patience
+            monitor="val-layer1/_loss", mode="min", patience=cfg.training.patience
         )
     return early_stopping
 

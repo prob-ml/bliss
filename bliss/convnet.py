@@ -54,7 +54,7 @@ class C3(nn.Module):
 
 
 class FeaturesNet(nn.Module):
-    def __init__(self, n_bands, ch_per_band, out_channels, double_downsample=True):
+    def __init__(self, n_bands, ch_per_band, double_downsample=True):
         super().__init__()
 
         nch_hidden = 64
@@ -82,7 +82,7 @@ class CatalogNet(nn.Module):
 
         context_dim = 64
         self.encode_context = nn.Sequential(
-            ConvBlock(4, 64),
+            ConvBlock(3, 64),
             ConvBlock(64, 64),
             ConvBlock(64, context_dim),
         )
