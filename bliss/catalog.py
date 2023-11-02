@@ -55,6 +55,9 @@ class TileCatalog(UserDict):
             msg = f"The key '{key}' is not in the allowed parameters for {self.__class__}"
             raise ValueError(msg)
         self._validate(item)
+        # TODO: all data should be torch.float32, fix this
+        if item.dtype == torch.float64:
+            item = item.float()
         super().__setitem__(key, item)
 
     def __getitem__(self, key: str) -> Tensor:

@@ -6,7 +6,6 @@ from torch import nn
 
 NUM_FEATURES = 256
 
-
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         super().__init__()
@@ -80,15 +79,8 @@ class CatalogNet(nn.Module):
     def __init__(self, out_channels):
         super().__init__()
 
-        context_dim = 64
-        self.encode_context = nn.Sequential(
-            ConvBlock(3, 64),
-            ConvBlock(64, 64),
-            ConvBlock(64, context_dim),
-        )
-
         net_layers = [
-            ConvBlock(NUM_FEATURES + context_dim, 256),  # 0
+            ConvBlock(NUM_FEATURES, 256),  # 0
             C3(256, 256, n=6),  # 1
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),
@@ -99,11 +91,7 @@ class CatalogNet(nn.Module):
         ]
         self.net_ml = nn.ModuleList(net_layers)
 
-    def forward(self, x_features, context):
-        x_context = self.encode_context(context)
-
-        x = torch.cat((x_features, x_context), dim=1)
-
+    def forward(self, x):
         save_lst = []
         for i, m in enumerate(self.net_ml):
             x = m(x)
@@ -112,3 +100,23 @@ class CatalogNet(nn.Module):
             if i == 5:
                 x = torch.cat(save_lst, dim=1)
         return x
+
+
+class ContextNet(nn.Module):
+    def __init__(self, out_channels):
+        super().__init__()
+
+        context_dim = 64
+        self.encode_context = nn.Sequential(
+            ConvBlock(2, 64),
+            ConvBlock(64, 64),
+            ConvBlock(64, context_dim),
+        )
+        self.merge = ConvBlock(NUM_FEATURES + context_dim, NUM_FEATURES)
+        self.catalog_net = CatalogNet(out_channels)
+
+    def forward(self, x_features, context):
+        x_context = self.encode_context(context)
+        x = torch.cat((x_features, x_context), dim=1)
+        x = self.merge(x)
+        return self.catalog_net(x)
