@@ -276,21 +276,37 @@ class Encoder(pl.LightningModule):
 #                metric_name = "{}-layer1/{}-black".format(logging_name, k)
 #                self.log(metric_name, v, batch_size=batch_size)
 
-            est_cat = pred_marginal.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
-            metrics = self.metrics(target_cat1_cropped, est_cat)
-            for k, v in metrics.items():
+            est_cat_marginal = pred_marginal.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
+            metrics_marginal = self.metrics(target_cat1_cropped, est_cat_marginal)
+            for k, v in metrics_marginal.items():
                 if k != "f1" and "detection" not in k:
                     continue
                 metric_name = "{}-layer1/{}-marginal".format(logging_name, k)
                 self.log(metric_name, v, batch_size=batch_size)
 
-            est_cat = pred_joint.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
-            metrics = self.metrics(target_cat1_cropped, est_cat)
-            for k, v in metrics.items():
+            est_cat_joint = pred_joint.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
+            metrics_joint = self.metrics(target_cat1_cropped, est_cat_joint)
+            for k, v in metrics_joint.items():
                 if k != "f1" and "detection" not in k:
                     continue
                 metric_name = "{}-layer1/{}-joint".format(logging_name, k)
                 self.log(metric_name, v, batch_size=batch_size)
+
+            tile_recall_marginal = (target_cat1_cropped.n_sources * est_cat_marginal.n_sources).sum() / target_cat1_cropped.n_sources.sum()
+            metric_name = "{}-layer1/{}-marginal".format(logging_name, "tile_recall")
+            self.log(metric_name, tile_recall_marginal, batch_size=batch_size)
+            
+            tile_recall_joint = (target_cat1_cropped.n_sources * est_cat_joint.n_sources).sum() / target_cat1_cropped.n_sources.sum()
+            metric_name = "{}-layer1/{}-joint".format(logging_name, "tile_recall")
+            self.log(metric_name, tile_recall_joint, batch_size=batch_size)
+
+            tile_precision_marginal = (target_cat1_cropped.n_sources * est_cat_marginal.n_sources).sum() / est_cat_marginal.n_sources.sum()
+            metric_name = "{}-layer1/{}-marginal".format(logging_name, "tile_precision")
+            self.log(metric_name, tile_precision_marginal, batch_size=batch_size)
+            
+            tile_precision_joint = (target_cat1_cropped.n_sources * est_cat_joint.n_sources).sum() / est_cat_joint.n_sources.sum()
+            metric_name = "{}-layer1/{}-joint".format(logging_name, "tile_precision")
+            self.log(metric_name, tile_precision_joint, batch_size=batch_size)
 
 #            est_cat = pred_second.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
 #            metrics = self.metrics(target_cat2_cropped, est_cat)

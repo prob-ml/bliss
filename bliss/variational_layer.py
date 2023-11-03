@@ -101,12 +101,14 @@ class VariationalLayer(torch.nn.Module):
             star_name = f"star_flux_{band}"
             star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i] + 1e-9) * true_star_bools
             star_flux_loss *= tile_mask
+            loss_with_components[star_name] = star_flux_loss.sum()
             loss += star_flux_loss
 
             # galaxy flux loss
             gal_name = f"galaxy_flux_{band}"
             gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., i] + 1e-9) * true_gal_bools
             gal_flux_loss *= tile_mask
+            loss_with_components[gal_name] = gal_flux_loss.sum()
             loss += gal_flux_loss
 
         # galaxy properties loss
@@ -115,6 +117,7 @@ class VariationalLayer(torch.nn.Module):
             galsim_pn = f"galsim_{param_name}"
             loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
             loss_term *= tile_mask
+            loss_with_components[galsim_pn] = loss_term.sum()
             loss += loss_term
 
         # we really shouldn't normalize this loss by the number of sources if we're subsequently summing it
