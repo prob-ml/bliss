@@ -77,14 +77,16 @@ class Encoder(pl.LightningModule):
         ch_per_band = self.image_normalizer.num_channels_per_band()
         n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
         assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
+        num_features = 256
         self.features_net = FeaturesNet(
             len(bands),
             ch_per_band,
+            num_features,
             double_downsample=(tile_slen == 4),
         )
-        self.marginal_net = CatalogNet(n_params_per_source)
-        self.checkerboard_net = ContextNet(n_params_per_source)
-        self.second_net = CatalogNet(n_params_per_source)
+        self.marginal_net = CatalogNet(num_features, n_params_per_source)
+        self.checkerboard_net = ContextNet(num_features, n_params_per_source)
+        self.second_net = CatalogNet(num_features, n_params_per_source)
 
         if compile_model:
             self.features_net = torch.compile(self.features_net)
@@ -215,6 +217,7 @@ class Encoder(pl.LightningModule):
 
         # predict first layer (brightest) of light sources; marginal
         x_cat_marginal = self.marginal_net(x_features)
+        x_features = x_features.detach()  # is this helpful? doing it here to match old code
         pred_marginal = self.make_layer(x_cat_marginal)
         marginal_loss_dict = pred_marginal.compute_nll(target_cat1, border_mask)
 
@@ -295,7 +298,7 @@ class Encoder(pl.LightningModule):
             tile_recall_marginal = (target_cat1_cropped.n_sources * est_cat_marginal.n_sources).sum() / target_cat1_cropped.n_sources.sum()
             metric_name = "{}-layer1/{}-marginal".format(logging_name, "tile_recall")
             self.log(metric_name, tile_recall_marginal, batch_size=batch_size)
-            
+
             tile_recall_joint = (target_cat1_cropped.n_sources * est_cat_joint.n_sources).sum() / target_cat1_cropped.n_sources.sum()
             metric_name = "{}-layer1/{}-joint".format(logging_name, "tile_recall")
             self.log(metric_name, tile_recall_joint, batch_size=batch_size)
@@ -303,7 +306,7 @@ class Encoder(pl.LightningModule):
             tile_precision_marginal = (target_cat1_cropped.n_sources * est_cat_marginal.n_sources).sum() / est_cat_marginal.n_sources.sum()
             metric_name = "{}-layer1/{}-marginal".format(logging_name, "tile_precision")
             self.log(metric_name, tile_precision_marginal, batch_size=batch_size)
-            
+
             tile_precision_joint = (target_cat1_cropped.n_sources * est_cat_joint.n_sources).sum() / est_cat_joint.n_sources.sum()
             metric_name = "{}-layer1/{}-joint".format(logging_name, "tile_precision")
             self.log(metric_name, tile_precision_joint, batch_size=batch_size)

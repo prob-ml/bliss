@@ -4,8 +4,6 @@ from torch import nn
 # The code in this file is based on the following repository:
 # https://github.com/ultralytics/yolov5/
 
-NUM_FEATURES = 256
-
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         super().__init__()
@@ -53,7 +51,7 @@ class C3(nn.Module):
 
 
 class FeaturesNet(nn.Module):
-    def __init__(self, n_bands, ch_per_band, double_downsample=True):
+    def __init__(self, n_bands, ch_per_band, num_features, double_downsample=True):
         super().__init__()
 
         nch_hidden = 64
@@ -67,7 +65,7 @@ class FeaturesNet(nn.Module):
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
-            ConvBlock(128, NUM_FEATURES, stride=(2 if double_downsample else 1)),  # 4
+            ConvBlock(128, num_features, stride=(2 if double_downsample else 1)),  # 4
         )
 
     def forward(self, x):
@@ -76,11 +74,11 @@ class FeaturesNet(nn.Module):
 
 
 class CatalogNet(nn.Module):
-    def __init__(self, out_channels):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
 
         net_layers = [
-            ConvBlock(NUM_FEATURES, 256),  # 0
+            ConvBlock(in_channels, 256),  # 0
             C3(256, 256, n=6),  # 1
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),
@@ -103,7 +101,7 @@ class CatalogNet(nn.Module):
 
 
 class ContextNet(nn.Module):
-    def __init__(self, out_channels):
+    def __init__(self, num_features, out_channels):
         super().__init__()
 
         context_dim = 64
@@ -112,11 +110,9 @@ class ContextNet(nn.Module):
             ConvBlock(64, 64),
             ConvBlock(64, context_dim),
         )
-        self.merge = ConvBlock(NUM_FEATURES + context_dim, NUM_FEATURES)
-        self.catalog_net = CatalogNet(out_channels)
+        self.catalog_net = CatalogNet(num_features + context_dim, out_channels)
 
     def forward(self, x_features, context):
         x_context = self.encode_context(context)
         x = torch.cat((x_features, x_context), dim=1)
-        x = self.merge(x)
         return self.catalog_net(x)
