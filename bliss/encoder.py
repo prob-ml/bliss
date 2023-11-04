@@ -86,13 +86,13 @@ class Encoder(pl.LightningModule):
         )
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
-        self.second_net = CatalogNet(num_features, n_params_per_source)
+#        self.second_net = CatalogNet(num_features, n_params_per_source)
 
         if compile_model:
             self.features_net = torch.compile(self.features_net)
             self.marginal_net = torch.compile(self.marginal_net)
             self.checkerboard_net = torch.compile(self.checkerboard_net)
-            self.second_net = torch.compile(self.second_net)
+#            self.second_net = torch.compile(self.second_net)
 
         # metrics
         self.metrics = BlissMetrics(
