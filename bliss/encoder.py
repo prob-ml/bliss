@@ -45,6 +45,7 @@ class Encoder(pl.LightningModule):
         scheduler_params: Optional[dict] = None,
         do_data_augmentation: bool = False,
         compile_model: bool = False,
+        two_layers: bool = False,
     ):
         """Initializes DetectionEncoder.
 
@@ -60,6 +61,7 @@ class Encoder(pl.LightningModule):
             scheduler_params: arguments passed to the learning rate scheduler
             do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
+            two_layers: whether to make up to two detections per tile rather than one
         """
         super().__init__()
         self.save_hyperparameters(ignore=["image_normalizer"])
@@ -73,7 +75,7 @@ class Encoder(pl.LightningModule):
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
-        self.second = True
+        self.two_layers = two_layers
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
         n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
@@ -87,14 +89,14 @@ class Encoder(pl.LightningModule):
         )
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
-        if self.second:
+        if self.two_layers:
             self.second_net = CatalogNet(num_features, n_params_per_source)
 
         if compile_model:
             self.features_net = torch.compile(self.features_net)
             self.marginal_net = torch.compile(self.marginal_net)
             self.checkerboard_net = torch.compile(self.checkerboard_net)
-            if self.second:
+            if self.two_layers:
                 self.second_net = torch.compile(self.second_net)
 
         # metrics
@@ -204,7 +206,7 @@ class Encoder(pl.LightningModule):
         black_loss_dict = pred_black.compute_nll(target_cat1, black_loss_mask)
 
         # predict second layer (next brightest) of light sources; marginal
-        if self.second:
+        if self.two_layers:
             target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
             x_cat_second = self.second_net(x_features)
             pred_second = self.make_layer(x_cat_second)
@@ -217,7 +219,7 @@ class Encoder(pl.LightningModule):
             self.log(f"{logging_name}-layer1/_{k}", loss_l1, batch_size=batch_size)
 
         # log layer2 losses
-        if self.second:
+        if self.two_layers:
             for k in ("loss", "counter_loss"):
                 loss_l2 = second_loss_dict[k] / border_mask.sum()
                 self.log(f"{logging_name}-layer2/_{k}", loss_l2, batch_size=batch_size)
@@ -246,7 +248,7 @@ class Encoder(pl.LightningModule):
                 metric_name = "{}-layer1/{}-joint".format(logging_name, k)
                 self.log(metric_name, metrics_joint[k], batch_size=batch_size)
 
-            if self.second:
+            if self.two_layers:
                 target_cat2_cropped = target_cat2.symmetric_crop(self.tiles_to_crop)
                 est_cat_s = pred_second.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
                 metrics_second = self.metrics(target_cat2_cropped, est_cat_s)
@@ -270,7 +272,7 @@ class Encoder(pl.LightningModule):
         loss = marginal_loss_dict["loss"]
         loss += white_loss_dict["loss"] + black_loss_dict["loss"]
         loss /= 2
-        if self.second:
+        if self.two_layers:
             loss += second_loss_dict["loss"]
         loss /= border_mask.sum()
         return loss

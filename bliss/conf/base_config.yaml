@@ -89,6 +89,7 @@ encoder:
         use_clahe: true
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
+    two_layers: false
 
 region_encoder:
     _target_: case_studies.adaptive_tiling.region_encoder.RegionEncoder
