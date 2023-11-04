@@ -192,7 +192,7 @@ class Encoder(pl.LightningModule):
 #        log_flux_history = (tile_cat.get_fluxes_of_on_sources().sum(-1) + 1).log()
 #        log_flux_history = rearrange(log_flux_history, "b ht wt 1 -> b 1 ht wt")
 
-        return torch.cat([color_mask, detection_history], dim=1).float()
+        return torch.cat([detection_history, color_mask], dim=1).float()
 
     def interleave_catalogs(self, x_cat1, x_cat2):
         _, ht, wt, _ = x_cat1.shape
