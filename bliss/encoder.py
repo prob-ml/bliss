@@ -73,6 +73,7 @@ class Encoder(pl.LightningModule):
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
+        self.second = True
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
         n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
@@ -86,13 +87,15 @@ class Encoder(pl.LightningModule):
         )
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
-#        self.second_net = CatalogNet(num_features, n_params_per_source)
+        if self.second:
+            self.second_net = CatalogNet(num_features, n_params_per_source)
 
         if compile_model:
             self.features_net = torch.compile(self.features_net)
             self.marginal_net = torch.compile(self.marginal_net)
             self.checkerboard_net = torch.compile(self.checkerboard_net)
-#            self.second_net = torch.compile(self.second_net)
+            if self.second:
+                self.second_net = torch.compile(self.second_net)
 
         # metrics
         self.metrics = BlissMetrics(
@@ -129,40 +132,6 @@ class Encoder(pl.LightningModule):
         tile_cb = indices.sum(axis=0) % 2
         return rearrange(tile_cb, "ht wt -> 1 1 ht wt")
 
-    def sample(self, batch, cat_type="joint1", use_mode=False, layer2=False) -> TileCatalog:
-        """Sample the variational distribution.
-
-        Args:
-            batch: (transformed) input data
-            cat_type: whether to use the marginal or joint predictions
-            use_mode: whether to use the mode of the distribution instead of random sampling
-            layer2: whether to sample the second layer of light sources
-
-        Returns:
-            TileCatalog: Sampled catalog
-        """
-        assert cat_type in {"marginal", "conditional", "joint1"}, "joint2 not supported"
-
-        def detection_callback(x_cat_marginal):  # noqa: WPS430
-            on_dist = self.dist_param_groups["on_prob"].get_dist(x_cat_marginal[:, :, :, 0:1])
-            return on_dist.mode if use_mode else on_dist.sample()
-
-        preds = self.infer(batch, detection_callback, layer2=layer2)
-
-        pred = preds[cat_type]
-        est_cat = pred.sample(use_mode=use_mode)
-
-        if cat_type == "joint1":
-            ttc = self.tiles_to_crop
-            if ttc > 0:
-                tile_cb = preds["tile_cb"].squeeze(1)
-                tile_cb = tile_cb[:, ttc:-ttc, ttc:-ttc]
-                md = preds["marginal_detections"][:, ttc:-ttc, ttc:-ttc]
-            est_cat.n_sources *= 1 - tile_cb
-            est_cat.n_sources += tile_cb * md
-
-        return est_cat
-
     def make_layer(self, x_cat):
         split_sizes = [v.dim for v in self.dist_param_groups.values()]
         dist_params_split = torch.split(x_cat, split_sizes, 3)
@@ -186,8 +155,8 @@ class Encoder(pl.LightningModule):
         # we may want to use richer conditioning information in the future;
         # e.g., a residual image based on the catalog so far
         detection_history = masked_cat.n_sources > 0
-#        log_flux_history = (tile_cat.get_fluxes_of_on_sources().sum(-1) + 1).log()
-#        log_flux_history = rearrange(log_flux_history, "b ht wt 1 -> b 1 ht wt")
+        #        log_flux_history = (tile_cat.get_fluxes_of_on_sources().sum(-1) + 1).log()
+        #        log_flux_history = rearrange(log_flux_history, "b ht wt 1 -> b 1 ht wt")
 
         context = torch.stack([detection_history, history_mask], dim=1).float()
         x_cat = self.checkerboard_net(x_features, context)
@@ -212,7 +181,8 @@ class Encoder(pl.LightningModule):
         x_features = self.get_features(batch)
 
         border_mask = torch.ones_like(target_cat.n_sources)
-        border_mask = pad(pad(border_mask, [-self.tiles_to_crop] * 4), [self.tiles_to_crop] * 4)
+        ttc = self.tiles_to_crop
+        border_mask = pad(pad(border_mask, [-ttc, -ttc, -ttc, -ttc]), [ttc, ttc, ttc, ttc])
         tile_cb = self._get_checkboard(target_cat.n_tiles_h, target_cat.n_tiles_w).squeeze(1)
         target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
 
@@ -234,13 +204,11 @@ class Encoder(pl.LightningModule):
         black_loss_dict = pred_black.compute_nll(target_cat1, black_loss_mask)
 
         # predict second layer (next brightest) of light sources; marginal
-#        target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
-#        context2 = self.get_context("second", target_cat1)
-        # should try using a second instance of CatalogNet here; second pass is so different,
-        # an there's some evidence that first pass performance is deteriorating with this call
-#        x_cat_second = self.catalog_net2(x_features, context2)
-#        pred_second = self.make_layer(x_cat_second)
-#        second_loss_dict = pred_second.compute_nll(target_cat2, border_mask)
+        if self.second:
+            target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
+            x_cat_second = self.second_net(x_features)
+            pred_second = self.make_layer(x_cat_second)
+            second_loss_dict = pred_second.compute_nll(target_cat2, border_mask)
 
         # log layer1 losses, divide by 2 because we make two predictions for each tile
         for k in ("loss", "counter_loss"):
@@ -249,63 +217,63 @@ class Encoder(pl.LightningModule):
             self.log(f"{logging_name}-layer1/_{k}", loss_l1, batch_size=batch_size)
 
         # log layer2 losses
- #       for k in ("loss", "counter_loss"):
- #           loss_l2 = second_loss_dict[k]
- #           loss_l2 /= border_mask.sum()
- #           self.log(f"{logging_name}-layer2/_{k}", loss_l2, batch_size=batch_size)
-
-        # loss for both layers
-        # loss = loss_l1 + loss_l2
-        # self.log("{}/{}".format(logging_name, k), loss, batch_size=batch_size)
+        if self.second:
+            for k in ("loss", "counter_loss"):
+                loss_l2 = second_loss_dict[k] / border_mask.sum()
+                self.log(f"{logging_name}-layer2/_{k}", loss_l2, batch_size=batch_size)
 
         target_cat1_cropped = target_cat1.symmetric_crop(self.tiles_to_crop)
-#        target_cat2_cropped = target_cat2.symmetric_crop(self.tiles_to_crop)
 
         # log metrics
+        assert log_metrics or not plot_images, "plot_images requires log_metrics"
+
         if log_metrics:
             # marginal metrics, layer 1
-            est_cat_marginal = pred_marginal.sample(use_mode=True)
-            ecm_cropped = est_cat_marginal.symmetric_crop(self.tiles_to_crop)
+            est_cat_m = pred_marginal.sample(use_mode=True)
+            ecm_cropped = est_cat_m.symmetric_crop(self.tiles_to_crop)
             metrics_marginal = self.metrics(target_cat1_cropped, ecm_cropped)
-            for k, v in metrics_marginal.items():
-                if k != "f1" and "detection" not in k:
-                    continue
+            for k in ("f1", "detection_precision", "detection_recall"):
                 metric_name = "{}-layer1/{}-marginal".format(logging_name, k)
-                self.log(metric_name, v, batch_size=batch_size)
+                self.log(metric_name, metrics_marginal[k], batch_size=batch_size)
 
             # joint metrics, layer 1
-            pred_white_notruth = self.infer_conditional(x_features, est_cat_marginal, white_history_mask)
+            pred_white_notruth = self.infer_conditional(x_features, est_cat_m, white_history_mask)
             est_cat_white = pred_white_notruth.sample(use_mode=True)
-            est_cat_joint = self.interleave_catalogs(est_cat_marginal, est_cat_white, white_history_mask)
+            est_cat_joint = self.interleave_catalogs(est_cat_m, est_cat_white, white_history_mask)
             ecj_cropped = est_cat_joint.symmetric_crop(self.tiles_to_crop)
             metrics_joint = self.metrics(target_cat1_cropped, ecj_cropped)
-            for k, v in metrics_joint.items():
-                if k != "f1" and "detection" not in k:
-                    continue
+            for k in ("f1", "detection_precision", "detection_recall"):
                 metric_name = "{}-layer1/{}-joint".format(logging_name, k)
-                self.log(metric_name, v, batch_size=batch_size)
+                self.log(metric_name, metrics_joint[k], batch_size=batch_size)
 
-#            est_cat = pred_second.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
-#            metrics = self.metrics(target_cat2_cropped, est_cat)
-#            for k, v in metrics.items():
-#                if k != "f1" and "detection" not in k:
-#                    continue
-#                metric_name = "{}-layer2/{}".format(logging_name, k)
-#                self.log(metric_name, v, batch_size=batch_size)
+            if self.second:
+                target_cat2_cropped = target_cat2.symmetric_crop(self.tiles_to_crop)
+                est_cat_s = pred_second.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
+                metrics_second = self.metrics(target_cat2_cropped, est_cat_s)
+                for k in ("f1", "detection_precision", "detection_recall"):
+                    metric_name = "{}-layer2/{}".format(logging_name, k)
+                    self.log(metric_name, metrics_second[k], batch_size=batch_size)
 
-        # log a grid of figures to the tensorboard
-        if False and plot_images:
-            est_cat = pred_marginal.sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
-            mp = self.tiles_to_crop * self.tile_slen
-            fig = plot_detections(batch["images"], target_cat1_cropped, est_cat, margin_px=mp)
-            title = f"Epoch:{self.current_epoch}/{logging_name} images"
-            if self.logger:
-                self.logger.experiment.add_figure(title, fig)
-            plt.close(fig)
+            # log a grid of figures to the tensorboard
+            if plot_images:
+                fig = plot_detections(
+                    batch["images"],
+                    target_cat1_cropped,
+                    ecj_cropped,
+                    margin_px=(self.tiles_to_crop * self.tile_slen),
+                )
+                title = f"Epoch:{self.current_epoch}/{logging_name} images"
+                if self.logger:
+                    self.logger.experiment.add_figure(title, fig)
+                plt.close(fig)
 
-        # returned value not used with manual optimization
-        first_pass_loss = (marginal_loss_dict["loss"] + white_loss_dict["loss"] + black_loss_dict["loss"]) / 2
-        return first_pass_loss / border_mask.sum() # + second_loss_dict["loss"]
+        loss = marginal_loss_dict["loss"]
+        loss += white_loss_dict["loss"] + black_loss_dict["loss"]
+        loss /= 2
+        if self.second:
+            loss += second_loss_dict["loss"]
+        loss /= border_mask.sum()
+        return loss
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""

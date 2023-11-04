@@ -120,8 +120,8 @@ class VariationalLayer(torch.nn.Module):
             loss_with_components[galsim_pn] = loss_term.sum()
             loss += loss_term
 
-        # we really shouldn't normalize this loss by the number of sources if we're subsequently summing it
-        # with loss from other layers
+        # we really shouldn't normalize this loss by the number of sources if we're subsequently
+        # summing it with loss from other layers
         loss_with_components["loss"] = loss.sum()
 
         return loss_with_components
