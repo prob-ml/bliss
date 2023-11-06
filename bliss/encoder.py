@@ -201,11 +201,9 @@ class Encoder(pl.LightningModule):
 
         return pred
 
-    def log_metrics(self, batch, pred, logging_name, plot_images):
-        batch_size = batch["images"].size(0)
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
-        target_cat1_cropped = target_cat1.symmetric_crop(self.tiles_to_crop)
+    def log_metrics(self, target_cats, pred, logging_name, images, plot_images):
+        batch_size = target_cats["layer1"].n_sources.size(0)
+        target_cat1_cropped = target_cats["layer1"].symmetric_crop(self.tiles_to_crop)
 
         # marginal metrics, layer 1
         est_cat_m = pred["marginal"].sample(use_mode=True)
@@ -230,8 +228,7 @@ class Encoder(pl.LightningModule):
             self.log(metric_name, metrics_joint[k], batch_size=batch_size)
 
         if self.two_layers:
-            target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
-            target_cat2_cropped = target_cat2.symmetric_crop(self.tiles_to_crop)
+            target_cat2_cropped = target_cats["layer2"].symmetric_crop(self.tiles_to_crop)
             est_cat_s = pred["second"].sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
             metrics_second = self.metrics(target_cat2_cropped, est_cat_s)
             for k in ("f1", "detection_precision", "detection_recall"):
@@ -240,12 +237,8 @@ class Encoder(pl.LightningModule):
 
         # log a grid of figures to the tensorboard
         if plot_images:
-            fig = plot_detections(
-                batch["images"],
-                target_cat1_cropped,
-                ecj_cropped,
-                margin_px=(self.tiles_to_crop * self.tile_slen),
-            )
+            mp = self.tiles_to_crop * self.tile_slen
+            fig = plot_detections(images, target_cat1_cropped, ecj_cropped, margin_px=mp)
             title = f"Epoch:{self.current_epoch}/{logging_name} images"
             if self.logger:
                 self.logger.experiment.add_figure(title, fig)
@@ -292,7 +285,10 @@ class Encoder(pl.LightningModule):
         # log metrics
         assert log_metrics or not plot_images, "plot_images requires log_metrics"
         if log_metrics:
-            self.log_metrics(batch, pred, logging_name, plot_images=plot_images)
+            target_cats = {"layer1": target_cat1, "layer2": target_cat2}
+            self.log_metrics(
+                target_cats, pred, logging_name, batch["images"], plot_images=plot_images
+            )
 
         loss = marginal_loss_dict["loss"]
         loss += white_loss_dict["loss"] + black_loss_dict["loss"]
