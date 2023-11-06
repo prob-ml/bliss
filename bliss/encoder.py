@@ -283,7 +283,9 @@ class Encoder(pl.LightningModule):
         # log metrics
         assert log_metrics or not plot_images, "plot_images requires log_metrics"
         if log_metrics:
-            target_cats = {"layer1": target_cat1, "layer2": target_cat2}
+            target_cats = {"layer1": target_cat1}
+            if self.two_layers:
+                target_cats["layer2"] = target_cat2
             self.log_metrics(
                 target_cats, pred, logging_name, batch["images"], plot_images=plot_images
             )
