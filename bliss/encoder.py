@@ -157,8 +157,6 @@ class Encoder(pl.LightningModule):
         # we may want to use richer conditioning information in the future;
         # e.g., a residual image based on the catalog so far
         detection_history = masked_cat.n_sources > 0
-        #        log_flux_history = (tile_cat.get_fluxes_of_on_sources().sum(-1) + 1).log()
-        #        log_flux_history = rearrange(log_flux_history, "b ht wt 1 -> b 1 ht wt")
 
         context = torch.stack([detection_history, history_mask], dim=1).float()
         x_cat = self.checkerboard_net(x_features, context)
@@ -253,7 +251,7 @@ class Encoder(pl.LightningModule):
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
         target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
-        truth_callback = lambda _: target_cat1  # noqa: C3001,E731
+        truth_callback = lambda _: target_cat1  # noqa: E731
         pred = self.infer(batch, truth_callback)
 
         border_mask = torch.ones_like(target_cat.n_sources)
