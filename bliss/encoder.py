@@ -1,3 +1,4 @@
+from copy import copy
 from typing import Optional
 
 import pytorch_lightning as pl
@@ -149,11 +150,10 @@ class Encoder(pl.LightningModule):
         return self.features_net(x)
 
     def infer_conditional(self, x_features, history_cat, history_mask):
-        #  deepcopy didn't work for one of the tests, so I'm explicitly cloning each tensor
-        clone_cat = {(k, v.clone()) for (k, v) in history_cat.to_dict().items()}
-        masked_cat = TileCatalog(self.tile_slen, clone_cat)
-        # masks not just n_sources; n_sources controls access to all fields
-        masked_cat.n_sources *= history_mask
+        masked_cat = copy(history_cat)
+        # masks not just n_sources; n_sources controls access to all fields.
+        # does not mutate history_cat because we aren't using *=
+        masked_cat.n_sources = masked_cat.n_sources * history_mask
 
         # we may want to use richer conditioning information in the future;
         # e.g., a residual image based on the catalog so far
