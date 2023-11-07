@@ -91,25 +91,6 @@ encoder:
     compile_model: false  # if true, compile model for potential performance
     two_layers: false
 
-region_encoder:
-    _target_: case_studies.adaptive_tiling.region_encoder.RegionEncoder
-    bands: ${encoder.bands}
-    survey_bands: ${encoder.survey_bands}
-    tile_slen: ${encoder.tile_slen}
-    # mysterious test failures if I write `image_normalizer: ${encoder.image_normalizer}` instead
-    image_normalizer:
-        _target_: bliss.image_normalizer.ImageNormalizer
-        bands: ${encoder.bands}
-        include_original: false
-        use_deconv_channel: false
-        concat_psf_params: false
-        log_transform_stdevs: [-3, 0, 1, 3]
-        use_clahe: true
-    overlap_slen: 0.4
-    slack: ${encoder.slack}
-    optimizer_params: ${encoder.optimizer_params}
-    scheduler_params: ${encoder.scheduler_params}
-
 generate:
     n_workers_per_process: 0
     n_batches: ${simulator.n_batches}

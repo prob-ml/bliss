@@ -1,4 +1,3 @@
-from copy import deepcopy
 from typing import Optional
 
 import pytorch_lightning as pl
@@ -150,7 +149,9 @@ class Encoder(pl.LightningModule):
         return self.features_net(x)
 
     def infer_conditional(self, x_features, history_cat, history_mask):
-        masked_cat = deepcopy(history_cat)
+        #  deepcopy didn't work for one of the tests, so I'm explicitly cloning each tensor
+        clone_cat = {(k, v.clone()) for (k, v) in history_cat.to_dict().items()}
+        masked_cat = TileCatalog(self.tile_slen, clone_cat)
         # masks not just n_sources; n_sources controls access to all fields
         masked_cat.n_sources *= history_mask
 
@@ -316,19 +317,23 @@ class Encoder(pl.LightningModule):
         """Pytorch lightning method."""
         self._generic_step(batch, "test", log_metrics=True)
 
-    def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        """Pytorch lightning method."""
-
+    def sample(self, batch, use_mode=True):
         def marginal_detections(pred_marginal):  # noqa: WPS430
-            return pred_marginal["on_prob"].mode
+            return pred_marginal.sample(use_mode=use_mode)
 
         pred = self.infer(batch, marginal_detections)
         white_cat = pred["white"].sample(use_mode=True)
         est_cat = self.interleave_catalogs(
             pred["history_cat"], white_cat, pred["white_history_mask"]
         )
+        # TODO: sample second layer too and merge catalogs if two_layers is true
+        return est_cat.symmetric_crop(self.tiles_to_crop)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        """Pytorch lightning method."""
+
         return {
-            "est_cat": est_cat,
+            "est_cat": self.sample(batch, use_mode=True),
             # a marginal catalog isn't really what we want here, perhaps
             # we should return samples from the variation distribution instead
             "pred": None,
