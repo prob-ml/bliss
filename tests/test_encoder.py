@@ -7,13 +7,13 @@ from case_studies.adaptive_tiling.region_catalog import RegionCatalog
 
 
 class TestEncoder:
-    def test_encode_multi_source_catalog(self, cfg, multi_source_dataloader, encoder):
+    def test_encode_multi_source_catalog(self, cfg, multi_source_dataloader):
         batch = next(iter(multi_source_dataloader))
         for key, val in batch.items():
             if isinstance(val, torch.Tensor):
                 batch[key] = val.to(cfg.predict.device)
-        pred = encoder.encode_batch(batch)
-        encoder.variational_mode(pred)
+        encoder = instantiate(cfg.encoder).to(cfg.predict.device)
+        encoder.sample(batch, use_mode=True)
 
     def test_encode_with_psf(self, cfg, multiband_dataloader):
         batch = next(iter(multiband_dataloader))
@@ -23,11 +23,15 @@ class TestEncoder:
 
         encoder_params = {
             "bands": [2],
-            "input_transform_params": {"use_deconv_channel": True, "concat_psf_params": True},
+            "image_normalizer": {
+                "use_deconv_channel": True,
+                "concat_psf_params": True,
+                "bands": [2],
+            },
         }
         encoder = instantiate(cfg.encoder, **encoder_params).to(cfg.predict.device)
-        pred = encoder.encode_batch(batch)
-        encoder.variational_mode(pred)
+        encoder.sample(batch, use_mode=True)
+        encoder.sample(batch, use_mode=False)
 
     def test_region_loss(self, cfg):
         encoder = instantiate(cfg.region_encoder).to(cfg.predict.device)
@@ -48,7 +52,8 @@ class TestEncoder:
         encoder.tiles_to_crop = 0
         encoder.eval()
         with torch.no_grad():
-            pred = encoder.encode_batch(batch)
+            x_cat_marginal, _ = encoder.get_marginal(batch)
+            pred = encoder.get_predicted_dist(x_cat_marginal)
             encoder._get_loss(pred, region_cat)  # pylint: disable=W0212  # noqa: WPS437
 
     def test_region_locs_in_tiles(self):

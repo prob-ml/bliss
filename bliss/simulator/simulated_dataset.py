@@ -55,7 +55,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             bands=survey.BANDS,
             pixel_shift=survey.pixel_shift,
             flux_calibration_dict=survey.flux_calibration_dict,
-            ref_band=prior.b_band,
+            ref_band=prior.reference_band,
         )
 
         self.n_batches = n_batches
@@ -82,7 +82,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         # reorder self.image_ids to match the order of the sampled indices
         return [self.image_ids[i] for i in n], n
 
-    def _apply_noise(self, images_mean):
+    def apply_noise(self, images_mean):
         images_mean = torch.clamp(images_mean, min=1e-6)
         images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
         images += images_mean
@@ -105,7 +105,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                     images[b].numpy(),
                     wcs_list=wcs_batch[b],
                     ref_depth=0,
-                    ref_band=self.catalog_prior.b_band,
+                    ref_band=self.catalog_prior.reference_band,
                 )
             )
         return images
@@ -134,7 +134,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         background = self.background.sample(images.shape, image_id_indices=image_id_indices)
         images += background
 
-        images = self._apply_noise(images)
+        images = self.apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
         return images, background, deconv_images, psf_params, tc
 

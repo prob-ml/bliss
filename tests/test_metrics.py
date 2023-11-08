@@ -14,7 +14,7 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 class TestMetrics:
     def _get_sdss_data(self, cfg):
         """Loads SDSS frame and Photo Catalog."""
-        sdss = instantiate(cfg.surveys.sdss)
+        sdss = instantiate(cfg.surveys.sdss, load_image_data=True)
 
         run, camcol, field = sdss.image_id(0)
         photo_cat = PhotoFullCatalog.from_file(
@@ -67,8 +67,8 @@ class TestMetrics:
             }
             encoder.eval()
             encoder = encoder.float()
-            pred = encoder.encode_batch(batch)
-            bliss_cat = encoder.variational_mode(pred).to(torch.device("cpu"))
+            bliss_cat = encoder.sample(batch, use_mode=True)
+            bliss_cat = bliss_cat.to(torch.device("cpu")).to_full_params()
 
         bliss_cat.plocs += torch.tensor(
             [h_lim[0] + cfg.encoder.tile_slen, w_lim[0] + cfg.encoder.tile_slen]
@@ -109,14 +109,14 @@ class TestMetrics:
         results = metrics(true_params, est_params)
         precision = results["detection_precision"]
         recall = results["detection_recall"]
-        avg_distance = results["avg_distance"]
+        avg_keep_distance = results["avg_keep_distance"]
 
         class_acc = results["class_acc"]
 
         assert np.isclose(precision, 2 / (2 + 2))
         assert np.isclose(recall, 2 / 3)
         assert np.isclose(class_acc, 1 / 2)
-        assert np.isclose(avg_distance, 50 * (0.01 + (0.01 + 0.09) / 2) / 2)
+        assert np.isclose(avg_keep_distance, 50 * (0.01 + 0.01) / 2)
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
@@ -142,7 +142,7 @@ class TestMetrics:
         assert results["detection_precision"] == 1 / 2
         assert results["detection_recall"] == 1 / 2
         assert results["gal_tp"] == 1
-        assert results["avg_distance"] == 1
+        assert results["avg_keep_distance"] == 1
 
     def test_classification_metrics_tile(self, tile_catalog):
         """Test galaxy classification metrics on tile catalog."""
@@ -167,43 +167,24 @@ class TestMetrics:
             else:
                 assert results[f"{metric}_mae"] == 0
 
-    def test_photo_self_agreement(self, catalogs):
-        """Compares PhotoFullCatalog to itself as safety check for metrics."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
-        results = metrics(catalogs["photo"], catalogs["photo"])
-        assert results["f1"] == 1
-
-    def test_decals_self_agreement(self, catalogs):
-        """Compares Decals catalog to itself as safety check for metrics."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
-        results = metrics(catalogs["decals"], catalogs["decals"])
-        assert results["f1"] == 1
-
-    def test_photo_decals_agree(self, catalogs):
-        """Compares metrics for agreement between Photo catalog and Decals catalog."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
-        results = metrics(catalogs["decals"], catalogs["photo"])
-        assert results["detection_precision"] > 0.8
-
-    def test_bliss_photo_agree(self, catalogs):
-        """Compares metrics for agreement between BLISS-inferred catalog and Photo catalog."""
-        slack = 1.0
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=slack, survey_bands=list(SDSS.BANDS))
-        results = metrics(catalogs["photo"], catalogs["bliss"])
-        assert results["f1"] > 0.7
-        assert results["avg_keep_distance"] < slack
-
-    def test_bliss_photo_agree_comp_decals(self, catalogs):
-        """Compares metrics between BLISS and Photo catalog with DECaLS as GT."""
-        decals_cat = catalogs["decals"]
-        photo_cat = catalogs["photo"]
-        bliss_cat = catalogs["bliss"]
-
+    def test_catalog_agreement(self, catalogs):
+        """Compares catalogs as safety check for metrics."""
         metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
 
-        bliss_vs_decals = metrics(decals_cat, bliss_cat)
-        photo_vs_decals = metrics(decals_cat, photo_cat)
+        assert metrics(catalogs["photo"], catalogs["photo"])["f1"] == 1
+        assert metrics(catalogs["decals"], catalogs["decals"])["f1"] == 1
+        assert metrics(catalogs["decals"], catalogs["photo"])["detection_precision"] > 0.8
+        assert metrics(catalogs["photo"], catalogs["bliss"])["avg_keep_distance"] < 1.0
 
+        # bliss finds many more sources than photo. recall here measures the fraction of sources
+        # photo finds that bliss also finds
+        assert metrics(catalogs["photo"], catalogs["bliss"])["detection_recall"] > 0.8
+
+        # with the arguments reversed, precision below measures that same thing as recall did above
+        assert metrics(catalogs["bliss"], catalogs["photo"])["detection_precision"] > 0.8
+
+        bliss_vs_decals = metrics(catalogs["decals"], catalogs["bliss"])
+        photo_vs_decals = metrics(catalogs["decals"], catalogs["photo"])
         assert bliss_vs_decals["f1"] > photo_vs_decals["f1"]
 
     def test_three_way_matching(self):

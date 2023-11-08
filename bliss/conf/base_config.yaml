@@ -60,7 +60,7 @@ simulator:
 
 cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
-    batch_size: ${generate.batch_size} # 128 for large cached
+    batch_size: 64
     splits: 0:80/80:90/90:100  # train/val/test splits as percent ranges
     num_workers: 0
     cached_data_path: ${generate.cached_data_path}
@@ -79,57 +79,35 @@ encoder:
     scheduler_params:
         milestones: [32]
         gamma: 0.1
-    input_transform_params:
+    image_normalizer:
+        _target_: bliss.image_normalizer.ImageNormalizer
+        bands: ${encoder.bands}
+        include_original: false
         use_deconv_channel: false
         concat_psf_params: false
-        log_transform: false
-        rolling_z_score: true
-    architecture:
-        # this architecture is based on yolov5l.yaml, see
-        # https://github.com/ultralytics/yolov5/blob/master/models/yolov5l.yaml
-        depth_multiple: 1.0  # model depth multiple
-        width_multiple: 1.0  # layer channel multiple
-        anchors:
-            - [4, 4]  # P3/8
-        backbone: [
-            # [from, number, module, args]
-            [-1, 1, Conv3d, [5, 64, 5]],  # (in-channels, out-channels, kernel size)
-            [-1, 1, Conv3d, [64, 5, 3]],
-            [-1, 1, Conv3d_down, [5, 1, 1]],
-            [-1, 1, Conv, [64, 3, 1]],  # (in-channels, kernel-size, stride)
-            [-1, 1, Conv, [128, 3, 2]],
-            [-1, 1, Conv, [128, 3, 1]],
-            [-1, 1, Conv, [256, 3, 2]],
-            [-1, 6, C3, [256]],
-            [-1, 1, Conv, [512, 3, 2]],
-            [-1, 9, C3, [512]],
-            [-1, 1, Conv, [1024, 3, 2]],
-            [-1, 3, C3, [1024]],
-            [-1, 1, SPPF, [1024, 5]],
-        ]
-        head: [
-            [-1, 1, Conv, [512, 1, 1]],
-            [-1, 1, nn.Upsample, [None, 2, 'nearest']],
-            [[-1, 8], 1, Concat, [1]],
-            [-1, 3, C3, [512, false]],
-            [-1, 1, Conv, [256, 1, 1]],
-            [-1, 1, nn.Upsample, [None, 2, 'nearest']],
-            [[-1, 6, 7], 1, Concat, [1]],
-            [-1, 3, C3, [256, false]],
-            [[-1], 1, Detect, [nc, anchors]],
-        ]
+        log_transform_stdevs: [-3, 0, 1, 3]
+        use_clahe: true
+    do_data_augmentation: false
+    compile_model: false  # if true, compile model for potential performance
 
 region_encoder:
     _target_: case_studies.adaptive_tiling.region_encoder.RegionEncoder
     bands: ${encoder.bands}
     survey_bands: ${encoder.survey_bands}
     tile_slen: ${encoder.tile_slen}
+    # mysterious test failures if I write `image_normalizer: ${encoder.image_normalizer}` instead
+    image_normalizer:
+        _target_: bliss.image_normalizer.ImageNormalizer
+        bands: ${encoder.bands}
+        include_original: false
+        use_deconv_channel: false
+        concat_psf_params: false
+        log_transform_stdevs: [-3, 0, 1, 3]
+        use_clahe: true
     overlap_slen: 0.4
     slack: ${encoder.slack}
     optimizer_params: ${encoder.optimizer_params}
     scheduler_params: ${encoder.scheduler_params}
-    input_transform_params: ${encoder.input_transform_params}
-    architecture: ${encoder.architecture}
 
 generate:
     n_workers_per_process: 0
@@ -145,7 +123,7 @@ training:
     n_epochs: 50
     save_top_k: 1
     enable_early_stopping: true
-    patience: 3
+    patience: 10
     pretrained_weights: null
     trainer:
         _target_: pytorch_lightning.Trainer
@@ -162,14 +140,14 @@ training:
     testing: true
     seed: 42
     weight_save_path: null
-    data_source: ${simulator}
+    data_source: ${cached_simulator}
     encoder_target: ${encoder}  # whether to use normal encoder or RegionEncoder
 
 predict:
     dataset: ${surveys.sdss}
     trainer: ${training.trainer}
     encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/rolling_z_10x10.pt
+    weight_save_path: ${paths.pretrained_models}/clahed_logged_20percent.pt
     device: "cuda:0"
     crop:
         do_crop: true
@@ -227,7 +205,9 @@ surveys:
     dc2:
         _target_: bliss.surveys.dc2.DC2
         data_dir: /nfs/turbo/lsa-regier/lsstdesc-public/dc2/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
-        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_622.pkl
-        batch_size: 128
+        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100.pkl
+        batch_size: 64
         n_split: 50
         image_lim: [4000, 4000]
+        use_deconv_channel: ${encoder.image_normalizer.use_deconv_channel}
+        deconv_path: ${paths.dc2}/coadd_deconv_image

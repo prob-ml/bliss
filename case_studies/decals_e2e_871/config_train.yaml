@@ -22,7 +22,7 @@ encoder:
     bands: [0, 1, 2, 3]
     survey_bands: ["g", "r", "i", "z"]
     # survey_bands: ["u", "g", "r", "i", "z"]
-    input_transform_params:
+    image_normalizer:
         z_score: false
 
 training:

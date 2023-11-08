@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -166,6 +167,10 @@ class TestBasicTileAndFullCatalogs:
         tile_cat = full_cat.to_tile_params(1, 1, ignore_extra_sources=True)
         assert torch.equal(tile_cat.n_sources, torch.tensor([[[1, 0], [0, 0]]]))
 
+        # test to_tile_coords and to_full_coords (set max_sources_per_tile to 2)
+        convert_full_cat = full_cat.to_tile_params(1, 2).to_full_params()
+        assert torch.allclose(convert_full_cat.plocs, full_cat.plocs)
+
         correct_locs = torch.tensor([[[0.5, 0.5], [0, 0]], [[0, 0], [0, 0]]]).reshape(1, 2, 2, 1, 2)
         assert torch.allclose(tile_cat.locs, correct_locs)
 
@@ -188,8 +193,8 @@ class TestDecalsCatalog:
         decals_cat = TractorFullCatalog.from_file(
             cat_path=sample_file,
             wcs=decals[0]["wcs"][DECaLS.BANDS.index("r")],
-            height=decals[0]["image"].shape[1],
-            width=decals[0]["image"].shape[2],
+            height=decals[0]["background"].shape[1],
+            width=decals[0]["background"].shape[2],
         )
 
         ras = decals_cat["ra"].numpy()
@@ -238,7 +243,45 @@ class TestRegionCatalog:
         )
         assert full_cat.plocs.equal(true_locs)
 
-    def test_tile_cat_to_region(self, basic_tilecat):
-        region_cat = tile_cat_to_region_cat(basic_tilecat, 0.5)
+    def test_tile_cat_to_region_basic(self, basic_tilecat):
+        region_cat = tile_cat_to_region_cat(basic_tilecat, 0.5, discard_extra_sources=False)
         full_cat = basic_tilecat.to_full_params()
         assert region_cat.to_full_params().plocs.equal(full_cat.plocs)
+
+    def test_tile_cat_to_region_filtering(self):
+        d = {
+            "n_sources": torch.zeros(3, 2, 2),
+            "locs": torch.zeros(3, 2, 2, 1, 2),
+            "source_type": torch.ones((3, 2, 2, 1, 1)).bool(),
+            "galaxy_params": torch.zeros((3, 2, 2, 1, 6)),
+            "star_fluxes": torch.ones((3, 2, 2, 1, 5)) * 1000,
+            "galaxy_fluxes": torch.ones(3, 2, 2, 1, 5) * 1000,
+        }
+        # BATCH 0: top right interior, center right boundary
+        d["n_sources"][0, 0, 1] = 1
+        d["n_sources"][0, 1, 1] = 1
+        d["locs"][0, 0, 1, 0] = torch.tensor([0.5, 0.5])
+        d["locs"][0, 1, 1, 0] = torch.tensor([0.02, 0.5])
+        d["galaxy_fluxes"][0, 0, 1, 0, 2] = 5000  # keep top right
+
+        # BATCH 1: top left interior, top center boundary
+        d["n_sources"][1, 0, 0] = 1
+        d["n_sources"][1, 0, 1] = 1
+        d["locs"][1, 0, 0, 0] = torch.tensor([0.5, 0.5])
+        d["locs"][1, 0, 1, 0] = torch.tensor([0.5, 0.02])
+        d["galaxy_fluxes"][1, 0, 1, 0, 2] = 5000  # keep top center
+
+        # BATCH 2: only one source in top left
+        d["n_sources"][2, 0, 0] = 1
+        d["locs"][2, 0, 0, 0] = torch.tensor([0.5, 0.5])
+
+        tilecat = TileCatalog(4, d)
+
+        # make sure no warning when converting (since extra sources have been discarded)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            region_cat = tile_cat_to_region_cat(tilecat, 0.5, discard_extra_sources=True)
+
+        n_sources = region_cat.n_sources
+        assert n_sources[0, 0, 2] == n_sources[1, 0, 1] == n_sources[2, 0, 0] == 1
+        assert n_sources[0].sum() == n_sources[1].sum() == n_sources[2].sum()

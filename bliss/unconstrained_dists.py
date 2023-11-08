@@ -40,33 +40,62 @@ class TruncatedDiagonalMVN(Distribution):
         super().__init__(validate_args=False)
 
         multiple_normals = Normal(mu, sigma)
-        prob_in_unit_box_hw = multiple_normals.cdf(torch.ones_like(mu))
-        prob_in_unit_box_hw -= multiple_normals.cdf(torch.zeros_like(mu))
-        self.log_prob_in_unit_box = prob_in_unit_box_hw.log().sum(dim=-1)
-
         self.base_dist = Independent(multiple_normals, 1)
+
+        prob_in_unit_box_hw = multiple_normals.cdf(self.b) - multiple_normals.cdf(self.a)
+        self.log_prob_in_unit_box = prob_in_unit_box_hw.log().sum(dim=-1)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.base_dist.base_dist})"
 
-    def sample(self, **args):
-        # some ideas for how to sample it here, if we need to:
-        # https://cran.r-project.org/web/packages/truncnorm/
-        raise NotImplementedError("sampling a truncated normal isn't straightforward")
+    def sample(self, sample_shape=(1,)):
+        """Generate sample using rejection sampling.
+
+        This isn't very efficient, but it's good enough for sampling one catalog at a time. A more
+        efficient method could be to use inverse cdf sampling on each dimension independently.
+
+        Args:
+            sample_shape (Tuple): Shape of samples to draw
+
+        Returns:
+            Tensor: (sample_shape, self.batch_shape, self.event_shape) shaped sample
+        """
+        q = Independent(Normal(self.base_dist.mean, self.base_dist.stddev), 1)
+        samples = q.sample(sample_shape)
+        valid = (samples.min(dim=-1)[0] >= 0) & (samples.max(dim=-1)[0] < 1)
+        while not valid.all():
+            new_samples = q.sample(sample_shape)
+            samples[~valid] = new_samples[~valid]
+            valid = (samples.min(dim=-1)[0] >= 0) & (samples.max(dim=-1)[0] < 1)
+        return samples
+
+    @property
+    def a(self):
+        return torch.zeros_like(self.base_dist.mean)
+
+    @property
+    def b(self):
+        return torch.ones_like(self.base_dist.mean)
 
     @property
     def mean(self):
-        return self.base_dist.mean
+        mu = self.base_dist.mean
+        offset = self.base_dist.log_prob(self.a).exp() - self.base_dist.log_prob(self.b).exp()
+        offset /= self.log_prob_in_unit_box.exp()
+        return mu + (offset.unsqueeze(-1) * self.base_dist.stddev)
 
     @property
     def stddev(self):
-        return self.base_dist.stddev
+        # See https://arxiv.org/pdf/1206.5387.pdf for the formula for the variance of a truncated
+        # multivariate normal. The covariance terms simplify since our dimensions are independent,
+        # but it's still tricky to compute.
+        raise NotImplementedError("Standard deviation for truncated normal is not implemented yet")
 
     @property
     def mode(self):
         # a mode still exists if this assertion is false, but I haven't implemented code
         # to compute it because I don't think we need it
-        assert (self.mean >= 0).all() and (self.mean <= 1).all()
+        assert (self.base_dist.mean >= 0).all() and (self.base_dist.mean <= 1).all()
         return self.base_dist.mode
 
     def log_prob(self, value):

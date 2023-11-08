@@ -184,31 +184,31 @@ class ImageDecoder(nn.Module):
             self.flux_calibration_dict[image_ids[b]] for b in range(batch_size)
         ]
 
-        for b in range(batch_size):
-            # Convert to electron counts
-            tile_cat["star_fluxes"][b] *= flux_calibration_rats[b]
-            tile_cat["galaxy_fluxes"][b] *= flux_calibration_rats[b]
+        for i in range(batch_size):
+            # Convert from (linear) physical units to electron counts
+            tile_cat["star_fluxes"][i] *= flux_calibration_rats[i]
+            tile_cat["galaxy_fluxes"][i] *= flux_calibration_rats[i]
 
         full_cat = tile_cat.to_full_params()
 
         # generate random WCS shifts as manual image dithering via unaligning WCS
         wcs_batch = []
 
-        for b in range(batch_size):
-            n_sources = int(full_cat.n_sources[b].item())
-            psf = psfs[b]
+        for i in range(batch_size):
+            n_sources = int(full_cat.n_sources[i].item())
+            psf = psfs[i]
             for d in range(coadd_depth):
                 depth_band_shifts, depth_band_wcs_list = self.pixel_shifts(
                     coadd_depth, self.n_bands, self.ref_band
                 )
                 wcs_batch.append(depth_band_wcs_list)
                 for band in range(self.n_bands):
-                    band_img = galsim.Image(array=images[b, d, band], scale=self.pixel_scale)
+                    band_img = galsim.Image(array=images[i, d, band], scale=self.pixel_scale)
                     self.draw_sources_on_band_image(
                         band_img,
                         n_sources,
                         full_cat,
-                        b,
+                        i,
                         psf,
                         band,
                         image_dims=(slen_h, slen_w),
