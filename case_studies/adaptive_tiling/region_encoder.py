@@ -668,7 +668,7 @@ class RegionEncoder(Encoder):
             idx = est_full_cat.n_sources.nonzero().view(-1)[:n_samples]
 
             margin_px = self.tiles_to_crop * self.tile_slen
-            fig = plot_detections(
+            fig = plot_detections(  # pylint: disable=E1124
                 batch["images"].squeeze(2),  # squeeze out extra dim
                 target_full_cat,
                 est_full_cat,
