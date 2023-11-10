@@ -1,5 +1,4 @@
 # pylint: disable=E1101
-# mypy: disable-error-code="union-attr"
 
 from enum import Enum
 from typing import Dict, List, Union

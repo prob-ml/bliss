@@ -55,6 +55,9 @@ class TileCatalog(UserDict):
             msg = f"The key '{key}' is not in the allowed parameters for {self.__class__}"
             raise ValueError(msg)
         self._validate(item)
+        # TODO: all data should be torch.float32, fix this
+        if item.dtype == torch.float64:
+            item = item.float()
         super().__setitem__(key, item)
 
     def __getitem__(self, key: str) -> Tensor:
@@ -244,7 +247,7 @@ class TileCatalog(UserDict):
         idx_to_gather = repeat(indices, "... -> ... k", k=param.size(-1))
         return torch.gather(param, dim=1, index=idx_to_gather)
 
-    def _get_fluxes_of_on_sources(self):
+    def get_fluxes_of_on_sources(self):
         """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
 
         Returns:
@@ -253,10 +256,26 @@ class TileCatalog(UserDict):
         fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
-    def get_brightest_source_per_tile(self, band=2):
+    def _sort_sources_by_flux(self, band=2):
+        # sort by fluxes of "on" sources to get brightest source per tile
+        on_fluxes = self.get_fluxes_of_on_sources()[..., band]  # shape n x nth x ntw x d
+        top_indexes = on_fluxes.argsort(dim=3, descending=True)
+
+        d = {"n_sources": self.n_sources}
+        for key, val in self.to_dict().items():
+            if key != "n_sources":
+                param_dim = val.size(-1)
+                idx_to_gather = repeat(top_indexes, "... -> ... pd", pd=param_dim)
+                d[key] = torch.take_along_dim(val, idx_to_gather, dim=3)
+
+        return TileCatalog(self.tile_slen, d)
+
+    def get_brightest_sources_per_tile(self, top_k=1, exclude_num=0, band=2):
         """Restrict TileCatalog to only the brightest 'on' source per tile.
 
         Args:
+            top_k (int): The number of sources to keep per tile. Defaults to 1.
+            exclude_num (int): A number of the brightest sources to exclude. Defaults to 0.
             band (int): The band to compare fluxes in. Defaults to 2 (r-band).
 
         Returns:
@@ -265,19 +284,14 @@ class TileCatalog(UserDict):
         if self.max_sources == 1:
             return self
 
-        # sort by fluxes of "on" sources to get brightest source per tile
-        on_fluxes = self._get_fluxes_of_on_sources()[..., band]  # shape n x nth x ntw x d
-        # 0:1 keeps dims right for slicing
-        top_idx = on_fluxes.argsort(dim=3, descending=True)[..., 0:1]
+        sorted_self = self._sort_sources_by_flux(band=band)
 
         d = {}
-        for key, val in self.to_dict().items():
+        for key, val in sorted_self.to_dict().items():
             if key == "n_sources":
-                d[key] = self.n_sources.bool().int()  # send all positive values to 1, 0 to 0
+                d[key] = (sorted_self.n_sources - exclude_num).clamp(min=0, max=top_k)
             else:
-                param_dim = val.size(-1)
-                idx_to_gather = repeat(top_idx, "... -> ... k", k=param_dim)
-                d[key] = torch.take_along_dim(val, idx_to_gather, dim=3)
+                d[key] = val[:, :, :, exclude_num : (exclude_num + top_k)]
 
         return TileCatalog(self.tile_slen, d)
 
@@ -293,13 +307,14 @@ class TileCatalog(UserDict):
             TileCatalog: a new catalog with only sources within the flux range. Note that the size
                 of the tensors stays the same, but params at sources outside the range are set to 0.
         """
+        sorted_self = self._sort_sources_by_flux(band=band)
 
         # get fluxes of "on" sources to mask by
-        on_fluxes = self._get_fluxes_of_on_sources()[..., band]
+        on_fluxes = sorted_self.get_fluxes_of_on_sources()[..., band]
         flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
 
         d = {}
-        for key, val in self.to_dict().items():
+        for key, val in sorted_self.to_dict().items():
             if key == "n_sources":
                 d[key] = flux_mask.sum(dim=3)  # number of sources within range in tile
             else:
@@ -308,6 +323,16 @@ class TileCatalog(UserDict):
         return TileCatalog(self.tile_slen, d)
 
     # endregion
+
+    def __repr__(self):
+        """A computationally efficient representation of a TileCatalog.
+        By defining this method, we no longer get warnings from the debugger that says
+        'pydevd warning: Computing repr of self (TileCatalog) was slow'.
+
+        Returns:
+            string: a representation of a tile catalog
+        """
+        return f"TileCatalog({self.batch_size}, {self.n_tiles_h}, {self.n_tiles_w})"
 
 
 class FullCatalog(UserDict):
