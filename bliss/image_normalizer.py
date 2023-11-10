@@ -10,6 +10,7 @@ class ImageNormalizer(torch.nn.Module):
         include_original: bool,
         use_deconv_channel: bool,
         concat_psf_params: bool,
+        num_psf_params: int,
         log_transform_stdevs: list,
         use_clahe: bool,
         clahe_min_stdev: float,
@@ -21,6 +22,7 @@ class ImageNormalizer(torch.nn.Module):
             include_original: whether to include the original image as an input channel
             use_deconv_channel: whether to include the deconvolved image as an input channel
             concat_psf_params: whether to include the PSF parameters as input channels
+            num_psf_params: number of PSF parameters
             log_transform_stdevs: list of thresholds to apply log transform to (can be empty)
             use_clahe: whether to apply Contrast Limited Adaptive Histogram Equalization to images
             clahe_min_stdev: minimum standard deviation for CLAHE
@@ -31,6 +33,7 @@ class ImageNormalizer(torch.nn.Module):
         self.include_original = include_original
         self.use_deconv_channel = use_deconv_channel
         self.concat_psf_params = concat_psf_params
+        self.num_psf_params = num_psf_params
         self.log_transform_stdevs = log_transform_stdevs
         self.use_clahe = use_clahe
         self.clahe_min_stdev = clahe_min_stdev
@@ -46,7 +49,7 @@ class ImageNormalizer(torch.nn.Module):
         if self.use_deconv_channel:
             nch += 1
         if self.concat_psf_params:
-            nch += 6  # number of PSF parameters for SDSS, may vary for other surveys
+            nch += self.num_psf_params
         if self.log_transform_stdevs:
             nch += len(self.log_transform_stdevs)
         if self.use_clahe:
@@ -91,7 +94,9 @@ class ImageNormalizer(torch.nn.Module):
             assert "psf_params" in batch, msg
             n, c, i, h, w = raw_images.shape
             psf_params = batch["psf_params"][:, self.bands]
-            inputs.append(psf_params.view(n, c, 6 * i, 1, 1).expand(n, c, 6 * i, h, w))
+            psf_params = psf_params.view(n, c, self.num_psf_params * i, 1, 1)
+            psf_params = psf_params.expand(n, c, self.num_psf_params * i, h, w)
+            inputs.append(psf_params)
 
         for threshold in self.log_transform_stdevs:
             image_offsets = (raw_images - backgrounds) / backgrounds.sqrt() - threshold

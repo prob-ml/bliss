@@ -200,6 +200,18 @@ class Encoder(pl.LightningModule):
 
         return pred
 
+    def sample(self, batch, use_mode=True):
+        def marginal_detections(pred_marginal):  # noqa: WPS430
+            return pred_marginal.sample(use_mode=use_mode)
+
+        pred = self.infer(batch, marginal_detections)
+        white_cat = pred["white"].sample(use_mode=True)
+        est_cat = self.interleave_catalogs(
+            pred["history_cat"], white_cat, pred["white_history_mask"]
+        )
+        # TODO: sample second layer too and merge catalogs if two_layers is true
+        return est_cat.symmetric_crop(self.tiles_to_crop)
+
     def log_metrics(self, target_cats, pred, logging_name, images, plot_images):
         batch_size = target_cats["layer1"].n_sources.size(0)
         target_cat1_cropped = target_cats["layer1"].symmetric_crop(self.tiles_to_crop)
@@ -316,18 +328,6 @@ class Encoder(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         self._generic_step(batch, "test", log_metrics=True)
-
-    def sample(self, batch, use_mode=True):
-        def marginal_detections(pred_marginal):  # noqa: WPS430
-            return pred_marginal.sample(use_mode=use_mode)
-
-        pred = self.infer(batch, marginal_detections)
-        white_cat = pred["white"].sample(use_mode=True)
-        est_cat = self.interleave_catalogs(
-            pred["history_cat"], white_cat, pred["white_history_mask"]
-        )
-        # TODO: sample second layer too and merge catalogs if two_layers is true
-        return est_cat.symmetric_crop(self.tiles_to_crop)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
