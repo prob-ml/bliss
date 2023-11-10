@@ -477,13 +477,13 @@ class BlendResidualFigure(BlissFigure):
         scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
         ax1.set_ylabel(ylabel)
         ax1.axhline(0, ls="--", color="k")
-        ax1.set_ylim(-1, 2.5)
+        ax1.set_ylim(-0.5, 0.5)
 
-        xlims = (0, 1)
+        xlims = (0, 0.5)
         x, y = blendedness, (efluxes - tfluxes) / tfluxes
-        scatter_shade_plot(ax2, x, y, xlims, delta=0.1)
+        scatter_shade_plot(ax2, x, y, xlims, delta=0.05)
         ax2.axhline(0, ls="--", color="k")
-        ax2.set_ylim(-1, 2.5)
+        ax2.set_ylim(-0.5, 0.5)
 
         xlims = (0.5, 3)
         ylabel = r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$"
@@ -491,12 +491,13 @@ class BlendResidualFigure(BlissFigure):
         scatter_shade_plot(ax3, x, y, xlims, delta=0.2)
         ax3.set_ylabel(ylabel)
         ax3.axhline(0, ls="--", color="k")
-        ax3.set_ylim(-1.5, 0.5)
+        ax3.set_ylim(-0.5, 0.5)
 
-        xlims = (0, 1)
+        xlims = (0, 0.5)
         x, y = blendedness, est_ellips[:, 0] - true_ellips[:, 0]
-        scatter_shade_plot(ax4, x, y, xlims, delta=0.1)
+        scatter_shade_plot(ax4, x, y, xlims, delta=0.05)
         ax4.axhline(0, ls="--", color="k")
+        ax4.set_ylim(-0.5, 0.5)
 
         xticks = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0.5, 3)
@@ -508,16 +509,17 @@ class BlendResidualFigure(BlissFigure):
         ax5.set_ylabel(ylabel)
         ax5.set_xticks(xticks)
         ax5.axhline(0, ls="--", color="k")
-        ax5.set_ylim(-1.5, 0.5)
+        ax5.set_ylim(-0.5, 0.5)
 
-        xticks = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
-        xlims = (0, 1)
+        xticks = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
+        xlims = (0, 0.5)
         xlabel = "$B$"
         x, y = blendedness, est_ellips[:, 1] - true_ellips[:, 1]
-        scatter_shade_plot(ax6, x, y, xlims=xlims, delta=0.1)
+        scatter_shade_plot(ax6, x, y, xlims=xlims, delta=0.05)
         ax6.set_xlabel(xlabel)
         ax6.set_xticks(xticks)
         ax6.axhline(0, ls="--", color="k")
+        ax6.set_ylim(-0.5, 0.5)
 
         plt.tight_layout()
 
