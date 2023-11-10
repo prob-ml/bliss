@@ -12,6 +12,7 @@ class ImageNormalizer(torch.nn.Module):
         concat_psf_params: bool,
         log_transform_stdevs: list,
         use_clahe: bool,
+        clahe_min_stdev: float,
     ):
         """Initializes DetectionEncoder.
 
@@ -22,6 +23,7 @@ class ImageNormalizer(torch.nn.Module):
             concat_psf_params: whether to include the PSF parameters as input channels
             log_transform_stdevs: list of thresholds to apply log transform to (can be empty)
             use_clahe: whether to apply Contrast Limited Adaptive Histogram Equalization to images
+            clahe_min_stdev: minimum standard deviation for CLAHE
         """
         super().__init__()
 
@@ -31,6 +33,7 @@ class ImageNormalizer(torch.nn.Module):
         self.concat_psf_params = concat_psf_params
         self.log_transform_stdevs = log_transform_stdevs
         self.use_clahe = use_clahe
+        self.clahe_min_stdev = clahe_min_stdev
 
         if not (log_transform_stdevs or use_clahe):
             warnings.warn("Either log transform or clahe should be enabled.")
@@ -71,8 +74,8 @@ class ImageNormalizer(torch.nn.Module):
             msg = f"Expected >= {len(self.bands)} bands in the input but found only {input_bands}"
             warnings.warn(msg)
 
-        raw_images = batch["images"][:, self.bands].unsqueeze(2)
-        backgrounds = batch["background"][:, self.bands].unsqueeze(2)
+        raw_images = batch["images"][:, self.bands]
+        backgrounds = batch["background"][:, self.bands]
         inputs = [backgrounds]
 
         if self.include_original:
@@ -81,7 +84,7 @@ class ImageNormalizer(torch.nn.Module):
         if self.use_deconv_channel:
             msg = "use_deconv_channel specified but deconvolution not present in data"
             assert "deconvolution" in batch, msg
-            inputs.append(batch["deconvolution"][:, self.bands].unsqueeze(2))
+            inputs.append(batch["deconvolution"][:, self.bands])
 
         if self.concat_psf_params:
             msg = "concat_psf_params specified but psf params not present in data"
@@ -95,43 +98,42 @@ class ImageNormalizer(torch.nn.Module):
             transformed_img = torch.log(torch.clamp(image_offsets + 1.0, min=1.0))
             inputs.append(transformed_img)
 
-        # we should revising normalizing the whole 80x80 image to see if that still performs
+        # we should revisit normalizing the whole 80x80 image to see if that still performs
         # better than CLAHE. if so, we can remove CLAHE and for large images partition them
         # into 80x80 images before prediction
-        if self.use_clahe:
-            renormalized_img = self.clahe(raw_images, 9, 200, 4)
-            inputs.append(renormalized_img)
-            inputs[0] = self.clahe(backgrounds, 9, 200, 4)
 
-        return torch.cat(inputs, dim=2)
+        if self.use_clahe:
+            renormalized_img = self.clahe(raw_images, self.clahe_min_stdev)
+            inputs.append(renormalized_img)
+            inputs[0] = self.clahe(backgrounds, self.clahe_min_stdev)
+
+        return torch.stack(inputs, dim=2)
 
     @classmethod
-    def clahe(cls, imgs, s, c, p):
+    def clahe(cls, images, min_stdev, kernel_size=9, padding=4):
         """Perform Contrast Limited Adaptive Histogram Equalization (CLAHE) on input images."""
-        imgs4d = torch.squeeze(imgs, dim=2)
-        padding = (p, p, p, p)
-        orig_shape = imgs4d.shape
+        orig_shape = images.shape
 
         # Padding for borders in image
-        pad_images = torch.nn.functional.pad(imgs4d, pad=padding, mode="reflect")
+        padding4d = (padding, padding, padding, padding)
+        pad_images = torch.nn.functional.pad(images, pad=padding4d, mode="reflect")
         # Unfold image, compute means
-        f = torch.nn.Unfold(kernel_size=(s, s), padding=0, stride=1)
+        f = torch.nn.Unfold(kernel_size=(kernel_size, kernel_size), padding=0, stride=1)
         out = f(pad_images)
         reshape_val = int(out.shape[1] / orig_shape[1])
         out = torch.reshape(
             out, (orig_shape[0], orig_shape[1], reshape_val, orig_shape[2], orig_shape[3])
         )
         # Compute residuals
-        res_img = imgs4d - torch.mean(out, dim=2)
+        res_img = images - torch.mean(out, dim=2)
         # Pad residuals, compute squared residuals
-        pad_res_img = torch.nn.functional.pad(res_img, pad=padding, mode="reflect")
+        pad_res_img = torch.nn.functional.pad(res_img, pad=padding4d, mode="reflect")
         # Unfold squared residuals
         sqr_res = f(pad_res_img**2)
         reshape_sqr_res = torch.reshape(
             sqr_res, (orig_shape[0], orig_shape[1], reshape_val, orig_shape[2], orig_shape[3])
         )
         # Find rolling std
-        std = torch.sqrt(torch.mean(reshape_sqr_res, dim=2))
+        stdev = torch.sqrt(torch.mean(reshape_sqr_res, dim=2))
         # Output rolling z-score
-        rolling_z = res_img / torch.clamp(std, min=c)
-        return torch.unsqueeze(rolling_z, dim=2)
+        return res_img / torch.clamp(stdev, min=min_stdev)

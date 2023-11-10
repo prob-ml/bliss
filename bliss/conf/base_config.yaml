@@ -87,6 +87,7 @@ encoder:
         concat_psf_params: false
         log_transform_stdevs: [-3, 0, 1, 3]
         use_clahe: true
+        clahe_min_stdev: 200
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
     two_layers: false
