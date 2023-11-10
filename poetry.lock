@@ -1517,6 +1517,25 @@ files = [
 ]
 
 [[package]]
+name = "galcheat"
+version = "1.0.0"
+description = "Tiny library of galaxy surveys most useful parameters with units"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "galcheat-1.0.0-py2.py3-none-any.whl", hash = "sha256:2f769cbcf73164f48dbf30a119119650fc4409b008322e222043ca62c5389e01"},
+    {file = "galcheat-1.0.0.tar.gz", hash = "sha256:8057221426859018535867fb043db5beffd2bfe6a5995326c75de926b889ad42"},
+]
+
+[package.dependencies]
+astropy = ">=4.3"
+pyyaml = ">=5.1"
+
+[package.extras]
+dev = ["mkdocs (>=1.2)", "mkdocs-material (>=8.2)", "mkdocstrings (>=0.18)", "pre-commit (>=2.17)", "pytest (>=6.0)", "pytest-astropy-header (>=0.2)", "pytest-cov (>=3.0)", "pytkdocs[numpy-style] (>=0.16)"]
+scripts = ["speclite (>=0.15)"]
+
+[[package]]
 name = "galsim"
 version = "2.4.10"
 description = "The modular galaxy image simulation toolkit"
@@ -5383,4 +5402,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10,<3.13"
-content-hash = "8160b38c8902930fe5ccfadada2f134cb5229475b626e0dabbfd6b0347e5aacf"
+content-hash = "ec10a3abb45455e9fb2990df917702608f90caab8a95bd189073108775377273"
