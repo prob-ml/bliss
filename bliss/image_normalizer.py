@@ -77,8 +77,8 @@ class ImageNormalizer(torch.nn.Module):
             msg = f"Expected >= {len(self.bands)} bands in the input but found only {input_bands}"
             warnings.warn(msg)
 
-        raw_images = batch["images"][:, self.bands]
-        backgrounds = batch["background"][:, self.bands]
+        raw_images = batch["images"][:, self.bands].unsqueeze(2)
+        backgrounds = batch["background"][:, self.bands].unsqueeze(2)
         inputs = [backgrounds]
 
         if self.include_original:
@@ -87,7 +87,7 @@ class ImageNormalizer(torch.nn.Module):
         if self.use_deconv_channel:
             msg = "use_deconv_channel specified but deconvolution not present in data"
             assert "deconvolution" in batch, msg
-            inputs.append(batch["deconvolution"][:, self.bands])
+            inputs.append(batch["deconvolution"][:, self.bands].unsqueeze(2))
 
         if self.concat_psf_params:
             msg = "concat_psf_params specified but psf params not present in data"
@@ -112,16 +112,17 @@ class ImageNormalizer(torch.nn.Module):
             inputs.append(renormalized_img)
             inputs[0] = self.clahe(backgrounds, self.clahe_min_stdev)
 
-        return torch.stack(inputs, dim=2)
+        return torch.cat(inputs, dim=2)
 
     @classmethod
-    def clahe(cls, images, min_stdev, kernel_size=9, padding=4):
+    def clahe(cls, imgs, min_stdev, kernel_size=9, padding=4):
         """Perform Contrast Limited Adaptive Histogram Equalization (CLAHE) on input images."""
-        orig_shape = images.shape
+        imgs4d = imgs.squeeze(2)
+        orig_shape = imgs4d.shape
 
         # Padding for borders in image
         padding4d = (padding, padding, padding, padding)
-        pad_images = torch.nn.functional.pad(images, pad=padding4d, mode="reflect")
+        pad_images = torch.nn.functional.pad(imgs4d, pad=padding4d, mode="reflect")
         # Unfold image, compute means
         f = torch.nn.Unfold(kernel_size=(kernel_size, kernel_size), padding=0, stride=1)
         out = f(pad_images)
@@ -130,7 +131,7 @@ class ImageNormalizer(torch.nn.Module):
             out, (orig_shape[0], orig_shape[1], reshape_val, orig_shape[2], orig_shape[3])
         )
         # Compute residuals
-        res_img = images - torch.mean(out, dim=2)
+        res_img = imgs4d - torch.mean(out, dim=2)
         # Pad residuals, compute squared residuals
         pad_res_img = torch.nn.functional.pad(res_img, pad=padding4d, mode="reflect")
         # Unfold squared residuals
@@ -141,4 +142,5 @@ class ImageNormalizer(torch.nn.Module):
         # Find rolling std
         stdev = torch.sqrt(torch.mean(reshape_sqr_res, dim=2))
         # Output rolling z-score
-        return res_img / torch.clamp(stdev, min=min_stdev)
+        normalized_img = res_img / torch.clamp(stdev, min=min_stdev)
+        return normalized_img.unsqueeze(2)
