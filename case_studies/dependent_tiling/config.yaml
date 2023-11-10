@@ -5,10 +5,11 @@ defaults:
     - override hydra/job_logging: stdout
 
 encoder:
-    bands: [0, 1, 2, 3, 4]
+    bands: [2, 3]
     survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: 2
     min_flux_threshold: 1.59  # 22 magnitude (0.63 is 23 mag; 0.25 is 24 mag)
+    two_layers: true
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
@@ -28,13 +29,6 @@ prior:
     star_flux_max: 1014
     star_flux_alpha: 0.5
 
-surveys:
-    sdss:
-        fields:
-            - run: 2583
-              camcol: 2
-              fields: [136]
-
 generate:
     n_batches: 512
     cached_data_path: /data/scratch/regier/m2
@@ -42,3 +36,31 @@ generate:
 cached_simulator:
     cached_data_path: /data/scratch/regier/m2
     batch_size: 32
+
+predict:
+    dataset:
+        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
+        dir_path: ${paths.sdss}
+        fields:
+            - run: 94 # 2583
+              camcol: 1 # 2
+              fields: [12, 13] # [136]
+        psf_config:
+            pixel_scale: 0.396
+            psf_slen: 25
+        pixel_shift: 2
+    trainer: ${training.trainer}
+    encoder: ${encoder}
+    weight_save_path: ${paths.root}/case_studies/dependent_tiling/m2.pt
+    device: "cuda:0"
+    crop:
+        do_crop: true
+        left_upper_corner: [160, 160]
+        width: 640
+        height: 640
+    plot:
+        show_plot: true
+        width: 1000
+        height: 1000
+        out_file_name: ${paths.output}/predict.html
+    is_simulated: false

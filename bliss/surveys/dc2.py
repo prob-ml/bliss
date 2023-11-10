@@ -83,7 +83,7 @@ class DC2(Survey):
             full_cat, psf_params = Dc2FullCatalog.from_file(
                 self.cat_path, wcs, height, width, self.bands
             )
-            tile_cat = full_cat.to_tile_params(4, 5).get_brightest_source_per_tile()
+            tile_cat = full_cat.to_tile_params(4, 5).get_brightest_sources_per_tile()
             tile_dict = tile_cat.to_dict()
 
             tile_dict["locs"] = rearrange(tile_cat.to_dict()["locs"], "1 h w nh nw -> h w nh nw")

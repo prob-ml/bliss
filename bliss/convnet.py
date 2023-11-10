@@ -4,8 +4,6 @@ from torch import nn
 # The code in this file is based on the following repository:
 # https://github.com/ultralytics/yolov5/
 
-NUM_FEATURES = 256
-
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
@@ -53,8 +51,8 @@ class C3(nn.Module):
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
 
 
-class MarginalNet(nn.Module):
-    def __init__(self, n_bands, ch_per_band, out_channels, double_downsample=True):
+class FeaturesNet(nn.Module):
+    def __init__(self, n_bands, ch_per_band, num_features, double_downsample=True):
         super().__init__()
 
         nch_hidden = 64
@@ -63,74 +61,60 @@ class MarginalNet(nn.Module):
             nn.BatchNorm3d(nch_hidden),
             nn.SiLU(),
         )
-        backbone_layers = [
+        self.backbone = nn.Sequential(
             ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
-            ConvBlock(128, NUM_FEATURES, stride=(2 if double_downsample else 1)),  # 4
-            C3(256, 256, n=6),  # 5
-            ConvBlock(256, 512, stride=2),
-            C3(512, 512, n=3, shortcut=False),
-            ConvBlock(512, 256, kernel_size=1, padding=0),
-            nn.Upsample(scale_factor=2, mode="nearest"),  # 9
-            C3(768, 256, n=3, shortcut=False),
-            Detect(256, out_channels),
-        ]
-        self.backbone = nn.ModuleList(backbone_layers)
+            ConvBlock(128, num_features, stride=(2 if double_downsample else 1)),  # 4
+        )
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
-
-        save_for_cat = []
-        save_as_features = None
-        for i, m in enumerate(self.backbone):
-            x = m(x)
-            if i == 4:
-                save_as_features = x
-            if i in {4, 5, 9}:
-                save_for_cat.append(x)
-            if i == 9:
-                x = torch.cat(save_for_cat, dim=1)
-
-        return x, save_as_features
+        return self.backbone(x)
 
 
-class ConditionalNet(nn.Module):
-    def __init__(self, out_channels):
+class CatalogNet(nn.Module):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
 
-        neighbor_dim = 64
-        preprocess_neighbors = [
-            ConvBlock(2, 64),
-            ConvBlock(64, 64),
-            ConvBlock(64, neighbor_dim),
-        ]
-        self.pn_net = nn.Sequential(*preprocess_neighbors)
-
         net_layers = [
-            ConvBlock(NUM_FEATURES + neighbor_dim, 256),  # 0
-            C3(256, 256, n=6),  # 1
+            C3(in_channels, 256, n=6),  # 0
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),
             ConvBlock(512, 256, kernel_size=1, padding=0),
-            nn.Upsample(scale_factor=2, mode="nearest"),  # 5
+            nn.Upsample(scale_factor=2, mode="nearest"),  # 4
             C3(768, 256, n=3, shortcut=False),
             Detect(256, out_channels),
         ]
         self.net_ml = nn.ModuleList(net_layers)
 
-    def forward(self, x_features, detections, mask):
-        neighbors = torch.cat([detections, mask], dim=1)
-        x_neighbors = self.pn_net(neighbors)
-
-        x = torch.cat((x_features, x_neighbors), dim=1)
-
-        save_lst = []
+    def forward(self, x):
+        save_lst = [x]
         for i, m in enumerate(self.net_ml):
             x = m(x)
-            if i in {0, 1, 5}:
+            if i in {0, 4}:
                 save_lst.append(x)
-            if i == 5:
+            if i == 4:
                 x = torch.cat(save_lst, dim=1)
         return x
+
+
+class ContextNet(nn.Module):
+    def __init__(self, num_features, out_channels):
+        super().__init__()
+
+        context_dim = 64
+        self.encode_context = nn.Sequential(
+            ConvBlock(2, 64),
+            ConvBlock(64, 64),
+            ConvBlock(64, context_dim),
+        )
+        self.merge = ConvBlock(num_features + context_dim, num_features)
+        self.catalog_net = CatalogNet(num_features, out_channels)
+
+    def forward(self, x_features, context):
+        x_context = self.encode_context(context)
+        x = torch.cat((x_features, x_context), dim=1)
+        x = self.merge(x)
+        return self.catalog_net(x)

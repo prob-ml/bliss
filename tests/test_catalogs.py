@@ -119,22 +119,22 @@ class TestBasicTileAndFullCatalogs:
         assert full_cat.galaxy_bools.equal(full_cat["galaxy_bools"])
 
     def test_restrict_tile_cat_to_brightest(self, multi_source_tilecat):
-        cat = multi_source_tilecat.get_brightest_source_per_tile(band=2)
+        cat = multi_source_tilecat.get_brightest_sources_per_tile(band=2)
         assert cat.max_sources == 1
-        assert cat["galaxy_fluxes"][0, 0, 0, 0, 2] == 1000
-        assert cat["galaxy_fluxes"][0, 1, 1, 0, 2] == 600
         assert cat.n_sources.max() == 1
+        assert cat.n_sources.sum() == 3
+        assert cat["galaxy_fluxes"].sum() == 11600.0
+        assert cat["galaxy_fluxes"].max() == 10000.0
 
         # do it again to make sure nothing changes
-        assert cat.get_brightest_source_per_tile(band=2).max_sources == 1
+        assert cat.get_brightest_sources_per_tile(band=2).max_sources == 1
 
     def test_filter_tile_cat_by_flux(self, multi_source_tilecat):
         cat = multi_source_tilecat.filter_tile_catalog_by_flux(300, 2000)
         assert cat.max_sources == 2
-        assert torch.equal(cat["galaxy_fluxes"][0, 0, 0, :, 2], torch.tensor([1000, 500]))
-        assert torch.equal(cat["galaxy_fluxes"][0, 0, 1, :, 2], torch.tensor([0, 0]))
-        assert torch.equal(cat["galaxy_fluxes"][0, 1, 0, :, 2], torch.tensor([0, 0]))
-        assert torch.equal(cat["galaxy_fluxes"][0, 1, 1, :, 2], torch.tensor([0, 600]))
+        assert cat.n_sources.sum() == 3
+        assert cat["galaxy_fluxes"].sum() == 2100.0
+        assert cat["galaxy_fluxes"].max() == 1000.0
 
     def test_bin_full_cat_by_flux(self):
         d = {

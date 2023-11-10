@@ -1,4 +1,6 @@
 """Common functions to plot results."""
+import math
+
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
@@ -37,12 +39,20 @@ def plot_plocs(catalog, ax, idx, filter_by="all", bp=0, **kwargs):
     ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)
 
 
-def plot_detections(images, true_cat, est_cat, nrows, img_ids, margin_px, ticks=None, figsize=None):
+def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, figsize=None):
     """Plots an image of true and estimated sources."""
+    batch_size = images.size(0)
+    n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
+    nrows = int(n_samples**0.5)
+    img_ids = torch.arange(n_samples, device=images.device)
+
     if figsize is None:
         figsize = (20, 20)
     fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=figsize)
     axes = axes.flatten() if nrows > 1 else [axes]  # flatten
+
+    true_cat = true_tile_cat.to_full_params()
+    est_cat = est_tile_cat.to_full_params()
 
     for ax_idx, ax in enumerate(axes):
         if ax_idx >= len(img_ids):  # don't plot on this ax if there aren't enough images
