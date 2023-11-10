@@ -115,14 +115,14 @@ class ImageNormalizer(torch.nn.Module):
         return torch.cat(inputs, dim=2)
 
     @classmethod
-    def clahe(cls, imgs, min_stdev, kernel_size=9, padding=4):
+    def clahe(cls, images, min_stdev, kernel_size=9, padding=4):
         """Perform Contrast Limited Adaptive Histogram Equalization (CLAHE) on input images."""
-        imgs4d = imgs.squeeze(2)
-        orig_shape = imgs4d.shape
+        images4d = images.squeeze(2)
+        orig_shape = images4d.shape
 
         # Padding for borders in image
         padding4d = (padding, padding, padding, padding)
-        pad_images = torch.nn.functional.pad(imgs4d, pad=padding4d, mode="reflect")
+        pad_images = torch.nn.functional.pad(images4d, pad=padding4d, mode="reflect")
         # Unfold image, compute means
         f = torch.nn.Unfold(kernel_size=(kernel_size, kernel_size), padding=0, stride=1)
         out = f(pad_images)
@@ -131,7 +131,7 @@ class ImageNormalizer(torch.nn.Module):
             out, (orig_shape[0], orig_shape[1], reshape_val, orig_shape[2], orig_shape[3])
         )
         # Compute residuals
-        res_img = imgs4d - torch.mean(out, dim=2)
+        res_img = images4d - torch.mean(out, dim=2)
         # Pad residuals, compute squared residuals
         pad_res_img = torch.nn.functional.pad(res_img, pad=padding4d, mode="reflect")
         # Unfold squared residuals
