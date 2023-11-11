@@ -1,0 +1,22 @@
+---
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+paths:
+    project: /data/scratch/zhteoh/case_studies/crowded_starfield
+
+prior:
+    mean_sources: 0.2 # NOTE: vary this!
+
+generate:
+    n_batches: 16
+    max_images_per_file: 1024
+    cached_data_path: ${paths.data}/cached_dataset_mean_sources_${prior.mean_sources}
+
+training:
+    name: pretrain-crowded-starfield
+    version: mean-sources-${prior.mean_sources}
+    weight_save_path: ${paths.output}/${training.name}/weights_${prior.mean_sources}.pt
+    data_source: ${cached_simulator}

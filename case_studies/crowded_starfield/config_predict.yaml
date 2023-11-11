@@ -1,0 +1,20 @@
+---
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+hydra:
+    sweeper:
+        params:
+            +pretrained_mean_sources: 0.06, 0.1, 0.2, 0.5, 0.6
+
+paths:
+    project: /data/scratch/zhteoh/case_studies/crowded_starfield
+
+training:
+    name: pretrain-crowded-starfield
+
+predict:
+    weight_save_path: ${paths.output}/${training.name}/weights_after_pretrained_${pretrained_mean_sources}.pt
+    show_plot: false
