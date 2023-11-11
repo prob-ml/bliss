@@ -18,7 +18,8 @@ class SDSSTest(pl.LightningDataModule):
 
     def predict_dataloader(self) -> EVAL_DATALOADERS:
         images, background = self.items[0].values()
-        images, background = crop_image(images, background, self.cfg.predict.crop)
+        images = crop_image(images, self.cfg)
+        background = crop_image(background, self.cfg)
         batch = {"images": images, "background": background}
         batch["images"] = batch["images"].squeeze(0)
         batch["background"] = batch["background"].squeeze(0)

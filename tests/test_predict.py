@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from bliss.generate import generate
-from bliss.predict import predict
+from bliss.predict import predict_and_compare
 from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
 from bliss.surveys.des import DarkEnergySurvey as DES
 from bliss.train import train
@@ -121,7 +121,7 @@ class TestPredict:
             {"run": 3635, "camcol": 1, "fields": [169]},
         ]
         the_cfg.predict.plot.show_plot = True
-        _, _, _, _, preds = predict(the_cfg)
+        _, _, _, _, preds = predict_and_compare(the_cfg)
 
         # TODO: check rest of the return values from predict
         assert len(preds) == len(
@@ -147,7 +147,7 @@ class TestPredict:
         the_cfg.encoder.survey_bands = DECaLS.BANDS
         the_cfg.encoder.image_normalizer.log_transform_stdevs = []
         the_cfg.predict.weight_save_path = decals_weight_save_path
-        _, _, _, _, preds = predict(the_cfg)
+        _, _, _, _, preds = predict_and_compare(the_cfg)
 
         # TODO: check rest of the return values from predict
         assert len(preds) == len(
@@ -165,7 +165,7 @@ class TestPredict:
         the_cfg.encoder.bands = list(range(len(DES.BANDS)))
         the_cfg.encoder.survey_bands = DES.BANDS
         the_cfg.predict.weight_save_path = des_weight_save_path
-        _, _, _, _, preds = predict(the_cfg)
+        _, _, _, _, preds = predict_and_compare(the_cfg)
 
         # TODO: check rest of the return values from predict
         assert len(preds) == len(

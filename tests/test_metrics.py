@@ -5,7 +5,7 @@ from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode, three_way_matching
-from bliss.predict import align, prepare_image
+from bliss.predict import align, crop_image
 from bliss.surveys.decals import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
@@ -62,8 +62,8 @@ class TestMetrics:
         # get predicted BLISS catalog
         with torch.no_grad():
             batch = {
-                "images": prepare_image(image, cfg.predict.device).float(),
-                "background": prepare_image(background, cfg.predict.device).float(),
+                "images": crop_image(image, cfg.predict.device).float(),
+                "background": crop_image(background, cfg.predict.device).float(),
             }
             encoder.eval()
             encoder = encoder.float()
