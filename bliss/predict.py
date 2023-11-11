@@ -162,13 +162,16 @@ def predict_and_compare(cfg):
 
         # now we load the survey's catalog from this frame
         survey_cat_path = dataset.downloader.download_catalog(images_id)
-        survey_cat = dataset.catalog_cls.from_file(
-            cat_path=survey_cat_path,
-            wcs=frame["wcs"][cfg.simulator.prior.reference_band],
-            height=frame["image"].shape[1],
-            width=frame["image"].shape[2],
-        )
-        survey_plocs = survey_cat.plocs[0]
+        try:
+            survey_cat = dataset.catalog_cls.from_file(
+                cat_path=survey_cat_path,
+                wcs=frame["wcs"][cfg.simulator.prior.reference_band],
+                height=frame["image"].shape[1],
+                width=frame["image"].shape[2],
+            )
+            survey_plocs = survey_cat.plocs[0]
+        except IndexError:
+            survey_plocs = None
 
         # we are merging survey catalogs as we go here, but we shouldn't be!
         # we should keep each catalog associated with a particular frame_id
@@ -178,6 +181,7 @@ def predict_and_compare(cfg):
             survey_plocs_all = torch.cat((survey_plocs_all, survey_plocs), dim=0)
             survey_plocs_all = torch.unique(survey_plocs_all, dim=0)
 
+    # better not to have this here...the caller should call plot_predict directly
     if cfg.predict.plot.show_plot and (survey_plocs_all is not None):
         plot_predict(
             cfg,
@@ -222,15 +226,16 @@ def add_cat(p, est_plocs, survey_true_plocs, sdss_plocs, decals_plocs):
         size=10,
         fill_color=None,
     )
-    p.scatter(
-        survey_true_plocs[:, 1],
-        survey_true_plocs[:, 0],
-        marker="circle",
-        color="hotpink",
-        legend_label="consolidated survey catalog",
-        size=20,
-        fill_color=None,
-    )
+    if survey_true_plocs is not None:
+        p.scatter(
+            survey_true_plocs[:, 1],
+            survey_true_plocs[:, 0],
+            marker="circle",
+            color="hotpink",
+            legend_label="consolidated survey catalog",
+            size=20,
+            fill_color=None,
+        )
     if sdss_plocs is not None:
         p.scatter(
             sdss_plocs[:, 1],
