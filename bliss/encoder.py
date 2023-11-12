@@ -331,13 +331,13 @@ class Encoder(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
-
-        return {
-            "est_cat": self.sample(batch, use_mode=True),
-            # a marginal catalog isn't really what we want here, perhaps
-            # we should return samples from the variation distribution instead
-            "pred": None,
-        }
+        with torch.no_grad():
+            return {
+                "est_cat": self.sample(batch, use_mode=True),
+                # a marginal catalog isn't really what we want here, perhaps
+                # we should return samples from the variation distribution instead
+                "pred": None,
+            }
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""

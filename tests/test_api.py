@@ -121,7 +121,7 @@ class TestApi:
         ).exists()
 
     def test_predict_sdss_default_rcf(self, bliss_client, monkeypatch):
-        monkeypatch.setattr(api, "_predict", mock_tests.mock_predict_sdss)
+        monkeypatch.setattr(api, "_predict_and_compare", mock_tests.mock_predict_sdss)
         # cached predict data copied to temp dir in mock_tests.mock_predict_sdss
         cat, cat_table, pred_tables = bliss_client.predict(
             survey="sdss", weight_save_path="test_path"
@@ -194,8 +194,8 @@ class TestApi:
         ), "pred_table missing columns"
 
     def test_predict_decals_default_brick(self, bliss_client, monkeypatch):
-        monkeypatch.setattr(api, "_predict", mock_tests.mock_predict_decals_bulk)
-        # cached predict data copied to temp dir in mock_tests.mock_predict_sdss
+        monkeypatch.setattr(api, "_predict_and_compare", mock_tests.mock_predict_decals_bulk)
+        # cached predict data copied to temp dir in mock_tests.mock_predict_decals_bulk
         cat, cat_table, pred_tables = bliss_client.predict(
             survey="decals",
             weight_save_path="test_path",
