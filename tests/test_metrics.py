@@ -69,7 +69,7 @@ class TestMetrics:
             encoder.eval()
             encoder = encoder.float()
             bliss_cat = encoder.sample(batch, use_mode=True)
-            bliss_cat = bliss_cat.to(torch.device("cpu")).to_full_params()
+            bliss_cat = bliss_cat.to(torch.device("cpu")).to_full_catalog()
 
         bliss_cat.plocs += torch.tensor(
             [h_lim[0] + cfg.encoder.tile_slen, w_lim[0] + cfg.encoder.tile_slen]
@@ -158,7 +158,7 @@ class TestMetrics:
 
     def test_classification_metrics_full(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
-        full_catalog = tile_catalog.to_full_params()
+        full_catalog = tile_catalog.to_full_catalog()
         metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(full_catalog, full_catalog)
         for metric in metrics.classification_metrics:
