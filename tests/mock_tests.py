@@ -104,10 +104,6 @@ def mock_checkpoint_callback(*args, **kwargs):
 def mock_predict_sdss_recon(cfg, *args, **kwargs):
     test_data_path = Path("data/tests")
 
-    # copy prediction file to temp directory so tests can find it
-    Path(cfg.predict.plot.out_file_name).parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(test_data_path / "predict.html", cfg.predict.plot.out_file_name)
-
     # return catalog and preds like predict_sdss
     with open(test_data_path / "sdss_preds.pt", "rb") as f:
         data = torch.load(f)

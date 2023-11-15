@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 import torch
 from hydra.utils import instantiate
+from omegaconf import open_dict
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.metrics import BlissMetrics, MetricsMode, three_way_matching
@@ -13,6 +14,8 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 class TestMetrics:
     def _get_sdss_data(self, cfg):
         """Loads SDSS frame and Photo Catalog."""
+        with open_dict(cfg):
+            cfg.surveys.sdss.align_to_band = 2
         sdss = instantiate(cfg.surveys.sdss, load_image_data=True)
         sdss.prepare_data()
 
@@ -34,7 +37,7 @@ class TestMetrics:
         # crop to center fourth
         height, width = image[0].shape
         min_h, min_w = height // 4, width // 4
-        max_h, max_w = min_h * 3, min_w * 3
+        max_h, max_w = min_h * 3 - 8, min_w * 3
         cropped_image = image[:, min_h:max_h, min_w:max_w]
         cropped_background = background[:, min_h:max_h, min_w:max_w]
 
