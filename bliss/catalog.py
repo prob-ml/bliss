@@ -142,7 +142,7 @@ class TileCatalog(UserDict):
             [tiles_to_crop, tile_width - tiles_to_crop],
         )
 
-    def to_full_params(self):
+    def to_full_catalog(self):
         """Converts image parameters in tiles to parameters of full image.
 
         By parameters, we mean samples from the variational distribution, not the variational
@@ -479,7 +479,7 @@ class FullCatalog(UserDict):
         d_new["n_sources"] = keep.sum(dim=(-2, -1)).long()
         return type(self)(self.height, self.width, d_new)
 
-    def to_tile_params(
+    def to_tile_catalog(
         self,
         tile_slen: int,
         max_sources_per_tile: int,

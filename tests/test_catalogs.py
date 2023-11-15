@@ -80,7 +80,7 @@ class TestBasicTileAndFullCatalogs:
         assert "source_type" in keys
         assert "galaxy_bools" not in keys
 
-        full_cat = tile_cat.to_full_params()
+        full_cat = tile_cat.to_full_catalog()
         assert full_cat.plocs.equal(full_cat["plocs"])
         assert full_cat.galaxy_bools.equal(full_cat["galaxy_bools"])
 
@@ -126,15 +126,15 @@ class TestBasicTileAndFullCatalogs:
         full_cat = FullCatalog(2, 2, d)
 
         with pytest.raises(ValueError) as error_info:
-            full_cat.to_tile_params(1, 1, ignore_extra_sources=False)
+            full_cat.to_tile_catalog(1, 1, ignore_extra_sources=False)
         assert error_info.value.args[0] == "# of sources per tile exceeds `max_sources_per_tile`."
 
         # should return only first source in first tile.
-        tile_cat = full_cat.to_tile_params(1, 1, ignore_extra_sources=True)
+        tile_cat = full_cat.to_tile_catalog(1, 1, ignore_extra_sources=True)
         assert torch.equal(tile_cat.n_sources, torch.tensor([[[1, 0], [0, 0]]]))
 
         # test to_tile_coords and to_full_coords (set max_sources_per_tile to 2)
-        convert_full_cat = full_cat.to_tile_params(1, 2).to_full_params()
+        convert_full_cat = full_cat.to_tile_catalog(1, 2).to_full_catalog()
         assert torch.allclose(convert_full_cat.plocs, full_cat.plocs)
 
         correct_locs = torch.tensor([[[0.5, 0.5], [0, 0]], [[0, 0], [0, 0]]]).reshape(1, 2, 2, 1, 2)

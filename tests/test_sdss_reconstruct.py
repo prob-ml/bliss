@@ -15,11 +15,11 @@ class TestSdssReconstruct:
             data = torch.load(f)
         tile_cat = TileCatalog(cfg.simulator.prior.tile_slen, data["catalog"])
 
-        est_full, true_img, true_bg = tile_cat.to_full_params(), data["image"], data["background"]
+        est_full, true_img, true_bg = tile_cat.to_full_catalog(), data["image"], data["background"]
 
         # reconstruction test only considers r-band image/catalog params
         rcfs = [(94, 1, 12)]
-        tile_cat = est_full.to_tile_params(
+        tile_cat = est_full.to_tile_catalog(
             tile_slen=cfg.simulator.prior.tile_slen,
             max_sources_per_tile=cfg.simulator.prior.max_sources,
             ignore_extra_sources=True,

@@ -137,7 +137,7 @@ class TestRegionCatalog:
     def test_tile_cat_to_region_basic(self, basic_tilecat):
         region_cat = tile_cat_to_region_cat(basic_tilecat, 0.5, discard_extra_sources=False)
         full_cat = basic_tilecat.to_full_params()
-        assert region_cat.to_full_params().plocs.equal(full_cat.plocs)
+        assert region_cat.to_full_catalog().plocs.equal(full_cat.plocs)
 
     def test_tile_cat_to_region_filtering(self):
         d = {

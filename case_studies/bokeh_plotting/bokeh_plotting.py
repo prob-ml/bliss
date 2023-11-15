@@ -136,7 +136,7 @@ def plot_predict(
         output_file(out_filepath)
 
     est_plocs = np.array(est_cat.plocs.cpu())[0]
-    est_tile = est_cat.to_tile_params(
+    est_tile = est_cat.to_tile_catalog(
         cfg.encoder.tile_slen,
         cfg.simulator.prior.max_sources,
         ignore_extra_sources=True,
