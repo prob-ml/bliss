@@ -533,6 +533,17 @@ def convert_flux_to_mag(flux: Tensor, nelec_per_nmgy=987.31) -> Tensor:
     return 22.5 - 2.5 * torch.log10(flux / nelec_per_nmgy)
 
 
+def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
+    fluxes_suffix = "_fluxes"
+    # reshape nelec_per_nmgy_per_band to (1, 1, 1, 1, {n_bands}) to broadcast
+    nelec_per_nmgy_per_band = torch.tensor(nelec_per_nmgy_per_band, device=est_cat.device)
+    nelec_per_nmgy_per_band = nelec_per_nmgy_per_band.view(1, 1, 1, 1, -1)
+    for key in est_cat.keys():
+        if key.endswith(fluxes_suffix):
+            est_cat[key] = est_cat[key] / nelec_per_nmgy_per_band
+    return est_cat
+
+
 def column_to_tensor(table, colname):
     dtypes = {
         np.dtype(">i2"): int,

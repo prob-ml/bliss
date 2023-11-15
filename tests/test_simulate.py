@@ -5,9 +5,9 @@ from hydra.utils import instantiate
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
-from bliss.align import crop_image
 from bliss.catalog import TileCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
+from bliss.surveys.sdss import nelec_to_nmgy_for_catalog
 
 
 class SDSSTest(pl.LightningDataModule):
@@ -18,8 +18,6 @@ class SDSSTest(pl.LightningDataModule):
 
     def predict_dataloader(self) -> EVAL_DATALOADERS:
         images, background = self.items[0].values()
-        images = crop_image(images, self.cfg)
-        background = crop_image(background, self.cfg)
         batch = {"images": images, "background": background}
         batch["images"] = batch["images"].squeeze(0)
         batch["background"] = batch["background"].squeeze(0)

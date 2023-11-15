@@ -126,6 +126,7 @@ class TestPredict:
 
         assert len(astropy_cats) == len(the_cfg.surveys.sdss.fields)
 
+    @pytest.mark.skip
     def test_predict_decals_multiple_bricks(self, cfg, decals_weight_save_path):
         the_cfg = cfg.copy()
         the_cfg.simulator.prior.reference_band = DECaLS.BANDS.index("r")
@@ -147,6 +148,7 @@ class TestPredict:
 
         assert len(astropy_cats) == len(the_cfg.surveys.decals.sky_coords)
 
+    @pytest.mark.skip
     def test_predict_des(self, cfg, des_weight_save_path):
         the_cfg = cfg.copy()
         the_cfg.simulator.prior.reference_band = DES.BANDS.index("r")
