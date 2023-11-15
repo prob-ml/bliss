@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import mock_tests
 import pytest
 import torch
 from astropy.table import Table
@@ -8,7 +7,7 @@ from omegaconf import OmegaConf
 
 from bliss import generate, train
 from bliss.catalog import FullCatalog, SourceType
-from case_studies.api import api
+from case_studies.api import api, mock_tests
 from case_studies.api.api import BlissClient
 
 
