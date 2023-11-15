@@ -47,38 +47,6 @@ def multi_source_tilecat():
     return TileCatalog(4, d)
 
 
-@pytest.fixture(scope="module")
-def region_cat():
-    n_sources = torch.zeros(2, 5, 5)
-    n_sources[0, 0, 0] = 1
-    n_sources[0, 1, 3] = 1
-    n_sources[0, 4, 2] = 1
-    n_sources[1, 0, 0] = 1
-    n_sources[1, 2, 2] = 1
-    n_sources[1, 4, 4] = 1
-
-    locs = torch.zeros(2, 5, 5, 1, 2)
-    locs[0, 0, 0] = torch.tensor([0.8, 0.2])
-    locs[0, 1, 3] = torch.tensor([0.1, 0.5])
-    locs[0, 4, 2] = torch.tensor([0.3, 0.3])
-    locs[1, 0, 0] = torch.tensor([0.5, 0.5])
-    locs[1, 2, 2] = torch.tensor([0.5, 0.5])
-    locs[1, 4, 4] = torch.tensor([0.5, 0.5])
-
-    fluxes = torch.zeros(2, 5, 5, 1, 5)
-    fluxes[0, 0, 0] = torch.tensor([100, 100, 100, 100, 100])
-    fluxes[0, 1, 3] = torch.tensor([100, 100, 100, 100, 100]) * 2
-    fluxes[0, 4, 2] = torch.tensor([100, 100, 100, 100, 100]) * 5
-
-    d = {
-        "n_sources": n_sources,
-        "locs": locs,
-        "galaxy_fluxes": fluxes,
-    }
-
-    return RegionCatalog(interior_slen=3.5, overlap_slen=0.5, d=d)
-
-
 class TestBasicTileAndFullCatalogs:
     def test_unallowed_param(self):
         d_tile = {

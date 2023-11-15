@@ -5,7 +5,6 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, IterableDataset
 
-from bliss.catalog import TileCatalog
 from bliss.surveys.sdss import SDSSDownloader
 
 
@@ -99,16 +98,6 @@ def mock_trainer(*args, **kwargs):
 
 def mock_checkpoint_callback(*args, **kwargs):
     return MockCallback()
-
-
-def mock_predict_sdss_recon(cfg, *args, **kwargs):
-    test_data_path = Path("data/tests")
-
-    # return catalog and preds like predict_sdss
-    with open(test_data_path / "sdss_preds.pt", "rb") as f:
-        data = torch.load(f)
-    tile_cat = TileCatalog(cfg.simulator.prior.tile_slen, data["catalog"])
-    return tile_cat.to_full_params(), data["image"], data["background"], None, data["pred"]
 
 
 def cached_output_from_predict_fn(cfg, filename="sdss_preds.pt"):

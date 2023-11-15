@@ -1,10 +1,11 @@
 import warnings
 
+import pytest
 import torch
 from hydra.utils import instantiate
 
 from bliss.catalog import TileCatalog
-from case_studies.adaptive_tiling.region_catalog import RegionCatalog
+from case_studies.adaptive_tiling.region_catalog import RegionCatalog, tile_cat_to_region_cat
 
 
 class TestRegionEncoder:
@@ -177,7 +178,7 @@ class TestRegionCatalog:
         assert n_sources[0].sum() == n_sources[1].sum() == n_sources[2].sum()
 
     @pytest.fixture(scope="module")
-    def region_cat():
+    def region_cat(self):
         n_sources = torch.zeros(2, 5, 5)
         n_sources[0, 0, 0] = 1
         n_sources[0, 1, 3] = 1
