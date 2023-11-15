@@ -34,7 +34,7 @@ class TestMetrics:
         # crop to center fourth
         height, width = image[0].shape
         min_h, min_w = height // 4, width // 4
-        max_h, max_w = min_h * 3 - 8, min_w * 3
+        max_h, max_w = min_h * 3, min_w * 3
         cropped_image = image[:, min_h:max_h, min_w:max_w]
         cropped_background = background[:, min_h:max_h, min_w:max_w]
 
