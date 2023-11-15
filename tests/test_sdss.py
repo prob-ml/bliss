@@ -25,4 +25,4 @@ class TestSDSS:
             copytree(cfg.surveys.sdss.dir_path, the_cfg.surveys.sdss.dir_path, dirs_exist_ok=True)
         # Also tests images loaded
         sdss_obj = instantiate(the_cfg.surveys.sdss, load_image_data=True)[0]
-        assert sdss_obj["image"].shape == (5, 1489, 2048)
+        assert sdss_obj["image"].shape == (5, 1488, 2048)

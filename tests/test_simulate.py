@@ -5,8 +5,8 @@ from hydra.utils import instantiate
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
+from bliss.align import crop_image
 from bliss.catalog import TileCatalog
-from bliss.predict import crop_image, nelec_to_nmgy_for_catalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 

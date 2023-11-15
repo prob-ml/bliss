@@ -11,11 +11,10 @@ from astropy.table import Table
 from astropy.utils.data import download_file
 from astropy.wcs import WCS, FITSFixedWarning
 from einops import rearrange
-from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from scipy.interpolate import RegularGridInterpolator
 from torch import Tensor
-from torch.utils.data import DataLoader
 
+from bliss.align import align, crop_to_mult16
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
@@ -58,12 +57,16 @@ class SloanDigitalSkySurvey(Survey):
         pixel_shift=0.0,
         dir_path="data/sdss",
         load_image_data: bool = False,
+        align_to_band=None,
+        crop_for_testing=False,
     ):
         super().__init__()
 
         self.sdss_path = Path(dir_path)
 
         self.load_image_data = load_image_data
+        self.align_to_band = align_to_band
+        self.crop_for_testing = crop_for_testing
 
         self.rcfgcs = []
         self.sdss_fields = fields
@@ -71,16 +74,14 @@ class SloanDigitalSkySurvey(Survey):
         self.n_bands = len(self.BANDS)
         self.pixel_shift = pixel_shift
 
-        self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
-        self.prepare_data()
+        num_frames = sum(len(rcf_conf["fields"]) for rcf_conf in fields)
+        self.items = [None for _ in range(num_frames)]
 
-        self.background = ImageBackground(self, bands=self.bands)
+        self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
+
         self.psf = SDSS_PSF(dir_path, self.image_ids(), self.bands, psf_config)
-        self.flux_calibration_dict = self.get_flux_calibrations()
 
         self.catalog_cls = PhotoFullCatalog
-        if self.load_image_data:
-            self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
     def prepare_data(self):
         self.downloader.download_pfs()
@@ -117,15 +118,29 @@ class SloanDigitalSkySurvey(Survey):
                 frame_path = field_path / frame_name
                 assert Path(frame_path).exists(), f"{frame_path} does not exist."
 
-        self.items = [None for _ in range(len(self.rcfgcs))]
+        self.background = ImageBackground(self, bands=self.bands)
+        self.flux_calibration_dict = self.get_flux_calibrations()
 
     def __len__(self):
         return len(self.rcfgcs)
 
     def __getitem__(self, idx):
         if not self.items[idx]:
-            self.items[idx] = self.get_from_disk(idx)
+            item = self.get_from_disk(idx)
+            if not self.load_image_data:
+                # we're just using the background/metadata, so no need to align or crop
+                return item
+            for k in ("image", "background", "deconvolution"):
+                if k not in item:
+                    continue
+                if self.align_to_band is not None:
+                    item[k] = align(item[k], wcs_list=item["wcs"], ref_band=self.align_to_band)
+                item[k] = self._crop_image(item[k])
+            self.items[idx] = item
         return self.items[idx]
+
+    def _crop_image(self, x):
+        return crop_to_mult16(x)
 
     def image_id(self, idx) -> Tuple[int, int, int]:
         """Return the image_id for the given index."""
@@ -220,26 +235,6 @@ class SloanDigitalSkySurvey(Survey):
         if self.load_image_data:
             d.update({"image": pixels_nelec})
         return d
-
-    @property
-    def predict_batch(self):
-        if not self._predict_batch:
-            self._predict_batch = {
-                "images": self[0]["image"],
-                "background": self[0]["background"],
-            }
-        return self._predict_batch
-
-    @predict_batch.setter
-    def predict_batch(self, value):
-        self._predict_batch = value
-
-    def predict_dataloader(self) -> EVAL_DATALOADERS:
-        assert self.predict_batch is not None, "predict_batch must be set."
-        return DataLoader([self.predict_batch], batch_size=1)
-
-
-SDSS = SloanDigitalSkySurvey
 
 
 class SDSSDownloader:

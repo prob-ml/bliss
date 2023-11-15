@@ -2,9 +2,10 @@ import shutil
 from pathlib import Path
 
 import pytest
+from omegaconf import open_dict
 
+from bliss.cli import predict
 from bliss.generate import generate
-from bliss.predict import predict_and_compare
 from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
 from bliss.surveys.des import DarkEnergySurvey as DES
 from bliss.train import train
@@ -13,7 +14,7 @@ from bliss.train import train
 @pytest.fixture(autouse=True)
 def setup_teardown(cfg, monkeypatch):
     # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
-    monkeypatch.setattr("bliss.predict.align", lambda x, **_args: x)
+    monkeypatch.setattr("bliss.align.align", lambda x, **_args: x)
 
     checkpoint_dir = cfg.paths.root + "/checkpoints"
     if Path(checkpoint_dir).exists():
@@ -112,30 +113,23 @@ def decals_weight_save_path(cfg, tmpdir_factory, decals_cached_data_path):
 
 class TestPredict:
     def test_predict_sdss_multiple_rcfs(self, cfg, monkeypatch):
-        # NOTE: DECaLS PSF not needed for plotting reference catalog in predict
-        monkeypatch.setattr("bliss.surveys.decals.DECaLS_PSF.__init__", lambda *_args: None)
+        crop = lambda _, img: img[:, 0:64, 0:64]
+        method_str = "bliss.surveys.sdss.SloanDigitalSkySurvey._crop_image"
+        monkeypatch.setattr(method_str, crop)
 
         the_cfg = cfg.copy()
         the_cfg.surveys.sdss.fields = [
             {"run": 94, "camcol": 1, "fields": [12]},
             {"run": 3635, "camcol": 1, "fields": [169]},
         ]
-        the_cfg.predict.plot.show_plot = True
-        _, _, _, _, preds = predict_and_compare(the_cfg)
+        astropy_cats = predict(the_cfg)
 
-        # TODO: check rest of the return values from predict
-        assert len(preds) == len(
-            the_cfg.surveys.sdss.fields
-        ), f"Expected {len(the_cfg.surveys.sdss.fields)} predictions, got {len(preds)}"
-
-        # TODO: somehow check plot output
+        assert len(astropy_cats) == len(the_cfg.surveys.sdss.fields)
 
     def test_predict_decals_multiple_bricks(self, cfg, decals_weight_save_path):
         the_cfg = cfg.copy()
         the_cfg.simulator.prior.reference_band = DECaLS.BANDS.index("r")
 
-        # TODO: fix the plotting: failing due to SDSS/DECaLS bands mismatch
-        the_cfg.predict.plot.show_plot = False
         the_cfg.predict.dataset = "${surveys.decals}"
         the_cfg.surveys.decals.sky_coords = [
             # brick '3366m010' corresponds to SDSS RCF 94-1-12
@@ -147,29 +141,22 @@ class TestPredict:
         the_cfg.encoder.survey_bands = DECaLS.BANDS
         the_cfg.encoder.image_normalizer.log_transform_stdevs = []
         the_cfg.predict.weight_save_path = decals_weight_save_path
-        _, _, _, _, preds = predict_and_compare(the_cfg)
+        with open_dict(the_cfg):
+            the_cfg.predict.dataset["load_image_data"] = True
+        astropy_cats = predict(the_cfg)
 
-        # TODO: check rest of the return values from predict
-        assert len(preds) == len(
-            the_cfg.surveys.decals.sky_coords
-        ), f"Expected {len(the_cfg.surveys.decals.sky_coords)} predictions, got {len(preds)}"
-
-        # TODO: somehow check plot output
+        assert len(astropy_cats) == len(the_cfg.surveys.decals.sky_coords)
 
     def test_predict_des(self, cfg, des_weight_save_path):
         the_cfg = cfg.copy()
         the_cfg.simulator.prior.reference_band = DES.BANDS.index("r")
 
-        the_cfg.predict.plot.show_plot = False
         the_cfg.predict.dataset = "${surveys.des}"
         the_cfg.encoder.bands = list(range(len(DES.BANDS)))
         the_cfg.encoder.survey_bands = DES.BANDS
         the_cfg.predict.weight_save_path = des_weight_save_path
-        _, _, _, _, preds = predict_and_compare(the_cfg)
+        with open_dict(the_cfg):
+            the_cfg.predict.dataset["load_image_data"] = True
+        astropy_cats = predict(the_cfg)
 
-        # TODO: check rest of the return values from predict
-        assert len(preds) == len(
-            the_cfg.surveys.des.image_ids
-        ), f"Expected {len(the_cfg.surveys.des.image_ids)} predictions, got {len(preds)}"
-
-        # TODO: somehow check plot output
+        assert len(astropy_cats) == len(the_cfg.surveys.des.image_ids)

@@ -44,12 +44,7 @@ training:
 predict:
     decals_frame: ${paths.decals}/336/3366m010/tractor-3366m010.fits
     device: "cpu"
-    crop:
-        left_upper_corner: [160, 160]
-        width: 160
-        height: 160
-    plot:
-        show_plot: false
+
 
 surveys:
     sdss:
@@ -57,6 +52,7 @@ surveys:
             - run: 94
               camcol: 1
               fields: [12]
+        load_image_data: true
     dc2:
         data_dir: ${paths.data}/tests/dc2/dc2_multiband/
         cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100000.pkl
