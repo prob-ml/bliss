@@ -3,6 +3,7 @@ import warnings
 import torch
 from hydra.utils import instantiate
 
+from bliss.catalog import TileCatalog
 from case_studies.adaptive_tiling.region_catalog import RegionCatalog
 
 
@@ -93,3 +94,84 @@ class TestRegionEncoder:
             locs_bl[0, 1, 3], torch.tensor([0.4 * 0.6 / 4.4, (0.4 * 0.6 + 4) / 4.4])
         )
         assert torch.allclose(locs_br[0, 1, 3], torch.tensor([0.4 * 0.6 / 4.4, 0.4 * 0.6 / 4.2]))
+
+
+class TestRegionCatalog:
+    def test_properties(self, region_cat):
+        assert region_cat.height == region_cat.width == 12
+        assert region_cat.is_on_mask.sum() == 6
+        assert torch.all(
+            region_cat.interior_mask + region_cat.boundary_mask + region_cat.corner_mask,
+        )
+        assert not torch.any(
+            region_cat.interior_mask * region_cat.boundary_mask * region_cat.corner_mask,
+        )
+
+    def test_region_coords(self, region_cat):
+        coords = region_cat.get_region_coords()
+        assert coords.amax(dim=(0, 1))[0] < region_cat.height
+        assert coords.amax(dim=(0, 1))[1] < region_cat.width
+
+    def test_region_sizes(self, region_cat):
+        sizes = region_cat.get_region_sizes()
+        assert sizes[0].equal(
+            torch.tensor([[3.75, 3.75], [3.75, 0.5], [3.75, 3.5], [3.75, 0.5], [3.75, 3.75]])
+        )
+        assert sizes[1].equal(
+            torch.tensor([[0.5, 3.75], [0.5, 0.5], [0.5, 3.5], [0.5, 0.5], [0.5, 3.75]])
+        )
+        assert torch.all(sizes[..., 0].sum(dim=0) == region_cat.height)
+        assert torch.all(sizes[..., 1].sum(dim=1) == region_cat.width)
+
+    def test_convert_to_full(self, region_cat):
+        full_cat = region_cat.to_full_params()
+        true_locs = torch.tensor(
+            [
+                [[9.375, 5.3], [3.8, 8], [3, 0.75]],
+                [[6, 6], [10.125, 10.125], [1.875, 1.875]],
+            ]
+        )
+        assert full_cat.plocs.equal(true_locs)
+
+    def test_tile_cat_to_region_basic(self, basic_tilecat):
+        region_cat = tile_cat_to_region_cat(basic_tilecat, 0.5, discard_extra_sources=False)
+        full_cat = basic_tilecat.to_full_params()
+        assert region_cat.to_full_params().plocs.equal(full_cat.plocs)
+
+    def test_tile_cat_to_region_filtering(self):
+        d = {
+            "n_sources": torch.zeros(3, 2, 2),
+            "locs": torch.zeros(3, 2, 2, 1, 2),
+            "source_type": torch.ones((3, 2, 2, 1, 1)).bool(),
+            "galaxy_params": torch.zeros((3, 2, 2, 1, 6)),
+            "star_fluxes": torch.ones((3, 2, 2, 1, 5)) * 1000,
+            "galaxy_fluxes": torch.ones(3, 2, 2, 1, 5) * 1000,
+        }
+        # BATCH 0: top right interior, center right boundary
+        d["n_sources"][0, 0, 1] = 1
+        d["n_sources"][0, 1, 1] = 1
+        d["locs"][0, 0, 1, 0] = torch.tensor([0.5, 0.5])
+        d["locs"][0, 1, 1, 0] = torch.tensor([0.02, 0.5])
+        d["galaxy_fluxes"][0, 0, 1, 0, 2] = 5000  # keep top right
+
+        # BATCH 1: top left interior, top center boundary
+        d["n_sources"][1, 0, 0] = 1
+        d["n_sources"][1, 0, 1] = 1
+        d["locs"][1, 0, 0, 0] = torch.tensor([0.5, 0.5])
+        d["locs"][1, 0, 1, 0] = torch.tensor([0.5, 0.02])
+        d["galaxy_fluxes"][1, 0, 1, 0, 2] = 5000  # keep top center
+
+        # BATCH 2: only one source in top left
+        d["n_sources"][2, 0, 0] = 1
+        d["locs"][2, 0, 0, 0] = torch.tensor([0.5, 0.5])
+
+        tilecat = TileCatalog(4, d)
+
+        # make sure no warning when converting (since extra sources have been discarded)
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            region_cat = tile_cat_to_region_cat(tilecat, 0.5, discard_extra_sources=True)
+
+        n_sources = region_cat.n_sources
+        assert n_sources[0, 0, 2] == n_sources[1, 0, 1] == n_sources[2, 0, 0] == 1
+        assert n_sources[0].sum() == n_sources[1].sum() == n_sources[2].sum()
