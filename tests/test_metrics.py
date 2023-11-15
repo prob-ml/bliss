@@ -14,6 +14,7 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 class TestMetrics:
     def _get_sdss_data(self, cfg):
         """Loads SDSS frame and Photo Catalog."""
+        cfg = cfg.copy()
         with open_dict(cfg):
             cfg.surveys.sdss.align_to_band = 2
         sdss = instantiate(cfg.surveys.sdss, load_image_data=True)
