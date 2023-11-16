@@ -51,8 +51,8 @@ def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, 
     fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=figsize)
     axes = axes.flatten() if nrows > 1 else [axes]  # flatten
 
-    true_cat = true_tile_cat.to_full_params()
-    est_cat = est_tile_cat.to_full_params()
+    true_cat = true_tile_cat.to_full_catalog()
+    est_cat = est_tile_cat.to_full_catalog()
 
     for ax_idx, ax in enumerate(axes):
         if ax_idx >= len(img_ids):  # don't plot on this ax if there aren't enough images

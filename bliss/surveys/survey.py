@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import pytorch_lightning as pl
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 
 
 class Survey(pl.LightningDataModule, Dataset, ABC):
@@ -48,15 +48,9 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
     def image_ids(self) -> list:
         """Return a list of all image_ids."""
 
-    @property
-    @abstractmethod
-    def predict_batch(self):
-        """Return a batch of data for prediction."""
-
-    @predict_batch.setter
-    @abstractmethod
-    def predict_batch(self):
-        """Set a batch of data for prediction."""
+    def predict_dataloader(self):
+        """Return a DataLoader for prediction."""
+        return DataLoader(SurveyDataset(self), batch_size=1)
 
     def get_flux_calibrations(self):
         d = {}
@@ -65,6 +59,18 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
             avg_nelec_conv = np.squeeze(np.mean(nelec_conv_for_frame, axis=1))
             d[image_id] = avg_nelec_conv
         return d
+
+
+class SurveyDataset:
+    def __init__(self, survey):
+        self.survey = survey
+
+    def __getitem__(self, idx):
+        x = self.survey[idx]
+        return {"images": x["image"], "background": x["background"]}
+
+    def __len__(self):
+        return len(self.survey)
 
 
 class SurveyDownloader:

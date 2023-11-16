@@ -83,7 +83,7 @@ class TestDC2:
             dc2_tile["star_log_fluxes"], "h w nh nw -> 1 h w nh nw"
         )
         origin_tile = TileCatalog(4, tile_dict)
-        origin_full = origin_tile.to_full_params()
+        origin_full = origin_tile.to_full_catalog()
 
         imgs = rearrange(dc2_obj["images"], "b h w -> 1 b 1 h w")
         bgs = rearrange(dc2_obj["background"], "b h w -> 1 b 1 h w")

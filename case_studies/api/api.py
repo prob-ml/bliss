@@ -5,19 +5,16 @@ from typing import Any, Dict, Literal, Optional, Tuple, TypeAlias
 
 import hydra
 import torch
-from astropy import units as u  # noqa: WPS347
-from astropy.table import Table, hstack
-from einops import rearrange
+from astropy.table import Table
 from omegaconf import OmegaConf
-from torch import Tensor
 
-from bliss.catalog import FullCatalog, SourceType
-from bliss.conf.igs import base_config
+from bliss.catalog import FullCatalog
 from bliss.generate import generate as _generate
-from bliss.predict import predict_and_compare as _predict_and_compare
+from bliss.predict import predict as _predict
 from bliss.surveys.sdss import SDSSDownloader
 from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
+from case_studies.api.igs import base_config
 
 SurveyType: TypeAlias = Literal["decals", "hst", "dc2", "sdss"]
 
@@ -160,16 +157,7 @@ class BlissClient:
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
 
-        # `predict.predict_and_compare` isn't really the right function to call here;
-        # it doesn't simply make predictions using bliss, it also loads survey catalogs.
-        # instead, we should implement and call `predict.bulk_predict`, which would use
-        # `trainer.predict(encoder, datamodule=dataset)` to make predictions
-        est_cat, _, _, _, pred_for_image_id = _predict_and_compare(cfg)
-        est_cat_table = fullcat_to_astropy_table(est_cat, cfg.encoder.survey_bands)
-        pred_tables = {}  # indexed by image_id
-        for image_id, pred in pred_for_image_id.items():
-            pred_tables[image_id] = pred_to_astropy_table(pred, cfg.encoder.survey_bands)
-        return est_cat, est_cat_table, pred_tables
+        return _predict(cfg)
 
     def plot_predictions_in_notebook(self):
         """Plot predictions in notebook."""
@@ -221,135 +209,6 @@ class BlissClient:
             cached_data_path (str): Path to cached data.
         """
         self.base_cfg.generate.cached_data_path = cached_data_path
-
-
-def fullcat_to_astropy_table(est_cat: FullCatalog, encoder_survey_bands: Tuple[str]) -> Table:
-    required_keys = [
-        "star_fluxes",
-        "source_type",
-        "galaxy_params",
-        "galaxy_fluxes",
-    ]
-    assert all(k in est_cat.keys() for k in required_keys), "`est_cat` missing required keys"
-
-    # Convert dictionary of tensors to list of dictionaries
-    on_vals = {}
-    is_on_mask = est_cat.get_is_on_mask()
-    for k, v in est_cat.to_dict().items():
-        if k == "n_sources":
-            continue
-        if k == "galaxy_params":
-            # reshape get_is_on_mask() to have same last dimension as galaxy_params
-            galaxy_params_mask = is_on_mask.unsqueeze(-1).expand_as(v)
-            on_vals[k] = v[galaxy_params_mask].reshape(-1, v.shape[-1]).cpu()
-        else:
-            on_vals[k] = v[is_on_mask].cpu()
-    # Split to different columns for each band
-    for b, bl in enumerate(encoder_survey_bands):
-        on_vals[f"star_flux_{bl}"] = on_vals["star_fluxes"][..., b]
-        on_vals[f"galaxy_flux_{bl}"] = on_vals["galaxy_fluxes"][..., b]
-    # Remove combined flux columns
-    on_vals.pop("star_fluxes")
-    on_vals.pop("galaxy_fluxes")
-    n = is_on_mask.sum()  # number of (predicted) objects
-    rows = []
-    for i in range(n):
-        row = {}
-        for k, v in on_vals.items():
-            row[k] = v[i].cpu()
-        # Convert `source_type` to string "star" or "galaxy" labels
-        row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
-        # Force `plocs` to be "({x}, {y})" tuple strings for readability
-        row["plocs"] = str(tuple(row["plocs"].tolist()))
-        rows.append(row)
-
-    # Convert to astropy table
-    est_cat_table = Table(rows)
-    # Convert all _fluxes columns to u.Quantity
-    for bl in encoder_survey_bands:
-        est_cat_table[f"star_flux_{bl}"].unit = u.nmgy
-        est_cat_table[f"galaxy_flux_{bl}"].unit = u.nmgy
-
-    # Create inner table for galaxy_params
-    # Convert list of tensors to list of dictionaries
-    galaxy_params_names = [
-        "galaxy_disk_frac",
-        "galaxy_beta_radians",
-        "galaxy_disk_q",
-        "galaxy_a_d",
-        "galaxy_bulge_q",
-        "galaxy_a_b",
-    ]
-    galaxy_params_list = []
-    for galaxy_params in est_cat_table["galaxy_params"]:
-        galaxy_params_dic = {}
-        for i, name in enumerate(galaxy_params_names):
-            galaxy_params_dic[name] = galaxy_params[i]
-        galaxy_params_dic["galaxy_beta_radians"].unit = u.radian
-        galaxy_params_dic["galaxy_a_d"].unit = u.arcsec
-        galaxy_params_dic["galaxy_a_b"].unit = u.arcsec
-        galaxy_params_list.append(galaxy_params_dic)
-    galaxy_params_table = Table(galaxy_params_list)
-    est_cat_table.remove_column("galaxy_params")
-
-    return hstack([est_cat_table, galaxy_params_table])
-
-
-def pred_to_astropy_table(pred: Dict[str, Tensor], encoder_survey_bands: Tuple[str]) -> Table:
-    pred.pop("loc")
-
-    # extract parameters from distributions
-    dist_params = {}
-    for pred_key, pred_dist in pred.items():
-        if isinstance(pred_dist, torch.distributions.Categorical):
-            probs = rearrange(pred_dist.probs, "b nth ntw ... -> b (nth ntw) ...")
-            dist_params[f"{pred_key}_false"] = probs[..., 0]
-            dist_params[f"{pred_key}_true"] = probs[..., 1]
-        elif (  # noqa: WPS337
-            isinstance(
-                pred_dist,
-                (torch.distributions.Independent, torch.distributions.TransformedDistribution),
-            )
-        ) and isinstance(pred_dist.base_dist, torch.distributions.Normal):
-            dist_params[f"{pred_key}_mean"] = rearrange(
-                pred_dist.base_dist.mean, "b nth ntw ... -> b (nth ntw) ..."
-            )
-            dist_params[f"{pred_key}_std"] = rearrange(
-                pred_dist.base_dist.stddev, "b nth ntw ... -> b (nth ntw) ..."
-            )
-        elif isinstance(pred_dist, (torch.distributions.Normal, torch.distributions.LogNormal)):
-            dist_params[f"{pred_key}_mean"] = rearrange(
-                pred_dist.mean, "b nth ntw ... -> b (nth ntw) ..."
-            )
-            dist_params[f"{pred_key}_std"] = rearrange(
-                pred_dist.stddev, "b nth ntw ... -> b (nth ntw) ..."
-            )
-        else:
-            raise NotImplementedError(f"Unknown distribution {pred_dist}")
-
-    # convert dictionary of tensors to list of dictionaries
-    n = torch.squeeze(dist_params["on_prob_false"]).shape[0]  # number of rows
-    dist_params_list = [
-        {k: torch.squeeze(v)[i].cpu() for k, v in dist_params.items()} for i in range(n)
-    ]
-
-    pred_table = Table(dist_params_list)
-    # convert values to astropy units
-    bands = encoder_survey_bands
-    for bnd in bands:
-        pred_table[f"star_flux_{bnd}_mean"].unit = u.nmgy
-        pred_table[f"star_flux_{bnd}_std"].unit = u.nmgy
-        pred_table[f"galaxy_flux_{bnd}_mean"].unit = u.nmgy
-        pred_table[f"galaxy_flux_{bnd}_std"].unit = u.nmgy
-
-    pred_table["galsim_beta_radians_mean"].unit = u.radian
-    pred_table["galsim_beta_radians_std"].unit = u.radian
-    pred_table["galsim_a_d_mean"].unit = u.arcsec
-    pred_table["galsim_a_d_std"].unit = u.arcsec
-    pred_table["galsim_a_b_mean"].unit = u.arcsec
-    pred_table["galsim_a_b_std"].unit = u.arcsec
-
-    return pred_table
 
 
 # pragma: no cover

@@ -1,14 +1,14 @@
 from pathlib import Path
 
-import mock_tests
 import pytest
 import torch
 from astropy.table import Table
 from omegaconf import OmegaConf
 
-from bliss import api, generate, train
-from bliss.api import BlissClient
+from bliss import generate, train
 from bliss.catalog import FullCatalog, SourceType
+from case_studies.api import api, mock_tests
+from case_studies.api.api import BlissClient
 
 
 @pytest.fixture(scope="class")
@@ -232,5 +232,5 @@ class TestApi:
             "galaxy_fluxes": torch.tensor([[[0.0, 0.0, 0.0, 0.0, 0.0]]]),
         }
         cat = FullCatalog(1, 1, d)
-        est_cat_table = api.fullcat_to_astropy_table(cat, ["u", "g", "r", "i", "z"])
+        est_cat_table = cat.to_astropy_table(["u", "g", "r", "i", "z"])
         assert isinstance(est_cat_table, Table)
