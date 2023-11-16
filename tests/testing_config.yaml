@@ -16,11 +16,13 @@ simulator:
 
 cached_simulator:
     num_workers: 0
+    splits: 0:34/34:67/67:100  # train/val/test splits as percent ranges
+    batch_size: 1
 
 generate:
-    n_batches: 2
+    n_batches: 3
     batch_size: 1
-    max_images_per_file: 2
+    max_images_per_file: 1
     cached_data_path: null # use pytest tmpdir
 
 training:
@@ -44,7 +46,6 @@ training:
 predict:
     decals_frame: ${paths.decals}/336/3366m010/tractor-3366m010.fits
     device: "cpu"
-
 
 surveys:
     sdss:
