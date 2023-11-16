@@ -1,8 +1,10 @@
+import os
 import shutil
 from pathlib import Path
 
 import pytest
 
+from bliss.generate import generate
 from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
 from bliss.surveys.des import DarkEnergySurvey as DES
 from bliss.train import train
@@ -60,3 +62,15 @@ class TestTrain:
         train_decals_cfg.simulator.use_coaddition = True
         train_decals_cfg.simulator.coadd_depth = 2
         train(train_decals_cfg)
+
+    def test_train_with_cached_data(self, cfg, tmp_path):
+        the_cfg = cfg.copy()
+        the_cfg.paths.output = tmp_path
+        the_cfg.generate.cached_data_path = tmp_path
+        generate(the_cfg)
+
+        the_cfg.training.data_source = "${cached_simulator}"
+        the_cfg.cached_simulator.cached_data_path = tmp_path
+        os.chdir(tmp_path)
+        the_cfg.training.weight_save_path = str(tmp_path / "encoder.pt")
+        train(the_cfg)

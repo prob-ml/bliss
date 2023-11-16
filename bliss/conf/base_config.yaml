@@ -133,17 +133,6 @@ predict:
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/clahed_logged_20percent.pt
     device: "cuda:0"
-    crop:
-        do_crop: true
-        left_upper_corner: [160, 160]
-        width: 640
-        height: 640
-    plot:
-        show_plot: true
-        width: 1000
-        height: 1000
-        out_file_name: ${paths.output}/predict.html
-    is_simulated: false
 
 surveys:
     sdss:
@@ -157,6 +146,8 @@ surveys:
             pixel_scale: 0.396
             psf_slen: 25
         pixel_shift: 2
+        align_to_band: null  # we should set this to 2 (r-band)
+        load_image_data: false
     decals:
         _target_: bliss.surveys.decals.DarkEnergyCameraLegacySurvey
         dir_path: ${paths.decals}

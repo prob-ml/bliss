@@ -12,8 +12,6 @@ from astropy.table import Table
 from astropy.utils.data import download_file
 from astropy.wcs import WCS, FITSFixedWarning
 from numpy import ma
-from pytorch_lightning.utilities.types import EVAL_DATALOADERS
-from torch.utils.data import DataLoader
 
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
@@ -283,23 +281,6 @@ class DarkEnergyCameraLegacySurvey(Survey):
         for brickname in self.bricknames:
             target_wcs_for_brick[brickname] = self[self.idx(brickname)]["wcs"]
         return target_wcs_for_brick
-
-    @property
-    def predict_batch(self):
-        if not self._predict_batch:
-            self._predict_batch = {
-                "images": self[0]["image"],
-                "background": self[0]["background"],
-            }
-        return self._predict_batch
-
-    @predict_batch.setter
-    def predict_batch(self, value):
-        self._predict_batch = value
-
-    def predict_dataloader(self) -> EVAL_DATALOADERS:
-        assert self.predict_batch is not None, "predict_batch must be set."
-        return DataLoader([self.predict_batch], batch_size=1)
 
 
 DECaLS = DarkEnergyCameraLegacySurvey

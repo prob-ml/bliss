@@ -25,7 +25,7 @@ def augment_batch(batch):
 
 def augment_data(tile_catalog, image):
     origin_tile = TileCatalog(4, tile_catalog)
-    origin_full = origin_tile.to_full_params()
+    origin_full = origin_tile.to_full_catalog()
     aug_full, aug_image = origin_full, image
 
     rotate_list = [None, aug_rotate90, aug_rotate180, aug_rotate270]
@@ -40,7 +40,7 @@ def augment_data(tile_catalog, image):
 
     aug_image, aug_full = aug_shift(aug_full, aug_image)
     aug_tile = (
-        aug_full.to_tile_params(4, 4, filter_oob=True).get_brightest_sources_per_tile().to_dict()
+        aug_full.to_tile_catalog(4, 4, filter_oob=True).get_brightest_sources_per_tile().to_dict()
     )
     return aug_image, aug_tile
 
