@@ -14,7 +14,7 @@ from torch import Tensor
 from bliss.catalog import FullCatalog, SourceType
 from bliss.conf.igs import base_config
 from bliss.generate import generate as _generate
-from bliss.predict import predict as _predict
+from bliss.predict import predict_and_compare as _predict_and_compare
 from bliss.surveys.sdss import SDSSDownloader
 from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
@@ -159,7 +159,12 @@ class BlissClient:
         cfg.predict.dataset = "${surveys." + survey + "}"
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
-        est_cat, _, _, _, pred_for_image_id = _predict(cfg)
+
+        # `predict.predict_and_compare` isn't really the right function to call here;
+        # it doesn't simply make predictions using bliss, it also loads survey catalogs.
+        # instead, we should implement and call `predict.bulk_predict`, which would use
+        # `trainer.predict(encoder, datamodule=dataset)` to make predictions
+        est_cat, _, _, _, pred_for_image_id = _predict_and_compare(cfg)
         est_cat_table = fullcat_to_astropy_table(est_cat, cfg.encoder.survey_bands)
         pred_tables = {}  # indexed by image_id
         for image_id, pred in pred_for_image_id.items():
