@@ -11,11 +11,6 @@ def crop_to_mult16(x):
     return x[:, :height, :width]
 
 
-def crop_image(x, bottom_y, top_y, left_x, right_x):
-    """Crop the image to a subregion for prediction."""
-    return x[:, bottom_y:top_y, left_x:right_x]
-
-
 def align(img, wcs_list, ref_band, ref_depth=0):
     """Reproject images based on some reference WCS for pixel alignment."""
     reproj_d = {}
