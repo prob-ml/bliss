@@ -9,12 +9,12 @@ from astropy.table import Table
 from omegaconf import OmegaConf
 
 from bliss.catalog import FullCatalog
-from bliss.conf.igs import base_config
 from bliss.generate import generate as _generate
 from bliss.predict import predict as _predict
 from bliss.surveys.sdss import SDSSDownloader
 from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
+from case_studies.api.igs import base_config
 
 SurveyType: TypeAlias = Literal["decals", "hst", "dc2", "sdss"]
 
