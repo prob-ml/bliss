@@ -10,8 +10,6 @@ hydra:
     run:
         dir: .
 
-mode: train
-
 paths:
     root: ${oc.env:BLISS_HOME}
     data: ${paths.root}/data
@@ -93,47 +91,6 @@ encoder:
     compile_model: false  # if true, compile model for potential performance
     two_layers: false
 
-generate:
-    n_workers_per_process: 0
-    n_batches: ${simulator.n_batches}
-    batch_size: ${simulator.prior.batch_size}
-    max_images_per_file: 4096
-    cached_data_path: ${paths.data}/cached_dataset
-    file_prefix: dataset
-
-training:
-    name: null
-    version: null
-    n_epochs: 50
-    save_top_k: 1
-    enable_early_stopping: true
-    patience: 10
-    pretrained_weights: null
-    trainer:
-        _target_: pytorch_lightning.Trainer
-        logger: true
-        enable_checkpointing: true
-        profiler: null
-        reload_dataloaders_every_n_epochs: 0
-        check_val_every_n_epoch: 1
-        log_every_n_steps: 10  # corresponds to n_batches
-        max_epochs: ${training.n_epochs}
-        min_epochs: 1
-        accelerator: "gpu"
-        devices: 1
-    testing: true
-    seed: 42
-    weight_save_path: null
-    data_source: ${cached_simulator}
-    encoder_target: ${encoder}  # whether to use normal encoder or RegionEncoder
-
-predict:
-    dataset: ${surveys.sdss}
-    trainer: ${training.trainer}
-    encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/clahed_logged_20percent.pt
-    device: "cuda:0"
-
 surveys:
     sdss:
         _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
@@ -186,3 +143,52 @@ surveys:
         image_lim: [4000, 4000]
         use_deconv_channel: ${encoder.image_normalizer.use_deconv_channel}
         deconv_path: ${paths.dc2}/coadd_deconv_image
+
+
+#######################################################################
+# things above matter only if they are referenced below
+
+mode: train
+
+generate:
+    n_workers_per_process: 0
+    n_batches: ${simulator.n_batches}
+    batch_size: ${simulator.prior.batch_size}
+    max_images_per_file: 4096
+    cached_data_path: ${paths.data}/cached_dataset
+    file_prefix: dataset
+    simulator: ${simulator}
+
+train:
+    name: null
+    version: null
+    n_epochs: 50
+    save_top_k: 1
+    enable_early_stopping: true
+    patience: 10
+    pretrained_weights: null
+    trainer:
+        _target_: pytorch_lightning.Trainer
+        logger: true
+        enable_checkpointing: true
+        profiler: null
+        reload_dataloaders_every_n_epochs: 0
+        check_val_every_n_epoch: 1
+        log_every_n_steps: 10  # corresponds to n_batches
+        max_epochs: ${train.n_epochs}
+        min_epochs: 1
+        accelerator: "gpu"
+        devices: 1
+    testing: true
+    seed: 42
+    weight_save_path: null
+    data_source: ${cached_simulator}
+    encoder: ${encoder}
+    output_dir: ${paths.output}
+
+predict:
+    dataset: ${surveys.sdss}
+    trainer: ${train.trainer}
+    encoder: ${encoder}
+    weight_save_path: ${paths.pretrained_models}/clahed_logged_20percent.pt
+    device: "cuda:0"

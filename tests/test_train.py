@@ -25,7 +25,7 @@ def clear_checkpoints(cfg):
 class TestTrain:
     def test_train_sdss(self, cfg):
         train_sdss_cfg = cfg.copy()
-        train(train_sdss_cfg)
+        train(train_sdss_cfg.train)
 
     def test_train_des(self, cfg):
         train_des_cfg = cfg.copy()
@@ -39,9 +39,9 @@ class TestTrain:
             DES.BANDS.index("z"),
         ]
         train_des_cfg.encoder.survey_bands = DES.BANDS
-        train_des_cfg.training.pretrained_weights = None
-        train_des_cfg.training.testing = True
-        train(train_des_cfg)
+        train_des_cfg.train.pretrained_weights = None
+        train_des_cfg.train.testing = True
+        train(train_des_cfg.train)
 
     def test_train_decals(self, cfg):
         train_decals_cfg = cfg.copy()
@@ -56,21 +56,21 @@ class TestTrain:
             DECaLS.BANDS.index("z"),
         ]
         train_decals_cfg.encoder.survey_bands = DECaLS.BANDS
-        train_decals_cfg.training.pretrained_weights = None
-        train_decals_cfg.training.testing = True
+        train_decals_cfg.train.pretrained_weights = None
+        train_decals_cfg.train.testing = True
 
         train_decals_cfg.simulator.use_coaddition = True
         train_decals_cfg.simulator.coadd_depth = 2
-        train(train_decals_cfg)
+        train(train_decals_cfg.train)
 
     def test_train_with_cached_data(self, cfg, tmp_path):
         the_cfg = cfg.copy()
         the_cfg.paths.output = tmp_path
         the_cfg.generate.cached_data_path = tmp_path
-        generate(the_cfg)
+        generate(the_cfg.generate)
 
-        the_cfg.training.data_source = "${cached_simulator}"
+        the_cfg.train.data_source = "${cached_simulator}"
         the_cfg.cached_simulator.cached_data_path = tmp_path
         os.chdir(tmp_path)
-        the_cfg.training.weight_save_path = str(tmp_path / "encoder.pt")
-        train(the_cfg)
+        the_cfg.train.weight_save_path = str(tmp_path / "encoder.pt")
+        train(the_cfg.train)

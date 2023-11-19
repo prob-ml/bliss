@@ -23,7 +23,7 @@ def bliss_client(cfg, tmpdir_factory):
     mock_tests.MockSDSSDownloader(image_ids, client.cwd + "/data/sdss")
     # Hack to apply select conftest.py overrides, since client.base_cfg should be private
     overrides = {
-        "training.trainer.accelerator": cfg.training.trainer.accelerator,
+        "train.trainer.accelerator": cfg.train.trainer.accelerator,
         "predict.device": cfg.predict.device,
     }
     for k, v in overrides.items():
@@ -85,7 +85,7 @@ class TestApi:
 
     def test_train_on_cached_data(self, bliss_client):
         cached_simulator_cfg = {"cached_data_path": "data/tests/multiband_data"}
-        training_cfg = {
+        train_cfg = {
             "n_epochs": 1,
             "trainer": {"check_val_every_n_epoch": 1, "log_every_n_steps": 1},
         }
@@ -95,7 +95,7 @@ class TestApi:
             splits="0:50/50:100/50:100",
             batch_size=8,
             cached_simulator=cached_simulator_cfg,
-            training=training_cfg,
+            training=train_cfg,
         )
 
         assert Path(f"{bliss_client.base_cfg.paths.output}/{weight_save_path}").exists()

@@ -17,9 +17,9 @@ simulator:
     background:
         _target_: bliss.simulator.background.SimulatedSDSSBackground
 
-training:
+train:
     # name: "encoder"
     # version: "sdss_one_band"
     # pretrained_weights: ${paths.pretrained_models}/crowded_field.pt
-    weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
+    weight_save_path: ${paths.output}/${train.name}/${train.version}.pt
     seed: 42
