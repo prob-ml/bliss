@@ -19,13 +19,29 @@ cached_simulator:
     splits: 0:34/34:67/67:100  # train/val/test splits as percent ranges
     batch_size: 1
 
+surveys:
+    sdss:
+        fields:  # list of dictionaries, each with run, camcol, and list of fields
+            - run: 94
+              camcol: 1
+              fields: [12]
+        load_image_data: true
+    dc2:
+        data_dir: ${paths.data}/tests/dc2/dc2_multiband/
+        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100000.pkl
+        n_split: 5
+        image_lim: [800, 800]
+        deconv_path: ${paths.data}/tests/dc2/coadd_deconv_image
+
+#########################################
+
 generate:
     n_batches: 3
     batch_size: 1
     max_images_per_file: 1
     cached_data_path: null # use pytest tmpdir
 
-training:
+train:
     name: "pytest_encoder"
     version: "version0"
     n_epochs: 1
@@ -46,17 +62,3 @@ training:
 predict:
     decals_frame: ${paths.decals}/336/3366m010/tractor-3366m010.fits
     device: "cpu"
-
-surveys:
-    sdss:
-        fields:  # list of dictionaries, each with run, camcol, and list of fields
-            - run: 94
-              camcol: 1
-              fields: [12]
-        load_image_data: true
-    dc2:
-        data_dir: ${paths.data}/tests/dc2/dc2_multiband/
-        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100000.pkl
-        n_split: 5
-        image_lim: [800, 800]
-        deconv_path: ${paths.data}/tests/dc2/coadd_deconv_image

@@ -29,11 +29,11 @@ def main(cfg):
         )
 
     if cfg.mode == "generate":
-        generate(cfg)
+        generate(cfg.generate)
     elif cfg.mode == "train":
-        train(cfg)
+        train(cfg.train)
     elif cfg.mode == "predict":
-        predict(cfg)
+        predict(cfg.predict)
     else:
         raise KeyError
 
