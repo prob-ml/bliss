@@ -51,7 +51,7 @@ class BlissClient:
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
 
-        _generate(cfg)
+        _generate(cfg.generate)
 
     def load_pretrained_weights_for_survey(
         self, survey: SurveyType, filename: str, request_headers: Optional[Dict[str, str]] = None
@@ -84,11 +84,11 @@ class BlissClient:
         """
         cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
-        cfg.training.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
+        cfg.train.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
 
-        _train(cfg)
+        _train(cfg.train)
 
     def train_on_cached_data(
         self,
@@ -110,18 +110,18 @@ class BlissClient:
         """
         cfg = OmegaConf.create(self.base_cfg)
         # apply overrides
-        cfg.training.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
+        cfg.train.weight_save_path = cfg.paths.output + f"/{weight_save_path}"
         cfg.cached_simulator.splits = splits
         cfg.cached_simulator.batch_size = batch_size
         if pretrained_weights_filename is not None:
-            cfg.training.pretrained_weights = (
+            cfg.train.pretrained_weights = (
                 cfg.paths.pretrained_models + f"/{pretrained_weights_filename}"
             )
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
-        cfg.training.data_source = cfg.cached_simulator
+        cfg.train.data_source = cfg.cached_simulator
 
-        _train(cfg)
+        _train(cfg.train)
 
     def load_survey(self, survey: SurveyType, run, camcol, field, download_dir: str):
         SDSSDownloader([(run, camcol, field)], self.cwd + f"/{download_dir}").download_all()
@@ -157,7 +157,7 @@ class BlissClient:
         for k, v in kwargs.items():
             OmegaConf.update(cfg, k, v)
 
-        return _predict(cfg)
+        return _predict(cfg.predict)
 
     def plot_predictions_in_notebook(self):
         """Plot predictions in notebook."""
@@ -240,7 +240,7 @@ def main(cfg):
             **cfg,
         )
     elif cfg.mode == "train":
-        bliss_client.train(weight_save_path=cfg.training.weight_save_path, **cfg)
+        bliss_client.train(weight_save_path=cfg.train.weight_save_path, **cfg)
     elif cfg.mode == "predict":
         # survey="sdss" is hack since OmegaConf.update overwrites predict.dataset
         bliss_client.predict(survey="sdss", weight_save_path=cfg.predict.weight_save_path, **cfg)

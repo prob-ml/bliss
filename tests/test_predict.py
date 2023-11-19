@@ -32,6 +32,9 @@ class TestPredict:
             {"run": 94, "camcol": 1, "fields": [12]},
             {"run": 3635, "camcol": 1, "fields": [169]},
         ]
-        astropy_cats = predict(the_cfg)
+        bliss_cats = predict(the_cfg.predict)
+        assert len(bliss_cats) == len(the_cfg.surveys.sdss.fields)
 
+        bands = cfg.encoder.survey_bands
+        astropy_cats = [c.to_astropy_table(bands) for c in bliss_cats.values()]
         assert len(astropy_cats) == len(the_cfg.surveys.sdss.fields)

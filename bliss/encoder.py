@@ -264,7 +264,7 @@ class Encoder(pl.LightningModule):
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
         target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
-        truth_callback = lambda _: target_cat1  # noqa: E731
+        truth_callback = lambda _: target_cat1
         pred = self.infer(batch, truth_callback)
 
         border_mask = torch.ones_like(target_cat.n_sources)
@@ -281,17 +281,20 @@ class Encoder(pl.LightningModule):
             target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
             second_loss_dict = pred["second"].compute_nll(target_cat2, border_mask)
 
-        # log layer1 losses, divide by 2 because we make two predictions for each tile
+        loss_dict = {}
+        # log layer1 losses
         for k in ("loss", "counter_loss"):
+            # divide by 2 because we make two predictions for each tile
             loss_l1 = (marginal_loss_dict[k] + white_loss_dict[k] + black_loss_dict[k]) / 2
             loss_l1 /= border_mask.sum()  # per tile loss
             self.log(f"{logging_name}-layer1/_{k}", loss_l1, batch_size=batch_size)
+            loss_dict[k] = loss_l1
 
-        # log layer2 losses
-        if self.two_layers:
-            for k in ("loss", "counter_loss"):
+            # log layer2 losses
+            if self.two_layers:
                 loss_l2 = second_loss_dict[k] / border_mask.sum()
                 self.log(f"{logging_name}-layer2/_{k}", loss_l2, batch_size=batch_size)
+                loss_dict[k] += loss_l2
 
         # log metrics
         assert log_metrics or not plot_images, "plot_images requires log_metrics"
@@ -303,13 +306,7 @@ class Encoder(pl.LightningModule):
                 target_cats, pred, logging_name, batch["images"], plot_images=plot_images
             )
 
-        loss = marginal_loss_dict["loss"]
-        loss += white_loss_dict["loss"] + black_loss_dict["loss"]
-        loss /= 2
-        if self.two_layers:
-            loss += second_loss_dict["loss"]
-        loss /= border_mask.sum()
-        return loss
+        return loss_dict["loss"]
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""

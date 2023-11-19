@@ -25,7 +25,7 @@ encoder:
     image_normalizer:
         z_score: false
 
-training:
+train:
     name: "pytest_encoder"
     version: "version0"
     n_epochs: 1

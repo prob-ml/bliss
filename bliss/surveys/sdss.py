@@ -58,24 +58,22 @@ class SloanDigitalSkySurvey(Survey):
         dir_path="data/sdss",
         load_image_data: bool = False,
         align_to_band=None,
-        crop_for_testing=False,
+        crop_config=None,
     ):
         super().__init__()
 
         self.sdss_path = Path(dir_path)
-
-        self.load_image_data = load_image_data
-        self.align_to_band = align_to_band
-        self.crop_for_testing = crop_for_testing
-
-        self.rcfgcs = []
         self.sdss_fields = fields
         self.bands = tuple(range(len(self.BANDS)))
         self.n_bands = len(self.BANDS)
         self.pixel_shift = pixel_shift
+        self.load_image_data = load_image_data
+        self.align_to_band = align_to_band
+        self.crop_config = crop_config
 
         num_frames = sum(len(rcf_conf["fields"]) for rcf_conf in fields)
         self.items = [None for _ in range(num_frames)]
+        self.rcfgcs = []
 
         self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
 
@@ -85,6 +83,7 @@ class SloanDigitalSkySurvey(Survey):
 
     def prepare_data(self):
         self.downloader.download_pfs()
+
         for rcf_conf in self.sdss_fields:
             run, camcol, fields = rcf_conf["run"], rcf_conf["camcol"], rcf_conf["fields"]
 
@@ -135,6 +134,9 @@ class SloanDigitalSkySurvey(Survey):
                     continue
                 if self.align_to_band is not None:
                     item[k] = align(item[k], wcs_list=item["wcs"], ref_band=self.align_to_band)
+                if self.crop_config:
+                    r1, r2, c1, c2 = self.crop_config
+                    item[k] = item[k][:, r1:r2, c1:c2]
                 item[k] = self._crop_image(item[k])
             self.items[idx] = item
         return self.items[idx]

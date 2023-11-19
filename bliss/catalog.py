@@ -324,17 +324,8 @@ class TileCatalog(UserDict):
 
         return TileCatalog(self.tile_slen, d)
 
-    # endregion
-
     def __repr__(self):
-        """A computationally efficient representation of a TileCatalog.
-        By defining this method, we no longer get warnings from the debugger that says
-        'pydevd warning: Computing repr of self (TileCatalog) was slow'.
-
-        Returns:
-            string: a representation of a tile catalog
-        """
-        return f"TileCatalog({self.batch_size}, {self.n_tiles_h}, {self.n_tiles_w})"
+        return f"TileCatalog({self.batch_size} x {self.n_tiles_h} x {self.n_tiles_w})"
 
 
 class FullCatalog(UserDict):
@@ -342,7 +333,10 @@ class FullCatalog(UserDict):
 
     @staticmethod
     def plocs_from_ra_dec(ras, decs, wcs: WCS):
-        """Converts RA/DEC coordinates into pixel coordinates.
+        """Converts RA/DEC coordinates into BLISS's pixel coordinates.
+            BLISS pixel coordinates have (0, 0) as the lower-left corner, whereas standard pixel
+            coordinates begin at (-0.5, -0.5). BLISS pixel coordinates are in row-column order,
+            whereas standard pixel coordinates are in column-row order.
 
         Args:
             ras (Tensor): (b, n) tensor of RA coordinates in degrees.
@@ -505,6 +499,8 @@ class FullCatalog(UserDict):
             ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
                 `ignore_extra_sources` is False.
         """
+        # TODO: a FullCatalog only needs to "know" its height and width to convert itself to a
+        # TileCatalog. So those parameters should be passed on conversion, not initialization.
         tile_coords = torch.div(self.plocs, tile_slen, rounding_mode="trunc").to(torch.int)
         n_tiles_h = math.ceil(self.height / tile_slen)
         n_tiles_w = math.ceil(self.width / tile_slen)

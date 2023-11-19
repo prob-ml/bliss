@@ -21,28 +21,28 @@ FileDatum = TypedDict(
 )
 
 
-def generate(cfg: DictConfig):
-    max_images_per_file = cfg.generate.max_images_per_file
-    cached_data_path = cfg.generate.cached_data_path
-    n_workers_per_process = cfg.generate.n_workers_per_process
+def generate(gen_cfg: DictConfig):
+    max_images_per_file = gen_cfg.max_images_per_file
+    cached_data_path = gen_cfg.cached_data_path
+    n_workers_per_process = gen_cfg.n_workers_per_process
 
     # largest `batch_size` multiple <= `max_images_per_file`
-    bs = cfg.generate.batch_size
+    bs = gen_cfg.batch_size
     images_per_file = (max_images_per_file // bs) * bs
     assert images_per_file >= bs, "max_images_per_file too small"
 
     # number of files needed to store >= `n_batches` * `batch_size` images
     # in <= `images_per_file`-image files
-    n_files = -(cfg.generate.n_batches * bs // -images_per_file)  # ceil division
+    n_files = -(gen_cfg.n_batches * bs // -images_per_file)  # ceil division
 
     # note: this is technically "n_files for this process"
-    process_index = cfg.generate.get("process_index", 0)
+    process_index = gen_cfg.get("process_index", 0)
     files_start_idx = process_index * n_files
 
     # use SimulatedDataset to generate data in minibatches iteratively,
     # then concatenate before caching to disk via pickle
     simulator = instantiate(
-        cfg.simulator,
+        gen_cfg.simulator,
         num_workers=n_workers_per_process,
         prior={"batch_size": bs},
     )
@@ -54,8 +54,8 @@ def generate(cfg: DictConfig):
     print("Data will be saved to {}".format(cached_data_path))  # noqa: WPS421
 
     # Save Hydra config (used to generate data) to cached_data_path
-    with open(f"{cfg.generate.cached_data_path}/hparams.yaml", "w", encoding="utf-8") as f:
-        OmegaConf.save(cfg, f)
+    with open(f"{gen_cfg.cached_data_path}/hparams.yaml", "w", encoding="utf-8") as f:
+        OmegaConf.save(gen_cfg, f)
 
     # assume overwriting any existing cached image files
     file_idxs = range(files_start_idx, files_start_idx + n_files)
@@ -64,7 +64,7 @@ def generate(cfg: DictConfig):
             images_per_file // bs, simulated_dataset, "Simulating images in batches for file"
         )
         file_data = itemize_data(batch_data)
-        with open(f"{cached_data_path}/{cfg.generate.file_prefix}_{file_idx}.pt", "wb") as f:
+        with open(f"{cached_data_path}/{gen_cfg.file_prefix}_{file_idx}.pt", "wb") as f:
             torch.save(file_data, f)
 
 
