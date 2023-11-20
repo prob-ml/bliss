@@ -120,9 +120,6 @@ class TileCatalog(UserDict):
     def device(self):
         return self.locs.device
 
-    # endregion
-
-    # region Functions
     def to(self, device):
         out = {}
         for k, v in self.to_dict().items():
