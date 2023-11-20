@@ -10,18 +10,18 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.catalog import TileCatalog
-from bliss.convnet import CatalogNet, ContextNet, FeaturesNet
-from bliss.data_augmentation import augment_batch
-from bliss.image_normalizer import ImageNormalizer
-from bliss.metrics import BlissMetrics, MetricsMode
-from bliss.plotting import plot_detections
-from bliss.unconstrained_dists import (
+from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
+from bliss.encoder.data_augmentation import augment_batch
+from bliss.encoder.image_normalizer import ImageNormalizer
+from bliss.encoder.metrics import BlissMetrics, MetricsMode
+from bliss.encoder.plotting import plot_detections
+from bliss.encoder.unconstrained_dists import (
     UnconstrainedBernoulli,
     UnconstrainedLogitNormal,
     UnconstrainedLogNormal,
     UnconstrainedTDBN,
 )
-from bliss.variational_layer import VariationalLayer
+from bliss.encoder.variational_layer import VariationalLayer
 
 
 class Encoder(pl.LightningModule):

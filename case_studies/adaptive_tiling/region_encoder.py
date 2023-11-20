@@ -9,11 +9,11 @@ from torch import Tensor
 from torch.distributions import Distribution, TransformedDistribution
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
-from bliss.encoder import Encoder
-from bliss.image_normalizer import ImageNormalizer
-from bliss.metrics import BlissMetrics, MetricsMode
-from bliss.plotting import plot_detections
-from bliss.unconstrained_dists import UnconstrainedBernoulli
+from bliss.encoder.encoder import Encoder
+from bliss.encoder.image_normalizer import ImageNormalizer
+from bliss.encoder.metrics import BlissMetrics, MetricsMode
+from bliss.encoder.plotting import plot_detections
+from bliss.encoder.unconstrained_dists import UnconstrainedBernoulli
 from case_studies.adaptive_tiling.region_catalog import (
     RegionCatalog,
     RegionType,

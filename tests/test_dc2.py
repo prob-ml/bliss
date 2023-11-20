@@ -3,7 +3,13 @@ from einops import rearrange
 from hydra.utils import instantiate
 
 from bliss.catalog import TileCatalog
-from bliss.data_augmentation import aug_rotate90, aug_rotate180, aug_rotate270, aug_shift, aug_vflip
+from bliss.encoder.data_augmentation import (
+    aug_rotate90,
+    aug_rotate180,
+    aug_rotate270,
+    aug_shift,
+    aug_vflip,
+)
 from bliss.train import train
 
 
