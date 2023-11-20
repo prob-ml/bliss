@@ -65,7 +65,7 @@ cached_simulator:
     file_prefix: ${generate.file_prefix}
 
 encoder:
-    _target_: bliss.encoder.Encoder
+    _target_: bliss.encoder.encoder.Encoder
     bands: [0, 1, 2, 3, 4]
     survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: ${simulator.prior.tile_slen}
@@ -78,7 +78,7 @@ encoder:
         milestones: [32]
         gamma: 0.1
     image_normalizer:
-        _target_: bliss.image_normalizer.ImageNormalizer
+        _target_: bliss.encoder.image_normalizer.ImageNormalizer
         bands: ${encoder.bands}
         include_original: false
         use_deconv_channel: false

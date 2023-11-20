@@ -5,7 +5,7 @@ from hydra.utils import instantiate
 from omegaconf import open_dict
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.metrics import BlissMetrics, MetricsMode, three_way_matching
+from bliss.encoder.metrics import BlissMetrics, MetricsMode, three_way_matching
 from bliss.surveys.decals import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS

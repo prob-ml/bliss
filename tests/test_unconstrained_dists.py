@@ -1,7 +1,7 @@
 import torch
 from torch.distributions import Normal
 
-from bliss.unconstrained_dists import TruncatedDiagonalMVN
+from bliss.encoder.unconstrained_dists import TruncatedDiagonalMVN
 
 
 class TestUnconstrainedDists:
