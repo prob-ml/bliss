@@ -4,10 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from bliss.generate import generate
+from bliss.main import generate, train
 from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
 from bliss.surveys.des import DarkEnergySurvey as DES
-from bliss.train import train
 
 
 @pytest.fixture(autouse=True)

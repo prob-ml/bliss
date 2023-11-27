@@ -1,6 +1,6 @@
 import os
 import warnings
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
 import pytorch_lightning as pl
@@ -12,7 +12,6 @@ from tqdm import tqdm
 
 from bliss.align import align
 from bliss.catalog import TileCatalog
-from bliss.generate import FileDatum
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
@@ -225,6 +224,18 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
+
+
+FileDatum = TypedDict(
+    "FileDatum",
+    {
+        "tile_catalog": TileCatalog,
+        "images": torch.Tensor,
+        "background": torch.Tensor,
+        "deconvolution": torch.Tensor,
+        "psf_params": torch.Tensor,
+    },
+)
 
 
 class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
