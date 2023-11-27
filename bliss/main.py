@@ -155,7 +155,7 @@ def train(train_cfg: DictConfig):  # pylint: disable=too-many-branches, too-many
             save_top_k=train_cfg.save_top_k,
             save_weights_only=True,
             verbose=True,
-            monitor="val-layer1/_loss",
+            monitor="val/_loss",
             mode="min",
             save_on_train_epoch_end=False,
             auto_insert_metric_name=False,
@@ -164,9 +164,7 @@ def train(train_cfg: DictConfig):  # pylint: disable=too-many-branches, too-many
 
     # setup early stopping
     if train_cfg.enable_early_stopping:
-        early_stopping = EarlyStopping(
-            monitor="val-layer1/_loss", mode="min", patience=train_cfg.patience
-        )
+        early_stopping = EarlyStopping(monitor="val/_loss", mode="min", patience=train_cfg.patience)
         callbacks.append(early_stopping)
 
     trainer = instantiate(train_cfg.trainer, logger=logger, profiler=profiler, callbacks=callbacks)

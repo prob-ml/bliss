@@ -265,14 +265,14 @@ class Encoder(pl.LightningModule):
             # divide by 2 because we make two predictions for each tile
             loss_l1 = (marginal_loss_dict[k] + white_loss_dict[k] + black_loss_dict[k]) / 2
             loss_l1 /= border_mask.sum()  # per tile loss
-            self.log(f"{logging_name}/_{k}", loss_l1, batch_size=batch_size)
             loss_dict[k] = loss_l1
 
             # log layer2 losses
             if self.two_layers:
                 loss_l2 = second_loss_dict[k] / two_mask.sum()
-                self.log(f"{logging_name}-layer2/_{k}", loss_l2, batch_size=batch_size)
                 loss_dict[k] += loss_l2
+
+            self.log(f"{logging_name}/_{k}", loss_l1, batch_size=batch_size)
 
         # log metrics
         assert log_metrics or not plot_images, "plot_images requires log_metrics"
