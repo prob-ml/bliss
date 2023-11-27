@@ -5,8 +5,8 @@ import torch
 from astropy.table import Table
 from omegaconf import OmegaConf
 
-from bliss import generate, train
 from bliss.catalog import FullCatalog, SourceType
+from bliss.main import generate, train
 from case_studies.api import api, mock_tests
 from case_studies.api.api import BlissClient
 
@@ -77,7 +77,7 @@ class TestApi:
     def test_train(self, bliss_client, monkeypatch):
         monkeypatch.setattr(train, "instantiate", mock_tests.mock_trainer)
         monkeypatch.setattr(train, "setup_checkpoint_callback", mock_tests.mock_checkpoint_callback)
-        bliss_client.train("test_train", training={"n_epochs": 1})
+        bliss_client.train("test_train")
 
         model_path = f"{bliss_client.base_cfg.paths.output}/test_train"
         assert Path(model_path).exists()
@@ -86,7 +86,6 @@ class TestApi:
     def test_train_on_cached_data(self, bliss_client):
         cached_simulator_cfg = {"cached_data_path": "data/tests/multiband_data"}
         train_cfg = {
-            "n_epochs": 1,
             "trainer": {"check_val_every_n_epoch": 1, "log_every_n_steps": 1},
         }
         weight_save_path = "tests/test_model.pt"

@@ -10,7 +10,7 @@ from bliss.encoder.data_augmentation import (
     aug_shift,
     aug_vflip,
 )
-from bliss.train import train
+from bliss.main import train
 
 
 class TestDC2:

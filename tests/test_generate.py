@@ -2,7 +2,7 @@ import os
 
 import torch
 
-from bliss.generate import generate
+from bliss.main import generate
 
 
 class TestGenerate:

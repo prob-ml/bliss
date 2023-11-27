@@ -9,10 +9,10 @@ from astropy.table import Table
 from omegaconf import OmegaConf
 
 from bliss.catalog import FullCatalog
-from bliss.generate import generate as _generate
-from bliss.predict import predict as _predict
+from bliss.main import generate as _generate
+from bliss.main import predict as _predict
+from bliss.main import train as _train
 from bliss.surveys.sdss import SDSSDownloader
-from bliss.train import train as _train
 from bliss.utils.download_utils import download_git_lfs_file
 from case_studies.api.igs import base_config
 

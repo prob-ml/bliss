@@ -1,5 +1,3 @@
-ignore:
-  - "bliss/main.py" # don't need to test hydra CLI wrapper
 coverage:
   status:
     project:

@@ -45,6 +45,6 @@ train:
     name: "encoder"
     version: "sdss"
     pretrained_weights: ${paths.pretrained_models}/sdss.pt
-    weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
+    weight_save_path: ${paths.output}/${train.name}/${train.version}.pt
     seed: 42
     use_cached_simulator: true
