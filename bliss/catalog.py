@@ -43,7 +43,6 @@ class TileCatalog(UserDict):
         "loc_sd",
     }
 
-    # region Init+Accessors
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.tile_slen = tile_slen
         d = copy(d)  # shallow copy, so we don't mutate the argument
@@ -73,9 +72,6 @@ class TileCatalog(UserDict):
         assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
         assert x.device == self.device
 
-    # endregion
-
-    # region Properties
     @property
     def height(self) -> int:
         return self.n_tiles_h * self.tile_slen
@@ -319,6 +315,35 @@ class TileCatalog(UserDict):
             else:
                 d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
 
+        return TileCatalog(self.tile_slen, d)
+
+    def union(self, other: "TileCatalog") -> "TileCatalog":
+        """Returns a new TileCatalog containing the union of the sources in self and other.
+
+        Args:
+            other: Another TileCatalog.
+
+        Returns:
+            A new TileCatalog containing the union of the sources in self and other.
+        """
+        assert self.tile_slen == other.tile_slen
+        assert self.batch_size == other.batch_size
+        assert self.n_tiles_h == other.n_tiles_h
+        assert self.n_tiles_w == other.n_tiles_w
+
+        # if not, we could store is_on_mask and derive n_sources by summing is_on_mask,
+        # rather than storing n_sources and deriving is_on_mask by assuming sorted sources
+        assert self.max_sources == other.max_sources == 1
+
+        d = {}
+        ns11 = rearrange(self.n_sources, "b ht wt -> b ht wt 1 1")
+        for k, v in self.to_dict().items():
+            if k == "n_sources":
+                d[k] = v + other[k]
+            else:
+                d1 = torch.cat((v, other[k]), dim=-2)
+                d2 = torch.cat((other[k], v), dim=-2)
+                d[k] = torch.where(ns11 > 0, d1, d2)
         return TileCatalog(self.tile_slen, d)
 
     def __repr__(self):

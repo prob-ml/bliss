@@ -44,7 +44,6 @@ generate:
 train:
     name: "pytest_encoder"
     version: "version0"
-    n_epochs: 1
     enable_early_stopping: true
     seed: 42
     weight_save_path: null
@@ -56,6 +55,7 @@ train:
         log_every_n_steps: 1
         accelerator: "cpu"
         devices: 1
+        max_epochs: 1
     testing: true
     data_source: ${simulator}
 

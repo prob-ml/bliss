@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from bliss.predict import predict
+from bliss.main import predict
 
 
 @pytest.fixture(autouse=True)

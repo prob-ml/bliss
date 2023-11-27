@@ -13,5 +13,5 @@ encoder:
     image_normalizer:
         use_deconv_channel: false
         concat_psf_params: false
-        z-score: false
+        use_clahe: false
     bands: [2]
