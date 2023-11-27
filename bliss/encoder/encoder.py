@@ -101,7 +101,7 @@ class Encoder(pl.LightningModule):
 
         # metrics
         self.metrics = BlissMetrics(
-            mode=MetricsMode.TILE, slack=slack, survey_bands=self.survey_bands
+            mode=MetricsMode.FULL, slack=slack, survey_bands=self.survey_bands
         )
 
     @property
@@ -212,17 +212,11 @@ class Encoder(pl.LightningModule):
         # TODO: sample second layer too and merge catalogs if two_layers is true
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
-    def log_metrics(self, target_cats, pred, logging_name, images, plot_images):
-        batch_size = target_cats["layer1"].n_sources.size(0)
-        target_cat1_cropped = target_cats["layer1"].symmetric_crop(self.tiles_to_crop)
+    def log_metrics(self, target_cat, pred, logging_name, images, plot_images):
+        batch_size = target_cat.n_sources.size(0)
 
         # marginal metrics, layer 1
         est_cat_m = pred["marginal"].sample(use_mode=True)
-        ecm_cropped = est_cat_m.symmetric_crop(self.tiles_to_crop)
-        metrics_marginal = self.metrics(target_cat1_cropped, ecm_cropped)
-        for k in ("f1", "detection_precision", "detection_recall"):
-            metric_name = "{}-layer1/{}-marginal".format(logging_name, k)
-            self.log(metric_name, metrics_marginal[k], batch_size=batch_size)
 
         # joint metrics, layer 1
         pred_white_notruth = self.infer_conditional(
@@ -232,24 +226,24 @@ class Encoder(pl.LightningModule):
         est_cat_joint = self.interleave_catalogs(
             est_cat_m, est_cat_white, pred["white_history_mask"]
         )
-        ecj_cropped = est_cat_joint.symmetric_crop(self.tiles_to_crop)
-        metrics_joint = self.metrics(target_cat1_cropped, ecj_cropped)
-        for k in ("f1", "detection_precision", "detection_recall"):
-            metric_name = "{}-layer1/{}-joint".format(logging_name, k)
-            self.log(metric_name, metrics_joint[k], batch_size=batch_size)
 
         if self.two_layers:
-            target_cat2_cropped = target_cats["layer2"].symmetric_crop(self.tiles_to_crop)
-            est_cat_s = pred["second"].sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
-            metrics_second = self.metrics(target_cat2_cropped, est_cat_s)
-            for k in ("f1", "detection_precision", "detection_recall"):
-                metric_name = "{}-layer2/{}".format(logging_name, k)
-                self.log(metric_name, metrics_second[k], batch_size=batch_size)
+            est_cat_s = pred["second"].sample(use_mode=True)
+            est_cat_joint = est_cat_joint.union(est_cat_s)
+
+        ecj_cropped = est_cat_joint.symmetric_crop(self.tiles_to_crop)
+        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
+        metrics_joint = self.metrics(
+            target_cat_cropped.to_full_catalog(), ecj_cropped.to_full_catalog()
+        )
+        for k in ("f1", "detection_precision", "detection_recall"):
+            metric_name = "{}/{}".format(logging_name, k)
+            self.log(metric_name, metrics_joint[k], batch_size=batch_size)
 
         # log a grid of figures to the tensorboard
         if plot_images:
             mp = self.tiles_to_crop * self.tile_slen
-            fig = plot_detections(images, target_cat1_cropped, ecj_cropped, margin_px=mp)
+            fig = plot_detections(images, target_cat_cropped, ecj_cropped, margin_px=mp)
             title = f"Epoch:{self.current_epoch}/{logging_name} images"
             if self.logger:
                 self.logger.experiment.add_figure(title, fig)
@@ -279,7 +273,8 @@ class Encoder(pl.LightningModule):
 
         if self.two_layers:
             target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
-            second_loss_dict = pred["second"].compute_nll(target_cat2, border_mask)
+            two_mask = border_mask * target_cat1.n_sources
+            second_loss_dict = pred["second"].compute_nll(target_cat2, two_mask)
 
         loss_dict = {}
         # log layer1 losses
@@ -292,18 +287,15 @@ class Encoder(pl.LightningModule):
 
             # log layer2 losses
             if self.two_layers:
-                loss_l2 = second_loss_dict[k] / border_mask.sum()
+                loss_l2 = second_loss_dict[k] / two_mask.sum()
                 self.log(f"{logging_name}-layer2/_{k}", loss_l2, batch_size=batch_size)
                 loss_dict[k] += loss_l2
 
         # log metrics
         assert log_metrics or not plot_images, "plot_images requires log_metrics"
         if log_metrics:
-            target_cats = {"layer1": target_cat1}
-            if self.two_layers:
-                target_cats["layer2"] = target_cat2
             self.log_metrics(
-                target_cats, pred, logging_name, batch["images"], plot_images=plot_images
+                target_cat, pred, logging_name, batch["images"], plot_images=plot_images
             )
 
         return loss_dict["loss"]
