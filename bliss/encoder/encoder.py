@@ -205,45 +205,28 @@ class Encoder(pl.LightningModule):
             return pred_marginal.sample(use_mode=use_mode)
 
         pred = self.infer(batch, marginal_detections)
-        white_cat = pred["white"].sample(use_mode=True)
+        white_cat = pred["white"].sample(use_mode=use_mode)
         est_cat = self.interleave_catalogs(
             pred["history_cat"], white_cat, pred["white_history_mask"]
         )
-        # TODO: sample second layer too and merge catalogs if two_layers is true
+        if self.two_layers:
+            est_cat_s = pred["second"].sample(use_mode=use_mode)
+            est_cat = est_cat.union(est_cat_s)
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
-    def log_metrics(self, target_cat, pred, logging_name, images, plot_images):
-        batch_size = target_cat.n_sources.size(0)
+    def log_metrics(self, target_cat, batch, logging_name, plot_images):
+        est_cat = self.sample(batch, use_mode=True)
 
-        # marginal metrics, layer 1
-        est_cat_m = pred["marginal"].sample(use_mode=True)
-
-        # joint metrics, layer 1
-        pred_white_notruth = self.infer_conditional(
-            pred["x_features"], est_cat_m, pred["white_history_mask"]
-        )
-        est_cat_white = pred_white_notruth.sample(use_mode=True)
-        est_cat_joint = self.interleave_catalogs(
-            est_cat_m, est_cat_white, pred["white_history_mask"]
-        )
-
-        if self.two_layers:
-            est_cat_s = pred["second"].sample(use_mode=True)
-            est_cat_joint = est_cat_joint.union(est_cat_s)
-
-        ecj_cropped = est_cat_joint.symmetric_crop(self.tiles_to_crop)
         target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
-        metrics_joint = self.metrics(
-            target_cat_cropped.to_full_catalog(), ecj_cropped.to_full_catalog()
-        )
+        metrics = self.metrics(target_cat_cropped.to_full_catalog(), est_cat.to_full_catalog())
         for k in ("f1", "detection_precision", "detection_recall"):
             metric_name = "{}/{}".format(logging_name, k)
-            self.log(metric_name, metrics_joint[k], batch_size=batch_size)
+            self.log(metric_name, metrics[k], batch_size=target_cat.n_sources.size(0))
 
         # log a grid of figures to the tensorboard
         if plot_images:
             mp = self.tiles_to_crop * self.tile_slen
-            fig = plot_detections(images, target_cat_cropped, ecj_cropped, margin_px=mp)
+            fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
             title = f"Epoch:{self.current_epoch}/{logging_name} images"
             if self.logger:
                 self.logger.experiment.add_figure(title, fig)
@@ -282,7 +265,7 @@ class Encoder(pl.LightningModule):
             # divide by 2 because we make two predictions for each tile
             loss_l1 = (marginal_loss_dict[k] + white_loss_dict[k] + black_loss_dict[k]) / 2
             loss_l1 /= border_mask.sum()  # per tile loss
-            self.log(f"{logging_name}-layer1/_{k}", loss_l1, batch_size=batch_size)
+            self.log(f"{logging_name}/_{k}", loss_l1, batch_size=batch_size)
             loss_dict[k] = loss_l1
 
             # log layer2 losses
@@ -294,9 +277,8 @@ class Encoder(pl.LightningModule):
         # log metrics
         assert log_metrics or not plot_images, "plot_images requires log_metrics"
         if log_metrics:
-            self.log_metrics(
-                target_cat, pred, logging_name, batch["images"], plot_images=plot_images
-            )
+            with torch.no_grad():
+                self.log_metrics(target_cat, batch, logging_name, plot_images=plot_images)
 
         return loss_dict["loss"]
 
