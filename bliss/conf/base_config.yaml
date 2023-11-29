@@ -178,6 +178,7 @@ train:
         max_epochs: 50
         accelerator: "gpu"
         devices: 1
+        precision: 16-mixed
     testing: true
     seed: 42
     weight_save_path: null
