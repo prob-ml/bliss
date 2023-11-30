@@ -1,17 +1,25 @@
-import torch
-from mock_tests import mock_predict_sdss_recon
+from pathlib import Path
 
+import torch
+
+from bliss.catalog import TileCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 
 class TestSdssReconstruct:
     def test_sdss_reconstruct(self, cfg, decoder):
-        # TODO: change to use mock_predict_sdss
-        est_full, true_img, true_bg, _, _ = mock_predict_sdss_recon(cfg)
+        test_data_path = Path("data/tests")
+
+        # return catalog and preds like predict_sdss
+        with open(test_data_path / "sdss_preds.pt", "rb") as f:
+            data = torch.load(f)
+        tile_cat = TileCatalog(cfg.simulator.prior.tile_slen, data["catalog"])
+
+        est_full, true_img, true_bg = tile_cat.to_full_catalog(), data["image"], data["background"]
 
         # reconstruction test only considers r-band image/catalog params
         rcfs = [(94, 1, 12)]
-        tile_cat = est_full.to_tile_params(
+        tile_cat = est_full.to_tile_catalog(
             tile_slen=cfg.simulator.prior.tile_slen,
             max_sources_per_tile=cfg.simulator.prior.max_sources,
             ignore_extra_sources=True,

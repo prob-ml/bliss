@@ -3,8 +3,14 @@ from einops import rearrange
 from hydra.utils import instantiate
 
 from bliss.catalog import TileCatalog
-from bliss.data_augmentation import aug_rotate90, aug_rotate180, aug_rotate270, aug_shift, aug_vflip
-from bliss.train import train
+from bliss.encoder.data_augmentation import (
+    aug_rotate90,
+    aug_rotate180,
+    aug_rotate270,
+    aug_shift,
+    aug_vflip,
+)
+from bliss.main import train
 
 
 class TestDC2:
@@ -50,14 +56,14 @@ class TestDC2:
         # why are these bands out of order? (should be "ugrizy") why does the test break if they
         # are ordered correctly?
         train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]
-        train_dc2_cfg.training.data_source = train_dc2_cfg.surveys.dc2
+        train_dc2_cfg.train.data_source = train_dc2_cfg.surveys.dc2
         train_dc2_cfg.encoder.image_normalizer.use_deconv_channel = True
         train_dc2_cfg.encoder.do_data_augmentation = True
-        train_dc2_cfg.training.pretrained_weights = None
+        train_dc2_cfg.train.pretrained_weights = None
         # log transform doesn't work in this test because the DC2 background is sometimes negative.
         # why would the background be negative? are we using the wrong background estimate?
         train_dc2_cfg.encoder.image_normalizer.log_transform_stdevs = []
-        train(train_dc2_cfg)
+        train(train_dc2_cfg.train)
 
     def test_dc2_augmentation(self, cfg):
         train_dc2_cfg = cfg.copy()
@@ -83,7 +89,7 @@ class TestDC2:
             dc2_tile["star_log_fluxes"], "h w nh nw -> 1 h w nh nw"
         )
         origin_tile = TileCatalog(4, tile_dict)
-        origin_full = origin_tile.to_full_params()
+        origin_full = origin_tile.to_full_catalog()
 
         imgs = rearrange(dc2_obj["images"], "b h w -> 1 b 1 h w")
         bgs = rearrange(dc2_obj["background"], "b h w -> 1 b 1 h w")

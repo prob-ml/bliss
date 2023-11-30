@@ -2,10 +2,10 @@ import numpy as np
 import pytest
 import torch
 from hydra.utils import instantiate
+from omegaconf import open_dict
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.metrics import BlissMetrics, MetricsMode, three_way_matching
-from bliss.predict import align
+from bliss.encoder.metrics import BlissMetrics, MetricsMode, three_way_matching
 from bliss.surveys.decals import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
@@ -14,7 +14,11 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 class TestMetrics:
     def _get_sdss_data(self, cfg):
         """Loads SDSS frame and Photo Catalog."""
+        cfg = cfg.copy()
+        with open_dict(cfg):
+            cfg.surveys.sdss.align_to_band = 2
         sdss = instantiate(cfg.surveys.sdss, load_image_data=True)
+        sdss.prepare_data()
 
         run, camcol, field = sdss.image_id(0)
         photo_cat = PhotoFullCatalog.from_file(
@@ -31,13 +35,10 @@ class TestMetrics:
         image = sdss[0]["image"]
         background = sdss[0]["background"]
 
-        image = align(image, sdss[0]["wcs"], SDSS.BANDS.index("r"))
-        background = align(background, sdss[0]["wcs"], SDSS.BANDS.index("r"))
-
         # crop to center fourth
         height, width = image[0].shape
         min_h, min_w = height // 4, width // 4
-        max_h, max_w = min_h * 3, min_w * 3
+        max_h, max_w = min_h * 3 - 8, min_w * 3
         cropped_image = image[:, min_h:max_h, min_w:max_w]
         cropped_background = background[:, min_h:max_h, min_w:max_w]
 
@@ -61,15 +62,14 @@ class TestMetrics:
 
         # get predicted BLISS catalog
         def prep_image(x):  # noqa: WPS430
-            x = torch.from_numpy(x[:, :736, :]).float()
-            return x.unsqueeze(0).to(device=cfg.predict.device)
+            return torch.from_numpy(x).float().unsqueeze(0).to(device=cfg.predict.device)
 
         with torch.no_grad():
             batch = {"images": prep_image(image), "background": prep_image(background)}
             encoder.eval()
             encoder = encoder.float()
             bliss_cat = encoder.sample(batch, use_mode=True)
-            bliss_cat = bliss_cat.to(torch.device("cpu")).to_full_params()
+            bliss_cat = bliss_cat.to(torch.device("cpu")).to_full_catalog()
 
         bliss_cat.plocs += torch.tensor(
             [h_lim[0] + cfg.encoder.tile_slen, w_lim[0] + cfg.encoder.tile_slen]
@@ -158,7 +158,7 @@ class TestMetrics:
 
     def test_classification_metrics_full(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
-        full_catalog = tile_catalog.to_full_params()
+        full_catalog = tile_catalog.to_full_catalog()
         metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(full_catalog, full_catalog)
         for metric in metrics.classification_metrics:

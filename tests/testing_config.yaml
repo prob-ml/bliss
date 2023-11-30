@@ -16,17 +16,34 @@ simulator:
 
 cached_simulator:
     num_workers: 0
+    splits: 0:34/34:67/67:100  # train/val/test splits as percent ranges
+    batch_size: 1
+
+surveys:
+    sdss:
+        fields:  # list of dictionaries, each with run, camcol, and list of fields
+            - run: 94
+              camcol: 1
+              fields: [12]
+        load_image_data: true
+    dc2:
+        data_dir: ${paths.data}/tests/dc2/dc2_multiband/
+        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100000.pkl
+        n_split: 5
+        image_lim: [800, 800]
+        deconv_path: ${paths.data}/tests/dc2/coadd_deconv_image
+
+#########################################
 
 generate:
-    n_batches: 2
+    n_batches: 3
     batch_size: 1
-    max_images_per_file: 2
+    max_images_per_file: 1
     cached_data_path: null # use pytest tmpdir
 
-training:
+train:
     name: "pytest_encoder"
     version: "version0"
-    n_epochs: 1
     enable_early_stopping: true
     seed: 42
     weight_save_path: null
@@ -38,28 +55,10 @@ training:
         log_every_n_steps: 1
         accelerator: "cpu"
         devices: 1
+        max_epochs: 1
     testing: true
     data_source: ${simulator}
 
 predict:
     decals_frame: ${paths.decals}/336/3366m010/tractor-3366m010.fits
     device: "cpu"
-    crop:
-        left_upper_corner: [160, 160]
-        width: 160
-        height: 160
-    plot:
-        show_plot: false
-
-surveys:
-    sdss:
-        fields:  # list of dictionaries, each with run, camcol, and list of fields
-            - run: 94
-              camcol: 1
-              fields: [12]
-    dc2:
-        data_dir: ${paths.data}/tests/dc2/dc2_multiband/
-        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100000.pkl
-        n_split: 5
-        image_lim: [800, 800]
-        deconv_path: ${paths.data}/tests/dc2/coadd_deconv_image

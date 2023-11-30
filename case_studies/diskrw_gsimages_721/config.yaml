@@ -41,10 +41,10 @@ generate:
     max_images_per_file: 64
     cached_data_path: /data/scratch/zhteoh/cached_dataset_${simulator.prior.mean_sources}_${simulator.prior.n_tiles_h}tiles_50GB
 
-training:
+train:
     name: "encoder"
     version: "sdss"
     pretrained_weights: ${paths.pretrained_models}/sdss.pt
-    weight_save_path: ${paths.output}/${training.name}/${training.version}.pt
+    weight_save_path: ${paths.output}/${train.name}/${train.version}.pt
     seed: 42
     use_cached_simulator: true

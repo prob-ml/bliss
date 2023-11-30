@@ -2,12 +2,12 @@ import os
 
 import torch
 
-from bliss.generate import generate
+from bliss.main import generate
 
 
 class TestGenerate:
     def test_generate_sdss(self, cfg):
-        generate(cfg)
+        generate(cfg.generate)
         # check that cached dataset exists
         cached_dataset_should_exist = cfg.generate.n_batches > 0 and (
             cfg.generate.batch_size < cfg.generate.max_images_per_file

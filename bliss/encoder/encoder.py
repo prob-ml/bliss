@@ -10,18 +10,18 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.catalog import TileCatalog
-from bliss.convnet import CatalogNet, ContextNet, FeaturesNet
-from bliss.data_augmentation import augment_batch
-from bliss.image_normalizer import ImageNormalizer
-from bliss.metrics import BlissMetrics, MetricsMode
-from bliss.plotting import plot_detections
-from bliss.unconstrained_dists import (
+from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
+from bliss.encoder.data_augmentation import augment_batch
+from bliss.encoder.image_normalizer import ImageNormalizer
+from bliss.encoder.metrics import BlissMetrics, MetricsMode
+from bliss.encoder.plotting import plot_detections
+from bliss.encoder.unconstrained_dists import (
     UnconstrainedBernoulli,
     UnconstrainedLogitNormal,
     UnconstrainedLogNormal,
     UnconstrainedTDBN,
 )
-from bliss.variational_layer import VariationalLayer
+from bliss.encoder.variational_layer import VariationalLayer
 
 
 class Encoder(pl.LightningModule):
@@ -101,7 +101,7 @@ class Encoder(pl.LightningModule):
 
         # metrics
         self.metrics = BlissMetrics(
-            mode=MetricsMode.TILE, slack=slack, survey_bands=self.survey_bands
+            mode=MetricsMode.FULL, slack=slack, survey_bands=self.survey_bands
         )
 
     @property
@@ -205,51 +205,28 @@ class Encoder(pl.LightningModule):
             return pred_marginal.sample(use_mode=use_mode)
 
         pred = self.infer(batch, marginal_detections)
-        white_cat = pred["white"].sample(use_mode=True)
+        white_cat = pred["white"].sample(use_mode=use_mode)
         est_cat = self.interleave_catalogs(
             pred["history_cat"], white_cat, pred["white_history_mask"]
         )
-        # TODO: sample second layer too and merge catalogs if two_layers is true
+        if self.two_layers:
+            est_cat_s = pred["second"].sample(use_mode=use_mode)
+            est_cat = est_cat.union(est_cat_s)
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
-    def log_metrics(self, target_cats, pred, logging_name, images, plot_images):
-        batch_size = target_cats["layer1"].n_sources.size(0)
-        target_cat1_cropped = target_cats["layer1"].symmetric_crop(self.tiles_to_crop)
+    def log_metrics(self, target_cat, batch, logging_name, plot_images):
+        est_cat = self.sample(batch, use_mode=True)
 
-        # marginal metrics, layer 1
-        est_cat_m = pred["marginal"].sample(use_mode=True)
-        ecm_cropped = est_cat_m.symmetric_crop(self.tiles_to_crop)
-        metrics_marginal = self.metrics(target_cat1_cropped, ecm_cropped)
+        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
+        metrics = self.metrics(target_cat_cropped.to_full_catalog(), est_cat.to_full_catalog())
         for k in ("f1", "detection_precision", "detection_recall"):
-            metric_name = "{}-layer1/{}-marginal".format(logging_name, k)
-            self.log(metric_name, metrics_marginal[k], batch_size=batch_size)
-
-        # joint metrics, layer 1
-        pred_white_notruth = self.infer_conditional(
-            pred["x_features"], est_cat_m, pred["white_history_mask"]
-        )
-        est_cat_white = pred_white_notruth.sample(use_mode=True)
-        est_cat_joint = self.interleave_catalogs(
-            est_cat_m, est_cat_white, pred["white_history_mask"]
-        )
-        ecj_cropped = est_cat_joint.symmetric_crop(self.tiles_to_crop)
-        metrics_joint = self.metrics(target_cat1_cropped, ecj_cropped)
-        for k in ("f1", "detection_precision", "detection_recall"):
-            metric_name = "{}-layer1/{}-joint".format(logging_name, k)
-            self.log(metric_name, metrics_joint[k], batch_size=batch_size)
-
-        if self.two_layers:
-            target_cat2_cropped = target_cats["layer2"].symmetric_crop(self.tiles_to_crop)
-            est_cat_s = pred["second"].sample(use_mode=True).symmetric_crop(self.tiles_to_crop)
-            metrics_second = self.metrics(target_cat2_cropped, est_cat_s)
-            for k in ("f1", "detection_precision", "detection_recall"):
-                metric_name = "{}-layer2/{}".format(logging_name, k)
-                self.log(metric_name, metrics_second[k], batch_size=batch_size)
+            metric_name = "{}/{}".format(logging_name, k)
+            self.log(metric_name, metrics[k], batch_size=target_cat.n_sources.size(0))
 
         # log a grid of figures to the tensorboard
         if plot_images:
             mp = self.tiles_to_crop * self.tile_slen
-            fig = plot_detections(images, target_cat1_cropped, ecj_cropped, margin_px=mp)
+            fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
             title = f"Epoch:{self.current_epoch}/{logging_name} images"
             if self.logger:
                 self.logger.experiment.add_figure(title, fig)
@@ -264,7 +241,7 @@ class Encoder(pl.LightningModule):
             target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
         target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
-        truth_callback = lambda _: target_cat1  # noqa: E731
+        truth_callback = lambda _: target_cat1
         pred = self.infer(batch, truth_callback)
 
         border_mask = torch.ones_like(target_cat.n_sources)
@@ -279,37 +256,31 @@ class Encoder(pl.LightningModule):
 
         if self.two_layers:
             target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
-            second_loss_dict = pred["second"].compute_nll(target_cat2, border_mask)
+            two_mask = border_mask * target_cat1.n_sources
+            second_loss_dict = pred["second"].compute_nll(target_cat2, two_mask)
 
-        # log layer1 losses, divide by 2 because we make two predictions for each tile
+        loss_dict = {}
+        # log layer1 losses
         for k in ("loss", "counter_loss"):
+            # divide by 2 because we make two predictions for each tile
             loss_l1 = (marginal_loss_dict[k] + white_loss_dict[k] + black_loss_dict[k]) / 2
             loss_l1 /= border_mask.sum()  # per tile loss
-            self.log(f"{logging_name}-layer1/_{k}", loss_l1, batch_size=batch_size)
+            loss_dict[k] = loss_l1
 
-        # log layer2 losses
-        if self.two_layers:
-            for k in ("loss", "counter_loss"):
-                loss_l2 = second_loss_dict[k] / border_mask.sum()
-                self.log(f"{logging_name}-layer2/_{k}", loss_l2, batch_size=batch_size)
+            # log layer2 losses
+            if self.two_layers:
+                loss_l2 = second_loss_dict[k] / two_mask.sum()
+                loss_dict[k] += loss_l2
+
+            self.log(f"{logging_name}/_{k}", loss_l1, batch_size=batch_size)
 
         # log metrics
         assert log_metrics or not plot_images, "plot_images requires log_metrics"
         if log_metrics:
-            target_cats = {"layer1": target_cat1}
-            if self.two_layers:
-                target_cats["layer2"] = target_cat2
-            self.log_metrics(
-                target_cats, pred, logging_name, batch["images"], plot_images=plot_images
-            )
+            with torch.no_grad():
+                self.log_metrics(target_cat, batch, logging_name, plot_images=plot_images)
 
-        loss = marginal_loss_dict["loss"]
-        loss += white_loss_dict["loss"] + black_loss_dict["loss"]
-        loss /= 2
-        if self.two_layers:
-            loss += second_loss_dict["loss"]
-        loss /= border_mask.sum()
-        return loss
+        return loss_dict["loss"]
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""

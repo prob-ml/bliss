@@ -5,6 +5,8 @@ from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
+from astropy import units as u  # noqa: WPS347
+from astropy.table import Table, hstack
 from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from torch import Tensor
@@ -41,7 +43,6 @@ class TileCatalog(UserDict):
         "loc_sd",
     }
 
-    # region Init+Accessors
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.tile_slen = tile_slen
         d = copy(d)  # shallow copy, so we don't mutate the argument
@@ -71,9 +72,6 @@ class TileCatalog(UserDict):
         assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
         assert x.device == self.device
 
-    # endregion
-
-    # region Properties
     @property
     def height(self) -> int:
         return self.n_tiles_h * self.tile_slen
@@ -118,9 +116,6 @@ class TileCatalog(UserDict):
     def device(self):
         return self.locs.device
 
-    # endregion
-
-    # region Functions
     def to(self, device):
         out = {}
         for k, v in self.to_dict().items():
@@ -140,7 +135,7 @@ class TileCatalog(UserDict):
             [tiles_to_crop, tile_width - tiles_to_crop],
         )
 
-    def to_full_params(self):
+    def to_full_catalog(self):
         """Converts image parameters in tiles to parameters of full image.
 
         By parameters, we mean samples from the variational distribution, not the variational
@@ -322,17 +317,37 @@ class TileCatalog(UserDict):
 
         return TileCatalog(self.tile_slen, d)
 
-    # endregion
+    def union(self, other: "TileCatalog") -> "TileCatalog":
+        """Returns a new TileCatalog containing the union of the sources in self and other.
 
-    def __repr__(self):
-        """A computationally efficient representation of a TileCatalog.
-        By defining this method, we no longer get warnings from the debugger that says
-        'pydevd warning: Computing repr of self (TileCatalog) was slow'.
+        Args:
+            other: Another TileCatalog.
 
         Returns:
-            string: a representation of a tile catalog
+            A new TileCatalog containing the union of the sources in self and other.
         """
-        return f"TileCatalog({self.batch_size}, {self.n_tiles_h}, {self.n_tiles_w})"
+        assert self.tile_slen == other.tile_slen
+        assert self.batch_size == other.batch_size
+        assert self.n_tiles_h == other.n_tiles_h
+        assert self.n_tiles_w == other.n_tiles_w
+
+        # if not, we could store is_on_mask and derive n_sources by summing is_on_mask,
+        # rather than storing n_sources and deriving is_on_mask by assuming sorted sources
+        assert self.max_sources == other.max_sources == 1
+
+        d = {}
+        ns11 = rearrange(self.n_sources, "b ht wt -> b ht wt 1 1")
+        for k, v in self.to_dict().items():
+            if k == "n_sources":
+                d[k] = v + other[k]
+            else:
+                d1 = torch.cat((v, other[k]), dim=-2)
+                d2 = torch.cat((other[k], v), dim=-2)
+                d[k] = torch.where(ns11 > 0, d1, d2)
+        return TileCatalog(self.tile_slen, d)
+
+    def __repr__(self):
+        return f"TileCatalog({self.batch_size} x {self.n_tiles_h} x {self.n_tiles_w})"
 
 
 class FullCatalog(UserDict):
@@ -340,7 +355,10 @@ class FullCatalog(UserDict):
 
     @staticmethod
     def plocs_from_ra_dec(ras, decs, wcs: WCS):
-        """Converts RA/DEC coordinates into pixel coordinates.
+        """Converts RA/DEC coordinates into BLISS's pixel coordinates.
+            BLISS pixel coordinates have (0, 0) as the lower-left corner, whereas standard pixel
+            coordinates begin at (-0.5, -0.5). BLISS pixel coordinates are in row-column order,
+            whereas standard pixel coordinates are in column-row order.
 
         Args:
             ras (Tensor): (b, n) tensor of RA coordinates in degrees.
@@ -477,7 +495,7 @@ class FullCatalog(UserDict):
         d_new["n_sources"] = keep.sum(dim=(-2, -1)).long()
         return type(self)(self.height, self.width, d_new)
 
-    def to_tile_params(
+    def to_tile_catalog(
         self,
         tile_slen: int,
         max_sources_per_tile: int,
@@ -503,6 +521,8 @@ class FullCatalog(UserDict):
             ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
                 `ignore_extra_sources` is False.
         """
+        # TODO: a FullCatalog only needs to "know" its height and width to convert itself to a
+        # TileCatalog. So those parameters should be passed on conversion, not initialization.
         tile_coords = torch.div(self.plocs, tile_slen, rounding_mode="trunc").to(torch.int)
         n_tiles_h = math.ceil(self.height / tile_slen)
         n_tiles_w = math.ceil(self.width / tile_slen)
@@ -576,3 +596,74 @@ class FullCatalog(UserDict):
             tile_params["locs"][ii] = (tile_params["locs"][ii] % tile_slen) / tile_slen
         tile_params.update({"n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
+
+    def to_astropy_table(self, encoder_survey_bands: Tuple[str]) -> Table:
+        required_keys = [
+            "star_fluxes",
+            "source_type",
+            "galaxy_params",
+            "galaxy_fluxes",
+        ]
+        assert all(k in self.keys() for k in required_keys), "`est_cat` missing required keys"
+
+        # Convert dictionary of tensors to list of dictionaries
+        on_vals = {}
+        is_on_mask = self.get_is_on_mask()
+        for k, v in self.to_dict().items():
+            if k == "n_sources":
+                continue
+            if k == "galaxy_params":
+                # reshape get_is_on_mask() to have same last dimension as galaxy_params
+                galaxy_params_mask = is_on_mask.unsqueeze(-1).expand_as(v)
+                on_vals[k] = v[galaxy_params_mask].reshape(-1, v.shape[-1]).cpu()
+            else:
+                on_vals[k] = v[is_on_mask].cpu()
+        # Split to different columns for each band
+        for b, bl in enumerate(encoder_survey_bands):
+            on_vals[f"star_flux_{bl}"] = on_vals["star_fluxes"][..., b]
+            on_vals[f"galaxy_flux_{bl}"] = on_vals["galaxy_fluxes"][..., b]
+        # Remove combined flux columns
+        on_vals.pop("star_fluxes")
+        on_vals.pop("galaxy_fluxes")
+        n = is_on_mask.sum()  # number of (predicted) objects
+        rows = []
+        for i in range(n):
+            row = {}
+            for k, v in on_vals.items():
+                row[k] = v[i].cpu()
+            # Convert `source_type` to string "star" or "galaxy" labels
+            row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
+            # Force `plocs` to be "({x}, {y})" tuple strings for readability
+            row["plocs"] = str(tuple(row["plocs"].tolist()))
+            rows.append(row)
+
+        # Convert to astropy table
+        est_cat_table = Table(rows)
+        # Convert all _fluxes columns to u.Quantity
+        for bl in encoder_survey_bands:
+            est_cat_table[f"star_flux_{bl}"].unit = u.nmgy
+            est_cat_table[f"galaxy_flux_{bl}"].unit = u.nmgy
+
+        # Create inner table for galaxy_params
+        # Convert list of tensors to list of dictionaries
+        galaxy_params_names = [
+            "galaxy_disk_frac",
+            "galaxy_beta_radians",
+            "galaxy_disk_q",
+            "galaxy_a_d",
+            "galaxy_bulge_q",
+            "galaxy_a_b",
+        ]
+        galaxy_params_list = []
+        for galaxy_params in est_cat_table["galaxy_params"]:
+            galaxy_params_dic = {}
+            for i, name in enumerate(galaxy_params_names):
+                galaxy_params_dic[name] = galaxy_params[i]
+            galaxy_params_dic["galaxy_beta_radians"].unit = u.radian
+            galaxy_params_dic["galaxy_a_d"].unit = u.arcsec
+            galaxy_params_dic["galaxy_a_b"].unit = u.arcsec
+            galaxy_params_list.append(galaxy_params_dic)
+        galaxy_params_table = Table(galaxy_params_list)
+        est_cat_table.remove_column("galaxy_params")
+
+        return hstack([est_cat_table, galaxy_params_table])

@@ -1,14 +1,14 @@
 from pathlib import Path
 
-import mock_tests
 import pytest
 import torch
 from astropy.table import Table
 from omegaconf import OmegaConf
 
-from bliss import api, generate, train
-from bliss.api import BlissClient
 from bliss.catalog import FullCatalog, SourceType
+from bliss.main import generate, train
+from case_studies.api import api, mock_tests
+from case_studies.api.api import BlissClient
 
 
 @pytest.fixture(scope="class")
@@ -23,7 +23,7 @@ def bliss_client(cfg, tmpdir_factory):
     mock_tests.MockSDSSDownloader(image_ids, client.cwd + "/data/sdss")
     # Hack to apply select conftest.py overrides, since client.base_cfg should be private
     overrides = {
-        "training.trainer.accelerator": cfg.training.trainer.accelerator,
+        "train.trainer.accelerator": cfg.train.trainer.accelerator,
         "predict.device": cfg.predict.device,
     }
     for k, v in overrides.items():
@@ -77,7 +77,7 @@ class TestApi:
     def test_train(self, bliss_client, monkeypatch):
         monkeypatch.setattr(train, "instantiate", mock_tests.mock_trainer)
         monkeypatch.setattr(train, "setup_checkpoint_callback", mock_tests.mock_checkpoint_callback)
-        bliss_client.train("test_train", training={"n_epochs": 1})
+        bliss_client.train("test_train")
 
         model_path = f"{bliss_client.base_cfg.paths.output}/test_train"
         assert Path(model_path).exists()
@@ -85,8 +85,7 @@ class TestApi:
 
     def test_train_on_cached_data(self, bliss_client):
         cached_simulator_cfg = {"cached_data_path": "data/tests/multiband_data"}
-        training_cfg = {
-            "n_epochs": 1,
+        train_cfg = {
             "trainer": {"check_val_every_n_epoch": 1, "log_every_n_steps": 1},
         }
         weight_save_path = "tests/test_model.pt"
@@ -95,7 +94,7 @@ class TestApi:
             splits="0:50/50:100/50:100",
             batch_size=8,
             cached_simulator=cached_simulator_cfg,
-            training=training_cfg,
+            training=train_cfg,
         )
 
         assert Path(f"{bliss_client.base_cfg.paths.output}/{weight_save_path}").exists()
@@ -232,5 +231,5 @@ class TestApi:
             "galaxy_fluxes": torch.tensor([[[0.0, 0.0, 0.0, 0.0, 0.0]]]),
         }
         cat = FullCatalog(1, 1, d)
-        est_cat_table = api.fullcat_to_astropy_table(cat, ["u", "g", "r", "i", "z"])
+        est_cat_table = cat.to_astropy_table(["u", "g", "r", "i", "z"])
         assert isinstance(est_cat_table, Table)

@@ -21,7 +21,7 @@ repository = "https://github.com/prob-ml/bliss"
 version = "0.3"
 
 [tool.poetry.scripts]
-bliss = "bliss.api:main"
+bliss = "bliss.main:main"
 
 [tool.poetry.dependencies]
 python = "^3.10"

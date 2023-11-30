@@ -9,11 +9,11 @@ from torch import Tensor
 from torch.distributions import Distribution, TransformedDistribution
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
-from bliss.encoder import Encoder
-from bliss.image_normalizer import ImageNormalizer
-from bliss.metrics import BlissMetrics, MetricsMode
-from bliss.plotting import plot_detections
-from bliss.unconstrained_dists import UnconstrainedBernoulli
+from bliss.encoder.encoder import Encoder
+from bliss.encoder.image_normalizer import ImageNormalizer
+from bliss.encoder.metrics import BlissMetrics, MetricsMode
+from bliss.encoder.plotting import plot_detections
+from bliss.encoder.unconstrained_dists import UnconstrainedBernoulli
 from case_studies.adaptive_tiling.region_catalog import (
     RegionCatalog,
     RegionType,
@@ -188,7 +188,7 @@ class RegionEncoder(Encoder):
 
         est_catalog_dict = self.suppress_tiles(d)
         est_cat = TileCatalog(self.tile_slen, est_catalog_dict)
-        return est_cat.to_full_params() if return_full else est_cat
+        return est_cat.to_full_catalog() if return_full else est_cat
 
     def sample(self, pred):
         # Sample point estimate of each distribution
@@ -654,7 +654,7 @@ class RegionEncoder(Encoder):
 
         # log all metrics
         if log_metrics:
-            metrics = self.metrics(true_cat.to_full_params(), est_full_cat)
+            metrics = self.metrics(true_cat.to_full_catalog(), est_full_cat)
             for k, v in metrics.items():
                 self.log("{}/{}".format(logging_name, k), v, batch_size=batch_size)
 
@@ -664,7 +664,7 @@ class RegionEncoder(Encoder):
             n_samples = min(int(math.sqrt(batch_size)) ** 2, 4)
             nrows = int(n_samples**0.5)  # for figure
 
-            target_full_cat = true_cat.to_full_params()
+            target_full_cat = true_cat.to_full_catalog()
             idx = est_full_cat.n_sources.nonzero().view(-1)[:n_samples]
 
             margin_px = self.tiles_to_crop * self.tile_slen

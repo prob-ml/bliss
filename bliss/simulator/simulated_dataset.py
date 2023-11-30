@@ -1,6 +1,6 @@
 import os
 import warnings
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
 import pytorch_lightning as pl
@@ -10,9 +10,8 @@ from torch import Tensor
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 from tqdm import tqdm
 
+from bliss.align import align
 from bliss.catalog import TileCatalog
-from bliss.generate import FileDatum
-from bliss.predict import align
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
@@ -38,6 +37,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         super().__init__()
 
         self.survey = survey
+        survey.prepare_data()
+
         self.catalog_prior = prior
         self.background = self.survey.background
         assert self.catalog_prior is not None, "Survey prior cannot be None."
@@ -100,14 +101,13 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         """Align images to the reference depth and band."""
         batch_size = images.shape[0]
         for b in range(batch_size):
-            images[b] = torch.from_numpy(
-                align(
-                    images[b].numpy(),
-                    wcs_list=wcs_batch[b],
-                    ref_depth=0,
-                    ref_band=self.catalog_prior.reference_band,
-                )
+            aligned_image = align(
+                images[b].numpy(),
+                wcs_list=wcs_batch[b],
+                ref_depth=0,
+                ref_band=self.catalog_prior.reference_band,
             )
+            images[b] = torch.from_numpy(aligned_image)
         return images
 
     def simulate_image(
@@ -230,6 +230,18 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
+
+
+FileDatum = TypedDict(
+    "FileDatum",
+    {
+        "tile_catalog": TileCatalog,
+        "images": torch.Tensor,
+        "background": torch.Tensor,
+        "deconvolution": torch.Tensor,
+        "psf_params": torch.Tensor,
+    },
+)
 
 
 class CachedSimulatedDataset(pl.LightningDataModule, Dataset):

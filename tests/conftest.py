@@ -36,7 +36,7 @@ def cfg(pytestconfig, cached_data_path, output_path):
 
     # pytest-specific overrides
     overrides = {
-        "training.trainer.accelerator": "gpu" if use_gpu else "cpu",
+        "train.trainer.accelerator": "gpu" if use_gpu else "cpu",
         "predict.device": "cuda:0" if use_gpu else "cpu",
         "paths.root": Path(__file__).parents[1].as_posix(),
         "paths.output": str(output_path),

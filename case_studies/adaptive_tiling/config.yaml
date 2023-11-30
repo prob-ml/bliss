@@ -11,7 +11,7 @@ region_encoder:
     tile_slen: ${encoder.tile_slen}
     # mysterious test failures if I write `image_normalizer: ${encoder.image_normalizer}` instead
     image_normalizer:
-        _target_: bliss.image_normalizer.ImageNormalizer
+        _target_: bliss.encoder.image_normalizer.ImageNormalizer
         bands: ${encoder.bands}
         include_original: false
         use_deconv_channel: false
