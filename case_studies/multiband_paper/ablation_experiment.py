@@ -12,29 +12,34 @@ from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 
 from bliss.catalog import TileCatalog
-from bliss.metrics import BlissMetrics, MetricsMode
+from bliss.encoder.metrics import BlissMetrics, MetricsMode
+from bliss.main import generate
 
 # Usage: python3 ablation_experiment.py fp1 [path1] fp2 [path2] b1 [bands1] b2 [bands2]
 # \ [-mean_sources mean_sources] [-llf log_low_flux] [-lhf log_high_flux] [-b bins]
+# NOTE: Call from BLISS home dir.
 
 
-def nmgy_to_nelec_for_catalog(est_cat, nelec_per_nmgy_per_band):
+def nmgy_to_nelec_for_catalog(cfg, cat):
+    conf = cfg.copy()
+    survey = instantiate(conf.predict.dataset, load_image_data=True)
+    survey_objs = [survey[i] for i in range(len(survey))]
+    nelec_per_nmgy_per_band = np.mean(survey_objs[0]["flux_calibration_list"], axis=1)
     fluxes_suffix = "_fluxes"
     # reshape nelec_per_nmgy_per_band to (1, 1, 1, 1, {n_bands}) to broadcast
-    nelec_per_nmgy_per_band = torch.tensor(nelec_per_nmgy_per_band, device=est_cat.device)
+    nelec_per_nmgy_per_band = torch.tensor(nelec_per_nmgy_per_band, device=cat.device)
     nelec_per_nmgy_per_band = nelec_per_nmgy_per_band.view(1, 1, 1, 1, -1)
-    for key in est_cat.keys():
+    for key in cat.keys():
         if key.endswith(fluxes_suffix):
-            est_cat[key] = est_cat[key] * nelec_per_nmgy_per_band
-    return est_cat
+            cat[key] = cat[key] * nelec_per_nmgy_per_band
+    return cat
 
 
-def pred(cfg, tile_cat, images, background):
+def pred(cfg, images, background):
     """Compute predictions using BLISS predict pipeline.
 
     Args:
         cfg: config file
-        tile_cat: true tile catalog (not cropped)
         images: simulated images
         background: simulated background
 
@@ -44,8 +49,6 @@ def pred(cfg, tile_cat, images, background):
     conf = cfg.copy()
     imgs = copy.deepcopy(images)
     bgs = copy.deepcopy(background)
-    survey = instantiate(cfg.predict.dataset, load_image_data=True)
-    survey_objs = [survey[i] for i in range(len(survey))]
     encoder = instantiate(conf.encoder)
     enc_state_dict = torch.load(conf.predict.weight_save_path)
     encoder.load_state_dict(enc_state_dict)
@@ -53,8 +56,7 @@ def pred(cfg, tile_cat, images, background):
     batch = {"images": imgs, "background": bgs}
     out_dict = encoder.predict_step(batch, None)
     est_cat = out_dict["est_cat"]
-    nelec_per_nmgy_per_band = np.mean(survey_objs[0]["flux_calibration_list"], axis=1)
-    return nmgy_to_nelec_for_catalog(est_cat, nelec_per_nmgy_per_band)
+    return nmgy_to_nelec_for_catalog(cfg, est_cat)
 
 
 def create_df(key, d, steps):
@@ -81,19 +83,19 @@ def create_df(key, d, steps):
     metrics = {}
     if "tgs" not in metrics:
         metrics["tgs"] = []
-    for i in len(d[key]["tgs"]):
+    for i in d[key]["tgs"]:
         metrics["tgs"].append(i.numpy())
     if "tss" not in metrics:
         metrics["tss"] = []
-    for i in len(d[key]["tss"]):
+    for i in d[key]["tss"]:
         metrics["tss"].append(i.numpy())
     if "egs" not in metrics:
         metrics["egs"] = []
-    for i in len(d[key]["egs"]):
+    for i in d[key]["egs"]:
         metrics["egs"].append(i.numpy())
     if "ess" not in metrics:
         metrics["ess"] = []
-    for i in len(d[key]["ess"]):
+    for i in d[key]["ess"]:
         metrics["ess"].append(i.numpy())
 
     metrics["boot_precision_25"] = d[key]["boot_precision_25"]
@@ -110,14 +112,14 @@ def create_df(key, d, steps):
     )
 
 
-def construct_pred_dict(cfg, fpaths, bands, ttc, imgs, bgs):
+def construct_pred_dict(cfg, fpaths, bands, imgs, bgs):
     d = {}
     for i, fpath in enumerate(fpaths):
         d[fpath] = {"bands": bands[i], "est_tile_cat": None}
         conf = cfg.copy()
         conf.encoder.bands = bands[i]
         conf.predict.weight_save_path = fpath
-        d[fpath]["est_tile_cat"] = pred(conf, ttc, imgs, bgs)
+        d[fpath]["est_tile_cat"] = pred(conf, imgs, bgs)
     return d
 
 
@@ -365,14 +367,14 @@ CLI.add_argument(
     nargs=1,
     type=int,
     default=[1],
-    help="Number of taken as input by each model specified in fnames.",
+    help="Number of bands taken as input by model1 specified in fnames.",
 )
 CLI.add_argument(
     "-bands2",
     nargs=1,
     type=int,
     default=[3],
-    help="Number of taken as input by each model specified in fnames.",
+    help="Number of taken as input by model2 specified in fnames.",
 )
 CLI.add_argument(
     "-ms",
@@ -387,7 +389,7 @@ CLI.add_argument(
     nargs=1,
     type=int,
     default=3,
-    help="Low-end range for flux bins (log-scale).",
+    help="Low-end range for flux bins (log-scale, elec counts).",
 )
 CLI.add_argument(
     "-lhf",
@@ -395,7 +397,7 @@ CLI.add_argument(
     nargs=1,
     type=int,
     default=6,
-    help="High-end range for flux bins (log-scale).",
+    help="High-end range for flux bins (log-scale, elec counts).",
 )
 CLI.add_argument(
     "-b",
@@ -408,7 +410,6 @@ CLI.add_argument(
 
 args = CLI.parse_args()
 conf = vars(args)  # noqa: WPS421
-print("conf: ", conf)  # noqa: WPS421
 fp1 = conf["fpath1"]
 fp2 = conf["fpath2"]
 bands1 = conf["bands1"]
@@ -436,27 +437,40 @@ else:
 
 bands = [bands1, bands2]
 
-environ["BLISS_HOME"] = str(Path().resolve().parents[1])
-with initialize(config_path=".", version_base=None):
+environ["BLISS_HOME"] = str(Path().resolve())
+with initialize(".", version_base=None):
     cfg = compose("config")
 
 # adjust mean sources based on CLI
-cfg.prior.mean_sources = mean_sources
+cfg.prior.mean_sources = 0.02
 
 # Generate
 print("Simulating data...")  # noqa: WPS421
-cfg.prior.batch_size = 128
-sim = instantiate(cfg.simulator)
-tc = sim.catalog_prior.sample()
-image_ids, image_id_indices = sim.randomized_image_ids(sim.catalog_prior.batch_size)
-images, background, deconv, psf_params, tile_c = sim.simulate_image(tc, image_ids, image_id_indices)
+cfg.generate.cached_data_path = "."
+cfg.generate.batch_size = 256
+cfg.generate.n_batches = 1
+cfg.generate.max_images_per_file = 256
+cfg.cached_simulator.batch_size = 256
+cfg.cached_simulator.cached_data_path = "."
+cfg.cached_simulator.splits = "0:100/100:100/100:100"
+generate(cfg.generate)
+
+gen_data = instantiate(cfg.training.data_source)
+dataset = gen_data.train_dataloader()
+test_data = next(iter(dataset))
+
+tile_c = TileCatalog(cfg.prior.tile_slen, test_data["tile_catalog"])
+images = test_data["images"]
+background = test_data["background"]
 
 # Crop true tile catalog
 true_tile_cat = tile_c.symmetric_crop(cfg.encoder.tiles_to_crop)
+# convert fluxes to counts
+true_tile_cat = nmgy_to_nelec_for_catalog(cfg, true_tile_cat)
 
 print("Finished simulating. Making predictions...")  # noqa: WPS421
 # construct prediction dictionaries for each model given freshly simulated data
-d = construct_pred_dict(cfg, fps, bands, true_tile_cat, images, background)
+d = construct_pred_dict(cfg, fps, bands, images, background)
 
 # Generate bin-intervals for histogram
 steps = np.logspace(3, 6, num=12)  # fluxes
@@ -471,7 +485,7 @@ model1_df, model2_df = list(out_d.values())  # pylint:disable=W0632
 # pack dfs into array
 dfs = [model1_df, model2_df]
 names = ["Single-Band", "Two-Band", "Three-Band", "Four-Band", "Five-Band"]
-plot_bands = [names[i] for i in n_bands]
+plot_bands = [names[i - 1] for i in n_bands]
 
 print("DFs constructed. Plotting...")  # noqa: WPS421
 # fig saved to 'ablation.png' in multiband directory

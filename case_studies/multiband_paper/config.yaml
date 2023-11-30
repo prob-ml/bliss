@@ -6,3 +6,6 @@ defaults:
 
 simulator:
     survey: ${surveys.sdss}
+
+training:
+    data_source: ${cached_simulator}
