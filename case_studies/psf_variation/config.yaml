@@ -27,7 +27,6 @@ cached_simulator:
 train:
     name: PSF_MODELS
     version: multi_field_deconv_and_psf_param
-    save_top_k: 1
     enable_early_stopping: true
     patience: 10
     pretrained_weights: null

@@ -162,7 +162,6 @@ generate:
 train:
     name: null
     version: null
-    save_top_k: 1
     enable_early_stopping: true
     patience: 10
     pretrained_weights: null
