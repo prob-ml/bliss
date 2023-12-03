@@ -126,6 +126,8 @@ def train(train_cfg: DictConfig):  # pylint: disable=too-many-branches, too-many
     # load pretrained weights
     if train_cfg.pretrained_weights is not None:
         enc_state_dict = torch.load(train_cfg.pretrained_weights)
+        if train_cfg.pretrained_weights.endswith(".ckpt"):
+            enc_state_dict = enc_state_dict["state_dict"]
         encoder.load_state_dict(enc_state_dict)
 
     # setup logger
