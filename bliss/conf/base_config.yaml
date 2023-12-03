@@ -181,7 +181,6 @@ train:
         precision: 16-mixed
     testing: true
     seed: 42
-    weight_save_path: null
     data_source: ${cached_simulator}
     encoder: ${encoder}
     output_dir: ${paths.output}
