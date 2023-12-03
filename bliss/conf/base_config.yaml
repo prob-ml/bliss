@@ -66,7 +66,6 @@ cached_simulator:
 
 encoder:
     _target_: bliss.encoder.encoder.Encoder
-    bands: [0, 1, 2, 3, 4]
     survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
@@ -79,7 +78,7 @@ encoder:
         gamma: 0.1
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
-        bands: ${encoder.bands}
+        bands: [0, 1, 2, 3, 4]
         include_original: false
         use_deconv_channel: false
         concat_psf_params: false

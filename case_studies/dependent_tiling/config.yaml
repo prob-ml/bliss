@@ -5,12 +5,12 @@ defaults:
     - override hydra/job_logging: stdout
 
 encoder:
-    bands: [2, 3]
-    survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: 2
     min_flux_threshold: 1.59  # 22 magnitude (0.63 is 23 mag; 0.25 is 24 mag)
     two_layers: true
     tiles_to_crop: 1
+    image_normalizer:
+        bands: [2, 3]
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
@@ -18,8 +18,8 @@ prior:
     reference_band: 2  # SDSS r-band
     star_color_model_path: ${simulator.survey.dir_path}/color_models/star_gmm_nmgy.pkl
     gal_color_model_path: ${simulator.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
-    n_tiles_h: 56
-    n_tiles_w: 56
+    n_tiles_h: 32
+    n_tiles_w: 32
     tile_slen: 2
     batch_size: 32
     max_sources: 5
@@ -32,7 +32,7 @@ prior:
 
 generate:
     n_batches: 512
-    cached_data_path: /data/scratch/regier/m2
+    cached_data_path: /data/scratch/regier/m2_32x32
 
 cached_simulator:
     cached_data_path: /data/scratch/regier/m2

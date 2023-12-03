@@ -34,7 +34,6 @@ class Encoder(pl.LightningModule):
 
     def __init__(
         self,
-        bands: list,
         survey_bands: list,
         tile_slen: int,
         tiles_to_crop: int,
@@ -50,7 +49,6 @@ class Encoder(pl.LightningModule):
         """Initializes DetectionEncoder.
 
         Args:
-            bands: specified band-pass filters
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
@@ -66,7 +64,6 @@ class Encoder(pl.LightningModule):
         super().__init__()
         self.save_hyperparameters(ignore=["image_normalizer"])
 
-        self.bands = bands
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
         self.tiles_to_crop = tiles_to_crop
@@ -82,7 +79,7 @@ class Encoder(pl.LightningModule):
         assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         num_features = 256
         self.features_net = FeaturesNet(
-            len(bands),
+            len(image_normalizer.bands),
             ch_per_band,
             num_features,
             double_downsample=(tile_slen == 4),
@@ -297,7 +294,8 @@ class Encoder(pl.LightningModule):
         # log metrics
         assert log_metrics or not plot_images, "plot_images requires log_metrics"
         if log_metrics:
-            self.log_metrics(target_cat, batch, logging_name, plot_images=plot_images)
+            assert not self.two_layers, "revert target_cat1 below to target_cat"
+            self.log_metrics(target_cat1, batch, logging_name, plot_images=plot_images)
 
         return loss
 
