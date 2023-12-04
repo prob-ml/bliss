@@ -35,8 +35,12 @@ generate:
     cached_data_path: /data/scratch/regier/m2_32x32
 
 cached_simulator:
-    cached_data_path: /data/scratch/regier/m2
-    batch_size: 24
+    cached_data_path: /data/scratch/regier/m2_32x32_163GB
+    batch_size: 32
+
+train:
+    trainer:
+        precision: 32
 
 predict:
     dataset:
