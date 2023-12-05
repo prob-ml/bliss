@@ -155,7 +155,6 @@ def train(train_cfg: DictConfig):  # pylint: disable=too-many-branches, too-many
         checkpoint_callback = ModelCheckpoint(
             filename="best_encoder",
             save_top_k=1,
-            save_weights_only=True,
             verbose=True,
             monitor="val/_loss",
             mode="min",

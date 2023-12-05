@@ -162,7 +162,7 @@ train:
     name: null
     version: null
     enable_early_stopping: true
-    patience: 10
+    patience: 5
     pretrained_weights: null
     trainer:
         _target_: pytorch_lightning.Trainer

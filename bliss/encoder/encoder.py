@@ -62,7 +62,6 @@ class Encoder(pl.LightningModule):
             two_layers: whether to make up to two detections per tile rather than one
         """
         super().__init__()
-        self.save_hyperparameters(ignore=["image_normalizer"])
 
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
