@@ -207,6 +207,9 @@ class Encoder(pl.LightningModule):
         )
         if self.two_layers:
             est_cat_s = pred["second"].sample(use_mode=use_mode)
+            # our loss function implies that the second layer is ignored for a tile
+            # if the first layer is empty for that tile
+            est_cat_s.n_sources *= est_cat.n_sources
             est_cat = est_cat.union(est_cat_s)
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
