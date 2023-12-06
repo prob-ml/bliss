@@ -44,7 +44,7 @@ generate:
 
 cached_simulator:
     cached_data_path: /data/scratch/regier/m2
-    batch_size: 24
+    batch_size: 23
 
 predict:
     dataset:
@@ -63,6 +63,6 @@ predict:
         crop_config: [624, 736, 304, 416]
     trainer: ${train.trainer}
     encoder: ${encoder}
-    weight_save_path: ${paths.root}/case_studies/dependent_tiling/m2.pt
+    weight_save_path: /home/regier/bliss/output/new125GB/version_0/checkpoints/best_encoder.ckpt
     device: "cuda:0"
     is_simulated: false

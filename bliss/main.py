@@ -183,7 +183,10 @@ def train(train_cfg: DictConfig):  # pylint: disable=too-many-branches, too-many
 
 def predict(predict_cfg):
     encoder = instantiate(predict_cfg.encoder)
-    encoder.load_state_dict(torch.load(predict_cfg.weight_save_path))
+    enc_state_dict = torch.load(predict_cfg.weight_save_path)
+    if predict_cfg.weight_save_path.endswith(".ckpt"):
+        enc_state_dict = enc_state_dict["state_dict"]
+    encoder.load_state_dict(enc_state_dict)
     dataset = instantiate(predict_cfg.dataset)
     trainer = instantiate(predict_cfg.trainer)
     enc_output = trainer.predict(encoder, datamodule=dataset)

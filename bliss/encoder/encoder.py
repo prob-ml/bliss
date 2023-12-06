@@ -293,8 +293,7 @@ class Encoder(pl.LightningModule):
         # log metrics
         assert log_metrics or not plot_images, "plot_images requires log_metrics"
         if log_metrics:
-            assert not self.two_layers, "revert target_cat1 below to target_cat"
-            self.log_metrics(target_cat1, batch, logging_name, plot_images=plot_images)
+            self.log_metrics(target_cat, batch, logging_name, plot_images=plot_images)
 
         return loss
 
