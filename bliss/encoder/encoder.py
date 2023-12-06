@@ -247,21 +247,22 @@ class Encoder(pl.LightningModule):
         target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
 
         nll_marginal_z1 = self._layer1_nll(target_cat1, pred)
+        nll_cond_z2 = pred["second"].compute_nll(target_cat2)
+        nll_marginal_z2 = self._layer1_nll(target_cat2, pred)
+        nll_cond_z1 = pred["second"].compute_nll(target_cat1)
+
         none_mask = target_cat.n_sources == 0
         loss0 = nll_marginal_z1 * none_mask
 
-        nll_cond_z2 = pred["second"].compute_nll(target_cat2)
         one_mask = target_cat.n_sources == 1
         loss1 = (nll_marginal_z1 + nll_cond_z2) * one_mask
 
-        nll_marginal_z2 = self._layer1_nll(target_cat2, pred)
-        nll_cond_z1 = pred["second"].compute_nll(target_cat1)
-        loss_a_stack = torch.stack([nll_marginal_z1, nll_cond_z2], dim=-1)
-        loss_a = torch.logsumexp(loss_a_stack, dim=-1)
-        loss_b_stack = torch.stack([nll_marginal_z2, nll_cond_z1], dim=-1)
-        loss_b = torch.logsumexp(loss_b_stack, dim=-1)
         two_mask = target_cat.n_sources >= 2
-        loss2 = (loss_a + loss_b) * two_mask
+        loss2a = nll_marginal_z1 + nll_cond_z2
+        loss2b = nll_marginal_z2 + nll_cond_z1
+        lse_stack = torch.stack([loss2a, loss2b], dim=-1)
+        loss2_unmasked = -torch.logsumexp(-lse_stack, dim=-1)
+        loss2 = loss2_unmasked * two_mask
 
         return loss0 + loss1 + loss2
 
