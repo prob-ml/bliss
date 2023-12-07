@@ -32,7 +32,7 @@ class TestTrain:
         train_des_cfg.simulator.prior.reference_band = DES.BANDS.index("r")
         train_des_cfg.simulator.prior.survey_bands = DES.BANDS
 
-        train_des_cfg.encoder.bands = [
+        train_des_cfg.encoder.image_normalizer.bands = [
             DES.BANDS.index("g"),
             DES.BANDS.index("r"),
             DES.BANDS.index("z"),
@@ -49,7 +49,7 @@ class TestTrain:
         train_decals_cfg.simulator.prior.survey_bands = DECaLS.BANDS
 
         train_decals_cfg.encoder.image_normalizer.log_transform_stdevs = []
-        train_decals_cfg.encoder.bands = [
+        train_decals_cfg.encoder.image_normalizer.bands = [
             DECaLS.BANDS.index("g"),
             DECaLS.BANDS.index("r"),
             DECaLS.BANDS.index("z"),

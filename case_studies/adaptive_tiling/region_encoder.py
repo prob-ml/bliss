@@ -24,7 +24,6 @@ from case_studies.adaptive_tiling.region_catalog import (
 class RegionEncoder(Encoder):
     def __init__(
         self,
-        bands: list,
         survey_bands: list,
         tile_slen: int,  # NOTE: this is the *unpadded* tile length!!
         image_normalizer: ImageNormalizer,
@@ -34,7 +33,6 @@ class RegionEncoder(Encoder):
         scheduler_params: Optional[dict] = None,
     ):
         super().__init__(
-            bands=bands,
             survey_bands=survey_bands,
             tile_slen=tile_slen,
             image_normalizer=image_normalizer,

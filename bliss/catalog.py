@@ -635,7 +635,7 @@ class FullCatalog(UserDict):
         for i in range(n):
             row = {}
             for k, v in on_vals.items():
-                row[k] = v[i].cpu()
+                row[k] = v[i].cpu().float()
             # Convert `source_type` to string "star" or "galaxy" labels
             row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
             # Force `plocs` to be "({x}, {y})" tuple strings for readability
