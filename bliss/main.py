@@ -54,6 +54,7 @@ def generate(gen_cfg: DictConfig):
 
     # Save Hydra config (used to generate data) to cached_data_path
     with open(f"{gen_cfg.cached_data_path}/hparams.yaml", "w", encoding="utf-8") as f:
+        OmegaConf.resolve(gen_cfg)
         OmegaConf.save(gen_cfg, f)
 
     # assume overwriting any existing cached image files
@@ -191,8 +192,8 @@ def predict(predict_cfg):
     trainer = instantiate(predict_cfg.trainer)
     enc_output = trainer.predict(encoder, datamodule=dataset)
 
-    est_cats = [b["est_cat"].to_full_catalog() for b in enc_output]
-    return dict(zip(dataset.image_ids(), est_cats))
+    mode_cats = [b["mode_cat"].to_full_catalog() for b in enc_output]
+    return dict(zip(dataset.image_ids(), mode_cats))
 
 
 # pragma: no cover

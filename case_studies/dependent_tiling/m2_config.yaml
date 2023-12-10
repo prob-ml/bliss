@@ -37,13 +37,14 @@ surveys:
             - run: 2583
               camcol: 2
               fields: [136]
+        background_offset: 140
 
 generate:
     n_batches: 512
-    cached_data_path: /data/scratch/regier/m2
+    cached_data_path: /data/scratch/regier/m2_offset
 
 cached_simulator:
-    cached_data_path: /data/scratch/regier/m2
+    cached_data_path: /data/scratch/regier/m2_offset
     batch_size: 23
 
 predict:

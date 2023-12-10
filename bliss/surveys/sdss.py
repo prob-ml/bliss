@@ -57,6 +57,7 @@ class SloanDigitalSkySurvey(Survey):
         pixel_shift=0.0,
         dir_path="data/sdss",
         load_image_data: bool = False,
+        background_offset=0.0,
         align_to_band=None,
         crop_config=None,
     ):
@@ -68,6 +69,7 @@ class SloanDigitalSkySurvey(Survey):
         self.n_bands = len(self.BANDS)
         self.pixel_shift = pixel_shift
         self.load_image_data = load_image_data
+        self.background_offset = background_offset
         self.align_to_band = align_to_band
         self.crop_config = crop_config
 
@@ -126,6 +128,7 @@ class SloanDigitalSkySurvey(Survey):
     def __getitem__(self, idx):
         if not self.items[idx]:
             item = self.get_from_disk(idx)
+            item["background"] += self.background_offset
             if not self.load_image_data:
                 # we're just using the background/metadata, so no need to align or crop
                 return item

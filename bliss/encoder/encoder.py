@@ -323,10 +323,9 @@ class Encoder(pl.LightningModule):
         """Pytorch lightning method."""
         with torch.no_grad():
             return {
-                "est_cat": self.sample(batch, use_mode=True),
-                # a marginal catalog isn't really what we want here, perhaps
-                # we should return samples from the variation distribution instead
-                "pred": None,
+                "mode_cat": self.sample(batch, use_mode=True),
+                # we probably want multiple samples
+                "sample_cat": self.sample(batch, use_mode=False),
             }
 
     def configure_optimizers(self):
