@@ -8,9 +8,6 @@ import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from pytorch_lightning.loggers import TensorBoardLogger
 from tqdm import tqdm
 
 from bliss.simulator.simulated_dataset import FileDatum
@@ -58,16 +55,14 @@ def generate(gen_cfg: DictConfig):
 # ============================== Training mode ==============================
 
 
-def train(train_cfg: DictConfig):  # pylint: disable=too-many-branches, too-many-statements
+def train(train_cfg: DictConfig):
     # setup seed
     pl.seed_everything(train_cfg.seed)
 
-    # setup dataset
-    data_source_cfg = train_cfg.data_source
-    dataset = instantiate(data_source_cfg)
-
-    # setup model
+    # setup dataset, encoder, and trainer
+    dataset = instantiate(train_cfg.data_source)
     encoder = instantiate(train_cfg.encoder)
+    trainer = instantiate(train_cfg.trainer)
 
     # load pretrained weights
     if train_cfg.pretrained_weights is not None:
@@ -76,40 +71,10 @@ def train(train_cfg: DictConfig):  # pylint: disable=too-many-branches, too-many
             enc_state_dict = enc_state_dict["state_dict"]
         encoder.load_state_dict(enc_state_dict)
 
-    # setup logger
-    logger = False
-    if train_cfg.trainer.logger:
-        logger = TensorBoardLogger(
-            save_dir=train_cfg.output_dir,
-            name=train_cfg.name,
-            version=train_cfg.version,
-            default_hp_metric=False,
-        )
-        # no idea why calling resolve is necessary now, but it is
+    # log the training config
+    if trainer.logger:
         OmegaConf.resolve(train_cfg)
-        logger.log_hyperparams(train_cfg)
-
-    callbacks = []
-
-    # setup checkpointing
-    if train_cfg.trainer.enable_checkpointing:
-        checkpoint_callback = ModelCheckpoint(
-            filename="best_encoder",
-            save_top_k=1,
-            verbose=True,
-            monitor="val/_loss",
-            mode="min",
-            save_on_train_epoch_end=False,
-            auto_insert_metric_name=False,
-        )
-        callbacks.append(checkpoint_callback)
-
-    # setup early stopping
-    if train_cfg.enable_early_stopping:
-        early_stopping = EarlyStopping(monitor="val/_loss", mode="min", patience=train_cfg.patience)
-        callbacks.append(early_stopping)
-
-    trainer = instantiate(train_cfg.trainer, logger=logger, callbacks=callbacks)
+        trainer.logger.log_hyperparams(train_cfg)
 
     # train!
     trainer.fit(encoder, datamodule=dataset)

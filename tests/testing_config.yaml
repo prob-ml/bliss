@@ -41,14 +41,10 @@ generate:
     cached_data_path: null # use pytest tmpdir
 
 train:
-    name: "pytest_encoder"
-    version: "version0"
-    enable_early_stopping: true
     seed: 42
     weight_save_path: null
     trainer:
-        logger: false
-        enable_checkpointing: true
+        logger: null
         check_val_every_n_epoch: 1
         log_every_n_steps: 1
         accelerator: "cpu"

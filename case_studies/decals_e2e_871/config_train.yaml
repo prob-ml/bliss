@@ -26,9 +26,6 @@ encoder:
         z_score: false
 
 train:
-    name: "pytest_encoder"
-    version: "version0"
-    enable_early_stopping: true
     pretrained_weights: null
     seed: 42
     weight_save_path: null
