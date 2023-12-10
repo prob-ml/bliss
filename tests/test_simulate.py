@@ -47,9 +47,8 @@ class TestSimulate:
         sdss_test = SDSSTest(image, background, cfg)
         encoder.eval()
         trainer = instantiate(cfg.predict.trainer)
-        est_catalog = trainer.predict(encoder, datamodule=sdss_test)[0]["est_cat"].to(
-            cfg.predict.device
-        )
+        est_catalog = trainer.predict(encoder, datamodule=sdss_test)[0]["mode_cat"]
+        est_catalog = est_catalog.to(cfg.predict.device)
 
         # Compare predicted and true source types
         ttc = cfg.encoder.tiles_to_crop

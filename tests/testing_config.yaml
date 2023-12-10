@@ -36,9 +36,8 @@ surveys:
 #########################################
 
 generate:
-    n_batches: 3
-    batch_size: 1
-    max_images_per_file: 1
+    n_image_files: 3
+    n_batches_per_file: 1
     cached_data_path: null # use pytest tmpdir
 
 train:

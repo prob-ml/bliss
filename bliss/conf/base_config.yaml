@@ -150,13 +150,11 @@ surveys:
 mode: train
 
 generate:
-    n_workers_per_process: 0
-    n_batches: ${simulator.n_batches}
-    batch_size: ${simulator.prior.batch_size}
-    max_images_per_file: 4096
+    n_image_files: 32
+    n_batches_per_file: 16
+    simulator: ${simulator}
     cached_data_path: ${paths.data}/cached_dataset
     file_prefix: dataset
-    simulator: ${simulator}
 
 train:
     name: null
