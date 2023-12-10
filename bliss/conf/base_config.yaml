@@ -166,7 +166,6 @@ train:
         _target_: pytorch_lightning.Trainer
         logger: true
         enable_checkpointing: true
-        profiler: null
         reload_dataloaders_every_n_epochs: 0
         check_val_every_n_epoch: 1
         log_every_n_steps: 10  # corresponds to n_batches

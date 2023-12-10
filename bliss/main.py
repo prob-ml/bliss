@@ -11,7 +11,6 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.profilers import AdvancedProfiler
 from tqdm import tqdm
 
 from bliss.simulator.simulated_dataset import FileDatum
@@ -90,11 +89,6 @@ def train(train_cfg: DictConfig):  # pylint: disable=too-many-branches, too-many
         OmegaConf.resolve(train_cfg)
         logger.log_hyperparams(train_cfg)
 
-    # setup profiling
-    profiler = None
-    if train_cfg.trainer.profiler:
-        profiler = AdvancedProfiler(filename="profile")
-
     callbacks = []
 
     # setup checkpointing
@@ -115,7 +109,7 @@ def train(train_cfg: DictConfig):  # pylint: disable=too-many-branches, too-many
         early_stopping = EarlyStopping(monitor="val/_loss", mode="min", patience=train_cfg.patience)
         callbacks.append(early_stopping)
 
-    trainer = instantiate(train_cfg.trainer, logger=logger, profiler=profiler, callbacks=callbacks)
+    trainer = instantiate(train_cfg.trainer, logger=logger, callbacks=callbacks)
 
     # train!
     trainer.fit(encoder, datamodule=dataset)
