@@ -11,7 +11,7 @@ from torch.distributions import Distribution, TransformedDistribution
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.encoder.encoder import Encoder
 from bliss.encoder.image_normalizer import ImageNormalizer
-from bliss.encoder.metrics import BlissMetrics, MetricsMode
+from bliss.encoder.metrics import BlissMetrics
 from bliss.encoder.plotting import plot_detections
 from bliss.encoder.unconstrained_dists import UnconstrainedBernoulli
 from case_studies.adaptive_tiling.region_catalog import (
@@ -42,7 +42,7 @@ class RegionEncoder(Encoder):
             scheduler_params=scheduler_params,
         )
         self.overlap_slen = overlap_slen
-        self.metrics = BlissMetrics(survey_bands=survey_bands, mode=MetricsMode.FULL, slack=slack)
+        self.metrics = BlissMetrics(survey_bands=survey_bands, mode="matching", slack=slack)
 
     # region Properties
     @property

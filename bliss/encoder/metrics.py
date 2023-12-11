@@ -1,6 +1,5 @@
 # pylint: disable=E1101
 
-from enum import Enum
 from typing import Dict, List, Union
 
 import torch
@@ -17,17 +16,13 @@ from bliss.catalog import FullCatalog, SourceType, TileCatalog
 Catalog = Union[TileCatalog, FullCatalog]
 
 
-class MetricsMode(Enum):
-    FULL = 1
-    TILE = 2
-
-
 class BlissMetrics(Metric):
     """Calculates detection and classification metrics between two catalogs.
 
-    BlissMetrics supports two modes, Full and Tile, which indicate what type of catalog to operate
-    over. For FullCatalogs, all metrics are computed by matching predicted sources to true sources.
-    For TileCatalogs, detection metrics are still computed that way, but star/galaxy parameter
+    BlissMetrics supports two modes, "matching" and "conditional", which operate on FullCatalog
+    objects and TileCatalog objects, respectively.
+    For "matching", all metrics are computed by matching predicted sources to true sources.
+    For "conditional", detection metrics are still computed that way, but star/galaxy parameter
     metrics are computed conditioned on true source location and type; i.e, given a true star or
     galaxy in a tile in the true catalog, get the corresponding parameters in the same tile in the
     estimated catalog (regardless of type/existence predicted by estimated catalog in that tile.
@@ -64,7 +59,7 @@ class BlissMetrics(Metric):
     def __init__(
         self,
         survey_bands: list,
-        mode: MetricsMode = MetricsMode.FULL,
+        mode: str = "matching",
         slack: float = 1.0,
         dist_sync_on_step: bool = False,
         disable_bar: bool = True,
@@ -109,11 +104,11 @@ class BlissMetrics(Metric):
 
     def update(self, true: Catalog, est: Catalog) -> None:
         assert true.batch_size == est.batch_size
-        if self.mode is MetricsMode.FULL:
-            msg = "Metrics mode is set to `Full` but received a TileCatalog"
+        if self.mode == "matching":
+            msg = "Metrics mode is set to `matching` but received a TileCatalog"
             assert isinstance(true, FullCatalog) and isinstance(est, FullCatalog), msg
-        elif self.mode is MetricsMode.TILE:
-            msg = "Metrics mode is set to `Tile` but received a FullCatalog"
+        elif self.mode == "conditional":
+            msg = "Metrics mode is set to `conditional` but received a FullCatalog"
             assert isinstance(true, TileCatalog) and isinstance(est, TileCatalog), msg
 
         match_true, match_est = self._update_detection_metrics(true, est)
@@ -121,12 +116,12 @@ class BlissMetrics(Metric):
 
     def _update_detection_metrics(self, true: Catalog, est: Catalog) -> None:
         """Update detection metrics."""
-        if self.mode is MetricsMode.FULL:
+        if self.mode == "matching":
             true_locs = true.plocs
             est_locs = est.plocs
             tgbool = true.galaxy_bools
             egbool = est.galaxy_bools
-        elif self.mode is MetricsMode.TILE:
+        elif self.mode == "conditional":
             true_on_idx, true_is_on = true.get_indices_of_on_sources()
             est_on_idx, est_is_on = est.get_indices_of_on_sources()
 
@@ -203,13 +198,13 @@ class BlissMetrics(Metric):
             return
 
         # get parameters depending on the kind of catalog
-        if self.mode is MetricsMode.FULL:
+        if self.mode == "matching":
             if not (match_true and match_est):
                 return  # need matches to compute classification metrics on full catalog
             true_params, est_params = self._get_classification_params_full(
                 true, est, match_true, match_est
             )
-        elif self.mode is MetricsMode.TILE:
+        elif self.mode == "conditional":
             true_params, est_params = self._get_classification_params_tile(true, est)
 
         true_gal_fluxes = true_params["galaxy_fluxes"]

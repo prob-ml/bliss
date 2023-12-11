@@ -13,7 +13,7 @@ from bliss.catalog import TileCatalog
 from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
-from bliss.encoder.metrics import BlissMetrics, MetricsMode
+from bliss.encoder.metrics import BlissMetrics
 from bliss.encoder.plotting import plot_detections
 from bliss.encoder.unconstrained_dists import (
     UnconstrainedBernoulli,
@@ -96,9 +96,7 @@ class Encoder(pl.LightningModule):
                 self.second_net = torch.compile(self.second_net)
 
         # metrics
-        self.metrics = BlissMetrics(
-            mode=MetricsMode.FULL, slack=slack, survey_bands=self.survey_bands
-        )
+        self.metrics = BlissMetrics(mode="matching", slack=slack, survey_bands=self.survey_bands)
 
     @property
     def dist_param_groups(self):

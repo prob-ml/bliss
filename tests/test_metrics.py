@@ -5,7 +5,7 @@ from hydra.utils import instantiate
 from omegaconf import open_dict
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.encoder.metrics import BlissMetrics, MetricsMode, three_way_matching
+from bliss.encoder.metrics import BlissMetrics, three_way_matching
 from bliss.surveys.decals import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
@@ -86,7 +86,7 @@ class TestMetrics:
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
         slen = 50
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
+        metrics = BlissMetrics(mode="matching", slack=1.0, survey_bands=list(SDSS.BANDS))
 
         true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]])
         est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]])
@@ -121,7 +121,7 @@ class TestMetrics:
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=2.0, survey_bands=list(SDSS.BANDS))
+        metrics = BlissMetrics(mode="matching", slack=2.0, survey_bands=list(SDSS.BANDS))
 
         true_locs = torch.tensor(
             [[[10, 10]], [[20, 20]], [[30, 30]], [[40, 40]]], dtype=torch.float
@@ -147,7 +147,7 @@ class TestMetrics:
 
     def test_classification_metrics_tile(self, tile_catalog):
         """Test galaxy classification metrics on tile catalog."""
-        metrics = BlissMetrics(mode=MetricsMode.TILE, slack=1.0, survey_bands=list(SDSS.BANDS))
+        metrics = BlissMetrics(mode="conditional", slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(tile_catalog, tile_catalog)
         for metric in metrics.classification_metrics:
             if metric in {"gal_fluxes", "star_fluxes"}:
@@ -159,7 +159,7 @@ class TestMetrics:
     def test_classification_metrics_full(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
         full_catalog = tile_catalog.to_full_catalog()
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
+        metrics = BlissMetrics(mode="matching", slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(full_catalog, full_catalog)
         for metric in metrics.classification_metrics:
             if metric in {"gal_fluxes", "star_fluxes"}:
@@ -170,7 +170,7 @@ class TestMetrics:
 
     def test_catalog_agreement(self, catalogs):
         """Compares catalogs as safety check for metrics."""
-        metrics = BlissMetrics(mode=MetricsMode.FULL, slack=1.0, survey_bands=list(SDSS.BANDS))
+        metrics = BlissMetrics(mode="matching", slack=1.0, survey_bands=list(SDSS.BANDS))
 
         assert metrics(catalogs["photo"], catalogs["photo"])["f1"] == 1
         assert metrics(catalogs["decals"], catalogs["decals"])["f1"] == 1
