@@ -14,4 +14,4 @@ encoder:
         use_deconv_channel: false
         concat_psf_params: false
         use_clahe: false
-    bands: [2]
+        bands: [2]
