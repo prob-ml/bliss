@@ -52,7 +52,7 @@ class TestDC2:
 
     def test_train_on_dc2(self, cfg):
         train_dc2_cfg = cfg.copy()
-        train_dc2_cfg.encoder.bands = [0, 1, 2, 3, 4, 5]
+        train_dc2_cfg.encoder.image_normalizer.bands = [0, 1, 2, 3, 4, 5]
         # why are these bands out of order? (should be "ugrizy") why does the test break if they
         # are ordered correctly?
         train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]

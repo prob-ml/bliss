@@ -59,16 +59,12 @@ class VariationalLayer(torch.nn.Module):
 
         return TileCatalog(self.tile_slen, est_cat)
 
-    def compute_nll(self, true_tile_cat: TileCatalog, tile_mask: torch.Tensor) -> dict:
+    def compute_nll(self, true_tile_cat: TileCatalog) -> dict:
         pred = self.pred
-
-        loss_with_components = {}
 
         # counter loss
         counter_loss = -pred["on_prob"].log_prob(true_tile_cat.n_sources)
-        counter_loss *= tile_mask
         loss = counter_loss
-        loss_with_components["counter_loss"] = counter_loss.sum()
 
         # all the squeezing/rearranging below is because a TileCatalog can store multiple
         # light sources per tile, which is annoying here, but helpful for storing samples
@@ -78,17 +74,13 @@ class VariationalLayer(torch.nn.Module):
         true_locs = true_tile_cat.locs.squeeze(3)
         locs_loss = -pred["loc"].log_prob(true_locs)
         locs_loss *= true_tile_cat.n_sources
-        locs_loss *= tile_mask
         loss += locs_loss
-        loss_with_components["locs_loss"] = locs_loss.sum()
 
         # star/galaxy classification loss
         true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
         binary_loss = -pred["galaxy_prob"].log_prob(true_gal_bools)
         binary_loss *= true_tile_cat.n_sources
-        binary_loss *= tile_mask
         loss += binary_loss
-        loss_with_components["binary_loss"] = binary_loss.sum()
 
         # flux losses
         true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
@@ -100,15 +92,11 @@ class VariationalLayer(torch.nn.Module):
             # star flux loss
             star_name = f"star_flux_{band}"
             star_flux_loss = -pred[star_name].log_prob(star_fluxes[..., i] + 1e-9) * true_star_bools
-            star_flux_loss *= tile_mask
-            loss_with_components[star_name] = star_flux_loss.sum()
             loss += star_flux_loss
 
             # galaxy flux loss
             gal_name = f"galaxy_flux_{band}"
             gal_flux_loss = -pred[gal_name].log_prob(galaxy_fluxes[..., i] + 1e-9) * true_gal_bools
-            gal_flux_loss *= tile_mask
-            loss_with_components[gal_name] = gal_flux_loss.sum()
             loss += gal_flux_loss
 
         # galaxy properties loss
@@ -116,10 +104,6 @@ class VariationalLayer(torch.nn.Module):
         for i, param_name in enumerate(self.GALSIM_NAMES):
             galsim_pn = f"galsim_{param_name}"
             loss_term = -pred[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
-            loss_term *= tile_mask
-            loss_with_components[galsim_pn] = loss_term.sum()
             loss += loss_term
 
-        loss_with_components["loss"] = loss.sum()
-
-        return loss_with_components
+        return loss

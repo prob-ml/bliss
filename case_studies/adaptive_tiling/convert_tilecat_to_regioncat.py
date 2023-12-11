@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
-from bliss.main import _itemize_data  # noqa: WPS450
 from case_studies.adaptive_tiling.region_catalog import tile_cat_to_region_cat
 
 parser = argparse.ArgumentParser()
@@ -48,4 +47,4 @@ for filename in tqdm(files):
     # Save converted data to new file
     output_filename = OUTPUT_PATH / filename.parts[-1]
     with open(output_filename, "wb") as f:
-        torch.save(_itemize_data(region_data), f)
+        torch.save(region_data, f)

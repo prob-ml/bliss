@@ -66,20 +66,23 @@ cached_simulator:
 
 encoder:
     _target_: bliss.encoder.encoder.Encoder
-    bands: [0, 1, 2, 3, 4]
     survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
-    slack: 1.0
     min_flux_threshold: 0  # default 0 to take all sources
     optimizer_params:
         lr: 1e-3
     scheduler_params:
         milestones: [32]
         gamma: 0.1
+    metrics:
+        _target_: bliss.encoder.metrics.CatalogMetrics
+        slack: 1.0
+        mode: matching
+        survey_bands: ${encoder.survey_bands}
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
-        bands: ${encoder.bands}
+        bands: [0, 1, 2, 3, 4]
         include_original: false
         use_deconv_channel: false
         concat_psf_params: false
@@ -151,26 +154,34 @@ surveys:
 mode: train
 
 generate:
-    n_workers_per_process: 0
-    n_batches: ${simulator.n_batches}
-    batch_size: ${simulator.prior.batch_size}
-    max_images_per_file: 4096
+    n_image_files: 32
+    n_batches_per_file: 16
+    simulator: ${simulator}
     cached_data_path: ${paths.data}/cached_dataset
     file_prefix: dataset
-    simulator: ${simulator}
 
 train:
-    name: null
-    version: null
-    save_top_k: 1
-    enable_early_stopping: true
-    patience: 10
-    pretrained_weights: null
     trainer:
         _target_: pytorch_lightning.Trainer
-        logger: true
-        enable_checkpointing: true
-        profiler: null
+        logger:
+            _target_: pytorch_lightning.loggers.TensorBoardLogger
+            save_dir: ${paths.output}
+            name: null
+            version: null
+            default_hp_metric: False
+        callbacks:
+            - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+              filename: best_encoder
+              save_top_k: 1
+              verbose: True
+              monitor: val/_loss
+              mode: min
+              save_on_train_epoch_end: False
+              auto_insert_metric_name: False
+            - _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+              monitor: val/_loss
+              mode: min
+              patience: 5
         reload_dataloaders_every_n_epochs: 0
         check_val_every_n_epoch: 1
         log_every_n_steps: 10  # corresponds to n_batches
@@ -178,12 +189,12 @@ train:
         max_epochs: 50
         accelerator: "gpu"
         devices: 1
-    testing: true
-    seed: 42
-    weight_save_path: null
+        precision: 32
     data_source: ${cached_simulator}
     encoder: ${encoder}
-    output_dir: ${paths.output}
+    seed: 42
+    pretrained_weights: null
+    testing: true
 
 predict:
     dataset: ${surveys.sdss}

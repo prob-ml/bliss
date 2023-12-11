@@ -276,8 +276,13 @@ class TileCatalog(UserDict):
         Returns:
             TileCatalog: a new catalog with only one source per tile
         """
-        if self.max_sources == 1:
+        if self.max_sources == 1 and top_k == 1 and exclude_num == 0:
             return self
+
+        if exclude_num >= self.max_sources:
+            tc = TileCatalog(self.tile_slen, self.to_dict())
+            tc.n_sources = torch.zeros_like(tc.n_sources)
+            return tc
 
         sorted_self = self._sort_sources_by_flux(band=band)
 
@@ -630,7 +635,7 @@ class FullCatalog(UserDict):
         for i in range(n):
             row = {}
             for k, v in on_vals.items():
-                row[k] = v[i].cpu()
+                row[k] = v[i].cpu().float()
             # Convert `source_type` to string "star" or "galaxy" labels
             row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
             # Force `plocs` to be "({x}, {y})" tuple strings for readability
