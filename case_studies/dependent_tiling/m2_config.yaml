@@ -6,7 +6,7 @@ defaults:
 
 encoder:
     tile_slen: 2
-    min_flux_threshold: 1.59  # 22 magnitude (0.63 is 23 mag; 0.25 is 24 mag)
+    min_flux_threshold: 1.4927944095789945  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
     two_layers: true
     tiles_to_crop: 1
     image_normalizer:
@@ -46,6 +46,10 @@ generate:
 cached_simulator:
     cached_data_path: /data/scratch/regier/m2
     batch_size: 23
+
+train:
+    trainer:
+        precision: 16-mixed
 
 predict:
     dataset:
