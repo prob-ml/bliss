@@ -117,7 +117,7 @@ class TestMetrics:
         assert np.isclose(precision, 2 / (2 + 2))
         assert np.isclose(recall, 2 / 3)
         assert np.isclose(class_acc, 1 / 2)
-        assert np.isclose(avg_keep_distance, 50 * (0.01 + 0.01) / 2)
+        assert np.isclose(avg_keep_distance, (((0.01 * 50) ** 2) * 2) ** 0.5)
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
@@ -143,7 +143,7 @@ class TestMetrics:
         assert results["detection_precision"] == 1 / 2
         assert results["detection_recall"] == 1 / 2
         assert results["gal_tp"] == 1
-        assert results["avg_keep_distance"] == 1
+        assert results["avg_keep_distance"] == pytest.approx(2**0.5)
 
     def test_classification_metrics_tile(self, tile_catalog):
         """Test galaxy classification metrics on tile catalog."""
