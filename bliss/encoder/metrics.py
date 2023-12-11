@@ -1,11 +1,8 @@
-# pylint: disable=E1101
-
 from typing import Dict, List, Union
 
 import torch
-from einops import rearrange, reduce
-from scipy.sparse import csr_matrix
-from scipy.sparse.csgraph import min_weight_full_bipartite_matching
+from einops import rearrange
+from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
@@ -324,10 +321,7 @@ class CatalogMetrics(Metric):
         """Match true and estimated locations and returned indices to match.
 
         Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
-        The matching is done with `scipy.optimize.linear_sum_assignment`, which implements
-        the Hungarian algorithm.
-
-        Discards matches where at least one location has coordinates **exactly** (0, 0).
+        The matching is done with the Hungarian algorithm.
 
         Args:
             true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
@@ -340,35 +334,22 @@ class CatalogMetrics(Metric):
             - row_indx: Indices of true objects matched to estimated objects.
             - col_indx: Indices of estimated objects matched to true objects.
             - dist_keep: Matched objects to keep based on l1 distances.
-            - avg_keep_distance: Average l-infinity distance over matched objects to keep.
+            - avg_keep_distance: Average L2 distance over matched objects to keep.
         """
-        locs1 = true_locs.view(-1, 2)
-        locs2 = est_locs.view(-1, 2)
-
-        locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
-        locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
-        locs_err_l_infty = reduce(locs_abs_diff, "i j k -> i j", "max")
+        locs_diff = rearrange(true_locs, "i j -> i 1 j") - rearrange(est_locs, "i j -> 1 i j")
+        locs_err = locs_diff.norm(dim=2)
 
         # Penalize all pairs which are greater than slack apart to favor valid matches.
-        locs_err = locs_err + (locs_err_l_infty > self.slack) * torch.finfo(torch.float32).max
-
-        # add small constant to avoid 0 weights (required for sparse bipartite matching)
-        locs_err += 0.001
-
-        # convert light source error matrix to CSR
-        csr_locs_err = csr_matrix(locs_err.detach().cpu())
+        locs_err = locs_err + (locs_err > self.slack) * 1e20
 
         # find minimal permutation and return matches
-        row_indx, col_indx = min_weight_full_bipartite_matching(csr_locs_err)
+        row_indx, col_indx = linear_sum_assignment(locs_err.detach().cpu())
 
-        # only match objects that satisfy threshold on l-infinity distance.
-        dist = (locs1[row_indx] - locs2[col_indx]).abs().max(1)[0]
+        # only match objects that satisfy threshold on l2 distance.
+        match_dist = (true_locs[row_indx] - est_locs[col_indx]).norm(dim=1)
 
-        # GOOD match condition: L-infinity distance is less than slack
-        dist_keep = (dist < self.slack).bool()
-        avg_keep_distance = dist[dist < self.slack].mean()
+        # GOOD match condition: L2 distance is less than slack
+        matches_to_keep = (match_dist < self.slack).bool().cpu().numpy()
+        avg_keep_distance = match_dist[match_dist < self.slack].mean()
 
-        if dist_keep.sum() > 0:
-            assert dist[dist_keep].max() <= self.slack
-
-        return row_indx, col_indx, dist_keep.cpu().numpy(), avg_keep_distance
+        return row_indx, col_indx, matches_to_keep, avg_keep_distance
