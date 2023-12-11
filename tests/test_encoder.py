@@ -18,7 +18,6 @@ class TestEncoder:
                 batch[key] = val.to(cfg.predict.device)
 
         encoder_params = {
-            "bands": [2],
             "image_normalizer": {
                 "use_deconv_channel": True,
                 "concat_psf_params": True,

@@ -56,6 +56,9 @@ disable=too-many-ancestors,
 	# flake8 already checks for lambda expressions, which are OK at times
 	unnecessary-lambda-assignment,
 
+	# too many false positives
+	no-member,
+
 
 [SIMILARITIES]
 
