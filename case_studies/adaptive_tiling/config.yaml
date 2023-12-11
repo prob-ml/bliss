@@ -18,7 +18,7 @@ region_encoder:
         log_transform_stdevs: [-3, 0, 1, 3]
         use_clahe: true
     overlap_slen: 0.4
-    slack: ${encoder.slack}
+    slack: ${encoder.metrics.slack}
     optimizer_params: ${encoder.optimizer_params}
     scheduler_params: ${encoder.scheduler_params}
 

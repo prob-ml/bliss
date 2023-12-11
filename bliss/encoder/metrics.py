@@ -16,10 +16,10 @@ from bliss.catalog import FullCatalog, SourceType, TileCatalog
 Catalog = Union[TileCatalog, FullCatalog]
 
 
-class BlissMetrics(Metric):
+class CatalogMetrics(Metric):
     """Calculates detection and classification metrics between two catalogs.
 
-    BlissMetrics supports two modes, "matching" and "conditional", which operate on FullCatalog
+    CatalogMetrics supports two modes, "matching" and "conditional", which operate on FullCatalog
     objects and TileCatalog objects, respectively.
     For "matching", all metrics are computed by matching predicted sources to true sources.
     For "conditional", detection metrics are still computed that way, but star/galaxy parameter

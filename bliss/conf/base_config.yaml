@@ -69,13 +69,17 @@ encoder:
     survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
-    slack: 1.0
     min_flux_threshold: 0  # default 0 to take all sources
     optimizer_params:
         lr: 1e-3
     scheduler_params:
         milestones: [32]
         gamma: 0.1
+    metrics:
+        _target_: bliss.encoder.metrics.CatalogMetrics
+        slack: 1.0
+        mode: matching
+        survey_bands: ${encoder.survey_bands}
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
         bands: [0, 1, 2, 3, 4]

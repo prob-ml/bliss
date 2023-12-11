@@ -13,7 +13,7 @@ from bliss.catalog import TileCatalog
 from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
-from bliss.encoder.metrics import BlissMetrics
+from bliss.encoder.metrics import CatalogMetrics
 from bliss.encoder.plotting import plot_detections
 from bliss.encoder.unconstrained_dists import (
     UnconstrainedBernoulli,
@@ -38,7 +38,7 @@ class Encoder(pl.LightningModule):
         tile_slen: int,
         tiles_to_crop: int,
         image_normalizer: ImageNormalizer,
-        slack: float = 1.0,
+        metrics: CatalogMetrics,
         min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
@@ -53,7 +53,7 @@ class Encoder(pl.LightningModule):
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
             image_normalizer: object that applies input transforms to images
-            slack: Slack to use when matching locations for validation metrics.
+            metrics: for scoring predicted catalogs during training
             min_flux_threshold: Sources with a lower flux will not be considered when computing loss
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
@@ -66,6 +66,7 @@ class Encoder(pl.LightningModule):
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
         self.tiles_to_crop = tiles_to_crop
+        self.metrics = metrics
         self.image_normalizer = image_normalizer
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
@@ -94,9 +95,6 @@ class Encoder(pl.LightningModule):
             self.checkerboard_net = torch.compile(self.checkerboard_net)
             if self.two_layers:
                 self.second_net = torch.compile(self.second_net)
-
-        # metrics
-        self.metrics = BlissMetrics(mode="matching", slack=slack, survey_bands=self.survey_bands)
 
     @property
     def dist_param_groups(self):
