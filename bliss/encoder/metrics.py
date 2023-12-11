@@ -152,8 +152,8 @@ class CatalogMetrics(Metric):
                 match_est.append([])
                 continue
 
-            mtrue, mest, dkeep, avg_keep_distance = match_by_locs(
-                true_locs[b, 0:ntrue], est_locs[b, 0:nest], self.slack
+            mtrue, mest, dkeep, avg_keep_distance = self.match_catalogs(
+                true_locs[b, 0:ntrue], est_locs[b, 0:nest]
             )
             match_true.append(mtrue[dkeep])
             match_est.append(mest[dkeep])
@@ -320,65 +320,58 @@ class CatalogMetrics(Metric):
 
         return metrics
 
+    def match_catalogs(self, true_locs, est_locs):
+        """Match true and estimated locations and returned indices to match.
 
-def match_by_locs(true_locs, est_locs, slack=1.0):
-    """Match true and estimated locations and returned indices to match.
+        Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
+        The matching is done with `scipy.optimize.linear_sum_assignment`, which implements
+        the Hungarian algorithm.
 
-    Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
-    The matching is done with `scipy.optimize.linear_sum_assignment`, which implements
-    the Hungarian algorithm.
+        Discards matches where at least one location has coordinates **exactly** (0, 0).
 
-    Automatically discards matches where at least one location has coordinates **exactly** (0, 0).
+        Args:
+            true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
+                The centroids should be in units of PIXELS.
+            est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
+                number of sources. The centroids should be in units of PIXELS.
 
-    Args:
-        slack: Threshold for matching objects a `slack` l-infinity distance away (in pixels).
-        true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
-            The centroids should be in units of PIXELS.
-        est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
-            number of sources. The centroids should be in units of PIXELS.
+        Returns:
+            A tuple of the following objects:
+            - row_indx: Indices of true objects matched to estimated objects.
+            - col_indx: Indices of estimated objects matched to true objects.
+            - dist_keep: Matched objects to keep based on l1 distances.
+            - avg_keep_distance: Average l-infinity distance over matched objects to keep.
+        """
+        locs1 = true_locs.view(-1, 2)
+        locs2 = est_locs.view(-1, 2)
 
-    Returns:
-        A tuple of the following objects:
-        - row_indx: Indicies of true objects matched to estimated objects.
-        - col_indx: Indicies of estimated objects matched to true objects.
-        - dist_keep: Matched objects to keep based on l1 distances.
-        - avg_keep_distance: Average l-infinity distance over matched objects to keep.
-    """
-    assert len(true_locs.shape) == len(est_locs.shape) == 2
-    assert true_locs.shape[-1] == est_locs.shape[-1] == 2
-    assert isinstance(true_locs, torch.Tensor) and isinstance(est_locs, torch.Tensor)
+        locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
+        locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
+        locs_err_l_infty = reduce(locs_abs_diff, "i j k -> i j", "max")
 
-    # reshape
-    locs1 = true_locs.view(-1, 2)
-    locs2 = est_locs.view(-1, 2)
+        # Penalize all pairs which are greater than slack apart to favor valid matches.
+        locs_err = locs_err + (locs_err_l_infty > self.slack) * torch.finfo(torch.float32).max
 
-    locs_abs_diff = (rearrange(locs1, "i j -> i 1 j") - rearrange(locs2, "i j -> 1 i j")).abs()
-    locs_err = reduce(locs_abs_diff, "i j k -> i j", "sum")
-    locs_err_l_infty = reduce(locs_abs_diff, "i j k -> i j", "max")
+        # add small constant to avoid 0 weights (required for sparse bipartite matching)
+        locs_err += 0.001
 
-    # Penalize all pairs which are greater than slack apart to favor valid matches.
-    locs_err = locs_err + (locs_err_l_infty > slack) * locs_err.max()
+        # convert light source error matrix to CSR
+        csr_locs_err = csr_matrix(locs_err.detach().cpu())
 
-    # add small constant to avoid 0 weights (required for sparse bipartite matching)
-    locs_err += 0.001
+        # find minimal permutation and return matches
+        row_indx, col_indx = min_weight_full_bipartite_matching(csr_locs_err)
 
-    # convert light source error matrix to CSR
-    csr_locs_err = csr_matrix(locs_err.detach().cpu())
+        # only match objects that satisfy threshold on l-infinity distance.
+        dist = (locs1[row_indx] - locs2[col_indx]).abs().max(1)[0]
 
-    # find minimal permutation and return matches
-    row_indx, col_indx = min_weight_full_bipartite_matching(csr_locs_err)
+        # GOOD match condition: L-infinity distance is less than slack
+        dist_keep = (dist < self.slack).bool()
+        avg_keep_distance = dist[dist < self.slack].mean()
 
-    # only match objects that satisfy threshold on l-infinity distance.
-    dist = (locs1[row_indx] - locs2[col_indx]).abs().max(1)[0]
+        if dist_keep.sum() > 0:
+            assert dist[dist_keep].max() <= self.slack
 
-    # GOOD match condition: L-infinity distance is less than slack
-    dist_keep = (dist < slack).bool()
-    avg_keep_distance = dist[dist < slack].mean()
-
-    if dist_keep.sum() > 0:
-        assert dist[dist_keep].max() <= slack
-
-    return row_indx, col_indx, dist_keep.cpu().numpy(), avg_keep_distance
+        return row_indx, col_indx, dist_keep.cpu().numpy(), avg_keep_distance
 
 
 def three_way_matching(pred_cat, comp_cat, gt_cat, slack=1):
@@ -400,8 +393,9 @@ def three_way_matching(pred_cat, comp_cat, gt_cat, slack=1):
     """
     gt_locs, pred_locs, comp_locs = gt_cat.plocs[0], pred_cat.plocs[0], comp_cat.plocs[0]
     # compute matches for both catalogs against gt
-    match_gt_pred = match_by_locs(gt_locs, pred_locs, slack=slack)
-    match_gt_comp = match_by_locs(gt_locs, comp_locs, slack=slack)
+    metrics = CatalogMetrics("ugriz", slack=slack)
+    match_gt_pred = metrics.match_catalogs(gt_locs, pred_locs)
+    match_gt_comp = metrics.match_catalogs(gt_locs, comp_locs)
 
     gt_pred_matches = match_gt_pred[0][match_gt_pred[2]]  # get indices to keep based on distance
     pred_gt_matches = match_gt_pred[1][match_gt_pred[2]]
