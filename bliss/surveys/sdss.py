@@ -12,7 +12,6 @@ from astropy.utils.data import download_file
 from astropy.wcs import WCS, FITSFixedWarning
 from einops import rearrange
 from scipy.interpolate import RegularGridInterpolator
-from torch import Tensor
 
 from bliss.align import align, crop_to_mult16
 from bliss.catalog import FullCatalog, SourceType
@@ -525,17 +524,6 @@ class SDSS_PSF(ImagePSF):  # noqa: N801
         term2 = b * torch.exp(-(r**2) / (2 * sigma2))
         term3 = p0 * (1 + r**2 / (beta * sigmap)) ** (-beta / 2)
         return (term1 + term2 + term3) / (1 + b + p0)
-
-
-# Data type conversion helpers
-def convert_mag_to_flux(mag: Tensor, nelec_per_nmgy=987.31) -> Tensor:
-    # default corresponds to average value of columns for run 94, camcol 1, field 12
-    return 10 ** ((22.5 - mag) / 2.5) * nelec_per_nmgy
-
-
-def convert_flux_to_mag(flux: Tensor, nelec_per_nmgy=987.31) -> Tensor:
-    # default corresponds to average value of columns for run 94, camcol 1, field 12
-    return 22.5 - 2.5 * torch.log10(flux / nelec_per_nmgy)
 
 
 def nelec_to_nmgy_for_catalog(est_cat, nelec_per_nmgy_per_band):
