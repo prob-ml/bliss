@@ -110,7 +110,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             images[b] = torch.from_numpy(aligned_image)
         return images
 
-    def simulate_image(
+    def simulate_images(
         self, tile_catalog: TileCatalog, image_ids, image_id_indices
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """Simulate a batch of images.
@@ -193,7 +193,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         image_ids, image_id_indices = self.randomized_image_ids(self.catalog_prior.batch_size)
         with torch.no_grad():
             tile_catalog = self.catalog_prior.sample()
-            images, background, deconv, psf_params = self.simulate_image(
+            images, background, deconv, psf_params = self.simulate_images(
                 tile_catalog, image_ids, image_id_indices
             )
             return {

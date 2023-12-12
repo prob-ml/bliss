@@ -44,7 +44,7 @@ def generate(gen_cfg: DictConfig):
 
             # flatten batches
             for i in range(gen_cfg.simulator.prior.batch_size):
-                file_datum: FileDatum = {k: v[0] for k, v in batch.items() if k != "tile_catalog"}
+                file_datum: FileDatum = {k: v[i] for k, v in batch.items() if k != "tile_catalog"}
                 file_datum["tile_catalog"] = {k: v[i] for k, v in batch["tile_catalog"].items()}
                 file_data.append(file_datum)
 
