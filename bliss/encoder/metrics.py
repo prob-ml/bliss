@@ -136,9 +136,9 @@ class CatalogMetrics(Metric):
             egbool *= est_is_on.unsqueeze(-1)
 
         match_true, match_est = [], []
-        for b in range(true.batch_size):
-            ntrue = int(true.n_sources[b].int().sum().item())
-            nest = int(est.n_sources[b].int().sum().item())
+        for i in range(true.batch_size):
+            ntrue = int(true.n_sources[i].int().sum().item())
+            nest = int(est.n_sources[i].int().sum().item())
             self.total_true_n_sources += ntrue
 
             # if either ntrue or nest are 0, manually increment FP/FN and continue
@@ -150,7 +150,7 @@ class CatalogMetrics(Metric):
                 continue
 
             mtrue, mest, dkeep, avg_keep_distance = self.match_catalogs(
-                true_locs[b, 0:ntrue], est_locs[b, 0:nest]
+                true_locs[i, 0:ntrue], est_locs[i, 0:nest]
             )
             match_true.append(mtrue[dkeep])
             match_est.append(mest[dkeep])
@@ -166,8 +166,8 @@ class CatalogMetrics(Metric):
                 self.match_count_keep += 1
 
             # update star/galaxy classification TP/FP
-            batch_tgbool = tgbool[b][mtrue][dkeep].reshape(-1)
-            batch_egbool = egbool[b][mest][dkeep].reshape(-1)
+            batch_tgbool = tgbool[i][mtrue][dkeep].reshape(-1)
+            batch_egbool = egbool[i][mest][dkeep].reshape(-1)
             self._update_confusion_matrix(batch_tgbool, batch_egbool)
 
         return match_true, match_est
@@ -325,15 +325,15 @@ class CatalogMetrics(Metric):
 
         Args:
             true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
-                The centroids should be in units of PIXELS.
+                The centroids should be in units of pixels.
             est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
-                number of sources. The centroids should be in units of PIXELS.
+                number of sources. The centroids should be in units of pixels.
 
         Returns:
             A tuple of the following objects:
             - row_indx: Indices of true objects matched to estimated objects.
             - col_indx: Indices of estimated objects matched to true objects.
-            - dist_keep: Matched objects to keep based on l1 distances.
+            - dist_keep: Matched objects to keep based on L2 distances.
             - avg_keep_distance: Average L2 distance over matched objects to keep.
         """
         locs_diff = rearrange(true_locs, "i j -> i 1 j") - rearrange(est_locs, "i j -> 1 i j")
@@ -342,10 +342,10 @@ class CatalogMetrics(Metric):
         # Penalize all pairs which are greater than slack apart to favor valid matches.
         locs_err = locs_err + (locs_err > self.slack) * 1e20
 
-        # find minimal permutation and return matches
+        # find minimal permutation
         row_indx, col_indx = linear_sum_assignment(locs_err.detach().cpu())
 
-        # only match objects that satisfy threshold on l2 distance.
+        # only match objects that satisfy threshold on L2 distance.
         match_dist = (true_locs[row_indx] - est_locs[col_indx]).norm(dim=1)
 
         # GOOD match condition: L2 distance is less than slack
