@@ -15,13 +15,7 @@ from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMetrics
 from bliss.encoder.plotting import plot_detections
-from bliss.encoder.unconstrained_dists import (
-    UnconstrainedBernoulli,
-    UnconstrainedLogitNormal,
-    UnconstrainedLogNormal,
-    UnconstrainedTDBN,
-)
-from bliss.encoder.variational_layer import VariationalLayer
+from bliss.encoder.variational_grid import VariationalGrid
 
 
 class Encoder(pl.LightningModule):
@@ -75,7 +69,6 @@ class Encoder(pl.LightningModule):
         self.two_layers = two_layers
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
-        n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
         assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         num_features = 256
         self.features_net = FeaturesNet(
@@ -84,10 +77,11 @@ class Encoder(pl.LightningModule):
             num_features,
             double_downsample=(tile_slen == 4),
         )
-        self.marginal_net = CatalogNet(num_features, n_params_per_source)
-        self.checkerboard_net = ContextNet(num_features, n_params_per_source)
+        dummy_vg = VariationalGrid(None, self.survey_bands, self.tile_slen)
+        self.marginal_net = CatalogNet(num_features, dummy_vg.n_params_per_source)
+        self.checkerboard_net = ContextNet(num_features, dummy_vg.n_params_per_source)
         if self.two_layers:
-            self.second_net = CatalogNet(num_features, n_params_per_source)
+            self.second_net = CatalogNet(num_features, dummy_vg.n_params_per_source)
 
         if compile_model:
             self.features_net = torch.compile(self.features_net)
@@ -95,26 +89,6 @@ class Encoder(pl.LightningModule):
             self.checkerboard_net = torch.compile(self.checkerboard_net)
             if self.two_layers:
                 self.second_net = torch.compile(self.second_net)
-
-    @property
-    def dist_param_groups(self):
-        d = {
-            "on_prob": UnconstrainedBernoulli(),
-            "loc": UnconstrainedTDBN(),
-            "galaxy_prob": UnconstrainedBernoulli(),
-            # galsim parameters
-            "galsim_disk_frac": UnconstrainedLogitNormal(),
-            "galsim_beta_radians": UnconstrainedLogitNormal(high=torch.pi),
-            "galsim_disk_q": UnconstrainedLogitNormal(),
-            "galsim_a_d": UnconstrainedLogNormal(),
-            "galsim_bulge_q": UnconstrainedLogitNormal(),
-            "galsim_a_b": UnconstrainedLogNormal(),
-        }
-        for band in self.survey_bands:
-            d[f"star_flux_{band}"] = UnconstrainedLogNormal()
-        for band in self.survey_bands:
-            d[f"galaxy_flux_{band}"] = UnconstrainedLogNormal()
-        return d
 
     def _get_checkboard(self, ht, wt):
         # make/store a checkerboard of tiles
@@ -125,17 +99,6 @@ class Encoder(pl.LightningModule):
         indices = torch.stack(mg)
         tile_cb = indices.sum(axis=0) % 2
         return rearrange(tile_cb, "ht wt -> 1 1 ht wt")
-
-    def make_layer(self, x_cat):
-        split_sizes = [v.dim for v in self.dist_param_groups.values()]
-        dist_params_split = torch.split(x_cat, split_sizes, 3)
-        names = self.dist_param_groups.keys()
-        pred = dict(zip(names, dist_params_split))
-
-        for k, v in pred.items():
-            pred[k] = self.dist_param_groups[k].get_dist(v)
-
-        return VariationalLayer(pred, self.survey_bands, self.tile_slen)
 
     def get_features(self, batch):
         x = self.image_normalizer.get_input_tensor(batch)
@@ -153,7 +116,7 @@ class Encoder(pl.LightningModule):
 
         context = torch.stack([detection_history, history_mask], dim=1).float()
         x_cat = self.checkerboard_net(x_features, context)
-        return self.make_layer(x_cat)
+        return VariationalGrid(x_cat, self.survey_bands, self.tile_slen)
 
     def interleave_catalogs(self, marginal_cat, cond_cat, marginal_mask):
         d = {}
@@ -174,7 +137,7 @@ class Encoder(pl.LightningModule):
 
         x_cat_marginal = self.marginal_net(x_features)
         x_features = x_features.detach()  # is this helpful? doing it here to match old code
-        pred["marginal"] = self.make_layer(x_cat_marginal)
+        pred["marginal"] = VariationalGrid(x_cat_marginal, self.survey_bands, self.tile_slen)
 
         history_cat = history_callback(pred["marginal"])
 
@@ -184,7 +147,7 @@ class Encoder(pl.LightningModule):
 
         if self.two_layers:
             x_cat_second = self.second_net(x_features)
-            pred["second"] = self.make_layer(x_cat_second)
+            pred["second"] = VariationalGrid(x_cat_second, self.survey_bands, self.tile_slen)
 
         pred["history_cat"] = history_cat
         pred["x_features"] = x_features
