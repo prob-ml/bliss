@@ -85,8 +85,8 @@ encoder:
         log_transform_stdevs: [-3, 0, 1, 3]
         use_clahe: true
         clahe_min_stdev: 200
-    grid_maker:
-        _target_: bliss.encoder.variational_grid.VariationalGridMaker
+    vd_spec:
+        _target_: bliss.encoder.variational_dist.VariationalDistSpec
         survey_bands: ${encoder.survey_bands}
         tile_slen: ${encoder.tile_slen}
     metrics:

@@ -15,7 +15,7 @@ from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMetrics
 from bliss.encoder.plotting import plot_detections
-from bliss.encoder.variational_grid import VariationalGridMaker
+from bliss.encoder.variational_dist import VariationalDistSpec
 
 
 class Encoder(pl.LightningModule):
@@ -32,7 +32,7 @@ class Encoder(pl.LightningModule):
         tile_slen: int,
         tiles_to_crop: int,
         image_normalizer: ImageNormalizer,
-        grid_maker: VariationalGridMaker,
+        vd_spec: VariationalDistSpec,
         metrics: CatalogMetrics,
         min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
@@ -48,7 +48,7 @@ class Encoder(pl.LightningModule):
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
             image_normalizer: object that applies input transforms to images
-            grid_maker: object that makes a variational grid from raw convnet output
+            vd_spec: object that makes a variational distribution from raw convnet output
             metrics: for scoring predicted catalogs during training
             min_flux_threshold: Sources with a lower flux will not be considered when computing loss
             optimizer_params: arguments passed to the Adam optimizer
@@ -63,7 +63,7 @@ class Encoder(pl.LightningModule):
         self.tile_slen = tile_slen
         self.tiles_to_crop = tiles_to_crop
         self.image_normalizer = image_normalizer
-        self.grid_maker = grid_maker
+        self.vd_spec = vd_spec
         self.metrics = metrics
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
@@ -80,7 +80,7 @@ class Encoder(pl.LightningModule):
             num_features,
             double_downsample=(tile_slen == 4),
         )
-        n_params_per_source = grid_maker.n_params_per_source
+        n_params_per_source = vd_spec.n_params_per_source
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
         if self.double_detect:
@@ -115,7 +115,7 @@ class Encoder(pl.LightningModule):
 
         context = torch.stack([detection_history, history_mask], dim=1).float()
         x_cat = self.checkerboard_net(x_features, context)
-        return self.grid_maker.make_grid(x_cat)
+        return self.vd_spec.make_dist(x_cat)
 
     def interleave_catalogs(self, marginal_cat, cond_cat, marginal_mask):
         d = {}
@@ -137,7 +137,7 @@ class Encoder(pl.LightningModule):
 
         x_cat_marginal = self.marginal_net(x_features)
         x_features = x_features.detach()  # is this helpful? doing it here to match old code
-        pred["marginal"] = self.grid_maker.make_grid(x_cat_marginal)
+        pred["marginal"] = self.vd_spec.make_dist(x_cat_marginal)
 
         history_cat = history_callback(pred["marginal"])
 
@@ -147,7 +147,7 @@ class Encoder(pl.LightningModule):
 
         if self.double_detect:
             x_cat_second = self.second_net(x_features)
-            pred["second"] = self.grid_maker.make_grid(x_cat_second)
+            pred["second"] = self.vd_spec.make_dist(x_cat_second)
 
         pred["history_cat"] = history_cat
         pred["x_features"] = x_features
