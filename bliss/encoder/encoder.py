@@ -39,7 +39,7 @@ class Encoder(pl.LightningModule):
         scheduler_params: Optional[dict] = None,
         do_data_augmentation: bool = False,
         compile_model: bool = False,
-        two_layers: bool = False,
+        double_detect: bool = False,
     ):
         """Initializes Encoder.
 
@@ -55,7 +55,7 @@ class Encoder(pl.LightningModule):
             scheduler_params: arguments passed to the learning rate scheduler
             do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
-            two_layers: whether to make up to two detections per tile rather than one
+            double_detect: whether to make up to two detections per tile rather than one
         """
         super().__init__()
 
@@ -69,7 +69,7 @@ class Encoder(pl.LightningModule):
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
-        self.two_layers = two_layers
+        self.double_detect = double_detect
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
         assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
@@ -83,14 +83,14 @@ class Encoder(pl.LightningModule):
         n_params_per_source = grid_maker.n_params_per_source
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
-        if self.two_layers:
+        if self.double_detect:
             self.second_net = CatalogNet(num_features, n_params_per_source)
 
         if compile_model:
             self.features_net = torch.compile(self.features_net)
             self.marginal_net = torch.compile(self.marginal_net)
             self.checkerboard_net = torch.compile(self.checkerboard_net)
-            if self.two_layers:
+            if self.double_detect:
                 self.second_net = torch.compile(self.second_net)
 
     def _get_checkboard(self, ht, wt):
@@ -145,7 +145,7 @@ class Encoder(pl.LightningModule):
         pred["white"] = self.infer_conditional(x_features, history_cat, white_history_mask)
         pred["black"] = self.infer_conditional(x_features, history_cat, 1 - white_history_mask)
 
-        if self.two_layers:
+        if self.double_detect:
             x_cat_second = self.second_net(x_features)
             pred["second"] = self.grid_maker.make_grid(x_cat_second)
 
@@ -164,10 +164,10 @@ class Encoder(pl.LightningModule):
         est_cat = self.interleave_catalogs(
             pred["history_cat"], white_cat, pred["white_history_mask"]
         )
-        if self.two_layers:
+        if self.double_detect:
             est_cat_s = pred["second"].sample(use_mode=use_mode)
-            # our loss function implies that the second layer is ignored for a tile
-            # if the first layer is empty for that tile
+            # our loss function implies that the second detection is ignored for a tile
+            # if the first detection is empty for that tile
             est_cat_s.n_sources *= est_cat.n_sources
             est_cat = est_cat.union(est_cat_s)
         return est_cat.symmetric_crop(self.tiles_to_crop)
@@ -191,7 +191,7 @@ class Encoder(pl.LightningModule):
                 self.logger.experiment.add_figure(title, fig)
             plt.close(fig)
 
-    def _layer1_nll(self, target_cat, pred):
+    def _single_detection_nll(self, target_cat, pred):
         marginal_loss = pred["marginal"].compute_nll(target_cat)
 
         white_loss = pred["white"].compute_nll(target_cat)
@@ -205,12 +205,12 @@ class Encoder(pl.LightningModule):
         # we divide by two because we score two predictions for each tile
         return (marginal_loss + white_loss + black_loss) / 2
 
-    def _two_layer_nll(self, target_cat1, target_cat, pred):
+    def _double_detection_nll(self, target_cat1, target_cat, pred):
         target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
 
-        nll_marginal_z1 = self._layer1_nll(target_cat1, pred)
+        nll_marginal_z1 = self._single_detection_nll(target_cat1, pred)
         nll_cond_z2 = pred["second"].compute_nll(target_cat2)
-        nll_marginal_z2 = self._layer1_nll(target_cat2, pred)
+        nll_marginal_z2 = self._single_detection_nll(target_cat2, pred)
         nll_cond_z1 = pred["second"].compute_nll(target_cat1)
 
         none_mask = target_cat.n_sources == 0
@@ -242,10 +242,10 @@ class Encoder(pl.LightningModule):
         pred = self.infer(batch, truth_callback)
 
         # compute loss
-        if not self.two_layers:
-            loss = self._layer1_nll(target_cat1, pred)
+        if not self.double_detect:
+            loss = self._single_detection_nll(target_cat1, pred)
         else:
-            loss = self._two_layer_nll(target_cat1, target_cat, pred)
+            loss = self._double_detection_nll(target_cat1, target_cat, pred)
 
         # exclude border tiles and report average per-tile loss
         ttc = self.tiles_to_crop

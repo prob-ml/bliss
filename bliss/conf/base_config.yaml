@@ -96,7 +96,7 @@ encoder:
         survey_bands: ${encoder.survey_bands}
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
-    two_layers: false
+    double_detect: false
 
 surveys:
     sdss:
