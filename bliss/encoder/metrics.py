@@ -8,6 +8,7 @@ from torch import Tensor
 from torchmetrics import Metric
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
+from bliss.utils.flux_units import convert_nmgy_to_mag
 
 # define type alias to simplify signatures
 Catalog = Union[TileCatalog, FullCatalog]
@@ -57,16 +58,20 @@ class CatalogMetrics(Metric):
         self,
         survey_bands: list,
         mode: str = "matching",
-        slack: float = 1.0,
+        dist_slack: float = 1.0,
+        mag_slack: float = 0.5,
+        mag_slack_band: int = 2,
         dist_sync_on_step: bool = False,
         disable_bar: bool = True,
     ) -> None:
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
-        self.slack = slack
-        self.disable_bar = disable_bar
-        self.mode = mode
         self.survey_bands = survey_bands
+        self.mode = mode
+        self.dist_slack = dist_slack
+        self.mag_slack = mag_slack
+        self.mag_slack_band = mag_slack_band
+        self.disable_bar = disable_bar
 
         self.detection_metrics = [
             "detection_tp",
@@ -118,6 +123,10 @@ class CatalogMetrics(Metric):
             est_locs = est.plocs
             tgbool = true.galaxy_bools
             egbool = est.galaxy_bools
+            true_fluxes = true.get_fluxes_of_on_sources()[:, :, self.mag_slack_band]
+            est_fluxes = est.get_fluxes_of_on_sources()[:, :, self.mag_slack_band]
+            true_mags = convert_nmgy_to_mag(true_fluxes)
+            est_mags = convert_nmgy_to_mag(est_fluxes)
         elif self.mode == "conditional":
             true_on_idx, true_is_on = true.get_indices_of_on_sources()
             est_on_idx, est_is_on = est.get_indices_of_on_sources()
@@ -135,6 +144,9 @@ class CatalogMetrics(Metric):
             egbool = est_st == SourceType.GALAXY
             egbool *= est_is_on.unsqueeze(-1)
 
+            true_mags = torch.zeros_like(true_on_idx, dtype=torch.float)
+            est_mags = true_mags  # hack to avoid filtering on mag in conditional mode
+
         match_true, match_est = [], []
         for i in range(true.batch_size):
             ntrue = int(true.n_sources[i].int().sum().item())
@@ -150,7 +162,10 @@ class CatalogMetrics(Metric):
                 continue
 
             mtrue, mest, dkeep, avg_keep_distance = self.match_catalogs(
-                true_locs[i, 0:ntrue], est_locs[i, 0:nest]
+                true_locs[i, 0:ntrue],
+                est_locs[i, 0:nest],
+                true_mags[i, 0:ntrue],
+                est_mags[i, 0:nest],
             )
             match_true.append(mtrue[dkeep])
             match_est.append(mest[dkeep])
@@ -317,7 +332,7 @@ class CatalogMetrics(Metric):
 
         return metrics
 
-    def match_catalogs(self, true_locs, est_locs):
+    def match_catalogs(self, true_locs, est_locs, true_mags, est_mags):
         """Match true and estimated locations and returned indices to match.
 
         Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
@@ -328,6 +343,8 @@ class CatalogMetrics(Metric):
                 The centroids should be in units of pixels.
             est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
                 number of sources. The centroids should be in units of pixels.
+            true_mags: The true magnitudes of the sources in a particular band
+            est_mags: The estimated magnitudes of the sources in a particular band
 
         Returns:
             A tuple of the following objects:
@@ -337,19 +354,21 @@ class CatalogMetrics(Metric):
             - avg_keep_distance: Average L2 distance over matched objects to keep.
         """
         locs_diff = rearrange(true_locs, "i j -> i 1 j") - rearrange(est_locs, "i j -> 1 i j")
-        locs_err = locs_diff.norm(dim=2)
+        locs_dist = locs_diff.norm(dim=2)
 
-        # Penalize all pairs which are greater than slack apart to favor valid matches.
-        locs_err = locs_err + (locs_err > self.slack) * 1e20
+        mag_diff = rearrange(true_mags, "i -> i 1") - rearrange(est_mags, "i -> 1 i")
+        mag_err = mag_diff.abs()
+
+        # Penalize all pairs which are greater than slack apart to favor valid matches
+        oob = (locs_dist > self.dist_slack) | (mag_err > self.mag_slack)
+        cost = locs_dist + oob * 1e20
 
         # find minimal permutation
-        row_indx, col_indx = linear_sum_assignment(locs_err.detach().cpu())
+        row_indx, col_indx = linear_sum_assignment(cost.detach().cpu())
 
-        # only match objects that satisfy threshold on L2 distance.
+        # good match condition: not out-of-bounds due to either slack contraint
+        matches_to_keep = ~oob[row_indx, col_indx]
         match_dist = (true_locs[row_indx] - est_locs[col_indx]).norm(dim=1)
+        avg_keep_distance = match_dist[matches_to_keep].mean()
 
-        # GOOD match condition: L2 distance is less than slack
-        matches_to_keep = (match_dist < self.slack).bool().cpu().numpy()
-        avg_keep_distance = match_dist[match_dist < self.slack].mean()
-
-        return row_indx, col_indx, matches_to_keep, avg_keep_distance
+        return row_indx, col_indx, matches_to_keep.cpu().numpy(), avg_keep_distance

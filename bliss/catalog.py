@@ -443,7 +443,8 @@ class FullCatalog(UserDict):
     def device(self):
         return self.plocs.device
 
-    def get_is_on_mask(self) -> Tensor:
+    @property
+    def is_on_mask(self) -> Tensor:
         arange = torch.arange(self.max_sources, device=self.device)
         return arange.view(1, -1) < self.n_sources.view(-1, 1)
 
@@ -451,17 +452,24 @@ class FullCatalog(UserDict):
     def star_bools(self) -> Tensor:
         is_star = self["source_type"] == SourceType.STAR
         assert is_star.size(1) == self.max_sources
-        is_on_mask = self.get_is_on_mask()
         assert is_star.size(2) == 1
-        return is_star * is_on_mask.unsqueeze(2)
+        return is_star * self.is_on_mask.unsqueeze(2)
 
     @property
     def galaxy_bools(self) -> Tensor:
         is_galaxy = self["source_type"] == SourceType.GALAXY
         assert is_galaxy.size(1) == self.max_sources
-        is_on_mask = self.get_is_on_mask()
         assert is_galaxy.size(2) == 1
-        return is_galaxy * is_on_mask.unsqueeze(2)
+        return is_galaxy * self.is_on_mask.unsqueeze(2)
+
+    def get_fluxes_of_on_sources(self):
+        """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
+
+        Returns:
+            Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
+        """
+        fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
+        return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
     def one_source(self, b: int, s: int):
         """Return a dict containing all parameter for one specified light source."""
@@ -613,12 +621,12 @@ class FullCatalog(UserDict):
 
         # Convert dictionary of tensors to list of dictionaries
         on_vals = {}
-        is_on_mask = self.get_is_on_mask()
+        is_on_mask = self.is_on_mask
         for k, v in self.to_dict().items():
             if k == "n_sources":
                 continue
             if k == "galaxy_params":
-                # reshape get_is_on_mask() to have same last dimension as galaxy_params
+                # reshape is_on_mask to have same last dimension as galaxy_params
                 galaxy_params_mask = is_on_mask.unsqueeze(-1).expand_as(v)
                 on_vals[k] = v[galaxy_params_mask].reshape(-1, v.shape[-1]).cpu()
             else:
