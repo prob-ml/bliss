@@ -75,11 +75,6 @@ encoder:
     scheduler_params:
         milestones: [32]
         gamma: 0.1
-    metrics:
-        _target_: bliss.encoder.metrics.CatalogMetrics
-        slack: 1.0
-        mode: matching
-        survey_bands: ${encoder.survey_bands}
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
         bands: [0, 1, 2, 3, 4]
@@ -90,6 +85,15 @@ encoder:
         log_transform_stdevs: [-3, 0, 1, 3]
         use_clahe: true
         clahe_min_stdev: 200
+    grid_maker:
+        _target_: bliss.encoder.variational_grid.VariationalGridMaker
+        survey_bands: ${encoder.survey_bands}
+        tile_slen: ${encoder.tile_slen}
+    metrics:
+        _target_: bliss.encoder.metrics.CatalogMetrics
+        slack: 1.0
+        mode: matching
+        survey_bands: ${encoder.survey_bands}
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
     two_layers: false

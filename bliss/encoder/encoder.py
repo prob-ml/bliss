@@ -15,7 +15,7 @@ from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMetrics
 from bliss.encoder.plotting import plot_detections
-from bliss.encoder.variational_grid import VariationalGrid
+from bliss.encoder.variational_grid import VariationalGridMaker
 
 
 class Encoder(pl.LightningModule):
@@ -32,6 +32,7 @@ class Encoder(pl.LightningModule):
         tile_slen: int,
         tiles_to_crop: int,
         image_normalizer: ImageNormalizer,
+        grid_maker: VariationalGridMaker,
         metrics: CatalogMetrics,
         min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
@@ -40,13 +41,14 @@ class Encoder(pl.LightningModule):
         compile_model: bool = False,
         two_layers: bool = False,
     ):
-        """Initializes DetectionEncoder.
+        """Initializes Encoder.
 
         Args:
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
             image_normalizer: object that applies input transforms to images
+            grid_maker: object that makes a variational grid from raw convnet output
             metrics: for scoring predicted catalogs during training
             min_flux_threshold: Sources with a lower flux will not be considered when computing loss
             optimizer_params: arguments passed to the Adam optimizer
@@ -60,8 +62,9 @@ class Encoder(pl.LightningModule):
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
         self.tiles_to_crop = tiles_to_crop
-        self.metrics = metrics
         self.image_normalizer = image_normalizer
+        self.grid_maker = grid_maker
+        self.metrics = metrics
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
@@ -77,11 +80,11 @@ class Encoder(pl.LightningModule):
             num_features,
             double_downsample=(tile_slen == 4),
         )
-        dummy_vg = VariationalGrid(None, self.survey_bands, self.tile_slen)
-        self.marginal_net = CatalogNet(num_features, dummy_vg.n_params_per_source)
-        self.checkerboard_net = ContextNet(num_features, dummy_vg.n_params_per_source)
+        n_params_per_source = grid_maker.n_params_per_source
+        self.marginal_net = CatalogNet(num_features, n_params_per_source)
+        self.checkerboard_net = ContextNet(num_features, n_params_per_source)
         if self.two_layers:
-            self.second_net = CatalogNet(num_features, dummy_vg.n_params_per_source)
+            self.second_net = CatalogNet(num_features, n_params_per_source)
 
         if compile_model:
             self.features_net = torch.compile(self.features_net)
@@ -100,10 +103,6 @@ class Encoder(pl.LightningModule):
         tile_cb = indices.sum(axis=0) % 2
         return rearrange(tile_cb, "ht wt -> 1 1 ht wt")
 
-    def get_features(self, batch):
-        x = self.image_normalizer.get_input_tensor(batch)
-        return self.features_net(x)
-
     def infer_conditional(self, x_features, history_cat, history_mask):
         masked_cat = copy(history_cat)
         # masks not just n_sources; n_sources controls access to all fields.
@@ -116,7 +115,7 @@ class Encoder(pl.LightningModule):
 
         context = torch.stack([detection_history, history_mask], dim=1).float()
         x_cat = self.checkerboard_net(x_features, context)
-        return VariationalGrid(x_cat, self.survey_bands, self.tile_slen)
+        return self.grid_maker.make_grid(x_cat)
 
     def interleave_catalogs(self, marginal_cat, cond_cat, marginal_mask):
         d = {}
@@ -133,11 +132,12 @@ class Encoder(pl.LightningModule):
         tile_cb = self._get_checkboard(ht, wt).squeeze(1)
         pred = {}
 
-        x_features = self.get_features(batch)
+        x = self.image_normalizer.get_input_tensor(batch)
+        x_features = self.features_net(x)
 
         x_cat_marginal = self.marginal_net(x_features)
         x_features = x_features.detach()  # is this helpful? doing it here to match old code
-        pred["marginal"] = VariationalGrid(x_cat_marginal, self.survey_bands, self.tile_slen)
+        pred["marginal"] = self.grid_maker.make_grid(x_cat_marginal)
 
         history_cat = history_callback(pred["marginal"])
 
@@ -147,7 +147,7 @@ class Encoder(pl.LightningModule):
 
         if self.two_layers:
             x_cat_second = self.second_net(x_features)
-            pred["second"] = VariationalGrid(x_cat_second, self.survey_bands, self.tile_slen)
+            pred["second"] = self.grid_maker.make_grid(x_cat_second)
 
         pred["history_cat"] = history_cat
         pred["x_features"] = x_features
