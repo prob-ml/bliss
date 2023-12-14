@@ -92,7 +92,7 @@ encoder:
     metrics:
         _target_: bliss.encoder.metrics.CatalogMetrics
         dist_slack: 1.0
-        mag_slack: 0.5
+        mag_slack: null
         mag_slack_band: 2  # SDSS r-band
         survey_bands: ${encoder.survey_bands}
     do_data_augmentation: false

@@ -468,7 +468,11 @@ class FullCatalog(UserDict):
         Returns:
             Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
         """
-        fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
+        if "fluxes" in self:
+            # ideally we'd always store fluxes rather than star_fluxes and galaxy_fluxes
+            fluxes = self.get("fluxes")
+        else:
+            fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
     def one_source(self, b: int, s: int):

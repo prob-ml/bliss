@@ -25,7 +25,7 @@ class CatalogMetrics(Metric):
     star_tp: Tensor
     star_fp: Tensor
 
-    # Classification metrics
+    # other metrics
     gal_fluxes: Tensor
     star_fluxes: Tensor
     disk_frac: Tensor
@@ -42,9 +42,9 @@ class CatalogMetrics(Metric):
         self,
         survey_bands: list,
         dist_slack: float = 1.0,
-        mag_slack: float = float("inf"),
+        mag_slack: float = None,
         mag_slack_band: int = 2,
-        mag_bin_cutoffs: list = (),
+        mag_bin_cutoffs: list = None,
         dist_sync_on_step: bool = False,
         disable_bar: bool = True,
     ):
@@ -54,8 +54,10 @@ class CatalogMetrics(Metric):
         self.dist_slack = dist_slack
         self.mag_slack = mag_slack
         self.mag_slack_band = mag_slack_band
-        self.mag_bin_cutoffs = torch.tensor(mag_bin_cutoffs, device=self.device)
         self.disable_bar = disable_bar
+
+        cutoffs = mag_bin_cutoffs if mag_bin_cutoffs else []
+        self.mag_bin_cutoffs = torch.tensor(cutoffs, device=self.device)
 
         detection_metrics = [
             "detection_tp",
@@ -72,7 +74,7 @@ class CatalogMetrics(Metric):
             init_val = torch.zeros(num_bins)
             self.add_state(metric, default=init_val, dist_reduce_fx="sum")
 
-        self.classification_metrics = [
+        self.other_metrics = [
             "disk_frac",
             "bulge_frac",
             "disk_q",
@@ -83,7 +85,7 @@ class CatalogMetrics(Metric):
             "gal_fluxes",
             "star_fluxes",
         ]
-        for metric in self.classification_metrics:
+        for metric in self.other_metrics:
             num_zeros = len(self.survey_bands) if metric in {"gal_fluxes", "star_fluxes"} else 1
             default = torch.zeros(num_zeros)
             self.add_state(metric, default=default, dist_reduce_fx="sum")
@@ -91,15 +93,10 @@ class CatalogMetrics(Metric):
     def update(self, true_cat, est_cat):
         assert isinstance(true_cat, FullCatalog) and isinstance(est_cat, FullCatalog)
         assert true_cat.batch_size == est_cat.batch_size
-        batch_true_matches, batch_est_matches = self._update_detection_metrics(true_cat, est_cat)
-        self._update_classification_metrics(
-            true_cat, est_cat, batch_true_matches, batch_est_matches
-        )
 
-    def _update_detection_metrics(self, true_cat, est_cat) -> None:
-        """Update detection metrics."""
-        true_mags = convert_nmgy_to_mag(true_cat.get_fluxes()[:, :, self.mag_slack_band])
-        est_mags = convert_nmgy_to_mag(est_cat.get_fluxes()[:, :, self.mag_slack_band])
+        if self.mag_slack:
+            true_mags = convert_nmgy_to_mag(true_cat.get_fluxes()[:, :, self.mag_slack_band])
+            est_mags = convert_nmgy_to_mag(est_cat.get_fluxes()[:, :, self.mag_slack_band])
 
         batch_true_matches, batch_est_matches = [], []
         for i in range(true_cat.batch_size):
@@ -110,8 +107,8 @@ class CatalogMetrics(Metric):
             true_matches, est_matches = self.match_catalogs(
                 true_cat.plocs[i, 0:n_true],
                 est_cat.plocs[i, 0:n_est],
-                true_mags[i, 0:n_true],
-                est_mags[i, 0:n_est],
+                true_mags[i, 0:n_true] if self.mag_slack else None,
+                est_mags[i, 0:n_est] if self.mag_slack else None,
             )
             batch_true_matches.append(true_matches)
             batch_est_matches.append(est_matches)
@@ -127,27 +124,24 @@ class CatalogMetrics(Metric):
             self.total_match_distance += image_match_distance
 
             # update star/galaxy classification TP/FP
-            batch_tgbool = true_cat.galaxy_bools[i][true_matches].reshape(-1)
-            batch_egbool = est_cat.galaxy_bools[i][est_matches].reshape(-1)
+            true_gal = true_cat.galaxy_bools[i][true_matches].reshape(-1).cpu()
+            est_gal = est_cat.galaxy_bools[i][est_matches].reshape(-1).cpu()
 
-            conf_matrix = confusion_matrix(batch_tgbool.cpu(), batch_egbool.cpu(), labels=[1, 0])
+            conf_matrix = confusion_matrix(true_gal, est_gal, labels=[1, 0])
 
             self.gal_tp += conf_matrix[0][0]
             self.gal_fp += conf_matrix[0][1]
             self.star_fp += conf_matrix[1][0]
             self.star_tp += conf_matrix[1][1]
 
-        return batch_true_matches, batch_est_matches
+        self._update_other_metrics(true_cat, est_cat, batch_true_matches, batch_est_matches)
 
-    def _update_classification_metrics(
-        self, true_cat, est_cat, batch_true_matches, batch_est_matches
-    ):
-        """Update classification metrics based on estimated params at locations of true sources."""
-        # only compute classification metrics if available
+    def _update_other_metrics(self, true_cat, est_cat, batch_true_matches, batch_est_matches):
+        """Update remaining metrics based on estimated params at locations of true sources."""
+        # only compute these metrics if available
         if "galaxy_params" not in true_cat or "galaxy_params" not in est_cat:
             return
 
-        # get parameters depending on the kind of catalog
         if not (batch_true_matches and batch_est_matches):
             return  # need matches to compute classification metrics on full catalog
 
@@ -165,6 +159,10 @@ class CatalogMetrics(Metric):
         params = ["galaxy_fluxes", "star_fluxes", "galaxy_params"]
         true_params = {param: true_cat[param][true_mask] for param in params}
         est_params = {param: est_cat[param][est_mask] for param in params}
+
+        # TODO: the metrics below should be normalized by the number of stars OR
+        # the number of galaxies in the true catalog, not the total number of entries!
+        # (which is what happens implicilty when we take a mean)
 
         # star flux average absolute error
         star_flux_diff = true_params["star_fluxes"] - est_params["star_fluxes"]
@@ -222,7 +220,7 @@ class CatalogMetrics(Metric):
         }
 
         # add classification metrics if computed
-        for metric in self.classification_metrics:
+        for metric in self.other_metrics:
             v = getattr(self, metric, None)
 
             # take median along first dim of stacked tensors, i.e. across images
@@ -256,11 +254,14 @@ class CatalogMetrics(Metric):
         locs_diff = rearrange(true_locs, "i j -> i 1 j") - rearrange(est_locs, "i j -> 1 i j")
         locs_dist = locs_diff.norm(dim=2)
 
-        mag_diff = rearrange(true_mags, "i -> i 1") - rearrange(est_mags, "i -> 1 i")
-        mag_err = mag_diff.abs()
-
         # Penalize all pairs which are greater than slack apart to favor valid matches
-        oob = (locs_dist > self.dist_slack) | (mag_err > self.mag_slack)
+        oob = locs_dist > self.dist_slack
+
+        if self.mag_slack:
+            mag_diff = rearrange(true_mags, "i -> i 1") - rearrange(est_mags, "i -> 1 i")
+            mag_err = mag_diff.abs()
+            oob |= mag_err > self.mag_slack
+
         cost = locs_dist + oob * 1e20
 
         # find minimal permutation

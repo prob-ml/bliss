@@ -165,7 +165,7 @@ class TestMetrics:
         full_catalog = tile_catalog.to_full_catalog()
         metrics = CatalogMetrics(dist_slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(full_catalog, full_catalog)
-        for metric in metrics.classification_metrics:
+        for metric in metrics.other_metrics:
             if metric in {"gal_fluxes", "star_fluxes"}:
                 for band in "ugriz":
                     assert results[f"{metric}_{band}_mae"] == 0
