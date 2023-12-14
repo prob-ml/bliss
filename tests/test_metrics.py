@@ -86,7 +86,7 @@ class TestMetrics:
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
         slen = 50
-        metrics = CatalogMetrics(mode="matching", slack=1.0, survey_bands=list(SDSS.BANDS))
+        metrics = CatalogMetrics(dist_slack=1.0, survey_bands=list(SDSS.BANDS))
 
         true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]])
         est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]])
@@ -97,6 +97,8 @@ class TestMetrics:
             "n_sources": torch.tensor([1, 2]),
             "plocs": true_locs * slen,
             "source_type": true_source_type,
+            "star_fluxes": torch.ones(2, 2, 5),
+            "galaxy_fluxes": torch.ones(2, 2, 5),
         }
         true_params = FullCatalog(slen, slen, d_true)
 
@@ -104,24 +106,26 @@ class TestMetrics:
             "n_sources": torch.tensor([2, 2]),
             "plocs": est_locs * slen,
             "source_type": est_source_type,
+            "star_fluxes": torch.ones(2, 2, 5),
+            "galaxy_fluxes": torch.ones(2, 2, 5),
         }
         est_params = FullCatalog(slen, slen, d_est)
 
         results = metrics(true_params, est_params)
         precision = results["detection_precision"]
         recall = results["detection_recall"]
-        avg_keep_distance = results["avg_keep_distance"]
+        avg_match_distance = results["avg_match_distance"]
 
-        class_acc = results["class_acc"]
+        classification_acc = results["classification_acc"]
 
         assert np.isclose(precision, 2 / (2 + 2))
         assert np.isclose(recall, 2 / 3)
-        assert np.isclose(class_acc, 1 / 2)
-        assert np.isclose(avg_keep_distance, (((0.01 * 50) ** 2) * 2) ** 0.5)
+        assert np.isclose(classification_acc, 1 / 2)
+        assert np.isclose(avg_match_distance, (((0.01 * 50) ** 2) * 2) ** 0.5)
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
-        metrics = CatalogMetrics(mode="matching", slack=2.0, survey_bands=list(SDSS.BANDS))
+        metrics = CatalogMetrics(dist_slack=2.0, survey_bands=list(SDSS.BANDS))
 
         true_locs = torch.tensor(
             [[[10, 10]], [[20, 20]], [[30, 30]], [[40, 40]]], dtype=torch.float
@@ -132,34 +136,34 @@ class TestMetrics:
         true_sources = torch.tensor([0, 0, 1, 1])
         est_sources = torch.tensor([0, 1, 0, 1])
 
-        d_true = {"n_sources": true_sources, "plocs": true_locs, "source_type": true_source_type}
+        d_true = {
+            "n_sources": true_sources,
+            "plocs": true_locs,
+            "source_type": true_source_type,
+            "star_fluxes": torch.ones(4, 1, 5),
+            "galaxy_fluxes": torch.ones(4, 1, 5),
+        }
         true_params = FullCatalog(50, 50, d_true)
 
-        d_est = {"n_sources": est_sources, "plocs": est_locs, "source_type": est_source_type}
+        d_est = {
+            "n_sources": est_sources,
+            "plocs": est_locs,
+            "source_type": est_source_type,
+            "star_fluxes": torch.ones(4, 1, 5),
+            "galaxy_fluxes": torch.ones(4, 1, 5),
+        }
         est_params = FullCatalog(50, 50, d_est)
 
         results = metrics(true_params, est_params)
 
         assert results["detection_precision"] == 1 / 2
         assert results["detection_recall"] == 1 / 2
-        assert results["gal_tp"] == 1
-        assert results["avg_keep_distance"] == pytest.approx(2**0.5)
-
-    def test_classification_metrics_tile(self, tile_catalog):
-        """Test galaxy classification metrics on tile catalog."""
-        metrics = CatalogMetrics(mode="conditional", slack=1.0, survey_bands=list(SDSS.BANDS))
-        results = metrics(tile_catalog, tile_catalog)
-        for metric in metrics.classification_metrics:
-            if metric in {"gal_fluxes", "star_fluxes"}:
-                for band in "ugriz":
-                    assert results[f"{metric}_{band}_mae"] == 0
-            else:
-                assert results[f"{metric}_mae"] == 0
+        assert results["avg_match_distance"] == pytest.approx(2**0.5)
 
     def test_classification_metrics_full(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
         full_catalog = tile_catalog.to_full_catalog()
-        metrics = CatalogMetrics(mode="matching", slack=1.0, survey_bands=list(SDSS.BANDS))
+        metrics = CatalogMetrics(dist_slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(full_catalog, full_catalog)
         for metric in metrics.classification_metrics:
             if metric in {"gal_fluxes", "star_fluxes"}:
@@ -170,12 +174,12 @@ class TestMetrics:
 
     def test_catalog_agreement(self, catalogs):
         """Compares catalogs as safety check for metrics."""
-        metrics = CatalogMetrics(mode="matching", slack=1.0, survey_bands=list(SDSS.BANDS))
+        metrics = CatalogMetrics(dist_slack=1.0, survey_bands=list(SDSS.BANDS))
 
         assert metrics(catalogs["photo"], catalogs["photo"])["f1"] == 1
         assert metrics(catalogs["decals"], catalogs["decals"])["f1"] == 1
         assert metrics(catalogs["decals"], catalogs["photo"])["detection_precision"] > 0.8
-        assert metrics(catalogs["photo"], catalogs["bliss"])["avg_keep_distance"] < 1.0
+        assert metrics(catalogs["photo"], catalogs["bliss"])["avg_match_distance"] < 1.0
 
         # bliss finds many more sources than photo. recall here measures the fraction of sources
         # photo finds that bliss also finds

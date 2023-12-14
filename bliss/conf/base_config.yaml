@@ -94,7 +94,6 @@ encoder:
         dist_slack: 1.0
         mag_slack: 0.5
         mag_slack_band: 2  # SDSS r-band
-        mode: matching
         survey_bands: ${encoder.survey_bands}
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance

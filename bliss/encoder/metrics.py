@@ -1,5 +1,3 @@
-from typing import Dict, List, Union
-
 import torch
 from einops import rearrange
 from scipy.optimize import linear_sum_assignment
@@ -7,24 +5,12 @@ from sklearn.metrics import confusion_matrix
 from torch import Tensor
 from torchmetrics import Metric
 
-from bliss.catalog import FullCatalog, SourceType, TileCatalog
+from bliss.catalog import FullCatalog
 from bliss.utils.flux_units import convert_nmgy_to_mag
-
-# define type alias to simplify signatures
-Catalog = Union[TileCatalog, FullCatalog]
 
 
 class CatalogMetrics(Metric):
     """Calculates detection and classification metrics between two catalogs.
-
-    CatalogMetrics supports two modes, "matching" and "conditional", which operate on FullCatalog
-    objects and TileCatalog objects, respectively.
-    For "matching", all metrics are computed by matching predicted sources to true sources.
-    For "conditional", detection metrics are still computed that way, but star/galaxy parameter
-    metrics are computed conditioned on true source location and type; i.e, given a true star or
-    galaxy in a tile in the true catalog, get the corresponding parameters in the same tile in the
-    estimated catalog (regardless of type/existence predicted by estimated catalog in that tile.
-
     Note that galaxy classification metrics are only computed when the values are available in
     both catalogs.
     """
@@ -33,9 +19,7 @@ class CatalogMetrics(Metric):
     detection_tp: Tensor
     detection_fp: Tensor
     total_true_n_sources: Tensor
-    total_distance_keep: Tensor
-    match_count: Tensor
-    match_count_keep: Tensor
+    total_match_distance: Tensor
     gal_tp: Tensor
     gal_fp: Tensor
     star_tp: Tensor
@@ -57,36 +41,36 @@ class CatalogMetrics(Metric):
     def __init__(
         self,
         survey_bands: list,
-        mode: str = "matching",
         dist_slack: float = 1.0,
-        mag_slack: float = 0.5,
+        mag_slack: float = float("inf"),
         mag_slack_band: int = 2,
+        mag_bin_cutoffs: list = (),
         dist_sync_on_step: bool = False,
         disable_bar: bool = True,
-    ) -> None:
+    ):
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
         self.survey_bands = survey_bands
-        self.mode = mode
         self.dist_slack = dist_slack
         self.mag_slack = mag_slack
         self.mag_slack_band = mag_slack_band
+        self.mag_bin_cutoffs = torch.tensor(mag_bin_cutoffs, device=self.device)
         self.disable_bar = disable_bar
 
-        self.detection_metrics = [
+        detection_metrics = [
             "detection_tp",
             "detection_fp",
             "total_true_n_sources",
-            "total_distance_keep",
-            "match_count",
-            "match_count_keep",
+            "total_match_distance",
             "gal_tp",
             "gal_fp",
             "star_tp",
             "star_fp",
         ]
-        for metric in self.detection_metrics:
-            self.add_state(metric, default=torch.tensor(0.0), dist_reduce_fx="sum")
+        for metric in detection_metrics:
+            num_bins = self.mag_bin_cutoffs.shape[0] + 1  # fence post
+            init_val = torch.zeros(num_bins)
+            self.add_state(metric, default=init_val, dist_reduce_fx="sum")
 
         self.classification_metrics = [
             "disk_frac",
@@ -104,130 +88,95 @@ class CatalogMetrics(Metric):
             default = torch.zeros(num_zeros)
             self.add_state(metric, default=default, dist_reduce_fx="sum")
 
-    def update(self, true: Catalog, est: Catalog) -> None:
-        assert true.batch_size == est.batch_size
-        if self.mode == "matching":
-            msg = "Metrics mode is set to `matching` but received a TileCatalog"
-            assert isinstance(true, FullCatalog) and isinstance(est, FullCatalog), msg
-        elif self.mode == "conditional":
-            msg = "Metrics mode is set to `conditional` but received a FullCatalog"
-            assert isinstance(true, TileCatalog) and isinstance(est, TileCatalog), msg
+    def update(self, true_cat, est_cat):
+        assert isinstance(true_cat, FullCatalog) and isinstance(est_cat, FullCatalog)
+        assert true_cat.batch_size == est_cat.batch_size
+        batch_true_matches, batch_est_matches = self._update_detection_metrics(true_cat, est_cat)
+        self._update_classification_metrics(
+            true_cat, est_cat, batch_true_matches, batch_est_matches
+        )
 
-        match_true, match_est = self._update_detection_metrics(true, est)
-        self._update_classification_metrics(true, est, match_true, match_est)
-
-    def _update_detection_metrics(self, true: Catalog, est: Catalog) -> None:
+    def _update_detection_metrics(self, true_cat, est_cat) -> None:
         """Update detection metrics."""
-        if self.mode == "matching":
-            true_locs = true.plocs
-            est_locs = est.plocs
-            tgbool = true.galaxy_bools
-            egbool = est.galaxy_bools
-            true_fluxes = true.get_fluxes_of_on_sources()[:, :, self.mag_slack_band]
-            est_fluxes = est.get_fluxes_of_on_sources()[:, :, self.mag_slack_band]
-            true_mags = convert_nmgy_to_mag(true_fluxes)
-            est_mags = convert_nmgy_to_mag(est_fluxes)
-        elif self.mode == "conditional":
-            true_on_idx, true_is_on = true.get_indices_of_on_sources()
-            est_on_idx, est_is_on = est.get_indices_of_on_sources()
+        true_mags = convert_nmgy_to_mag(true_cat.get_fluxes()[:, :, self.mag_slack_band])
+        est_mags = convert_nmgy_to_mag(est_cat.get_fluxes()[:, :, self.mag_slack_band])
 
-            true_locs = true.gather_param_at_tiles("locs", true_on_idx)
-            true_locs *= true_is_on.unsqueeze(-1)
-            est_locs = est.gather_param_at_tiles("locs", est_on_idx)
-            est_locs *= est_is_on.unsqueeze(-1)
+        batch_true_matches, batch_est_matches = [], []
+        for i in range(true_cat.batch_size):
+            n_true = int(true_cat.n_sources[i].int().sum().item())
+            n_est = int(est_cat.n_sources[i].int().sum().item())
+            self.total_true_n_sources += n_true
 
-            true_st = true.gather_param_at_tiles("source_type", true_on_idx)
-            tgbool = true_st == SourceType.GALAXY
-            tgbool *= true_is_on.unsqueeze(-1)
-
-            est_st = est.gather_param_at_tiles("source_type", est_on_idx)
-            egbool = est_st == SourceType.GALAXY
-            egbool *= est_is_on.unsqueeze(-1)
-
-            true_mags = torch.zeros_like(true_on_idx, dtype=torch.float)
-            est_mags = true_mags  # hack to avoid filtering on mag in conditional mode
-
-        match_true, match_est = [], []
-        for i in range(true.batch_size):
-            ntrue = int(true.n_sources[i].int().sum().item())
-            nest = int(est.n_sources[i].int().sum().item())
-            self.total_true_n_sources += ntrue
-
-            # if either ntrue or nest are 0, manually increment FP/FN and continue
-            if ntrue == 0 or nest == 0:
-                if nest > 0:
-                    self.detection_fp += nest
-                match_true.append([])
-                match_est.append([])
-                continue
-
-            mtrue, mest, dkeep, avg_keep_distance = self.match_catalogs(
-                true_locs[i, 0:ntrue],
-                est_locs[i, 0:nest],
-                true_mags[i, 0:ntrue],
-                est_mags[i, 0:nest],
+            true_matches, est_matches = self.match_catalogs(
+                true_cat.plocs[i, 0:n_true],
+                est_cat.plocs[i, 0:n_est],
+                true_mags[i, 0:n_true],
+                est_mags[i, 0:n_est],
             )
-            match_true.append(mtrue[dkeep])
-            match_est.append(mest[dkeep])
+            batch_true_matches.append(true_matches)
+            batch_est_matches.append(est_matches)
 
-            # update TP/FP and distances
-            tp = dkeep.sum().item()
+            # update TP/FP
+            tp = len(true_matches)
             self.detection_tp += tp
-            self.detection_fp += nest - tp
+            self.detection_fp += n_est - tp
 
-            self.match_count += 1
-            if not torch.isnan(avg_keep_distance):
-                self.total_distance_keep += avg_keep_distance
-                self.match_count_keep += 1
+            # update match distance
+            loc_diffs = true_cat.plocs[i, true_matches] - est_cat.plocs[i, est_matches]
+            image_match_distance = loc_diffs.norm(dim=1).sum()
+            self.total_match_distance += image_match_distance
 
             # update star/galaxy classification TP/FP
-            batch_tgbool = tgbool[i][mtrue][dkeep].reshape(-1)
-            batch_egbool = egbool[i][mest][dkeep].reshape(-1)
-            self._update_confusion_matrix(batch_tgbool, batch_egbool)
+            batch_tgbool = true_cat.galaxy_bools[i][true_matches].reshape(-1)
+            batch_egbool = est_cat.galaxy_bools[i][est_matches].reshape(-1)
 
-        return match_true, match_est
+            conf_matrix = confusion_matrix(batch_tgbool.cpu(), batch_egbool.cpu(), labels=[1, 0])
 
-    def _update_confusion_matrix(self, tgbool: Tensor, egbool: Tensor) -> None:
-        """Compute galaxy detection confusion matrix and update TP/FP/TN/FN.
+            self.gal_tp += conf_matrix[0][0]
+            self.gal_fp += conf_matrix[0][1]
+            self.star_fp += conf_matrix[1][0]
+            self.star_tp += conf_matrix[1][1]
 
-        Args:
-            tgbool (Tensor): Galaxy bools from true catalog.
-            egbool (Tensor): Galaxy bools from estimated catalog.
-        """
-        conf_matrix = confusion_matrix(tgbool.cpu(), egbool.cpu(), labels=[1, 0])
-        # decompose confusion matrix
-        self.gal_tp += conf_matrix[0][0]
-        self.gal_fp += conf_matrix[0][1]
-        self.star_fp += conf_matrix[1][0]
-        self.star_tp += conf_matrix[1][1]
+        return batch_true_matches, batch_est_matches
 
     def _update_classification_metrics(
-        self, true: Catalog, est: Catalog, match_true: List, match_est: List
-    ) -> None:
+        self, true_cat, est_cat, batch_true_matches, batch_est_matches
+    ):
         """Update classification metrics based on estimated params at locations of true sources."""
         # only compute classification metrics if available
-        if "galaxy_params" not in true or "galaxy_params" not in est:
+        if "galaxy_params" not in true_cat or "galaxy_params" not in est_cat:
             return
 
         # get parameters depending on the kind of catalog
-        if self.mode == "matching":
-            if not (match_true and match_est):
-                return  # need matches to compute classification metrics on full catalog
-            true_params, est_params = self._get_classification_params_full(
-                true, est, match_true, match_est
-            )
-        elif self.mode == "conditional":
-            true_params, est_params = self._get_classification_params_tile(true, est)
+        if not (batch_true_matches and batch_est_matches):
+            return  # need matches to compute classification metrics on full catalog
 
-        true_gal_fluxes = true_params["galaxy_fluxes"]
-        true_star_fluxes = true_params["star_fluxes"]
+        # Get galaxy params in true and est catalogs based on matches
+        batch_size, max_true, max_est = (
+            true_cat.batch_size,
+            true_cat.plocs.shape[1],
+            est_cat.plocs.shape[1],
+        )
+        true_mask = torch.zeros((batch_size, max_true)).bool()
+        est_mask = torch.zeros((batch_size, max_est)).bool()
+        for i in range(batch_size):
+            true_mask[i][batch_true_matches[i]] = True
+            est_mask[i][batch_est_matches[i]] = True
+        params = ["galaxy_fluxes", "star_fluxes", "galaxy_params"]
+        true_params = {param: true_cat[param][true_mask] for param in params}
+        est_params = {param: est_cat[param][est_mask] for param in params}
+
+        # star flux average absolute error
+        star_flux_diff = true_params["star_fluxes"] - est_params["star_fluxes"]
+        self.star_fluxes = star_flux_diff.abs().mean(dim=0)
+
+        # galaxy cluster average absolute error
+        gal_flux_diff = true_params["galaxy_fluxes"] - est_params["galaxy_fluxes"]
+        self.gal_fluxes = gal_flux_diff.abs().mean(dim=0)
+
+        # galaxy parameters average absolute error
         true_gal_params = true_params["galaxy_params"]
-        est_gal_fluxes = est_params["galaxy_fluxes"]
-        est_star_fluxes = est_params["star_fluxes"]
         est_gal_params = est_params["galaxy_params"]
-
-        self.gal_fluxes = (true_gal_fluxes - est_gal_fluxes).abs().mean(dim=0)
-        self.star_fluxes = (true_star_fluxes - est_star_fluxes).abs().mean(dim=0)
 
         # skip if no galaxies in true or estimated catalog
         if (true_gal_params.shape[0] == 0) or (est_gal_params.shape[0] == 0):
@@ -254,69 +203,22 @@ class CatalogMetrics(Metric):
         true_bulge_hlr = true_gal_params[:, 5] * torch.sqrt(true_gal_params[:, 4])
         self.bulge_hlr = (true_bulge_hlr - est_bulge_hlr).abs().mean()
 
-    def _get_classification_params_full(self, true, est, match_true, match_est):
-        """Get galaxy params in true and est catalogs based on matches."""
-        batch_size, max_true, max_est = true.batch_size, true.plocs.shape[1], est.plocs.shape[1]
-        true_mask = torch.zeros((batch_size, max_true)).bool()
-        est_mask = torch.zeros((batch_size, max_est)).bool()
-
-        for i in range(batch_size):
-            true_mask[i][match_true[i]] = True
-            est_mask[i][match_est[i]] = True
-
-        params = ["galaxy_fluxes", "star_fluxes", "galaxy_params"]
-        true_params = {param: true[param][true_mask] for param in params}
-        est_params = {param: est[param][est_mask] for param in params}
-
-        return true_params, est_params
-
-    def _get_classification_params_tile(self, true, est):
-        """Get galaxy params in est catalog at tiles containing a galaxy in the true catalog."""
-        true_indices, true_is_on = true.get_indices_of_on_sources()
-
-        # construct flattened masks for true source type
-        true_st = true.gather_param_at_tiles("source_type", true_indices)
-        true_gal_bools = true_st == SourceType.GALAXY
-        gal_mask = true_gal_bools.squeeze() * true_is_on.squeeze(1)
-        star_mask = (~true_gal_bools).squeeze() * true_is_on.squeeze(1)
-
-        # gather parameters where source is present in true catalog AND source is actually a star
-        # or galaxy respectively in true catalog
-        # note that the boolean indexing collapses across batches to return a 1D tensor
-        param_masks = {
-            "galaxy_fluxes": gal_mask,
-            "star_fluxes": star_mask,
-            "galaxy_params": gal_mask,
-        }
-        true_params = {}
-        est_params = {}
-        for param, mask in param_masks.items():
-            true_params[param] = true.gather_param_at_tiles(param, true_indices).squeeze(1)[mask]
-            est_params[param] = est.gather_param_at_tiles(param, true_indices).squeeze(1)[mask]
-
-        return true_params, est_params
-
-    def compute(self) -> Dict[str, float]:
+    def compute(self):
         precision = self.detection_tp / (self.detection_tp + self.detection_fp)
         recall = self.detection_tp / self.total_true_n_sources
         f1 = 2 * precision * recall / (precision + recall)
 
-        avg_keep_distance = self.total_distance_keep / self.match_count_keep.item()
+        avg_match_distance = self.total_match_distance / self.detection_tp
 
-        class_acc = (self.gal_tp + self.star_tp) / (
-            self.gal_tp + self.star_tp + self.gal_fp + self.star_fp
-        )
+        n_predictions = self.gal_tp + self.star_tp + self.gal_fp + self.star_fp
+        classification_acc = (self.gal_tp + self.star_tp) / n_predictions
 
         metrics = {
             "detection_precision": precision.item(),
             "detection_recall": recall.item(),
             "f1": f1.item(),
-            "avg_keep_distance": avg_keep_distance.item(),
-            "gal_tp": self.gal_tp.item(),
-            "gal_fp": self.gal_fp.item(),
-            "star_tp": self.star_tp.item(),
-            "star_fp": self.star_fp.item(),
-            "class_acc": class_acc.item(),
+            "avg_match_distance": avg_match_distance.item(),
+            "classification_acc": classification_acc.item(),
         }
 
         # add classification metrics if computed
@@ -348,10 +250,8 @@ class CatalogMetrics(Metric):
 
         Returns:
             A tuple of the following objects:
-            - row_indx: Indices of true objects matched to estimated objects.
-            - col_indx: Indices of estimated objects matched to true objects.
-            - dist_keep: Matched objects to keep based on L2 distances.
-            - avg_keep_distance: Average L2 distance over matched objects to keep.
+            - true_matches: Indices of true objects matched to estimated objects.
+            - est_matches: Indices of estimated objects matched to true objects.
         """
         locs_diff = rearrange(true_locs, "i j -> i 1 j") - rearrange(est_locs, "i j -> 1 i j")
         locs_dist = locs_diff.norm(dim=2)
@@ -367,8 +267,9 @@ class CatalogMetrics(Metric):
         row_indx, col_indx = linear_sum_assignment(cost.detach().cpu())
 
         # good match condition: not out-of-bounds due to either slack contraint
-        matches_to_keep = ~oob[row_indx, col_indx]
-        match_dist = (true_locs[row_indx] - est_locs[col_indx]).norm(dim=1)
-        avg_keep_distance = match_dist[matches_to_keep].mean()
+        valid_matches = ~oob[row_indx, col_indx].cpu().numpy()
 
-        return row_indx, col_indx, matches_to_keep.cpu().numpy(), avg_keep_distance
+        true_matches = row_indx[valid_matches]
+        est_matches = col_indx[valid_matches]
+
+        return true_matches, est_matches

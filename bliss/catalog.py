@@ -242,7 +242,7 @@ class TileCatalog(UserDict):
         idx_to_gather = repeat(indices, "... -> ... k", k=param.size(-1))
         return torch.gather(param, dim=1, index=idx_to_gather)
 
-    def get_fluxes_of_on_sources(self):
+    def get_fluxes(self):
         """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
 
         Returns:
@@ -253,7 +253,7 @@ class TileCatalog(UserDict):
 
     def _sort_sources_by_flux(self, band=2):
         # sort by fluxes of "on" sources to get brightest source per tile
-        on_fluxes = self.get_fluxes_of_on_sources()[..., band]  # shape n x nth x ntw x d
+        on_fluxes = self.get_fluxes()[..., band]  # shape n x nth x ntw x d
         top_indexes = on_fluxes.argsort(dim=3, descending=True)
 
         d = {"n_sources": self.n_sources}
@@ -310,7 +310,7 @@ class TileCatalog(UserDict):
         sorted_self = self._sort_sources_by_flux(band=band)
 
         # get fluxes of "on" sources to mask by
-        on_fluxes = sorted_self.get_fluxes_of_on_sources()[..., band]
+        on_fluxes = sorted_self.get_fluxes()[..., band]
         flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
 
         d = {}
@@ -462,7 +462,7 @@ class FullCatalog(UserDict):
         assert is_galaxy.size(2) == 1
         return is_galaxy * self.is_on_mask.unsqueeze(2)
 
-    def get_fluxes_of_on_sources(self):
+    def get_fluxes(self):
         """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
 
         Returns:
