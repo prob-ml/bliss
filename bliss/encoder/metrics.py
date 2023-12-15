@@ -4,7 +4,6 @@ from scipy.optimize import linear_sum_assignment
 from torchmetrics import Metric
 
 from bliss.catalog import FullCatalog
-from bliss.encoder.variational_dist import VariationalDist
 from bliss.utils.flux_units import convert_nmgy_to_mag
 
 
@@ -13,6 +12,8 @@ class CatalogMetrics(Metric):
     Note that galaxy classification metrics are only computed when the values are available in
     both catalogs.
     """
+
+    GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
 
     def __init__(
         self,
@@ -53,7 +54,7 @@ class CatalogMetrics(Metric):
         fe_init = torch.zeros(len(self.survey_bands))
         self.add_state("flux_err", default=fe_init, dist_reduce_fx="sum")
 
-        gpe_init = torch.zeros(len(VariationalDist.GALSIM_NAMES))
+        gpe_init = torch.zeros(len(self.GALSIM_NAMES))
         self.add_state("galsim_param_err", default=gpe_init, dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat):
@@ -134,7 +135,7 @@ class CatalogMetrics(Metric):
 
         if self.gal_tp > 0:
             avg_galsim_param_err = self.galsim_param_err / self.gal_tp
-            for i, gs_name in enumerate(VariationalDist.GALSIM_NAMES):
+            for i, gs_name in enumerate(self.GALSIM_NAMES):
                 metrics[f"{gs_name}_mae"] = avg_galsim_param_err[i]
 
         return metrics
