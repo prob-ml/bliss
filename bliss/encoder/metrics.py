@@ -6,6 +6,7 @@ from torch import Tensor
 from torchmetrics import Metric
 
 from bliss.catalog import FullCatalog
+from bliss.encoder.variational_dist import VariationalDist
 from bliss.utils.flux_units import convert_nmgy_to_mag
 
 
@@ -70,25 +71,15 @@ class CatalogMetrics(Metric):
             "star_fp",
         ]
         for metric in detection_metrics:
-            num_bins = self.mag_bin_cutoffs.shape[0] + 1  # fence post
+            num_bins = self.mag_bin_cutoffs.shape[0] + 1  # fencepost
             init_val = torch.zeros(num_bins)
             self.add_state(metric, default=init_val, dist_reduce_fx="sum")
 
-        self.other_metrics = [
-            "disk_frac",
-            "bulge_frac",
-            "disk_q",
-            "bulge_q",
-            "disk_hlr",
-            "bulge_hlr",
-            "beta_radians",
-            "gal_fluxes",
-            "star_fluxes",
-        ]
-        for metric in self.other_metrics:
-            num_zeros = len(self.survey_bands) if metric in {"gal_fluxes", "star_fluxes"} else 1
-            default = torch.zeros(num_zeros)
-            self.add_state(metric, default=default, dist_reduce_fx="sum")
+        fe_init = torch.zeros(len(self.survey_bands))
+        self.add_state("flux_err", default=fe_init, dist_reduce_fx="sum")
+
+        gpe_init = torch.zeros(len(VariationalDist.GALSIM_NAMES))
+        self.add_state("galsim_param_err", default=gpe_init, dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat):
         assert isinstance(true_cat, FullCatalog) and isinstance(est_cat, FullCatalog)
@@ -98,7 +89,6 @@ class CatalogMetrics(Metric):
             true_mags = convert_nmgy_to_mag(true_cat.get_fluxes()[:, :, self.mag_slack_band])
             est_mags = convert_nmgy_to_mag(est_cat.get_fluxes()[:, :, self.mag_slack_band])
 
-        batch_true_matches, batch_est_matches = [], []
         for i in range(true_cat.batch_size):
             n_true = int(true_cat.n_sources[i].int().sum().item())
             n_est = int(est_cat.n_sources[i].int().sum().item())
@@ -110,8 +100,6 @@ class CatalogMetrics(Metric):
                 true_mags[i, 0:n_true] if self.mag_slack else None,
                 est_mags[i, 0:n_est] if self.mag_slack else None,
             )
-            batch_true_matches.append(true_matches)
-            batch_est_matches.append(est_matches)
 
             # update TP/FP
             tp = len(true_matches)
@@ -134,72 +122,15 @@ class CatalogMetrics(Metric):
             self.star_fp += conf_matrix[1][0]
             self.star_tp += conf_matrix[1][1]
 
-        self._update_other_metrics(true_cat, est_cat, batch_true_matches, batch_est_matches)
+            true_flux = true_cat.get_fluxes()[i, true_matches, :]
+            est_flux = est_cat.get_fluxes()[i, est_matches, :]
+            self.flux_err += (true_flux - est_flux).abs().sum(dim=0)
 
-    def _update_other_metrics(self, true_cat, est_cat, batch_true_matches, batch_est_matches):
-        """Update remaining metrics based on estimated params at locations of true sources."""
-        # only compute these metrics if available
-        if "galaxy_params" not in true_cat or "galaxy_params" not in est_cat:
-            return
-
-        if not (batch_true_matches and batch_est_matches):
-            return  # need matches to compute classification metrics on full catalog
-
-        # Get galaxy params in true and est catalogs based on matches
-        batch_size, max_true, max_est = (
-            true_cat.batch_size,
-            true_cat.plocs.shape[1],
-            est_cat.plocs.shape[1],
-        )
-        true_mask = torch.zeros((batch_size, max_true)).bool()
-        est_mask = torch.zeros((batch_size, max_est)).bool()
-        for i in range(batch_size):
-            true_mask[i][batch_true_matches[i]] = True
-            est_mask[i][batch_est_matches[i]] = True
-        params = ["galaxy_fluxes", "star_fluxes", "galaxy_params"]
-        true_params = {param: true_cat[param][true_mask] for param in params}
-        est_params = {param: est_cat[param][est_mask] for param in params}
-
-        # TODO: the metrics below should be normalized by the number of stars OR
-        # the number of galaxies in the true catalog, not the total number of entries!
-        # (which is what happens implicilty when we take a mean)
-
-        # star flux average absolute error
-        star_flux_diff = true_params["star_fluxes"] - est_params["star_fluxes"]
-        self.star_fluxes = star_flux_diff.abs().mean(dim=0)
-
-        # galaxy cluster average absolute error
-        gal_flux_diff = true_params["galaxy_fluxes"] - est_params["galaxy_fluxes"]
-        self.gal_fluxes = gal_flux_diff.abs().mean(dim=0)
-
-        # galaxy parameters average absolute error
-        true_gal_params = true_params["galaxy_params"]
-        est_gal_params = est_params["galaxy_params"]
-
-        # skip if no galaxies in true or estimated catalog
-        if (true_gal_params.shape[0] == 0) or (est_gal_params.shape[0] == 0):
-            return
-
-        # disk/bulge proportions
-        self.disk_frac = (true_gal_params[:, 0] - est_gal_params[:, 0]).abs().mean()
-        self.bulge_frac = ((1 - true_gal_params[:, 0]) - (1 - est_gal_params[:, 0])).abs().mean()
-
-        # angle
-        self.beta_radians = (true_gal_params[:, 1] - est_gal_params[:, 1]).abs().mean()
-
-        # axis ratio
-        self.disk_q = (true_gal_params[:, 2] - est_gal_params[:, 2]).abs().mean()
-        self.bulge_q = (true_gal_params[:, 4] - est_gal_params[:, 4]).abs().mean()
-
-        # half-light radius
-        # sqrt(a * b) = sqrt(a * a * q) = a * sqrt(q)
-        est_disk_hlr = est_gal_params[:, 3] * torch.sqrt(est_gal_params[:, 2])
-        true_disk_hlr = true_gal_params[:, 3] * torch.sqrt(true_gal_params[:, 2])
-        self.disk_hlr = (true_disk_hlr - est_disk_hlr).abs().mean()
-
-        est_bulge_hlr = est_gal_params[:, 5] * torch.sqrt(est_gal_params[:, 4])
-        true_bulge_hlr = true_gal_params[:, 5] * torch.sqrt(true_gal_params[:, 4])
-        self.bulge_hlr = (true_bulge_hlr - est_bulge_hlr).abs().mean()
+            true_gp = true_cat["galaxy_params"][i, true_matches, :]
+            est_gp = est_cat["galaxy_params"][i, est_matches, :]
+            gp_err = (true_gp - est_gp).abs().sum(dim=0)
+            # TODO: angle is a special case, need to wrap around pi (not 2pi due to symmetry)
+            self.galsim_param_err += gp_err
 
     def compute(self):
         precision = self.detection_tp / (self.detection_tp + self.detection_fp)
@@ -219,16 +150,13 @@ class CatalogMetrics(Metric):
             "classification_acc": classification_acc.item(),
         }
 
-        # add classification metrics if computed
-        for metric in self.other_metrics:
-            v = getattr(self, metric, None)
+        avg_flux_err = self.flux_err / self.detection_tp
+        for i, band in enumerate(self.survey_bands):
+            metrics[f"flux_err_{band}_mae"] = avg_flux_err[i].item()
 
-            # take median along first dim of stacked tensors, i.e. across images
-            if metric in {"gal_fluxes", "star_fluxes"}:
-                for i, band in enumerate(self.survey_bands):
-                    metrics[f"{metric}_{band}_mae"] = v[i].item()
-            else:
-                metrics[f"{metric}_mae"] = v.item()
+        avg_galsim_param_err = self.galsim_param_err / self.gal_tp
+        for i, gs_name in enumerate(VariationalDist.GALSIM_NAMES):
+            metrics[f"{gs_name}_mae"] = avg_galsim_param_err[i]
 
         return metrics
 
