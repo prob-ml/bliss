@@ -69,6 +69,5 @@ predict:
         crop_config: [624, 736, 304, 416]
     trainer: ${train.trainer}
     encoder: ${encoder}
-    weight_save_path: /home/regier/bliss/output/new125GB/version_0/checkpoints/best_encoder.ckpt
+    weight_save_path: null
     device: "cuda:0"
-    is_simulated: false

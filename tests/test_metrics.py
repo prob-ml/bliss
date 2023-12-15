@@ -114,16 +114,11 @@ class TestMetrics:
         est_params = FullCatalog(slen, slen, d_est)
 
         results = metrics(true_params, est_params)
-        precision = results["detection_precision"]
-        recall = results["detection_recall"]
-        avg_match_distance = results["avg_match_distance"]
 
-        classification_acc = results["classification_acc"]
-
-        assert np.isclose(precision, 2 / (2 + 2))
-        assert np.isclose(recall, 2 / 3)
-        assert np.isclose(classification_acc, 1 / 2)
-        assert np.isclose(avg_match_distance, (((0.01 * 50) ** 2) * 2) ** 0.5)
+        assert np.isclose(results["detection_precision"], 2 / (2 + 2))
+        assert np.isclose(results["detection_recall"], 2 / 3)
+        assert np.isclose(results["classification_acc"], 1 / 2)
+        assert np.isclose(results["avg_match_distance"], (((0.01 * 50) ** 2) * 2) ** 0.5)
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""

@@ -1,8 +1,6 @@
 import torch
 from einops import rearrange
 from scipy.optimize import linear_sum_assignment
-from sklearn.metrics import confusion_matrix
-from torch import Tensor
 from torchmetrics import Metric
 
 from bliss.catalog import FullCatalog
@@ -15,29 +13,6 @@ class CatalogMetrics(Metric):
     Note that galaxy classification metrics are only computed when the values are available in
     both catalogs.
     """
-
-    # detection metrics
-    detection_tp: Tensor
-    detection_fp: Tensor
-    total_true_n_sources: Tensor
-    total_match_distance: Tensor
-    gal_tp: Tensor
-    gal_fp: Tensor
-    star_tp: Tensor
-    star_fp: Tensor
-
-    # other metrics
-    gal_fluxes: Tensor
-    star_fluxes: Tensor
-    disk_frac: Tensor
-    bulge_frac: Tensor
-    disk_q: Tensor
-    bulge_q: Tensor
-    disk_hlr: Tensor
-    bulge_hlr: Tensor
-    beta_radians: Tensor
-
-    full_state_update: bool = False
 
     def __init__(
         self,
@@ -101,7 +76,7 @@ class CatalogMetrics(Metric):
                 est_mags[i, 0:n_est] if self.mag_slack else None,
             )
 
-            # update TP/FP
+            # update detection stats
             tp = len(true_matches)
             self.detection_tp += tp
             self.detection_fp += n_est - tp
@@ -111,25 +86,21 @@ class CatalogMetrics(Metric):
             image_match_distance = loc_diffs.norm(dim=1).sum()
             self.total_match_distance += image_match_distance
 
-            # update star/galaxy classification TP/FP
-            true_gal = true_cat.galaxy_bools[i][true_matches].reshape(-1).cpu()
-            est_gal = est_cat.galaxy_bools[i][est_matches].reshape(-1).cpu()
+            # update star/galaxy classification stats
+            true_gal = true_cat.galaxy_bools[i][true_matches]
+            est_gal = est_cat.galaxy_bools[i][est_matches]
 
-            conf_matrix = confusion_matrix(true_gal, est_gal, labels=[1, 0])
+            self.gal_tp += (true_gal * est_gal).sum()
+            self.gal_fp += (true_gal * ~est_gal).sum()
+            self.star_tp += (~true_gal * ~est_gal).sum()
+            self.star_fp += (~true_gal * est_gal).sum()
 
-            self.gal_tp += conf_matrix[0][0]
-            self.gal_fp += conf_matrix[0][1]
-            self.star_fp += conf_matrix[1][0]
-            self.star_tp += conf_matrix[1][1]
-
+            # update total per-band flux errors
             true_flux = true_cat.get_fluxes()[i, true_matches, :]
             est_flux = est_cat.get_fluxes()[i, est_matches, :]
             self.flux_err += (true_flux - est_flux).abs().sum(dim=0)
 
-            if self.gal_tp == 0:
-                continue
-
-            # some real catalogs do not have galaxy_params
+            # some real catalogs (e.g., sdss) do not have galaxy_params
             if "galaxy_params" not in true_cat or "galaxy_params" not in est_cat:
                 continue
 
