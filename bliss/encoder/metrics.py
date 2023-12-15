@@ -126,6 +126,9 @@ class CatalogMetrics(Metric):
             est_flux = est_cat.get_fluxes()[i, est_matches, :]
             self.flux_err += (true_flux - est_flux).abs().sum(dim=0)
 
+            if self.gal_tp == 0:
+                continue
+
             true_gp = true_cat["galaxy_params"][i, true_matches, :]
             est_gp = est_cat["galaxy_params"][i, est_matches, :]
             gp_err = (true_gp - est_gp).abs().sum(dim=0)
@@ -154,9 +157,10 @@ class CatalogMetrics(Metric):
         for i, band in enumerate(self.survey_bands):
             metrics[f"flux_err_{band}_mae"] = avg_flux_err[i].item()
 
-        avg_galsim_param_err = self.galsim_param_err / self.gal_tp
-        for i, gs_name in enumerate(VariationalDist.GALSIM_NAMES):
-            metrics[f"{gs_name}_mae"] = avg_galsim_param_err[i]
+        if self.gal_tp > 0:
+            avg_galsim_param_err = self.galsim_param_err / self.gal_tp
+            for i, gs_name in enumerate(VariationalDist.GALSIM_NAMES):
+                metrics[f"{gs_name}_mae"] = avg_galsim_param_err[i]
 
         return metrics
 
@@ -192,7 +196,8 @@ class CatalogMetrics(Metric):
 
         cost = locs_dist + oob * 1e20
 
-        # find minimal permutation
+        # find minimal permutation (can be slow for large catalogs, consider using a heuristic
+        # that exploits sparsity instead)
         row_indx, col_indx = linear_sum_assignment(cost.detach().cpu())
 
         # good match condition: not out-of-bounds due to either slack contraint

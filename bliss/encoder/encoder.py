@@ -178,9 +178,9 @@ class Encoder(pl.LightningModule):
 
         target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
         metrics = self.metrics(target_cat_cropped.to_full_catalog(), est_cat.to_full_catalog())
-        for k in ("f1", "detection_precision", "detection_recall"):
+        for k, v in metrics.items():
             metric_name = "{}/{}".format(logging_name, k)
-            self.log(metric_name, metrics[k], batch_size=target_cat.n_sources.size(0))
+            self.log(metric_name, v, batch_size=target_cat.n_sources.size(0))
 
         # log a grid of figures to the tensorboard
         if plot_images:
