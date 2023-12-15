@@ -129,6 +129,10 @@ class CatalogMetrics(Metric):
             if self.gal_tp == 0:
                 continue
 
+            # some real catalogs do not have galaxy_params
+            if "galaxy_params" not in true_cat or "galaxy_params" not in est_cat:
+                continue
+
             true_gp = true_cat["galaxy_params"][i, true_matches, :]
             est_gp = est_cat["galaxy_params"][i, est_matches, :]
             gp_err = (true_gp - est_gp).abs().sum(dim=0)

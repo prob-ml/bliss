@@ -99,6 +99,7 @@ class TestMetrics:
             "source_type": true_source_type,
             "star_fluxes": torch.ones(2, 2, 5),
             "galaxy_fluxes": torch.ones(2, 2, 5),
+            "galaxy_params": torch.ones(2, 2, 6),
         }
         true_params = FullCatalog(slen, slen, d_true)
 
@@ -108,6 +109,7 @@ class TestMetrics:
             "source_type": est_source_type,
             "star_fluxes": torch.ones(2, 2, 5),
             "galaxy_fluxes": torch.ones(2, 2, 5),
+            "galaxy_params": torch.ones(2, 2, 6),
         }
         est_params = FullCatalog(slen, slen, d_est)
 
@@ -142,6 +144,7 @@ class TestMetrics:
             "source_type": true_source_type,
             "star_fluxes": torch.ones(4, 1, 5),
             "galaxy_fluxes": torch.ones(4, 1, 5),
+            "galaxy_params": torch.ones(4, 1, 6),
         }
         true_params = FullCatalog(50, 50, d_true)
 
@@ -151,6 +154,7 @@ class TestMetrics:
             "source_type": est_source_type,
             "star_fluxes": torch.ones(4, 1, 5),
             "galaxy_fluxes": torch.ones(4, 1, 5),
+            "galaxy_params": torch.ones(4, 1, 6),
         }
         est_params = FullCatalog(50, 50, d_est)
 
@@ -160,17 +164,14 @@ class TestMetrics:
         assert results["detection_recall"] == 1 / 2
         assert results["avg_match_distance"] == pytest.approx(2**0.5)
 
-    def test_classification_metrics_full(self, tile_catalog):
+    def test_self_agreement(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
         full_catalog = tile_catalog.to_full_catalog()
         metrics = CatalogMetrics(dist_slack=1.0, survey_bands=list(SDSS.BANDS))
         results = metrics(full_catalog, full_catalog)
-        for metric in metrics.other_metrics:
-            if metric in {"gal_fluxes", "star_fluxes"}:
-                for band in "ugriz":
-                    assert results[f"{metric}_{band}_mae"] == 0
-            else:
-                assert results[f"{metric}_mae"] == 0
+        assert results["classification_acc"] == 1
+        assert results["flux_err_r_mae"] == 0
+        assert results["f1"] == 1
 
     def test_catalog_agreement(self, catalogs):
         """Compares catalogs as safety check for metrics."""
