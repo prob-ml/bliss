@@ -33,21 +33,21 @@ class CatalogMetrics(Metric):
         self.mag_slack_band = mag_slack_band
         self.disable_bar = disable_bar
 
-        cutoffs = mag_bin_cutoffs if mag_bin_cutoffs else []
-        self.mag_bin_cutoffs = torch.tensor(cutoffs, device=self.device)
+        self.mag_bin_cutoffs = mag_bin_cutoffs if mag_bin_cutoffs else []
 
         detection_metrics = [
-            "detection_tp",
-            "detection_fp",
-            "total_true_n_sources",
-            "total_match_distance",
-            "gal_tp",
-            "star_tp",
+            "n_true_sources",
+            "n_est_sources",
+            "n_true_matches",
+            "n_est_matches",
         ]
         for metric in detection_metrics:
-            num_bins = self.mag_bin_cutoffs.shape[0] + 1  # fencepost
-            init_val = torch.zeros(num_bins)
+            n_bins = len(self.mag_bin_cutoffs) + 1  # fencepost
+            init_val = torch.zeros(n_bins)
             self.add_state(metric, default=init_val, dist_reduce_fx="sum")
+
+        self.add_state("gal_tp", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state("star_tp", default=torch.zeros(1), dist_reduce_fx="sum")
 
         fe_init = torch.zeros(len(self.survey_bands))
         self.add_state("flux_err", default=fe_init, dist_reduce_fx="sum")
@@ -66,23 +66,25 @@ class CatalogMetrics(Metric):
         for i in range(true_cat.batch_size):
             n_true = int(true_cat.n_sources[i].int().sum().item())
             n_est = int(est_cat.n_sources[i].int().sum().item())
-            self.total_true_n_sources += n_true
 
+            tmi = true_mags[i, 0:n_true]
+            emi = est_mags[i, 0:n_est]
             tcat_matches, ecat_matches = self.match_catalogs(
                 true_cat.plocs[i, 0:n_true],
                 est_cat.plocs[i, 0:n_est],
-                true_mags[i, 0:n_true] if self.mag_slack else None,
-                est_mags[i, 0:n_est] if self.mag_slack else None,
+                tmi if self.mag_slack else None,
+                emi if self.mag_slack else None,
             )
 
             # update detection stats
-            self.detection_tp += len(tcat_matches)
-            self.detection_fp += n_est - len(tcat_matches)
+            cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+            n_bins = len(cutoffs) + 1
+            tmim, emim = tmi[tcat_matches], emi[ecat_matches]
 
-            # update match distance
-            loc_diffs = true_cat.plocs[i, tcat_matches] - est_cat.plocs[i, ecat_matches]
-            image_match_distance = loc_diffs.norm(dim=1).sum()
-            self.total_match_distance += image_match_distance
+            self.n_true_sources += torch.bucketize(tmi, cutoffs).bincount(minlength=n_bins)
+            self.n_est_sources += torch.bucketize(emi, cutoffs).bincount(minlength=n_bins)
+            self.n_true_matches += torch.bucketize(tmim, cutoffs).bincount(minlength=n_bins)
+            self.n_est_matches += torch.bucketize(emim, cutoffs).bincount(minlength=n_bins)
 
             # update star/galaxy classification stats
             true_gal = true_cat.galaxy_bools[i][tcat_matches]
@@ -106,21 +108,20 @@ class CatalogMetrics(Metric):
             self.galsim_param_err += gp_err
 
     def compute(self):
-        precision = self.detection_tp / (self.detection_tp + self.detection_fp)
-        recall = self.detection_tp / self.total_true_n_sources
+        precision = self.n_est_matches.sum() / self.n_est_sources.sum()
+        recall = self.n_true_matches.sum() / self.n_true_sources.sum()
         f1 = 2 * precision * recall / (precision + recall)
-        avg_match_distance = self.total_match_distance / self.detection_tp
-        classification_acc = (self.gal_tp + self.star_tp) / self.detection_tp
+
+        classification_acc = (self.gal_tp + self.star_tp) / self.n_true_matches.sum()
 
         metrics = {
-            "detection_precision": precision.item(),
-            "detection_recall": recall.item(),
-            "detection_f1": f1.item(),
-            "avg_match_distance": avg_match_distance.item(),
+            "detection_precision": precision,
+            "detection_recall": recall,
+            "detection_f1": f1,
             "classification_acc": classification_acc.item(),
         }
 
-        avg_flux_err = self.flux_err / self.detection_tp
+        avg_flux_err = self.flux_err / self.n_true_matches.sum()
         for i, band in enumerate(self.survey_bands):
             metrics[f"flux_err_{band}_mae"] = avg_flux_err[i].item()
 
@@ -173,4 +174,4 @@ class CatalogMetrics(Metric):
         true_matches = row_indx[valid_matches]
         est_matches = col_indx[valid_matches]
 
-        return true_matches, est_matches
+        return torch.from_numpy(true_matches), torch.from_numpy(est_matches)

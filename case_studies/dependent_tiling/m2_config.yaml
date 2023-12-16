@@ -11,6 +11,11 @@ encoder:
     tiles_to_crop: 1
     image_normalizer:
         bands: [2]
+    metrics:
+        dist_slack: 0.5
+        mag_slack: 0.5
+        mag_slack_band: 2  # SDSS r-band
+        mag_bin_cutoffs: [18, 19, 20, 21, 22]
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior

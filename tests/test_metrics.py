@@ -118,7 +118,6 @@ class TestMetrics:
         assert np.isclose(results["detection_precision"], 2 / (2 + 2))
         assert np.isclose(results["detection_recall"], 2 / 3)
         assert np.isclose(results["classification_acc"], 1 / 2)
-        assert np.isclose(results["avg_match_distance"], (((0.01 * 50) ** 2) * 2) ** 0.5)
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
@@ -157,7 +156,6 @@ class TestMetrics:
 
         assert results["detection_precision"] == 1 / 2
         assert results["detection_recall"] == 1 / 2
-        assert results["avg_match_distance"] == pytest.approx(2**0.5)
 
     def test_self_agreement(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
@@ -175,7 +173,6 @@ class TestMetrics:
         assert metrics(catalogs["photo"], catalogs["photo"])["detection_f1"] == 1
         assert metrics(catalogs["decals"], catalogs["decals"])["detection_f1"] == 1
         assert metrics(catalogs["decals"], catalogs["photo"])["detection_precision"] > 0.8
-        assert metrics(catalogs["photo"], catalogs["bliss"])["avg_match_distance"] < 1.0
 
         # bliss finds many more sources than photo. recall here measures the fraction of sources
         # photo finds that bliss also finds
