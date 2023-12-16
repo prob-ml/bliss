@@ -42,9 +42,7 @@ class CatalogMetrics(Metric):
             "total_true_n_sources",
             "total_match_distance",
             "gal_tp",
-            "gal_fp",
             "star_tp",
-            "star_fp",
         ]
         for metric in detection_metrics:
             num_bins = self.mag_bin_cutoffs.shape[0] + 1  # fencepost
@@ -70,7 +68,7 @@ class CatalogMetrics(Metric):
             n_est = int(est_cat.n_sources[i].int().sum().item())
             self.total_true_n_sources += n_true
 
-            true_matches, est_matches = self.match_catalogs(
+            tcat_matches, ecat_matches = self.match_catalogs(
                 true_cat.plocs[i, 0:n_true],
                 est_cat.plocs[i, 0:n_est],
                 true_mags[i, 0:n_true] if self.mag_slack else None,
@@ -78,35 +76,31 @@ class CatalogMetrics(Metric):
             )
 
             # update detection stats
-            tp = len(true_matches)
-            self.detection_tp += tp
-            self.detection_fp += n_est - tp
+            self.detection_tp += len(tcat_matches)
+            self.detection_fp += n_est - len(tcat_matches)
 
             # update match distance
-            loc_diffs = true_cat.plocs[i, true_matches] - est_cat.plocs[i, est_matches]
+            loc_diffs = true_cat.plocs[i, tcat_matches] - est_cat.plocs[i, ecat_matches]
             image_match_distance = loc_diffs.norm(dim=1).sum()
             self.total_match_distance += image_match_distance
 
             # update star/galaxy classification stats
-            true_gal = true_cat.galaxy_bools[i][true_matches]
-            est_gal = est_cat.galaxy_bools[i][est_matches]
-
+            true_gal = true_cat.galaxy_bools[i][tcat_matches]
+            est_gal = est_cat.galaxy_bools[i][ecat_matches]
             self.gal_tp += (true_gal * est_gal).sum()
-            self.gal_fp += (true_gal * ~est_gal).sum()
             self.star_tp += (~true_gal * ~est_gal).sum()
-            self.star_fp += (~true_gal * est_gal).sum()
 
             # update total per-band flux errors
-            true_flux = true_cat.get_fluxes()[i, true_matches, :]
-            est_flux = est_cat.get_fluxes()[i, est_matches, :]
+            true_flux = true_cat.get_fluxes()[i, tcat_matches, :]
+            est_flux = est_cat.get_fluxes()[i, ecat_matches, :]
             self.flux_err += (true_flux - est_flux).abs().sum(dim=0)
 
             # some real catalogs (e.g., sdss) do not have galaxy_params
             if "galaxy_params" not in true_cat or "galaxy_params" not in est_cat:
                 continue
 
-            true_gp = true_cat["galaxy_params"][i, true_matches, :]
-            est_gp = est_cat["galaxy_params"][i, est_matches, :]
+            true_gp = true_cat["galaxy_params"][i, tcat_matches, :]
+            est_gp = est_cat["galaxy_params"][i, ecat_matches, :]
             gp_err = (true_gp - est_gp).abs().sum(dim=0)
             # TODO: angle is a special case, need to wrap around pi (not 2pi due to symmetry)
             self.galsim_param_err += gp_err
@@ -118,8 +112,7 @@ class CatalogMetrics(Metric):
 
         avg_match_distance = self.total_match_distance / self.detection_tp
 
-        n_predictions = self.gal_tp + self.star_tp + self.gal_fp + self.star_fp
-        classification_acc = (self.gal_tp + self.star_tp) / n_predictions
+        classification_acc = (self.gal_tp + self.star_tp) / self.detection_tp
 
         metrics = {
             "detection_precision": precision.item(),
