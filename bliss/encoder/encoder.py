@@ -172,25 +172,6 @@ class Encoder(pl.LightningModule):
             est_cat = est_cat.union(est_cat_s)
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
-    def log_metrics(self, target_cat, batch, logging_name, plot_images):
-        with torch.no_grad():
-            est_cat = self.sample(batch, use_mode=True)
-
-        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
-        metrics = self.metrics(target_cat_cropped.to_full_catalog(), est_cat.to_full_catalog())
-        for k, v in metrics.items():
-            metric_name = "{}/{}".format(logging_name, k)
-            self.log(metric_name, v, batch_size=target_cat.n_sources.size(0))
-
-        # log a grid of figures to the tensorboard
-        if plot_images:
-            mp = self.tiles_to_crop * self.tile_slen
-            fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
-            title = f"Epoch:{self.current_epoch}/{logging_name} images"
-            if self.logger:
-                self.logger.experiment.add_figure(title, fig)
-            plt.close(fig)
-
     def _single_detection_nll(self, target_cat, pred):
         marginal_loss = pred["marginal"].compute_nll(target_cat)
 
@@ -228,13 +209,12 @@ class Encoder(pl.LightningModule):
 
         return loss0 + loss1 + loss2
 
-    def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
+    def _compute_loss(self, batch, logging_name):
         batch_size = batch["images"].size(0)
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
         # filter out undetectable sources
-        if self.min_flux_threshold > 0:
-            target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
         # make predictions/inferences
         target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
@@ -253,11 +233,6 @@ class Encoder(pl.LightningModule):
         loss = interior_loss.sum() / interior_loss.numel()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size)
 
-        # log metrics
-        assert log_metrics or not plot_images, "plot_images requires log_metrics"
-        if log_metrics:
-            self.log_metrics(target_cat, batch, logging_name, plot_images=plot_images)
-
         return loss
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
@@ -265,18 +240,52 @@ class Encoder(pl.LightningModule):
         if self.do_data_augmentation:
             augment_batch(batch)
 
-        return self._generic_step(batch, "train")
+        return self._compute_loss(batch, "train")
+
+    def update_metrics(self, batch):
+        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
+        est_cat = self.sample(batch, use_mode=True)
+        self.metrics.update(target_cat_cropped.to_full_catalog(), est_cat.to_full_catalog())
+
+    def plot_sample_images(self, batch, logging_name):
+        """Log a grid of figures to the tensorboard."""
+        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
+        est_cat = self.sample(batch, use_mode=True)
+        mp = self.tiles_to_crop * self.tile_slen
+        fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
+        title = f"Epoch:{self.current_epoch}/{logging_name} images"
+        if self.logger:
+            self.logger.experiment.add_figure(title, fig)
+        plt.close(fig)
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        # only plot images on the first batch of every 10th epoch
         epoch = self.trainer.current_epoch
-        plot_images = batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1)
-        self._generic_step(batch, "val", log_metrics=True, plot_images=plot_images)
+        self._compute_loss(batch, "val")
+        self.update_metrics(batch)
+
+        # only plot images from the first batch every tenth epoch
+        if batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1):
+            self.plot_sample_images(batch, "val")
+
+    def on_validation_epoch_end(self):
+        for k, v in self.metrics.compute().items():
+            self.log(f"val/{k}", v)
+        self.metrics.reset()
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        self._generic_step(batch, "test", log_metrics=True)
+        self._compute_loss(batch, "test")
+        self.update_metrics(batch)
+
+    def on_test_epoch_end(self):
+        for k, v in self.metrics.compute().items():
+            self.log(f"test/{k}", v)
+        self.metrics.reset()
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
