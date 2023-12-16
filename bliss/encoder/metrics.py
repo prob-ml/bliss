@@ -109,15 +109,13 @@ class CatalogMetrics(Metric):
         precision = self.detection_tp / (self.detection_tp + self.detection_fp)
         recall = self.detection_tp / self.total_true_n_sources
         f1 = 2 * precision * recall / (precision + recall)
-
         avg_match_distance = self.total_match_distance / self.detection_tp
-
         classification_acc = (self.gal_tp + self.star_tp) / self.detection_tp
 
         metrics = {
             "detection_precision": precision.item(),
             "detection_recall": recall.item(),
-            "f1": f1.item(),
+            "detection_f1": f1.item(),
             "avg_match_distance": avg_match_distance.item(),
             "classification_acc": classification_acc.item(),
         }

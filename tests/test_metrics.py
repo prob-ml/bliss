@@ -166,14 +166,14 @@ class TestMetrics:
         results = metrics(full_catalog, full_catalog)
         assert results["classification_acc"] == 1
         assert results["flux_err_r_mae"] == 0
-        assert results["f1"] == 1
+        assert results["detection_f1"] == 1
 
     def test_catalog_agreement(self, catalogs):
         """Compares catalogs as safety check for metrics."""
         metrics = CatalogMetrics(dist_slack=1.0, survey_bands=list(SDSS.BANDS))
 
-        assert metrics(catalogs["photo"], catalogs["photo"])["f1"] == 1
-        assert metrics(catalogs["decals"], catalogs["decals"])["f1"] == 1
+        assert metrics(catalogs["photo"], catalogs["photo"])["detection_f1"] == 1
+        assert metrics(catalogs["decals"], catalogs["decals"])["detection_f1"] == 1
         assert metrics(catalogs["decals"], catalogs["photo"])["detection_precision"] > 0.8
         assert metrics(catalogs["photo"], catalogs["bliss"])["avg_match_distance"] < 1.0
 
@@ -186,4 +186,4 @@ class TestMetrics:
 
         bliss_vs_decals = metrics(catalogs["decals"], catalogs["bliss"])
         photo_vs_decals = metrics(catalogs["decals"], catalogs["photo"])
-        assert bliss_vs_decals["f1"] > photo_vs_decals["f1"]
+        assert bliss_vs_decals["detection_f1"] > photo_vs_decals["detection_f1"]
