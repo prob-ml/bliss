@@ -89,12 +89,20 @@ encoder:
         _target_: bliss.encoder.variational_dist.VariationalDistSpec
         survey_bands: ${encoder.survey_bands}
         tile_slen: ${encoder.tile_slen}
-    metrics:
-        _target_: bliss.encoder.metrics.CatalogMetrics
+    matcher:
+        _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
         mag_slack: null
-        mag_slack_band: 2  # SDSS r-band
-        survey_bands: ${encoder.survey_bands}
+        mag_band: 2  # SDSS r-band
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        metrics:
+          - _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
+          - _target_: bliss.encoder.metrics.SourceTypeAccuracy
+          - _target_: bliss.encoder.metrics.FluxError
+            survey_bands: ${encoder.survey_bands}
+          - _target_: bliss.encoder.metrics.GalaxyShapeError
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
     double_detect: false

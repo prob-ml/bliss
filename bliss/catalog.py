@@ -12,6 +12,14 @@ from einops import rearrange, reduce, repeat
 from torch import Tensor
 
 
+def convert_mag_to_nmgy(mag):
+    return 10 ** ((22.5 - mag) / 2.5)
+
+
+def convert_nmgy_to_mag(nmgy):
+    return 22.5 - 2.5 * torch.log10(nmgy)
+
+
 class SourceType(IntEnum):
     STAR = 0
     GALAXY = 1
@@ -111,6 +119,20 @@ class TileCatalog(UserDict):
     def galaxy_bools(self) -> Tensor:
         is_galaxy = self["source_type"] == SourceType.GALAXY
         return is_galaxy * self.is_on_mask.unsqueeze(-1)
+
+    @property
+    def on_fluxes(self):
+        """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
+
+        Returns:
+            Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
+        """
+        fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
+        return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
+
+    @property
+    def magnitudes(self):
+        return convert_nmgy_to_mag(self.on_fluxes)
 
     @property
     def device(self):
@@ -242,18 +264,9 @@ class TileCatalog(UserDict):
         idx_to_gather = repeat(indices, "... -> ... k", k=param.size(-1))
         return torch.gather(param, dim=1, index=idx_to_gather)
 
-    def get_fluxes(self):
-        """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
-
-        Returns:
-            Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
-        """
-        fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
-        return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
-
     def _sort_sources_by_flux(self, band=2):
         # sort by fluxes of "on" sources to get brightest source per tile
-        on_fluxes = self.get_fluxes()[..., band]  # shape n x nth x ntw x d
+        on_fluxes = self.on_fluxes[..., band]  # shape n x nth x ntw x d
         top_indexes = on_fluxes.argsort(dim=3, descending=True)
 
         d = {"n_sources": self.n_sources}
@@ -310,7 +323,7 @@ class TileCatalog(UserDict):
         sorted_self = self._sort_sources_by_flux(band=band)
 
         # get fluxes of "on" sources to mask by
-        on_fluxes = sorted_self.get_fluxes()[..., band]
+        on_fluxes = sorted_self.on_fluxes[..., band]
         flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
 
         d = {}
@@ -462,7 +475,8 @@ class FullCatalog(UserDict):
         assert is_galaxy.size(2) == 1
         return is_galaxy * self.is_on_mask.unsqueeze(2)
 
-    def get_fluxes(self):
+    @property
+    def on_fluxes(self) -> Tensor:
         """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
 
         Returns:
@@ -474,6 +488,10 @@ class FullCatalog(UserDict):
         else:
             fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
+
+    @property
+    def magnitudes(self):
+        return convert_nmgy_to_mag(self.on_fluxes)
 
     def one_source(self, b: int, s: int):
         """Return a dict containing all parameter for one specified light source."""

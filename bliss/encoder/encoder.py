@@ -8,12 +8,13 @@ from matplotlib import pyplot as plt
 from torch.nn.functional import pad
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
+from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
-from bliss.encoder.metrics import CatalogMetrics
+from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.plotting import plot_detections
 from bliss.encoder.variational_dist import VariationalDistSpec
 
@@ -33,7 +34,8 @@ class Encoder(pl.LightningModule):
         tiles_to_crop: int,
         image_normalizer: ImageNormalizer,
         vd_spec: VariationalDistSpec,
-        metrics: CatalogMetrics,
+        metrics: MetricCollection,
+        matcher: CatalogMatcher,
         min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
@@ -50,6 +52,7 @@ class Encoder(pl.LightningModule):
             image_normalizer: object that applies input transforms to images
             vd_spec: object that makes a variational distribution from raw convnet output
             metrics: for scoring predicted catalogs during training
+            matcher: for matching predicted catalogs to ground truth catalogs
             min_flux_threshold: Sources with a lower flux will not be considered when computing loss
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
@@ -65,6 +68,7 @@ class Encoder(pl.LightningModule):
         self.image_normalizer = image_normalizer
         self.vd_spec = vd_spec
         self.metrics = metrics
+        self.matcher = matcher
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
@@ -245,9 +249,10 @@ class Encoder(pl.LightningModule):
     def update_metrics(self, batch):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
-        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
-        est_cat = self.sample(batch, use_mode=True)
-        self.metrics.update(target_cat_cropped.to_full_catalog(), est_cat.to_full_catalog())
+        target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
+        est_cat = self.sample(batch, use_mode=True).to_full_catalog()
+        matching = self.matcher.match_catalogs(target_cat, est_cat)
+        self.metrics.update(target_cat, est_cat, matching)
 
     def plot_sample_images(self, batch, logging_name):
         """Log a grid of figures to the tensorboard."""
@@ -272,10 +277,13 @@ class Encoder(pl.LightningModule):
         if batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1):
             self.plot_sample_images(batch, "val")
 
-    def on_validation_epoch_end(self):
+    def report_metrics(self, logging_name):
         for k, v in self.metrics.compute().items():
             self.log(f"val/{k}", v)
         self.metrics.reset()
+
+    def on_validation_epoch_end(self):
+        self.report_metrics("val")
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
@@ -283,9 +291,7 @@ class Encoder(pl.LightningModule):
         self.update_metrics(batch)
 
     def on_test_epoch_end(self):
-        for k, v in self.metrics.compute().items():
-            self.log(f"test/{k}", v)
-        self.metrics.reset()
+        self.report_metrics("test")
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
