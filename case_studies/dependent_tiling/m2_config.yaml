@@ -6,11 +6,22 @@ defaults:
 
 encoder:
     tile_slen: 2
-    min_flux_threshold: 1.4927944095789945  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
-    two_layers: true
+    min_flux_threshold: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
+    double_detect: true
     tiles_to_crop: 1
     image_normalizer:
         bands: [2]
+    matcher:
+        _target_: bliss.encoder.metrics.CatalogMatcher
+        dist_slack: 0.5
+        mag_slack: 0.5
+        mag_band: 2  # SDSS r-band
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        metrics:
+          - _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
+            exclude_last_bin: true
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
@@ -37,10 +48,11 @@ surveys:
             - run: 2583
               camcol: 2
               fields: [136]
-        background_offset: 140
+        background_offset: 80
 
 generate:
-    n_batches: 512
+    n_image_files: 16
+    n_batches_per_file: 16
     cached_data_path: /data/scratch/regier/m2
 
 cached_simulator:
@@ -68,6 +80,5 @@ predict:
         crop_config: [624, 736, 304, 416]
     trainer: ${train.trainer}
     encoder: ${encoder}
-    weight_save_path: /home/regier/bliss/output/new125GB/version_0/checkpoints/best_encoder.ckpt
+    weight_save_path: null
     device: "cuda:0"
-    is_simulated: false

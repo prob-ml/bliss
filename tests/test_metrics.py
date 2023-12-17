@@ -5,10 +5,14 @@ from hydra.utils import instantiate
 from omegaconf import open_dict
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.encoder.metrics import CatalogMetrics
+from bliss.encoder.metrics import (
+    CatalogMatcher,
+    DetectionPerformance,
+    FluxError,
+    SourceTypeAccuracy,
+)
 from bliss.surveys.decals import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
-from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 
 class TestMetrics:
@@ -49,7 +53,6 @@ class TestMetrics:
         """The main entry point to get data for most of the tests."""
         # load SDSS catalog and WCS
         base_photo_cat, sdss = self._get_sdss_data(cfg)
-
         wcs = sdss[0]["wcs"][2]
         image, background, w_lim, h_lim = self._get_image_and_background(sdss)
 
@@ -86,7 +89,6 @@ class TestMetrics:
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
         slen = 50
-        metrics = CatalogMetrics(mode="matching", slack=1.0, survey_bands=list(SDSS.BANDS))
 
         true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]])
         est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]])
@@ -97,6 +99,9 @@ class TestMetrics:
             "n_sources": torch.tensor([1, 2]),
             "plocs": true_locs * slen,
             "source_type": true_source_type,
+            "star_fluxes": torch.ones(2, 2, 5),
+            "galaxy_fluxes": torch.ones(2, 2, 5),
+            "galaxy_params": torch.ones(2, 2, 6),
         }
         true_params = FullCatalog(slen, slen, d_true)
 
@@ -104,25 +109,26 @@ class TestMetrics:
             "n_sources": torch.tensor([2, 2]),
             "plocs": est_locs * slen,
             "source_type": est_source_type,
+            "star_fluxes": torch.ones(2, 2, 5),
+            "galaxy_fluxes": torch.ones(2, 2, 5),
+            "galaxy_params": torch.ones(2, 2, 6),
         }
         est_params = FullCatalog(slen, slen, d_est)
 
-        results = metrics(true_params, est_params)
-        precision = results["detection_precision"]
-        recall = results["detection_recall"]
-        avg_keep_distance = results["avg_keep_distance"]
+        matcher = CatalogMatcher(dist_slack=1.0, mag_band=2)
+        matching = matcher.match_catalogs(true_params, est_params)
 
-        class_acc = results["class_acc"]
+        detection_metrics = DetectionPerformance()
+        dresults = detection_metrics(true_params, est_params, matching)
+        assert np.isclose(dresults["detection_precision"], 2 / (2 + 2))
+        assert np.isclose(dresults["detection_recall"], 2 / 3)
 
-        assert np.isclose(precision, 2 / (2 + 2))
-        assert np.isclose(recall, 2 / 3)
-        assert np.isclose(class_acc, 1 / 2)
-        assert np.isclose(avg_keep_distance, (((0.01 * 50) ** 2) * 2) ** 0.5)
+        acc_metrics = SourceTypeAccuracy()
+        acc_results = acc_metrics(true_params, est_params, matching)
+        assert np.isclose(acc_results["classification_acc"], 1 / 2)
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
-        metrics = CatalogMetrics(mode="matching", slack=2.0, survey_bands=list(SDSS.BANDS))
-
         true_locs = torch.tensor(
             [[[10, 10]], [[20, 20]], [[30, 30]], [[40, 40]]], dtype=torch.float
         )
@@ -132,58 +138,82 @@ class TestMetrics:
         true_sources = torch.tensor([0, 0, 1, 1])
         est_sources = torch.tensor([0, 1, 0, 1])
 
-        d_true = {"n_sources": true_sources, "plocs": true_locs, "source_type": true_source_type}
+        d_true = {
+            "n_sources": true_sources,
+            "plocs": true_locs,
+            "source_type": true_source_type,
+            "star_fluxes": torch.ones(4, 1, 5),
+            "galaxy_fluxes": torch.ones(4, 1, 5),
+            "galaxy_params": torch.ones(4, 1, 6),
+        }
         true_params = FullCatalog(50, 50, d_true)
 
-        d_est = {"n_sources": est_sources, "plocs": est_locs, "source_type": est_source_type}
+        d_est = {
+            "n_sources": est_sources,
+            "plocs": est_locs,
+            "source_type": est_source_type,
+            "star_fluxes": torch.ones(4, 1, 5),
+            "galaxy_fluxes": torch.ones(4, 1, 5),
+            "galaxy_params": torch.ones(4, 1, 6),
+        }
         est_params = FullCatalog(50, 50, d_est)
 
-        results = metrics(true_params, est_params)
+        matcher = CatalogMatcher(dist_slack=2.0, mag_band=2)
+        matching = matcher.match_catalogs(true_params, est_params)
 
-        assert results["detection_precision"] == 1 / 2
-        assert results["detection_recall"] == 1 / 2
-        assert results["gal_tp"] == 1
-        assert results["avg_keep_distance"] == pytest.approx(2**0.5)
+        detection_metrics = DetectionPerformance()
+        dresults = detection_metrics(true_params, est_params, matching)
 
-    def test_classification_metrics_tile(self, tile_catalog):
-        """Test galaxy classification metrics on tile catalog."""
-        metrics = CatalogMetrics(mode="conditional", slack=1.0, survey_bands=list(SDSS.BANDS))
-        results = metrics(tile_catalog, tile_catalog)
-        for metric in metrics.classification_metrics:
-            if metric in {"gal_fluxes", "star_fluxes"}:
-                for band in "ugriz":
-                    assert results[f"{metric}_{band}_mae"] == 0
-            else:
-                assert results[f"{metric}_mae"] == 0
+        assert dresults["detection_precision"] == 1 / 2
+        assert dresults["detection_recall"] == 1 / 2
 
-    def test_classification_metrics_full(self, tile_catalog):
+    def test_self_agreement(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
         full_catalog = tile_catalog.to_full_catalog()
-        metrics = CatalogMetrics(mode="matching", slack=1.0, survey_bands=list(SDSS.BANDS))
-        results = metrics(full_catalog, full_catalog)
-        for metric in metrics.classification_metrics:
-            if metric in {"gal_fluxes", "star_fluxes"}:
-                for band in "ugriz":
-                    assert results[f"{metric}_{band}_mae"] == 0
-            else:
-                assert results[f"{metric}_mae"] == 0
+
+        matcher = CatalogMatcher(dist_slack=1.0, mag_band=2)
+        matching = matcher.match_catalogs(full_catalog, full_catalog)
+
+        detection_metrics = DetectionPerformance()
+        dresults = detection_metrics(full_catalog, full_catalog, matching)
+        assert dresults["detection_f1"] == 1
+
+        acc_metrics = SourceTypeAccuracy()
+        acc_results = acc_metrics(full_catalog, full_catalog, matching)
+        assert acc_results["classification_acc"] == 1
+
+        flux_metrics = FluxError("ugriz")
+        flux_results = flux_metrics(full_catalog, full_catalog, matching)
+        assert flux_results["flux_err_r_mae"] == 0
 
     def test_catalog_agreement(self, catalogs):
         """Compares catalogs as safety check for metrics."""
-        metrics = CatalogMetrics(mode="matching", slack=1.0, survey_bands=list(SDSS.BANDS))
+        matcher = CatalogMatcher(dist_slack=1.0)
+        detection_metrics = DetectionPerformance(mag_band=None)
 
-        assert metrics(catalogs["photo"], catalogs["photo"])["f1"] == 1
-        assert metrics(catalogs["decals"], catalogs["decals"])["f1"] == 1
-        assert metrics(catalogs["decals"], catalogs["photo"])["detection_precision"] > 0.8
-        assert metrics(catalogs["photo"], catalogs["bliss"])["avg_keep_distance"] < 1.0
+        pp_matching = matcher.match_catalogs(catalogs["photo"], catalogs["photo"])
+        pp_results = detection_metrics(catalogs["photo"], catalogs["photo"], pp_matching)
+        assert pp_results["detection_f1"] == 1
+
+        dd_matching = matcher.match_catalogs(catalogs["decals"], catalogs["decals"])
+        dd_results = detection_metrics(catalogs["decals"], catalogs["decals"], dd_matching)
+        assert dd_results["detection_f1"] == 1
+
+        dp_matching = matcher.match_catalogs(catalogs["decals"], catalogs["photo"])
+        dp_results = detection_metrics(catalogs["decals"], catalogs["photo"], dp_matching)
+        assert dp_results["detection_precision"] > 0.8
 
         # bliss finds many more sources than photo. recall here measures the fraction of sources
         # photo finds that bliss also finds
-        assert metrics(catalogs["photo"], catalogs["bliss"])["detection_recall"] > 0.8
+        pb_matching = matcher.match_catalogs(catalogs["photo"], catalogs["bliss"])
+        pb_results = detection_metrics(catalogs["photo"], catalogs["bliss"], pb_matching)
+        assert pb_results["detection_recall"] > 0.8
 
         # with the arguments reversed, precision below measures that same thing as recall did above
-        assert metrics(catalogs["bliss"], catalogs["photo"])["detection_precision"] > 0.8
+        bp_matching = matcher.match_catalogs(catalogs["bliss"], catalogs["photo"])
+        bp_results = detection_metrics(catalogs["bliss"], catalogs["photo"], bp_matching)
+        assert bp_results["detection_precision"] > 0.8
 
-        bliss_vs_decals = metrics(catalogs["decals"], catalogs["bliss"])
-        photo_vs_decals = metrics(catalogs["decals"], catalogs["photo"])
-        assert bliss_vs_decals["f1"] > photo_vs_decals["f1"]
+        db_matching = matcher.match_catalogs(catalogs["decals"], catalogs["bliss"])
+        db_results = detection_metrics(catalogs["decals"], catalogs["bliss"], db_matching)
+        assert db_results["detection_f1"] > dp_results["detection_f1"]

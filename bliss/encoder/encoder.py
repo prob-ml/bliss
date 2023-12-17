@@ -8,20 +8,15 @@ from matplotlib import pyplot as plt
 from torch.nn.functional import pad
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
+from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
-from bliss.encoder.metrics import CatalogMetrics
+from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.plotting import plot_detections
-from bliss.encoder.unconstrained_dists import (
-    UnconstrainedBernoulli,
-    UnconstrainedLogitNormal,
-    UnconstrainedLogNormal,
-    UnconstrainedTDBN,
-)
-from bliss.encoder.variational_layer import VariationalLayer
+from bliss.encoder.variational_dist import VariationalDistSpec
 
 
 class Encoder(pl.LightningModule):
@@ -38,44 +33,49 @@ class Encoder(pl.LightningModule):
         tile_slen: int,
         tiles_to_crop: int,
         image_normalizer: ImageNormalizer,
-        metrics: CatalogMetrics,
+        vd_spec: VariationalDistSpec,
+        metrics: MetricCollection,
+        matcher: CatalogMatcher,
         min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
         do_data_augmentation: bool = False,
         compile_model: bool = False,
-        two_layers: bool = False,
+        double_detect: bool = False,
     ):
-        """Initializes DetectionEncoder.
+        """Initializes Encoder.
 
         Args:
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
             tiles_to_crop: margin of tiles not to use for computing loss
             image_normalizer: object that applies input transforms to images
+            vd_spec: object that makes a variational distribution from raw convnet output
             metrics: for scoring predicted catalogs during training
+            matcher: for matching predicted catalogs to ground truth catalogs
             min_flux_threshold: Sources with a lower flux will not be considered when computing loss
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
             do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
-            two_layers: whether to make up to two detections per tile rather than one
+            double_detect: whether to make up to two detections per tile rather than one
         """
         super().__init__()
 
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
         self.tiles_to_crop = tiles_to_crop
-        self.metrics = metrics
         self.image_normalizer = image_normalizer
+        self.vd_spec = vd_spec
+        self.metrics = metrics
+        self.matcher = matcher
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
-        self.two_layers = two_layers
+        self.double_detect = double_detect
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
-        n_params_per_source = sum(param.dim for param in self.dist_param_groups.values())
         assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         num_features = 256
         self.features_net = FeaturesNet(
@@ -84,37 +84,18 @@ class Encoder(pl.LightningModule):
             num_features,
             double_downsample=(tile_slen == 4),
         )
+        n_params_per_source = vd_spec.n_params_per_source
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
-        if self.two_layers:
+        if self.double_detect:
             self.second_net = CatalogNet(num_features, n_params_per_source)
 
         if compile_model:
             self.features_net = torch.compile(self.features_net)
             self.marginal_net = torch.compile(self.marginal_net)
             self.checkerboard_net = torch.compile(self.checkerboard_net)
-            if self.two_layers:
+            if self.double_detect:
                 self.second_net = torch.compile(self.second_net)
-
-    @property
-    def dist_param_groups(self):
-        d = {
-            "on_prob": UnconstrainedBernoulli(),
-            "loc": UnconstrainedTDBN(),
-            "galaxy_prob": UnconstrainedBernoulli(),
-            # galsim parameters
-            "galsim_disk_frac": UnconstrainedLogitNormal(),
-            "galsim_beta_radians": UnconstrainedLogitNormal(high=torch.pi),
-            "galsim_disk_q": UnconstrainedLogitNormal(),
-            "galsim_a_d": UnconstrainedLogNormal(),
-            "galsim_bulge_q": UnconstrainedLogitNormal(),
-            "galsim_a_b": UnconstrainedLogNormal(),
-        }
-        for band in self.survey_bands:
-            d[f"star_flux_{band}"] = UnconstrainedLogNormal()
-        for band in self.survey_bands:
-            d[f"galaxy_flux_{band}"] = UnconstrainedLogNormal()
-        return d
 
     def _get_checkboard(self, ht, wt):
         # make/store a checkerboard of tiles
@@ -125,21 +106,6 @@ class Encoder(pl.LightningModule):
         indices = torch.stack(mg)
         tile_cb = indices.sum(axis=0) % 2
         return rearrange(tile_cb, "ht wt -> 1 1 ht wt")
-
-    def make_layer(self, x_cat):
-        split_sizes = [v.dim for v in self.dist_param_groups.values()]
-        dist_params_split = torch.split(x_cat, split_sizes, 3)
-        names = self.dist_param_groups.keys()
-        pred = dict(zip(names, dist_params_split))
-
-        for k, v in pred.items():
-            pred[k] = self.dist_param_groups[k].get_dist(v)
-
-        return VariationalLayer(pred, self.survey_bands, self.tile_slen)
-
-    def get_features(self, batch):
-        x = self.image_normalizer.get_input_tensor(batch)
-        return self.features_net(x)
 
     def infer_conditional(self, x_features, history_cat, history_mask):
         masked_cat = copy(history_cat)
@@ -153,7 +119,7 @@ class Encoder(pl.LightningModule):
 
         context = torch.stack([detection_history, history_mask], dim=1).float()
         x_cat = self.checkerboard_net(x_features, context)
-        return self.make_layer(x_cat)
+        return self.vd_spec.make_dist(x_cat)
 
     def interleave_catalogs(self, marginal_cat, cond_cat, marginal_mask):
         d = {}
@@ -170,11 +136,12 @@ class Encoder(pl.LightningModule):
         tile_cb = self._get_checkboard(ht, wt).squeeze(1)
         pred = {}
 
-        x_features = self.get_features(batch)
+        x = self.image_normalizer.get_input_tensor(batch)
+        x_features = self.features_net(x)
 
         x_cat_marginal = self.marginal_net(x_features)
         x_features = x_features.detach()  # is this helpful? doing it here to match old code
-        pred["marginal"] = self.make_layer(x_cat_marginal)
+        pred["marginal"] = self.vd_spec.make_dist(x_cat_marginal)
 
         history_cat = history_callback(pred["marginal"])
 
@@ -182,9 +149,9 @@ class Encoder(pl.LightningModule):
         pred["white"] = self.infer_conditional(x_features, history_cat, white_history_mask)
         pred["black"] = self.infer_conditional(x_features, history_cat, 1 - white_history_mask)
 
-        if self.two_layers:
+        if self.double_detect:
             x_cat_second = self.second_net(x_features)
-            pred["second"] = self.make_layer(x_cat_second)
+            pred["second"] = self.vd_spec.make_dist(x_cat_second)
 
         pred["history_cat"] = history_cat
         pred["x_features"] = x_features
@@ -201,34 +168,15 @@ class Encoder(pl.LightningModule):
         est_cat = self.interleave_catalogs(
             pred["history_cat"], white_cat, pred["white_history_mask"]
         )
-        if self.two_layers:
+        if self.double_detect:
             est_cat_s = pred["second"].sample(use_mode=use_mode)
-            # our loss function implies that the second layer is ignored for a tile
-            # if the first layer is empty for that tile
+            # our loss function implies that the second detection is ignored for a tile
+            # if the first detection is empty for that tile
             est_cat_s.n_sources *= est_cat.n_sources
             est_cat = est_cat.union(est_cat_s)
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
-    def log_metrics(self, target_cat, batch, logging_name, plot_images):
-        with torch.no_grad():
-            est_cat = self.sample(batch, use_mode=True)
-
-        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
-        metrics = self.metrics(target_cat_cropped.to_full_catalog(), est_cat.to_full_catalog())
-        for k in ("f1", "detection_precision", "detection_recall"):
-            metric_name = "{}/{}".format(logging_name, k)
-            self.log(metric_name, metrics[k], batch_size=target_cat.n_sources.size(0))
-
-        # log a grid of figures to the tensorboard
-        if plot_images:
-            mp = self.tiles_to_crop * self.tile_slen
-            fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
-            title = f"Epoch:{self.current_epoch}/{logging_name} images"
-            if self.logger:
-                self.logger.experiment.add_figure(title, fig)
-            plt.close(fig)
-
-    def _layer1_nll(self, target_cat, pred):
+    def _single_detection_nll(self, target_cat, pred):
         marginal_loss = pred["marginal"].compute_nll(target_cat)
 
         white_loss = pred["white"].compute_nll(target_cat)
@@ -242,12 +190,12 @@ class Encoder(pl.LightningModule):
         # we divide by two because we score two predictions for each tile
         return (marginal_loss + white_loss + black_loss) / 2
 
-    def _two_layer_nll(self, target_cat1, target_cat, pred):
+    def _double_detection_nll(self, target_cat1, target_cat, pred):
         target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
 
-        nll_marginal_z1 = self._layer1_nll(target_cat1, pred)
+        nll_marginal_z1 = self._single_detection_nll(target_cat1, pred)
         nll_cond_z2 = pred["second"].compute_nll(target_cat2)
-        nll_marginal_z2 = self._layer1_nll(target_cat2, pred)
+        nll_marginal_z2 = self._single_detection_nll(target_cat2, pred)
         nll_cond_z1 = pred["second"].compute_nll(target_cat1)
 
         none_mask = target_cat.n_sources == 0
@@ -265,13 +213,12 @@ class Encoder(pl.LightningModule):
 
         return loss0 + loss1 + loss2
 
-    def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
+    def _compute_loss(self, batch, logging_name):
         batch_size = batch["images"].size(0)
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
         # filter out undetectable sources
-        if self.min_flux_threshold > 0:
-            target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
 
         # make predictions/inferences
         target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
@@ -279,21 +226,16 @@ class Encoder(pl.LightningModule):
         pred = self.infer(batch, truth_callback)
 
         # compute loss
-        if not self.two_layers:
-            loss = self._layer1_nll(target_cat1, pred)
+        if not self.double_detect:
+            loss = self._single_detection_nll(target_cat1, pred)
         else:
-            loss = self._two_layer_nll(target_cat1, target_cat, pred)
+            loss = self._double_detection_nll(target_cat1, target_cat, pred)
 
         # exclude border tiles and report average per-tile loss
         ttc = self.tiles_to_crop
         interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
         loss = interior_loss.sum() / interior_loss.numel()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size)
-
-        # log metrics
-        assert log_metrics or not plot_images, "plot_images requires log_metrics"
-        if log_metrics:
-            self.log_metrics(target_cat, batch, logging_name, plot_images=plot_images)
 
         return loss
 
@@ -302,18 +244,63 @@ class Encoder(pl.LightningModule):
         if self.do_data_augmentation:
             augment_batch(batch)
 
-        return self._generic_step(batch, "train")
+        return self._compute_loss(batch, "train")
+
+    def update_metrics(self, batch):
+        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
+        est_cat = self.sample(batch, use_mode=True).to_full_catalog()
+        matching = self.matcher.match_catalogs(target_cat, est_cat)
+        self.metrics.update(target_cat, est_cat, matching)
+
+    def plot_sample_images(self, batch, logging_name):
+        """Log a grid of figures to the tensorboard."""
+        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
+        est_cat = self.sample(batch, use_mode=True)
+        mp = self.tiles_to_crop * self.tile_slen
+        fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
+        title = f"Epoch:{self.current_epoch}/{logging_name} images"
+        if self.logger:
+            self.logger.experiment.add_figure(title, fig)
+        plt.close(fig)
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        # only plot images on the first batch of every 10th epoch
         epoch = self.trainer.current_epoch
-        plot_images = batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1)
-        self._generic_step(batch, "val", log_metrics=True, plot_images=plot_images)
+        self._compute_loss(batch, "val")
+        self.update_metrics(batch)
+
+        # only plot images from the first batch every tenth epoch
+        if batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1):
+            self.plot_sample_images(batch, "val")
+
+    def report_metrics(self, logging_name, show_epoch=False):
+        for k, v in self.metrics.compute().items():
+            self.log(f"{logging_name}/{k}", v)
+
+        for metric_name, metric in self.metrics.items():
+            if hasattr(metric, "plot"):  # noqa: WPS421
+                fig, _axes = metric.plot()
+                name = f"Epoch:{self.current_epoch}" if show_epoch else ""
+                name += f"/{logging_name} {metric_name}"
+                if self.logger:
+                    self.logger.experiment.add_figure(name, fig)
+
+        self.metrics.reset()
+
+    def on_validation_epoch_end(self):
+        self.report_metrics("val", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        self._generic_step(batch, "test", log_metrics=True)
+        self._compute_loss(batch, "test")
+        self.update_metrics(batch)
+
+    def on_test_epoch_end(self):
+        self.report_metrics("test")
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
