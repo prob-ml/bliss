@@ -1,6 +1,6 @@
 import itertools
 import math
-from typing import Dict, Optional
+from typing import Dict
 
 import torch
 from einops import rearrange, repeat
@@ -10,8 +10,6 @@ from torch.distributions import Distribution, TransformedDistribution
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.encoder.encoder import Encoder
-from bliss.encoder.image_normalizer import ImageNormalizer
-from bliss.encoder.metrics import CatalogMetrics
 from bliss.encoder.plotting import plot_detections
 from bliss.encoder.unconstrained_dists import UnconstrainedBernoulli
 from case_studies.adaptive_tiling.region_catalog import (
@@ -22,25 +20,8 @@ from case_studies.adaptive_tiling.region_catalog import (
 
 
 class RegionEncoder(Encoder):
-    def __init__(
-        self,
-        survey_bands: list,
-        tile_slen: int,  # NOTE: this is the *unpadded* tile length!!
-        image_normalizer: ImageNormalizer,
-        overlap_slen: float,
-        metrics: CatalogMetrics,
-        optimizer_params: Optional[dict] = None,
-        scheduler_params: Optional[dict] = None,
-    ):
-        super().__init__(
-            survey_bands=survey_bands,
-            tile_slen=tile_slen,
-            image_normalizer=image_normalizer,
-            tiles_to_crop=0,
-            metrics=metrics,
-            optimizer_params=optimizer_params,
-            scheduler_params=scheduler_params,
-        )
+    def __init__(self, overlap_slen: float, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.overlap_slen = overlap_slen
 
     # region Properties
@@ -631,7 +612,7 @@ class RegionEncoder(Encoder):
     # endregion
 
     # region Lightning Functions
-    def _generic_step(self, batch, logging_name, log_metrics=False, plot_images=False):
+    def _compute_loss(self, batch, logging_name, log_metrics=False, plot_images=False):
         batch_size = batch["images"].size(0)
         x_cat_marginal, _ = self.get_marginal(batch)
         pred = self.get_predicted_dist(x_cat_marginal)
