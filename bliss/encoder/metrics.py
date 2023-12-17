@@ -73,11 +73,13 @@ class DetectionPerformance(Metric):
         self,
         mag_band: int = 2,
         mag_bin_cutoffs: list = None,
+        exclude_last_bin: bool = False,
     ):
         super().__init__()
 
         self.mag_band = mag_band
         self.mag_bin_cutoffs = mag_bin_cutoffs if mag_bin_cutoffs else []
+        self.exclude_last_bin = exclude_last_bin
 
         detection_metrics = [
             "n_true_sources",
@@ -118,8 +120,13 @@ class DetectionPerformance(Metric):
             self.n_est_matches += torch.bucketize(emim, cutoffs).bincount(minlength=n_bins)
 
     def compute(self):
-        precision = self.n_est_matches.sum() / self.n_est_sources.sum()
-        recall = self.n_true_matches.sum() / self.n_true_sources.sum()
+        n_est_matches = self.n_est_matches[:-1] if self.exclude_last_bin else self.n_est_matches
+        n_true_matches = self.n_true_matches[:-1] if self.exclude_last_bin else self.n_true_matches
+        n_est_sources = self.n_est_sources[:-1] if self.exclude_last_bin else self.n_est_sources
+        n_true_sources = self.n_true_sources[:-1] if self.exclude_last_bin else self.n_true_sources
+
+        precision = n_est_matches.sum() / n_est_sources.sum()
+        recall = n_true_matches.sum() / n_true_sources.sum()
         f1 = 2 * precision * recall / (precision + recall)
 
         return {
@@ -137,6 +144,12 @@ class DetectionPerformance(Metric):
         mbc = self.mag_bin_cutoffs
         xlabels = [f"[{mbc[i]}, {mbc[i+1]}]" for i in range(len(mbc) - 1)]
         xlabels = ["< " + str(mbc[0])] + xlabels + ["> " + str(mbc[-1])]
+
+        if self.exclude_last_bin:
+            precision = precision[:-1]
+            recall = recall[:-1]
+            f1 = f1[:-1]
+            xlabels = xlabels[:-1]
 
         sns.set(style="whitegrid")
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
