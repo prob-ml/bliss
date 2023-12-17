@@ -277,13 +277,22 @@ class Encoder(pl.LightningModule):
         if batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1):
             self.plot_sample_images(batch, "val")
 
-    def report_metrics(self, logging_name):
+    def report_metrics(self, logging_name, show_epoch=False):
         for k, v in self.metrics.compute().items():
-            self.log(f"val/{k}", v)
+            self.log(f"{logging_name}/{k}", v)
+
+        for metric_name, metric in self.metrics.items():
+            if hasattr(metric, "plot"):  # noqa: WPS421
+                fig, _axes = metric.plot()
+                name = f"Epoch:{self.current_epoch}" if show_epoch else ""
+                name += f"/{logging_name} {metric_name}"
+                if self.logger:
+                    self.logger.experiment.add_figure(name, fig)
+
         self.metrics.reset()
 
     def on_validation_epoch_end(self):
-        self.report_metrics("val")
+        self.report_metrics("val", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""

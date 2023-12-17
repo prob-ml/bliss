@@ -1,5 +1,7 @@
+import seaborn as sns
 import torch
 from einops import rearrange
+from matplotlib import pyplot as plt
 from scipy.optimize import linear_sum_assignment
 from torchmetrics import Metric
 
@@ -125,6 +127,42 @@ class DetectionPerformance(Metric):
             "detection_recall": recall,
             "detection_f1": f1,
         }
+
+    def plot(self):
+        # Compute recall, precision, and F1 score
+        recall = self.n_true_matches / self.n_true_sources
+        precision = self.n_est_matches / self.n_est_sources
+        f1 = 2 * precision * recall / (precision + recall)
+
+        mbc = self.mag_bin_cutoffs
+        xlabels = [f"[{mbc[i]}, {mbc[i+1]}]" for i in range(len(mbc) - 1)]
+        xlabels = ["< " + str(mbc[0])] + xlabels + ["> " + str(mbc[-1])]
+
+        sns.set(style="whitegrid")
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+        axes[0].plot(recall.tolist(), marker="s")
+        axes[0].set_title("Recall")
+        axes[0].set_xticks(range(len(xlabels)))
+        axes[0].set_xticklabels(xlabels, rotation=45)
+        axes[0].set_ylim([0, 1])
+
+        axes[1].plot(precision.tolist(), marker="s")
+        axes[1].set_title("Precision")
+        axes[1].set_xticks(range(len(xlabels)))
+        axes[1].set_xticklabels(xlabels, rotation=45)
+        axes[1].set_ylim([0, 1])
+
+        axes[2].plot(f1.tolist(), marker="s")
+        axes[2].set_title("F1 Score")
+        axes[2].set_xticks(range(len(xlabels)))
+        axes[2].set_xticklabels(xlabels, rotation=45)
+        axes[2].set_ylim([0, 1])
+
+        plt.tight_layout()
+        plt.show()
+
+        return fig, axes
 
 
 class SourceTypeAccuracy(Metric):
