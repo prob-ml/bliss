@@ -1,355 +1,263 @@
-from typing import Dict, List, Union
-
+import seaborn as sns
 import torch
 from einops import rearrange
+from matplotlib import pyplot as plt
 from scipy.optimize import linear_sum_assignment
-from sklearn.metrics import confusion_matrix
-from torch import Tensor
 from torchmetrics import Metric
 
-from bliss.catalog import FullCatalog, SourceType, TileCatalog
-
-# define type alias to simplify signatures
-Catalog = Union[TileCatalog, FullCatalog]
+from bliss.catalog import FullCatalog
 
 
-class CatalogMetrics(Metric):
+class CatalogMatcher:
+    def __init__(
+        self,
+        dist_slack: float = 1.0,
+        mag_slack: float = None,
+        mag_band: int = 2,
+    ):
+        self.dist_slack = dist_slack
+        self.mag_slack = mag_slack
+        self.mag_band = mag_band
+
+    def match_catalogs(self, true_cat, est_cat):
+        assert isinstance(true_cat, FullCatalog) and isinstance(est_cat, FullCatalog)
+        assert true_cat.batch_size == est_cat.batch_size
+
+        if self.mag_slack:
+            true_mags = true_cat.magnitudes[:, :, self.mag_band]
+            est_mags = est_cat.magnitudes[:, :, self.mag_band]
+
+        matching = []
+        for i in range(true_cat.batch_size):
+            n_true = int(true_cat.n_sources[i].int().sum().item())
+            n_est = int(est_cat.n_sources[i].int().sum().item())
+
+            true_locs = true_cat.plocs[i, :n_true]
+            est_locs = est_cat.plocs[i, :n_est]
+
+            locs_diff = rearrange(true_locs, "i j -> i 1 j") - rearrange(est_locs, "i j -> 1 i j")
+            locs_dist = locs_diff.norm(dim=2)
+
+            # Penalize all pairs which are greater than slack apart to favor valid matches
+            oob = locs_dist > self.dist_slack
+
+            if self.mag_slack:
+                true_mag_col = rearrange(true_mags[i, :n_true], "k -> k 1")
+                est_mag_col = rearrange(est_mags[i, :n_est], "k -> 1 k")
+                mag_err = (true_mag_col - est_mag_col).abs()
+                oob |= mag_err > self.mag_slack
+
+            cost = locs_dist + oob * 1e20
+
+            # find minimal permutation (can be slow for large catalogs, consider using a heuristic
+            # that exploits sparsity instead)
+            row_indx, col_indx = linear_sum_assignment(cost.detach().cpu())
+
+            # good match condition: not out-of-bounds due to either slack contraint
+            valid_matches = ~oob[row_indx, col_indx].cpu().numpy()
+
+            true_matches = torch.from_numpy(row_indx[valid_matches])
+            est_matches = torch.from_numpy(col_indx[valid_matches])
+            matching.append((true_matches, est_matches))
+
+        return matching
+
+
+class DetectionPerformance(Metric):
     """Calculates detection and classification metrics between two catalogs.
-
-    CatalogMetrics supports two modes, "matching" and "conditional", which operate on FullCatalog
-    objects and TileCatalog objects, respectively.
-    For "matching", all metrics are computed by matching predicted sources to true sources.
-    For "conditional", detection metrics are still computed that way, but star/galaxy parameter
-    metrics are computed conditioned on true source location and type; i.e, given a true star or
-    galaxy in a tile in the true catalog, get the corresponding parameters in the same tile in the
-    estimated catalog (regardless of type/existence predicted by estimated catalog in that tile.
-
     Note that galaxy classification metrics are only computed when the values are available in
     both catalogs.
     """
 
-    # detection metrics
-    detection_tp: Tensor
-    detection_fp: Tensor
-    total_true_n_sources: Tensor
-    total_distance_keep: Tensor
-    match_count: Tensor
-    match_count_keep: Tensor
-    gal_tp: Tensor
-    gal_fp: Tensor
-    star_tp: Tensor
-    star_fp: Tensor
-
-    # Classification metrics
-    gal_fluxes: Tensor
-    star_fluxes: Tensor
-    disk_frac: Tensor
-    bulge_frac: Tensor
-    disk_q: Tensor
-    bulge_q: Tensor
-    disk_hlr: Tensor
-    bulge_hlr: Tensor
-    beta_radians: Tensor
-
-    full_state_update: bool = False
-
     def __init__(
         self,
-        survey_bands: list,
-        mode: str = "matching",
-        slack: float = 1.0,
-        dist_sync_on_step: bool = False,
-        disable_bar: bool = True,
-    ) -> None:
-        super().__init__(dist_sync_on_step=dist_sync_on_step)
+        mag_band: int = 2,
+        mag_bin_cutoffs: list = None,
+        exclude_last_bin: bool = False,
+    ):
+        super().__init__()
 
-        self.slack = slack
-        self.disable_bar = disable_bar
-        self.mode = mode
-        self.survey_bands = survey_bands
+        self.mag_band = mag_band
+        self.mag_bin_cutoffs = mag_bin_cutoffs if mag_bin_cutoffs else []
+        self.exclude_last_bin = exclude_last_bin
 
-        self.detection_metrics = [
-            "detection_tp",
-            "detection_fp",
-            "total_true_n_sources",
-            "total_distance_keep",
-            "match_count",
-            "match_count_keep",
-            "gal_tp",
-            "gal_fp",
-            "star_tp",
-            "star_fp",
+        detection_metrics = [
+            "n_true_sources",
+            "n_est_sources",
+            "n_true_matches",
+            "n_est_matches",
         ]
-        for metric in self.detection_metrics:
-            self.add_state(metric, default=torch.tensor(0.0), dist_reduce_fx="sum")
+        for metric in detection_metrics:
+            n_bins = len(self.mag_bin_cutoffs) + 1  # fencepost
+            init_val = torch.zeros(n_bins)
+            self.add_state(metric, default=init_val, dist_reduce_fx="sum")
 
-        self.classification_metrics = [
-            "disk_frac",
-            "bulge_frac",
-            "disk_q",
-            "bulge_q",
-            "disk_hlr",
-            "bulge_hlr",
-            "beta_radians",
-            "gal_fluxes",
-            "star_fluxes",
-        ]
-        for metric in self.classification_metrics:
-            num_zeros = len(self.survey_bands) if metric in {"gal_fluxes", "star_fluxes"} else 1
-            default = torch.zeros(num_zeros)
-            self.add_state(metric, default=default, dist_reduce_fx="sum")
+    def update(self, true_cat, est_cat, matching):
+        if self.mag_band:
+            true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
+            est_mags = est_cat.magnitudes[:, :, self.mag_band].contiguous()
+        else:
+            # hack to match regardless of magnitude; intended for
+            # catalogs from surveys with incompatible filter bands
+            true_mags = torch.ones_like(true_cat.plocs[:, :, 0])
+            est_mags = torch.ones_like(est_cat.plocs[:, :, 0])
 
-    def update(self, true: Catalog, est: Catalog) -> None:
-        assert true.batch_size == est.batch_size
-        if self.mode == "matching":
-            msg = "Metrics mode is set to `matching` but received a TileCatalog"
-            assert isinstance(true, FullCatalog) and isinstance(est, FullCatalog), msg
-        elif self.mode == "conditional":
-            msg = "Metrics mode is set to `conditional` but received a FullCatalog"
-            assert isinstance(true, TileCatalog) and isinstance(est, TileCatalog), msg
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            n_true = true_cat.n_sources[i].sum().item()
+            n_est = est_cat.n_sources[i].sum().item()
 
-        match_true, match_est = self._update_detection_metrics(true, est)
-        self._update_classification_metrics(true, est, match_true, match_est)
+            cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+            n_bins = len(cutoffs) + 1
 
-    def _update_detection_metrics(self, true: Catalog, est: Catalog) -> None:
-        """Update detection metrics."""
-        if self.mode == "matching":
-            true_locs = true.plocs
-            est_locs = est.plocs
-            tgbool = true.galaxy_bools
-            egbool = est.galaxy_bools
-        elif self.mode == "conditional":
-            true_on_idx, true_is_on = true.get_indices_of_on_sources()
-            est_on_idx, est_is_on = est.get_indices_of_on_sources()
+            tmi = true_mags[i, 0:n_true]
+            emi = est_mags[i, 0:n_est]
+            tmim, emim = tmi[tcat_matches], emi[ecat_matches]
 
-            true_locs = true.gather_param_at_tiles("locs", true_on_idx)
-            true_locs *= true_is_on.unsqueeze(-1)
-            est_locs = est.gather_param_at_tiles("locs", est_on_idx)
-            est_locs *= est_is_on.unsqueeze(-1)
+            self.n_true_sources += torch.bucketize(tmi, cutoffs).bincount(minlength=n_bins)
+            self.n_est_sources += torch.bucketize(emi, cutoffs).bincount(minlength=n_bins)
+            self.n_true_matches += torch.bucketize(tmim, cutoffs).bincount(minlength=n_bins)
+            self.n_est_matches += torch.bucketize(emim, cutoffs).bincount(minlength=n_bins)
 
-            true_st = true.gather_param_at_tiles("source_type", true_on_idx)
-            tgbool = true_st == SourceType.GALAXY
-            tgbool *= true_is_on.unsqueeze(-1)
+    def compute(self):
+        n_est_matches = self.n_est_matches[:-1] if self.exclude_last_bin else self.n_est_matches
+        n_true_matches = self.n_true_matches[:-1] if self.exclude_last_bin else self.n_true_matches
+        n_est_sources = self.n_est_sources[:-1] if self.exclude_last_bin else self.n_est_sources
+        n_true_sources = self.n_true_sources[:-1] if self.exclude_last_bin else self.n_true_sources
 
-            est_st = est.gather_param_at_tiles("source_type", est_on_idx)
-            egbool = est_st == SourceType.GALAXY
-            egbool *= est_is_on.unsqueeze(-1)
-
-        match_true, match_est = [], []
-        for i in range(true.batch_size):
-            ntrue = int(true.n_sources[i].int().sum().item())
-            nest = int(est.n_sources[i].int().sum().item())
-            self.total_true_n_sources += ntrue
-
-            # if either ntrue or nest are 0, manually increment FP/FN and continue
-            if ntrue == 0 or nest == 0:
-                if nest > 0:
-                    self.detection_fp += nest
-                match_true.append([])
-                match_est.append([])
-                continue
-
-            mtrue, mest, dkeep, avg_keep_distance = self.match_catalogs(
-                true_locs[i, 0:ntrue], est_locs[i, 0:nest]
-            )
-            match_true.append(mtrue[dkeep])
-            match_est.append(mest[dkeep])
-
-            # update TP/FP and distances
-            tp = dkeep.sum().item()
-            self.detection_tp += tp
-            self.detection_fp += nest - tp
-
-            self.match_count += 1
-            if not torch.isnan(avg_keep_distance):
-                self.total_distance_keep += avg_keep_distance
-                self.match_count_keep += 1
-
-            # update star/galaxy classification TP/FP
-            batch_tgbool = tgbool[i][mtrue][dkeep].reshape(-1)
-            batch_egbool = egbool[i][mest][dkeep].reshape(-1)
-            self._update_confusion_matrix(batch_tgbool, batch_egbool)
-
-        return match_true, match_est
-
-    def _update_confusion_matrix(self, tgbool: Tensor, egbool: Tensor) -> None:
-        """Compute galaxy detection confusion matrix and update TP/FP/TN/FN.
-
-        Args:
-            tgbool (Tensor): Galaxy bools from true catalog.
-            egbool (Tensor): Galaxy bools from estimated catalog.
-        """
-        conf_matrix = confusion_matrix(tgbool.cpu(), egbool.cpu(), labels=[1, 0])
-        # decompose confusion matrix
-        self.gal_tp += conf_matrix[0][0]
-        self.gal_fp += conf_matrix[0][1]
-        self.star_fp += conf_matrix[1][0]
-        self.star_tp += conf_matrix[1][1]
-
-    def _update_classification_metrics(
-        self, true: Catalog, est: Catalog, match_true: List, match_est: List
-    ) -> None:
-        """Update classification metrics based on estimated params at locations of true sources."""
-        # only compute classification metrics if available
-        if "galaxy_params" not in true or "galaxy_params" not in est:
-            return
-
-        # get parameters depending on the kind of catalog
-        if self.mode == "matching":
-            if not (match_true and match_est):
-                return  # need matches to compute classification metrics on full catalog
-            true_params, est_params = self._get_classification_params_full(
-                true, est, match_true, match_est
-            )
-        elif self.mode == "conditional":
-            true_params, est_params = self._get_classification_params_tile(true, est)
-
-        true_gal_fluxes = true_params["galaxy_fluxes"]
-        true_star_fluxes = true_params["star_fluxes"]
-        true_gal_params = true_params["galaxy_params"]
-        est_gal_fluxes = est_params["galaxy_fluxes"]
-        est_star_fluxes = est_params["star_fluxes"]
-        est_gal_params = est_params["galaxy_params"]
-
-        self.gal_fluxes = (true_gal_fluxes - est_gal_fluxes).abs().mean(dim=0)
-        self.star_fluxes = (true_star_fluxes - est_star_fluxes).abs().mean(dim=0)
-
-        # skip if no galaxies in true or estimated catalog
-        if (true_gal_params.shape[0] == 0) or (est_gal_params.shape[0] == 0):
-            return
-
-        # disk/bulge proportions
-        self.disk_frac = (true_gal_params[:, 0] - est_gal_params[:, 0]).abs().mean()
-        self.bulge_frac = ((1 - true_gal_params[:, 0]) - (1 - est_gal_params[:, 0])).abs().mean()
-
-        # angle
-        self.beta_radians = (true_gal_params[:, 1] - est_gal_params[:, 1]).abs().mean()
-
-        # axis ratio
-        self.disk_q = (true_gal_params[:, 2] - est_gal_params[:, 2]).abs().mean()
-        self.bulge_q = (true_gal_params[:, 4] - est_gal_params[:, 4]).abs().mean()
-
-        # half-light radius
-        # sqrt(a * b) = sqrt(a * a * q) = a * sqrt(q)
-        est_disk_hlr = est_gal_params[:, 3] * torch.sqrt(est_gal_params[:, 2])
-        true_disk_hlr = true_gal_params[:, 3] * torch.sqrt(true_gal_params[:, 2])
-        self.disk_hlr = (true_disk_hlr - est_disk_hlr).abs().mean()
-
-        est_bulge_hlr = est_gal_params[:, 5] * torch.sqrt(est_gal_params[:, 4])
-        true_bulge_hlr = true_gal_params[:, 5] * torch.sqrt(true_gal_params[:, 4])
-        self.bulge_hlr = (true_bulge_hlr - est_bulge_hlr).abs().mean()
-
-    def _get_classification_params_full(self, true, est, match_true, match_est):
-        """Get galaxy params in true and est catalogs based on matches."""
-        batch_size, max_true, max_est = true.batch_size, true.plocs.shape[1], est.plocs.shape[1]
-        true_mask = torch.zeros((batch_size, max_true)).bool()
-        est_mask = torch.zeros((batch_size, max_est)).bool()
-
-        for i in range(batch_size):
-            true_mask[i][match_true[i]] = True
-            est_mask[i][match_est[i]] = True
-
-        params = ["galaxy_fluxes", "star_fluxes", "galaxy_params"]
-        true_params = {param: true[param][true_mask] for param in params}
-        est_params = {param: est[param][est_mask] for param in params}
-
-        return true_params, est_params
-
-    def _get_classification_params_tile(self, true, est):
-        """Get galaxy params in est catalog at tiles containing a galaxy in the true catalog."""
-        true_indices, true_is_on = true.get_indices_of_on_sources()
-
-        # construct flattened masks for true source type
-        true_st = true.gather_param_at_tiles("source_type", true_indices)
-        true_gal_bools = true_st == SourceType.GALAXY
-        gal_mask = true_gal_bools.squeeze() * true_is_on.squeeze(1)
-        star_mask = (~true_gal_bools).squeeze() * true_is_on.squeeze(1)
-
-        # gather parameters where source is present in true catalog AND source is actually a star
-        # or galaxy respectively in true catalog
-        # note that the boolean indexing collapses across batches to return a 1D tensor
-        param_masks = {
-            "galaxy_fluxes": gal_mask,
-            "star_fluxes": star_mask,
-            "galaxy_params": gal_mask,
-        }
-        true_params = {}
-        est_params = {}
-        for param, mask in param_masks.items():
-            true_params[param] = true.gather_param_at_tiles(param, true_indices).squeeze(1)[mask]
-            est_params[param] = est.gather_param_at_tiles(param, true_indices).squeeze(1)[mask]
-
-        return true_params, est_params
-
-    def compute(self) -> Dict[str, float]:
-        precision = self.detection_tp / (self.detection_tp + self.detection_fp)
-        recall = self.detection_tp / self.total_true_n_sources
+        precision = n_est_matches.sum() / n_est_sources.sum()
+        recall = n_true_matches.sum() / n_true_sources.sum()
         f1 = 2 * precision * recall / (precision + recall)
 
-        avg_keep_distance = self.total_distance_keep / self.match_count_keep.item()
-
-        class_acc = (self.gal_tp + self.star_tp) / (
-            self.gal_tp + self.star_tp + self.gal_fp + self.star_fp
-        )
-
-        metrics = {
-            "detection_precision": precision.item(),
-            "detection_recall": recall.item(),
-            "f1": f1.item(),
-            "avg_keep_distance": avg_keep_distance.item(),
-            "gal_tp": self.gal_tp.item(),
-            "gal_fp": self.gal_fp.item(),
-            "star_tp": self.star_tp.item(),
-            "star_fp": self.star_fp.item(),
-            "class_acc": class_acc.item(),
+        return {
+            "detection_precision": precision,
+            "detection_recall": recall,
+            "detection_f1": f1,
         }
 
-        # add classification metrics if computed
-        for metric in self.classification_metrics:
-            v = getattr(self, metric, None)
+    def plot(self):
+        # Compute recall, precision, and F1 score
+        recall = self.n_true_matches / self.n_true_sources
+        precision = self.n_est_matches / self.n_est_sources
+        f1 = 2 * precision * recall / (precision + recall)
 
-            # take median along first dim of stacked tensors, i.e. across images
-            if metric in {"gal_fluxes", "star_fluxes"}:
-                for i, band in enumerate(self.survey_bands):
-                    metrics[f"{metric}_{band}_mae"] = v[i].item()
-            else:
-                metrics[f"{metric}_mae"] = v.item()
+        mbc = self.mag_bin_cutoffs
+        xlabels = [f"[{mbc[i]}, {mbc[i+1]}]" for i in range(len(mbc) - 1)]
+        xlabels = ["< " + str(mbc[0])] + xlabels + ["> " + str(mbc[-1])]
 
-        return metrics
+        if self.exclude_last_bin:
+            precision = precision[:-1]
+            recall = recall[:-1]
+            f1 = f1[:-1]
+            xlabels = xlabels[:-1]
 
-    def match_catalogs(self, true_locs, est_locs):
-        """Match true and estimated locations and returned indices to match.
+        sns.set(style="whitegrid")
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-        Permutes `est_locs` to find minimal error between `true_locs` and `est_locs`.
-        The matching is done with the Hungarian algorithm.
+        axes[0].plot(recall.tolist(), marker="s")
+        axes[0].set_title("Recall")
+        axes[0].set_xticks(range(len(xlabels)))
+        axes[0].set_xticklabels(xlabels, rotation=45)
+        axes[0].set_ylim([0, 1])
 
-        Args:
-            true_locs: Tensor of shape `(n1 x 2)`, where `n1` is the true number of sources.
-                The centroids should be in units of pixels.
-            est_locs: Tensor of shape `(n2 x 2)`, where `n2` is the predicted
-                number of sources. The centroids should be in units of pixels.
+        axes[1].plot(precision.tolist(), marker="s")
+        axes[1].set_title("Precision")
+        axes[1].set_xticks(range(len(xlabels)))
+        axes[1].set_xticklabels(xlabels, rotation=45)
+        axes[1].set_ylim([0, 1])
 
-        Returns:
-            A tuple of the following objects:
-            - row_indx: Indices of true objects matched to estimated objects.
-            - col_indx: Indices of estimated objects matched to true objects.
-            - dist_keep: Matched objects to keep based on L2 distances.
-            - avg_keep_distance: Average L2 distance over matched objects to keep.
-        """
-        locs_diff = rearrange(true_locs, "i j -> i 1 j") - rearrange(est_locs, "i j -> 1 i j")
-        locs_err = locs_diff.norm(dim=2)
+        axes[2].plot(f1.tolist(), marker="s")
+        axes[2].set_title("F1 Score")
+        axes[2].set_xticks(range(len(xlabels)))
+        axes[2].set_xticklabels(xlabels, rotation=45)
+        axes[2].set_ylim([0, 1])
 
-        # Penalize all pairs which are greater than slack apart to favor valid matches.
-        locs_err = locs_err + (locs_err > self.slack) * 1e20
+        plt.tight_layout()
+        plt.show()
 
-        # find minimal permutation
-        row_indx, col_indx = linear_sum_assignment(locs_err.detach().cpu())
+        return fig, axes
 
-        # only match objects that satisfy threshold on L2 distance.
-        match_dist = (true_locs[row_indx] - est_locs[col_indx]).norm(dim=1)
 
-        # GOOD match condition: L2 distance is less than slack
-        matches_to_keep = (match_dist < self.slack).bool().cpu().numpy()
-        avg_keep_distance = match_dist[match_dist < self.slack].mean()
+class SourceTypeAccuracy(Metric):
+    def __init__(self):
+        super().__init__()
 
-        return row_indx, col_indx, matches_to_keep, avg_keep_distance
+        self.add_state("gal_tp", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state("star_tp", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state("n_matches", default=torch.zeros(1), dist_reduce_fx="sum")
+
+    def update(self, true_cat, est_cat, matching):
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            self.n_matches += tcat_matches.size(0)
+
+            true_gal = true_cat.galaxy_bools[i][tcat_matches]
+            est_gal = est_cat.galaxy_bools[i][ecat_matches]
+
+            self.gal_tp += (true_gal * est_gal).sum()
+            self.star_tp += (~true_gal * ~est_gal).sum()
+
+    def compute(self):
+        acc = (self.gal_tp + self.star_tp) / self.n_matches
+        return {"classification_acc": acc.item()}
+
+
+class FluxError(Metric):
+    def __init__(self, survey_bands):
+        super().__init__()
+        self.survey_bands = survey_bands
+
+        fe_init = torch.zeros(len(self.survey_bands))
+        self.add_state("flux_err", default=fe_init, dist_reduce_fx="sum")
+
+        self.add_state("n_matches", default=torch.zeros(1), dist_reduce_fx="sum")
+
+    def update(self, true_cat, est_cat, matching):
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            self.n_matches += tcat_matches.size(0)
+
+            true_flux = true_cat.on_fluxes[i, tcat_matches, :]
+            est_flux = est_cat.on_fluxes[i, ecat_matches, :]
+            self.flux_err += (true_flux - est_flux).abs().sum(dim=0)
+
+    def compute(self):
+        avg_flux_err = self.flux_err / self.n_matches
+        results = {}
+        for i, band in enumerate(self.survey_bands):
+            results[f"flux_err_{band}_mae"] = avg_flux_err[i].item()
+        return results
+
+
+class GalaxyShapeError(Metric):
+    GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
+
+    def __init__(self):
+        super().__init__()
+
+        gpe_init = torch.zeros(len(self.GALSIM_NAMES))
+        self.add_state("galsim_param_err", default=gpe_init, dist_reduce_fx="sum")
+
+        self.add_state("n_true_galaxies", default=torch.zeros(1), dist_reduce_fx="sum")
+
+    def update(self, true_cat, est_cat, matching):
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+
+            true_gal = true_cat.galaxy_bools[i][tcat_matches]
+            self.n_true_galaxies += true_gal.sum()
+
+            # TODO: only compute error for *true* galaxies
+            true_gp = true_cat["galaxy_params"][i, tcat_matches, :]
+            est_gp = est_cat["galaxy_params"][i, ecat_matches, :]
+            gp_err = (true_gp - est_gp).abs().sum(dim=0)
+            # TODO: angle is a special case, need to wrap around pi (not 2pi due to symmetry)
+            self.galsim_param_err += gp_err
+
+    def compute(self):
+        avg_galsim_param_err = self.galsim_param_err / self.n_true_galaxies
+        results = {}
+        for i, gs_name in enumerate(self.GALSIM_NAMES):
+            results[f"{gs_name}_mae"] = avg_galsim_param_err[i]
+
+        return results
