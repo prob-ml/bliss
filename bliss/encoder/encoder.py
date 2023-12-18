@@ -69,7 +69,8 @@ class Encoder(pl.LightningModule):
         self.tiles_to_crop = tiles_to_crop
         self.image_normalizer = image_normalizer
         self.vd_spec = vd_spec
-        self.metrics = metrics
+        self.mode_metrics = metrics.clone()
+        self.sample_metrics = metrics.clone()
         self.matcher = matcher
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
@@ -261,9 +262,14 @@ class Encoder(pl.LightningModule):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
-        est_cat = self.sample(batch, use_mode=True).to_full_catalog()
-        matching = self.matcher.match_catalogs(target_cat, est_cat)
-        self.metrics.update(target_cat, est_cat, matching)
+
+        mode_cat = self.sample(batch, use_mode=True).to_full_catalog()
+        matching = self.matcher.match_catalogs(target_cat, mode_cat)
+        self.mode_metrics.update(target_cat, mode_cat, matching)
+
+        sample_cat = self.sample(batch, use_mode=False).to_full_catalog()
+        matching = self.matcher.match_catalogs(target_cat, sample_cat)
+        self.sample_metrics.update(target_cat, sample_cat, matching)
 
     def plot_sample_images(self, batch, logging_name):
         """Log a grid of figures to the tensorboard."""
@@ -288,11 +294,11 @@ class Encoder(pl.LightningModule):
         if batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1):
             self.plot_sample_images(batch, "val")
 
-    def report_metrics(self, logging_name, show_epoch=False):
-        for k, v in self.metrics.compute().items():
+    def report_metrics(self, metrics, logging_name, show_epoch=False):
+        for k, v in metrics.compute().items():
             self.log(f"{logging_name}/{k}", v)
 
-        for metric_name, metric in self.metrics.items():
+        for metric_name, metric in metrics.items():
             if hasattr(metric, "plot"):  # noqa: WPS421
                 fig, _axes = metric.plot()
                 name = f"Epoch:{self.current_epoch}" if show_epoch else ""
@@ -300,10 +306,11 @@ class Encoder(pl.LightningModule):
                 if self.logger:
                     self.logger.experiment.add_figure(name, fig)
 
-        self.metrics.reset()
+        metrics.reset()
 
     def on_validation_epoch_end(self):
-        self.report_metrics("val", show_epoch=True)
+        self.report_metrics(self.mode_metrics, "val_mode", show_epoch=True)
+        self.report_metrics(self.sample_metrics, "val_sample", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
@@ -311,7 +318,8 @@ class Encoder(pl.LightningModule):
         self.update_metrics(batch)
 
     def on_test_epoch_end(self):
-        self.report_metrics("test")
+        self.report_metrics(self.mode_metrics, "test_mode", show_epoch=False)
+        self.report_metrics(self.sample_metrics, "test_sample", show_epoch=False)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
