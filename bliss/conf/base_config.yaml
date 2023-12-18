@@ -106,6 +106,7 @@ encoder:
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
     double_detect: false
+    use_checkerboard: true
 
 surveys:
     sdss:

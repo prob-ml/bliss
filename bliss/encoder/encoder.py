@@ -42,6 +42,7 @@ class Encoder(pl.LightningModule):
         do_data_augmentation: bool = False,
         compile_model: bool = False,
         double_detect: bool = False,
+        use_checkerboard: bool = True,
     ):
         """Initializes Encoder.
 
@@ -59,6 +60,7 @@ class Encoder(pl.LightningModule):
             do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
             double_detect: whether to make up to two detections per tile rather than one
+            use_checkerboard: whether to use dependent tiling
         """
         super().__init__()
 
@@ -74,6 +76,7 @@ class Encoder(pl.LightningModule):
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
         self.double_detect = double_detect
+        self.use_checkerboard = use_checkerboard
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
         assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
@@ -97,7 +100,7 @@ class Encoder(pl.LightningModule):
             if self.double_detect:
                 self.second_net = torch.compile(self.second_net)
 
-    def _get_checkboard(self, ht, wt):
+    def _get_checkerboard(self, ht, wt):
         # make/store a checkerboard of tiles
         # https://stackoverflow.com/questions/72874737/how-to-make-a-checkerboard-in-pytorch
         arange_ht = torch.arange(ht, device=self.device)
@@ -133,7 +136,6 @@ class Encoder(pl.LightningModule):
         batch_size = batch["images"].size(0)
         h, w = batch["images"].shape[2:4]
         ht, wt = h // self.tile_slen, w // self.tile_slen
-        tile_cb = self._get_checkboard(ht, wt).squeeze(1)
         pred = {}
 
         x = self.image_normalizer.get_input_tensor(batch)
@@ -141,21 +143,23 @@ class Encoder(pl.LightningModule):
 
         x_cat_marginal = self.marginal_net(x_features)
         x_features = x_features.detach()  # is this helpful? doing it here to match old code
+        pred["x_features"] = x_features
         pred["marginal"] = self.vd_spec.make_dist(x_cat_marginal)
 
         history_cat = history_callback(pred["marginal"])
+        pred["history_cat"] = history_cat
 
-        white_history_mask = tile_cb.expand([batch_size, -1, -1])
-        pred["white"] = self.infer_conditional(x_features, history_cat, white_history_mask)
-        pred["black"] = self.infer_conditional(x_features, history_cat, 1 - white_history_mask)
+        if self.use_checkerboard:
+            tile_cb = self._get_checkerboard(ht, wt).squeeze(1)
+            white_history_mask = tile_cb.expand([batch_size, -1, -1])
+            pred["white_history_mask"] = white_history_mask
+
+            pred["white"] = self.infer_conditional(x_features, history_cat, white_history_mask)
+            pred["black"] = self.infer_conditional(x_features, history_cat, 1 - white_history_mask)
 
         if self.double_detect:
             x_cat_second = self.second_net(x_features)
             pred["second"] = self.vd_spec.make_dist(x_cat_second)
-
-        pred["history_cat"] = history_cat
-        pred["x_features"] = x_features
-        pred["white_history_mask"] = white_history_mask
 
         return pred
 
@@ -164,10 +168,14 @@ class Encoder(pl.LightningModule):
             return pred_marginal.sample(use_mode=use_mode)
 
         pred = self.infer(batch, marginal_detections)
-        white_cat = pred["white"].sample(use_mode=use_mode)
-        est_cat = self.interleave_catalogs(
-            pred["history_cat"], white_cat, pred["white_history_mask"]
-        )
+
+        if not self.use_checkerboard:
+            est_cat = pred["history_cat"]
+        else:
+            white_cat = pred["white"].sample(use_mode=use_mode)
+            est_cat = self.interleave_catalogs(
+                pred["history_cat"], white_cat, pred["white_history_mask"]
+            )
         if self.double_detect:
             est_cat_s = pred["second"].sample(use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
@@ -178,6 +186,9 @@ class Encoder(pl.LightningModule):
 
     def _single_detection_nll(self, target_cat, pred):
         marginal_loss = pred["marginal"].compute_nll(target_cat)
+
+        if not self.use_checkerboard:
+            return marginal_loss
 
         white_loss = pred["white"].compute_nll(target_cat)
         white_loss_mask = 1 - pred["white_history_mask"]
