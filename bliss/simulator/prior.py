@@ -33,9 +33,11 @@ class CatalogPrior(pl.LightningModule):
         star_flux_min: float,
         star_flux_max: float,
         star_flux_alpha: float,
+        star_flux_loc: float,
         galaxy_flux_min: float,
         galaxy_flux_max: float,
-        galaxy_alpha: float,
+        galaxy_flux_alpha: float,
+        galaxy_flux_loc: float,
         galaxy_a_concentration: float,
         galaxy_a_loc: float,
         galaxy_a_scale: float,
@@ -56,12 +58,14 @@ class CatalogPrior(pl.LightningModule):
             max_sources: Maximum number of sources in a tile
             mean_sources: Mean rate of sources appearing in a tile
             prob_galaxy: Prior probability a source is a galaxy
-            star_flux_min: Prior parameter on fluxes
-            star_flux_max: Prior parameter on fluxes
-            star_flux_alpha: Prior parameter on fluxes (pareto parameter)
-            galaxy_flux_min: Minimum flux of a galaxy
-            galaxy_flux_max: Maximum flux of a galaxy
-            galaxy_alpha: ?
+            star_flux_min: Star flux scale parameter
+            star_flux_max: Maximum star flux
+            star_flux_alpha: Star flux shape parameter
+            star_flux_loc: Star flux location parameter
+            galaxy_flux_min: Galaxy flux scale parameter
+            galaxy_flux_max: Galaxy flux maximum parameter
+            galaxy_flux_alpha: Galaxy flux shape parameter
+            galaxy_flux_loc: Galaxy flux location parameter
             galaxy_a_concentration: ?
             galaxy_a_loc: ?
             galaxy_a_scale: galaxy scale
@@ -88,10 +92,12 @@ class CatalogPrior(pl.LightningModule):
         self.star_flux_min = star_flux_min
         self.star_flux_max = star_flux_max
         self.star_flux_alpha = star_flux_alpha
+        self.star_flux_loc = star_flux_loc
 
         self.galaxy_flux_min = galaxy_flux_min
         self.galaxy_flux_max = galaxy_flux_max
-        self.galaxy_alpha = galaxy_alpha
+        self.galaxy_flux_alpha = galaxy_flux_alpha
+        self.galaxy_flux_loc = galaxy_flux_loc
 
         self.galaxy_a_concentration = galaxy_a_concentration
         self.galaxy_a_loc = galaxy_a_loc
@@ -148,18 +154,22 @@ class CatalogPrior(pl.LightningModule):
         star_bool = galaxy_bool.bitwise_not()
         return SourceType.STAR * star_bool + SourceType.GALAXY * galaxy_bool
 
-    def _draw_truncated_pareto(self, alpha, min_x, max_x, n_samples) -> Tensor:
+    def _draw_truncated_pareto(self, alpha, min_x, max_x, loc, n_samples) -> Tensor:
         # draw pareto conditioned on being less than f_max
         u_max = 1 - (min_x / max_x) ** alpha
         uniform_samples = torch.rand(n_samples) * u_max
-        return min_x / (1.0 - uniform_samples) ** (1 / alpha)
+        return min_x / (1.0 - uniform_samples) ** (1 / alpha) + loc
 
     def _sample_star_fluxes(self):
         flux_prop = self._sample_flux_ratios(self.gmm_star)
 
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
         ref_band_flux = self._draw_truncated_pareto(
-            self.star_flux_alpha, self.star_flux_min, self.star_flux_max, latent_dims
+            self.star_flux_alpha,
+            self.star_flux_min,
+            self.star_flux_max,
+            self.star_flux_loc,
+            latent_dims,
         )
         total_flux = ref_band_flux * flux_prop
 
@@ -234,7 +244,11 @@ class CatalogPrior(pl.LightningModule):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
 
         ref_band_flux = self._draw_truncated_pareto(
-            self.galaxy_alpha, self.galaxy_flux_min, self.galaxy_flux_max, latent_dims
+            self.galaxy_flux_alpha,
+            self.galaxy_flux_min,
+            self.galaxy_flux_max,
+            self.galaxy_flux_loc,
+            latent_dims,
         )
 
         total_flux = flux_prop * ref_band_flux

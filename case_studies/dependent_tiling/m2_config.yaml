@@ -37,9 +37,10 @@ prior:
     mean_sources: 0.48
     min_sources: 0
     prob_galaxy: 0.0
-    star_flux_min: 0.63  # i.e., 23 magnitude
-    star_flux_max: 1014
-    star_flux_alpha: 0.5
+    star_flux_min: 1.3012  # only the min is star_flux_loc is 0
+    star_flux_max: 1e6
+    star_flux_alpha: 0.9530
+    star_flux_loc: -1.0498
 
 surveys:
     sdss:
