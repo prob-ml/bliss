@@ -3,3 +3,8 @@ defaults:
     - ../../bliss/conf@_here_: base_config
     - _self_
     - override hydra/job_logging: stdout
+
+prior:
+    _target_: case_studies.redshift_estimation.prior.RedshiftPrior
+    redshift_min: 0.99
+    redshift_max: 1.01
