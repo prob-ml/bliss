@@ -30,14 +30,14 @@ class CatalogPrior(pl.LightningModule):
         max_sources: int,
         mean_sources: float,
         prob_galaxy: float,
-        star_flux_min: float,
-        star_flux_max: float,
-        star_flux_alpha: float,
+        star_flux_exponent: float,
+        star_flux_truncation: float,
         star_flux_loc: float,
-        galaxy_flux_min: float,
-        galaxy_flux_max: float,
-        galaxy_flux_alpha: float,
+        star_flux_scale: float,
+        galaxy_flux_exponent: float,
+        galaxy_flux_truncation: float,
         galaxy_flux_loc: float,
+        galaxy_flux_scale: float,
         galaxy_a_concentration: float,
         galaxy_a_loc: float,
         galaxy_a_scale: float,
@@ -58,14 +58,14 @@ class CatalogPrior(pl.LightningModule):
             max_sources: Maximum number of sources in a tile
             mean_sources: Mean rate of sources appearing in a tile
             prob_galaxy: Prior probability a source is a galaxy
-            star_flux_min: Star flux scale parameter
-            star_flux_max: Maximum star flux
-            star_flux_alpha: Star flux shape parameter
-            star_flux_loc: Star flux location parameter
-            galaxy_flux_min: Galaxy flux scale parameter
-            galaxy_flux_max: Galaxy flux maximum parameter
-            galaxy_flux_alpha: Galaxy flux shape parameter
-            galaxy_flux_loc: Galaxy flux location parameter
+            star_flux_exponent: Exponent (alpha) parameter of a truncated Pareto
+            star_flux_truncation: Truncation parameter of a truncated Pareto
+            star_flux_loc: Location parameter of a truncated Pareto
+            star_flux_scale: Scale parameter of a truncated Pareto
+            galaxy_flux_exponent: Exponent (alpha) parameter of a truncated Pareto
+            galaxy_flux_truncation: Truncation parameter of a truncated Pareto
+            galaxy_flux_loc: Location parameter of a truncated Pareto
+            galaxy_flux_scale: Scale parameter of a truncated Pareto
             galaxy_a_concentration: ?
             galaxy_a_loc: ?
             galaxy_a_scale: galaxy scale
@@ -83,21 +83,22 @@ class CatalogPrior(pl.LightningModule):
         self.bands = range(self.n_bands)
         self.batch_size = batch_size
 
+        # TODO: refactor prior to take hydra-initialized distributions as arguments
         self.min_sources = min_sources
         self.max_sources = max_sources
         self.mean_sources = mean_sources
 
         self.prob_galaxy = prob_galaxy
 
-        self.star_flux_min = star_flux_min
-        self.star_flux_max = star_flux_max
-        self.star_flux_alpha = star_flux_alpha
+        self.star_flux_truncation = star_flux_truncation
+        self.star_flux_exponent = star_flux_exponent
         self.star_flux_loc = star_flux_loc
+        self.star_flux_scale = star_flux_scale
 
-        self.galaxy_flux_min = galaxy_flux_min
-        self.galaxy_flux_max = galaxy_flux_max
-        self.galaxy_flux_alpha = galaxy_flux_alpha
+        self.galaxy_flux_exponent = galaxy_flux_exponent
+        self.galaxy_flux_truncation = galaxy_flux_truncation
         self.galaxy_flux_loc = galaxy_flux_loc
+        self.galaxy_flux_scale = galaxy_flux_scale
 
         self.galaxy_a_concentration = galaxy_a_concentration
         self.galaxy_a_loc = galaxy_a_loc
@@ -154,21 +155,21 @@ class CatalogPrior(pl.LightningModule):
         star_bool = galaxy_bool.bitwise_not()
         return SourceType.STAR * star_bool + SourceType.GALAXY * galaxy_bool
 
-    def _draw_truncated_pareto(self, alpha, min_x, max_x, loc, n_samples) -> Tensor:
+    def _draw_truncated_pareto(self, exponent, truncation, loc, scale, n_samples) -> Tensor:
         # draw pareto conditioned on being less than f_max
-        u_max = 1 - (min_x / max_x) ** alpha
+        u_max = 1 - (scale / truncation) ** exponent
         uniform_samples = torch.rand(n_samples) * u_max
-        return min_x / (1.0 - uniform_samples) ** (1 / alpha) + loc
+        return scale / (1.0 - uniform_samples) ** (1 / exponent) + loc
 
     def _sample_star_fluxes(self):
         flux_prop = self._sample_flux_ratios(self.gmm_star)
 
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
         ref_band_flux = self._draw_truncated_pareto(
-            self.star_flux_alpha,
-            self.star_flux_min,
-            self.star_flux_max,
+            self.star_flux_exponent,
+            self.star_flux_truncation,
             self.star_flux_loc,
+            self.star_flux_scale,
             latent_dims,
         )
         total_flux = ref_band_flux * flux_prop
@@ -244,10 +245,10 @@ class CatalogPrior(pl.LightningModule):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
 
         ref_band_flux = self._draw_truncated_pareto(
-            self.galaxy_flux_alpha,
-            self.galaxy_flux_min,
-            self.galaxy_flux_max,
+            self.galaxy_flux_exponent,
+            self.galaxy_flux_truncation,
             self.galaxy_flux_loc,
+            self.galaxy_flux_scale,
             latent_dims,
         )
 
