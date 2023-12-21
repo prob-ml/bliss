@@ -83,11 +83,11 @@ class CatalogPrior(pl.LightningModule):
         self.bands = range(self.n_bands)
         self.batch_size = batch_size
 
-        # TODO: refactor prior to take hydra-initialized distributions as arguments
         self.min_sources = min_sources
         self.max_sources = max_sources
         self.mean_sources = mean_sources
 
+        # TODO: refactor prior to take hydra-initialized distributions as arguments
         self.prob_galaxy = prob_galaxy
 
         self.star_flux_truncation = star_flux_truncation
