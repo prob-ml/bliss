@@ -309,8 +309,8 @@ class Encoder(pl.LightningModule):
         metrics.reset()
 
     def on_validation_epoch_end(self):
-        self.report_metrics(self.mode_metrics, "val_mode", show_epoch=True)
-        self.report_metrics(self.sample_metrics, "val_sample", show_epoch=True)
+        self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
+        self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
@@ -318,8 +318,8 @@ class Encoder(pl.LightningModule):
         self.update_metrics(batch)
 
     def on_test_epoch_end(self):
-        self.report_metrics(self.mode_metrics, "test_mode", show_epoch=False)
-        self.report_metrics(self.sample_metrics, "test_sample", show_epoch=False)
+        self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)
+        self.report_metrics(self.sample_metrics, "test/sample", show_epoch=False)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
