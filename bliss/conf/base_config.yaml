@@ -214,7 +214,10 @@ train:
 
 predict:
     dataset: ${surveys.sdss}
-    trainer: ${train.trainer}
+    trainer:
+        _target_: pytorch_lightning.Trainer
+        accelerator: "gpu"
+        precision: ${train.trainer.precision}
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/clahed_logged_20percent.pt
     device: "cuda:0"

@@ -79,7 +79,4 @@ predict:
         align_to_band: null
         load_image_data: true
         crop_config: [624, 736, 304, 416]
-    trainer: ${train.trainer}
-    encoder: ${encoder}
     weight_save_path: null
-    device: "cuda:0"
