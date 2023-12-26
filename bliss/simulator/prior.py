@@ -5,6 +5,7 @@ from typing import Tuple
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from scipy.stats import truncpareto
 from torch import Tensor
 from torch.distributions import Gamma, Poisson, Uniform
 
@@ -156,10 +157,9 @@ class CatalogPrior(pl.LightningModule):
         return SourceType.STAR * star_bool + SourceType.GALAXY * galaxy_bool
 
     def _draw_truncated_pareto(self, exponent, truncation, loc, scale, n_samples) -> Tensor:
-        # draw pareto conditioned on being less than f_max
-        u_max = 1 - (scale / truncation) ** exponent
-        uniform_samples = torch.rand(n_samples) * u_max
-        return scale / (1.0 - uniform_samples) ** (1 / exponent) + loc
+        # could use PyTorch's Pareto instead, but would have to transform to truncate
+        samples = truncpareto.rvs(exponent, truncation, loc=loc, scale=scale, size=n_samples)
+        return torch.from_numpy(samples)
 
     def _sample_star_fluxes(self):
         flux_prop = self._sample_flux_ratios(self.gmm_star)

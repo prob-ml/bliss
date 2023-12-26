@@ -35,9 +35,9 @@ prior:
     min_sources: 0
     prob_galaxy: 0.72
     star_flux_exponent: 0.43
-    star_flux_truncation: 1014
+    star_flux_truncation: 640  # too low -- refit this
     star_flux_loc: 0.0
-    star_flux_scale: 0.63094948  # only the min is star_flux_loc is 0
+    star_flux_scale: 0.63094948  # also the min becauae star_flux_loc is 0
     galaxy_flux_truncation: 1013
     galaxy_flux_exponent: 0.47
     galaxy_flux_scale: 0.6301037
