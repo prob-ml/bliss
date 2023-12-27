@@ -318,7 +318,7 @@ class Encoder(pl.LightningModule):
         self.update_metrics(batch)
 
     def on_test_epoch_end(self):
-        self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)
+#        self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)
         self.report_metrics(self.sample_metrics, "test/sample", show_epoch=False)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
