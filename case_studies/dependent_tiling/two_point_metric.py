@@ -19,9 +19,14 @@ class TwoPointMetric(Metric):
             # TODO: filter out sources within radius of the edge for one of two kd trees
 
             ne = est_cat.n_sources[i].item()
+            locs = est_cat.plocs[i, :ne]
+
+            # ne = (est_cat.on_fluxes[i, :, 2] > 3).sum()
+            # sort_indexes = est_cat.on_fluxes[i, :, 2].sort(descending=True)[1]
+            # locs = est_cat.plocs[i, sort_indexes[:ne]]
+
             self.n_est += ne
 
-            locs = est_cat.plocs[i, :ne]
             kd = cKDTree(locs.cpu().numpy())
             n_obs = kd.count_neighbors(kd, self.radii) - ne
             self.obs_neighbors += torch.from_numpy(n_obs).to(self.device)
