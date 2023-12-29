@@ -326,7 +326,7 @@ class Encoder(pl.LightningModule):
         with torch.no_grad():
             return {
                 "mode_cat": self.sample(batch, use_mode=True),
-                # we probably want multiple samples
+                # we may want multiple samples
                 "sample_cat": self.sample(batch, use_mode=False),
             }
 
