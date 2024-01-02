@@ -34,7 +34,7 @@ prior:
     tile_slen: 2
     batch_size: 32
     max_sources: 6
-    mean_sources: 0.22
+    mean_sources: 0.48
     min_sources: 0
     prob_galaxy: 0.0
     star_flux_exponent: 0.9859821185389767
