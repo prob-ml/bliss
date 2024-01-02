@@ -16,24 +16,24 @@ class TwoPointMetric(Metric):
 
     def update(self, _true_cat, est_cat, _matching):
         for i in range(est_cat.batch_size):
-            # TODO: filter out sources within radius of the edge for one of two kd trees
+            ne_all = est_cat.n_sources[i].item()
+            locs_all = est_cat.plocs[i, :ne_all]
 
-            ne = est_cat.n_sources[i].item()
-            locs = est_cat.plocs[i, :ne]
+            is_inner = ((locs_all > 10) & (locs_all < 98)).all(dim=1)
+            locs_inner = locs_all[is_inner]
 
-            # ne = (est_cat.on_fluxes[i, :, 2] > 3).sum()
-            # sort_indexes = est_cat.on_fluxes[i, :, 2].sort(descending=True)[1]
-            # locs = est_cat.plocs[i, sort_indexes[:ne]]
+            ne_inner = locs_inner.shape[0]
+            self.n_est += ne_inner
 
-            self.n_est += ne
+            kd_all = cKDTree(locs_all.cpu().numpy())
+            kd_inner = cKDTree(locs_inner.cpu().numpy())
 
-            kd = cKDTree(locs.cpu().numpy())
-            n_obs = kd.count_neighbors(kd, self.radii) - ne
+            n_obs = kd_inner.count_neighbors(kd_all, self.radii) - ne_inner
             self.obs_neighbors += torch.from_numpy(n_obs).to(self.device)
 
-            other_per_pixel = (ne - 1) / 100**2  # adjust for image size (108 x 108 outer)
+            other_per_pixel = (ne_all - 1) / 108**2  # adjust for image size (108 x 108 outer)
             other_per_disk = other_per_pixel * torch.pi * self.radii**2
-            n_expected = other_per_disk * ne
+            n_expected = other_per_disk * ne_inner
             self.expected_neighbors += n_expected.to(self.device)
 
     def compute(self):
