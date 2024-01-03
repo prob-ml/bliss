@@ -194,6 +194,8 @@ class ImageDecoder(nn.Module):
         # generate random WCS shifts as manual image dithering via unaligning WCS
         wcs_batch = []
 
+        # TODO: replace this painfully slow loop and remove our dependence on galsim by writing
+        # our own vectorized (and GPU accelerated) rendering function using torch.fft/ifft
         for i in range(batch_size):
             n_sources = int(full_cat.n_sources[i].item())
             psf = psfs[i]

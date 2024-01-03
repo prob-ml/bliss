@@ -293,6 +293,9 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
             f"but only have {len(self.data[self.slices[0]])}. Re-run `generate.py` with "
             f"different generation `train_n_batches` and/or `batch_size`."
         )
+        # TODO: consider adding pixelwise Poisson noise to the *training* images on the fly
+        # to reduce overfitting rather than adding noise while simulating training images.
+        # (validation and test images should still be simulated with noise, though)
         return DataLoader(
             self.data[self.slices[0]],
             shuffle=True,

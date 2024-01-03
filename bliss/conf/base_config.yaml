@@ -34,12 +34,14 @@ prior:
     mean_sources: 0.2
     min_sources: 0
     prob_galaxy: 0.72
-    star_flux_min: 0.63094948
-    star_flux_max: 1014
-    star_flux_alpha: 0.43
-    galaxy_flux_min: 0.6301037
-    galaxy_flux_max: 1013
-    galaxy_alpha: 0.47
+    star_flux_exponent: 0.43
+    star_flux_truncation: 640  # too low -- refit this
+    star_flux_loc: 0.0
+    star_flux_scale: 0.63094948  # also the min becauae star_flux_loc is 0
+    galaxy_flux_truncation: 1013
+    galaxy_flux_exponent: 0.47
+    galaxy_flux_scale: 0.6301037
+    galaxy_flux_loc: 0.0
     galaxy_a_concentration: 0.39330758068481686
     galaxy_a_loc: 0.8371888967872619
     galaxy_a_scale: 4.432725319432478
@@ -106,6 +108,7 @@ encoder:
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
     double_detect: false
+    use_checkerboard: true
 
 surveys:
     sdss:
@@ -211,7 +214,10 @@ train:
 
 predict:
     dataset: ${surveys.sdss}
-    trainer: ${train.trainer}
+    trainer:
+        _target_: pytorch_lightning.Trainer
+        accelerator: "gpu"
+        precision: ${train.trainer.precision}
     encoder: ${encoder}
     weight_save_path: ${paths.pretrained_models}/clahed_logged_20percent.pt
     device: "cuda:0"

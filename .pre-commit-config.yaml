@@ -49,4 +49,5 @@ repos:
         types: [python]
         args:
           - "--check"
+          - "--diff"
           - "--line-length=100"

@@ -97,8 +97,7 @@ def predict(predict_cfg):
     trainer = instantiate(predict_cfg.trainer)
     enc_output = trainer.predict(encoder, datamodule=dataset)
 
-    mode_cats = [b["mode_cat"].to_full_catalog() for b in enc_output]
-    return dict(zip(dataset.image_ids(), mode_cats))
+    return dict(zip(dataset.image_ids(), enc_output))
 
 
 # pragma: no cover
