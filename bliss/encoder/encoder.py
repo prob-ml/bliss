@@ -42,6 +42,7 @@ class Encoder(pl.LightningModule):
         do_data_augmentation: bool = False,
         compile_model: bool = False,
         double_detect: bool = False,
+        use_checkerboard: bool = True,
     ):
         """Initializes Encoder.
 
@@ -59,6 +60,7 @@ class Encoder(pl.LightningModule):
             do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
             double_detect: whether to make up to two detections per tile rather than one
+            use_checkerboard: whether to use dependent tiling
         """
         super().__init__()
 
@@ -67,13 +69,15 @@ class Encoder(pl.LightningModule):
         self.tiles_to_crop = tiles_to_crop
         self.image_normalizer = image_normalizer
         self.vd_spec = vd_spec
-        self.metrics = metrics
+        self.mode_metrics = metrics.clone()
+        self.sample_metrics = metrics.clone()
         self.matcher = matcher
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
         self.double_detect = double_detect
+        self.use_checkerboard = use_checkerboard
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
         assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
@@ -97,7 +101,7 @@ class Encoder(pl.LightningModule):
             if self.double_detect:
                 self.second_net = torch.compile(self.second_net)
 
-    def _get_checkboard(self, ht, wt):
+    def _get_checkerboard(self, ht, wt):
         # make/store a checkerboard of tiles
         # https://stackoverflow.com/questions/72874737/how-to-make-a-checkerboard-in-pytorch
         arange_ht = torch.arange(ht, device=self.device)
@@ -133,7 +137,6 @@ class Encoder(pl.LightningModule):
         batch_size = batch["images"].size(0)
         h, w = batch["images"].shape[2:4]
         ht, wt = h // self.tile_slen, w // self.tile_slen
-        tile_cb = self._get_checkboard(ht, wt).squeeze(1)
         pred = {}
 
         x = self.image_normalizer.get_input_tensor(batch)
@@ -141,21 +144,23 @@ class Encoder(pl.LightningModule):
 
         x_cat_marginal = self.marginal_net(x_features)
         x_features = x_features.detach()  # is this helpful? doing it here to match old code
+        pred["x_features"] = x_features
         pred["marginal"] = self.vd_spec.make_dist(x_cat_marginal)
 
         history_cat = history_callback(pred["marginal"])
+        pred["history_cat"] = history_cat
 
-        white_history_mask = tile_cb.expand([batch_size, -1, -1])
-        pred["white"] = self.infer_conditional(x_features, history_cat, white_history_mask)
-        pred["black"] = self.infer_conditional(x_features, history_cat, 1 - white_history_mask)
+        if self.use_checkerboard:
+            tile_cb = self._get_checkerboard(ht, wt).squeeze(1)
+            white_history_mask = tile_cb.expand([batch_size, -1, -1])
+            pred["white_history_mask"] = white_history_mask
+
+            pred["white"] = self.infer_conditional(x_features, history_cat, white_history_mask)
+            pred["black"] = self.infer_conditional(x_features, history_cat, 1 - white_history_mask)
 
         if self.double_detect:
             x_cat_second = self.second_net(x_features)
             pred["second"] = self.vd_spec.make_dist(x_cat_second)
-
-        pred["history_cat"] = history_cat
-        pred["x_features"] = x_features
-        pred["white_history_mask"] = white_history_mask
 
         return pred
 
@@ -164,10 +169,14 @@ class Encoder(pl.LightningModule):
             return pred_marginal.sample(use_mode=use_mode)
 
         pred = self.infer(batch, marginal_detections)
-        white_cat = pred["white"].sample(use_mode=use_mode)
-        est_cat = self.interleave_catalogs(
-            pred["history_cat"], white_cat, pred["white_history_mask"]
-        )
+
+        if not self.use_checkerboard:
+            est_cat = pred["history_cat"]
+        else:
+            white_cat = pred["white"].sample(use_mode=use_mode)
+            est_cat = self.interleave_catalogs(
+                pred["history_cat"], white_cat, pred["white_history_mask"]
+            )
         if self.double_detect:
             est_cat_s = pred["second"].sample(use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
@@ -178,6 +187,9 @@ class Encoder(pl.LightningModule):
 
     def _single_detection_nll(self, target_cat, pred):
         marginal_loss = pred["marginal"].compute_nll(target_cat)
+
+        if not self.use_checkerboard:
+            return marginal_loss
 
         white_loss = pred["white"].compute_nll(target_cat)
         white_loss_mask = 1 - pred["white_history_mask"]
@@ -250,9 +262,14 @@ class Encoder(pl.LightningModule):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
-        est_cat = self.sample(batch, use_mode=True).to_full_catalog()
-        matching = self.matcher.match_catalogs(target_cat, est_cat)
-        self.metrics.update(target_cat, est_cat, matching)
+
+        mode_cat = self.sample(batch, use_mode=True).to_full_catalog()
+        matching = self.matcher.match_catalogs(target_cat, mode_cat)
+        self.mode_metrics.update(target_cat, mode_cat, matching)
+
+        sample_cat = self.sample(batch, use_mode=False).to_full_catalog()
+        matching = self.matcher.match_catalogs(target_cat, sample_cat)
+        self.sample_metrics.update(target_cat, sample_cat, matching)
 
     def plot_sample_images(self, batch, logging_name):
         """Log a grid of figures to the tensorboard."""
@@ -277,11 +294,11 @@ class Encoder(pl.LightningModule):
         if batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1):
             self.plot_sample_images(batch, "val")
 
-    def report_metrics(self, logging_name, show_epoch=False):
-        for k, v in self.metrics.compute().items():
+    def report_metrics(self, metrics, logging_name, show_epoch=False):
+        for k, v in metrics.compute().items():
             self.log(f"{logging_name}/{k}", v)
 
-        for metric_name, metric in self.metrics.items():
+        for metric_name, metric in metrics.items():
             if hasattr(metric, "plot"):  # noqa: WPS421
                 fig, _axes = metric.plot()
                 name = f"Epoch:{self.current_epoch}" if show_epoch else ""
@@ -289,10 +306,11 @@ class Encoder(pl.LightningModule):
                 if self.logger:
                     self.logger.experiment.add_figure(name, fig)
 
-        self.metrics.reset()
+        metrics.reset()
 
     def on_validation_epoch_end(self):
-        self.report_metrics("val", show_epoch=True)
+        self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
+        self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
@@ -300,14 +318,15 @@ class Encoder(pl.LightningModule):
         self.update_metrics(batch)
 
     def on_test_epoch_end(self):
-        self.report_metrics("test")
+        self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)
+        self.report_metrics(self.sample_metrics, "test/sample", show_epoch=False)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
         with torch.no_grad():
             return {
                 "mode_cat": self.sample(batch, use_mode=True),
-                # we probably want multiple samples
+                # we may want multiple samples
                 "sample_cat": self.sample(batch, use_mode=False),
             }
 
