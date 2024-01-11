@@ -49,7 +49,6 @@ class TileCatalog(UserDict):
         "detection_thresholds",
         "log_flux_sd",
         "loc_sd",
-        "redshifts",
     }
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
