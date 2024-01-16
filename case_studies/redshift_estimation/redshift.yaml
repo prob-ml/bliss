@@ -8,3 +8,6 @@ prior:
     _target_: case_studies.redshift_estimation.prior.RedshiftPrior
     redshift_min: 0.99
     redshift_max: 1.01
+
+simulator:
+    _target_: case_studies.redshift_estimation.simulated_dataset.RedshiftSimulatedDataset

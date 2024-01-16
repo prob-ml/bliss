@@ -52,6 +52,7 @@ class RedshiftPrior(CatalogPrior):
             "galaxy_fluxes": galaxy_fluxes,
             "galaxy_params": galaxy_params,
             "star_fluxes": star_fluxes,
+            "redshifts": redshifts,
         }
 
-        return RedshiftTileCatalog(redshifts, self.tile_slen, catalog_params)
+        return RedshiftTileCatalog(self.tile_slen, catalog_params)
