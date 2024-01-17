@@ -25,7 +25,7 @@ class RedshiftPrior(CatalogPrior):
         self.redshift_max = redshift_max
 
     def _sample_redshifts(self):
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 2)
+        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
         return Uniform(self.redshift_min, self.redshift_max).sample(latent_dims)
 
     def sample(self) -> RedshiftTileCatalog:
