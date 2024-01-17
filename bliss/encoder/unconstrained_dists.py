@@ -28,8 +28,8 @@ class UnconstrainedNormal:
         self.high_clamp = high_clamp
 
     def get_dist(self, params):
-        mean = params[:, :, :, 0]
-        sd = params[:, :, :, 1].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        mean = params[:, :, :, 0].unsqueeze(-1)
+        sd = params[:, :, :, 1].clamp(self.low_clamp, self.high_clamp).exp().sqrt().unsqueeze(-1)
         return Normal(mean, sd)
 
 

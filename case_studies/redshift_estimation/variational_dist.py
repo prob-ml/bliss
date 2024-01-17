@@ -76,7 +76,9 @@ class RedshiftVariationalDist(VariationalDist):
         q = self.factors
 
         # redshift loss
-        true_redshifts = true_tile_cat.redshifts
-        redshift_loss = -1 * q["redshift"].log_prob(true_redshifts)
+        # TODO: more elegant shapes, shouldn't need to squeeze
+        # TODO: make true_tiles_cat.redshifts
+        true_redshifts = true_tile_cat["data"]["redshifts"].squeeze(-1)
+        redshift_loss = -1 * q["redshift"].log_prob(true_redshifts).squeeze(-1)
         redshift_loss *= true_tile_cat.n_sources
         return loss_old_params + redshift_loss
