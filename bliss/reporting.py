@@ -3,10 +3,7 @@ from collections import defaultdict
 from typing import DefaultDict, Dict, Optional, Tuple
 
 import galsim
-import numpy as np
 import torch
-from astropy.table import Table
-from astropy.wcs import WCS
 from einops import rearrange, reduce
 from scipy import optimize as sp_optim
 from sklearn.metrics import confusion_matrix
@@ -15,7 +12,7 @@ from torchmetrics import Metric
 from tqdm import tqdm
 
 from bliss.catalog import FullCatalog
-from bliss.datasets.sdss import column_to_tensor, convert_flux_to_mag, convert_mag_to_flux
+from bliss.datasets.lsst import convert_flux_to_mag
 
 
 class DetectionMetrics(Metric):

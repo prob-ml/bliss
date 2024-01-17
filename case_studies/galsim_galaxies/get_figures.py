@@ -17,7 +17,7 @@ from tqdm import tqdm
 from bliss import generate, reporting
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.galsim_galaxies import GalsimBlends
-from bliss.datasets.sdss import convert_mag_to_flux
+from bliss.datasets.lsst import convert_mag_to_flux
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE

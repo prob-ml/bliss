@@ -10,7 +10,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from bliss.datasets.sdss import convert_flux_to_mag
+from bliss.datasets.lsst import convert_flux_to_mag
 
 
 class TileCatalog(UserDict):
