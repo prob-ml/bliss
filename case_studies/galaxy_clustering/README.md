@@ -1,7 +1,7 @@
 # Galaxy clustering
 *Winter 2024*
 
-*Li Shihang, Zhao Yongxiang, [Gabriel Patron](https://lsa.umich.edu/stats/people/phd-students/gapatron.html), [Prof. Jeffrey Regier](https://regier.stat.lsa.umich.edu/).*
+*[Li Shihang](https://www.linkedin.com/in/shihang-li-2b69251ba/), Zhao Yongxiang, [Gabriel Patron](https://lsa.umich.edu/stats/people/phd-students/gapatron.html), [Prof. Jeffrey Regier](https://regier.stat.lsa.umich.edu/).*
 
 ----------------------------------------------------------------------------------------------------------------------
 
