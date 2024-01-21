@@ -28,8 +28,7 @@ class LensingTileCatalog(TileCatalog):
         "detection_thresholds",
         "log_flux_sd",
         "loc_sd",
-        "shear_horizontal",
-        "shear_diagonal",
+        "shear",
         "convergence",
     }
 
