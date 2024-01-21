@@ -1,0 +1,11 @@
+---
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+prior:
+    _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
+
+simulator:
+    _target_: case_studies.weak_lensing.lensing_simulated_dataset.LensingSimulatedDataset
