@@ -6,6 +6,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from lensing_catalog import LensingTileCatalog
+from lensing_decoder import LensingDecoder
 from lensing_prior import LensingPrior
 from skimage.restoration import richardson_lucy
 from torch import Tensor
@@ -13,7 +14,6 @@ from torch.utils.data import DataLoader, Dataset, IterableDataset
 from tqdm import tqdm
 
 from bliss.align import align
-from bliss.simulator.decoder import ImageDecoder
 from bliss.surveys.survey import Survey
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
@@ -51,7 +51,7 @@ class LensingSimulatedDataset(pl.LightningDataModule, IterableDataset):
         assert (
             survey.flux_calibration_dict is not None
         ), "Survey flux_calibration_dict cannot be None."
-        self.image_decoder = ImageDecoder(
+        self.image_decoder = LensingDecoder(
             psf=survey.psf,
             bands=survey.BANDS,
             pixel_shift=survey.pixel_shift,
