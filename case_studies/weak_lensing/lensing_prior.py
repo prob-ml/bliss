@@ -5,12 +5,14 @@ class LensingPrior(CatalogPrior):
     def __init__(
         self,
         *args,
-        shear_horizontal: float = 0.0,
-        shear_diagonal: float = 0.0,
-        convergence: float = 0.0,
+        shear_min: float = -0.5,
+        shear_max: float = 0.5,
+        convergence_a: float = 1,
+        convergence_b: float = 100,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.shear_horizontal = shear_horizontal
-        self.shear_diagonal = shear_diagonal
-        self.convergence = convergence
+        self.shear_min = shear_min
+        self.shear_max = shear_max
+        self.convergence_a = convergence_a
+        self.convergence_b = convergence_b
