@@ -27,7 +27,7 @@ This project is being conducted under the Undergraduate Research Program in Stat
 #### Generative Model
 
 ##### FullCatalog vs. TileCatalog
-Current implementaion focueses on building from FullCatalog instead of TileCatalog. Each implementation
+Current implementaion focueses on building from FullCatalog instead of TileCatalog.
 First dimension is always batch size (# of images). Second dimension is usually the maximum number of sources within the batch to have an upper bond for consistent tensor shape. The last dimension contains info for the specific source at specific batch.  
 **Example:** A tensor shape of (32, 1500, 2) means we have 32 images in a batch, the maximum possible number of sources across whole batch is 1500 and, for each source, it will have two properties in like (x, y).  
 
