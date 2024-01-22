@@ -20,34 +20,38 @@ We set the following, non-exhaustive, objectives for our galaxy cluster detectio
 
 
 ### URPS
-This project is being conducted under the Undergraduate Research Program in Statistics (URPS), a competitive program that pairs promising undergraduates with Statistics faculty on a research project for the winter semester. If you are interested, and for more information, please follow [this link](https://lsa.umich.edu/stats/undergraduate-students/undergraduate-research-opportunities-.html).\
+This project is being conducted under the Undergraduate Research Program in Statistics (URPS), a competitive program that pairs promising undergraduates with Statistics faculty on a research project for the winter semester. If you are interested, and for more information, please follow [this link](https://lsa.umich.edu/stats/undergraduate-students/undergraduate-research-opportunities-.html).
 
 ### Documentation
-Current implementaion focueses on building from FullCatalog instead of TileCatalog.  
 
-First dimension is always batch size (# of images). Second dimension is usually the maxmium number of sources within the batch to have an upper bond for consistent tensor shape. The last dimension contains info for the specific source at specific batch.  
+#### Generative Model
 
-Example: (32, 1500, 2) represents we have 32 images in a batch. The maximum possible number of sources across whole batch is 1500. For each source, it will have some property in like (x, y).  
+##### FullCatalog vs. TileCatalog
+Current implementaion focueses on building from FullCatalog instead of TileCatalog. Each implementation
+First dimension is always batch size (# of images). Second dimension is usually the maximum number of sources within the batch to have an upper bond for consistent tensor shape. The last dimension contains info for the specific source at specific batch.  
+**Example:** A tensor shape of (32, 1500, 2) means we have 32 images in a batch, the maximum possible number of sources across whole batch is 1500 and, for each source, it will have two properties in like (x, y).  
 
-Our implementaion's goal is to create a cluster (in the future, 0-k) within the image. The cluster is mainly consisted of galaxies. Therefore, the galaxy_fluxes, galaxy_params, and density of galaxies within the cluster should perform differently than the other part.
 
-The task may be seen as to create a subimage inside the original image. We consider a cluster with a center. For the center, it would have a bounding box and all galaxies within the bounding box should perform differently. To make the image look more real, the center should be in another bounding box of the overall image encompassing the region between 25% and 75% of its side length. The center's own bounding box shall have side length no larger than 50% of the image side length. 
+##### Details
+Our implementaion's goal is to create a single cluster (in the future, 0-k) within the image. The cluster consists mainly of galaxies. Therefore, the *galaxy_fluxes*, *galaxy_params*, and density of galaxies within the cluster should perform differently than the other part.
 
-So far, the only change within the cluster was to increase the rate of galaxy. The normal implementaion is to use Possion distribution to first sample the number of sources based on number of tiles and the average number of sources within tiles. Then, it times with a predetermined ptobability of galaxy to decide how many galaxies within the image. 
+*The task may be seen as creating a subimage inside the original image.* We consider a cluster with a center. For the center, it would have a bounding box and all galaxies within the bounding box should perform differently. To make the image look more real, the center should be in another bounding box of the overall image encompassing the region between 25% and 75% of its side length. The center's own bounding box shall have side length no larger than 50% of the image side length. 
 
 In our cluster, we first calcuate the area of the bounding box and convert it to the equal number of titles. Then we times it with maximum number of sources within a tile and randomly pick 80% out of it (gives a slightly larger value than the average number of sources per tile). The fluxes/params for the galaxy so far follows the identical implementation for normal galaxies. In the future, we aim to use the redmapper paper to further modify the flux and params. 
 
+So far, the only change within the cluster was to increase the rate of galaxies. That is, we use the Possion distribution to first sample the number of sources based on number of tiles and the average number of sources within tiles. A predetermined probability of a source being a galaxy determines how many galaxies will ultimately be present within the image. 
+
 For implementation details, we generate location, fluxes, params, and types for the cluster first. Then we follow the normal procedure of generating sources. In the end, we stack two sets of vectors together to have the final values. 
 
-Returns:
-1. n_sources: in shape (batch_size, ). A single integer representing how many sources in each image.
-2. source_type: in shape (batch_size, max(n_sources), 1). Uses integer to represent source type. 0 represents a star while 1 represents galaxy. Second dimension is adjusted to the maximum number of sources within the batch.
-3. plocs: in shape (batch_size, max(n_sources), 2). The coordinates for sources are in form (x, y) and represents absolute coordinates.
-4. galaxy_fluxes/star_fluxes/galaxy_params:  in shape (batch_size, max(n_sources), n_bands).
+**Returns:**
+1. *n_sources*: in shape (batch_size, ). A single integer representing how many sources in each image.
+2. *source_type*: in shape (batch_size, max(n_sources), 1). Uses integer to represent source type. 0 represents a star while 1 represents galaxy. Second dimension is adjusted to the maximum number of sources within the batch.
+3. *plocs*: in shape (batch_size, max(n_sources), 2). The coordinates for sources are in form (x, y) and represents absolute coordinates.
+4. *galaxy_fluxes/star_fluxes/galaxy_params*:  in shape (batch_size, max(n_sources), n_bands).
 
 
 ### TODO
 1. Update the flux/param for the cluster galaxies based on redmapper paper.
-2. Shape of the cluster. 
+2. Incorporate cluster shape as additional variable. 
 3. Cluster number and galaxy rate. What rate shall we be using for galaxies within the cluster? How many cluster are reasonable? For cluster numbers, we are targeting for a categorical variable like [0,1,2,3, ... k] and probability [p_0, p_1, ... p_k]. The galaxy rate could be related to size? 
 4. If we are generating mutiple clusters, what shall be the distance between them? Should they be close to each other or far from each other? Currently thinking each cluster bounding box should be a bit seperate from each other (no overlapping and at least somewhat away from each other?)
