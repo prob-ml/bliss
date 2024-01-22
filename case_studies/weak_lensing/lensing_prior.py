@@ -8,10 +8,10 @@ class LensingPrior(CatalogPrior):
     def __init__(
         self,
         *args,
-        shear_min: float = -0.5,
-        shear_max: float = 0.5,
-        convergence_a: float = 1,
-        convergence_b: float = 100,
+        shear_min: float,
+        shear_max: float,
+        convergence_a: float,
+        convergence_b: float,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)

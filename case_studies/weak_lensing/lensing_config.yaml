@@ -6,6 +6,15 @@ defaults:
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
+    n_tiles_h: 20
+    n_tiles_w: 20
+    tile_slen: 4
+    batch_size: 32
+    prob_galaxy: 1.0
+    shear_min: 0.249
+    shear_max: 0.251
+    convergence_a: 1
+    convergence_b: 25
 
 simulator:
     _target_: case_studies.weak_lensing.lensing_simulated_dataset.LensingSimulatedDataset
