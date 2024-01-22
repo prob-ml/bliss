@@ -31,11 +31,11 @@ Example: (32, 1500, 2) represents we have 32 images in a batch. The maximum poss
 
 Our implementaion's goal is to create a cluster (in the future, 0-k) within the image. The cluster is mainly consisted of galaxies. Therefore, the galaxy_fluxes, galaxy_params, and density of galaxies within the cluster should perform differently than the other part.
 
-The task may be seen as to create a subimage inside the original image. We consider a cluster with a center. For the center, it would have a binding box and all galaxies within the binding box should perform differently. To make the image look more real, the center should be in another bounding box of the overall image encompassing the region between 25% and 75% of its side length. The center's own binding box shall have side length no larger than 50% of the image side length. 
+The task may be seen as to create a subimage inside the original image. We consider a cluster with a center. For the center, it would have a bounding box and all galaxies within the bounding box should perform differently. To make the image look more real, the center should be in another bounding box of the overall image encompassing the region between 25% and 75% of its side length. The center's own bounding box shall have side length no larger than 50% of the image side length. 
 
 So far, the only change within the cluster was to increase the rate of galaxy. The normal implementaion is to use Possion distribution to first sample the number of sources based on number of tiles and the average number of sources within tiles. Then, it times with a predetermined ptobability of galaxy to decide how many galaxies within the image. 
 
-In our cluster, we first calcuate the area of the binding box and convert it to the equal number of titles. Then we times it with maximum number of sources within a tile and randomly pick 80% out of it (gives a slightly larger value than the average number of sources per tile). The fluxes/params for the galaxy so far follows the identical implementation for normal galaxies. In the future, we aim to use the redmapper paper to further modify the flux and params. 
+In our cluster, we first calcuate the area of the bounding box and convert it to the equal number of titles. Then we times it with maximum number of sources within a tile and randomly pick 80% out of it (gives a slightly larger value than the average number of sources per tile). The fluxes/params for the galaxy so far follows the identical implementation for normal galaxies. In the future, we aim to use the redmapper paper to further modify the flux and params. 
 
 For implementation details, we generate location, fluxes, params, and types for the cluster first. Then we follow the normal procedure of generating sources. In the end, we stack two sets of vectors together to have the final values. 
 
@@ -44,3 +44,10 @@ Returns:
 2. source_type: in shape (batch_size, max(n_sources), 1). Uses integer to represent source type. 0 represents a star while 1 represents galaxy. Second dimension is adjusted to the maximum number of sources within the batch.
 3. plocs: in shape (batch_size, max(n_sources), 2). The coordinates for sources are in form (x, y) and represents absolute coordinates.
 4. galaxy_fluxes/star_fluxes/galaxy_params:  in shape (batch_size, max(n_sources), n_bands).
+
+
+### TODO
+1. Update the flux/param for the cluster galaxies based on redmapper paper.
+2. Shape of the cluster. 
+3. Cluster number and galaxy rate. What rate shall we be using for galaxies within the cluster? How many cluster are reasonable? For cluster numbers, we are targeting for a categorical variable like [0,1,2,3, ... k] and probability [p_0, p_1, ... p_k]. The galaxy rate could be related to size? 
+4. If we are generating mutiple clusters, what shall be the distance between them? Should they be close to each other or far from each other? Currently thinking each cluster bounding box should be a bit seperate from each other (no overlapping and at least somewhat away from each other?)
