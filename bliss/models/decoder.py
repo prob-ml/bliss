@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, Union
+from typing import Optional
 
 import numpy as np
 import pytorch_lightning as pl
@@ -9,11 +9,8 @@ from torch.nn import functional as F
 
 from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.models.galsim_decoder import SingleGalsimGalaxyDecoder
 from bliss.models.psf_decoder import PSFDecoder, get_mgrid
 from bliss.reporting import get_single_galaxy_ellipticities
-
-GalaxyModel = Union[OneCenteredGalaxyAE, SingleGalsimGalaxyDecoder]
 
 
 class ImageDecoder(pl.LightningModule):
@@ -34,10 +31,8 @@ class ImageDecoder(pl.LightningModule):
         tile_slen: int,
         ptile_slen: int,
         psf_slen: int,
-        sdss_bands: Tuple[int, ...],
-        psf_params_file: str,
         border_padding: Optional[int] = None,
-        galaxy_model: Optional[GalaxyModel] = None,
+        galaxy_model: Optional[OneCenteredGalaxyAE] = None,
     ):
         """Initializes ImageDecoder.
 
@@ -46,8 +41,6 @@ class ImageDecoder(pl.LightningModule):
             tile_slen: Side-length of each tile.
             ptile_slen: Padded side-length of each tile (for reconstructing image).
             psf_slen: Side-length of reconstruced star image from PSF.
-            sdss_bands: Bands to retrieve from PSF.
-            psf_params_file: Path where point-spread-function (PSF) data is located.
             border_padding: Size of border around the final image where sources will not be present.
             galaxy_model: Specifies how galaxy shapes are decoded from latent representation.
         """
@@ -62,8 +55,6 @@ class ImageDecoder(pl.LightningModule):
         self.star_tile_decoder = StarPSFDecoder(
             n_bands=self.n_bands,
             psf_slen=psf_slen,
-            sdss_bands=tuple(sdss_bands),
-            psf_params_file=psf_params_file,
         )
 
         if galaxy_model is None:
@@ -109,59 +100,6 @@ class ImageDecoder(pl.LightningModule):
             img_row = self.render_images(tile_cat_row)
             scene[:, :, start_h:end_h] += img_row.cpu()
         return scene
-
-    def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
-        assert self.galaxy_tile_decoder is not None
-        galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(
-            galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5]
-        )
-        galaxy_fluxes = reduce(galaxy_shapes, "n 1 h w -> n", "sum")
-        assert torch.all(galaxy_fluxes >= 0.0)
-        galaxy_fluxes_all = torch.zeros_like(
-            galaxy_bools_flat.reshape(-1), dtype=galaxy_fluxes.dtype
-        )
-        galaxy_fluxes_all[galaxy_bools_flat.squeeze(-1) > 0.5] = galaxy_fluxes
-        galaxy_fluxes = rearrange(
-            galaxy_fluxes_all,
-            "(b nth ntw s) -> b nth ntw s 1",
-            b=galaxy_params_in.shape[0],
-            nth=galaxy_params_in.shape[1],
-            ntw=galaxy_params_in.shape[2],
-            s=galaxy_params_in.shape[3],
-        )
-        galaxy_fluxes *= galaxy_bools
-        return galaxy_fluxes
-
-    def get_galaxy_ellips(
-        self, galaxy_bools: Tensor, galaxy_params_in: Tensor, scale: float = 0.393
-    ) -> Tensor:
-        assert self.galaxy_tile_decoder is not None
-        b, nth, ntw, s, _ = galaxy_bools.shape
-        b_flat = b * nth * ntw * s
-        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
-
-        unfit_psf = self.star_tile_decoder.forward_psf_from_params()
-        psf = fit_source_to_ptile(unfit_psf, self.ptile_slen)
-        psf_image = rearrange(psf, "1 h w -> h w", h=slen, w=slen)
-
-        galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
-        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(
-            galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5]
-        )
-        galaxy_shapes = self.galaxy_tile_decoder.size_galaxy(galaxy_shapes)
-        single_galaxies = rearrange(galaxy_shapes, "n 1 h w -> n h w", h=slen, w=slen)
-        ellips = get_single_galaxy_ellipticities(single_galaxies, psf_image, scale)
-
-        ellips_all = torch.zeros(b_flat, 2, dtype=ellips.dtype, device=ellips.device)
-        ellips_all[galaxy_bools_flat.squeeze(-1) > 0.5] = ellips
-        ellips = rearrange(
-            ellips_all, "(b nth ntw s) g -> b nth ntw s g", b=b, nth=nth, ntw=ntw, s=s, g=2
-        )
-        ellips *= galaxy_bools
-        return ellips
 
     def forward(self):
         """Decodes latent representation into an image."""
@@ -270,6 +208,59 @@ class ImageDecoder(pl.LightningModule):
         max_padding = int(max_padding)
         crop_idx = max_padding - self.border_padding
         return folded_image[:, :, crop_idx : (-crop_idx or None), crop_idx : (-crop_idx or None)]
+
+    def get_galaxy_fluxes(self, galaxy_bools: Tensor, galaxy_params_in: Tensor):
+        assert self.galaxy_tile_decoder is not None
+        galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
+        galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
+        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(
+            galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5]
+        )
+        galaxy_fluxes = reduce(galaxy_shapes, "n 1 h w -> n", "sum")
+        assert torch.all(galaxy_fluxes >= 0.0)
+        galaxy_fluxes_all = torch.zeros_like(
+            galaxy_bools_flat.reshape(-1), dtype=galaxy_fluxes.dtype
+        )
+        galaxy_fluxes_all[galaxy_bools_flat.squeeze(-1) > 0.5] = galaxy_fluxes
+        galaxy_fluxes = rearrange(
+            galaxy_fluxes_all,
+            "(b nth ntw s) -> b nth ntw s 1",
+            b=galaxy_params_in.shape[0],
+            nth=galaxy_params_in.shape[1],
+            ntw=galaxy_params_in.shape[2],
+            s=galaxy_params_in.shape[3],
+        )
+        galaxy_fluxes *= galaxy_bools
+        return galaxy_fluxes
+
+    def get_galaxy_ellips(
+        self, galaxy_bools: Tensor, galaxy_params_in: Tensor, scale: float = 0.393
+    ) -> Tensor:
+        assert self.galaxy_tile_decoder is not None
+        b, nth, ntw, s, _ = galaxy_bools.shape
+        b_flat = b * nth * ntw * s
+        slen = self.ptile_slen + ((self.ptile_slen % 2) == 0) * 1
+
+        unfit_psf = self.star_tile_decoder.forward_psf_from_params()
+        psf = fit_source_to_ptile(unfit_psf, self.ptile_slen)
+        psf_image = rearrange(psf, "1 h w -> h w", h=slen, w=slen)
+
+        galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw s d -> (b nth ntw s) d")
+        galaxy_params = rearrange(galaxy_params_in, "b nth ntw s d -> (b nth ntw s) d")
+        galaxy_shapes = self.galaxy_tile_decoder.galaxy_decoder(
+            galaxy_params[galaxy_bools_flat.squeeze(-1) > 0.5]
+        )
+        galaxy_shapes = self.galaxy_tile_decoder.size_galaxy(galaxy_shapes)
+        single_galaxies = rearrange(galaxy_shapes, "n 1 h w -> n h w", h=slen, w=slen)
+        ellips = get_single_galaxy_ellipticities(single_galaxies, psf_image, scale)
+
+        ellips_all = torch.zeros(b_flat, 2, dtype=ellips.dtype, device=ellips.device)
+        ellips_all[galaxy_bools_flat.squeeze(-1) > 0.5] = ellips
+        ellips = rearrange(
+            ellips_all, "(b nth ntw s) g -> b nth ntw s g", b=b, nth=nth, ntw=ntw, s=s, g=2
+        )
+        ellips *= galaxy_bools
+        return ellips
 
 
 class TileRenderer(nn.Module):
@@ -400,7 +391,7 @@ class StarPSFDecoder(PSFDecoder):
 
         n_ptiles, max_sources, n_bands = fluxes.shape
 
-        psf = self.forward_psf_from_params()
+        psf = super().forward(fluxes)  # uses 'fluxes' just for device.
         psf = fit_source_to_ptile(psf, ptile_slen)
         n_bands, _, _ = psf.shape
         assert fluxes.shape[0] == star_bools.shape[0] == n_ptiles
@@ -417,7 +408,7 @@ class StarPSFDecoder(PSFDecoder):
 
 
 class GalaxyDecoder(nn.Module):
-    def __init__(self, tile_slen, ptile_slen, n_bands, galaxy_model: GalaxyModel):
+    def __init__(self, tile_slen, ptile_slen, n_bands, galaxy_model: OneCenteredGalaxyAE):
         super().__init__()
         self.n_bands = n_bands
         self.tiler = TileRenderer(tile_slen, ptile_slen)
@@ -425,8 +416,6 @@ class GalaxyDecoder(nn.Module):
 
         if isinstance(galaxy_model, OneCenteredGalaxyAE):
             galaxy_decoder = galaxy_model.get_decoder()
-        elif isinstance(galaxy_model, SingleGalsimGalaxyDecoder):
-            galaxy_decoder = galaxy_model
         else:
             raise TypeError("galaxy_model is not a valid type.")
         self.galaxy_decoder = galaxy_decoder
