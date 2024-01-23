@@ -22,3 +22,6 @@ simulator:
 encoder:
     vd_spec:
         _target_: case_studies.weak_lensing.lensing_variational_dist.LensingVariationalDistSpec
+
+train:
+    data_source: ${simulator}
