@@ -1,7 +1,7 @@
 """Common functions to plot results."""
 from abc import abstractmethod
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import matplotlib as mpl
 import numpy as np
@@ -95,6 +95,8 @@ def set_rc_params(
 
 
 class BlissFigure:
+    """Class that simplifies creating figures by automatically caching data and saving."""
+
     def __init__(
         self,
         figdir: str,
@@ -108,20 +110,14 @@ class BlissFigure:
         self.img_format = img_format
 
     @property
-    def rc_kwargs(self) -> dict:
+    def all_rcs(self) -> dict:
         return {}
 
     @property
     @abstractmethod
     def cache_name(self) -> str:
         """Unique identifier for set of figures including cache."""
-        return "cache_name"
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """Unique identifier for set of figures including cache."""
-        return "bliss_fig"
+        return ""
 
     @abstractmethod
     def compute_data(self, *args, **kwargs) -> dict:
@@ -129,7 +125,7 @@ class BlissFigure:
         return {}
 
     @abstractmethod
-    def create_figure(self, data) -> Figure:
+    def create_figures(self, data: dict) -> Dict[str, Figure]:
         """Return matplotlib figure instances to save based on data."""
         return {}
 
@@ -144,13 +140,15 @@ class BlissFigure:
 
     def __call__(self, *args, **kwargs):
         """Create figures and save to output directory with names from `self.fignames`."""
-        set_rc_params(**self.rc_kwargs)
         data = self.get_data(*args, **kwargs)
         data_np = _to_numpy(data)
-        fig: Figure = self.create_figure(data_np)  # data for figures is all numpy arrays or floats.
-        figfile = self.figdir / f"{self.name}.{self.img_format}"
-        fig.savefig(figfile, format=self.img_format)  # pylint: disable=no-member
-        plt.close(fig)
+        figs = self.create_figures(data_np)
+        for fname, fig in figs.items():
+            rc_kwargs = self.all_rcs[fname]
+            set_rc_params(**rc_kwargs)
+            figfile = self.figdir / f"{fname}.{self.img_format}"
+            fig.savefig(figfile, format=self.img_format)  # pylint: disable=no-member
+            plt.close(fig)
 
 
 def plot_image(

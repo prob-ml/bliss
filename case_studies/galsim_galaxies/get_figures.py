@@ -144,22 +144,24 @@ def _make_pr_figure(
     return fig
 
 
-class AutoEncoderReconRandom(BlissFigure):
+class AutoEncoderFigures(BlissFigure):
     def __init__(self, *args, n_examples: int = 5, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.n_examples = n_examples
 
     @property
-    def rc_kwargs(self):
-        return {"fontsize": 22, "tick_label_size": "small", "legend_fontsize": "small"}
+    def all_rcs(self):
+        rc_recon = {"fontsize": 22, "tick_label_size": "small", "legend_fontsize": "small"}
+        return {
+            "ae_random_recon": rc_recon,
+            "ae_worst_recon": rc_recon,
+            "ae_bin_measurements": {"fontsize": 24},
+            "ae_bin_hists": {"fontsize": 24},
+        }
 
     @property
     def cache_name(self) -> str:
         return "ae"
-
-    @property
-    def name(self) -> str:
-        return "ae_recon_random"
 
     def compute_data(
         self,
@@ -231,20 +233,7 @@ class AutoEncoderReconRandom(BlissFigure):
             "true_params": true_params,
         }
 
-    def create_figure(self, data) -> Figure:
-        return _reconstruction_figure(self.n_examples, *data["random"].values())
-
-
-class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
-    @property
-    def name(self) -> str:
-        return "ae_bin_measurements"
-
-    @property
-    def rc_kwargs(self):
-        return {"fontsize": 24}
-
-    def create_figure(self, data) -> Figure:
+    def _get_binned_measurements_figure(self, data) -> Figure:
         meas = data["measurements"]
 
         fig, axes = plt.subplots(1, 3, figsize=(18, 7))
@@ -285,30 +274,7 @@ class AutoEncoderBinMeasurements(AutoEncoderReconRandom):
 
         return fig
 
-
-class AutoEncoderReconWorst(AutoEncoderReconRandom):
-    @property
-    def name(self) -> str:
-        return "ae_recon_worst"
-
-    @property
-    def rc_kwargs(self):
-        return {"fontsize": 24}
-
-    def create_figure(self, data) -> Figure:
-        return _reconstruction_figure(self.n_examples, *data["worst"].values())
-
-
-class AutoEncoderHistograms(AutoEncoderReconRandom):
-    @property
-    def name(self) -> str:
-        return "ae_bin_hists"
-
-    @property
-    def rc_kwargs(self):
-        return {"fontsize": 24}
-
-    def create_figure(self, data) -> Figure:
+    def _get_ae_hists_figure(self, data) -> Figure:
         snr = data["measurements"]["snr"]
         fig, ax = plt.subplots(1, 1, figsize=(7, 7))
         xticks = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
@@ -324,19 +290,28 @@ class AutoEncoderHistograms(AutoEncoderReconRandom):
 
         return fig
 
+    def create_figures(self, data) -> Dict[str, Figure]:
+        return {
+            "ae_recon_random": _reconstruction_figure(self.n_examples, *data["random"].values()),
+            "ae_recon_worst": _reconstruction_figure(self.n_examples, *data["worst"].values()),
+            "ae_bin_measurements": self._get_binned_measurements_figure(data),
+            "ae_hists": self._get_ae_hists_figure(data),
+        }
 
-class BlendResidualFigure(BlissFigure):
+
+class BlendSimulationFigure(BlissFigure):
     @property
-    def rc_kwargs(self):
-        return {"fontsize": 24}
+    def all_rcs(self) -> dict:
+        return {
+            "blendsim_gal_meas": {},
+            "blendsim_detection": {"fontsize": 32},
+            "blendsim_classification": {"fontsize": 28},
+            "blendsim_hists": {"fontsize": 28},
+        }
 
     @property
     def cache_name(self) -> str:
-        return "blend_sim"
-
-    @property
-    def name(self) -> str:
-        return "blendsim_gal_meas"
+        return "blendsim"
 
     def compute_data(self, blend_file: Path, encoder: Encoder, decoder: ImageDecoder):
         blend_data: Dict[str, Tensor] = torch.load(blend_file)
@@ -359,7 +334,7 @@ class BlendResidualFigure(BlissFigure):
         print("INFO: BLISS posterior inference on images.")
         tile_est = encoder.variational_mode(images, background)
         tile_est.set_all_fluxes_and_mags(decoder)
-        tile_est.set_galaxy_ellips(decoder, scale=0.393)
+        tile_est.set_galaxy_ellips(decoder, scale=0.2)
         tile_est.set_snr(decoder, bg)
         tile_est = tile_est.cpu()
         est = tile_est.to_full_params()
@@ -465,7 +440,7 @@ class BlendResidualFigure(BlissFigure):
             },
         }
 
-    def create_figure(self, data) -> Figure:
+    def _get_residual_blend_figure(self, data) -> Figure:
         snr, blendedness, tfluxes, efluxes, true_ellips, est_ellips = data["residuals"].values()
         fig, axes = plt.subplots(3, 2, figsize=(12, 18), sharex="col", sharey="row")
         ax1, ax2, ax3, ax4, ax5, ax6 = axes.flatten()
@@ -525,34 +500,14 @@ class BlendResidualFigure(BlissFigure):
 
         return fig
 
-
-class BlendDetectionFigure(BlendResidualFigure):
-    @property
-    def rc_kwargs(self):
-        return {"fontsize": 32}
-
-    @property
-    def name(self) -> str:
-        return "blendsim_detection"
-
-    def create_figure(self, data) -> Figure:
+    def _get_detection_figure(self, data) -> Figure:
         # take middle of bin as x for plotting
         snr_bins = np.log10(data["detection"]["bins"].mean(1))
         return _make_pr_figure(
             snr_bins, data["detection"], r"$\log_{10} \rm SNR$", xlims=(0.5, 3), ylims2=(0, 2000)
         )
 
-
-class BlendClassificationFigure(BlendResidualFigure):
-    @property
-    def rc_kwargs(self):
-        return {"fontsize": 28}
-
-    @property
-    def name(self) -> str:
-        return "blendsim_classification"
-
-    def _compute_pr(self, tgbool: np.ndarray, egbool: np.ndarray):
+    def _compute_pr_class(self, tgbool: np.ndarray, egbool: np.ndarray):
         t = np.sum(tgbool)
         p = np.sum(egbool)
 
@@ -567,7 +522,7 @@ class BlendClassificationFigure(BlendResidualFigure):
 
         return tp / p, tp / t
 
-    def create_figure(self, data) -> Figure:
+    def _get_classification_figure(self, data) -> Figure:
         snrs, _, tgbools, egbools = data["classification"].values()
         snr_bins = data["detection"]["bins"]
         n_matches = len(snrs)
@@ -596,7 +551,7 @@ class BlendClassificationFigure(BlendResidualFigure):
                 tgbool_ii = tgbools_ii[keep]
                 egbool_ii = egbools_ii[keep]
 
-                p, r = self._compute_pr(tgbool_ii, egbool_ii)
+                p, r = self._compute_pr_class(tgbool_ii, egbool_ii)
                 boot_precision[ii][jj] = p
                 boot_recall[ii][jj] = r
 
@@ -605,7 +560,7 @@ class BlendClassificationFigure(BlendResidualFigure):
             keep = (b1 < snrs) & (snrs < b2)
             tgbool = tgbools[keep]
             egbool = egbools[keep]
-            p, r = self._compute_pr(tgbool, egbool)
+            p, r = self._compute_pr_class(tgbool, egbool)
             precision[jj] = p
             recall[jj] = r
 
@@ -635,17 +590,7 @@ class BlendClassificationFigure(BlendResidualFigure):
             ylims=(0.5, 1.03),
         )
 
-
-class BlendHistogramFigure(BlendResidualFigure):
-    @property
-    def rc_kwargs(self):
-        return {"fontsize": 32}
-
-    @property
-    def name(self) -> str:
-        return "blendsim_hists"
-
-    def create_figure(self, data) -> Figure:
+    def _get_histogram_figure(self, data) -> Figure:
         snr = np.log10(data["residuals"]["snr"])
         blendedness = data["residuals"]["blendedness"]
 
@@ -667,19 +612,35 @@ class BlendHistogramFigure(BlendResidualFigure):
 
         return fig
 
+    def create_figures(self, data) -> Dict[str, Figure]:
+        return {
+            "blendsim_gal_meas": self._get_residual_blend_figure(data),
+            "blendsim_detection": self._get_detection_figure(data),
+            "blendsim_classification": self._get_classification_figure(data),
+            "blendsim_hists": self._get_histogram_figure(data),
+        }
+
 
 class ToySeparationFigure(BlissFigure):
     @property
-    def rc_kwargs(self):
-        return {"fontsize": 22, "tick_label_size": "small", "legend_fontsize": "small"}
+    def all_rcs(self):
+        return {
+            "three_separations": {
+                "fontsize": 22,
+                "tick_label_size": "small",
+                "legend_fontsize": "small",
+            },
+            "toy_residuals": {"fontsize": 22},
+            "toy_measurements": {
+                "fontsize": 22,
+                "tick_label_size": "small",
+                "legend_fontsize": "small",
+            },
+        }
 
     @property
     def cache_name(self) -> str:
         return "toy_separation"
-
-    @property
-    def name(self) -> str:
-        return "toy_separations"
 
     @property
     def separations_to_plot(self) -> List[int]:
@@ -796,7 +757,7 @@ class ToySeparationFigure(BlissFigure):
 
         return params
 
-    def create_figure(self, data) -> Figure:
+    def _get_three_separations_plot(self, data) -> Figure:
         seps: np.ndarray = data["seps"]
         images: np.ndarray = data["images"]
         tplocs: np.ndarray = data["truth"]["ploc"]
@@ -840,21 +801,7 @@ class ToySeparationFigure(BlissFigure):
 
         return fig
 
-
-class ToySeparationFigureResiduals(ToySeparationFigure):
-    @property
-    def rc_kwargs(self):
-        return {"fontsize": 22}
-
-    @property
-    def cache_name(self) -> str:
-        return "toy_separation"
-
-    @property
-    def name(self) -> str:
-        return "toy_residuals"
-
-    def create_figure(self, data) -> Figure:
+    def _get_residuals_figure(self, data) -> Figure:
         n_examples = 3
         bp = 24
         seps_to_plot = [4, 8, 12]
@@ -919,21 +866,7 @@ class ToySeparationFigureResiduals(ToySeparationFigure):
         plt.tight_layout()
         return fig
 
-
-class ToySeparationFigureMeasurements(ToySeparationFigure):
-    @property
-    def rc_kwargs(self):
-        return {"fontsize": 22, "tick_label_size": "small", "legend_fontsize": "small"}
-
-    @property
-    def cache_name(self) -> str:
-        return "toy_separation"
-
-    @property
-    def name(self) -> str:
-        return "toy_measurements"
-
-    def create_figure(self, data) -> Figure:
+    def _get_measurement_figure(self, data: dict) -> Figure:
         fig, axes = plt.subplots(2, 2, figsize=(12, 12))
         axs = axes.flatten()
         seps = data["seps"]
@@ -1016,6 +949,13 @@ class ToySeparationFigureMeasurements(ToySeparationFigure):
 
         return fig
 
+    def create_figures(self, data: dict) -> Dict[str, Figure]:
+        return {
+            "three_separations": self._get_three_separations_plot(data),
+            "toy_residuals": self._get_residuals_figure(data),
+            "toy_measurements": self._get_measurement_figure(data),
+        }
+
 
 def _load_models(cfg, device):
     # load models required for reconstructions.
@@ -1057,7 +997,9 @@ def _setup(cfg):
     }
 
     if not Path(cachedir).exists():
-        warnings.warn("Specified cache directory does not exist, will attempt to create it.")
+        warnings.warn(
+            "Specified cache directory does not exist, will attempt to create it.", stacklevel=1
+        )
         Path(cachedir).mkdir(exist_ok=True, parents=True)
 
     assert set(figs).issubset(set(ALL_FIGS))
@@ -1088,10 +1030,7 @@ def _make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
     args = (autoencoder, galaxies_file, psf_params_file, sdss_pixel_scale)
 
     # create figure classes and plot.
-    AutoEncoderReconRandom(n_examples=5, overwrite=overwrite, **bfig_kwargs)(*args)
-    AutoEncoderReconWorst(n_examples=5, overwrite=False, **bfig_kwargs)(*args)
-    AutoEncoderBinMeasurements(overwrite=False, **bfig_kwargs)(*args)
-    AutoEncoderHistograms(overwrite=False, **bfig_kwargs)(*args)
+    AutoEncoderFigures(n_examples=5, overwrite=overwrite, **bfig_kwargs)(*args)
     mpl.rc_file_defaults()
 
 
@@ -1107,10 +1046,7 @@ def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dic
         global_params = ("background", "slen")
         generate.generate(dataset, blend_file, imagepath, n_plots=25, global_params=global_params)
 
-    BlendResidualFigure(overwrite=overwrite, **bfig_kwargs)(blend_file, encoder, decoder)
-    BlendDetectionFigure(overwrite=False, **bfig_kwargs)(blend_file, encoder, decoder)
-    BlendHistogramFigure(overwrite=False, **bfig_kwargs)(blend_file, encoder, decoder)
-    BlendClassificationFigure(overwrite=False, **bfig_kwargs)(blend_file, encoder, decoder)
+    BlendSimulationFigure(overwrite=overwrite, **bfig_kwargs)(blend_file, encoder, decoder)
 
 
 @hydra.main(config_path="./config", config_name="config", version_base=None)
@@ -1132,8 +1068,6 @@ def main(cfg):
         print("INFO: Creating figures for testing BLISS on pair galaxy toy example.")
         blend_ds = instantiate(cfg.plots.galsim_blends)
         ToySeparationFigure(overwrite=overwrite, **bfig_kwargs)(encoder, decoder, blend_ds)
-        ToySeparationFigureMeasurements(overwrite=False, **bfig_kwargs)(encoder, decoder, blend_ds)
-        ToySeparationFigureResiduals(overwrite=False, **bfig_kwargs)(encoder, decoder, blend_ds)
 
 
 if __name__ == "__main__":
