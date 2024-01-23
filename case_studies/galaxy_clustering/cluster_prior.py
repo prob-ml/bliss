@@ -9,8 +9,8 @@ import pytorch_lightning as pl
 import torch
 from scipy.stats import truncpareto
 from torch import Tensor
-from torch.distributions import Gamma, Poisson, Uniform, normal
-
+from torch.distributions import Gamma, Poisson, Uniform
+from torch.distributions.normal import Normal
 from bliss.catalog import SourceType, TileCatalog, FullCatalog
 
 
@@ -151,7 +151,7 @@ class ClusterPrior(pl.LightningModule):
         # Setting all of their types to galxies.
         cluster_types = torch.zeros((self.batch_size, max(self.n_batch_cluster_galaxy), 1))
         # Generate their fluxes.
-        cluster_galaxy_fluxes, cluster_galaxy_params = self._sample_galaxy_prior(max(self.n_batch_cluster_galaxy))
+        cluster_galaxy_fluxes, cluster_galaxy_params = self._sample_galaxy_prior_cluster(max(self.n_batch_cluster_galaxy))
 
         # Max number of sources across all batches that may still left for other sources
         
@@ -318,13 +318,70 @@ class ClusterPrior(pl.LightningModule):
             self.galaxy_flux_scale,
             latent_dims,
         )
-
+        
         total_flux = flux_prop * ref_band_flux
-
         # select fluxes from specified bands
         bands = np.array(self.bands)
         select_flux = total_flux[..., bands]
 
+        latent_dims = latent_dims[:-1]
+
+        disk_frac = Uniform(0, 1).sample(latent_dims)
+        beta_radians = Uniform(0, np.pi).sample(latent_dims)
+        disk_q = Uniform(1e-8, 1).sample(latent_dims)
+        bulge_q = Uniform(1e-8, 1).sample(latent_dims)
+
+        base_dist = Gamma(self.galaxy_a_concentration, rate=1.0)
+        disk_a = base_dist.sample(latent_dims) * self.galaxy_a_scale + self.galaxy_a_loc
+
+        bulge_loc = self.galaxy_a_loc / self.galaxy_a_bd_ratio
+        bulge_scale = self.galaxy_a_scale / self.galaxy_a_bd_ratio
+        bulge_a = base_dist.sample(latent_dims) * bulge_scale + bulge_loc
+        disk_frac = torch.unsqueeze(disk_frac, 2)
+        beta_radians = torch.unsqueeze(beta_radians, 2)
+        disk_q = torch.unsqueeze(disk_q, 2)
+        disk_a = torch.unsqueeze(disk_a, 2)
+        bulge_q = torch.unsqueeze(bulge_q, 2)
+        bulge_a = torch.unsqueeze(bulge_a, 2)
+
+        param_lst = [disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
+
+        return select_flux, torch.cat(param_lst, dim=2)
+    
+
+    def _sample_galaxy_prior_cluster(self, max_source) -> Tuple[Tensor, Tensor]:
+        """Sample the latent galaxy params.
+
+        Returns:
+            Tuple[Tensor]: A tuple of galaxy fluxes (per band) and galsim parameters, including.
+                - disk_frac: the fraction of flux attributed to the disk (rest goes to bulge)
+                - beta_radians: the angle of shear in radians
+                - disk_q: the minor-to-major axis ratio of the disk
+                - a_d: semi-major axis of disk
+                - bulge_q: minor-to-major axis ratio of the bulge
+                - a_b: semi-major axis of bulge
+        """
+        flux_prop = self._sample_flux_ratios(self.gmm_gal, max_source)
+
+        latent_dims = (self.batch_size, max_source, 1)
+
+        ref_band_flux = self._draw_truncated_pareto(
+            self.galaxy_flux_exponent,
+            self.galaxy_flux_truncation,
+            self.galaxy_flux_loc,
+            self.galaxy_flux_scale,
+            latent_dims,
+        )
+        
+        total_flux = flux_prop * ref_band_flux
+        # select fluxes from specified bands
+        bands = np.array(self.bands)
+        select_flux = total_flux[..., bands]
+        for i in range(self.batch_size):
+            r_mean = torch.mean(select_flux[i,:,2])
+            r_std = torch.std(select_flux[i,:,2])
+            r_dim = (max_source,1)
+            select_flux[i,:,2] = Normal(loc = r_mean, scale = r_std/3).sample(r_dim).squeeze(1)
         latent_dims = latent_dims[:-1]
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
