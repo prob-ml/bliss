@@ -1,55 +1,87 @@
 from typing import Dict, List, Optional
 
+import btk
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
+from galcheat.utilities import mean_sky_level
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from bliss.catalog import FullCatalog
 from bliss.datasets.background import ConstantBackground
-from bliss.datasets.lsst import convert_flux_to_mag
-from bliss.models.galsim_decoder import (
-    DefaultGalsimPrior,
-    FullCatalogDecoder,
-    SingleGalsimGalaxyDecoder,
-    SingleGalsimGalaxyPrior,
-)
+from bliss.datasets.lsst import PIXEL_SCALE, convert_flux_to_mag, table_to_dict
+from bliss.models.galsim_decoder import FullCatalogDecoder
 from bliss.reporting import get_single_galaxy_ellipticities
+
+
+def _setup_single_galaxy_draw_generator(catalog_file: str, slen: int, seed: int):
+    catalog = btk.catalog.CatsimCatalog.from_file(catalog_file)
+
+    stamp_size = slen * PIXEL_SCALE  # arcsecs
+
+    sampling_function = btk.sampling_functions.DefaultSampling(
+        max_number=1,
+        min_number=1,
+        stamp_size=stamp_size,
+        max_shift=0.0,
+        min_mag=0,  # min mag in i-band is 14.32
+        max_mag=27.3,  # see document of high level responses
+        seed=seed,
+    )
+
+    survey = btk.survey.get_surveys("LSST")
+
+    return btk.draw_blends.CatsimGenerator(
+        catalog,
+        sampling_function,
+        survey,
+        batch_size=1,  # batching is taking care of by torch dataset
+        stamp_size=stamp_size,
+        njobs=1,
+        add_noise="none",  # will add noise and background later
+        seed=seed,  # use same seed here
+    )
 
 
 class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
     def __init__(
         self,
-        prior: SingleGalsimGalaxyPrior,
-        decoder: SingleGalsimGalaxyDecoder,
-        background: ConstantBackground,
+        catalog_file: str,  # should point to 'OneSqDeg.fits'
         num_workers: int,
         batch_size: int,
         n_batches: int,
+        slen: int,
+        seed: int,  # for draw generator
         fix_validation_set: bool = False,
         valid_n_batches: Optional[int] = None,
     ):
         super().__init__()
-        self.prior = prior
-        self.decoder = decoder
+        self.catalog_file = catalog_file
         self.n_batches = n_batches
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.background = background
         self.fix_validation_set = fix_validation_set
         self.valid_n_batches = valid_n_batches
+        self.seed = seed
+        self.slen = slen
+
+        sky_level: float = mean_sky_level("LSST", "i").to_value("electron")
+        self.background = ConstantBackground((sky_level,))
+        self.draw_generator = _setup_single_galaxy_draw_generator(
+            self.catalog_file, self.slen, self.seed
+        )
 
     def __getitem__(self, idx):
-        galaxy_params = self.prior.sample(1)
-        galaxy_image = self.decoder(galaxy_params[0])
+        batch = next(self.draw_generator)
+        galaxy_image = batch.blend_images[0, None, 3]  # '3' refers to i-band
         background = self.background.sample((1, *galaxy_image.shape)).squeeze(1)
         return {
             "images": _add_noise_and_background(galaxy_image, background),
             "background": background,
             "noiseless": galaxy_image,
-            "params": galaxy_params[0],
+            "params": table_to_dict(batch.catalog_list[0]),
             "snr": _get_snr(galaxy_image, background),
         }
 
@@ -113,7 +145,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
         return FullCatalog(self.slen, self.slen, params_dict)
 
-    def get_images(self, full_cat):
+    def get_images(self, full_cat: FullCatalog):
         noiseless, noiseless_centered, noiseless_uncentered = self.decoder(full_cat)
 
         # get background and noisy image.
