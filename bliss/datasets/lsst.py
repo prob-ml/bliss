@@ -6,6 +6,8 @@ import numpy as np
 import torch
 from torch import Tensor
 
+PIXEL_SCALE = 0.2
+
 
 def convert_mag_to_flux(mag: Tensor) -> Tensor:
     raise NotImplementedError
@@ -35,7 +37,7 @@ def get_default_lsst_psf(
     i_band = lsst.get_filter("i")
     mirror_diameter = lsst.mirror_diameter.to_value("m")
     effective_area = lsst.effective_area.to_value("m2")
-    fwhm = i_band.psf_fwhm.to_value("arcsec")
+    fwhm = i_band.psf_fwhm.to_value("arcsec")  # = 0.79, atmospheric component
     effective_wavelength = i_band.effective_wavelength.to_value("angstrom")
 
     # define atmospheric psf
@@ -79,3 +81,10 @@ def column_to_tensor(table, colname):
     dtype = dtypes[x.dtype]
     x = x.astype(dtype)
     return torch.from_numpy(x)
+
+
+def table_to_dict(table):
+    d = {}
+    for p in table.columns:
+        d[p] = column_to_tensor(table, p)
+    return d
