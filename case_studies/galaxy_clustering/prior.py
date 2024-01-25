@@ -6,6 +6,7 @@ from typing import Tuple
 from torch import Tensor
 import random
 from bliss.catalog import FullCatalog
+import matplotlib.pyplot as plt
 
 class GalaxyClusterPrior(CatalogPrior):
     def __init__(self, *args, **kwargs):
@@ -159,14 +160,16 @@ class GalaxyClusterPrior(CatalogPrior):
         
         for i in range(self.batch_size):
             center = centers[i]
-            stdev = random.uniform(shorter_edge*0.2, shorter_edge*0.3)*self.tile_slen
+            stdev = random.uniform(shorter_edge*0.1, shorter_edge*0.2)*self.tile_slen
             cluster_source_n = int(((stdev/self.tile_slen))**2*np.pi*self.mean_sources*1.5)
             cluster_locs = self._sample_locs_cluster(cluster_source_n, stdev)
             index = 0
             for j in range(cluster_source_n):
-                cluster_galaxy_locs[i][index][0] = center[0] + cluster_locs[j][0]
-                cluster_galaxy_locs[i][index][1] = center[1] + cluster_locs[j][1]
+                cluster_galaxy_locs[i][index][0] = max(0,min(center[0] + cluster_locs[j][0], self.tile_slen*self.n_tiles_w))
+                cluster_galaxy_locs[i][index][1] = max(0,min(center[1] + cluster_locs[j][1], self.tile_slen*self.n_tiles_h))
                 index += 1
+            plt.scatter(x = list(cluster_galaxy_locs[i][:index][:, 0]), y = list(cluster_galaxy_locs[i][:index][:, 1]))
+            plt.show()
             self.n_batch_cluster_galaxy[i] = index
             # After this, we should have all locs for the galaxy within the cluster.
         cluster_galaxy_locs = cluster_galaxy_locs[:,:max(self.n_batch_cluster_galaxy),:]
