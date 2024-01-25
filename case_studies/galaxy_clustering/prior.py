@@ -20,8 +20,8 @@ class GalaxyClusterPrior(CatalogPrior):
         return n_sources.long()
     
     def _sample_cluster_center(self):
-        y_locs = Uniform(self.n_tiles_h*self.tile_slen*0.25, self.n_tiles_h*self.tile_slen*0.75).sample((self.batch_size, 1))
-        x_locs = Uniform(self.n_tiles_w*self.tile_slen*0.25, self.n_tiles_w*self.tile_slen*0.75).sample((self.batch_size, 1))
+        y_locs = Uniform(self.n_tiles_h*self.tile_slen*0.3, self.n_tiles_h*self.tile_slen*0.7).sample((self.batch_size, 1))
+        x_locs = Uniform(self.n_tiles_w*self.tile_slen*0.3, self.n_tiles_w*self.tile_slen*0.7).sample((self.batch_size, 1))
         return torch.cat((x_locs, y_locs), dim=-1)
 
     def _sample_source_type(self, max_source):
@@ -165,9 +165,12 @@ class GalaxyClusterPrior(CatalogPrior):
             cluster_locs = self._sample_locs_cluster(cluster_source_n, stdev)
             index = 0
             for j in range(cluster_source_n):
-                cluster_galaxy_locs[i][index][0] = max(0,min(center[0] + cluster_locs[j][0], self.tile_slen*self.n_tiles_w))
-                cluster_galaxy_locs[i][index][1] = max(0,min(center[1] + cluster_locs[j][1], self.tile_slen*self.n_tiles_h))
-                index += 1
+                if center[0] + cluster_locs[j][0] >= self.tile_slen*self.n_tiles_w or center[0] + cluster_locs[j][0] < 0 or center[1] + cluster_locs[j][1] >= self.tile_slen*self.n_tiles_h or self.tile_slen*self.n_tiles_h < 0:
+                    continue
+                else:       
+                    cluster_galaxy_locs[i][index][0] = center[0] + cluster_locs[j][0] 
+                    cluster_galaxy_locs[i][index][1] = center[1] + cluster_locs[j][1]
+                    index += 1
             plt.scatter(x = list(cluster_galaxy_locs[i][:index][:, 0]), y = list(cluster_galaxy_locs[i][:index][:, 1]))
             plt.show()
             self.n_batch_cluster_galaxy[i] = index
