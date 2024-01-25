@@ -26,12 +26,16 @@ class LensingPrior(CatalogPrior):
         self.convergence_b = convergence_b
 
     def _sample_shear(self):
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 2)
-        return Uniform(self.shear_min, self.shear_max).sample(latent_dims)
+        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 2)
+        shear_maps = Uniform(self.shear_min, self.shear_max).sample(latent_dims)
+
+        return shear_maps.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
 
     def _sample_convergence(self):
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        return Beta(self.convergence_a, self.convergence_b).sample(latent_dims)
+        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 1)
+        convergence_map = Beta(self.convergence_a, self.convergence_b).sample(latent_dims)
+
+        return convergence_map.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
 
     def _sample_galaxy_prior(self) -> Tuple[Tensor, Tensor]:
         """Sample the latent galaxy params.

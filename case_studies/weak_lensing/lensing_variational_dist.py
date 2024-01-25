@@ -44,6 +44,7 @@ class LensingVariationalDist(VariationalDist):
     def compute_nll(self, true_tile_cat: LensingTileCatalog):
         q = self.factors
 
+        # Squeezing here won't work if max_sources > 1, so this should be rewritten
         true_shear = true_tile_cat.data["shear"].squeeze()
         true_convergence = true_tile_cat.data["convergence"].squeeze()
         lensing_loss = -q["shear"].log_prob(true_shear)
