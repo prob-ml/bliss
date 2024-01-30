@@ -26,14 +26,37 @@ class LensingPrior(CatalogPrior):
         self.convergence_b = convergence_b
 
     def _sample_shear(self):
+        method="interpolate"
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 2)
-        shear_maps = Uniform(self.shear_min, self.shear_max).sample(latent_dims)
+        if method == "interpolate":
+            corners = (self.batch_size, 2, 2, 2)
+            shear_maps = Uniform(self.shear_min, self.shear_max).sample(corners)
+
+            shear_maps = torch.nn.functional.interpolate(shear_maps, scale_factor=(self.n_tiles_h / 2, self.n_tiles_w / 2), mode = 'bilinear', align_corners=True)
+
+            # want to change from 32 x 2 x 20 x 20 to 32 x 20 x 20 x 2
+            shear_maps = torch.swapaxes(shear_maps, 1, 3)
+            shear_maps = torch.swapaxes(shear_maps, 1, 2)
+        else:
+            shear_maps = Uniform(self.shear_min, self.shear_max).sample(latent_dims)
 
         return shear_maps.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
 
     def _sample_convergence(self):
+        method="interpolate"
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 1)
-        convergence_map = Beta(self.convergence_a, self.convergence_b).sample(latent_dims)
+        if method == "interpolate":
+            corners = (self.batch_size, 2, 2, 1)
+            convergence_map = Beta(self.convergence_a, self.convergence_b).sample(corners)
+
+            convergence_map = convergence_map.reshape((self.batch_size, 1, 2, 2))
+            convergence_map = torch.nn.functional.interpolate(convergence_map, scale_factor=(self.n_tiles_h / 2, self.n_tiles_w / 2), mode = 'bilinear', align_corners=True)
+
+            # want to change from 32 x 1 x 20 x 20 to 32 x 20 x 20 x 1
+            convergence_map = torch.swapaxes(convergence_map, 1, 3)
+            convergence_map = torch.swapaxes(convergence_map, 1, 2)
+        else:
+            convergence_map = Beta(self.convergence_a, self.convergence_b).sample(latent_dims)
 
         return convergence_map.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
 
