@@ -25,4 +25,4 @@ but not essential. Strong computational skills are required.
 ## TODOs
 
 ## URPS
-This project is being conducted under the Undergraduate Research Program in Statistics (URPS), a competitive program that pairs promising undergraduates with Statistics faculty on a research project for the winter semester. If you are interested, and for more information, please follow this link.
+This project is being conducted under the Undergraduate Research Program in Statistics (URPS), a competitive program that pairs promising undergraduates with Statistics faculty on a research project for the winter semester. If you are interested, and for more information, please follow this [link](https://lsa.umich.edu/stats/undergraduate-students/undergraduate-research-opportunities-.html).
