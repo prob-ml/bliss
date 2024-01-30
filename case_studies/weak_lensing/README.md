@@ -1,6 +1,7 @@
 # Weak Lensing
 ### Winter 2024
-#### Tahseen Younus, Steve Fan, Supervisors: Jeffrey Regier (faculty), Tim White (PhD student)
+#### Undergrads: Tahseen Younus, Steve Fan
+#### Supervisors: Jeffrey Regier (faculty), Tim White (PhD student)
 
 ## Description
 Dark matter between Earth and distant galaxies acts as a “gravitational lens,” distorting
@@ -18,11 +19,16 @@ prior knowledge of astronomy is expected. Familiarity with Bayesian statistics i
 but not essential. Strong computational skills are required.
 
 ## References
-- 
+- [Variational Inference for Deblending Crowded Starfields](https://arxiv.org/pdf/2102.02409.pdf)
 
 ## Documentation
+- TBD
 
 ## TODOs
+- Fill in lensing_metrics.py
+- Implement realistic priors for shear and convergence
+- Research traditional methods of convergence estimation — see Kaiser-Squires method and Wiener filter
+- Research traditional methods of shear estimation
 
 ## URPS
 This project is being conducted under the Undergraduate Research Program in Statistics (URPS), a competitive program that pairs promising undergraduates with Statistics faculty on a research project for the winter semester. If you are interested, and for more information, please follow this [link](https://lsa.umich.edu/stats/undergraduate-students/undergraduate-research-opportunities-.html).
