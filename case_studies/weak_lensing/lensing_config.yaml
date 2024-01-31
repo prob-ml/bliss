@@ -11,8 +11,8 @@ prior:
     tile_slen: 4
     batch_size: 32
     prob_galaxy: 1.0
-    shear_min: 0.249
-    shear_max: 0.251
+    shear_min: -0.1
+    shear_max: 0.1
     convergence_a: 1
     convergence_b: 25
 
