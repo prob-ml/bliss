@@ -26,13 +26,18 @@ class LensingPrior(CatalogPrior):
         self.convergence_b = convergence_b
 
     def _sample_shear(self):
-        method="interpolate"
+        method = "interpolate"
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 2)
         if method == "interpolate":
             corners = (self.batch_size, 2, 2, 2)
             shear_maps = Uniform(self.shear_min, self.shear_max).sample(corners)
 
-            shear_maps = torch.nn.functional.interpolate(shear_maps, scale_factor=(self.n_tiles_h / 2, self.n_tiles_w / 2), mode = 'bilinear', align_corners=True)
+            shear_maps = torch.nn.functional.interpolate(
+                shear_maps,
+                scale_factor=(self.n_tiles_h / 2, self.n_tiles_w / 2),
+                mode="bilinear",
+                align_corners=True,
+            )
 
             # want to change from 32 x 2 x 20 x 20 to 32 x 20 x 20 x 2
             shear_maps = torch.swapaxes(shear_maps, 1, 3)
@@ -43,14 +48,19 @@ class LensingPrior(CatalogPrior):
         return shear_maps.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
 
     def _sample_convergence(self):
-        method="interpolate"
+        method = "interpolate"
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 1)
         if method == "interpolate":
             corners = (self.batch_size, 2, 2, 1)
             convergence_map = Beta(self.convergence_a, self.convergence_b).sample(corners)
 
             convergence_map = convergence_map.reshape((self.batch_size, 1, 2, 2))
-            convergence_map = torch.nn.functional.interpolate(convergence_map, scale_factor=(self.n_tiles_h / 2, self.n_tiles_w / 2), mode = 'bilinear', align_corners=True)
+            convergence_map = torch.nn.functional.interpolate(
+                convergence_map,
+                scale_factor=(self.n_tiles_h / 2, self.n_tiles_w / 2),
+                mode="bilinear",
+                align_corners=True,
+            )
 
             # want to change from 32 x 1 x 20 x 20 to 32 x 20 x 20 x 1
             convergence_map = torch.swapaxes(convergence_map, 1, 3)
@@ -93,7 +103,7 @@ class LensingPrior(CatalogPrior):
         latent_dims = latent_dims[:-1]
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
-        beta_radians = Uniform(0, 0.001).sample(latent_dims)
+        beta_radians = Uniform(0, np.pi).sample(latent_dims)
         # Set beta = 0 instead of uniform on [0,pi]
         disk_q = Uniform(1e-8, 1).sample(latent_dims)
         bulge_q = Uniform(1e-8, 1).sample(latent_dims)
