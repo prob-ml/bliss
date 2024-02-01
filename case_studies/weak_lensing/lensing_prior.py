@@ -29,12 +29,17 @@ class LensingPrior(CatalogPrior):
         method = "interpolate"
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 2)
         if method == "interpolate":
-            corners = (self.batch_size, 2, 2, 2)
+            # number of knots in each dimension
+            num_knots = [4, 4]
+            corners = (self.batch_size, num_knots[0], num_knots[1], 2)
+
             shear_maps = Uniform(self.shear_min, self.shear_max).sample(corners)
+            # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
+            shear_maps = shear_maps.reshape((self.batch_size, 2, num_knots[0], num_knots[1]))
 
             shear_maps = torch.nn.functional.interpolate(
                 shear_maps,
-                scale_factor=(self.n_tiles_h / 2, self.n_tiles_w / 2),
+                scale_factor=(self.n_tiles_h // num_knots[0], self.n_tiles_w // num_knots[1]),
                 mode="bilinear",
                 align_corners=True,
             )
@@ -51,13 +56,18 @@ class LensingPrior(CatalogPrior):
         method = "interpolate"
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 1)
         if method == "interpolate":
-            corners = (self.batch_size, 2, 2, 1)
+            # number of knots in each dimension
+            num_knots = [4, 4]
+            corners = (self.batch_size, num_knots[0], num_knots[1], 1)
             convergence_map = Beta(self.convergence_a, self.convergence_b).sample(corners)
+            # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
+            convergence_map = convergence_map.reshape(
+                (self.batch_size, 1, num_knots[0], num_knots[1])
+            )
 
-            convergence_map = convergence_map.reshape((self.batch_size, 1, 2, 2))
             convergence_map = torch.nn.functional.interpolate(
                 convergence_map,
-                scale_factor=(self.n_tiles_h / 2, self.n_tiles_w / 2),
+                scale_factor=(self.n_tiles_h // num_knots[0], self.n_tiles_w // num_knots[1]),
                 mode="bilinear",
                 align_corners=True,
             )
@@ -104,7 +114,6 @@ class LensingPrior(CatalogPrior):
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
         beta_radians = Uniform(0, np.pi).sample(latent_dims)
-        # Set beta = 0 instead of uniform on [0,pi]
         disk_q = Uniform(1e-8, 1).sample(latent_dims)
         bulge_q = Uniform(1e-8, 1).sample(latent_dims)
 
