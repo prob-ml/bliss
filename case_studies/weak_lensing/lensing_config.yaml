@@ -6,6 +6,7 @@ defaults:
 
 paths:
     root: ${oc.env:BLISS_HOME}
+    data: ${paths.root}/data
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
@@ -22,18 +23,15 @@ prior:
 simulator:
     _target_: case_studies.weak_lensing.lensing_simulated_dataset.LensingSimulatedDataset
 
-cached_simulator:
-    cached_data_path: /data/scratch/twhit/weak_lensing
-    batch_size: 32
-
 generate:
-    n_image_files: 8
+    n_image_files: 4
     n_batches_per_file: 8
-    cached_data_path: /data/scratch/twhit/weak_lensing
+    cached_data_path: ${paths.data}/scratch/cached_dataset
+
+cached_simulator:
+    cached_data_path: ${paths.data}/scratch/cached_dataset
+    batch_size: 32
 
 encoder:
     vd_spec:
         _target_: case_studies.weak_lensing.lensing_variational_dist.LensingVariationalDistSpec
-
-train:
-    data_source: ${simulator}
