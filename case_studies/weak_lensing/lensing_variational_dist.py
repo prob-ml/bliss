@@ -43,10 +43,10 @@ class LensingVariationalDist(VariationalDist):
     def compute_nll(self, true_tile_cat: TileCatalog):
         q = self.factors
 
-        # Squeezing here won't work if max_sources > 1, so this should be rewritten
+        # Squeezing here won't work if max_sources > 1, so this might need to be rewritten
         true_shear = true_tile_cat.data["shear"].squeeze()
         true_convergence = true_tile_cat.data["convergence"].squeeze()
-        lensing_loss = -q["shear"].log_prob(true_shear)
+        lensing_loss = -q["shear"].log_prob(true_shear).sum(3)
         lensing_loss -= q["convergence"].log_prob(true_convergence)
 
         return lensing_loss
