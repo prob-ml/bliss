@@ -1,5 +1,4 @@
-from lensing_catalog import LensingTileCatalog
-
+from bliss.catalog import TileCatalog
 from bliss.encoder.unconstrained_dists import UnconstrainedLogitNormal, UnconstrainedTDBN
 from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
 
@@ -24,14 +23,14 @@ class LensingVariationalDistSpec(VariationalDistSpec):
 
 
 class LensingVariationalDist(VariationalDist):
-    def sample(self, use_mode=False) -> LensingTileCatalog:
+    def sample(self, use_mode=False) -> TileCatalog:
         """Sample the variational distribution.
 
         Args:
             use_mode: whether to use the mode of the distribution instead of random sampling
 
         Returns:
-            LensingTileCatalog: Sampled catalog
+            TileCatalog: Sampled catalog
         """
         q = self.factors
 
@@ -39,9 +38,9 @@ class LensingVariationalDist(VariationalDist):
         est_cat["shear"] = q["shear"].mode if use_mode else q["shear"].sample()
         est_cat["convergence"] = q["convergence"].mode if use_mode else q["convergence"].sample()
 
-        return LensingTileCatalog(self.tile_slen, est_cat)
+        return TileCatalog(self.tile_slen, est_cat)
 
-    def compute_nll(self, true_tile_cat: LensingTileCatalog):
+    def compute_nll(self, true_tile_cat: TileCatalog):
         q = self.factors
 
         # Squeezing here won't work if max_sources > 1, so this should be rewritten

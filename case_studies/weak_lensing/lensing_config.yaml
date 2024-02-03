@@ -4,6 +4,9 @@ defaults:
     - _self_
     - override hydra/job_logging: stdout
 
+paths:
+    root: ${oc.env:BLISS_HOME}
+
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
     n_tiles_h: 20
