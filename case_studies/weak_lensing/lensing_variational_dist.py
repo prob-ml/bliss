@@ -1,5 +1,5 @@
 from bliss.catalog import TileCatalog
-from bliss.encoder.unconstrained_dists import UnconstrainedLogitNormal, UnconstrainedTDBN
+from bliss.encoder.unconstrained_dists import ShearUnconstrainedTDBN, UnconstrainedNormal
 from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
 
 
@@ -11,8 +11,8 @@ class LensingVariationalDistSpec(VariationalDistSpec):
     ):
         super().__init__(*args, **kwargs)
         self.factor_specs = {
-            "shear": UnconstrainedTDBN(),
-            "convergence": UnconstrainedLogitNormal(),
+            "shear": ShearUnconstrainedTDBN(),
+            "convergence": UnconstrainedNormal(),
         }
 
     def make_dist(self, x_cat):
