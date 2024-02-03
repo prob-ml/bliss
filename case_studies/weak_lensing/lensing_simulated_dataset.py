@@ -4,16 +4,16 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from lensing_catalog import LensingTileCatalog
-from lensing_decoder import LensingDecoder
-from lensing_prior import LensingPrior
 from skimage.restoration import richardson_lucy
 from torch import Tensor
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
 from bliss.align import align
+from bliss.catalog import TileCatalog
 from bliss.surveys.survey import Survey
+from case_studies.weak_lensing.lensing_decoder import LensingDecoder
+from case_studies.weak_lensing.lensing_prior import LensingPrior
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -110,12 +110,12 @@ class LensingSimulatedDataset(pl.LightningDataModule, IterableDataset):
         return images
 
     def simulate_images(
-        self, tile_catalog: LensingTileCatalog, image_ids, image_id_indices
+        self, tile_catalog: TileCatalog, image_ids, image_id_indices
     ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
         """Simulate a batch of images.
 
         Args:
-            tile_catalog (LensingTileCatalog): The LensingTileCatalog to render.
+            tile_catalog (TileCatalog): The TileCatalog to render.
             image_ids: List of image_ids to render, in `image_id_indices` order.
             image_id_indices: Indices in self.image_ids to sample from.
 
@@ -228,7 +228,7 @@ class LensingSimulatedDataset(pl.LightningDataModule, IterableDataset):
 FileDatum = TypedDict(
     "FileDatum",
     {
-        "tile_catalog": LensingTileCatalog,
+        "tile_catalog": TileCatalog,
         "images": torch.Tensor,
         "background": torch.Tensor,
         "deconvolution": torch.Tensor,

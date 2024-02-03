@@ -5,8 +5,8 @@ import torch
 from torch import Tensor
 from torch.distributions import Beta, Gamma, Uniform
 
+from bliss.catalog import TileCatalog
 from bliss.simulator.prior import CatalogPrior
-from case_studies.weak_lensing.lensing_catalog import LensingTileCatalog
 
 
 class LensingPrior(CatalogPrior):
@@ -30,7 +30,7 @@ class LensingPrior(CatalogPrior):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 2)
         if method == "interpolate":
             # number of knots in each dimension
-            num_knots = [4, 4]
+            num_knots = [10, 10]
             corners = (self.batch_size, num_knots[0], num_knots[1], 2)
 
             shear_maps = Uniform(self.shear_min, self.shear_max).sample(corners)
@@ -57,7 +57,7 @@ class LensingPrior(CatalogPrior):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 1)
         if method == "interpolate":
             # number of knots in each dimension
-            num_knots = [4, 4]
+            num_knots = [10, 10]
             corners = (self.batch_size, num_knots[0], num_knots[1], 1)
             convergence_map = Beta(self.convergence_a, self.convergence_b).sample(corners)
             # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
@@ -135,7 +135,7 @@ class LensingPrior(CatalogPrior):
 
         return select_flux, torch.cat(param_lst, dim=4)
 
-    def sample(self) -> LensingTileCatalog:
+    def sample(self) -> TileCatalog:
         """Samples latent variables from the prior of an astronomical image.
 
         Returns:
@@ -166,4 +166,4 @@ class LensingPrior(CatalogPrior):
             "star_fluxes": star_fluxes,
         }
 
-        return LensingTileCatalog(self.tile_slen, catalog_params)
+        return TileCatalog(self.tile_slen, catalog_params)
