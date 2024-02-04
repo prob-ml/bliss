@@ -146,7 +146,7 @@ class ShearTruncatedDiagonalMVN(Distribution):
         return f"{self.__class__.__name__}({self.base_dist})"
 
     def sample(self, **args):
-        p = torch.rand(tuple(self.dim)).clamp(min=1e-6, max=1.0 - 1e-6)
+        p = torch.rand(tuple(self.dim)).cuda().clamp(min=1e-6, max=1.0 - 1e-6)
         p_tilde = self.base_dist.cdf(self.lb) + p * (self.log_prob_in_box.exp())
 
         return self.base_dist.icdf(p_tilde)
