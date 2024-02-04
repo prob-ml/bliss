@@ -24,12 +24,12 @@ simulator:
     _target_: case_studies.weak_lensing.lensing_simulated_dataset.LensingSimulatedDataset
 
 generate:
-    n_image_files: 4
-    n_batches_per_file: 8
-    cached_data_path: ${paths.data}/scratch/cached_dataset
+    n_image_files: 16
+    n_batches_per_file: 16
+    cached_data_path: ${paths.data}/scratch/weak_lensing
 
 cached_simulator:
-    cached_data_path: ${paths.data}/scratch/cached_dataset
+    cached_data_path: ${paths.data}/scratch/weak_lensing
     batch_size: 32
 
 encoder:
