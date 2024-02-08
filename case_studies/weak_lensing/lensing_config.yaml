@@ -30,7 +30,7 @@ generate:
 
 cached_simulator:
     cached_data_path: ${paths.data}/scratch/weak_lensing
-    batch_size: 32
+    batch_size: 24
 
 encoder:
     metrics:
@@ -42,4 +42,4 @@ encoder:
     vd_spec:
         _target_: case_studies.weak_lensing.lensing_variational_dist.LensingVariationalDistSpec
     double_detect: false
-    use_checkerboard: false
+    use_checkerboard: true
