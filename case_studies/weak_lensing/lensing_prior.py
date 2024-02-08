@@ -5,8 +5,8 @@ import torch
 from torch import Tensor
 from torch.distributions import Beta, Gamma, Uniform
 
+from bliss.catalog import TileCatalog
 from bliss.simulator.prior import CatalogPrior
-from case_studies.weak_lensing.lensing_catalog import LensingTileCatalog
 
 
 class LensingPrior(CatalogPrior):
@@ -26,14 +26,57 @@ class LensingPrior(CatalogPrior):
         self.convergence_b = convergence_b
 
     def _sample_shear(self):
+        method = "interpolate"
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 2)
-        shear_maps = Uniform(self.shear_min, self.shear_max).sample(latent_dims)
+        if method == "interpolate":
+            # number of knots in each dimension
+            num_knots = [10, 10]
+            corners = (self.batch_size, num_knots[0], num_knots[1], 2)
+
+            shear_maps = Uniform(self.shear_min, self.shear_max).sample(corners)
+            # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
+            shear_maps = shear_maps.reshape((self.batch_size, 2, num_knots[0], num_knots[1]))
+
+            shear_maps = torch.nn.functional.interpolate(
+                shear_maps,
+                scale_factor=(self.n_tiles_h // num_knots[0], self.n_tiles_w // num_knots[1]),
+                mode="bilinear",
+                align_corners=True,
+            )
+
+            # want to change from 32 x 2 x 20 x 20 to 32 x 20 x 20 x 2
+            shear_maps = torch.swapaxes(shear_maps, 1, 3)
+            shear_maps = torch.swapaxes(shear_maps, 1, 2)
+        else:
+            shear_maps = Uniform(self.shear_min, self.shear_max).sample(latent_dims)
 
         return shear_maps.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
 
     def _sample_convergence(self):
+        method = "interpolate"
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 1)
-        convergence_map = Beta(self.convergence_a, self.convergence_b).sample(latent_dims)
+        if method == "interpolate":
+            # number of knots in each dimension
+            num_knots = [10, 10]
+            corners = (self.batch_size, num_knots[0], num_knots[1], 1)
+            convergence_map = Beta(self.convergence_a, self.convergence_b).sample(corners)
+            # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
+            convergence_map = convergence_map.reshape(
+                (self.batch_size, 1, num_knots[0], num_knots[1])
+            )
+
+            convergence_map = torch.nn.functional.interpolate(
+                convergence_map,
+                scale_factor=(self.n_tiles_h // num_knots[0], self.n_tiles_w // num_knots[1]),
+                mode="bilinear",
+                align_corners=True,
+            )
+
+            # want to change from 32 x 1 x 20 x 20 to 32 x 20 x 20 x 1
+            convergence_map = torch.swapaxes(convergence_map, 1, 3)
+            convergence_map = torch.swapaxes(convergence_map, 1, 2)
+        else:
+            convergence_map = Beta(self.convergence_a, self.convergence_b).sample(latent_dims)
 
         return convergence_map.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
 
@@ -70,8 +113,7 @@ class LensingPrior(CatalogPrior):
         latent_dims = latent_dims[:-1]
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
-        beta_radians = Uniform(0, 0.001).sample(latent_dims)
-        # Set beta = 0 instead of uniform on [0,pi]
+        beta_radians = Uniform(0, np.pi).sample(latent_dims)
         disk_q = Uniform(1e-8, 1).sample(latent_dims)
         bulge_q = Uniform(1e-8, 1).sample(latent_dims)
 
@@ -93,7 +135,7 @@ class LensingPrior(CatalogPrior):
 
         return select_flux, torch.cat(param_lst, dim=4)
 
-    def sample(self) -> LensingTileCatalog:
+    def sample(self) -> TileCatalog:
         """Samples latent variables from the prior of an astronomical image.
 
         Returns:
@@ -124,4 +166,4 @@ class LensingPrior(CatalogPrior):
             "star_fluxes": star_fluxes,
         }
 
-        return LensingTileCatalog(self.tile_slen, catalog_params)
+        return TileCatalog(self.tile_slen, catalog_params)
