@@ -4,13 +4,18 @@ import galcheat
 import galsim
 import numpy as np
 import torch
+from galcheat.utilities import mag2counts
 from torch import Tensor
 
 PIXEL_SCALE = 0.2
+MAX_MAG_GAL = 27.3
+MAX_MAG_STAR = 26.0  # see histogram of dc2 star catalog in i-band
+MIN_MAG = 0.0
 
 
 def convert_mag_to_flux(mag: Tensor) -> Tensor:
-    raise NotImplementedError
+    """Assuming gain = 1 always."""
+    raise mag2counts(mag.numpy(), "LSST", "i").to_value("electron")
 
 
 def convert_flux_to_mag(flux: Tensor) -> Tensor:
