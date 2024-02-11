@@ -1,7 +1,7 @@
 import torch
 
 from bliss.catalog import SourceType, TileCatalog
-from bliss.encoder.unconstrained_dists import ShearUnconstrainedTDBN, UnconstrainedNormal
+from bliss.encoder.unconstrained_dists import ShearUnconstrainedTDBN, UnconstrainedLogNormal
 from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
 
 
@@ -13,7 +13,7 @@ class LensingVariationalDistSpec(VariationalDistSpec):
     ):
         super().__init__(*args, **kwargs)
         self.factor_specs["shear"] = ShearUnconstrainedTDBN()
-        self.factor_specs["convergence"] = UnconstrainedNormal()
+        self.factor_specs["convergence"] = UnconstrainedLogNormal()
 
     def make_dist(self, x_cat):
         # override this method to instantiate a subclass of VariationalGrid, e.g.,
@@ -85,7 +85,7 @@ class LensingVariationalDist(VariationalDist):
         # Squeezing here won't work if max_sources > 1, so this might need to be rewritten
         true_shear = true_tile_cat.data["shear"].squeeze(3)
         true_convergence = true_tile_cat.data["convergence"].squeeze((3, 4))
-        lensing_loss = -q["shear"].log_prob(true_shear).sum(3)
+        lensing_loss = -q["shear"].log_prob(true_shear)
         lensing_loss -= q["convergence"].log_prob(true_convergence)
 
         return sources_loss + lensing_loss
