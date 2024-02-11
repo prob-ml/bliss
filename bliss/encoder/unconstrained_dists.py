@@ -38,52 +38,38 @@ class UnconstrainedNormal:
 class TruncatedDiagonalMVN(Distribution):
     """A truncated diagonal multivariate normal distribution."""
 
-    def __init__(self, mu, sigma):
+    def __init__(self, mu, sigma, a, b):
         super().__init__(validate_args=False)
 
-        multiple_normals = Normal(mu, sigma)
-        self.base_dist = Independent(multiple_normals, 1)
+        self.multiple_normals = Normal(mu, sigma)
+        self.base_dist = Independent(self.multiple_normals, 1)
 
-        prob_in_unit_box_hw = multiple_normals.cdf(self.b) - multiple_normals.cdf(self.a)
-        self.log_prob_in_unit_box = prob_in_unit_box_hw.log().sum(dim=-1)
+        self.a = a
+        self.b = b
+        self.lb = self.a * torch.ones_like(self.base_dist.mean)
+        self.ub = self.b * torch.ones_like(self.base_dist.mean)
+
+        prob_in_box_hw = self.multiple_normals.cdf(self.ub) - self.multiple_normals.cdf(self.lb)
+        self.log_prob_in_box = prob_in_box_hw.log().sum(dim=-1)
 
     def __repr__(self):
-        return f"{self.__class__.__name__}({self.base_dist.base_dist})"
+        return f"{self.__class__.__name__}({self.base_dist})"
 
     def sample(self, sample_shape=(1,)):
-        """Generate sample using rejection sampling.
-
-        This isn't very efficient, but it's good enough for sampling one catalog at a time. A more
-        efficient method could be to use inverse cdf sampling on each dimension independently.
-
-        Args:
-            sample_shape (Tuple): Shape of samples to draw
-
-        Returns:
-            Tensor: (sample_shape, self.batch_shape, self.event_shape) shaped sample
-        """
         q = Independent(Normal(self.base_dist.mean, self.base_dist.stddev), 1)
         samples = q.sample(sample_shape)
-        valid = (samples.min(dim=-1)[0] >= 0) & (samples.max(dim=-1)[0] < 1)
+        valid = (samples.min(dim=-1)[0] >= self.a) & (samples.max(dim=-1)[0] < self.b)
         while not valid.all():
             new_samples = q.sample(sample_shape)
             samples[~valid] = new_samples[~valid]
-            valid = (samples.min(dim=-1)[0] >= 0) & (samples.max(dim=-1)[0] < 1)
+            valid = (samples.min(dim=-1)[0] >= self.a) & (samples.max(dim=-1)[0] < self.b)
         return samples
-
-    @property
-    def a(self):
-        return torch.zeros_like(self.base_dist.mean)
-
-    @property
-    def b(self):
-        return torch.ones_like(self.base_dist.mean)
 
     @property
     def mean(self):
         mu = self.base_dist.mean
-        offset = self.base_dist.log_prob(self.a).exp() - self.base_dist.log_prob(self.b).exp()
-        offset /= self.log_prob_in_unit_box.exp()
+        offset = self.base_dist.log_prob(self.lb).exp() - self.base_dist.log_prob(self.ub).exp()
+        offset /= self.log_prob_in_box.exp()
         return mu + (offset.unsqueeze(-1) * self.base_dist.stddev)
 
     @property
@@ -92,69 +78,6 @@ class TruncatedDiagonalMVN(Distribution):
         # multivariate normal. The covariance terms simplify since our dimensions are independent,
         # but it's still tricky to compute.
         raise NotImplementedError("Standard deviation for truncated normal is not implemented yet")
-
-    @property
-    def mode(self):
-        # a mode still exists if this assertion is false, but I haven't implemented code
-        # to compute it because I don't think we need it
-        assert (self.base_dist.mean >= 0).all() and (self.base_dist.mean <= 1).all()
-        return self.base_dist.mode
-
-    def log_prob(self, value):
-        assert (value >= 0).all() and (value <= 1).all()
-        # subtracting log probability that the base RV is in the unit box
-        # is equivalent in log space to dividing the normal pdf by the normalizing constant
-        return self.base_dist.log_prob(value) - self.log_prob_in_unit_box
-
-    def cdf(self, value):
-        cdf_at_val = self.base_dist.base_dist.cdf(value)
-        cdf_at_lb = self.base_dist.base_dist.cdf(torch.zeros_like(self.mean))
-        log_cdf = (cdf_at_val - cdf_at_lb + 1e-9).log().sum(dim=-1) - self.log_prob_in_unit_box
-        return log_cdf.exp()
-
-
-class UnconstrainedTDBN:
-    """Produces truncated bivariate normal distributions from unconstrained parameters."""
-
-    def __init__(self):
-        self.dim = 4
-
-    def get_dist(self, params):
-        mu = params[:, :, :, :2].sigmoid()
-        sigma = params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
-        return TruncatedDiagonalMVN(mu, sigma)
-
-
-class ShearTruncatedDiagonalMVN(Distribution):
-    """A truncated diagonal multivariate normal distribution."""
-
-    def __init__(self, mu, sigma, a, b):
-        super().__init__(validate_args=False)
-
-        self.multiple_normals = Normal(mu, sigma)
-        self.base_dist = Independent(self.multiple_normals, 1)
-
-        self.lb = a * torch.ones_like(self.base_dist.mean)
-        self.ub = b * torch.ones_like(self.base_dist.mean)
-
-        prob_in_box_hw = self.multiple_normals.cdf(self.ub) - self.multiple_normals.cdf(self.lb)
-        self.log_prob_in_box = prob_in_box_hw.log().sum(dim=-1)
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}({self.base_dist})"
-
-    def sample(self, **args):
-        p = torch.rand(self.base_dist.mean.shape).clamp(min=1e-6, max=1.0 - 1e-6)
-        p_tilde = self.multiple_normals.cdf(self.lb) + p * (self.log_prob_in_box.exp())
-
-        return self.multiple_normals.icdf(p_tilde)
-
-    @property
-    def mean(self):
-        mu = self.base_dist.mean
-        offset = self.base_dist.log_prob(self.lb).exp() - self.base_dist.log_prob(self.ub).exp()
-        offset /= self.log_prob_in_box.exp()
-        return mu + (offset.unsqueeze(-1) * self.base_dist.stddev)
 
     @property
     def mode(self):
@@ -172,16 +95,18 @@ class ShearTruncatedDiagonalMVN(Distribution):
         return log_cdf.exp()
 
 
-class ShearUnconstrainedTDBN:
+class UnconstrainedTDBN:
     """Produces truncated bivariate normal distributions from unconstrained parameters."""
 
-    def __init__(self):
+    def __init__(self, a=0, b=1):
         self.dim = 4
+        self.a = a
+        self.b = b
 
     def get_dist(self, params):
         mu = params[:, :, :, :2].tanh()
         sigma = params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
-        return ShearTruncatedDiagonalMVN(mu, sigma, a=-1, b=1)
+        return TruncatedDiagonalMVN(mu, sigma, a=self.a, b=self.b)
 
 
 class UnconstrainedLogNormal:
