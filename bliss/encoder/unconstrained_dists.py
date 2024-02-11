@@ -129,32 +129,30 @@ class ShearTruncatedDiagonalMVN(Distribution):
     def __init__(self, mu, sigma, a, b):
         super().__init__(validate_args=False)
 
-        self.dim = mu.size()
+        self.multiple_normals = Normal(mu, sigma)
+        self.base_dist = Independent(self.multiple_normals, 1)
 
-        self.lb = a * torch.ones_like(mu)
-        self.ub = b * torch.ones_like(mu)
+        self.lb = a * torch.ones_like(self.base_dist.mean)
+        self.ub = b * torch.ones_like(self.base_dist.mean)
 
-        base = Normal(mu, sigma)
-        prob_in_box_hw = base.cdf(b * torch.ones_like(mu)) - base.cdf(a * torch.ones_like(mu))
-        self.log_prob_in_box = prob_in_box_hw.log()
-
-        self.base_dist = base
+        prob_in_box_hw = self.multiple_normals.cdf(self.ub) - self.multiple_normals.cdf(self.lb)
+        self.log_prob_in_box = prob_in_box_hw.log().sum(dim=-1)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.base_dist})"
 
     def sample(self, **args):
-        p = torch.rand(tuple(self.dim)).cuda().clamp(min=1e-6, max=1.0 - 1e-6)
-        p_tilde = self.base_dist.cdf(self.lb) + p * (self.log_prob_in_box.exp())
+        p = torch.rand(self.base_dist.mean.shape).clamp(min=1e-6, max=1.0 - 1e-6)
+        p_tilde = self.multiple_normals.cdf(self.lb) + p * (self.log_prob_in_box.exp())
 
-        return self.base_dist.icdf(p_tilde)
+        return self.multiple_normals.icdf(p_tilde)
 
     @property
     def mean(self):
         mu = self.base_dist.mean
         offset = self.base_dist.log_prob(self.lb).exp() - self.base_dist.log_prob(self.ub).exp()
         offset /= self.log_prob_in_box.exp()
-        return mu + (offset * self.base_dist.stddev)
+        return mu + (offset.unsqueeze(-1) * self.base_dist.stddev)
 
     @property
     def mode(self):
