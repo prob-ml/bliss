@@ -59,7 +59,7 @@ class LensingVariationalDist(VariationalDist):
         est_cat["galaxy_fluxes"] = torch.stack(gf_lst, dim=3)
 
         # populate catalog with shear and convergence
-        est_cat["shear"] = q["shear"].mode if use_mode else q["shear"].sample()
+        est_cat["shear"] = q["shear"].mode if use_mode else q["shear"].sample().squeeze(0)
         est_cat["convergence"] = (
             q["convergence"].mode.unsqueeze(3)
             if use_mode
