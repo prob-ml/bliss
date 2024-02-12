@@ -2,7 +2,7 @@ import torch
 from hydra.utils import instantiate
 
 from bliss.catalog import TileCatalog
-from bliss.datasets.galsim_galaxies import GalsimBlends
+from bliss.datasets.blends import GalsimBlends
 
 
 def test_galaxy_blend(get_galsim_galaxies_config):
