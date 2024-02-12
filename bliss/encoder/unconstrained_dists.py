@@ -47,8 +47,8 @@ class TruncatedDiagonalMVN(Distribution):
         self.lb = self.a * torch.ones_like(self.base_dist.mean)
         self.ub = self.b * torch.ones_like(self.base_dist.mean)
 
-        prob_in_box_hw = self.multiple_normals.cdf(self.ub) - self.multiple_normals.cdf(self.lb)
-        self.log_prob_in_box = prob_in_box_hw.log().sum(dim=-1)
+        prob_in_box = self.multiple_normals.cdf(self.ub) - self.multiple_normals.cdf(self.lb)
+        self.log_prob_in_box = prob_in_box.log().sum(dim=-1)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.base_dist})"
@@ -96,15 +96,25 @@ class TruncatedDiagonalMVN(Distribution):
 class UnconstrainedTDBN:
     """Produces truncated bivariate normal distributions from unconstrained parameters."""
 
-    def __init__(self, a=0, b=1):
+    def __init__(self):
         self.dim = 4
-        self.a = a
-        self.b = b
+
+    def get_dist(self, params):
+        mu = params[:, :, :, :2].sigmoid()
+        sigma = params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
+        return TruncatedDiagonalMVN(mu, sigma, a=0, b=1)
+
+
+class ShearUnconstrainedTDBN:
+    """Produces truncated bivariate normal distributions from unconstrained parameters."""
+
+    def __init__(self):
+        self.dim = 4
 
     def get_dist(self, params):
         mu = params[:, :, :, :2].tanh()
         sigma = params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
-        return TruncatedDiagonalMVN(mu, sigma, a=self.a, b=self.b)
+        return TruncatedDiagonalMVN(mu, sigma, a=-1, b=1)
 
 
 class UnconstrainedLogNormal:

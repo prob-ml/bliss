@@ -1,7 +1,7 @@
 import torch
 
 from bliss.catalog import SourceType, TileCatalog
-from bliss.encoder.unconstrained_dists import UnconstrainedLogNormal, UnconstrainedTDBN
+from bliss.encoder.unconstrained_dists import ShearUnconstrainedTDBN, UnconstrainedNormal
 from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
 
 
@@ -12,8 +12,8 @@ class LensingVariationalDistSpec(VariationalDistSpec):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.factor_specs["shear"] = UnconstrainedTDBN(a=-1, b=1)
-        self.factor_specs["convergence"] = UnconstrainedLogNormal()
+        self.factor_specs["shear"] = ShearUnconstrainedTDBN()
+        self.factor_specs["convergence"] = UnconstrainedNormal()
 
     def make_dist(self, x_cat):
         # override this method to instantiate a subclass of VariationalGrid, e.g.,
