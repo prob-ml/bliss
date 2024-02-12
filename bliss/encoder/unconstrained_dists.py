@@ -75,7 +75,7 @@ class TruncatedDiagonalMVN(Distribution):
             self.multiple_normals.log_prob(alpha).exp() - self.multiple_normals.log_prob(beta).exp()
         )
         offset_denominator = self.multiple_normals.cdf(beta) - self.multiple_normals.cdf(alpha)
-        return mu + (sigma * (offset_numerator / offset_denominator).unsqueeze(-1))
+        return mu + (sigma * offset_numerator / offset_denominator)
 
     @property
     def stddev(self):
