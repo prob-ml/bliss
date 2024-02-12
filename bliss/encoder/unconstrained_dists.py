@@ -66,9 +66,16 @@ class TruncatedDiagonalMVN(Distribution):
     @property
     def mean(self):
         mu = self.base_dist.mean
-        offset = self.base_dist.log_prob(self.lb).exp() - self.base_dist.log_prob(self.ub).exp()
-        offset /= self.log_prob_in_box.exp()
-        return mu + (offset.unsqueeze(-1) * self.base_dist.stddev)
+        sigma = self.base_dist.stddev
+
+        alpha = (self.lb - mu) / sigma
+        beta = (self.ub - mu) / sigma
+
+        offset_numerator = (
+            self.multiple_normals.log_prob(alpha).exp() - self.multiple_normals.log_prob(beta).exp()
+        )
+        offset_denominator = self.multiple_normals.cdf(beta) - self.multiple_normals.cdf(alpha)
+        return mu + (sigma * (offset_numerator / offset_denominator).unsqueeze(-1))
 
     @property
     def stddev(self):
