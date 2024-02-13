@@ -462,10 +462,11 @@ class FullCatalog(UserDict):
             max_sources_per_tile: The maximum number of sources in one tile.
             ignore_extra_sources: If False (default), raises an error if the number of sources
                 in one tile exceeds the `max_sources_per_tile`. If True, only adds the tile
-                parameters of the first `max_sources_per_tile` sources to the new TileCatalog.
+                parameters of the first, brightest `max_sources_per_tile` sources to
+                the new TileCatalog.
 
         Returns:
-            TileCatalog correspond to the each source in the FullCatalog.
+            TileCatalog corresponding to the each source in the FullCatalog.
 
         Raises:
             ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
@@ -478,6 +479,12 @@ class FullCatalog(UserDict):
         tile_cat_shape = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile)
         tile_locs = torch.zeros((*tile_cat_shape, 2), device=self.device)
         tile_n_sources = torch.zeros(tile_cat_shape[:3], dtype=torch.int64, device=self.device)
+
+        if ignore_extra_sources:
+            # need to compare fluxes per tile to get brightest object
+            tile_fluxes = torch.zeros(tile_cat_shape, device=self.device)
+            assert "fluxes" in self.keys()
+
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
             dtype = torch.int64 if k == "objid" else torch.float
@@ -493,7 +500,11 @@ class FullCatalog(UserDict):
                         raise ValueError(  # noqa: WPS220
                             "# of sources per tile exceeds `max_sources_per_tile`."
                         )
-                    continue  # ignore extra sources in this tile.
+                    assert max_sources_per_tile == 1, "Implementation only works in simplest case."
+                    flux1 = tile_fluxes[ii, coords[0], coords[1]].item()
+                    flux2 = self["fluxes"][ii, idx].item()
+                    if flux1 > flux2:
+                        continue  # keep current source in tile
                 tile_loc = (self.plocs[ii, idx] - coords * tile_slen) / tile_slen
                 tile_locs[ii, coords[0], coords[1], source_idx] = tile_loc
                 for k, v in tile_params.items():
