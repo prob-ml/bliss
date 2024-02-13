@@ -93,3 +93,25 @@ def table_to_dict(table):
     for p in table.columns:
         d[p] = column_to_tensor(table, p)
     return d
+
+
+def catsim_row_to_galaxy_params(table, max_n_sources):
+    names = (
+        "fluxnorm_bulge",
+        "fluxnorm_disk",
+        "fluxnorm_agn",
+        "a_b",
+        "a_d",
+        "b_b",
+        "b_d",
+        "pa_bulge",
+        "i_ab",
+    )
+
+    params = torch.zeros((max_n_sources, len(names)))
+
+    for ii, col in enumerate(table):
+        for jj, n in enumerate(names):
+            params[ii, jj] = column_to_tensor(col, n)
+
+    return params
