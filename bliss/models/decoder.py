@@ -387,7 +387,6 @@ class StarPSFDecoder(PSFDecoder):
         """Renders star tile from fluxes."""
         # fluxes: Is (n_ptiles x max_stars x n_bands)
         # star_bools: Is (n_ptiles x max_stars x 1)
-        # max_sources obtained from locs, allows for more flexibility when rendering.
 
         n_ptiles, max_sources, n_bands = fluxes.shape
 
