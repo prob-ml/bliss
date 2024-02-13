@@ -53,37 +53,35 @@ def _render_star(
 
 
 def render_stars(
-    star_mags: Tensor,
-    star_plocs: Tensor,
+    n_stars: int,
+    star_fluxes: Tensor,
+    star_locs: Tensor,
     slen: float,
     bp: float,
     psf: galsim.GSObject,
     max_n_stars: int,
 ):
     # single, constant PSF
-    # single-band for `star_mags`
-    assert star_mags.ndim == star_plocs.ndim == 2
-    assert star_mags.shape[0] == star_plocs.shape[0]  # first dimension is max_n_stars
-    assert star_plocs.shape[1] == 2
+    # single-band for `star_fluxes`
+    assert star_fluxes.ndim == star_locs.ndim == 2
+    assert star_fluxes.shape[0] == star_locs.shape[0]  # first dimension is max_n_stars
+    assert star_locs.shape[1] == 2
+    assert n_stars <= max_n_stars
 
     size = slen + 2 * bp
     image = torch.zeros((1, size, size))  # single-band only
-    noiseless_centered = torch.zeros((max_n_stars, 1, size, size))
-    noiseless_uncentered = torch.zeros((max_n_stars, 1, size, size))
+    isolated_images = torch.zeros((max_n_stars, 1, size, size))
 
-    for ii, (mag, ploc) in enumerate(zip(star_mags, star_plocs)):
-        mag = mag.item()
+    for ii, flux, loc in zip(range(n_stars), star_fluxes, star_locs):
+        ploc = loc * slen
         offset_x = ploc[1] + bp - size / 2
         offset_y = ploc[0] + bp - size / 2
         offset = torch.tensor([offset_x, offset_y])
-        flux = convert_mag_to_flux(mag)
         star_uncentered = _render_star(flux, size, psf, offset=offset)
-        star_centered = _render_star(flux, size, psf)
-        noiseless_uncentered[ii] = star_uncentered
-        noiseless_centered[ii] = star_centered
+        isolated_images[ii] = star_uncentered
         image += star_uncentered
 
-    return image, noiseless_centered, noiseless_uncentered
+    return image, isolated_images
 
 
 def _sample_poisson_n_sources(mean_sources, max_n_sources) -> int:
