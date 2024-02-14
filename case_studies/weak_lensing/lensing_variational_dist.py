@@ -59,7 +59,7 @@ class LensingVariationalDist(VariationalDist):
         est_cat["galaxy_fluxes"] = torch.stack(gf_lst, dim=3)
 
         # populate catalog with shear and convergence
-        est_cat["shear"] = q["shear"].mode if use_mode else q["shear"].sample()
+        est_cat["shear"] = q["shear"].mode if use_mode else q["shear"].sample().squeeze(0)
         est_cat["convergence"] = (
             q["convergence"].mode.unsqueeze(3)
             if use_mode
@@ -85,7 +85,7 @@ class LensingVariationalDist(VariationalDist):
         # Squeezing here won't work if max_sources > 1, so this might need to be rewritten
         true_shear = true_tile_cat.data["shear"].squeeze(3)
         true_convergence = true_tile_cat.data["convergence"].squeeze((3, 4))
-        lensing_loss = -q["shear"].log_prob(true_shear).sum(3)
+        lensing_loss = -q["shear"].log_prob(true_shear)
         lensing_loss -= q["convergence"].log_prob(true_convergence)
 
         return sources_loss + lensing_loss
