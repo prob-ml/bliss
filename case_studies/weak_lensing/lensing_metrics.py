@@ -1,4 +1,4 @@
-from torchmetrics import Metric
+from torchmetrics import Metric, PearsonCorrCoef
 import torch
 
 class LensingMapCorrCoef(Metric):
@@ -8,6 +8,8 @@ class LensingMapCorrCoef(Metric):
         self.add_state("target_shear", default=torch.Tensor(), dist_reduce_fx="cat")
         self.add_state("preds_convergence", default=torch.Tensor(), dist_reduce_fx="cat")
         self.add_state("target_convergence", default=torch.Tensor(), dist_reduce_fx="cat")
+
+        self.compute_corrcoef = PearsonCorrCoef()
     
     def update(self, true_cat, est_cat, matching) -> None:
         for i in range(len(matching)):
@@ -28,9 +30,9 @@ class LensingMapCorrCoef(Metric):
         true_shear2 = self.target_shear[:,1]
         true_convergence = self.target_convergence
 
-        shear_1_corr_coef = torch.corrcoef(torch.Tensor([posterior_shear1, true_shear1]))
-        shear_2_corr_coef = torch.corrcoef(torch.Tensor([posterior_shear2, true_shear2]))
-        convergence_corr_coef = torch.corrcoef(torch.Tensor([posterior_convergence, true_convergence]))
+        shear_1_corr_coef = self.compute_corrcoef(posterior_shear1, true_shear1)
+        shear_2_corr_coef = self.compute_corrcoef(posterior_shear2, true_shear2)
+        convergence_corr_coef = self.compute_corrcoef(posterior_convergence, true_convergence)
 
         return {
             "Shear 1 corr_coef" : shear_1_corr_coef,
