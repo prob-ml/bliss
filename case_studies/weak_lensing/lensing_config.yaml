@@ -16,8 +16,8 @@ prior:
     tile_slen: 4
     batch_size: 32
     prob_galaxy: 1.0
-    shear_min: -0.5
-    shear_max: 0.5
+    shear_min: -0.25
+    shear_max: 0.25
     convergence_a: 1
     convergence_b: 10
 
@@ -31,7 +31,7 @@ generate:
 
 cached_simulator:
     cached_data_path: /data/scratch/twhit/weak_lensing_new
-    batch_size: 24
+    batch_size: 32
 
 encoder:
     metrics:
