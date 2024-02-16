@@ -150,7 +150,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         # bools
         galaxy_bools = torch.zeros((self.max_n_sources, 1))
         galaxy_bools[:n_galaxies, :] = 1
-        star_bools = (1 - galaxy_bools) * is_on_sources
+        star_bools = (1 - galaxy_bools) * is_on_sources.reshape(-1, 1)
 
         # star fluxes and log_fluxes
         star_fluxes = star_params["star_fluxes"].reshape(-1, 1)
