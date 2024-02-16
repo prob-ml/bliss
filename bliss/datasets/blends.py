@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 import torch
 from astropy.table import Table
 from einops import rearrange
-from galcheat.utilities import mean_sky_level
+from galcheat.utilities import mag2counts, mean_sky_level
 from galsim.gsobject import GSObject
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
@@ -42,7 +42,7 @@ def _setup_blend_galaxy_generator(
         min_number=0,
         density=density,
         stamp_size=stamp_size,
-        max_shift=slen * PIXEL_SCALE,
+        max_shift=slen * PIXEL_SCALE / 2,  # in arcseconds
         seed=seed,
         max_mag=max_mag,
         mag_name="i_ab",
@@ -103,15 +103,18 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         self.star_density = star_density
 
         # we just need something sensible here
-        self.max_n_sources = math.ceil(galaxy_density * (self.slen * PIXEL_SCALE / 60) ** 2 * 2)
-        self.max_n_stars = self.max_n_sources * (self.star_density / self.galaxy_density)
+        self.max_n_galaxies = math.ceil(galaxy_density * (self.slen * PIXEL_SCALE / 60) ** 2 * 2)
+        self.max_n_stars = math.ceil(
+            self.max_n_galaxies * (self.star_density / self.galaxy_density),
+        )
+        self.max_n_sources = self.max_n_galaxies + self.max_n_stars
 
         sky_level: float = mean_sky_level("LSST", "i").to_value("electron")
         self.background = ConstantBackground((sky_level,))
 
         # btk
         self.galaxy_generator = _setup_blend_galaxy_generator(
-            catalog_file, self.galaxy_density, self.max_n_sources, self.slen, self.bp, self.seed
+            catalog_file, self.galaxy_density, self.max_n_galaxies, self.slen, self.bp, self.seed
         )
 
         self.all_star_magnitudes = column_to_tensor(Table.read(stars_file), "i_ab")
@@ -119,7 +122,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
     def sample(self):
         # sampling
         star_params = sample_stars(
-            self.all_star_magnitudes, self.slen, self.star_density, self.max_n_sources
+            self.all_star_magnitudes, self.slen, self.star_density, self.max_n_stars
         )
         batch = next(self.galaxy_generator)
         blend_cat = batch.catalog_list[0]  # always only 1 batch
@@ -150,23 +153,27 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         star_bools = (1 - galaxy_bools) * is_on_sources
 
         # star fluxes and log_fluxes
-        star_fluxes = star_params["star_fluxes"]
-        star_log_fluxes = star_params["star_log_fluxes"]
-        new_star_fluxes = torch.zeros((self.max_n_sources, 2))
-        new_star_log_fluxes = torch.zeros((self.max_n_sources, 2))
-        new_star_fluxes[n_galaxies : n_galaxies + n_stars, :] = star_fluxes[:n_stars]
-        new_star_log_fluxes[n_galaxies : n_galaxies + n_stars, :] = star_log_fluxes[:n_stars]
+        star_fluxes = star_params["star_fluxes"].reshape(-1, 1)
+        star_log_fluxes = star_params["star_log_fluxes"].reshape(-1, 1)
+        new_star_fluxes = torch.zeros((self.max_n_sources, 1))
+        new_star_log_fluxes = torch.zeros((self.max_n_sources, 1))
+        new_star_fluxes[n_galaxies : n_galaxies + n_stars, :] = star_fluxes[:n_stars, :]
+        new_star_log_fluxes[n_galaxies : n_galaxies + n_stars, :] = star_log_fluxes[:n_stars, :]
 
         # galaxy params
+        gal_flux = mag2counts(blend_cat["i_ab"], "LSST", "i").to_value("electron")
+        blend_cat["flux"] = gal_flux.astype(float)
+        # NOTE: this requires all galaxies to be in the front to work
         galaxy_params = catsim_row_to_galaxy_params(blend_cat, self.max_n_sources)
 
         # images
         stars_image, stars_isolated = render_stars(
             n_stars, star_fluxes, star_locs, self.slen, self.bp, psf, self.max_n_stars
         )
-        galaxies_image = batch.blend_images[0, 3, None]
-        galaxies_isolated = batch.blend_images[0, :, 3, None]
+        galaxies_image = torch.from_numpy(batch.blend_images[0, 3, None])
         noiseless = stars_image + galaxies_image
+
+        galaxies_isolated = torch.from_numpy(batch.isolated_images[0, :, 3, None])
         isolated_images = torch.zeros((self.max_n_sources, 1, self.size, self.size))
         isolated_images[:n_galaxies] = galaxies_isolated[:n_galaxies]  # noqa:WPS362
         isolated_images[n_galaxies : n_galaxies + n_stars] = stars_isolated[:n_stars]  # noqa:WPS362
@@ -178,8 +185,8 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
             "plocs": locs * self.slen,
             "galaxy_bools": galaxy_bools,
             "star_bools": star_bools,
-            "star_fluxes": star_fluxes,
-            "star_log_fluxes": star_log_fluxes,
+            "star_fluxes": new_star_fluxes,
+            "star_log_fluxes": new_star_log_fluxes,
             "galaxy_params": galaxy_params,
         }
         params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
@@ -221,17 +228,18 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         blendedness = rearrange(blendedness, "n -> 1 n 1", n=self.max_n_sources)
 
         # get magnitudes
-        gal_fluxes = galaxy_params[0, :, 0]
+
+        gal_fluxes = galaxy_params[0, :, -1]
         star_fluxes = full_cat["star_fluxes"][0, :, 0]
         mags = torch.zeros(self.max_n_sources)
         fluxes = torch.zeros(self.max_n_sources)
         for ii in range(n_sources):
-            if galaxy_bools[0, ii, 0].item() == 1:
-                mags[ii] = convert_flux_to_mag(gal_fluxes[ii]).item()
-                fluxes[ii] = gal_fluxes[ii].item()
-            else:
-                mags[ii] = convert_flux_to_mag(star_fluxes[ii]).item()
-                fluxes[ii] = star_fluxes[ii].item()
+            gbool = galaxy_bools[0, ii, 0].item()
+            flux = gal_fluxes[ii, None] if gbool == 1 else star_fluxes[ii, None]
+            assert flux.item() > 0
+            mag = convert_flux_to_mag(flux)
+            fluxes[ii] = flux.item()
+            mags[ii] = mag.item()
         mags = rearrange(mags, "n -> 1 n 1", n=self.max_n_sources)
         fluxes = rearrange(fluxes, "n -> 1 n 1", n=self.max_n_sources)
 
