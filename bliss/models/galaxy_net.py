@@ -8,7 +8,6 @@ from torch.distributions import Normal
 from torch.nn import functional as F
 from torch.nn.utils import weight_norm
 from torch.optim import Adam
-from tqdm import tqdm
 
 from bliss.plotting import plot_image
 
@@ -159,17 +158,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def get_decoder(self):
         return self.dec
-
-    def generate_latents(self, dataloader, n_batches):
-        """Induces a latent distribution for a non-probabilistic autoencoder."""
-        latent_list = []
-        with torch.no_grad():
-            for _ in tqdm(range(n_batches)):
-                galaxy = next(iter(dataloader))
-                img = (galaxy["images"] - galaxy["background"]).to(self.device)
-                latent_batch = self.enc(img)[0]
-                latent_list.append(latent_batch)
-        return torch.cat(latent_list, dim=0)
 
     # ---------------
     # Optimizer
