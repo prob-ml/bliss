@@ -1,5 +1,5 @@
 import math
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import btk
 import pytorch_lightning as pl
@@ -9,8 +9,7 @@ from einops import rearrange
 from galcheat.utilities import mag2counts, mean_sky_level
 from galsim.gsobject import GSObject
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
+from torch.utils.data import Dataset
 
 from bliss.catalog import FullCatalog, get_is_on_from_n_sources
 from bliss.datasets.background import ConstantBackground
@@ -278,20 +277,22 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
     def __len__(self):
         return self.batch_size * self.n_batches
 
-    def train_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
 
-    def val_dataloader(self):
-        dl = DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-        if not self.fix_validation_set:
-            return dl
-        valid: List[Dict[str, Tensor]] = []
-        for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
-            valid.append(next(iter(dl)))
-        return DataLoader(valid, batch_size=None, num_workers=0)
+class SavedGalsimBlends(Dataset):
 
-    def test_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+    def __init__(self, dataset_file: str, epoch_size: int) -> None:
+        super().__init__()
+        self.ds = torch.load(dataset_file)
+        self.epoch_size = epoch_size
+        assert len(self.ds["images"]) == self.epoch_size
+        assert {"images", "background", "n_sources", "galaxy_bools"}.issubset(set(self.ds.keys()))
+        assert {"star_log_fluxes", "locs"}.issubset(set(self.ds.keys()))
+
+    def __len__(self):
+        return self.epoch_size
+
+    def __getitem__(self, index) -> Dict[str, Tensor]:
+        return {k: v[index] for k, v in self.ds.items()}
 
 
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:

@@ -1,12 +1,10 @@
-from typing import Dict, List, Optional
+from typing import Dict
 
 import btk
-import pytorch_lightning as pl
 import torch
 from galcheat.utilities import mean_sky_level
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset
-from tqdm import tqdm
+from torch.utils.data import Dataset
 
 from bliss.datasets.background import ConstantBackground
 from bliss.datasets.lsst import PIXEL_SCALE, table_to_dict
@@ -42,25 +40,15 @@ def _setup_single_galaxy_draw_generator(catalog_file: str, slen: int, seed: int)
     )
 
 
-class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
+class SingleGalsimGalaxies(Dataset):
     def __init__(
         self,
         catalog_file: str,  # should point to 'OneSqDeg.fits'
-        num_workers: int,
-        batch_size: int,
-        n_batches: int,
         slen: int,
         seed: int,  # for draw generator
-        fix_validation_set: bool = False,
-        valid_n_batches: Optional[int] = None,
     ):
         super().__init__()
         self.catalog_file = catalog_file
-        self.n_batches = n_batches
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.fix_validation_set = fix_validation_set
-        self.valid_n_batches = valid_n_batches
         self.seed = seed
         self.slen = slen
 
@@ -83,23 +71,27 @@ class SingleGalsimGalaxies(pl.LightningDataModule, Dataset):
             "snr": _get_snr(galaxy_image, background),
         }
 
+
+class SavedSingleGalsimGalaxies(Dataset):
+    def __init__(self, dataset_file: str, epoch_size: int) -> None:
+        super().__init__()
+        ds = _load_dataset(dataset_file)
+        assert {"images", "background", "noiseless", "params", "snr"}.issubset(ds)
+
+        self.ds = ds
+        self.epoch_size = epoch_size
+
+        assert len(self.ds["images"]) == self.epoch_size, "Train on entired saved dataset."
+
     def __len__(self):
-        return self.batch_size * self.n_batches
+        return self.epoch_size
 
-    def train_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+    def __getitem__(self, index) -> Dict[str, Tensor]:
+        return {k: v[index] for k, v in self.ds.items()}
 
-    def val_dataloader(self):
-        dl = DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
-        if not self.fix_validation_set:
-            return dl
-        valid: List[Dict[str, Tensor]] = []
-        for _ in tqdm(range(self.valid_n_batches), desc="Generating fixed validation set"):
-            valid.append(next(iter(dl)))
-        return DataLoader(valid, batch_size=None, num_workers=0)
 
-    def test_dataloader(self):
-        return DataLoader(self, batch_size=self.batch_size, num_workers=self.num_workers)
+def _load_dataset(file: str):
+    return torch.load(file)
 
 
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
