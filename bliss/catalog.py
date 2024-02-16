@@ -505,11 +505,13 @@ class FullCatalog(UserDict):
                     flux2 = self["fluxes"][ii, idx].item()
                     if flux1 > flux2:
                         continue  # keep current source in tile
+                    source_idx -= 1  # need to be replaced in previous index, which is always 0
                 tile_loc = (self.plocs[ii, idx] - coords * tile_slen) / tile_slen
                 tile_locs[ii, coords[0], coords[1], source_idx] = tile_loc
                 for k, v in tile_params.items():
                     v[ii, coords[0], coords[1], source_idx] = self[k][ii, idx]
                 tile_n_sources[ii, coords[0], coords[1]] = source_idx + 1
+                tile_fluxes[ii, coords[0], coords[1]] = self["fluxes"][ii, idx].item()
         tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
 
