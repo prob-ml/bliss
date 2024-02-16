@@ -4,6 +4,7 @@ import galcheat
 import galsim
 import numpy as np
 import torch
+from astropy import units as u
 from galcheat.utilities import mag2counts
 from torch import Tensor
 
@@ -15,11 +16,16 @@ MIN_MAG = 0.0
 
 def convert_mag_to_flux(mag: Tensor) -> Tensor:
     """Assuming gain = 1 always."""
-    raise mag2counts(mag.numpy(), "LSST", "i").to_value("electron")
+    return torch.from_numpy(mag2counts(mag.numpy(), "LSST", "i").to_value("electron"))
 
 
-def convert_flux_to_mag(flux: Tensor) -> Tensor:
-    raise NotImplementedError
+def convert_flux_to_mag(counts: Tensor) -> Tensor:
+    i_band = galcheat.get_survey("LSST").get_filter("i")
+
+    flux = counts.numpy() * u.electron / i_band.full_exposure_time
+    mag = flux.to(u.mag(u.electron / u.s)) + i_band.zeropoint
+
+    return torch.from_numpy(mag.value)
 
 
 def get_default_lsst_psf(
@@ -106,6 +112,7 @@ def catsim_row_to_galaxy_params(table, max_n_sources):
         "b_d",
         "pa_bulge",
         "i_ab",
+        "flux",
     )
 
     params = torch.zeros((max_n_sources, len(names)))
