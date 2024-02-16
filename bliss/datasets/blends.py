@@ -163,7 +163,7 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         # galaxy params
         gal_flux = mag2counts(blend_cat["i_ab"], "LSST", "i").to_value("electron")
         blend_cat["flux"] = gal_flux.astype(float)
-        # NOTE: this requires all galaxies to be in the front to work
+        # NOTE: this function requires all galaxies to be in the front to work
         galaxy_params = catsim_row_to_galaxy_params(blend_cat, self.max_n_sources)
 
         # images
@@ -228,7 +228,6 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         blendedness = rearrange(blendedness, "n -> 1 n 1", n=self.max_n_sources)
 
         # get magnitudes
-
         gal_fluxes = galaxy_params[0, :, -1]
         star_fluxes = full_cat["star_fluxes"][0, :, 0]
         mags = torch.zeros(self.max_n_sources)
