@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import galsim
 import numpy as np
@@ -29,7 +29,8 @@ def sample_stars(
     fluxes = torch.zeros((max_n_stars,))
     star_log_fluxes = torch.zeros((max_n_stars,))
 
-    mags[:n_stars] = np.random.choice(all_star_mags, size=(n_stars,), replace=True)  # noqa: WPS362
+    star_mags = np.random.choice(all_star_mags, size=(n_stars,), replace=True)
+    mags[:n_stars] = torch.from_numpy(star_mags)  # noqa: WPS362
     fluxes[:n_stars] = convert_mag_to_flux(mags[:n_stars])  # noqa: WPS362
     star_log_fluxes[:n_stars] = torch.log(fluxes[:n_stars])  # noqa: WPS362
 
@@ -56,11 +57,11 @@ def render_stars(
     n_stars: int,
     star_fluxes: Tensor,
     star_locs: Tensor,
-    slen: float,
-    bp: float,
+    slen: int,
+    bp: int,
     psf: galsim.GSObject,
     max_n_stars: int,
-):
+) -> Tuple[Tensor, Tensor]:
     # single, constant PSF
     # single-band for `star_fluxes`
     assert star_fluxes.ndim == star_locs.ndim == 2
