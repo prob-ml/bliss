@@ -26,14 +26,12 @@ class PSFDecoder(nn.Module):
     image to account for atmospheric and camera lens effects.
     PSF loading is suppported as a direct image (npy) or through attributes (npy or fits) file.
 
-    For parameter loading, a psf_params_file should be indicated, with the corresponding
-    psf_slen and sdss_bands.
 
     Attributes:
-        psf_params_file: PSF parameters (saved either in a numpy file or fits file from SDSS)
         psf_slen: Side-length of the PSF.
-        sdss_bands: Bands to retrieve from PSF.
         n_bands: Number of bands to retrieve from PSF.
+        pixel_scale: Number of arcseconds per pixel in the corresponding survey (default: LSST)
+        atmospheric_model: What atmospheric model to use for PSF modeling (default: Kolmogorov)
     """
 
     def __init__(
