@@ -3,6 +3,7 @@ from typing import Dict
 import btk
 import torch
 from galcheat.utilities import mean_sky_level
+from tensordict import TensorDict
 from torch import Tensor
 from torch.utils.data import Dataset
 
@@ -63,13 +64,19 @@ class SingleGalsimGalaxies(Dataset):
         galaxy_image_np = batch.blend_images[0, None, 3]  # '3' refers to i-band
         galaxy_image = torch.from_numpy(galaxy_image_np)
         background = self.background.sample((1, *galaxy_image.shape)).squeeze(1)
-        return {
-            "images": _add_noise_and_background(galaxy_image, background),
-            "background": background,
-            "noiseless": galaxy_image,
-            "params": table_to_dict(batch.catalog_list[0]),
-            "snr": _get_snr(galaxy_image, background),
+
+        params = table_to_dict(batch.catalog_list[0])
+        params = {k: v.unsqueeze(0) for k, v in params.items()}
+
+        d = {
+            "images": _add_noise_and_background(galaxy_image, background).unsqueeze(0),
+            "background": background.unsqueeze(0),
+            "noiseless": galaxy_image.unsqueeze(0),
+            "params": params,
+            "snr": torch.tensor(_get_snr(galaxy_image, background)).unsqueeze(0),
         }
+
+        return TensorDict(d, batch_size=[1])
 
 
 class SavedSingleGalsimGalaxies(Dataset):
