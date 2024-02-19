@@ -1,5 +1,5 @@
 import math
-from typing import Dict, Optional
+from typing import Dict
 
 import btk
 import pytorch_lightning as pl
@@ -8,6 +8,7 @@ from astropy.table import Table
 from einops import rearrange
 from galcheat.utilities import mag2counts, mean_sky_level
 from galsim.gsobject import GSObject
+from tensordict import TensorDict
 from torch import Tensor
 from torch.utils.data import Dataset
 
@@ -61,7 +62,7 @@ def _setup_blend_galaxy_generator(
     )
 
 
-class GalsimBlends(pl.LightningDataModule, Dataset):
+class GalsimBlends(Dataset):
     """Dataset of galsim blends."""
 
     def __init__(
@@ -70,30 +71,20 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         stars_file: str,  # should point to 'stars_med_june2018.fits'
         tile_slen: int,
         max_sources_per_tile: int,
-        num_workers: int,
-        batch_size: int,
-        n_batches: int,
-        bp: int,
         slen: int,
+        bp: int,
         seed: int,  # for draw generator
         star_density: float = 10,  # counts / sq. arcmin
         galaxy_density: float = 185,  # counts / sq. arcmin
-        fix_validation_set: bool = False,
-        valid_n_batches: Optional[int] = None,
     ):
         super().__init__()
-        self.n_batches = n_batches
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.fix_validation_set = fix_validation_set
-        self.valid_n_batches = valid_n_batches
         self.seed = seed
 
         # images
         self.tile_slen = tile_slen
         self.max_sources_per_tile = max_sources_per_tile
-        self.bp = bp
         self.slen = slen
+        self.bp = bp
         self.size = self.slen + 2 * self.bp
         self.pixel_scale = PIXEL_SCALE
 
@@ -256,12 +247,8 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         )
         tile_dict = tile_cat.to_dict()
         n_sources = tile_dict.pop("n_sources")
-        n_sources = rearrange(n_sources, "1 nth ntw -> nth ntw")
 
-        return {
-            "n_sources": n_sources,
-            **{k: rearrange(v, "1 nth ntw n d -> nth ntw n d") for k, v in tile_dict.items()},
-        }
+        return {"n_sources": n_sources, **tile_dict}
 
     def _run_nan_check(self, *tensors):
         for t in tensors:
@@ -272,10 +259,10 @@ class GalsimBlends(pl.LightningDataModule, Dataset):
         full_cat = self._add_metrics(full_cat, noiseless, isolated_images, bg, psf)
         tile_params = self._get_tile_params(full_cat)
         self._run_nan_check(images, bg, *tile_params.values())
-        return {"images": images, "background": bg, **tile_params}
-
-    def __len__(self):
-        return self.batch_size * self.n_batches
+        return TensorDict(
+            {"images": images.unsqueeze(0), "background": bg.unsqueeze(0), **tile_params},
+            batch_size=[1],
+        )
 
 
 class SavedGalsimBlends(Dataset):
