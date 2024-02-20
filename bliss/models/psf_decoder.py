@@ -39,13 +39,12 @@ class PSFDecoder(nn.Module):
         psf_slen: int,
         n_bands: Optional[int] = 1,
         pixel_scale: Optional[float] = 0.2,  # lsst
-        atmospheric_model: Optional[str] = "Kolmogorov",
     ):
         assert n_bands == 1, "Currently only supporting 1 band"
 
         super().__init__()
         self.n_bands = n_bands
-        self.psf_galsim = get_default_lsst_psf(atmospheric_model=atmospheric_model)
+        self.psf_galsim = get_default_lsst_psf()
 
         psf = self.psf_galsim.drawImage(nx=psf_slen, ny=psf_slen, scale=pixel_scale).array
         self.psf = psf.reshape(self.n_bands, psf_slen, psf_slen)
