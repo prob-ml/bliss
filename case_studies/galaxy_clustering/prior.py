@@ -1,246 +1,295 @@
-from bliss.simulator.prior import CatalogPrior
-import numpy as np
-from torch.distributions import Uniform, Gamma, Poisson
-import torch
-from typing import Tuple
-from torch import Tensor
-import random
-from bliss.catalog import FullCatalog
 import matplotlib.pyplot as plt
+from hmf import MassFunction
+import numpy as np
+import pandas as pd
+from astropy.cosmology import WMAP7, FlatLambdaCDM
+from scipy.constants import G
+import pickle
+import fitsio as fio
+import images
+from scipy.stats import lognorm, gennorm
+import tutorial.synthetic.tools as tools
+import tutorial.synthetic.render.frame as frame
+import tutorial.synthetic.render.render as render
+import os
 
-class GalaxyClusterPrior(CatalogPrior):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.n_batch_cluster_galaxy = [0]*self.batch_size
+class Cluster_Prior():
+    def __init__(self):
+        super().__init__()
+        self.size = 4000
+        self.width = 5000
+        self.height = 5000
+        self.bands = ["G", "R", "I", "Z"]
+        self.n_bands = 4
+        self.reference_band = 1
+        self.ra_cen = 50.64516228577292
+        self.dec_cen = -40.228830895890404   
+        self.mass_min = 10**14 * 1.989*10**33 # Minimum value of the range solar mass
+        self.mass_max = 10**15.5 * 1.989*10**33 # Maximum value of the range
+        self.size = 1000
+        self.scale_pixels_per_au = 100 
+        self.mean_source = 0.005
+        self.tsize_s = 0.64
+        self.tsize_loc=0.017
+        self.tsize_scale=0.23
+        self.mag_ex = 1.3
+        self.mag_max = 25
+        self.bg_min_z = 0
+        self.bg_max_z = 0.3
+        self.cluster_min_z = 0.2
+        self.cluster_max_z = 0.5
+        self.G1_beta = 0.6
+        self.G1_loc = 0
+        self.G1_scale = 0.035 
+        self.G2_beta = 0.6
+        self.G2_loc = 0
+        self.G2_scale = 0.032 
+        self.tiles_width = 25
+        self.tiles_height = 25
+
+    def _sample_mass(self):
+        hmf = MassFunction()
+        hmf.update(Mmin=14, Mmax = 15.5) 
+        mass_func = hmf.dndlnm
+        mass_sample = []
+        while(len(mass_sample) < self.size):
+            index = np.random.randint(0, len(mass_func))
+            prob = (mass_func/sum(mass_func))[index]
+            if np.random.random() < prob:
+                mass_sample.append((self.mass_max-self.mass_min)/len(mass_func)*(index+np.random.random()) + self.mass_min)
+        return mass_sample
     
-    def _sample_n_sources_cluster(self):
-        latent_dims = (self.batch_size, 1)
-        n_sources = Poisson(self.n_tiles_h * self.n_tiles_w *self.mean_sources).sample(latent_dims)
-        n_sources = n_sources.clamp(max=self.n_tiles_h * self.n_tiles_w * self.max_sources, min=self.n_tiles_h * self.n_tiles_w *self.min_sources)
-        return n_sources.long()
+    def Z_to_zis(self, z, mass, size):
+            delta = (WMAP7.H(z).value/100*mass/(10**15*1.989*10**33))**(1/3)*1082.9
+            # light speed 
+            c = 899377.37
+            speed_mean = (c*(1+z)**2 - c)/((1+z)**2 + 1)
+            zis = np.random.normal(speed_mean, delta, size)
+            zis = [max(0, np.sqrt((c+x)/(c-x)) - 1) for x in zis]
+            return zis
+
+    def Z_M_to_R(self, mass, z):
+        pho_z = WMAP7.critical_density(z).value
+        return (mass/(4/3*np.pi*pho_z))**(1/3)
     
-    def _sample_cluster_center(self):
-        y_locs = Uniform(self.n_tiles_h*self.tile_slen*0.3, self.n_tiles_h*self.tile_slen*0.7).sample((self.batch_size, 1))
-        x_locs = Uniform(self.n_tiles_w*self.tile_slen*0.3, self.n_tiles_w*self.tile_slen*0.7).sample((self.batch_size, 1))
-        return torch.cat((x_locs, y_locs), dim=-1)
-
-    def _sample_source_type(self, max_source):
-        latent_dims = (self.batch_size, max_source, 1)
-        uniform_aux_var = torch.rand(*latent_dims)
-        uniform_aux_var = torch.where(uniform_aux_var > self.prob_galaxy, 0, 1)
-        return uniform_aux_var
+    def _sample_redshift(self):
+        redshift_samples = np.random.uniform(self.cluster_min_z, self.cluster_max_z, self.size)
+        return redshift_samples
     
-    def _sample_flux_ratios_cluster(self, gmm, max_dim) -> Tuple[Tensor, Tensor]:
-        """Sample and compute all star, galaxy fluxes based on real image data.
-
-        Instead of pareto-sampling fluxes for each band, we pareto-sample `b`-band flux values,
-        using prior `b`-band star/galaxy flux parameters, then apply other-band-to-`b`-band flux
-        ratios to get other-band flux values. This is primarily because it is not always the case
-        that, e.g.,
-            flux_r ~ Pareto, flux_g ~ Pareto => flux_r | flux_g ~ Pareto.
-        This function is survey-specific as the 'b'-band index depends on the survey.
-
-        Args:
-            gmm: Gaussian mixture model of flux ratios (either star or galaxy)
-
-        Returns:
-            stars_fluxes (Tensor): (b x th x tw x ms x nbands) Tensor containing all star flux
-                ratios for current batch
-            gals_fluxes (Tensor): (b x th x tw x ms x nbands) Tensor containing all gal fluxes
-                ratios for current batch
-        """
-
-        sample_dims = (self.batch_size, max_dim)
-        flux_logdiff, _ = gmm.sample(np.prod(sample_dims))
-
-        # A log difference of +/- 2.76 correpsonds to a 3 magnitude difference (e.g. 18 vs 21),
-        # or equivalently an 15.8x flux ratio.
-        # It's unlikely that objects will have a ratio larger than this.
-        flux_logdiff = np.clip(flux_logdiff, -2.76, 2.76)
+    def _sample_radius(self, mass_samples, redshift_samples):
+        radius_samples = []
+        for i in range(self.size):
+            radius_samples.append(self.Z_M_to_R(mass_samples[i], redshift_samples[i])/(3.086*10**24) * self.scale_pixels_per_au)
+        return radius_samples
+    
+    def _sample_n_cluster(self, mass_samples):
+        n_galaxy_cluster = []
+        for i in range(self.size):
+            n_galaxy_cluster.append(int(((mass_samples[i]/(1.989*10**33))/(2*10**13))**(1/1.2)*20))
+        return n_galaxy_cluster
+    
+    def _sample_center(self):
+        center_sample = []
+        x_coords = np.random.uniform(self.width * 0.3, self.width * 0.7, self.size)
+        y_coords = np.random.uniform(self.height * 0.3, self.height * 0.7, self.size)
+        center_sample = np.vstack((x_coords, y_coords)).T
+        return center_sample
+    
+    def _sample_cluster_locs(self, center_samples, radius_samples, n_galaxy_cluster):
+        galaxy_locs_cluster = []
+        for i in range(self.size):
+            center_x, center_y = center_samples[i]
+            samples = []
+            while(len(samples) < int(n_galaxy_cluster[i])):
+                angles = np.random.uniform(0, 2 * np.pi, 1)
+                radii = np.random.uniform(0, radius_samples[i], 1)  
+                sampled_x = float(center_x + radii * np.cos(angles))  
+                sampled_y = float(center_y + radii * np.sin(angles))
+                if sampled_x >= 0 and sampled_x < self.width and sampled_y >= 0 and sampled_y < self.height:
+                    samples.append([sampled_x, sampled_y])
+            while(len(samples) < 1.5*int(n_galaxy_cluster[i])):
+                angles = np.random.uniform(0, 2 * np.pi, 1)
+                radii = np.random.uniform(radius_samples[i] + 0.001, 2*radius_samples[i], 1)  
+                sampled_x = float(center_x + radii * np.cos(angles))  
+                sampled_y = float(center_y + radii * np.sin(angles))
+                if sampled_x >= 0 and sampled_x < self.width and sampled_y >= 0 and sampled_y < self.height and np.random.random() > (((sampled_x - center_x)**2 + (sampled_y - center_y)**2)**0.5 - radius_samples[i])/radius_samples[i]:
+                    samples.append([sampled_x, sampled_y])
+            galaxy_locs_cluster.append(samples)
+        return galaxy_locs_cluster
+    
+    def _sample_n_galaxy(self):
+        return np.random.poisson(self.mean_sources*self.width*self.height/36, self.size)
+    
+    def _sample_galaxy_locs(self, n_galaxy):
+        galaxy_locs = []
+        for i in range(self.size):
+            x = np.random.uniform(0, self.width, self.n_galaxy[i])
+            y = np.random.uniform(0, self.height, self.n_galaxy[i])
+            galaxy_locs.append(np.column_stack((x, y)))
+        return galaxy_locs
+    
+    def cartesian2geo(self, coordinates, sky_center, pixel_scale=0.2, image_offset=(2499.5, 2499.5)):
+        sky_center=(self.ra_cen, self.dec_cen)
+        geo_coordinates = []
+        for i in range(len(coordinates)):
+            temp = []
+            for j in range(len(coordinates[i])):
+                ra = (coordinates[i][j][0] - image_offset[0])*pixel_scale / (60*60) + sky_center[0]
+                desc = (coordinates[i][j][1] - image_offset[1])*pixel_scale / (60*60) + sky_center[1]
+                temp.append((ra, desc))
+            geo_coordinates.append(temp)
+        return geo_coordinates
+    
+    def _sample_TSIZE(self, galaxy_locs, galaxy_locs_cluster):
+        t_size_samples = []
+        for i in range(self.size):
+            total_element = len(galaxy_locs[i]) + len(galaxy_locs_cluster[i])
+            t_size_samples.append(lognorm.rvs(s=self.tsize_s, loc=self.tsize_loc, scale=self.tsize_scale, size=total_element))
+        return t_size_samples
+    
+    def _sample_flux(self, galaxy_locs, galaxy_locs_cluster, redshift_samples, mass_samples):
+        flux_samples = []
+        for i in range(self.size):
+            total_element = len(galaxy_locs[i]) + len(galaxy_locs_cluster[i])
+            mag_samples = self.mag_max - np.random.exponential(self.mag_ex, total_element)
+            for j in range(len(mag_samples)):
+                while(mag_samples[j] < 15.75):
+                    mag_samples[j] = (self.mag_max - np.random.exponential(self.mag_ex, 1))[0]
+                mag_samples[j] = tools.toflux(mag_samples[j])
+                if j <= len(galaxy_locs_cluster[i]):
+                    mag_samples[j] *= (1+self.Z_to_zis(redshift_samples[i], mass_samples[i], 1)[0])
+                else:
+                    mag_samples[j] *= (1+np.random.uniform(self.bg_min_z, self.bg_max_z))
+            flux_samples.append(mag_samples)
+        return flux_samples
+    
+    def _sample_shape(self, galaxy_locs, galaxy_locs_cluster):
+        G1_size_samples = []
+        G2_size_samples = []
+        for i in range(self.size):
+            total_element = len(galaxy_locs[i]) + len(galaxy_locs_cluster[i])
+            G1_size_samples.append(gennorm.rvs(self.G1_beta, self.G1_loc, self.G1_scale, total_element))
+            G2_size_samples.append(gennorm.rvs(self.G2_beta, self.G2_loc, self.G2_scale, total_element))
+            for j in range(total_element):
+                while G1_size_samples[i][j]**2 + G2_size_samples[i][j]**2 >= 1 or G1_size_samples[i][j] >= 0.8 or G2_size_samples[i][j] >= 0.8:
+                    G1_size_samples[i][j] = gennorm.rvs(self.G1_beta, self.G1_loc, self.G1_scale, 1)[0]
+                    G2_size_samples[i][j] = gennorm.rvs(self.G2_beta, self.G2_loc, self.G2_scale, 1)[0]
+        return G1_size_samples, G2_size_samples
+    
+    def galaxy_flux_ratio(self, size):
+        # ["G", "R", "I", "Z"]
+        with open("gal_gmm_nmgy.pkl", "rb") as f:
+            gmm_gal = pickle.load(f)
+        flux_logdiff, _ = gmm_gal.sample(self.size)
+        flux_logdiff = flux_logdiff[:][:, 1:]
+        flux_logdiff = np.clip(flux_logdiff, -2.76, 2.76)        
         flux_ratio = np.exp(flux_logdiff)
-
-        # Computes the flux in each band as a proportion of the reference band flux
-        flux_prop = torch.ones(flux_logdiff.shape[0], self.n_bands)
+        flux_prop = np.ones((flux_logdiff.shape[0], self.n_bands))
         for band in range(self.reference_band - 1, -1, -1):
             flux_prop[:, band] = flux_prop[:, band + 1] / flux_ratio[:, band]
         for band in range(self.reference_band + 1, self.n_bands):
             flux_prop[:, band] = flux_prop[:, band - 1] * flux_ratio[:, band - 1]
-
-        # Reshape drawn values into appropriate form
-        sample_dims = sample_dims + (self.n_bands,)
-        return flux_prop.view(sample_dims)
-
-    def _sample_galaxy_prior_cluster(self, max_source, cluster=False) -> Tuple[Tensor, Tensor]:
-        """Sample the latent galaxy params.
-
-        Returns:
-            Tuple[Tensor]: A tuple of galaxy fluxes (per band) and galsim parameters, including.
-                - disk_frac: the fraction of flux attributed to the disk (rest goes to bulge)
-                - beta_radians: the angle of shear in radians
-                - disk_q: the minor-to-major axis ratio of the disk
-                - a_d: semi-major axis of disk
-                - bulge_q: minor-to-major axis ratio of the bulge
-                - a_b: semi-major axis of bulge
-        """
-        flux_prop = self._sample_flux_ratios_cluster(self.gmm_gal, max_source)
-
-        latent_dims = (self.batch_size, max_source, 1)
-
-        ref_band_flux = self._draw_truncated_pareto(
-            self.galaxy_flux_exponent,
-            self.galaxy_flux_truncation,
-            self.galaxy_flux_loc,
-            self.galaxy_flux_scale,
-            latent_dims,
-        )
-        if cluster:
-            for i in range(self.batch_size):
-                ref_band_flux[i, :] = torch.mean(ref_band_flux[i, :])
-        total_flux = flux_prop * ref_band_flux
-
-        # select fluxes from specified bands
-        bands = np.array(self.bands)
-        select_flux = total_flux[..., bands]
-
-        latent_dims = latent_dims[:-1]
-
-        disk_frac = Uniform(0, 1).sample(latent_dims)
-        beta_radians = Uniform(0, np.pi).sample(latent_dims)
-        disk_q = Uniform(1e-8, 1).sample(latent_dims)
-        bulge_q = Uniform(1e-8, 1).sample(latent_dims)
-
-        base_dist = Gamma(self.galaxy_a_concentration, rate=1.0)
-        disk_a = base_dist.sample(latent_dims) * self.galaxy_a_scale + self.galaxy_a_loc
-
-        bulge_loc = self.galaxy_a_loc / self.galaxy_a_bd_ratio
-        bulge_scale = self.galaxy_a_scale / self.galaxy_a_bd_ratio
-        bulge_a = base_dist.sample(latent_dims) * bulge_scale + bulge_loc
-        disk_frac = torch.unsqueeze(disk_frac, 2)
-        beta_radians = torch.unsqueeze(beta_radians, 2)
-        disk_q = torch.unsqueeze(disk_q, 2)
-        disk_a = torch.unsqueeze(disk_a, 2)
-        bulge_q = torch.unsqueeze(bulge_q, 2)
-        bulge_a = torch.unsqueeze(bulge_a, 2)
-
-        param_lst = [disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
-
-        return select_flux, torch.cat(param_lst, dim=2)
+        return flux_prop
     
-    def _sample_star_fluxes_other(self, max_source):
-            flux_prop = self._sample_flux_ratios_cluster(self.gmm_star, max_source)
-            # latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-            latent_dims = (self.batch_size, max_source, 1)
-            ref_band_flux = self._draw_truncated_pareto(
-                self.star_flux_exponent,
-                self.star_flux_truncation,
-                self.star_flux_loc,
-                self.star_flux_scale,
-                latent_dims,
-            )
-            total_flux = ref_band_flux * flux_prop
-
-            # select specified bands
-            bands = np.array(range(self.n_bands))
-            return total_flux[..., bands]
+    def make_catalog(self, flux_samples, t_size_samples, G1_size_samples, G2_size_samples,geo_galaxy, geo_galaxy_cluster, galaxy_locs, galaxy_locs_cluster):
+        res = []
+        for i in range(len(flux_samples)):
+            ratios = self.galaxy_flux_ratio(len(geo_galaxy_cluster[i]) + len(geo_galaxy[i]))
+            fluxes = np.array(flux_samples[i])[:, np.newaxis] * np.array(ratios)
+            mock_catalog = pd.DataFrame()
+            mock_catalog["RA"] = np.append(np.array(geo_galaxy_cluster[i])[:, 0], np.array(geo_galaxy[i])[:, 0])
+            mock_catalog["DEC"] = np.append(np.array(geo_galaxy_cluster[i])[:, 1], np.array(geo_galaxy[i])[:, 1])
+            mock_catalog["X"] = np.append(np.array(galaxy_locs[i])[:, 0], np.array(galaxy_locs_cluster[i])[:, 0])
+            mock_catalog["Y"] = np.append(np.array(galaxy_locs[i])[:, 1], np.array(galaxy_locs_cluster[i])[:, 1])
+            mock_catalog["FLUX_R"] = fluxes[:, 1]
+            mock_catalog["MAG_R"] = -2.5*np.log10(mock_catalog["FLUX_R"]) + 30
+            mock_catalog["FLUX_G"] = fluxes[:, 0]
+            mock_catalog["MAG_G"] = -2.5*np.log10(mock_catalog["FLUX_G"]) + 30
+            mock_catalog["FLUX_I"] = fluxes[:, 2]
+            mock_catalog["MAG_I"] = -2.5*np.log10(mock_catalog["FLUX_I"]) + 30
+            mock_catalog["FLUX_Z"] = fluxes[:, 3]
+            mock_catalog["MAG_Z"] = -2.5*np.log10(mock_catalog["FLUX_Z"]) + 30
+            mock_catalog["TSIZE"] = t_size_samples[i]
+            mock_catalog["FRACDEV"] = 0
+            mock_catalog["G1"] = G1_size_samples[i]
+            mock_catalog["G2"] = G2_size_samples[i]
+            res.append(mock_catalog)
+        return res
     
-    def _sample_locs_cluster(self, max_source, stdev):
-        positions = np.random.randn(max_source, 2) * stdev
-        return torch.tensor(positions)
-    
-    def _sample_locs_other(self, max_source):
-        x_locs = Uniform(0, self.tile_slen * self.n_tiles_w).sample((self.batch_size, max_source, 1))
-        y_locs = Uniform(0, self.tile_slen * self.n_tiles_h).sample((self.batch_size, max_source, 1))
-        return torch.cat((x_locs, y_locs), dim=-1)
-    
-    def sample(self):
-        n_sources = self._sample_n_sources_cluster()
-        centers = self._sample_cluster_center()
-        shorter_edge = min(self.n_tiles_h, self.n_tiles_w)
-        cluster_galaxy_locs = torch.zeros((self.batch_size, int((0.3*shorter_edge)**2*np.pi*self.max_sources), 2))
-        
-        for i in range(self.batch_size):
-            center = centers[i]
-            stdev = random.uniform(shorter_edge*0.1, shorter_edge*0.2)*self.tile_slen
-            cluster_source_n = int(((stdev/self.tile_slen))**2*np.pi*self.mean_sources*1.5)
-            cluster_locs = self._sample_locs_cluster(cluster_source_n, stdev)
-            index = 0
-            for j in range(cluster_source_n):
-                if center[0] + cluster_locs[j][0] >= self.tile_slen*self.n_tiles_w or center[0] + cluster_locs[j][0] < 0 or center[1] + cluster_locs[j][1] >= self.tile_slen*self.n_tiles_h or self.tile_slen*self.n_tiles_h < 0:
-                    continue
-                else:       
-                    cluster_galaxy_locs[i][index][0] = center[0] + cluster_locs[j][0] 
-                    cluster_galaxy_locs[i][index][1] = center[1] + cluster_locs[j][1]
-                    index += 1
-            plt.scatter(x = list(cluster_galaxy_locs[i][:index][:, 0]), y = list(cluster_galaxy_locs[i][:index][:, 1]))
-            plt.show()
-            self.n_batch_cluster_galaxy[i] = index
-            # After this, we should have all locs for the galaxy within the cluster.
-        cluster_galaxy_locs = cluster_galaxy_locs[:,:max(self.n_batch_cluster_galaxy),:]
-
-        # Setting all of their types to galxies.
-        cluster_types = torch.zeros((self.batch_size, max(self.n_batch_cluster_galaxy), 1))
-        # Generate their fluxes.
-        cluster_galaxy_fluxes, cluster_galaxy_params = self._sample_galaxy_prior_cluster(max(self.n_batch_cluster_galaxy), True)
-        # Max number of sources across all batches that may still left for other sources
-        
-        max_left_n_sources = 0
-        for i in range(self.batch_size):
-            max_left_n_sources = max(int(max(n_sources)) - self.n_batch_cluster_galaxy[i], max_left_n_sources)
-        
-        # This gives the location for other sources.
-        other_locs = self._sample_locs_other(max_left_n_sources)
-        # This one contains if they are star or galaxy.
-        other_types = self._sample_source_type(max_left_n_sources)
-        # Combined with n_sources and the cluster info above, we should be able to solve this problem.
-        star_fluxes = self._sample_star_fluxes_other(int(max(n_sources)))
-        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior_cluster(max_left_n_sources)
-
-        final_loc = []
-        final_type = []
-        final_galaxy_fluxes = []
-        final_galaxy_params = []
-
-        for i in range(self.batch_size):
-            batch_locs = torch.cat([cluster_galaxy_locs[i,:self.n_batch_cluster_galaxy[i],:], other_locs[i, :, :]], dim =0)[:int(max(n_sources)), :]
-            batch_types = torch.cat([cluster_types[i,:self.n_batch_cluster_galaxy[i],:], other_types[i, :, :]], dim =0)[:int(max(n_sources)), :]
-            batch_galaxy_fluxes =  torch.cat([cluster_galaxy_fluxes[i,:self.n_batch_cluster_galaxy[i],:], galaxy_fluxes[i, :, :]], dim =0)[:int(max(n_sources)), :]
-            batch_galaxy_params = torch.cat([cluster_galaxy_params[i,:self.n_batch_cluster_galaxy[i],:], galaxy_params[i, :, :]], dim =0)[:int(max(n_sources)), :]
-
-            if final_loc == []:
-                final_loc = batch_locs
-            elif len(final_loc.shape) == 3:
-                final_loc = torch.cat([final_loc, batch_locs.unsqueeze(0)], dim = 0)
-            else:
-                final_loc = torch.stack([final_loc, batch_locs], dim = 0)
+    def to_tiles(self, center_sample, mass_sample):
+        tiles = []
+        for i in range(len(mass_sample)):
+            tiles_X = self.width // self.tiles_width
+            tiles_Y = self.height // self.tiles_height
+            x_index = int(center_sample[i][0] // self.tiles_width)
+            y_index = int(center_sample[i][1] // self.tiles_height)
+            cluster_grid = [[0 for _ in range(tiles_X)] for _ in range(tiles_Y)]
+            cluster_grid[x_index][y_index] = 1
+            mass_grid = [[0 for _ in range(tiles_X)] for _ in range(tiles_Y)]
+            mass_grid[x_index][y_index] = mass_sample[i]
+            coordinate_grid = [[(0, 0) for _ in range(tiles_X)] for _ in range(tiles_Y)]
+            coordinate_grid[x_index][y_index] = (center_sample[i][0]%self.tiles_width, center_sample[i][1]%self.tiles_height)
+            temp = {}
+            temp["mass"] = mass_grid
+            temp["coordinate"] = coordinate_grid
+            temp["cluster"] = cluster_grid
+            tiles.append(temp)
+        return tiles
             
-            if final_type == []:
-                final_type = batch_types
-            elif len(final_type.shape) == 3:
-                final_type = torch.cat([final_type, batch_types.unsqueeze(0)], dim = 0)
-            else:
-                final_type = torch.stack([final_type, batch_types], dim = 0)
+def catalog_render(self, catalogs, tiles):
+    for i in range(len(catalogs)):
+        mock_catalog = catalogs[i]
+        stds = np.array([2.509813, 5.192254, 8.36335, 15.220351]) / 1.3
+        file_name_tag = str(i)
+        for j, band in enumerate(("g", "r", "i")):
+            name =  file_name_tag + "_"+ band
+            print(name)
+            fr = frame.Frame(mock_catalog.to_records(), band=band, name=name,
+                            center=(self.ra_cen, self.dec_cen), noise_std=stds[j], canvas_size=5000, )
+            fr.render(nprocess=8) 
+        ims_all = []
+        for j, band in enumerate(("g", "r", "i")):
+            name = file_name_tag + "_" + band + ".fits"
+            tmp = fio.read(name)
+            os.remove(name)
+            os.remove(file_name_tag + "_" + band + "_epsf.fits")
+            ims_all.append(tmp)
+        fig = plt.figure(figsize=(12, 12))
+        ax = fig.add_subplot(111)
+        factor = 0.001
+        scales = np.array([1., 1.2, 2.5]) * factor
+        nonlinear = 0.12
+        clip = 0
+        obs_im = images.get_color_image(ims_all[2],
+                                        ims_all[1],
+                                        ims_all[0],
+                                        nonlinear=nonlinear, clip=clip, scales=scales)  
+        print(obs_im.max())
+        ax.imshow(obs_im * 2, origin='upper')
 
-            if final_galaxy_fluxes == []:
-                final_galaxy_fluxes = batch_galaxy_fluxes
-            elif len(final_galaxy_fluxes.shape) == 3:
-                final_galaxy_fluxes = torch.cat([final_galaxy_fluxes, batch_galaxy_fluxes.unsqueeze(0)], dim = 0)
-            else:
-                final_galaxy_fluxes = torch.stack([final_galaxy_fluxes, batch_galaxy_fluxes], dim = 0)
+        ax.set_xlabel("X [pix]")
+        ax.set_ylabel("Y [pix]")
+        fig.savefig("data/" + file_name_tag + ".png", bbox_inches='tight')
+        plt.close(fig)
+        filehandler = open("data/" + file_name_tag + "_catalog.pkl", 'wb') 
+        pickle.dump(tiles[i], filehandler)
 
-            if final_galaxy_params == []:
-                final_galaxy_params = batch_galaxy_params
-            elif len(final_galaxy_params.shape) == 3:
-                final_galaxy_params = torch.cat([final_galaxy_params, batch_galaxy_params.unsqueeze(0)], dim = 0)
-            else:
-                final_galaxy_params = torch.stack([final_galaxy_params, batch_galaxy_params], dim = 0)
-        
-        catalog_params = {
-            "n_sources": n_sources.squeeze(),
-            "source_type": final_type,
-            "plocs": final_loc,
-            "galaxy_fluxes": final_galaxy_fluxes,
-            "galaxy_params": final_galaxy_params,
-            "star_fluxes": star_fluxes,
-        }
-        return FullCatalog(self.n_tiles_h * self.tile_slen, self.n_tiles_w * self.tile_slen, catalog_params).to_tile_catalog(self.tile_slen, self.max_sources, True)
-
+    def _sample(self):
+        mass_samples = self._sample_mass()
+        redshift_samples = self._sample_redshift()
+        radius_samples = self._sample_radius(mass_samples, redshift_samples)
+        n_galaxy_cluster = self._sample_n_cluster(mass_samples)
+        center_samples = self._sample_center()
+        galaxy_cluster_locs = self._sample_cluster_locs(center_samples, radius_samples, n_galaxy_cluster)
+        n_galaxy = self._sample_n_galaxy()
+        for i in range(self.size):
+            n_galaxy[i] -= n_galaxy_cluster[i]
+        galaxy_locs = self._sample_galaxy_locs(n_galaxy)
+        geo_galaxy = self.cartesian2geo(galaxy_locs)
+        geo_galaxy_cluster = self.cartesian2geo(galaxy_cluster_locs)
+        TSIZE_samples = self._sample_TSIZE(galaxy_locs, galaxy_cluster_locs)
+        flux_samples = self._sample_flux(galaxy_locs, galaxy_cluster_locs, redshift_samples, mass_samples)
+        G1_size_samples, G2_size_samples = self._sample_shape(galaxy_locs, galaxy_cluster_locs)
+        catalogs = self.make_catalog(flux_samples, TSIZE_samples, G1_size_samples, G2_size_samples,geo_galaxy, geo_galaxy_cluster, galaxy_locs, galaxy_cluster_locs)
+        tiles = self.to_tiles(center_samples, mass_samples)
+        self.catalog_render(catalogs, tiles)
