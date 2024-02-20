@@ -14,25 +14,30 @@ def _task(ds, idx):
     return ds[idx]
 
 
-def _generate_single_galaxy_datasets(cfg, n_samples, overwrite):
-    assert n_samples == 30000
-    ds = instantiate(cfg.single_galaxy_datasets.single_galaxies)
+def _save_dataset(ds, train_path, val_path, test_path, n_samples: int, overwrite=False, njobs=1):
+    assert n_samples % 3 == 0
+    tpath, vpath, ttpath = Path(train_path), Path(val_path), Path(test_path)
 
-    train_path = Path(cfg.single_galaxy_datasets.train_saved_single_galaxies.dataset_file)
-    val_path = Path(cfg.single_galaxy_datasets.val_saved_single_galaxies.dataset_file)
-    test_path = Path(cfg.plots.test_datasets.single_galaxies_test_file)
-
-    if train_path.exists() or val_path.exists() or test_path.exists():
+    if tpath.exists() or vpath.exists() or ttpath.exists():
         if not overwrite:
             raise ValueError("Overwrite turned on, but files exists.")
 
-    results = Parallel(n_jobs=1)(delayed(_task)(ds, ii) for ii in tqdm(range(n_samples)))
+    results = Parallel(n_jobs=njobs)(delayed(_task)(ds, ii) for ii in tqdm(range(n_samples)))
     output = torch.cat(results)
     assert output.shape[0] == n_samples
 
-    torch.save(output[:10000], train_path)
-    torch.save(output[10000:20000], val_path)
-    torch.save(output[20000:30000], test_path)
+    div1, div2 = n_samples // 3, n_samples // 3 * 2
+    torch.save(output[:div1], tpath)
+    torch.save(output[div1:div2], vpath)
+    torch.save(output[div2:], ttpath)
+
+
+def _generate_single_galaxy_datasets(cfg, n_samples, overwrite):
+    ds = instantiate(cfg.single_galaxy_datasets.single_galaxies)
+    train_path = Path(cfg.single_galaxy_datasets.train_saved_single_galaxies.dataset_file)
+    val_path = Path(cfg.single_galaxy_datasets.val_saved_single_galaxies.dataset_file)
+    test_path = Path(cfg.plots.test_datasets.single_galaxies_test_file)
+    _save_dataset(ds, train_path, val_path, test_path, n_samples, overwrite, njobs=1)
 
 
 def _generate_blends_datasets(cfg, n_samples, overwrite):
@@ -40,18 +45,7 @@ def _generate_blends_datasets(cfg, n_samples, overwrite):
     train_path = Path(cfg.blends_datasets.train_saved_blends.dataset_file)
     val_path = Path(cfg.blends_datasets.val_saved_blends.dataset_file)
     test_path = Path(cfg.plots.test_datasets.blends_test_file)
-
-    if train_path.exists() or val_path.exists() or test_path.exists():
-        if not overwrite:
-            raise ValueError("Overwrite turned on, but files exists.")
-
-    results = Parallel(n_jobs=1)(delayed(_task)(ds, ii) for ii in tqdm(range(n_samples)))
-    output = torch.cat(results)
-    assert output.shape[0] == n_samples
-
-    torch.save(output[:10000], train_path)
-    torch.save(output[10000:20000], val_path)
-    torch.save(output[20000:30000], test_path)
+    _save_dataset(ds, train_path, val_path, test_path, n_samples, overwrite, njobs=1)
 
 
 @hydra.main(config_path="./config", config_name="config", version_base=None)
