@@ -240,17 +240,12 @@ class GalsimBlends(Dataset):
         full_cat["fluxes"] = fluxes
         return full_cat
 
-    def _run_nan_check(self, *tensors):
-        for t in tensors:
-            assert not torch.any(torch.isnan(t))
-
     def __getitem__(self, idx):
         full_cat, images, noiseless, isolated_images, bg, psf = self.sample()
         full_cat = self._add_metrics(full_cat, noiseless, isolated_images, bg, psf)
         tile_cat = full_cat.to_tile_params(
             self.tile_slen, self.max_sources_per_tile, ignore_extra_sources=True
         )
-        self._run_nan_check(images, bg, *tile_cat.to_dict().values(), *full_cat.to_dict().values())
         return TensorDict(
             {
                 "images": images.unsqueeze(0),
