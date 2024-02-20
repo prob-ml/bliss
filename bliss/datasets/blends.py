@@ -2,7 +2,6 @@ import math
 from typing import Dict
 
 import btk
-import pytorch_lightning as pl
 import torch
 from astropy.table import Table
 from einops import rearrange
@@ -261,17 +260,19 @@ class SavedGalsimBlends(Dataset):
 
     def __init__(self, dataset_file: str, epoch_size: int) -> None:
         super().__init__()
-        self.ds = torch.load(dataset_file)
+        self.ds: TensorDict = torch.load(dataset_file)
         self.epoch_size = epoch_size
-        assert len(self.ds["images"]) == self.epoch_size
-        assert {"images", "background", "n_sources", "galaxy_bools"}.issubset(set(self.ds.keys()))
-        assert {"star_log_fluxes", "locs"}.issubset(set(self.ds.keys()))
+        assert len(self.ds) == self.epoch_size
+        for p in ("images", "background"):
+            assert p in self.ds.keys()
+        for p in ("n_sources", "galaxy_bools", "locs"):
+            assert ("tile_params", p) in self.ds.keys(include_nested=True)
 
     def __len__(self):
         return self.epoch_size
 
-    def __getitem__(self, index) -> Dict[str, Tensor]:
-        return {k: v[index] for k, v in self.ds.items()}
+    def __getitem__(self, index) -> TensorDict:
+        return self.ds[index]
 
 
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
