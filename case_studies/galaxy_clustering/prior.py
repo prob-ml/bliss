@@ -26,9 +26,9 @@ class Cluster_Prior():
         self.dec_cen = -40.228830895890404   
         self.mass_min = 10**14 * 1.989*10**33 # Minimum value of the range solar mass
         self.mass_max = 10**15.5 * 1.989*10**33 # Maximum value of the range
-        self.size = 1000
+        self.size = 10
         self.scale_pixels_per_au = 100 
-        self.mean_source = 0.005
+        self.mean_sources = 0.005
         self.tsize_s = 0.64
         self.tsize_loc=0.017
         self.tsize_scale=0.23
@@ -46,7 +46,9 @@ class Cluster_Prior():
         self.G2_scale = 0.032 
         self.tiles_width = 25
         self.tiles_height = 25
-
+        with open("gal_gmm_nmgy.pkl", "rb") as f:
+            self.gmm_gal = pickle.load(f)
+    
     def _sample_mass(self):
         hmf = MassFunction()
         hmf.update(Mmin=14, Mmax = 15.5) 
@@ -123,12 +125,12 @@ class Cluster_Prior():
     def _sample_galaxy_locs(self, n_galaxy):
         galaxy_locs = []
         for i in range(self.size):
-            x = np.random.uniform(0, self.width, self.n_galaxy[i])
-            y = np.random.uniform(0, self.height, self.n_galaxy[i])
+            x = np.random.uniform(0, self.width, n_galaxy[i])
+            y = np.random.uniform(0, self.height, n_galaxy[i])
             galaxy_locs.append(np.column_stack((x, y)))
         return galaxy_locs
     
-    def cartesian2geo(self, coordinates, sky_center, pixel_scale=0.2, image_offset=(2499.5, 2499.5)):
+    def cartesian2geo(self, coordinates, pixel_scale=0.2, image_offset=(2499.5, 2499.5)):
         sky_center=(self.ra_cen, self.dec_cen)
         geo_coordinates = []
         for i in range(len(coordinates)):
@@ -178,9 +180,8 @@ class Cluster_Prior():
     
     def galaxy_flux_ratio(self, size):
         # ["G", "R", "I", "Z"]
-        with open("gal_gmm_nmgy.pkl", "rb") as f:
-            gmm_gal = pickle.load(f)
-        flux_logdiff, _ = gmm_gal.sample(self.size)
+        gmm_gal = self.gmm_gal
+        flux_logdiff, _ = gmm_gal.sample(size)
         flux_logdiff = flux_logdiff[:][:, 1:]
         flux_logdiff = np.clip(flux_logdiff, -2.76, 2.76)        
         flux_ratio = np.exp(flux_logdiff)
@@ -236,45 +237,45 @@ class Cluster_Prior():
             tiles.append(temp)
         return tiles
             
-def catalog_render(self, catalogs, tiles):
-    for i in range(len(catalogs)):
-        mock_catalog = catalogs[i]
-        stds = np.array([2.509813, 5.192254, 8.36335, 15.220351]) / 1.3
-        file_name_tag = str(i)
-        for j, band in enumerate(("g", "r", "i")):
-            name =  file_name_tag + "_"+ band
-            print(name)
-            fr = frame.Frame(mock_catalog.to_records(), band=band, name=name,
-                            center=(self.ra_cen, self.dec_cen), noise_std=stds[j], canvas_size=5000, )
-            fr.render(nprocess=8) 
-        ims_all = []
-        for j, band in enumerate(("g", "r", "i")):
-            name = file_name_tag + "_" + band + ".fits"
-            tmp = fio.read(name)
-            os.remove(name)
-            os.remove(file_name_tag + "_" + band + "_epsf.fits")
-            ims_all.append(tmp)
-        fig = plt.figure(figsize=(12, 12))
-        ax = fig.add_subplot(111)
-        factor = 0.001
-        scales = np.array([1., 1.2, 2.5]) * factor
-        nonlinear = 0.12
-        clip = 0
-        obs_im = images.get_color_image(ims_all[2],
-                                        ims_all[1],
-                                        ims_all[0],
-                                        nonlinear=nonlinear, clip=clip, scales=scales)  
-        print(obs_im.max())
-        ax.imshow(obs_im * 2, origin='upper')
+    def catalog_render(self, catalogs, tiles):
+        for i in range(len(catalogs)):
+            mock_catalog = catalogs[i]
+            stds = np.array([2.509813, 5.192254, 8.36335, 15.220351]) / 1.3
+            file_name_tag = str(i)
+            for j, band in enumerate(("g", "r", "i")):
+                name =  file_name_tag + "_"+ band
+                print(name)
+                fr = frame.Frame(mock_catalog.to_records(), band=band, name=name,
+                                center=(self.ra_cen, self.dec_cen), noise_std=stds[j], canvas_size=5000, )
+                fr.render(nprocess=8) 
+            ims_all = []
+            for j, band in enumerate(("g", "r", "i")):
+                name = file_name_tag + "_" + band + ".fits"
+                tmp = fio.read(name)
+                os.remove(name)
+                os.remove(file_name_tag + "_" + band + "_epsf.fits")
+                ims_all.append(tmp)
+            fig = plt.figure(figsize=(12, 12))
+            ax = fig.add_subplot(111)
+            factor = 0.001
+            scales = np.array([1., 1.2, 2.5]) * factor
+            nonlinear = 0.12
+            clip = 0
+            obs_im = images.get_color_image(ims_all[2],
+                                            ims_all[1],
+                                            ims_all[0],
+                                            nonlinear=nonlinear, clip=clip, scales=scales)  
+            print(obs_im.max())
+            ax.imshow(obs_im * 2, origin='upper')
 
-        ax.set_xlabel("X [pix]")
-        ax.set_ylabel("Y [pix]")
-        fig.savefig("data/" + file_name_tag + ".png", bbox_inches='tight')
-        plt.close(fig)
-        filehandler = open("data/" + file_name_tag + "_catalog.pkl", 'wb') 
-        pickle.dump(tiles[i], filehandler)
+            ax.set_xlabel("X [pix]")
+            ax.set_ylabel("Y [pix]")
+            fig.savefig("data/" + file_name_tag + ".png", bbox_inches='tight')
+            plt.close(fig)
+            filehandler = open("data/" + file_name_tag + "_catalog.pkl", 'wb') 
+            pickle.dump(tiles[i], filehandler)
 
-    def _sample(self):
+    def sample(self):
         mass_samples = self._sample_mass()
         redshift_samples = self._sample_redshift()
         radius_samples = self._sample_radius(mass_samples, redshift_samples)
