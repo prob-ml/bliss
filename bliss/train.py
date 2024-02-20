@@ -49,9 +49,6 @@ def train(cfg: DictConfig):
     trainer.fit(model, datamodule=dataset)
     toc = time_ns()
     train_time_sec = (toc - tic) * 1e-9
-    # test!
-    if cfg.training.testing.file is not None:
-        trainer.test(model, datamodule=dataset)
 
     # Load best weights from checkpoint
     if cfg.training.weight_save_path is not None and (checkpoint_callback is not None):
