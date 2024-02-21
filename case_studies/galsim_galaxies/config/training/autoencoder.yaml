@@ -1,7 +1,7 @@
-name: "sdss_autoencoder"
+name: "autoencoder"
 model: ${models.galaxy_net}
-dataset: ${datasets.sdss_galaxies}
-n_epochs: 2001
+dataset: ${single_galaxy_datasets.single_galaxies_datamodule}
+n_epochs: 501
 trainer:
   check_val_every_n_epoch: 10
   enable_checkpointing: True

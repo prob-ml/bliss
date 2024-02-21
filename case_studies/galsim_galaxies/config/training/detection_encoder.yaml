@@ -1,8 +1,8 @@
 # @package _global_
 training:
-  name: "sdss_detection_encoder"
+  name: "detection_encoder"
   model: ${models.detection_encoder}
-  dataset: ${datasets.simulated}
-  n_epochs: 3001
+  dataset: ${blends_datasets.blends_datamodule}
+  n_epochs: 1001
   trainer:
     enable_checkpointing: True

@@ -1,8 +1,8 @@
 # @package _global_
 training:
-  name: "sdss_binary"
+  name: "binary_encoder"
   model: ${models.binary}
-  dataset: ${datasets.simulated}
-  n_epochs: 501
+  dataset: ${blends_datasets.blends_datamodule}
+  n_epochs: 201
   trainer:
     enable_checkpointing: True
