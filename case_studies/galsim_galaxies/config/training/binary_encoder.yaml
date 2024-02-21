@@ -1,7 +1,7 @@
 # @package _global_
 training:
   name: "binary_encoder"
-  model: ${models.binary}
+  model: ${models.binary_encoder}
   dataset: ${blends_datasets.blends_datamodule}
   n_epochs: 201
   trainer:
