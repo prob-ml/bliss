@@ -268,11 +268,22 @@ class SavedGalsimBlends(Dataset):
         for p in ("n_sources", "galaxy_bools", "locs"):
             assert ("tile_params", p) in self.ds.keys(include_nested=True)
 
+        # discard not needed values (and thus avoid copying to GPU)
+        self.ds.pop("full_params")
+
+        for p in ("ellips", "blendedness", "snr", "fluxes", "galaxy_params", "mags"):
+            self.ds["tile_params"].pop(p)
+
+        # finally, flatten `tile_params` because that is what encoders assume
+        tile_params = self.ds.pop("tile_params")
+        for p in tile_params.keys():
+            self.ds[p] = tile_params[p]
+
     def __len__(self):
         return self.epoch_size
 
     def __getitem__(self, index) -> TensorDict:
-        return self.ds[index]
+        return {**self.ds[index]}
 
 
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
