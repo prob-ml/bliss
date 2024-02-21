@@ -41,6 +41,7 @@ single_galaxy_datasets:
         _target_: bliss.datasets.saved.SavedDataModule
         train_ds: ${datasets.train_saved_single_galaxies}
         val_ds: ${datasets.val_saved_single_galaxies}
+        batch_size: 64
 
 blends_datasets:
     blends:
@@ -64,6 +65,7 @@ blends_datasets:
         _target_: bliss.datasets.saved.SavedDataModule
         train_ds: ${datasets.train_saved_blends}
         val_ds: ${datasets.val_saved_blends}
+        batch_size: 64
 
 models:
     decoder:
