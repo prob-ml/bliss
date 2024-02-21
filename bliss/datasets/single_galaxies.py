@@ -82,11 +82,17 @@ class SingleGalsimGalaxies(Dataset):
 class SavedSingleGalsimGalaxies(Dataset):
     def __init__(self, dataset_file: str, epoch_size: int) -> None:
         super().__init__()
-        ds = _load_dataset(dataset_file)
-        assert {"images", "background", "noiseless", "params", "snr"}.issubset(ds)
-
-        self.ds = ds
+        self.ds: TensorDict = torch.load(dataset_file)
         self.epoch_size = epoch_size
+
+        assert len(self.ds) == self.epoch_size
+        for p in ("images", "background", "params", "noiseless", "snr"):
+            assert p in self.ds.keys()
+
+        # discard not needed values for training/validation
+        self.ds.pop("noiseless")
+        self.ds.pop("params")
+        self.ds.pop("snr")
 
         assert len(self.ds["images"]) == self.epoch_size, "Train on entired saved dataset."
 
@@ -94,11 +100,8 @@ class SavedSingleGalsimGalaxies(Dataset):
         return self.epoch_size
 
     def __getitem__(self, index) -> Dict[str, Tensor]:
-        return {k: v[index] for k, v in self.ds.items()}
-
-
-def _load_dataset(file: str):
-    return torch.load(file)
+        # datamodule prefers normaly dicts with default collate_fn
+        return {**self.ds[index]}
 
 
 def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
