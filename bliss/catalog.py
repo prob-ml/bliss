@@ -29,13 +29,6 @@ class TileCatalog(UserDict):
         "galaxy_probs",
         "galaxy_blends",
         "star_bools",
-        "objid",
-        "hlr",
-        "ra",
-        "dec",
-        "matched",
-        "mismatched",
-        "detection_thresholds",
         "log_flux_sd",
         "loc_sd",
     }
