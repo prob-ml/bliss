@@ -81,7 +81,7 @@ models:
             latent_dim: ${models.galaxy_net.latent_dim}
             hidden: ${models.galaxy_net.hidden}
             n_bands: ${models.galaxy_net.n_bands}
-            ckpt: ${paths.project}/models/sdss_autoencoder.pt
+            ckpt: ${paths.project}/models/autoencoder.pt
     binary:
         _target_: bliss.models.binary_encoder.BinaryEncoder
         input_transform:
@@ -129,7 +129,7 @@ models:
 
 training:
     n_epochs: 1001
-    experiment: default
+    experiment: null
     version: null
     save_top_k: 1
     trainer:
@@ -153,9 +153,11 @@ plots:
         - "single_gal"
         - "blend_gal"
         - "toy"
-    location_checkpoint: ${paths.project}/models/detection_encoder.pt
-    galaxy_checkpoint: ${paths.project}/models/galaxy_encoder.pt
-    binary_checkpoint: ${paths.project}/models/binary_encoder.pt
+    checkpoints:
+        location_encoder: ${paths.project}/models/detection_encoder.pt
+        galaxy_encoder: ${paths.project}/models/galaxy_encoder.pt
+        binary_encoder: ${paths.project}/models/binary_encoder.pt
+        autoencoder: ${paths.project}/models/autoencoder.pt
     cachedir: ${paths.project}/output/galsim_figs_cache
     figdir: ${paths.project}/figures
     image_format: "png"
