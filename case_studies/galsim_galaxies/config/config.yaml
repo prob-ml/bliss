@@ -82,7 +82,15 @@ models:
             hidden: ${models.galaxy_net.hidden}
             n_bands: ${models.galaxy_net.n_bands}
             ckpt: ${paths.project}/models/autoencoder.pt
-    binary:
+    galaxy_net:
+        _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
+        slen: 53
+        latent_dim: 8
+        hidden: 256
+        n_bands: 1
+        optimizer_params:
+            lr: 1e-3
+    binary_encoder:
         _target_: bliss.models.binary_encoder.BinaryEncoder
         input_transform:
             _target_: bliss.models.detection_encoder.ConcatBackgroundTransform
@@ -118,14 +126,6 @@ models:
         hidden: ${models.galaxy_net.hidden}
         optimizer_params:
             lr: 1e-3
-    galaxy_net:
-        _target_: bliss.models.galaxy_net.OneCenteredGalaxyAE
-        slen: 53
-        latent_dim: 8
-        hidden: 256
-        n_bands: 1
-        optimizer_params:
-            lr: 1e-3
 
 training:
     n_epochs: 1001
@@ -154,7 +154,7 @@ plots:
         - "blend_gal"
         - "toy"
     checkpoints:
-        location_encoder: ${paths.project}/models/detection_encoder.pt
+        detection_encoder: ${paths.project}/models/detection_encoder.pt
         galaxy_encoder: ${paths.project}/models/galaxy_encoder.pt
         binary_encoder: ${paths.project}/models/binary_encoder.pt
         autoencoder: ${paths.project}/models/autoencoder.pt
@@ -167,5 +167,5 @@ plots:
         n_images_per_batch: 10
         n_rows_per_batch: 15
     test_datasets:
-        single_galaxies_test_file: ${paths.project}/data/test_single_galaxies.pt
-        blends_test_file: ${paths.project}/data/test_blends.pt
+        single_galaxies: ${paths.project}/data/test_single_galaxies.pt
+        blends: ${paths.project}/data/test_blends.pt
