@@ -10,7 +10,6 @@ hydra:
 
 paths:
     root: ${oc.env:BLISS_HOME}
-    sdss: ${paths.root}/data/sdss
     data: ${paths.root}/data
     project: ${paths.root}/case_studies/galsim_galaxies
     output: ${paths.project}/output
@@ -39,8 +38,8 @@ single_galaxy_datasets:
         epoch_size: 10000
     single_galaxies_datamodule:
         _target_: bliss.datasets.saved.SavedDataModule
-        train_ds: ${datasets.train_saved_single_galaxies}
-        val_ds: ${datasets.val_saved_single_galaxies}
+        train_ds: ${single_galaxy_datasets.train_saved_single_galaxies}
+        val_ds: ${single_galaxy_datasets.val_saved_single_galaxies}
         batch_size: 64
 
 blends_datasets:
