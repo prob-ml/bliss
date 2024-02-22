@@ -45,6 +45,7 @@ sep = "^1.2.1"
 galcheat = "^1.0.0"
 blending-toolkit = ">=1.0.0b4"
 tensordict = "^0.3.0"
+tensorboard = "^2.16.2"
 
 [tool.poetry.dev-dependencies]
 Cython = ">=0.29.21"
