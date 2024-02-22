@@ -2,13 +2,12 @@ from typing import Dict
 
 import btk
 import torch
-from galcheat.utilities import mean_sky_level
 from tensordict import TensorDict
 from torch import Tensor
 from torch.utils.data import Dataset
 
 from bliss.datasets.background import ConstantBackground
-from bliss.datasets.lsst import PIXEL_SCALE, table_to_dict
+from bliss.datasets.lsst import PIXEL_SCALE, get_default_lsst_background, table_to_dict
 
 
 def _setup_single_galaxy_draw_generator(catalog_file: str, slen: int, seed: int):
@@ -53,8 +52,7 @@ class SingleGalsimGalaxies(Dataset):
         self.seed = seed
         self.slen = slen
 
-        sky_level: float = mean_sky_level("LSST", "i").to_value("electron")
-        self.background = ConstantBackground((sky_level,))
+        self.background = ConstantBackground((get_default_lsst_background(),))
         self.draw_generator = _setup_single_galaxy_draw_generator(
             self.catalog_file, self.slen, self.seed
         )
