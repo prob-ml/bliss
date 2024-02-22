@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from astropy import units as u
 from btk.survey import get_surveys
-from galcheat.utilities import mag2counts
+from galcheat.utilities import mag2counts, mean_sky_level
 from torch import Tensor
 
 PIXEL_SCALE = 0.2
@@ -42,6 +42,10 @@ def get_default_lsst_psf() -> galsim.GSObject:
     lsst = get_surveys("LSST")
     i_band = lsst.get_filter("i")
     return i_band.psf
+
+
+def get_default_lsst_background() -> float:
+    return mean_sky_level("LSST", "i").to_value("electron")
 
 
 def column_to_tensor(table, colname):
