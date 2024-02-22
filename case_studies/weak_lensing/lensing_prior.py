@@ -17,6 +17,7 @@ class LensingPrior(CatalogPrior):
         shear_max: float,
         convergence_a: float,
         convergence_b: float,
+        num_knots: int,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -24,22 +25,22 @@ class LensingPrior(CatalogPrior):
         self.shear_max = shear_max
         self.convergence_a = convergence_a
         self.convergence_b = convergence_b
+        self.num_knots = [num_knots, num_knots]
 
     def _sample_shear(self):
         method = "interpolate"
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 2)
         if method == "interpolate":
             # number of knots in each dimension
-            num_knots = [10, 10]
-            corners = (self.batch_size, num_knots[0], num_knots[1], 2)
+            corners = (self.batch_size, self.num_knots[0], self.num_knots[1], 2)
 
             shear_maps = Uniform(self.shear_min, self.shear_max).sample(corners)
             # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
-            shear_maps = shear_maps.reshape((self.batch_size, 2, num_knots[0], num_knots[1]))
+            shear_maps = shear_maps.reshape((self.batch_size, 2, self.num_knots[0], self.num_knots[1]))
 
             shear_maps = torch.nn.functional.interpolate(
                 shear_maps,
-                scale_factor=(self.n_tiles_h // num_knots[0], self.n_tiles_w // num_knots[1]),
+                scale_factor=(self.n_tiles_h // self.num_knots[0], self.n_tiles_w // self.num_knots[1]),
                 mode="bilinear",
                 align_corners=True,
             )
@@ -57,17 +58,16 @@ class LensingPrior(CatalogPrior):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 1)
         if method == "interpolate":
             # number of knots in each dimension
-            num_knots = [10, 10]
-            corners = (self.batch_size, num_knots[0], num_knots[1], 1)
+            corners = (self.batch_size, self.num_knots[0], self.num_knots[1], 1)
             convergence_map = Beta(self.convergence_a, self.convergence_b).sample(corners)
             # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
             convergence_map = convergence_map.reshape(
-                (self.batch_size, 1, num_knots[0], num_knots[1])
+                (self.batch_size, 1, self.num_knots[0], self.num_knots[1])
             )
 
             convergence_map = torch.nn.functional.interpolate(
                 convergence_map,
-                scale_factor=(self.n_tiles_h // num_knots[0], self.n_tiles_w // num_knots[1]),
+                scale_factor=(self.n_tiles_h // self.num_knots[0], self.n_tiles_w // self.num_knots[1]),
                 mode="bilinear",
                 align_corners=True,
             )
