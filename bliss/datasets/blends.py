@@ -1,11 +1,9 @@
 import math
-from typing import Dict
 
 import btk
 import torch
 from astropy.table import Table
 from einops import rearrange
-from galcheat.utilities import mag2counts, mean_sky_level
 from galsim.gsobject import GSObject
 from tensordict import TensorDict
 from torch import Tensor
@@ -18,6 +16,8 @@ from bliss.datasets.lsst import (
     catsim_row_to_galaxy_params,
     column_to_tensor,
     convert_flux_to_mag,
+    convert_mag_to_flux,
+    get_default_lsst_background,
 )
 from bliss.datasets.stars import render_stars, sample_stars
 from bliss.reporting import get_single_galaxy_ellipticities
@@ -97,9 +97,7 @@ class GalsimBlends(Dataset):
             self.max_n_galaxies * (self.star_density / self.galaxy_density),
         )
         self.max_n_sources = self.max_n_galaxies + self.max_n_stars
-
-        sky_level: float = mean_sky_level("LSST", "i").to_value("electron")
-        self.background = ConstantBackground((sky_level,))
+        self.background = ConstantBackground((get_default_lsst_background(),))
 
         # btk
         self.galaxy_generator = _setup_blend_galaxy_generator(
@@ -150,8 +148,9 @@ class GalsimBlends(Dataset):
         new_star_log_fluxes[n_galaxies : n_galaxies + n_stars, :] = star_log_fluxes[:n_stars, :]
 
         # galaxy params
-        gal_flux = mag2counts(blend_cat["i_ab"], "LSST", "i").to_value("electron")
-        blend_cat["flux"] = gal_flux.astype(float)
+        mags = torch.from_numpy(blend_cat["i_ab"].value)
+        gal_flux = convert_mag_to_flux(mags)
+        blend_cat["flux"] = gal_flux.numpy().astype(float)
         # NOTE: this function requires all galaxies to be in the front to work
         galaxy_params = catsim_row_to_galaxy_params(blend_cat, self.max_n_sources)
 
