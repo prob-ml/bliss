@@ -14,12 +14,13 @@ prior:
     n_tiles_h: 20
     n_tiles_w: 20
     tile_slen: 4
-    batch_size: 32
+    batch_size: 1
     prob_galaxy: 1.0
     shear_min: -0.25
     shear_max: 0.25
     convergence_a: 1
     convergence_b: 10
+    num_knots: 10
 
 simulator:
     _target_: case_studies.weak_lensing.lensing_simulated_dataset.LensingSimulatedDataset
