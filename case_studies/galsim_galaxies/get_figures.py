@@ -3,11 +3,13 @@ import warnings
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+import btk
 import hydra
 import matplotlib as mpl
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from astropy.table import Table
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
@@ -17,8 +19,13 @@ from tqdm import tqdm
 
 from bliss import reporting
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.datasets.blends import GalsimBlends
-from bliss.datasets.lsst import PIXEL_SCALE, convert_mag_to_flux
+from bliss.datasets.lsst import (
+    PIXEL_SCALE,
+    convert_flux_to_mag,
+    convert_mag_to_flux,
+    get_default_lsst_background,
+    get_default_lsst_psf,
+)
 from bliss.encoder import Encoder
 from bliss.models.decoder import ImageDecoder
 from bliss.models.galaxy_net import OneCenteredGalaxyAE
@@ -621,6 +628,14 @@ class BlendSimulationFigure(BlissFigure):
         }
 
 
+def _render_blend(blend_cat: Table, survey, filt, psf, slen: int):
+    blend_image = torch.zeros((1, slen, slen))
+    for entry in blend_cat:
+        single_image = btk.draw_blends.render_single_catsim_galaxy(entry, filt, survey, psf, slen)
+        blend_image[0] += single_image.array
+    return blend_image
+
+
 class ToySeparationFigure(BlissFigure):
     @property
     def all_rcs(self):
@@ -646,14 +661,13 @@ class ToySeparationFigure(BlissFigure):
     def separations_to_plot(self) -> List[int]:
         return [4, 8, 12]
 
-    def compute_data(self, encoder: Encoder, decoder: ImageDecoder, blends_ds: GalsimBlends):
+    def compute_data(self, encoder: Encoder, decoder: ImageDecoder, galaxy_generator):
         # first, decide image size
         slen = 44
         bp = encoder.detection_encoder.border_padding
         tile_slen = encoder.detection_encoder.tile_slen
         size = 44 + 2 * bp
-        blends_ds.slen = slen
-        blends_ds.decoder.slen = slen
+        tile_slen = encoder.detection_encoder.tile_slen
         assert slen / tile_slen % 2 == 1, "Need odd number of tiles to center galaxy."
 
         # now separations between galaxies to be considered (in pixels)
@@ -663,34 +677,49 @@ class ToySeparationFigure(BlissFigure):
 
         # Params: total_flux, disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a
         # first centered galaxy, then moving one.
-        n_sources = 2
+        # BTK params: ra, dec, fluxnorm_disk, fluxnorm_bulge, fluxnorm_agn, a_d, b_d, a_b, b_b,
+        # pa_bulge, pa_disk, btk_rotation
+        colnames = [
+            "ra",
+            "dec",
+            "fluxnorm_disk",
+            "fluxnorm_bulge",
+            "fluxnorm_agn",
+            "a_d",
+            "b_d",
+            "a_b",
+            "b_b",
+            "pa_bulge",
+            "pa_disk",
+            "btk_rotation",
+            "i_ab",
+        ]
         flux1, flux2 = 2e5, 1e5
-        gparams = torch.tensor(
-            [
-                [flux1, 1.0, torch.pi / 4, 0.7, 1.5, 0, 0],
-                [flux2, 1.0, 3 * torch.pi / 4, 0.7, 1.0, 0, 0],
-            ],
-        )
-        gparams = gparams.reshape(1, 2, 7).expand(batch_size, 2, 7)
+        mag1, mag2 = convert_flux_to_mag(torch.tensor([flux1, flux2]))
+        mag1, mag2 = mag1.item(), mag2.item()
+        gal1 = [0, 0, 1.0, 0, 0, 1.5, 0.7, 0, 0, np.pi / 4, np.pi / 4, 0, mag1]
+        gal2 = [0, 0, 1.0, 0, 0, 1.0, 0.7, 0, 0, 3 * np.pi / 4, np.pi / 4, 0, mag2]
+        assert len(gal1) == len(gal2) == len(colnames)
+        base_cat = Table((gal1, gal2), names=colnames)
 
-        # create full catalogs (need separately since decoder only accepts 1 batch)
+        # need plocs for later
         x0, y0 = 22, 22  # center plocs
+        plocs = torch.tensor([[[x0, y0], [x0, y0 + sep]] for sep in seps]).reshape(batch_size, 2, 2)
+
+        # setup btk configurations
+        survey = btk.survey.get_surveys("LSST")
+        i_band = survey.get_filter("i")
+        psf = get_default_lsst_psf()
+        bg = get_default_lsst_background()
+
+        # create full catalogs (need separately since `render_blend`` only accepts 1 batch)
         images = torch.zeros(batch_size, 1, size, size)
         background = torch.zeros(batch_size, 1, size, size)
-        plocs = torch.tensor([[[x0, y0], [x0, y0 + sep]] for sep in seps]).reshape(batch_size, 2, 2)
         for ii in range(batch_size):
-            ploc = plocs[ii].reshape(1, 2, 2)
-            d = {
-                "n_sources": torch.full((1,), n_sources),
-                "plocs": ploc,
-                "galaxy_bools": torch.ones(1, n_sources, 1),
-                "galaxy_params": gparams[ii, None],
-                "star_bools": torch.zeros(1, n_sources, 1),
-                "star_fluxes": torch.zeros(1, n_sources, 1),
-                "star_log_fluxes": torch.zeros(1, n_sources, 1),
-            }
-            full_cat = FullCatalog(slen, slen, d)
-            image, _, _, _, bg = blends_ds.get_images(full_cat)
+            cat = base_cat.copy()
+            ra = seps[ii] * PIXEL_SCALE
+            cat["ra"] = ra
+            image = _render_blend(cat, survey, i_band, psf, size)
             images[ii] = image
             background[ii] = bg
 
