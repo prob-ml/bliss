@@ -1,6 +1,4 @@
-import torch
-
-from bliss.catalog import SourceType, TileCatalog
+from bliss.catalog import TileCatalog
 from bliss.encoder.unconstrained_dists import ShearUnconstrainedTDBN, UnconstrainedNormal
 from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
 
@@ -34,7 +32,9 @@ class LensingVariationalDist(VariationalDist):
         """
         q = self.factors
 
-        est_cat = {}
+        locs = q["loc"].mode if use_mode else q["loc"].sample().squeeze(0)
+        est_cat = {"locs": locs}
+
         # populate catalog with shear and convergence
         est_cat["shear"] = q["shear"].mode if use_mode else q["shear"].sample().squeeze(0)
         est_cat["convergence"] = (
@@ -47,6 +47,10 @@ class LensingVariationalDist(VariationalDist):
         # light sources per tile, but we sample only one source per tile
         for k, v in est_cat.items():
             est_cat[k] = v.unsqueeze(3)
+
+        # n_sources is not unsqueezed because it is a single integer per tile regardless of
+        # how many light sources are stored per tile
+        est_cat["n_sources"] = q["on_prob"].mode if use_mode else q["on_prob"].sample()
 
         return TileCatalog(self.tile_slen, est_cat)
 
