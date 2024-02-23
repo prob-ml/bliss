@@ -301,7 +301,7 @@ class AutoEncoderFigures(BlissFigure):
             "ae_random_recon": _reconstruction_figure(self.n_examples, *data["random"].values()),
             "ae_worst_recon": _reconstruction_figure(self.n_examples, *data["worst"].values()),
             "ae_bin_measurements": self._get_binned_measurements_figure(data),
-            "ae_bin_histse": self._get_ae_hists_figure(data),
+            "ae_bin_hists": self._get_ae_hists_figure(data),
         }
 
 
