@@ -13,6 +13,28 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities import rank_zero_only
 
 
+def _save_best_weights(weight_save_path: str, best_model_path: str, train_time_sec: float = None):
+    model_checkpoint = torch.load(best_model_path, map_location="cpu")
+    model_state_dict = model_checkpoint["state_dict"]
+    Path(weight_save_path).parent.mkdir(parents=True, exist_ok=True)
+    torch.save(model_state_dict, weight_save_path)
+    result_path = weight_save_path + ".log.json"
+    with open(result_path, "w", encoding="utf-8") as fp:
+        cp_data = model_checkpoint["callbacks"]
+        key = list(cp_data.keys())[0]
+        cp_data = cp_data[key]
+        data_to_write: Dict[str, Any] = {
+            "timestamp": str(dt.datetime.today()),
+            "train_time_sec": train_time_sec,
+        }
+        for k, v in cp_data.items():
+            if isinstance(v, torch.Tensor) and not v.shape:
+                data_to_write[k] = v.item()
+            elif is_json_serializable(v):
+                data_to_write[k] = v
+        fp.write(json.dumps(data_to_write))
+
+
 def train(cfg: DictConfig):
     # setup paths and seed
     paths = OmegaConf.to_container(cfg.paths, resolve=True)
@@ -52,25 +74,9 @@ def train(cfg: DictConfig):
 
     # Load best weights from checkpoint
     if cfg.training.weight_save_path is not None and (checkpoint_callback is not None):
-        model_checkpoint = torch.load(checkpoint_callback.best_model_path, map_location="cpu")
-        model_state_dict = model_checkpoint["state_dict"]
-        Path(cfg.training.weight_save_path).parent.mkdir(parents=True, exist_ok=True)
-        torch.save(model_state_dict, cfg.training.weight_save_path)
-        result_path = cfg.training.weight_save_path + ".log.json"
-        with open(result_path, "w", encoding="utf-8") as fp:
-            cp_data = model_checkpoint["callbacks"]
-            key = list(cp_data.keys())[0]
-            cp_data = cp_data[key]
-            data_to_write: Dict[str, Any] = {
-                "timestamp": str(dt.datetime.today()),
-                "train_time_sec": train_time_sec,
-            }
-            for k, v in cp_data.items():
-                if isinstance(v, torch.Tensor) and not v.shape:
-                    data_to_write[k] = v.item()
-                elif is_json_serializable(v):
-                    data_to_write[k] = v
-            fp.write(json.dumps(data_to_write))
+        _save_best_weights(
+            cfg.training.weight_save_path, checkpoint_callback.best_model_path, train_time_sec
+        )
 
 
 def setup_logger(cfg, paths):
