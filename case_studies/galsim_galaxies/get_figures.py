@@ -181,14 +181,14 @@ class AutoEncoderFigures(BlissFigure):
         true_params: Tensor = image_data["params"]
         images: Tensor = image_data["images"]
         recon_means = torch.tensor([])
-        background: Tensor = image_data["background"].reshape(1, 1, 53, 53).to(device)
+        background: Tensor = image_data["background"][0].reshape(1, 1, 53, 53).to(device)
         noiseless_images: Tensor = image_data["noiseless"]
         snr: Tensor = image_data["snr"].reshape(-1)
 
         print("INFO: Computing reconstructions from saved autoencoder model...")
         n_images = images.shape[0]
         batch_size = 128
-        n_iters = int(np.ceil(n_images // 128))
+        n_iters = int(np.ceil(n_images // 128)) + 1
         for i in range(n_iters):  # in batches otherwise GPU error.
             bimages = images[batch_size * i : batch_size * (i + 1)].to(device)
             recon_mean, _ = autoencoder.forward(bimages, background)
@@ -210,7 +210,7 @@ class AutoEncoderFigures(BlissFigure):
 
         # measurements
         psf_decoder = PSFDecoder(psf_slen=53)
-        psf_image = psf_decoder.forward_psf_from_params()
+        psf_image = psf_decoder(recon_means)
 
         recon_no_background = recon_means - background.cpu()
         assert torch.all(recon_no_background.sum(axis=(1, 2, 3)) > 0)
@@ -298,10 +298,10 @@ class AutoEncoderFigures(BlissFigure):
 
     def create_figures(self, data) -> Dict[str, Figure]:
         return {
-            "ae_recon_random": _reconstruction_figure(self.n_examples, *data["random"].values()),
-            "ae_recon_worst": _reconstruction_figure(self.n_examples, *data["worst"].values()),
+            "ae_random_recon": _reconstruction_figure(self.n_examples, *data["random"].values()),
+            "ae_worst_recon": _reconstruction_figure(self.n_examples, *data["worst"].values()),
             "ae_bin_measurements": self._get_binned_measurements_figure(data),
-            "ae_hists": self._get_ae_hists_figure(data),
+            "ae_bin_histse": self._get_ae_hists_figure(data),
         }
 
 
