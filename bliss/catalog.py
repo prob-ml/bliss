@@ -37,7 +37,7 @@ class TileCatalog(UserDict):
         self.tile_slen = tile_slen
         d = copy(d)  # shallow copy, so we don't mutate the argument
         self.locs = d.pop("locs")
-        self.n_sources = d.pop("n_sources")
+        self.n_sources = d.pop("n_sources").long()
         self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
         assert self.n_sources.shape == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
 
