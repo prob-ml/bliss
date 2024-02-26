@@ -308,7 +308,7 @@ class DetectionEncoder(pl.LightningModule):
         """Configure optimizers for training (pytorch lightning)."""
         return Adam(self.parameters(), **self.optimizer_params)
 
-    def training_step(self, batch, batch_idx, optimizer_idx=0):
+    def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
         batch_size = len(batch["n_sources"])
         out = self._get_loss(batch)
