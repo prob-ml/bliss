@@ -269,7 +269,6 @@ class SavedGalsimBlends(Dataset):
 
         # discard not needed values (and thus avoid copying to GPU)
         self.ds.pop("full_params")
-
         for p in ("ellips", "blendedness", "snr", "fluxes", "galaxy_params", "mags"):
             self.ds["tile_params"].pop(p)
 
