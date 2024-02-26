@@ -12,6 +12,7 @@ import tutorial.synthetic.tools as tools
 import tutorial.synthetic.render.frame as frame
 import tutorial.synthetic.render.render as render
 import os
+import multiprocessing
 
 class Cluster_Prior():
     def __init__(self):
@@ -26,7 +27,6 @@ class Cluster_Prior():
         self.dec_cen = -40.228830895890404   
         self.mass_min = 10**14 * 1.989*10**33 # Minimum value of the range solar mass
         self.mass_max = 10**15.5 * 1.989*10**33 # Maximum value of the range
-        self.size = 10
         self.scale_pixels_per_au = 100 
         self.mean_sources = 0.005
         self.tsize_s = 0.64
@@ -48,6 +48,9 @@ class Cluster_Prior():
         self.tiles_height = 25
         with open("gal_gmm_nmgy.pkl", "rb") as f:
             self.gmm_gal = pickle.load(f)
+        self.tsize_poly = np.poly1d([-6.88890387e-11,  3.70584026e-05,  4.34623392e-02])
+        self.folder_path = "data/"
+        self.threadings = 5
     
     def _sample_mass(self):
         hmf = MassFunction()
@@ -142,11 +145,10 @@ class Cluster_Prior():
             geo_coordinates.append(temp)
         return geo_coordinates
     
-    def _sample_TSIZE(self, galaxy_locs, galaxy_locs_cluster):
+    def _sample_TSIZE(self, flux_samples):
         t_size_samples = []
         for i in range(self.size):
-            total_element = len(galaxy_locs[i]) + len(galaxy_locs_cluster[i])
-            t_size_samples.append(lognorm.rvs(s=self.tsize_s, loc=self.tsize_loc, scale=self.tsize_scale, size=total_element))
+                t_size_samples.append(self.tsize_poly(flux_samples[i]))
         return t_size_samples
     
     def _sample_flux(self, galaxy_locs, galaxy_locs_cluster, redshift_samples, mass_samples):
@@ -220,40 +222,31 @@ class Cluster_Prior():
     def to_tiles(self, center_sample, mass_sample):
         tiles = []
         for i in range(len(mass_sample)):
-            tiles_X = self.width // self.tiles_width
-            tiles_Y = self.height // self.tiles_height
-            x_index = int(center_sample[i][0] // self.tiles_width)
-            y_index = int(center_sample[i][1] // self.tiles_height)
-            cluster_grid = [[0 for _ in range(tiles_X)] for _ in range(tiles_Y)]
-            cluster_grid[x_index][y_index] = 1
-            mass_grid = [[0 for _ in range(tiles_X)] for _ in range(tiles_Y)]
-            mass_grid[x_index][y_index] = mass_sample[i]
-            coordinate_grid = [[(0, 0) for _ in range(tiles_X)] for _ in range(tiles_Y)]
-            coordinate_grid[x_index][y_index] = (center_sample[i][0]%self.tiles_width, center_sample[i][1]%self.tiles_height)
             temp = {}
-            temp["mass"] = mass_grid
-            temp["coordinate"] = coordinate_grid
-            temp["cluster"] = cluster_grid
+            temp["mass"] = mass_sample[i]
+            temp["coordinate"] = center_sample[i]
+            temp["canvas"] = [self.width, self.height]
+            temp["tiles"] = [self.tiles_width, self.tiles_height]
             tiles.append(temp)
         return tiles
             
-    def catalog_render(self, catalogs, tiles):
+    def catalog_render(self, catalogs, start_index, tiles):
         for i in range(len(catalogs)):
             mock_catalog = catalogs[i]
             stds = np.array([2.509813, 5.192254, 8.36335, 15.220351]) / 1.3
-            file_name_tag = str(i)
+            file_name_tag = str(i + start_index)
             for j, band in enumerate(("g", "r", "i")):
-                name =  file_name_tag + "_"+ band
+                name =  self.folder_path + file_name_tag + "_"+ band
                 print(name)
                 fr = frame.Frame(mock_catalog.to_records(), band=band, name=name,
                                 center=(self.ra_cen, self.dec_cen), noise_std=stds[j], canvas_size=5000, )
                 fr.render(nprocess=8) 
             ims_all = []
             for j, band in enumerate(("g", "r", "i")):
-                name = file_name_tag + "_" + band + ".fits"
+                name = self.folder_path + file_name_tag + "_" + band + ".fits"
                 tmp = fio.read(name)
                 os.remove(name)
-                os.remove(file_name_tag + "_" + band + "_epsf.fits")
+                os.remove(self.folder_path + file_name_tag + "_" + band + "_epsf.fits")
                 ims_all.append(tmp)
             fig = plt.figure(figsize=(12, 12))
             ax = fig.add_subplot(111)
@@ -270,9 +263,10 @@ class Cluster_Prior():
 
             ax.set_xlabel("X [pix]")
             ax.set_ylabel("Y [pix]")
-            fig.savefig("data/" + file_name_tag + ".png", bbox_inches='tight')
+            plt.axis('off')
+            fig.savefig(self.folder_path + file_name_tag + ".png", bbox_inches='tight',pad_inches=0)
             plt.close(fig)
-            filehandler = open("data/" + file_name_tag + "_catalog.pkl", 'wb') 
+            filehandler = open(self.folder_path + file_name_tag + "_catalog.pkl", 'wb') 
             pickle.dump(tiles[i], filehandler)
 
     def sample(self):
@@ -288,9 +282,12 @@ class Cluster_Prior():
         galaxy_locs = self._sample_galaxy_locs(n_galaxy)
         geo_galaxy = self.cartesian2geo(galaxy_locs)
         geo_galaxy_cluster = self.cartesian2geo(galaxy_cluster_locs)
-        TSIZE_samples = self._sample_TSIZE(galaxy_locs, galaxy_cluster_locs)
         flux_samples = self._sample_flux(galaxy_locs, galaxy_cluster_locs, redshift_samples, mass_samples)
+        TSIZE_samples = self._sample_TSIZE(flux_samples)
         G1_size_samples, G2_size_samples = self._sample_shape(galaxy_locs, galaxy_cluster_locs)
         catalogs = self.make_catalog(flux_samples, TSIZE_samples, G1_size_samples, G2_size_samples,geo_galaxy, geo_galaxy_cluster, galaxy_locs, galaxy_cluster_locs)
         tiles = self.to_tiles(center_samples, mass_samples)
-        self.catalog_render(catalogs, tiles)
+        print(self.size//self.threadings)
+        for i in range(self.threadings):
+            x = multiprocessing.Process(target = self.catalog_render, args = (catalogs[i*self.size//self.threadings:(i+1)*self.size//self.threadings], i*self.size//self.threadings, tiles[i*self.size//self.threadings:(i+1)*self.size//self.threadings], ))
+            x.start()
