@@ -57,9 +57,11 @@ def _reconstruction_figure(
 
         # only add titles to the first axes.
         if i == 0:
-            ax_true.set_title("Images $x$", pad=pad)
-            ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
-            ax_res.set_title(r"Residual $\left(\tilde{x} - x\right) / \sqrt{\tilde{x}}$", pad=pad)
+            ax_true.set_title(r"\rm Images $x$", pad=pad)
+            ax_recon.set_title(r"\rm Reconstruction $\tilde{x}$", pad=pad)
+            ax_res.set_title(
+                r"\rm Residual $\left(\tilde{x} - x\right) / \sqrt{\tilde{x}}$", pad=pad
+            )
 
         # standarize ranges of true and reconstruction
         image = images[i, 0]
@@ -153,6 +155,7 @@ def _make_pr_figure(
 
 
 class AutoEncoderFigures(BlissFigure):
+
     def __init__(self, *args, n_examples: int = 5, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.n_examples = n_examples
@@ -166,6 +169,10 @@ class AutoEncoderFigures(BlissFigure):
             "ae_bin_measurements": {"fontsize": 24},
             "ae_bin_hists": {"fontsize": 24},
         }
+
+    @property
+    def fignames(self) -> tuple[str, ...]:
+        return ("ae_random_recon", "ae_worst_recon", "ae_bin_measurements", "ae_bin_hists")
 
     @property
     def cache_name(self) -> str:
@@ -247,7 +254,7 @@ class AutoEncoderFigures(BlissFigure):
         snr = meas["snr"]
         xticks = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0.5, 3)
-        xlabel = r"$\log_{10} \text{SNR}$"
+        xlabel = r"$\log_{10} \rm SNR$"
 
         # fluxes
         true_fluxes, recon_fluxes = meas["true_fluxes"], meas["recon_fluxes"]
@@ -255,7 +262,7 @@ class AutoEncoderFigures(BlissFigure):
         scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
         ax1.set_xlim(xlims)
         ax1.set_xlabel(xlabel)
-        ax1.set_ylabel(r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
+        ax1.set_ylabel(r"$(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
         ax1.set_xticks(xticks)
         ax1.axhline(0, ls="--", color="k")
 
@@ -286,7 +293,7 @@ class AutoEncoderFigures(BlissFigure):
         xticks = [0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0, 3)
         snr_bins = np.arange(xlims[0], xlims[1] + 0.2, 0.2)
-        xlabel = r"$\log_{10} \text{SNR}$"
+        xlabel = r"$\log_{10} \rm SNR$"
         ax.hist(np.log10(snr), bins=snr_bins, histtype="step")
         ax.set_xlabel(xlabel)
         ax.set_xticks(xticks)
@@ -296,13 +303,16 @@ class AutoEncoderFigures(BlissFigure):
 
         return fig
 
-    def create_figures(self, data) -> Dict[str, Figure]:
-        return {
-            "ae_random_recon": _reconstruction_figure(self.n_examples, *data["random"].values()),
-            "ae_worst_recon": _reconstruction_figure(self.n_examples, *data["worst"].values()),
-            "ae_bin_measurements": self._get_binned_measurements_figure(data),
-            "ae_bin_hists": self._get_ae_hists_figure(data),
-        }
+    def create_figure(self, fname: str, data) -> Figure:
+        if fname == "ae_random_recon":
+            return _reconstruction_figure(self.n_examples, *data["random"].values())
+        if fname == "ae_worst_recon":
+            return _reconstruction_figure(self.n_examples, *data["worst"].values())
+        if fname == "ae_bin_measurements":
+            return self._get_binned_measurements_figure(data)
+        if fname == "ae_bin_hists":
+            return self._get_ae_hists_figure(data)
+        raise NotImplementedError("Figure {fname} not implemented.")
 
 
 class BlendSimulationFigure(BlissFigure):
@@ -318,6 +328,15 @@ class BlendSimulationFigure(BlissFigure):
     @property
     def cache_name(self) -> str:
         return "blendsim"
+
+    @property
+    def fignames(self) -> tuple[str, ...]:
+        return (
+            "blendsim_gal_meas",
+            "blendsim_detection",
+            "blendsim_classification",
+            "blendsim_hists",
+        )
 
     def compute_data(self, blend_file: str, encoder: Encoder, decoder: ImageDecoder):
         blend_data: TensorDict = torch.load(blend_file)
@@ -619,13 +638,16 @@ class BlendSimulationFigure(BlissFigure):
 
         return fig
 
-    def create_figures(self, data) -> Dict[str, Figure]:
-        return {
-            "blendsim_gal_meas": self._get_residual_blend_figure(data),
-            "blendsim_detection": self._get_detection_figure(data),
-            "blendsim_classification": self._get_classification_figure(data),
-            "blendsim_hists": self._get_histogram_figure(data),
-        }
+    def create_figure(self, fname: str, data) -> Figure:
+        if fname == "blendsim_gal_meas":
+            return self._get_residual_blend_figure(data)
+        if fname == "blendsim_detection":
+            return self._get_detection_figure(data)
+        if fname == "blendsim_classification":
+            return self._get_classification_figure(data)
+        if fname == "blendsim_hists":
+            return self._get_histogram_figure(data)
+        raise NotImplementedError("Figure {fname} not implemented.")
 
 
 def _render_blend(blend_cat: Table, survey, filt, psf, slen: int):
@@ -656,6 +678,10 @@ class ToySeparationFigure(BlissFigure):
     @property
     def cache_name(self) -> str:
         return "toy_separation"
+
+    @property
+    def fignames(self) -> tuple[str, ...]:
+        return ("three_separations", "toy_residuals", "toy_measurements")
 
     @property
     def separations_to_plot(self) -> List[int]:
@@ -856,8 +882,8 @@ class ToySeparationFigure(BlissFigure):
 
             # only add titles to the first axes.
             if i == 0:
-                ax_true.set_title("Images $x$", pad=pad)
-                ax_recon.set_title(r"Reconstruction $\tilde{x}$", pad=pad)
+                ax_true.set_title(r"\rm Images $x$", pad=pad)
+                ax_recon.set_title(r"\rm Reconstruction $\tilde{x}$", pad=pad)
                 ax_res.set_title(
                     r"Residual $\left(\tilde{x} - x\right) / \sqrt{\tilde{x}}$", pad=pad
                 )
@@ -978,12 +1004,14 @@ class ToySeparationFigure(BlissFigure):
 
         return fig
 
-    def create_figures(self, data: dict) -> Dict[str, Figure]:
-        return {
-            "three_separations": self._get_three_separations_plot(data),
-            "toy_residuals": self._get_residuals_figure(data),
-            "toy_measurements": self._get_measurement_figure(data),
-        }
+    def create_figure(self, fname: str, data: dict) -> Figure:
+        if fname == "three_separations":
+            return self._get_three_separations_plot(data)
+        if fname == "toy_residuals":
+            return self._get_residuals_figure(data)
+        if fname == "toy_measurements":
+            return self._get_measurement_figure(data)
+        raise NotImplementedError("Figure {fname} not implemented.")
 
 
 def _load_models(cfg, device):
@@ -1065,7 +1093,6 @@ def _make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
 
     # create figure classes and plot.
     AutoEncoderFigures(n_examples=5, overwrite=overwrite, **bfig_kwargs)(*args)
-    mpl.rc_file_defaults()
 
 
 def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dict):
