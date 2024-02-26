@@ -11,7 +11,6 @@ from torch import Tensor, nn
 from torch.distributions import Categorical, Normal, Poisson
 from torch.nn import functional as F
 from torch.optim import Adam
-from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.encoder_layers import (
@@ -45,7 +44,6 @@ class DetectionEncoder(pl.LightningModule):
         annotate_probs: bool = False,
         slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
-        scheduler_params: Optional[dict] = None,
     ):
         """Initializes DetectionEncoder.
 
@@ -63,7 +61,6 @@ class DetectionEncoder(pl.LightningModule):
             annotate_probs: Annotate probabilities on validation plots?
             slack: Slack to use when matching locations for validation metrics.
             optimizer_params: arguments passed to the Adam optimizer
-            scheduler_params: arguments passed to the learning rate scheduler
         """
         super().__init__()
 
@@ -71,7 +68,6 @@ class DetectionEncoder(pl.LightningModule):
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.optimizer_params = optimizer_params
-        self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
 
         assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
@@ -310,9 +306,7 @@ class DetectionEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
-        optimizer = Adam(self.parameters(), **self.optimizer_params)
-        scheduler = MultiStepLR(optimizer, **self.scheduler_params)
-        return [optimizer], [scheduler]
+        return Adam(self.parameters(), **self.optimizer_params)
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
