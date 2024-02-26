@@ -62,9 +62,9 @@ blends_datasets:
         epoch_size: 10000
     blends_datamodule:
         _target_: bliss.datasets.saved.SavedDataModule
-        train_ds: ${datasets.train_saved_blends}
-        val_ds: ${datasets.val_saved_blends}
-        batch_size: 64
+        train_ds: ${blends_datasets.train_saved_blends}
+        val_ds: ${blends_datasets.val_saved_blends}
+        batch_size: 32
 
 models:
     decoder:
@@ -96,7 +96,7 @@ models:
         n_bands: ${models.decoder.n_bands}
         tile_slen: ${models.decoder.tile_slen}
         ptile_slen: 52
-        max_detections: ${models.prior.max_sources}
+        max_detections: 1
         channel: 8
         spatial_dropout: 0.0
         dropout: 0.0
