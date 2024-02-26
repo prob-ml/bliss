@@ -1,16 +1,17 @@
 """Common functions to plot results."""
+
 from abc import abstractmethod
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import matplotlib as mpl
 import numpy as np
-import seaborn as sns
 import torch
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.pyplot import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from tensordict import TensorDict
 
 CB_color_cycle = [
     "#377eb8",
@@ -31,11 +32,12 @@ def _to_numpy(d: dict):
             d[k] = v.numpy()
         elif isinstance(v, (float, int, np.ndarray)):
             d[k] = v
-        elif isinstance(v, dict):
+        elif isinstance(v, (dict, TensorDict)):
             v = _to_numpy(v)
             d[k] = v
         else:
-            msg = f"Data returned can only be dict, tensor, array, or float but got {type(v)}"
+            msg = f"""Data returned can only be dict, tensor, array, tensordict, or
+                    float but got {type(v)}"""
             raise TypeError(msg)
     return d
 
@@ -56,9 +58,8 @@ def set_rc_params(
 ):
     # named size options: 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
     rc_params = {
-        # font.
-        "font.family": "serif",
-        "font.sans-serif": "Helvetica",
+        # font
+        "font.family": "sans-serif",
         "text.usetex": True,
         "text.latex.preamble": r"\usepackage{amsmath}",
         "mathtext.fontset": "cm",
@@ -91,7 +92,6 @@ def set_rc_params(
         "figure.autolayout": True,
     }
     mpl.rcParams.update(rc_params)
-    sns.set_context(rc=rc_params)
 
 
 class BlissFigure:
@@ -144,7 +144,7 @@ class BlissFigure:
         data_np = _to_numpy(data)
         figs = self.create_figures(data_np)
         for fname, fig in figs.items():
-            rc_kwargs = self.all_rcs[fname]
+            rc_kwargs = self.all_rcs.get(fname, {})
             set_rc_params(**rc_kwargs)
             figfile = self.figdir / f"{fname}.{self.img_format}"
             fig.savefig(figfile, format=self.img_format)  # pylint: disable=no-member
@@ -249,9 +249,3 @@ def scatter_shade_plot(
 
     ax.plot(xs, ys, marker="o", c=color, linestyle="-")
     ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=alpha)
-
-
-def make_scatter_contours(ax, x, y):
-    sns.scatterplot(x=x, y=y, s=10, color="0.15", ax=ax)
-    sns.histplot(x=x, y=y, pthresh=0.1, cmap="mako", ax=ax, cbar=True)
-    sns.kdeplot(x=x, y=y, levels=10, color="w", linewidths=1, ax=ax)
