@@ -32,10 +32,6 @@ def get_default_lsst_psf() -> galsim.GSObject:
 
     Credit: WeakLensingDeblending (https://github.com/LSSTDESC/WeakLensingDeblending)
 
-    Args:
-        atmospheric_model: type of atmospheric model. Current options:
-            ['Kolmogorov', 'Moffat', 'None'].
-
     Returns:
         Galsim PSF model as a galsim.GSObject.
     """
