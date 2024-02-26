@@ -25,7 +25,11 @@ def _save_dataset(ds, train_path, val_path, test_path, n_samples: int, overwrite
     results = Parallel(n_jobs=njobs)(delayed(_task)(ds, ii) for ii in tqdm(range(n_samples)))
     output = torch.cat(results)
     assert output.shape[0] == n_samples
-    output = output.float()  # nn need all tensors to be float32
+
+    # nn need all input tensors to be float32
+    if "images" in output.keys() and "background" in output.keys():
+        output["images"] = output["images"].float()
+        output["background"] = output["background"].float()
 
     div1, div2 = n_samples // 3, n_samples // 3 * 2
     torch.save(output[:div1], tpath)
