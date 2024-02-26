@@ -2,7 +2,7 @@
 
 from abc import abstractmethod
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import matplotlib as mpl
 import numpy as np
@@ -57,41 +57,43 @@ def set_rc_params(
     legend_loc="best",
 ):
     # named size options: 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
-    rc_params = {
-        # font
-        "font.family": "sans-serif",
-        "text.usetex": True,
-        "text.latex.preamble": r"\usepackage{amsmath}",
-        "mathtext.fontset": "cm",
-        "font.size": fontsize,
-        # figure
-        "figure.figsize": figsize,
-        # axes
-        "axes.labelsize": label_size,
-        "axes.titlesize": title_size,
-        # ticks
-        "xtick.labelsize": tick_label_size,
-        "ytick.labelsize": tick_label_size,
-        "xtick.major.size": major_tick_size,
-        "ytick.major.size": major_tick_size,
-        "xtick.major.width": major_tick_width,
-        "ytick.major.width": major_tick_width,
-        "ytick.minor.size": minor_tick_size,
-        "xtick.minor.size": minor_tick_size,
-        "xtick.minor.width": minor_tick_width,
-        "ytick.minor.width": minor_tick_width,
-        # markers
-        "lines.markersize": lines_marker_size,
-        # legend
-        "legend.fontsize": legend_fontsize,
-        "legend.loc": legend_loc,
-        # colors
-        "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
-        # images
-        "image.cmap": "gray",
-        "figure.autolayout": True,
-    }
-    mpl.rcParams.update(rc_params)
+    plt.rcParams.update(
+        {
+            # font
+            "text.usetex": True,
+            "font.family": "sans-serif",
+            "font.sans-serif": "Helvetica",
+            "text.latex.preamble": r"\usepackage{amsmath}",
+            "mathtext.fontset": "cm",
+            "font.size": fontsize,
+            # figure
+            "figure.figsize": figsize,
+            # axes
+            "axes.labelsize": label_size,
+            "axes.titlesize": title_size,
+            # ticks
+            "xtick.labelsize": tick_label_size,
+            "ytick.labelsize": tick_label_size,
+            "xtick.major.size": major_tick_size,
+            "ytick.major.size": major_tick_size,
+            "xtick.major.width": major_tick_width,
+            "ytick.major.width": major_tick_width,
+            "ytick.minor.size": minor_tick_size,
+            "xtick.minor.size": minor_tick_size,
+            "xtick.minor.width": minor_tick_width,
+            "ytick.minor.width": minor_tick_width,
+            # markers
+            "lines.markersize": lines_marker_size,
+            # legend
+            "legend.fontsize": legend_fontsize,
+            "legend.loc": legend_loc,
+            # colors
+            "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
+            # images
+            "image.cmap": "gray",
+            "figure.autolayout": True,
+        }
+    )
 
 
 class BlissFigure:
@@ -119,13 +121,19 @@ class BlissFigure:
         """Unique identifier for set of figures including cache."""
         return ""
 
+    @property
+    @abstractmethod
+    def fignames(self) -> tuple[str, ...]:
+        """Names of all plots that are produced as tuple."""
+        return ()
+
     @abstractmethod
     def compute_data(self, *args, **kwargs) -> dict:
         """Should only return tensors that can be casted to numpy."""
         return {}
 
     @abstractmethod
-    def create_figures(self, data: dict) -> Dict[str, Figure]:
+    def create_figure(self, fname: str, data: dict) -> Figure:
         """Return matplotlib figure instances to save based on data."""
         return {}
 
@@ -142,10 +150,10 @@ class BlissFigure:
         """Create figures and save to output directory with names from `self.fignames`."""
         data = self.get_data(*args, **kwargs)
         data_np = _to_numpy(data)
-        figs = self.create_figures(data_np)
-        for fname, fig in figs.items():
+        for fname in self.fignames:
             rc_kwargs = self.all_rcs.get(fname, {})
             set_rc_params(**rc_kwargs)
+            fig = self.create_figure(fname, data_np)
             figfile = self.figdir / f"{fname}.{self.img_format}"
             fig.savefig(figfile, format=self.img_format)  # pylint: disable=no-member
             plt.close(fig)
