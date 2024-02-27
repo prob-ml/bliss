@@ -484,7 +484,7 @@ class FullCatalog(UserDict):
         if ignore_extra_sources:
             # need to compare fluxes per tile to get brightest object
             tile_fluxes = torch.zeros(tile_cat_shape, device=self.device)
-            assert "fluxes" in self.keys()
+            assert "fluxes" in self.keys(), "Fluxes are required to decide which source to keep!"
 
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
@@ -498,10 +498,9 @@ class FullCatalog(UserDict):
                 source_idx = tile_n_sources[ii, coords[0], coords[1]].item()
                 if source_idx >= max_sources_per_tile:
                     if not ignore_extra_sources:
-                        raise ValueError(  # noqa: WPS220
-                            "# of sources per tile exceeds `max_sources_per_tile`."
-                        )
-                    assert max_sources_per_tile == 1, "Implementation only works in simplest case."
+                        raise ValueError("# of sources per tile exceeds `max_sources_per_tile`.")
+                    if max_sources_per_tile > 1:
+                        raise ValueError("Implementation only works in simplest case.")
                     flux1 = tile_fluxes[ii, coords[0], coords[1]].item()
                     flux2 = self["fluxes"][ii, idx].item()
                     if flux1 > flux2:
@@ -512,7 +511,8 @@ class FullCatalog(UserDict):
                 for k, v in tile_params.items():
                     v[ii, coords[0], coords[1], source_idx] = self[k][ii, idx]
                 tile_n_sources[ii, coords[0], coords[1]] = source_idx + 1
-                tile_fluxes[ii, coords[0], coords[1]] = self["fluxes"][ii, idx].item()
+                if ignore_extra_sources:
+                    tile_fluxes[ii, coords[0], coords[1]] = self["fluxes"][ii, idx].item()
         tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
 
