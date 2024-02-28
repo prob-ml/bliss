@@ -127,8 +127,8 @@ class GalsimBlends(Dataset):
         # NOTE: BTK positions are w.r.t to top-left corner in pixels.
         star_locs = star_params["locs"]
         x, y = column_to_tensor(blend_cat, "x_peak"), column_to_tensor(blend_cat, "y_peak")
-        locs_x = (x - self.bp) / self.slen
-        locs_y = (y - self.bp) / self.slen
+        locs_x = (x - self.bp + 0.5) / self.slen
+        locs_y = (y - self.bp + 0.5) / self.slen
         galaxy_locs = torch.vstack((locs_y, locs_x)).T.reshape(-1, 2)
         locs = torch.zeros((self.max_n_sources, 2))
         locs[:n_galaxies, :] = galaxy_locs
@@ -148,7 +148,7 @@ class GalsimBlends(Dataset):
         new_star_log_fluxes[n_galaxies : n_galaxies + n_stars, :] = star_log_fluxes[:n_stars, :]
 
         # galaxy params
-        mags = torch.from_numpy(blend_cat["i_ab"].value)
+        mags = torch.from_numpy(blend_cat["i_ab"].value.astype(float))  # byte order
         gal_flux = convert_mag_to_flux(mags)
         blend_cat["flux"] = gal_flux.numpy().astype(float)
         # NOTE: this function requires all galaxies to be in the front to work
@@ -248,6 +248,7 @@ class GalsimBlends(Dataset):
             {
                 "images": images.unsqueeze(0),
                 "background": bg.unsqueeze(0),
+                "noiseless": noiseless.unsqueeze(0),  # debugging
                 "tile_params": tile_cat.to_dict(),
                 "full_params": full_cat.to_dict(),
             },
@@ -266,6 +267,7 @@ class SavedGalsimBlends(Dataset):
             assert p in self.ds.keys()
         for p in ("n_sources", "galaxy_bools", "locs"):
             assert ("tile_params", p) in self.ds.keys(include_nested=True)
+        self.ds.pop("noiseless", None)
 
         # discard not needed values (and thus avoid copying to GPU)
         self.ds.pop("full_params")
