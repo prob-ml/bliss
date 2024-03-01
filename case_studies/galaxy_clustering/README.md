@@ -17,6 +17,15 @@ We set the following, non-exhaustive, objectives for our galaxy cluster detectio
 
 ### References
 - [Variational Inference for Deblending Crowded Starfields](https://arxiv.org/pdf/2102.02409.pdf).
+- [Euclid preparation III](https://arxiv.org/pdf/1906.04707.pdf)
+- [YOLO-CL](https://arxiv.org/pdf/2301.09657.pdf).
+- [redMaPPer I](https://arxiv.org/abs/1303.3562)
+- [redMaPPer IV](https://arxiv.org/abs/1410.1193).
+- [redMaPPer (latest)](https://arxiv.org/abs/1601.00621).
+- [LSST Science Book V2 Chapter 9.5.3](https://www.lsst.org/sites/default/files/docs/sciencebook/SB_9.pdf).
+- [LSST Science Book V2 Chapter 12.12](https://www.lsst.org/sites/default/files/docs/sciencebook/SB_12.pdf).
+- [LSST Science Book V2 Chapter 13.6](https://www.lsst.org/sites/default/files/docs/sciencebook/SB_13.pdf).
+- [LSST Science Book V2 Chapter 14.3.8](https://www.lsst.org/sites/default/files/docs/sciencebook/SB_14.pdf).
 
 
 ### URPS
