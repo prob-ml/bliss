@@ -58,9 +58,3 @@ For implementation details, we generate location, fluxes, params, and types for 
 3. *plocs*: in shape (batch_size, max(n_sources), 2). The coordinates for sources are in form (x, y) and represents absolute coordinates.
 4. *galaxy_fluxes/star_fluxes/galaxy_params*:  in shape (batch_size, max(n_sources), n_bands).
 
-
-### TODO
-1. Update the flux/param for the cluster galaxies based on redmapper paper.
-2. Incorporate cluster shape as additional variable. 
-3. Cluster number and galaxy rate. What rate shall we be using for galaxies within the cluster? How many cluster are reasonable? For cluster numbers, we are targeting for a categorical variable like [0,1,2,3, ... k] and probability [p_0, p_1, ... p_k]. The galaxy rate could be related to size? 
-4. If we are generating mutiple clusters, what shall be the distance between them? Should they be close to each other or far from each other? Currently thinking each cluster bounding box should be a bit seperate from each other (no overlapping and at least somewhat away from each other?)
