@@ -1,4 +1,5 @@
 import math
+from typing import Dict
 
 import btk
 import torch
@@ -19,7 +20,7 @@ from bliss.datasets.lsst import (
     convert_mag_to_flux,
     get_default_lsst_background,
 )
-from bliss.datasets.stars import render_stars, sample_stars
+from bliss.datasets.stars import render_stars_from_params, sample_stars
 from bliss.reporting import get_single_galaxy_ellipticities
 
 
@@ -61,6 +62,87 @@ def _setup_blend_galaxy_generator(
     )
 
 
+def _get_size(slen: int, bp: int):
+    return slen + 2 * bp
+
+
+def _get_full_params(
+    star_params: Dict[str, Tensor], blend_cat: Table, max_n_sources: int, bp: int, slen: int
+) -> Dict[str, Tensor]:
+    """Combines star parameters from BLISS and BTK galaxy catalog into a single dict."""
+
+    # number of sources
+    n_stars = star_params["n_stars"].item()
+    n_galaxies = len(blend_cat)
+    n_sources = torch.tensor(n_stars + n_galaxies)
+    is_on_sources = get_is_on_from_n_sources(n_sources, max_n_sources)
+    assert n_sources <= max_n_sources
+
+    # locs
+    # NOTE: BTK positions are w.r.t to top-left corner in pixels.
+    star_locs = star_params["locs"]
+    x, y = column_to_tensor(blend_cat, "x_peak"), column_to_tensor(blend_cat, "y_peak")
+    locs_x = (x - bp + 0.5) / slen
+    locs_y = (y - bp + 0.5) / slen
+    galaxy_locs = torch.vstack((locs_y, locs_x)).T.reshape(-1, 2)
+    locs = torch.zeros((max_n_sources, 2))
+    locs[:n_galaxies, :] = galaxy_locs
+    locs[n_galaxies : n_galaxies + n_stars, :] = star_locs[:n_stars]
+
+    # bools
+    galaxy_bools = torch.zeros((max_n_sources, 1))
+    galaxy_bools[:n_galaxies, :] = 1
+    new_star_bools = (1 - galaxy_bools) * is_on_sources.reshape(-1, 1)
+
+    # star fluxes and log_fluxes
+    star_fluxes = star_params["star_fluxes"].reshape(-1, 1)
+    star_log_fluxes = star_params["star_log_fluxes"].reshape(-1, 1)
+    new_star_fluxes = torch.zeros((max_n_sources, 1))
+    new_star_log_fluxes = torch.zeros((max_n_sources, 1))
+    new_star_fluxes[n_galaxies : n_galaxies + n_stars, :] = star_fluxes[:n_stars, :]
+    new_star_log_fluxes[n_galaxies : n_galaxies + n_stars, :] = star_log_fluxes[:n_stars, :]
+
+    # galaxy params
+    mags = torch.from_numpy(blend_cat["i_ab"].value.astype(float))  # byte order
+    gal_flux = convert_mag_to_flux(mags)
+    blend_cat["flux"] = gal_flux.numpy().astype(float)
+    # NOTE: this function requires all galaxies to be in the front to work
+    galaxy_params = catsim_row_to_galaxy_params(blend_cat, max_n_sources)
+
+    return {
+        "n_sources": n_sources,
+        "plocs": locs * slen,
+        "galaxy_bools": galaxy_bools,
+        "star_bools": new_star_bools,
+        "star_fluxes": new_star_fluxes,
+        "star_log_fluxes": new_star_log_fluxes,
+        "galaxy_params": galaxy_params,
+    }
+
+
+def _combine_isolated_images(
+    isolated_galaxy_images: Tensor,
+    isolated_star_images: Tensor,
+    n_stars: int,
+    n_galaxies: int,
+    size: int,
+):
+    """Combine isolated images of stars and galaxies from their tensors."""
+    assert isolated_galaxy_images.ndim == isolated_star_images.ndim == 4
+    assert isolated_galaxy_images.shape[-2:] == isolated_star_images.shape[-2:]
+    max_n_galaxies = isolated_galaxy_images.shape[0]
+    max_n_stars = isolated_star_images.shape[0]
+    max_n_sources = max_n_galaxies + max_n_stars
+
+    isolated_images = torch.zeros((max_n_sources, 1, size, size))
+    for ii in range(n_galaxies):
+        isolated_images[ii] = isolated_galaxy_images[ii]
+    for ii in range(n_stars):
+        isolated_images[n_galaxies + ii] = isolated_star_images[ii]
+
+    return isolated_images
+
+
 class GalsimBlends(Dataset):
     """Dataset of galsim blends."""
 
@@ -84,7 +166,7 @@ class GalsimBlends(Dataset):
         self.max_sources_per_tile = max_sources_per_tile
         self.slen = slen
         self.bp = bp
-        self.size = self.slen + 2 * self.bp
+        self.size = _get_size(slen, bp)
         self.pixel_scale = PIXEL_SCALE
 
         # counts and densities
@@ -107,77 +189,40 @@ class GalsimBlends(Dataset):
         self.all_star_magnitudes = column_to_tensor(Table.read(stars_file), "i_ab")
 
     def sample(self):
-        # sampling
-        star_params = sample_stars(
-            self.all_star_magnitudes, self.slen, self.star_density, self.max_n_stars
-        )
+
+        # galaxies
         batch = next(self.galaxy_generator)
         blend_cat = batch.catalog_list[0]  # always only 1 batch
+        galaxy_image = torch.from_numpy(batch.blend_images[0, 3, None])
+        isolated_galaxy_image = torch.from_numpy(batch.isolated_images[0, :, 3, None])
+        n_galaxies = len(blend_cat)
+
         psf = batch.psf[3]  # i-band index
         assert isinstance(psf, GSObject)
 
-        # number of sources
-        n_stars = star_params["n_stars"]
-        n_galaxies = torch.tensor(len(blend_cat))
-        n_sources = torch.tensor(n_stars.item() + n_galaxies.item())
-        is_on_sources = get_is_on_from_n_sources(n_sources, self.max_n_sources)
-        assert n_sources <= self.max_n_sources
-
-        # locs
-        # NOTE: BTK positions are w.r.t to top-left corner in pixels.
-        star_locs = star_params["locs"]
-        x, y = column_to_tensor(blend_cat, "x_peak"), column_to_tensor(blend_cat, "y_peak")
-        locs_x = (x - self.bp + 0.5) / self.slen
-        locs_y = (y - self.bp + 0.5) / self.slen
-        galaxy_locs = torch.vstack((locs_y, locs_x)).T.reshape(-1, 2)
-        locs = torch.zeros((self.max_n_sources, 2))
-        locs[:n_galaxies, :] = galaxy_locs
-        locs[n_galaxies : n_galaxies + n_stars, :] = star_locs[:n_stars]
-
-        # bools
-        galaxy_bools = torch.zeros((self.max_n_sources, 1))
-        galaxy_bools[:n_galaxies, :] = 1
-        star_bools = (1 - galaxy_bools) * is_on_sources.reshape(-1, 1)
-
-        # star fluxes and log_fluxes
-        star_fluxes = star_params["star_fluxes"].reshape(-1, 1)
-        star_log_fluxes = star_params["star_log_fluxes"].reshape(-1, 1)
-        new_star_fluxes = torch.zeros((self.max_n_sources, 1))
-        new_star_log_fluxes = torch.zeros((self.max_n_sources, 1))
-        new_star_fluxes[n_galaxies : n_galaxies + n_stars, :] = star_fluxes[:n_stars, :]
-        new_star_log_fluxes[n_galaxies : n_galaxies + n_stars, :] = star_log_fluxes[:n_stars, :]
-
-        # galaxy params
-        mags = torch.from_numpy(blend_cat["i_ab"].value.astype(float))  # byte order
-        gal_flux = convert_mag_to_flux(mags)
-        blend_cat["flux"] = gal_flux.numpy().astype(float)
-        # NOTE: this function requires all galaxies to be in the front to work
-        galaxy_params = catsim_row_to_galaxy_params(blend_cat, self.max_n_sources)
+        # stars
+        star_params = sample_stars(
+            self.all_star_magnitudes, self.slen, self.star_density, self.max_n_stars
+        )
+        star_image, stars_isolated = render_stars_from_params(
+            star_params, self.slen, self.bp, psf, self.max_n_stars
+        )
+        n_stars = star_params["n_stars"].item()
 
         # images
-        stars_image, stars_isolated = render_stars(
-            n_stars, star_fluxes, star_locs, self.slen, self.bp, psf, self.max_n_stars
-        )
-        galaxies_image = torch.from_numpy(batch.blend_images[0, 3, None])
-        noiseless = stars_image + galaxies_image
-
-        galaxies_isolated = torch.from_numpy(batch.isolated_images[0, :, 3, None])
-        isolated_images = torch.zeros((self.max_n_sources, 1, self.size, self.size))
-        isolated_images[:n_galaxies] = galaxies_isolated[:n_galaxies]  # noqa:WPS362
-        isolated_images[n_galaxies : n_galaxies + n_stars] = stars_isolated[:n_stars]  # noqa:WPS362
-        background = self.background.sample((1, *noiseless.shape)).squeeze(0)
+        assert galaxy_image.shape == star_image.shape
+        noiseless = galaxy_image + star_image
+        background = self.background.sample((1, 1, self.size, self.size))[0]
         image = _add_noise_and_background(noiseless, background)
+        isolated_images = _combine_isolated_images(
+            isolated_galaxy_image, stars_isolated, n_stars, n_galaxies, self.size
+        )
+        assert isolated_images.shape[0] == self.max_n_sources
 
-        params_dict = {
-            "n_sources": n_sources,
-            "plocs": locs * self.slen,
-            "galaxy_bools": galaxy_bools,
-            "star_bools": star_bools,
-            "star_fluxes": new_star_fluxes,
-            "star_log_fluxes": new_star_log_fluxes,
-            "galaxy_params": galaxy_params,
-        }
-        params_dict = {k: v.unsqueeze(0) for k, v in params_dict.items()}
+        # combine parameters
+        fparams = _get_full_params(star_params, blend_cat, self.max_n_sources, self.bp, self.slen)
+        params_dict = {k: v.unsqueeze(0) for k, v in fparams.items()}
+
         cat = FullCatalog(self.slen, self.slen, params_dict)
         return cat, image, noiseless, isolated_images, background, psf  # noqa: WPS227
 
