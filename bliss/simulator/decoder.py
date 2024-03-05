@@ -190,6 +190,7 @@ class ImageDecoder(nn.Module):
             tile_cat["galaxy_fluxes"][i] *= flux_calibration_rats[i]
 
         full_cat = tile_cat.to_full_catalog()
+       
 
         # generate random WCS shifts as manual image dithering via unaligning WCS
         wcs_batch = []

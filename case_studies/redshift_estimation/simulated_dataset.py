@@ -192,6 +192,14 @@ class RedshiftSimulatedDataset(pl.LightningDataModule, IterableDataset):
         image_ids, image_id_indices = self.randomized_image_ids(self.catalog_prior.batch_size)
         with torch.no_grad():
             tile_catalog = self.catalog_prior.sample()
+            #galaxy_fluxes_shape = tile_catalog['galaxy_fluxes'].shape
+
+            # Sample dummy photometry values from a uniform distribution
+            #tile_catalog['galaxy_fluxes'] = torch.distributions.LogNormal(1.3, 0.6).sample(galaxy_fluxes_shape)
+            
+            # Sample dummy photometry values from a uniform distribution
+            #tile_catalog['star_fluxes'] = torch.distributions.LogNormal(1.3, 0.6).sample(galaxy_fluxes_shape)
+
             images, background, deconv, psf_params = self.simulate_images(
                 tile_catalog, image_ids, image_id_indices
             )
