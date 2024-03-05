@@ -166,6 +166,6 @@ plots:
     encoder:
         n_images_per_batch: 10
         n_rows_per_batch: 15
-    test_datasets:
+    test_datasets_files:
         single_galaxies: ${paths.project}/data/test_single_galaxies.pt
         blends: ${paths.project}/data/test_blends.pt

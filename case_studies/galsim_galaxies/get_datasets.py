@@ -41,7 +41,7 @@ def _generate_single_galaxy_datasets(cfg, n_samples, overwrite):
     ds = instantiate(cfg.single_galaxy_datasets.single_galaxies)
     train_path = Path(cfg.single_galaxy_datasets.train_saved_single_galaxies.dataset_file)
     val_path = Path(cfg.single_galaxy_datasets.val_saved_single_galaxies.dataset_file)
-    test_path = Path(cfg.plots.test_datasets.single_galaxies_test_file)
+    test_path = Path(cfg.plots.test_datasets_files.single_galaxies)
     _save_dataset(ds, train_path, val_path, test_path, n_samples, overwrite, njobs=1)
 
 
@@ -49,7 +49,7 @@ def _generate_blends_datasets(cfg, n_samples, overwrite):
     ds = instantiate(cfg.blends_datasets.blends)
     train_path = Path(cfg.blends_datasets.train_saved_blends.dataset_file)
     val_path = Path(cfg.blends_datasets.val_saved_blends.dataset_file)
-    test_path = Path(cfg.plots.test_datasets.blends_test_file)
+    test_path = Path(cfg.plots.test_datasets_files.blends)
     _save_dataset(ds, train_path, val_path, test_path, n_samples, overwrite, njobs=1)
 
 

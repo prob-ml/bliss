@@ -1086,7 +1086,7 @@ def _make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
     autoencoder.load_state_dict(torch.load(cfg.plots.checkpoints.autoencoder))
     autoencoder = autoencoder.to(device).eval()
 
-    galaxies_file = cfg.plots.test_datasets.single_galaxies
+    galaxies_file = cfg.plots.test_datasets_files.single_galaxies
 
     # arguments for figures
     args = (autoencoder, galaxies_file)
@@ -1097,7 +1097,7 @@ def _make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
 
 def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dict):
     print("INFO: Creating figures for metrics on simulated blended galaxies.")
-    blend_file = Path(cfg.plots.test_datasets.blends)
+    blend_file = Path(cfg.plots.test_datasets_files.blends)
     BlendSimulationFigure(overwrite=overwrite, **bfig_kwargs)(blend_file, encoder, decoder)
 
 
