@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import galsim
 import numpy as np
@@ -37,8 +37,8 @@ def sample_stars(
     return {
         "n_stars": n_stars,
         "locs": locs,
-        "star_fluxes": fluxes,
-        "star_log_fluxes": star_log_fluxes,
+        "star_fluxes": fluxes.reshape(-1, 1),
+        "star_log_fluxes": star_log_fluxes.reshape(-1, 1),
     }
 
 
@@ -73,16 +73,28 @@ def render_stars(
     image = torch.zeros((1, size, size))  # single-band only
     isolated_images = torch.zeros((max_n_stars, 1, size, size))
 
-    for ii, flux, loc in zip(range(n_stars), star_fluxes, star_locs):
-        ploc = loc * slen
-        offset_x = ploc[1] + bp - size / 2
-        offset_y = ploc[0] + bp - size / 2
+    for ii in range(n_stars):
+        flux = star_fluxes[ii].item()
+        ploc = star_locs[ii] * slen
+        # TODO: do I need a half-pixel offset here too???
+        offset_x = ploc[1].item() + bp - size / 2
+        offset_y = ploc[0].item() + bp - size / 2
         offset = torch.tensor([offset_x, offset_y])
         star_uncentered = _render_star(flux, size, psf, offset=offset)
         isolated_images[ii] = star_uncentered
         image += star_uncentered
 
     return image, isolated_images
+
+
+def render_stars_from_params(
+    star_params: Dict[str, Tensor], slen: int, bp: int, psf: galsim.GSObject, max_n_stars: int
+):
+    """Render stars but using directly the output for `sample_stars`."""
+    n_stars = star_params["n_stars"]
+    star_fluxes = star_params["star_fluxes"]
+    locs = star_params["locs"]
+    return render_stars(n_stars.item(), star_fluxes, locs, slen, bp, psf, max_n_stars)
 
 
 def _sample_poisson_n_sources(mean_sources, max_n_sources) -> int:
