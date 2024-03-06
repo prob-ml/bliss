@@ -56,7 +56,7 @@ class DetectionMetrics(Metric):
         self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("tp_gal", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("fp", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("avg_distance", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total_true_n_sources", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
