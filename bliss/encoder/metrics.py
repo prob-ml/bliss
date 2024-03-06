@@ -93,7 +93,7 @@ class DetectionPerformance(Metric):
             self.add_state(metric, default=init_val, dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
-        if self.mag_band:
+        if self.mag_band is not None:
             true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
             est_mags = est_cat.magnitudes[:, :, self.mag_band].contiguous()
         else:
