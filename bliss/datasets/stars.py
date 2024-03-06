@@ -15,7 +15,6 @@ def sample_stars(
     max_n_stars: int,
     max_shift: float = 0.5,  # between (0, 0.5)
 ):
-
     # counts
     exp_count = (slen * PIXEL_SCALE / 60) ** 2 * star_density
     n_stars = torch.tensor(_sample_poisson_n_sources(exp_count, max_n_stars))
