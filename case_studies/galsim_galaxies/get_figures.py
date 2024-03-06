@@ -367,7 +367,7 @@ class BlendSimulationFigure(BlissFigure):
 
         # compute detection metrics (snr)
         snr_bins2 = 10 ** torch.arange(0.2, 3.2, 0.2)
-        snr_bins1 = 10 ** torch.arange(0.0, 3.0, 0.2)
+        snr_bins1 = 10 ** torch.arange(0, 3.0, 0.2)
         snr_bins = torch.column_stack((snr_bins1, snr_bins2))
         bin_metrics = compute_bin_metrics(truth, est, "snr", snr_bins)
         boot_metrics = get_boostrap_precision_and_recall(1000, truth, est, "snr", snr_bins)
