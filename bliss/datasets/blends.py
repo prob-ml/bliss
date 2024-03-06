@@ -1,5 +1,5 @@
 import math
-from typing import Dict
+from typing import Callable, Dict
 
 import btk
 import torch
@@ -157,6 +157,7 @@ class GalsimBlends(Dataset):
         seed: int,  # for draw generator
         star_density: float = 10,  # counts / sq. arcmin
         galaxy_density: float = 185,  # counts / sq. arcmin
+        generator_setup: Callable = _setup_blend_galaxy_generator,
     ):
         super().__init__()
         self.seed = seed
@@ -182,14 +183,13 @@ class GalsimBlends(Dataset):
         self.background = ConstantBackground((get_default_lsst_background(),))
 
         # btk
-        self.galaxy_generator = _setup_blend_galaxy_generator(
+        self.galaxy_generator = generator_setup(
             catalog_file, self.galaxy_density, self.max_n_galaxies, self.slen, self.bp, self.seed
         )
 
         self.all_star_magnitudes = column_to_tensor(Table.read(stars_file), "i_ab")
 
     def sample(self):
-
         # galaxies
         batch = next(self.galaxy_generator)
         blend_cat = batch.catalog_list[0]  # always only 1 batch
@@ -302,7 +302,6 @@ class GalsimBlends(Dataset):
 
 
 class SavedGalsimBlends(Dataset):
-
     def __init__(self, dataset_file: str, epoch_size: int) -> None:
         super().__init__()
         self.ds: TensorDict = torch.load(dataset_file)
