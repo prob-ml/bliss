@@ -19,7 +19,7 @@ def _setup_single_galaxy_draw_generator(catalog_file: str, slen: int, seed: int)
         max_number=1,
         min_number=1,
         stamp_size=stamp_size,
-        max_shift=0.0,
+        max_shift=0,
         min_mag=0,  # min mag in i-band is 14.32
         max_mag=27.3,  # see document of high level responses
         seed=seed,
