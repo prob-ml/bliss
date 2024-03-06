@@ -7,7 +7,7 @@ import torch
 from einops import rearrange, reduce, repeat
 from matplotlib.pyplot import Axes
 from torch import Tensor
-from torch.nn import functional as F
+from torch.nn.functional import unfold
 from tqdm import tqdm
 
 from bliss.datasets.lsst import convert_flux_to_mag
@@ -549,7 +549,7 @@ def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tens
     n_tiles_h, n_tiles_w = get_n_padded_tiles_hw(
         images.shape[2], images.shape[3], window, tile_slen
     )
-    tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
+    tiles = unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
     return rearrange(
         tiles,
