@@ -2,7 +2,7 @@ import galcheat
 import galsim
 import numpy as np
 import torch
-from astropy import units as u
+from astropy import units as u  # noqa: WPS347
 from btk.survey import get_surveys
 from galcheat.utilities import mag2counts, mean_sky_level
 from torch import Tensor
@@ -10,7 +10,7 @@ from torch import Tensor
 PIXEL_SCALE = 0.2
 MAX_MAG_GAL = 27.3
 MAX_MAG_STAR = 26.0  # see histogram of dc2 star catalog in i-band
-MIN_MAG = 0.0
+MIN_MAG = 0
 
 
 def convert_mag_to_flux(mag: Tensor) -> Tensor:
