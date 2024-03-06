@@ -1,4 +1,4 @@
-from torch.distributions import Uniform
+from torch.distributions import Gamma, Uniform
 
 from bliss.simulator.prior import CatalogPrior
 from case_studies.redshift_estimation.catalog import RedshiftTileCatalog
@@ -15,18 +15,18 @@ class RedshiftPrior(CatalogPrior):
     def __init__(
         self,
         *args,
-        redshift_min: float = 0.0,
-        redshift_max: float = 1.0,
+        redshift_alpha: float = 0.0,
+        redshift_beta: float = 1.0,
         **kwargs,
     ):
         """Initializes CatalogPrior."""
         super().__init__(*args, **kwargs)
-        self.redshift_min = redshift_min
-        self.redshift_max = redshift_max
+        self.redshift_alpha = redshift_alpha
+        self.redshift_beta = redshift_beta
 
     def _sample_redshifts(self):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        return Uniform(self.redshift_min, self.redshift_max).sample(latent_dims)
+        return Gamma(self.redshift_alpha, self.redshift_beta).sample(latent_dims)
 
     def sample(self) -> RedshiftTileCatalog:
         """Overrides this method from CatalogPrior to include redshift samples from prior.

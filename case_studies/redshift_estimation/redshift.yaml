@@ -6,8 +6,8 @@ defaults:
 
 prior:
     _target_: case_studies.redshift_estimation.prior.RedshiftPrior
-    redshift_min: 0.99
-    redshift_max: 1.01
+    redshift_alpha: 3
+    redshift_beta: 3.33333333333333
 
 simulator:
     _target_: case_studies.redshift_estimation.simulated_dataset.RedshiftSimulatedDataset
