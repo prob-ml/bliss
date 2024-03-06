@@ -1,22 +1,11 @@
-import os
-import warnings
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
 import dataclasses
+import math
+import warnings
 
-import numpy as np
-import pytorch_lightning as pl
 import torch
-from skimage.restoration import richardson_lucy
-from torch import Tensor
-from torch.utils.data import DataLoader, Dataset, IterableDataset
-from tqdm import tqdm
+from torch.utils.data import IterableDataset
 
-from bliss.catalog import TileCatalog
 from bliss.catalog import FullCatalog
-from bliss.simulator.decoder import ImageDecoder
-from bliss.simulator.prior import CatalogPrior
-from bliss.surveys.survey import Survey
-
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -25,7 +14,7 @@ warnings.filterwarnings(
 
 
 def counts_mask(counts):
-    """
+    """Identify the first `counts[i]` elements of the ith row of the result.
     Args:
         counts: (m) tensor of counts
 
@@ -55,8 +44,9 @@ def counts_mask(counts):
 
 
 def draw_trunc_pareto(b, c, loc, scale, size, torch_generator=None):
-    """
-    Draw a truncated pareto random variable.  Specifically, let the "standardized"
+    """Draw a truncated pareto random variable.
+
+    Specifically, let the "standardized"
     truncated pareto distribution be the distribution with PDF
 
     f(x) propto x^{-b-1} I(1<=x<=c)
@@ -85,7 +75,8 @@ def draw_trunc_pareto(b, c, loc, scale, size, torch_generator=None):
 
 @dataclasses.dataclass
 class ToySimulator:
-    """
+    """Fast but simple simulator for testing purposes.
+
     Args:
         n_bands (int): number of bands
         coadd_depth (int): number of Single-Epoch Observed Images (SEOs) to coadd
@@ -132,9 +123,11 @@ class ToySimulator:
     noise_level: float = 10
 
     def construct_fluxes(self, size, generator=None):
-        """
+        """Draw fluxes based on our parameters.
+
         Args:
             size: tuple of ints; output will be size + (n_bands,)
+            generator: torch.Generator, optional; random number generator
 
         """
 
@@ -155,14 +148,12 @@ class ToySimulator:
 
         # modify by some random factor for each band, uniform in [.8,1.2]
         mods = 0.8 + 0.4 * torch.rand(size + (self.n_bands,), generator=generator, device=device)
-        final_brightness = base_brightness[..., None] * mods
 
-        return final_brightness
+        # done
+        return base_brightness[..., None] * mods
 
     def sample_catalogs(self, batch_size, generator=None) -> FullCatalog:
-        """
-        Sample a FullCatalog for a single fictitious patch of sky, for use in training bliss.
-        """
+        """Sample a FullCatalog for a single fictitious patch of sky."""
 
         # handle generator
         # take cue from generator about device
@@ -186,7 +177,7 @@ class ToySimulator:
         source_fluxes = torch.where(
             counts_mask(n_sources)[:, :, None],
             source_fluxes,
-            torch.tensor(float("nan"), device=device),
+            torch.tensor(math.nan, device=device),
         )
 
         # positions for eaach sources
@@ -197,7 +188,7 @@ class ToySimulator:
         )
 
         # max sources per batch
-        M = source_fluxes.shape[1]
+        max_sources = source_fluxes.shape[1]
 
         # done
         return FullCatalog(
@@ -205,16 +196,19 @@ class ToySimulator:
             self.width,
             {
                 "plocs": source_locations,
-                "source_type": torch.zeros(batch_size, M, 1, dtype=torch.int32, device=device),
-                "galaxy_fluxes": torch.zeros(batch_size, M, self.n_bands, device=device),
-                "galaxy_params": torch.zeros(batch_size, M, 6, device=device),
+                "source_type": torch.zeros(
+                    batch_size, max_sources, 1, dtype=torch.int32, device=device
+                ),
+                "galaxy_fluxes": torch.zeros(batch_size, max_sources, self.n_bands, device=device),
+                "galaxy_params": torch.zeros(batch_size, max_sources, 6, device=device),
                 "star_fluxes": source_fluxes,
                 "n_sources": n_sources,
             },
         )
 
     def sample_dithers(self, full_catalog, generator=None) -> torch.tensor:
-        """
+        """Simulate misalignment of coadds.
+
         Args:
             full_catalog: FullCatalog, the catalog of sources in each tile
 
@@ -222,14 +216,18 @@ class ToySimulator:
             (B, n_coadds, n_bands, 2) tensor, offsets for each image
         """
 
-        B = full_catalog["plocs"].shape[0]
+        batch_size = full_catalog["plocs"].shape[0]
+        size = (batch_size, self.coadd_depth, self.n_bands, 2)
         eps = torch.rand(
-            (B, self.coadd_depth, self.n_bands, 2), generator=generator, device=generator.device
+            size=size,
+            generator=generator,
+            device=generator.device
         )
         return (eps * 2 - 1) * self.coadd_wiggle_shift
 
     def sample_images(self, full_catalog, dithers, generator=None) -> torch.tensor:
-        """
+        """Create images from a catalog and misalignments.
+
         Args:
             full_catalog: FullCatalog, the catalog of sources in each tile
             dithers: (B, n_coadds, n_bands, 2) tensor, offsets for each image
@@ -237,6 +235,9 @@ class ToySimulator:
 
         Returns:
             (B, n_bands, height, width) tensor, the coadded images
+
+        Raises:
+            ValueError: if any source is not a star
 
         Sample images from full catalog
 
@@ -254,8 +255,7 @@ class ToySimulator:
         mask = counts_mask(full_catalog["n_sources"])[:, :, None]  # B x max_sources x 1
         fluxes = torch.where(mask, full_catalog["star_fluxes"], 0)
 
-        # construct meshgrid
-        # (height,width)
+        # construct meshgrid of size (height,width)
         # pixel value at img[0,0] is assumed to span from coordinate 0,0
         # to coordinate value 1,1
         # so the *center* of img[0,0] pixel is at coordinate (.5,.5)
@@ -297,20 +297,19 @@ class ToySimulator:
                         * (
                             (plocs_x - xx) ** 2 / self.psf_radius_h**2
                             + (plocs_y - yy) ** 2 / self.psf_radius_w**2
-                        )
+                        )  # noqa: C815
                     )
                     * relevant_fluxes[:, None, None]
                 ).sum(-1)
 
                 # sample and add it in
                 samp = torch.poisson(brightness + self.noise_level, generator=generator)
-                img = img + samp
+                img += samp
 
             band_images.append(img)
 
         # merge
-        stack = torch.stack(band_images, dim=1)
-        return stack
+        return torch.stack(band_images, dim=1)
 
 
 class ToySimulatedDataset(IterableDataset):
@@ -320,7 +319,7 @@ class ToySimulatedDataset(IterableDataset):
         batch_size: int = 64,
         num_workers: int = 1,
         epoch_size: int = 64,
-        generator: Optional[torch.Generator] = None,
+        generator: torch.Generator = None,
         tile_slen: int = 4,
         max_sources_per_tile: int = 1,
         cache: bool = False,
