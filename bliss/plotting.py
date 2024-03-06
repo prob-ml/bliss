@@ -180,7 +180,7 @@ def plot_image(
         fig.colorbar(im, cax=cax, orientation="vertical")
 
 
-def plot_locs(
+def plot_plocs(
     ax: Axes,
     bp: int,
     slen: int,
@@ -211,17 +211,17 @@ def plot_locs(
 def add_loc_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s=20):
     cmp1 = mpl.colormaps[cmap1]
     cmp2 = mpl.colormaps[cmap2]
-    colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
+    colors = (cmp1(1.0), cmp1(0), cmp2(1.0), cmp2(0))
     markers = ("+", "+", "x", "x")
     sizes = (s * 2, s * 2, s + 5, s + 5)
     for label, c, m, size in zip(labels, colors, markers, sizes):
         ax.scatter([], [], color=c, marker=m, label=label, s=size)
     ax.legend(
-        bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+        bbox_to_anchor=(0, 1.2, 1.0, 0.102),
         loc="lower left",
         ncol=2,
         mode="expand",
-        borderaxespad=0.0,
+        borderaxespad=0,
     )
 
 
