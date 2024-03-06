@@ -218,11 +218,7 @@ class ToySimulator:
 
         batch_size = full_catalog["plocs"].shape[0]
         size = (batch_size, self.coadd_depth, self.n_bands, 2)
-        eps = torch.rand(
-            size=size,
-            generator=generator,
-            device=generator.device
-        )
+        eps = torch.rand(size=size, generator=generator, device=generator.device)
         return (eps * 2 - 1) * self.coadd_wiggle_shift
 
     def sample_images(self, full_catalog, dithers, generator=None) -> torch.tensor:
