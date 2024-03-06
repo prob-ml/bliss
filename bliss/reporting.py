@@ -1,4 +1,5 @@
 """Functions to evaluate the performance of BLISS predictions."""
+
 from collections import defaultdict
 from typing import DefaultDict, Dict, Optional, Tuple
 
@@ -415,7 +416,7 @@ def compute_bin_metrics(
 
 
 def get_single_galaxy_ellipticities(
-    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396, no_bar: bool = True
+    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.2, no_bar: bool = True
 ) -> Tensor:
     """Returns ellipticities of (noiseless, single-band) individual galaxy images.
 
@@ -451,7 +452,7 @@ def get_single_galaxy_ellipticities(
 
 
 def get_single_galaxy_measurements(
-    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.396
+    images: Tensor, psf_image: Tensor, pixel_scale: float = 0.2
 ) -> Dict[str, Tensor]:
     """Compute individual galaxy measurements comparing true images with reconstructed images.
 
