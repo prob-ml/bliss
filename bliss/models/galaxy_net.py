@@ -5,7 +5,7 @@ import torch
 from matplotlib import pyplot as plt
 from torch import Tensor, nn
 from torch.distributions import Normal
-from torch.nn import functional as F
+from torch.nn.functional import relu
 from torch.nn.utils import weight_norm
 from torch.optim import Adam
 
@@ -58,7 +58,7 @@ class CenteredGalaxyEncoder(nn.Module):
     def forward(self, image):
         """Encodes galaxy from image."""
         z = self.sample(image)
-        return z, torch.tensor(0.0, device=image.device)
+        return z, torch.tensor(0, device=image.device)
 
 
 class CenteredGalaxyDecoder(nn.Module):
@@ -92,7 +92,7 @@ class CenteredGalaxyDecoder(nn.Module):
         z = self.deconv(z)
         z = z[:, :, : self.slen, : self.slen]
         assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
-        return F.relu(z)
+        return relu(z)
 
     def _validate_slen(self):
         slen2 = _conv2d_inv_dim(_conv2d_inv_dim(self.min_slen))
