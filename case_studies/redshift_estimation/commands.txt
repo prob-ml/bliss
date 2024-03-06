@@ -1,0 +1,5 @@
+# For large scale data generation. From within the base project directory (i.e. the parent directory of case_studies), run the following:
+
+nohup ./scripts/generate_data_in_parallel.sh -n 16 -cp /home/declan/current/bliss/case_studies/redshift_estimation/ -cn redshift.yaml &> generate_output.out &
+
+# For training the encoder.
