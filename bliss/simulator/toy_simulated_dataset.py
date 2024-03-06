@@ -15,6 +15,7 @@ warnings.filterwarnings(
 
 def counts_mask(counts):
     """Identify the first `counts[i]` elements of the ith row of the result.
+
     Args:
         counts: (m) tensor of counts
 
@@ -45,6 +46,17 @@ def counts_mask(counts):
 
 def draw_trunc_pareto(b, c, loc, scale, size, torch_generator=None):
     """Draw a truncated pareto random variable.
+
+    Args:
+        b: float, exponent of the power law
+        c: float, truncation of the power law
+        loc: float, location of the power law
+        scale: float, scale of the power law
+        size: tuple of ints, size of the output
+        torch_generator: torch.Generator, optional; random number generator
+
+    Returns:
+        (size) tensor of draws from the truncated pareto distribution
 
     Specifically, let the "standardized"
     truncated pareto distribution be the distribution with PDF
@@ -129,6 +141,9 @@ class ToySimulator:
             size: tuple of ints; output will be size + (n_bands,)
             generator: torch.Generator, optional; random number generator
 
+        Returns:
+            (size + (n_bands,)) tensor of fluxes
+
         """
 
         # handle generator
@@ -211,6 +226,7 @@ class ToySimulator:
 
         Args:
             full_catalog: FullCatalog, the catalog of sources in each tile
+            generator: torch.Generator, optional; random number generator
 
         Returns:
             (B, n_coadds, n_bands, 2) tensor, offsets for each image
@@ -228,6 +244,7 @@ class ToySimulator:
             full_catalog: FullCatalog, the catalog of sources in each tile
             dithers: (B, n_coadds, n_bands, 2) tensor, offsets for each image
                 representing errors in the alignment
+            generator: torch.Generator, optional; random number generator
 
         Returns:
             (B, n_bands, height, width) tensor, the coadded images
