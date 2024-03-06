@@ -1,3 +1,4 @@
+import math
 from typing import Dict, List, Optional, Union
 
 import pytorch_lightning as pl
@@ -16,7 +17,7 @@ from bliss.models.encoder_layers import (
     make_enc_final,
 )
 from bliss.models.galaxy_encoder import CenterPaddedTilesTransform
-from bliss.plotting import add_loc_legend, plot_image, plot_locs
+from bliss.plotting import add_loc_legend, plot_image, plot_plocs
 
 
 class BinaryEncoder(pl.LightningModule):
@@ -64,7 +65,7 @@ class BinaryEncoder(pl.LightningModule):
         self.ptile_slen = ptile_slen
         border_padding = (ptile_slen - tile_slen) / 2
         assert tile_slen <= ptile_slen
-        assert border_padding % 1 == 0, "amount of border padding should be an integer"
+        assert border_padding.is_integer(), "amount of border padding should be an integer"
         self.border_padding = int(border_padding)
         self.slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
@@ -189,7 +190,7 @@ class BinaryEncoder(pl.LightningModule):
     def make_plots(self, batch, n_samples=16):
         """Produced informative plots demonstrating encoder performance."""
 
-        assert n_samples ** (0.5) % 1 == 0
+        assert math.sqrt(n_samples).is_integer()
         if n_samples > len(batch["n_sources"]):  # do nothing if low on samples.
             return
         nrows = int(n_samples**0.5)  # for figure
@@ -222,8 +223,8 @@ class BinaryEncoder(pl.LightningModule):
             est_gprobs = est["galaxy_probs"][ii].cpu().numpy().reshape(-1)
             slen, _ = image.shape
             plot_image(fig, ax, image, colorbar=False)
-            plot_locs(ax, bp, slen, true_plocs, true_gbools, m="+", s=30, cmap="cool")
-            plot_locs(ax, bp, slen, est_plocs, est_gprobs, m="x", s=20, cmap="bwr")
+            plot_plocs(ax, bp, slen, true_plocs, true_gbools, m="+", s=30, cmap="cool")
+            plot_plocs(ax, bp, slen, est_plocs, est_gprobs, m="x", s=20, cmap="bwr")
             if ii == 0:
                 add_loc_legend(ax, labels)
         fig.tight_layout()
