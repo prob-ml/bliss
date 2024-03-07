@@ -19,8 +19,6 @@ class LogBackgroundTransform:
 
 
 class ConcatBackgroundTransform:
-    def __init__(self):
-        pass
 
     def __call__(self, image_and_background: Tensor) -> Tensor:
         return image_and_background
