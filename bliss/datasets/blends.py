@@ -1,9 +1,12 @@
 import math
 from typing import Callable, Dict
 
-import btk
 import torch
 from astropy.table import Table
+from btk.catalog import CatsimCatalog
+from btk.draw_blends import CatsimGenerator
+from btk.sampling_functions import DensitySampling
+from btk.survey import get_surveys
 from einops import rearrange
 from galsim.gsobject import GSObject
 from tensordict import TensorDict
@@ -33,11 +36,11 @@ def _setup_blend_galaxy_generator(
     seed: int,
     max_mag: float = 27.3,
 ):
-    catalog = btk.catalog.CatsimCatalog.from_file(catalog_file)
+    catalog = CatsimCatalog.from_file(catalog_file)
 
     stamp_size = (slen + 2 * bp) * PIXEL_SCALE  # arcsecs
 
-    sampling_function = btk.sampling_functions.DensitySampling(
+    sampling_function = DensitySampling(
         max_number=max_number,
         min_number=0,
         density=density,
@@ -48,9 +51,9 @@ def _setup_blend_galaxy_generator(
         mag_name="i_ab",
     )
 
-    survey = btk.survey.get_surveys("LSST")
+    survey = get_surveys("LSST")
 
-    return btk.draw_blends.CatsimGenerator(
+    return CatsimGenerator(
         catalog,
         sampling_function,
         survey,
@@ -84,7 +87,7 @@ def _get_full_params(
     x, y = column_to_tensor(blend_cat, "x_peak"), column_to_tensor(blend_cat, "y_peak")
     locs_x = (x - bp + 0.5) / slen
     locs_y = (y - bp + 0.5) / slen
-    galaxy_locs = torch.vstack((locs_y, locs_x)).T.reshape(-1, 2)
+    galaxy_locs = rearrange([locs_y, locs_x], "l b -> b l", l=2)
     locs = torch.zeros((max_n_sources, 2))
     locs[:n_galaxies, :] = galaxy_locs
     locs[n_galaxies : n_galaxies + n_stars, :] = star_locs[:n_stars]
@@ -265,13 +268,13 @@ class GalsimBlends(Dataset):
         star_fluxes = full_cat["star_fluxes"][0, :, 0]
         mags = torch.zeros(self.max_n_sources)
         fluxes = torch.zeros(self.max_n_sources)
-        for ii in range(n_sources):
-            gbool = galaxy_bools[0, ii, 0].item()
-            flux = gal_fluxes[ii, None] if gbool == 1 else star_fluxes[ii, None]
+        for jj in range(n_sources):
+            gbool = galaxy_bools[0, jj, 0].item()
+            flux = gal_fluxes[jj, None] if gbool == 1 else star_fluxes[jj, None]
             assert flux.item() > 0
             mag = convert_flux_to_mag(flux)
-            fluxes[ii] = flux.item()
-            mags[ii] = mag.item()
+            fluxes[jj] = flux.item()
+            mags[jj] = mag.item()
         mags = rearrange(mags, "n -> 1 n 1", n=self.max_n_sources)
         fluxes = rearrange(fluxes, "n -> 1 n 1", n=self.max_n_sources)
 
@@ -309,19 +312,19 @@ class SavedGalsimBlends(Dataset):
         assert len(self.ds) == self.epoch_size
         for p in ("images", "background"):
             assert p in self.ds.keys()
-        for p in ("n_sources", "galaxy_bools", "locs"):
-            assert ("tile_params", p) in self.ds.keys(include_nested=True)
+        for q in ("n_sources", "galaxy_bools", "locs"):
+            assert ("tile_params", q) in self.ds.keys(include_nested=True)
         self.ds.pop("noiseless", None)
 
         # discard not needed values (and thus avoid copying to GPU)
         self.ds.pop("full_params")
-        for p in ("ellips", "blendedness", "snr", "fluxes", "galaxy_params", "mags"):
-            self.ds["tile_params"].pop(p)
+        for r in ("ellips", "blendedness", "snr", "fluxes", "galaxy_params", "mags"):
+            self.ds["tile_params"].pop(r)
 
         # finally, flatten `tile_params` because that is what encoders assume
         tile_params = self.ds.pop("tile_params")
-        for p in tile_params.keys():
-            self.ds[p] = tile_params[p]
+        for t in tile_params.keys():
+            self.ds[t] = tile_params[t]
 
     def __len__(self):
         return self.epoch_size
