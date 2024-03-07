@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
@@ -14,8 +14,6 @@ from torch.optim import Adam
 from bliss.catalog import TileCatalog, get_images_in_tiles
 from bliss.models.decoder import ImageDecoder, get_mgrid
 from bliss.models.galaxy_net import CenteredGalaxyEncoder, OneCenteredGalaxyAE
-from bliss.models.vae.galaxy_flow import CenteredGalaxyLatentFlow
-from bliss.models.vae.galaxy_vae import OneCenteredGalaxyVAE
 from bliss.plotting import add_loc_legend, plot_image, plot_locs
 
 
@@ -23,10 +21,8 @@ class GalaxyEncoder(pl.LightningModule):
     def __init__(
         self,
         decoder: ImageDecoder,
-        autoencoder: Union[OneCenteredGalaxyAE, OneCenteredGalaxyVAE],
+        autoencoder: OneCenteredGalaxyAE,
         hidden: int,
-        vae_flow: Optional[CenteredGalaxyLatentFlow] = None,
-        vae_flow_ckpt: Optional[str] = None,
         optimizer_params: Optional[dict] = None,
         crop_loss_at_border: bool = False,
         checkpoint_path: Optional[str] = None,
@@ -55,14 +51,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.enc = autoencoder.make_deblender(
             self.slen, autoencoder.latent_dim, self.n_bands, hidden
         )
-        if vae_flow is not None:
-            if vae_flow_ckpt is None:
-                raise TypeError("Using `vae_flow` requires `vae_flow_ckpt`.")
-            state_dict = torch.load(vae_flow_ckpt, map_location=vae_flow.device)  # type: ignore
-            vae_flow.load_state_dict(state_dict)
-            vae_flow.eval()
-            vae_flow.requires_grad_(False)
-            self.enc.p_z = vae_flow
+
         self.latent_dim = autoencoder.latent_dim
 
         # grid for center cropped tiles

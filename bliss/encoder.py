@@ -1,4 +1,5 @@
 """Scripts to produce BLISS estimates on astronomical images."""
+
 from typing import Dict, List, Optional, Tuple
 
 import torch
@@ -6,7 +7,7 @@ from torch import Tensor, nn
 from tqdm import tqdm
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
-from bliss.models.binary import BinaryEncoder
+from bliss.models.binary_encoder import BinaryEncoder
 from bliss.models.detection_encoder import DetectionEncoder
 from bliss.models.galaxy_encoder import GalaxyEncoder
 

@@ -1,16 +1,17 @@
 """Common functions to plot results."""
+
 from abc import abstractmethod
 from pathlib import Path
 from typing import Optional, Tuple
 
 import matplotlib as mpl
 import numpy as np
-import seaborn as sns
 import torch
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.pyplot import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from tensordict import TensorDict
 
 CB_color_cycle = [
     "#377eb8",
@@ -31,11 +32,12 @@ def _to_numpy(d: dict):
             d[k] = v.numpy()
         elif isinstance(v, (float, int, np.ndarray)):
             d[k] = v
-        elif isinstance(v, dict):
+        elif isinstance(v, (dict, TensorDict)):
             v = _to_numpy(v)
             d[k] = v
         else:
-            msg = f"Data returned can only be dict, tensor, array, or float but got {type(v)}"
+            msg = f"""Data returned can only be dict, tensor, array, tensordict, or
+                    float but got {type(v)}"""
             raise TypeError(msg)
     return d
 
@@ -55,46 +57,48 @@ def set_rc_params(
     legend_loc="best",
 ):
     # named size options: 'xx-small', 'x-small', 'small', 'medium', 'large', 'x-large', 'xx-large'.
-    rc_params = {
-        # font.
-        "font.family": "serif",
-        "font.sans-serif": "Helvetica",
-        "text.usetex": True,
-        "text.latex.preamble": r"\usepackage{amsmath}",
-        "mathtext.fontset": "cm",
-        "font.size": fontsize,
-        # figure
-        "figure.figsize": figsize,
-        # axes
-        "axes.labelsize": label_size,
-        "axes.titlesize": title_size,
-        # ticks
-        "xtick.labelsize": tick_label_size,
-        "ytick.labelsize": tick_label_size,
-        "xtick.major.size": major_tick_size,
-        "ytick.major.size": major_tick_size,
-        "xtick.major.width": major_tick_width,
-        "ytick.major.width": major_tick_width,
-        "ytick.minor.size": minor_tick_size,
-        "xtick.minor.size": minor_tick_size,
-        "xtick.minor.width": minor_tick_width,
-        "ytick.minor.width": minor_tick_width,
-        # markers
-        "lines.markersize": lines_marker_size,
-        # legend
-        "legend.fontsize": legend_fontsize,
-        "legend.loc": legend_loc,
-        # colors
-        "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
-        # images
-        "image.cmap": "gray",
-        "figure.autolayout": True,
-    }
-    mpl.rcParams.update(rc_params)
-    sns.set_context(rc=rc_params)
+    plt.rcParams.update(
+        {
+            # font
+            "text.usetex": True,
+            "font.family": "sans-serif",
+            "font.sans-serif": "Helvetica",
+            "text.latex.preamble": r"\usepackage{amsmath}",
+            "mathtext.fontset": "cm",
+            "font.size": fontsize,
+            # figure
+            "figure.figsize": figsize,
+            # axes
+            "axes.labelsize": label_size,
+            "axes.titlesize": title_size,
+            # ticks
+            "xtick.labelsize": tick_label_size,
+            "ytick.labelsize": tick_label_size,
+            "xtick.major.size": major_tick_size,
+            "ytick.major.size": major_tick_size,
+            "xtick.major.width": major_tick_width,
+            "ytick.major.width": major_tick_width,
+            "ytick.minor.size": minor_tick_size,
+            "xtick.minor.size": minor_tick_size,
+            "xtick.minor.width": minor_tick_width,
+            "ytick.minor.width": minor_tick_width,
+            # markers
+            "lines.markersize": lines_marker_size,
+            # legend
+            "legend.fontsize": legend_fontsize,
+            "legend.loc": legend_loc,
+            # colors
+            "axes.prop_cycle": mpl.cycler(color=CB_color_cycle),
+            # images
+            "image.cmap": "gray",
+            "figure.autolayout": True,
+        }
+    )
 
 
 class BlissFigure:
+    """Class that simplifies creating figures by automatically caching data and saving."""
+
     def __init__(
         self,
         figdir: str,
@@ -108,20 +112,20 @@ class BlissFigure:
         self.img_format = img_format
 
     @property
-    def rc_kwargs(self) -> dict:
+    def all_rcs(self) -> dict:
         return {}
 
     @property
     @abstractmethod
     def cache_name(self) -> str:
         """Unique identifier for set of figures including cache."""
-        return "cache_name"
+        return ""
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        """Unique identifier for set of figures including cache."""
-        return "bliss_fig"
+    def fignames(self) -> tuple[str, ...]:
+        """Names of all plots that are produced as tuple."""
+        return ()
 
     @abstractmethod
     def compute_data(self, *args, **kwargs) -> dict:
@@ -129,7 +133,7 @@ class BlissFigure:
         return {}
 
     @abstractmethod
-    def create_figure(self, data) -> Figure:
+    def create_figure(self, fname: str, data: dict) -> Figure:
         """Return matplotlib figure instances to save based on data."""
         return {}
 
@@ -144,13 +148,15 @@ class BlissFigure:
 
     def __call__(self, *args, **kwargs):
         """Create figures and save to output directory with names from `self.fignames`."""
-        set_rc_params(**self.rc_kwargs)
         data = self.get_data(*args, **kwargs)
         data_np = _to_numpy(data)
-        fig: Figure = self.create_figure(data_np)  # data for figures is all numpy arrays or floats.
-        figfile = self.figdir / f"{self.name}.{self.img_format}"
-        fig.savefig(figfile, format=self.img_format)  # pylint: disable=no-member
-        plt.close(fig)
+        for fname in self.fignames:
+            rc_kwargs = self.all_rcs.get(fname, {})
+            set_rc_params(**rc_kwargs)
+            fig = self.create_figure(fname, data_np)
+            figfile = self.figdir / f"{fname}.{self.img_format}"
+            fig.savefig(figfile, format=self.img_format)  # pylint: disable=no-member
+            plt.close(fig)
 
 
 def plot_image(
@@ -174,7 +180,7 @@ def plot_image(
         fig.colorbar(im, cax=cax, orientation="vertical")
 
 
-def plot_locs(
+def plot_plocs(
     ax: Axes,
     bp: int,
     slen: int,
@@ -205,17 +211,17 @@ def plot_locs(
 def add_loc_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s=20):
     cmp1 = mpl.colormaps[cmap1]
     cmp2 = mpl.colormaps[cmap2]
-    colors = (cmp1(1.0), cmp1(0.0), cmp2(1.0), cmp2(0.0))
+    colors = (cmp1(1.0), cmp1(0), cmp2(1.0), cmp2(0))
     markers = ("+", "+", "x", "x")
     sizes = (s * 2, s * 2, s + 5, s + 5)
     for label, c, m, size in zip(labels, colors, markers, sizes):
         ax.scatter([], [], color=c, marker=m, label=label, s=size)
     ax.legend(
-        bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+        bbox_to_anchor=(0, 1.2, 1.0, 0.102),
         loc="lower left",
         ncol=2,
         mode="expand",
-        borderaxespad=0.0,
+        borderaxespad=0,
     )
 
 
@@ -251,9 +257,3 @@ def scatter_shade_plot(
 
     ax.plot(xs, ys, marker="o", c=color, linestyle="-")
     ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=alpha)
-
-
-def make_scatter_contours(ax, x, y):
-    sns.scatterplot(x=x, y=y, s=10, color="0.15", ax=ax)
-    sns.histplot(x=x, y=y, pthresh=0.1, cmap="mako", ax=ax, cbar=True)
-    sns.kdeplot(x=x, y=y, levels=10, color="w", linewidths=1, ax=ax)

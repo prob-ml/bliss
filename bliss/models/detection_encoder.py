@@ -9,9 +9,8 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torch import Tensor, nn
 from torch.distributions import Categorical, Normal, Poisson
-from torch.nn import functional as F
+from torch.nn.functional import nll_loss, pad
 from torch.optim import Adam
-from torch.optim.lr_scheduler import MultiStepLR
 
 from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
 from bliss.models.encoder_layers import (
@@ -45,7 +44,6 @@ class DetectionEncoder(pl.LightningModule):
         annotate_probs: bool = False,
         slack: float = 1.0,
         optimizer_params: Optional[dict] = None,
-        scheduler_params: Optional[dict] = None,
     ):
         """Initializes DetectionEncoder.
 
@@ -63,7 +61,6 @@ class DetectionEncoder(pl.LightningModule):
             annotate_probs: Annotate probabilities on validation plots?
             slack: Slack to use when matching locations for validation metrics.
             optimizer_params: arguments passed to the Adam optimizer
-            scheduler_params: arguments passed to the learning rate scheduler
         """
         super().__init__()
 
@@ -71,7 +68,6 @@ class DetectionEncoder(pl.LightningModule):
         self.max_detections = max_detections
         self.n_bands = n_bands
         self.optimizer_params = optimizer_params
-        self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
 
         assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
@@ -204,7 +200,7 @@ class DetectionEncoder(pl.LightningModule):
         if n_source_weights is None:
             max_n_weights = self.max_detections + 1
             n_source_weights = torch.ones(max_n_weights, device=self.device)  # type: ignore
-        n_source_weights = n_source_weights.reshape(1, -1)
+        n_source_weights = rearrange(n_source_weights, "n -> 1 n")
         ns_log_probs_adj = dist_params["n_source_log_probs"] + n_source_weights.log()
         ns_log_probs_adj -= ns_log_probs_adj.logsumexp(dim=-1, keepdim=True)
 
@@ -283,7 +279,7 @@ class DetectionEncoder(pl.LightningModule):
 
         # next, we pad `params_per_source` with a dummy column of zeros that will be looked up
         # (copied) whenever fewer the `max_detections` sources are present. `gather` does the copy.
-        pps_padded = F.pad(params_per_source, (0, 0, 0, 1))
+        pps_padded = pad(params_per_source, (0, 0, 0, 1))
         pps_gathered = torch.gather(pps_padded, 1, sindx3)
         params_n_srcs_combined = rearrange(
             pps_gathered, "np (ns md) pps -> ns np md pps", ns=tile_n_sources.size(0)
@@ -310,11 +306,9 @@ class DetectionEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
-        optimizer = Adam(self.parameters(), **self.optimizer_params)
-        scheduler = MultiStepLR(optimizer, **self.scheduler_params)
-        return [optimizer], [scheduler]
+        return Adam(self.parameters(), **self.optimizer_params)
 
-    def training_step(self, batch, batch_idx, optimizer_idx=0):
+    def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
         batch_size = len(batch["n_sources"])
         out = self._get_loss(batch)
@@ -331,7 +325,7 @@ class DetectionEncoder(pl.LightningModule):
 
         nslp_flat = rearrange(dist_params["n_source_log_probs"], "n_ptiles ns -> n_ptiles ns")
         truth_flat = true_catalog.n_sources.reshape(-1)
-        counter_loss = F.nll_loss(nslp_flat, truth_flat, reduction="none")
+        counter_loss = nll_loss(nslp_flat, truth_flat, reduction="none")
 
         pred = self.encode_for_n_sources(
             dist_params["per_source_params"],
@@ -444,11 +438,11 @@ class DetectionEncoder(pl.LightningModule):
                 ax.scatter(None, None, color="m", marker="x", s=20, label="t.star")
                 ax.scatter(None, None, color="b", marker="+", s=30, label="p.source")
                 ax.legend(
-                    bbox_to_anchor=(0.0, 1.2, 1.0, 0.102),
+                    bbox_to_anchor=(0, 1.2, 1.0, 0.102),
                     loc="lower left",
                     ncol=2,
                     mode="expand",
-                    borderaxespad=0.0,
+                    borderaxespad=0,
                 )
 
         fig.tight_layout()

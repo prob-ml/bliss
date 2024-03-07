@@ -5,10 +5,9 @@ import torch
 from matplotlib import pyplot as plt
 from torch import Tensor, nn
 from torch.distributions import Normal
-from torch.nn import functional as F
+from torch.nn.functional import relu
 from torch.nn.utils import weight_norm
 from torch.optim import Adam
-from tqdm import tqdm
 
 from bliss.plotting import plot_image
 
@@ -30,6 +29,8 @@ def _identity(x):
 
 
 class CenteredGalaxyEncoder(nn.Module):
+    """Encodes single galaxies with noise but no background."""
+
     def __init__(self, slen, latent_dim, n_bands, hidden, use_weight_norm=False):
         super().__init__()
 
@@ -57,10 +58,12 @@ class CenteredGalaxyEncoder(nn.Module):
     def forward(self, image):
         """Encodes galaxy from image."""
         z = self.sample(image)
-        return z, torch.tensor(0.0, device=image.device)
+        return z, torch.tensor(0, device=image.device)
 
 
 class CenteredGalaxyDecoder(nn.Module):
+    """Reconstructs noiseless galaxies from encoding with no background."""
+
     def __init__(self, slen=53, latent_dim=8, n_bands=1, hidden=256, use_weight_norm=False):
         super().__init__()
 
@@ -89,7 +92,7 @@ class CenteredGalaxyDecoder(nn.Module):
         z = self.deconv(z)
         z = z[:, :, : self.slen, : self.slen]
         assert z.shape[-1] == self.slen and z.shape[-2] == self.slen
-        return F.relu(z)
+        return relu(z)
 
     def _validate_slen(self):
         slen2 = _conv2d_inv_dim(_conv2d_inv_dim(self.min_slen))
@@ -155,17 +158,6 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def get_decoder(self):
         return self.dec
-
-    def generate_latents(self, dataloader, n_batches):
-        """Induces a latent distribution for a non-probabilistic autoencoder."""
-        latent_list = []
-        with torch.no_grad():
-            for _ in tqdm(range(n_batches)):
-                galaxy = next(iter(dataloader))
-                img = (galaxy["images"] - galaxy["background"]).to(self.device)
-                latent_batch = self.enc(img)[0]
-                latent_list.append(latent_batch)
-        return torch.cat(latent_list, dim=0)
 
     # ---------------
     # Optimizer

@@ -25,3 +25,4 @@ hydra_temp/
 bin/
 .pytest_cache/
 venv
+*OneDegSq.fits

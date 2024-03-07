@@ -5,7 +5,7 @@ import pytest
 def overrides(devices):
     overrides = {
         "mode": "train",
-        "training": "sdss_binary",
+        "training": "binary_encoder",
     }
     if devices.use_cuda:
         overrides.update({"training.n_epochs": 50})

@@ -28,40 +28,35 @@ repository = "https://github.com/prob-ml/bliss"
 version = "0.1.1"
 
 [tool.poetry.dependencies]
-astropy = "^5.3"
-einops = "^0.6.1"
+astropy = "^6.0"
+einops = ">=0.6.0"
 galsim = "^2.4.10"
 hydra-core = "^1.3.2"
 matplotlib = "^3.7.2"
-nflows = "^0.14"
 numpy = "^1.25.2"
-python = "^3.10,<3.13"
+python = "^3.10,<3.12"
 pytorch-lightning = "^2.0.6"
 scikit-learn = "^1.3.0"
 scipy = "^1.11.1"
-seaborn = "^0.12.2"
-torch = "^1.13.1"
+torch = "^2.0"
 torchmetrics = "^1.0.1"
-sep = "^1.2.1"
+galcheat = "^1.0.0"
+blending-toolkit = ">=1.0.0b4"
+tensordict = "^0.3.0"
+tensorboard = "^2.16.2"
 
 [tool.poetry.dev-dependencies]
-Cython = ">=0.29.21"
-black = "^23.7.0"
-flake8 = "^6.0.1"
-ipykernel = "^6.21.0"
-isort = "^5.9.3"
+black = "^24.2.0"
+flake8 = "^7.0.0"
+isort = "^5.13.2"
 jupyter = "^1.0.0"
-jupyter_contrib_nbextensions = "^0.7.0"
 nbstripout = "^0.6.0"
-plotly = "^5.15.0"
-pre-commit = "^3.3.3"
-pre-commit-hooks = "^4.4.0"
-pylint = "^2.17.0"
-pytest = "^7.4.0"
-pytest-cov = "^4.1.0"
-pytest-mypy = "^0.10.3"
-tqdm = "^4.65.0"
+pylint = "^3.1.0"
+pytest = "^8.0.2"
+tqdm = "^4.66.2"
 wemake-python-styleguide = "^0.18.0"
+pre-commit = "^3.6.2"
+
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
@@ -70,6 +65,16 @@ requires = ["poetry-core>=1.0.0"]
 [tool.black]
 line-length = 100
 target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+include_trailing_comma = "True"
+use_parentheses = "True"
+ensure_newline_before_comments = "True"
+multi_line_output = 3
+force_grid_wrap = 0
+line_length = 100
+
 
 # pyproject.toml
 [tool.pytest.ini_options]

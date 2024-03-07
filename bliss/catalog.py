@@ -7,10 +7,10 @@ import torch
 from einops import rearrange, reduce, repeat
 from matplotlib.pyplot import Axes
 from torch import Tensor
-from torch.nn import functional as F
+from torch.nn.functional import unfold
 from tqdm import tqdm
 
-from bliss.datasets.sdss import convert_flux_to_mag
+from bliss.datasets.lsst import convert_flux_to_mag
 
 
 class TileCatalog(UserDict):
@@ -29,13 +29,6 @@ class TileCatalog(UserDict):
         "galaxy_probs",
         "galaxy_blends",
         "star_bools",
-        "objid",
-        "hlr",
-        "ra",
-        "dec",
-        "matched",
-        "mismatched",
-        "detection_thresholds",
         "log_flux_sd",
         "loc_sd",
     }
@@ -44,7 +37,7 @@ class TileCatalog(UserDict):
         self.tile_slen = tile_slen
         d = copy(d)  # shallow copy, so we don't mutate the argument
         self.locs = d.pop("locs")
-        self.n_sources = d.pop("n_sources")
+        self.n_sources = d.pop("n_sources").long()
         self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
         assert self.n_sources.shape == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
 
@@ -369,6 +362,14 @@ class FullCatalog(UserDict):
         assert x.shape[:-1] == (self.batch_size, self.max_sources)
         assert x.device == self.device
 
+    def to_dict(self):
+        out = {}
+        out["plocs"] = self.plocs
+        out["n_sources"] = self.n_sources
+        for k, v in self.items():
+            out[k] = v
+        return out
+
     @property
     def device(self):
         return self.plocs.device
@@ -462,10 +463,11 @@ class FullCatalog(UserDict):
             max_sources_per_tile: The maximum number of sources in one tile.
             ignore_extra_sources: If False (default), raises an error if the number of sources
                 in one tile exceeds the `max_sources_per_tile`. If True, only adds the tile
-                parameters of the first `max_sources_per_tile` sources to the new TileCatalog.
+                parameters of the first, brightest `max_sources_per_tile` sources to
+                the new TileCatalog.
 
         Returns:
-            TileCatalog correspond to the each source in the FullCatalog.
+            TileCatalog corresponding to the each source in the FullCatalog.
 
         Raises:
             ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
@@ -478,6 +480,12 @@ class FullCatalog(UserDict):
         tile_cat_shape = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile)
         tile_locs = torch.zeros((*tile_cat_shape, 2), device=self.device)
         tile_n_sources = torch.zeros(tile_cat_shape[:3], dtype=torch.int64, device=self.device)
+
+        if ignore_extra_sources:
+            # need to compare fluxes per tile to get brightest object
+            tile_fluxes = torch.zeros(tile_cat_shape, device=self.device)
+            assert "fluxes" in self.keys(), "Fluxes are required to decide which source to keep!"
+
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
             dtype = torch.int64 if k == "objid" else torch.float
@@ -490,15 +498,21 @@ class FullCatalog(UserDict):
                 source_idx = tile_n_sources[ii, coords[0], coords[1]].item()
                 if source_idx >= max_sources_per_tile:
                     if not ignore_extra_sources:
-                        raise ValueError(  # noqa: WPS220
-                            "# of sources per tile exceeds `max_sources_per_tile`."
-                        )
-                    continue  # ignore extra sources in this tile.
+                        raise ValueError("# of sources per tile exceeds `max_sources_per_tile`.")
+                    if max_sources_per_tile > 1:
+                        raise ValueError("Implementation only works in simplest case.")
+                    flux1 = tile_fluxes[ii, coords[0], coords[1]].item()
+                    flux2 = self["fluxes"][ii, idx].item()
+                    if flux1 > flux2:
+                        continue  # keep current source in tile
+                    source_idx -= 1  # need to be replaced in previous index, which is always 0
                 tile_loc = (self.plocs[ii, idx] - coords * tile_slen) / tile_slen
                 tile_locs[ii, coords[0], coords[1], source_idx] = tile_loc
                 for k, v in tile_params.items():
                     v[ii, coords[0], coords[1], source_idx] = self[k][ii, idx]
                 tile_n_sources[ii, coords[0], coords[1]] = source_idx + 1
+                if ignore_extra_sources:
+                    tile_fluxes[ii, coords[0], coords[1]] = self["fluxes"][ii, idx].item()
         tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
 
@@ -535,7 +549,7 @@ def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tens
     n_tiles_h, n_tiles_w = get_n_padded_tiles_hw(
         images.shape[2], images.shape[3], window, tile_slen
     )
-    tiles = F.unfold(images, kernel_size=window, stride=tile_slen)
+    tiles = unfold(images, kernel_size=window, stride=tile_slen)
     # b: batch, c: channel, h: tile height, w: tile width, n: num of total tiles for each batch
     return rearrange(
         tiles,

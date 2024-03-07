@@ -1,5 +1,5 @@
-sdss_galaxies
+galsim_galaxies
 ========
 Contains scripts to re-run the Galsim galaxies experiment.
 
-- `figures.py` contains code for reproducing figures for the paper.
+- `get_figures.py` contains code for reproducing all the figures for the paper.
