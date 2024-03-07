@@ -3,6 +3,7 @@ training:
   name: "binary_encoder"
   model: ${models.binary_encoder}
   dataset: ${blends_datasets.blends_datamodule}
-  n_epochs: 201
+  n_epochs: 30
   trainer:
     enable_checkpointing: True
+    check_val_every_n_epoch: 1
