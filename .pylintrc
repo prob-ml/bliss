@@ -16,19 +16,9 @@ disable=too-many-ancestors,
 	# get unused variable warnings instead
 	arguments-differ,
 
-	# these not-callable warnings come from an issue with pytorch
-	# that may be resolved in pytorch version 1.7.2
-	not-callable,
-
-	# we often don't want to override lightning's abstract methods
-	abstract-method,
-
 	# we have too a lot of short variable names, and fixing them doesn't
 	# seem urgent
 	invalid-name,
-
-	# doesn't seem helpful
-	too-few-public-methods,
 
 	# we don't have comprehensive documentation yet, let's suppress
 	# these warnings until that's something we're focused on
@@ -41,17 +31,8 @@ disable=too-many-ancestors,
 	too-many-locals,
 	too-many-instance-attributes,
 
-	# we should remove fixme comments
-	fixme,
-
 	# problems in the tests directory
 	redefined-outer-name,
-
-	# when overriding methods you don't get to pick your arguments
-	unused-argument,
-
-	# flake8 recommends against f-strings
-	consider-using-f-string,
 
 
 [SIMILARITIES]
