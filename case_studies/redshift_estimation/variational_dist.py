@@ -1,9 +1,9 @@
 import torch
-from catalog import RedshiftTileCatalog
 
 from bliss.catalog import SourceType
 from bliss.encoder.unconstrained_dists import UnconstrainedNormal
 from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
+from case_studies.redshift_estimation.catalog import RedshiftTileCatalog
 
 
 class RedshiftVariationalDistSpec(VariationalDistSpec):

@@ -8,6 +8,7 @@ paths:
     root: ${oc.env:BLISS_HOME}
     data: ${paths.root}/data
     sdss: ${paths.data}/sdss
+    output: ${paths.root}/redshift_output
 
 prior:
     _target_: case_studies.redshift_estimation.prior.RedshiftPrior
