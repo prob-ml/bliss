@@ -70,6 +70,9 @@ ignore =
     # some of these "overused" expressions are quite short
     WPS204,
 
+    # it's sometimes useful to import from and import the module directly
+    WPS458
+
     # false positive; this cannot be done with "yield from"
     WPS526,
 
