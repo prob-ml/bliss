@@ -3,6 +3,7 @@ from typing import Dict, Optional, Tuple
 import galsim
 import numpy as np
 import torch
+from einops import rearrange
 from torch import Tensor
 
 from bliss.datasets.lsst import PIXEL_SCALE, convert_mag_to_flux
@@ -24,20 +25,22 @@ def sample_stars(
     locs[:n_stars, 0] = _uniform(-max_shift, max_shift, n_stars) + 0.5
     locs[:n_stars, 1] = _uniform(-max_shift, max_shift, n_stars) + 0.5
 
-    mags = torch.zeros((max_n_stars,))
+    # fluxes
     fluxes = torch.zeros((max_n_stars,))
     star_log_fluxes = torch.zeros((max_n_stars,))
 
     star_mags = np.random.choice(all_star_mags, size=(n_stars,), replace=True)
-    mags[:n_stars] = torch.from_numpy(star_mags)  # noqa: WPS362
-    fluxes[:n_stars] = convert_mag_to_flux(mags[:n_stars])  # noqa: WPS362
-    star_log_fluxes[:n_stars] = torch.log(fluxes[:n_stars])  # noqa: WPS362
+    star_mags = torch.from_numpy(star_mags)
+
+    for ii in range(n_stars):
+        fluxes[ii] = convert_mag_to_flux(star_mags[ii])
+        star_log_fluxes[ii] = torch.log(fluxes[ii])
 
     return {
         "n_stars": n_stars,
         "locs": locs,
-        "star_fluxes": fluxes.reshape(-1, 1),
-        "star_log_fluxes": star_log_fluxes.reshape(-1, 1),
+        "star_fluxes": rearrange(fluxes, "n -> n 1"),
+        "star_log_fluxes": rearrange(star_log_fluxes, "n -> n 1"),
     }
 
 
@@ -49,7 +52,8 @@ def _render_star(
     star = psf.withFlux(flux)  # creates a copy
     offset = offset if offset is None else offset.numpy()
     image = star.drawImage(nx=size, ny=size, scale=PIXEL_SCALE, offset=offset)
-    return torch.from_numpy(image.array).reshape(1, size, size)
+    image_tensor = torch.from_numpy(image.array)
+    return rearrange(image_tensor, "h w -> 1 h w")
 
 
 def render_stars(
@@ -75,7 +79,6 @@ def render_stars(
     for ii in range(n_stars):
         flux = star_fluxes[ii].item()
         ploc = star_locs[ii] * slen
-        # TODO: do I need a half-pixel offset here too???
         offset_x = ploc[1].item() + bp - size / 2
         offset_y = ploc[0].item() + bp - size / 2
         offset = torch.tensor([offset_x, offset_y])
