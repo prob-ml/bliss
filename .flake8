@@ -90,3 +90,6 @@ ignore =
 
     # the keyword "del" is useful to us
     WPS420,
+
+    # sometime we need to import several modules even for well-defined modules we implement
+    WPS202,
