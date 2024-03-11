@@ -1,147 +1,116 @@
-import datetime as dt
-import json
 from pathlib import Path
-from time import time_ns
-from typing import Any, Dict, Optional
+from typing import Callable
 
-import pytorch_lightning as pl
 import torch
-from hydra.utils import instantiate
-from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.utilities import rank_zero_only
+from torch import nn
+from torch.optim import Adam
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 
-def _save_best_weights(weight_save_path: str, best_model_path: str, train_time_sec: float = None):
-    model_checkpoint = torch.load(best_model_path, map_location="cpu")
-    model_state_dict = model_checkpoint["state_dict"]
-    Path(weight_save_path).parent.mkdir(parents=True, exist_ok=True)
-    torch.save(model_state_dict, weight_save_path)
-    result_path = weight_save_path + ".log.json"
-    with open(result_path, "w", encoding="utf-8") as fp:
-        cp_data = model_checkpoint["callbacks"]
-        key = list(cp_data.keys())[0]
-        cp_data = cp_data[key]
-        data_to_write: Dict[str, Any] = {
-            "timestamp": str(dt.datetime.today()),
-            "train_time_sec": train_time_sec,
-        }
-        for k, v in cp_data.items():
-            if isinstance(v, torch.Tensor) and not v.shape:
-                data_to_write[k] = v.item()
-            elif is_json_serializable(v):
-                data_to_write[k] = v
-        fp.write(json.dumps(data_to_write))
+def train_one_epoch(
+    epoch_indx: int,
+    model: nn.Module,
+    training_loader: DataLoader,
+    loss_fn: Callable,
+    optimizer: Adam,
+    writer: SummaryWriter | None = None,
+    log_every_n_batches: int = 1000,
+):
+
+    running_loss = 0
+    last_loss = 0
+
+    for ii, data in enumerate(training_loader):
+
+        # Zero your gradients for every batch!
+        optimizer.zero_grad()
+
+        # Make predictions for this batch
+        outputs = model(*data)
+
+        # Compute the loss and its gradients
+        loss = loss_fn(*data, *outputs)
+        loss.backward()
+
+        # Adjust learning weights
+        optimizer.step()
+
+        # Gather data and report
+        running_loss += loss.item()
+        if ii % log_every_n_batches == log_every_n_batches - 1 and writer:
+            last_loss = running_loss / log_every_n_batches  # loss per batch
+            tb_x = epoch_indx * len(training_loader) + ii + 1
+            writer.add_scalar("train/loss", last_loss, tb_x)
+            running_loss = 0
+
+    return last_loss
 
 
-def train(cfg: DictConfig):
-    # setup paths and seed
-    paths = OmegaConf.to_container(cfg.paths, resolve=True)
-    assert isinstance(paths, dict)
-    for key in paths.keys():
-        path = Path(paths[key])
-        if not path.exists():
-            if key == "output":
-                path.mkdir(parents=True)
-            else:
-                err = "path for {} ({}) does not exist".format(str(key), path.as_posix())
-                raise FileNotFoundError(err)
-    pl.seed_everything(cfg.training.seed)
+def validate(
+    epoch: int,
+    model: nn.Module,
+    val_loader: DataLoader,
+    loss_fn: Callable,
+    writer: SummaryWriter | None = None,
+    model_path: Path | None = None,
+    best_vloss: float | None = None,
+):
+    model.eval()
 
-    # setup dataset.
-    dataset = instantiate(cfg.training.dataset)
+    running_vloss = 0
+    val_n_batches = 0
 
-    # setup model
-    model = instantiate(cfg.training.model)
+    # Disable gradient computation and reduce memory consumption.
+    with torch.no_grad():
+        for vdata in enumerate(val_loader):
+            vinputs, vlabels = vdata
+            voutputs = model(vinputs)
+            vloss = loss_fn(voutputs, vlabels)
+            running_vloss += vloss
+            val_n_batches += 1
 
-    # setup trainer
-    logger = setup_logger(cfg, paths)
-    checkpoint_callback = setup_callbacks(cfg)
+    avg_vloss = running_vloss / (val_n_batches + 1)
 
-    callbacks = [] if checkpoint_callback is None else [checkpoint_callback]
+    if writer:
+        writer.add_scalars("val/loss", avg_vloss, epoch + 1)
+        writer.flush()
 
-    trainer = instantiate(cfg.training.trainer, logger=logger, callbacks=callbacks)
+    # Track best performance, and save the model's state
+    if model_path and best_vloss and avg_vloss < best_vloss:
+        best_vloss = avg_vloss
+        path = model_path.parent / f"{model_path.stem}_{epoch}.pt"
+        torch.save(model.state_dict(), path)
+    return best_vloss
 
-    if logger:
-        log_hyperparameters(config=cfg, model=model, trainer=trainer)
 
-    # train!
-    tic = time_ns()
-    trainer.fit(model, datamodule=dataset)
-    toc = time_ns()
-    train_time_sec = (toc - tic) * 1e-9
+def train(
+    n_epochs: int,
+    model: nn.Module,
+    training_loader: DataLoader,
+    loss_fn: Callable,
+    optimizer: Adam,
+    val_loader: DataLoader | None = None,
+    model_path: str | Path | None = None,
+    writer: SummaryWriter | None = None,
+    log_every_n_batches: int = 1000,
+):
 
-    # Load best weights from checkpoint
-    if cfg.training.weight_save_path is not None and (checkpoint_callback is not None):
-        _save_best_weights(
-            cfg.training.weight_save_path, checkpoint_callback.best_model_path, train_time_sec
+    best_vloss = torch.inf
+
+    for epoch in tqdm(n_epochs, desc="N_EPOCHS:"):
+
+        model.train(True)
+        train_one_epoch(
+            epoch,
+            model,
+            training_loader,
+            loss_fn,
+            optimizer,
+            writer,
+            log_every_n_batches=log_every_n_batches,
         )
 
-
-def setup_logger(cfg, paths):
-    logger = False
-    if cfg.training.trainer.logger:
-        logger = TensorBoardLogger(
-            save_dir=paths["output"],
-            name=cfg.training.experiment,
-            version=cfg.training.version,
-            default_hp_metric=False,
-        )
-    return logger
-
-
-def setup_callbacks(cfg) -> Optional[ModelCheckpoint]:
-    if cfg.training.trainer.enable_checkpointing:
-        checkpoint_callback = ModelCheckpoint(
-            filename="epoch={epoch}-val_loss={val/loss:.3f}",
-            save_top_k=cfg.training.save_top_k,
-            verbose=True,
-            monitor="val/loss",
-            mode="min",
-            save_on_train_epoch_end=False,
-            auto_insert_metric_name=False,
-        )
-    else:
-        checkpoint_callback = None
-    return checkpoint_callback
-
-
-# https://github.com/ashleve/lightning-hydra-template/blob/main/src/utils/utils.py
-@rank_zero_only
-def log_hyperparameters(config, model, trainer) -> None:
-    """Log config and num of model parameters to all Lightning loggers."""
-
-    hparams = {}
-
-    # choose which parts of hydra config will be saved to loggers
-    hparams["mode"] = config["mode"]
-    hparams["training"] = config["training"]
-
-    # save number of model parameters
-    hparams["model/params_total"] = sum(p.numel() for p in model.parameters())
-    hparams["model/params_trainable"] = sum(
-        p.numel() for p in model.parameters() if p.requires_grad
-    )
-    hparams["model/params_not_trainable"] = sum(
-        p.numel() for p in model.parameters() if not p.requires_grad
-    )
-
-    # send hparams to all loggers
-    trainer.logger.log_hyperparams(hparams)
-
-    # trick to disable logging any more hyperparameters for all loggers
-    trainer.logger.log_hyperparams = empty
-
-
-def empty(*args, **kwargs):
-    pass
-
-
-def is_json_serializable(x):
-    ret = True
-    try:
-        json.dumps(x)
-    except TypeError:
-        ret = False
-    return ret
+        if val_loader:
+            best_vloss = validate(epoch, model, val_loader, loss_fn, writer, model_path, best_vloss)
