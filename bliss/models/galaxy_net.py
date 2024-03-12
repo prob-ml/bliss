@@ -20,9 +20,9 @@ def vae_loss(image: Tensor, recon_mean: Tensor, pq_z: Tensor):
 class OneCenteredGalaxyAE(nn.Module):
     def __init__(
         self,
-        slen: int,
-        latent_dim: int,
-        hidden: int,
+        slen: int = 53,
+        latent_dim: int = 8,
+        hidden: int = 256,
         n_bands: int = 1,
         ckpt: str | Path | None = None,
     ):
