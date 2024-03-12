@@ -4,7 +4,8 @@ import numpy as np
 import torch
 from einops import pack, rearrange, reduce, unpack
 from torch import Tensor
-from torch.nn.functional import fold, grid_sample
+from torch.nn.functional import fold, grid_sample, unfold
+from tqdm import tqdm
 
 from bliss.datasets.lsst import PIXEL_SCALE
 from bliss.models.galaxy_net import CenteredGalaxyDecoder
@@ -133,6 +134,33 @@ def reconstruct_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, bp: int)
     return folded_image[:, :, crop_idx : (-crop_idx or None), crop_idx : (-crop_idx or None)]
 
 
+def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tensor:
+    """Divides a batch of full images into padded tiles.
+
+    This is similar to nn.conv2d, with a sliding window=ptile_slen and stride=tile_slen.
+
+    Arguments:
+        images: Tensor of images with size (batchsize x n_bands x slen x slen)
+        tile_slen: Side length of tile
+        ptile_slen: Side length of padded tile
+
+    Returns:
+        A batchsize x n_tiles_h x n_tiles_w x n_bands x tile_height x tile_width image
+    """
+    assert images.ndim == 4
+    _, _, h, w = images.shape
+    window = ptile_slen
+    n_tiles_h, n_tiles_w = get_n_padded_tiles_hw(h, w, window, tile_slen)
+    tiles = unfold(images, kernel_size=window, stride=tile_slen)
+    return rearrange(tiles, "b (c h w) (nth ntw) -> b nth ntw c h w", nth=n_tiles_h, ntw=n_tiles_w)
+
+
+def get_n_padded_tiles_hw(height, width, window, tile_slen):
+    nh = ((height - window) // tile_slen) + 1
+    nw = ((width - window) // tile_slen) + 1
+    return nh, nw
+
+
 def size_galaxy(galaxy: Tensor, ptile_slen: int) -> Tensor:
     _, _, h, w = galaxy.shape
     assert h == w
@@ -223,7 +251,7 @@ def get_galaxy_ellips(
     galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw 1 -> (b nth ntw 1)")
     is_gal = torch.gt(galaxy_bools_flat, 0.5).bool()
     galaxy_params = rearrange(galaxy_params_in, "b nth ntw d -> (b nth ntw) d")
-    galaxy_shapes = galaxy_decoder(galaxy_params[is_gal])
+    galaxy_shapes = galaxy_decoder.forward(galaxy_params[is_gal]).detach().cpu()
     sized_galaxy_shapes = size_galaxy(galaxy_shapes, ptile_slen)
     single_galaxies = rearrange(sized_galaxy_shapes, "n 1 h w -> n h w")
 
@@ -234,6 +262,39 @@ def get_galaxy_ellips(
     ellips = rearrange(ellips_all, "(b nth ntw s) g -> b nth ntw g", b=b, nth=nth, ntw=ntw, g=2)
     ellips *= galaxy_bools
     return ellips
+
+
+def get_galaxy_snr(self, decoder: CenteredGalaxyDecoder, ptile_slen: int, bg: float) -> None:
+
+    b, nth, ntw, _ = self["galaxy_params"].shape
+    galaxy_params = rearrange(self["galaxy_params"], "b nth ntw d -> (b nth ntw) d")
+    galaxy_bools = rearrange(self["galaxy_bools"], "b nth ntw 1 -> (b nth ntw) 1")
+
+    n_total = b * nth * ntw
+    snr = torch.zeros((n_total, 1))
+    n_parts = 1000  # not all fits in GPU
+    for ii in tqdm(range(0, n_total, n_parts), desc="computing SNR", total=n_total // n_parts):
+        jj = ii + n_parts
+        galaxy_params_ii = galaxy_params[ii:jj]
+        galaxy_bools_ii = galaxy_bools[ii:jj]
+
+        # galaxies first to get correct sizes
+        single_galaxies_ii = _render_centered_galaxies_ptiles(
+            decoder, galaxy_params_ii, galaxy_bools_ii, ptile_slen
+        )
+        single_galaxies_ii = rearrange(single_galaxies_ii, "np s 1 h w -> np s h w")
+        single_galaxies_ii = single_galaxies_ii.cpu()
+        _, _, h, w = single_galaxies_ii.shape
+        assert h == w
+        bg_ii = torch.full_like(single_galaxies_ii, bg)
+
+        gal_snr = (single_galaxies_ii**2 / (single_galaxies_ii + bg_ii)).sum(axis=(-1, -2)).sqrt()
+
+        gal_snr = rearrange(gal_snr, "n s -> n s 1")
+
+        snr[ii:jj] = gal_snr * galaxy_bools_ii.cpu()
+
+    return rearrange(snr, "(b nth ntw) s 1 -> b nth ntw s 1", b=b, nth=nth, ntw=ntw)
 
 
 def _validate_border_padding(tile_slen: int, ptile_slen: int, bp: float = None):
