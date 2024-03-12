@@ -58,7 +58,7 @@ class RedshiftUniformPrior(CatalogPrior):
         return RedshiftTileCatalog(self.tile_slen, catalog_params)
 
 
-class RedshiftBetaPrior(CatalogPrior):
+class RedshiftGammaPrior(CatalogPrior):
     """Prior distribution of objects in an astronomical image.
 
     Inherits from CatalogPrior, adding redshift. Temporarily,
