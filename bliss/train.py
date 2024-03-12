@@ -17,7 +17,7 @@ def train_one_epoch(
     optimizer: Adam,
     writer: SummaryWriter | None = None,
     log_every_n_batches: int = 1000,
-):
+) -> float:
 
     running_loss = 0
     last_loss = 0
@@ -56,7 +56,7 @@ def validate(
     writer: SummaryWriter | None = None,
     model_path: Path | None = None,
     best_vloss: float | None = None,
-):
+) -> float:
     model.eval()
 
     running_vloss = 0
@@ -80,8 +80,9 @@ def validate(
     # Track best performance, and save the model's state
     if model_path and best_vloss and avg_vloss < best_vloss:
         best_vloss = avg_vloss
-        path = model_path.parent / f"{model_path.stem}_{epoch}.pt"
+        path = model_path.parent / f"{model_path.stem}_{epoch}{model_path.suffix}"
         torch.save(model.state_dict(), path)
+
     return best_vloss
 
 
@@ -91,10 +92,11 @@ def train(
     training_loader: DataLoader,
     loss_fn: Callable,
     optimizer: Adam,
+    log_every_n_batches: int = 1000,
     val_loader: DataLoader | None = None,
     model_path: str | Path | None = None,
+    val_every_n_epoch: int = 1,
     writer: SummaryWriter | None = None,
-    log_every_n_batches: int = 1000,
 ):
 
     best_vloss = torch.inf
@@ -112,5 +114,5 @@ def train(
             log_every_n_batches=log_every_n_batches,
         )
 
-        if val_loader:
+        if val_loader and epoch % val_every_n_epoch == val_every_n_epoch - 1:
             best_vloss = validate(epoch, model, val_loader, loss_fn, writer, model_path, best_vloss)
