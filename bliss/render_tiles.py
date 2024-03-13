@@ -145,14 +145,14 @@ def get_images_in_tiles(images: Tensor, tile_slen: int, ptile_slen: int) -> Tens
         ptile_slen: Side length of padded tile
 
     Returns:
-        A batchsize x n_tiles_h x n_tiles_w x n_bands x tile_height x tile_width image
+        A batchsize x nth x ntw x n_bands x tile_height x tile_width image
     """
     assert images.ndim == 4
     _, _, h, w = images.shape
     window = ptile_slen
-    n_tiles_h, n_tiles_w = get_n_padded_tiles_hw(h, w, window, tile_slen)
+    nth, ntw = get_n_padded_tiles_hw(h, w, window, tile_slen)
     tiles = unfold(images, kernel_size=window, stride=tile_slen)
-    return rearrange(tiles, "b (c h w) (nth ntw) -> b nth ntw c h w", nth=n_tiles_h, ntw=n_tiles_w)
+    return rearrange(tiles, "b (c h w) (nth ntw) -> b nth ntw c h w", nth=nth, ntw=ntw)
 
 
 def get_n_padded_tiles_hw(height, width, window, tile_slen):
