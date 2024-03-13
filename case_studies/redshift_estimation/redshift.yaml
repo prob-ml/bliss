@@ -11,7 +11,7 @@ paths:
     output: ${paths.root}/redshift_output
 
 prior:
-    _target_: case_studies.redshift_estimation.prior.RedshiftPrior
+    _target_: case_studies.redshift_estimation.prior.RedshiftUniformPrior
     redshift_min: 0.99
     redshift_max: 1.01
 
