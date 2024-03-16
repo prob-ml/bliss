@@ -10,13 +10,13 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 
-from bliss.catalog import TileCatalog
 from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.plotting import plot_detections
 from bliss.encoder.variational_dist import VariationalDistSpec
+from case_studies.redshift_estimation.catalog import RedshiftTileCatalog
 
 
 class Encoder(pl.LightningModule):
@@ -131,7 +131,7 @@ class Encoder(pl.LightningModule):
         for k, v in marginal_cat.to_dict().items():
             mm = marginal_mask if k == "n_sources" else mm5d
             d[k] = v * mm + cond_cat[k] * (1 - mm)
-        return TileCatalog(self.tile_slen, d)
+        return RedshiftTileCatalog(self.tile_slen, d)
 
     def infer(self, batch, history_callback):
         batch_size = batch["images"].size(0)
@@ -227,7 +227,7 @@ class Encoder(pl.LightningModule):
 
     def _compute_loss(self, batch, logging_name):
         batch_size = batch["images"].size(0)
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = RedshiftTileCatalog(self.tile_slen, batch["tile_catalog"])
 
         # filter out undetectable sources
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
@@ -259,7 +259,7 @@ class Encoder(pl.LightningModule):
         return self._compute_loss(batch, "train")
 
     def update_metrics(self, batch):
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = RedshiftTileCatalog(self.tile_slen, batch["tile_catalog"])
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
@@ -273,7 +273,7 @@ class Encoder(pl.LightningModule):
 
     def plot_sample_images(self, batch, logging_name):
         """Log a grid of figures to the tensorboard."""
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = RedshiftTileCatalog(self.tile_slen, batch["tile_catalog"])
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
         est_cat = self.sample(batch, use_mode=True)

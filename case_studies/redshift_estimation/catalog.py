@@ -5,31 +5,7 @@ from bliss.catalog import FullCatalog, TileCatalog
 
 
 class RedshiftTileCatalog(TileCatalog):
-    allowed_params = {
-        "n_source_log_probs",
-        "fluxes",
-        "star_fluxes",
-        "star_log_fluxes",
-        "mags",
-        "ellips",
-        "snr",
-        "blendedness",
-        "source_type",
-        "galaxy_params",
-        "galaxy_fluxes",
-        "galaxy_probs",
-        "galaxy_blends",
-        "objid",
-        "hlr",
-        "ra",
-        "dec",
-        "matched",
-        "mismatched",
-        "detection_thresholds",
-        "log_flux_sd",
-        "loc_sd",
-        "redshifts",
-    }
+    allowed_params = TileCatalog.allowed_params  # ideally don't alter TileCatalog
 
     def to_full_catalog(self):
         """Copy/paste from super, but return RedshiftFullCatalog.
@@ -45,6 +21,12 @@ class RedshiftTileCatalog(TileCatalog):
 
         params = {}
         indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()
+
+        # Maybe clean up this shaping later; should already be in resulting shape
+        # Because there's one redshift parameter per source.
+        tile_params_to_gather["redshifts"] = rearrange(
+            tile_params_to_gather["redshifts"], "b nth ntw s -> b nth ntw s 1"
+        )
         for param_name, tile_param in tile_params_to_gather.items():
             k = tile_param.shape[-1]
             param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)

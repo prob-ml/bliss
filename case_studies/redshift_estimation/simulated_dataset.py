@@ -4,8 +4,6 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict
 import numpy as np
 import pytorch_lightning as pl
 import torch
-from catalog import RedshiftTileCatalog
-from prior import RedshiftPrior
 from skimage.restoration import richardson_lucy
 from torch import Tensor
 from torch.utils.data import DataLoader, IterableDataset
@@ -14,6 +12,8 @@ from tqdm import tqdm
 from bliss.align import align
 from bliss.simulator.decoder import ImageDecoder
 from bliss.surveys.survey import Survey
+from case_studies.redshift_estimation.catalog import RedshiftTileCatalog
+from case_studies.redshift_estimation.prior import RedshiftPrior
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
