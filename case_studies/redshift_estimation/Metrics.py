@@ -5,12 +5,23 @@ import torch
 class RedshiftMeanSquaredError(Metric):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.add_state("preds", default=torch.tensor([]), dist_reduce_fx="cat")
-        self.add_state("truth", default=torch.tensor([]), dist_reduce_fx="cat")
+        # self.add_state("preds", default=torch.tensor([]), dist_reduce_fx="cat")
+        # self.add_state("truth", default=torch.tensor([]), dist_reduce_fx="cat")
         self.add_state("sum_squared_error", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
     def update(self, preds: torch.Tensor, truth: torch.Tensor) -> None:
+
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            self.total += tcat_matches.size(0)
+
+            true_red = true_cat["redshift"].loc[i][tcat_matches]
+            est_red = est_cat["redshift"].loc[i][ecat_matches]
+            red_err = ((true_red - est_red).abs()** 2).sum()
+
+            
+            self.redshift_err += red_err
         if preds.shape != truth.shape:
             raise ValueError("preds and truth must have the same shape")
         self.preds = torch.cat((self.preds, preds), dim=0)
@@ -51,30 +62,31 @@ class RedshiftNLL(Metric):
     def __init__(self,  **kwargs):
         super().__init__(**kwargs)
         
-        self.add_state("preds_loc", default=torch.tensor([]), dist_reduce_fx="cat")
-        self.add_state("preds_scale", default=torch.tensor([]), dist_reduce_fx="cat")
-        self.add_state("truth", default=torch.tensor([]), dist_reduce_fx="cat")
-        self.add_state("negative_loglikelihood", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        # self.add_state("preds_loc", default=torch.tensor([]), dist_reduce_fx="cat")
+        # self.add_state("preds_scale", default=torch.tensor([]), dist_reduce_fx="cat")
+        # self.add_state("truth", default=torch.tensor([]), dist_reduce_fx="cat")
+        self.add_state("negative_loglikelihood", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.zeros(1), dist_reduce_fx="sum")
 
-    def update(self, preds_loc: torch.Tensor,preds_scale: torch.Tensor, truth: torch.Tensor) -> None:
-        if preds_loc.shape != truth.shape or preds_scale.shape != truth.shape:
-            raise ValueError("preds and truth must have the same shape")
-        self.preds_loc = torch.cat((self.preds_loc, preds_loc), dim=0)
-        self.preds_scale = torch.cat((self.preds_scale, preds_scale), dim=0)
-        self.truth = torch.cat((self.truth, truth), dim=0)
+    def update(self, true_cat, est_cat, matching):
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            self.total += tcat_matches.size(0)
 
+            est_miu = est_cat["redshift"].loc[i][ecat_matches]
+            est_sigma = est_cat["redshift"].scale[i][ecat_matches]
+            true_miu = true_cat["redshift"].loc[i][tcat_matches]
+            distribution = torch.distributions.Normal(est_miu, est_sigma)
+            nll = -distribution.log_prob(true_miu)
+            self.negative_loglikelihood += sum(nll)
+            
+    
     def compute(self):
-        miu = self.preds_loc
-        sigma = self.preds_scale
-        
-        distribution = torch.distributions.Normal(miu, sigma)
-        nll = -distribution.log_prob(self.truth)
-        self.negative_loglikelihood += sum(nll)
-        self.total = self.truth.numel()
 
-        
-        return self.negative_loglikelihood.float() / self.total
+       
+        nll = self.negative_loglikelihood / self.total
+        return {"negative loglikelihood": nll.item()}
+    
     
 # preds = torch.tensor([0.9924, 0.9927, 0.9909,  0.9837, 0.9853, 0.9877])
 # preds_scale = torch.tensor([0.0416, 0.0426, 0.0425,  0.0421, 0.0418, 0.0419])
