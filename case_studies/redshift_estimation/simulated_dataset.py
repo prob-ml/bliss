@@ -13,7 +13,7 @@ from bliss.align import align
 from bliss.simulator.decoder import ImageDecoder
 from bliss.surveys.survey import Survey
 from case_studies.redshift_estimation.catalog import RedshiftTileCatalog
-from case_studies.redshift_estimation.prior import RedshiftPrior
+from case_studies.redshift_estimation.prior import RedshiftUniformPrior
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -25,7 +25,7 @@ class RedshiftSimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
         self,
         survey: Survey,
-        prior: RedshiftPrior,
+        prior: RedshiftUniformPrior,
         n_batches: int,
         use_coaddition: bool = False,
         coadd_depth: int = 1,

@@ -1,0 +1,161 @@
+nohup: ignoring input
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=8']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=11']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=15']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=7']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=6']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=1']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=2']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=0']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=4']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=3']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=9']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=14']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=5']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=12']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=10']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
+Data will be saved to /data/scratch/declan/redshift_estimation
+Error executing job with overrides: ['mode=generate', '+generate.process_index=13']
+Traceback (most recent call last):
+  File "/home/yolandz/bliss/bliss/main.py", line 124, in main
+    generate(cfg.generate)
+  File "/home/yolandz/bliss/bliss/main.py", line 29, in generate
+    with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
+PermissionError: [Errno 13] Permission denied: '/data/scratch/declan/redshift_estimation/hparams.yaml'
+
+Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.

@@ -23,6 +23,12 @@ encoder:
         _target_: case_studies.redshift_estimation.variational_dist.RedshiftVariationalDistSpec
     double_detect: false
     use_checkerboard: false
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        metrics:
+          - _target_: case_studies.redshift_estimation.metrics.RedshiftMeanSquaredError
+          - _target_: case_studies.redshift_estimation.metrics.RedshiftCatastrophicErrorRate
+          - _target_: case_studies.redshift_estimation.metrics.RedshiftNLL
 
 generate:
     n_image_files: 16

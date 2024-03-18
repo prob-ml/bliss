@@ -7,11 +7,10 @@ class RedshiftMeanSquaredError(Metric):
         super().__init__(**kwargs)
         # self.add_state("preds", default=torch.tensor([]), dist_reduce_fx="cat")
         # self.add_state("truth", default=torch.tensor([]), dist_reduce_fx="cat")
-        self.add_state("sum_squared_error", default=torch.tensor(0.0), dist_reduce_fx="sum")
-        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("sum_squared_error", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state("total",  default=torch.zeros(1), dist_reduce_fx="sum")
 
-    def update(self, preds: torch.Tensor, truth: torch.Tensor) -> None:
-
+    def update(self, true_cat, est_cat, matching):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
             self.total += tcat_matches.size(0)
@@ -19,43 +18,38 @@ class RedshiftMeanSquaredError(Metric):
             true_red = true_cat["redshift"].loc[i][tcat_matches]
             est_red = est_cat["redshift"].loc[i][ecat_matches]
             red_err = ((true_red - est_red).abs()** 2).sum()
-
             
-            self.redshift_err += red_err
-        if preds.shape != truth.shape:
-            raise ValueError("preds and truth must have the same shape")
-        self.preds = torch.cat((self.preds, preds), dim=0)
-        self.truth = torch.cat((self.truth, truth), dim=0)
+            self.sum_squared_err += red_err
 
     def compute(self):
-        squared_error = (self.preds - self.truth) ** 2
-        self.sum_squared_error += squared_error.sum()
-        self.total = self.truth.numel()
-        return self.sum_squared_error / self.total
+        mse = self.sum_squared_err / self.total
+        return {"Mean squared error": mse.item()}
 
 
 
 class RedshiftCatastrophicErrorRate(Metric):
-    def __init__(self, threshold, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.threshold = threshold
-        self.add_state("preds", default=torch.tensor([]), dist_reduce_fx="cat")
-        self.add_state("truth", default=torch.tensor([]), dist_reduce_fx="cat")
-        self.add_state("catastrophic_errors", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        
+        self.add_state("catastrophic_errors", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.zeros(1), dist_reduce_fx="sum")
 
-    def update(self, preds: torch.Tensor, truth: torch.Tensor) -> None:
-        if preds.shape != truth.shape:
-            raise ValueError("preds and truth must have the same shape")
-        self.preds = torch.cat((self.preds, preds), dim=0)
-        self.truth = torch.cat((self.truth, truth), dim=0)
+    def update(self, true_cat, est_cat, matching):
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            self.total += tcat_matches.size(0)
 
+            est_miu = est_cat["redshift"].loc[i][ecat_matches]
+            est_sigma = est_cat["redshift"].scale[i][ecat_matches]
+            true_miu = true_cat["redshift"].loc[i][tcat_matches]
+            temp = abs(true_miu - est_miu ) > 5 * est_sigma
+            self.catastrophic_errors += temp.sum()
+        
+            
     def compute(self):
-        errors = torch.abs(self.preds - self.truth)
-        catastrophic = torch.sum(errors > self.threshold)
-        self.catastrophic_errors += catastrophic
-        self.total = self.truth.numel()
-        return self.catastrophic_errors.float() / self.total
+        csr = self.catastrophic_errors.float() / self.total
+        return {"Catastrophic error rate": csr.item()}
+    
 
 
 class RedshiftNLL(Metric):
@@ -83,7 +77,6 @@ class RedshiftNLL(Metric):
     
     def compute(self):
 
-       
         nll = self.negative_loglikelihood / self.total
         return {"negative loglikelihood": nll.item()}
     
