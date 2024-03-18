@@ -33,7 +33,7 @@ encoder:
 generate:
     n_image_files: 16
     n_batches_per_file: 16
-    cached_data_path: /data/scratch/declan/redshift_estimation
+    cached_data_path: /data/scratch/declan/redshift_estimation_test
 
 cached_simulator:
     cached_data_path: /data/scratch/declan/redshift_estimation
