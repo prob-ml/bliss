@@ -77,7 +77,7 @@ class DetectionEncoder(pl.LightningModule):
         )
         self._log_softmax = nn.LogSoftmax(dim=1)
 
-    def encode(self, images: Tensor, background: Tensor):
+    def forward(self, images: Tensor, background: Tensor):
 
         # prepare padded tiles with background
         images_with_background, _ = pack([images, background], "b * h w")
@@ -108,7 +108,7 @@ class DetectionEncoder(pl.LightningModule):
         """Compute the variational mode."""
         _, _, h, w = images.shape
         nth, ntw = get_n_padded_tiles_hw(h, w, self.ptile_slen, self.tile_slen)
-        n_source_log_probs, locs_mean, _ = self.encode(images, background)
+        n_source_log_probs, locs_mean, _ = self.forward(images, background)
         flat_tile_n_sources = torch.argmax(n_source_log_probs, dim=-1)
         flat_tile_locs = locs_mean * rearrange(flat_tile_n_sources, "np -> np 1")
 
@@ -133,7 +133,7 @@ class DetectionEncoder(pl.LightningModule):
             A dictionary of tensors with shape `n_samples * n_ptiles * ...`.
             Consists of `"n_sources" and "locs".
         """
-        n_source_log_probs, locs_mean, locs_sd = self.encode(images, background)
+        n_source_log_probs, locs_mean, locs_sd = self.forward(images, background)
 
         # sample counts per tile
         n_source_probs = n_source_log_probs.exp()
@@ -149,11 +149,11 @@ class DetectionEncoder(pl.LightningModule):
 
         return {"n_sources": tile_n_sources, "locs": tile_locs}
 
-    def _get_loss(self, image: Tensor, background: Tensor, true_catalog: TileCatalog):
+    def get_loss(self, image: Tensor, background: Tensor, true_catalog: TileCatalog):
         assert true_catalog.n_sources.max() <= 1
 
         # encode
-        n_source_log_probs, loc_mean, loc_sd = self.encode(image, background)
+        n_source_log_probs, loc_mean, loc_sd = self.forward(image, background)
 
         # loss from detection count encoding
         nlsp = rearrange(n_source_log_probs, "np C -> np C", C=2)
