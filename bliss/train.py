@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Callable
 
 import torch
 from torch import nn
@@ -13,7 +12,6 @@ def train_one_epoch(
     epoch_indx: int,
     model: nn.Module,
     training_loader: DataLoader,
-    loss_fn: Callable,
     optimizer: Adam,
     writer: SummaryWriter | None = None,
     log_every_n_batches: int = 1000,
@@ -27,11 +25,8 @@ def train_one_epoch(
         # Zero your gradients for every batch!
         optimizer.zero_grad()
 
-        # Make predictions for this batch
-        outputs = model(*data)
-
-        # Compute the loss and its gradients
-        loss = loss_fn(*data, *outputs)
+        # get lost and backward propagate
+        loss = model.get_loss(*data)
         loss.backward()
 
         # Adjust learning weights
@@ -52,7 +47,6 @@ def validate(
     epoch: int,
     model: nn.Module,
     val_loader: DataLoader,
-    loss_fn: Callable,
     writer: SummaryWriter | None = None,
     model_path: Path | None = None,
     best_vloss: float | None = None,
@@ -65,9 +59,7 @@ def validate(
     # Disable gradient computation and reduce memory consumption.
     with torch.no_grad():
         for vdata in enumerate(val_loader):
-            vinputs, vlabels = vdata
-            voutputs = model(vinputs)
-            vloss = loss_fn(voutputs, vlabels)
+            vloss = model.get_loss(*vdata)
             running_vloss += vloss
             val_n_batches += 1
 
@@ -90,7 +82,6 @@ def train(
     n_epochs: int,
     model: nn.Module,
     training_loader: DataLoader,
-    loss_fn: Callable,
     optimizer: Adam,
     log_every_n_batches: int = 1000,
     val_loader: DataLoader | None = None,
@@ -108,11 +99,10 @@ def train(
             epoch,
             model,
             training_loader,
-            loss_fn,
             optimizer,
             writer,
             log_every_n_batches=log_every_n_batches,
         )
 
         if val_loader and epoch % val_every_n_epoch == val_every_n_epoch - 1:
-            best_vloss = validate(epoch, model, val_loader, loss_fn, writer, model_path, best_vloss)
+            best_vloss = validate(epoch, model, val_loader, writer, model_path, best_vloss)
