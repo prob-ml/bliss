@@ -86,11 +86,11 @@ class ConvBlock(nn.Module):
     def __init__(self, in_channel: int, out_channel: int, dropout: float, downsample: bool = False):
         """Initializes the module layers."""
         super().__init__()
-        self.downsample = downsample
+        self._downsample = downsample
         stride = 1
-        if self.downsample:
+        if self._downsample:
             stride = 2
-            self.sc_conv = nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride)
+            self._sc_conv = nn.Conv2d(in_channel, out_channel, kernel_size=1, stride=stride)
             self.sc_bn = nn.BatchNorm2d(out_channel)
         self.conv1 = nn.Conv2d(in_channel, out_channel, kernel_size=3, padding=1, stride=stride)
         self.bn1 = nn.BatchNorm2d(out_channel)
@@ -110,8 +110,8 @@ class ConvBlock(nn.Module):
         x = self.conv2(x)
         x = self.bn2(x)
 
-        if self.downsample:
-            identity = self.sc_bn(self.sc_conv(identity))
+        if self._downsample:
+            identity = self.sc_bn(self._sc_conv(identity))
 
         out = x + identity
         return relu(out, inplace=True)
