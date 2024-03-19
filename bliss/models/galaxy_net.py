@@ -44,6 +44,12 @@ class OneCenteredGalaxyAE(nn.Module):
         recon_mean = self.dec.forward(z)
         return recon_mean + background, pq_z
 
+    def get_loss(self, image: Tensor, background: Tensor):
+        recon_mean, pq_z = self.forward(image, background)
+        recon_loss = -Normal(recon_mean, recon_mean.sqrt()).log_prob(image).sum()
+        pq_z_loss = -pq_z.sum()
+        return recon_loss + pq_z_loss
+
     def make_encoder(self, slen: int, latent_dim: int, n_bands: int, hidden: int):
         return CenteredGalaxyEncoder(slen, latent_dim, n_bands, hidden)
 
