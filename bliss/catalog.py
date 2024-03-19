@@ -45,11 +45,6 @@ class TileCatalog(UserDict):
         self._validate(item)
         super().__setitem__(key, item)
 
-    def _validate(self, x: Tensor):
-        assert isinstance(x, Tensor)
-        assert x.shape[:-1] == (self.batch_size, self.nth, self.ntw)
-        assert x.device == self.device
-
     @classmethod
     def from_flat_dict(cls, tile_slen: int, nth: int, ntw: int, d: Dict[str, Tensor]):
         catalog_dict: Dict[str, Tensor] = {}
@@ -65,6 +60,14 @@ class TileCatalog(UserDict):
         for k, v in self.to_dict().items():
             out[k] = v.to(device)
         return type(self)(self.tile_slen, out)
+
+    def to_dict(self) -> Dict[str, Tensor]:
+        out = {}
+        out["locs"] = self.locs
+        out["n_sources"] = self.n_sources
+        for k, v in self.items():
+            out[k] = v
+        return out
 
     @property
     def device(self):
@@ -82,7 +85,7 @@ class TileCatalog(UserDict):
             NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
             pixel locations ("plocs") that are between 0 and `slen`.
         """
-        plocs = get_tiled_plocs(self.locs, self.tile_slen)
+        plocs = _get_tiled_plocs(self.locs, self.tile_slen)
 
         # include plocs with other parameters (excluding `n_sources` and `locs`)
         param_names_to_mask = {"plocs"}.union(set(self.keys()))
@@ -103,6 +106,28 @@ class TileCatalog(UserDict):
         params["n_sources"] = reduce(self.n_sources, "b nth ntw -> b", "sum")
         height, width = self.nth * self.tile_slen, self.ntw * self.tile_slen
         return FullCatalog(height, width, params)
+
+    def _get_tile_params_at_coord(self, plocs: torch.Tensor) -> Dict[str, Tensor]:
+        """Return the parameters contained within the tiles corresponding to locations in plocs."""
+        assert len(plocs.shape) == 2 and plocs.shape[1] == 2
+        assert plocs.device == self.locs.device
+        n_total = len(plocs)
+        slen = self.nth * self.tile_slen
+        wlen = self.ntw * self.tile_slen
+        # coordinates on tiles.
+        x_coords = torch.arange(0, slen, self.tile_slen, device=self.locs.device).long()
+        y_coords = torch.arange(0, wlen, self.tile_slen, device=self.locs.device).long()
+
+        x_indx = torch.searchsorted(x_coords.contiguous(), plocs[:, 0].contiguous()) - 1
+        y_indx = torch.searchsorted(y_coords.contiguous(), plocs[:, 1].contiguous()) - 1
+
+        # gather in dictionary
+        d = {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
+
+        # also include locs
+        d["locs"] = self.locs[:, x_indx, y_indx, :, :].reshape(n_total, -1)
+
+        return d
 
     def _get_indices_of_on_sources(self) -> Tuple[Tensor, Tensor]:
         """Get the indices of detected sources from each tile.
@@ -127,38 +152,13 @@ class TileCatalog(UserDict):
         is_on_array = torch.gather(tile_is_on_array, dim=1, index=indices_sorted_clipped)
         return indices_sorted_clipped, is_on_array
 
-    def to_dict(self) -> Dict[str, Tensor]:
-        out = {}
-        out["locs"] = self.locs
-        out["n_sources"] = self.n_sources
-        for k, v in self.items():
-            out[k] = v
-        return out
-
-    def get_tile_params_at_coord(self, plocs: torch.Tensor) -> Dict[str, Tensor]:
-        """Return the parameters contained within the tiles corresponding to locations in plocs."""
-        assert len(plocs.shape) == 2 and plocs.shape[1] == 2
-        assert plocs.device == self.locs.device
-        n_total = len(plocs)
-        slen = self.nth * self.tile_slen
-        wlen = self.ntw * self.tile_slen
-        # coordinates on tiles.
-        x_coords = torch.arange(0, slen, self.tile_slen, device=self.locs.device).long()
-        y_coords = torch.arange(0, wlen, self.tile_slen, device=self.locs.device).long()
-
-        x_indx = torch.searchsorted(x_coords.contiguous(), plocs[:, 0].contiguous()) - 1
-        y_indx = torch.searchsorted(y_coords.contiguous(), plocs[:, 1].contiguous()) - 1
-
-        # gather in dictionary
-        d = {k: v[:, x_indx, y_indx, :, :].reshape(n_total, -1) for k, v in self.items()}
-
-        # also include locs
-        d["locs"] = self.locs[:, x_indx, y_indx, :, :].reshape(n_total, -1)
-
-        return d
+    def _validate(self, x: Tensor):
+        assert isinstance(x, Tensor)
+        assert x.shape[:-1] == (self.batch_size, self.nth, self.ntw)
+        assert x.device == self.device
 
 
-def get_tiled_plocs(locs: Tensor, tile_slen: int) -> Tensor:
+def _get_tiled_plocs(locs: Tensor, tile_slen: int) -> Tensor:
     """Get the full image locations from tile locations.
 
     Returns:
@@ -216,12 +216,6 @@ class FullCatalog(UserDict):
         assert isinstance(key, str)
         return super().__getitem__(key)
 
-    def _validate(self, x: Tensor):
-        assert isinstance(x, Tensor)
-        assert x.ndim == 3
-        assert x.shape[:-1] == (self.batch_size, self.max_n_sources)
-        assert x.device == self.device
-
     def to_dict(self):
         out = {}
         out["plocs"] = self.plocs
@@ -229,10 +223,6 @@ class FullCatalog(UserDict):
         for k, v in self.items():
             out[k] = v
         return out
-
-    @property
-    def device(self):
-        return self.plocs.device
 
     def apply_param_bin(self, pname: str, p_min: float, p_max: float):
         """Apply magnitude bin to given parameters."""
@@ -259,6 +249,10 @@ class FullCatalog(UserDict):
             d_new[k] = torch.gather(v_expand, 1, to_collect_v)
         d_new["n_sources"] = keep.sum(dim=(-2, -1)).long()
         return type(self)(self.height, self.width, d_new)
+
+    @property
+    def device(self):
+        return self.plocs.device
 
     def to_tile_params(self, tile_slen: int, ignore_extra_sources=False) -> TileCatalog:
         """Returns the TileCatalog (with at most 1 source per tile) for this FullCatalog.
@@ -315,12 +309,18 @@ class FullCatalog(UserDict):
         tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
 
+    def _validate(self, x: Tensor):
+        assert isinstance(x, Tensor)
+        assert x.ndim == 3
+        assert x.shape[:-1] == (self.batch_size, self.max_n_sources)
+        assert x.device == self.device
 
-def get_n_tiles_hw(height: int, width: int, tile_slen: int):
+
+def get_n_tiles_hw(height: int, width: int, tile_slen: int) -> tuple[int, int]:
     return math.ceil(height / tile_slen), math.ceil(width / tile_slen)
 
 
-def get_is_on_from_n_sources(n_sources: Tensor, max_n_sources: int) -> Tensor[bool]:
+def get_is_on_from_n_sources(n_sources: Tensor, max_n_sources: int) -> Tensor:
     """Provides a tensor indicating which sources are "on" or "off".
 
     Return a boolean array of `shape=(*n_sources.shape, max_n_sources)` whose `(*,l)th` entry
