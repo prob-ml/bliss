@@ -8,6 +8,7 @@ from torch.nn.functional import fold, grid_sample, unfold
 from tqdm import tqdm
 
 from bliss.datasets.lsst import PIXEL_SCALE
+from bliss.grid import get_mgrid
 from bliss.models.galaxy_net import CenteredGalaxyDecoder
 from bliss.reporting import get_single_galaxy_ellipticities
 
@@ -19,7 +20,6 @@ def render_galaxy_ptiles(
     galaxy_bools: Tensor,
     ptile_slen: int,
     tile_slen: int,
-    cached_grid: Tensor,
     n_bands: int = 1,
 ) -> Tensor:
     """Render padded tiles of galaxies from tiled tensors."""
@@ -35,9 +35,7 @@ def render_galaxy_ptiles(
     )
 
     # render galaxies in correct location within padded tile
-    uncentered_galaxies = _shift_sources_in_ptiles(
-        locs, centered_galaxies, ptile_slen, tile_slen, cached_grid
-    )
+    uncentered_galaxies = _shift_sources_in_ptiles(locs, centered_galaxies, ptile_slen, tile_slen)
 
     return rearrange(uncentered_galaxies, "(b nth ntw) c h w -> b nth ntw c h w")
 
@@ -71,13 +69,13 @@ def _render_centered_galaxies_ptiles(
 
 
 def _shift_sources_in_ptiles(
-    locs: Tensor, source: Tensor, ptile_slen: int, tile_slen: int, cached_grid: Tensor
+    locs: Tensor, source: Tensor, ptile_slen: int, tile_slen: int
 ) -> Tensor:
     """Renders one source at location (per tile) using `grid_sample`."""
     assert source.ndim == 4
     assert source.shape[2] == source.shape[3]
     assert locs.shape[1] == 2 and locs.ndim == 2
-    assert cached_grid.device == locs.device == source.device
+    assert locs.device == source.device
 
     # scale so that they land in the tile within the padded tile
     padding = (ptile_slen - tile_slen) / 2
@@ -87,9 +85,8 @@ def _shift_sources_in_ptiles(
     locs_swapped = rearrange(locs_swapped, "np xy -> np 1 1 xy")
 
     # get grid
-    local_grid = rearrange(
-        cached_grid, "s1 s2 xy -> 1 s1 s2 xy", s1=ptile_slen, s2=ptile_slen, xy=2
-    )
+    mgrid = get_mgrid(ptile_slen, locs.device)
+    local_grid = rearrange(mgrid, "s1 s2 xy -> 1 s1 s2 xy", s1=ptile_slen, s2=ptile_slen, xy=2)
     grid_loc = local_grid - locs_swapped
 
     return grid_sample(source, grid_loc, align_corners=True)
@@ -99,7 +96,7 @@ def _swap_locs_columns(locs: Tensor) -> Tensor:
     """Swap the columns of locs to invert 'x' and 'y' with einops!"""
     assert locs.ndim == 2 and locs.shape[1] == 2
     x, y = unpack(locs, [[1], [1]], "b *")
-    return pack([y, x], "b *")
+    return pack([y, x], "b *")[0]
 
 
 def reconstruct_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, bp: int) -> Tensor:
