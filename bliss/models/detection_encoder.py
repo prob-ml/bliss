@@ -58,24 +58,24 @@ class DetectionEncoder(pl.LightningModule):
 
         # Number of distributional parameters used to characterize each source in an image.
         # 2 for location mean and 2 for location sigma (xy)
-        self.n_params_per_source = 4
+        self._n_params_per_source = 4
 
         # the total number of distributional parameters per tile
         # the extra 2 is for probability of coutns, "on" and "off" (need both to softmax)
-        self.dim_out_all = self.n_params_per_source + 2
+        self._dim_out_all = self._n_params_per_source + 2
 
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
 
         # networks to be trained
         n_bands_in = self.input_transform.output_channels(n_bands)
-        self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
-        self.enc_final = make_enc_final(
+        self._enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
+        self._enc_final = make_enc_final(
             channel * 4 * dim_enc_conv_out**2,
             hidden,
-            self.dim_out_all,
+            self._dim_out_all,
             dropout,
         )
-        self.log_softmax = nn.LogSoftmax(dim=1)
+        self._log_softmax = nn.LogSoftmax(dim=1)
 
     def encode(self, images: Tensor, background: Tensor):
 
@@ -90,43 +90,19 @@ class DetectionEncoder(pl.LightningModule):
 
         # encode
         transformed_ptiles = self.input_transform(flat_image_ptiles)
-        enc_conv_output = self.enc_conv(transformed_ptiles)
-        enc_final_output = self.enc_final(enc_conv_output)
+        enc_conv_output = self._enc_conv(transformed_ptiles)
+        enc_final_output = self._enc_final(enc_conv_output)
 
         # split NN output
-        locs_mean_raw, locs_logvar, n_source_free_probs = unpack(
+        locs_mean_raw, locs_logvar_raw, n_source_free_probs = unpack(
             enc_final_output, [(2,), (2,), (2,)], "np *"
         )
 
         # final transformation from NN output
-        n_source_log_probs = self.log_softmax(n_source_free_probs)
-        locs_mean = _loc_mean_func(locs_mean_raw)
-        locs_sd = (locs_logvar.exp() + 1e-5).sqrt()
+        n_source_log_probs = self._log_softmax(n_source_free_probs)
+        locs_mean = _locs_mean_func(locs_mean_raw)
+        locs_sd = _locs_sd_func(locs_logvar_raw)
         return n_source_log_probs, locs_mean, locs_sd
-
-    def _get_loss(self, image: Tensor, background: Tensor, true_catalog: TileCatalog):
-        assert true_catalog.n_sources.max() <= 1
-
-        # encode
-        n_source_log_probs, loc_mean, loc_sd = self.encode(image, background)
-
-        # loss from detection count encoding
-        nlsp = rearrange(n_source_log_probs, "np C -> np C", C=2)
-        n_true_sources_flat = rearrange(true_catalog.n_sources, "b nth ntw -> (b nth ntw)")
-        counter_loss = nll_loss(nlsp, n_true_sources_flat, reduction="none")
-
-        # now for locations
-        flat_true_locs = rearrange(true_catalog.locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
-        locs_loss = Normal(loc_mean, loc_sd).log_prob(flat_true_locs) * n_true_sources_flat
-
-        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss  # noqa: WPS459
-        loss = loss_vec.mean()
-
-        return {
-            "loss": loss,
-            "counter_loss": counter_loss,
-            "locs_loss": locs_loss,
-        }
 
     def sample(self, images: Tensor, background: Tensor, n_samples: int = 1) -> dict[str, Tensor]:
         """Sample from the encoded variational distribution.
@@ -167,16 +143,44 @@ class DetectionEncoder(pl.LightningModule):
         nth, ntw = get_n_padded_tiles_hw(h, w, self.ptile_slen, self.tile_slen)
         n_source_log_probs, locs_mean, _ = self.encode(images, background)
         flat_tile_n_sources = torch.argmax(n_source_log_probs, dim=-1)
-        tile_locs = locs_mean * rearrange(flat_tile_n_sources, "np -> np 1")
+        flat_tile_locs = locs_mean * rearrange(flat_tile_n_sources, "np -> np 1")
 
         return TileCatalog.from_flat_dict(
-            self.tile_slen, nth, ntw, {"n_sources": flat_tile_n_sources, "locs": tile_locs}
+            self.tile_slen, nth, ntw, {"n_sources": flat_tile_n_sources, "locs": flat_tile_locs}
         )
 
+    def _get_loss(self, image: Tensor, background: Tensor, true_catalog: TileCatalog):
+        assert true_catalog.n_sources.max() <= 1
 
-def _loc_mean_func(x):
+        # encode
+        n_source_log_probs, loc_mean, loc_sd = self.encode(image, background)
+
+        # loss from detection count encoding
+        nlsp = rearrange(n_source_log_probs, "np C -> np C", C=2)
+        n_true_sources_flat = rearrange(true_catalog.n_sources, "b nth ntw -> (b nth ntw)")
+        counter_loss = nll_loss(nlsp, n_true_sources_flat, reduction="none")
+
+        # now for locations
+        flat_true_locs = rearrange(true_catalog.locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
+        locs_loss = Normal(loc_mean, loc_sd).log_prob(flat_true_locs) * n_true_sources_flat
+
+        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss  # noqa: WPS459
+        loss = loss_vec.mean()
+
+        return {
+            "loss": loss,
+            "counter_loss": counter_loss,
+            "locs_loss": locs_loss,
+        }
+
+
+def _locs_mean_func(x: Tensor) -> Tensor:
     # I don't think the special case for `x == 0` should be necessary
     return torch.sigmoid(x) * (x != 0).float()
+
+
+def _locs_sd_func(x: Tensor) -> Tensor:
+    return (x.exp() + 1e-5).sqrt()
 
 
 def plot_image_detections(images, true_cat, est_cat, bp: int, nrows, img_ids):
