@@ -1,0 +1,33 @@
+---
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+encoder:
+    survey_bands: ["g", "i", "r", "u", "y", "z"]
+    tile_slen: 4
+    double_detect: false
+    tiles_to_crop: 1
+    image_normalizer:
+        bands: [0, 1, 2, 3, 4, 5]
+        num_psf_params: 4  # for SDSS, 4 for DC2
+        log_transform_stdevs: []
+        use_clahe: false
+
+
+surveys:
+    dc2:
+        data_dir: ${paths.data}/tests/dc2/dc2_multiband/
+        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100000.pkl
+        n_split: 5
+        image_lim: [800, 800]
+        deconv_path: ${paths.data}/tests/dc2/coadd_deconv_image
+
+train:
+    trainer:
+        logger:
+            name: DC2
+            version: DC2_origin
+        precision: 32
+    data_source: ${surveys.dc2}
