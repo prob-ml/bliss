@@ -43,7 +43,7 @@ def write_batch_to_csv(data_batch, header=False):
     with open(output_file_path, mode='a', newline='') as file:  # 'a' mode to append data
         writer = csv.writer(file)
         if header:
-            writer.writerow(['objID', 'u_band', 'g_band', 'r_band', 'i_band', 'z_band', 'redshift'])
+            writer.writerow(['objID', 'u_band', 'g_band', 'r_band', 'i_band', 'z_band', 'redshift', 'source_type'])
         writer.writerows(data_batch)
 
 # Write the header row
@@ -56,7 +56,7 @@ for start_index in range(0, total_ids, 100):
     # Construct the SQL query for the current batch
     sql_query = f"""
     SELECT
-        p.objID, p.u, p.g, p.r, p.i, p.z, s.z AS redshift
+        p.objID, p.u, p.g, p.r, p.i, p.z, s.z AS redshift, s.class AS source_type
     FROM
         PhotoObj AS p
         JOIN SpecObj AS s ON p.objID = s.bestObjID
@@ -70,7 +70,7 @@ for start_index in range(0, total_ids, 100):
             # Prepare data batch for CSV writing
             data_batch = []
             for row in photo_data:
-                data_row = [row['objID'], row['u'], row['g'], row['r'], row['i'], row['z'], row['redshift']]
+                data_row = [row['objID'], row['u'], row['g'], row['r'], row['i'], row['z'], row['redshift'],row['source_type']]
                 data_batch.append(data_row)
 
             # Write the current batch of data to the CSV file
