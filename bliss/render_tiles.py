@@ -8,8 +8,8 @@ from torch.nn.functional import fold, grid_sample, unfold
 from tqdm import tqdm
 
 from bliss.datasets.lsst import PIXEL_SCALE
+from bliss.encoders.ae import CenteredGalaxyDecoder
 from bliss.grid import get_mgrid
-from bliss.models.galaxy_net import CenteredGalaxyDecoder
 from bliss.reporting import get_single_galaxy_ellipticities
 
 
@@ -24,7 +24,6 @@ def render_galaxy_ptiles(
 ) -> Tensor:
     """Render padded tiles of galaxies from tiled tensors."""
     assert galaxy_bools.le(1).all(), "At most one source can be rendered per tile."
-    assert cached_grid.shape == (ptile_slen, ptile_slen, 2)
 
     locs = rearrange(locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
     galaxy_bools = rearrange(galaxy_bools, "b nth ntw 1 -> (b nth ntw) 1")
@@ -308,7 +307,7 @@ def _validate_border_padding(tile_slen: int, ptile_slen: int, bp: float = None):
 
     n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
     ptile_padding = n_tiles_of_padding * tile_slen
-    assert bp.is_integer(), "amount of border padding must be an integer"
+    assert float(bp).is_integer(), "amount of border padding must be an integer"
     assert n_tiles_of_padding.is_integer(), "n_tiles_of_padding must be an integer"
     assert bp <= ptile_padding, "Too much border, increase ptile_slen"
     return int(bp)
