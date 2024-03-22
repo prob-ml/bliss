@@ -1,10 +1,11 @@
 import math
 from collections import UserDict
 from copy import copy
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import torch
 from einops import rearrange, reduce, repeat
+from tensordict import TensorDict
 from torch import Tensor
 
 
@@ -19,6 +20,9 @@ class TileCatalog(UserDict):
         "blendedness",
         "galaxy_fluxes",
         "galaxy_probs",
+        "star_fluxes",
+        "star_log_fluxes",
+        "star_bools",
     }
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
@@ -184,7 +188,7 @@ def _get_tiled_plocs(locs: Tensor, tile_slen: int) -> Tensor:
 class FullCatalog(UserDict):
     allowed_params = TileCatalog.allowed_params
 
-    def __init__(self, height: int, width: int, d: Dict[str, Tensor]) -> None:
+    def __init__(self, height: int, width: int, d: dict[str, Tensor]) -> None:
         """Initialize FullCatalog.
 
         Args:
@@ -197,7 +201,8 @@ class FullCatalog(UserDict):
         self.plocs = d.pop("plocs")  # pixel distance from top-left corner of inner image.
         self.n_sources = d.pop("n_sources")
         self.batch_size = self.plocs.shape[0]
-        self.max_n_sources = self.plocs[1]
+        self.max_n_sources = self.plocs.shape[1]
+        assert self.plocs.ndim == 3
         assert self.plocs.shape[-1] == 2
         assert self.n_sources.max().int().item() <= self.max_n_sources
         assert self.n_sources.shape == (self.batch_size,)
@@ -216,13 +221,16 @@ class FullCatalog(UserDict):
         assert isinstance(key, str)
         return super().__getitem__(key)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Tensor]:
         out = {}
         out["plocs"] = self.plocs
         out["n_sources"] = self.n_sources
         for k, v in self.items():
             out[k] = v
         return out
+
+    def to_tensor_dict(self) -> TensorDict:
+        return TensorDict(self.to_dict(), batch_size=[self.batch_size])
 
     def apply_param_bin(self, pname: str, p_min: float, p_max: float):
         """Apply magnitude bin to given parameters."""
@@ -280,6 +288,7 @@ class FullCatalog(UserDict):
             # need to compare fluxes per tile to get brightest object
             tile_fluxes = torch.zeros(tile_cat_shape, device=self.device)
             assert "fluxes" in self.keys(), "Fluxes are required to decide which source to keep!"
+
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
             dtype = torch.int64 if k == "objid" else torch.float
@@ -290,20 +299,20 @@ class FullCatalog(UserDict):
         for ii in range(self.batch_size):
             n_sources = int(self.n_sources[ii].item())
             for idx, coords in enumerate(tile_coords[ii][:n_sources]):
-                source_idx = tile_n_sources[ii, coords[0], coords[1]].item()
-                if source_idx >= 1:
+                n_sources_in_tile = tile_n_sources[ii, coords[0], coords[1]].item()
+                assert n_sources_in_tile in {0, 1}
+                if n_sources_in_tile > 0:
                     if not ignore_extra_sources:
                         raise ValueError("# of sources in at least one tile is larger than 1.")
                     flux1 = tile_fluxes[ii, coords[0], coords[1]].item()
                     flux2 = self["fluxes"][ii, idx].item()
                     if flux1 > flux2:
                         continue  # keep current source in tile
-                    source_idx -= 1  # need to be replaced in previous index, which is always 0
                 tile_loc = (self.plocs[ii, idx] - coords * tile_slen) / tile_slen
-                tile_locs[ii, coords[0], coords[1], source_idx] = tile_loc
+                tile_locs[ii, coords[0], coords[1]] = tile_loc
                 for p, q in tile_params.items():
-                    q[ii, coords[0], coords[1], source_idx] = self[p][ii, idx]
-                tile_n_sources[ii, coords[0], coords[1]] = source_idx + 1
+                    q[ii, coords[0], coords[1], :] = self[p][ii, idx]
+                tile_n_sources[ii, coords[0], coords[1]] = 1
                 if ignore_extra_sources:
                     tile_fluxes[ii, coords[0], coords[1]] = self["fluxes"][ii, idx].item()
         tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
@@ -314,6 +323,20 @@ class FullCatalog(UserDict):
         assert x.ndim == 3
         assert x.shape[:-1] == (self.batch_size, self.max_n_sources)
         assert x.device == self.device
+
+
+def stack_full_catalogs(full_cats: List[FullCatalog]) -> FullCatalog:
+    all_tds = []
+    for full_cat in full_cats:
+        all_tds.append(full_cat.to_tensor_dict())
+    return torch.cat(all_tds, 0)
+
+
+def index_full_catalog(
+    full_cat: FullCatalog, idx1: int | None = None, idx2: int | None = None
+) -> FullCatalog:
+    new_td = full_cat.to_tensor_dict()[idx1:idx2]
+    return FullCatalog(full_cat.height, full_cat.width, {**new_td})
 
 
 def get_n_tiles_hw(height: int, width: int, tile_slen: int) -> tuple[int, int]:
