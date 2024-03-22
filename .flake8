@@ -1,5 +1,7 @@
 [flake8]
-exclude = .git
+exclude =
+    .git,
+    tests/**
 max-line-length = 100
 inline-quotes = double
 docstring-convention=google
