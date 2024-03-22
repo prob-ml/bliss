@@ -52,8 +52,12 @@ class TileCatalog(UserDict):
     @classmethod
     def from_flat_dict(cls, tile_slen: int, nth: int, ntw: int, d: Dict[str, Tensor]):
         catalog_dict: Dict[str, Tensor] = {}
+        catalog_dict["n_sources"] = rearrange(
+            d["n_sources"], "(b nth ntw) -> b nth ntw", nth=nth, ntw=ntw
+        )
         for k, v in d.items():
-            catalog_dict[k] = rearrange(v, "(b nth ntw) d -> b nth ntw d", nth=nth, ntw=ntw)
+            if k != "n_sources":
+                catalog_dict[k] = rearrange(v, "(b nth ntw) d -> b nth ntw d", nth=nth, ntw=ntw)
         return cls(tile_slen, catalog_dict)
 
     def cpu(self):
@@ -179,7 +183,7 @@ def _get_tiled_plocs(locs: Tensor, tile_slen: int) -> Tensor:
 
     # recenter and renormalize locations.
     locs_flat = rearrange(locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
-    bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=batch_size).float()
+    bias = repeat(tile_coords, "n xy -> (r n) xy", r=batch_size).float()
 
     plocs = locs_flat * tile_slen + bias
     return rearrange(plocs, "(b nth ntw) xy -> b nth ntw xy", b=batch_size, nth=nth, ntw=ntw)
