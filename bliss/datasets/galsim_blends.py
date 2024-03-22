@@ -9,7 +9,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.background import add_noise_and_background, get_constant_background
 from bliss.datasets.lsst import PIXEL_SCALE, convert_mag_to_flux, get_default_lsst_background
 from bliss.datasets.table_utils import catsim_row_to_galaxy_params
@@ -23,8 +23,8 @@ class SavedGalsimBlends(Dataset):
         self.ds: dict[str, Tensor] = torch.load(dataset_file)
         self.epoch_size = epoch_size
 
-        self.images = self.ds.pop("images")
-        self.background = self.ds.pop("background")
+        self.images = self.ds.pop("images").float()  # needs to be a float for NN
+        self.background = self.ds.pop("background").float()
 
         full_catalog = FullCatalog(slen, slen, self.ds)
         tile_catalogs = full_catalog.to_tile_params(tile_slen, ignore_extra_sources=True)
@@ -74,6 +74,14 @@ def generate_dataset(
     paramss = torch.cat(paramss, dim=0)
 
     return {"images": images, "background": background, **paramss}
+
+
+def parse_dataset(dataset: dict[str, Tensor], tile_slen: int = 4):
+    """Parse dataset into a tuple of (images, background, TileCatalog)."""
+    params = dataset.copy()  # make a copy
+    images = params.pop("images")
+    background = params.pop("background")
+    return images, background, TileCatalog(tile_slen, params)
 
 
 def sample_source_params(
