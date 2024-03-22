@@ -1,5 +1,5 @@
 import torch
-from einops import pack, rearrange, unpack
+from einops import pack, rearrange, reduce, unpack
 from torch import Tensor, nn
 from torch.distributions import Categorical, Normal
 from torch.nn.functional import nll_loss
@@ -160,15 +160,18 @@ class DetectionEncoder(nn.Module):
 
         # now for locations
         flat_true_locs = rearrange(true_catalog.locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
-        locs_loss = Normal(loc_mean, loc_sd).log_prob(flat_true_locs) * n_true_sources_flat
+        locs_log_prob = reduce(
+            Normal(loc_mean, loc_sd).log_prob(flat_true_locs), "np xy -> np", "sum", xy=2
+        )
+        locs_loss = locs_log_prob * n_true_sources_flat
 
         loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss  # noqa: WPS459
         loss = loss_vec.mean()
 
         return {
             "loss": loss,
-            "counter_loss": counter_loss.mean(),
-            "locs_loss": locs_loss.mean(),
+            "counter_loss": counter_loss.detach().mean().item(),
+            "locs_loss": locs_loss.detach().sum().item(),
         }
 
 
