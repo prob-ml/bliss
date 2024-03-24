@@ -78,7 +78,7 @@ def generate_dataset(
 
 def parse_dataset(dataset: dict[str, Tensor], tile_slen: int = 4):
     """Parse dataset into a tuple of (images, background, TileCatalog)."""
-    params = dataset.copy()  # make a copy
+    params = dataset.copy()  # make a copy to not change argument.
     images = params.pop("images")
     background = params.pop("background")
     return images, background, TileCatalog(tile_slen, params)
