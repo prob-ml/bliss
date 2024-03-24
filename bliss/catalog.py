@@ -32,6 +32,8 @@ class TileCatalog(UserDict):
         self.n_sources = d.pop("n_sources").long()
 
         bs, nth, ntw, _ = self.locs.shape
+        assert self.n_sources.max() <= 1 and self.n_sources.min() >= 0
+        assert self.locs.max() <= 1 and self.locs.min() >= 0
         assert self.n_sources.shape == (bs, nth, ntw)
         self.batch_size = bs
         self.nth = nth
