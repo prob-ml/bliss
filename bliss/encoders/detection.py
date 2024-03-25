@@ -149,7 +149,7 @@ class DetectionEncoder(nn.Module):
 
         # loss from detection count encoding
         n_true_sources_flat = rearrange(true_catalog.n_sources, "b nth ntw -> (b nth ntw)")
-        counter_loss = BCELoss(n_source_probs, n_true_sources_flat, reduction="none")
+        counter_loss = BCELoss(reduction="none")(n_source_probs, n_true_sources_flat.float())
 
         # now for locations
         flat_true_locs = rearrange(true_catalog.locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
