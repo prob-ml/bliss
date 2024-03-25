@@ -58,7 +58,7 @@ class DetectionEncoder(nn.Module):
         self._n_params_per_source = 4
 
         # the total number of distributional parameters per tile
-        # the extra 2 is for probability of coutns, "on" and "off" (need both to softmax)
+        # the extra 2 is for probability of counts, "on" and "off" (need both to softmax)
         self._dim_out_all = self._n_params_per_source + 2
 
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
@@ -147,11 +147,10 @@ class DetectionEncoder(nn.Module):
         return {"n_sources": tile_n_sources, "locs": tile_locs}
 
     def get_loss(self, image: Tensor, background: Tensor, true_catalog: TileCatalog):
-        assert true_catalog.n_sources.max() <= 1
         assert image.device == background.device == true_catalog.device
 
         # encode
-        n_source_log_probs, loc_mean, loc_sd = self.forward(image, background)
+        n_source_log_probs, locs_mean, locs_sd = self.forward(image, background)
 
         # loss from detection count encoding
         nlsp = rearrange(n_source_log_probs, "np C -> np C", C=2)
@@ -161,7 +160,7 @@ class DetectionEncoder(nn.Module):
         # now for locations
         flat_true_locs = rearrange(true_catalog.locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
         locs_log_prob = reduce(
-            Normal(loc_mean, loc_sd).log_prob(flat_true_locs), "np xy -> np", "sum", xy=2
+            Normal(locs_mean, locs_sd).log_prob(flat_true_locs), "np xy -> np", "sum", xy=2
         )
         locs_loss = locs_log_prob * n_true_sources_flat
 
