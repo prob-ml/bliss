@@ -2,7 +2,7 @@ import torch
 from einops import pack, rearrange, reduce, unpack
 from torch import Tensor, nn
 from torch.distributions import Categorical, Normal
-from torch.nn.functional import nll_loss
+from torch.nn import BCELoss
 
 from bliss.catalog import TileCatalog
 from bliss.encoders.layers import ConcatBackgroundTransform, EncoderCNN, make_enc_final
@@ -41,6 +41,7 @@ class DetectionEncoder(nn.Module):
             dropout: TODO (document this)
             hidden: TODO (document this)
         """
+        assert n_bands == 1, "Only 1 band is supported"
         super().__init__()
 
         self.input_transform = input_transform
@@ -54,12 +55,8 @@ class DetectionEncoder(nn.Module):
         self.bp = (ptile_slen - tile_slen) // 2
 
         # Number of distributional parameters used to characterize each source in an image.
-        # 2 for location mean and 2 for location sigma (xy)
-        self._n_params_per_source = 4
-
-        # the total number of distributional parameters per tile
-        # the extra 2 is for probability of counts, "on" and "off" (need both to softmax)
-        self._dim_out_all = self._n_params_per_source + 2
+        # 2 for location mean, 2 for location sigma (xy), 1 for for probability of counts.
+        self._dim_out_all = 5
 
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
 
@@ -72,7 +69,6 @@ class DetectionEncoder(nn.Module):
             self._dim_out_all,
             dropout,
         )
-        self._log_softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, images: Tensor, background: Tensor):
 
@@ -92,21 +88,21 @@ class DetectionEncoder(nn.Module):
 
         # split NN output
         locs_mean_raw, locs_logvar_raw, n_source_free_probs = unpack(
-            enc_final_output, [(2,), (2,), (2,)], "np *"
+            enc_final_output, [(2,), (2,), ()], "np *"
         )
 
         # final transformation from NN output
-        n_source_log_probs = self._log_softmax(n_source_free_probs)
+        n_source_probs = torch.sigmoid(n_source_free_probs).clamp(1e-4, 1 - 1e-4)
         locs_mean = _locs_mean_func(locs_mean_raw)
         locs_sd = _locs_sd_func(locs_logvar_raw)
-        return n_source_log_probs, locs_mean, locs_sd
+        return n_source_probs, locs_mean, locs_sd
 
     def variational_mode(self, images: Tensor, background: Tensor) -> TileCatalog:
         """Compute the variational mode."""
         _, _, h, w = images.shape
         nth, ntw = get_n_padded_tiles_hw(h, w, self.ptile_slen, self.tile_slen)
-        n_source_log_probs, locs_mean, _ = self.forward(images, background)
-        flat_tile_n_sources = torch.argmax(n_source_log_probs, dim=-1)
+        n_source_probs, locs_mean, _ = self.forward(images, background)
+        flat_tile_n_sources = n_source_probs.ge(0.5).long()
         flat_tile_locs = locs_mean * rearrange(flat_tile_n_sources, "np -> np 1")
 
         return TileCatalog.from_flat_dict(
@@ -130,10 +126,9 @@ class DetectionEncoder(nn.Module):
             A dictionary of tensors with shape `n_samples * n_ptiles * ...`.
             Consists of "n_sources" and "locs".
         """
-        n_source_log_probs, locs_mean, locs_sd = self.forward(images, background)
+        n_source_probs, locs_mean, locs_sd = self.forward(images, background)
 
         # sample counts per tile
-        n_source_probs = n_source_log_probs.exp()
         tile_n_sources = Categorical(probs=n_source_probs).sample((n_samples,))
         assert tile_n_sources.ndim == 2
 
@@ -150,12 +145,11 @@ class DetectionEncoder(nn.Module):
         assert image.device == background.device == true_catalog.device
 
         # encode
-        n_source_log_probs, locs_mean, locs_sd = self.forward(image, background)
+        n_source_probs, locs_mean, locs_sd = self.forward(image, background)
 
         # loss from detection count encoding
-        nlsp = rearrange(n_source_log_probs, "np C -> np C", C=2)
         n_true_sources_flat = rearrange(true_catalog.n_sources, "b nth ntw -> (b nth ntw)")
-        counter_loss = nll_loss(nlsp, n_true_sources_flat, reduction="none")
+        counter_loss = BCELoss(n_source_probs, n_true_sources_flat, reduction="none")
 
         # now for locations
         flat_true_locs = rearrange(true_catalog.locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
