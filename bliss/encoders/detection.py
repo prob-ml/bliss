@@ -153,7 +153,7 @@ class DetectionEncoder(nn.Module):
 
         # now for locations
         flat_true_locs = rearrange(true_catalog.locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
-        locs_log_prob = reduce(
+        locs_log_prob = -reduce(  # negative!
             Normal(locs_mean, locs_sd).log_prob(flat_true_locs), "np xy -> np", "sum", xy=2
         )
         locs_loss = locs_log_prob * n_true_sources_flat.float()
