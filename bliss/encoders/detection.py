@@ -156,7 +156,7 @@ class DetectionEncoder(nn.Module):
         locs_log_prob = reduce(
             Normal(locs_mean, locs_sd).log_prob(flat_true_locs), "np xy -> np", "sum", xy=2
         )
-        locs_loss = locs_log_prob * n_true_sources_flat
+        locs_loss = locs_log_prob * n_true_sources_flat.float()
 
         loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss  # noqa: WPS459
         loss = loss_vec.mean()
@@ -164,7 +164,7 @@ class DetectionEncoder(nn.Module):
         return {
             "loss": loss,
             "counter_loss": counter_loss.detach().mean().item(),
-            "locs_loss": locs_loss.detach().sum().item(),
+            "locs_loss": locs_loss.detach().mean().item(),
         }
 
 
