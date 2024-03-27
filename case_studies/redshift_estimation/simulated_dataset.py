@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 from bliss.align import align
 from bliss.simulator.decoder import ImageDecoder
+from bliss.simulator.simulated_dataset import CachedSimulatedDataset
 from bliss.surveys.survey import Survey
 from case_studies.redshift_estimation.catalog import RedshiftTileCatalog
 from case_studies.redshift_estimation.prior import RedshiftUniformPrior
@@ -232,6 +233,9 @@ class RedshiftSimulatedDataset(pl.LightningDataModule, IterableDataset):
     def test_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
 
+    def predict_dataloader(self):
+        return DataLoader(self, batch_size=None, num_workers=self.num_workers)
+
 
 FileDatum = TypedDict(
     "FileDatum",
@@ -243,3 +247,9 @@ FileDatum = TypedDict(
         "psf_params": torch.Tensor,
     },
 )
+
+
+class RedshiftCachedSimulatedDataset(CachedSimulatedDataset):
+    def predict_dataloader(self):
+        assert self.data, "No cached test data found; run `generate.py` first"
+        return DataLoader(self.data, batch_size=self.batch_size, num_workers=self.num_workers)
