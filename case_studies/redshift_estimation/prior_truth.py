@@ -21,7 +21,7 @@ class RedshiftPrior(CatalogPrior):
     ):
         """Initializes CatalogPrior."""
         super().__init__(*args, **kwargs)
-        self.array = pd.read_csv('/home/../data/scratch/photometric_data.csv').to_numpy()[:,1:7]
+        self.array = pd.read_csv('/home/../data/scratch/songju/STAR.csv').to_numpy()[:,1:7]
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
         self.__sample = np.random.choice(range(len(self.array)), size=latent_dims, replace=True)
 
@@ -32,7 +32,7 @@ class RedshiftPrior(CatalogPrior):
     # Override the source_type to be a star
     def _sample_source_type(self):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        return torch.zeros(*latent_dims)  
+        return torch.ones(*latent_dims)  
     
     # Overirde the star fluxes to sample from the real data
     def _sample_star_fluxes(self):
@@ -42,6 +42,15 @@ class RedshiftPrior(CatalogPrior):
         # bands = np.array(range(self.n_bands))
         # return total_flux[..., bands]
         return torch.from_numpy(total_flux)
+    
+    def _sample_galaxy_fluxes(self):
+        galaxy_fluxes, galaxy_params = super()._sample_galaxy_prior()
+        total_flux = np.concatenate((np.take(self.array[:,0], self.__sample),np.take(self.array[:,1], self.__sample),np.take(self.array[:,2], self.__sample),np.take(self.array[:,3], self.__sample),np.take(self.array[:,4], self.__sample)),axis=-1)
+
+        # select specified bands
+        # bands = np.array(range(self.n_bands))
+        # return total_flux[..., bands]
+        return torch.from_numpy(total_flux),galaxy_params
 
     def sample(self) -> RedshiftTileCatalog:
         """Overrides this method from CatalogPrior to include redshift samples from prior.
