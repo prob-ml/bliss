@@ -22,11 +22,6 @@ class RedshiftTileCatalog(TileCatalog):
         params = {}
         indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()
 
-        # Maybe clean up this shaping later; should already be in resulting shape
-        # Because there's one redshift parameter per source.
-        tile_params_to_gather["redshifts"] = rearrange(
-            tile_params_to_gather["redshifts"], "b nth ntw s -> b nth ntw s 1"
-        )
         for param_name, tile_param in tile_params_to_gather.items():
             k = tile_param.shape[-1]
             param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
