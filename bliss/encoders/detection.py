@@ -1,15 +1,18 @@
+import pytorch_lightning as pl
 import torch
 from einops import pack, rearrange, reduce, unpack
 from torch import Tensor, nn
 from torch.distributions import Categorical, Normal
 from torch.nn import BCELoss
+from torch.optim import Adam
 
 from bliss.catalog import TileCatalog
+from bliss.datasets.galsim_blends import parse_dataset
 from bliss.encoders.layers import ConcatBackgroundTransform, EncoderCNN, make_enc_final
 from bliss.render_tiles import get_images_in_tiles, get_n_padded_tiles_hw
 
 
-class DetectionEncoder(nn.Module):
+class DetectionEncoder(pl.LightningModule):
     """Encodes the distribution of a latent variable representing an astronomical image.
 
     This class implements the source encoder, which is supposed to take in
@@ -141,11 +144,11 @@ class DetectionEncoder(nn.Module):
 
         return {"n_sources": tile_n_sources, "locs": tile_locs}
 
-    def get_loss(self, image: Tensor, background: Tensor, true_catalog: TileCatalog):
-        assert image.device == background.device == true_catalog.device
+    def get_loss(self, images: Tensor, background: Tensor, true_catalog: TileCatalog):
+        assert images.device == background.device == true_catalog.device
 
         # encode
-        n_source_probs, locs_mean, locs_sd = self.forward(image, background)
+        n_source_probs, locs_mean, locs_sd = self.forward(images, background)
 
         # loss from detection count encoding
         n_true_sources_flat = rearrange(true_catalog.n_sources, "b nth ntw -> (b nth ntw)")
@@ -153,7 +156,7 @@ class DetectionEncoder(nn.Module):
 
         # now for locations
         flat_true_locs = rearrange(true_catalog.locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
-        locs_log_prob = -reduce(  # negative!
+        locs_log_prob = -reduce(  # negative log-probability is the loss!
             Normal(locs_mean, locs_sd).log_prob(flat_true_locs), "np xy -> np", "sum", xy=2
         )
         locs_loss = locs_log_prob * n_true_sources_flat.float()
@@ -166,6 +169,49 @@ class DetectionEncoder(nn.Module):
             "counter_loss": counter_loss.detach().mean().item(),
             "locs_loss": locs_loss.detach().mean().item(),
         }
+
+    # pytorch lightning
+    def training_step(self, batch, batch_idx):
+        """Training step (pytorch lightning)."""
+        images, background, truth_cat = parse_dataset(batch, self.tile_slen)
+        out = self.get_loss(images, background, truth_cat)
+
+        # logging
+        self.log("train/loss", out["loss"], batch_size=truth_cat.batch_size)
+        self.log("train/counter_loss", out["counter_loss"], batch_size=truth_cat.batch_size)
+        self.log("train/locs_loss", out["locs_loss"], batch_size=truth_cat.batch_size)
+
+        return out["loss"]
+
+    def validation_step(self, batch, batch_idx):
+        """Training step (pytorch lightning)."""
+        images, background, truth_cat = parse_dataset(batch, self.tile_slen)
+        out = self.get_loss(images, background, truth_cat)
+
+        # compute accuracy of counts (per tile) for tiles with a source
+        pred_cat = self.variational_mode(images, background)
+        metrics = _compute_metrics(truth_cat, pred_cat)
+        self.log(
+            "val/n_match", metrics["n_match"], batch_size=truth_cat.batch_size, reduce_fx="sum"
+        )
+
+        # logging
+        self.log("val/loss", out["loss"], batch_size=truth_cat.batch_size)
+        self.log("val/counter_loss", out["counter_loss"], batch_size=truth_cat.batch_size)
+        self.log("val/locs_loss", out["locs_loss"], batch_size=truth_cat.batch_size)
+
+        return out["loss"]
+
+    def configure_optimizers(self):
+        return Adam(self.parameters(), lr=1e-4)
+
+
+def _compute_metrics(truth_cat: TileCatalog, pred_cat: TileCatalog):
+    n_sources1 = truth_cat.n_sources.flatten()
+    n_sources2 = pred_cat.n_sources.flatten()
+    mask = n_sources1 > 0
+    n_match = torch.eq(n_sources1[mask], n_sources2[mask]).sum().item()
+    return {"n_match": n_match}
 
 
 def _locs_mean_func(x: Tensor) -> Tensor:
