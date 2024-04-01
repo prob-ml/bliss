@@ -14,7 +14,8 @@ from torch import Tensor
 from torch.utils.data import Dataset
 
 from bliss.catalog import FullCatalog, get_is_on_from_n_sources
-from bliss.datasets.background import ConstantBackground
+from bliss.datasets.background import add_noise_and_background, get_constant_background
+from bliss.datasets.galsim_blends import render_stars_from_params, sample_stars
 from bliss.datasets.lsst import (
     PIXEL_SCALE,
     catsim_row_to_galaxy_params,
@@ -23,7 +24,6 @@ from bliss.datasets.lsst import (
     convert_mag_to_flux,
     get_default_lsst_background,
 )
-from bliss.datasets.stars import render_stars_from_params, sample_stars
 from bliss.reporting import get_single_galaxy_ellipticities
 
 
@@ -216,7 +216,7 @@ class GalsimBlends(Dataset):
         assert galaxy_image.shape == star_image.shape
         noiseless = galaxy_image + star_image
         background = self.background.sample((1, 1, self.size, self.size))[0]
-        image = _add_noise_and_background(noiseless, background)
+        image = add_noise_and_background(noiseless, background)
         isolated_images = _combine_isolated_images(
             isolated_galaxy_image, stars_isolated, n_stars, n_galaxies, self.size
         )
@@ -331,12 +331,6 @@ class SavedGalsimBlends(Dataset):
 
     def __getitem__(self, index) -> TensorDict:
         return {**self.ds[index]}
-
-
-def _add_noise_and_background(image: Tensor, background: Tensor) -> Tensor:
-    image_with_background = image + background
-    noise = image_with_background.sqrt() * torch.randn_like(image_with_background)
-    return image_with_background + noise
 
 
 def _get_snr(image: Tensor, background: Tensor) -> float:
