@@ -28,3 +28,4 @@ venv
 *OneDegSq.fits
 **/out/
 **/output/
+**/notebooks/*.pt
