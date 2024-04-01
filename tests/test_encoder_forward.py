@@ -1,6 +1,6 @@
 import torch
 
-from bliss.models.detection_encoder import DetectionEncoder, LogBackgroundTransform
+from bliss.encoders.detection import DetectionEncoder, LogBackgroundTransform
 
 
 class TestSourceEncoder:
