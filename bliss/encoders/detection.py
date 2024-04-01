@@ -1,7 +1,7 @@
 import pytorch_lightning as pl
 import torch
 from einops import pack, rearrange, reduce, unpack
-from torch import Tensor, nn
+from torch import Tensor
 from torch.distributions import Categorical, Normal
 from torch.nn import BCELoss
 from torch.optim import Adam
@@ -191,14 +191,15 @@ class DetectionEncoder(pl.LightningModule):
         # compute accuracy of counts (per tile) for tiles with a source
         pred_cat = self.variational_mode(images, background)
         metrics = _compute_metrics(truth_cat, pred_cat)
-        self.log(
-            "val/n_match", metrics["n_match"], batch_size=truth_cat.batch_size, reduce_fx="sum"
-        )
 
         # logging
         self.log("val/loss", out["loss"], batch_size=truth_cat.batch_size)
         self.log("val/counter_loss", out["counter_loss"], batch_size=truth_cat.batch_size)
         self.log("val/locs_loss", out["locs_loss"], batch_size=truth_cat.batch_size)
+        self.log(
+            "val/n_match", metrics["n_match"], batch_size=truth_cat.batch_size, reduce_fx="sum"
+        )
+        self.log("val/recall", metrics["recall"], batch_size=truth_cat.batch_size, reduce_fx="mean")
 
         return out["loss"]
 
@@ -211,7 +212,8 @@ def _compute_metrics(truth_cat: TileCatalog, pred_cat: TileCatalog):
     n_sources2 = pred_cat.n_sources.flatten()
     mask = n_sources1 > 0
     n_match = torch.eq(n_sources1[mask], n_sources2[mask]).sum().item()
-    return {"n_match": n_match}
+    recall = n_match / n_sources1.sum()
+    return {"n_match": n_match, "recall": recall}
 
 
 def _locs_mean_func(x: Tensor) -> Tensor:
