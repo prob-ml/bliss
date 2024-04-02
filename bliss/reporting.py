@@ -23,6 +23,10 @@ class DetectionMetrics(Metric):
     fp: Tensor
     avg_distance: Tensor
     tp_gal: Tensor
+
+    # Set to True if the metric during 'update' requires access to the global metric
+    # state for its calculations. If not, setting this to False indicates that all
+    # batch states are independent and we will optimize the runtime of 'forward'
     full_state_update: Optional[bool] = True
 
     def __init__(
@@ -56,13 +60,13 @@ class DetectionMetrics(Metric):
         self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("tp_gal", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("fp", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("total_true_n_sources", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
+        self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="mean")
 
     # pylint: disable=no-member
-    def update(self, true: FullCatalog, est: FullCatalog) -> None:  # type: ignore
+    def update(self, true: FullCatalog, est: FullCatalog) -> None:
         """Update the internal state of the metric including tp, fp, total_true_n_sources, etc."""
         assert true.batch_size == est.batch_size
 
@@ -82,7 +86,7 @@ class DetectionMetrics(Metric):
                 self.tp_gal += tp_gal
                 self.fp += fp
                 self.avg_distance += avg_distance
-                self.total_true_n_sources += ntrue  # type: ignore
+                self.total_true_n_sources += ntrue
                 count += 1
         self.avg_distance /= count
 
@@ -91,13 +95,10 @@ class DetectionMetrics(Metric):
         recall = self.tp / self.total_true_n_sources  # = TPR = true positive rate
         f1 = (2 * precision * recall) / (precision + recall)
         return {
-            "tp": self.tp,
-            "fp": self.fp,
             "precision": precision,
             "recall": recall,
             "f1": f1,
             "avg_distance": self.avg_distance,
-            "n_galaxies_detected": self.tp_gal,
         }
 
 
