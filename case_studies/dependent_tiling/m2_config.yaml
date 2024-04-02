@@ -11,6 +11,7 @@ encoder:
     tiles_to_crop: 1
     image_normalizer:
         bands: [2]
+        log_transform_stdevs: [3, 10, 35, 150, 350, 700]
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 0.5
@@ -33,13 +34,14 @@ prior:
     n_tiles_w: 56
     tile_slen: 2
     batch_size: 32
-    max_sources: 5
+    max_sources: 6
     mean_sources: 0.48
     min_sources: 0
     prob_galaxy: 0.0
-    star_flux_min: 0.63  # i.e., 23 magnitude
-    star_flux_max: 1014
-    star_flux_alpha: 0.5
+    star_flux_exponent: 0.9859821185389767
+    star_flux_truncation: 5685.588160703261
+    star_flux_loc: -1.162430157551662
+    star_flux_scale: 1.4137911256506595
 
 surveys:
     sdss:
@@ -78,7 +80,4 @@ predict:
         align_to_band: null
         load_image_data: true
         crop_config: [624, 736, 304, 416]
-    trainer: ${train.trainer}
-    encoder: ${encoder}
     weight_save_path: null
-    device: "cuda:0"
