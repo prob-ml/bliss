@@ -211,7 +211,10 @@ class DetectionEncoder(pl.LightningModule):
         return out["loss"]
 
     def on_validation_epoch_end(self) -> None:
-        return super().on_validation_epoch_end()
+        out = self.val_detection_metrics.compute()
+        out_log = {f"val/full/{p}": q for p, q in out.items()}
+        self.log_dict(out_log, reduce_fx="mean")
+        self.val_detection_metrics.reset()
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=1e-4)
