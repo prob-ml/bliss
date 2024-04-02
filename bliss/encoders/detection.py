@@ -10,6 +10,7 @@ from bliss.catalog import TileCatalog
 from bliss.datasets.galsim_blends import parse_dataset
 from bliss.encoders.layers import ConcatBackgroundTransform, EncoderCNN, make_enc_final
 from bliss.render_tiles import get_images_in_tiles, get_n_padded_tiles_hw
+from bliss.reporting import DetectionMetrics
 
 
 class DetectionEncoder(pl.LightningModule):
@@ -72,6 +73,9 @@ class DetectionEncoder(pl.LightningModule):
             self._dim_out_all,
             dropout,
         )
+
+        # metrics
+        self.val_detection_metrics = DetectionMetrics(slack=1.0)
 
     def forward(self, images: Tensor, background: Tensor):
 
@@ -186,36 +190,38 @@ class DetectionEncoder(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
         images, background, truth_cat = parse_dataset(batch, self.tile_slen)
+        batch_size = truth_cat.batch_size
         out = self.get_loss(images, background, truth_cat)
-
-        # compute accuracy of counts (per tile) for tiles with a source
         pred_cat = self.variational_mode(images, background)
-        metrics = _compute_metrics(truth_cat, pred_cat, tile_slen=self.tile_slen)
+
+        # compute tiled metrics
+        tiled_metrics = _compute_tiled_metrics(truth_cat, pred_cat, tile_slen=self.tile_slen)
+
+        # compute full metrics with matching
+        self.val_detection_metrics.update(truth_cat.to_full_params(), pred_cat.to_full_params())
 
         # logging
-        self.log("val/loss", out["loss"], batch_size=truth_cat.batch_size)
-        self.log("val/counter_loss", out["counter_loss"], batch_size=truth_cat.batch_size)
-        self.log("val/locs_loss", out["locs_loss"], batch_size=truth_cat.batch_size)
-        self.log(
-            "val/precision", metrics["precision"], batch_size=truth_cat.batch_size, reduce_fx="mean"
-        )
-        self.log("val/recall", metrics["recall"], batch_size=truth_cat.batch_size, reduce_fx="mean")
-        self.log("val/f1", metrics["f1"], batch_size=truth_cat.batch_size, reduce_fx="mean")
-        self.log(
-            "val/avg_dist", metrics["avg_dist"], batch_size=truth_cat.batch_size, reduce_fx="mean"
+        self.log("val/loss", out["loss"], batch_size=batch_size)
+        self.log("val/counter_loss", out["counter_loss"], batch_size=batch_size)
+        self.log("val/locs_loss", out["locs_loss"], batch_size=batch_size)
+        self.log_dict(
+            tiled_metrics, batch_size=batch_size, on_step=True, on_epoch=True, reduce_fx="mean"
         )
 
         return out["loss"]
+
+    def on_validation_epoch_end(self) -> None:
+        return super().on_validation_epoch_end()
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=1e-4)
 
 
-def _compute_metrics(truth_cat: TileCatalog, pred_cat: TileCatalog, tile_slen: int = 4):
-    # technically not using full catalog is slightly incorrect here
-    # also these are 'simple' metrics in the sense that we don't compute precision/recall/f1 with
-    # matching.
-    # but this is only for general diagnostics in tensorboard, not results, so its OK.
+def _compute_tiled_metrics(
+    truth_cat: TileCatalog, pred_cat: TileCatalog, tile_slen: int = 4, prefix: str = "val/tiled/"
+):
+    # compute simple 'tiled' metrics that do not use matching or FullCatalog
+    # thus they are slightly incorrect, but OK for general diagnostics of model improving or not
     n_sources1 = truth_cat.n_sources.flatten()
     n_sources2 = pred_cat.n_sources.flatten()
 
@@ -240,7 +246,10 @@ def _compute_metrics(truth_cat: TileCatalog, pred_cat: TileCatalog, tile_slen: i
     plocs2 = locs2_flat[match_mask] * tile_slen
     avg_dist = reduce((plocs1 - plocs2).pow(2), "np xy -> np", "sum").sqrt().mean()
 
-    return {"precision": precision, "recall": recall, "f1": f1, "avg_dist": avg_dist}
+    # prefix
+    out = {"precision": precision, "recall": recall, "f1": f1, "avg_dist": avg_dist}
+
+    return {f"{prefix}{p}": q for p, q in out.items()}
 
 
 def _locs_mean_func(x: Tensor) -> Tensor:
