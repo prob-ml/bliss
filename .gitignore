@@ -29,3 +29,4 @@ venv
 **/out/
 **/output/
 **/notebooks/*.pt
+**/run/*.pt
