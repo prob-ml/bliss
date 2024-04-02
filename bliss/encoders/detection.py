@@ -190,16 +190,20 @@ class DetectionEncoder(pl.LightningModule):
 
         # compute accuracy of counts (per tile) for tiles with a source
         pred_cat = self.variational_mode(images, background)
-        metrics = _compute_metrics(truth_cat, pred_cat)
+        metrics = _compute_metrics(truth_cat, pred_cat, tile_slen=self.tile_slen)
 
         # logging
         self.log("val/loss", out["loss"], batch_size=truth_cat.batch_size)
         self.log("val/counter_loss", out["counter_loss"], batch_size=truth_cat.batch_size)
         self.log("val/locs_loss", out["locs_loss"], batch_size=truth_cat.batch_size)
         self.log(
-            "val/n_match", metrics["n_match"], batch_size=truth_cat.batch_size, reduce_fx="sum"
+            "val/precision", metrics["precision"], batch_size=truth_cat.batch_size, reduce_fx="mean"
         )
         self.log("val/recall", metrics["recall"], batch_size=truth_cat.batch_size, reduce_fx="mean")
+        self.log("val/f1", metrics["f1"], batch_size=truth_cat.batch_size, reduce_fx="mean")
+        self.log(
+            "val/avg_dist", metrics["avg_dist"], batch_size=truth_cat.batch_size, reduce_fx="mean"
+        )
 
         return out["loss"]
 
@@ -207,13 +211,36 @@ class DetectionEncoder(pl.LightningModule):
         return Adam(self.parameters(), lr=1e-4)
 
 
-def _compute_metrics(truth_cat: TileCatalog, pred_cat: TileCatalog):
+def _compute_metrics(truth_cat: TileCatalog, pred_cat: TileCatalog, tile_slen: int = 4):
+    # technically not using full catalog is slightly incorrect here
+    # also these are 'simple' metrics in the sense that we don't compute precision/recall/f1 with
+    # matching.
+    # but this is only for general diagnostics in tensorboard, not results, so its OK.
     n_sources1 = truth_cat.n_sources.flatten()
     n_sources2 = pred_cat.n_sources.flatten()
-    mask = n_sources1 > 0
-    n_match = torch.eq(n_sources1[mask], n_sources2[mask]).sum().item()
+
+    # recall
+    mask1 = n_sources1 > 0
+    n_match = torch.eq(n_sources1[mask1], n_sources2[mask1]).sum().item()
     recall = n_match / n_sources1.sum()
-    return {"n_match": n_match, "recall": recall}
+
+    # precision
+    mask2 = n_sources2 > 0
+    n_match = torch.eq(n_sources1[mask2], n_sources2[mask2]).sum().item()
+    precision = n_match / n_sources2.sum()
+
+    # f1
+    f1 = 2 / (precision**-1 + recall**-1)
+
+    # average residual distance for true matches
+    match_mask = torch.logical_and(torch.eq(n_sources1, n_sources2), torch.eq(n_sources1, 1))
+    locs1_flat = rearrange(truth_cat.locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
+    locs2_flat = rearrange(pred_cat.locs, "b nth ntw xy -> (b nth ntw) xy", xy=2)
+    plocs1 = locs1_flat[match_mask] * tile_slen
+    plocs2 = locs2_flat[match_mask] * tile_slen
+    avg_dist = reduce((plocs1 - plocs2).pow(2), "np xy -> np", "sum").sqrt().mean()
+
+    return {"precision": precision, "recall": recall, "f1": f1, "avg_dist": avg_dist}
 
 
 def _locs_mean_func(x: Tensor) -> Tensor:
