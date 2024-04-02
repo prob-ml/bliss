@@ -8,77 +8,113 @@ from torch.distributions import Beta, Gamma, Uniform
 from bliss.catalog import TileCatalog
 from bliss.simulator.prior import CatalogPrior
 
+import pyccl as ccl
+import galsim
 
 class LensingPrior(CatalogPrior):
     def __init__(
         self,
         *args,
-        shear_min: float,
-        shear_max: float,
-        convergence_a: float,
-        convergence_b: float,
-        num_knots: int,
+        arcsec_per_pixel: float,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.shear_min = shear_min
-        self.shear_max = shear_max
-        self.convergence_a = convergence_a
-        self.convergence_b = convergence_b
-        self.num_knots = [num_knots, num_knots]
+        # validate that tiles height and width is the same, used as ngrid later
+        if self.n_tiles_h != self.n_tiles_w:
+            print("Tiles height and width are not the same")
+            exit(1)
+        self.arcsec_per_pixel = arcsec_per_pixel
+        self.cosmology = ccl.cosmology.CosmologyVanillaLCDM()
 
-    def _sample_shear(self):
-        method = "interpolate"
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 2)
-        if method == "interpolate":
-            # number of knots in each dimension
-            corners = (self.batch_size, self.num_knots[0], self.num_knots[1], 2)
+    def sample_shear_and_convergence(self):
+        ngrid = self.n_tiles_w
+        # ngrid is tiles, convert tiles to pixels, then to arcsecs, and then degrees
+        grid_size = (ngrid * self.tile_slen * self.arcsec_per_pixel) / 3600
 
-            shear_maps = Uniform(self.shear_min, self.shear_max).sample(corners)
-            # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
-            shear_maps = shear_maps.reshape((self.batch_size, 2, self.num_knots[0], self.num_knots[1]))
+        # redshift taken from https://github.com/LSSTDESC/CCLX/blob/master/CellsCorrelations.ipynb
+        z = np.linspace(0., 3., 512)
+        i_lim = 26. # Limiting i-band magnitude
+        z0 = 0.0417*i_lim - 0.744
 
-            shear_maps = torch.nn.functional.interpolate(
-                shear_maps,
-                scale_factor=(self.n_tiles_h // self.num_knots[0], self.n_tiles_w // self.num_knots[1]),
-                mode="bilinear",
-                align_corners=True,
-            )
+        Ngal = 46. * 100.31 * (i_lim - 25.) # Normalisation, galaxies/arcmin^2
+        pz = 1./(2.*z0) * (z / z0)**2. * np.exp(-z/z0) # Redshift distribution, p(z)
+        dNdz = Ngal * pz # Number density distribution
 
-            # want to change from 32 x 2 x 20 x 20 to 32 x 20 x 20 x 2
-            shear_maps = torch.swapaxes(shear_maps, 1, 3)
-            shear_maps = torch.swapaxes(shear_maps, 1, 2)
-        else:
-            shear_maps = Uniform(self.shear_min, self.shear_max).sample(latent_dims)
+        lensing_tracer = ccl.WeakLensingTracer(self.cosmology, dndz=(z, dNdz))
 
-        return shear_maps.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
+        # range of values required by buildGrid
+        ell = np.arange(1, 100000)
 
-    def _sample_convergence(self):
-        method = "interpolate"
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 1)
-        if method == "interpolate":
-            # number of knots in each dimension
-            corners = (self.batch_size, self.num_knots[0], self.num_knots[1], 1)
-            convergence_map = Beta(self.convergence_a, self.convergence_b).sample(corners)
-            # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
-            convergence_map = convergence_map.reshape(
-                (self.batch_size, 1, self.num_knots[0], self.num_knots[1])
-            )
+        shear_map = torch.zeros((self.batch_size, self.n_tiles_h, self.n_tiles_w, 2))
+        convergence_map = torch.zeros((self.batch_size, self.n_tiles_h, self.n_tiles_w, 1))
+        for i in range(self.batch_size):
+            cls = ccl.angular_cl(self.cosmology, lensing_tracer, lensing_tracer, ell)
+            table = galsim.LookupTable(x = ell, f = cls)
+            my_ps = galsim.PowerSpectrum(table, units = galsim.degrees)
+            g1, g2, kappa = my_ps.buildGrid(grid_spacing=grid_size/ngrid, ngrid=ngrid,
+                                            get_convergence=True, units = galsim.degrees)
+            gamma1 = g1 * (1 - kappa)
+            gamma2 = g2 * (1 - kappa)
 
-            convergence_map = torch.nn.functional.interpolate(
-                convergence_map,
-                scale_factor=(self.n_tiles_h // self.num_knots[0], self.n_tiles_w // self.num_knots[1]),
-                mode="bilinear",
-                align_corners=True,
-            )
+            shear_map[i,:,:,0] = torch.from_numpy(gamma1)
+            shear_map[i,:,:,1] = torch.from_numpy(gamma2)
+            convergence_map[i,:,:,0] =  torch.from_numpy(kappa)
 
-            # want to change from 32 x 1 x 20 x 20 to 32 x 20 x 20 x 1
-            convergence_map = torch.swapaxes(convergence_map, 1, 3)
-            convergence_map = torch.swapaxes(convergence_map, 1, 2)
-        else:
-            convergence_map = Beta(self.convergence_a, self.convergence_b).sample(latent_dims)
+        return (shear_map.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1),
+                convergence_map.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1))
+            
+    # def _sample_shear(self):
+    #     method = "interpolate"
+    #     latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 2)
+    #     if method == "interpolate":
+    #         # number of knots in each dimension
+    #         corners = (self.batch_size, self.num_knots[0], self.num_knots[1], 2)
 
-        return convergence_map.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
+    #         shear_maps = Uniform(self.shear_min, self.shear_max).sample(corners)
+    #         # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
+    #         shear_maps = shear_maps.reshape((self.batch_size, 2, self.num_knots[0], self.num_knots[1]))
+
+    #         shear_maps = torch.nn.functional.interpolate(
+    #             shear_maps,
+    #             scale_factor=(self.n_tiles_h // self.num_knots[0], self.n_tiles_w // self.num_knots[1]),
+    #             mode="bilinear",
+    #             align_corners=True,
+    #         )
+
+    #         # want to change from 32 x 2 x 20 x 20 to 32 x 20 x 20 x 2
+    #         shear_maps = torch.swapaxes(shear_maps, 1, 3)
+    #         shear_maps = torch.swapaxes(shear_maps, 1, 2)
+    #     else:
+    #         shear_maps = Uniform(self.shear_min, self.shear_max).sample(latent_dims)
+
+    #     return shear_maps.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
+
+    # def _sample_convergence(self):
+    #     method = "interpolate"
+    #     latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, 1)
+    #     if method == "interpolate":
+    #         # number of knots in each dimension
+    #         corners = (self.batch_size, self.num_knots[0], self.num_knots[1], 1)
+    #         convergence_map = Beta(self.convergence_a, self.convergence_b).sample(corners)
+    #         # want to change from 32 x 20 x 20 x 2 to 32 x 2 x 20 x 20
+    #         convergence_map = convergence_map.reshape(
+    #             (self.batch_size, 1, self.num_knots[0], self.num_knots[1])
+    #         )
+
+    #         convergence_map = torch.nn.functional.interpolate(
+    #             convergence_map,
+    #             scale_factor=(self.n_tiles_h // self.num_knots[0], self.n_tiles_w // self.num_knots[1]),
+    #             mode="bilinear",
+    #             align_corners=True,
+    #         )
+
+    #         # want to change from 32 x 1 x 20 x 20 to 32 x 20 x 20 x 1
+    #         convergence_map = torch.swapaxes(convergence_map, 1, 3)
+    #         convergence_map = torch.swapaxes(convergence_map, 1, 2)
+    #     else:
+    #         convergence_map = Beta(self.convergence_a, self.convergence_b).sample(latent_dims)
+
+    #     return convergence_map.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
 
     def _sample_galaxy_prior(self) -> Tuple[Tensor, Tensor]:
         """Sample the latent galaxy params.
@@ -145,8 +181,9 @@ class LensingPrior(CatalogPrior):
             The remaining dimensions are variable-specific.
         """
 
-        shear = self._sample_shear()
-        convergence = self._sample_convergence()
+        # shear = self._sample_shear()
+        # convergence = self._sample_convergence()
+        shear, convergence = self.sample_shear_and_convergence()
 
         locs = self._sample_locs()
         galaxy_fluxes, galaxy_params = self._sample_galaxy_prior()
