@@ -10,12 +10,14 @@ def test_metrics():
     detect = DetectionMetrics(slack)
     classify = ClassificationMetrics(slack)
 
-    true_locs = torch.tensor([[[0.5, 0.5], [0.0, 0.0]], [[0.2, 0.2], [0.1, 0.1]]]).reshape(2, 2, 2)
-    est_locs = torch.tensor([[[0.49, 0.49], [0.1, 0.1]], [[0.19, 0.19], [0.01, 0.01]]]).reshape(
-        2, 2, 2
-    )
-    true_galaxy_bools = torch.tensor([[1, 0], [1, 1]]).reshape(2, 2, 1)
-    est_galaxy_bools = torch.tensor([[0, 1], [1, 0]]).reshape(2, 2, 1)
+    true_locs = torch.tensor(
+        [[[0.5, 0.5], [0.0, 0.0], [0.0, 0.0]], [[0.1, 0.1], [0.2, 0.2], [0.0, 0.0]]]
+    ).reshape(2, 3, 2)
+    est_locs = torch.tensor(
+        [[[0.49, 0.49], [0.1, 0.1], [0.0, 0.0]], [[0.19, 0.19], [0.01, 0.01], [0.0, 0.0]]]
+    ).reshape(2, 3, 2)
+    true_galaxy_bools = torch.tensor([[1, 0, 0], [1, 1, 0]]).reshape(2, 3, 1)
+    est_galaxy_bools = torch.tensor([[0, 1, 0], [1, 0, 0]]).reshape(2, 3, 1)
 
     true_params = FullCatalog(
         slen,
