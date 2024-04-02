@@ -11,16 +11,12 @@ paths:
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
-    n_tiles_h: 20
-    n_tiles_w: 20
+    n_tiles_h: 48
+    n_tiles_w: 48
     tile_slen: 4
     batch_size: 32
     prob_galaxy: 1.0
-    shear_min: -0.25
-    shear_max: 0.25
-    convergence_a: 1
-    convergence_b: 10
-    num_knots: 10
+    arcsec_per_pixel: 0.396
 
 simulator:
     _target_: case_studies.weak_lensing.lensing_simulated_dataset.LensingSimulatedDataset
@@ -28,10 +24,10 @@ simulator:
 generate:
     n_image_files: 16
     n_batches_per_file: 16
-    cached_data_path: /data/scratch/twhit/weak_lensing_new
+    cached_data_path: /data/scratch/stevefan/weak_lensing_48x16x16
 
 cached_simulator:
-    cached_data_path: /data/scratch/twhit/weak_lensing_new
+    cached_data_path: /data/scratch/stevefan/weak_lensing_48x16x16
     batch_size: 32
 
 encoder:
