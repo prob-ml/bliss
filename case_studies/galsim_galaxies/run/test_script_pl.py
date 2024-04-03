@@ -15,18 +15,18 @@ from bliss.datasets.table_utils import column_to_tensor
 from bliss.encoders.detection import DetectionEncoder
 from bliss.encoders.layers import ConcatBackgroundTransform
 
-OVERWRITE = False
-N_SAMPLES = 512 * 20
+OVERWRITE = True
+N_SAMPLES = 1028 * 20
 SPLIT = N_SAMPLES * 15 // 20
 BATCH_SIZE = 32
 NUM_WORKERS = 0
 N_EPOCHS = 100
-ONLY_BRIGHT = True
-VERSION = "3"  # for dataset
+ONLY_BRIGHT = False
+VERSION = "4"  # for dataset
 TRAIN_DATASET_FILE = f"train_ds_{VERSION}.pt"
 VALIDATION_DATASET_FILE = f"val_ds_{VERSION}.pt"
 VALIDATE_EVERY_N_EPOCH = 1
-VAL_CHECK_INTERVAL = 0.1
+VAL_CHECK_INTERVAL = 32
 
 # device
 gpu = torch.device("cuda:0")
@@ -46,8 +46,11 @@ if OVERWRITE:
         bright_mask = catsim_table["i_ab"] < 23
         new_table = catsim_table[bright_mask]
         print("INFO: Smaller catalog with only bright sources of length:", len(new_table))
+
     else:
-        new_table = catsim_table.copy()
+        mask = catsim_table["i_ab"] < 27.3
+        new_table = catsim_table[mask]
+        print("INFO: Complete catalog with only i < 27.3 magnitude of length:", len(new_table))
 
     dataset = generate_dataset(
         N_SAMPLES,
@@ -75,13 +78,8 @@ validation_dataset = SavedGalsimBlends(VALIDATION_DATASET_FILE, N_SAMPLES - SPLI
 
 
 # now dataloaders
-
 train_dl = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
-val_dl = DataLoader(
-    validation_dataset,
-    batch_size=BATCH_SIZE,
-    num_workers=NUM_WORKERS,
-)
+val_dl = DataLoader(validation_dataset, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS)
 
 # callback
 checkpoint_callback = ModelCheckpoint(
@@ -95,11 +93,7 @@ checkpoint_callback = ModelCheckpoint(
 )
 
 # logger
-logger = TensorBoardLogger(
-    save_dir="out",
-    name="detection",
-    default_hp_metric=False,
-)
+logger = TensorBoardLogger(save_dir="out", name="detection", default_hp_metric=False)
 
 # now train on the same batch 100 times with some optimizer
 input_transform = ConcatBackgroundTransform()
@@ -113,7 +107,7 @@ trainer = L.Trainer(
     callbacks=[checkpoint_callback],
     accelerator="gpu",
     devices=1,
-    log_every_n_steps=8,
+    log_every_n_steps=16,
     check_val_every_n_epoch=VALIDATE_EVERY_N_EPOCH,
     val_check_interval=VAL_CHECK_INTERVAL,
 )
