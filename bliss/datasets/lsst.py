@@ -9,7 +9,7 @@ from einops import rearrange
 from galcheat.utilities import mag2counts, mean_sky_level
 from torch import Tensor
 
-PIXEL_SCALE = 0.2
+PIXEL_SCALE = 0.2  # arcsecs / pixel
 MAX_MAG_GAL = 27.3
 MAX_MAG_STAR = 26.0  # see histogram of dc2 star catalog in i-band
 MIN_MAG = 0
