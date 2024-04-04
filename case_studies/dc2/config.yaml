@@ -31,3 +31,4 @@ train:
             version: DC2_origin
         precision: 32
     data_source: ${surveys.dc2}
+    pretrained_weights: null
