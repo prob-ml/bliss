@@ -26,6 +26,10 @@ class SavedGalsimBlends(Dataset):
         self.images = self.ds.pop("images").float()  # needs to be a float for NN
         self.background = self.ds.pop("background").float()
 
+        # don't need for training
+        self.ds.pop("individuals")
+        self.ds.pop("noiseless")
+
         full_catalog = FullCatalog(slen, slen, self.ds)
         tile_catalogs = full_catalog.to_tile_params(tile_slen, ignore_extra_sources=True)
         self.tile_params = tile_catalogs.to_dict()
@@ -104,7 +108,7 @@ def generate_dataset(
         "images": images,
         "background": background,
         "noiseless": noiseless_images,
-        "individual": individuals,
+        "individuals": individuals,
         **paramss,
     }
 
