@@ -23,6 +23,11 @@ class RedshiftTileCatalog(TileCatalog):
         indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()
 
         for param_name, tile_param in tile_params_to_gather.items():
+            # TODO: remove this if statement, very unelegant
+            # Issue is that redshifts are sometimes (b, w, h, 1) or (b,w,h,1,1)
+            if len(tile_param.shape) != 5:
+                tile_param = tile_param.unsqueeze(-1)
+
             k = tile_param.shape[-1]
             param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
             indices_for_param = repeat(indices_to_retrieve, "b nth_ntw_s -> b nth_ntw_s k", k=k)
