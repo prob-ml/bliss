@@ -132,8 +132,7 @@ def _render_padded_image(
     for _ in range(n_sources):
 
         # offset always needs to be out of the central square
-        x = _uniform_two_disjoint(-size / 2, -slen / 2, slen / 2, size / 2)
-        y = _uniform_two_disjoint(-size / 2, -slen / 2, slen / 2, size / 2)
+        x, y = _uniform_out_of_square(slen, size)
         offset = torch.tensor([x, y])
 
         is_galaxy = _bernoulli(galaxy_prob, 1).bool().item()
@@ -319,13 +318,20 @@ def _uniform(a, b, n_samples=1) -> Tensor:
     return (a - b) * torch.rand(n_samples) + b
 
 
-def _uniform_two_disjoint(a1, b1, a2, b2) -> float:
-    """Returns a uniform float between (a1, b1) or (a2,b2), where a2 > b1."""
-    assert a1 < b1 < a2 < b2  # noqa:WPS228
-    is_left: bool = np.random.choice([False, True])
-    if is_left:
-        return _uniform(a1, b1).item()
-    return _uniform(a2, b2).item()
+def _uniform_out_of_square(a: float, b: float) -> float:
+    """Returns two uniformly random numbers outside of central square with side-length a."""
+    assert a < b
+    x = _uniform(-b / 2, b / 2).item()
+    if abs(x) < a / 2:
+        is_left: bool = np.random.choice([False, True])
+        if is_left:
+            y = _uniform(-b / 2, -a / 2).item()
+        else:
+            y = _uniform(a / 2, b / 2).item()
+    else:
+        y = _uniform(-b / 2, b / 2).item()
+
+    return x, y
 
 
 def _bernoulli(prob, n_samples=1) -> Tensor:
