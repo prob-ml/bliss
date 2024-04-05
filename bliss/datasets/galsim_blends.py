@@ -46,34 +46,105 @@ def generate_dataset(
     n_samples: int,
     catsim_table: Table,
     all_star_mags: np.ndarray,  # i-band
-    mean_sources: float,
     max_n_sources: int,
     psf: galsim.GSObject,
+    galaxy_density: float = 185,  # counts / sq. arcmin
+    star_density: float = 10,  # counts / sq. arcmin
     slen: int = 40,
     bp: int = 24,
-    max_shift: float = 0.5,
-    galaxy_prob: float = 0.9,
+    max_shift: float = 0.5,  # within tile, 0.5 -> maximum
 ) -> dict[str, Tensor]:
 
-    images = []
-    paramss = []
+    images_list = []
+    noiseless_images_list = []
+    individuals_list = []
+    params_list = []
 
     size = slen + 2 * bp
 
     background = get_constant_background(get_default_lsst_background(), (n_samples, 1, size, size))
+
+    # internal region
+    mean_sources_in = (galaxy_density + star_density) * (slen * PIXEL_SCALE / 60) ** 2
+    mean_sources_out = (
+        (galaxy_density + star_density) * (size**2 - slen**2) * (PIXEL_SCALE / 60) ** 2
+    )
+    galaxy_prob = galaxy_density / (galaxy_density + star_density)
+
     for ii in tqdm(range(n_samples)):
         full_cat = sample_full_catalog(
-            catsim_table, all_star_mags, mean_sources, max_n_sources, slen, max_shift, galaxy_prob
+            catsim_table,
+            all_star_mags,
+            mean_sources_in,
+            max_n_sources,
+            slen,
+            max_shift,
+            galaxy_prob,
         )
-        image, _, _ = render_full_catalog(full_cat, psf, slen, bp)
-        noisy = add_noise_and_background(image, background[ii, None])
-        images.append(noisy)
-        paramss.append(full_cat.to_tensor_dict())
+        center_noiseless, individual_noiseless = render_full_catalog(full_cat, psf, slen, bp)
+        padding_noiseless = _render_padded_image(
+            catsim_table, all_star_mags, mean_sources_out, galaxy_prob, psf, slen, bp
+        )
+        noiseless = center_noiseless + padding_noiseless
+        noisy = add_noise_and_background(noiseless, background[ii, None])
 
-    images, _ = pack(images, "* c h w")
-    paramss = torch.cat(paramss, dim=0)
+        images_list.append(noisy)
+        noiseless_images_list.append(noiseless)
+        individuals_list.append(individual_noiseless)
+        params_list.append(full_cat.to_tensor_dict())
 
-    return {"images": images, "background": background, **paramss}
+    images, _ = pack(images_list, "* c h w")
+    noiseless_images, _ = pack(noiseless_images_list, "* c h w")
+    individuals, _ = pack(individuals_list, "* n c h w")
+    paramss = torch.cat(params_list, dim=0)
+
+    assert individuals.shape[:3] == (n_samples, max_n_sources, 1)
+
+    return {
+        "images": images,
+        "background": background,
+        "noiseless": noiseless_images,
+        "individual": individuals,
+        **paramss,
+    }
+
+
+def _render_padded_image(
+    catsim_table: Table,
+    all_star_mags: np.ndarray,
+    mean_sources: float,
+    galaxy_prob: float,
+    psf: galsim.GSObject,
+    slen: int,
+    bp: int,
+):
+    """We need to include galaxies outside the padding for realism. Return noiseless version."""
+    size = slen + 2 * bp
+    n_sources = _sample_poisson_n_sources(mean_sources, torch.inf)
+    image = torch.zeros((1, slen, slen))
+
+    # we don't need to record or keep track, just produce the image in padding
+    # we will construct the image galaxy by galaxy
+    for _ in range(n_sources):
+
+        # offset always needs to be out of the central square
+        x = _uniform_two_disjoint(-size / 2, -slen / 2, slen / 2, size / 2)
+        y = _uniform_two_disjoint(-size / 2, -slen / 2, slen / 2, size / 2)
+        offset = torch.tensor([x, y])
+
+        is_galaxy = _bernoulli(galaxy_prob, 1).bool().item()
+        if is_galaxy:
+            params = _sample_galaxy_params(catsim_table, 1, 1)
+            assert params.shape == (1, 10)
+            one_galaxy_params = params[0]
+            galaxy = _render_one_galaxy(one_galaxy_params, psf, size, offset)
+            image += galaxy
+        else:
+            star_flux = _sample_star_fluxes(all_star_mags, 1, 1).item()
+            star = _render_one_star(psf, star_flux, size, offset)
+            image += star
+
+    return image
 
 
 def parse_dataset(dataset: dict[str, Tensor], tile_slen: int = 4):
@@ -98,19 +169,17 @@ def sample_source_params(
     params = _sample_galaxy_params(catsim_table, n_sources, max_n_sources)
     assert params.shape == (max_n_sources, 10)
 
-    star_fluxes = torch.zeros((max_n_sources, 1))
-    star_mags = np.random.choice(all_star_mags, size=(n_sources,), replace=True)
-    star_fluxes[:n_sources, 0] = convert_mag_to_flux(torch.from_numpy(star_mags))
+    star_fluxes = _sample_star_fluxes(all_star_mags, n_sources, max_n_sources)
+
+    galaxy_bools = torch.zeros(max_n_sources, 1)
+    star_bools = torch.zeros(max_n_sources, 1)
+    galaxy_bools[:n_sources, :] = _bernoulli(galaxy_prob, n_sources)[:, None]
+    star_bools[:n_sources, :] = 1 - galaxy_bools[:n_sources, :]
 
     locs = torch.zeros(max_n_sources, 2)
     locs[:n_sources, 0] = _uniform(-max_shift, max_shift, n_sources) + 0.5
     locs[:n_sources, 1] = _uniform(-max_shift, max_shift, n_sources) + 0.5
     plocs = locs * slen
-
-    galaxy_bools = torch.zeros(max_n_sources, 1)
-    galaxy_bools[:n_sources, :] = _bernoulli(galaxy_prob, n_sources)[:, None]
-    star_bools = torch.zeros(max_n_sources, 1)
-    star_bools[:n_sources, :] = 1 - galaxy_bools[:n_sources, :]
 
     return {
         "n_sources": torch.tensor([n_sources]),
@@ -121,6 +190,13 @@ def sample_source_params(
         "star_fluxes": star_fluxes * star_bools,
         "fluxes": params[:, -1, None] * galaxy_bools + star_fluxes * star_bools,
     }
+
+
+def _sample_star_fluxes(all_star_mags: np.ndarray, n_sources: int, max_n_sources: int):
+    star_fluxes = torch.zeros((max_n_sources, 1))
+    star_mags = np.random.choice(all_star_mags, size=(n_sources,), replace=True)
+    star_fluxes[:n_sources, 0] = convert_mag_to_flux(torch.from_numpy(star_mags))
+    return star_fluxes
 
 
 def sample_full_catalog(
@@ -150,8 +226,7 @@ def render_full_catalog(full_cat: FullCatalog, psf: galsim.GSObject, slen: int, 
     assert b == 1, "Only one batch supported for now."
 
     image = torch.zeros(1, size, size)
-    noiseless_centered = torch.zeros(max_n_sources, 1, size, size)
-    noiseless_uncentered = torch.zeros(max_n_sources, 1, size, size)
+    individual_noiseless = torch.zeros(max_n_sources, 1, size, size)
 
     n_sources = int(full_cat.n_sources.item())
     galaxy_params = full_cat["galaxy_params"][0]
@@ -164,18 +239,15 @@ def render_full_catalog(full_cat: FullCatalog, psf: galsim.GSObject, slen: int, 
         offset_y = plocs[ii][0] + bp - size / 2
         offset = torch.tensor([offset_x, offset_y])
         if galaxy_bools[ii] == 1:
-            centered = _render_one_galaxy(galaxy_params[ii], psf, size)
-            uncentered = _render_one_galaxy(galaxy_params[ii], psf, size, offset)
+            source = _render_one_galaxy(galaxy_params[ii], psf, size, offset)
         elif star_bools[ii] == 1:
-            centered = _render_one_star(psf, star_fluxes[ii][0].item(), size)
-            uncentered = _render_one_star(psf, star_fluxes[ii][0].item(), size, offset)
+            source = _render_one_star(psf, star_fluxes[ii][0].item(), size, offset)
         else:
             continue
-        noiseless_centered[ii] = centered
-        noiseless_uncentered[ii] = uncentered
-        image += uncentered
+        individual_noiseless[ii] = source
+        image += source
 
-    return image, noiseless_centered, noiseless_uncentered
+    return image, individual_noiseless
 
 
 def _sample_galaxy_params(catsim_table: Table, n_galaxies: int, max_n_sources: int) -> Tensor:
@@ -203,7 +275,7 @@ def _render_one_galaxy(
     galaxy_params: Tensor, psf: galsim.GSObject, size: int, offset: Optional[Tensor] = None
 ) -> Tensor:
     assert offset is None or offset.shape == (2,)
-    assert galaxy_params.device == torch.device("cpu")
+    assert galaxy_params.device == torch.device("cpu") and galaxy_params.shape == (10,)
     fnb, fnd, fnagn, ab, ad, bb, bd, pa, _, total_flux = galaxy_params.numpy()  # noqa:WPS236
 
     disk_flux = total_flux * fnd / (fnd + fnb + fnagn)
@@ -233,14 +305,23 @@ def _render_one_galaxy(
     return rearrange(torch.from_numpy(galaxy_image), "h w -> 1 h w")
 
 
-def _sample_poisson_n_sources(mean_sources, max_n_sources) -> int:
+def _sample_poisson_n_sources(mean_sources: float, max_n_sources: int | float) -> int:
     n_sources = torch.distributions.Poisson(mean_sources).sample([1])
     return int(torch.clamp(n_sources, max=torch.tensor(max_n_sources)))
 
 
 def _uniform(a, b, n_samples=1) -> Tensor:
-    # uses pytorch to return a single float ~ U(a, b)
+    """Uses pytorch to return a single float ~ U(a, b)."""
     return (a - b) * torch.rand(n_samples) + b
+
+
+def _uniform_two_disjoint(a1, b1, a2, b2) -> float:
+    """Returns a uniform float between (a1, b1) or (a2,b2), where a2 > b1."""
+    assert a1 < b1 < a2 < b2  # noqa:WPS228
+    is_left: bool = np.random.choice([False, True])
+    if is_left:
+        return _uniform(a1, b1).item()
+    return _uniform(a2, b2).item()
 
 
 def _bernoulli(prob, n_samples=1) -> Tensor:
