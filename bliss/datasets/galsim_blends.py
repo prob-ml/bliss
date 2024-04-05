@@ -50,8 +50,8 @@ def generate_dataset(
     n_samples: int,
     catsim_table: Table,
     all_star_mags: np.ndarray,  # i-band
-    max_n_sources: int,
     psf: galsim.GSObject,
+    max_n_sources: int,
     galaxy_density: float = 185,  # counts / sq. arcmin
     star_density: float = 10,  # counts / sq. arcmin
     slen: int = 40,
@@ -79,11 +79,11 @@ def generate_dataset(
         full_cat = sample_full_catalog(
             catsim_table,
             all_star_mags,
-            mean_sources_in,
-            max_n_sources,
-            slen,
-            max_shift,
-            galaxy_prob,
+            mean_sources=mean_sources_in,
+            max_n_sources=max_n_sources,
+            slen=slen,
+            max_shift=max_shift,
+            galaxy_prob=galaxy_prob,
         )
         center_noiseless, individual_noiseless = render_full_catalog(full_cat, psf, slen, bp)
         padding_noiseless = _render_padded_image(
@@ -125,7 +125,7 @@ def _render_padded_image(
     """We need to include galaxies outside the padding for realism. Return noiseless version."""
     size = slen + 2 * bp
     n_sources = _sample_poisson_n_sources(mean_sources, torch.inf)
-    image = torch.zeros((1, slen, slen))
+    image = torch.zeros((1, size, size))
 
     # we don't need to record or keep track, just produce the image in padding
     # we will construct the image galaxy by galaxy
