@@ -9,7 +9,7 @@ from case_studies.galsim_galaxies.run.training_functions import (
     setup_training_objects,
 )
 
-OVERWRITE = True
+OVERWRITE = False
 N_SAMPLES = 1028 * 20
 SPLIT = N_SAMPLES * 15 // 20
 BATCH_SIZE = 32
@@ -42,7 +42,7 @@ if OVERWRITE:
 if not OVERWRITE and not Path(TRAIN_DS_FILE).exists():
     raise IOError
 
-train_dl, val_dl, trainer, logger, ccb = setup_training_objects(  # noqa: WPS236
+train_dl, val_dl, trainer = setup_training_objects(
     TRAIN_DS_FILE,
     VAL_DS_FILE,
     N_SAMPLES,

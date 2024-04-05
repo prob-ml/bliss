@@ -97,4 +97,4 @@ def setup_training_objects(
         val_check_interval=val_check_interval,
     )
 
-    return train_dl, val_dl, trainer, logger, ccb
+    return train_dl, val_dl, trainer
