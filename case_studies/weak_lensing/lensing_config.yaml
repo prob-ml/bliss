@@ -28,7 +28,7 @@ generate:
 
 cached_simulator:
     cached_data_path: /data/scratch/stevefan/weak_lensing_48x16x16
-    batch_size: 32
+    batch_size: 16
 
 encoder:
     metrics:
