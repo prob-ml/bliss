@@ -15,7 +15,7 @@ from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
-from bliss.encoder.plotting import plot_detections
+from bliss.encoder.plotting import plot_detections, plot_maps
 from bliss.encoder.variational_dist import VariationalDistSpec
 
 
@@ -278,7 +278,8 @@ class Encoder(pl.LightningModule):
         target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
         est_cat = self.sample(batch, use_mode=True)
         mp = self.tiles_to_crop * self.tile_slen
-        fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
+        # fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
+        fig = plot_maps(batch["images"], target_cat_cropped, est_cat)
         title = f"Epoch:{self.current_epoch}/{logging_name} images"
         if self.logger:
             self.logger.experiment.add_figure(title, fig)
