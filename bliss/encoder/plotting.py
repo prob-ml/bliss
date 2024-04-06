@@ -112,3 +112,112 @@ def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, 
 
     fig.tight_layout()
     return fig
+
+
+def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None):
+    """Plots shear and convergence maps."""
+    batch_size = images.size(0)
+
+    n_samples = min(int(math.sqrt(batch_size)) ** 2, 4)
+
+    # every row should be a true map vs generated map for 3 types of maps (shear 1, shear 2, convergence) and the image
+    # so total of 7
+    nrows = n_samples
+    ncols = 3 * 2 + 1
+    img_ids = torch.arange(n_samples, device=images.device)
+
+    if figsize is None:
+        # using each image as 5x5 in size:
+        figsize = (n_samples * 5, ncols * 5)
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
+    axes = axes.flatten() if nrows > 1 else [axes]  # flatten
+
+    true_shear = true_tile_cat['shear']
+    est_shear = est_tile_cat['shear']
+    true_convergence = true_tile_cat['convergence']
+    est_convergence = est_tile_cat['convergence']
+
+    for ax_idx, ax in enumerate(axes):
+        if ax_idx % 7 == 0:
+            # synthetic image
+            ax.set_xlabel("Synthetic Image")
+            img_id = img_ids[ax_idx // 7]
+            # plot image first
+            image = images[img_id].cpu().numpy()
+            image = np.sum(image, axis=0)
+            vmin = image.min().item()
+            vmax = image.max().item()
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            im = ax.matshow(
+                image,
+                vmin=vmin,
+                vmax=vmax,
+                cmap="viridis",
+                extent=(0, image.shape[0], image.shape[1], 0),
+            )
+            fig.colorbar(im, cax=cax, orientation="vertical")
+        elif ax_idx % 7 == 1:
+            plot_maps_helper(
+                x_label="True Shear 1",
+                map=true_shear[img_id].squeeze()[:,:,0],
+                ax=ax,
+                fig=fig,
+            )
+        elif ax_idx % 7 == 2:
+            plot_maps_helper(
+                x_label="Estimated Shear 1",
+                map=est_shear[img_id].squeeze()[:,:,0],
+                ax=ax,
+                fig=fig,
+            )
+        elif ax_idx % 7 == 3:
+            plot_maps_helper(
+                x_label="True Shear 2",
+                map=true_shear[img_id].squeeze()[:,:,1],
+                ax=ax,
+                fig=fig,
+            )
+        elif ax_idx % 7 == 4:
+            plot_maps_helper(
+                x_label="Estimated Shear 2",
+                map=est_shear[img_id].squeeze()[:,:,1],
+                ax=ax,
+                fig=fig,
+            )
+        elif ax_idx % 7 == 5:
+            plot_maps_helper(
+                x_label="True Convergence",
+                map=true_convergence[img_id].squeeze(),
+                ax=ax,
+                fig=fig,
+            )
+        elif ax_idx % 7 == 6:
+            plot_maps_helper(
+                x_label="Predicted Convergence",
+                map=est_convergence[img_id].squeeze(),
+                ax=ax,
+                fig=fig,
+            )
+
+
+    fig.tight_layout()
+    return fig
+
+
+def plot_maps_helper(x_label: str, map, ax, fig):
+    ax.set_xlabel(x_label)
+
+    map = map.cpu().numpy()
+    vmin = map.min().item()
+    vmax = map.max().item()
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+    im = ax.matshow(
+        map,
+        vmin=vmin,
+        vmax=vmax,
+        cmap="viridis",
+        extent=(0, map.shape[0], map.shape[1], 0),
+    )
+    fig.colorbar(im, cax=cax, orientation="vertical")
