@@ -27,7 +27,7 @@ class Cluster_Prior():
         self.dec_cen = -40.228830895890404   
         self.mass_min = 10**14.5 * 1.989*10**33 # Minimum value of the range solar mass
         self.mass_max = 10**15.5 * 1.989*10**33 # Maximum value of the range
-        self.scale_pixels_per_au = 100 
+        self.scale_pixels_per_au = 80 
         self.mean_sources = 0.004
         self.tsize_s = 0.64
         self.tsize_loc=0.017
@@ -49,9 +49,8 @@ class Cluster_Prior():
         with open("gal_gmm_nmgy.pkl", "rb") as f:
             self.gmm_gal = pickle.load(f)
         self.tsize_poly = np.poly1d([-6.88890387e-11,  3.70584026e-05,  4.34623392e-02])
-        self.folder_path = "data/"
+        self.folder_path = "data3/"
         self.threadings = 8
-        self.cluster_overall_rate = 0.3
         self.z_pdf = [4.4230e-03, 1.4160e-02, 2.3567e-02, 3.0799e-02, 3.6851e-02,
        4.1139e-02, 4.4207e-02, 4.5863e-02, 4.6542e-02, 4.6706e-02,
        4.5852e-02, 4.5019e-02, 4.2973e-02, 4.1131e-02, 3.9549e-02,
@@ -100,7 +99,9 @@ class Cluster_Prior():
         return (mass/(4/3*np.pi*pho_z))**(1/3)
     
     def _sample_redshift(self):
-        redshift_samples = np.random.uniform(self.cluster_min_z, self.cluster_max_z, self.size)
+        redshift_samples = np.random.choice(np.linspace(0.01, 7, 100), size = self.size, p = self.z_pdf)
+        for i in range(self.size):
+            redshift_samples[i] += (np.random.random())*0.07 
         return redshift_samples
     
     def _sample_radius(self, mass_samples, redshift_samples):
@@ -112,7 +113,7 @@ class Cluster_Prior():
     def _sample_n_cluster(self, mass_samples):
         n_galaxy_cluster = []
         for i in range(self.size):
-            if np.random.random() < self.cluster_prob:
+            if np.random.random() > self.cluster_prob:
                 n_galaxy_cluster.append(int(((mass_samples[i]/(1.989*10**33))/(1.4*10**13))**(1/1.35)*20))
             else:
                 n_galaxy_cluster.append(0)
@@ -135,7 +136,8 @@ class Cluster_Prior():
                 radii = np.random.uniform(0, radius_samples[i], 1)  
                 sampled_x = float(center_x + radii * np.cos(angles))  
                 sampled_y = float(center_y + radii * np.sin(angles))
-                if sampled_x >= 0 and sampled_x < self.width and sampled_y >= 0 and sampled_y < self.height and np.random.random() > radii/radius_samples[i]:
+                if sampled_x >= 0 and sampled_x < self.width and sampled_y >= 0 and sampled_y < self.height:
+                    if np.random.uniform(0, 3/2*np.pi*(radius_samples[i])**2) < 3/(2*np.pi*(radius_samples[i])**3) * np.sqrt(radius_samples[i]**2 - radii**2 ):
                     samples.append([sampled_x, sampled_y])
             galaxy_locs_cluster.append(samples)
         return galaxy_locs_cluster
@@ -170,7 +172,7 @@ class Cluster_Prior():
         return t_size_samples
     
     def _sample_redshift_bg(self):
-        return np.random.choice(np.linspace(0.01, 7, 100), p = self.z_pdf)*(1+np.random.random())
+        return np.random.choice(np.linspace(0.01, 7, 100), p = self.z_pdf)+(np.random.random())*0.07 
     
     def _sample_flux(self, galaxy_locs, galaxy_locs_cluster, redshift_samples, mass_samples):
         flux_samples = []
@@ -318,8 +320,6 @@ class Cluster_Prior():
         G1_size_samples, G2_size_samples = self._sample_shape(galaxy_locs, galaxy_cluster_locs)
         catalogs = self.make_catalog(flux_samples, TSIZE_samples, G1_size_samples, G2_size_samples,geo_galaxy, geo_galaxy_cluster, galaxy_locs, galaxy_cluster_locs)
         tiles = self.to_tiles(center_samples, mass_samples, radius_samples, galaxy_cluster_locs)
-        print(tiles)
         for i in range(self.threadings):
             x = multiprocessing.Process(target = self.catalog_render, args = (catalogs[i*self.size//self.threadings:(i+1)*self.size//self.threadings], i*self.size//self.threadings, tiles[i*self.size//self.threadings:(i+1)*self.size//self.threadings], ))
             x.start()
-        # return galaxy_cluster_locs, galaxy_locs, center_samples
