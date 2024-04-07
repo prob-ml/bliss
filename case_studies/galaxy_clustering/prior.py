@@ -140,7 +140,6 @@ class Cluster_Prior():
                     if np.random.uniform(0, 3/(2*np.pi*(radius_samples[i])**2)) < 3/(2*np.pi*(radius_samples[i])**3) * np.sqrt(radius_samples[i]**2 - radii**2):
                         samples.append([sampled_x, sampled_y])
 
-            print(len(galaxy_locs_cluster))
             galaxy_locs_cluster.append(samples)
         return galaxy_locs_cluster
     
