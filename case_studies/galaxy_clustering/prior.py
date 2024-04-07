@@ -17,7 +17,7 @@ import multiprocessing
 class Cluster_Prior():
     def __init__(self):
         super().__init__()
-        self.size = 4000
+        self.size = 100
         self.width = 5000
         self.height = 5000
         self.bands = ["G", "R", "I", "Z"]
@@ -49,7 +49,7 @@ class Cluster_Prior():
         with open("gal_gmm_nmgy.pkl", "rb") as f:
             self.gmm_gal = pickle.load(f)
         self.tsize_poly = np.poly1d([-6.88890387e-11,  3.70584026e-05,  4.34623392e-02])
-        self.folder_path = "data3/"
+        self.folder_path = "data5/"
         self.threadings = 8
         self.z_pdf = [4.4230e-03, 1.4160e-02, 2.3567e-02, 3.0799e-02, 3.6851e-02,
        4.1139e-02, 4.4207e-02, 4.5863e-02, 4.6542e-02, 4.6706e-02,
@@ -137,8 +137,10 @@ class Cluster_Prior():
                 sampled_x = float(center_x + radii * np.cos(angles))  
                 sampled_y = float(center_y + radii * np.sin(angles))
                 if sampled_x >= 0 and sampled_x < self.width and sampled_y >= 0 and sampled_y < self.height:
-                    if np.random.uniform(0, 3/2*np.pi*(radius_samples[i])**2) < 3/(2*np.pi*(radius_samples[i])**3) * np.sqrt(radius_samples[i]**2 - radii**2 ):
-                    samples.append([sampled_x, sampled_y])
+                    if np.random.uniform(0, 3/(2*np.pi*(radius_samples[i])**2)) < 3/(2*np.pi*(radius_samples[i])**3) * np.sqrt(radius_samples[i]**2 - radii**2):
+                        samples.append([sampled_x, sampled_y])
+
+            print(len(galaxy_locs_cluster))
             galaxy_locs_cluster.append(samples)
         return galaxy_locs_cluster
     
@@ -323,3 +325,4 @@ class Cluster_Prior():
         for i in range(self.threadings):
             x = multiprocessing.Process(target = self.catalog_render, args = (catalogs[i*self.size//self.threadings:(i+1)*self.size//self.threadings], i*self.size//self.threadings, tiles[i*self.size//self.threadings:(i+1)*self.size//self.threadings], ))
             x.start()
+        # return catalogs, radius_samples, galaxy_cluster_locs, center_samples
