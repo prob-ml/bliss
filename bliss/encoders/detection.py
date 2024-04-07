@@ -188,7 +188,7 @@ class DetectionEncoder(pl.LightningModule):
         return out["loss"]
 
     def validation_step(self, batch, batch_idx):
-        """Training step (pytorch lightning)."""
+        """Validation step (pytorch lightning)."""
         images, background, truth_cat = parse_dataset(batch, self.tile_slen)
         batch_size = truth_cat.batch_size
         out = self.get_loss(images, background, truth_cat)
