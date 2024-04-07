@@ -1,14 +1,10 @@
 from pathlib import Path
 from typing import Tuple
 
-import numpy as np
 import torch
-from matplotlib import pyplot as plt
 from torch import Tensor, nn
 from torch.distributions import Normal
 from torch.nn.functional import relu
-
-from bliss.plotting import plot_image
 
 
 def vae_loss(image: Tensor, recon_mean: Tensor, pq_z: Tensor):
