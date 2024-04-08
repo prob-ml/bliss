@@ -57,6 +57,7 @@ def generate_dataset(
     slen: int = 40,
     bp: int = 24,
     max_shift: float = 0.5,  # within tile, 0.5 -> maximum
+    add_galaxies_in_padding: bool = True,
 ) -> dict[str, Tensor]:
 
     images_list = []
@@ -86,10 +87,15 @@ def generate_dataset(
             galaxy_prob=galaxy_prob,
         )
         center_noiseless, individual_noiseless = render_full_catalog(full_cat, psf, slen, bp)
-        padding_noiseless = _render_padded_image(
-            catsim_table, all_star_mags, mean_sources_out, galaxy_prob, psf, slen, bp
-        )
-        noiseless = center_noiseless + padding_noiseless
+
+        if add_galaxies_in_padding:
+            padding_noiseless = _render_padded_image(
+                catsim_table, all_star_mags, mean_sources_out, galaxy_prob, psf, slen, bp
+            )
+            noiseless = center_noiseless + padding_noiseless
+        else:
+            noiseless = center_noiseless
+
         noisy = add_noise_and_background(noiseless, background[ii, None])
 
         images_list.append(noisy)

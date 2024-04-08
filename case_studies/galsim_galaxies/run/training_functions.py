@@ -18,6 +18,7 @@ def create_dataset(
     train_ds_file: str,
     val_ds_file: str,
     only_bright=False,
+    add_galaxies_in_padding=True,
 ):
     print("INFO: Overwriting dataset...")
     # prepare bigger dataset
@@ -44,6 +45,7 @@ def create_dataset(
         slen=40,
         bp=24,
         max_shift=0.5,
+        add_galaxies_in_padding=add_galaxies_in_padding,
     )
 
     # train, test split

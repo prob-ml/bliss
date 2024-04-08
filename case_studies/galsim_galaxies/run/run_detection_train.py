@@ -9,18 +9,19 @@ from case_studies.galsim_galaxies.run.training_functions import (
     setup_training_objects,
 )
 
-OVERWRITE = False
+OVERWRITE = True
 N_SAMPLES = 1028 * 20
 SPLIT = N_SAMPLES * 15 // 20
 BATCH_SIZE = 32
 NUM_WORKERS = 0
 N_EPOCHS = 100
 ONLY_BRIGHT = False
-VERSION = "5"  # for dataset
+VERSION = "6"  # for dataset
 TRAIN_DS_FILE = f"train_ds_{VERSION}.pt"
 VAL_DS_FILE = f"val_ds_{VERSION}.pt"
 VALIDATE_EVERY_N_EPOCH = 1
 VAL_CHECK_INTERVAL = 32
+ADD_PADDING_GALAXIES = False
 
 
 # setup model to train
@@ -37,10 +38,11 @@ if OVERWRITE:
         TRAIN_DS_FILE,
         VAL_DS_FILE,
         only_bright=ONLY_BRIGHT,
+        add_galaxies_in_padding=ADD_PADDING_GALAXIES,
     )
 
 if not OVERWRITE and not Path(TRAIN_DS_FILE).exists():
-    raise IOError
+    raise IOError("No file found.")
 
 train_dl, val_dl, trainer = setup_training_objects(
     TRAIN_DS_FILE,
