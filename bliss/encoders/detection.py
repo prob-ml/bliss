@@ -9,7 +9,7 @@ from torch.optim import Adam
 from bliss.catalog import TileCatalog
 from bliss.datasets.galsim_blends import parse_dataset
 from bliss.encoders.layers import ConcatBackgroundTransform, EncoderCNN, make_enc_final
-from bliss.render_tiles import get_images_in_tiles, get_n_padded_tiles_hw
+from bliss.render_tiles import get_images_in_tiles, get_n_padded_tiles_hw, validate_border_padding
 from bliss.reporting import DetectionMetrics
 
 
@@ -54,9 +54,7 @@ class DetectionEncoder(pl.LightningModule):
         assert tile_slen <= ptile_slen
         self.tile_slen = tile_slen
         self.ptile_slen = ptile_slen
-
-        assert (ptile_slen - tile_slen) % 2 == 0
-        self.bp = (ptile_slen - tile_slen) // 2
+        self.bp = validate_border_padding(tile_slen, ptile_slen)
 
         # Number of distributional parameters used to characterize each source in an image.
         # 2 for location mean, 2 for location sigma (xy), 1 for for probability of counts.
