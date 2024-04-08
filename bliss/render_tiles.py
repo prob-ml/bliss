@@ -8,7 +8,7 @@ from torch.nn.functional import fold, grid_sample, unfold
 from tqdm import tqdm
 
 from bliss.datasets.lsst import PIXEL_SCALE
-from bliss.encoders.ae import CenteredGalaxyDecoder
+from bliss.encoders.autoencoder import CenteredGalaxyDecoder
 from bliss.grid import get_mgrid, swap_locs_columns
 from bliss.reporting import get_single_galaxy_ellipticities
 
@@ -101,7 +101,7 @@ def reconstruct_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, bp: int)
     Returns:
         Reconstructed image of size (batch_size x n_bands x height x width)
     """
-    _, nth, ntw, _, ptile_slen, _ = image_ptiles.shape
+    _, nth, ntw, _, ptile_slen, _ = image_ptiles.shape  # noqa: WPS236
     image_ptiles_prefold = rearrange(image_ptiles, "b nth ntw c h w -> b (c h w) (nth ntw)")
     kernel_size = (ptile_slen, ptile_slen)
     stride = (tile_slen, tile_slen)
@@ -114,7 +114,7 @@ def reconstruct_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, bp: int)
 
     folded_image = fold(image_ptiles_prefold, output_size, kernel_size, stride=stride)
 
-    # In default settings of ImageDecoder, no borders are cropped from
+    # In default settings, no borders are cropped from
     # output image. However, we may want to crop
     max_padding = (ptile_slen - tile_slen) / 2
     assert max_padding.is_integer()
@@ -295,7 +295,7 @@ def get_galaxy_snr(self, decoder: CenteredGalaxyDecoder, ptile_slen: int, bg: fl
     return rearrange(snr, "(b nth ntw) s 1 -> b nth ntw s 1", b=b, nth=nth, ntw=ntw)
 
 
-def _validate_border_padding(tile_slen: int, ptile_slen: int, bp: float = None):
+def validate_border_padding(tile_slen: int, ptile_slen: int, bp: float = None):
     # Border Padding
     # Images are first rendered on *padded* tiles (aka ptiles).
     # The padded tile consists of the tile and neighboring tiles
