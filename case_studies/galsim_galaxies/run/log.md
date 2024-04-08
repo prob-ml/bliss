@@ -1,3 +1,5 @@
+- **v6**: Trying no galaxies in padding to ensure this is what impacts training
+
 - **v5**: In theory the one for the paper, corrected issue where there were no galaxies in the padding.
 
 - **v4**: Uses `i < 27.3` as for final paper results. But no stars, and `mean_sources` = 4, which
