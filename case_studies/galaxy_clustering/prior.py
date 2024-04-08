@@ -256,7 +256,7 @@ class Cluster_Prior():
         for i in range(len(mass_sample)):
             temp = {}
             temp["mass"] = mass_sample[i]
-            temp["exsit"] = len(galaxy_locs_cluster[i]) == 0
+            temp["exist"] = len(galaxy_locs_cluster[i]) != 0
             temp["coordinate"] = center_sample[i]
             temp["radius"] = radius_sample[i]
             temp["canvas"] = [self.width, self.height]
