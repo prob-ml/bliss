@@ -25,6 +25,7 @@ class GalaxyEncoder(pl.LightningModule):
         tile_slen: int,
         ptile_slen: int,
         decoder_state_dict: str,
+        decoder_slen: int = 53,
         n_bands: int = 1,
         latent_dim: int = 8,
         hidden: int = 256,
@@ -47,7 +48,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.enc = CenteredGalaxyEncoder(self.final_slen, latent_dim, n_bands, hidden)
 
         # decoder
-        self.dec = CenteredGalaxyDecoder(self.final_slen, latent_dim, n_bands, hidden)
+        self.dec = CenteredGalaxyDecoder(decoder_slen, latent_dim, n_bands, hidden)
         self.dec.load_state_dict(
             torch.load(Path(decoder_state_dict), map_location=torch.device("cpu"))
         )
