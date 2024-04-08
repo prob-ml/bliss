@@ -2,14 +2,14 @@
 
 import numpy as np
 import torch
-from einops import pack, rearrange, reduce, unpack
+from einops import rearrange, reduce
 from torch import Tensor
 from torch.nn.functional import fold, grid_sample, unfold
 from tqdm import tqdm
 
 from bliss.datasets.lsst import PIXEL_SCALE
 from bliss.encoders.ae import CenteredGalaxyDecoder
-from bliss.grid import get_mgrid
+from bliss.grid import get_mgrid, swap_locs_columns
 from bliss.reporting import get_single_galaxy_ellipticities
 
 
@@ -80,7 +80,7 @@ def _shift_sources_in_ptiles(
     padding = (ptile_slen - tile_slen) / 2
     ptile_locs = (locs * tile_slen + padding) / ptile_slen
     scaled_locs = (ptile_locs - 0.5) * 2  # between -1 and 1 (needed for grid_sample)
-    locs_swapped = _swap_locs_columns(scaled_locs)
+    locs_swapped = swap_locs_columns(scaled_locs)
     locs_swapped = rearrange(locs_swapped, "np xy -> np 1 1 xy")
 
     # get grid
@@ -89,13 +89,6 @@ def _shift_sources_in_ptiles(
     grid_loc = local_grid - locs_swapped
 
     return grid_sample(source, grid_loc, align_corners=True)
-
-
-def _swap_locs_columns(locs: Tensor) -> Tensor:
-    """Swap the columns of locs to invert 'x' and 'y' with einops!"""
-    assert locs.ndim == 2 and locs.shape[1] == 2
-    x, y = unpack(locs, [[1], [1]], "b *")
-    return pack([y, x], "b *")[0]
 
 
 def reconstruct_image_from_ptiles(image_ptiles: Tensor, tile_slen: int, bp: int) -> Tensor:
