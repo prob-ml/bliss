@@ -30,3 +30,4 @@ venv
 **/output/
 **/notebooks/*.pt
 **/run/*.pt
+**/run/ds
