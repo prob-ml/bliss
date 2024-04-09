@@ -54,8 +54,8 @@ class DetectionMetrics(Metric):
         """
         super().__init__(dist_sync_on_step=dist_sync_on_step)
 
-        self.slack = slack
-        self.disable_bar = disable_bar
+        self._slack = slack
+        self._disable_bar = disable_bar
 
         self.add_state("tp", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("tp_gal", default=torch.tensor(0), dist_reduce_fx="sum")
@@ -63,7 +63,7 @@ class DetectionMetrics(Metric):
         self.add_state("total_true_n_sources", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total_correct_class", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("conf_matrix", default=torch.tensor([[0, 0], [0, 0]]), dist_reduce_fx="sum")
-        self.add_state("avg_distance", default=torch.tensor(0.0), dist_reduce_fx="mean")
+        self.add_state("avg_distance", default=torch.tensor(0).float(), dist_reduce_fx="mean")
 
     # pylint: disable=no-member
     def update(self, true: FullCatalog, est: FullCatalog) -> None:
@@ -72,11 +72,11 @@ class DetectionMetrics(Metric):
 
         count = 0
         desc = "Detection Metric per batch"
-        for b in tqdm(range(true.batch_size), desc=desc, disable=self.disable_bar):
+        for b in tqdm(range(true.batch_size), desc=desc, disable=self._disable_bar):
             ntrue, nest = true.n_sources[b].int().item(), est.n_sources[b].int().item()
             tlocs, elocs = true.plocs[b], est.plocs[b]
             if ntrue > 0 and nest > 0:
-                mtrue, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self.slack)
+                mtrue, mest, dkeep, avg_distance = match_by_locs(tlocs, elocs, self._slack)
                 tp = len(elocs[mest][dkeep])  # n_matches
                 true_galaxy_bools = true["galaxy_bools"][b][mtrue][dkeep]
                 tp_gal = true_galaxy_bools.bool().sum()

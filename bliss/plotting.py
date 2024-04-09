@@ -26,7 +26,7 @@ CB_color_cycle = [
 ]
 
 
-def _to_numpy(d: dict):
+def _to_numpy(d: dict):  # noqa:WPS231
     for k, v in d.items():
         if isinstance(v, torch.Tensor):
             d[k] = v.numpy()
@@ -107,9 +107,21 @@ class BlissFigure:
         img_format: str = "png",
     ) -> None:
         self.figdir = Path(figdir)
-        self.cachefile = Path(cachedir) / (self.cache_name + ".pt")
+        self.cachefile = Path(cachedir) / f"{self.cache_name}.pt"
         self.overwrite = overwrite
         self.img_format = img_format
+
+    def __call__(self, *args, **kwargs):
+        """Create figures and save to output directory with names from `self.fignames`."""
+        data = self.get_data(*args, **kwargs)
+        data_np = _to_numpy(data)
+        for fname in self.fignames:
+            rc_kwargs = self.all_rcs.get(fname, {})
+            set_rc_params(**rc_kwargs)
+            fig = self.create_figure(fname, data_np)
+            figfile = self.figdir / f"{fname}.{self.img_format}"
+            fig.savefig(figfile, format=self.img_format)  # pylint: disable=no-member
+            plt.close(fig)
 
     @property
     def all_rcs(self) -> dict:
@@ -145,18 +157,6 @@ class BlissFigure:
         data = self.compute_data(*args, **kwargs)
         torch.save(data, self.cachefile)
         return data
-
-    def __call__(self, *args, **kwargs):
-        """Create figures and save to output directory with names from `self.fignames`."""
-        data = self.get_data(*args, **kwargs)
-        data_np = _to_numpy(data)
-        for fname in self.fignames:
-            rc_kwargs = self.all_rcs.get(fname, {})
-            set_rc_params(**rc_kwargs)
-            fig = self.create_figure(fname, data_np)
-            figfile = self.figdir / f"{fname}.{self.img_format}"
-            fig.savefig(figfile, format=self.img_format)  # pylint: disable=no-member
-            plt.close(fig)
 
 
 def plot_image(
@@ -242,7 +242,7 @@ def scatter_shade_plot(
     yqs = np.zeros((len(xbins), 2))
 
     for i, bx in enumerate(xbins):
-        keep_x = (x > bx) & (x < bx + delta)
+        keep_x = np.logical_and(x > bx, x < bx + delta)
         y_bin: np.ndarray = y[keep_x]
 
         xs[i] = bx + delta / 2

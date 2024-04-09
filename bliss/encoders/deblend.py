@@ -40,26 +40,26 @@ class GalaxyEncoder(pl.LightningModule):
         self.bp = validate_border_padding(tile_slen, ptile_slen)
         self.final_slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
-        self.crop_loss_at_border = crop_loss_at_border
+        self._crop_loss_at_border = crop_loss_at_border
 
         # encoder (to be trained)
-        self.latent_dim = latent_dim
-        self.hidden = hidden
-        self.enc = CenteredGalaxyEncoder(self.final_slen, latent_dim, n_bands, hidden)
+        self._latent_dim = latent_dim
+        self._hidden = hidden
+        self._enc = CenteredGalaxyEncoder(self.final_slen, latent_dim, n_bands, hidden)
 
         # decoder
-        self.dec = CenteredGalaxyDecoder(decoder_slen, latent_dim, n_bands, hidden)
-        self.dec.load_state_dict(
+        self._dec = CenteredGalaxyDecoder(decoder_slen, latent_dim, n_bands, hidden)
+        self._dec.load_state_dict(
             torch.load(Path(decoder_state_dict), map_location=torch.device("cpu"))
         )
-        self.dec.requires_grad_(False)
-        self.dec.eval()
+        self._dec.requires_grad_(False)
+        self._dec.eval()
 
     def forward(self, image_ptiles_flat: Tensor, tile_locs_flat: Tensor) -> tuple[Tensor, Tensor]:
         """Runs galaxy encoder on input image ptiles (with bg substracted)."""
         centered_ptiles = self._get_centered_padded_tiles(image_ptiles_flat, tile_locs_flat)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.final_slen
-        return self.enc(centered_ptiles)
+        return self._enc(centered_ptiles)
 
     def get_loss(self, images: Tensor, background: Tensor, tile_catalog: TileCatalog):
         _, nth, ntw, _ = tile_catalog.locs
@@ -81,7 +81,7 @@ class GalaxyEncoder(pl.LightningModule):
             galaxy_params_flat, "(b nth ntw) ms d -> b nth ntw ms d", nth=nth, ntw=ntw
         )
         recon_ptiles = render_galaxy_ptiles(
-            self.dec,
+            self._dec,
             tile_catalog.locs,
             galaxy_params_pred,
             tile_catalog["galaxy_bools"],
@@ -96,7 +96,7 @@ class GalaxyEncoder(pl.LightningModule):
         assert not torch.any(torch.isnan(recon_mean))
         assert not torch.any(torch.isinf(recon_mean))
         recon_losses = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
-        if self.crop_loss_at_border:
+        if self._crop_loss_at_border:
             bp = self.bp * 2
             recon_losses = recon_losses[:, :, :, bp:(-bp), bp:(-bp)]
         assert not torch.any(torch.isnan(recon_losses))
@@ -124,7 +124,7 @@ class GalaxyEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Set up optimizers."""
-        return Adam(self.enc.parameters(), 1e-3)
+        return Adam(self._enc.parameters(), 1e-3)
 
     def _get_centered_padded_tiles(self, image_ptiles: Tensor, tile_locs_flat: Tensor) -> Tensor:
         img, bg = unpack(image_ptiles, [(1,), (1,)], "b nht nhw * h w")

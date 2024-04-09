@@ -290,7 +290,8 @@ def get_galaxy_snr(self, decoder: CenteredGalaxyDecoder, ptile_slen: int, bg: fl
 
         gal_snr = rearrange(gal_snr, "n s -> n s 1")
 
-        snr[ii:jj] = gal_snr * galaxy_bools_ii.cpu()
+        for kk in range(ii, jj):
+            snr[kk] = gal_snr[kk] * galaxy_bools_ii[kk].cpu()
 
     return rearrange(snr, "(b nth ntw) s 1 -> b nth ntw s 1", b=b, nth=nth, ntw=ntw)
 

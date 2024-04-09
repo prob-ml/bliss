@@ -54,8 +54,8 @@ class BinaryEncoder(nn.Module):
 
         dim_enc_conv_out = ((self.final_slen + 1) // 2 + 1) // 2
         n_bands_in = self.input_transform.output_channels(n_bands)
-        self.enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
-        self.enc_final = make_enc_final(channel * 4 * dim_enc_conv_out**2, hidden, 1, dropout)
+        self._enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
+        self._enc_final = make_enc_final(channel * 4 * dim_enc_conv_out**2, hidden, 1, dropout)
 
     def forward(self, images: Tensor, background: Tensor, locs: Tensor) -> Tensor:
         """Runs the binary encoder on centered_ptiles."""
@@ -74,8 +74,8 @@ class BinaryEncoder(nn.Module):
 
         # forward to layer shared by all n_sources
         x = rearrange(centered_tiles, "npt c h w -> npt c h w")
-        h = self.enc_conv(x)
-        h2 = self.enc_final(h)
+        h = self._enc_conv(x)
+        h2 = self._enc_final(h)
         galaxy_probs = torch.sigmoid(h2).clamp(1e-4, 1 - 1e-4)
         return rearrange(galaxy_probs, "npt -> npt", npt=npt)
 

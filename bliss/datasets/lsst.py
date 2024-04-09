@@ -23,8 +23,8 @@ def convert_mag_to_flux(mag: Tensor) -> Tensor:
 def convert_flux_to_mag(counts: Tensor) -> Tensor:
     i_band = galcheat.get_survey("LSST").get_filter("i")
 
-    flux = counts.numpy() * u.electron / i_band.full_exposure_time
-    mag = flux.to(u.mag(u.electron / u.s)) + i_band.zeropoint
+    flux = counts.numpy() * u.electron / i_band.full_exposure_time  # pylint: disable=no-member
+    mag = flux.to(u.mag(u.electron / u.s)) + i_band.zeropoint  # pylint: disable=no-member
 
     return torch.from_numpy(mag.value)
 

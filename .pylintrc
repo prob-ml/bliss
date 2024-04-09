@@ -34,6 +34,9 @@ disable=too-many-ancestors,
 	# problems in the tests directory
 	redefined-outer-name,
 
+	#pytorch lightning needs `batch_idx`
+	unused-argument
+
 
 [SIMILARITIES]
 

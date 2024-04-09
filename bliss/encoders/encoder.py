@@ -6,10 +6,11 @@ import torch
 from torch import Tensor, nn
 from tqdm import tqdm
 
-from bliss.catalog import TileCatalog, get_images_in_tiles, get_is_on_from_n_sources
+from bliss.catalog import TileCatalog, get_is_on_from_n_sources
 from bliss.encoders.binary import BinaryEncoder
 from bliss.encoders.deblend import GalaxyEncoder
 from bliss.encoders.detection import DetectionEncoder
+from bliss.render_tiles import get_images_in_tiles
 
 
 class Encoder(nn.Module):
@@ -134,12 +135,16 @@ class Encoder(nn.Module):
                 start_h = row * self.detection_encoder.tile_slen
                 end_h = end_row * self.detection_encoder.tile_slen + 2 * self.bp
                 img_bg_cropped = img_bg[start_b:end_b, :, start_h:end_h, :]
-                image_ptiles = get_images_in_tiles(
-                    img_bg_cropped,
-                    self.detection_encoder.tile_slen,
-                    self.detection_encoder.ptile_slen,
-                )
+                image_ptiles = self._get_images_in_ptiles(img_bg_cropped)
                 yield image_ptiles.reshape(-1, *image_ptiles.shape[-3:])
+
+    @property
+    def bp(self) -> int:
+        return self.detection_encoder.bp
+
+    @property
+    def device(self):
+        return self._dummy_param.device
 
     def _encode_ptiles(self, image_ptiles: Tensor, n_samples: Optional[int]):
         assert isinstance(self.map_n_source_weights, Tensor)
@@ -166,9 +171,9 @@ class Encoder(nn.Module):
             galaxy_probs = self.binary_encoder.forward(image_ptiles, locs)
             galaxy_probs *= is_on_array.unsqueeze(-1)
             if deterministic:
-                galaxy_bools = (galaxy_probs > 0.5).float() * is_on_array.unsqueeze(-1)
+                galaxy_bools = galaxy_probs.ge(0.5).float() * is_on_array.unsqueeze(-1)
             else:
-                galaxy_bools = (torch.rand_like(galaxy_probs) > 0.5).float()
+                galaxy_bools = torch.rand_like(galaxy_probs).ge(0.5).float()
                 galaxy_bools *= is_on_array.unsqueeze(-1)
 
             tile_samples.update({"galaxy_bools": galaxy_bools, "galaxy_probs": galaxy_probs})
@@ -182,23 +187,16 @@ class Encoder(nn.Module):
 
         return tile_samples
 
-    @staticmethod
-    def collate(tile_map_list: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
-        out: Dict[str, Tensor] = {}
-        for k in tile_map_list[0]:
-            out[k] = torch.cat([d[k] for d in tile_map_list], dim=1)
-        return out
-
-    def get_images_in_ptiles(self, images):
+    def _get_images_in_ptiles(self, images):
         """Run get_images_in_ptiles with correct tile_slen and ptile_slen."""
         return get_images_in_tiles(
             images, self.detection_encoder.tile_slen, self.detection_encoder.ptile_slen
         )
 
-    @property
-    def bp(self) -> int:
-        return self.detection_encoder.bp
 
-    @property
-    def device(self):
-        return self._dummy_param.device
+def collate(tile_map_list: List[Dict[str, Tensor]]) -> Dict[str, Tensor]:
+    """Combine multiple Tensors across dictionaries into a single dictionary."""
+    out: Dict[str, Tensor] = {}
+    for k in tile_map_list[0]:
+        out[k] = torch.cat([d[k] for d in tile_map_list], dim=1)
+    return out

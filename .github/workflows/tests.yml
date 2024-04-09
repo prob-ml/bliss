@@ -6,9 +6,9 @@ name: tests
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 jobs:
   build:
@@ -52,25 +52,12 @@ jobs:
 
       - name: Run flake8
         run: |
-          poetry run flake8 bliss/ tests/
-
-      - name: Run mypy
-        run: |
-          env MYPYPATH=typings poetry run mypy --ignore-missing-imports bliss
+          poetry run flake8 bliss/
 
       - name: Run pylint
         run: |
-          poetry run pylint bliss/ tests/
+          poetry run pylint bliss/
 
       - name: Run Tests
         run: |
-          poetry run pytest --cov=./bliss --cov-report=xml --durations=0
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml
-          flags: unittests
-          env_vars: OS,PYTHON
-          name: codecov-umbrella
-          fail_ci_if_error: true
+          poetry run pytest

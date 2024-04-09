@@ -95,3 +95,6 @@ ignore =
 
     # sometime we need to import several modules even for well-defined modules we implement
     WPS202,
+
+    # hard to avoid having too many methods with pytorch lightning
+    WPS214

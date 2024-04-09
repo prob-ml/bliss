@@ -1,5 +1,7 @@
 # pylint: skip-file
 
+from pathlib import Path
+
 import pytest
 import torch
 
@@ -28,3 +30,8 @@ class DeviceSetup:
 def devices(pytestconfig):
     use_gpu = pytestconfig.getoption("gpu")
     return DeviceSetup(use_gpu)
+
+
+@pytest.fixture(scope="session")
+def home_dir() -> Path:
+    return Path(__file__).parent.parent
