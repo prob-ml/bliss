@@ -26,11 +26,11 @@ from bliss.datasets.lsst import (
     get_default_lsst_background,
     get_default_lsst_psf,
 )
-from bliss.encoder import Encoder
-from bliss.models.decoder import ImageDecoder
-from bliss.models.galaxy_net import OneCenteredGalaxyAE
-from bliss.models.psf_decoder import PSFDecoder
+from bliss.encoders.autoencoder import OneCenteredGalaxyAE
+from bliss.encoders.encoder import Encoder
+from bliss.encoders.psf_decoder import PSFDecoder
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
+from bliss.render_tiles import ImageDecoder
 from bliss.reporting import compute_bin_metrics, get_boostrap_precision_and_recall, match_by_locs
 
 ALL_FIGS = ("single_gal", "blend_gal", "toy")
@@ -354,7 +354,7 @@ class BlendSimulationFigure(BlissFigure):
 
         # turn TensorDict `full_parasm` to `FullCatalog`
         full_params = blend_data["full_params"]
-        slen = size - 2 * (decoder.border_padding)
+        slen = size - 2 * (decoder.bp)
         truth = FullCatalog(slen, slen, {**full_params})
 
         print("INFO: BLISS posterior inference on images.")
@@ -690,7 +690,7 @@ class ToySeparationFigure(BlissFigure):
     def compute_data(self, encoder: Encoder, decoder: ImageDecoder, galaxy_generator):
         # first, decide image size
         slen = 44
-        bp = encoder.detection_encoder.border_padding
+        bp = encoder.detection_encoder.bp
         tile_slen = encoder.detection_encoder.tile_slen
         size = 44 + 2 * bp
         tile_slen = encoder.detection_encoder.tile_slen
@@ -783,7 +783,7 @@ class ToySeparationFigure(BlissFigure):
             tile_est_ii = TileCatalog(tile_slen, d)
 
             ploc = plocs[ii]
-            params_at_coord = tile_est_ii.get_tile_params_at_coord(ploc)
+            params_at_coord = tile_est_ii._get_tile_params_at_coord(ploc)
             prob_n_source = torch.exp(params_at_coord["n_source_log_probs"])
             flux = params_at_coord["fluxes"]
             ploc_sd = params_at_coord["loc_sd"] * tile_slen
@@ -1045,10 +1045,10 @@ def _load_models(cfg, device):
     decoder: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
 
     # sanity checks
-    bp = decoder.border_padding
-    assert bp == detection.border_padding
-    assert bp == galaxy.border_padding
-    assert bp == binary.border_padding
+    bp = decoder.bp
+    assert bp == detection.bp
+    assert bp == galaxy.bp
+    assert bp == binary.bp
 
     return encoder, decoder
 
