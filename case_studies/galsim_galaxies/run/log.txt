@@ -1,0 +1,44 @@
+\n
+./bin/run_detection_train_script.py -o -s 42 --star-density 0 -t 11_42
+
+Run training detection script...
+        With tag 11_42 and seed 42 at 2024-04-11 12:01:12.055897
+        Galaxy density 185.0, star_density 0.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.01, batch_size 32, n_epochs 25
+
+INFO: Overwriting dataset...
+INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
+
+Run training detection script...
+        With tag 11_42 and seed 42 at 2024-04-11 12:29:52.988583
+        Galaxy density 185.0, star_density 0.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+
+./bin/run_detection_train_script.py -o -s 43 --star-density 0 -t 11_43
+
+Run training detection script...
+        With tag 11_43 and seed 43 at 2024-04-11 12:32:50.034828
+        Galaxy density 185.0, star_density 0.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+INFO: Overwriting dataset...
+INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
+
+./bin/run_detection_train_script.py -o -s 44 --star-density 0 -t 11_44
+
+Run training detection script...
+        With tag 11_44 and seed 44 at 2024-04-11 16:17:31.538439
+        Galaxy density 185.0, star_density 0.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+INFO: Overwriting dataset...
+INFO: Complete catalog with only i < 27.3 magnitude of length: 666475

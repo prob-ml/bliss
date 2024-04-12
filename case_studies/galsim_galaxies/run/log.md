@@ -1,3 +1,7 @@
+- **v10-11**: No stars, but with padding (all galaxy types)
+
+- **v9**: No stars and no padding
+
 - **v6**: Trying no galaxies in padding to ensure this is what impacts training
 
 - **v5**: In theory the one for the paper, corrected issue where there were no galaxies in the padding.

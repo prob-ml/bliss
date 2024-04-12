@@ -1,3 +1,6 @@
+import sys
+from typing import TextIO
+
 import pytorch_lightning as L
 import torch
 from astropy.table import Table
@@ -19,8 +22,12 @@ def create_dataset(
     val_ds_file: str,
     only_bright=False,
     add_galaxies_in_padding=True,
+    galaxy_density: float = 185,
+    star_density: float = 10,
+    log_file: TextIO = sys.stdout,
 ):
-    print("INFO: Overwriting dataset...")
+    print("INFO: Overwriting dataset...", file=log_file)
+
     # prepare bigger dataset
     catsim_table = Table.read(catsim_file)
     all_star_mags = column_to_tensor(Table.read(stars_mag_file), "i_ab")
@@ -29,12 +36,20 @@ def create_dataset(
     if only_bright:
         bright_mask = catsim_table["i_ab"] < 23
         new_table = catsim_table[bright_mask]
-        print("INFO: Smaller catalog with only bright sources of length:", len(new_table))
+        print(
+            "INFO: Smaller catalog with only bright sources of length:",
+            len(new_table),
+            file=log_file,
+        )
 
     else:
         mask = catsim_table["i_ab"] < 27.3
         new_table = catsim_table[mask]
-        print("INFO: Complete catalog with only i < 27.3 magnitude of length:", len(new_table))
+        print(
+            "INFO: Complete catalog with only i < 27.3 magnitude of length:",
+            len(new_table),
+            file=log_file,
+        )
 
     dataset = generate_dataset(
         n_samples,
@@ -46,6 +61,8 @@ def create_dataset(
         bp=24,
         max_shift=0.5,
         add_galaxies_in_padding=add_galaxies_in_padding,
+        galaxy_density=galaxy_density,
+        star_density=star_density,
     )
 
     # train, test split

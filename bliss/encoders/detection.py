@@ -37,9 +37,8 @@ class DetectionEncoder(pl.LightningModule):
         Args:
             input_transform: Class which determines how input image and bg are transformed.
             n_bands: number of bands
-            tile_slen: dimension of full image, we assume its square for now
-            ptile_slen: dimension (in pixels) of the individual
-                            image padded tiles (usually 8 for stars, and _ for galaxies).
+            tile_slen: size of tiles (squares).
+            ptile_slen: size of padded tiles (squares).
             channel: TODO (document this)
             spatial_dropout: TODO (document this)
             dropout: TODO (document this)

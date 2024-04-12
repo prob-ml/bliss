@@ -22,7 +22,6 @@ trials_result/
 jupyter/
 output/
 hydra_temp/
-bin/
 .pytest_cache/
 venv
 **/out/
