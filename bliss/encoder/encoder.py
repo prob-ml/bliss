@@ -15,7 +15,7 @@ from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
-from bliss.encoder.plotting import plot_detections, plot_maps
+from bliss.encoder.plotting import plot_maps
 from bliss.encoder.variational_dist import VariationalDistSpec
 
 
@@ -229,9 +229,6 @@ class Encoder(pl.LightningModule):
         batch_size = batch["images"].size(0)
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
-        # filter out undetectable sources
-        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
-
         # make predictions/inferences
         target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
         truth_callback = lambda _: target_cat1
@@ -260,7 +257,6 @@ class Encoder(pl.LightningModule):
 
     def update_metrics(self, batch):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
         mode_cat = self.sample(batch, use_mode=True).to_full_catalog()
@@ -274,11 +270,8 @@ class Encoder(pl.LightningModule):
     def plot_sample_images(self, batch, logging_name):
         """Log a grid of figures to the tensorboard."""
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
         est_cat = self.sample(batch, use_mode=True)
-        mp = self.tiles_to_crop * self.tile_slen
-        # fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
         fig = plot_maps(batch["images"], target_cat_cropped, est_cat)
         title = f"Epoch:{self.current_epoch}/{logging_name} images"
         if self.logger:
@@ -287,12 +280,11 @@ class Encoder(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        epoch = self.trainer.current_epoch
         self._compute_loss(batch, "val")
         self.update_metrics(batch)
 
-        # only plot images from the first batch every tenth epoch
-        if batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1):
+        # only plot images from the first batch every epoch
+        if batch_idx == 0:
             self.plot_sample_images(batch, "val")
 
     def report_metrics(self, metrics, logging_name, show_epoch=False):
