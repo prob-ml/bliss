@@ -60,7 +60,6 @@ class BinaryEncoder(nn.Module):
     def forward(self, images: Tensor, background: Tensor, locs: Tensor) -> Tensor:
         """Runs the binary encoder on centered_ptiles."""
         flat_locs = rearrange(locs, "n nth ntw xy -> (n nth ntw) xy", xy=2)
-        npt, _ = flat_locs.shape
 
         images_with_background, _ = pack([images, background], "b * h w")
         image_ptiles = get_images_in_tiles(
@@ -68,11 +67,13 @@ class BinaryEncoder(nn.Module):
             self.tile_slen,
             self.ptile_slen,
         )
-        image_ptiles = rearrange(image_ptiles, "n nth ntw c h w -> (n nth ntw) c h w")
+        image_ptiles_flat = rearrange(image_ptiles, "n nth ntw c h w -> (n nth ntw) c h w")
 
-        centered_tiles = self._center_ptiles(image_ptiles, flat_locs)
+        return self.encode_tiled(image_ptiles_flat, flat_locs)
 
-        # forward to layer shared by all n_sources
+    def encode_tiled(self, image_ptiles_flat: Tensor, flat_locs: Tensor):
+        npt, _ = flat_locs.shape
+        centered_tiles = self._center_ptiles(image_ptiles_flat, flat_locs)
         x = rearrange(centered_tiles, "npt c h w -> npt c h w")
         h = self._enc_conv(x)
         h2 = self._enc_final(h)

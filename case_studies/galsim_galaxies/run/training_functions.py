@@ -84,6 +84,7 @@ def setup_training_objects(
     n_epochs: int,
     validate_every_n_epoch: int,
     val_check_interval: float,
+    log_file: TextIO = sys.stdout,
 ):
     train_dataset = SavedGalsimBlends(train_ds_file, train_val_split)
     validation_dataset = SavedGalsimBlends(val_ds_file, n_samples - train_val_split)
@@ -103,6 +104,7 @@ def setup_training_objects(
     )
 
     logger = TensorBoardLogger(save_dir="out", name="detection", default_hp_metric=False)
+    print(f"INFO: Saving model as version {logger.version}", file=log_file)
 
     trainer = L.Trainer(
         limit_train_batches=1.0,

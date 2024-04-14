@@ -1,4 +1,3 @@
-\n
 ./bin/run_detection_train_script.py -o -s 42 --star-density 0 -t 11_42
 
 Run training detection script...
@@ -8,6 +7,7 @@ Run training detection script...
         n_samples 20560, split 15420, validate_every_n_epoch 1,
         val_check_interval 0.01, batch_size 32, n_epochs 25
 
+INFO: Will be saved as `version 17`
 INFO: Overwriting dataset...
 INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
 
@@ -28,6 +28,7 @@ Run training detection script...
         n_samples 20560, split 15420, validate_every_n_epoch 1,
         val_check_interval 0.15, batch_size 32, n_epochs 25
 
+INFO: Will be saved as `version 18`
 INFO: Overwriting dataset...
 INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
 
@@ -40,5 +41,8 @@ Run training detection script...
         n_samples 20560, split 15420, validate_every_n_epoch 1,
         val_check_interval 0.15, batch_size 32, n_epochs 25
 
+INFO: Will be saved as `version 19`
 INFO: Overwriting dataset...
 INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
+
+INFO: Saving checkpoint 'run/out/detection/version_17/checkpoints/epoch=8-val_loss=0.020.ckpt' as weights models/detection_model.pt

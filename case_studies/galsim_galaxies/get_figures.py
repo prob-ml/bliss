@@ -4,13 +4,10 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import btk
-import hydra
-import matplotlib as mpl
 import numpy as np
 import pytorch_lightning as pl
 import torch
 from astropy.table import Table
-from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from tensordict import TensorDict
@@ -28,7 +25,6 @@ from bliss.datasets.lsst import (
 )
 from bliss.encoders.autoencoder import OneCenteredGalaxyAE
 from bliss.encoders.encoder import Encoder
-from bliss.encoders.psf_decoder import PSFDecoder
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
 from bliss.render_tiles import ImageDecoder
 from bliss.reporting import compute_bin_metrics, get_boostrap_precision_and_recall, match_by_locs
@@ -1015,7 +1011,7 @@ class ToySeparationFigure(BlissFigure):
 
 
 def _load_models(cfg, device):
-    # load models required for reconstructions.
+    """Load models required for producing results."""
 
     detection = instantiate(cfg.models.detection_encoder).to(device).eval()
     detection.load_state_dict(
@@ -1101,7 +1097,6 @@ def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dic
     BlendSimulationFigure(overwrite=overwrite, **bfig_kwargs)(blend_file, encoder, decoder)
 
 
-@hydra.main(config_path="./config", config_name="config", version_base=None)
 def main(cfg):
     figs, device, bfig_kwargs = _setup(cfg)
     overwrite = cfg.plots.overwrite

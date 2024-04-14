@@ -84,19 +84,21 @@ def main(
             )
 
     if not overwrite and not Path(val_ds_file).exists():
-        raise IOError("No file found.")
+        raise IOError("Validation dataset file not found and overwrite is 'False'.")
 
-    train_dl, val_dl, trainer = setup_training_objects(
-        train_ds_file,
-        val_ds_file,
-        n_samples,
-        split,
-        batch_size,
-        NUM_WORKERS,
-        n_epochs,
-        validate_every_n_epoch,
-        val_check_interval,
-    )
+    with open("log.txt", "a") as g:
+        train_dl, val_dl, trainer = setup_training_objects(
+            train_ds_file,
+            val_ds_file,
+            n_samples,
+            split,
+            batch_size,
+            NUM_WORKERS,
+            n_epochs,
+            validate_every_n_epoch,
+            val_check_interval,
+            log_file=g,
+        )
 
     trainer.fit(model=detection_encoder, train_dataloaders=train_dl, val_dataloaders=val_dl)
 

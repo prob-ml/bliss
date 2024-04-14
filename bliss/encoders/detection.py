@@ -85,6 +85,9 @@ class DetectionEncoder(pl.LightningModule):
         )
         flat_image_ptiles = rearrange(image_ptiles, "n nth ntw c h w -> (n nth ntw) c h w")
 
+        return self.encode_tiled(flat_image_ptiles)
+
+    def encode_tiled(self, flat_image_ptiles: Tensor):
         # encode
         transformed_ptiles = self.input_transform(flat_image_ptiles)
         enc_conv_output = self._enc_conv(transformed_ptiles)
@@ -112,6 +115,12 @@ class DetectionEncoder(pl.LightningModule):
         return TileCatalog.from_flat_dict(
             self.tile_slen, nth, ntw, {"n_sources": flat_tile_n_sources, "locs": flat_tile_locs}
         )
+
+    def variational_model_tiled(self, flat_image_ptiles: Tensor) -> dict[str, Tensor]:
+        n_source_probs, locs_mean, _ = self.encode_tiled(flat_image_ptiles)
+        flat_tile_n_sources = n_source_probs.ge(0.5).long()
+        flat_tile_locs = locs_mean * rearrange(flat_tile_n_sources, "np -> np 1")
+        return {"n_sources": flat_tile_n_sources, "locs": flat_tile_locs}
 
     def sample(self, images: Tensor, background: Tensor, n_samples: int = 1) -> dict[str, Tensor]:
         """Sample from the encoded variational distribution.
