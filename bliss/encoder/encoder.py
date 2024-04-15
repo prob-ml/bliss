@@ -5,6 +5,7 @@ import pytorch_lightning as pl
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
+from torch.nn.functional import pad
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
@@ -239,7 +240,10 @@ class Encoder(pl.LightningModule):
         else:
             loss = self._double_detection_nll(target_cat1, target_cat, pred)
 
-        loss = loss.sum() / loss.numel()
+        # exclude border tiles and report average per-tile loss
+        ttc = self.tiles_to_crop
+        interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
+        loss = interior_loss.sum() / interior_loss.numel()
 
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size)
 
