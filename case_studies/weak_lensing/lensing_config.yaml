@@ -16,6 +16,7 @@ prior:
     tile_slen: 4
     batch_size: 32
     prob_galaxy: 1.0
+    mean_sources: 0.2
     arcsec_per_pixel: 0.396
 
 simulator:
@@ -31,6 +32,7 @@ cached_simulator:
     batch_size: 32
 
 encoder:
+    tiles_to_crop: 0
     metrics:
         _target_: torchmetrics.MetricCollection
         metrics:
