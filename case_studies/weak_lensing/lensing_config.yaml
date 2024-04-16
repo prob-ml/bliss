@@ -23,7 +23,7 @@ prior:
     shear_std: 0.01
     convergence_mean: 0
     convergence_std: 0.01
-    num_knots: 2
+    num_knots: 16
 
 simulator:
     _target_: case_studies.weak_lensing.lensing_simulated_dataset.LensingSimulatedDataset
@@ -31,10 +31,10 @@ simulator:
 generate:
     n_image_files: 16
     n_batches_per_file: 16
-    cached_data_path: /data/scratch/stevefan/weak_lensing_48x16x16
+    cached_data_path: /data/scratch/stevefan/weak_lensing_48x16x16_16_knots
 
 cached_simulator:
-    cached_data_path: /data/scratch/stevefan/weak_lensing_48x16x16
+    cached_data_path: /data/scratch/stevefan/weak_lensing_48x16x16_16_knots
     batch_size: 24
 
 encoder:

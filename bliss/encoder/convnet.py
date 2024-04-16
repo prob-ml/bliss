@@ -65,6 +65,7 @@ class FeaturesNet(nn.Module):
             ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
+            # nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
             ConvBlock(128, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
             ConvBlock(128, num_features, stride=(2 if double_downsample else 1)),  # 4
