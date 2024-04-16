@@ -18,6 +18,12 @@ prior:
     prob_galaxy: 1.0
     mean_sources: 0.2
     arcsec_per_pixel: 0.396
+    sample_method: interpolate
+    shear_mean: 0
+    shear_std: 0.01
+    convergence_mean: 0
+    convergence_std: 0.01
+    num_knots: 2
 
 simulator:
     _target_: case_studies.weak_lensing.lensing_simulated_dataset.LensingSimulatedDataset
