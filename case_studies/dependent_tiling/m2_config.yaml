@@ -11,6 +11,7 @@ encoder:
     tiles_to_crop: 1
     image_normalizer:
         bands: [2]
+        log_transform_stdevs: [3, 10, 35, 150, 350, 700]
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 0.5

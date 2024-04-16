@@ -18,6 +18,8 @@ class UnconstrainedBernoulli:
     def get_dist(self, params):
         yes_prob = params.sigmoid().clamp(1e-4, 1 - 1e-4)
         no_yes_prob = torch.cat([1 - yes_prob, yes_prob], dim=3)
+        # this next line may be helpful with nans encountered during training with fp16s
+        no_yes_prob = no_yes_prob.nan_to_num(nan=0.5)
         return Categorical(no_yes_prob)
 
 
@@ -31,6 +33,19 @@ class UnconstrainedNormal:
         mean = params[:, :, :, 0]
         sd = params[:, :, :, 1].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
         return Normal(mean, sd)
+
+
+class ShearUnconstrainedNormal:
+    def __init__(self, low_clamp=-20, high_clamp=20):
+        self.dim = 4
+        self.low_clamp = low_clamp
+        self.high_clamp = high_clamp
+
+    def get_dist(self, params):
+        mean = params[:, :, :, :2]
+        sd = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+
+        return Independent(Normal(mean, sd), 1)
 
 
 class TruncatedDiagonalMVN(Distribution):
