@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import btk
+import click
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -22,11 +23,11 @@ from bliss.datasets.lsst import (
     convert_mag_to_flux,
     get_default_lsst_background,
     get_default_lsst_psf,
+    get_default_lsst_psf_tensor,
 )
 from bliss.encoders.autoencoder import OneCenteredGalaxyAE
 from bliss.encoders.encoder import Encoder
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
-from bliss.render_tiles import ImageDecoder
 from bliss.reporting import compute_bin_metrics, get_boostrap_precision_and_recall, match_by_locs
 
 ALL_FIGS = ("single_gal", "blend_gal", "toy")
@@ -174,14 +175,9 @@ class AutoEncoderFigures(BlissFigure):
     def cache_name(self) -> str:
         return "ae"
 
-    def compute_data(
-        self,
-        autoencoder: OneCenteredGalaxyAE,
-        images_file: str,
-    ):
+    def compute_data(self, autoencoder: OneCenteredGalaxyAE, images_file: str):
         device = autoencoder.device  # GPU is better otherwise slow.
         image_data = torch.load(images_file)
-        true_params: Tensor = image_data["params"]
         images: Tensor = image_data["images"]
         recon_means = torch.tensor([])
         background: Tensor = image_data["background"][0].reshape(1, 1, 53, 53).to(device)
@@ -192,11 +188,12 @@ class AutoEncoderFigures(BlissFigure):
         n_images = images.shape[0]
         batch_size = 128
         n_iters = int(np.ceil(n_images // 128)) + 1
-        for i in range(n_iters):  # in batches otherwise GPU error.
-            bimages = images[batch_size * i : batch_size * (i + 1)].to(device)
-            recon_mean, _ = autoencoder.forward(bimages, background)
-            recon_mean = recon_mean.detach().to("cpu")
-            recon_means = torch.cat((recon_means, recon_mean))
+        with torch.no_grad():
+            for i in range(n_iters):  # in batches otherwise GPU error.
+                bimages = images[batch_size * i : batch_size * (i + 1)].to(device)
+                recon_mean = autoencoder.forward(bimages, background)
+                recon_mean = recon_mean.detach().to("cpu")
+                recon_means = torch.cat((recon_means, recon_mean))
         residuals = (recon_means - images) / recon_means.sqrt()
         assert recon_means.shape[0] == noiseless_images.shape[0]
 
@@ -212,17 +209,16 @@ class AutoEncoderFigures(BlissFigure):
         worst_indices = absolute_residual.argsort()[-self.n_examples - q : -q]
 
         # measurements
-        psf_decoder = PSFDecoder(psf_slen=53)
-        psf_image = psf_decoder(recon_means)
+        psf_image = get_default_lsst_psf_tensor(53)
 
         recon_no_background = recon_means - background.cpu()
         assert torch.all(recon_no_background.sum(axis=(1, 2, 3)) > 0)
         true_meas = reporting.get_single_galaxy_measurements(
-            noiseless_images, psf_image.reshape(-1, 53, 53), PIXEL_SCALE
+            noiseless_images, psf_image, PIXEL_SCALE
         )
         true_meas = {f"true_{k}": v for k, v in true_meas.items()}
         recon_meas = reporting.get_single_galaxy_measurements(
-            recon_no_background, psf_image.reshape(-1, 53, 53), PIXEL_SCALE
+            recon_no_background, psf_image, PIXEL_SCALE
         )
         recon_meas = {f"recon_{k}": v for k, v in recon_meas.items()}
         measurements = {**true_meas, **recon_meas, "snr": snr}
@@ -239,7 +235,6 @@ class AutoEncoderFigures(BlissFigure):
                 "res": residuals[worst_indices],
             },
             "measurements": measurements,
-            "true_params": true_params,
         }
 
     def _get_binned_measurements_figure(self, data) -> Figure:
@@ -334,7 +329,7 @@ class BlendSimulationFigure(BlissFigure):
             "blendsim_hists",
         )
 
-    def compute_data(self, blend_file: str, encoder: Encoder, decoder: ImageDecoder):
+    def compute_data(self, blend_file: str, encoder: Encoder, decoder):
         blend_data: TensorDict = torch.load(blend_file)
         images = blend_data.pop("images")
         background = blend_data.pop("background")
@@ -683,7 +678,7 @@ class ToySeparationFigure(BlissFigure):
     def separations_to_plot(self) -> List[int]:
         return [4, 8, 12]
 
-    def compute_data(self, encoder: Encoder, decoder: ImageDecoder, galaxy_generator):
+    def compute_data(self, encoder: Encoder, decoder, galaxy_generator):
         # first, decide image size
         slen = 44
         bp = encoder.detection_encoder.bp
@@ -1010,7 +1005,7 @@ class ToySeparationFigure(BlissFigure):
         raise NotImplementedError("Figure {fname} not implemented.")
 
 
-def _load_models(cfg, device):
+def _load_models(device):
     """Load models required for producing results."""
 
     detection = instantiate(cfg.models.detection_encoder).to(device).eval()
@@ -1038,7 +1033,7 @@ def _load_models(cfg, device):
         n_rows_per_batch=n_rows_per_batch,
     )
     encoder = encoder.to(device)
-    decoder: ImageDecoder = instantiate(cfg.models.decoder).to(device).eval()
+    decoder = instantiate(cfg.models.decoder).to(device).eval()
 
     # sanity checks
     bp = decoder.bp
@@ -1049,46 +1044,18 @@ def _load_models(cfg, device):
     return encoder, decoder
 
 
-def _setup(cfg):
-    pcfg = cfg.plots
-    figs = set(pcfg.figs)
-    cachedir = pcfg.cachedir
-    device = torch.device(pcfg.device)
-    bfig_kwargs = {
-        "figdir": pcfg.figdir,
-        "cachedir": cachedir,
-        "img_format": pcfg.image_format,
-    }
-
-    if not Path(cachedir).exists():
-        warnings.warn(
-            "Specified cache directory does not exist, will attempt to create it.", stacklevel=1
-        )
-        Path(cachedir).mkdir(exist_ok=True, parents=True)
-
-    if not Path(pcfg.figdir).exists():
-        warnings.warn(
-            "Specified figure directory does not exist, will attempt to create it.", stacklevel=1
-        )
-        Path(pcfg.figdir).mkdir(exist_ok=True, parents=True)
-
-    assert set(figs).issubset(set(ALL_FIGS))
-    return figs, device, bfig_kwargs
-
-
-def _make_autoencoder_figures(cfg, device, overwrite: bool, bfig_kwargs: dict):
+def _make_autoencoder_figures(device, overwrite: bool):
     print("INFO: Creating autoencoder figures...")
-    autoencoder = instantiate(cfg.models.galaxy_net)
-    autoencoder.load_state_dict(torch.load(cfg.plots.checkpoints.autoencoder))
+    autoencoder = OneCenteredGalaxyAE()
+    autoencoder.load_state_dict(torch.load("models/autoencoder.pt"))
     autoencoder = autoencoder.to(device).eval()
-
-    galaxies_file = cfg.plots.test_datasets_files.single_galaxies
+    galaxies_file = "data/single_galaxies_test.pt"
 
     # arguments for figures
     args = (autoencoder, galaxies_file)
 
     # create figure classes and plot.
-    AutoEncoderFigures(n_examples=5, overwrite=overwrite, **bfig_kwargs)(*args)
+    AutoEncoderFigures(n_examples=5, overwrite=overwrite, figdir="figures", cachedir="data")(*args)
 
 
 def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dict):
@@ -1097,24 +1064,27 @@ def _make_blend_figures(cfg, encoder, decoder, overwrite: bool, bfig_kwargs: dic
     BlendSimulationFigure(overwrite=overwrite, **bfig_kwargs)(blend_file, encoder, decoder)
 
 
-def main(cfg):
-    figs, device, bfig_kwargs = _setup(cfg)
-    overwrite = cfg.plots.overwrite
+@click.command()
+@click.option("-m", "--mode", required=True, type=str, help="which figure to make")
+@click.option("-o", "--overwrite", is_flag=True, default=False)
+def main(mode: str, overwrite: bool):
+    assert mode in {"single_gal", "toy", "blend_gal"}
+    device = torch.device("cuda:0")
 
     # FIGURE 1: Autoencoder single galaxy reconstruction
-    if "single_gal" in figs:
-        _make_autoencoder_figures(cfg, device, overwrite, bfig_kwargs)
+    if mode == "single_gal":
+        _make_autoencoder_figures(device, overwrite)
 
-    if "toy" in figs or "blend_gal" in figs:
-        encoder, decoder = _load_models(cfg, device)
+    if mode == "toy" or mode == "blend_gal":
+        encoder, decoder = _load_models(device)
 
-    if "blend_gal" in figs:
-        _make_blend_figures(cfg, encoder, decoder, overwrite, bfig_kwargs)
-
-    if "toy" in figs:
+    if mode == "toy":
         print("INFO: Creating figures for testing BLISS on pair galaxy toy example.")
         blend_ds = instantiate(cfg.plots.galsim_blends)
         ToySeparationFigure(overwrite=overwrite, **bfig_kwargs)(encoder, decoder, blend_ds)
+
+    if mode == "blend_gal":
+        _make_blend_figures(cfg, encoder, decoder, overwrite, bfig_kwargs)
 
 
 if __name__ == "__main__":

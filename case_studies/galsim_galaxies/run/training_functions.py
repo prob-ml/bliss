@@ -6,9 +6,9 @@ import torch
 from astropy.table import Table
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
-from bliss.datasets.galsim_blends import SavedGalsimBlends, generate_dataset
+from bliss.datasets.galsim_blends import generate_dataset
 from bliss.datasets.lsst import get_default_lsst_psf
 from bliss.datasets.table_utils import column_to_tensor
 
@@ -20,6 +20,10 @@ def create_dataset(
     train_val_split: int,
     train_ds_file: str,
     val_ds_file: str,
+    max_shift: float,
+    max_n_sources: int,
+    slen: int = 40,
+    bp: int = 24,
     only_bright=False,
     add_galaxies_in_padding=True,
     galaxy_density: float = 185,
@@ -56,13 +60,13 @@ def create_dataset(
         new_table,
         all_star_mags,
         psf=psf,
-        max_n_sources=15,  # https://www.wolframalpha.com/input?i=Poisson+distribution+with+mean+4
-        slen=40,
-        bp=24,
-        max_shift=0.5,
-        add_galaxies_in_padding=add_galaxies_in_padding,
+        max_n_sources=max_n_sources,
         galaxy_density=galaxy_density,
         star_density=star_density,
+        slen=slen,
+        bp=bp,
+        max_shift=max_shift,
+        add_galaxies_in_padding=add_galaxies_in_padding,
     )
 
     # train, test split
@@ -75,23 +79,19 @@ def create_dataset(
 
 
 def setup_training_objects(
-    train_ds_file: str,
-    val_ds_file: str,
-    n_samples: int,
-    train_val_split: int,
+    train_ds: Dataset,
+    val_ds: Dataset,
     batch_size: int,
     num_workers: int,
     n_epochs: int,
     validate_every_n_epoch: int,
     val_check_interval: float,
+    model_name: str,
+    log_every_n_steps: int = 16,
     log_file: TextIO = sys.stdout,
 ):
-    train_dataset = SavedGalsimBlends(train_ds_file, train_val_split)
-    validation_dataset = SavedGalsimBlends(val_ds_file, n_samples - train_val_split)
-    train_dl = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
-    )
-    val_dl = DataLoader(validation_dataset, batch_size=batch_size, num_workers=num_workers)
+    train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+    val_dl = DataLoader(val_ds, batch_size=batch_size, num_workers=num_workers)
 
     ccb = ModelCheckpoint(
         filename="epoch={epoch}-val_loss={val/loss:.3f}",
@@ -103,7 +103,7 @@ def setup_training_objects(
         auto_insert_metric_name=False,
     )
 
-    logger = TensorBoardLogger(save_dir="out", name="detection", default_hp_metric=False)
+    logger = TensorBoardLogger(save_dir="out", name=model_name, default_hp_metric=False)
     print(f"INFO: Saving model as version {logger.version}", file=log_file)
 
     trainer = L.Trainer(
@@ -113,7 +113,7 @@ def setup_training_objects(
         callbacks=[ccb],
         accelerator="gpu",
         devices=1,
-        log_every_n_steps=16,
+        log_every_n_steps=log_every_n_steps,
         check_val_every_n_epoch=validate_every_n_epoch,
         val_check_interval=val_check_interval,
     )

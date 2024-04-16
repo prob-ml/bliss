@@ -46,3 +46,80 @@ INFO: Overwriting dataset...
 INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
 
 INFO: Saving checkpoint 'run/out/detection/version_17/checkpoints/epoch=8-val_loss=0.020.ckpt' as weights models/detection_model.pt
+
+Run training autoencoder script...
+        With tag 1 and seed 42 at 2024-04-14 16:33:32.142696
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        val_check_interval 0.1, batch_size 128, n_epochs 50
+
+INFO: Overwriting dataset...
+INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
+INFO: Saving model as version 0
+ERROR: Wrong model specified
+
+Run training autoencoder script...
+        With tag 1 and seed 42 at 2024-04-14 16:44:17.409650
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        val_check_interval 0.1, batch_size 128, n_epochs 50
+
+INFO: Saving model as version 0
+
+Run training autoencoder script...
+        With tag 1 and seed 42 at 2024-04-14 16:45:07.584212
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        val_check_interval 0.1, batch_size 128, n_epochs 50
+
+INFO: Saving model as version 0
+
+
+./bin/run_autoencoder_train.py -s 42 -t 2
+
+./bin/run_autoencoder_train.py -s 42 -t 2
+
+
+./bin/run_autoencoder_train.py -s 42 -t 2
+
+Run training autoencoder script...
+        With tag 2 and seed 42 at 2024-04-14 16:55:38.127869
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 1001
+
+
+./bin/run_autoencoder_train.py -s 42 -t 1
+
+Run training autoencoder script...
+        With tag 1 and seed 42 at 2024-04-14 16:56:07.421368
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 1001
+
+INFO: Saving model as version 1
+
+./bin/run_autoencoder_train.py -s 42 -t 1
+
+Run training autoencoder script...
+        With tag 1 and seed 42 at 2024-04-14 17:12:08.652202
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 1001
+
+INFO: Saving model as version 2
+
+./bin/run_autoencoder_train.py -s 42 -t 2
+
+./bin/run_autoencoder_train.py -o -s 42 -t 2
+
+Run training autoencoder script...
+        With tag 2 and seed 42 at 2024-04-15 10:59:29.884042
+        Only bright 'False',
+        n_samples 204800, split 153600, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 3001
+
+INFO: Overwriting dataset...
+INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
+INFO: Saving model as version 3
+INFO: Saved checkpoint 'run/out/autoencoder/version_2/checkpoints/epoch=984-val_loss=5386824.500.ckpt' as weights models/autoencoder.pt

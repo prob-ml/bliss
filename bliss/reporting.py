@@ -433,6 +433,7 @@ def get_single_galaxy_ellipticities(
         Tensor containing ellipticity measurements for each galaxy in `images`.
     """
     assert images.device == psf_image.device == torch.device("cpu")
+    assert images.ndim == 3 and psf_image.ndim == 2
     n_samples, _, _ = images.shape
     ellips = torch.zeros((n_samples, 2))  # 2nd shape: e1, e2
     images_np = images.numpy()
@@ -467,13 +468,12 @@ def get_single_galaxy_measurements(
     Returns:
         Dictionary containing fluxes, magnitudes, and ellipticities of `images`.
     """
-    _, c, slen, w = images.shape
-    assert slen == w and c == 1 and psf_image.shape == (c, slen, w)
+    _, c, h, w = images.shape
+    assert h == w and c == 1 and psf_image.shape == (c, h, w)
     assert images.device == psf_image.device == torch.device("cpu")
-    assert images.ndim == 3 and psf_image.ndim == 2
 
-    fluxes = torch.sum(images, (1, 2))
-    ellips = get_single_galaxy_ellipticities(images, psf_image, pixel_scale)
+    fluxes = reduce(images, "b c h w -> b", "sum")
+    ellips = get_single_galaxy_ellipticities(images[:, 0], psf_image[0], pixel_scale)
 
     return {
         "fluxes": fluxes,

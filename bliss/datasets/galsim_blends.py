@@ -46,6 +46,25 @@ class SavedGalsimBlends(Dataset):
         }
 
 
+class SavedIndividualGalaxies(Dataset):
+    def __init__(self, dataset_file: str, epoch_size: int) -> None:
+        super().__init__()
+        self.ds: dict[str, Tensor] = torch.load(dataset_file)
+        self.epoch_size = epoch_size
+
+        self.images = self.ds.pop("images").float()  # needs to be a float for NN
+        self.background = self.ds.pop("background").float()
+
+    def __len__(self) -> int:
+        return self.epoch_size
+
+    def __getitem__(self, index) -> dict[str, Tensor]:
+        return {
+            "images": self.images[index],
+            "background": self.background[index],
+        }
+
+
 def generate_dataset(
     n_samples: int,
     catsim_table: Table,

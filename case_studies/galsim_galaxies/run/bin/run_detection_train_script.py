@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 import pytorch_lightning as L
 
+from bliss.datasets.galsim_blends import SavedGalsimBlends
 from bliss.encoders.detection import DetectionEncoder
 from bliss.encoders.layers import ConcatBackgroundTransform
 from case_studies.galsim_galaxies.run.training_functions import (
@@ -69,6 +70,8 @@ def main(
 
     if overwrite:
         with open("log.txt", "a") as f:
+            # for max_n_sources choice, see:
+            # https://www.wolframalpha.com/input?i=Poisson+distribution+with+mean+4
             create_dataset(
                 catsim_file="../../../data/OneDegSq.fits",
                 stars_mag_file="../../../data/stars_med_june2018.fits",
@@ -76,6 +79,8 @@ def main(
                 train_val_split=split,
                 train_ds_file=train_ds_file,
                 val_ds_file=val_ds_file,
+                max_n_sources=15,
+                max_shift=0.5,  # uniformly random within central slen square.
                 only_bright=only_bright,
                 add_galaxies_in_padding=not no_padding_galaxies,
                 galaxy_density=galaxy_density,
@@ -87,16 +92,17 @@ def main(
         raise IOError("Validation dataset file not found and overwrite is 'False'.")
 
     with open("log.txt", "a") as g:
+        train_ds = SavedGalsimBlends(train_ds_file, split)
+        val_ds = SavedGalsimBlends(val_ds_file, n_samples - split)
         train_dl, val_dl, trainer = setup_training_objects(
-            train_ds_file,
-            val_ds_file,
-            n_samples,
-            split,
+            train_ds,
+            val_ds,
             batch_size,
             NUM_WORKERS,
             n_epochs,
             validate_every_n_epoch,
             val_check_interval,
+            model_name="detection",
             log_file=g,
         )
 
