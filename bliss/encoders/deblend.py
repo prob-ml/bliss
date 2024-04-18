@@ -1,3 +1,4 @@
+from copy import deepcopy
 from pathlib import Path
 
 import pytorch_lightning as pl
@@ -9,7 +10,7 @@ from torch.optim import Adam
 
 from bliss.catalog import TileCatalog
 from bliss.datasets.galsim_blends import parse_dataset
-from bliss.encoders.autoencoder import CenteredGalaxyDecoder, CenteredGalaxyEncoder
+from bliss.encoders.autoencoder import CenteredGalaxyEncoder, OneCenteredGalaxyAE
 from bliss.grid import center_ptiles
 from bliss.render_tiles import (
     get_images_in_tiles,
@@ -24,7 +25,7 @@ class GalaxyEncoder(pl.LightningModule):
         self,
         tile_slen: int,
         ptile_slen: int,
-        decoder_state_dict: str,
+        ae_state_dict: str,
         decoder_slen: int = 53,
         n_bands: int = 1,
         latent_dim: int = 8,
@@ -48,14 +49,14 @@ class GalaxyEncoder(pl.LightningModule):
         self._enc = CenteredGalaxyEncoder(self.final_slen, latent_dim, n_bands, hidden)
 
         # decoder
-        self._dec = CenteredGalaxyDecoder(decoder_slen, latent_dim, n_bands, hidden)
-        self._dec.load_state_dict(
-            torch.load(Path(decoder_state_dict), map_location=torch.device("cpu"))
-        )
+        ae = OneCenteredGalaxyAE(decoder_slen, latent_dim, n_bands, hidden)
+        ae.load_state_dict(Path(ae_state_dict))
+        self._dec = deepcopy(ae.dec)
         self._dec.requires_grad_(False)
         self._dec.eval()
+        del ae
 
-    def forward(self, image_ptiles_flat: Tensor, tile_locs_flat: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, image_ptiles_flat: Tensor, tile_locs_flat: Tensor) -> Tensor:
         """Runs galaxy encoder on input image ptiles (with bg substracted)."""
         centered_ptiles = self._get_centered_padded_tiles(image_ptiles_flat, tile_locs_flat)
         assert centered_ptiles.shape[-1] == centered_ptiles.shape[-2] == self.final_slen
@@ -72,13 +73,13 @@ class GalaxyEncoder(pl.LightningModule):
         )
         image_ptiles_flat = rearrange(image_ptiles, "n nth ntw c h w -> (n nth ntw) c h w")
         tile_locs_flat = rearrange(tile_catalog.locs, "n nth ntw xy -> (n nth ntw) xy")
-        galaxy_params_flat, pq_divergence_flat = self.forward(image_ptiles_flat, tile_locs_flat)
-        assert galaxy_params_flat.ndim == 2 and pq_divergence_flat.ndim == 1
+        galaxy_params_flat: Tensor = self(image_ptiles_flat, tile_locs_flat)
+        assert galaxy_params_flat.ndim == 2
 
         # draw fully reconstructed image.
         # NOTE: Assume recon_mean = recon_var per poisson approximation.
         galaxy_params_pred = rearrange(
-            galaxy_params_flat, "(b nth ntw) ms d -> b nth ntw ms d", nth=nth, ntw=ntw
+            galaxy_params_flat, "(b nth ntw) d -> b nth ntw d", nth=nth, ntw=ntw
         )
         recon_ptiles = render_galaxy_ptiles(
             self._dec,
@@ -102,11 +103,7 @@ class GalaxyEncoder(pl.LightningModule):
         assert not torch.any(torch.isnan(recon_losses))
         assert not torch.any(torch.isinf(recon_losses))
 
-        # For divergence loss, we only evaluate tiles with a galaxy in them
-        galaxy_bools = tile_catalog["galaxy_bools"]
-        galaxy_bools_flat = rearrange(galaxy_bools, "n nth ntw 1 -> (n nth ntw)")
-        divergence_loss = (pq_divergence_flat * galaxy_bools_flat).sum()
-        return recon_losses.sum() - divergence_loss
+        return recon_losses.sum()
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""

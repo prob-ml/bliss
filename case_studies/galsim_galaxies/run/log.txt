@@ -123,3 +123,65 @@ INFO: Overwriting dataset...
 INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
 INFO: Saving model as version 3
 INFO: Saved checkpoint 'run/out/autoencoder/version_2/checkpoints/epoch=984-val_loss=5386824.500.ckpt' as weights models/autoencoder.pt
+
+./bin/run_detection_train_script.py -o -s 43 -t 12_43
+
+Run training detection script...
+        With tag 12_43 and seed 43 at 2024-04-16 13:50:50.398530
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+INFO: Saving model as version 20
+
+./bin/run_binary_train_script.py -s 43 -t 12_43
+
+Run training binary script...
+        With tag 12_43 and seed 43 at 2024-04-16 14:43:50.783964
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.2, batch_size 32, n_epochs 10
+
+INFO: Saving model as version 2
+
+./bin/run_binary_train_script.py -s 44 -t 12_43
+
+Run training binary script...
+        With tag 12_43 and seed 44 at 2024-04-16 15:13:48.351046
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.1, batch_size 32, n_epochs 10
+
+INFO: Saving model as version 3
+
+./bin/run_detection_train_script.py -o -s 44 -t 12_44
+
+Run training detection script...
+        With tag 12_44 and seed 44 at 2024-04-16 17:44:16.259131
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 21
+
+./bin/run_detection_train_script.py -o -s 45 -t 12_45
+
+Run training detection script...
+        With tag 12_45 and seed 45 at 2024-04-16 22:43:01.788808
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 22
+INFO: Saved checkpoint 'run/out/binary/version_3/checkpoints/epoch=2-val_loss=11.227.ckpt' as weights models/binary.pt

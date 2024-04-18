@@ -50,15 +50,24 @@ def create_dataset(
         mask = catsim_table["i_ab"] < 27.3
         new_table = catsim_table[mask]
         print(
-            "INFO: Complete catalog with only i < 27.3 magnitude of length:",
+            "INFO: Complete galaxy catalog with only i < 27.3 magnitude of length:",
             len(new_table),
             file=log_file,
         )
 
+    # we mask stars with mag < 20 which corresponds to SNR >1000
+    # as the notebook `test-stars-with-new-model` shows.
+    new_all_star_mags = all_star_mags[all_star_mags > 20]
+    print(
+        "INFO: Removing bright stars with only i < 20 magnitude, final catalog length:",
+        len(new_all_star_mags),
+        file=log_file,
+    )
+
     dataset = generate_dataset(
         n_samples,
         new_table,
-        all_star_mags,
+        new_all_star_mags,
         psf=psf,
         max_n_sources=max_n_sources,
         galaxy_density=galaxy_density,
