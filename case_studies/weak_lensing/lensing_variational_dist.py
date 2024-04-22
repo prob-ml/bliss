@@ -1,4 +1,6 @@
-from bliss.catalog import TileCatalog
+import torch
+
+from bliss.catalog import SourceType, TileCatalog
 from bliss.encoder.unconstrained_dists import ShearUnconstrainedNormal, UnconstrainedNormal
 from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
 
@@ -34,6 +36,27 @@ class LensingVariationalDist(VariationalDist):
 
         locs = q["loc"].mode if use_mode else q["loc"].sample().squeeze(0)
         est_cat = {"locs": locs}
+
+        # populate catalog with per-band (log) star fluxes
+        sf_factors = [q[f"star_flux_{band}"] for band in self.survey_bands]
+        sf_lst = [p.mode if use_mode else p.sample() for p in sf_factors]
+        est_cat["star_fluxes"] = torch.stack(sf_lst, dim=3)
+
+        # populate catalog with source type
+        galaxy_bools = q["galaxy_prob"].mode if use_mode else q["galaxy_prob"].sample()
+        galaxy_bools = galaxy_bools.unsqueeze(3)
+        star_bools = 1 - galaxy_bools
+        est_cat["source_type"] = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
+
+        # populate catalog with galaxy parameters
+        gs_dists = [q[f"galsim_{name}"] for name in self.GALSIM_NAMES]
+        gs_param_lst = [d.icdf(torch.tensor(0.5)) if use_mode else d.sample() for d in gs_dists]
+        est_cat["galaxy_params"] = torch.stack(gs_param_lst, dim=3)
+
+        # populate catalog with per-band galaxy fluxes
+        gf_dists = [q[f"galaxy_flux_{band}"] for band in self.survey_bands]
+        gf_lst = [d.icdf(torch.tensor(0.5)) if use_mode else d.sample() for d in gf_dists]
+        est_cat["galaxy_fluxes"] = torch.stack(gf_lst, dim=3)
 
         # populate catalog with shear and convergence
         est_cat["shear"] = q["shear"].mode if use_mode else q["shear"].sample().squeeze(0)

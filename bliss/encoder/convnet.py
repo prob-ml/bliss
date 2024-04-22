@@ -65,7 +65,6 @@ class FeaturesNet(nn.Module):
             ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
-            ConvBlock(128, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
             ConvBlock(128, num_features, stride=(2 if double_downsample else 1)),  # 4
         )
@@ -86,7 +85,6 @@ class CatalogNet(nn.Module):
             ConvBlock(512, 256, kernel_size=1, padding=0),
             nn.Upsample(scale_factor=2, mode="nearest"),  # 4
             C3(768, 256, n=3, shortcut=False),
-            nn.Upsample(scale_factor=2, mode="nearest"),
             Detect(256, out_channels),
         ]
         self.net_ml = nn.ModuleList(net_layers)
