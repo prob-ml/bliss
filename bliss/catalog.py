@@ -330,7 +330,9 @@ class TileCatalog(UserDict):
 
         d = {}
         for key, val in sorted_self.to_dict().items():
-            if key == "n_sources":
+            if key in {"shear", "convergence"}:
+                d[key] = val
+            elif key == "n_sources":
                 d[key] = flux_mask.sum(dim=3)  # number of sources within range in tile
             else:
                 d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))

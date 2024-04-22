@@ -31,10 +31,10 @@ simulator:
 generate:
     n_image_files: 16
     n_batches_per_file: 16
-    cached_data_path: /data/scratch/stevefan/weak_lensing_48x16x16
+    cached_data_path: /data/scratch/tahseeny/weak_lensing_combined_knots_4
 
 cached_simulator:
-    cached_data_path: /data/scratch/stevefan/weak_lensing_48x16x16
+    cached_data_path: /data/scratch/tahseeny/weak_lensing_combined_knots_4
     batch_size: 24
 
 encoder:

@@ -229,6 +229,9 @@ class Encoder(pl.LightningModule):
         batch_size = batch["images"].size(0)
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
+        # filter out undetectable sources
+        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+
         # make predictions/inferences
         target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
         truth_callback = lambda _: target_cat1
@@ -258,6 +261,7 @@ class Encoder(pl.LightningModule):
 
     def update_metrics(self, batch):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
         mode_cat = self.sample(batch, use_mode=True).to_full_catalog()
@@ -271,6 +275,7 @@ class Encoder(pl.LightningModule):
     def plot_sample_images(self, batch, logging_name):
         """Log a grid of figures to the tensorboard."""
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
         est_cat = self.sample(batch, use_mode=True)
         fig = plot_maps(batch["images"], target_cat_cropped, est_cat)
