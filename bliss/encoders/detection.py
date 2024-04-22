@@ -9,7 +9,8 @@ from torch.optim import Adam
 from bliss.catalog import TileCatalog
 from bliss.datasets.galsim_blends import parse_dataset
 from bliss.encoders.layers import ConcatBackgroundTransform, EncoderCNN, make_enc_final
-from bliss.render_tiles import get_images_in_tiles, get_n_padded_tiles_hw, validate_border_padding
+from bliss.grid import validate_border_padding
+from bliss.render_tiles import get_images_in_tiles, get_n_padded_tiles_hw
 from bliss.reporting import DetectionMetrics
 
 
@@ -183,7 +184,7 @@ class DetectionEncoder(pl.LightningModule):
     # pytorch lightning
     def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
-        images, background, truth_cat = parse_dataset(batch, self.tile_slen)
+        images, background, truth_cat, _ = parse_dataset(batch, self.tile_slen)
         out = self.get_loss(images, background, truth_cat)
 
         # logging
@@ -195,7 +196,7 @@ class DetectionEncoder(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
-        images, background, truth_cat = parse_dataset(batch, self.tile_slen)
+        images, background, truth_cat, _ = parse_dataset(batch, self.tile_slen)
         batch_size = truth_cat.batch_size
         out = self.get_loss(images, background, truth_cat)
         pred_cat = self.variational_mode(images, background)

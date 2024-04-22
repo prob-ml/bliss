@@ -24,28 +24,59 @@ def swap_locs_columns(locs: Tensor) -> Tensor:
     return pack([y, x], "b *")[0]
 
 
-def center_ptiles(image_ptiles: Tensor, tile_locs_flat: Tensor, tile_slen: int, bp: int) -> Tensor:
-    """Center given padded tiles at locations `tile_locs_flat`."""
-    npt, _, _, ptile_slen = image_ptiles.shape
-    n_ptiles_locs, _ = tile_locs_flat.shape
-    assert ptile_slen == image_ptiles.shape[-2]
-    assert n_ptiles_locs == npt
-    assert bp == (ptile_slen - tile_slen) // 2
+def shift_sources_in_ptiles(
+    image_ptiles_flat: Tensor, tile_locs_flat: Tensor, tile_slen: int, ptile_slen: int, center=False
+) -> Tensor:
+    """Shift sources at given padded tiles to given locations.
 
-    # get new locs to do the shift
-    grid = get_mgrid(ptile_slen, image_ptiles.device)
+    The keyword `center` controls whether the sources are already centered at the
+    padded tile and should be shifted by `tile_locs_flat` (center=False),
+    or if the sources are already shifted by that amount and should be centered (center=True).
+    Default is `False`.
+
+    This function can only be used if input image has the same size as padded tiles or is one
+    pixel larger. The common use case is that we have odd-sized images (e.g. 53x53) that have a
+    light source centered in them but the padded tile is even-sized and one pixel smaller
+    (e.g. 52x52). The `grid_sample` function will below will automatically work for both cases of
+    input (e.g. 53x53 or 52x52) and in the former case trim the size of the image and correctly
+    interpolate.
+
+    An explicit demonstration of this function working correctly can be found in the `case_studies`
+    notebook: `test-shift-ptiles-fnc.ipynb`.
+    """
+    npt, _, _, size = image_ptiles_flat.shape
+    assert tile_locs_flat.shape[0] == npt
+    assert size in {ptile_slen, ptile_slen + 1}
+    bp = validate_border_padding(tile_slen, ptile_slen)
+
+    grid = get_mgrid(ptile_slen, image_ptiles_flat.device)
     ptile_locs = (tile_locs_flat * tile_slen + bp) / ptile_slen
-    offsets_hw = torch.tensor(1.0) - 2 * ptile_locs
+    sgn = 1 if center else -1
+    offsets_hw = sgn * (torch.tensor(1.0) - 2 * ptile_locs)
     offsets_xy = swap_locs_columns(offsets_hw)
     grid_inflated = rearrange(grid, "h w xy -> 1 h w xy", xy=2, h=ptile_slen)
     offsets_xy_inflated = rearrange(offsets_xy, "npt xy -> npt 1 1 xy", xy=2)
-    grid_loc = grid_inflated - offsets_xy_inflated
+    grid_locs = grid_inflated - offsets_xy_inflated
 
-    shifted_tiles = grid_sample(image_ptiles, grid_loc, align_corners=True)
+    sampled_images = grid_sample(image_ptiles_flat, grid_locs, align_corners=True)
+    assert sampled_images.shape[-1] == sampled_images.shape[-2] == ptile_slen
+    return sampled_images
 
-    # now that everything is center we can crop easily
-    return shifted_tiles[
-        ...,
-        tile_slen : (ptile_slen - tile_slen),
-        tile_slen : (ptile_slen - tile_slen),
-    ]
+
+def validate_border_padding(tile_slen: int, ptile_slen: int, bp: float = None) -> int:
+    # Border Padding
+    # Images are first rendered on *padded* tiles (aka ptiles).
+    # The padded tile consists of the tile and neighboring tiles
+    # The width of the padding is given by ptile_slen.
+    # border_padding is the amount of padding we leave in the final image. Useful for
+    # avoiding sources getting too close to the edges.
+    if bp is None:
+        # default value matches encoder default.
+        bp = (ptile_slen - tile_slen) / 2
+
+    n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
+    ptile_padding = n_tiles_of_padding * tile_slen
+    assert float(bp).is_integer(), "amount of border padding must be an integer"
+    assert n_tiles_of_padding.is_integer(), "n_tiles_of_padding must be an integer"
+    assert bp <= ptile_padding, "Too much border, increase ptile_slen"
+    return int(bp)

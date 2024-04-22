@@ -15,7 +15,7 @@ def test_galaxy_blend_catalogs(home_dir: Path):
     all_star_mags = column_to_tensor(
         Table.read(home_dir / "data" / "stars_med_june2018.fits"), "i_ab"
     )
-    blends_ds = generate_dataset(100, catsim_table, all_star_mags, psf, 20)
+    blends_ds = generate_dataset(100, catsim_table, all_star_mags, psf, 10)
 
     tile_slen = 4
     slen = 40
@@ -28,6 +28,7 @@ def test_galaxy_blend_catalogs(home_dir: Path):
     images = blends_ds.pop("images")
     background = blends_ds.pop("background")
     noiseless = blends_ds.pop("noiseless")
+    blends_ds.pop("paddings")
     blends_ds.pop("individuals")
     full_cat = FullCatalog(slen, slen, blends_ds)
     tile_cat = full_cat.to_tile_params(tile_slen, ignore_extra_sources=True)

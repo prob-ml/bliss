@@ -4,7 +4,7 @@ import galsim
 import numpy as np
 import torch
 from astropy.table import Table
-from einops import pack, rearrange
+from einops import pack, rearrange, reduce
 from torch import Tensor
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -17,20 +17,33 @@ from bliss.datasets.table_utils import catsim_row_to_galaxy_params
 
 class SavedGalsimBlends(Dataset):
     def __init__(
-        self, dataset_file: str, epoch_size: int, slen: int = 40, tile_slen: int = 4
+        self,
+        dataset_file: str,
+        epoch_size: int,
+        slen: int = 40,
+        tile_slen: int = 4,
+        keep_padding: bool = False,
     ) -> None:
         super().__init__()
-        self.ds: dict[str, Tensor] = torch.load(dataset_file)
+        ds: dict[str, Tensor] = torch.load(dataset_file)
         self.epoch_size = epoch_size
 
-        self.images = self.ds.pop("images").float()  # needs to be a float for NN
-        self.background = self.ds.pop("background").float()
+        self.images = ds.pop("images").float()  # needs to be a float for NN
+        self.background = ds.pop("background").float()
 
         # don't need for training
-        self.ds.pop("individuals")
-        self.ds.pop("noiseless")
+        ds.pop("individuals")
+        ds.pop("noiseless")
 
-        full_catalog = FullCatalog(slen, slen, self.ds)
+        # avoid large memory usage if we don't need padding.
+        if not keep_padding:
+            ds.pop("paddings")
+            self.paddings = torch.tensor([0]).float()
+        else:
+            self.paddings = ds.pop("paddings").float()
+        self.keep_padding = keep_padding
+
+        full_catalog = FullCatalog(slen, slen, ds)
         tile_catalogs = full_catalog.to_tile_params(tile_slen, ignore_extra_sources=True)
         self.tile_params = tile_catalogs.to_dict()
 
@@ -42,6 +55,7 @@ class SavedGalsimBlends(Dataset):
         return {
             "images": self.images[index],
             "background": self.background[index],
+            "paddings": self.paddings[index] if self.keep_padding else self.paddings,
             **tile_params_ii,
         }
 
@@ -49,11 +63,11 @@ class SavedGalsimBlends(Dataset):
 class SavedIndividualGalaxies(Dataset):
     def __init__(self, dataset_file: str, epoch_size: int) -> None:
         super().__init__()
-        self.ds: dict[str, Tensor] = torch.load(dataset_file)
+        ds: dict[str, Tensor] = torch.load(dataset_file)
         self.epoch_size = epoch_size
 
-        self.images = self.ds.pop("images").float()  # needs to be a float for NN
-        self.background = self.ds.pop("background").float()
+        self.images = ds.pop("images").float()  # needs to be a float for NN
+        self.background = ds.pop("background").float()
 
     def __len__(self) -> int:
         return self.epoch_size
@@ -82,6 +96,7 @@ def generate_dataset(
     images_list = []
     noiseless_images_list = []
     individuals_list = []
+    paddings_list = []
     params_list = []
 
     size = slen + 2 * bp
@@ -111,10 +126,10 @@ def generate_dataset(
             padding_noiseless = _render_padded_image(
                 catsim_table, all_star_mags, mean_sources_out, galaxy_prob, psf, slen, bp
             )
-            noiseless = center_noiseless + padding_noiseless
         else:
-            noiseless = center_noiseless
+            padding_noiseless = torch.zeros_like(center_noiseless)
 
+        noiseless = center_noiseless + padding_noiseless
         noisy = add_noise_and_background(noiseless, background[ii, None])
 
         images_list.append(noisy)
@@ -122,9 +137,17 @@ def generate_dataset(
         individuals_list.append(individual_noiseless)
         params_list.append(full_cat.to_tensor_dict())
 
+        # separately keep padding since it's needed in the deblender loss function
+        # for that same purpose we also add central stars
+        sbool = rearrange(full_cat["star_bools"], "1 ms 1 -> ms 1 1 1")
+        all_stars = reduce(individual_noiseless * sbool, "ms 1 h w -> 1 h w", "sum")
+        padding_with_stars_noiseless = padding_noiseless + all_stars
+        paddings_list.append(padding_with_stars_noiseless)
+
     images, _ = pack(images_list, "* c h w")
     noiseless_images, _ = pack(noiseless_images_list, "* c h w")
     individuals, _ = pack(individuals_list, "* n c h w")
+    paddings, _ = pack(paddings_list, "* c h w")
     paramss = torch.cat(params_list, dim=0)
 
     assert individuals.shape[:3] == (n_samples, max_n_sources, 1)
@@ -134,6 +157,7 @@ def generate_dataset(
         "background": background,
         "noiseless": noiseless_images,
         "individuals": individuals,
+        "paddings": paddings,
         **paramss,
     }
 
@@ -180,7 +204,8 @@ def parse_dataset(dataset: dict[str, Tensor], tile_slen: int = 4):
     params = dataset.copy()  # make a copy to not change argument.
     images = params.pop("images")
     background = params.pop("background")
-    return images, background, TileCatalog(tile_slen, params)
+    paddings = params.pop("paddings")
+    return images, background, TileCatalog(tile_slen, params), paddings
 
 
 def sample_source_params(
