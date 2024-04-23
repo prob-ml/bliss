@@ -233,11 +233,13 @@ class RedshiftCSVPrior_Galaxy(CatalogPrior):
             .to_numpy()[:, 2:8]
             .astype(float)
         )
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        self.__sample = np.random.choice(range(len(self.array)), size=latent_dims, replace=True)
+        self.latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
 
-    def _sample_redshifts(self):
-        return torch.from_numpy(np.take(self.array[:, -1], self.__sample))
+    def _sample_indices(self):
+        return np.random.choice(range(len(self.array)), size=self.latent_dims, replace=True)
+
+    def _sample_redshifts(self, indices):
+        return torch.from_numpy(np.take(self.array[:, -1], indices))
 
     # Override the source_type to be a star
     def _sample_source_type(self):
@@ -245,22 +247,19 @@ class RedshiftCSVPrior_Galaxy(CatalogPrior):
         return torch.ones(*latent_dims)
 
     # Overirde the star fluxes to sample from the real data
-    def _sample_galaxy_fluxes(self):
+    def _sample_galaxy_fluxes(self, indices):
         galaxy_fluxes, galaxy_params = super()._sample_galaxy_prior()
         total_flux = np.concatenate(
             (
-                np.take(self.array[:, 0], self.__sample),
-                np.take(self.array[:, 1], self.__sample),
-                np.take(self.array[:, 2], self.__sample),
-                np.take(self.array[:, 3], self.__sample),
-                np.take(self.array[:, 4], self.__sample),
+                np.take(self.array[:, 0], indices),
+                np.take(self.array[:, 1], indices),
+                np.take(self.array[:, 2], indices),
+                np.take(self.array[:, 3], indices),
+                np.take(self.array[:, 4], indices),
             ),
             axis=-1,
         )
 
-        # select specified bands
-        # bands = np.array(range(self.n_bands))
-        # return total_flux[..., bands]
         return torch.from_numpy(total_flux), galaxy_params
 
     def sample(self) -> RedshiftTileCatalog:
@@ -274,12 +273,14 @@ class RedshiftCSVPrior_Galaxy(CatalogPrior):
         """
         locs = self._sample_locs()
         # Assume all sources are stars for now, cant comment this because their values are needed elsewhere even we are not using them
-        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior()
+        indices = self._sample_indices()
+
+        galaxy_fluxes, galaxy_params = self._sample_galaxy_fluxes(indices)
         star_fluxes = self._sample_star_fluxes()
 
         n_sources = self._sample_n_sources()
         source_type = self._sample_source_type()
-        redshifts = self._sample_redshifts()
+        redshifts = self._sample_redshifts(indices)
 
         catalog_params = {
             "n_sources": n_sources,
@@ -323,11 +324,13 @@ class RedshiftCSVPriorDC2(CatalogPrior):
             .to_numpy()[:, 1:]
             .astype(float)
         )
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        self.__sample = np.random.choice(range(len(self.array)), size=latent_dims, replace=True)
+        self.latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
 
-    def _sample_redshifts(self):
-        return torch.from_numpy(np.take(self.array[:, -1], self.__sample))
+    def _sample_indices(self):
+        return np.random.choice(range(len(self.array)), size=self.latent_dims, replace=True)
+
+    def _sample_redshifts(self, indices):
+        return torch.from_numpy(np.take(self.array[:, -1], indices))
 
     # Override the source_type to be a star
     def _sample_source_type(self):
@@ -335,15 +338,15 @@ class RedshiftCSVPriorDC2(CatalogPrior):
         return torch.ones(*latent_dims)
 
     # Overirde the star fluxes to sample from the real data
-    def _sample_galaxy_fluxes(self):
+    def _sample_galaxy_fluxes(self, indices):
         galaxy_fluxes, galaxy_params = super()._sample_galaxy_prior()
         total_flux = np.concatenate(
             (
-                np.take(self.array[:, 0], self.__sample),
-                np.take(self.array[:, 1], self.__sample),
-                np.take(self.array[:, 2], self.__sample),
-                np.take(self.array[:, 3], self.__sample),
-                np.take(self.array[:, 4], self.__sample),
+                np.take(self.array[:, 0], indices),
+                np.take(self.array[:, 1], indices),
+                np.take(self.array[:, 2], indices),
+                np.take(self.array[:, 3], indices),
+                np.take(self.array[:, 4], indices),
             ),
             axis=-1,
         )
@@ -364,12 +367,14 @@ class RedshiftCSVPriorDC2(CatalogPrior):
         """
         locs = self._sample_locs()
         # Assume all sources are stars for now, cant comment this because their values are needed elsewhere even we are not using them
-        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior()
+        indices = self._sample_indices()
+
+        galaxy_fluxes, galaxy_params = self._sample_galaxy_fluxes(indices)
         star_fluxes = self._sample_star_fluxes()
 
         n_sources = self._sample_n_sources()
         source_type = self._sample_source_type()
-        redshifts = self._sample_redshifts()
+        redshifts = self._sample_redshifts(indices)
 
         catalog_params = {
             "n_sources": n_sources,
