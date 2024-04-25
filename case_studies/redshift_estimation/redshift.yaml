@@ -11,7 +11,7 @@ paths:
     output: ${paths.root}/redshift_output
 
 prior:
-    _target_: case_studies.redshift_estimation.prior.RedshiftCSVPrior_Galaxy
+    _target_: case_studies.redshift_estimation.prior.RedshiftCSVPriorDC2
 
 simulator:
     _target_: case_studies.redshift_estimation.simulated_dataset.RedshiftSimulatedDataset
@@ -41,11 +41,11 @@ encoder:
 generate:
     n_image_files: 16
     n_batches_per_file: 16
-    cached_data_path: /data/scratch/declan/sdss_like_galaxies
+    cached_data_path: /data/scratch/declan/dc2_like_galaxies
 
 cached_simulator:
     _target_: case_studies.redshift_estimation.simulated_dataset.RedshiftCachedSimulatedDataset
-    cached_data_path: /data/scratch/declan/sdss_like_galaxies
+    cached_data_path: /data/scratch/declan/dc2_like_galaxies
     batch_size: 32
 
 cached_test_data:
