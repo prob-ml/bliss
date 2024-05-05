@@ -204,7 +204,7 @@ class RedshiftCSVPrior(CatalogPrior):
         return RedshiftTileCatalog(self.tile_slen, catalog_params)
 
 
-class RedshiftCSVPrior_Galaxy(CatalogPrior):
+class RedshiftCSVPriorSDSS(CatalogPrior):
     """Prior distribution of objects in an astronomical image.
 
     Inherits from CatalogPrior, adding redshift. Load a csvfile for flux and redshift.
