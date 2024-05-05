@@ -1,0 +1,120 @@
+---
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+mode: generate
+
+encoder:
+    survey_bands: ["r"]
+    tile_slen: 4
+    min_flux_threshold: 1.59  # 22 magnitude (0.63 is 23 mag; 0.25 is 24 mag)
+    double_detect: false
+    tiles_to_crop: 1
+    image_normalizer:
+        bands: [2]
+        include_original: true
+        use_deconv_channel: false
+        concat_psf_params: false
+        num_psf_params: 6  # for SDSS, 4 for DC2
+        log_transform_stdevs: [0]
+        use_clahe: false
+    vd_spec:
+        _target_: bliss.encoder.new_variational_dist.NewVariationalDistSpec
+        survey_bands: ${encoder.survey_bands}
+        tile_slen: ${encoder.tile_slen}
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        metrics:
+            - _target_: bliss.encoder.metrics.DetectionPerformance
+              mag_bin_cutoffs: [17.826, 19.138, 19.921, 20.549, 20.970, 21.332, 21.703, 22]
+              exclude_last_bin: true  # ignore >22 mag
+
+surveys:
+    sdss:
+        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
+        dir_path: /data/sdss
+        fields:
+            - run: 94
+              camcol: 1
+              fields: [12] #${range:22,460,20}
+            # - run: 3900
+            #   camcol: 6
+            #   fields: ${range:26,820,20}
+            # - run: 752
+            #   camcol: 1
+            #   fields: ${range:25,700,20}
+            # - run: 125
+            #   camcol: 1
+            #   fields: ${range:25,580,20}
+
+prior:
+    _target_: bliss.simulator.prior.CatalogPrior
+    survey_bands: ["u", "g", "r", "i", "z"]  # SDSS available band filters
+    reference_band: 2  # SDSS r-band
+    star_color_model_path: /home/aakashdp/bliss/data/sdss/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: /home/aakashdp/bliss/data/sdss/color_models/gal_gmm_nmgy.pkl
+    n_tiles_h: 20
+    n_tiles_w: 20
+    tile_slen: 4
+    batch_size: 64
+    max_sources: 1
+    mean_sources: 0.04
+    min_sources: 0
+    prob_galaxy: 0.72
+    star_flux_min: 0.63094948
+    star_flux_max: 1014
+    star_flux_alpha: 0.43
+    galaxy_flux_min: 0.6301037
+    galaxy_flux_max: 1013
+    galaxy_alpha: 0.47
+    galaxy_a_concentration: 0.39330758068481686
+    galaxy_a_loc: 0.8371888967872619
+    galaxy_a_scale: 4.432725319432478
+    galaxy_a_bd_ratio: 2.0
+
+generate:
+    n_image_files: 4
+    n_batches_per_file: 16
+    cached_data_path: /data/scratch/aakash/single_field_test
+
+cached_simulator:
+    cached_data_path: /data/scratch/aakash/multi_field_train
+    batch_size: 64
+    splits: 0:80/80:100/80:100  # train/val/test splits as percent ranges
+
+train:
+    trainer:
+        _target_: pytorch_lightning.Trainer
+        logger:
+            _target_: pytorch_lightning.loggers.TensorBoardLogger
+            save_dir: ${paths.output}
+            name: PSF_LIMITED_PARAMS
+            version: multi_field_unaware
+            default_hp_metric: False
+        callbacks:
+            - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+              filename: best_encoder
+              save_top_k: 1
+              verbose: True
+              monitor: val/_loss
+              mode: min
+              save_on_train_epoch_end: False
+              auto_insert_metric_name: False
+            # - _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+            #   monitor: val/_loss
+            #   mode: min
+            #   patience: 10
+        reload_dataloaders_every_n_epochs: 0
+        check_val_every_n_epoch: 1
+        log_every_n_steps: 10  # corresponds to n_batches
+        min_epochs: 1
+        max_epochs: 50
+        accelerator: "gpu"
+        devices: 1
+    data_source: ${cached_simulator}
+    encoder: ${encoder}
+    seed: 42
+    pretrained_weights: null
+    testing: true

@@ -94,8 +94,10 @@ class DetectionPerformance(Metric):
 
     def update(self, true_cat, est_cat, matching):
         if self.mag_band:
+            # handle single band prediction
+            est_mag_band = 0 if est_cat["galaxy_fluxes"].shape[-1] == 1 else self.mag_band
             true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
-            est_mags = est_cat.magnitudes[:, :, self.mag_band].contiguous()
+            est_mags = est_cat.magnitudes[:, :, est_mag_band].contiguous()
         else:
             # hack to match regardless of magnitude; intended for
             # catalogs from surveys with incompatible filter bands
@@ -120,28 +122,39 @@ class DetectionPerformance(Metric):
             self.n_est_matches += torch.bucketize(emim, cutoffs).bincount(minlength=n_bins)
 
     def compute(self):
-        n_est_matches = self.n_est_matches[:-1] if self.exclude_last_bin else self.n_est_matches
-        n_true_matches = self.n_true_matches[:-1] if self.exclude_last_bin else self.n_true_matches
-        n_est_sources = self.n_est_sources[:-1] if self.exclude_last_bin else self.n_est_sources
-        n_true_sources = self.n_true_sources[:-1] if self.exclude_last_bin else self.n_true_sources
+        final_idx = -1 if self.exclude_last_bin else None
+        n_est_matches = self.n_est_matches[:final_idx]
+        n_true_matches = self.n_true_matches[:final_idx]
+        n_est_sources = self.n_est_sources[:final_idx]
+        n_true_sources = self.n_true_sources[:final_idx]
 
         precision = n_est_matches.sum() / n_est_sources.sum()
         recall = n_true_matches.sum() / n_true_sources.sum()
         f1 = 2 * precision * recall / (precision + recall)
 
+        binned_precision = n_est_matches / n_est_sources
+        binned_recall = n_true_matches / n_true_sources
+        binned_f1 = 2 * binned_precision * binned_recall / (binned_precision + binned_recall)
+
         return {
-            "detection_precision": precision,
-            "detection_recall": recall,
-            "detection_f1": f1,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "binned_precision": binned_precision,
+            "binned_recall": binned_recall,
+            "binned_f1": binned_f1,
         }
 
-    def plot(self):
+    def _plot(self):
         # Compute recall, precision, and F1 score
         recall = self.n_true_matches / self.n_true_sources
         precision = self.n_est_matches / self.n_est_sources
         f1 = 2 * precision * recall / (precision + recall)
 
         mbc = self.mag_bin_cutoffs
+        if not mbc:
+            return None, None
+
         xlabels = [f"[{mbc[i]}, {mbc[i+1]}]" for i in range(len(mbc) - 1)]
         xlabels = ["< " + str(mbc[0])] + xlabels + ["> " + str(mbc[-1])]
 
@@ -179,85 +192,221 @@ class DetectionPerformance(Metric):
 
 
 class SourceTypeAccuracy(Metric):
-    def __init__(self):
+    def __init__(self, mag_band=2, mag_bin_cutoffs=[], exclude_last_bin=False,):
         super().__init__()
 
-        self.add_state("gal_tp", default=torch.zeros(1), dist_reduce_fx="sum")
-        self.add_state("star_tp", default=torch.zeros(1), dist_reduce_fx="sum")
-        self.add_state("n_matches", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.mag_band = mag_band
+        self.mag_bin_cutoffs = mag_bin_cutoffs
+        self.n_bins = len(self.mag_bin_cutoffs) + 1
+        self.exclude_last_bin = exclude_last_bin
+
+        self.add_state("gal_tp", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
+        self.add_state("star_tp", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
+        self.add_state("n_matches", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
+
 
     def update(self, true_cat, est_cat, matching):
+        true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
+        boundaries = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            self.n_matches += tcat_matches.size(0)
+            n_true = true_cat.n_sources[i].sum().item()
+
+            true_matched_mags = true_mags[i, 0:n_true][tcat_matches]
+            bins = torch.bucketize(true_matched_mags, boundaries)
 
             true_gal = true_cat.galaxy_bools[i][tcat_matches]
             est_gal = est_cat.galaxy_bools[i][ecat_matches]
 
-            self.gal_tp += (true_gal * est_gal).sum()
-            self.star_tp += (~true_gal * ~est_gal).sum()
+            gal_tp = torch.zeros(self.n_bins, device=self.device).float()
+            gal_tp = gal_tp.scatter_add(0, bins, (true_gal * est_gal).float().squeeze())
+            self.gal_tp += gal_tp
+
+            star_tp = torch.zeros(self.n_bins, device=self.device).float()
+            star_tp += star_tp.scatter_add(0, bins, (~true_gal * ~est_gal).float().squeeze())
+            self.star_tp += star_tp
+
+            self.n_matches += bins.bincount(minlength=self.n_bins)
 
     def compute(self):
-        acc = (self.gal_tp + self.star_tp) / self.n_matches
-        return {"classification_acc": acc.item()}
+        final_idx = -1 if self.exclude_last_bin else None
+        gal_tp = self.gal_tp[:final_idx]
+        star_tp = self.star_tp[:final_idx]
+        n_matches = self.n_matches[:final_idx]
+        binned_acc = (gal_tp + star_tp) / n_matches
+        total_acc = (gal_tp.sum() + star_tp.sum()) / n_matches.sum()
+        return {
+            "class_acc": total_acc,
+            "binned_class_acc": binned_acc,
+        }
 
 
 class FluxError(Metric):
-    def __init__(self, survey_bands):
+    def __init__(
+            self,
+            bands,
+            survey_bands,
+            mag_band: int = 2,
+            mag_bin_cutoffs: list = [],
+            exclude_last_bin: bool = False
+        ):
         super().__init__()
-        self.survey_bands = survey_bands
+        self.bands = torch.tensor(bands)  # list of band indices (e.g. 2)
+        self.survey_bands = survey_bands  # list of band names (e.g. "r")
 
-        fe_init = torch.zeros(len(self.survey_bands))
+        self.mag_band = mag_band
+        self.mag_bin_cutoffs = mag_bin_cutoffs
+        self.exclude_last_bin = exclude_last_bin
+        self.n_bins = len(self.mag_bin_cutoffs) + 1
+
+        fe_init = torch.zeros((len(self.bands), self.n_bins))  # n_bins per band
         self.add_state("flux_err", default=fe_init, dist_reduce_fx="sum")
-
-        self.add_state("n_matches", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state("n_matches", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
+        if self.mag_band:
+            true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
+        else:
+            true_mags = torch.ones_like(true_cat.plocs[:, :, 0])
+        
+        boundaries = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            self.n_matches += tcat_matches.size(0)
+            n_true = true_cat.n_sources[i].sum().item()
+            true_matched_mags = true_mags[i, 0:n_true][tcat_matches]
 
-            true_flux = true_cat.on_fluxes[i, tcat_matches, :]
-            est_flux = est_cat.on_fluxes[i, ecat_matches, :]
-            self.flux_err += (true_flux - est_flux).abs().sum(dim=0)
+            bins = torch.bucketize(true_matched_mags, boundaries)
+
+            true_flux = true_cat.on_fluxes[i, tcat_matches, self.bands]
+            est_bands = torch.tensor([0]) if len(self.bands) == 1 else self.bands
+            est_flux = est_cat.on_fluxes[i, ecat_matches, est_bands]
+
+            pct_err = (true_flux - est_flux) / true_flux
+            # TODO: currently only supports single band
+            flux_err = torch.zeros((1, self.n_bins), dtype=torch.float, device=self.device)  
+            flux_err = flux_err.scatter_add(1, bins.reshape(1, -1), pct_err.reshape(1, -1))
+            self.flux_err += flux_err
+            self.n_matches += bins.bincount(minlength=self.n_bins)
+
 
     def compute(self):
-        avg_flux_err = self.flux_err / self.n_matches
+        final_idx = -1 if self.exclude_last_bin else None
+        flux_err = self.flux_err[:, :final_idx]
+        n_matches = self.n_matches[:final_idx]
+
+        total_err = flux_err.sum(dim=1) / n_matches.sum()
+        binned_err = flux_err / n_matches
         results = {}
         for i, band in enumerate(self.survey_bands):
-            results[f"flux_err_{band}_mae"] = avg_flux_err[i].item()
+            results[f"{band}_flux_mape"] = total_err[i]
+            results[f"binned_{band}_flux_mape"] = binned_err[i]
+
         return results
 
 
 class GalaxyShapeError(Metric):
-    GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
+    """Compute metrics for galaxy shape parameters.
 
-    def __init__(self):
+    The metrics are computed over both magnitude and parameter bins. E.g. if the magnitude bins are
+    [18, 20, 22] and the parameter bins are [1, 2, 3], we first filter by magnitude range
+    (i.e. <18, 18-20, 20-22, >22), and then compute metrics over each parameter bin in that
+    magnitude range.
+    """
+    GALSIM_NAMES = [
+        "disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b", "disk_hlr", "bulge_hlr"
+    ]
+
+    def __init__(
+            self,
+            mag_bin_cutoffs,
+            param_bin_cutoffs,
+            mag_band=2,
+            exclude_last_bin=False,
+        ):
+        """Initialize state and variables.
+
+        Args:
+            mag_bin_cutoffs (list): List of magnitudes to bin by.
+            param_bin_cutoffs (dict): dictionary mapping parameter names in GALSIM_NAMES to a list
+                of bins for that parameter.
+            mag_band (int, optional): Band to bin by. Defaults to 2.
+            exclude_last_bin (bool, optional): Used to ignore the last magnitude band (e.g. if you
+                want to ignore magnitude greater than some value). Defaults to False.
+        """
         super().__init__()
 
-        gpe_init = torch.zeros(len(self.GALSIM_NAMES))
-        self.add_state("galsim_param_err", default=gpe_init, dist_reduce_fx="sum")
+        self.mag_band = mag_band
+        self.mag_bin_cutoffs = mag_bin_cutoffs
+        self.n_mag_bins = len(self.mag_bin_cutoffs) + 1
+        self.exclude_last_mag_bin = exclude_last_bin  # used to ignore dim objects
 
-        self.add_state("n_true_galaxies", default=torch.zeros(1), dist_reduce_fx="sum")
+        # assume all values from GALSIM_NAMES in param_bin_cutoffs
+        self.param_bin_cutoffs = param_bin_cutoffs
+
+        for param in self.GALSIM_NAMES:
+            n_param_bins = len(self.param_bin_cutoffs[param]) + 1
+            error_init = torch.zeros((self.n_mag_bins, n_param_bins))
+            self.add_state(f"{param}_err", default=error_init.clone(), dist_reduce_fx="sum")
+            self.add_state(f"n_gal_{param}", default=error_init.clone(), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
+        true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
+        mag_boundaries = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+        param_boundaries = {
+            key: torch.tensor(val, device=self.device)
+            for key, val in self.param_bin_cutoffs.items()
+        }
+
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
+            n_true = true_cat.n_sources[i].sum().item()
 
-            true_gal = true_cat.galaxy_bools[i][tcat_matches]
-            self.n_true_galaxies += true_gal.sum()
+            true_gal = true_cat.galaxy_bools[i][tcat_matches].reshape(-1)
+            true_matched_mags = true_mags[i, 0:n_true][tcat_matches]
+            true_gal_mags = true_matched_mags[true_gal]
 
-            # TODO: only compute error for *true* galaxies
-            true_gp = true_cat["galaxy_params"][i, tcat_matches, :]
-            est_gp = est_cat["galaxy_params"][i, ecat_matches, :]
-            gp_err = (true_gp - est_gp).abs().sum(dim=0)
-            # TODO: angle is a special case, need to wrap around pi (not 2pi due to symmetry)
-            self.galsim_param_err += gp_err
+            # get magnitude bin for each matched galaxy
+            mag_bins = torch.bucketize(true_gal_mags, mag_boundaries)
+
+            true_gp = true_cat["galaxy_params"][i, tcat_matches][true_gal]
+            est_gp = est_cat["galaxy_params"][i, ecat_matches][true_gal]
+            gp_errors = (true_gp - est_gp) / true_gp
+
+            for j, param in enumerate(self.GALSIM_NAMES):
+                p_err = gp_errors[:, j].contiguous()
+                if param == "beta_radians":
+                    p_err = p_err % torch.pi
+
+                # get parameter bin for each source
+                param_bins = torch.bucketize(p_err, param_boundaries[param])
+
+                param_errors = getattr(self, f"{param}_err")
+                param_true_gal = getattr(self, f"n_gal_{param}")
+
+                # update errors and # galaxies for [mag_bin, param_bin]
+                for k in range(mag_bins.shape[0]):
+                    param_errors[mag_bins[k], param_bins[k]] += p_err[k]
+                    param_true_gal[mag_bins[k], param_bins[k]] += 1
+
+                setattr(self, f"{param}_err", param_errors)
+                setattr(self, f"n_gal_{param}", param_true_gal)
 
     def compute(self):
-        avg_galsim_param_err = self.galsim_param_err / self.n_true_galaxies
         results = {}
-        for i, gs_name in enumerate(self.GALSIM_NAMES):
-            results[f"{gs_name}_mae"] = avg_galsim_param_err[i]
+        final_idx = -1 if self.exclude_last_mag_bin else None
+        for param in self.GALSIM_NAMES:
+            param_err = getattr(self, f"{param}_err")[:final_idx]  # mag bins x param_bins
+            n_true_gal = getattr(self, f"n_gal_{param}")[:final_idx]
+
+            total_err = param_err.sum() / n_true_gal.sum()
+            mag_binned_err = param_err.sum(dim=1) / n_true_gal.sum(dim=1)
+            param_binned_err = param_err / n_true_gal
+
+            for i in range(param_err.shape[0]):
+                results[f"{param}_mape"] = total_err
+                results[f"{param}_mape_mag_{i}"] = mag_binned_err[i]
+                results[f"binned_{param}_mape_mag_{i}"] = param_binned_err[i]
 
         return results

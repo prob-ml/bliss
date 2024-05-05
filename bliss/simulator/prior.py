@@ -228,6 +228,8 @@ class CatalogPrior(pl.LightningModule):
                 - a_d: semi-major axis of disk
                 - bulge_q: minor-to-major axis ratio of the bulge
                 - a_b: semi-major axis of bulge
+                - disk_hlr_arcsecs: disk half-light radius (calculated from other params)
+                - bulge_hlr_arcsecs: bulge half-light radius (calculated from other params)
         """
         flux_prop = self._sample_flux_ratios(self.gmm_gal)
 
@@ -257,13 +259,21 @@ class CatalogPrior(pl.LightningModule):
         bulge_scale = self.galaxy_a_scale / self.galaxy_a_bd_ratio
         bulge_a = base_dist.sample(latent_dims) * bulge_scale + bulge_loc
 
-        disk_frac = torch.unsqueeze(disk_frac, 4)
-        beta_radians = torch.unsqueeze(beta_radians, 4)
-        disk_q = torch.unsqueeze(disk_q, 4)
-        disk_a = torch.unsqueeze(disk_a, 4)
-        bulge_q = torch.unsqueeze(bulge_q, 4)
-        bulge_a = torch.unsqueeze(bulge_a, 4)
+        # Compute half-light radii
+        disk_b = disk_a * disk_q
+        disk_hlr_arcsecs = np.sqrt(disk_a * disk_b)
+        bulge_b = bulge_q * bulge_a
+        bulge_hlr_arcsecs = np.sqrt(bulge_a * bulge_b)
 
-        param_lst = [disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
+        param_lst = [
+            torch.unsqueeze(disk_frac, 4),
+            torch.unsqueeze(beta_radians, 4),
+            torch.unsqueeze(disk_q, 4),
+            torch.unsqueeze(disk_a, 4),
+            torch.unsqueeze(bulge_q, 4),
+            torch.unsqueeze(bulge_a, 4),
+            torch.unsqueeze(disk_hlr_arcsecs, 4),
+            torch.unsqueeze(bulge_hlr_arcsecs, 4),
+        ]
 
         return select_flux, torch.cat(param_lst, dim=4)

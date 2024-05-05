@@ -13,12 +13,41 @@ encoder:
     image_normalizer:
         bands: [2]
         include_original: true
-        use_deconv_channel: true
+        use_deconv_channel: false
         concat_psf_params: true
         num_psf_params: 6  # for SDSS, 4 for DC2
         log_transform_stdevs: [0]
         use_clahe: false
-
+    vd_spec:
+        _target_: bliss.encoder.new_variational_dist.NewVariationalDistSpec
+        survey_bands: ${encoder.survey_bands}
+        tile_slen: ${encoder.tile_slen}
+    metrics: 
+        _target_: torchmetrics.MetricCollection
+        metrics:
+          - _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [17.826, 19.138, 19.921, 20.549, 20.970, 21.332, 21.703, 22]
+            exclude_last_bin: true  # ignore >22 mag
+          - _target_: bliss.encoder.metrics.SourceTypeAccuracy
+            mag_bin_cutoffs: [17.826, 19.138, 19.921, 20.549, 20.970, 21.332, 21.703, 22]
+            exclude_last_bin: true  # ignore >22 mag
+          - _target_: bliss.encoder.metrics.FluxError
+            bands: [2]
+            survey_bands: ${encoder.survey_bands}
+            mag_bin_cutoffs: [17.826, 19.138, 19.921, 20.549, 20.970, 21.332, 21.703, 22]
+            exclude_last_bin: true  # ignore >22 mag
+          - _target_: bliss.encoder.metrics.GalaxyShapeError
+            mag_bin_cutoffs: [19.7, 21.1, 22]
+            exclude_last_bin: true  # ignore >22 mag
+            param_bin_cutoffs:
+                disk_frac: [0.1514, 0.3343, 0.5141, 0.6739, 0.8392]
+                beta_radians: [0.5046, 1.0516, 1.5421, 2.0816, 2.6147]
+                disk_q: [0.1764, 0.3253, 0.4914, 0.6588, 0.8245]
+                a_d: [0.8658, 1.0222, 1.4374, 2.3332, 4.1416]
+                bulge_q: [0.1536, 0.3465, 0.5064, 0.6630, 0.8323]
+                a_b: [0.4335, 0.5172, 0.7212, 1.0987, 2.0239]
+                disk_hlr: [0.5201, 0.7288, 0.9464, 1.4795, 2.8159]
+                bulge_hlr: [0.2582, 0.3687, 0.4796, 0.7098, 1.3225]
 cached_simulator:
     cached_data_path: /data/scratch/aakash/train_multi_field
     batch_size: 64
@@ -26,7 +55,7 @@ cached_simulator:
 
 train:
     trainer:
-        logger:
-            name: PSF_MODELS
-            version: multi_field_deconv_and_psf_param
+        logger: null
+            # name: PSF_MODELS
+            # version: multi_field_deconv_and_psf_param
         precision: 32

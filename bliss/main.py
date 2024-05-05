@@ -107,7 +107,7 @@ def predict(predict_cfg):
 
 # config_path should be overriden when running `bliss` poetry executable
 # e.g., `bliss -cp case_studies/summer_template -cn config`
-@hydra.main(config_path="conf", config_name="base_config", version_base=None)
+@hydra.main(config_path="conf", config_name="aakash", version_base=None)
 def main(cfg):
     """Main entry point(s) for BLISS."""
     if not getenv("BLISS_HOME"):

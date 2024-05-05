@@ -70,7 +70,7 @@ class ImageDecoder(nn.Module):
         galaxy_params = source_params["galaxy_params"]
 
         total_flux = galaxy_fluxes[band]
-        disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
+        disk_frac, beta_radians, disk_q, _, bulge_q, _, disk_hlr, bulge_hlr = galaxy_params
 
         disk_flux = total_flux * disk_frac
         bulge_frac = 1 - disk_frac
@@ -78,15 +78,11 @@ class ImageDecoder(nn.Module):
 
         components = []
         if disk_flux > 0:
-            b_d = a_d * disk_q
-            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
-            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs)
+            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr)
             sheared_disk = disk.shear(q=disk_q, beta=beta_radians * galsim.radians)
             components.append(sheared_disk)
         if bulge_flux > 0:
-            b_b = bulge_q * a_b
-            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
-            bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs)
+            bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr)
             sheared_bulge = bulge.shear(q=bulge_q, beta=beta_radians * galsim.radians)
             components.append(sheared_bulge)
         galaxy = galsim.Add(components)
@@ -161,7 +157,7 @@ class ImageDecoder(nn.Module):
             AssertionError: image_ids must contain `batch_size` values
 
         Returns:
-            Tuple[Tensor, List, Tensor]: tensor of images, list of PSFs, tensor of PSF params
+            Tuple of images (Tensor), PSFs (list), PSF params (Tensor), and flux ratios (Tensor)
         """
         tile_cat = copy.deepcopy(tile_cat)  # make a copy to avoid modifying input
         batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
@@ -180,14 +176,13 @@ class ImageDecoder(nn.Module):
         psf_params = torch.stack(param_list, dim=0)
 
         # use the specified flux_calibration ratios indexed by image_id
-        flux_calibration_rats = [
+        # converting list of arrays to tensor is slow, convert to numpy array first
+        flux_conversion_ratios = torch.tensor(np.array([
             self.flux_calibration_dict[image_ids[b]] for b in range(batch_size)
-        ]
+        ])).reshape((batch_size, 1, 1, 1, -1))
 
-        for i in range(batch_size):
-            # Convert from (linear) physical units to electron counts
-            tile_cat["star_fluxes"][i] *= flux_calibration_rats[i]
-            tile_cat["galaxy_fluxes"][i] *= flux_calibration_rats[i]
+        tile_cat["star_fluxes"] *= flux_conversion_ratios
+        tile_cat["galaxy_fluxes"] *= flux_conversion_ratios
 
         full_cat = tile_cat.to_full_catalog()
 
@@ -219,4 +214,4 @@ class ImageDecoder(nn.Module):
         images = torch.from_numpy(images).clamp(1e-8)
         images = torch.squeeze(images, dim=1)  # remove coadd depth dimension if 1
 
-        return images, psfs, psf_params, wcs_batch
+        return images, psfs, psf_params, wcs_batch, flux_conversion_ratios

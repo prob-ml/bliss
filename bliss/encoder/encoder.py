@@ -279,15 +279,20 @@ class Encoder(pl.LightningModule):
 
     def report_metrics(self, logging_name, show_epoch=False):
         for k, v in self.metrics.compute().items():
-            self.log(f"{logging_name}/{k}", v)
+            if v.dim() == 0:
+                self.log(f"{logging_name}/{k}", v)
+            else:
+                for i in range(len(v)):
+                    self.log(f"{logging_name}/{k}_{i}", v[i])
 
-        for metric_name, metric in self.metrics.items():
-            if hasattr(metric, "plot"):  # noqa: WPS421
-                fig, _axes = metric.plot()
-                name = f"Epoch:{self.current_epoch}" if show_epoch else ""
-                name += f"/{logging_name} {metric_name}"
-                if self.logger:
-                    self.logger.experiment.add_figure(name, fig)
+        if self.logger:
+            for metric_name, metric in self.metrics.items():
+                if hasattr(metric, "plot"):  # noqa: WPS421
+                    fig, _ = metric.plot()
+                    if fig:
+                        name = f"Epoch:{self.current_epoch}" if show_epoch else ""
+                        name += f"/{logging_name} {metric_name}"
+                        self.logger.experiment.add_figure(name, fig)
 
         self.metrics.reset()
 
@@ -300,7 +305,7 @@ class Encoder(pl.LightningModule):
         self.update_metrics(batch)
 
     def on_test_epoch_end(self):
-        self.report_metrics("test")
+        return self.report_metrics("test")
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""

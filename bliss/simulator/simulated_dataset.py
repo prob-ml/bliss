@@ -112,7 +112,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def simulate_images(
         self, tile_catalog: TileCatalog, image_ids, image_id_indices
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         """Simulate a batch of images.
 
         Args:
@@ -121,10 +121,9 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             image_id_indices: Indices in self.image_ids to sample from.
 
         Returns:
-            Tuple[Tensor, Tensor, Tensor, Tensor]: tuple of images, backgrounds, deconvolved images,
-            and psf parameters
+            Tuple of images, backgrounds, deconvolved images, psf parameters, and flux ratios.
         """
-        images, psfs, psf_params, wcs_batch = self.image_decoder.render_images(
+        images, psfs, psf_params, wcs_batch, flux_ratios = self.image_decoder.render_images(
             tile_catalog, image_ids, self.coadd_depth
         )
         images = self.align_images(images, wcs_batch)
@@ -136,7 +135,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         images = self.apply_noise(images)
         deconv_images = self.get_deconvolved_images(images, background, psfs)
-        return images, background, deconv_images, psf_params
+        return images, background, deconv_images, psf_params, flux_ratios
 
     def get_deconvolved_images(self, images, backgrounds, psfs) -> Tensor:
         """Deconvolve the synthetic images with the psf used to generate them.
@@ -193,7 +192,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         image_ids, image_id_indices = self.randomized_image_ids(self.catalog_prior.batch_size)
         with torch.no_grad():
             tile_catalog = self.catalog_prior.sample()
-            images, background, deconv, psf_params = self.simulate_images(
+            images, background, deconv, psf_params, flux_ratios = self.simulate_images(
                 tile_catalog, image_ids, image_id_indices
             )
             return {
@@ -202,6 +201,8 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 "background": background,
                 "deconvolution": deconv,
                 "psf_params": psf_params,
+                "image_ids": image_ids,
+                "flux_ratios": flux_ratios,
             }
 
     def __iter__(self):
@@ -234,6 +235,7 @@ FileDatum = TypedDict(
         "background": torch.Tensor,
         "deconvolution": torch.Tensor,
         "psf_params": torch.Tensor,
+        "flux_ratios": torch.Tensor,
     },
 )
 
