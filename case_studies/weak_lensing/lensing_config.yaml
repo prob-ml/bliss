@@ -18,23 +18,23 @@ prior:
     prob_galaxy: 1.0
     mean_sources: 0.2
     arcsec_per_pixel: 0.396
-    sample_method: interpolate
+    sample_method: cosmology
     shear_mean: 0
-    shear_std: 0.01
+    shear_std: 0.02
     convergence_mean: 0
-    convergence_std: 0.01
+    convergence_std: 0.02
     num_knots: 2
 
 simulator:
     _target_: case_studies.weak_lensing.lensing_simulated_dataset.LensingSimulatedDataset
 
 generate:
-    n_image_files: 16
+    n_image_files: 8
     n_batches_per_file: 16
-    cached_data_path: /data/scratch/tahseeny/weak_lensing_combined_knots_4
+    cached_data_path: /data/scratch/shreyas/lensing_cosmology_prior
 
 cached_simulator:
-    cached_data_path: /data/scratch/tahseeny/weak_lensing_combined_knots_4
+    cached_data_path: /data/scratch/shreyas/lensing_cosmology_prior
     batch_size: 24
 
 encoder:
