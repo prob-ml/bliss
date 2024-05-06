@@ -37,7 +37,7 @@ class TestSimulate:
         # extra sources in the image, which causes the test to fail
         image_simulator.apply_noise = lambda img: img
         rcfs, rcf_indices = image_simulator.randomized_image_ids(true_catalog.n_sources.size(0))
-        image, background, _, _ = image_simulator.simulate_images(true_catalog, rcfs, rcf_indices)
+        image, background, _ = image_simulator.simulate_images(true_catalog, rcfs, rcf_indices)
 
         # make predictions on simulated image
         true_catalog = true_catalog.to(cfg.predict.device)

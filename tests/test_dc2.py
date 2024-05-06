@@ -57,7 +57,6 @@ class TestDC2:
         # are ordered correctly?
         train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]
         train_dc2_cfg.train.data_source = train_dc2_cfg.surveys.dc2
-        train_dc2_cfg.encoder.image_normalizer.use_deconv_channel = True
         train_dc2_cfg.encoder.do_data_augmentation = True
         train_dc2_cfg.train.pretrained_weights = None
         # log transform doesn't work in this test because the DC2 background is sometimes negative.
@@ -67,7 +66,6 @@ class TestDC2:
 
     def test_dc2_augmentation(self, cfg):
         train_dc2_cfg = cfg.copy()
-        train_dc2_cfg.encoder.image_normalizer.use_deconv_channel = True
 
         dataset = instantiate(train_dc2_cfg.surveys.dc2)
         dataset.prepare_data()
@@ -93,9 +91,8 @@ class TestDC2:
 
         imgs = rearrange(dc2_obj["images"], "b h w -> 1 b 1 h w")
         bgs = rearrange(dc2_obj["background"], "b h w -> 1 b 1 h w")
-        deconv_image = rearrange(dc2_obj["deconvolution"], "b h w -> 1 b 1 h w")
 
-        aug_input_images = [imgs, bgs, deconv_image]
+        aug_input_images = [imgs, bgs]
         aug_input_images = torch.cat(aug_input_images, dim=2)
 
         aug_list = [aug_vflip, aug_rotate90, aug_rotate180, aug_rotate270, aug_shift]
@@ -104,7 +101,6 @@ class TestDC2:
             aug_image, aug_full = aug_method(origin_full, aug_input_images)
             assert aug_image[0, :, 0, :, :].shape == dc2_obj["images"].shape
             assert aug_image[0, :, 1, :, :].shape == dc2_obj["background"].shape
-            assert aug_image[0, :, 2, :, :].shape == dc2_obj["deconvolution"].shape
             assert aug_full["n_sources"] <= origin_full.n_sources
 
         # test rotatation

@@ -18,9 +18,7 @@ class DC2(Survey):
     # why are these bands out of order? why does a test break if they are ordered correctly?
     BANDS = ("g", "i", "r", "u", "y", "z")
 
-    def __init__(
-        self, data_dir, cat_path, batch_size, n_split, image_lim, use_deconv_channel, deconv_path
-    ):
+    def __init__(self, data_dir, cat_path, batch_size, n_split, image_lim):
         super().__init__()
         self.data_dir = data_dir
         self.cat_path = cat_path
@@ -33,8 +31,6 @@ class DC2(Survey):
         self.test = []
         self.n_split = n_split
         self.image_lim = image_lim
-        self.use_deconv_channel = use_deconv_channel
-        self.deconv_path = deconv_path
 
         self._predict_batch = None
 
@@ -137,11 +133,6 @@ class DC2(Survey):
                 "background": split_bg,
                 "psf_params": [psf_params for _ in range(self.n_split**2)],
             }
-
-            if self.use_deconv_channel:
-                file_path = self.deconv_path + "/" + str(image_files[0][n])[-15:-5] + ".pt"
-                deconv_images = torch.load(file_path)
-                data_split["deconvolution"] = split_full_image(deconv_images, split_lim)
 
             data.extend([dict(zip(data_split, i)) for i in zip(*data_split.values())])
 

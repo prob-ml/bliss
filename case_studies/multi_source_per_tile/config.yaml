@@ -11,7 +11,6 @@ paths:
 encoder:
     min_flux_threshold: 600
     image_normalizer:
-        use_deconv_channel: false
         concat_psf_params: false
         use_clahe: false
         bands: [2]

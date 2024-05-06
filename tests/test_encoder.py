@@ -19,7 +19,6 @@ class TestEncoder:
 
         encoder_params = {
             "image_normalizer": {
-                "use_deconv_channel": True,
                 "concat_psf_params": True,
                 "bands": [2],
             },

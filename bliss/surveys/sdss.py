@@ -131,7 +131,7 @@ class SloanDigitalSkySurvey(Survey):
             if not self.load_image_data:
                 # we're just using the background/metadata, so no need to align or crop
                 return item
-            for k in ("image", "background", "deconvolution"):
+            for k in ("image", "background"):
                 if k not in item:
                     continue
                 if self.align_to_band is not None:

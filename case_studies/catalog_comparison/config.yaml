@@ -6,7 +6,6 @@ defaults:
 
 encoder:
     image_normalizer:
-        use_deconv_channel: true
         concat_psf_params: true
     bands: [2]
 

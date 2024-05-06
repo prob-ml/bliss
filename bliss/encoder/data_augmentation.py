@@ -9,8 +9,6 @@ from bliss.catalog import TileCatalog
 
 def augment_batch(batch):
     original_images = [batch["images"], batch["background"]]
-    if "deconvolution" in batch:
-        original_images.append(batch["background"])
     original_image_stack = torch.stack(original_images, dim=2)
 
     aug_image_stack, aug_tile = augment_data(batch["tile_catalog"], original_image_stack)
@@ -19,8 +17,6 @@ def augment_batch(batch):
 
     batch["images"] = aug_image_stack[:, :, 0, :, :]
     batch["background"] = aug_image_stack[:, :, 1, :, :]
-    if "deconvolution" in batch:
-        batch["deconvolution"] = aug_image_stack[:, :, 2, :, :]  # noqa: WPS529
 
 
 def augment_data(tile_catalog, image):
