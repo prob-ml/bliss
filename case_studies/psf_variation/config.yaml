@@ -13,7 +13,6 @@ encoder:
     image_normalizer:
         bands: [2]
         include_original: true
-        use_deconv_channel: true
         concat_psf_params: true
         num_psf_params: 6  # for SDSS, 4 for DC2
         log_transform_stdevs: [0]
@@ -28,5 +27,5 @@ train:
     trainer:
         logger:
             name: PSF_MODELS
-            version: multi_field_deconv_and_psf_param
+            version: multi_field_psf_param
         precision: 32
