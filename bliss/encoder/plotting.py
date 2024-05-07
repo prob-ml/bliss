@@ -120,8 +120,8 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None):
 
     n_samples = min(int(math.sqrt(batch_size)) ** 2, 4)
 
-    # every row should be a true map vs generated map for 3 types of maps (shear 1, shear 2, convergence) and the image
-    # so total of 7
+    # every row should be a true map vs generated map for 3 types
+    # of maps (shear 1, shear 2, convergence) and the image
     nrows = n_samples
     ncols = 3 * 2 + 1
     img_ids = torch.arange(n_samples, device=images.device)
@@ -132,15 +132,15 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None):
     fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
     axes = axes.flatten() if nrows > 1 else [axes]  # flatten
 
-    true_shear = true_tile_cat['shear']
-    est_shear = est_tile_cat['shear']
-    true_convergence = true_tile_cat['convergence']
-    est_convergence = est_tile_cat['convergence']
+    true_shear = true_tile_cat["shear"]
+    est_shear = est_tile_cat["shear"]
+    true_convergence = true_tile_cat["convergence"]
+    est_convergence = est_tile_cat["convergence"]
 
     for ax_idx, ax in enumerate(axes):
         if ax_idx % 7 == 0:
             # synthetic image
-            ax.set_xlabel("Synthetic Image")
+            ax.set_xlabel("Image")
             img_id = img_ids[ax_idx // 7]
             # plot image first
             image = images[img_id].cpu().numpy()
@@ -157,67 +157,66 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None):
                 extent=(0, image.shape[0], image.shape[1], 0),
             )
             fig.colorbar(im, cax=cax, orientation="vertical")
-        elif ax_idx % 7 == 1:
+        if ax_idx % 7 == 1:
             plot_maps_helper(
-                x_label="True Shear 1",
-                map=true_shear[img_id].squeeze()[:,:,0],
+                x_label="True horizontal shear",
+                mp=true_shear[img_id].squeeze()[:, :, 0],
                 ax=ax,
                 fig=fig,
             )
-        elif ax_idx % 7 == 2:
+        if ax_idx % 7 == 2:
             plot_maps_helper(
-                x_label="Estimated Shear 1",
-                map=est_shear[img_id].squeeze()[:,:,0],
+                x_label="Estimated horizontal shear",
+                mp=est_shear[img_id].squeeze()[:, :, 0],
                 ax=ax,
                 fig=fig,
             )
-        elif ax_idx % 7 == 3:
+        if ax_idx % 7 == 3:
             plot_maps_helper(
-                x_label="True Shear 2",
-                map=true_shear[img_id].squeeze()[:,:,1],
+                x_label="True diagonal shear",
+                mp=true_shear[img_id].squeeze()[:, :, 1],
                 ax=ax,
                 fig=fig,
             )
-        elif ax_idx % 7 == 4:
+        if ax_idx % 7 == 4:
             plot_maps_helper(
-                x_label="Estimated Shear 2",
-                map=est_shear[img_id].squeeze()[:,:,1],
+                x_label="Estimated diagonal shear",
+                mp=est_shear[img_id].squeeze()[:, :, 1],
                 ax=ax,
                 fig=fig,
             )
-        elif ax_idx % 7 == 5:
+        if ax_idx % 7 == 5:
             plot_maps_helper(
-                x_label="True Convergence",
-                map=true_convergence[img_id].squeeze(),
+                x_label="True convergence",
+                mp=true_convergence[img_id].squeeze(),
                 ax=ax,
                 fig=fig,
             )
-        elif ax_idx % 7 == 6:
+        if ax_idx % 7 == 6:
             plot_maps_helper(
-                x_label="Predicted Convergence",
-                map=est_convergence[img_id].squeeze(),
+                x_label="Estimated convergence",
+                mp=est_convergence[img_id].squeeze(),
                 ax=ax,
                 fig=fig,
             )
-
 
     fig.tight_layout()
     return fig
 
 
-def plot_maps_helper(x_label: str, map, ax, fig):
+def plot_maps_helper(x_label: str, mp, ax, fig):
     ax.set_xlabel(x_label)
 
-    map = map.cpu().numpy()
-    vmin = map.min().item()
-    vmax = map.max().item()
+    mp = mp.cpu().numpy()
+    vmin = mp.min().item()
+    vmax = mp.max().item()
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
     im = ax.matshow(
-        map,
+        mp,
         vmin=vmin,
         vmax=vmax,
         cmap="viridis",
-        extent=(0, map.shape[0], map.shape[1], 0),
+        extent=(0, mp.shape[0], mp.shape[1], 0),
     )
     fig.colorbar(im, cax=cax, orientation="vertical")
