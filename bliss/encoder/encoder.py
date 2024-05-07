@@ -15,7 +15,7 @@ from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
-from bliss.encoder.plotting import plot_maps
+from bliss.encoder.plotting import plot_detections, plot_maps
 from bliss.encoder.variational_dist import VariationalDistSpec
 
 
@@ -247,7 +247,6 @@ class Encoder(pl.LightningModule):
         ttc = self.tiles_to_crop
         interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
         loss = interior_loss.sum() / interior_loss.numel()
-
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size)
 
         return loss
@@ -278,19 +277,28 @@ class Encoder(pl.LightningModule):
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
         est_cat = self.sample(batch, use_mode=True)
-        fig = plot_maps(batch["images"], target_cat_cropped, est_cat)
+        mp = self.tiles_to_crop * self.tile_slen
+        fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
         title = f"Epoch:{self.current_epoch}/{logging_name} images"
         if self.logger:
             self.logger.experiment.add_figure(title, fig)
         plt.close(fig)
 
+        if "shear" in est_cat and "convergence" in est_cat:
+            fig_lensing = plot_maps(batch["images"], target_cat_cropped, est_cat)
+            title = f"Epoch:{self.current_epoch}/{logging_name} images"
+            if self.logger:
+                self.logger.experiment.add_figure(title, fig_lensing)
+            plt.close(fig_lensing)
+
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
+        epoch = self.trainer.current_epoch
         self._compute_loss(batch, "val")
         self.update_metrics(batch)
 
-        # only plot images from the first batch every epoch
-        if batch_idx == 0:
+        # only plot images from the first batch every tenth epoch
+        if batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1):
             self.plot_sample_images(batch, "val")
 
     def report_metrics(self, metrics, logging_name, show_epoch=False):
