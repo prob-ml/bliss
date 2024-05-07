@@ -31,10 +31,10 @@ simulator:
 generate:
     n_image_files: 8
     n_batches_per_file: 16
-    cached_data_path: /data/scratch/shreyas/lensing_cosmology_prior
+    cached_data_path: /data/scratch/shreyas/weak_lensing_cosmology_prior
 
 cached_simulator:
-    cached_data_path: /data/scratch/shreyas/lensing_cosmology_prior
+    cached_data_path: /data/scratch/shreyas/weak_lensing_cosmology_prior
     batch_size: 24
 
 encoder:
