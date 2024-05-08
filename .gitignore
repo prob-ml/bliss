@@ -35,5 +35,3 @@ case_studies/*/data/
 venv
 nohup.out
 multirun
-*.out
-*.pt
