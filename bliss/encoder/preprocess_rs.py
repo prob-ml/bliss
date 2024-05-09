@@ -67,7 +67,7 @@ if __name__== "__main__":
     rootdir = '/nfs/turbo/lsa-regier/'
     dataset_name = 'desc_dc2_run2.2i_dr6_truth'
     quantities = ["mag_u", "mag_g", "mag_r", "mag_i", "mag_z", "mag_y", "redshift"]
-    path = f'/home/qiaozhih/bliss/data/redshift/dc2/{dataset_name}.pkl'
+    path = f'/home/qiaozhih/bliss/data/redshift/dc2/{dataset_name}.pkl' # PATH TO SAVE
 
     dataset = load_dataset(rootdir, dataset_name)
     dataset = load_quantities(dataset, quantities)
