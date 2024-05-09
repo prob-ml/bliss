@@ -132,6 +132,8 @@ class DC2(Survey):
                 "images": split_image,
                 "background": split_bg,
                 "psf_params": [psf_params for _ in range(self.n_split**2)],
+                "wcs": [wcs for _ in range(self.n_split**2)],
+                "full_catalog": [full_cat for _ in range(self.n_split**2)]
             }
 
             data.extend([dict(zip(data_split, i)) for i in zip(*data_split.values())])
