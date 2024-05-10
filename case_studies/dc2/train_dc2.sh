@@ -33,3 +33,10 @@ bliss -cp ~/bliss/case_studies/dc2 -cn config mode=train \
     train.trainer.logger.version=dc2_psf_da \
     encoder.image_normalizer.concat_psf_params=True \
     encoder.do_data_augmentation=True
+
+bliss -cp ~/bliss/case_studies/dc2 -cn full_train_config \
+    mode=train \
+    train.trainer.logger.name=DC2_NEW_MODELS \
+    train.trainer.logger.version=dc2_psf_da \
+    encoder.image_normalizer.concat_psf_params=True \
+    encoder.do_data_augmentation=True

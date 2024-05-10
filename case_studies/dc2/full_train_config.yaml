@@ -8,11 +8,9 @@ encoder:
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
     double_detect: false
-    tiles_to_crop: 0
-    do_data_augmentation: true # set this according to your training model
+    tiles_to_crop: 1
     image_normalizer:
         bands: [0, 1, 2, 3, 4, 5]
-        concat_psf_params: true # set this according to your training model
         num_psf_params: 4  # for SDSS, 4 for DC2
         log_transform_stdevs: []
         use_clahe: false
@@ -20,11 +18,12 @@ encoder:
 
 surveys:
     dc2:
-        data_dir: ${paths.data}/tests/dc2/dc2_multiband/
+        data_dir: /data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
         cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100000.pkl
-        n_split: 1
+        batch_size: 64
+        n_split: 50
         image_lim: [4000, 4000]
-        for_plotting: true
+        for_plotting: false
 
 train:
     trainer:
@@ -32,5 +31,12 @@ train:
             name: DC2
             version: DC2_origin
         precision: 32
+        # strategy:
+        #   _target_: pytorch_lightning.strategies.DDPStrategy
+        #   process_group_backend: nccl
+        #   timeout:
+        #     _target_: datetime.timedelta
+        #     seconds: 180000
+        # devices: -1
     data_source: ${surveys.dc2}
     pretrained_weights: null

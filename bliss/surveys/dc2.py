@@ -18,7 +18,7 @@ class DC2(Survey):
     # why are these bands out of order? why does a test break if they are ordered correctly?
     BANDS = ("g", "i", "r", "u", "y", "z")
 
-    def __init__(self, data_dir, cat_path, batch_size, n_split, image_lim):
+    def __init__(self, data_dir, cat_path, batch_size, n_split, image_lim, for_plotting=False):
         super().__init__()
         self.data_dir = data_dir
         self.cat_path = cat_path
@@ -31,6 +31,7 @@ class DC2(Survey):
         self.test = []
         self.n_split = n_split
         self.image_lim = image_lim
+        self.for_plotting = for_plotting
 
         self._predict_batch = None
 
@@ -127,14 +128,22 @@ class DC2(Survey):
                 split2_tile = torch.stack(torch.split(split1_tile, split_lim // 4, dim=2))
                 tile_split[i] = torch.split(split2_tile.flatten(0, 2), split_lim // 4)
 
-            data_split = {
-                "tile_catalog": [dict(zip(tile_split, i)) for i in zip(*tile_split.values())],
-                "images": split_image,
-                "background": split_bg,
-                "psf_params": [psf_params for _ in range(self.n_split**2)],
-                "wcs": [wcs for _ in range(self.n_split**2)],
-                "full_catalog": [full_cat for _ in range(self.n_split**2)]
-            }
+            if self.for_plotting:
+                data_split = {
+                    "tile_catalog": [dict(zip(tile_split, i)) for i in zip(*tile_split.values())],
+                    "images": split_image,
+                    "background": split_bg,
+                    "psf_params": [psf_params for _ in range(self.n_split**2)],
+                    "wcs": [wcs for _ in range(self.n_split**2)],
+                    "full_catalog": [full_cat for _ in range(self.n_split**2)],
+                }
+            else:
+                data_split = {
+                    "tile_catalog": [dict(zip(tile_split, i)) for i in zip(*tile_split.values())],
+                    "images": split_image,
+                    "background": split_bg,
+                    "psf_params": [psf_params for _ in range(self.n_split**2)],
+                }
 
             data.extend([dict(zip(data_split, i)) for i in zip(*data_split.values())])
 
