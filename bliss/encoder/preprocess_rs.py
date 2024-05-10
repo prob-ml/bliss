@@ -63,7 +63,19 @@ def save_pickle(dataframe, path):
     """
     dataframe.to_pickle(path)
 
-if __name__== "__main__":
+def get_rid_nan(df):
+    """
+    get rid of nan value
+    ----
+    Params:
+    df: Dataframe
+    ----
+    Returns:
+    Dataframe
+    """
+    return df.dropna()
+
+if __name__ == "__main__":
     rootdir = '/nfs/turbo/lsa-regier/'
     dataset_name = 'desc_dc2_run2.2i_dr6_truth'
     quantities = ["mag_u", "mag_g", "mag_r", "mag_i", "mag_z", "mag_y", "redshift"]
@@ -71,6 +83,7 @@ if __name__== "__main__":
 
     dataset = load_dataset(rootdir, dataset_name)
     dataset = load_quantities(dataset, quantities)
+    dataset = get_rid_nan(dataset)
     save_pickle(dataset, path)
 
 

@@ -20,11 +20,11 @@ class Regressor(torch.nn.Module):
 
         self.net = torch.nn.Sequential(
             torch.nn.Linear(in_dim, hidden_dim),
-            torch.nn.Softplus(),
+            torch.nn.ReLU(),
             torch.nn.Linear(hidden_dim, hidden_dim),
-            torch.nn.Softplus(),
+            torch.nn.ReLU(),
             torch.nn.Linear(hidden_dim, hidden_dim),
-            torch.nn.Softplus(),
+            torch.nn.ReLU(),
             torch.nn.Linear(hidden_dim, out_dim),
         )
 

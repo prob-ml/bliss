@@ -9,29 +9,31 @@ from tqdm import tqdm
 import os
 import re
 import matplotlib.pyplot as plt
+import json
 
 def main():
     ###### Prepare Training set
     print("start reading dataset!")
-    # dataset_name = 'desc_dc2_run2.2i_dr6_truth'
-    dataset_name = 'test'
+    dataset_name = 'desc_dc2_run2.2i_dr6_truth_nona_train'
+    # dataset_name = 'test'
     path = f'/home/qiaozhih/bliss/data/redshift/dc2/{dataset_name}.pkl'
     photo_z = pd.read_pickle(path)
     print("finish reading dataset!")
     device = 'cuda'
-    num_data = 10
-    photo_z = photo_z[:num_data]
+    # num_data = 10000
+    batch_size = 2048
+    # photo_z = photo_z[:num_data]
+    seed = 42
     
     print("start tensor dataset preparation!")
     x = photo_z.values[:,:-1].astype(float)
     y = photo_z.values[:, -1].astype(float)
     x_train = np.array(x)
     y_train = np.array(y)
-    tensor_x = torch.Tensor(x_train).to(device)
-    tensor_y = torch.Tensor(y_train).to(device)
+    tensor_x = torch.Tensor(x_train)
+    tensor_y = torch.Tensor(y_train)
     custom_dataset = TensorDataset(tensor_x, tensor_y)     
-    dataloader = DataLoader(custom_dataset, batch_size=2048)
-    train_dataloader, val_dataloader = torch.utils.data.random_split(dataloader, [int(len(dataloader) * 0.8), len(dataloader) - int(len(dataloader) * 0.8)]) 
+    dataloader = DataLoader(custom_dataset, batch_size=batch_size)
     print("finish tensor dataset preparation!")
     
     
@@ -39,9 +41,11 @@ def main():
     options = {
         'hidden_dim': 256,
         'out_dim': 1,
-        'n_epochs': 1000,
+        'n_epochs': 100001,
         'n_pred': 1000, 
-        'outdir': '/home/qiaozhih/bliss/bliss/encoder/training_runs/'
+        'outdir': '/home/qiaozhih/bliss/bliss/encoder/training_runs/',
+        'snap': 100,                                        # how many epoches to save one model once
+        'loss_fcn': torch.nn.MSELoss(),                     # loss func
     }
     in_dim = x.shape[1]
     
@@ -66,28 +70,18 @@ def main():
     cur_run_id = max(prev_run_ids, default=-1) + 1
     run_dir = os.path.join(outdir, f'{cur_run_id:05d}-run')
     os.makedirs(run_dir)
-    print("Created running directory!")
+    print("created running directory!")
 
     # train
-    print("Start Training")
-    train(reg, optimizer, train_dataloader, options['n_epochs'], torch.nn.MSELoss(), run_dir)
-    # preds = []
-    # trues = []
-    # for idx, (x, y) in tqdm(enumerate(val_dataloader), unit='batch'):
-    #     pred_this_batch = reg.net(x)
-    #     preds.append(pred_this_batch)
-    #     trues.append(y)
-        
-    #     if idx > options['n_pred']:
-    #         break
-    # preds = torch.cat(preds)
-    # trues = torch.cat(trues)
-    # plt.scatter(preds.detach().cpu().numpy(), trues.detach().cpu().numpy(), alpha=0.1, s=3)
+    print("start training")
+    train(reg, optimizer, dataloader, options, run_dir)
+    print('finish training!')
 
-
-def train_one_epoch(model, optimizer, dataloader, loss_fcn = torch.nn.MSELoss()):
+def train_one_epoch(model, optimizer, dataloader, loss_fcn = torch.nn.MSELoss(), device='cuda'):
     losses = []
     for idx, (x, y) in tqdm(enumerate(dataloader), unit='batch'):
+        x = x.to(device)
+        y = y.to(device)
         optimizer.zero_grad()
         loss = loss_fcn(model(x).view(-1), y)
         loss.backward()
@@ -96,12 +90,19 @@ def train_one_epoch(model, optimizer, dataloader, loss_fcn = torch.nn.MSELoss())
             
         return torch.tensor(losses).mean()
     
-def train(model, optimizer, dataloader, n_epochs=100, loss_fcn = torch.nn.MSELoss(), run_dir='.'):
+def train(model, optimizer, dataloader, options, run_dir='.'):
+    n_epochs = options['n_epochs']
+    stats_jsonal = None
+    stats_jsonl = open(os.path.join(run_dir, 'stats.jsonl'), 'wt')
+    fields = []
     for i in range(n_epochs):
-        this_epoch_average_loss = train_one_epoch(model, optimizer, dataloader)
+        this_epoch_average_loss = train_one_epoch(model, optimizer, dataloader, loss_fcn=options['loss_fcn'])
         print('Epoch {}: Avg. Loss {}'.format(i, this_epoch_average_loss))
-        if i % 5 == 0:
-            # TODO modfy path
+
+        fields = ['Epoch {}: Avg. Loss {}'.format(i, this_epoch_average_loss)]
+        stats_jsonl.write(json.dumps(fields) + '\n')
+        stats_jsonl.flush()
+        if i % options['snap'] == 0:
             path = os.path.join(run_dir, f'{i:06d}')
             save_checkpoint(model, optimizer, path)
     
@@ -118,6 +119,7 @@ def load_model(model, optimizer, model_path, optimizer_path):
     """
     model.load_state_dict(torch.load(model_path))
     optimizer.load_state_dict(torch.load(optimizer_path))
+    model.eval()
     return model, optimizer
 
 if __name__ == "__main__":
