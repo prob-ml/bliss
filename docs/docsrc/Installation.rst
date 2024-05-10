@@ -11,6 +11,7 @@ Installation Guide
 
     git clone https://github.com/prob-ml/bliss.git
     cd bliss
+    export POETRY_VIRTUALENVS_IN_PROJECT=1
     poetry install
     poetry shell
 
