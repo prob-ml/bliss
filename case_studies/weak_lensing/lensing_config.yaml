@@ -43,7 +43,6 @@ encoder:
         _target_: torchmetrics.MetricCollection
         metrics:
           - _target_: case_studies.weak_lensing.lensing_metrics.LensingMapRMSE
-          - _target_: case_studies.weak_lensing.lensing_metrics.LensingMapCorrCoef
     vd_spec:
         _target_: case_studies.weak_lensing.lensing_variational_dist.LensingVariationalDistSpec
     double_detect: false
