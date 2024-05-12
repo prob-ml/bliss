@@ -2,7 +2,7 @@ import torch
 from torchmetrics import Metric
 
 
-class LensingMapRMSE(Metric):
+class LensingMapMSE(Metric):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.add_state("shear1_sum_squared_err", default=torch.zeros(1), dist_reduce_fx="sum")
