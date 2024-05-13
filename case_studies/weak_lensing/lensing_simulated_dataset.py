@@ -19,11 +19,7 @@ class LensingSimulatedDataset(SimulatedDataset):
         prior: LensingPrior,
         **kwargs,
     ):
-        super().__init__(*args, **kwargs)
-
-        self.catalog_prior = prior
-        assert self.catalog_prior is not None, "Survey prior cannot be None."
-        self.catalog_prior.requires_grad_(False)
+        super().__init__(*args, survey, prior, **kwargs)
 
         self.image_decoder = LensingDecoder(
             psf=survey.psf,
