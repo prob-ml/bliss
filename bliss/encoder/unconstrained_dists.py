@@ -35,7 +35,7 @@ class UnconstrainedNormal:
         return Normal(mean, sd)
 
 
-class ShearUnconstrainedNormal:
+class UnconstrainedBivariateNormal:
     def __init__(self, low_clamp=-20, high_clamp=20):
         self.dim = 4
         self.low_clamp = low_clamp
