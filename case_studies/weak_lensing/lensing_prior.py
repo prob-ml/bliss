@@ -1,11 +1,8 @@
-from typing import Tuple
-
 import galsim
 import numpy as np
 import pyccl as ccl
 import torch
-from torch import Tensor
-from torch.distributions import Beta, Gamma, Normal, Uniform
+from torch.distributions import Beta, Normal, Uniform
 
 from bliss.catalog import TileCatalog
 from bliss.simulator.prior import CatalogPrior
@@ -137,61 +134,6 @@ class LensingPrior(CatalogPrior):
             convergence_map = Beta(self.convergence_a, self.convergence_b).sample(latent_dims)
 
         return convergence_map.unsqueeze(3).expand(-1, -1, -1, self.max_sources, -1)
-
-    def _sample_galaxy_prior(self) -> Tuple[Tensor, Tensor]:
-        """Sample the latent galaxy params.
-
-        Returns:
-            Tuple[Tensor]: A tuple of galaxy fluxes (per band) and galsim parameters, including.
-                - disk_frac: the fraction of flux attributed to the disk (rest goes to bulge)
-                - beta_radians: the angle of shear in radians
-                - disk_q: the minor-to-major axis ratio of the disk
-                - a_d: semi-major axis of disk
-                - bulge_q: minor-to-major axis ratio of the bulge
-                - a_b: semi-major axis of bulge
-        """
-        flux_prop = self._sample_flux_ratios(self.gmm_gal)
-
-        latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-
-        ref_band_flux = self._draw_truncated_pareto(
-            self.galaxy_flux_exponent,
-            self.galaxy_flux_truncation,
-            self.galaxy_flux_loc,
-            self.galaxy_flux_scale,
-            latent_dims,
-        )
-
-        total_flux = flux_prop * ref_band_flux
-
-        # select fluxes from specified bands
-        bands = np.array(self.bands)
-        select_flux = total_flux[..., bands]
-
-        latent_dims = latent_dims[:-1]
-
-        disk_frac = Uniform(0, 1).sample(latent_dims)
-        beta_radians = Uniform(0, np.pi).sample(latent_dims)
-        disk_q = Uniform(1e-8, 1).sample(latent_dims)
-        bulge_q = Uniform(1e-8, 1).sample(latent_dims)
-
-        base_dist = Gamma(self.galaxy_a_concentration, rate=1.0)
-        disk_a = base_dist.sample(latent_dims) * self.galaxy_a_scale + self.galaxy_a_loc
-
-        bulge_loc = self.galaxy_a_loc / self.galaxy_a_bd_ratio
-        bulge_scale = self.galaxy_a_scale / self.galaxy_a_bd_ratio
-        bulge_a = base_dist.sample(latent_dims) * bulge_scale + bulge_loc
-
-        disk_frac = torch.unsqueeze(disk_frac, 4)
-        beta_radians = torch.unsqueeze(beta_radians, 4)
-        disk_q = torch.unsqueeze(disk_q, 4)
-        disk_a = torch.unsqueeze(disk_a, 4)
-        bulge_q = torch.unsqueeze(bulge_q, 4)
-        bulge_a = torch.unsqueeze(bulge_a, 4)
-
-        param_lst = [disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
-
-        return select_flux, torch.cat(param_lst, dim=4)
 
     def sample(self) -> TileCatalog:
         """Samples latent variables from the prior of an astronomical image.
