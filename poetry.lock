@@ -1830,6 +1830,37 @@ files = [
 protobuf = ["grpcio-tools (>=1.51.3)"]
 
 [[package]]
+name = "healpy"
+version = "1.16.6"
+description = "Healpix tools package for Python"
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "healpy-1.16.6-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:1cad7ed1d7030eeb06081240f669c9107db1282678512c85f5cf6eef1bea01bb"},
+    {file = "healpy-1.16.6-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6be3ca85cb78f3f243f660f3105d362615843f32c1ff53ffdead5ea1ffe07eb6"},
+    {file = "healpy-1.16.6-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:af4469864f465fc4bc3752543812ab1161d84eff4a8aead3842d56ea1b2585bb"},
+    {file = "healpy-1.16.6-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:366a269b239eeabf924d4a069cce5f2f1d72c7af24132d59f95fec09f670a38a"},
+    {file = "healpy-1.16.6-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3324fc5aa737188db8017819d4ecb18c11315873481f31d97aceb29958591f40"},
+    {file = "healpy-1.16.6-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fd5adc827a90dffa72158b8a576143459d06dbd3afc52c2ff5c4a566aafcb049"},
+    {file = "healpy-1.16.6-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:12b5c5ea0c767b7ae7659b18bd4c42b11384765b44b9205b27147ab4686657bf"},
+    {file = "healpy-1.16.6-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f72338a29fc776a4031cb2e9b7bd9306cbe2f0b6355e9541716b38ad23ba880d"},
+    {file = "healpy-1.16.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9d13dd979e804d2d7e80f5121b0acf46f94dcddfac757ebb01cecbcb3304b285"},
+    {file = "healpy-1.16.6-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:0a0e0b725c9fa2777f184c70beed87ff7c8dfa1869aca1fc370b40057db5c739"},
+    {file = "healpy-1.16.6-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7e5a284e7ec4cc06b7b222098ab0961a3b31f72014f0194b3cfd62e4dcd2963e"},
+    {file = "healpy-1.16.6-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:754fed0f2313f805535ea44e37a538b8d7b58b377cdfe8f36accdf8fec417f4a"},
+    {file = "healpy-1.16.6.tar.gz", hash = "sha256:0ab26e828fcd251a141095af6d9bf3dba43cec6f0f5cd48b65bf0af8f56329f1"},
+]
+
+[package.dependencies]
+astropy = "*"
+matplotlib = "*"
+numpy = ">=1.19"
+scipy = "*"
+
+[package.extras]
+test = ["pytest", "pytest-cython", "pytest-doctestplus", "requests"]
+
+[[package]]
 name = "hydra-core"
 version = "1.3.2"
 description = "A framework for elegantly configuring complex applications"
@@ -6173,4 +6204,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "9c8d23e1a259ce14a1535bec9005b484852070f262793a33102f6611edc5dffc"
+content-hash = "9147c637c85c8687e8e5a747e9c45603e3e1718dc0af70440e50c6286774ba9b"
