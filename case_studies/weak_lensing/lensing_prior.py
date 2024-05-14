@@ -1,6 +1,10 @@
 import galsim
 import numpy as np
-import pyccl as ccl
+
+try:
+    import pyccl as ccl
+except ModuleNotFoundError as err:
+    raise ModuleNotFoundError("Please install pyccl using pip: pip install pyccl") from err
 import torch
 from torch.distributions import Beta, Normal, Uniform
 
@@ -24,7 +28,10 @@ class LensingPrior(CatalogPrior):
         super().__init__(*args, **kwargs)
         # validate that tiles height and width is the same, used as ngrid later
         self.arcsec_per_pixel = arcsec_per_pixel
-        self.cosmology = ccl.cosmology.CosmologyVanillaLCDM()
+        try:
+            self.cosmology = ccl.cosmology.CosmologyVanillaLCDM()
+        except NameError as err:
+            raise NameError("Please install pyccl using pip: pip install pyccl") from err
 
         self.sample_method = sample_method
         self.shear_mean = shear_mean
@@ -46,8 +53,10 @@ class LensingPrior(CatalogPrior):
         ngal = 46.0 * 100.31 * (i_lim - 25.0)  # Normalisation, galaxies/arcmin^2
         pz = 1.0 / (2.0 * z0) * (z / z0) ** 2.0 * np.exp(-z / z0)  # Redshift distribution, p(z)
         dndz = ngal * pz  # Number density distribution
-
-        lensing_tracer = ccl.WeakLensingTracer(self.cosmology, dndz=(z, dndz))
+        try:
+            lensing_tracer = ccl.WeakLensingTracer(self.cosmology, dndz=(z, dndz))
+        except NameError as err:
+            raise NameError("Please install pyccl using pip: pip install pyccl") from err
 
         # range of values required by buildGrid
         ell = np.arange(1, 100000)
@@ -55,7 +64,10 @@ class LensingPrior(CatalogPrior):
         shear_map = torch.zeros((self.batch_size, self.n_tiles_h, self.n_tiles_w, 2))
         convergence_map = torch.zeros((self.batch_size, self.n_tiles_h, self.n_tiles_w, 1))
         for i in range(self.batch_size):
-            angular_cl = ccl.angular_cl(self.cosmology, lensing_tracer, lensing_tracer, ell)
+            try:
+                angular_cl = ccl.angular_cl(self.cosmology, lensing_tracer, lensing_tracer, ell)
+            except NameError as err:
+                raise NameError("Please install pyccl using pip: pip install pyccl") from err
             table = galsim.LookupTable(x=ell, f=angular_cl)
             my_ps = galsim.PowerSpectrum(table, units=galsim.degrees)
             g1, g2, kappa = my_ps.buildGrid(
