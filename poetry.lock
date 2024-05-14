@@ -4231,6 +4231,19 @@ files = [
 global = ["pybind11-global (==2.10.3)"]
 
 [[package]]
+name = "pyccl"
+version = "3.0.2"
+description = "Library of validated cosmological functions."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "pyccl-3.0.2.tar.gz", hash = "sha256:5ca8979f91c23bc4e90856ca4b6328d210a022a3039e422349089e53d95e3d92"},
+]
+
+[package.dependencies]
+numpy = "*"
+
+[[package]]
 name = "pycodestyle"
 version = "2.8.0"
 description = "Python style guide checker"
