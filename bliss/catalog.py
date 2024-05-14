@@ -5,11 +5,13 @@ from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
+import torch.nn.functional as F
 from astropy import units as u  # noqa: WPS347
 from astropy.table import Table, hstack
 from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from torch import Tensor
+from torch.nn.utils.rnn import pad_sequence
 
 
 def convert_mag_to_nmgy(mag):
@@ -58,6 +60,67 @@ class TileCatalog(UserDict):
         self.n_sources = d.pop("n_sources")
         self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
         super().__init__(**d)
+
+    def _test_data_equal(self, other_data):
+        is_equal = True
+        for k, v in self.data.items():
+            cur_test_equal = torch.equal(other_data[k], v)
+            if not cur_test_equal:
+                print(f"{k} are different")
+            is_equal &= cur_test_equal
+        return is_equal
+
+    def __eq__(self, other):
+        if not isinstance(other, TileCatalog):
+            # don't attempt to compare against unrelated types
+            raise NotImplementedError()
+
+        if self.tile_slen != other.tile_slen:
+            print(f"""
+                  tile_slen are different:
+                    left: {self.tile_slen}; right: {other.tile_slen}
+                  """)
+
+        if not torch.equal(self.locs, other.locs):
+            print("locs are different")
+
+        if not torch.equal(self.n_sources, other.n_sources):
+            print("n_sources are different")
+
+        if self.batch_size != other.batch_size:
+            print(f"""
+                  batch_size are different:
+                    left: {self.batch_size}; right: {other.batch_size}
+                  """)
+
+        if self.n_tiles_h != other.n_tiles_h:
+            print(f"""
+                  n_tiles_h are different:
+                    left: {self.n_tiles_h}; right: {other.n_tiles_h}
+                  """)
+
+        if self.n_tiles_w != other.n_tiles_w:
+            print(f"""
+                  n_tiles_w are different:
+                    left: {self.n_tiles_w}; right: {other.n_tiles_w}
+                  """)
+
+        if self.max_sources != other.max_sources:
+            print(f"""
+                  max_sources are different:
+                    left: {self.max_sources}; right: {other.max_sources}
+                  """)
+
+        self._test_data_equal(other.data)
+
+        return self.tile_slen == other.tile_slen and \
+               torch.equal(self.locs, other.locs) and \
+               torch.equal(self.n_sources, other.n_sources) and \
+               self.batch_size == other.batch_size and \
+               self.n_tiles_h == other.n_tiles_h and \
+               self.n_tiles_w == other.n_tiles_w and \
+               self.max_sources == other.max_sources and \
+               self._test_data_equal(other.data)
 
     def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
@@ -418,6 +481,60 @@ class FullCatalog(UserDict):
         assert self.n_sources.shape == (self.batch_size,)
         super().__init__(**d)
 
+    def _test_data_equal(self, other_data):
+        is_equal = True
+        for k, v in self.data.items():
+            cur_test_equal = torch.equal(other_data[k], v)
+            if not cur_test_equal:
+                print(f"{k} are different")
+            is_equal &= cur_test_equal
+        return is_equal
+
+    def __eq__(self, other):
+        if not isinstance(other, FullCatalog):
+            # don't attempt to compare against unrelated types
+            raise NotImplementedError()
+
+        if self.height != other.height:
+            print(f"""
+                  heights are different:
+                    left: {self.height}; right: {other.height}
+                  """)
+
+        if self.width != other.width:
+            print(f"""
+                  widths are different:
+                    left: {self.width}; right: {other.width}
+                  """)
+
+        if not torch.equal(self.plocs, other.plocs):
+            print("plocs are different")
+
+        if not torch.equal(self.n_sources, other.n_sources):
+            print("n_sources are different")
+
+        if self.batch_size != other.batch_size:
+            print(f"""
+                  batch_size are different:
+                    left: {self.batch_size}; right: {other.batch_size}
+                 """)
+
+        if self.max_sources != other.max_sources:
+            print(f"""
+                  max_sources are different:
+                    left: {self.max_sources}; right: {other.max_sources}
+                  """)
+
+        self._test_data_equal(other.data)
+
+        return self.height == other.height and \
+               self.width == other.width and \
+               torch.equal(self.plocs, other.plocs) and \
+               torch.equal(self.n_sources, other.n_sources) and \
+               self.batch_size == other.batch_size and \
+               self.max_sources == other.max_sources and \
+               self._test_data_equal(other.data)
+
     def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
             raise ValueError(
@@ -530,7 +647,100 @@ class FullCatalog(UserDict):
         d_new["n_sources"] = keep.sum(dim=(-2, -1)).long()
         return type(self)(self.height, self.width, d_new)
 
+    def _get_tile_to_source_mapping(self, mapping_matrix: Tensor) -> Tensor:
+        return (mapping_matrix > 0).nonzero()
+
     def to_tile_catalog(
+        self,
+        tile_slen: int,
+        max_sources_per_tile: int,
+        ignore_extra_sources=False,
+        filter_oob=False,
+    ) -> TileCatalog:
+        """Returns the TileCatalog corresponding to this FullCatalog.
+
+        Args:
+            tile_slen: The side length of the tiles.
+            max_sources_per_tile: The maximum number of sources in one tile.
+            ignore_extra_sources: If False (default), raises an error if the number of sources
+                in one tile exceeds the `max_sources_per_tile`. If True, only adds the tile
+                parameters of the first `max_sources_per_tile` sources to the new TileCatalog.
+            filter_oob: If filter_oob is true, filter out the sources outside the image. (e.g. In
+                case of data augmentation, there is a chance of some sources located outside the
+                image)
+
+        Returns:
+            TileCatalog correspond to the each source in the FullCatalog.
+
+        Raises:
+            ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
+                `ignore_extra_sources` is False.
+        """
+        # TODO: a FullCatalog only needs to "know" its height and width to convert itself to a
+        # TileCatalog. So those parameters should be passed on conversion, not initialization.
+        tile_coords = torch.div(self.plocs, tile_slen, rounding_mode="trunc").to(torch.int)
+        n_tiles_h = math.ceil(self.height / tile_slen)
+        n_tiles_w = math.ceil(self.width / tile_slen)
+
+        # prepare tiled tensors
+        tile_cat_shape = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile)
+        tile_locs = torch.zeros((*tile_cat_shape, 2), device=self.device)
+        tile_n_sources = torch.zeros(tile_cat_shape[:3], dtype=torch.int64, device=self.device)
+        tile_params: Dict[str, Tensor] = {}
+        for k, v in self.items():
+            dtype = torch.int64 if k == "objid" else torch.float
+            size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
+            tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
+
+        tile_params["locs"] = tile_locs
+
+        for ii in range(self.batch_size):
+            n_sources = int(self.n_sources[ii].item())
+            plocs_ii = self.plocs[ii][:n_sources]
+            filter_sources = n_sources
+            source_tile_coords = tile_coords[ii][:n_sources]
+            if filter_oob:
+                x0_mask = (plocs_ii[:, 0] > 0) & (plocs_ii[:, 0] < self.height)
+                x1_mask = (plocs_ii[:, 1] > 0) & (plocs_ii[:, 1] < self.width)
+                x_mask = x0_mask * x1_mask
+                filter_sources = x_mask.sum()
+                source_tile_coords = source_tile_coords[x_mask]
+
+            source_indices = source_tile_coords[:, 0] * n_tiles_w + source_tile_coords[:, 1].unsqueeze(0)
+            tile_indices = torch.arange(n_tiles_h * n_tiles_w, device=self.device).unsqueeze(1)
+
+            tile_to_source_mapping = self._get_tile_to_source_mapping((source_indices == tile_indices).long())
+            tile_source_count: Tuple[Tensor, Tensor] = tile_to_source_mapping[:, 0].unique(sorted=True, return_counts=True) # first element is tile index; second element is source count
+            if tile_source_count[1].max() > max_sources_per_tile:
+                if not ignore_extra_sources:
+                    raise ValueError(  # noqa: WPS220
+                        "# of sources per tile exceeds `max_sources_per_tile`."
+                    )
+
+            # get n_sources for each tile
+            tile_n_sources[ii].view(-1)[tile_source_count[0].flatten().tolist()] = torch.where(tile_source_count[1] <= max_sources_per_tile,
+                                                                                               tile_source_count[1], max_sources_per_tile)
+
+            for k, v in tile_params.items():
+                if k == "locs":
+                    k = "plocs"
+                param_matrix = self[k][ii][:n_sources]
+                if filter_oob:
+                    param_matrix = param_matrix[x_mask]
+                params_on_tile = list(param_matrix[tile_to_source_mapping[:, 1]].split(tile_source_count[1].flatten().tolist()))
+                # pad first tensor to desired length
+                params_on_tile[0] = F.pad(params_on_tile[0], (0, 0, 0, (max_sources_per_tile - params_on_tile[0].shape[0]))) # the second argument of pad function is (padding_left, padding_right, padding_top, padding_bottom)
+                # pad all tensors to desired length
+                params_on_tile = pad_sequence(params_on_tile, batch_first=True)
+                max_fill = min(filter_sources, max_sources_per_tile)
+                v[ii].view(-1, *v[ii].shape[2:])[tile_to_source_mapping[:, 0].unique(sorted=True).tolist(), :max_fill] = params_on_tile[:, :max_fill].to(dtype=v.dtype)
+
+            # modify tile location
+            tile_params["locs"][ii] = (tile_params["locs"][ii] % tile_slen) / tile_slen
+        tile_params.update({"n_sources": tile_n_sources})
+        return TileCatalog(tile_slen, tile_params)
+
+    def old_to_tile_catalog(
         self,
         tile_slen: int,
         max_sources_per_tile: int,
