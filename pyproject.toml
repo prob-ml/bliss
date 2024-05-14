@@ -43,7 +43,6 @@ galsim = ">=2.4.10"
 reproject = ">=0.11.0"
 pyvo = "^1.4.1"
 fofcatalogmatching = "^0.1.0"
-pyccl = "^3.0.2"
 
 [tool.poetry.dev-dependencies]
 Cython = ">=0.29.21"
