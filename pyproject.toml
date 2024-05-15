@@ -74,6 +74,7 @@ types-requests = "^2.31.0.1"
 seaborn = "^0.13.0"
 lsstdesc-gcr-catalogs = "^1.7.0"
 pyarrow = "^15.0.0"
+hmf = "^3.4.4"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
