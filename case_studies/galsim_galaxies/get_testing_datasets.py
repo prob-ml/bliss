@@ -6,25 +6,19 @@ import click
 import pytorch_lightning as pl
 import torch
 from astropy.table import Table
-from einops import reduce
-from torch import Tensor
 
 from bliss.datasets.galsim_blends import generate_dataset
 from bliss.datasets.lsst import get_default_lsst_psf
 from bliss.datasets.table_utils import column_to_tensor
+from bliss.reporting import get_snr
 
 HOME_DIR = Path(__file__).parent.parent.parent
 DATA_DIR = Path(__file__).parent / "data"
 cat = Table.read(HOME_DIR / "data/OneDegSq.fits")
 CATSIM_TABLE = cat[cat["i_ab"] < 27.3]
-STAR_MAGS = column_to_tensor(Table.read(HOME_DIR / "data/stars_med_june2018.fits"), "i_ab")
+star_mags = column_to_tensor(Table.read(HOME_DIR / "data/stars_med_june2018.fits"), "i_ab")
+STAR_MAGS = star_mags[star_mags > 20]
 PSF = get_default_lsst_psf()
-
-
-def _get_snr(noiseless: Tensor, background: Tensor) -> float:
-    image_with_background = noiseless + background
-    snr2 = reduce(noiseless**2 / image_with_background, "b c h w -> b", "sum")
-    return torch.sqrt(snr2)
 
 
 @click.command()
@@ -57,7 +51,7 @@ def main(n_samples: int, seed: int, mode: str, overwrite: bool):
         )
 
         # compute SNR
-        dataset["snr"] = _get_snr(dataset["noiseless"], dataset["background"])
+        dataset["snr"] = get_snr(dataset["noiseless"], dataset["background"])
 
         # convert everything to float and remove useless params
         params_to_remove = {

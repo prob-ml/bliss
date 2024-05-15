@@ -1,15 +1,12 @@
 """Functions from producing images from tiled parameters of galaxies or stars."""
 
 import torch
-from einops import rearrange, reduce
+from einops import rearrange
 from torch import Tensor
 from torch.nn.functional import fold, unfold
-from tqdm import tqdm
 
-from bliss.datasets.lsst import PIXEL_SCALE
 from bliss.encoders.autoencoder import CenteredGalaxyDecoder
 from bliss.grid import shift_sources_in_ptiles
-from bliss.reporting import get_single_galaxy_ellipticities
 
 
 def render_galaxy_ptiles(
@@ -132,81 +129,3 @@ def get_n_padded_tiles_hw(
     nh = ((height - ptile_slen) // tile_slen) + 1
     nw = ((width - ptile_slen) // tile_slen) + 1
     return nh, nw
-
-
-def get_galaxy_fluxes(
-    galaxy_decoder: CenteredGalaxyDecoder, galaxy_bools: Tensor, galaxy_params_in: Tensor
-) -> Tensor:
-
-    # obtain galaxies from decoder and latents
-    galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw 1 -> (b nth ntw 1)")
-    galaxy_params = rearrange(galaxy_params_in, "b nth ntw d -> (b nth ntw) d")
-    is_gal = torch.ge(galaxy_bools_flat, 0.5)
-    galaxy_shapes = galaxy_decoder(galaxy_params[is_gal])
-
-    # get fluxes and reshape
-    galaxy_fluxes = reduce(galaxy_shapes, "n 1 h w -> n", "sum")
-    assert torch.all(galaxy_fluxes >= 0)
-    galaxy_fluxes_all = torch.zeros_like(galaxy_bools_flat, dtype=galaxy_fluxes.dtype)
-    galaxy_fluxes_all[is_gal] = galaxy_fluxes
-    galaxy_fluxes_all = rearrange(galaxy_fluxes_all, "(b nth ntw) -> b nth ntw 1")
-    return galaxy_fluxes_all * galaxy_bools
-
-
-def get_galaxy_ellips(
-    galaxy_decoder: CenteredGalaxyDecoder,
-    galaxy_bools: Tensor,
-    galaxy_params_in: Tensor,
-    psf: Tensor,
-) -> Tensor:
-    assert galaxy_bools.ndim == 4 and galaxy_params_in.ndim == 4
-    assert psf.shape == (1, galaxy_decoder.slen, galaxy_decoder.slen)
-    b, nth, ntw, _ = galaxy_bools.shape
-    b_flat = b * nth * ntw
-
-    is_gal = rearrange(galaxy_bools, "b nth ntw 1 -> (b nth ntw 1)").bool()
-    galaxy_params = rearrange(galaxy_params_in, "b nth ntw d -> (b nth ntw) d")
-    galaxy_shapes = galaxy_decoder.forward(galaxy_params[is_gal]).detach().cpu()
-    single_galaxies = rearrange(galaxy_shapes, "n 1 h w -> n h w")
-    assert galaxy_shapes.shape[-1] == galaxy_shapes.shape[-2] == galaxy_decoder.slen
-
-    ellips_gal = get_single_galaxy_ellipticities(single_galaxies, psf[0], PIXEL_SCALE)
-
-    ellips_all = torch.zeros(b_flat, 2, dtype=ellips_gal.dtype, device=ellips_gal.device)
-    ellips_all[is_gal] = ellips_gal
-    ellips = rearrange(ellips_all, "(b nth ntw s) g -> b nth ntw g", b=b, nth=nth, ntw=ntw, g=2)
-    return ellips * galaxy_bools
-
-
-def get_galaxy_snr(self, decoder: CenteredGalaxyDecoder, ptile_slen: int, bg: float) -> None:
-
-    b, nth, ntw, _ = self["galaxy_params"].shape
-    galaxy_params = rearrange(self["galaxy_params"], "b nth ntw d -> (b nth ntw) d")
-    galaxy_bools = rearrange(self["galaxy_bools"], "b nth ntw 1 -> (b nth ntw) 1")
-
-    n_total = b * nth * ntw
-    snr = torch.zeros((n_total, 1))
-    n_parts = 1000  # not all fits in GPU
-    for ii in tqdm(range(0, n_total, n_parts), desc="computing SNR", total=n_total // n_parts):
-        jj = ii + n_parts
-        galaxy_params_ii = galaxy_params[ii:jj]
-        galaxy_bools_ii = galaxy_bools[ii:jj]
-
-        # galaxies first to get correct sizes
-        single_galaxies_ii = _render_centered_galaxies_ptiles(
-            decoder, galaxy_params_ii, galaxy_bools_ii, ptile_slen
-        )
-        single_galaxies_ii = rearrange(single_galaxies_ii, "np s 1 h w -> np s h w")
-        single_galaxies_ii = single_galaxies_ii.cpu()
-        _, _, h, w = single_galaxies_ii.shape
-        assert h == w
-        bg_ii = torch.full_like(single_galaxies_ii, bg)
-
-        gal_snr = (single_galaxies_ii**2 / (single_galaxies_ii + bg_ii)).sum(axis=(-1, -2)).sqrt()
-
-        gal_snr = rearrange(gal_snr, "n s -> n s 1")
-
-        for kk in range(ii, jj):
-            snr[kk] = gal_snr[kk] * galaxy_bools_ii[kk].cpu()
-
-    return rearrange(snr, "(b nth ntw) s 1 -> b nth ntw s 1", b=b, nth=nth, ntw=ntw)

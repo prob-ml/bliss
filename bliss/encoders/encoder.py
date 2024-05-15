@@ -1,5 +1,7 @@
 """Scripts to produce BLISS estimates on astronomical images."""
 
+import math
+
 import torch
 from einops import pack, rearrange
 from torch import Tensor, nn
@@ -33,8 +35,8 @@ class Encoder(nn.Module):
         detection_encoder: DetectionEncoder,
         binary_encoder: BinaryEncoder | None = None,
         galaxy_encoder: GalaxyEncoder | None = None,
-        n_images_per_batch: int | None = None,
-        n_rows_per_batch: int | None = None,
+        n_images_per_batch: int = 10,
+        n_rows_per_batch: int = 15,
     ):
         """Initializes Encoder.
 
@@ -62,8 +64,8 @@ class Encoder(nn.Module):
         self.binary_encoder = binary_encoder
         self.galaxy_encoder = galaxy_encoder
 
-        self.n_images_per_batch = n_images_per_batch if n_images_per_batch is not None else 10
-        self.n_rows_per_batch = n_rows_per_batch if n_rows_per_batch is not None else 15
+        self.n_images_per_batch = n_images_per_batch
+        self.n_rows_per_batch = n_rows_per_batch
 
     def forward(self, x):
         raise NotImplementedError("Unavailable. Use .variational_mode() or .sample() instead.")
@@ -96,15 +98,19 @@ class Encoder(nn.Module):
         ptile_loader = self.make_ptile_loader(image, background, n_tiles_h)
         tile_map_list: list[dict[str, Tensor]] = []
 
+        n_tiles_h = (image.shape[2] - 2 * self.bp) // self.detection_encoder.tile_slen
+        n_tiles_w = (image.shape[3] - 2 * self.bp) // self.detection_encoder.tile_slen
+
+        n1 = math.ceil(image.shape[0] / self.n_images_per_batch)
+        n2 = math.ceil(n_tiles_h / self.n_rows_per_batch)
+        total_n_ptiles = n1 * n2
         with torch.no_grad():
-            for ptiles in tqdm(ptile_loader, desc="Encoding ptiles..."):
+            for ptiles in tqdm(ptile_loader, desc="Encoding ptiles...", total=total_n_ptiles):
                 out_ptiles = self._encode_ptiles(ptiles)
                 tile_map_list.append(out_ptiles)
 
-        tile_map = collate(tile_map_list)
+        tile_map = _collate(tile_map_list)
 
-        n_tiles_h = (image.shape[2] - 2 * self.bp) // self.detection_encoder.tile_slen
-        n_tiles_w = (image.shape[3] - 2 * self.bp) // self.detection_encoder.tile_slen
         return TileCatalog.from_flat_dict(
             self.detection_encoder.tile_slen,
             n_tiles_h,
@@ -135,14 +141,16 @@ class Encoder(nn.Module):
         return self._dummy_param.device
 
     def _encode_ptiles(self, flat_image_ptiles: Tensor):
+        assert not self.detection_encoder.training
         tiled_params: dict[str, Tensor] = {}
 
         n_source_probs, locs_mean, locs_sd_raw = self.detection_encoder.encode_tiled(
             flat_image_ptiles
         )
+        n_source_probs_inflated = rearrange(n_source_probs, "n -> n 1")  # for `TileCatalog`
         n_sources = n_source_probs.ge(0.5).long()
         tile_is_on = rearrange(n_sources, "np -> np 1")
-        tiled_params.update({"n_sources": n_sources, "n_source_probs": n_source_probs})
+        tiled_params.update({"n_sources": n_sources, "n_source_probs": n_source_probs_inflated})
 
         locs = locs_mean * tile_is_on
         locs_sd = locs_sd_raw * tile_is_on
@@ -156,7 +164,8 @@ class Encoder(nn.Module):
             tiled_params.update({"galaxy_bools": galaxy_bools})
 
             if self.galaxy_encoder is not None:
-                galaxy_params, _ = self.galaxy_encoder.forward(flat_image_ptiles, locs)
+                assert not self.galaxy_encoder.training
+                galaxy_params = self.galaxy_encoder.forward(flat_image_ptiles, locs)
                 galaxy_params *= tile_is_on * galaxy_bools
                 tiled_params.update({"galaxy_params": galaxy_params})
 
@@ -169,11 +178,11 @@ class Encoder(nn.Module):
         )
 
 
-def collate(tile_map_list: list[dict[str, Tensor]]) -> dict[str, Tensor]:
+def _collate(tile_map_list: list[dict[str, Tensor]]) -> dict[str, Tensor]:
     """Combine multiple Tensors across dictionaries into a single dictionary."""
     assert tile_map_list  # not empty
 
     out: dict[str, Tensor] = {}
     for k in tile_map_list[0]:
-        out[k] = torch.cat([d[k] for d in tile_map_list], dim=1)
+        out[k] = torch.cat([d[k] for d in tile_map_list], dim=0)
     return out
