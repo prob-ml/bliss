@@ -66,14 +66,13 @@ class ClusterPrior:
         hmf.update(Mmin=14.5, Mmax=15.5)
         mass_func = hmf.dndlnm
         mass_sample = []
+        delta_mass = self.mass_max - self.mass_min
         while len(mass_sample) < self.size:
             index = np.random.randint(0, len(mass_func))
             prob = (mass_func / sum(mass_func))[index]
             if np.random.random() < prob:
-                mass_sample.append(
-                    (self.mass_max - self.mass_min) / len(mass_func) * (index + np.random.random())
-                    + self.mass_min,
-                )
+                sample_mass_index = (index + np.random.random()) / len(mass_func)
+                mass_sample.append(self.mass_min + (sample_mass_index * delta_mass))
         return mass_sample
 
     def z_to_zis(self, z, mass, size):
@@ -102,23 +101,17 @@ class ClusterPrior:
     def _sample_radius(self, mass_samples, redshift_samples):
         radius_samples = []
         for i in range(self.size):
-            radius_samples.append(
-                self.z_m_to_r(mass_samples[i], redshift_samples[i])
-                / (3.086 * 10**24)
-                * self.scale_pixels_per_au,
-            )
+            unscaled_r = self.z_m_to_r(mass_samples[i], redshift_samples[i])
+            radius_samples.append(unscaled_r * self.scale_pixels_per_au / (3.086 * 10**24))
         return radius_samples
 
     def _sample_n_cluster(self, mass_samples):
+        m0 = (1.989 * 10**33) * (1.4 * 10**13)
+        beta = 1.35
         n_galaxy_cluster = []
         for i in range(self.size):
             if np.random.random() > self.cluster_prob:
-                n_galaxy_cluster.append(
-                    int(
-                        ((mass_samples[i] / (1.989 * 10**33)) / (1.4 * 10**13)) ** (1 / 1.35)
-                        * 20,
-                    ),
-                )
+                n_galaxy_cluster.append(int(20 * (mass_samples[i] / m0) ** (1 / beta)))
             else:
                 n_galaxy_cluster.append(0)
         return n_galaxy_cluster
@@ -182,10 +175,9 @@ class ClusterPrior:
         redshift_bins = np.linspace(0.01, 7, 100)
         redshift_pdf = [self._redshift_distribution(z) for z in redshift_bins]
         redshift_pdf = redshift_pdf / np.sum(redshift_pdf)
-        return (
-            np.random.choice(np.linspace(0.01, 7, 100), p=redshift_pdf)
-            + (np.random.random()) * 0.07
-        )
+        sampled_redshift = np.random.choice(np.linspace(0.01, 7, 100), p=redshift_pdf)
+        offset_redshift = (np.random.random()) * 0.07
+        return sampled_redshift + offset_redshift
 
     def _sample_flux(self, galaxy_locs, galaxy_locs_cluster, redshift_samples, mass_samples):
         flux_samples = []
@@ -280,31 +272,15 @@ class ClusterPrior:
                 mock_catalog["X"] = np.array(galaxy_locs[i])[:, 0]
                 mock_catalog["Y"] = np.array(galaxy_locs[i])[:, 1]
             mock_catalog["FLUX_R"] = fluxes[:, 1]
-            mock_catalog["MAG_R"] = -2.5 * np.log10(mock_catalog["FLUX_R"]) + 30
             mock_catalog["FLUX_G"] = fluxes[:, 0]
-            mock_catalog["MAG_G"] = -2.5 * np.log10(mock_catalog["FLUX_G"]) + 30
             mock_catalog["FLUX_I"] = fluxes[:, 2]
-            mock_catalog["MAG_I"] = -2.5 * np.log10(mock_catalog["FLUX_I"]) + 30
             mock_catalog["FLUX_Z"] = fluxes[:, 3]
-            mock_catalog["MAG_Z"] = -2.5 * np.log10(mock_catalog["FLUX_Z"]) + 30
             mock_catalog["TSIZE"] = t_size_samples[i]
             mock_catalog["FRACDEV"] = 0
             mock_catalog["G1"] = g1_size_samples[i]
             mock_catalog["G2"] = g2_size_samples[i]
             res.append(mock_catalog)
         return res
-
-    def to_tiles(self, center_sample, mass_sample, radius_sample, galaxy_locs_cluster):
-        tiles = []
-        for i, _ in enumerate(mass_sample):
-            temp = {}
-            temp["mass"] = mass_sample[i]
-            temp["coordinate"] = center_sample[i]
-            temp["radius"] = radius_sample[i]
-            temp["canvas"] = [self.width, self.height]
-            temp["tiles"] = [self.tiles_width, self.tiles_height]
-            tiles.append(temp)
-        return tiles
 
     def sample(self):
         mass_samples = self._sample_mass()

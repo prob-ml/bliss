@@ -69,8 +69,8 @@ gal :
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 14 }
-    g2 : { type: Catalog, col: 15 }
+    g1 : { type: Catalog, col: 10 }
+    g2 : { type: Catalog, col: 11 }
 
 output :
   type : Fits
@@ -90,12 +90,12 @@ gal :
   type : Exponential
   #Using a constant half light radius for now, since there were some issues in the TSIZE prior
   half_light_radius : 2.3
-  flux : { type: Catalog, col: 6 } #using G band
+  flux : { type: Catalog, col: 5 } #using G band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 14 }
-    g2 : { type: Catalog, col: 15 }
+    g1 : { type: Catalog, col: 10 }
+    g2 : { type: Catalog, col: 11 }
 
 output :
   type : Fits
@@ -115,12 +115,12 @@ gal :
   type : Exponential
   #Using a constant half light radius for now, since there were some issues in the TSIZE prior
   half_light_radius : 2.3
-  flux : { type: Catalog, col: 8 } #using I band
+  flux : { type: Catalog, col: 6 } #using I band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 14 }
-    g2 : { type: Catalog, col: 15 }
+    g1 : { type: Catalog, col: 10 }
+    g2 : { type: Catalog, col: 11 }
 
 output :
   type : Fits
@@ -140,12 +140,12 @@ gal :
   type : Exponential
   #Using a constant half light radius for now, since there were some issues in the TSIZE prior
   half_light_radius : 2.3
-  flux : { type: Catalog, col: 10 } #using Z band
+  flux : { type: Catalog, col: 7 } #using Z band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 14 }
-    g2 : { type: Catalog, col: 15 }
+    g1 : { type: Catalog, col: 10 }
+    g2 : { type: Catalog, col: 11 }
 
 output :
   type : Fits
