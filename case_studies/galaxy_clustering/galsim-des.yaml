@@ -26,18 +26,6 @@
  # sigma : 1
  # index_key : file_num
 
-gal :
-
-  type : Exponential
-  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
-  half_light_radius : 2.3
-  flux : { type: Catalog, col: 4 } #using R band for now
-
-  shear :
-    type : G1G2
-    g1 : { type: Catalog, col: 14 }
-    g2 : { type: Catalog, col: 15 }
-
 image :
 
   type : Scattered
@@ -70,13 +58,102 @@ input :
       items :
       - { type : Sequence, nitems : '@output.nfiles'}
 
+---
+
+gal :
+
+  type : Exponential
+  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  half_light_radius : 2.3
+  flux : { type: Catalog, col: 4 } #using R band
+
+  shear :
+    type : G1G2
+    g1 : { type: Catalog, col: 14 }
+    g2 : { type: Catalog, col: 15 }
+
 output :
   type : Fits
   dir : galsim_des_data
   file_name :
     type : FormattedStr
-    format : "galsim-des-%03d.fits"
+    format : "galsim-des-%03d-r.fits"
     items :
     - { type : Sequence, nitems: '@output.nfiles'}
 
-  nfiles : 100
+  nfiles : 10
+
+---
+
+gal :
+
+  type : Exponential
+  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  half_light_radius : 2.3
+  flux : { type: Catalog, col: 6 } #using G band
+
+  shear :
+    type : G1G2
+    g1 : { type: Catalog, col: 14 }
+    g2 : { type: Catalog, col: 15 }
+
+output :
+  type : Fits
+  dir : galsim_des_data
+  file_name :
+    type : FormattedStr
+    format : "galsim-des-%03d-g.fits"
+    items :
+    - { type : Sequence, nitems: '@output.nfiles'}
+
+  nfiles : 10
+
+---
+
+gal :
+
+  type : Exponential
+  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  half_light_radius : 2.3
+  flux : { type: Catalog, col: 8 } #using I band
+
+  shear :
+    type : G1G2
+    g1 : { type: Catalog, col: 14 }
+    g2 : { type: Catalog, col: 15 }
+
+output :
+  type : Fits
+  dir : galsim_des_data
+  file_name :
+    type : FormattedStr
+    format : "galsim-des-%03d-i.fits"
+    items :
+    - { type : Sequence, nitems: '@output.nfiles'}
+
+  nfiles : 10
+
+---
+
+gal :
+
+  type : Exponential
+  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  half_light_radius : 2.3
+  flux : { type: Catalog, col: 10 } #using Z band
+
+  shear :
+    type : G1G2
+    g1 : { type: Catalog, col: 14 }
+    g2 : { type: Catalog, col: 15 }
+
+output :
+  type : Fits
+  dir : galsim_des_data
+  file_name :
+    type : FormattedStr
+    format : "galsim-des-%03d-z.fits"
+    items :
+    - { type : Sequence, nitems: '@output.nfiles'}
+
+  nfiles : 10

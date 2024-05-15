@@ -128,6 +128,7 @@ class ClusterPrior:
         y_coords = np.random.uniform(self.height * 0.2, self.height * 0.8, self.size)
         return np.vstack((x_coords, y_coords)).T
 
+    # Spherical Sampling Method: https://stackoverflow.com/a/5408843
     def _sample_cluster_locs(self, center_samples, radius_samples, n_galaxy_cluster):
         galaxy_locs_cluster = []
         for i in range(self.size):
@@ -135,9 +136,11 @@ class ClusterPrior:
             samples = []
             while len(samples) < int(n_galaxy_cluster[i]):
                 phi = np.random.uniform(0, 2 * np.pi, 1)
-                radii = np.random.uniform(0, radius_samples[i], 1)
-                shift_x = np.sqrt((radius_samples[i] ** 2) - (radii**2)) * np.cos(phi)
-                shift_y = np.sqrt((radius_samples[i] ** 2) - (radii**2)) * np.sin(phi)
+                sintheta = np.random.uniform(-1, 1, 1)
+                u = np.random.uniform(0, 1, 1)
+                r_in_sphere = radius_samples[i] * np.cbrt(u)
+                shift_x = r_in_sphere * sintheta * np.cos(phi)
+                shift_y = r_in_sphere * sintheta * np.sin(phi)
                 sampled_x = float(center_x + shift_x)
                 sampled_y = float(center_y + shift_y)
                 if 0 <= sampled_x < self.width and 0 <= sampled_y < self.height:
@@ -211,6 +214,22 @@ class ClusterPrior:
             g2_size_samples.append(
                 gennorm.rvs(self.G2_beta, self.G2_loc, self.G2_scale, total_element)
             )
+            for j in range(total_element):
+                flag_large = g1_size_samples[i][j] ** 2 + g2_size_samples[i][j] ** 2 >= 1
+                flag_g1_large = g1_size_samples[i][j] >= 0.8
+                flag_g2_large = g2_size_samples[i][j] >= 0.8
+                flag_reject = flag_large or flag_g1_large or flag_g2_large
+                while flag_reject:
+                    g1_size_samples[i][j] = gennorm.rvs(
+                        self.G1_beta, self.G1_loc, self.G1_scale, 1
+                    )[0]
+                    g2_size_samples[i][j] = gennorm.rvs(
+                        self.G2_beta, self.G2_loc, self.G2_scale, 1
+                    )[0]
+                    flag_large = g1_size_samples[i][j] ** 2 + g2_size_samples[i][j] ** 2 >= 1
+                    flag_g1_large = g1_size_samples[i][j] >= 0.8
+                    flag_g2_large = g2_size_samples[i][j] >= 0.8
+                    flag_reject = flag_large or flag_g1_large or flag_g2_large
         return g1_size_samples, g2_size_samples
 
     def galaxy_flux_ratio(self, size):
