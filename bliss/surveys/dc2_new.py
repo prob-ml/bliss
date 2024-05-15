@@ -5,6 +5,7 @@ import multiprocessing
 import pathlib
 import pickle
 import random
+import time
 
 import numpy as np
 import pandas as pd
@@ -43,12 +44,28 @@ def generate_split_file(image_index, object_attributes):
     full_cat, psf_params = Dc2FullCatalog.from_file(
         object_attributes["cat_path"], wcs, height, width, object_attributes["bands"]
     )
+    current_to_tile_start_time = time.time()
     tile_cat = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile()
+    current_to_tile_end_time = time.time()
 
     # for debug
-    # tile_cat_old = full_cat.old_to_tile_catalog(4, 5).get_brightest_sources_per_tile()
+    # previous_to_tile_start_time = time.time()
+    # tile_cat_previous = full_cat.previous_to_tile_catalog(4, 5).get_brightest_sources_per_tile()
+    # previous_to_tile_end_time = time.time()
+
+    # ori_to_tile_start_time = time.time()
+    # tile_cat_ori = full_cat.ori_to_tile_params(4, 5).get_brightest_sources_per_tile()
+    # ori_to_tile_end_time = time.time()
+
     # full_tile_cat = tile_cat.to_full_catalog()
-    # full_tile_cat_old = tile_cat_old.to_full_catalog()
+    # full_tile_cat_previous = tile_cat_previous.to_full_catalog()
+    # full_tile_cat_ori = tile_cat_ori.to_full_catalog()
+    # assert tile_cat == tile_cat_previous, "tile_cat are different between current implementation and previous one"
+    # assert tile_cat == tile_cat_ori, "tile_cat are different between current implementation and original one"
+    # assert tile_cat_previous == tile_cat_ori, "tile_cat are different between previous implementation and original one"
+    # assert full_tile_cat == full_tile_cat_previous, "full_cat are different between current implementation and previous one"
+    # assert full_tile_cat == full_tile_cat_ori, "full_cat are different between current implementation and original one"
+    # assert full_tile_cat_ori == full_tile_cat_previous, "full_cat are different between previous implementation and original one"
 
     tile_dict = tile_cat.to_dict()
 
@@ -131,6 +148,7 @@ class DC2(Survey):
     BANDS = ("g", "i", "r", "u", "y", "z")
 
     def __init__(self, data_dir, cat_path, batch_size, n_split, image_lim, num_workers,
+                 split_result_folder,
                  for_plotting=False):
         super().__init__()
         self.data_dir = data_dir
@@ -146,7 +164,7 @@ class DC2(Survey):
         self.image_lim = image_lim
         self.num_workers = num_workers
         self.for_plotting = for_plotting
-        self.split_file_path = pathlib.Path(data_dir) / "split_results/"
+        self.split_file_path = pathlib.Path(data_dir) / split_result_folder
 
         self.image_files = None
         self.bg_files = None
@@ -362,6 +380,10 @@ def read_frame_for_band(image_files, bg_files, n, n_bands, image_lim):
 
         image = torch.nan_to_num(torch.from_numpy(image_data)[: image_lim[0], : image_lim[1]])
         bg = torch.from_numpy(bg_data.astype(np.float32)).expand(image_lim[0], image_lim[1])
+
+        # to make sure the background are positive
+        bg = bg.clone()
+        bg[bg <= 1e-6] = 1e-5
 
         image += bg
         image_list.append(image)

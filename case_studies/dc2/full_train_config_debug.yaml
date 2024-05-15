@@ -1,0 +1,21 @@
+---
+defaults:
+    - full_train_config.yaml
+    - _self_
+    - override hydra/job_logging: stdout
+
+train:
+    trainer:
+        logger:
+            name: DC2_debug
+            version: DC2_debug
+        precision: 32
+        strategy:
+          _target_: pytorch_lightning.strategies.DDPStrategy
+          process_group_backend: nccl
+          timeout:
+            _target_: datetime.timedelta
+            seconds: 180000
+        devices: [7]
+    data_source: ${surveys.dc2}
+    pretrained_weights: null

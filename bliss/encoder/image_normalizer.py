@@ -1,4 +1,5 @@
 import warnings
+from typing import Dict
 
 import torch
 
@@ -13,6 +14,7 @@ class ImageNormalizer(torch.nn.Module):
         log_transform_stdevs: list,
         use_clahe: bool,
         clahe_min_stdev: float,
+        asinh_params: Dict[str, float]
     ):
         """Initializes DetectionEncoder.
 
@@ -34,9 +36,10 @@ class ImageNormalizer(torch.nn.Module):
         self.log_transform_stdevs = log_transform_stdevs
         self.use_clahe = use_clahe
         self.clahe_min_stdev = clahe_min_stdev
+        self.asinh_params = asinh_params
 
-        if not (log_transform_stdevs or use_clahe):
-            warnings.warn("Either log transform or clahe should be enabled.")
+        if not (log_transform_stdevs or use_clahe or asinh_params):
+            warnings.warn("Normalization should be enabled (you could use log/clahe/asinh).")
 
     def num_channels_per_band(self):
         """Determine number of input channels for model based on desired input transforms."""
@@ -49,6 +52,8 @@ class ImageNormalizer(torch.nn.Module):
             nch += len(self.log_transform_stdevs)
         if self.use_clahe:
             nch += 1
+        if self.asinh_params:
+            nch += len(self.asinh_params["thresholds"])
         return nch
 
     def get_input_tensor(self, batch):
@@ -65,6 +70,9 @@ class ImageNormalizer(torch.nn.Module):
         assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
 
         if self.log_transform_stdevs:
+            assert batch["background"].min() > 1e-6, "background must be positive"
+
+        if self.asinh_params:
             assert batch["background"].min() > 1e-6, "background must be positive"
 
         input_bands = batch["images"].shape[1]
@@ -101,6 +109,10 @@ class ImageNormalizer(torch.nn.Module):
             renormalized_img = self.clahe(raw_images, self.clahe_min_stdev)
             inputs.append(renormalized_img)
             inputs[0] = self.clahe(backgrounds, self.clahe_min_stdev)
+
+        if self.asinh_params:
+            for threshold in self.asinh_params["thresholds"]:
+                inputs.append(torch.asinh(((raw_images - backgrounds) / backgrounds.sqrt() - threshold) * self.asinh_params["scale"]))
 
         return torch.cat(inputs, dim=2)
 
