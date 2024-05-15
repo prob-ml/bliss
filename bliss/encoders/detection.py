@@ -8,7 +8,7 @@ from torch.optim import Adam
 
 from bliss.catalog import TileCatalog
 from bliss.datasets.galsim_blends import parse_dataset
-from bliss.encoders.layers import ConcatBackgroundTransform, EncoderCNN, make_enc_final
+from bliss.encoders.layers import EncoderCNN, make_enc_final
 from bliss.grid import validate_border_padding
 from bliss.render_tiles import get_images_in_tiles, get_n_padded_tiles_hw
 from bliss.reporting import DetectionMetrics
@@ -24,7 +24,6 @@ class DetectionEncoder(pl.LightningModule):
 
     def __init__(
         self,
-        input_transform: ConcatBackgroundTransform,
         n_bands: int = 1,
         tile_slen: int = 4,
         ptile_slen: int = 52,
@@ -36,7 +35,6 @@ class DetectionEncoder(pl.LightningModule):
         """Initializes DetectionEncoder.
 
         Args:
-            input_transform: Class which determines how input image and bg are transformed.
             n_bands: number of bands
             tile_slen: size of tiles (squares).
             ptile_slen: size of padded tiles (squares).
@@ -48,7 +46,6 @@ class DetectionEncoder(pl.LightningModule):
         assert n_bands == 1, "Only 1 band is supported"
         super().__init__()
 
-        self.input_transform = input_transform
         self.n_bands = n_bands
 
         assert tile_slen <= ptile_slen
@@ -63,7 +60,7 @@ class DetectionEncoder(pl.LightningModule):
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
 
         # networks to be trained
-        n_bands_in = self.input_transform.output_channels(n_bands)
+        n_bands_in = 2 * n_bands
         self._enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
         self._enc_final = make_enc_final(
             channel * 4 * dim_enc_conv_out**2,
@@ -90,8 +87,7 @@ class DetectionEncoder(pl.LightningModule):
 
     def encode_tiled(self, flat_image_ptiles: Tensor):
         # encode
-        transformed_ptiles = self.input_transform(flat_image_ptiles)
-        enc_conv_output = self._enc_conv(transformed_ptiles)
+        enc_conv_output = self._enc_conv(flat_image_ptiles)
         enc_final_output = self._enc_final(enc_conv_output)
 
         # split NN output

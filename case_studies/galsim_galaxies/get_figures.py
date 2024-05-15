@@ -11,7 +11,6 @@ from bliss.encoders.binary import BinaryEncoder
 from bliss.encoders.deblend import GalaxyEncoder
 from bliss.encoders.detection import DetectionEncoder
 from bliss.encoders.encoder import Encoder
-from bliss.encoders.layers import ConcatBackgroundTransform
 from case_studies.galsim_galaxies.scripts_figures.ae_figures import AutoEncoderFigures
 from case_studies.galsim_galaxies.scripts_figures.blend_figures import BlendSimulationFigure
 from case_studies.galsim_galaxies.scripts_figures.toy_figures import ToySeparationFigure
@@ -25,13 +24,11 @@ def _load_models(device):
     """Load models required for producing results."""
 
     # encoders
-    input_transform = ConcatBackgroundTransform()
-
-    detection = DetectionEncoder(input_transform).to(device).eval()
+    detection = DetectionEncoder().to(device).eval()
     detection.load_state_dict(torch.load("models/detection.pt", map_location=device))
     detection.requires_grad_(False)
 
-    binary = BinaryEncoder(input_transform).to(device).eval()
+    binary = BinaryEncoder().to(device).eval()
     binary.load_state_dict(torch.load("models/binary.pt", map_location=device))
     binary.requires_grad_(False)
 

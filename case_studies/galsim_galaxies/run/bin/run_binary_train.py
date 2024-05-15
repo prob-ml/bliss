@@ -8,7 +8,6 @@ import pytorch_lightning as L
 
 from bliss.datasets.galsim_blends import SavedGalsimBlends
 from bliss.encoders.binary import BinaryEncoder
-from bliss.encoders.layers import ConcatBackgroundTransform
 from case_studies.galsim_galaxies.run.training_functions import (
     create_dataset,
     setup_training_objects,
@@ -65,8 +64,7 @@ def main(
     val_ds_file = f"ds/val_ds_{tag}.pt"
 
     # setup model to train
-    input_transform = ConcatBackgroundTransform()
-    binary_encoder = BinaryEncoder(input_transform)
+    binary_encoder = BinaryEncoder()
 
     if overwrite:
         with open("log.txt", "a") as f:

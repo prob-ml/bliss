@@ -5,7 +5,6 @@ from pathlib import Path
 import pytorch_lightning as L
 
 from bliss.encoders.detection import DetectionEncoder
-from bliss.encoders.layers import ConcatBackgroundTransform
 from case_studies.galsim_galaxies.run.training_functions import (
     create_dataset,
     setup_training_objects,
@@ -32,8 +31,7 @@ L.seed_everything(SEED)
 
 
 # setup model to train
-input_transform = ConcatBackgroundTransform()
-detection_encoder = DetectionEncoder(input_transform)
+detection_encoder = DetectionEncoder()
 
 
 if OVERWRITE:

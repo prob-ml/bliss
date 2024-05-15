@@ -10,7 +10,6 @@ from bliss.datasets.table_utils import column_to_tensor
 from bliss.encoders.binary import BinaryEncoder
 from bliss.encoders.deblend import GalaxyEncoder
 from bliss.encoders.detection import DetectionEncoder
-from bliss.encoders.layers import ConcatBackgroundTransform
 
 
 def test_encoder_forward(home_dir, tmp_path):
@@ -31,9 +30,8 @@ def test_encoder_forward(home_dir, tmp_path):
     dl1 = DataLoader(saved_ds1, batch_size=32, num_workers=0)
     dl2 = DataLoader(saved_ds2, batch_size=32, num_workers=0)
 
-    input_transform = ConcatBackgroundTransform()
-    binary_encoder = BinaryEncoder(input_transform)
-    detection_encoder = DetectionEncoder(input_transform)
+    binary_encoder = BinaryEncoder()
+    detection_encoder = DetectionEncoder()
     galaxy_encoder = GalaxyEncoder(ae_state_dict)
 
     with torch.no_grad():

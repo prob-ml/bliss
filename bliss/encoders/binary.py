@@ -7,7 +7,7 @@ from torch.optim import Adam
 
 from bliss.catalog import TileCatalog
 from bliss.datasets.galsim_blends import parse_dataset
-from bliss.encoders.layers import ConcatBackgroundTransform, EncoderCNN, make_enc_final
+from bliss.encoders.layers import EncoderCNN, make_enc_final
 from bliss.grid import shift_sources_in_ptiles, validate_border_padding
 from bliss.render_tiles import get_images_in_tiles
 
@@ -15,7 +15,6 @@ from bliss.render_tiles import get_images_in_tiles
 class BinaryEncoder(pl.LightningModule):
     def __init__(
         self,
-        input_transform: ConcatBackgroundTransform,
         n_bands: int = 1,
         tile_slen: int = 4,
         ptile_slen: int = 52,
@@ -31,7 +30,6 @@ class BinaryEncoder(pl.LightningModule):
         image is a star or a galaxy.
 
         Arguments:
-            input_transform: Transformation to apply to input image.
             n_bands: number of bands
             tile_slen: dimension (in pixels) of each tile.
             ptile_slen: dimension (in pixels) of the individual image padded tiles.
@@ -42,7 +40,6 @@ class BinaryEncoder(pl.LightningModule):
         """
         super().__init__()
         self.save_hyperparameters()
-        self.input_transform = input_transform
 
         # extract useful info from image_decoder
         self.n_bands = n_bands
@@ -54,7 +51,7 @@ class BinaryEncoder(pl.LightningModule):
         self.final_slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
 
         dim_enc_conv_out = ((self.final_slen + 1) // 2 + 1) // 2
-        n_bands_in = self.input_transform.output_channels(n_bands)
+        n_bands_in = 2 * n_bands
         self._enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
         self._enc_final = make_enc_final(channel * 4 * dim_enc_conv_out**2, hidden, 1, dropout)
 
@@ -122,10 +119,9 @@ class BinaryEncoder(pl.LightningModule):
         return Adam(self.parameters(), lr=1e-4)
 
     def _center_ptiles(self, image_ptiles: Tensor, tile_locs_flat: Tensor) -> Tensor:
-        transformed_ptiles = self.input_transform(image_ptiles)
-        assert transformed_ptiles.shape[-1] == transformed_ptiles.shape[-2] == self.ptile_slen
+        assert image_ptiles.shape[-1] == image_ptiles.shape[-2] == self.ptile_slen
         shifted_ptiles = shift_sources_in_ptiles(
-            transformed_ptiles, tile_locs_flat, self.tile_slen, self.ptile_slen, center=True
+            image_ptiles, tile_locs_flat, self.tile_slen, self.ptile_slen, center=True
         )
         assert shifted_ptiles.shape[-1] == shifted_ptiles.shape[-2] == self.ptile_slen
         cropped_ptiles = shifted_ptiles[

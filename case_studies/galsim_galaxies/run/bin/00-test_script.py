@@ -15,7 +15,6 @@ from bliss.datasets.galsim_blends import SavedGalsimBlends, generate_dataset, pa
 from bliss.datasets.lsst import get_default_lsst_background, get_default_lsst_psf
 from bliss.datasets.table_utils import column_to_tensor
 from bliss.encoders.detection import DetectionEncoder
-from bliss.encoders.layers import ConcatBackgroundTransform
 
 OVERWRITE = False
 N_SAMPLES = 999
@@ -59,9 +58,7 @@ val_dl = DataLoader(
 
 
 # now train on the same batch 100 times with some optimizer
-
-input_transform = ConcatBackgroundTransform()
-detection_encoder = DetectionEncoder(input_transform)
+detection_encoder = DetectionEncoder()
 
 # gpu
 detection_encoder.to(gpu)
