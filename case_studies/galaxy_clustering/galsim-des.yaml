@@ -23,8 +23,8 @@
 #psf :
 
  # type : Gaussian
- # sigma : 1
- # index_key : file_num
+  #sigma : 1
+  #index_key : file_num
 
 image :
 
@@ -37,6 +37,13 @@ image :
   random_seed : 8241573
 
   gsparams : {maximum_fft_size : 50000}
+
+  noise:
+    type: Gaussian
+    variance:
+      type: Random
+      min: 0.002
+      max: 0.006
 
 stamp :
 
@@ -51,7 +58,7 @@ stamp :
 
 input :
   catalog :
-    dir : catalogs
+    dir : data/catalogs
     file_name :
       type : FormattedStr
       format : "catalog_%03d.dat"
@@ -74,14 +81,14 @@ gal :
 
 output :
   type : Fits
-  dir : galsim_des_data
+  dir : data/images
   file_name :
     type : FormattedStr
     format : "galsim-des-%03d-r.fits"
     items :
     - { type : Sequence, nitems: '@output.nfiles'}
 
-  nfiles : 10
+  nfiles : 100
 
 ---
 
@@ -99,14 +106,14 @@ gal :
 
 output :
   type : Fits
-  dir : galsim_des_data
+  dir : data/images
   file_name :
     type : FormattedStr
     format : "galsim-des-%03d-g.fits"
     items :
     - { type : Sequence, nitems: '@output.nfiles'}
 
-  nfiles : 10
+  nfiles : 100
 
 ---
 
@@ -124,14 +131,14 @@ gal :
 
 output :
   type : Fits
-  dir : galsim_des_data
+  dir : data/images
   file_name :
     type : FormattedStr
     format : "galsim-des-%03d-i.fits"
     items :
     - { type : Sequence, nitems: '@output.nfiles'}
 
-  nfiles : 10
+  nfiles : 100
 
 ---
 
@@ -149,11 +156,11 @@ gal :
 
 output :
   type : Fits
-  dir : galsim_des_data
+  dir : data/images
   file_name :
     type : FormattedStr
     format : "galsim-des-%03d-z.fits"
     items :
     - { type : Sequence, nitems: '@output.nfiles'}
 
-  nfiles : 10
+  nfiles : 100
