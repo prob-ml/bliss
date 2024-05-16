@@ -35,6 +35,19 @@ class UnconstrainedNormal:
         return Normal(mean, sd)
 
 
+class UnconstrainedBivariateNormal:
+    def __init__(self, low_clamp=-20, high_clamp=20):
+        self.dim = 4
+        self.low_clamp = low_clamp
+        self.high_clamp = high_clamp
+
+    def get_dist(self, params):
+        mean = params[:, :, :, :2]
+        sd = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+
+        return Independent(Normal(mean, sd), 1)
+
+
 class TruncatedDiagonalMVN(Distribution):
     """A truncated diagonal multivariate normal distribution."""
 
