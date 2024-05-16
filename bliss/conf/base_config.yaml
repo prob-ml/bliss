@@ -110,7 +110,6 @@ encoder:
             "sample_imgs": bliss.encoder.plots.plot_sample_images
         freqs: 
             "sample_imgs": 10
-        logger: ${train.trainer.logger}
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
     double_detect: false

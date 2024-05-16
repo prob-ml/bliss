@@ -9,22 +9,21 @@ import warnings
 from omegaconf import ListConfig, DictConfig
 
 class PlotCollection:
-    def __init__(self, plotfns, freqs, logger):
+    def __init__(self, plotfns, freqs):
         self.plotfns = plotfns # list or dict
         self.freqs = freqs
-        self.logger = logger
 
         assert(type(self.freqs) == type(self.plotfns))
     
-    def single_plot(self, fn_key_or_idx, state_dict, **kwargs):
+    def single_plot(self, fn_key_or_idx, state_dict, logger=None, **kwargs):
         # try:
         tag, only_plot = hydra.utils.get_method(self.plotfns[fn_key_or_idx])(state_dict=state_dict, **kwargs)
         # except(TypeError) as err:
             # raise TypeError("Remember to return a logging plot title before figure in " + str(self.plotfns[fn_key_or_idx]) + ".") from err
-        if self.logger and only_plot is not None:
-            self.logger.experiment.add_figure(tag, only_plot, close=True)
+        if logger and only_plot:
+            logger.experiment.add_figure(tag, only_plot, close=True)
 
-    def plot_all(self, state_dict, check_freqs, **kwargs):
+    def plot_all(self, state_dict, check_freqs, logger=None, **kwargs):
         if check_freqs:
             assert("current_iteration" in state_dict.keys(), "Plotting frequency enabled but no current iteration counter provided")
             curr_iteration = state_dict["current_iteration"]
@@ -36,11 +35,11 @@ class PlotCollection:
         if isinstance(self.plotfns, ListConfig):
             for plot_idx in range(len(self.plotfns)):
                 if ((not check_freqs) or (curr_iteration % self.freqs[plot_idx] == 0 or curr_iteration == max_iterations - 1)):
-                    self.single_plot(fn_key_or_idx=plot_idx, state_dict=state_dict, **kwargs)
+                    self.single_plot(fn_key_or_idx=plot_idx, state_dict=state_dict, logger=logger **kwargs)
         elif isinstance(self.plotfns, DictConfig):
             for plot_key in self.plotfns.keys():
                 if ((not check_freqs) or (curr_iteration % self.freqs[plot_key] == 0 or curr_iteration == max_iterations - 1)):
-                    self.single_plot(fn_key_or_idx=plot_key, state_dict=state_dict, **kwargs)
+                    self.single_plot(fn_key_or_idx=plot_key, state_dict=state_dict, logger=logger, **kwargs)
         else:
             raise TypeError("Invalid type found for plotting functions collection, expected list or dict but found " + str(type(self.plotfns)))
 

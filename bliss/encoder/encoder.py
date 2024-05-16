@@ -320,7 +320,7 @@ class Encoder(pl.LightningModule):
             "current_iteration": self.current_epoch, 
             "logging_name": "val"
         }
-        self.plots.plot_all(state_dict=plot_dict, check_freqs=True)
+        self.plots.plot_all(state_dict=plot_dict, check_freqs=True, logger=self.logger)
     def report_metrics(self, metrics, logging_name, show_epoch=False):
         for k, v in metrics.compute().items():
             self.log(f"{logging_name}/{k}", v, sync_dist=True)
