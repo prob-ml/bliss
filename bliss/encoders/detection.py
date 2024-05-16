@@ -155,7 +155,8 @@ class DetectionEncoder(pl.LightningModule):
         assert images.device == background.device == true_catalog.device
 
         # encode
-        n_source_probs, locs_mean, locs_sd = self.forward(images, background)
+        out: tuple[Tensor, Tensor, Tensor] = self(images, background)
+        n_source_probs, locs_mean, locs_sd = out
 
         # loss from detection count encoding
         n_true_sources_flat = rearrange(true_catalog.n_sources, "b nth ntw -> (b nth ntw)")
@@ -173,8 +174,8 @@ class DetectionEncoder(pl.LightningModule):
 
         return {
             "loss": loss,
-            "counter_loss": counter_loss.detach().mean().item(),
-            "locs_loss": locs_loss.detach().mean().item(),
+            "counter_loss": counter_loss.detach().mean(),
+            "locs_loss": locs_loss.detach().mean(),
         }
 
     # pytorch lightning
@@ -233,12 +234,12 @@ def _compute_tiled_metrics(
 
     # recall
     mask1 = n_sources1 > 0
-    n_match = torch.eq(n_sources1[mask1], n_sources2[mask1]).sum().item()
+    n_match = torch.eq(n_sources1[mask1], n_sources2[mask1]).sum()
     recall = n_match / n_sources1.sum()
 
     # precision
     mask2 = n_sources2 > 0
-    n_match = torch.eq(n_sources1[mask2], n_sources2[mask2]).sum().item()
+    n_match = torch.eq(n_sources1[mask2], n_sources2[mask2]).sum()
     precision = n_match / n_sources2.sum()
 
     # f1

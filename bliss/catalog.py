@@ -157,7 +157,7 @@ class TileCatalog(UserDict):
             the elements of this tensor would take values from 0 up to and including 5.
         """
         n_sources_per_batch = reduce(self.n_sources, "b nth ntw -> b", "sum")
-        max_n_sources_per_batch = int(n_sources_per_batch.max().int().item())
+        max_n_sources_per_batch = n_sources_per_batch.max().int()
         tile_is_on_array = rearrange(self.n_sources, "b nth ntw-> b (nth ntw)")
         indices_sorted = tile_is_on_array.long().argsort(dim=1, descending=True)
         indices_sorted_clipped = indices_sorted[:, :max_n_sources_per_batch]
@@ -214,7 +214,7 @@ class FullCatalog(UserDict):
         self.max_n_sources = self.plocs.shape[1]
         assert self.plocs.ndim == 3
         assert self.plocs.shape[-1] == 2
-        assert self.n_sources.max().int().item() <= self.max_n_sources
+        assert self.n_sources.max().int() <= self.max_n_sources
         assert self.n_sources.shape == (self.batch_size,)
         super().__init__(**d)
 
@@ -246,7 +246,7 @@ class FullCatalog(UserDict):
         """Apply magnitude bin to given parameters."""
         assert pname in self, f"Parameter '{pname}' required to apply mag cut."
         assert self[pname].shape[-1] == 1, "Can only be applied to scalar parameters."
-        assert self[pname].min().item() >= 0, f"Cannot use this function with {pname}."
+        assert self[pname].min() >= 0, f"Cannot use this function with {pname}."
         assert p_min >= 0, "`p_min` should be at least 0 "
 
         # get indices to collect
@@ -309,17 +309,20 @@ class FullCatalog(UserDict):
 
         # fill up the tiled tensors
         for ii in range(self.batch_size):
-            n_sources = int(self.n_sources[ii].item())
+            n_sources = self.n_sources[ii].int()
+            assert n_sources.ndim == 0
             for idx, coords in enumerate(tile_coords[ii][:n_sources]):
-                n_sources_in_tile = tile_n_sources[ii, coords[0], coords[1]].item()
-                assert n_sources_in_tile in {0, 1}
+                n_sources_in_tile = tile_n_sources[ii, coords[0], coords[1]]
+                assert n_sources_in_tile.ndim == 0
+                assert n_sources_in_tile.le(1) or n_sources_in_tile.ge(0)
+                assert n_sources_in_tile.dtype is torch.int64
                 if n_sources_in_tile > 0:
                     if not ignore_extra_sources:
                         raise ValueError(  # noqa: WPS220
                             "# of sources in at least one tile is larger than 1."
                         )
-                    flux1 = tile_fluxes[ii, coords[0], coords[1]].item()
-                    flux2 = self["fluxes"][ii, idx].item()
+                    flux1 = rearrange(tile_fluxes[ii, coords[0], coords[1]], "->")
+                    flux2 = rearrange(self["fluxes"][ii, idx], "1 ->")
                     if flux1 > flux2:  # keep current source in tile
                         continue  # noqa: WPS220
                 tile_loc = (self.plocs[ii, idx] - coords * tile_slen) / tile_slen
@@ -328,7 +331,8 @@ class FullCatalog(UserDict):
                     q[ii, coords[0], coords[1], :] = self[p][ii, idx]
                 tile_n_sources[ii, coords[0], coords[1]] = 1
                 if ignore_extra_sources:
-                    tile_fluxes[ii, coords[0], coords[1]] = self["fluxes"][ii, idx].item()
+                    flux = rearrange(self["fluxes"][ii, idx], "1->")
+                    tile_fluxes[ii, coords[0], coords[1]] = flux
         tile_params.update({"locs": tile_locs, "n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
 

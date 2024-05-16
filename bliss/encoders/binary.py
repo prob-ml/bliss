@@ -88,12 +88,13 @@ class BinaryEncoder(pl.LightningModule):
         n_sources_flat = rearrange(n_sources, "b nth ntw -> (b nth ntw)")
         galaxy_bools_flat = rearrange(galaxy_bools, "b nth ntw 1 -> (b nth ntw 1)")
 
-        galaxy_probs_flat = self.forward(images, background, locs)
+        galaxy_probs_flat: Tensor = self(images, background, locs)
 
         # accuracy
-        hits = galaxy_probs_flat.ge(0.5).eq(galaxy_bools_flat.bool())
-        hits_with_one_source = hits.logical_and(n_sources_flat.eq(1))
-        acc = hits_with_one_source.sum() / n_sources_flat.sum()
+        with torch.no_grad():
+            hits = galaxy_probs_flat.ge(0.5).eq(galaxy_bools_flat.bool())
+            hits_with_one_source = hits.logical_and(n_sources_flat.eq(1))
+            acc = hits_with_one_source.sum() / n_sources_flat.sum()
 
         # we need to calculate cross entropy loss, only for "on" sources
         raw_loss = BCELoss(reduction="none")(galaxy_probs_flat, galaxy_bools_flat.float())
