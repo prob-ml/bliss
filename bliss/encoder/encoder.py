@@ -15,7 +15,7 @@ from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
-from bliss.encoder.plotting import plot_detections, plot_maps
+from bliss.encoder.plotting import plot_detections
 from bliss.encoder.variational_dist import VariationalDistSpec
 
 
@@ -283,13 +283,6 @@ class Encoder(pl.LightningModule):
         if self.logger:
             self.logger.experiment.add_figure(title, fig)
         plt.close(fig)
-
-        if "shear" in est_cat and "convergence" in est_cat:
-            fig_lensing = plot_maps(batch["images"], target_cat_cropped, est_cat)
-            title = f"Epoch:{self.current_epoch}/{logging_name} images"
-            if self.logger:
-                self.logger.experiment.add_figure(title, fig_lensing)
-            plt.close(fig_lensing)
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
