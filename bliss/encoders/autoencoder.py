@@ -34,12 +34,12 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def forward(self, images, background) -> Tensor:
         """Gets reconstructed images from running through encoder and decoder."""
-        z = self.enc.forward(images - background)
-        recon_mean = self.dec.forward(z)
+        z = self.enc(images - background)
+        recon_mean = self.dec(z)
         return recon_mean + background
 
     def get_loss(self, images: Tensor, background: Tensor) -> Tuple[Tensor, Tensor]:
-        recon_mean = self.forward(images, background)
+        recon_mean: Tensor = self(images, background)
         return -Normal(recon_mean, recon_mean.sqrt()).log_prob(images).sum(), recon_mean
 
     def training_step(self, batch: dict[str, Tensor], batch_idx: int):
