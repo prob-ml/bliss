@@ -1,58 +1,95 @@
-from bliss.catalog import TileCatalog
-import hydra
 import math
+import warnings
+
+import hydra
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-import warnings
-from omegaconf import ListConfig, DictConfig
+from omegaconf import DictConfig, ListConfig
+
+from bliss.catalog import TileCatalog
+
 
 class PlotCollection:
     def __init__(self, plotfns, freqs):
-        self.plotfns = plotfns # list or dict
+        self.plotfns = plotfns
         self.freqs = freqs
 
-        assert(type(self.freqs) == type(self.plotfns))
-    
     def single_plot(self, fn_key_or_idx, state_dict, logger=None, **kwargs):
-        # try:
-        tag, only_plot = hydra.utils.get_method(self.plotfns[fn_key_or_idx])(state_dict=state_dict, **kwargs)
-        # except(TypeError) as err:
-            # raise TypeError("Remember to return a logging plot title before figure in " + str(self.plotfns[fn_key_or_idx]) + ".") from err
+        tag, only_plot = hydra.utils.get_method(self.plotfns[fn_key_or_idx])(
+            state_dict=state_dict,
+            **kwargs,
+        )
         if logger and only_plot:
             logger.experiment.add_figure(tag, only_plot, close=True)
 
     def plot_all(self, state_dict, check_freqs, logger=None, **kwargs):
         if check_freqs:
-            assert("current_iteration" in state_dict.keys(), "Plotting frequency enabled but no current iteration counter provided")
+            assert (
+                "current_iteration" in state_dict
+            ), "Plotting frequency enabled but no current iteration counter provided"
             curr_iteration = state_dict["current_iteration"]
-            if "max_iterations" not in state_dict.keys():
+            if "max_iterations" not in state_dict:
                 max_iterations = -1
-                warnings.warn("Warning: Current iteration set in plotting but max iterations not set. Ignore if expected behavior.", RuntimeWarning)
+                warnings.warn(
+                    "Warning: Current iteration set in plotting but max iterations not set."
+                    + "Ignore if expected behavior.",
+                    RuntimeWarning,
+                )
             else:
                 max_iterations = state_dict["max_iterations"]
         if isinstance(self.plotfns, ListConfig):
-            for plot_idx in range(len(self.plotfns)):
-                if ((not check_freqs) or (curr_iteration % self.freqs[plot_idx] == 0 or curr_iteration == max_iterations - 1)):
-                    self.single_plot(fn_key_or_idx=plot_idx, state_dict=state_dict, logger=logger **kwargs)
+            for idx, freq in enumerate(self.freqs):
+                should_plot = (
+                    (not check_freqs)
+                    or curr_iteration % freq == 0
+                    or curr_iteration == max_iterations - 1
+                )
+                if should_plot:
+                    self.single_plot(
+                        fn_key_or_idx=idx,
+                        state_dict=state_dict,
+                        logger=logger,
+                        **kwargs,
+                    )
         elif isinstance(self.plotfns, DictConfig):
             for plot_key in self.plotfns.keys():
-                if ((not check_freqs) or (curr_iteration % self.freqs[plot_key] == 0 or curr_iteration == max_iterations - 1)):
-                    self.single_plot(fn_key_or_idx=plot_key, state_dict=state_dict, logger=logger, **kwargs)
+                should_plot = (
+                    not check_freqs
+                    or curr_iteration % self.freqs[plot_key] == 0
+                    or curr_iteration == max_iterations - 1
+                )
+                if should_plot:
+                    self.single_plot(
+                        fn_key_or_idx=plot_key,
+                        state_dict=state_dict,
+                        logger=logger,
+                        **kwargs,
+                    )
         else:
-            raise TypeError("Invalid type found for plotting functions collection, expected list or dict but found " + str(type(self.plotfns)))
+            raise TypeError(
+                "Invalid type found for plotting functions collection, "
+                + "expected list or dict but found "
+                + str(type(self.plotfns))
+            )
+
 
 def plot_sample_images(state_dict, **kwargs):
-    if ("restrict_batch" in state_dict.keys() and "batch_idx" in state_dict.keys() and state_dict["batch_idx"] != state_dict["restrict_batch"]):
+    batch_restriction = (
+        "restrict_batch" in state_dict
+        and "batch_idx" in state_dict
+        and state_dict["batch_idx"] != state_dict["restrict_batch"]
+    )
+    if batch_restriction:
         return "", None
-    tile_slen = state_dict['tile_slen']
-    batch = state_dict['batch']
-    min_flux_threshold = state_dict['min_flux_threshold']
-    tiles_to_crop = state_dict['tiles_to_crop']
-    sample = state_dict['sample']
-    current_epoch = state_dict['current_iteration']
-    logging_name = state_dict['logging_name']
+    tile_slen = state_dict["tile_slen"]
+    batch = state_dict["batch"]
+    min_flux_threshold = state_dict["min_flux_threshold"]
+    tiles_to_crop = state_dict["tiles_to_crop"]
+    sample = state_dict["sample"]
+    current_epoch = state_dict["current_iteration"]
+    logging_name = state_dict["logging_name"]
 
     target_cat = TileCatalog(tile_slen, batch["tile_catalog"])
     target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=min_flux_threshold)
@@ -62,6 +99,7 @@ def plot_sample_images(state_dict, **kwargs):
     fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
     title = f"Epoch:{current_epoch}/{logging_name} images"
     return title, fig
+
 
 def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, figsize=None):
     """Plots an image of true and estimated sources."""
@@ -136,6 +174,7 @@ def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, 
 
     fig.tight_layout()
     return fig
+
 
 def plot_plocs(catalog, ax, idx, filter_by="all", bp=0, **kwargs):
     """Plots pixel coordinates of sources on given axis.
