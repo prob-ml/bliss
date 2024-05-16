@@ -21,6 +21,17 @@ encoder:
             scale: 0.1
             thresholds: [-3, 0, 1, 3]
         concat_psf_params: true
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        metrics:
+          - _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
+          - _target_: bliss.encoder.metrics.DetectionPerformanceOnFlux
+            flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+          - _target_: bliss.encoder.metrics.SourceTypeAccuracy
+          - _target_: bliss.encoder.metrics.FluxError
+            survey_bands: ${encoder.survey_bands}
+          - _target_: bliss.encoder.metrics.GalaxyShapeError
 
 
 surveys:
@@ -38,7 +49,7 @@ surveys:
 train:
     trainer:
         logger:
-            name: DC2_psf_aug_asinh
+            name: DC2_experiments
             version: DC2_psf_aug_asinh
         precision: 32
         strategy:
@@ -47,6 +58,6 @@ train:
           timeout:
             _target_: datetime.timedelta
             seconds: 180000
-        devices: [0, 1]
+        devices: [0, 1, 5, 6]
     data_source: ${surveys.dc2}
     pretrained_weights: null

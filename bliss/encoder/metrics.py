@@ -2,6 +2,7 @@ import seaborn as sns
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
+import numpy as np
 from scipy.optimize import linear_sum_assignment
 from torchmetrics import Metric
 
@@ -92,10 +93,10 @@ class DetectionPerformance(Metric):
             init_val = torch.zeros(n_bins)
             self.add_state(metric, default=init_val, dist_reduce_fx="sum")
 
-    def update(self, true_cat, est_cat, matching):
+    def update(self, true_cat, est_cat, matching, compare_attr_name="magnitudes"):
         if self.mag_band:
-            true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
-            est_mags = est_cat.magnitudes[:, :, self.mag_band].contiguous()
+            true_mags = true_cat[compare_attr_name][:, :, self.mag_band].contiguous()
+            est_mags = est_cat[compare_attr_name][:, :, self.mag_band].contiguous()
         else:
             # hack to match regardless of magnitude; intended for
             # catalogs from surveys with incompatible filter bands
@@ -137,9 +138,9 @@ class DetectionPerformance(Metric):
 
     def plot(self):
         # Compute recall, precision, and F1 score
-        recall = self.n_true_matches / self.n_true_sources
-        precision = self.n_est_matches / self.n_est_sources
-        f1 = 2 * precision * recall / (precision + recall)
+        recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)
+        precision = (self.n_est_matches / self.n_est_sources).nan_to_num(0)
+        f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
 
         mbc = self.mag_bin_cutoffs
         xlabels = [f"[{mbc[i]}, {mbc[i+1]}]" for i in range(len(mbc) - 1)]
@@ -151,7 +152,7 @@ class DetectionPerformance(Metric):
             f1 = f1[:-1]
             xlabels = xlabels[:-1]
 
-        sns.set(style="whitegrid")
+        sns.set_theme(style="whitegrid")
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
         axes[0].plot(recall.tolist(), marker="s")
@@ -177,6 +178,121 @@ class DetectionPerformance(Metric):
 
         return fig, axes
 
+
+class DetectionPerformanceOnFlux(DetectionPerformance):
+    """Calculates detection and classification metrics between two catalogs for each flux bin.
+    Note that galaxy classification metrics are only computed when the values are available in
+    both catalogs.
+    """
+
+    def __init__(
+        self,
+        flux_band: int = 2,
+        flux_bin_cutoffs: list = None,
+        exclude_last_bin: bool = False,
+    ):
+        super().__init__(flux_band, flux_bin_cutoffs, exclude_last_bin)
+
+    def update(self, true_cat, est_cat, matching, compare_attr_name="magnitudes"):
+        super(DetectionPerformanceOnFlux, self).update(true_cat, est_cat, matching, "on_fluxes")
+        
+    def plot(self):
+        # Compute recall, precision, and F1 score
+        recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)
+        precision = (self.n_est_matches / self.n_est_sources).nan_to_num(0)
+        f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
+
+        fbc = self.mag_bin_cutoffs
+        xlabels = [f"{fbc[i]}" for i in range(len(fbc) - 1)]
+        xlabels = ["< " + str(fbc[0])] + xlabels + ["> " + str(fbc[-1])]
+
+        if self.exclude_last_bin:
+            precision = precision[:-1]
+            recall = recall[:-1]
+            f1 = f1[:-1]
+            xlabels = xlabels[:-1]
+
+        sns.set_theme(style="whitegrid")
+        fig, axes = plt.subplots(2, 3, 
+                                 figsize=(30, 15), 
+                                 gridspec_kw={"height_ratios": [1, 2]}, 
+                                 sharex="col")
+        
+        c1, c2, c3 = plt.rcParams["axes.prop_cycle"].by_key()["color"][0:3]
+        col_index = 0
+        axes[1, col_index].plot(range(len(xlabels)), recall.tolist(), 
+                                "-o", color=c1, label="BLISS Recall")
+        axes[1, col_index].set_title("Recall")
+        axes[1, col_index].set_ylabel("Recall")
+        axes[1, col_index].set_xlabel("Flux")
+        axes[1, col_index].set_xticks(range(len(xlabels)))
+        axes[1, col_index].set_xticklabels(xlabels, rotation=45)
+        axes[1, col_index].set_ylim([0, 1])
+        axes[1, col_index].legend()
+
+        axes[0, col_index].step(range(len(xlabels)), 
+                                self.n_true_sources.tolist(), 
+                                label="# true sources", where="mid", color=c3)
+        axes[0, col_index].step(range(len(xlabels)),
+                                self.n_true_matches.tolist(), 
+                                label="# matches (BLISS)", ls="--", where="mid", color=c2)
+        count_max = self.n_true_sources.max().item()
+        count_ticks = np.round(np.linspace(0, count_max, 5), -3)
+        axes[0, col_index].set_yticks(count_ticks)
+        axes[0, col_index].set_ylabel("Count")
+        axes[0, col_index].legend()
+
+
+        col_index = 1
+        axes[1, col_index].plot(range(len(xlabels)), precision.tolist(), 
+                                "-o", color=c1, label="BLISS Precision")
+        axes[1, col_index].set_title("Precision")
+        axes[1, col_index].set_ylabel("Precision")
+        axes[1, col_index].set_xlabel("Flux")
+        axes[1, col_index].set_xticks(range(len(xlabels)))
+        axes[1, col_index].set_xticklabels(xlabels, rotation=45)
+        axes[1, col_index].set_ylim([0, 1])
+        axes[1, col_index].legend()
+
+        axes[0, col_index].step(range(len(xlabels)), 
+                                self.n_true_sources.tolist(), 
+                                label="# true sources", where="mid", color=c3)
+        axes[0, col_index].step(range(len(xlabels)),
+                                self.n_true_matches.tolist(), 
+                                label="# matches (BLISS)", ls="--", where="mid", color=c2)
+        count_max = self.n_true_sources.max().item()
+        count_ticks = np.round(np.linspace(0, count_max, 5), -3)
+        axes[0, col_index].set_yticks(count_ticks)
+        axes[0, col_index].set_ylabel("Count")
+        axes[0, col_index].legend()
+
+        col_index = 2
+        axes[1, col_index].plot(range(len(xlabels)), f1.tolist(), 
+                                "-o", color=c1, label="BLISS F1")
+        axes[1, col_index].set_title("F1")
+        axes[1, col_index].set_ylabel("F1")
+        axes[1, col_index].set_xlabel("Flux")
+        axes[1, col_index].set_xticks(range(len(xlabels)))
+        axes[1, col_index].set_xticklabels(xlabels, rotation=45)
+        axes[1, col_index].set_ylim([0, 1])
+        axes[1, col_index].legend()
+
+        axes[0, col_index].step(range(len(xlabels)), 
+                                self.n_true_sources.tolist(), 
+                                label="# true sources", where="mid", color=c3)
+        axes[0, col_index].step(range(len(xlabels)),
+                                self.n_true_matches.tolist(), 
+                                label="# matches (BLISS)", ls="--", where="mid", color=c2)
+        count_max = self.n_true_sources.max().item()
+        count_ticks = np.round(np.linspace(0, count_max, 5), -3)
+        axes[0, col_index].set_yticks(count_ticks)
+        axes[0, col_index].set_ylabel("Count")
+        axes[0, col_index].legend()
+
+        plt.tight_layout()
+        plt.show()
+
+        return fig, axes
 
 class SourceTypeAccuracy(Metric):
     def __init__(self):
