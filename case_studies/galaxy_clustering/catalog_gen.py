@@ -4,7 +4,8 @@ from astropy.io import ascii as astro_ascii
 from astropy.table import Table
 from prior import ClusterPrior
 
-CATALOG_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data/catalogs"
+ENVIRONMENT_PATH = os.getcwd()
+CATALOG_PATH = os.path.join(ENVIRONMENT_PATH, "data/catalogs")
 
 if not os.path.exists(CATALOG_PATH):
     os.makedirs(CATALOG_PATH)
