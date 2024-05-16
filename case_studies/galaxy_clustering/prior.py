@@ -8,9 +8,9 @@ from scipy.stats import gennorm
 
 
 class ClusterPrior:
-    def __init__(self):
+    def __init__(self, size=100):
         super().__init__()
-        self.size = 100
+        self.size = size
         self.width = 5000
         self.height = 5000
         self.bands = ["G", "R", "I", "Z"]
