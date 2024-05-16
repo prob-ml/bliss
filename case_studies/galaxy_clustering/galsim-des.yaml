@@ -7,18 +7,15 @@
 #   1: DEC
 #   2: X
 #   3: Y
-#   4: FLUX_R
-#   5: MAG_R
+#   4: MEM
+#   5: FLUX_R
 #   6: FLUX_G
-#   7: MAG_G
-#   8: FLUX_I
-#   9: MAG_I
-#   10: FLUX_Z
-#   11: MAG_Z
-#   12: TSIZE
-#   13: FRACDEV
-#   14: G1
-#   15: G2
+#   7: FLUX_I
+#   8: FLUX_Z
+#   9: TSIZE
+#   10: FRACDEV
+#   11: G1
+#   12: G2
 
 #psf :
 
@@ -72,12 +69,12 @@ gal :
   type : Exponential
   #Using a constant half light radius for now, since there were some issues in the TSIZE prior
   half_light_radius : 2.3
-  flux : { type: Catalog, col: 4 } #using R band
+  flux : { type: Catalog, col: 5 } #using R band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 10 }
-    g2 : { type: Catalog, col: 11 }
+    g1 : { type: Catalog, col: 11 }
+    g2 : { type: Catalog, col: 12 }
 
 output :
   type : Fits
@@ -97,12 +94,12 @@ gal :
   type : Exponential
   #Using a constant half light radius for now, since there were some issues in the TSIZE prior
   half_light_radius : 2.3
-  flux : { type: Catalog, col: 5 } #using G band
+  flux : { type: Catalog, col: 6 } #using G band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 10 }
-    g2 : { type: Catalog, col: 11 }
+    g1 : { type: Catalog, col: 11 }
+    g2 : { type: Catalog, col: 12 }
 
 output :
   type : Fits
@@ -122,12 +119,12 @@ gal :
   type : Exponential
   #Using a constant half light radius for now, since there were some issues in the TSIZE prior
   half_light_radius : 2.3
-  flux : { type: Catalog, col: 6 } #using I band
+  flux : { type: Catalog, col: 7 } #using I band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 10 }
-    g2 : { type: Catalog, col: 11 }
+    g1 : { type: Catalog, col: 11 }
+    g2 : { type: Catalog, col: 12 }
 
 output :
   type : Fits
@@ -147,12 +144,12 @@ gal :
   type : Exponential
   #Using a constant half light radius for now, since there were some issues in the TSIZE prior
   half_light_radius : 2.3
-  flux : { type: Catalog, col: 7 } #using Z band
+  flux : { type: Catalog, col: 8 } #using Z band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 10 }
-    g2 : { type: Catalog, col: 11 }
+    g1 : { type: Catalog, col: 11 }
+    g2 : { type: Catalog, col: 12 }
 
 output :
   type : Fits

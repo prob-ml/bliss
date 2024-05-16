@@ -261,16 +261,19 @@ class ClusterPrior:
                     np.array(geo_galaxy_cluster[i])[:, 1], np.array(geo_galaxy[i])[:, 1]
                 )
                 mock_catalog["X"] = np.append(
-                    np.array(galaxy_locs[i])[:, 0], np.array(galaxy_locs_cluster[i])[:, 0]
+                    np.array(galaxy_locs_cluster[i])[:, 0], np.array(galaxy_locs[i])[:, 0]
                 )
                 mock_catalog["Y"] = np.append(
-                    np.array(galaxy_locs[i])[:, 1], np.array(galaxy_locs_cluster[i])[:, 1]
+                    np.array(galaxy_locs_cluster[i])[:, 1], np.array(galaxy_locs[i])[:, 1]
                 )
+                n_cg, n_bg = len(geo_galaxy_cluster[i]), len(geo_galaxy[i])
+                mock_catalog["MEM"] = np.append(np.ones(n_cg), np.zeros(n_bg))
             else:
                 mock_catalog["RA"] = np.array(geo_galaxy[i])[:, 0]
                 mock_catalog["DEC"] = np.array(geo_galaxy[i])[:, 1]
                 mock_catalog["X"] = np.array(galaxy_locs[i])[:, 0]
                 mock_catalog["Y"] = np.array(galaxy_locs[i])[:, 1]
+                mock_catalog["MEM"] = 0
             mock_catalog["FLUX_R"] = fluxes[:, 1]
             mock_catalog["FLUX_G"] = fluxes[:, 0]
             mock_catalog["FLUX_I"] = fluxes[:, 2]
