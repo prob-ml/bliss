@@ -1,8 +1,8 @@
+import numpy as np
 import seaborn as sns
 import torch
 from einops import rearrange
 from matplotlib import pyplot as plt
-import numpy as np
 from scipy.optimize import linear_sum_assignment
 from torchmetrics import Metric
 
@@ -193,17 +193,95 @@ class DetectionPerformanceOnFlux(DetectionPerformance):
     ):
         super().__init__(flux_band, flux_bin_cutoffs, exclude_last_bin)
 
+        galaxy_star_detection_metrics = [
+            "n_galaxy_true_sources",
+            "n_galaxy_est_sources",
+            "n_galaxy_true_matches",
+            "n_galaxy_est_matches",
+            "n_star_true_sources",
+            "n_star_est_sources",
+            "n_star_true_matches",
+            "n_star_est_matches",
+        ]
+
+        for metric in galaxy_star_detection_metrics:
+            n_bins = len(self.mag_bin_cutoffs) + 1  # fencepost
+            init_val = torch.zeros(n_bins)
+            self.add_state(metric, default=init_val, dist_reduce_fx="sum")
+
     def update(self, true_cat, est_cat, matching, compare_attr_name="magnitudes"):
+        assert self.mag_band, "mag_band should be set"
+        assert isinstance(true_cat, FullCatalog), "true_cat should be FullCatalog"
+        assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
+
         super(DetectionPerformanceOnFlux, self).update(true_cat, est_cat, matching, "on_fluxes")
-        
+
+        true_fluxes = true_cat["on_fluxes"][:, :, self.mag_band].contiguous()
+        est_fluxes = est_cat["on_fluxes"][:, :, self.mag_band].contiguous()
+
+        true_star_bools = true_cat.star_bools.squeeze(2)
+        true_galaxy_bools = true_cat.galaxy_bools.squeeze(2)
+        est_star_bools = est_cat.star_bools.squeeze(2)
+        est_galaxy_bools = est_cat.galaxy_bools.squeeze(2)
+
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(device=self.device)
+            n_true = true_cat.n_sources[i].sum().item()
+            n_est = est_cat.n_sources[i].sum().item()
+
+            cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+            n_bins = len(cutoffs) + 1
+
+            cur_batch_true_fluxes = true_fluxes[i, :n_true]
+            cur_batch_est_fluxes = est_fluxes[i, :n_est]
+
+            cur_batch_true_star_bools = true_star_bools[i, :n_true]
+            cur_batch_true_galaxy_bools = true_galaxy_bools[i, :n_true]
+            cur_batch_est_star_bools = est_star_bools[i, :n_est]
+            cur_batch_est_galaxy_bools = est_galaxy_bools[i, :n_est]
+
+            tmi_star = cur_batch_true_fluxes[cur_batch_true_star_bools]
+            tmi_galaxy = cur_batch_true_fluxes[cur_batch_true_galaxy_bools]
+            emi_star = cur_batch_est_fluxes[cur_batch_est_star_bools]
+            emi_galaxy = cur_batch_est_fluxes[cur_batch_est_galaxy_bools]
+
+            tcat_matches_star = tcat_matches[cur_batch_true_star_bools[tcat_matches]]
+            tcat_matches_galaxy = tcat_matches[cur_batch_true_galaxy_bools[tcat_matches]]
+            ecat_matches_star = ecat_matches[cur_batch_est_star_bools[ecat_matches]]
+            ecat_matches_galaxy = ecat_matches[cur_batch_est_galaxy_bools[ecat_matches]]
+
+            tmim_star = cur_batch_true_fluxes[tcat_matches_star]
+            tmim_galaxy = cur_batch_true_fluxes[tcat_matches_galaxy]
+            emim_star = cur_batch_est_fluxes[ecat_matches_star]
+            emim_galaxy = cur_batch_est_fluxes[ecat_matches_galaxy]
+
+            self.n_star_true_sources += torch.bucketize(tmi_star, cutoffs).bincount(minlength=n_bins)
+            self.n_star_est_sources += torch.bucketize(emi_star, cutoffs).bincount(minlength=n_bins)
+            self.n_star_true_matches += torch.bucketize(tmim_star, cutoffs).bincount(minlength=n_bins)
+            self.n_star_est_matches += torch.bucketize(emim_star, cutoffs).bincount(minlength=n_bins)
+
+            self.n_galaxy_true_sources += torch.bucketize(tmi_galaxy, cutoffs).bincount(minlength=n_bins)
+            self.n_galaxy_est_sources += torch.bucketize(emi_galaxy, cutoffs).bincount(minlength=n_bins)
+            self.n_galaxy_true_matches += torch.bucketize(tmim_galaxy, cutoffs).bincount(minlength=n_bins)
+            self.n_galaxy_est_matches += torch.bucketize(emim_galaxy, cutoffs).bincount(minlength=n_bins)
+
     def plot(self):
         # Compute recall, precision, and F1 score
         recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)
         precision = (self.n_est_matches / self.n_est_sources).nan_to_num(0)
         f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
 
+        recall_star = (self.n_star_true_matches / self.n_star_true_sources).nan_to_num(0)
+        precision_star = (self.n_star_est_matches / self.n_star_est_sources).nan_to_num(0)
+        f1_star = (2 * precision_star * recall_star / (precision_star + recall_star)).nan_to_num(0)
+
+        recall_galaxy = (self.n_galaxy_true_matches / self.n_galaxy_true_sources).nan_to_num(0)
+        precision_galaxy = (self.n_galaxy_est_matches / self.n_galaxy_est_sources).nan_to_num(0)
+        f1_galaxy = (2 * precision_galaxy * recall_galaxy / (precision_galaxy + recall_galaxy)).nan_to_num(0)
+
         fbc = self.mag_bin_cutoffs
-        xlabels = [f"{fbc[i]}" for i in range(len(fbc) - 1)]
+        xlabels = [f"{fbc[i + 1]}" for i in range(len(fbc) - 1)]
         xlabels = ["< " + str(fbc[0])] + xlabels + ["> " + str(fbc[-1])]
 
         if self.exclude_last_bin:
@@ -213,29 +291,31 @@ class DetectionPerformanceOnFlux(DetectionPerformance):
             xlabels = xlabels[:-1]
 
         sns.set_theme(style="whitegrid")
-        fig, axes = plt.subplots(2, 3, 
-                                 figsize=(30, 15), 
-                                 gridspec_kw={"height_ratios": [1, 2]}, 
+        fig, axes = plt.subplots(2, 2,
+                                 figsize=(30, 10),
+                                 gridspec_kw={"height_ratios": [1, 2]},
                                  sharex="col")
-        
-        c1, c2, c3 = plt.rcParams["axes.prop_cycle"].by_key()["color"][0:3]
+
+        c1, c2, c3, c4, c5 = plt.rcParams["axes.prop_cycle"].by_key()["color"][0:5]
         col_index = 0
-        axes[1, col_index].plot(range(len(xlabels)), recall.tolist(), 
-                                "-o", color=c1, label="BLISS Recall")
-        axes[1, col_index].set_title("Recall")
-        axes[1, col_index].set_ylabel("Recall")
+        axes[1, col_index].plot(range(len(xlabels)), recall.tolist(),
+                                linestyle="solid", color=c1, label="BLISS Recall")
+        axes[1, col_index].plot(range(len(xlabels)), precision.tolist(),
+                                linestyle="solid", color=c2, label="BLISS Precision")
+        axes[1, col_index].plot(range(len(xlabels)), f1.tolist(),
+                                linestyle="solid", color=c3, label="BLISS F1")
         axes[1, col_index].set_xlabel("Flux")
         axes[1, col_index].set_xticks(range(len(xlabels)))
         axes[1, col_index].set_xticklabels(xlabels, rotation=45)
         axes[1, col_index].set_ylim([0, 1])
         axes[1, col_index].legend()
 
-        axes[0, col_index].step(range(len(xlabels)), 
-                                self.n_true_sources.tolist(), 
-                                label="# true sources", where="mid", color=c3)
         axes[0, col_index].step(range(len(xlabels)),
-                                self.n_true_matches.tolist(), 
-                                label="# matches (BLISS)", ls="--", where="mid", color=c2)
+                                self.n_true_sources.tolist(),
+                                label="# true sources", where="mid", color=c1)
+        axes[0, col_index].step(range(len(xlabels)),
+                                self.n_true_matches.tolist(),
+                                label="# matches (BLISS)", ls="--", where="mid", color=c1)
         count_max = self.n_true_sources.max().item()
         count_ticks = np.round(np.linspace(0, count_max, 5), -3)
         axes[0, col_index].set_yticks(count_ticks)
@@ -244,45 +324,36 @@ class DetectionPerformanceOnFlux(DetectionPerformance):
 
 
         col_index = 1
-        axes[1, col_index].plot(range(len(xlabels)), precision.tolist(), 
-                                "-o", color=c1, label="BLISS Precision")
-        axes[1, col_index].set_title("Precision")
-        axes[1, col_index].set_ylabel("Precision")
+        axes[1, col_index].plot(range(len(xlabels)), recall_star.tolist(),
+                                linestyle=(0, (1, 1)), color=c1, label="BLISS Recall (Star)")
+        axes[1, col_index].plot(range(len(xlabels)), recall_galaxy.tolist(),
+                                linestyle=(0, (5, 5)), color=c1, label="BLISS Recall (Galaxy)")
+        axes[1, col_index].plot(range(len(xlabels)), precision_star.tolist(),
+                                linestyle=(0, (1, 1)), color=c2, label="BLISS Precision (Star)")
+        axes[1, col_index].plot(range(len(xlabels)), precision_galaxy.tolist(),
+                                linestyle=(0, (5, 5)), color=c2, label="BLISS Precision (Galaxy)")
+        axes[1, col_index].plot(range(len(xlabels)), f1_star.tolist(),
+                                linestyle=(0, (1, 1)), color=c3, label="BLISS F1 (Star)")
+        axes[1, col_index].plot(range(len(xlabels)), f1_galaxy.tolist(),
+                                linestyle=(0, (5, 5)), color=c3, label="BLISS F1 (Galaxy)")
         axes[1, col_index].set_xlabel("Flux")
         axes[1, col_index].set_xticks(range(len(xlabels)))
         axes[1, col_index].set_xticklabels(xlabels, rotation=45)
         axes[1, col_index].set_ylim([0, 1])
         axes[1, col_index].legend()
 
-        axes[0, col_index].step(range(len(xlabels)), 
-                                self.n_true_sources.tolist(), 
-                                label="# true sources", where="mid", color=c3)
         axes[0, col_index].step(range(len(xlabels)),
-                                self.n_true_matches.tolist(), 
-                                label="# matches (BLISS)", ls="--", where="mid", color=c2)
-        count_max = self.n_true_sources.max().item()
-        count_ticks = np.round(np.linspace(0, count_max, 5), -3)
-        axes[0, col_index].set_yticks(count_ticks)
-        axes[0, col_index].set_ylabel("Count")
-        axes[0, col_index].legend()
-
-        col_index = 2
-        axes[1, col_index].plot(range(len(xlabels)), f1.tolist(), 
-                                "-o", color=c1, label="BLISS F1")
-        axes[1, col_index].set_title("F1")
-        axes[1, col_index].set_ylabel("F1")
-        axes[1, col_index].set_xlabel("Flux")
-        axes[1, col_index].set_xticks(range(len(xlabels)))
-        axes[1, col_index].set_xticklabels(xlabels, rotation=45)
-        axes[1, col_index].set_ylim([0, 1])
-        axes[1, col_index].legend()
-
-        axes[0, col_index].step(range(len(xlabels)), 
-                                self.n_true_sources.tolist(), 
-                                label="# true sources", where="mid", color=c3)
+                                self.n_true_sources.tolist(),
+                                label="# true sources", where="mid", color=c1)
         axes[0, col_index].step(range(len(xlabels)),
-                                self.n_true_matches.tolist(), 
-                                label="# matches (BLISS)", ls="--", where="mid", color=c2)
+                                self.n_true_matches.tolist(),
+                                label="# matches (BLISS)", ls="--", where="mid", color=c1)
+        axes[0, col_index].step(range(len(xlabels)),
+                                self.n_star_true_matches.tolist(),
+                                label="# matches star (BLISS)", ls="--", where="mid", color=c4)
+        axes[0, col_index].step(range(len(xlabels)),
+                                self.n_galaxy_true_matches.tolist(),
+                                label="# matches galaxy (BLISS)", ls="--", where="mid", color=c5)
         count_max = self.n_true_sources.max().item()
         count_ticks = np.round(np.linspace(0, count_max, 5), -3)
         axes[0, col_index].set_yticks(count_ticks)

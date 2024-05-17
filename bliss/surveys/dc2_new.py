@@ -1,9 +1,7 @@
 import collections.abc
-import gc
 import math
 import multiprocessing
 import pathlib
-import pickle
 import random
 import time
 
@@ -11,12 +9,17 @@ import numpy as np
 import pandas as pd
 import torch
 from astropy.io import fits
+from astropy.io.fits import Header
 from astropy.wcs import WCS
 from einops import rearrange
 from torch.utils.data import DataLoader, Dataset
 
 from bliss.catalog import FullCatalog
 from bliss.surveys.survey import Survey
+
+
+def from_wcs_header_str_to_wcs(wcs_header_str: str):
+    return WCS(Header.fromstring(wcs_header_str))
 
 
 def map_nested_dicts(cur_dict, func):
@@ -28,7 +31,7 @@ def map_nested_dicts(cur_dict, func):
 
 def generate_split_file(image_index, object_attributes):
     split_count = 0
-    image_list, bg_list, wcs = read_frame_for_band(
+    image_list, bg_list, wcs, wcs_header_str = read_frame_for_band(
         object_attributes["image_files"],
         object_attributes["bg_files"],
         image_index,
@@ -47,25 +50,6 @@ def generate_split_file(image_index, object_attributes):
     current_to_tile_start_time = time.time()
     tile_cat = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile()
     current_to_tile_end_time = time.time()
-
-    # for debug
-    # previous_to_tile_start_time = time.time()
-    # tile_cat_previous = full_cat.previous_to_tile_catalog(4, 5).get_brightest_sources_per_tile()
-    # previous_to_tile_end_time = time.time()
-
-    # ori_to_tile_start_time = time.time()
-    # tile_cat_ori = full_cat.ori_to_tile_params(4, 5).get_brightest_sources_per_tile()
-    # ori_to_tile_end_time = time.time()
-
-    # full_tile_cat = tile_cat.to_full_catalog()
-    # full_tile_cat_previous = tile_cat_previous.to_full_catalog()
-    # full_tile_cat_ori = tile_cat_ori.to_full_catalog()
-    # assert tile_cat == tile_cat_previous, "tile_cat are different between current implementation and previous one"
-    # assert tile_cat == tile_cat_ori, "tile_cat are different between current implementation and original one"
-    # assert tile_cat_previous == tile_cat_ori, "tile_cat are different between previous implementation and original one"
-    # assert full_tile_cat == full_tile_cat_previous, "full_cat are different between current implementation and previous one"
-    # assert full_tile_cat == full_tile_cat_ori, "full_cat are different between current implementation and original one"
-    # assert full_tile_cat_ori == full_tile_cat_previous, "full_cat are different between previous implementation and original one"
 
     tile_dict = tile_cat.to_dict()
 
@@ -124,8 +108,9 @@ def generate_split_file(image_index, object_attributes):
     for cur_split in [dict(zip(data_split, i)) for i in zip(*data_split.values())]:
         with open(object_attributes["split_file_path"] / f"split_image_{image_index:04d}_{split_count:08d}.pt",
                     "wb") as split_file:
-            torch.save(map_nested_dicts(cur_split, lambda x: x.clone()), split_file)
-            # pickle.dump(cur_split, split_file, pickle.HIGHEST_PROTOCOL)
+            cur_split_copy = map_nested_dicts(cur_split, lambda x: x.clone())
+            cur_split_copy.update(wcs_header_str=wcs_header_str)
+            torch.save(cur_split_copy, split_file)
         split_count += 1
 
 
@@ -148,8 +133,7 @@ class DC2(Survey):
     BANDS = ("g", "i", "r", "u", "y", "z")
 
     def __init__(self, data_dir, cat_path, batch_size, n_split, image_lim, num_workers,
-                 split_result_folder,
-                 for_plotting=False):
+                 split_result_folder):
         super().__init__()
         self.data_dir = data_dir
         self.cat_path = cat_path
@@ -163,7 +147,6 @@ class DC2(Survey):
         self.n_split = n_split
         self.image_lim = image_lim
         self.num_workers = num_workers
-        self.for_plotting = for_plotting
         self.split_file_path = pathlib.Path(data_dir) / split_result_folder
 
         self.image_files = None
@@ -210,7 +193,7 @@ class DC2(Survey):
         self.image_files = image_files
         self.bg_files = bg_files
 
-        with multiprocessing.Pool(processes=2) as process_pool:
+        with multiprocessing.Pool(processes=4) as process_pool:
             process_pool.starmap(generate_split_file,
                                  zip(list(range(n_image)),
                                      [{"image_files": self.image_files,
@@ -221,30 +204,6 @@ class DC2(Survey):
                                        "bands": self.bands,
                                        "n_split": self.n_split,
                                        "split_file_path": self.split_file_path} for _ in range(n_image)]), chunksize=4)
-
-        # for i in range(n_image):
-        #     generate_split_file(i, {"image_files": self.image_files,
-        #                             "bg_files": self.bg_files,
-        #                             "n_bands": self.n_bands,
-        #                             "image_lim": self.image_lim,
-        #                             "cat_path": self.cat_path,
-        #                             "bands": self.bands,
-        #                             "n_split": self.n_split,
-        #                             "split_file_path": self.split_file_path})
-        #     gc.collect()
-
-    # @property
-    # def predict_batch(self):
-    #     if not self._predict_batch:
-    #         self._predict_batch = {
-    #             "images": self.dc2_data[0]["images"],
-    #             "background": self.dc2_data[0]["background"],
-    #         }
-    #     return self._predict_batch
-
-    # @predict_batch.setter
-    # def predict_batch(self, value):
-    #     self._predict_batch = value
 
     def setup(self, stage="fit"):
         self.split_files_list = list(self.split_file_path.glob("split_*.pt"))
@@ -366,6 +325,7 @@ def read_frame_for_band(image_files, bg_files, n, n_bands, image_lim):
     image_list = []
     bg_list = []
     wcs = None
+    wcs_header_str = None
     for b in range(n_bands):
         image_frame = fits.open(image_files[b][n])
         bg_frame = fits.open(bg_files[b][n])
@@ -373,7 +333,9 @@ def read_frame_for_band(image_files, bg_files, n, n_bands, image_lim):
         bg_data = bg_frame[0].data  # pylint: disable=maybe-no-member
 
         if wcs is None:
-            wcs = WCS(image_frame[1].header)  # pylint: disable=maybe-no-member
+            wcs_header = image_frame[1].header
+            wcs = WCS(wcs_header)  # pylint: disable=maybe-no-member
+            wcs_header_str = wcs_header.tostring()
 
         image_frame.close()
         bg_frame.close()
@@ -389,7 +351,7 @@ def read_frame_for_band(image_files, bg_files, n, n_bands, image_lim):
         image_list.append(image)
         bg_list.append(bg)
 
-    return image_list, bg_list, wcs
+    return image_list, bg_list, wcs, wcs_header_str
 
 
 def split_full_image(image, split_lim):

@@ -38,13 +38,12 @@ surveys:
     dc2:
         _target_: bliss.surveys.dc2_new.DC2
         data_dir: /data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
-        split_result_folder: split_results_05_15_2024
+        split_result_folder: split_results_05_16_2024
         cat_path: ${paths.dc2}/merged_catalog/merged_catalog_with_flux_over_100.pkl
         batch_size: 64
         n_split: 50
         image_lim: [4000, 4000]
         num_workers: 4
-        for_plotting: false
 
 train:
     trainer:
@@ -58,6 +57,6 @@ train:
           timeout:
             _target_: datetime.timedelta
             seconds: 180000
-        devices: [0, 1, 5, 6]
+        devices: [1, 2]
     data_source: ${surveys.dc2}
     pretrained_weights: null
