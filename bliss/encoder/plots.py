@@ -16,7 +16,7 @@ class PlotCollection:
         self.plotfns = plotfns
         self.freqs = freqs
 
-    def single_plot(self, fn_key_or_idx, state_dict, logger=None, **kwargs):
+    def plot_one(self, fn_key_or_idx, state_dict, logger=None, **kwargs):
         tag, only_plot = hydra.utils.get_method(self.plotfns[fn_key_or_idx])(
             state_dict=state_dict,
             **kwargs,
@@ -49,7 +49,7 @@ class PlotCollection:
                     or curr_iteration == max_iterations - 1
                 )
                 if should_plot:
-                    self.single_plot(
+                    self.plot_one(
                         fn_key_or_idx=idx,
                         state_dict=state_dict,
                         logger=logger,
@@ -63,7 +63,7 @@ class PlotCollection:
                     or curr_iteration == max_iterations - 1
                 )
                 if should_plot:
-                    self.single_plot(
+                    self.plot_one(
                         fn_key_or_idx=plot_key,
                         state_dict=state_dict,
                         logger=logger,
