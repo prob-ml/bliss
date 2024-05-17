@@ -36,7 +36,7 @@ encoder:
 
 surveys:
     dc2:
-        _target_: bliss.surveys.dc2_new.DC2
+        _target_: bliss.surveys.dc2.DC2
         data_dir: /data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
         split_result_folder: split_results_05_16_2024
         cat_path: ${paths.dc2}/merged_catalog/merged_catalog_with_flux_over_100.pkl
