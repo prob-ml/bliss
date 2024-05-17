@@ -23,7 +23,9 @@ class PlotCollection:
         )
         if logger and only_plot:
             logger.experiment.add_figure(tag, only_plot, close=True)
+        return tag
 
+    # TODO: address non-descriptive error with mismatched types in instantiation (throws below)
     def plot_all(self, state_dict, check_freqs, logger=None, **kwargs):
         if check_freqs:
             assert (
@@ -52,7 +54,7 @@ class PlotCollection:
                         state_dict=state_dict,
                         logger=logger,
                         **kwargs,
-                    )
+                    )  # TODO: warn if tag already exists (silent overwriting of plots)
         elif isinstance(self.plotfns, DictConfig):
             for plot_key in self.plotfns.keys():
                 should_plot = (
@@ -66,7 +68,7 @@ class PlotCollection:
                         state_dict=state_dict,
                         logger=logger,
                         **kwargs,
-                    )
+                    )  # TODO: warn if tag already exists (silent overwriting of plots)
         else:
             raise TypeError(
                 "Invalid type found for plotting functions collection, "
