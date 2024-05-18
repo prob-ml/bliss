@@ -16,8 +16,6 @@ from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.plotting import plot_detections
 from bliss.encoder.variational_dist import VariationalDistSpec
-from case_studies.redshift_estimation.catalog import RedshiftTileCatalog
-from case_studies.redshift_estimation.metrics import RedshiftNLL
 
 
 class Encoder(pl.LightningModule):
@@ -266,14 +264,14 @@ class Encoder(pl.LightningModule):
 
     def update_metrics(self, batch):
         batch_size = batch["images"].size(0)
-      
+
         target_cat = RedshiftTileCatalog(self.tile_slen, batch["tile_catalog"])
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
-        
+
 
         target_callback =  target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
         target_cat_full = target_cat['redshifts'].squeeze(-1)
-        
+
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
 
@@ -333,7 +331,7 @@ class Encoder(pl.LightningModule):
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
         self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
-        #add 
+        #add
         self.report_metrics(self.marginal_metrics, "val/marginal", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
@@ -344,7 +342,7 @@ class Encoder(pl.LightningModule):
     def on_test_epoch_end(self):
         self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)
         self.report_metrics(self.sample_metrics, "test/sample", show_epoch=False)
-        #add 
+        #add
         self.report_metrics(self.marginal_metrics, "test/marginal", show_epoch=False)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):

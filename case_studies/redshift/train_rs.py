@@ -1,21 +1,23 @@
 # Author: Qiaozhi Huang
 # train to predict redshift using network
 # python case_studies/redshift/train_rs.py --resume-model=/home/qiaozhih/bliss/case_studies/redshift/training_runs/00017-runreg/000000_model.pt --resume-opt=/home/qiaozhih/bliss/case_studies/redshift/training_runs/00017-runreg/000000_opt.pt --nick=reg
-import pandas as pd
-import numpy as np
-import torch
-from network_rs import Regressor, LitRegressor
-from torch.utils.data import TensorDataset, DataLoader
-from tqdm import tqdm
+import json
 import os
 import re
-import matplotlib.pyplot as plt
-import json
+
 import click
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import TensorBoardLogger
-from torch.utils.tensorboard import SummaryWriter
+import torch
 import torch.nn as nn
+from network_rs import LitRegressor, Regressor
+from pytorch_lightning.loggers import TensorBoardLogger
+from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
 
 @click.command()
 # Optinal features
@@ -37,7 +39,7 @@ def main(resume_model, resume_opt, nick):
     seed = 42
     num_bins = 1
     group_size = 128
-    
+
     print("start tensor dataset preparation!")
     x = photo_z.values[:,:-1].astype(float)
     y = photo_z.values[:, -1].astype(float)
@@ -52,11 +54,11 @@ def main(resume_model, resume_opt, nick):
     tensor_y = torch.Tensor(y_train).view(-1, group_size, n_features_y)
     # tensor_x = torch.Tensor(x_train)
     # tensor_y = torch.Tensor(y_train)
-    custom_dataset = TensorDataset(tensor_x, tensor_y)     
+    custom_dataset = TensorDataset(tensor_x, tensor_y)
     dataloader = DataLoader(custom_dataset, batch_size=batch_size, num_workers=4, pin_memory=True)
     print("finish tensor dataset preparation!")
-    
-    
+
+
     ###### Construct Network
     options = {
         'hidden_dim': 512,
@@ -71,7 +73,7 @@ def main(resume_model, resume_opt, nick):
         'group_size': group_size,
     }
     in_dim = x.shape[1]
-    
+
     reg = Regressor(in_dim, options['hidden_dim'], options['out_dim'], options['dropout_rate'])
     # reg = LitRegressor(in_dim, options['hidden_dim'], options['out_dim'], options['dropout_rate'], options['learning_rate'], options['loss_fcn'])
     optimizer = torch.optim.Adam(reg.parameters(), lr=options['learning_rate'])
@@ -81,7 +83,7 @@ def main(resume_model, resume_opt, nick):
         print(resume_model)
         reg, optimizer = load_model(reg, optimizer, resume_model, resume_opt)
         print('resume successfully!')
-    
+
     reg = nn.DataParallel(reg)
     reg = reg.to(device)
     ###### Start Train
@@ -136,9 +138,9 @@ def train_one_epoch(model, optimizer, dataloader, options, device='cuda'):
         loss.backward()
         optimizer.step()
         losses.append(loss.item())
-            
+
     return torch.tensor(losses).mean()
-    
+
 def train(model, optimizer, dataloader, options, run_dir='.', writer=SummaryWriter()):
     n_epochs = options['n_epochs']
     stats_jsonal = None
@@ -156,7 +158,7 @@ def train(model, optimizer, dataloader, options, run_dir='.', writer=SummaryWrit
             stats_jsonl.flush()
             path = os.path.join(run_dir, f'{i:06d}')
             save_checkpoint(model, optimizer, path)
-    
+
 def save_checkpoint(model, optimizer, path):
     """
     save optimizer and model's state_dict
