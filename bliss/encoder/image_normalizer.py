@@ -8,7 +8,6 @@ class ImageNormalizer(torch.nn.Module):
         self,
         bands: list,
         include_original: bool,
-        use_deconv_channel: bool,
         concat_psf_params: bool,
         num_psf_params: int,
         log_transform_stdevs: list,
@@ -20,7 +19,6 @@ class ImageNormalizer(torch.nn.Module):
         Args:
             bands: list of bands to use for input
             include_original: whether to include the original image as an input channel
-            use_deconv_channel: whether to include the deconvolved image as an input channel
             concat_psf_params: whether to include the PSF parameters as input channels
             num_psf_params: number of PSF parameters
             log_transform_stdevs: list of thresholds to apply log transform to (can be empty)
@@ -31,7 +29,6 @@ class ImageNormalizer(torch.nn.Module):
 
         self.bands = bands
         self.include_original = include_original
-        self.use_deconv_channel = use_deconv_channel
         self.concat_psf_params = concat_psf_params
         self.num_psf_params = num_psf_params
         self.log_transform_stdevs = log_transform_stdevs
@@ -45,8 +42,6 @@ class ImageNormalizer(torch.nn.Module):
         """Determine number of input channels for model based on desired input transforms."""
         nch = 1  # background is always included
         if self.include_original:
-            nch += 1
-        if self.use_deconv_channel:
             nch += 1
         if self.concat_psf_params:
             nch += self.num_psf_params
@@ -83,11 +78,6 @@ class ImageNormalizer(torch.nn.Module):
 
         if self.include_original:
             inputs.insert(0, raw_images)  # add extra dim for 5d input
-
-        if self.use_deconv_channel:
-            msg = "use_deconv_channel specified but deconvolution not present in data"
-            assert "deconvolution" in batch, msg
-            inputs.append(batch["deconvolution"][:, self.bands].unsqueeze(2))
 
         if self.concat_psf_params:
             msg = "concat_psf_params specified but psf params not present in data"

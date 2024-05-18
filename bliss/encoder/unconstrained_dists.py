@@ -18,6 +18,8 @@ class UnconstrainedBernoulli:
     def get_dist(self, params):
         yes_prob = params.sigmoid().clamp(1e-4, 1 - 1e-4)
         no_yes_prob = torch.cat([1 - yes_prob, yes_prob], dim=3)
+        # this next line may be helpful with nans encountered during training with fp16s
+        no_yes_prob = no_yes_prob.nan_to_num(nan=0.5)
         return Categorical(no_yes_prob)
 
 
