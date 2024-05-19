@@ -42,7 +42,6 @@ astropy = ">=4.2.1"
 galsim = ">=2.4.10"
 reproject = ">=0.11.0"
 pyvo = "^1.4.1"
-healpy = "^1.16.6"
 
 [tool.poetry.dev-dependencies]
 Cython = ">=0.29.21"
@@ -75,6 +74,8 @@ types-requests = "^2.31.0.1"
 seaborn = "^0.13.0"
 lsstdesc-gcr-catalogs = "^1.7.0"
 pyarrow = "^15.0.0"
+hmf = "^3.4.4"
+healpy = "^1.16.6"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
