@@ -51,6 +51,8 @@ class TileCatalog(UserDict):
         "detection_thresholds",
         "log_flux_sd",
         "loc_sd",
+        "shear",
+        "convergence",
     }
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
@@ -394,7 +396,9 @@ class TileCatalog(UserDict):
 
         d = {}
         for key, val in sorted_self.to_dict().items():
-            if key == "n_sources":
+            if key in {"shear", "convergence"}:
+                d[key] = val
+            elif key == "n_sources":
                 d[key] = flux_mask.sum(dim=3)  # number of sources within range in tile
             else:
                 d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))

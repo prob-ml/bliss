@@ -1,0 +1,64 @@
+---
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+paths:
+    root: ${oc.env:BLISS_HOME}
+    data: ${paths.root}/data
+    sdss: ${paths.data}/sdss
+
+prior:
+    _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
+    n_tiles_h: 48
+    n_tiles_w: 48
+    tile_slen: 4
+    batch_size: 32
+    prob_galaxy: 1.0
+    mean_sources: 0.2
+    arcsec_per_pixel: 0.396
+    sample_method: cosmology
+    shear_mean: 0
+    shear_std: 0.02
+    convergence_mean: 0
+    convergence_std: 0.02
+    num_knots: 2
+
+simulator:
+    _target_: case_studies.weak_lensing.lensing_simulated_dataset.LensingSimulatedDataset
+
+generate:
+    n_image_files: 8
+    n_batches_per_file: 16
+    cached_data_path: /data/scratch/shreyas/weak_lensing_cosmology_prior
+
+cached_simulator:
+    cached_data_path: /data/scratch/shreyas/weak_lensing_cosmology_prior
+    batch_size: 24
+
+encoder:
+    tiles_to_crop: 0
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        metrics:
+          - _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
+    vd_spec:
+        _target_: case_studies.weak_lensing.lensing_variational_dist.LensingVariationalDistSpec
+    double_detect: false
+    use_checkerboard: false
+
+surveys:
+    sdss:
+        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
+        dir_path: ${paths.sdss}
+        fields:  # TODO: better arbitary name for fields/bricks?
+            - run: 2334
+              camcol: 6
+              fields: [13]
+        psf_config:
+            pixel_scale: 0.396
+            psf_slen: 25
+        pixel_shift: 2
+        align_to_band: null
+        load_image_data: true
