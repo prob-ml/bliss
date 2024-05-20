@@ -108,7 +108,7 @@ encoder:
         _target_: bliss.encoder.plots.PlotCollection
         plotfns:
             "sample_imgs": bliss.encoder.plots.plot_sample_images
-        freqs: 
+        freqs:
             "sample_imgs": 10
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance

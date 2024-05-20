@@ -42,7 +42,7 @@ encoder:
     metrics:
         _target_: torchmetrics.MetricCollection
         metrics:
-          - _target_: case_studies.weak_lensing.lensing_metrics.LensingMapRMSE
+          - _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
     plots:
         _target_: bliss.encoder.plots.PlotCollection
         plotfns:
