@@ -168,7 +168,7 @@ class ClusterPrior:
     def _sample_tsize(self, flux_samples):
         t_size_samples = []
         for i in range(self.size):
-            t_size_samples.append(self.tsize_poly(flux_samples[i]))
+            t_size_samples.append(np.random.uniform(1.0, 4.0, len(flux_samples[i])))
         return t_size_samples
 
     def _sample_redshift_bg(self):
