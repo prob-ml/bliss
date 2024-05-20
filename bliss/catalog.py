@@ -1,3 +1,4 @@
+import logging
 import math
 from collections import UserDict
 from copy import copy
@@ -5,7 +6,7 @@ from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
-import torch.nn.functional as F
+import torch.nn.functional as F  # noqa: WPS301
 from astropy import units as u  # noqa: WPS347
 from astropy.table import Table, hstack
 from astropy.wcs import WCS
@@ -67,11 +68,12 @@ class TileCatalog(UserDict):
         return torch.allclose(left, right, atol=1e-4)
 
     def _test_data_equal(self, other_data):
+        logger = logging.getLogger(__name__)
         is_equal = True
         for k, v in self.data.items():
             cur_test_equal = self._test_tensor_all_close(other_data[k], v)
             if not cur_test_equal:
-                print(f"{k} are different")
+                logger.warning("%s are different", k)
             is_equal &= cur_test_equal
         return is_equal
 
@@ -80,52 +82,61 @@ class TileCatalog(UserDict):
             # don't attempt to compare against unrelated types
             raise NotImplementedError()
 
+        logger = logging.getLogger(__name__)
+
         if self.tile_slen != other.tile_slen:
-            print(f"""
-                  tile_slen are different:
-                    left: {self.tile_slen}; right: {other.tile_slen}
-                  """)
+            logger.warning(
+                "tile_slen are different:   left: %d; right: %d",
+                self.tile_slen,
+                other.tile_slen,
+            )
 
         if not self._test_tensor_all_close(self.locs, other.locs):
-            print("locs are different")
+            logger.warning("locs are different")
 
         if not self._test_tensor_all_close(self.n_sources, other.n_sources):
-            print("n_sources are different")
+            logger.warning("n_sources are different")
 
         if self.batch_size != other.batch_size:
-            print(f"""
-                  batch_size are different:
-                    left: {self.batch_size}; right: {other.batch_size}
-                  """)
+            logger.warning(
+                "batch_size are different:  left: %d; right: %d",
+                self.batch_size,
+                other.batch_size,
+            )
 
         if self.n_tiles_h != other.n_tiles_h:
-            print(f"""
-                  n_tiles_h are different:
-                    left: {self.n_tiles_h}; right: {other.n_tiles_h}
-                  """)
+            logger.warning(
+                "n_tiles_h are different:   left: %d; right: %d",
+                self.n_tiles_h,
+                other.n_tiles_h,
+            )
 
         if self.n_tiles_w != other.n_tiles_w:
-            print(f"""
-                  n_tiles_w are different:
-                    left: {self.n_tiles_w}; right: {other.n_tiles_w}
-                  """)
+            logger.warning(
+                "n_tiles_w are different:   left: %d; right: %d",
+                self.n_tiles_w,
+                other.n_tiles_w,
+            )
 
         if self.max_sources != other.max_sources:
-            print(f"""
-                  max_sources are different:
-                    left: {self.max_sources}; right: {other.max_sources}
-                  """)
+            logger.warning(
+                "max_sources are different: left: %d; right: %d",
+                self.max_sources,
+                other.max_sources,
+            )
 
         self._test_data_equal(other.data)
 
-        return self.tile_slen == other.tile_slen and \
-               self._test_tensor_all_close(self.locs, other.locs) and \
-               self._test_tensor_all_close(self.n_sources, other.n_sources) and \
-               self.batch_size == other.batch_size and \
-               self.n_tiles_h == other.n_tiles_h and \
-               self.n_tiles_w == other.n_tiles_w and \
-               self.max_sources == other.max_sources and \
-               self._test_data_equal(other.data)
+        return (
+            self.tile_slen == other.tile_slen  # noqa: WPS222
+            and self._test_tensor_all_close(self.locs, other.locs)
+            and self._test_tensor_all_close(self.n_sources, other.n_sources)
+            and self.batch_size == other.batch_size
+            and self.n_tiles_h == other.n_tiles_h
+            and self.n_tiles_w == other.n_tiles_w
+            and self.max_sources == other.max_sources
+            and self._test_data_equal(other.data)
+        )
 
     def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
@@ -492,11 +503,12 @@ class FullCatalog(UserDict):
         return torch.allclose(left, right, atol=1e-4)
 
     def _test_data_equal(self, other_data):
+        logger = logging.getLogger(__name__)
         is_equal = True
         for k, v in self.data.items():
             cur_test_equal = self._test_tensor_all_close(other_data[k], v)
             if not cur_test_equal:
-                print(f"{k} are different")
+                logger.warning("%s are different", k)
             is_equal &= cur_test_equal
         return is_equal
 
@@ -505,45 +517,53 @@ class FullCatalog(UserDict):
             # don't attempt to compare against unrelated types
             raise NotImplementedError()
 
+        logger = logging.getLogger(__name__)
+
         if self.height != other.height:
-            print(f"""
-                  heights are different:
-                    left: {self.height}; right: {other.height}
-                  """)
+            logger.warning(
+                "heights are different: left: %d; right: %d",
+                self.height,
+                other.height,
+            )
 
         if self.width != other.width:
-            print(f"""
-                  widths are different:
-                    left: {self.width}; right: {other.width}
-                  """)
+            logger.warning(
+                "widths are different:  left: %d; right: %d",
+                self.width,
+                other.width,
+            )
 
         if not self._test_tensor_all_close(self.plocs, other.plocs):
-            print("plocs are different")
+            logger.warning("plocs are different")
 
         if not self._test_tensor_all_close(self.n_sources, other.n_sources):
-            print("n_sources are different")
+            logger.warning("n_sources are different")
 
         if self.batch_size != other.batch_size:
-            print(f"""
-                  batch_size are different:
-                    left: {self.batch_size}; right: {other.batch_size}
-                 """)
+            logger.warning(
+                "batch_size are different:  left: %d; right: %d",
+                self.batch_size,
+                other.batch_size,
+            )
 
         if self.max_sources != other.max_sources:
-            print(f"""
-                  max_sources are different:
-                    left: {self.max_sources}; right: {other.max_sources}
-                  """)
+            logger.warning(
+                "max_sources are different: left: %d; right: %d",
+                self.max_sources,
+                other.max_sources,
+            )
 
         self._test_data_equal(other.data)
 
-        return self.height == other.height and \
-               self.width == other.width and \
-               self._test_tensor_all_close(self.plocs, other.plocs) and \
-               self._test_tensor_all_close(self.n_sources, other.n_sources) and \
-               self.batch_size == other.batch_size and \
-               self.max_sources == other.max_sources and \
-               self._test_data_equal(other.data)
+        return (
+            self.height == other.height  # noqa:WPS222
+            and self.width == other.width
+            and self._test_tensor_all_close(self.plocs, other.plocs)
+            and self._test_tensor_all_close(self.n_sources, other.n_sources)
+            and self.batch_size == other.batch_size
+            and self.max_sources == other.max_sources
+            and self._test_data_equal(other.data)
+        )
 
     def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
@@ -719,11 +739,17 @@ class FullCatalog(UserDict):
             if filter_sources == 0:
                 continue
 
-            source_indices = source_tile_coords[:, 0] * n_tiles_w + source_tile_coords[:, 1].unsqueeze(0)
+            source_indices = source_tile_coords[:, 0] * n_tiles_w + source_tile_coords[
+                :, 1
+            ].unsqueeze(0)
             tile_indices = torch.arange(n_tiles_h * n_tiles_w, device=self.device).unsqueeze(1)
 
-            tile_to_source_mapping = self._get_tile_to_source_mapping(source_indices == tile_indices)
-            tile_source_count: Tuple[Tensor, Tensor] = tile_to_source_mapping[:, 0].unique(sorted=True, return_counts=True) # first element is tile index; second element is source count
+            tile_to_source_mapping = self._get_tile_to_source_mapping(
+                source_indices == tile_indices
+            )
+            tile_source_count: Tuple[Tensor, Tensor] = tile_to_source_mapping[:, 0].unique(
+                sorted=True, return_counts=True
+            )  # first element is tile index; second element is source count
             if tile_source_count[1].max() > max_sources_per_tile:
                 if not ignore_extra_sources:
                     raise ValueError(  # noqa: WPS220
@@ -731,8 +757,11 @@ class FullCatalog(UserDict):
                     )
 
             # get n_sources for each tile
-            tile_n_sources[ii].view(-1)[tile_source_count[0].flatten().tolist()] = torch.where(tile_source_count[1] <= max_sources_per_tile,
-                                                                                               tile_source_count[1], max_sources_per_tile)
+            tile_n_sources[ii].view(-1)[tile_source_count[0].flatten().tolist()] = torch.where(
+                tile_source_count[1] <= max_sources_per_tile,
+                tile_source_count[1],
+                max_sources_per_tile,
+            )
 
             for k, v in tile_params.items():
                 if k == "locs":
@@ -740,13 +769,24 @@ class FullCatalog(UserDict):
                 param_matrix = self[k][ii][:n_sources]
                 if filter_oob:
                     param_matrix = param_matrix[x_mask]
-                params_on_tile = list(param_matrix[tile_to_source_mapping[:, 1]].split(tile_source_count[1].flatten().tolist()))
+                params_on_tile = list(
+                    param_matrix[tile_to_source_mapping[:, 1]].split(
+                        tile_source_count[1].flatten().tolist()
+                    )
+                )
                 # pad first tensor to desired length
-                params_on_tile[0] = F.pad(params_on_tile[0], (0, 0, 0, (max_sources_per_tile - params_on_tile[0].shape[0]))) # the second argument of pad function is (padding_left, padding_right, padding_top, padding_bottom)
-                # pad all tensors to desired length
+                # the second argument of pad function is
+                # padding_left, padding_right, padding_top, padding_bottom
+                params_on_tile[0] = F.pad(
+                    params_on_tile[0],
+                    (0, 0, 0, (max_sources_per_tile - params_on_tile[0].shape[0])),
+                )
+                # pad all tensors
                 params_on_tile = pad_sequence(params_on_tile, batch_first=True)
                 max_fill = min(filter_sources, max_sources_per_tile)
-                v[ii].view(-1, *v[ii].shape[2:])[tile_to_source_mapping[:, 0].unique(sorted=True).tolist(), :max_fill] = params_on_tile[:, :max_fill].to(dtype=v.dtype)
+                v[ii].view(-1, *v[ii].shape[2:])[
+                    tile_to_source_mapping[:, 0].unique(sorted=True).tolist(), :max_fill
+                ] = params_on_tile[:, :max_fill].to(dtype=v.dtype)
 
             # modify tile location
             tile_params["locs"][ii] = (tile_params["locs"][ii] % tile_slen) / tile_slen

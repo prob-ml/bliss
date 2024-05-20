@@ -35,4 +35,3 @@ case_studies/*/data/
 venv
 nohup.out
 multirun
-case_studies/dc2/*.pkl

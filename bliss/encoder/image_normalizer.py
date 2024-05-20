@@ -14,7 +14,7 @@ class ImageNormalizer(torch.nn.Module):
         log_transform_stdevs: list,
         use_clahe: bool,
         clahe_min_stdev: float,
-        asinh_params: Dict[str, float]
+        asinh_params: Dict[str, float],
     ):
         """Initializes DetectionEncoder.
 
@@ -26,6 +26,7 @@ class ImageNormalizer(torch.nn.Module):
             log_transform_stdevs: list of thresholds to apply log transform to (can be empty)
             use_clahe: whether to apply Contrast Limited Adaptive Histogram Equalization to images
             clahe_min_stdev: minimum standard deviation for CLAHE
+            asinh_params: parameters for asinh normalization
         """
         super().__init__()
 
@@ -112,7 +113,12 @@ class ImageNormalizer(torch.nn.Module):
 
         if self.asinh_params:
             for threshold in self.asinh_params["thresholds"]:
-                inputs.append(torch.asinh(((raw_images - backgrounds) / backgrounds.sqrt() - threshold) * self.asinh_params["scale"]))
+                inputs.append(
+                    torch.asinh(
+                        ((raw_images - backgrounds) / backgrounds.sqrt() - threshold)
+                        * self.asinh_params["scale"],
+                    )
+                )
 
         return torch.cat(inputs, dim=2)
 
