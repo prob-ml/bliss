@@ -8,8 +8,8 @@ from bliss.catalog import TileCatalog
 
 
 def plot_lensing_maps(state_dict, **kwargs):
-    if state_dict["batch_idx"] != state_dict["restrict_batch"]:
-        if "restrict_batch" in state_dict and "batch_idx" in state_dict:
+    if "restrict_batch" in state_dict and "batch_idx" in state_dict:
+        if state_dict["batch_idx"] != state_dict["restrict_batch"]:
             return "", None
     logging_name = state_dict["logging_name"]
     current_epoch = state_dict["current_iteration"]
@@ -24,7 +24,7 @@ def plot_lensing_maps(state_dict, **kwargs):
     target_cat_cropped = target_cat.symmetric_crop(tiles_to_crop)
     est_cat = sample(batch, use_mode=True)
     fig = plot_maps(batch["images"], target_cat_cropped, est_cat, figsize=None)
-    title = f"Epoch:{current_epoch}/{logging_name} images"
+    title = f"Epoch:{current_epoch}/{logging_name} shear and convergence"
     return title, fig
 
 
