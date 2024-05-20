@@ -4,7 +4,6 @@ from typing import Optional
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
-from matplotlib import pyplot as plt
 from torch.nn.functional import pad
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
@@ -15,7 +14,7 @@ from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
-from bliss.encoder.plotting import plot_detections
+from bliss.encoder.plots import PlotCollection
 from bliss.encoder.variational_dist import VariationalDistSpec
 
 
@@ -35,6 +34,7 @@ class Encoder(pl.LightningModule):
         image_normalizer: ImageNormalizer,
         vd_spec: VariationalDistSpec,
         metrics: MetricCollection,
+        plots: PlotCollection,
         matcher: CatalogMatcher,
         min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
@@ -52,6 +52,7 @@ class Encoder(pl.LightningModule):
             tiles_to_crop: margin of tiles not to use for computing loss
             image_normalizer: object that applies input transforms to images
             vd_spec: object that makes a variational distribution from raw convnet output
+            plots: for plotting relevant images and outputs during training
             metrics: for scoring predicted catalogs during training
             matcher: for matching predicted catalogs to ground truth catalogs
             min_flux_threshold: Sources with a lower flux will not be considered when computing loss
@@ -71,6 +72,7 @@ class Encoder(pl.LightningModule):
         self.vd_spec = vd_spec
         self.mode_metrics = metrics.clone()
         self.sample_metrics = metrics.clone()
+        self.plots = plots
         self.matcher = matcher
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
@@ -247,7 +249,7 @@ class Encoder(pl.LightningModule):
         ttc = self.tiles_to_crop
         interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
         loss = interior_loss.sum() / interior_loss.numel()
-        self.log(f"{logging_name}/_loss", loss, batch_size=batch_size)
+        self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         return loss
 
@@ -271,32 +273,28 @@ class Encoder(pl.LightningModule):
         matching = self.matcher.match_catalogs(target_cat, sample_cat)
         self.sample_metrics.update(target_cat, sample_cat, matching)
 
-    def plot_sample_images(self, batch, logging_name):
-        """Log a grid of figures to the tensorboard."""
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
-        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
-        est_cat = self.sample(batch, use_mode=True)
-        mp = self.tiles_to_crop * self.tile_slen
-        fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
-        title = f"Epoch:{self.current_epoch}/{logging_name} images"
-        if self.logger:
-            self.logger.experiment.add_figure(title, fig)
-        plt.close(fig)
-
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
-        epoch = self.trainer.current_epoch
         self._compute_loss(batch, "val")
         self.update_metrics(batch)
 
-        # only plot images from the first batch every tenth epoch
-        if batch_idx == 0 and (epoch % 10 == 0 or epoch == self.trainer.max_epochs - 1):
-            self.plot_sample_images(batch, "val")
+        plot_dict = {
+            "restrict_batch": 0,
+            "batch": batch,
+            "batch_idx": batch_idx,
+            "max_iterations": self.trainer.max_epochs,
+            "tile_slen": self.tile_slen,
+            "min_flux_threshold": self.min_flux_threshold,
+            "tiles_to_crop": self.tiles_to_crop,
+            "sample": self.sample,
+            "current_iteration": self.current_epoch,
+            "logging_name": "val",
+        }
+        self.plots.plot_all(state_dict=plot_dict, check_freqs=True, logger=self.logger)
 
     def report_metrics(self, metrics, logging_name, show_epoch=False):
         for k, v in metrics.compute().items():
-            self.log(f"{logging_name}/{k}", v)
+            self.log(f"{logging_name}/{k}", v, sync_dist=True)
 
         for metric_name, metric in metrics.items():
             if hasattr(metric, "plot"):  # noqa: WPS421

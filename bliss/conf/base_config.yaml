@@ -104,6 +104,12 @@ encoder:
           - _target_: bliss.encoder.metrics.FluxError
             survey_bands: ${encoder.survey_bands}
           - _target_: bliss.encoder.metrics.GalaxyShapeError
+    plots:
+        _target_: bliss.encoder.plots.PlotCollection
+        plotfns:
+            "sample_imgs": bliss.encoder.plots.plot_sample_images
+        freqs:
+            "sample_imgs": 10
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
     double_detect: false
