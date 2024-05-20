@@ -56,6 +56,7 @@ git clone git@github.com:prob-ml/bliss.git
 
 ```bash
 cd bliss
+export POETRY_VIRTUALENVS_IN_PROJECT=1
 poetry install
 poetry shell
 ```
