@@ -9,6 +9,7 @@ import pandas as pd
 import GCRCatalogs
 from GCR import GCRQuery
 from tqdm import tqdm
+import click
 
 def load_dataset(rootdir='/nfs/turbo/lsa-regier/', dataset='desc_dc2_run2.2i_dr6_truth'):
     """
@@ -75,15 +76,21 @@ def get_rid_nan(df):
     """
     return df.dropna()
 
-if __name__ == "__main__":
+@click.command()
+@click.option('--out',  help='output_path', type=str)
+def main(out):
     rootdir = '/nfs/turbo/lsa-regier/'
     dataset_name = 'desc_dc2_run2.2i_dr6_truth'
     quantities = ["mag_u", "mag_g", "mag_r", "mag_i", "mag_z", "mag_y", "redshift"]
-    path = f'/home/qiaozhih/bliss/data/redshift/dc2/{dataset_name}.pkl' # PATH TO SAVE
+    path = out # PATH TO SAVE
 
     dataset = load_dataset(rootdir, dataset_name)
     dataset = load_quantities(dataset, quantities)
     dataset = get_rid_nan(dataset)
     save_pickle(dataset, path)
+
+if __name__ == "__main__":
+    main()
+    
 
 
