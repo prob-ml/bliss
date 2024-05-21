@@ -26,11 +26,6 @@ surveys:
               camcol: 1
               fields: [12]
         load_image_data: true
-    dc2:
-        data_dir: ${paths.data}/tests/dc2/dc2_multiband/
-        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100000.pkl
-        n_split: 5
-        image_lim: [800, 800]
 
 #########################################
 

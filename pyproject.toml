@@ -76,6 +76,7 @@ lsstdesc-gcr-catalogs = "^1.7.0"
 pyarrow = "^15.0.0"
 hmf = "^3.4.4"
 healpy = "^1.16.6"
+h5py = "^3.11.0"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"

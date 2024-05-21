@@ -1,4 +1,3 @@
-import logging
 import math
 from collections import UserDict
 from copy import copy
@@ -63,80 +62,6 @@ class TileCatalog(UserDict):
         self.n_sources = d.pop("n_sources")
         self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
         super().__init__(**d)
-
-    def _test_tensor_all_close(self, left, right):
-        return torch.allclose(left, right, atol=1e-4)
-
-    def _test_data_equal(self, other_data):
-        logger = logging.getLogger(__name__)
-        is_equal = True
-        for k, v in self.data.items():
-            cur_test_equal = self._test_tensor_all_close(other_data[k], v)
-            if not cur_test_equal:
-                logger.warning("%s are different", k)
-            is_equal &= cur_test_equal
-        return is_equal
-
-    def __eq__(self, other):
-        if not isinstance(other, TileCatalog):
-            # don't attempt to compare against unrelated types
-            raise NotImplementedError()
-
-        logger = logging.getLogger(__name__)
-
-        if self.tile_slen != other.tile_slen:
-            logger.warning(
-                "tile_slen are different:   left: %d; right: %d",
-                self.tile_slen,
-                other.tile_slen,
-            )
-
-        if not self._test_tensor_all_close(self.locs, other.locs):
-            logger.warning("locs are different")
-
-        if not self._test_tensor_all_close(self.n_sources, other.n_sources):
-            logger.warning("n_sources are different")
-
-        if self.batch_size != other.batch_size:
-            logger.warning(
-                "batch_size are different:  left: %d; right: %d",
-                self.batch_size,
-                other.batch_size,
-            )
-
-        if self.n_tiles_h != other.n_tiles_h:
-            logger.warning(
-                "n_tiles_h are different:   left: %d; right: %d",
-                self.n_tiles_h,
-                other.n_tiles_h,
-            )
-
-        if self.n_tiles_w != other.n_tiles_w:
-            logger.warning(
-                "n_tiles_w are different:   left: %d; right: %d",
-                self.n_tiles_w,
-                other.n_tiles_w,
-            )
-
-        if self.max_sources != other.max_sources:
-            logger.warning(
-                "max_sources are different: left: %d; right: %d",
-                self.max_sources,
-                other.max_sources,
-            )
-
-        self._test_data_equal(other.data)
-
-        return (
-            self.tile_slen == other.tile_slen  # noqa: WPS222
-            and self._test_tensor_all_close(self.locs, other.locs)
-            and self._test_tensor_all_close(self.n_sources, other.n_sources)
-            and self.batch_size == other.batch_size
-            and self.n_tiles_h == other.n_tiles_h
-            and self.n_tiles_w == other.n_tiles_w
-            and self.max_sources == other.max_sources
-            and self._test_data_equal(other.data)
-        )
 
     def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:
@@ -498,72 +423,6 @@ class FullCatalog(UserDict):
         assert self.n_sources.max().int().item() <= self.max_sources
         assert self.n_sources.shape == (self.batch_size,)
         super().__init__(**d)
-
-    def _test_tensor_all_close(self, left, right):
-        return torch.allclose(left, right, atol=1e-4)
-
-    def _test_data_equal(self, other_data):
-        logger = logging.getLogger(__name__)
-        is_equal = True
-        for k, v in self.data.items():
-            cur_test_equal = self._test_tensor_all_close(other_data[k], v)
-            if not cur_test_equal:
-                logger.warning("%s are different", k)
-            is_equal &= cur_test_equal
-        return is_equal
-
-    def __eq__(self, other):
-        if not isinstance(other, FullCatalog):
-            # don't attempt to compare against unrelated types
-            raise NotImplementedError()
-
-        logger = logging.getLogger(__name__)
-
-        if self.height != other.height:
-            logger.warning(
-                "heights are different: left: %d; right: %d",
-                self.height,
-                other.height,
-            )
-
-        if self.width != other.width:
-            logger.warning(
-                "widths are different:  left: %d; right: %d",
-                self.width,
-                other.width,
-            )
-
-        if not self._test_tensor_all_close(self.plocs, other.plocs):
-            logger.warning("plocs are different")
-
-        if not self._test_tensor_all_close(self.n_sources, other.n_sources):
-            logger.warning("n_sources are different")
-
-        if self.batch_size != other.batch_size:
-            logger.warning(
-                "batch_size are different:  left: %d; right: %d",
-                self.batch_size,
-                other.batch_size,
-            )
-
-        if self.max_sources != other.max_sources:
-            logger.warning(
-                "max_sources are different: left: %d; right: %d",
-                self.max_sources,
-                other.max_sources,
-            )
-
-        self._test_data_equal(other.data)
-
-        return (
-            self.height == other.height  # noqa:WPS222
-            and self.width == other.width
-            and self._test_tensor_all_close(self.plocs, other.plocs)
-            and self._test_tensor_all_close(self.n_sources, other.n_sources)
-            and self.batch_size == other.batch_size
-            and self.max_sources == other.max_sources
-            and self._test_data_equal(other.data)
-        )
 
     def __setitem__(self, key: str, item: Tensor) -> None:
         if key not in self.allowed_params:

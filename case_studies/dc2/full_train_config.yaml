@@ -23,27 +23,29 @@ encoder:
         concat_psf_params: true
     metrics:
         _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
         metrics:
-          - _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
-          - _target_: bliss.encoder.metrics.DetectionPerformanceOnFlux
-            flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-          - _target_: bliss.encoder.metrics.SourceTypeAccuracy
-          - _target_: bliss.encoder.metrics.FluxError
+          detection_performance:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            bin_unit_is_flux: true
+          detection_performance_star:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            source_type_filter: "star"
+            bin_unit_is_flux: true
+          detection_performance_galaxy:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            source_type_filter: "galaxy"
+            bin_unit_is_flux: true
+          source_type_accuracy:
+            _target_: bliss.encoder.metrics.SourceTypeAccuracy
+          flux_error:
+            _target_: bliss.encoder.metrics.FluxError
             survey_bands: ${encoder.survey_bands}
-          - _target_: bliss.encoder.metrics.GalaxyShapeError
-
-
-surveys:
-    dc2:
-        _target_: bliss.surveys.dc2.DC2
-        data_dir: /data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
-        split_result_folder: split_results_05_16_2024
-        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_with_flux_over_100.pkl
-        batch_size: 64
-        n_split: 50
-        image_lim: [4000, 4000]
-        num_workers: 4
+          galaxy_shape_error:
+            _target_: bliss.encoder.metrics.GalaxyShapeError
 
 train:
     trainer:
@@ -57,6 +59,6 @@ train:
           timeout:
             _target_: datetime.timedelta
             seconds: 180000
-        devices: [1, 2]
+        devices: [0, 1, 3, 4]
     data_source: ${surveys.dc2}
     pretrained_weights: null

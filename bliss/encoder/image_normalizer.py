@@ -73,9 +73,6 @@ class ImageNormalizer(torch.nn.Module):
         if self.log_transform_stdevs:
             assert batch["background"].min() > 1e-6, "background must be positive"
 
-        if self.asinh_params:
-            assert batch["background"].min() > 1e-6, "background must be positive"
-
         input_bands = batch["images"].shape[1]
         if input_bands < len(self.bands):
             msg = f"Expected >= {len(self.bands)} bands in the input but found only {input_bands}"
@@ -112,6 +109,7 @@ class ImageNormalizer(torch.nn.Module):
             inputs[0] = self.clahe(backgrounds, self.clahe_min_stdev)
 
         if self.asinh_params:
+            backgrounds = backgrounds.clamp(min=1e-6)
             for threshold in self.asinh_params["thresholds"]:
                 inputs.append(
                     torch.asinh(

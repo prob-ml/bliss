@@ -9,6 +9,4 @@ train:
         logger:
             name: DC2_debug
             version: DC2_debug
-        devices: [7]
-    data_source: ${surveys.dc2}
-    pretrained_weights: null
+        devices: [1]
