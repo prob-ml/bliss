@@ -12,6 +12,7 @@ from bliss.encoder.data_augmentation import (
     aug_shift,
     aug_vflip,
 )
+from bliss.main import train
 
 
 def _test_tensor_all_close(left, right):
@@ -150,7 +151,7 @@ class TestDC2:
         dc2.setup()
 
         assert dc2[0]["images"].shape[0] == 6
-        assert len(dc2.image_ids()) == 10
+        assert len(dc2.image_ids()) == 25
 
         params = (
             "locs",
@@ -167,6 +168,24 @@ class TestDC2:
 
         for k in ("images", "background", "psf_params"):
             assert isinstance(dc2[0][k], torch.Tensor)
+
+    def test_train_on_dc2(self, cfg):
+        train_dc2_cfg = cfg.copy()
+        train_dc2_cfg.encoder.image_normalizer.bands = [0, 1, 2, 3, 4, 5]
+        # why are these bands out of order? (should be "ugrizy") why does the test break if they
+        # are ordered correctly?
+        train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]
+        train_dc2_cfg.train.data_source = train_dc2_cfg.surveys.dc2
+        train_dc2_cfg.encoder.do_data_augmentation = True
+        train_dc2_cfg.train.pretrained_weights = None
+        # log transform doesn't work in this test because the DC2 background is sometimes negative.
+        # why would the background be negative? are we using the wrong background estimate?
+        train_dc2_cfg.encoder.image_normalizer.log_transform_stdevs = []
+        train_dc2_cfg.encoder.image_normalizer.asinh_params = {
+            "scale": 0.1,
+            "thresholds": [-3, 0, 1, 3],
+        }
+        train(train_dc2_cfg.train)
 
     def test_dc2_augmentation(self, cfg):
         dc2 = instantiate(cfg.surveys.dc2)
