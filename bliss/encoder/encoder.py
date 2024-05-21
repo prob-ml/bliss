@@ -273,11 +273,9 @@ class Encoder(pl.LightningModule):
         self.sample_metrics.update(target_cat, sample_cat, matching)
 
         self.plots.update(
-            self.tile_slen,
             batch,
-            self.min_flux_threshold,
-            self.tiles_to_crop,
-            self.sample,
+            target_cat,
+            mode_cat,
             self.current_epoch,
             batch_idx,
         )

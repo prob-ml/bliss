@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torchmetrics import Metric
 
-from bliss.catalog import TileCatalog
+from bliss.catalog import FullCatalog
 
 
 class PlotSampleImages(Metric):
@@ -16,52 +16,45 @@ class PlotSampleImages(Metric):
         self,
         frequency: int = 1,
         restrict_batch: int = 0,
+        tiles_to_crop: int = 0,  # note must match encoder tiles_to_crop
+        tile_slen: int = 0,  # note must match encoder tile_slen
     ):
         super().__init__()
 
         self.frequency = frequency
         self.restrict_batch = restrict_batch
-        self.tile_slen = 0
+        self.tiles_to_crop = tiles_to_crop
+        self.tile_slen = tile_slen
+
+        self.should_plot = False
         self.batch = {}
         self.batch_idx = -1
-        self.min_flux_threshold = 0
-        self.tiles_to_crop = 0
-        self.sample = lambda: None
-        self.current_epoch = 0
-        self.tile_catalog = None
+        self.sample_with_mode = None
         self.images = None
         self.current_epoch = 0
-        self.should_plot = False
+        self.target_cat_cropped = None
 
-    def update(
-        self, tile_slen, batch, min_flux_threshold, tiles_to_crop, sample, current_epoch, batch_idx
-    ):
+    def update(self, batch, target_cat_cropped, sample_with_mode, current_epoch, batch_idx):
         self.batch_idx = batch_idx
         if self.restrict_batch != batch_idx:
             self.should_plot = False
             return
         self.current_epoch = current_epoch
         self.should_plot = True
-        self.tile_slen = tile_slen
         self.batch = batch
-        self.min_flux_threshold = min_flux_threshold
-        self.tiles_to_crop = tiles_to_crop
-        self.sample = sample
-        self.tile_catalog = batch["tile_catalog"]
+        self.sample_with_mode = sample_with_mode
         self.images = batch["images"]
+        self.target_cat_cropped = target_cat_cropped
 
     def compute(self):
         return {}
 
     def plot(self):
+        mp = self.tile_slen * self.tiles_to_crop
         if self.current_epoch % self.frequency != 0:
             return None
-        target_cat = TileCatalog(self.tile_slen, self.tile_catalog)
-        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
-        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
-        est_cat = self.sample(self.batch, use_mode=True)
-        mp = self.tiles_to_crop * self.tile_slen
-        return plot_detections(self.images, target_cat_cropped, est_cat, margin_px=mp)
+        est_cat = self.sample_with_mode
+        return plot_detections(self.images, self.target_cat_cropped, est_cat, margin_px=mp)
 
 
 def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, figsize=None):
@@ -76,8 +69,12 @@ def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, 
     fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=figsize)
     axes = axes.flatten() if nrows > 1 else [axes]  # flatten
 
-    true_cat = true_tile_cat.to_full_catalog()
-    est_cat = est_tile_cat.to_full_catalog()
+    true_cat = true_tile_cat
+    if not isinstance(true_cat, FullCatalog):
+        true_cat = true_cat.to_full_catalog()
+    est_cat = est_tile_cat
+    if not isinstance(est_cat, FullCatalog):
+        est_cat = est_cat.to_full_catalog()
 
     for ax_idx, ax in enumerate(axes):
         if ax_idx >= len(img_ids):  # don't plot on this ax if there aren't enough images
@@ -95,7 +92,6 @@ def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, 
             ax.axhline(margin_px, color="w")
             ax.axhline(images.shape[-2] - margin_px, color="w")
 
-        # plot image first
         image = images[img_id].cpu().numpy()
         image = np.sum(image, axis=0)
         vmin = image.min().item()

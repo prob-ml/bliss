@@ -110,6 +110,8 @@ encoder:
           - _target_: bliss.encoder.plots.PlotSampleImages
             frequency: 1
             restrict_batch: 0
+            tiles_to_crop: 1
+            tile_slen: ${simulator.prior.tile_slen}
 
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
