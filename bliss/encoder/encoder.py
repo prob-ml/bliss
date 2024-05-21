@@ -247,7 +247,7 @@ class Encoder(pl.LightningModule):
         ttc = self.tiles_to_crop
         interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
         loss = interior_loss.sum() / interior_loss.numel()
-        self.log(f"{logging_name}/_loss", loss, batch_size=batch_size)
+        self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         return loss
 
@@ -296,7 +296,7 @@ class Encoder(pl.LightningModule):
 
     def report_metrics(self, metrics, logging_name, show_epoch=False):
         for k, v in metrics.compute().items():
-            self.log(f"{logging_name}/{k}", v)
+            self.log(f"{logging_name}/{k}", v, sync_dist=True)
 
         for metric_name, metric in metrics.items():
             if hasattr(metric, "plot"):  # noqa: WPS421

@@ -13,7 +13,7 @@ We set the following, non-exhaustive, objectives for our galaxy cluster detectio
 - **Generative Model Development** Define, implement, refine the generative model by subclassing 'CatalogPrior' and simulate realistic galaxy cluster data.
 - **Benchmarking Metrics**: Adapt the 'Metric' class to  galaxy cluster detection benchmarks.
 - **Inference Model Specification**: Outline variational distributions by subclassing 'VariationalDistSpec' and 'VariationalDist' for probabilistic modeling.
-- **Training BLISS**: Harness BLISS to train our inference model and fine-tune it for optimal performance. 
+- **Training BLISS**: Harness BLISS to train our inference model and fine-tune it for optimal performance.
 
 ### References
 - [Variational Inference for Deblending Crowded Starfields](https://arxiv.org/pdf/2102.02409.pdf).
@@ -37,24 +37,23 @@ This project is being conducted under the Undergraduate Research Program in Stat
 
 ##### FullCatalog vs. TileCatalog
 Current implementaion focueses on building from FullCatalog instead of TileCatalog.
-First dimension is always batch size (# of images). Second dimension is usually the maximum number of sources within the batch to have an upper bond for consistent tensor shape. The last dimension contains info for the specific source at specific batch.  
-**Example:** A tensor shape of (32, 1500, 2) means we have 32 images in a batch, the maximum possible number of sources across whole batch is 1500 and, for each source, it will have two properties in like (x, y).  
+First dimension is always batch size (# of images). Second dimension is usually the maximum number of sources within the batch to have an upper bond for consistent tensor shape. The last dimension contains info for the specific source at specific batch.
+**Example:** A tensor shape of (32, 1500, 2) means we have 32 images in a batch, the maximum possible number of sources across whole batch is 1500 and, for each source, it will have two properties in like (x, y).
 
 
 ##### Details
 Our implementaion's goal is to create a single cluster (in the future, 0-k) within the image. The cluster consists mainly of galaxies. Therefore, the *galaxy_fluxes*, *galaxy_params*, and density of galaxies within the cluster should perform differently than the other part.
 
-*The task may be seen as creating a subimage inside the original image.* We consider a cluster with a center. For the center, it would have a bounding box and all galaxies within the bounding box should perform differently. To make the image look more real, the center should be in another bounding box of the overall image encompassing the region between 25% and 75% of its side length. The center's own bounding box shall have side length no larger than 50% of the image side length. 
+*The task may be seen as creating a subimage inside the original image.* We consider a cluster with a center. For the center, it would have a bounding box and all galaxies within the bounding box should perform differently. To make the image look more real, the center should be in another bounding box of the overall image encompassing the region between 25% and 75% of its side length. The center's own bounding box shall have side length no larger than 50% of the image side length.
 
-In our cluster, we first calcuate the area of the bounding box and convert it to the equal number of titles. Then we times it with maximum number of sources within a tile and randomly pick 80% out of it (gives a slightly larger value than the average number of sources per tile). The fluxes/params for the galaxy so far follows the identical implementation for normal galaxies. In the future, we aim to use the redmapper paper to further modify the flux and params. 
+In our cluster, we first calcuate the area of the bounding box and convert it to the equal number of titles. Then we times it with maximum number of sources within a tile and randomly pick 80% out of it (gives a slightly larger value than the average number of sources per tile). The fluxes/params for the galaxy so far follows the identical implementation for normal galaxies. In the future, we aim to use the redmapper paper to further modify the flux and params.
 
-So far, the only change within the cluster was to increase the rate of galaxies. That is, we use the Possion distribution to first sample the number of sources based on number of tiles and the average number of sources within tiles. A predetermined probability of a source being a galaxy determines how many galaxies will ultimately be present within the image. 
+So far, the only change within the cluster was to increase the rate of galaxies. That is, we use the Possion distribution to first sample the number of sources based on number of tiles and the average number of sources within tiles. A predetermined probability of a source being a galaxy determines how many galaxies will ultimately be present within the image.
 
-For implementation details, we generate location, fluxes, params, and types for the cluster first. Then we follow the normal procedure of generating sources. In the end, we stack two sets of vectors together to have the final values. 
+For implementation details, we generate location, fluxes, params, and types for the cluster first. Then we follow the normal procedure of generating sources. In the end, we stack two sets of vectors together to have the final values.
 
 **Returns:**
 1. *n_sources*: in shape (batch_size, ). A single integer representing how many sources in each image.
 2. *source_type*: in shape (batch_size, max(n_sources), 1). Uses integer to represent source type. 0 represents a star while 1 represents galaxy. Second dimension is adjusted to the maximum number of sources within the batch.
 3. *plocs*: in shape (batch_size, max(n_sources), 2). The coordinates for sources are in form (x, y) and represents absolute coordinates.
 4. *galaxy_fluxes/star_fluxes/galaxy_params*:  in shape (batch_size, max(n_sources), n_bands).
-

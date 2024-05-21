@@ -1,0 +1,8 @@
+---
+defaults:
+    - full_train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+encoder:
+    tiles_to_crop: 0

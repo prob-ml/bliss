@@ -1,3 +1,4 @@
+import numpy as np
 import seaborn as sns
 import torch
 from einops import rearrange
@@ -74,12 +75,21 @@ class DetectionPerformance(Metric):
         mag_band: int = 2,
         mag_bin_cutoffs: list = None,
         exclude_last_bin: bool = False,
+        source_type_filter: str = None,
+        bin_unit_is_flux: bool = False,
     ):
         super().__init__()
 
         self.mag_band = mag_band
         self.mag_bin_cutoffs = mag_bin_cutoffs if mag_bin_cutoffs else []
         self.exclude_last_bin = exclude_last_bin
+        self.source_type_filter = source_type_filter
+        assert (
+            source_type_filter is None
+            or source_type_filter == "star"
+            or source_type_filter == "galaxy"
+        ), "invalid source_type_filter"
+        self.bin_unit_is_flux = bin_unit_is_flux
 
         detection_metrics = [
             "n_true_sources",
@@ -92,27 +102,66 @@ class DetectionPerformance(Metric):
             init_val = torch.zeros(n_bins)
             self.add_state(metric, default=init_val, dist_reduce_fx="sum")
 
+        if self.source_type_filter is None:
+            self.source_type_name = "total"
+        elif self.source_type_filter == "star":
+            self.source_type_name = "star"
+        elif self.source_type_filter == "galaxy":
+            self.source_type_name = "galaxy"
+        else:
+            raise NotImplementedError()
+
     def update(self, true_cat, est_cat, matching):
+        assert isinstance(true_cat, FullCatalog), "true_cat should be FullCatalog"
+        assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
+
         if self.mag_band:
-            true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
-            est_mags = est_cat.magnitudes[:, :, self.mag_band].contiguous()
+            unit = "on_fluxes" if self.bin_unit_is_flux else "magnitudes"
+            true_mags = true_cat[unit][:, :, self.mag_band].contiguous()
+            est_mags = est_cat[unit][:, :, self.mag_band].contiguous()
         else:
             # hack to match regardless of magnitude; intended for
             # catalogs from surveys with incompatible filter bands
             true_mags = torch.ones_like(true_cat.plocs[:, :, 0])
             est_mags = torch.ones_like(est_cat.plocs[:, :, 0])
 
+        if self.source_type_filter == "star":
+            true_filter_bools = true_cat.star_bools.squeeze(2)
+            est_filter_bools = est_cat.star_bools.squeeze(2)
+        elif self.source_type_filter == "galaxy":
+            true_filter_bools = true_cat.galaxy_bools.squeeze(2)
+            est_filter_bools = est_cat.galaxy_bools.squeeze(2)
+        elif self.source_type_filter is None:
+            true_filter_bools = torch.ones_like(true_cat.star_bools.squeeze(2)).bool()
+            est_filter_bools = torch.ones_like(est_cat.star_bools.squeeze(2)).bool()
+        else:
+            raise NotImplementedError()
+
+        cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+        n_bins = len(cutoffs) + 1
+
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
+            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
+                device=self.device
+            )
             n_true = true_cat.n_sources[i].sum().item()
             n_est = est_cat.n_sources[i].sum().item()
 
-            cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
-            n_bins = len(cutoffs) + 1
+            cur_batch_true_mags = true_mags[i, :n_true]
+            cur_batch_est_mags = est_mags[i, :n_est]
 
-            tmi = true_mags[i, 0:n_true]
-            emi = est_mags[i, 0:n_est]
-            tmim, emim = tmi[tcat_matches], emi[ecat_matches]
+            cur_batch_true_filter_bools = true_filter_bools[i, :n_true]
+            cur_batch_est_filter_bools = est_filter_bools[i, :n_est]
+
+            tmi = cur_batch_true_mags[cur_batch_true_filter_bools]
+            emi = cur_batch_est_mags[cur_batch_est_filter_bools]
+
+            tcat_matches = tcat_matches[cur_batch_true_filter_bools[tcat_matches]]
+            ecat_matches = ecat_matches[cur_batch_est_filter_bools[ecat_matches]]
+
+            tmim = cur_batch_true_mags[tcat_matches]
+            emim = cur_batch_est_mags[ecat_matches]
 
             self.n_true_sources += torch.bucketize(tmi, cutoffs).bincount(minlength=n_bins)
             self.n_est_sources += torch.bucketize(emi, cutoffs).bincount(minlength=n_bins)
@@ -129,21 +178,30 @@ class DetectionPerformance(Metric):
         recall = n_true_matches.sum() / n_true_sources.sum()
         f1 = 2 * precision * recall / (precision + recall)
 
+        if self.source_type_name == "total":
+            return {
+                "detection_precision": precision,
+                "detection_recall": recall,
+                "detection_f1": f1,
+            }
+
         return {
-            "detection_precision": precision,
-            "detection_recall": recall,
-            "detection_f1": f1,
+            f"detection_precision_{self.source_type_name}": precision,
+            f"detection_recall_{self.source_type_name}": recall,
+            f"detection_f1_{self.source_type_name}": f1,
         }
 
     def plot(self):
         # Compute recall, precision, and F1 score
-        recall = self.n_true_matches / self.n_true_sources
-        precision = self.n_est_matches / self.n_est_sources
-        f1 = 2 * precision * recall / (precision + recall)
+        recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)
+        precision = (self.n_est_matches / self.n_est_sources).nan_to_num(0)
+        f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
 
-        mbc = self.mag_bin_cutoffs
-        xlabels = [f"[{mbc[i]}, {mbc[i+1]}]" for i in range(len(mbc) - 1)]
-        xlabels = ["< " + str(mbc[0])] + xlabels + ["> " + str(mbc[-1])]
+        xlabels = (
+            ["< " + str(self.mag_bin_cutoffs[0])]
+            + [f"{self.mag_bin_cutoffs[i + 1]}" for i in range(len(self.mag_bin_cutoffs) - 1)]
+            + ["> " + str(self.mag_bin_cutoffs[-1])]
+        )
 
         if self.exclude_last_bin:
             precision = precision[:-1]
@@ -151,26 +209,59 @@ class DetectionPerformance(Metric):
             f1 = f1[:-1]
             xlabels = xlabels[:-1]
 
-        sns.set(style="whitegrid")
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        sns.set_theme(style="whitegrid")
+        fig, axes = plt.subplots(
+            2, 1, figsize=(10, 10), gridspec_kw={"height_ratios": [1, 2]}, sharex="col"
+        )
 
-        axes[0].plot(recall.tolist(), marker="s")
-        axes[0].set_title("Recall")
-        axes[0].set_xticks(range(len(xlabels)))
-        axes[0].set_xticklabels(xlabels, rotation=45)
-        axes[0].set_ylim([0, 1])
-
-        axes[1].plot(precision.tolist(), marker="s")
-        axes[1].set_title("Precision")
+        c1, c2, c3, c4 = plt.rcParams["axes.prop_cycle"].by_key()["color"][0:4]
+        axes[1].plot(
+            range(len(xlabels)),
+            recall.tolist(),
+            linestyle="solid",
+            color=c1,
+            label=f"BLISS Recall ({self.source_type_name})",
+        )
+        axes[1].plot(
+            range(len(xlabels)),
+            precision.tolist(),
+            linestyle="solid",
+            color=c2,
+            label=f"BLISS Precision ({self.source_type_name})",
+        )
+        axes[1].plot(
+            range(len(xlabels)),
+            f1.tolist(),
+            linestyle="solid",
+            color=c3,
+            label=f"BLISS F1 ({self.source_type_name})",
+        )
+        axes[1].set_xlabel("Flux" if self.bin_unit_is_flux else "Magnitudes")
         axes[1].set_xticks(range(len(xlabels)))
         axes[1].set_xticklabels(xlabels, rotation=45)
         axes[1].set_ylim([0, 1])
+        axes[1].legend()
 
-        axes[2].plot(f1.tolist(), marker="s")
-        axes[2].set_title("F1 Score")
-        axes[2].set_xticks(range(len(xlabels)))
-        axes[2].set_xticklabels(xlabels, rotation=45)
-        axes[2].set_ylim([0, 1])
+        axes[0].step(
+            range(len(xlabels)),
+            self.n_true_sources.tolist(),
+            label=f"# true sources ({self.source_type_name})",
+            where="mid",
+            color=c4,
+        )
+        axes[0].step(
+            range(len(xlabels)),
+            self.n_true_matches.tolist(),
+            label=f"# BLISS matches ({self.source_type_name})",
+            ls="--",
+            where="mid",
+            color=c4,
+        )
+        count_max = self.n_true_sources.max().item()
+        count_ticks = np.round(np.linspace(0, count_max, 5), -3)
+        axes[0].set_yticks(count_ticks)
+        axes[0].set_ylabel("Count")
+        axes[0].legend()
 
         plt.tight_layout()
         plt.show()

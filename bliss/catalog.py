@@ -5,11 +5,13 @@ from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
+import torch.nn.functional as F  # noqa: WPS301
 from astropy import units as u  # noqa: WPS347
 from astropy.table import Table, hstack
 from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from torch import Tensor
+from torch.nn.utils.rnn import pad_sequence
 
 
 def convert_mag_to_nmgy(mag):
@@ -534,6 +536,9 @@ class FullCatalog(UserDict):
         d_new["n_sources"] = keep.sum(dim=(-2, -1)).long()
         return type(self)(self.height, self.width, d_new)
 
+    def _get_tile_to_source_mapping(self, mapping_matrix: Tensor) -> Tensor:
+        return mapping_matrix.nonzero()
+
     def to_tile_catalog(
         self,
         tile_slen: int,
@@ -582,54 +587,65 @@ class FullCatalog(UserDict):
             n_sources = int(self.n_sources[ii].item())
             plocs_ii = self.plocs[ii][:n_sources]
             filter_sources = n_sources
-            source_indices = tile_coords[ii][:n_sources]
+            source_tile_coords = tile_coords[ii][:n_sources]
             if filter_oob:
                 x0_mask = (plocs_ii[:, 0] > 0) & (plocs_ii[:, 0] < self.height)
                 x1_mask = (plocs_ii[:, 1] > 0) & (plocs_ii[:, 1] < self.width)
                 x_mask = x0_mask * x1_mask
                 filter_sources = x_mask.sum()
-                source_indices = source_indices[x_mask]
-            source_indices = source_indices[:, 0] * n_tiles_w + source_indices[:, 1].unsqueeze(0)
-            tile_range = torch.arange(n_tiles_h * n_tiles_w, device=self.device).unsqueeze(1)
-            # get mask, for tiles
-            source_mask = (source_indices == tile_range).long()  # (nth*ntw) x n_sources
-            if source_mask.sum(-1).max() > max_sources_per_tile:
+                source_tile_coords = source_tile_coords[x_mask]
+
+            if filter_sources == 0:
+                continue
+
+            source_indices = source_tile_coords[:, 0] * n_tiles_w + source_tile_coords[
+                :, 1
+            ].unsqueeze(0)
+            tile_indices = torch.arange(n_tiles_h * n_tiles_w, device=self.device).unsqueeze(1)
+
+            tile_to_source_mapping = self._get_tile_to_source_mapping(
+                source_indices == tile_indices
+            )
+            tile_source_count: Tuple[Tensor, Tensor] = tile_to_source_mapping[:, 0].unique(
+                sorted=True, return_counts=True
+            )  # first element is tile index; second element is source count
+            if tile_source_count[1].max() > max_sources_per_tile:
                 if not ignore_extra_sources:
                     raise ValueError(  # noqa: WPS220
                         "# of sources per tile exceeds `max_sources_per_tile`."
                     )
 
-            mask_sources = torch.zeros_like(source_mask, dtype=torch.bool, device=self.device)
-
-            # Find the indices of the first 'max_sources_per_tile' truth values in each row
-            sorted_indices = torch.argsort(source_mask, dim=1, descending=True)
-            top_indices = sorted_indices[:, :max_sources_per_tile]
-
-            # Set the corresponding positions in the output tensor to True
-            mask_sources = mask_sources.scatter_(1, top_indices, 1) & source_mask
-
             # get n_sources for each tile
-            tile_n_sources[ii] = mask_sources.reshape(n_tiles_h, n_tiles_w, filter_sources).sum(-1)
+            tile_n_sources[ii].view(-1)[tile_source_count[0].flatten().tolist()] = torch.where(
+                tile_source_count[1] <= max_sources_per_tile,
+                tile_source_count[1],
+                max_sources_per_tile,
+            )
 
             for k, v in tile_params.items():
                 if k == "locs":
                     k = "plocs"
-                source_matrix = self[k][ii][:n_sources]
+                param_matrix = self[k][ii][:n_sources]
                 if filter_oob:
-                    source_matrix = source_matrix[x_mask]
-                num_tile = n_tiles_h * n_tiles_w
-                source_matrix_expand = source_matrix.unsqueeze(0).expand(num_tile, -1, -1)
-
-                masked_params = source_matrix_expand * mask_sources.unsqueeze(2)
-                # gather params values
-                gathered_params = masked_params.reshape(
-                    n_tiles_h, n_tiles_w, filter_sources, v[ii].shape[-1]
-                ).to(v[ii].dtype)
-
-                # move nonzero ahead (eg. [0, 1, 0, 2] --> [1, 2, 0, 0]) for later used
-                fill_indice = min(filter_sources, max_sources_per_tile)
-                index = torch.sort((gathered_params != 0).long(), dim=2, descending=True)[1]
-                v[ii][:, :, :fill_indice] = gathered_params.gather(2, index)[:, :, :fill_indice]
+                    param_matrix = param_matrix[x_mask]
+                params_on_tile = list(
+                    param_matrix[tile_to_source_mapping[:, 1]].split(
+                        tile_source_count[1].flatten().tolist()
+                    )
+                )
+                # pad first tensor to desired length
+                # the second argument of pad function is
+                # padding_left, padding_right, padding_top, padding_bottom
+                params_on_tile[0] = F.pad(
+                    params_on_tile[0],
+                    (0, 0, 0, (max_sources_per_tile - params_on_tile[0].shape[0])),
+                )
+                # pad all tensors
+                params_on_tile = pad_sequence(params_on_tile, batch_first=True)
+                max_fill = min(filter_sources, max_sources_per_tile)
+                v[ii].view(-1, *v[ii].shape[2:])[
+                    tile_to_source_mapping[:, 0].unique(sorted=True).tolist(), :max_fill
+                ] = params_on_tile[:, :max_fill].to(dtype=v.dtype)
 
             # modify tile location
             tile_params["locs"][ii] = (tile_params["locs"][ii] % tile_slen) / tile_slen
