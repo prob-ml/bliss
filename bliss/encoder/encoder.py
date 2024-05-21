@@ -264,7 +264,8 @@ class Encoder(pl.LightningModule):
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
-        mode_cat = self.sample(batch, use_mode=True).to_full_catalog()
+        mode_cat_tile = self.sample(batch, use_mode=True)
+        mode_cat = mode_cat_tile.to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, matching)
 
@@ -275,6 +276,7 @@ class Encoder(pl.LightningModule):
         self.sample_image_renders.update(
             batch,
             target_cat,
+            mode_cat_tile,
             mode_cat,
             self.current_epoch,
             batch_idx,

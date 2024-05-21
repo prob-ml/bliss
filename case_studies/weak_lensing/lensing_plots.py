@@ -3,29 +3,65 @@ import math
 import torch
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from torchmetrics import Metric
 
 from bliss.catalog import TileCatalog
 
 
-def plot_lensing_maps(state_dict, **kwargs):
-    if "restrict_batch" in state_dict and "batch_idx" in state_dict:
-        if state_dict["batch_idx"] != state_dict["restrict_batch"]:
-            return "", None
-    logging_name = state_dict["logging_name"]
-    current_epoch = state_dict["current_iteration"]
-    sample = state_dict["sample"]
-    tiles_to_crop = state_dict["tiles_to_crop"]
-    min_flux_threshold = state_dict["min_flux_threshold"]
-    batch = state_dict["batch"]
-    tile_slen = state_dict["tile_slen"]
+class PlotWeakLensingShearConvergence(Metric):
+    """Metric wrapper for plotting sample images."""
 
-    target_cat = TileCatalog(tile_slen, batch["tile_catalog"])
-    target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=min_flux_threshold)
-    target_cat_cropped = target_cat.symmetric_crop(tiles_to_crop)
-    est_cat = sample(batch, use_mode=True)
-    fig = plot_maps(batch["images"], target_cat_cropped, est_cat, figsize=None)
-    title = f"Epoch:{current_epoch}/{logging_name} shear and convergence"
-    return title, fig
+    def __init__(
+        self,
+        frequency: int = 1,
+        restrict_batch: int = 0,
+        tiles_to_crop: int = 0,  # note must match encoder tiles_to_crop
+        tile_slen: int = 0,  # note must match encoder tile_slen
+    ):
+        super().__init__()
+
+        self.frequency = frequency
+        self.restrict_batch = restrict_batch
+        self.tiles_to_crop = tiles_to_crop
+        self.tile_slen = tile_slen
+
+        self.should_plot = False
+        self.batch = {}
+        self.batch_idx = -1
+        self.sample_with_mode_tile = None
+        self.images = None
+        self.current_epoch = 0
+        self.target_cat_cropped = None
+
+    def update(
+        self,
+        batch,
+        target_cat_cropped,
+        sample_with_mode_tile,
+        sample_with_mode,
+        current_epoch,
+        batch_idx,
+    ):
+        self.batch_idx = batch_idx
+        if self.restrict_batch != batch_idx:
+            self.should_plot = False
+            return
+        self.current_epoch = current_epoch
+        self.should_plot = True
+        self.batch = batch
+        self.sample_with_mode_tile = sample_with_mode_tile
+        self.images = batch["images"]
+        self.target_cat_cropped = target_cat_cropped
+
+    def compute(self):
+        return {}
+
+    def plot(self):
+        if self.current_epoch % self.frequency != 0:
+            return None
+        est_cat = self.sample_with_mode_tile
+        true_tile_cat = TileCatalog(self.tile_slen, self.batch["tile_catalog"])
+        return plot_maps(self.images, true_tile_cat, est_cat, figsize=None)
 
 
 def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None):
@@ -84,7 +120,7 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None):
         )
 
     fig.tight_layout()
-    return fig
+    return fig, axes
 
 
 def plot_maps_helper(x_label: str, mp, ax, fig):

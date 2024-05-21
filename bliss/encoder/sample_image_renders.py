@@ -34,7 +34,15 @@ class PlotSampleImages(Metric):
         self.current_epoch = 0
         self.target_cat_cropped = None
 
-    def update(self, batch, target_cat_cropped, sample_with_mode, current_epoch, batch_idx):
+    def update(
+        self,
+        batch,
+        target_cat_cropped,
+        sample_with_mode_tile,
+        sample_with_mode,
+        current_epoch,
+        batch_idx,
+    ):
         self.batch_idx = batch_idx
         if self.restrict_batch != batch_idx:
             self.should_plot = False
