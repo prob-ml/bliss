@@ -29,72 +29,59 @@ def plot_lensing_maps(state_dict, **kwargs):
 
 
 def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None):
-    """Plots shear and convergence maps."""
+    """Plots weak lensing shear and convergence maps."""
     batch_size = images.size(0)
 
-    n_samples = min(int(math.sqrt(batch_size)) ** 2, 4)
-
-    # every row should be a true map vs generated map for 3 types
-    # of maps (shear 1, shear 2, convergence) and the image
-    nrows = n_samples
-    ncols = 3 * 2
-    img_ids = torch.arange(n_samples, device=images.device)
+    num_images = min(int(math.sqrt(batch_size)) ** 2, 5)
+    num_lensing_params = 6  # true and estimated shear1, shear2, and convergence
+    img_ids = torch.arange(num_images, device=images.device)
 
     if figsize is None:
-        # using each image as 5x5 in size:
-        figsize = (n_samples * 5, ncols * 5)
-    fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
-    axes = axes.flatten() if nrows > 1 else [axes]  # flatten
+        figsize = (20, 20)
+    fig, axes = plt.subplots(nrows=num_images, ncols=num_lensing_params, figsize=figsize)
 
     true_shear = true_tile_cat["shear"]
     est_shear = est_tile_cat["shear"]
     true_convergence = true_tile_cat["convergence"]
     est_convergence = est_tile_cat["convergence"]
 
-    for ax_idx, ax in enumerate(axes):
-        img_id = img_ids[ax_idx // 6]
-        if ax_idx % 6 == 0:
-            plot_maps_helper(
-                x_label="True horizontal shear",
-                mp=true_shear[img_id].squeeze()[:, :, 0],
-                ax=ax,
-                fig=fig,
-            )
-        if ax_idx % 6 == 1:
-            plot_maps_helper(
-                x_label="Estimated horizontal shear",
-                mp=est_shear[img_id].squeeze()[:, :, 0],
-                ax=ax,
-                fig=fig,
-            )
-        if ax_idx % 6 == 2:
-            plot_maps_helper(
-                x_label="True diagonal shear",
-                mp=true_shear[img_id].squeeze()[:, :, 1],
-                ax=ax,
-                fig=fig,
-            )
-        if ax_idx % 6 == 3:
-            plot_maps_helper(
-                x_label="Estimated diagonal shear",
-                mp=est_shear[img_id].squeeze()[:, :, 1],
-                ax=ax,
-                fig=fig,
-            )
-        if ax_idx % 6 == 4:
-            plot_maps_helper(
-                x_label="True convergence",
-                mp=true_convergence[img_id].squeeze(),
-                ax=ax,
-                fig=fig,
-            )
-        if ax_idx % 6 == 5:
-            plot_maps_helper(
-                x_label="Estimated convergence",
-                mp=est_convergence[img_id].squeeze(),
-                ax=ax,
-                fig=fig,
-            )
+    for img_id in img_ids:
+        plot_maps_helper(
+            x_label="True horizontal shear",
+            mp=true_shear[img_id].squeeze()[:, :, 0],
+            ax=axes[img_id, 0],
+            fig=fig,
+        )
+        plot_maps_helper(
+            x_label="Estimated horizontal shear",
+            mp=est_shear[img_id].squeeze()[:, :, 0],
+            ax=axes[img_id, 1],
+            fig=fig,
+        )
+        plot_maps_helper(
+            x_label="True diagonal shear",
+            mp=true_shear[img_id].squeeze()[:, :, 1],
+            ax=axes[img_id, 2],
+            fig=fig,
+        )
+        plot_maps_helper(
+            x_label="Estimated diagonal shear",
+            mp=est_shear[img_id].squeeze()[:, :, 1],
+            ax=axes[img_id, 3],
+            fig=fig,
+        )
+        plot_maps_helper(
+            x_label="True convergence",
+            mp=true_convergence[img_id].squeeze(),
+            ax=axes[img_id, 4],
+            fig=fig,
+        )
+        plot_maps_helper(
+            x_label="Estimated convergence",
+            mp=est_convergence[img_id].squeeze(),
+            ax=axes[img_id, 5],
+            fig=fig,
+        )
 
     fig.tight_layout()
     return fig
@@ -104,14 +91,10 @@ def plot_maps_helper(x_label: str, mp, ax, fig):
     ax.set_xlabel(x_label)
 
     mp = mp.cpu().numpy()
-    vmin = mp.min().item()
-    vmax = mp.max().item()
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
     im = ax.matshow(
         mp,
-        vmin=vmin,
-        vmax=vmax,
         cmap="viridis",
         extent=(0, mp.shape[0], mp.shape[1], 0),
     )
