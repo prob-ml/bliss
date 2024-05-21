@@ -3,6 +3,9 @@ defaults:
     - ../bliss/conf@_here_: base_config
     - _self_
 
+paths:
+    dc2_pytest_data: ${paths.root}/case_studies/dc2/pytest_data/
+
 prior:
     n_tiles_h: 4
     n_tiles_w: 4
@@ -26,6 +29,9 @@ surveys:
               camcol: 1
               fields: [12]
         load_image_data: true
+    dc2:
+        data_dir: ${paths.dc2_pytest_data}
+        split_result_folder: split_samples
 
 #########################################
 

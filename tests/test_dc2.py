@@ -150,7 +150,7 @@ class TestDC2:
         dc2.setup()
 
         assert dc2[0]["images"].shape[0] == 6
-        assert len(dc2.image_ids()) == 245000
+        assert len(dc2.image_ids()) == 10
 
         params = (
             "locs",
