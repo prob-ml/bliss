@@ -14,7 +14,6 @@ from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
-from bliss.encoder.plots import PlotCollection
 from bliss.encoder.variational_dist import VariationalDistSpec
 
 
@@ -34,7 +33,7 @@ class Encoder(pl.LightningModule):
         image_normalizer: ImageNormalizer,
         vd_spec: VariationalDistSpec,
         metrics: MetricCollection,
-        plots: PlotCollection,
+        plots: MetricCollection,
         matcher: CatalogMatcher,
         min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
@@ -260,7 +259,7 @@ class Encoder(pl.LightningModule):
 
         return self._compute_loss(batch, "train")
 
-    def update_metrics(self, batch):
+    def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
@@ -273,24 +272,20 @@ class Encoder(pl.LightningModule):
         matching = self.matcher.match_catalogs(target_cat, sample_cat)
         self.sample_metrics.update(target_cat, sample_cat, matching)
 
+        self.plots.update(
+            self.tile_slen,
+            batch,
+            self.min_flux_threshold,
+            self.tiles_to_crop,
+            self.sample,
+            self.current_epoch,
+            batch_idx,
+        )
+
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         self._compute_loss(batch, "val")
-        self.update_metrics(batch)
-
-        plot_dict = {
-            "restrict_batch": 0,
-            "batch": batch,
-            "batch_idx": batch_idx,
-            "max_iterations": self.trainer.max_epochs,
-            "tile_slen": self.tile_slen,
-            "min_flux_threshold": self.min_flux_threshold,
-            "tiles_to_crop": self.tiles_to_crop,
-            "sample": self.sample,
-            "current_iteration": self.current_epoch,
-            "logging_name": "val",
-        }
-        self.plots.plot_all(state_dict=plot_dict, check_freqs=True, logger=self.logger)
+        self.update_metrics(batch, batch_idx)
 
     def report_metrics(self, metrics, logging_name, show_epoch=False):
         for k, v in metrics.compute().items():
@@ -298,10 +293,12 @@ class Encoder(pl.LightningModule):
 
         for metric_name, metric in metrics.items():
             if hasattr(metric, "plot"):  # noqa: WPS421
-                fig, _axes = metric.plot()
+                plot_or_none = metric.plot()
+                if plot_or_none:
+                    fig, _axes = plot_or_none
                 name = f"Epoch:{self.current_epoch}" if show_epoch else ""
                 name += f"/{logging_name} {metric_name}"
-                if self.logger:
+                if self.logger and plot_or_none:
                     self.logger.experiment.add_figure(name, fig)
 
         metrics.reset()
@@ -309,11 +306,12 @@ class Encoder(pl.LightningModule):
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
         self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
+        self.report_metrics(self.plots, "val/plots", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
         self._compute_loss(batch, "test")
-        self.update_metrics(batch)
+        self.update_metrics(batch, batch_idx)
 
     def on_test_epoch_end(self):
         self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)

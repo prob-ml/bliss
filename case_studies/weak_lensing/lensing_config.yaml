@@ -43,12 +43,6 @@ encoder:
         _target_: torchmetrics.MetricCollection
         metrics:
           - _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
-    plots:
-        _target_: bliss.encoder.plots.PlotCollection
-        plotfns:
-            "lensing_maps": case_studies.weak_lensing.lensing_plots.plot_lensing_maps
-        freqs:
-            "lensing_maps": 1
     vd_spec:
         _target_: case_studies.weak_lensing.lensing_variational_dist.LensingVariationalDistSpec
     double_detect: false

@@ -1,106 +1,67 @@
 import math
-import warnings
 
-import hydra
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from omegaconf import DictConfig, ListConfig
+from torchmetrics import Metric
 
 from bliss.catalog import TileCatalog
 
 
-class PlotCollection:
-    def __init__(self, plotfns, freqs):
-        self.plotfns = plotfns
-        self.freqs = freqs
+class PlotSampleImages(Metric):
+    """Metric wrapper for plotting sample images."""
 
-    def plot_one(self, fn_key_or_idx, state_dict, logger=None, **kwargs):
-        tag, only_plot = hydra.utils.get_method(self.plotfns[fn_key_or_idx])(
-            state_dict=state_dict,
-            **kwargs,
-        )
-        if logger and only_plot:
-            logger.experiment.add_figure(tag, only_plot, close=True)
-        return tag
+    def __init__(
+        self,
+        frequency: int = 1,
+        restrict_batch: int = 0,
+    ):
+        super().__init__()
 
-    # TODO: address non-descriptive error with mismatched types in instantiation (throws below)
-    def plot_all(self, state_dict, check_freqs, logger=None, **kwargs):
-        if check_freqs:
-            assert (
-                "current_iteration" in state_dict
-            ), "Plotting frequency enabled but no current iteration counter provided"
-            curr_iteration = state_dict["current_iteration"]
-            if "max_iterations" not in state_dict:
-                max_iterations = -1
-                warnings.warn(
-                    "Warning: Current iteration set in plotting but max iterations not set."
-                    + "Ignore if expected behavior.",
-                    RuntimeWarning,
-                )
-            else:
-                max_iterations = state_dict["max_iterations"]
-        if isinstance(self.plotfns, ListConfig):
-            for idx, freq in enumerate(self.freqs):
-                should_plot = (
-                    (not check_freqs)
-                    or curr_iteration % freq == 0
-                    or curr_iteration == max_iterations - 1
-                )
-                if should_plot:
-                    self.plot_one(
-                        fn_key_or_idx=idx,
-                        state_dict=state_dict,
-                        logger=logger,
-                        **kwargs,
-                    )  # TODO: warn if tag already exists (silent overwriting of plots)
-        elif isinstance(self.plotfns, DictConfig):
-            for plot_key in self.plotfns.keys():
-                should_plot = (
-                    not check_freqs
-                    or curr_iteration % self.freqs[plot_key] == 0
-                    or curr_iteration == max_iterations - 1
-                )
-                if should_plot:
-                    self.plot_one(
-                        fn_key_or_idx=plot_key,
-                        state_dict=state_dict,
-                        logger=logger,
-                        **kwargs,
-                    )  # TODO: warn if tag already exists (silent overwriting of plots)
-        else:
-            raise TypeError(
-                "Invalid type found for plotting functions collection, "
-                + "expected list or dict but found "
-                + str(type(self.plotfns))
-            )
+        self.frequency = frequency
+        self.restrict_batch = restrict_batch
+        self.tile_slen = 0
+        self.batch = {}
+        self.batch_idx = -1
+        self.min_flux_threshold = 0
+        self.tiles_to_crop = 0
+        self.sample = lambda: None
+        self.current_epoch = 0
+        self.tile_catalog = None
+        self.images = None
+        self.current_epoch = 0
+        self.should_plot = False
 
+    def update(
+        self, tile_slen, batch, min_flux_threshold, tiles_to_crop, sample, current_epoch, batch_idx
+    ):
+        self.batch_idx = batch_idx
+        if self.restrict_batch != batch_idx:
+            self.should_plot = False
+            return
+        self.current_epoch = current_epoch
+        self.should_plot = True
+        self.tile_slen = tile_slen
+        self.batch = batch
+        self.min_flux_threshold = min_flux_threshold
+        self.tiles_to_crop = tiles_to_crop
+        self.sample = sample
+        self.tile_catalog = batch["tile_catalog"]
+        self.images = batch["images"]
 
-def plot_sample_images(state_dict, **kwargs):
-    batch_restriction = (
-        "restrict_batch" in state_dict
-        and "batch_idx" in state_dict
-        and state_dict["batch_idx"] != state_dict["restrict_batch"]
-    )
-    if batch_restriction:
-        return "", None
-    tile_slen = state_dict["tile_slen"]
-    batch = state_dict["batch"]
-    min_flux_threshold = state_dict["min_flux_threshold"]
-    tiles_to_crop = state_dict["tiles_to_crop"]
-    sample = state_dict["sample"]
-    current_epoch = state_dict["current_iteration"]
-    logging_name = state_dict["logging_name"]
+    def compute(self):
+        return {}
 
-    target_cat = TileCatalog(tile_slen, batch["tile_catalog"])
-    target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=min_flux_threshold)
-    target_cat_cropped = target_cat.symmetric_crop(tiles_to_crop)
-    est_cat = sample(batch, use_mode=True)
-    mp = tiles_to_crop * tile_slen
-    fig = plot_detections(batch["images"], target_cat_cropped, est_cat, margin_px=mp)
-    title = f"Epoch:{current_epoch}/{logging_name} images"
-    return title, fig
+    def plot(self):
+        if self.current_epoch % self.frequency != 0:
+            return None
+        target_cat = TileCatalog(self.tile_slen, self.tile_catalog)
+        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat_cropped = target_cat.symmetric_crop(self.tiles_to_crop)
+        est_cat = self.sample(self.batch, use_mode=True)
+        mp = self.tiles_to_crop * self.tile_slen
+        return plot_detections(self.images, target_cat_cropped, est_cat, margin_px=mp)
 
 
 def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, figsize=None):
@@ -175,7 +136,7 @@ def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, 
             ax.grid(linestyle="dotted", which="major")
 
     fig.tight_layout()
-    return fig
+    return fig, axes
 
 
 def plot_plocs(catalog, ax, idx, filter_by="all", bp=0, **kwargs):
