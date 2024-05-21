@@ -3,6 +3,9 @@ defaults:
     - ../bliss/conf@_here_: base_config
     - _self_
 
+paths:
+    dc2_pytest_data: ${paths.root}/case_studies/dc2/pytest_data/
+
 prior:
     n_tiles_h: 4
     n_tiles_w: 4
@@ -28,9 +31,9 @@ surveys:
         load_image_data: true
     dc2:
         data_dir: ${paths.data}/tests/dc2/dc2_multiband/
-        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100000.pkl
         n_split: 5
         image_lim: [800, 800]
+        batch_size: 4
 
 #########################################
 

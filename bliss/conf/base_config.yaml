@@ -19,6 +19,7 @@ paths:
     dc2: ${paths.data}/dc2
     output: ${paths.root}/output
     pretrained_models: ${paths.data}/pretrained_models
+    dc2_catalog: ${paths.root}/case_studies/dc2/merged_catalog
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
@@ -86,6 +87,7 @@ encoder:
         log_transform_stdevs: [-3, 0, 1, 3]
         use_clahe: true
         clahe_min_stdev: 200
+        asinh_params: null
     vd_spec:
         _target_: bliss.encoder.variational_dist.VariationalDistSpec
         survey_bands: ${encoder.survey_bands}
@@ -97,13 +99,18 @@ encoder:
         mag_band: 2  # SDSS r-band
     metrics:
         _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
         metrics:
-          - _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
-          - _target_: bliss.encoder.metrics.SourceTypeAccuracy
-          - _target_: bliss.encoder.metrics.FluxError
-            survey_bands: ${encoder.survey_bands}
-          - _target_: bliss.encoder.metrics.GalaxyShapeError
+            detection_performance:
+                _target_: bliss.encoder.metrics.DetectionPerformance
+                mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
+            source_type_accuracy:
+                _target_: bliss.encoder.metrics.SourceTypeAccuracy
+            flux_error:
+                _target_: bliss.encoder.metrics.FluxError
+                survey_bands: ${encoder.survey_bands}
+            galaxy_shape_error:
+                _target_: bliss.encoder.metrics.GalaxyShapeError
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
@@ -163,11 +170,14 @@ surveys:
         pixel_shift: 2
     dc2:
         _target_: bliss.surveys.dc2.DC2
-        data_dir: /nfs/turbo/lsa-regier/lsstdesc-public/dc2/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
-        cat_path: ${paths.dc2}/merged_catalog/merged_catalog_psf_100.pkl
+        data_dir: /data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
+        split_result_folder: split_results
+        cat_path: ${paths.dc2_catalog}/merged_catalog_with_flux_over_100.pkl
         batch_size: 64
         n_split: 50
         image_lim: [4000, 4000]
+        num_workers: 4
+        split_processes_num: 2
 
 
 #######################################################################

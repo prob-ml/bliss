@@ -1,0 +1,12 @@
+---
+defaults:
+    - full_train_config.yaml
+    - _self_
+    - override hydra/job_logging: stdout
+
+train:
+    trainer:
+        logger:
+            name: DC2_debug
+            version: DC2_debug
+        devices: [1]
