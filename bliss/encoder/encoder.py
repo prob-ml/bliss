@@ -33,7 +33,7 @@ class Encoder(pl.LightningModule):
         image_normalizer: ImageNormalizer,
         vd_spec: VariationalDistSpec,
         metrics: MetricCollection,
-        plots: MetricCollection,
+        sample_image_renders: MetricCollection,
         matcher: CatalogMatcher,
         min_flux_threshold: float = 0,
         optimizer_params: Optional[dict] = None,
@@ -51,7 +51,7 @@ class Encoder(pl.LightningModule):
             tiles_to_crop: margin of tiles not to use for computing loss
             image_normalizer: object that applies input transforms to images
             vd_spec: object that makes a variational distribution from raw convnet output
-            plots: for plotting relevant images and outputs during training
+            sample_image_renders: for plotting relevant images (overlays, shear maps)
             metrics: for scoring predicted catalogs during training
             matcher: for matching predicted catalogs to ground truth catalogs
             min_flux_threshold: Sources with a lower flux will not be considered when computing loss
@@ -71,7 +71,7 @@ class Encoder(pl.LightningModule):
         self.vd_spec = vd_spec
         self.mode_metrics = metrics.clone()
         self.sample_metrics = metrics.clone()
-        self.plots = plots
+        self.sample_image_renders = sample_image_renders
         self.matcher = matcher
         self.min_flux_threshold = min_flux_threshold
         self.optimizer_params = optimizer_params
@@ -272,7 +272,7 @@ class Encoder(pl.LightningModule):
         matching = self.matcher.match_catalogs(target_cat, sample_cat)
         self.sample_metrics.update(target_cat, sample_cat, matching)
 
-        self.plots.update(
+        self.sample_image_renders.update(
             batch,
             target_cat,
             mode_cat,
@@ -304,7 +304,7 @@ class Encoder(pl.LightningModule):
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
         self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
-        self.report_metrics(self.plots, "val/plots", show_epoch=True)
+        self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""

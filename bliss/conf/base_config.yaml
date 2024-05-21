@@ -104,7 +104,7 @@ encoder:
           - _target_: bliss.encoder.metrics.FluxError
             survey_bands: ${encoder.survey_bands}
           - _target_: bliss.encoder.metrics.GalaxyShapeError
-    plots:
+    sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
           - _target_: bliss.encoder.plots.PlotSampleImages
