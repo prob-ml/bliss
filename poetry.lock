@@ -1845,6 +1845,70 @@ files = [
 protobuf = ["grpcio-tools (>=1.51.3)"]
 
 [[package]]
+name = "h5py"
+version = "3.11.0"
+description = "Read and write HDF5 files from Python"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "h5py-3.11.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:1625fd24ad6cfc9c1ccd44a66dac2396e7ee74940776792772819fc69f3a3731"},
+    {file = "h5py-3.11.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:c072655ad1d5fe9ef462445d3e77a8166cbfa5e599045f8aa3c19b75315f10e5"},
+    {file = "h5py-3.11.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:77b19a40788e3e362b54af4dcf9e6fde59ca016db2c61360aa30b47c7b7cef00"},
+    {file = "h5py-3.11.0-cp310-cp310-win_amd64.whl", hash = "sha256:ef4e2f338fc763f50a8113890f455e1a70acd42a4d083370ceb80c463d803972"},
+    {file = "h5py-3.11.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:bbd732a08187a9e2a6ecf9e8af713f1d68256ee0f7c8b652a32795670fb481ba"},
+    {file = "h5py-3.11.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:75bd7b3d93fbeee40860fd70cdc88df4464e06b70a5ad9ce1446f5f32eb84007"},
+    {file = "h5py-3.11.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:52c416f8eb0daae39dabe71415cb531f95dce2d81e1f61a74537a50c63b28ab3"},
+    {file = "h5py-3.11.0-cp311-cp311-win_amd64.whl", hash = "sha256:083e0329ae534a264940d6513f47f5ada617da536d8dccbafc3026aefc33c90e"},
+    {file = "h5py-3.11.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:a76cae64080210389a571c7d13c94a1a6cf8cb75153044fd1f822a962c97aeab"},
+    {file = "h5py-3.11.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:f3736fe21da2b7d8a13fe8fe415f1272d2a1ccdeff4849c1421d2fb30fd533bc"},
+    {file = "h5py-3.11.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:aa6ae84a14103e8dc19266ef4c3e5d7c00b68f21d07f2966f0ca7bdb6c2761fb"},
+    {file = "h5py-3.11.0-cp312-cp312-win_amd64.whl", hash = "sha256:21dbdc5343f53b2e25404673c4f00a3335aef25521bd5fa8c707ec3833934892"},
+    {file = "h5py-3.11.0-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:754c0c2e373d13d6309f408325343b642eb0f40f1a6ad21779cfa9502209e150"},
+    {file = "h5py-3.11.0-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:731839240c59ba219d4cb3bc5880d438248533366f102402cfa0621b71796b62"},
+    {file = "h5py-3.11.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8ec9df3dd2018904c4cc06331951e274f3f3fd091e6d6cc350aaa90fa9b42a76"},
+    {file = "h5py-3.11.0-cp38-cp38-win_amd64.whl", hash = "sha256:55106b04e2c83dfb73dc8732e9abad69d83a436b5b82b773481d95d17b9685e1"},
+    {file = "h5py-3.11.0-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:f4e025e852754ca833401777c25888acb96889ee2c27e7e629a19aee288833f0"},
+    {file = "h5py-3.11.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:6c4b760082626120031d7902cd983d8c1f424cdba2809f1067511ef283629d4b"},
+    {file = "h5py-3.11.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:67462d0669f8f5459529de179f7771bd697389fcb3faab54d63bf788599a48ea"},
+    {file = "h5py-3.11.0-cp39-cp39-win_amd64.whl", hash = "sha256:d9c944d364688f827dc889cf83f1fca311caf4fa50b19f009d1f2b525edd33a3"},
+    {file = "h5py-3.11.0.tar.gz", hash = "sha256:7b7e8f78072a2edec87c9836f25f34203fd492a4475709a18b417a33cfb21fa9"},
+]
+
+[package.dependencies]
+numpy = ">=1.17.3"
+
+[[package]]
+name = "healpy"
+version = "1.16.6"
+description = "Healpix tools package for Python"
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "healpy-1.16.6-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:1cad7ed1d7030eeb06081240f669c9107db1282678512c85f5cf6eef1bea01bb"},
+    {file = "healpy-1.16.6-cp310-cp310-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6be3ca85cb78f3f243f660f3105d362615843f32c1ff53ffdead5ea1ffe07eb6"},
+    {file = "healpy-1.16.6-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:af4469864f465fc4bc3752543812ab1161d84eff4a8aead3842d56ea1b2585bb"},
+    {file = "healpy-1.16.6-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:366a269b239eeabf924d4a069cce5f2f1d72c7af24132d59f95fec09f670a38a"},
+    {file = "healpy-1.16.6-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:3324fc5aa737188db8017819d4ecb18c11315873481f31d97aceb29958591f40"},
+    {file = "healpy-1.16.6-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fd5adc827a90dffa72158b8a576143459d06dbd3afc52c2ff5c4a566aafcb049"},
+    {file = "healpy-1.16.6-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:12b5c5ea0c767b7ae7659b18bd4c42b11384765b44b9205b27147ab4686657bf"},
+    {file = "healpy-1.16.6-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:f72338a29fc776a4031cb2e9b7bd9306cbe2f0b6355e9541716b38ad23ba880d"},
+    {file = "healpy-1.16.6-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9d13dd979e804d2d7e80f5121b0acf46f94dcddfac757ebb01cecbcb3304b285"},
+    {file = "healpy-1.16.6-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:0a0e0b725c9fa2777f184c70beed87ff7c8dfa1869aca1fc370b40057db5c739"},
+    {file = "healpy-1.16.6-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7e5a284e7ec4cc06b7b222098ab0961a3b31f72014f0194b3cfd62e4dcd2963e"},
+    {file = "healpy-1.16.6-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:754fed0f2313f805535ea44e37a538b8d7b58b377cdfe8f36accdf8fec417f4a"},
+    {file = "healpy-1.16.6.tar.gz", hash = "sha256:0ab26e828fcd251a141095af6d9bf3dba43cec6f0f5cd48b65bf0af8f56329f1"},
+]
+
+[package.dependencies]
+astropy = "*"
+matplotlib = "*"
+numpy = ">=1.19"
+scipy = "*"
+
+[package.extras]
+test = ["pytest", "pytest-cython", "pytest-doctestplus", "requests"]
+
+[[package]]
 name = "hmf"
 version = "3.4.4"
 description = "A halo mass function calculator"
@@ -6269,4 +6333,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "bb1f81bd46a51e5b24a5006ff44398ef3c761c62485aefa526632371c85d00aa"
+content-hash = "2264ab514f2e8a682610bb681574c9aef67cc383872832fad919326e0bf7838d"
