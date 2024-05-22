@@ -10,7 +10,7 @@ from torch.distributions import Distribution, TransformedDistribution
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
 from bliss.encoder.encoder import Encoder
-from bliss.encoder.plotting import plot_detections
+from bliss.encoder.sample_image_renders import plot_detections
 from bliss.encoder.unconstrained_dists import UnconstrainedBernoulli
 from case_studies.adaptive_tiling.region_catalog import (
     RegionCatalog,

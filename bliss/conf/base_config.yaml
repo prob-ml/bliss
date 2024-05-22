@@ -111,6 +111,15 @@ encoder:
                 survey_bands: ${encoder.survey_bands}
             galaxy_shape_error:
                 _target_: bliss.encoder.metrics.GalaxyShapeError
+    sample_image_renders:
+        _target_: torchmetrics.MetricCollection
+        metrics:
+          - _target_: bliss.encoder.sample_image_renders.PlotSampleImages
+            frequency: 1
+            restrict_batch: 0
+            tiles_to_crop: 1
+            tile_slen: ${simulator.prior.tile_slen}
+
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
     double_detect: false
