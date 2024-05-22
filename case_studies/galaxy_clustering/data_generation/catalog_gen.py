@@ -3,7 +3,8 @@ import sys
 
 from astropy.io import ascii as astro_ascii
 from astropy.table import Table
-from prior import GalaxyClusterPrior
+
+from case_studies.galaxy_clustering.prior import GalaxyClusterPrior
 
 ENVIRONMENT_PATH = os.getcwd()
 CATALOG_PATH = os.path.join(ENVIRONMENT_PATH, "data/catalogs")
