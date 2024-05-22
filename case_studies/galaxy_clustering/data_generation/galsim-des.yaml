@@ -122,7 +122,7 @@ stamp :
 
 input :
   catalog :
-    dir : data/catalogs
+    dir : data_generation/catalogs
     file_name :
       type : FormattedStr
       format : "galsim_des_%03d.dat"
@@ -145,7 +145,7 @@ gal :
 
 output :
   type : Fits
-  dir : data/images
+  dir : data_generation/images
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_r.fits"
@@ -170,7 +170,7 @@ gal :
 
 output :
   type : Fits
-  dir : data/images
+  dir : data_generation/images
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_g.fits"
@@ -195,7 +195,7 @@ gal :
 
 output :
   type : Fits
-  dir : data/images
+  dir : data_generation/images
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_i.fits"
@@ -220,7 +220,7 @@ gal :
 
 output :
   type : Fits
-  dir : data/images
+  dir : data_generation/images
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_z.fits"

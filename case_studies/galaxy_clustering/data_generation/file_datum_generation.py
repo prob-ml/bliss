@@ -11,7 +11,7 @@ from bliss.catalog import FullCatalog, TileCatalog
 
 TileCatalog.allowed_params.update(["membership", "fracdev", "g1g2"])
 
-DATA_PATH = Path(os.getcwd()) / Path("data")
+DATA_PATH = Path(os.getcwd()) / Path("data_generation")
 CATALOGS_PATH = DATA_PATH / Path("padded_catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
@@ -51,7 +51,7 @@ data: List[FileDatum] = []
 for CATALOG_PATH in CATALOGS_PATH.glob("*.dat"):
     catalog = pd.read_csv(CATALOG_PATH, sep=" ", header=None, names=COL_NAMES)
 
-    catalog_dict = dict()
+    catalog_dict = {}
     catalog_dict["plocs"] = torch.tensor([catalog[["X", "Y"]].to_numpy()])
     n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
     catalog_dict["n_sources"] = n_sources
@@ -69,7 +69,7 @@ for CATALOG_PATH in CATALOGS_PATH.glob("*.dat"):
     filename = CATALOG_PATH.stem
     pad_file_prefix = f"{FILE_PREFIX}_padded_"
     index = filename[len(pad_file_prefix) :]
-    image_bands = list()
+    image_bands = []
     for band in BANDS:
         fits_filepath = IMAGES_PATH / Path(f"{FILE_PREFIX}_{index}_{band}.fits")
         # Should the ordering in the bands matter? It does here.
