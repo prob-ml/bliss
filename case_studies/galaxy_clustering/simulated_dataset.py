@@ -10,7 +10,7 @@ from astropy.io import fits
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
 from bliss.catalog import FullCatalog
-from bliss.simulator.simulated_dataset import CachedSimulatedDataset
+from bliss.simulator.simulated_dataset import FileDatum
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -18,7 +18,7 @@ warnings.filterwarnings(
 )
 
 
-class GalaxyClusterCachedSimulatedDataset(CachedSimulatedDataset):
+class GalaxyClusterCachedSimulatedDataset(pl.LightningDataModule):
     COL_NAMES = [
         "RA",
         "DEC",
@@ -42,14 +42,15 @@ class GalaxyClusterCachedSimulatedDataset(CachedSimulatedDataset):
         num_workers: int,
         cached_data_path: str,
         file_prefix: str,
-        bands: List[str],
+        survey_bands: List[str],
         padded_catalogs: bool = True,
     ):
+        super().__init__()
         self.num_workers = num_workers
         self.batch_size = batch_size
         self.cached_data_path = cached_data_path
         self.file_prefix = file_prefix
-        self.bands = bands
+        self.survey_bands = survey_bands
         self.padded_catalogs = padded_catalogs
 
         self.data: List[Dict] = list()
@@ -87,7 +88,7 @@ class GalaxyClusterCachedSimulatedDataset(CachedSimulatedDataset):
 
             # Read and stack image bands
             image_bands = list()
-            for band in self.bands:
+            for band in self.survey_bands:
                 fits_filepath = (
                     Path(self.cached_data_path)
                     / Path("images")
@@ -100,4 +101,55 @@ class GalaxyClusterCachedSimulatedDataset(CachedSimulatedDataset):
             stacked_image = torch.stack(image_bands, dim=0)
 
             self.data.append({"catalog": tile_catalog, "images": stacked_image})
-            self.slices = self.parse_slices(splits, len(self.data))
+        self.slices = self.parse_slices(splits, len(self.data))
+    
+    def _percent_to_idx(self, x, length):
+        """Converts string in percent to an integer index."""
+        return int(float(x.strip()) / 100 * length) if x.strip() else None
+
+    def parse_slices(self, splits: str, length: int):
+        slices = [slice(0, 0) for _ in range(3)]  # default to empty slice for each split
+        for i, data_split in enumerate(splits.split("/")):
+            # map "start_percent:stop_percent" to slice(start_idx, stop_idx)
+            slices[i] = slice(*(self._percent_to_idx(val, length) for val in data_split.split(":")))
+        return slices
+
+    def read_file(self, filename: str) -> List[FileDatum]:
+        with open(filename, "rb") as f:
+            return torch.load(f)
+
+    def __len__(self):
+        return len(self.data[self.slices[0]])
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    def train_dataloader(self):
+        assert self.data, "No cached train data loaded; run `generate.py` first"
+        assert len(self.data[self.slices[0]]) >= self.batch_size, (
+            f"Insufficient cached data loaded; "
+            f"need at least {self.batch_size} "
+            f"but only have {len(self.data[self.slices[0]])}. Re-run `generate.py` with "
+            f"different generation `train_n_batches` and/or `batch_size`."
+        )
+        # TODO: consider adding pixelwise Poisson noise to the *training* images on the fly
+        # to reduce overfitting rather than adding noise while simulating training images.
+        # (validation and test images should still be simulated with noise, though)
+        return DataLoader(
+            self.data[self.slices[0]],
+            shuffle=True,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+        )
+
+    def val_dataloader(self):
+        assert self.data[self.slices[1]], "No cached validation data found; run `generate.py` first"
+        return DataLoader(
+            self.data[self.slices[1]], batch_size=self.batch_size, num_workers=self.num_workers
+        )
+
+    def test_dataloader(self):
+        assert self.data[self.slices[2]], "No cached test data found; run `generate.py` first"
+        return DataLoader(
+            self.data[self.slices[2]], batch_size=self.batch_size, num_workers=self.num_workers
+        )
