@@ -7,7 +7,7 @@ from hmf import MassFunction
 from scipy.stats import gennorm
 
 
-class ClusterPrior:
+class GalaxyClusterPrior:
     def __init__(self, size=100):
         super().__init__()
         self.size = size
