@@ -43,6 +43,20 @@ encoder:
         _target_: torchmetrics.MetricCollection
         metrics:
           - _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
+
+    sample_image_renders:
+        _target_: torchmetrics.MetricCollection
+        metrics:
+          - _target_: bliss.encoder.sample_image_renders.PlotSampleImages
+            frequency: 1
+            restrict_batch: 0
+            tiles_to_crop: 1
+            tile_slen: ${simulator.prior.tile_slen}
+          - _target_: case_studies.weak_lensing.lensing_plots.PlotWeakLensingShearConvergence
+            frequency: 1
+            restrict_batch: 0
+            tiles_to_crop: 1
+            tile_slen: ${simulator.prior.tile_slen}
     vd_spec:
         _target_: case_studies.weak_lensing.lensing_variational_dist.LensingVariationalDistSpec
     double_detect: false
