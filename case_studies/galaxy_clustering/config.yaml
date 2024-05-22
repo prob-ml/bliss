@@ -36,3 +36,4 @@ cached_simulator:
     num_workers: 1
     cached_data_path: ${generate.cached_data_path}
     file_prefix: ${generate.file_prefix}
+    survey_bands: ["g", "r", "i", "z"]
