@@ -11,7 +11,7 @@ from bliss.catalog import FullCatalog, TileCatalog
 
 TileCatalog.allowed_params.update(["membership", "fracdev", "g1g2"])
 
-DATA_PATH = Path(os.getcwd()) / Path("data_generation")
+DATA_PATH = Path(os.getcwd()) / Path("data")
 CATALOGS_PATH = DATA_PATH / Path("padded_catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
