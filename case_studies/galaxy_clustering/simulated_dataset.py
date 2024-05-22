@@ -1,16 +1,16 @@
 import warnings
-from typing import Tuple, Dict, List
 from pathlib import Path
+from typing import Dict, List, Tuple
 
-from astropy.io import fits
-import torch
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytorch_lightning as pl
+import torch
+from astropy.io import fits
 from torch.utils.data import DataLoader, Dataset, IterableDataset
 
-import pytorch_lightning as pl
+from bliss.catalog import FullCatalog
 from bliss.simulator.simulated_dataset import CachedSimulatedDataset
-
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -63,6 +63,21 @@ class GalaxyClusterCachedSimulatedDataset(CachedSimulatedDataset):
             # Read catalog entries
             catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=self.COL_NAMES)
 
+            catalog_dict = dict()
+            catalog_dict["plocs"] = torch.tensor([catalog[["X", "Y"]].to_numpy()])
+            n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
+            catalog_dict["n_sources"] = n_sources
+            catalog_dict["fluxes"] = torch.tensor(
+                [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z"]].to_numpy()]
+            )
+            catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
+            catalog_dict["hlr"] = torch.tensor([catalog[["TSIZE"]].to_numpy()])
+            catalog_dict["fracdev"] = torch.tensor([catalog[["FRACDEV"]].to_numpy()])
+            catalog_dict["g1g2"] = torch.tensor([catalog[["G1", "G2"]].to_numpy()])
+
+            full_catalog = FullCatalog(height=5000, width=5000, d=catalog_dict)
+            tile_catalog = full_catalog.to_tile_catalog(tile_slen=5, max_sources_per_tile=4)
+
             # Extract index from catalog filepath in preparation to read images
             filename = catalog_path.stem
             pad_file_prefix = (
@@ -84,5 +99,5 @@ class GalaxyClusterCachedSimulatedDataset(CachedSimulatedDataset):
                     image_bands.append(torch.from_numpy(image_data))
             stacked_image = torch.stack(image_bands, dim=0)
 
-            self.data.append({"catalog": catalog, "images": stacked_image})
+            self.data.append({"catalog": tile_catalog, "images": stacked_image})
             self.slices = self.parse_slices(splits, len(self.data))
