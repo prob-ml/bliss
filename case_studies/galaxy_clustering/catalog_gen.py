@@ -3,7 +3,7 @@ import sys
 
 from astropy.io import ascii as astro_ascii
 from astropy.table import Table
-from prior import ClusterPrior
+from prior import GalaxyClusterPrior
 
 ENVIRONMENT_PATH = os.getcwd()
 CATALOG_PATH = os.path.join(ENVIRONMENT_PATH, "data/catalogs")
@@ -17,9 +17,9 @@ if not os.path.exists(PADDED_CATALOG_PATH):
     os.makedirs(PADDED_CATALOG_PATH)
 
 if N_FILES:
-    cluster_prior_obj = ClusterPrior(size=int(N_FILES))
+    cluster_prior_obj = GalaxyClusterPrior(size=int(N_FILES))
 else:
-    cluster_prior_obj = ClusterPrior()
+    cluster_prior_obj = GalaxyClusterPrior()
 catalogs = cluster_prior_obj.sample()
 for i, catalog in enumerate(catalogs):
     file_name = f"data/catalogs/{FILE_PREFIX}_{i:03}.dat"
