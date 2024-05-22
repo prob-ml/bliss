@@ -18,7 +18,7 @@ warnings.filterwarnings(
 )
 
 
-class GalaxyClusterSimulatedDataset(CachedSimulatedDataset):
+class GalaxyClusterCachedSimulatedDataset(CachedSimulatedDataset):
     COL_NAMES = [
         "RA",
         "DEC",
