@@ -53,6 +53,9 @@ class TileCatalog(UserDict):
         "loc_sd",
         "shear",
         "convergence",
+        "membership",
+        "fracdev",
+        "g1g2"
     }
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
