@@ -55,16 +55,22 @@ for CATALOG_PATH in CATALOGS_PATH.glob("*.dat"):
     catalog_dict["plocs"][:,:,1] = 5000 - catalog_dict["plocs"][:,:,1]
     n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
     catalog_dict["n_sources"] = n_sources
-    catalog_dict["fluxes"] = torch.tensor(
+    catalog_dict["galaxy_fluxes"] = torch.tensor(
         [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z"]].to_numpy()]
     )
+    catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
     catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
     catalog_dict["hlr"] = torch.tensor([catalog[["TSIZE"]].to_numpy()])
     catalog_dict["fracdev"] = torch.tensor([catalog[["FRACDEV"]].to_numpy()])
     catalog_dict["g1g2"] = torch.tensor([catalog[["G1", "G2"]].to_numpy()])
+    catalog_dict["source_type"] = torch.ones_like(catalog_dict["membership"])
 
     full_catalog = FullCatalog(height=5000, width=5000, d=catalog_dict)
     tile_catalog = full_catalog.to_tile_catalog(tile_slen=4, max_sources_per_tile=10)
+
+    tile_catalog_dict = tile_catalog.to_dict()
+    for (key, value) in tile_catalog_dict.items():
+        tile_catalog_dict[key] = torch.squeeze(value, 0)
 
     filename = CATALOG_PATH.stem
     image_bands = []
@@ -76,7 +82,7 @@ for CATALOG_PATH in CATALOGS_PATH.glob("*.dat"):
             image_bands.append(torch.from_numpy(image_data))
     stacked_image = torch.stack(image_bands, dim=0)
 
-    data.append(FileDatum({"tile_catalog": tile_catalog, "images": stacked_image}))
+    data.append(FileDatum({"tile_catalog": tile_catalog_dict, "images": stacked_image}))
 
 chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
 for i, chunk in enumerate(chunks):
