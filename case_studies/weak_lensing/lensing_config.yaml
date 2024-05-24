@@ -41,13 +41,19 @@ encoder:
     tiles_to_crop: 0
     metrics:
         _target_: torchmetrics.MetricCollection
+        _convert_: partial
         metrics:
             lensingMSE:
-                - _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
+                _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
 
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
+          - _target_: bliss.encoder.sample_image_renders.PlotSampleImages
+            frequency: 1
+            restrict_batch: 0
+            tiles_to_crop: 1
+            tile_slen: ${simulator.prior.tile_slen}
           - _target_: case_studies.weak_lensing.lensing_plots.PlotWeakLensingShearConvergence
             frequency: 1
             restrict_batch: 0
