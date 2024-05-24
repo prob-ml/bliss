@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import List, TypedDict
+import sys
 
 import numpy as np
 import pandas as pd
@@ -45,45 +46,60 @@ FileDatum = TypedDict(
     },
 )
 
-data: List[FileDatum] = []
+def main(**kwargs):
 
-for CATALOG_PATH in CATALOGS_PATH.glob("*.dat"):
-    catalog = pd.read_csv(CATALOG_PATH, sep=" ", header=None, names=COL_NAMES)
+    if "image_size" in kwargs.keys():
+        IMAGE_SIZE = int(kwargs["image_size"])
+    else:
+        IMAGE_SIZE = 4800
 
-    catalog_dict = {}
-    catalog_dict["plocs"] = torch.tensor([catalog[["X", "Y"]].to_numpy()])
-    catalog_dict["plocs"][:,:,1] = 1200 - catalog_dict["plocs"][:,:,1]
-    n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
-    catalog_dict["n_sources"] = n_sources
-    catalog_dict["galaxy_fluxes"] = torch.tensor(
-        [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z"]].to_numpy()]
-    )
-    catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
-    catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
-    catalog_dict["hlr"] = torch.tensor([catalog[["TSIZE"]].to_numpy()])
-    catalog_dict["fracdev"] = torch.tensor([catalog[["FRACDEV"]].to_numpy()])
-    catalog_dict["g1g2"] = torch.tensor([catalog[["G1", "G2"]].to_numpy()])
-    catalog_dict["source_type"] = torch.ones_like(catalog_dict["membership"])
+    if "tile_size" in kwargs.keys():
+        TILE_SIZE = int(kwargs["tile_size"])
+    else:
+        TILE_SIZE = 4
 
-    full_catalog = FullCatalog(height=1200, width=1200, d=catalog_dict)
-    tile_catalog = full_catalog.to_tile_catalog(tile_slen=2, max_sources_per_tile=5)
+    data: List[FileDatum] = []
 
-    tile_catalog_dict = tile_catalog.to_dict()
-    for (key, value) in tile_catalog_dict.items():
-        tile_catalog_dict[key] = torch.squeeze(value, 0)
+    for CATALOG_PATH in CATALOGS_PATH.glob("*.dat"):
+        catalog = pd.read_csv(CATALOG_PATH, sep=" ", header=None, names=COL_NAMES)
 
-    filename = CATALOG_PATH.stem
-    image_bands = []
-    for band in BANDS:
-        fits_filepath = IMAGES_PATH / Path(f"{filename}_{band}.fits")
-        # Should the ordering in the bands matter? It does here.
-        with fits.open(fits_filepath) as hdul:
-            image_data = hdul[0].data.astype(np.float32)
-            image_bands.append(torch.from_numpy(image_data))
-    stacked_image = torch.stack(image_bands, dim=0)
+        catalog_dict = {}
+        catalog_dict["plocs"] = torch.tensor([catalog[["X", "Y"]].to_numpy()])
+        catalog_dict["plocs"][:,:,1] = IMAGE_SIZE - catalog_dict["plocs"][:,:,1]
+        n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
+        catalog_dict["n_sources"] = n_sources
+        catalog_dict["galaxy_fluxes"] = torch.tensor(
+            [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z"]].to_numpy()]
+        )
+        catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
+        catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
+        catalog_dict["hlr"] = torch.tensor([catalog[["TSIZE"]].to_numpy()])
+        catalog_dict["fracdev"] = torch.tensor([catalog[["FRACDEV"]].to_numpy()])
+        catalog_dict["g1g2"] = torch.tensor([catalog[["G1", "G2"]].to_numpy()])
+        catalog_dict["source_type"] = torch.ones_like(catalog_dict["membership"])
 
-    data.append(FileDatum({"tile_catalog": tile_catalog_dict, "images": stacked_image}))
+        full_catalog = FullCatalog(height=IMAGE_SIZE, width=IMAGE_SIZE, d=catalog_dict)
+        tile_catalog = full_catalog.to_tile_catalog(tile_slen=TILE_SIZE, max_sources_per_tile=2*TILE_SIZE)
 
-chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
-for i, chunk in enumerate(chunks):
-    torch.save(chunk, f"{DATA_PATH}/file_data/file_data_{i}.pt")
+        tile_catalog_dict = tile_catalog.to_dict()
+        for (key, value) in tile_catalog_dict.items():
+            tile_catalog_dict[key] = torch.squeeze(value, 0)
+
+        filename = CATALOG_PATH.stem
+        image_bands = []
+        for band in BANDS:
+            fits_filepath = IMAGES_PATH / Path(f"{filename}_{band}.fits")
+            # Should the ordering in the bands matter? It does here.
+            with fits.open(fits_filepath) as hdul:
+                image_data = hdul[0].data.astype(np.float32)
+                image_bands.append(torch.from_numpy(image_data))
+        stacked_image = torch.stack(image_bands, dim=0)
+
+        data.append(FileDatum({"tile_catalog": tile_catalog_dict, "images": stacked_image}))
+
+    chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
+    for i, chunk in enumerate(chunks):
+        torch.save(chunk, f"{DATA_PATH}/file_data/file_data_{i}.pt")
+
+if __name__=='__main__':
+    main(**dict(arg.split('=') for arg in sys.argv[1:]))

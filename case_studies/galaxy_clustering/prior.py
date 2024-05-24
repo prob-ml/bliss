@@ -8,11 +8,12 @@ from scipy.stats import gennorm
 
 
 class GalaxyClusterPrior:
-    def __init__(self, size=100):
+    def __init__(self, size=100, image_size=4800):
         super().__init__()
         self.size = size
-        self.width = 1200
-        self.height = 1200
+        self.width = image_size
+        self.height = image_size
+        self.center_offset = (self.width/2) - 0.5
         self.bands = ["G", "R", "I", "Z"]
         self.n_bands = 4
         self.reference_band = 1
@@ -153,7 +154,8 @@ class GalaxyClusterPrior:
             galaxy_locs.append(np.column_stack((x, y)))
         return galaxy_locs
 
-    def cartesian2geo(self, coordinates, pixel_scale=0.2, image_offset=(599.5, 599.5)):
+    def cartesian2geo(self, coordinates, pixel_scale=0.2):
+        image_offset = (self.center_offset, self.center_offset)
         sky_center = (self.ra_cen, self.dec_cen)
         geo_coordinates = []
         for coord_i in coordinates:
