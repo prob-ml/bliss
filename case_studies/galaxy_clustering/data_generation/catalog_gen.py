@@ -9,7 +9,6 @@ from case_studies.galaxy_clustering.prior import GalaxyClusterPrior
 ENVIRONMENT_PATH = os.getcwd()
 CATALOG_PATH = os.path.join(ENVIRONMENT_PATH, "data/catalogs")
 FILE_PREFIX = "galsim_des"
-MAX_SOURCES = 2200
 N_FILES = sys.argv[1]
 if not os.path.exists(CATALOG_PATH):
     os.makedirs(CATALOG_PATH)

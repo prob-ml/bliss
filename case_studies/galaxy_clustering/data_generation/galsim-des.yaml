@@ -94,8 +94,8 @@ image :
   nproc : 24
   type : Scattered
   pixel_scale : 1.0
-  xsize : 5000
-  ysize : 5000
+  xsize : 1200
+  ysize : 1200
   stamp_size : 100
 
   random_seed : 8241573

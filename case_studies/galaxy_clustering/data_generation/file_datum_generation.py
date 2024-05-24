@@ -33,7 +33,7 @@ COL_NAMES = [
     "G2",
 ]
 BANDS = ["g", "r", "i", "z"]
-N_CATALOGS_PER_FILE = 2
+N_CATALOGS_PER_FILE = 1
 
 FileDatum = TypedDict(
     "FileDatum",
@@ -52,7 +52,7 @@ for CATALOG_PATH in CATALOGS_PATH.glob("*.dat"):
 
     catalog_dict = {}
     catalog_dict["plocs"] = torch.tensor([catalog[["X", "Y"]].to_numpy()])
-    catalog_dict["plocs"][:,:,1] = 5000 - catalog_dict["plocs"][:,:,1]
+    catalog_dict["plocs"][:,:,1] = 1200 - catalog_dict["plocs"][:,:,1]
     n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
     catalog_dict["n_sources"] = n_sources
     catalog_dict["galaxy_fluxes"] = torch.tensor(
@@ -65,8 +65,8 @@ for CATALOG_PATH in CATALOGS_PATH.glob("*.dat"):
     catalog_dict["g1g2"] = torch.tensor([catalog[["G1", "G2"]].to_numpy()])
     catalog_dict["source_type"] = torch.ones_like(catalog_dict["membership"])
 
-    full_catalog = FullCatalog(height=5000, width=5000, d=catalog_dict)
-    tile_catalog = full_catalog.to_tile_catalog(tile_slen=4, max_sources_per_tile=10)
+    full_catalog = FullCatalog(height=1200, width=1200, d=catalog_dict)
+    tile_catalog = full_catalog.to_tile_catalog(tile_slen=2, max_sources_per_tile=5)
 
     tile_catalog_dict = tile_catalog.to_dict()
     for (key, value) in tile_catalog_dict.items():

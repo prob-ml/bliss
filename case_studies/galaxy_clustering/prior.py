@@ -11,8 +11,8 @@ class GalaxyClusterPrior:
     def __init__(self, size=100):
         super().__init__()
         self.size = size
-        self.width = 5000
-        self.height = 5000
+        self.width = 1200
+        self.height = 1200
         self.bands = ["G", "R", "I", "Z"]
         self.n_bands = 4
         self.reference_band = 1
@@ -153,7 +153,7 @@ class GalaxyClusterPrior:
             galaxy_locs.append(np.column_stack((x, y)))
         return galaxy_locs
 
-    def cartesian2geo(self, coordinates, pixel_scale=0.2, image_offset=(2499.5, 2499.5)):
+    def cartesian2geo(self, coordinates, pixel_scale=0.2, image_offset=(599.5, 599.5)):
         sky_center = (self.ra_cen, self.dec_cen)
         geo_coordinates = []
         for coord_i in coordinates:
@@ -295,8 +295,8 @@ class GalaxyClusterPrior:
             center_samples, radius_samples, n_galaxy_cluster
         )
         n_galaxy = self._sample_n_galaxy()
-        for i in range(self.size):
-            n_galaxy[i] = int(n_galaxy[i] - n_galaxy_cluster[i])
+        #for i in range(self.size):
+         #   n_galaxy[i] = int(n_galaxy[i] - n_galaxy_cluster[i])
         galaxy_locs = self._sample_galaxy_locs(n_galaxy)
         geo_galaxy = self.cartesian2geo(galaxy_locs)
         geo_galaxy_cluster = self.cartesian2geo(galaxy_cluster_locs)

@@ -9,7 +9,7 @@ class GalaxyClusterVariationlDistSpec(VariationalDistSpec):
     def __init__(self, survey_bands, tile_slen):
         super().__init__(survey_bands, tile_slen)
 
-        self.factor_specs["member"] = UnconstrainedBernoulli()
+        self.factor_specs["mem_prob"] = UnconstrainedBernoulli()
 
     def make_dist(self, x_cat):
         factors = self._parse_factors(x_cat)
@@ -34,7 +34,7 @@ class GalaxyClusterVariationalDist(VariationalDist):
         q = self.factors
 
         est_cat = {}
-        est_cat["MEM"] = q["mem_prob"].mode if use_mode else q["mem_prob"].sample()
+        est_cat["membership"] = q["mem_prob"].mode if use_mode else q["mem_prob"].sample()
 
         return TileCatalog(self.tile_slen, est_cat)
 
@@ -42,7 +42,7 @@ class GalaxyClusterVariationalDist(VariationalDist):
         q = self.factors
 
         # We just need counter loss for now
-        counter_loss = -q["mem_prob"].log_prob(true_tile_cat["MEM"])
+        counter_loss = -q["mem_prob"].log_prob(true_tile_cat["membership"])
         loss = counter_loss
 
         # TODO:
