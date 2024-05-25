@@ -2,7 +2,9 @@
 
 Summer 2024
 
-[Ishan Kapnadak](https://www.linkedin.com/in/ishan-kapnadak/), [Gabriel Patron](https://lsa.umich.edu/stats/people/phd-students/gapatron.html), [Prof. Jeffrey Regier](https://regier.stat.lsa.umich.edu/), [Prof. Camille Avestruz](https://cavestruz.github.io/)
+[Ishan Kapnadak](https://www.linkedin.com/in/ishan-kapnadak/), [Gabriel Patron](https://lsa.umich.edu/stats/people/phd-students/gapatron.html), [Prof. Jeffrey Regier](https://regier.stat.lsa.umich.edu/), [Prof. Camille Avestruz](https://cavestruz.github.io/).
+
+Built on work done in Winter 2024 by *[Li Shihang](https://www.linkedin.com/in/shihang-li-2b69251ba/), Zhao Yongxiang.
 
 ----------------------------------------------------------------------------------------------------------------------
 
