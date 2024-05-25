@@ -177,7 +177,7 @@ surveys:
         n_split: 50
         image_lim: [4000, 4000]
         num_workers: 4
-        split_processes_num: 2
+        split_processes_num: 4
 
 
 #######################################################################

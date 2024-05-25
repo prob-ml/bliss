@@ -6,3 +6,7 @@ defaults:
 
 encoder:
     tiles_to_crop: 0
+    image_normalizer:
+        asinh_params:
+            scale: 0.1
+            thresholds: [-25, -3, 0.5, 9, 44]

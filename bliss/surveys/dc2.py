@@ -63,6 +63,8 @@ def generate_split_file(image_index, self_copy):
     split_lim = self_copy["image_lim"][0] // self_copy["n_split"]
     image = torch.from_numpy(image)
     split_image = split_full_image(image, split_lim)
+    image_height_pixels = image.shape[1]
+    split_image_num_on_height = image_height_pixels // split_lim
     bg = torch.from_numpy(bg)
     split_bg = split_full_image(bg, split_lim)
 
@@ -84,18 +86,29 @@ def generate_split_file(image_index, self_copy):
     data_split = {
         "tile_catalog": [dict(zip(tile_split, i)) for i in zip(*tile_split.values())],
         "images": split_image,
+        "image_height_index": (
+            torch.arange(0, len(split_image)) % split_image_num_on_height
+        ).tolist(),
+        "image_width_index": (
+            torch.arange(0, len(split_image)) // split_image_num_on_height
+        ).tolist(),
         "background": split_bg,
         "psf_params": [psf_params for _ in range(self_copy["n_split"] ** 2)],
     }
 
     data_splits = [dict(zip(data_split, i)) for i in zip(*data_split.values())]
-    for cur_split in data_splits:
+    for cur_split in data_splits:  # noqa: WPS426
+        assert split_count < 1e6 and image_index < 1e5, "too many splits"
+        split_file_name = f"split_image_{image_index:04d}_{split_count:05d}.pt"
         with open(
-            self_copy["split_file_path"] / f"split_image_{image_index:04d}_{split_count:08d}.pt",
+            self_copy["split_file_path"] / split_file_name,
             "wb",
         ) as split_file:
-            cur_split_copy = map_nested_dicts(cur_split, lambda x: x.clone())
+            cur_split_copy = map_nested_dicts(
+                cur_split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
+            )
             cur_split_copy.update(wcs_header_str=wcs_header_str)
+            cur_split_copy.update(split_id=split_file_name)
             torch.save(cur_split_copy, split_file)
         split_count += 1
 

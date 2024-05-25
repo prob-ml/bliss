@@ -1,1 +1,4 @@
 *.pkl
+*_output/
+merged_catalog/
+*.out

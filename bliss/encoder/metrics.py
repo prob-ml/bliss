@@ -191,6 +191,24 @@ class DetectionPerformance(Metric):
             f"detection_f1_{self.source_type_name}": f1,
         }
 
+    def get_results_on_per_flux_bin(self):
+        recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)
+        precision = (self.n_est_matches / self.n_est_sources).nan_to_num(0)
+        f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
+
+        if self.source_type_name == "total":
+            return {
+                "detection_precision": precision,
+                "detection_recall": recall,
+                "detection_f1": f1,
+            }
+
+        return {
+            f"detection_precision_{self.source_type_name}": precision,
+            f"detection_recall_{self.source_type_name}": recall,
+            f"detection_f1_{self.source_type_name}": f1,
+        }
+
     def plot(self):
         # Compute recall, precision, and F1 score
         recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)
