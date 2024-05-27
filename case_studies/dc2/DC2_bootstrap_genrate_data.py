@@ -81,8 +81,8 @@ def generate_lsst_fullcat_files(
 
 
 if __name__ == "__main__":
-    print("+" * 100)
-    print("initialization begins")
+    print("+" * 100, flush=True)
+    print("initialization begins", flush=True)
     environ["BLISS_HOME"] = str(Path().resolve().parents[1])
 
     output_dir = Path("./DC2_bootstrap_output/")
@@ -90,19 +90,19 @@ if __name__ == "__main__":
 
     with initialize(config_path=".", version_base=None):
         notebook_cfg = compose("notebook_config")
-    print("initialization ends")
-    print("+" * 100)
+    print("initialization ends", flush=True)
+    print("+" * 100, flush=True)
 
-    print("+" * 100)
-    print("load dc2")
+    print("+" * 100, flush=True)
+    print("load dc2", flush=True)
     dc2: DC2 = instantiate(notebook_cfg.surveys.dc2)
     dc2.prepare_data()
     dc2.setup()
     dc2_test_dataset = dc2.test_dataset
-    print("+" * 100)
+    print("+" * 100, flush=True)
 
-    print("+" * 100)
-    print("load lsst catalog")
+    print("+" * 100, flush=True)
+    print("load lsst catalog", flush=True)
     GCRCatalogs.set_root_dir("/data/dc2/")
     lsst_catalog_gcr = GCRCatalogs.load_catalog("desc_dc2_run2.2i_dr6_object_with_truth_match")
     lsst_catalog_sub = lsst_catalog_gcr.get_quantities(
@@ -146,15 +146,15 @@ if __name__ == "__main__":
         "ra": torch.tensor(lsst_catalog_df["ra"].values),
         "dec": torch.tensor(lsst_catalog_df["dec"].values),
     }
-    print("+" * 100)
+    print("+" * 100, flush=True)
 
-    print("+" * 100)
-    print("generate lsst split results")
+    print("+" * 100, flush=True)
+    print("generate lsst split results", flush=True)
     split_results_path = Path(
-        "/data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/split_results_new/"
+        "/data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/split_results/"
     )
     split_ids = [split_file_path.name for split_file_path in dc2_test_dataset.split_files_list]
-    print(f"there are {len(split_ids)} split_ids")
+    print(f"there are {len(split_ids)} split_ids", flush=True)
     lsst_split_result_dir = output_dir / "lsst_split_results"
     lsst_split_result_dir.mkdir(exist_ok=True)
 
@@ -173,5 +173,5 @@ if __name__ == "__main__":
     #                 [[split_results_path, split_ids_chunk, lsst_catalog_tensors_dict, lsst_split_result_dir] for split_ids_chunk in split_ids_chunks],
     #                 chunksize=4,
     #             )
-    print("generation ends")
-    print("+" * 100)
+    print("generation ends", flush=True)
+    print("+" * 100, flush=True)

@@ -14,4 +14,4 @@ train:
 surveys:
     dc2:
         split_result_folder: split_results
-        split_processes_num: 1
+        split_processes_num: 4

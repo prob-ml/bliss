@@ -1,6 +1,9 @@
 import warnings
+from pathlib import Path
 from typing import Dict
 
+import matplotlib.pyplot as plt  # noqa: WPS301
+import numpy as np
 import torch
 
 
@@ -44,7 +47,7 @@ class ImageNormalizer(torch.nn.Module):
 
     def num_channels_per_band(self):
         """Determine number of input channels for model based on desired input transforms."""
-        nch = 1  # background is always included
+        nch = 1  # background is always included (except for asinh)
         if self.include_original:
             nch += 1
         if self.concat_psf_params:
@@ -55,6 +58,7 @@ class ImageNormalizer(torch.nn.Module):
             nch += 1
         if self.asinh_params:
             nch += len(self.asinh_params["thresholds"])
+            nch -= 1
         return nch
 
     def get_input_tensor(self, batch):
@@ -80,7 +84,7 @@ class ImageNormalizer(torch.nn.Module):
 
         raw_images = batch["images"][:, self.bands].unsqueeze(2)
         backgrounds = batch["background"][:, self.bands].unsqueeze(2)
-        inputs = [backgrounds]
+        inputs = [] if self.asinh_params else [backgrounds]
 
         if self.include_original:
             inputs.insert(0, raw_images)  # add extra dim for 5d input
@@ -109,12 +113,10 @@ class ImageNormalizer(torch.nn.Module):
             inputs[0] = self.clahe(backgrounds, self.clahe_min_stdev)
 
         if self.asinh_params:
-            backgrounds = backgrounds.clamp(min=1e-6)
             for threshold in self.asinh_params["thresholds"]:
                 inputs.append(
                     torch.asinh(
-                        ((raw_images - backgrounds) / backgrounds.sqrt() - threshold)
-                        * self.asinh_params["scale"],
+                        (raw_images - threshold) * self.asinh_params["scale"],
                     )
                 )
 
@@ -150,3 +152,32 @@ class ImageNormalizer(torch.nn.Module):
         # Output rolling z-score
         normalized_img = res_img / torch.clamp(stdev, min=min_stdev)
         return normalized_img.unsqueeze(2)
+
+    # just for debug
+    def plot_image(self, inputs, asinh_thresholds, raw_images, split_ids):
+        figure_output_path = Path("./input_images/")
+        figure_output_path.mkdir(exist_ok=True)
+        batch_size = raw_images.shape[0]
+        for i in range(batch_size):
+            for j in range(1, len(asinh_thresholds) + 1):
+                image_matrix = inputs[-j].squeeze(2)[i]
+                self._plot_image_matrix(
+                    image_matrix,
+                    figure_output_path / f"{split_ids[i]}_threshold_{asinh_thresholds[-j]}.png",
+                )
+
+            image_matrix = raw_images.squeeze(2)[i]
+            self._plot_image_matrix(
+                image_matrix, figure_output_path / f"{split_ids[i]}_raw_image.png"
+            )
+
+    # just for debug
+    def _plot_image_matrix(self, image_matrix, output_path):
+        image = image_matrix.detach().cpu().numpy()
+        image = np.sum(image, axis=0)
+        vmin = image.min().item()
+        vmax = image.max().item()
+        fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(10, 10))
+        ax.matshow(image, vmin=vmin, vmax=vmax, cmap="viridis")
+        fig.savefig(output_path)
+        plt.close(fig)

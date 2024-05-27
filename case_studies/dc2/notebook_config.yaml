@@ -8,5 +8,5 @@ encoder:
     tiles_to_crop: 0
     image_normalizer:
         asinh_params:
-            scale: 0.1
-            thresholds: [-25, -3, 0.5, 9, 44]
+            scale: 1000
+            thresholds: [-0.1, -0.03, 0.008, 0.06, 0.18]
