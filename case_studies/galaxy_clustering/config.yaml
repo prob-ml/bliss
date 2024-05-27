@@ -34,7 +34,7 @@ cached_simulator:
 
 train:
     trainer:
-        precision: 16-mixed
+        precision: 32-true
 
 encoder:
     _target_: bliss.encoder.encoder.Encoder
