@@ -17,8 +17,8 @@ class ClusterMembershipAccuracy(Metric):
             tcat_matches, ecat_matches = matching[i]
             self.n_matches += tcat_matches.size(0)
 
-            true_membership = true_cat["membership"][i][tcat_matches]
-            est_membership = est_cat["membership"][i][ecat_matches]
+            true_membership = true_cat["membership"][i][tcat_matches].to(torch.bool)
+            est_membership = est_cat["membership"][i][ecat_matches].to(torch.bool)
 
             self.membership_tp += (true_membership * est_membership).sum()
             self.membership_tn += (~true_membership * ~est_membership).sum()
