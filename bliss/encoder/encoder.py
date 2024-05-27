@@ -267,11 +267,11 @@ class Encoder(pl.LightningModule):
         mode_cat_tile = self.sample(batch, use_mode=True)
         mode_cat = mode_cat_tile.to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
-        self.mode_metrics.update(target_cat, mode_cat, matching)
+        #self.mode_metrics.update(target_cat, mode_cat, matching)
 
         sample_cat = self.sample(batch, use_mode=False).to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, sample_cat)
-        self.sample_metrics.update(target_cat, sample_cat, matching)
+        #self.sample_metrics.update(target_cat, sample_cat, matching)
 
         self.sample_image_renders.update(
             batch,
