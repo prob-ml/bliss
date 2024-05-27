@@ -32,6 +32,10 @@ cached_simulator:
     cached_data_path: ${paths.root}/case_studies/galaxy_clustering/data/file_data/
     file_prefix: file_data_
 
+train:
+    trainer:
+        precision: 16-mixed
+
 encoder:
     _target_: bliss.encoder.encoder.Encoder
     survey_bands: ["g", "r", "i", "z"]
