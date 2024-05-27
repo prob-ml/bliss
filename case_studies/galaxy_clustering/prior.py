@@ -13,7 +13,7 @@ class GalaxyClusterPrior:
         self.size = size
         self.width = image_size
         self.height = image_size
-        self.center_offset = (self.width/2) - 0.5
+        self.center_offset = (self.width / 2) - 0.5
         self.bands = ["G", "R", "I", "Z"]
         self.n_bands = 4
         self.reference_band = 1
@@ -48,7 +48,23 @@ class GalaxyClusterPrior:
         self.redshift_alpha = 1.24
         self.redshift_beta = 1.01
         self.redshift0 = 0.51
-        self.cluster_prob = 0.2
+        self.cluster_prob = 0.2 if self.width >= 1200 else 0.0
+
+        self.col_names = [
+            "RA",
+            "DEC",
+            "X",
+            "Y",
+            "MEM",
+            "FLUX_R",
+            "FLUX_G",
+            "FLUX_I",
+            "FLUX_Z",
+            "TSIZE",
+            "FRACDEV",
+            "G1",
+            "G2",
+        ]
 
     #  Source: https://github.com/LSSTDESC/CLMM/blob/main/clmm/redshift/distributions.py
     def _redshift_distribution(self, redshift):
@@ -111,7 +127,7 @@ class GalaxyClusterPrior:
         beta = 1.35
         n_galaxy_cluster = []
         for i in range(self.size):
-            if np.random.random() > self.cluster_prob:
+            if np.random.random() < self.cluster_prob:
                 n_galaxy_cluster.append(int(20 * (mass_samples[i] / m0) ** (1 / beta)))
             else:
                 n_galaxy_cluster.append(0)
@@ -144,7 +160,7 @@ class GalaxyClusterPrior:
         return galaxy_locs_cluster
 
     def _sample_n_galaxy(self):
-        return np.random.poisson(self.mean_sources * self.width * self.height / 49, self.size)
+        return 1 + np.random.poisson(self.mean_sources * self.width * self.height / 49, self.size)
 
     def _sample_galaxy_locs(self, n_galaxy):
         galaxy_locs = []
@@ -252,10 +268,10 @@ class GalaxyClusterPrior:
     ):
         res = []
         for i, _ in enumerate(flux_samples):
+            mock_catalog = pd.DataFrame()
             ratios = self.galaxy_flux_ratio(len(geo_galaxy_cluster[i]) + len(geo_galaxy[i]))
             fluxes = np.array(flux_samples[i])[:, np.newaxis] * np.array(ratios)
-            mock_catalog = pd.DataFrame()
-            if geo_galaxy_cluster[i]:
+            if geo_galaxy_cluster[i] and geo_galaxy[i]:
                 mock_catalog["RA"] = np.append(
                     np.array(geo_galaxy_cluster[i])[:, 0], np.array(geo_galaxy[i])[:, 0]
                 )
@@ -297,8 +313,6 @@ class GalaxyClusterPrior:
             center_samples, radius_samples, n_galaxy_cluster
         )
         n_galaxy = self._sample_n_galaxy()
-        #for i in range(self.size):
-         #   n_galaxy[i] = int(n_galaxy[i] - n_galaxy_cluster[i])
         galaxy_locs = self._sample_galaxy_locs(n_galaxy)
         geo_galaxy = self.cartesian2geo(galaxy_locs)
         geo_galaxy_cluster = self.cartesian2geo(galaxy_cluster_locs)
