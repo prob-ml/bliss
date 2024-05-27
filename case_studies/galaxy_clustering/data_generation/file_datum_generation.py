@@ -73,9 +73,12 @@ def main(**kwargs):
         )
         catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
         catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
-        catalog_dict["hlr"] = torch.tensor([catalog[["TSIZE"]].to_numpy()])
-        catalog_dict["fracdev"] = torch.tensor([catalog[["FRACDEV"]].to_numpy()])
-        catalog_dict["g1g2"] = torch.tensor([catalog[["G1", "G2"]].to_numpy()])
+        catalog_dict["galaxy_params"] = torch.tensor(
+            [catalog[["TSIZE", "G1", "G2", "FRACDEV"]].to_numpy()]
+        )
+        #catalog_dict["hlr"] = torch.tensor([catalog[["TSIZE"]].to_numpy()])
+        #catalog_dict["fracdev"] = torch.tensor([catalog[["FRACDEV"]].to_numpy()])
+        #catalog_dict["g1g2"] = torch.tensor([catalog[["G1", "G2"]].to_numpy()])
         catalog_dict["source_type"] = torch.ones_like(catalog_dict["membership"])
 
         full_catalog = FullCatalog(height=IMAGE_SIZE, width=IMAGE_SIZE, d=catalog_dict)
@@ -95,7 +98,7 @@ def main(**kwargs):
                 image_bands.append(torch.from_numpy(image_data))
         stacked_image = torch.stack(image_bands, dim=0)
 
-        data.append(FileDatum({"tile_catalog": tile_catalog_dict, "images": stacked_image}))
+        data.append(FileDatum({"tile_catalog": tile_catalog_dict, "images": stacked_image, "background": stacked_image}))
 
     chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
     for i, chunk in enumerate(chunks):
