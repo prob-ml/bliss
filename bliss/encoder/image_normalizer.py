@@ -94,10 +94,11 @@ class ImageNormalizer(torch.nn.Module):
             psf_params = psf_params.expand(n, c, self.num_psf_params * i, h, w)
             inputs.append(psf_params)
 
-        for threshold in self.log_transform_stdevs:
-            image_offsets = (raw_images - backgrounds) / backgrounds.sqrt() - threshold
-            transformed_img = torch.log(torch.clamp(image_offsets + 1.0, min=1.0))
-            inputs.append(transformed_img)
+        if self.log_transform_stdevs:
+            for threshold in self.log_transform_stdevs:
+                image_offsets = (raw_images - backgrounds) / backgrounds.sqrt() - threshold
+                transformed_img = torch.log(torch.clamp(image_offsets + 1.0, min=1.0))
+                inputs.append(transformed_img)
 
         # we should revisit normalizing the whole 80x80 image to see if that still performs
         # better than CLAHE. if so, we can remove CLAHE and for large images partition them
