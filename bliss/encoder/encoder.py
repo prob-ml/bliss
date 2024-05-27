@@ -228,11 +228,7 @@ class Encoder(pl.LightningModule):
 
     def _compute_loss(self, batch, logging_name):
         batch_size = batch["images"].size(0)
-        #print(batch_size)
-        print(batch["tile_catalog"]["locs"].shape)
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        print(target_cat.to_dict().keys())
-        print("Success")
 
         # filter out undetectable sources
         target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
