@@ -109,8 +109,6 @@ encoder:
             flux_error:
                 _target_: bliss.encoder.metrics.FluxError
                 survey_bands: ${encoder.survey_bands}
-            galaxy_shape_error:
-                _target_: bliss.encoder.metrics.GalaxyShapeError
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
