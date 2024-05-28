@@ -48,7 +48,7 @@ class GalaxyClusterPrior:
         self.redshift_alpha = 1.24
         self.redshift_beta = 1.01
         self.redshift0 = 0.51
-        self.cluster_prob = 0.2 if self.width >= 1200 else 0.0
+        self.cluster_prob = 0.5
 
         self.col_names = [
             "RA",
