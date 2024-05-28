@@ -81,7 +81,7 @@ class Encoder(pl.LightningModule):
         self.use_checkerboard = use_checkerboard
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
-        assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
+        #assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         num_features = 256
         self.features_net = FeaturesNet(
             len(image_normalizer.bands),
@@ -267,11 +267,11 @@ class Encoder(pl.LightningModule):
         mode_cat_tile = self.sample(batch, use_mode=True)
         mode_cat = mode_cat_tile.to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
-        #self.mode_metrics.update(target_cat, mode_cat, matching)
+        self.mode_metrics.update(target_cat, mode_cat, matching)
 
         sample_cat = self.sample(batch, use_mode=False).to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, sample_cat)
-        #self.sample_metrics.update(target_cat, sample_cat, matching)
+        self.sample_metrics.update(target_cat, sample_cat, matching)
 
         self.sample_image_renders.update(
             batch,
