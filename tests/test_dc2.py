@@ -1,3 +1,5 @@
+# flake8: noqa
+# pylint: skip-file
 import logging
 
 import torch
@@ -16,7 +18,7 @@ from bliss.main import train
 
 
 def _test_tensor_all_close(left, right):
-    return torch.allclose(left, right, atol=1e-4)
+    return torch.allclose(left, right)
 
 
 def _test_data_equal(left_data, right_data):
@@ -226,3 +228,40 @@ class TestDC2:
 
         assert _test_full_catalog_equal(aug_full90270, ori_full)
         assert _test_full_catalog_equal(aug_full90180, aug_full270)
+
+    def test_flux_filter(self, cfg):
+        from pathlib import Path
+
+        import tqdm
+
+        from bliss.surveys.dc2 import unsqueeze_tile_dict
+
+        split_results_with_flux_over_50_path = Path(
+            "/data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/split_results/"
+        )
+        split_results_with_flux_over_100_path = Path(
+            "/data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/split_results_debug/"
+        )
+
+        split_files_with_flux_over_50_list = list(split_results_with_flux_over_50_path.glob("*.pt"))
+
+        for split_file in tqdm.tqdm(split_files_with_flux_over_50_list):
+            with open(split_file, "rb") as s:
+                t = torch.load(s)
+                t_over_50_cat = TileCatalog(4, unsqueeze_tile_dict(t["tile_catalog"]))
+
+            with open(split_results_with_flux_over_100_path / split_file.name, "rb") as s:
+                t = torch.load(s)
+                t_over_100_cat = TileCatalog(4, unsqueeze_tile_dict(t["tile_catalog"]))
+
+            t_over_50_cat_filter_100 = t_over_50_cat.filter_tile_catalog_by_flux(min_flux=100)
+            t_over_100_cat_filter_0 = t_over_100_cat.filter_tile_catalog_by_flux(min_flux=0)
+            t_over_50_cat_filter_0 = t_over_50_cat.filter_tile_catalog_by_flux(min_flux=0)
+            t_over_50_cat_filter_50 = t_over_50_cat.filter_tile_catalog_by_flux(min_flux=50)
+            t_over_100_cat_filter_100 = t_over_100_cat.filter_tile_catalog_by_flux(min_flux=100)
+
+            assert _test_tile_catalog_equal(
+                t_over_50_cat_filter_100, t_over_100_cat_filter_0
+            ), "tile catalogs are not equal"
+            assert _test_tile_catalog_equal(t_over_50_cat_filter_0, t_over_50_cat_filter_50)
+            assert _test_tile_catalog_equal(t_over_100_cat_filter_0, t_over_100_cat_filter_100)

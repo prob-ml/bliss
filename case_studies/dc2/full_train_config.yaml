@@ -6,12 +6,15 @@ defaults:
 
 mode: train
 
+global_setting:
+    min_flux_threshold: 100  # you need to regenerate split_results after changing this number
+
 encoder:
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
     double_detect: false
     tiles_to_crop: 1
-    min_flux_threshold: 0
+    min_flux_threshold_during_test: 100
     do_data_augmentation: true
     image_normalizer:
         bands: [0, 1, 2, 3, 4, 5]
@@ -20,7 +23,7 @@ encoder:
         use_clahe: false
         asinh_params:
             scale: 10000
-            thresholds: [-0.38, -0.1, -0.03, -0.014, 0.008, 0.034, 0.06, 0.18, 0.74]
+            thresholds: [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738]
         concat_psf_params: true
     metrics:
         _target_: torchmetrics.MetricCollection
@@ -52,14 +55,13 @@ train:
     trainer:
         logger:
             name: DC2_experiments
-            version: DC2_psf_aug_asinh_05-26-3 # change it before running the code
-        precision: 32
+            version: DC2_psf_aug_asinh_05-27-3 # change it before running the code
         strategy:
           _target_: pytorch_lightning.strategies.DDPStrategy
           process_group_backend: nccl
           timeout:
             _target_: datetime.timedelta
             seconds: 180000
-        devices: [0, 1, 6, 7] # change it before running the code
+        devices: [1, 2] # change it before running the code
     data_source: ${surveys.dc2}
     pretrained_weights: null
