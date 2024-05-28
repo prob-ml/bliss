@@ -1,5 +1,6 @@
 from copy import copy
 from typing import Optional
+import numpy as np
 
 import pytorch_lightning as pl
 import torch
@@ -87,7 +88,7 @@ class Encoder(pl.LightningModule):
             len(image_normalizer.bands),
             ch_per_band,
             num_features,
-            double_downsample=(tile_slen == 4),
+            double_downsample=int(self.tile_slen/2),
         )
         n_params_per_source = vd_spec.n_params_per_source
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
