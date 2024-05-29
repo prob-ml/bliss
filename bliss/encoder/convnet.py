@@ -52,7 +52,7 @@ class C3(nn.Module):
 
 
 class FeaturesNet(nn.Module):
-    def __init__(self, n_bands, ch_per_band, num_features, double_downsample=2):
+    def __init__(self, n_bands, ch_per_band, num_features, num_downsample=1):
         super().__init__()
 
         nch_hidden = 64
@@ -66,7 +66,8 @@ class FeaturesNet(nn.Module):
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
-            ConvBlock(128, num_features, stride=double_downsample),  # 4
+            nn.Sequential(*[ConvBlock(128, 128, stride=2) for _ in range(num_downsample)]),
+            ConvBlock(128, num_features, stride=1),  # 4
         )
 
     def forward(self, x):

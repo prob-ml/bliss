@@ -81,6 +81,8 @@ class Encoder(pl.LightningModule):
         self.double_detect = double_detect
         self.use_checkerboard = use_checkerboard
 
+        num_downsample = int(np.log2(self.tile_slen)) - 1
+
         ch_per_band = self.image_normalizer.num_channels_per_band()
         #assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         num_features = 256
@@ -88,7 +90,7 @@ class Encoder(pl.LightningModule):
             len(image_normalizer.bands),
             ch_per_band,
             num_features,
-            double_downsample=int(self.tile_slen/2),
+            num_downsample=num_downsample,
         )
         n_params_per_source = vd_spec.n_params_per_source
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
