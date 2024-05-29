@@ -86,7 +86,7 @@ class GalaxyClusterVariationalDist(VariationalDist):
         q = self.factors
 
         # We just need counter loss for now
-        counter_loss = -q["mem_prob"].log_prob(true_tile_cat["membership"])
+        counter_loss = -q["mem_prob"].log_prob(true_tile_cat["membership"].squeeze())
         loss = counter_loss
 
         # TODO:
