@@ -1,3 +1,4 @@
+# flake8: noqa: WPS348
 import warnings
 from pathlib import Path
 from typing import Dict
@@ -41,6 +42,23 @@ class ImageNormalizer(torch.nn.Module):
         self.use_clahe = use_clahe
         self.clahe_min_stdev = clahe_min_stdev
         self.asinh_params = asinh_params
+
+        if self.asinh_params:
+            thresholds_num = len(self.asinh_params["thresholds"])
+            thresholds = (
+                torch.tensor(self.asinh_params["thresholds"])
+                .view(1, -1)
+                .expand(len(self.bands), thresholds_num)
+                .view(1, len(self.bands), thresholds_num, 1, 1)
+            )
+            scales = torch.log(torch.tensor([self.asinh_params["scale"]])).expand(
+                1, len(self.bands), thresholds_num, 1, 1
+            )
+            self.asinh_thresholds_tensor = torch.nn.Parameter(thresholds, requires_grad=True)
+            self.asinh_scales_tensor = torch.nn.Parameter(scales, requires_grad=True)
+        else:
+            self.asinh_thresholds_tensor = None
+            self.asinh_scales_tensor = None
 
         if not (log_transform_stdevs or use_clahe or asinh_params):
             warnings.warn("Normalization should be enabled (you could use log/clahe/asinh).")
@@ -113,12 +131,12 @@ class ImageNormalizer(torch.nn.Module):
             inputs[0] = self.clahe(backgrounds, self.clahe_min_stdev)
 
         if self.asinh_params:
-            for threshold in self.asinh_params["thresholds"]:
-                inputs.append(
-                    torch.asinh(
-                        (raw_images - threshold) * self.asinh_params["scale"],
-                    )
+            inputs.append(
+                torch.asinh(
+                    (raw_images - self.asinh_thresholds_tensor)
+                    * torch.exp(self.asinh_scales_tensor),
                 )
+            )
 
         return torch.cat(inputs, dim=2)
 

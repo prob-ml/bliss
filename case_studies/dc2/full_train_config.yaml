@@ -55,13 +55,13 @@ train:
     trainer:
         logger:
             name: DC2_experiments
-            version: DC2_psf_aug_asinh_05-27-3 # change it before running the code
+            version: DC2_psf_aug_asinh_05-28-3 # change it before running the code
         strategy:
           _target_: pytorch_lightning.strategies.DDPStrategy
           process_group_backend: nccl
           timeout:
             _target_: datetime.timedelta
             seconds: 180000
-        devices: [1, 2] # change it before running the code
+        devices: [4, 5, 6, 7] # change it before running the code
     data_source: ${surveys.dc2}
     pretrained_weights: null

@@ -1,3 +1,4 @@
+# flake8: noqa: WPS348
 from copy import copy
 from typing import Optional
 
@@ -265,15 +266,23 @@ class Encoder(pl.LightningModule):
 
     def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat = target_cat.filter_tile_catalog_by_flux(
+            min_flux=self.min_flux_threshold_during_test
+        )
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
-        mode_cat_tile = self.sample(batch, use_mode=True)
+        mode_cat_tile = self.sample(batch, use_mode=True).filter_tile_catalog_by_flux(
+            min_flux=self.min_flux_threshold_during_test
+        )
         mode_cat = mode_cat_tile.to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, matching)
 
-        sample_cat = self.sample(batch, use_mode=False).to_full_catalog()
+        sample_cat = (
+            self.sample(batch, use_mode=False)
+            .filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold_during_test)
+            .to_full_catalog()
+        )
         matching = self.matcher.match_catalogs(target_cat, sample_cat)
         self.sample_metrics.update(target_cat, sample_cat, matching)
 
