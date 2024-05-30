@@ -24,3 +24,16 @@ bash data-gen.sh -n 10 -s 2400 -t 8
 ```
 
 generates 10 images of size 2400 x 2400 tiled with a tile size of 8 x 8.
+
+The bash command `data-gen.sh` runs three scripts (located under the data_generation directory) for data generation:
+1. `catalog_gen.py` which generates catalogs of images and stores them in the data/catalogs subdirectory. Keyword arguments: `image_size` and `nfiles`.
+2. `galsim-des.yaml` then reads in these catalogs and uses GalSim to generate corresponding images, which are stored as .fits files (one for each band) in the data/images subdirectory. Keyword arguments: `image_size` and `nfiles`.
+3. `file_datum_generation.py` reads in the catalogs and images and saves them as *FileDatum* objects which contain the tile catalog and images in a dictionary. Keyword arguments: `image_size` and `tile_size`.
+
+Often, after image data has been generated, we would want to retile it with a different tile size. This can be done by just running the file `file_datum_generation.py` with appropriate arguments (you would have to pass in the image size as well since it defaults to 4800). For example, if we have 80 x 80 images that we want to tile with tile size 8, we may run
+
+```
+python data_generation/file_datum_generation.py image_size=80 tile_size=8
+```
+
+Note that you must run the file from the galaxy_clustering directory (since the script takes in the current working directory for the data paths).
