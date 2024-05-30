@@ -6,11 +6,13 @@ import pandas as pd
 import torch
 
 if __name__ == "__main__":
-    with open("./merged_catalog/merged_catalog_psf_100000.pkl", "rb") as f1:
+    with open("./merged_catalog/merged_catalog_with_flux_over_50.pkl", "rb") as f1:
         p1 = pd.read_pickle(f1)
 
-    with open("./merged_catalog/merged_catalog_with_flux_over_100000_new.pkl", "rb") as f2:
+    with open("./merged_catalog/merged_catalog_with_flux_over_100.pkl", "rb") as f2:
         p2 = pd.read_pickle(f2)
+
+    p1 = p1.loc[p1["flux_r"] > 100]
 
     for k1, v1 in p1.items():
         v2 = p2[k1].values

@@ -128,7 +128,8 @@ class ImageNormalizer(torch.nn.Module):
         if self.use_clahe:
             renormalized_img = self.clahe(raw_images, self.clahe_min_stdev)
             inputs.append(renormalized_img)
-            inputs[0] = self.clahe(backgrounds, self.clahe_min_stdev)
+            if not self.asinh_params:
+                inputs[0] = self.clahe(backgrounds, self.clahe_min_stdev)
 
         if self.asinh_params:
             inputs.append(

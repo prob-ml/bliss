@@ -20,9 +20,9 @@ encoder:
         bands: [0, 1, 2, 3, 4, 5]
         num_psf_params: 4  # for SDSS, 4 for DC2
         log_transform_stdevs: []
-        use_clahe: false
+        use_clahe: true
         asinh_params:
-            scale: 10000
+            scale: 1000
             thresholds: [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738]
         concat_psf_params: true
     metrics:
@@ -55,13 +55,13 @@ train:
     trainer:
         logger:
             name: DC2_experiments
-            version: DC2_psf_aug_asinh_05-28-3 # change it before running the code
+            version: DC2_psf_aug_asinh_05-29-6  # change it before running the code
         strategy:
           _target_: pytorch_lightning.strategies.DDPStrategy
           process_group_backend: nccl
           timeout:
             _target_: datetime.timedelta
             seconds: 180000
-        devices: [4, 5, 6, 7] # change it before running the code
+        devices: [1, 2]  # change it before running the code
     data_source: ${surveys.dc2}
     pretrained_weights: null

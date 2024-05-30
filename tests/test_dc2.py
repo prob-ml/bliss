@@ -265,3 +265,44 @@ class TestDC2:
             ), "tile catalogs are not equal"
             assert _test_tile_catalog_equal(t_over_50_cat_filter_0, t_over_50_cat_filter_50)
             assert _test_tile_catalog_equal(t_over_100_cat_filter_0, t_over_100_cat_filter_100)
+
+    def test_old_and_new_dc2(self, cfg):
+        from pathlib import Path
+
+        from bliss.surveys.dc2 import unsqueeze_tile_dict
+
+        data_folder = Path(
+            "/data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/"
+        )
+        new_split_files_list = sorted(
+            list((data_folder / "split_results_using_new_dc2").glob("split_*.pt"))
+        )
+        old_split_files_list = sorted(list((data_folder / "split_results").glob("split_*.pt")))
+
+        test_variables = ["tile_catalog", "images", "background", "psf_params", "wcs_header_str"]
+
+        for new_file, old_file in zip(new_split_files_list, old_split_files_list):
+            with open(new_file, "rb") as new_f:
+                new_result = torch.load(new_f)
+
+            with open(old_file, "rb") as old_f:
+                old_result = torch.load(old_f)
+
+            for key in test_variables:
+                new_var = new_result[key]
+                old_var = old_result[key]
+
+                if key == "tile_catalog":
+                    new_tile_cat = TileCatalog(4, unsqueeze_tile_dict(new_var))
+                    old_tile_cat = TileCatalog(4, unsqueeze_tile_dict(old_var))
+                    assert _test_tile_catalog_equal(new_tile_cat, old_tile_cat)
+                elif key == "images":
+                    assert _test_tensor_all_close(new_var, old_var)
+                elif key == "background":
+                    assert _test_tensor_all_close(new_var, old_var)
+                elif key == "psf_params":
+                    assert _test_tensor_all_close(new_var, old_var)
+                elif key == "wcs_header_str":
+                    assert new_var == old_var
+                else:
+                    raise NotImplementedError()
