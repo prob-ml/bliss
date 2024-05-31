@@ -1,7 +1,7 @@
 from copy import copy
 from typing import Optional
-import numpy as np
 
+import numpy as np
 import pytorch_lightning as pl
 import torch
 from einops import rearrange
@@ -84,7 +84,6 @@ class Encoder(pl.LightningModule):
         num_downsample = int(np.log2(self.tile_slen)) - 1
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
-        #assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         num_features = 256
         self.features_net = FeaturesNet(
             len(image_normalizer.bands),
