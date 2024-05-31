@@ -55,7 +55,7 @@ class TileCatalog(UserDict):
         "convergence",
         "membership",
         "fracdev",
-        "g1g2"
+        "g1g2",
         "redshift",
     }
 
