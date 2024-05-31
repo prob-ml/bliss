@@ -80,6 +80,9 @@ class Encoder(pl.LightningModule):
         self.double_detect = double_detect
         self.use_checkerboard = use_checkerboard
 
+        # bitwise operation to check if tile length is a power of two
+        power_of_two = (self.tile_slen != 0) & (self.tile_slen & (self.tile_slen-1) == 0)
+        assert power_of_two, "tile_slen must be a power of two"
         num_downsample = int(torch.round(torch.log2(torch.tensor(self.tile_slen)))) - 1
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
