@@ -4,6 +4,8 @@ from bliss.catalog import SourceType, TileCatalog
 from bliss.encoder.unconstrained_dists import UnconstrainedBernoulli, UnconstrainedLogitNormal
 from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
 
+# pylint: disable=duplicate-code
+
 
 class GalaxyClusterVariationlDistSpec(VariationalDistSpec):
     def __init__(self, survey_bands, tile_slen):

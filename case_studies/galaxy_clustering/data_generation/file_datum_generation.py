@@ -10,7 +10,7 @@ from astropy.io import fits
 
 from bliss.catalog import FullCatalog, TileCatalog
 
-TileCatalog.allowed_params.update(["membership", "fracdev", "g1g2"])
+# pylint: disable=duplicate-code
 
 MIN_FLUX_THRESHOLD = 0
 DATA_PATH = Path(os.getcwd()) / Path("data")
@@ -19,6 +19,7 @@ IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
 if not os.path.exists(FILE_DATA_PATH):
     os.makedirs(FILE_DATA_PATH)
+
 COL_NAMES = (
     "RA",
     "DEC",
