@@ -80,7 +80,7 @@ class Encoder(pl.LightningModule):
         self.double_detect = double_detect
         self.use_checkerboard = use_checkerboard
 
-        num_downsample = int(torch.round(torch.log2(self.tile_slen))) - 1
+        num_downsample = int(torch.round(torch.log2(torch.tensor(self.tile_slen)))) - 1
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
         num_features = 256
