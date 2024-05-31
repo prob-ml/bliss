@@ -182,8 +182,8 @@ class TestDC2:
         # why would the background be negative? are we using the wrong background estimate?
         train_dc2_cfg.encoder.image_normalizer.log_transform_stdevs = []
         train_dc2_cfg.encoder.image_normalizer.asinh_params = {
-            "scale": 0.1,
-            "thresholds": [-3, 0, 1, 3],
+            "scale": 1000,
+            "thresholds": [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738],
         }
         train(train_dc2_cfg.train)
 
