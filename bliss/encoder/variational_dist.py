@@ -1,3 +1,4 @@
+# flake8: noqa: E800
 import torch
 from einops import rearrange
 
@@ -153,10 +154,10 @@ class VariationalDist(torch.nn.Module):
             loss += gal_flux_loss
 
         # galaxy properties loss
-        galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
-        for i, param_name in enumerate(self.GALSIM_NAMES):
-            galsim_pn = f"galsim_{param_name}"
-            loss_term = -q[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
-            loss += loss_term
+        # galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
+        # for i, param_name in enumerate(self.GALSIM_NAMES):
+        #     galsim_pn = f"galsim_{param_name}"
+        #     loss_term = -q[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
+        #     loss += loss_term
 
         return loss

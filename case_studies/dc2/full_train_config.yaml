@@ -55,7 +55,7 @@ train:
     trainer:
         logger:
             name: DC2_experiments
-            version: DC2_psf_aug_asinh_05-29-6  # change it before running the code
+            version: DC2_psf_aug_asinh_05-30-2  # change it before running the code
         strategy:
           _target_: pytorch_lightning.strategies.DDPStrategy
           process_group_backend: nccl

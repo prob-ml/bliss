@@ -50,9 +50,11 @@ class ImageNormalizer(torch.nn.Module):
                 .view(1, -1)
                 .expand(len(self.bands), thresholds_num)
                 .view(1, len(self.bands), thresholds_num, 1, 1)
-            )
-            scales = torch.log(torch.tensor([self.asinh_params["scale"]])).expand(
-                1, len(self.bands), thresholds_num, 1, 1
+            ).clone()
+            scales = (
+                torch.log(torch.tensor([self.asinh_params["scale"]]))
+                .expand(1, len(self.bands), thresholds_num, 1, 1)
+                .clone()
             )
             self.asinh_thresholds_tensor = torch.nn.Parameter(thresholds, requires_grad=True)
             self.asinh_scales_tensor = torch.nn.Parameter(scales, requires_grad=True)
