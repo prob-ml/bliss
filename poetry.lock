@@ -593,17 +593,6 @@ files = [
 ]
 
 [[package]]
-name = "cached-property"
-version = "1.5.2"
-description = "A decorator for caching properties in classes."
-optional = false
-python-versions = "*"
-files = [
-    {file = "cached-property-1.5.2.tar.gz", hash = "sha256:9fa5755838eecbb2d234c3aa390bd80fbd3ac6b6869109bfc1b499f7bd89a130"},
-    {file = "cached_property-1.5.2-py2.py3-none-any.whl", hash = "sha256:df4f613cf7ad9a588cc381aaf4a512d26265ecebd5eb9e1ba12f1319eb85a6a0"},
-]
-
-[[package]]
 name = "cachetools"
 version = "5.3.0"
 description = "Extensible memoizing collections and decorators"
@@ -613,24 +602,6 @@ files = [
     {file = "cachetools-5.3.0-py3-none-any.whl", hash = "sha256:429e1a1e845c008ea6c85aa35d4b98b65d6a9763eeef3e37e92728a12d1de9d4"},
     {file = "cachetools-5.3.0.tar.gz", hash = "sha256:13dfddc7b8df938c21a940dfa6557ce6e94a2f1cdfa58eb90c805721d58f2c14"},
 ]
-
-[[package]]
-name = "camb"
-version = "1.5.4"
-description = "Code for Anisotropies in the Microwave Background"
-optional = false
-python-versions = ">=3.6.0"
-files = [
-    {file = "camb-1.5.4.tar.gz", hash = "sha256:d105a9529a534d77c44c66235948d52a4b3138f35ff39c10aa89467f7a6c0d48"},
-]
-
-[package.dependencies]
-packaging = "*"
-scipy = ">=1.0"
-sympy = ">=1.0"
-
-[package.extras]
-docs = ["sphinx (>=4.0)", "sphinx_rtd_theme (>=1.0)", "sphinxcontrib-jquery"]
 
 [[package]]
 name = "camb"
@@ -1132,20 +1103,6 @@ files = [
     {file = "defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61"},
     {file = "defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69"},
 ]
-
-[[package]]
-name = "deprecation"
-version = "2.1.0"
-description = "A library to handle automated deprecations"
-optional = false
-python-versions = "*"
-files = [
-    {file = "deprecation-2.1.0-py2.py3-none-any.whl", hash = "sha256:a10811591210e1fb0e768a8c25517cabeabcba6f0bf96564f8ff45189f90b14a"},
-    {file = "deprecation-2.1.0.tar.gz", hash = "sha256:72b3bde64e5d778694b0cf68178aed03d15e15477116add3fb773e581f9518ff"},
-]
-
-[package.dependencies]
-packaging = "*"
 
 [[package]]
 name = "deprecation"
@@ -1982,36 +1939,6 @@ fit = ["emcee (>=3.0)"]
 tests = ["colossus (>=1.2.1)", "coverage (>=4.5.1)", "halomod (==1.4.6.dev58)", "mpmath (>=1.0.0)", "pre-commit", "pytest (>=3.5.1)", "pytest-cov (>=2.5.1)"]
 
 [[package]]
-name = "hmf"
-version = "3.4.4"
-description = "A halo mass function calculator"
-optional = false
-python-versions = "*"
-files = [
-    {file = "hmf-3.4.4-py2.py3-none-any.whl", hash = "sha256:a64e14e16daf5e43ffcf2924733154a066fdbcd3c5fe2d05e0c510930588ca29"},
-    {file = "hmf-3.4.4.tar.gz", hash = "sha256:abe64a6aa88ed9767ec51b11e6491c47d34b7910ab7cd196d00387657034e97d"},
-]
-
-[package.dependencies]
-astropy = ">=1.1"
-cached-property = "*"
-camb = "*"
-click = "*"
-deprecation = "*"
-numpy = ">=1.6.2"
-rich = "*"
-scipy = ">=0.12.0"
-toml = ">=0.10.1"
-
-[package.extras]
-all = ["colossus (>=1.2.1)", "emcee (>=3.0)"]
-cosmo = ["colossus (>=1.2.1)"]
-dev = ["Sphinx (>=1.7.5)", "bump2version", "colossus (>=1.2.16)", "coverage (>=4.5.1)", "halomod (==1.4.6.dev58)", "mpmath (>=1.0.0)", "nbsphinx", "numpydoc (>=0.8.0)", "pre-commit", "pytest (>=3.5.1)", "pytest-cov (>=2.5.1)"]
-docs = ["Sphinx (>=1.7.5)", "nbsphinx", "numpydoc (>=0.8.0)"]
-fit = ["emcee (>=3.0)"]
-tests = ["colossus (>=1.2.1)", "coverage (>=4.5.1)", "halomod (==1.4.6.dev58)", "mpmath (>=1.0.0)", "pre-commit", "pytest (>=3.5.1)", "pytest-cov (>=2.5.1)"]
-
-[[package]]
 name = "hydra-core"
 version = "1.3.2"
 description = "A framework for elegantly configuring complex applications"
@@ -2023,7 +1950,6 @@ files = [
 ]
 
 [package.dependencies]
-antlr4-python3-runtime = "==4.9.*"
 antlr4-python3-runtime = "==4.9.*"
 omegaconf = ">=2.2,<2.4"
 packaging = "*"
@@ -2142,7 +2068,6 @@ comm = ">=0.1.1"
 debugpy = ">=1.6.5"
 ipython = ">=7.23.1"
 jupyter-client = ">=6.1.12"
-jupyter-core = ">=4.12,<5.0.dev0 || >=5.1.dev0"
 jupyter-core = ">=4.12,<5.0.dev0 || >=5.1.dev0"
 matplotlib-inline = ">=0.1"
 nest-asyncio = "*"
@@ -2378,7 +2303,6 @@ files = [
 
 [package.dependencies]
 jupyter-core = ">=4.12,<5.0.dev0 || >=5.1.dev0"
-jupyter-core = ">=4.12,<5.0.dev0 || >=5.1.dev0"
 python-dateutil = ">=2.8.2"
 pyzmq = ">=23.0"
 tornado = ">=6.2"
@@ -2403,7 +2327,6 @@ files = [
 ipykernel = ">=6.14"
 ipython = "*"
 jupyter-client = ">=7.0.0"
-jupyter-core = ">=4.12,<5.0.dev0 || >=5.1.dev0"
 jupyter-core = ">=4.12,<5.0.dev0 || >=5.1.dev0"
 prompt-toolkit = ">=3.0.30"
 pygments = "*"
@@ -2550,7 +2473,6 @@ anyio = ">=3.1.0"
 argon2-cffi = "*"
 jinja2 = "*"
 jupyter-client = ">=7.4.4"
-jupyter-core = ">=4.12,<5.0.dev0 || >=5.1.dev0"
 jupyter-core = ">=4.12,<5.0.dev0 || >=5.1.dev0"
 jupyter-events = ">=0.4.0"
 jupyter-server-terminals = "*"
@@ -2999,30 +2921,6 @@ rtd = ["jupyter_sphinx", "mdit-py-plugins", "myst-parser", "pyyaml", "sphinx", "
 testing = ["coverage", "pytest", "pytest-cov", "pytest-regressions"]
 
 [[package]]
-name = "markdown-it-py"
-version = "3.0.0"
-description = "Python port of markdown-it. Markdown parsing, done right!"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "markdown-it-py-3.0.0.tar.gz", hash = "sha256:e3f60a94fa066dc52ec76661e37c851cb232d92f9886b15cb560aaada2df8feb"},
-    {file = "markdown_it_py-3.0.0-py3-none-any.whl", hash = "sha256:355216845c60bd96232cd8d8c40e8f9765cc86f46880e43a8fd22dc1a1a8cab1"},
-]
-
-[package.dependencies]
-mdurl = ">=0.1,<1.0"
-
-[package.extras]
-benchmarking = ["psutil", "pytest", "pytest-benchmark"]
-code-style = ["pre-commit (>=3.0,<4.0)"]
-compare = ["commonmark (>=0.9,<1.0)", "markdown (>=3.4,<4.0)", "mistletoe (>=1.0,<2.0)", "mistune (>=2.0,<3.0)", "panflute (>=2.3,<3.0)"]
-linkify = ["linkify-it-py (>=1,<3)"]
-plugins = ["mdit-py-plugins"]
-profiling = ["gprof2dot"]
-rtd = ["jupyter_sphinx", "mdit-py-plugins", "myst-parser", "pyyaml", "sphinx", "sphinx-copybutton", "sphinx-design", "sphinx_book_theme"]
-testing = ["coverage", "pytest", "pytest-cov", "pytest-regressions"]
-
-[[package]]
 name = "markupsafe"
 version = "2.1.2"
 description = "Safely add untrusted strings to HTML/XML markup."
@@ -3165,17 +3063,6 @@ python-versions = "*"
 files = [
     {file = "mccabe-0.6.1-py2.py3-none-any.whl", hash = "sha256:ab8a6258860da4b6677da4bd2fe5dc2c659cff31b3ee4f7f5d64e79735b80d42"},
     {file = "mccabe-0.6.1.tar.gz", hash = "sha256:dd8d182285a0fe56bace7f45b5e7d1a6ebcbf524e8f3bd87eb0f125271b8831f"},
-]
-
-[[package]]
-name = "mdurl"
-version = "0.1.2"
-description = "Markdown URL utilities"
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8"},
-    {file = "mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba"},
 ]
 
 [[package]]
@@ -3359,7 +3246,6 @@ files = [
 
 [package.dependencies]
 jupyter-client = ">=6.1.12"
-jupyter-core = ">=4.12,<5.0.dev0 || >=5.1.dev0"
 jupyter-core = ">=4.12,<5.0.dev0 || >=5.1.dev0"
 nbformat = ">=5.1"
 traitlets = ">=5.3"
@@ -3851,7 +3737,6 @@ files = [
 
 [package.dependencies]
 antlr4-python3-runtime = "==4.9.*"
-antlr4-python3-runtime = "==4.9.*"
 PyYAML = ">=5.1.0"
 
 [[package]]
@@ -3903,7 +3788,6 @@ files = [
 
 [package.dependencies]
 numpy = [
-    {version = ">=1.21.0", markers = "python_version >= \"3.10\" and python_version < \"3.11\""},
     {version = ">=1.21.0", markers = "python_version >= \"3.10\" and python_version < \"3.11\""},
     {version = ">=1.23.2", markers = "python_version >= \"3.11\""},
 ]
@@ -5097,24 +4981,6 @@ pygments = ">=2.13.0,<3.0.0"
 jupyter = ["ipywidgets (>=7.5.1,<9)"]
 
 [[package]]
-name = "rich"
-version = "13.7.1"
-description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
-optional = false
-python-versions = ">=3.7.0"
-files = [
-    {file = "rich-13.7.1-py3-none-any.whl", hash = "sha256:4edbae314f59eb482f54e9e30bf00d33350aaa94f4bfcd4e9e3110e64d0d7222"},
-    {file = "rich-13.7.1.tar.gz", hash = "sha256:9be308cb1fe2f1f57d67ce99e95af38a1e2bc71ad9813b0e247cf7ffbcc3a432"},
-]
-
-[package.dependencies]
-markdown-it-py = ">=2.2.0"
-pygments = ">=2.13.0,<3.0.0"
-
-[package.extras]
-jupyter = ["ipywidgets (>=7.5.1,<9)"]
-
-[[package]]
 name = "rsa"
 version = "4.9"
 description = "Pure-Python RSA implementation"
@@ -5160,8 +5026,6 @@ files = [
     {file = "ruamel.yaml.clib-0.2.7-cp310-cp310-win32.whl", hash = "sha256:763d65baa3b952479c4e972669f679fe490eee058d5aa85da483ebae2009d231"},
     {file = "ruamel.yaml.clib-0.2.7-cp310-cp310-win_amd64.whl", hash = "sha256:d000f258cf42fec2b1bbf2863c61d7b8918d31ffee905da62dede869254d3b8a"},
     {file = "ruamel.yaml.clib-0.2.7-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:045e0626baf1c52e5527bd5db361bc83180faaba2ff586e763d3d5982a876a9e"},
-    {file = "ruamel.yaml.clib-0.2.7-cp311-cp311-macosx_13_0_arm64.whl", hash = "sha256:1a6391a7cabb7641c32517539ca42cf84b87b667bad38b78d4d42dd23e957c81"},
-    {file = "ruamel.yaml.clib-0.2.7-cp311-cp311-manylinux2014_aarch64.whl", hash = "sha256:9c7617df90c1365638916b98cdd9be833d31d337dbcd722485597b43c4a215bf"},
     {file = "ruamel.yaml.clib-0.2.7-cp311-cp311-macosx_13_0_arm64.whl", hash = "sha256:1a6391a7cabb7641c32517539ca42cf84b87b667bad38b78d4d42dd23e957c81"},
     {file = "ruamel.yaml.clib-0.2.7-cp311-cp311-manylinux2014_aarch64.whl", hash = "sha256:9c7617df90c1365638916b98cdd9be833d31d337dbcd722485597b43c4a215bf"},
     {file = "ruamel.yaml.clib-0.2.7-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_24_x86_64.whl", hash = "sha256:41d0f1fa4c6830176eef5b276af04c89320ea616655d01327d5ce65e50575c94"},
@@ -5778,17 +5642,6 @@ files = [
 ]
 
 [[package]]
-name = "toml"
-version = "0.10.2"
-description = "Python Library for Tom's Obvious, Minimal Language"
-optional = false
-python-versions = ">=2.6, !=3.0.*, !=3.1.*, !=3.2.*"
-files = [
-    {file = "toml-0.10.2-py2.py3-none-any.whl", hash = "sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b"},
-    {file = "toml-0.10.2.tar.gz", hash = "sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f"},
-]
-
-[[package]]
 name = "tomli"
 version = "2.0.1"
 description = "A lil' TOML parser"
@@ -5952,7 +5805,6 @@ files = [
 
 [package.dependencies]
 numpy = "*"
-pillow = ">=5.3.0,<8.3.dev0 || >=8.4.dev0"
 pillow = ">=5.3.0,<8.3.dev0 || >=8.4.dev0"
 requests = "*"
 torch = "2.0.0"
@@ -6482,4 +6334,3 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 lock-version = "2.0"
 python-versions = "^3.10"
 content-hash = "2264ab514f2e8a682610bb681574c9aef67cc383872832fad919326e0bf7838d"
-content-hash = "bb1f81bd46a51e5b24a5006ff44398ef3c761c62485aefa526632371c85d00aa"
