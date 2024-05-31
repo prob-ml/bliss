@@ -124,6 +124,7 @@ encoder:
     compile_model: false  # if true, compile model for potential performance
     double_detect: false
     use_checkerboard: true
+    downsample_at_front: false
 
 surveys:
     sdss:

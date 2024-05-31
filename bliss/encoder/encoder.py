@@ -42,6 +42,7 @@ class Encoder(pl.LightningModule):
         compile_model: bool = False,
         double_detect: bool = False,
         use_checkerboard: bool = True,
+        downsample_at_front: bool = False,
     ):
         """Initializes Encoder.
 
@@ -61,6 +62,7 @@ class Encoder(pl.LightningModule):
             compile_model: compile model for potential performance improvements
             double_detect: whether to make up to two detections per tile rather than one
             use_checkerboard: whether to use dependent tiling
+            downsample_at_front: whether to downsample at front of the network or at the end
         """
         super().__init__()
 
@@ -79,9 +81,10 @@ class Encoder(pl.LightningModule):
         self.do_data_augmentation = do_data_augmentation
         self.double_detect = double_detect
         self.use_checkerboard = use_checkerboard
+        self.downsample_at_front = downsample_at_front
 
         # bitwise operation to check if tile length is a power of two
-        power_of_two = (self.tile_slen != 0) & (self.tile_slen & (self.tile_slen-1) == 0)
+        power_of_two = (self.tile_slen != 0) & (self.tile_slen & (self.tile_slen - 1) == 0)
         assert power_of_two, "tile_slen must be a power of two"
         log_tile_size = torch.log2(torch.tensor(self.tile_slen))
         num_downsample = int(torch.round(log_tile_size)) - 1
@@ -93,6 +96,7 @@ class Encoder(pl.LightningModule):
             ch_per_band,
             num_features,
             num_downsample=num_downsample,
+            downsample_at_front=self.downsample_at_front,
         )
         n_params_per_source = vd_spec.n_params_per_source
         self.marginal_net = CatalogNet(num_features, n_params_per_source)

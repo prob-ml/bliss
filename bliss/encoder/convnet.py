@@ -52,7 +52,9 @@ class C3(nn.Module):
 
 
 class FeaturesNet(nn.Module):
-    def __init__(self, n_bands, ch_per_band, num_features, num_downsample=1):
+    def __init__(
+        self, n_bands, ch_per_band, num_features, num_downsample=1, downsample_at_front=False
+    ):
         super().__init__()
 
         nch_hidden = 64
@@ -62,17 +64,29 @@ class FeaturesNet(nn.Module):
             nn.SiLU(),
         )
         self.backbone = nn.Sequential(
-            nn.Sequential(*[ConvBlock(64, 64, stride=2, kernel_size=5) for _ in range(num_downsample)]),
             ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
-            ConvBlock(128, num_features, stride=1),  # 4
         )
+        if downsample_at_front:
+            self.net = nn.Sequential(
+                nn.Sequential(
+                    *[ConvBlock(64, 64, kernel_size=5, stride=2) for _ in range(num_downsample)],
+                ),
+                self.backbone,
+                ConvBlock(128, num_features, stride=1),
+            )
+        else:
+            self.net = nn.Sequential(
+                self.backbone,
+                nn.Sequential(*[ConvBlock(128, 128, stride=2) for _ in range(num_downsample)]),
+                ConvBlock(128, num_features, stride=1),
+            )
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
-        return self.backbone(x)
+        return self.net(x)
 
 
 class CatalogNet(nn.Module):
