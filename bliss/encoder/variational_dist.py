@@ -62,7 +62,7 @@ class VariationalDistSpec(torch.nn.Module):
 class VariationalDist(torch.nn.Module):
     GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
 
-    def __init__(self, factors, survey_bands, tile_slen, include_galaxy_property_loss):
+    def __init__(self, factors, survey_bands, tile_slen, include_galaxy_property_loss: bool = True):
         super().__init__()
 
         self.factors = factors
