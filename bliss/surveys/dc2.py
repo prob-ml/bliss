@@ -129,26 +129,23 @@ class DC2(Survey):
         self.split_file_path.mkdir(parents=True)
 
         n_image = self._load_image_and_bg_files_list()
+        generate_split_file_params_dict = {
+            "image_files": self.image_files,
+            "bg_files": self.bg_files,
+            "n_bands": self.n_bands,
+            "image_lim": self.image_lim,
+            "cat_path": self.cat_path,
+            "bands": self.bands,
+            "n_split": self.n_split,
+            "split_file_path": self.split_file_path,
+            "min_flux_threshold": self.min_flux_threshold,
+        }
 
         with multiprocessing.Pool(processes=self.split_processes_num) as process_pool:
             process_pool.starmap(
                 generate_split_file,
                 zip(
-                    list(range(n_image)),
-                    [
-                        {
-                            "image_files": self.image_files,
-                            "bg_files": self.bg_files,
-                            "n_bands": self.n_bands,
-                            "image_lim": self.image_lim,
-                            "cat_path": self.cat_path,
-                            "bands": self.bands,
-                            "n_split": self.n_split,
-                            "split_file_path": self.split_file_path,
-                            "min_flux_threshold": self.min_flux_threshold,
-                        }
-                        for _ in range(n_image)
-                    ],
+                    list(range(n_image)), [generate_split_file_params_dict for _ in range(n_image)]
                 ),
                 chunksize=4,
             )
@@ -190,16 +187,7 @@ class DC2(Survey):
         if self.image_files is None or self.bg_files is None:
             self._load_image_and_bg_files_list()
 
-        (
-            image,
-            bg,
-            tile_dict,
-            full_cat,
-            wcs,
-            _,
-            match_id,
-            psf_params,
-        ) = load_image_and_catalog(
+        result_dict = load_image_and_catalog(
             image_idx,
             self.image_files,
             self.bg_files,
@@ -210,13 +198,13 @@ class DC2(Survey):
             self.min_flux_threshold,
         )
         return {
-            "tile_catalog": tile_dict,
-            "image": torch.from_numpy(image),
-            "background": torch.from_numpy(bg),
-            "match_id": match_id,
-            "full_catalog": full_cat,
-            "wcs": wcs,
-            "psf_params": psf_params,
+            "tile_catalog": result_dict["tile_dict"],
+            "image": torch.from_numpy(result_dict["inputs"]["image"]),
+            "background": torch.from_numpy(result_dict["inputs"]["bg"]),
+            "match_id": result_dict["other_info"]["match_id"],
+            "full_catalog": result_dict["other_info"]["full_cat"],
+            "wcs": result_dict["other_info"]["wcs"],
+            "psf_params": result_dict["inputs"]["psf_params"],
         }
 
 
@@ -261,21 +249,25 @@ def load_image_and_catalog(
     tile_dict["galaxy_params"][..., 3] = tile_dict["galaxy_params"][..., 3].clamp(min=1e-18)
     tile_dict["galaxy_params"][..., 5] = tile_dict["galaxy_params"][..., 5].clamp(min=1e-18)
 
-    return image, bg, tile_dict, full_cat, wcs, wcs_header_str, match_id, psf_params  # noqa: WPS227
+    return {
+        "tile_dict": tile_dict,
+        "inputs": {
+            "image": image,
+            "bg": bg,
+            "psf_params": psf_params,
+        },
+        "other_info": {
+            "full_cat": full_cat,
+            "wcs": wcs,
+            "wcs_header_str": wcs_header_str,
+            "match_id": match_id,
+        },
+    }
 
 
 def generate_split_file(image_index, self_copy):
     split_count = 0
-    (
-        image,
-        bg,
-        tile_dict,
-        _,
-        _,
-        wcs_header_str,
-        _,
-        psf_params,
-    ) = load_image_and_catalog(
+    result_dict = load_image_and_catalog(
         image_index,
         self_copy["image_files"],
         self_copy["bg_files"],
@@ -285,6 +277,12 @@ def generate_split_file(image_index, self_copy):
         self_copy["cat_path"],
         self_copy["min_flux_threshold"],
     )
+
+    image = result_dict["inputs"]["image"]
+    bg = result_dict["inputs"]["bg"]
+    tile_dict = result_dict["tile_dict"]
+    wcs_header_str = result_dict["other_info"]["wcs_header_str"]
+    psf_params = result_dict["inputs"]["psf_params"]
 
     # split image
     split_lim = self_copy["image_lim"][0] // self_copy["n_split"]

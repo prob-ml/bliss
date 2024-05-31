@@ -185,6 +185,8 @@ class TestDC2:
             "scale": 1000,
             "thresholds": [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738],
         }
+        train_dc2_cfg.encoder.image_normalizer.use_clahe = True
+        train_dc2_cfg.encoder.image_normalizer.include_background = False
         train(train_dc2_cfg.train)
 
     def test_dc2_augmentation(self, cfg):

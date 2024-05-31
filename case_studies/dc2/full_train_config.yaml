@@ -25,6 +25,9 @@ encoder:
             scale: 1000
             thresholds: [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738]
         concat_psf_params: true
+        include_background: false
+    vd_spec:
+        include_galaxy_property_loss: false
     metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"

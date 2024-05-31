@@ -92,10 +92,12 @@ encoder:
         use_clahe: true
         clahe_min_stdev: 200
         asinh_params: null
+        include_background: true
     vd_spec:
         _target_: bliss.encoder.variational_dist.VariationalDistSpec
         survey_bands: ${encoder.survey_bands}
         tile_slen: ${encoder.tile_slen}
+        include_galaxy_property_loss: true
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
