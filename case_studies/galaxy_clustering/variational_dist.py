@@ -1,15 +1,13 @@
-from bliss.catalog import TileCatalog, SourceType
-from bliss.encoder.variational_dist import VariationalDistSpec, VariationalDist
-from bliss.encoder.unconstrained_dists import UnconstrainedBernoulli, UnconstrainedLogitNormal
 import torch
 
-
+from bliss.catalog import SourceType, TileCatalog
+from bliss.encoder.unconstrained_dists import UnconstrainedBernoulli, UnconstrainedLogitNormal
+from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
 
 
 class GalaxyClusterVariationlDistSpec(VariationalDistSpec):
     def __init__(self, survey_bands, tile_slen):
         super().__init__(survey_bands, tile_slen)
-        
 
         self.factor_specs["mem_prob"] = UnconstrainedBernoulli()
         self.factor_specs["galsim_hlr"] = UnconstrainedLogitNormal()
@@ -18,17 +16,16 @@ class GalaxyClusterVariationlDistSpec(VariationalDistSpec):
 
     def make_dist(self, x_cat):
         factors = self._parse_factors(x_cat)
-        return GalaxyClusterVariationalDist(factors, survey_bands=self.survey_bands, tile_slen=self.tile_slen)
-    
-
+        return GalaxyClusterVariationalDist(
+            factors, survey_bands=self.survey_bands, tile_slen=self.tile_slen
+        )
 
 
 class GalaxyClusterVariationalDist(VariationalDist):
-
-    GALSIM_NAMES = ["hlr", "g1", "g2", "disk_frac"]
-
     def __init__(self, factors, survey_bands, tile_slen):
         super().__init__(factors, survey_bands, tile_slen)
+
+        self.GALSIM_NAMES = ["hlr", "g1", "g2", "disk_frac"]
 
     def sample(self, use_mode=False) -> TileCatalog:
         """Sample the variational distribution.
@@ -42,7 +39,7 @@ class GalaxyClusterVariationalDist(VariationalDist):
         q = self.factors
 
         est_cat = {}
-        
+
         locs = q["loc"].mode if use_mode else q["loc"].sample().squeeze(0)
         est_cat = {"locs": locs}
 
@@ -66,7 +63,7 @@ class GalaxyClusterVariationalDist(VariationalDist):
         gf_dists = [q[f"galaxy_flux_{band}"] for band in self.survey_bands]
         gf_lst = [d.icdf(torch.tensor(0.5)) if use_mode else d.sample() for d in gf_dists]
         est_cat["galaxy_fluxes"] = torch.stack(gf_lst, dim=3)
-        
+
         est_cat["membership"] = q["mem_prob"].mode if use_mode else q["mem_prob"].sample()
         est_cat["membership"] = est_cat["membership"].unsqueeze(3)
 
@@ -77,7 +74,7 @@ class GalaxyClusterVariationalDist(VariationalDist):
 
         # n_sources is not unsqueezed because it is a single integer per tile regardless of
         # how many light sources are stored per tile
-        
+
         est_cat["n_sources"] = q["on_prob"].mode if use_mode else q["on_prob"].sample()
 
         return TileCatalog(self.tile_slen, est_cat)
@@ -86,11 +83,9 @@ class GalaxyClusterVariationalDist(VariationalDist):
         q = self.factors
 
         # We just need counter loss for now
-        counter_loss = -q["mem_prob"].log_prob(true_tile_cat["membership"].squeeze())
-        loss = counter_loss
-
         # TODO:
-        ## redshift loss: can define ourselves, or get it from redshift estimation (Declan's project)
-        ## fluxes loss: can be found in super().compute_nll() definition
+        # redshift loss: can define ourselves,
+        # or get it from redshift estimation (Declan's project)
+        # fluxes loss: can be found in super().compute_nll() definition
 
-        return loss
+        return -q["mem_prob"].log_prob(true_tile_cat["membership"].squeeze())

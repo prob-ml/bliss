@@ -1,7 +1,7 @@
 import os
+import sys
 from pathlib import Path
 from typing import List, TypedDict
-import sys
 
 import numpy as np
 import pandas as pd
@@ -19,7 +19,7 @@ IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
 if not os.path.exists(FILE_DATA_PATH):
     os.makedirs(FILE_DATA_PATH)
-COL_NAMES = [
+COL_NAMES = (
     "RA",
     "DEC",
     "X",
@@ -33,8 +33,8 @@ COL_NAMES = [
     "FRACDEV",
     "G1",
     "G2",
-]
-BANDS = ["g", "r", "i", "z"]
+)
+BANDS = ("g", "r", "i", "z")
 N_CATALOGS_PER_FILE = 10
 
 FileDatum = TypedDict(
@@ -47,29 +47,20 @@ FileDatum = TypedDict(
     },
 )
 
+
 def main(**kwargs):
-
-    if "image_size" in kwargs.keys():
-        IMAGE_SIZE = int(kwargs["image_size"])
-    else:
-        IMAGE_SIZE = 4800
-
-    if "tile_size" in kwargs.keys():
-        TILE_SIZE = int(kwargs["tile_size"])
-    else:
-        TILE_SIZE = 4
-
+    image_size = int(kwargs.get("image_size", 4800))
+    tile_size = int(kwargs.get("tile_size", 4))
     data: List[FileDatum] = []
 
-    for CATALOG_PATH in CATALOGS_PATH.glob("*.dat"):
-        catalog = pd.read_csv(CATALOG_PATH, sep=" ", header=None, names=COL_NAMES)
+    for catalog_path in CATALOGS_PATH.glob("*.dat"):
+        catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=COL_NAMES)
 
         catalog_dict = {}
         catalog_dict["plocs"] = torch.tensor([catalog[["X", "Y"]].to_numpy()])
-        catalog_dict["plocs"][:,:,1] = IMAGE_SIZE - catalog_dict["plocs"][:,:,1]
+        catalog_dict["plocs"][:, :, 1] = image_size - catalog_dict["plocs"][:, :, 1]
         n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
         catalog_dict["n_sources"] = n_sources
-        #print("Number of sources in full catalog: ", catalog_dict["n_sources"])
         catalog_dict["galaxy_fluxes"] = torch.tensor(
             [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z"]].to_numpy()]
         )
@@ -78,20 +69,20 @@ def main(**kwargs):
         catalog_dict["galaxy_params"] = torch.tensor(
             [catalog[["TSIZE", "G1", "G2", "FRACDEV"]].to_numpy()]
         )
-        #catalog_dict["hlr"] = torch.tensor([catalog[["TSIZE"]].to_numpy()])
-        #catalog_dict["fracdev"] = torch.tensor([catalog[["FRACDEV"]].to_numpy()])
-        #catalog_dict["g1g2"] = torch.tensor([catalog[["G1", "G2"]].to_numpy()])
         catalog_dict["source_type"] = torch.ones_like(catalog_dict["membership"])
-        full_catalog = FullCatalog(height=IMAGE_SIZE, width=IMAGE_SIZE, d=catalog_dict)
-        tile_catalog = full_catalog.to_tile_catalog(tile_slen=TILE_SIZE, max_sources_per_tile=12*TILE_SIZE)
+        full_catalog = FullCatalog(height=image_size, width=image_size, d=catalog_dict)
+        tile_catalog = full_catalog.to_tile_catalog(
+            tile_slen=tile_size,
+            max_sources_per_tile=12 * tile_size,
+        )
         tile_catalog = tile_catalog.filter_tile_catalog_by_flux(min_flux=MIN_FLUX_THRESHOLD)
         tile_catalog = tile_catalog.get_brightest_sources_per_tile(band=2, exclude_num=0)
 
         tile_catalog_dict = tile_catalog.to_dict()
-        for (key, value) in tile_catalog_dict.items():
+        for key, value in tile_catalog_dict.items():
             tile_catalog_dict[key] = torch.squeeze(value, 0)
 
-        filename = CATALOG_PATH.stem
+        filename = catalog_path.stem
         image_bands = []
         for band in BANDS:
             fits_filepath = IMAGES_PATH / Path(f"{filename}_{band}.fits")
@@ -101,11 +92,20 @@ def main(**kwargs):
                 image_bands.append(torch.from_numpy(image_data))
         stacked_image = torch.stack(image_bands, dim=0)
 
-        data.append(FileDatum({"tile_catalog": tile_catalog_dict, "images": stacked_image, "background": stacked_image}))
+        data.append(
+            FileDatum(
+                {
+                    "tile_catalog": tile_catalog_dict,
+                    "images": stacked_image,
+                    "background": stacked_image,
+                }
+            )
+        )
 
     chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
     for i, chunk in enumerate(chunks):
         torch.save(chunk, f"{DATA_PATH}/file_data/file_data_{i}.pt")
 
-if __name__=='__main__':
-    main(**dict(arg.split('=') for arg in sys.argv[1:]))
+
+if __name__ == "__main__":
+    main(**dict(arg.split("=") for arg in sys.argv[1:]))
