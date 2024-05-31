@@ -62,11 +62,11 @@ class FeaturesNet(nn.Module):
             nn.SiLU(),
         )
         self.backbone = nn.Sequential(
+            nn.Sequential(*[ConvBlock(64, 64, stride=2, kernel_size=5) for _ in range(num_downsample)]),
             ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
-            nn.Sequential(*[ConvBlock(128, 128, stride=2) for _ in range(num_downsample)]),
             ConvBlock(128, num_features, stride=1),  # 4
         )
 
