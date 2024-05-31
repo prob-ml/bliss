@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader, TensorDataset
 
-from case_studies.redshift.network_rs import PhotoZFromFluxes
+from case_studies.redshift.network_rs import PhotoZFromMag
 
 
 @click.command()
@@ -82,7 +82,7 @@ def main(epoch, train_path, val_path, nick, resume, outdir):  # noqa: WPS216
         "val_check_interval": 0.2,  # How often to check the validation set.
     }
     in_dim = dataset_options["x_dim"]
-    reg = PhotoZFromFluxes(
+    reg = PhotoZFromMag(
         in_dim,
         network_options["hidden_dim"],
         network_options["out_dim"],

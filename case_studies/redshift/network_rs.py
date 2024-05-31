@@ -4,7 +4,7 @@ import pytorch_lightning as pl
 import torch
 
 
-class PhotoZFromFluxes(pl.LightningModule):
+class PhotoZFromMag(pl.LightningModule):
     def __init__(
         self,
         in_dim,  # Number of input features.
