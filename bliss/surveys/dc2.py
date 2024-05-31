@@ -141,14 +141,19 @@ class DC2(Survey):
             "min_flux_threshold": self.min_flux_threshold,
         }
 
-        with multiprocessing.Pool(processes=self.split_processes_num) as process_pool:
-            process_pool.starmap(
-                generate_split_file,
-                zip(
-                    list(range(n_image)), [generate_split_file_params_dict for _ in range(n_image)]
-                ),
-                chunksize=4,
-            )
+        if self.split_processes_num > 1:
+            with multiprocessing.Pool(processes=self.split_processes_num) as process_pool:
+                process_pool.starmap(
+                    generate_split_file,
+                    zip(
+                        list(range(n_image)),
+                        [generate_split_file_params_dict for _ in range(n_image)],
+                    ),
+                    chunksize=4,
+                )
+        else:
+            for i in range(n_image):
+                generate_split_file(i, generate_split_file_params_dict)
 
         return None
 

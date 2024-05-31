@@ -1,4 +1,3 @@
-# flake8: noqa: WPS348
 from copy import copy
 from typing import Optional
 
@@ -278,11 +277,12 @@ class Encoder(pl.LightningModule):
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, matching)
 
-        sample_cat = (
-            self.sample(batch, use_mode=False)
-            .filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold_during_test)
-            .to_full_catalog()
+        sample_cat = self.sample(batch, use_mode=False)
+        sample_cat = sample_cat.filter_tile_catalog_by_flux(
+            min_flux=self.min_flux_threshold_during_test
         )
+        sample_cat = sample_cat.to_full_catalog()
+
         matching = self.matcher.match_catalogs(target_cat, sample_cat)
         self.sample_metrics.update(target_cat, sample_cat, matching)
 

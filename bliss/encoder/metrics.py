@@ -184,44 +184,38 @@ class DetectionPerformance(Metric):
         recall = n_true_matches.sum() / n_true_sources.sum()
         f1 = 2 * precision * recall / (precision + recall)
 
-        if self.source_type_name == "total":
-            precision_bin_results = {
-                f"detection_precision_bin_{i}": precision_per_bin[i]
-                for i in range(len(precision_per_bin))
-            }
-            recall_bin_results = {
-                f"detection_recall_bin_{i}": recall_per_bin[i] for i in range(len(recall_per_bin))
-            }
-            f1_bin_results = {
-                f"detection_f1_bin_{i}": f1_per_bin[i] for i in range(len(f1_per_bin))
-            }
-
-            return {
-                "detection_precision": precision,
-                "detection_recall": recall,
-                "detection_f1": f1,
-                **precision_bin_results,
-                **recall_bin_results,
-                **f1_bin_results,
-            }
+        detection_precision_name = (
+            f"detection_precision_{self.source_type_name}"
+            if self.source_type_name != "total"
+            else "detection_precision"
+        )
+        detection_recall_name = (
+            f"detection_recall_{self.source_type_name}"
+            if self.source_type_name != "total"
+            else "detection_recall"
+        )
+        detection_f1_name = (
+            f"detection_f1_{self.source_type_name}"
+            if self.source_type_name != "total"
+            else "detection_f1"
+        )
 
         precision_bin_results = {
-            f"detection_precision_{self.source_type_name}_bin_{i}": precision_per_bin[i]
+            f"{detection_precision_name}_bin_{i}": precision_per_bin[i]
             for i in range(len(precision_per_bin))
         }
         recall_bin_results = {
-            f"detection_recall_{self.source_type_name}_bin_{i}": recall_per_bin[i]
+            f"{detection_recall_name}_bin_{i}": recall_per_bin[i]
             for i in range(len(recall_per_bin))
         }
         f1_bin_results = {
-            f"detection_f1_{self.source_type_name}_bin_{i}": f1_per_bin[i]
-            for i in range(len(f1_per_bin))
+            f"{detection_f1_name}_bin_{i}": f1_per_bin[i] for i in range(len(f1_per_bin))
         }
 
         return {
-            f"detection_precision_{self.source_type_name}": precision,
-            f"detection_recall_{self.source_type_name}": recall,
-            f"detection_f1_{self.source_type_name}": f1,
+            f"{detection_precision_name}": precision,
+            f"{detection_recall_name}": recall,
+            f"{detection_f1_name}": f1,
             **precision_bin_results,
             **recall_bin_results,
             **f1_bin_results,
