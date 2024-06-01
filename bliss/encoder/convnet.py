@@ -63,30 +63,30 @@ class FeaturesNet(nn.Module):
             nn.BatchNorm3d(nch_hidden),
             nn.SiLU(),
         )
-        self.backbone = nn.Sequential(
+        self.internal_net = nn.Sequential(
             ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
         )
         if downsample_at_front:
-            self.net = nn.Sequential(
+            self.backbone = nn.Sequential(
                 nn.Sequential(
                     *[ConvBlock(64, 64, kernel_size=5, stride=2) for _ in range(num_downsample)],
                 ),
-                self.backbone,
+                self.internal_net,
                 ConvBlock(128, num_features, stride=1),
             )
         else:
-            self.net = nn.Sequential(
-                self.backbone,
+            self.backbone = nn.Sequential(
+                self.internal_net,
                 nn.Sequential(*[ConvBlock(128, 128, stride=2) for _ in range(num_downsample)]),
                 ConvBlock(128, num_features, stride=1),
             )
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
-        return self.net(x)
+        return self.backbone(x)
 
 
 class CatalogNet(nn.Module):
