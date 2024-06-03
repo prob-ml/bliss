@@ -1,0 +1,13 @@
+---
+defaults:
+    - full_train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+encoder:
+    tiles_to_crop: 0
+    image_normalizer:
+        asinh_params:
+            scale: 1000
+            thresholds: [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738]
+        use_clahe: true

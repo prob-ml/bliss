@@ -36,6 +36,7 @@ class Encoder(pl.LightningModule):
         sample_image_renders: MetricCollection,
         matcher: CatalogMatcher,
         min_flux_threshold: float = 0,
+        min_flux_threshold_during_test: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
         do_data_augmentation: bool = False,
@@ -56,6 +57,7 @@ class Encoder(pl.LightningModule):
             metrics: for scoring predicted catalogs during training
             matcher: for matching predicted catalogs to ground truth catalogs
             min_flux_threshold: Sources with a lower flux will not be considered when computing loss
+            min_flux_threshold_during_test: filter sources by flux during test
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
             do_data_augmentation: used for determining whether or not do data augmentation
@@ -76,6 +78,8 @@ class Encoder(pl.LightningModule):
         self.sample_image_renders = sample_image_renders
         self.matcher = matcher
         self.min_flux_threshold = min_flux_threshold
+        self.min_flux_threshold_during_test = min_flux_threshold_during_test
+        assert self.min_flux_threshold <= self.min_flux_threshold_during_test, "invalid threshold"
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
@@ -277,12 +281,19 @@ class Encoder(pl.LightningModule):
         )
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
-        mode_cat_tile = self.sample(batch, use_mode=True)
+        mode_cat_tile = self.sample(batch, use_mode=True).filter_tile_catalog_by_flux(
+            min_flux=self.min_flux_threshold_during_test
+        )
         mode_cat = mode_cat_tile.to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, matching)
 
-        sample_cat = self.sample(batch, use_mode=False).to_full_catalog()
+        sample_cat = self.sample(batch, use_mode=False)
+        sample_cat = sample_cat.filter_tile_catalog_by_flux(
+            min_flux=self.min_flux_threshold_during_test
+        )
+        sample_cat = sample_cat.to_full_catalog()
+
         matching = self.matcher.match_catalogs(target_cat, sample_cat)
         self.sample_metrics.update(target_cat, sample_cat, matching)
 

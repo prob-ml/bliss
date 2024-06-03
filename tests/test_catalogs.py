@@ -47,6 +47,30 @@ def multi_source_tilecat():
     return TileCatalog(4, d)
 
 
+@pytest.fixture(scope="module")
+def multi_source_fullcat():
+    d = {
+        "n_sources": torch.tensor([2, 3, 1]),
+        "plocs": torch.zeros((3, 3, 2)),
+        "source_type": torch.ones((3, 3, 1)).bool(),
+        "star_fluxes": torch.zeros((3, 3, 6)),
+        "galaxy_fluxes": torch.zeros(3, 3, 6),
+    }
+
+    d["plocs"][0, 0, :] = torch.tensor([300, 600])
+    d["plocs"][0, 1, :] = torch.tensor([1200, 1300])
+    d["plocs"][1, 0, :] = torch.tensor([730, 73])
+    d["plocs"][1, 1, :] = torch.tensor([1500, 1600])
+    d["plocs"][1, 2, :] = torch.tensor([999, 998])
+    d["plocs"][2, 0, :] = torch.tensor([1999, 1977])
+
+    d["galaxy_fluxes"][0, :, 2] = torch.tensor([1000, 500, 0])
+    d["galaxy_fluxes"][1, :, 2] = torch.tensor([10000, 545, 123])
+    d["galaxy_fluxes"][2, :, 2] = torch.tensor([124, 0, 0])
+
+    return FullCatalog(2000, 2000, d)
+
+
 class TestBasicTileAndFullCatalogs:
     def test_unallowed_param(self):
         d_tile = {
@@ -142,6 +166,18 @@ class TestBasicTileAndFullCatalogs:
 
         correct_gbs = torch.tensor([[[1], [0]], [[0], [0]]]).reshape(1, 2, 2, 1, 1)
         assert torch.equal(tile_cat.galaxy_bools, correct_gbs)
+
+    def test_filter_full_catalog_by_ploc_box(self, multi_source_fullcat):
+        cat = multi_source_fullcat.filter_full_catalog_by_ploc_box(torch.tensor([0.0, 0.0]), 1000.0)
+        assert torch.equal(cat["n_sources"], torch.tensor([1, 2, 0]))
+        assert cat["plocs"].shape[1] == 2
+        assert torch.allclose(cat["plocs"][0, 0, :], torch.tensor([300.0, 600.0]))
+        assert torch.allclose(cat["plocs"][1, 0, :], torch.tensor([730.0, 73.0]))
+        assert torch.allclose(cat["plocs"][1, 1, :], torch.tensor([999.0, 998.0]))
+        assert cat["galaxy_fluxes"].shape[1] == 2
+        assert torch.allclose(cat["galaxy_fluxes"][0, :, 2], torch.tensor([1000.0, 500.0]))
+        assert torch.allclose(cat["galaxy_fluxes"][1, :, 2], torch.tensor([10000.0, 123.0]))
+        assert torch.allclose(cat["galaxy_fluxes"][2, :, 2], torch.tensor([124.0, 0.0]))
 
 
 class TestDecalsCatalog:
