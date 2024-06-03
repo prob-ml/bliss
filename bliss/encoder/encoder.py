@@ -42,6 +42,7 @@ class Encoder(pl.LightningModule):
         compile_model: bool = False,
         double_detect: bool = False,
         use_checkerboard: bool = True,
+        reference_band: int = 2,
     ):
         """Initializes Encoder.
 
@@ -61,6 +62,7 @@ class Encoder(pl.LightningModule):
             compile_model: compile model for potential performance improvements
             double_detect: whether to make up to two detections per tile rather than one
             use_checkerboard: whether to use dependent tiling
+            reference_band: band to use for filtering sources
         """
         super().__init__()
 
@@ -79,6 +81,7 @@ class Encoder(pl.LightningModule):
         self.do_data_augmentation = do_data_augmentation
         self.double_detect = double_detect
         self.use_checkerboard = use_checkerboard
+        self.reference_band = reference_band
 
         ch_per_band = self.image_normalizer.num_channels_per_band()
         assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
@@ -204,7 +207,9 @@ class Encoder(pl.LightningModule):
         return (marginal_loss + white_loss + black_loss) / 2
 
     def _double_detection_nll(self, target_cat1, target_cat, pred):
-        target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
+        target_cat2 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=1
+        )
 
         nll_marginal_z1 = self._single_detection_nll(target_cat1, pred)
         nll_cond_z2 = pred["second"].compute_nll(target_cat2)
@@ -231,10 +236,15 @@ class Encoder(pl.LightningModule):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
         # filter out undetectable sources
-        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat = target_cat.filter_tile_catalog_by_flux(
+            min_flux=self.min_flux_threshold,
+            band=self.reference_band,
+        )
 
         # make predictions/inferences
-        target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
         truth_callback = lambda _: target_cat1
         pred = self.infer(batch, truth_callback)
 
@@ -261,7 +271,10 @@ class Encoder(pl.LightningModule):
 
     def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat = target_cat.filter_tile_catalog_by_flux(
+            min_flux=self.min_flux_threshold,
+            band=self.reference_band,
+        )
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
         mode_cat_tile = self.sample(batch, use_mode=True)
@@ -294,11 +307,10 @@ class Encoder(pl.LightningModule):
         for metric_name, metric in metrics.items():
             if hasattr(metric, "plot"):  # noqa: WPS421
                 plot_or_none = metric.plot()
-                if plot_or_none:
-                    fig, _axes = plot_or_none
                 name = f"Epoch:{self.current_epoch}" if show_epoch else ""
                 name += f"/{logging_name} {metric_name}"
                 if self.logger and plot_or_none:
+                    fig, _axes = plot_or_none
                     self.logger.experiment.add_figure(name, fig)
 
         metrics.reset()
