@@ -4,7 +4,8 @@ defaults:
     - _self_
 
 paths:
-    dc2_pytest_data: ${paths.root}/case_studies/dc2/pytest_data/
+    root: ${oc.env:BLISS_HOME}
+    data: ${oc.env:BLISS_HOME}/tests/data
 
 prior:
     n_tiles_h: 4

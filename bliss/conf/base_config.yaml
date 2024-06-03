@@ -12,11 +12,11 @@ hydra:
 
 paths:
     root: ${oc.env:BLISS_HOME}
-    data: ${paths.root}/data
+    data: /data/scratch
     sdss: ${paths.data}/sdss
     decals: ${paths.data}/decals
     des: ${paths.data}/des
-    dc2: ${paths.data}/dc2
+    dc2: ${paths.data}/dc2local
     output: ${paths.root}/output
     pretrained_models: ${paths.data}/pretrained_models
     dc2_catalog: ${paths.root}/case_studies/dc2/merged_catalog
