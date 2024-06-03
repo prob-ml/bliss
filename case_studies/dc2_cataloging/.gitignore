@@ -1,5 +1,4 @@
 *.pkl
 *_output/
 *.out
-DC2_exp_record.md
 !merged_catalog/merged_catalog_with_flux_over_50.pkl
