@@ -115,7 +115,7 @@ class DetectionPerformance(Metric):
         assert isinstance(true_cat, FullCatalog), "true_cat should be FullCatalog"
         assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
 
-        if self.mag_band:
+        if self.mag_band is not None:
             unit = "on_fluxes" if self.bin_unit_is_flux else "magnitudes"
             true_mags = true_cat[unit][:, :, self.mag_band].contiguous()
             est_mags = est_cat[unit][:, :, self.mag_band].contiguous()
