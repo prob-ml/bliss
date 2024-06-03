@@ -19,7 +19,7 @@ paths:
     dc2: ${paths.data}/dc2
     output: ${paths.root}/output
     pretrained_models: ${paths.data}/pretrained_models
-    dc2_catalog: ${paths.root}/case_studies/dc2/merged_catalog
+    dc2_catalog: ${paths.root}/case_studies/dc2_cataloging/merged_catalog
 
 global_setting:
     min_flux_threshold: 0  # default 0 to take all sources

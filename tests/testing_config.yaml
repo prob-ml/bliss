@@ -4,7 +4,7 @@ defaults:
     - _self_
 
 paths:
-    dc2_pytest_data: ${paths.root}/case_studies/dc2/pytest_data/
+    dc2_pytest_data: ${paths.root}/case_studies/dc2_cataloging/pytest_data/
 
 prior:
     n_tiles_h: 4
