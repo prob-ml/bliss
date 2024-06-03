@@ -129,12 +129,14 @@ class TruncatedDiagonalMVN(Distribution):
 class UnconstrainedTDBN:
     """Produces truncated bivariate normal distributions from unconstrained parameters."""
 
-    def __init__(self):
+    def __init__(self, low_clamp=-6, high_clamp=3):
         self.dim = 4
+        self.low_clamp = low_clamp
+        self.high_clamp = high_clamp
 
     def get_dist(self, params):
         mu = params[:, :, :, :2].sigmoid()
-        sigma = params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
+        sigma = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
         return TruncatedDiagonalMVN(mu, sigma)
 
 
@@ -144,7 +146,7 @@ class UnconstrainedLogNormal:
 
     def get_dist(self, params):
         mu = params[:, :, :, 0]
-        sigma = params[:, :, :, 1].clamp(1e-4, 10)
+        sigma = params[:, :, :, 1].clamp(-6, 10).exp().sqrt()
         return LogNormal(mu, sigma, validate_args=False)  # we may evaluate at 0 for masked tiles
 
 
