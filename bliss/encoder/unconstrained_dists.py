@@ -70,15 +70,11 @@ class TruncatedDiagonalMVN(Distribution):
         prob_in_unit_box_hw = multiple_normals.cdf(self.b) - multiple_normals.cdf(self.a)
         self.log_prob_in_unit_box = prob_in_unit_box_hw.log().sum(dim=-1)
 
-        # we'll need these calculations later for sampling
-        self.lower_cdf = multiple_normals.cdf(self.a)
-        self.upper_cdf = multiple_normals.cdf(self.b)
-
     def __repr__(self):
         return f"{self.__class__.__name__}({self.base_dist.base_dist})"
 
     def sample(self, sample_shape=(1,)):
-        """Generate sample using rejection sampling.
+        """Generate sample.
 
         Args:
             sample_shape (Tuple): Shape of samples to draw
@@ -88,21 +84,18 @@ class TruncatedDiagonalMVN(Distribution):
 
         """
 
-        # This is "sample" so no grads allowed!
-        with torch.no_grad():
-            # calculate target shape
-            shape = sample_shape + self.base_dist.batch_shape + self.base_dist.event_shape
+        shape = sample_shape + self.base_dist.batch_shape + self.base_dist.event_shape
+        uniform_samples = torch.rand(shape, device=self.base_dist.mean.device)
 
+        with torch.no_grad():
             # draw using inverse cdf method
             # if Fi is the cdf of the relavant gaussian, then
             # Gi(u) = Fi(u*(F(b) - F(a)) + F(a)) is the cdf of the truncated gaussian
-            uniform_samples = torch.rand(shape, device=self.base_dist.mean.device)
-            u_transformed = uniform_samples * (self.upper_cdf - self.lower_cdf) + self.lower_cdf
-            samples = self.base_dist.base_dist.icdf(u_transformed)
-
             # if u_transformed is within machine precision of 0 or 1
             # the icdf will be -inf or inf, respectively, so we have to clamp
-            return samples.clamp(self.a, self.b)
+            return self.base_dist.base_dist.icdf(
+                uniform_samples * (self.upper_cdf - self.lower_cdf) + self.lower_cdf,
+            ).clamp(self.a, self.b)
 
     @property
     def a(self):
@@ -111,6 +104,14 @@ class TruncatedDiagonalMVN(Distribution):
     @property
     def b(self):
         return torch.ones_like(self.base_dist.mean)
+
+    @property
+    def lower_cdf(self):
+        return self.base_dist.base_dist.cdf(self.a)
+
+    @property
+    def upper_cdf(self):
+        return self.base_dist.base_dist.cdf(self.b)
 
     @property
     def mean(self):
