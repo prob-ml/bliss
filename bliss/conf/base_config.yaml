@@ -19,7 +19,6 @@ paths:
     dc2: /data/scratch/dc2local
 
     output: ${paths.root}/output
-    pretrained_models: ${paths.data}/pretrained_models
 
 global_setting:
     min_flux_threshold: 0  # default 0 to take all sources
@@ -196,7 +195,7 @@ generate:
     n_image_files: 32
     n_batches_per_file: 16
     simulator: ${simulator}
-    cached_data_path: ${paths.data}/cached_dataset
+    cached_data_path: null
     file_prefix: dataset
 
 train:

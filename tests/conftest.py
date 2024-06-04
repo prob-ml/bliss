@@ -1,6 +1,3 @@
-# pylint: skip-file
-import os
-import shutil
 from pathlib import Path
 
 import pytest
@@ -50,27 +47,6 @@ def cfg(pytestconfig, cached_data_path, output_path):
 
 
 @pytest.fixture(scope="session")
-def decals_setup_teardown(cfg):
-    # replace if needed
-    original_ccds_annotated_path = cfg.paths.decals + "/ccds-annotated-decam-dr9.fits"
-    temp_ccds_annotated_path = cfg.paths.decals + "/ccds-annotated-decam-dr9-large.fits"
-    large_file_existed = os.path.exists(original_ccds_annotated_path)
-    if large_file_existed:
-        shutil.move(original_ccds_annotated_path, temp_ccds_annotated_path)
-    shutil.copyfile(
-        cfg.paths.data + "/decals/ccds-annotated-decam-dr9-small.fits",
-        original_ccds_annotated_path,
-    )
-
-    yield
-
-    # restore
-    os.remove(original_ccds_annotated_path)
-    if large_file_existed:
-        shutil.move(temp_ccds_annotated_path, original_ccds_annotated_path)
-
-
-@pytest.fixture(scope="session")
 def encoder(cfg):
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
     enc_state_dict = torch.load(cfg.predict.weight_save_path)
@@ -87,13 +63,13 @@ def decoder(cfg):
 
 @pytest.fixture(scope="session")
 def multiband_dataloader(cfg):
-    with open(cfg.paths.data + "/multiband_data/dataset_0.pt", "rb") as f:
+    with open(cfg.paths.test_data + "/multiband_data/dataset_0.pt", "rb") as f:
         data = torch.load(f)
     return DataLoader(data, batch_size=8, shuffle=False)
 
 
 @pytest.fixture(scope="session")
 def multi_source_dataloader(cfg):
-    with open(cfg.paths.data + "/test_multi_source.pt", "rb") as f:
+    with open(cfg.paths.test_data + "/test_multi_source.pt", "rb") as f:
         data = torch.load(f)
     return DataLoader(data, batch_size=8, shuffle=False)
