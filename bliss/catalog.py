@@ -53,6 +53,7 @@ class TileCatalog(UserDict):
         "loc_sd",
         "shear",
         "convergence",
+        "redshift",
     }
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
@@ -722,3 +723,35 @@ class FullCatalog(UserDict):
         est_cat_table.remove_column("galaxy_params")
 
         return hstack([est_cat_table, galaxy_params_table])
+
+    def filter_full_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
+        assert box_origin[0] + box_len < self.height, "invalid box"
+        assert box_origin[1] + box_len < self.width, "invalid box"
+
+        box_origin_tensor = box_origin.view(1, 1, 2).to(device=self.device)
+        box_end_tensor = (box_origin + box_len).view(1, 1, 2).to(device=self.device)
+
+        plocs_mask = torch.all(
+            (self.plocs < box_end_tensor) & (self.plocs > box_origin_tensor), dim=2
+        )
+
+        plocs_mask_indexes = plocs_mask.nonzero()
+        plocs_inverse_mask_indexes = (~plocs_mask).nonzero()
+        plocs_full_mask_indexes = torch.cat((plocs_mask_indexes, plocs_inverse_mask_indexes), dim=0)
+        _, index_order = plocs_full_mask_indexes[:, 0].sort(stable=True)
+        plocs_full_mask_sorted_indexes = plocs_full_mask_indexes[index_order.tolist(), :]
+
+        d = {}
+        new_max_sources = plocs_mask.sum(dim=1).max()
+        for k, v in self.to_dict().items():
+            if k == "n_sources":
+                d[k] = plocs_mask.sum(dim=1)
+            else:
+                d[k] = v[
+                    plocs_full_mask_sorted_indexes[:, 0].tolist(),
+                    plocs_full_mask_sorted_indexes[:, 1].tolist(),
+                ].view(-1, self.max_sources, v.shape[-1])[:, :new_max_sources, :]
+
+        d["plocs"] -= box_origin_tensor
+
+        return FullCatalog(box_len, box_len, d)

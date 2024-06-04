@@ -115,7 +115,7 @@ class DetectionPerformance(Metric):
         assert isinstance(true_cat, FullCatalog), "true_cat should be FullCatalog"
         assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
 
-        if self.mag_band:
+        if self.mag_band is not None:
             unit = "on_fluxes" if self.bin_unit_is_flux else "magnitudes"
             true_mags = true_cat[unit][:, :, self.mag_band].contiguous()
             est_mags = est_cat[unit][:, :, self.mag_band].contiguous()
@@ -174,9 +174,57 @@ class DetectionPerformance(Metric):
         n_est_sources = self.n_est_sources[:-1] if self.exclude_last_bin else self.n_est_sources
         n_true_sources = self.n_true_sources[:-1] if self.exclude_last_bin else self.n_true_sources
 
+        precision_per_bin = (n_est_matches / n_est_sources).nan_to_num(0)
+        recall_per_bin = (n_true_matches / n_true_sources).nan_to_num(0)
+        f1_per_bin = (
+            2 * precision_per_bin * recall_per_bin / (precision_per_bin + recall_per_bin)
+        ).nan_to_num(0)
+
         precision = n_est_matches.sum() / n_est_sources.sum()
         recall = n_true_matches.sum() / n_true_sources.sum()
         f1 = 2 * precision * recall / (precision + recall)
+
+        detection_precision_name = (
+            f"detection_precision_{self.source_type_name}"
+            if self.source_type_name != "total"
+            else "detection_precision"
+        )
+        detection_recall_name = (
+            f"detection_recall_{self.source_type_name}"
+            if self.source_type_name != "total"
+            else "detection_recall"
+        )
+        detection_f1_name = (
+            f"detection_f1_{self.source_type_name}"
+            if self.source_type_name != "total"
+            else "detection_f1"
+        )
+
+        precision_bin_results = {
+            f"{detection_precision_name}_bin_{i}": precision_per_bin[i]
+            for i in range(len(precision_per_bin))
+        }
+        recall_bin_results = {
+            f"{detection_recall_name}_bin_{i}": recall_per_bin[i]
+            for i in range(len(recall_per_bin))
+        }
+        f1_bin_results = {
+            f"{detection_f1_name}_bin_{i}": f1_per_bin[i] for i in range(len(f1_per_bin))
+        }
+
+        return {
+            f"{detection_precision_name}": precision,
+            f"{detection_recall_name}": recall,
+            f"{detection_f1_name}": f1,
+            **precision_bin_results,
+            **recall_bin_results,
+            **f1_bin_results,
+        }
+
+    def get_results_on_per_flux_bin(self):
+        recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)
+        precision = (self.n_est_matches / self.n_est_sources).nan_to_num(0)
+        f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
 
         if self.source_type_name == "total":
             return {
