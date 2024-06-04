@@ -52,41 +52,73 @@ class C3(nn.Module):
 
 
 class FeaturesNet(nn.Module):
-    def __init__(
-        self, n_bands, ch_per_band, num_features, num_downsample=1, downsample_at_front=False
-    ):
+    def __init__(self, n_bands, ch_per_band, num_features, tile_slen=2, downsample_at_front=False):
         super().__init__()
-
         nch_hidden = 64
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, nch_hidden, [ch_per_band, 5, 5], padding=[0, 2, 2]),
             nn.BatchNorm3d(nch_hidden),
             nn.SiLU(),
         )
-        self.backbone = nn.Sequential(
-            ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
-            nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
-            ConvBlock(64, 128, stride=2),
-            nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
-        )
-        if downsample_at_front:
-            self.backbone = nn.Sequential(
-                nn.Sequential(
-                    *[ConvBlock(64, 64, kernel_size=5, stride=2) for _ in range(num_downsample)],
-                ),
-                self.backbone,
-                ConvBlock(128, num_features, stride=1),
+
+        # Currently, if tile length is 2 or 4,
+        # we revert to previous version of the network for backward compatibility
+        # This needs to be fixed in future iterations
+        # to make the network architecture cleaner and generalizable
+
+        log_tile_size = torch.log2(torch.tensor(tile_slen))
+        num_downsample = int(torch.round(log_tile_size)) - 1
+        self.backbone = nn.ModuleList()
+        if tile_slen == 2:
+            self.backbone.append(ConvBlock(nch_hidden, 64, kernel_size=5, padding=2))
+            self.backbone.append(
+                nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)])
             )
+            self.backbone.append(ConvBlock(64, 128, stride=2))
+            self.backbone.append(nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]))
+            self.backbone.append(ConvBlock(128, num_features, stride=1))
+        elif tile_slen == 4:
+            self.backbone.append(ConvBlock(nch_hidden, 64, kernel_size=5, padding=2))
+            self.backbone.append(
+                nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)])
+            )
+            self.backbone.append(ConvBlock(64, 128, stride=2))
+            self.backbone.append(nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]))
+            self.backbone.append(ConvBlock(128, num_features, stride=2))
         else:
-            self.backbone = nn.Sequential(
-                self.backbone,
-                nn.Sequential(*[ConvBlock(128, 128, stride=2) for _ in range(num_downsample)]),
-                ConvBlock(128, num_features, stride=1),
-            )
+            if downsample_at_front:
+                for _ in range(num_downsample):
+                    self.backbone.append(
+                        ConvBlock(nch_hidden, 2 * nch_hidden, kernel_size=5, stride=2)
+                    )
+                    nch_hidden *= 2
+                self.backbone.append(ConvBlock(nch_hidden, 64, kernel_size=5, padding=2))
+                self.backbone.append(
+                    nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)])
+                )
+                self.backbone.append(ConvBlock(64, 128, stride=2))
+                self.backbone.append(nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]))
+                self.backbone.append(ConvBlock(128, num_features, stride=1))
+            else:
+                self.backbone.append(ConvBlock(nch_hidden, 64, kernel_size=5, padding=2))
+                self.backbone.append(
+                    nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)])
+                )
+                self.backbone.append(ConvBlock(64, 128, stride=2))
+                self.backbone.append(nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]))
+                num_channels = 128
+                for _ in range(num_downsample):
+                    self.backbone.append(
+                        ConvBlock(num_channels, 2 * num_channels, kernel_size=5, stride=2)
+                    )
+                    num_channels *= 2
+                self.backbone.append(ConvBlock(num_channels, num_features, stride=2))
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
-        return self.backbone(x)
+        for layer in self.backbone:
+            x = layer(x)
+        return x
 
 
 class CatalogNet(nn.Module):
