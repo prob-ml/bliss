@@ -89,7 +89,7 @@ class FeaturesNet(nn.Module):
             if downsample_at_front:
                 for _ in range(num_downsample):
                     self.backbone.append(
-                        ConvBlock(nch_hidden, 2 * nch_hidden, kernel_size=5, stride=2)
+                        ConvBlock(nch_hidden, 2 * nch_hidden, kernel_size=5, stride=2, padding=2)
                     )
                     nch_hidden *= 2
                 self.backbone.append(ConvBlock(nch_hidden, 64, kernel_size=5, padding=2))
