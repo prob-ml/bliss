@@ -65,6 +65,8 @@ class FeaturesNet(nn.Module):
         # we revert to previous version of the network for backward compatibility
         # This needs to be fixed in future iterations
         # to make the network architecture cleaner and generalizable
+        # for tile sizes of 2 or 4, downsampling at front is disabled for now
+        # for backward compatibility, might be useful to add later
 
         log_tile_size = torch.log2(torch.tensor(tile_slen))
         num_downsample = int(torch.round(log_tile_size)) - 1
