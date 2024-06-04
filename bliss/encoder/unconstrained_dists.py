@@ -52,13 +52,27 @@ class TruncatedDiagonalMVN(Distribution):
     """A truncated diagonal multivariate normal distribution."""
 
     def __init__(self, mu, sigma):
+        """Initialize a truncated diagonal multivariate normal distribution.
+
+        Args:
+            mu (Tensor): Mean of the distribution (must be at least 1d)
+            sigma (Tensor): Standard deviation of the distribution (must be at least 1d)
+
+        Distribution is "multivariate" in that the last dimension of mu and sigma
+        are considered event dimensions.
+        """
+
         super().__init__(validate_args=False)
+        multiple_normals = Normal(mu, sigma)  # all dims are batch dims, none are event
+        self.base_dist = Independent(multiple_normals, 1)  # now last dim is event dim
 
-        multiple_normals = Normal(mu, sigma)
-        self.base_dist = Independent(multiple_normals, 1)
-
+        # we'll need these calculations later for log_prob
         prob_in_unit_box_hw = multiple_normals.cdf(self.b) - multiple_normals.cdf(self.a)
         self.log_prob_in_unit_box = prob_in_unit_box_hw.log().sum(dim=-1)
+
+        # we'll need these calculations later for sampling
+        self.lower_cdf = multiple_normals.cdf(self.a)
+        self.upper_cdf = multiple_normals.cdf(self.b)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.base_dist.base_dist})"
@@ -66,23 +80,29 @@ class TruncatedDiagonalMVN(Distribution):
     def sample(self, sample_shape=(1,)):
         """Generate sample using rejection sampling.
 
-        This isn't very efficient, but it's good enough for sampling one catalog at a time. A more
-        efficient method could be to use inverse cdf sampling on each dimension independently.
-
         Args:
             sample_shape (Tuple): Shape of samples to draw
 
         Returns:
             Tensor: (sample_shape, self.batch_shape, self.event_shape) shaped sample
+
         """
-        q = Independent(Normal(self.base_dist.mean, self.base_dist.stddev), 1)
-        samples = q.sample(sample_shape)
-        valid = (samples.min(dim=-1)[0] >= 0) & (samples.max(dim=-1)[0] < 1)
-        while not valid.all():
-            new_samples = q.sample(sample_shape)
-            samples[~valid] = new_samples[~valid]
-            valid = (samples.min(dim=-1)[0] >= 0) & (samples.max(dim=-1)[0] < 1)
-        return samples
+
+        # This is "sample" so no grads allowed!
+        with torch.no_grad():
+            # calculate target shape
+            shape = sample_shape + self.base_dist.batch_shape + self.base_dist.event_shape
+
+            # draw using inverse cdf method
+            # if Fi is the cdf of the relavant gaussian, then
+            # Gi(u) = Fi(u*(F(b) - F(a)) + F(a)) is the cdf of the truncated gaussian
+            uniform_samples = torch.rand(shape, device=self.base_dist.mean.device)
+            u_transformed = uniform_samples * (self.upper_cdf - self.lower_cdf) + self.lower_cdf
+            samples = self.base_dist.base_dist.icdf(u_transformed)
+
+            # if u_transformed is within machine precision of 0 or 1
+            # the icdf will be -inf or inf, respectively, so we have to clamp
+            return samples.clamp(self.a, self.b)
 
     @property
     def a(self):
@@ -121,7 +141,7 @@ class TruncatedDiagonalMVN(Distribution):
 
     def cdf(self, value):
         cdf_at_val = self.base_dist.base_dist.cdf(value)
-        cdf_at_lb = self.base_dist.base_dist.cdf(torch.zeros_like(self.mean))
+        cdf_at_lb = self.lower_cdf
         log_cdf = (cdf_at_val - cdf_at_lb + 1e-9).log().sum(dim=-1) - self.log_prob_in_unit_box
         return log_cdf.exp()
 
