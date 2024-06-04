@@ -12,11 +12,12 @@ hydra:
 
 paths:
     root: ${oc.env:BLISS_HOME}
+
     sdss: /data/scratch/sdss
     decals: /data/scratch/decals
     des: /data/scratch/des
     dc2: /data/scratch/dc2local
-    dc2_catalog: ${paths.root}/case_studies/dc2_cataloging/merged_catalog
+
     output: ${paths.root}/output
     pretrained_models: ${paths.data}/pretrained_models
 
@@ -175,9 +176,9 @@ surveys:
         pixel_shift: 2
     dc2:
         _target_: bliss.surveys.dc2.DC2
-        data_dir: /data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
+        data_dir: ${paths.dc2}/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
+        cat_path: ${paths.dc2}/merged_catalog_with_flux_over_50.pkl
         split_result_folder: split_results
-        cat_path: ${paths.dc2_catalog}/merged_catalog_with_flux_over_50.pkl
         batch_size: 64
         n_split: 50
         image_lim: [4000, 4000]
