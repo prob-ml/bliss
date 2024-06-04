@@ -45,6 +45,7 @@ class DarkEnergySurvey(Survey):
     BANDS = ("g", "r", "i", "z")
 
     # cf. https://noirlab.edu/science/programs/ctio/instruments/Dark-Energy-Camera/characteristics
+    GAIN = 4.0  # e-/ADU
     EXPTIME = 90.0  # s
 
     @staticmethod
