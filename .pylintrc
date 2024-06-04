@@ -57,7 +57,7 @@ disable=too-many-ancestors,
 	unnecessary-lambda-assignment,
 
 	# too many false positives
-	no-member,
+	no-member, maybe-no-member, no-value-for-parameter
 
 
 [SIMILARITIES]

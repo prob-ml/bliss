@@ -191,4 +191,4 @@ def bin_target(y: np.array, num_bins: int = 30):
 
 
 if __name__ == "__main__":
-    main()  # pylint: disable=no-value-for-parameter
+    main()
