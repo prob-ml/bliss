@@ -251,11 +251,16 @@ class DetectionPerformance(Metric):
             + ["> " + str(self.mag_bin_cutoffs[-1])]
         )
 
+        n_true_sources = self.n_true_sources
+        n_true_matches = self.n_true_matches
+
         if self.exclude_last_bin:
             precision = precision[:-1]
             recall = recall[:-1]
             f1 = f1[:-1]
             xlabels = xlabels[:-1]
+            n_true_sources = n_true_sources[:-1]
+            n_true_matches = n_true_matches[:-1]
 
         sns.set_theme(style="whitegrid")
         fig, axes = plt.subplots(
@@ -292,20 +297,20 @@ class DetectionPerformance(Metric):
 
         axes[0].step(
             range(len(xlabels)),
-            self.n_true_sources.tolist(),
+            n_true_sources.tolist(),
             label=f"# true sources ({self.source_type_name})",
             where="mid",
             color=c4,
         )
         axes[0].step(
             range(len(xlabels)),
-            self.n_true_matches.tolist(),
+            n_true_matches.tolist(),
             label=f"# BLISS matches ({self.source_type_name})",
             ls="--",
             where="mid",
             color=c4,
         )
-        count_max = self.n_true_sources.max().item()
+        count_max = n_true_sources.max().item()
         count_ticks = np.round(np.linspace(0, count_max, 5), -3)
         axes[0].set_yticks(count_ticks)
         axes[0].set_ylabel("Count")
