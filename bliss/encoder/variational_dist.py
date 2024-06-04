@@ -20,7 +20,7 @@ class VariationalDistSpec(torch.nn.Module):
 
         self.factor_specs = {
             "on_prob": UnconstrainedBernoulli(),
-            "loc": UnconstrainedTDBN(low_clamp=-5),
+            "loc": UnconstrainedTDBN(),
             "galaxy_prob": UnconstrainedBernoulli(),
             # galsim parameters
             "galsim_disk_frac": UnconstrainedLogitNormal(),
