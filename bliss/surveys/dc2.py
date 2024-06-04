@@ -445,8 +445,8 @@ def read_frame_for_band(image_files, bg_files, n, n_bands, image_lim):
     for b in range(n_bands):
         image_frame = fits.open(image_files[b][n])
         bg_frame = fits.open(bg_files[b][n])
-        image_data = image_frame[1].data  # pylint: disable=maybe-no-member
-        bg_data = bg_frame[0].data  # pylint: disable=maybe-no-member
+        image_data = image_frame[1].data
+        bg_data = bg_frame[0].data
 
         if wcs_header_str is None:
             wcs_header_str = image_frame[1].header.tostring()

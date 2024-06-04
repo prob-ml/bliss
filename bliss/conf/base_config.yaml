@@ -12,14 +12,13 @@ hydra:
 
 paths:
     root: ${oc.env:BLISS_HOME}
-    data: ${paths.root}/data
-    sdss: ${paths.data}/sdss
-    decals: ${paths.data}/decals
-    des: ${paths.data}/des
-    dc2: ${paths.data}/dc2
+
+    sdss: /data/scratch/sdss
+    decals: /data/scratch/decals
+    des: /data/scratch/des
+    dc2: /data/scratch/dc2local
+
     output: ${paths.root}/output
-    pretrained_models: ${paths.data}/pretrained_models
-    dc2_catalog: ${paths.root}/case_studies/dc2_cataloging/merged_catalog
 
 global_setting:
     min_flux_threshold: 0  # default 0 to take all sources
@@ -176,9 +175,9 @@ surveys:
         pixel_shift: 2
     dc2:
         _target_: bliss.surveys.dc2.DC2
-        data_dir: /data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
+        data_dir: ${paths.dc2}/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
+        cat_path: ${paths.dc2}/merged_catalog_with_flux_over_50.pkl
         split_result_folder: split_results
-        cat_path: ${paths.dc2_catalog}/merged_catalog_with_flux_over_50.pkl
         batch_size: 64
         n_split: 50
         image_lim: [4000, 4000]
@@ -196,7 +195,7 @@ generate:
     n_image_files: 32
     n_batches_per_file: 16
     simulator: ${simulator}
-    cached_data_path: ${paths.data}/cached_dataset
+    cached_data_path: null
     file_prefix: dataset
 
 train:
