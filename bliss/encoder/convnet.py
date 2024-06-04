@@ -109,10 +109,16 @@ class FeaturesNet(nn.Module):
                 num_channels = 128
                 for _ in range(num_downsample):
                     self.backbone.append(
-                        ConvBlock(num_channels, 2 * num_channels, kernel_size=5, stride=2)
+                        ConvBlock(
+                            num_channels,
+                            2 * num_channels,
+                            kernel_size=5,
+                            stride=2,
+                            padding=2,
+                        )
                     )
                     num_channels *= 2
-                self.backbone.append(ConvBlock(num_channels, num_features, stride=2))
+                self.backbone.append(ConvBlock(num_channels, num_features))
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
