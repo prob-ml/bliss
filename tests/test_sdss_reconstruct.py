@@ -8,10 +8,8 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 class TestSdssReconstruct:
     def test_sdss_reconstruct(self, cfg, decoder):
-        test_data_path = Path("data/tests")
-
         # return catalog and preds like predict_sdss
-        with open(test_data_path / "sdss_preds.pt", "rb") as f:
+        with open(Path(cfg.paths.data) / "sdss_preds.pt", "rb") as f:
             data = torch.load(f)
         tile_cat = TileCatalog(cfg.simulator.prior.tile_slen, data["catalog"])
 

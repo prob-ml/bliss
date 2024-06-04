@@ -4,8 +4,13 @@ defaults:
     - _self_
 
 paths:
-    root: ${oc.env:BLISS_HOME}
     data: ${oc.env:BLISS_HOME}/tests/data
+    sdss: ${paths.data}/sdss
+    decals: ${paths.data}/decals
+    des: ${paths.data}/des
+    dc2: ${paths.data}/dc2
+    dc2_catalog: ${paths.root}/case_studies/dc2/merged_catalog
+    pretrained_models: ${paths.data}/pretrained_models
 
 prior:
     n_tiles_h: 4
@@ -31,7 +36,7 @@ surveys:
               fields: [12]
         load_image_data: true
     dc2:
-        data_dir: ${paths.data}/tests/dc2/dc2_multiband/
+        data_dir: ${paths.data}/dc2/dc2_multiband/
         n_split: 5
         image_lim: [800, 800]
         batch_size: 4

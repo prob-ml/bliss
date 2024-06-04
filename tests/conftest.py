@@ -58,7 +58,7 @@ def decals_setup_teardown(cfg):
     if large_file_existed:
         shutil.move(original_ccds_annotated_path, temp_ccds_annotated_path)
     shutil.copyfile(
-        cfg.paths.data + "/tests/decals/ccds-annotated-decam-dr9-small.fits",
+        cfg.paths.data + "/decals/ccds-annotated-decam-dr9-small.fits",
         original_ccds_annotated_path,
     )
 
@@ -87,13 +87,13 @@ def decoder(cfg):
 
 @pytest.fixture(scope="session")
 def multiband_dataloader(cfg):
-    with open(cfg.paths.data + "/tests/multiband_data/dataset_0.pt", "rb") as f:
+    with open(cfg.paths.data + "/multiband_data/dataset_0.pt", "rb") as f:
         data = torch.load(f)
     return DataLoader(data, batch_size=8, shuffle=False)
 
 
 @pytest.fixture(scope="session")
 def multi_source_dataloader(cfg):
-    with open(cfg.paths.data + "/tests/test_multi_source.pt", "rb") as f:
+    with open(cfg.paths.data + "/test_multi_source.pt", "rb") as f:
         data = torch.load(f)
     return DataLoader(data, batch_size=8, shuffle=False)

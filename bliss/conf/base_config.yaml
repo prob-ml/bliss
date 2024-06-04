@@ -12,14 +12,12 @@ hydra:
 
 paths:
     root: ${oc.env:BLISS_HOME}
-    data: /data/scratch
-    sdss: ${paths.data}/sdss
-    decals: ${paths.data}/decals
-    des: ${paths.data}/des
-    dc2: ${paths.data}/dc2local
-    output: ${paths.root}/output
-    pretrained_models: ${paths.data}/pretrained_models
+    sdss: /data/scratch/sdss
+    decals: /data/scratch/decals
+    des: /data/scratch/des
+    dc2: /data/scratch/dc2local
     dc2_catalog: ${paths.root}/case_studies/dc2/merged_catalog
+    output: ${paths.root}/output
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
