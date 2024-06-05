@@ -12,14 +12,16 @@ hydra:
 
 paths:
     root: ${oc.env:BLISS_HOME}
-    data: ${paths.root}/data
-    sdss: ${paths.data}/sdss
-    decals: ${paths.data}/decals
-    des: ${paths.data}/des
-    dc2: ${paths.data}/dc2
+
+    sdss: /data/scratch/sdss
+    decals: /data/scratch/decals
+    des: /data/scratch/des
+    dc2: /data/scratch/dc2local
+
     output: ${paths.root}/output
-    pretrained_models: ${paths.data}/pretrained_models
-    dc2_catalog: ${paths.root}/case_studies/dc2/merged_catalog
+
+global_setting:
+    min_flux_threshold: 0  # default 0 to take all sources
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
@@ -72,7 +74,8 @@ encoder:
     survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
-    min_flux_threshold: 0  # default 0 to take all sources
+    min_flux_threshold: ${global_setting.min_flux_threshold}  # default 0 to take all sources
+    min_flux_threshold_during_test: 0  # default 0 to take all sources
     optimizer_params:
         lr: 1e-3
     scheduler_params:
@@ -88,10 +91,12 @@ encoder:
         use_clahe: true
         clahe_min_stdev: 200
         asinh_params: null
+        include_background: true
     vd_spec:
         _target_: bliss.encoder.variational_dist.VariationalDistSpec
         survey_bands: ${encoder.survey_bands}
         tile_slen: ${encoder.tile_slen}
+        include_galaxy_property_loss: true
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -168,14 +173,15 @@ surveys:
         pixel_shift: 2
     dc2:
         _target_: bliss.surveys.dc2.DC2
-        data_dir: /data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
+        data_dir: ${paths.dc2}/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
+        cat_path: ${paths.dc2}/merged_catalog_with_flux_over_50.pkl
         split_result_folder: split_results
-        cat_path: ${paths.dc2_catalog}/merged_catalog_with_flux_over_100.pkl
         batch_size: 64
         n_split: 50
         image_lim: [4000, 4000]
         num_workers: 4
-        split_processes_num: 2
+        split_processes_num: 4
+        min_flux_threshold: ${global_setting.min_flux_threshold}
 
 
 #######################################################################
@@ -187,7 +193,7 @@ generate:
     n_image_files: 32
     n_batches_per_file: 16
     simulator: ${simulator}
-    cached_data_path: ${paths.data}/cached_dataset
+    cached_data_path: null
     file_prefix: dataset
 
 train:

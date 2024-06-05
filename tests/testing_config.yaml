@@ -4,7 +4,14 @@ defaults:
     - _self_
 
 paths:
-    dc2_pytest_data: ${paths.root}/case_studies/dc2/pytest_data/
+    test_data: ${oc.env:BLISS_HOME}/tests/data
+
+    sdss: ${paths.test_data}/sdss
+    decals: ${paths.test_data}/decals
+    des: ${paths.test_data}/des
+    dc2: ${paths.test_data}/dc2
+
+    pretrained_models: ${paths.test_data}/pretrained_models
 
 prior:
     n_tiles_h: 4
@@ -30,10 +37,11 @@ surveys:
               fields: [12]
         load_image_data: true
     dc2:
-        data_dir: ${paths.data}/tests/dc2/dc2_multiband/
+        data_dir: ${paths.dc2}/dc2_multiband/
         n_split: 5
         image_lim: [800, 800]
         batch_size: 4
+        split_processes_num: 1
 
 #########################################
 

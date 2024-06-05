@@ -11,11 +11,12 @@ from bliss.encoder.unconstrained_dists import (
 
 
 class VariationalDistSpec(torch.nn.Module):
-    def __init__(self, survey_bands, tile_slen):
+    def __init__(self, survey_bands, tile_slen, include_galaxy_property_loss: bool = True):
         super().__init__()
 
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
+        self.include_galaxy_property_loss = include_galaxy_property_loss
 
         self.factor_specs = {
             "on_prob": UnconstrainedBernoulli(),
@@ -53,18 +54,21 @@ class VariationalDistSpec(torch.nn.Module):
         # override this method to instantiate a subclass of VariationalGrid, e.g.,
         # one with additional distribution parameter groups
         factors = self._parse_factors(x_cat)
-        return VariationalDist(factors, self.survey_bands, self.tile_slen)
+        return VariationalDist(
+            factors, self.survey_bands, self.tile_slen, self.include_galaxy_property_loss
+        )
 
 
 class VariationalDist(torch.nn.Module):
     GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
 
-    def __init__(self, factors, survey_bands, tile_slen):
+    def __init__(self, factors, survey_bands, tile_slen, include_galaxy_property_loss: bool = True):
         super().__init__()
 
         self.factors = factors
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
+        self.include_galaxy_property_loss = include_galaxy_property_loss
 
     def sample(self, use_mode=False) -> TileCatalog:
         """Sample the variational distribution.
@@ -153,10 +157,11 @@ class VariationalDist(torch.nn.Module):
             loss += gal_flux_loss
 
         # galaxy properties loss
-        galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
-        for i, param_name in enumerate(self.GALSIM_NAMES):
-            galsim_pn = f"galsim_{param_name}"
-            loss_term = -q[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
-            loss += loss_term
+        if self.include_galaxy_property_loss:
+            galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
+            for i, param_name in enumerate(self.GALSIM_NAMES):
+                galsim_pn = f"galsim_{param_name}"
+                loss_term = -q[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
+                loss += loss_term
 
         return loss

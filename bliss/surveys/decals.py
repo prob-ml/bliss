@@ -219,7 +219,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
             / brickname
             / f"legacysurvey-{brickname}-image-{bl}.fits"
         )
-        hr = fits.getheader(img_fits_filename, 1)  # pylint: disable=no-member
+        hr = fits.getheader(img_fits_filename, 1)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=FITSFixedWarning)
             wcs = WCS(hr)
@@ -233,7 +233,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
             "flux_calibration_list": np.array([[[flux_calibration]]]),
         }
         if self.load_image_data:
-            image = fits.getdata(img_fits_filename, 1)  # pylint: disable=no-member
+            image = fits.getdata(img_fits_filename, 1)
             image_nelec = image.astype(np.float32) * flux_calibration
             d.update({"image": image_nelec})
         return d
@@ -325,7 +325,7 @@ class DecalsDownloader(SurveyDownloader):
         """Get survey bricks table."""
         if not getattr(cls, "_survey_bricks", None):
             cls.download_survey_bricks()
-        return cls._survey_bricks  # pylint: disable=no-member
+        return cls._survey_bricks
 
     def __init__(self, bricknames, download_dir):
         self.bricknames = bricknames
@@ -504,7 +504,7 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
                     + f"legacysurvey-{brickname}-psfsize-{DECaLS.BANDS[b]}.fits.fz"
                 )
                 brick_fwhm_b = fits.open(brick_fwhm_b_filename)
-                brick_fwhms[b] = brick_fwhm_b[1].data  # pylint: disable=no-member
+                brick_fwhms[b] = brick_fwhm_b[1].data
 
             self.psf_params[brickname] = self._get_fit_file_psf_params(
                 ccds_annotated_filename, bands, ccds_for_brick, brick_fwhms
@@ -516,7 +516,8 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
 
     def _get_psf_coadded(self, brickname, brick_ccds, target_wcs_for_brick):
         """Get co-added PSF images for each band in brick, using CCDs in `brick_ccds`.
-        cf. https://github.com/legacysurvey/legacypipe/blob/ba1ffd4969c1f920566e780118c542d103cbd9a5/py/legacypipe/coadds.py#L486-L519 # noqa: E501 # pylint: disable=line-too-long
+        cf. https://github.com/legacysurvey/legacypipe/blob/
+        ba1ffd4969c1f920566e780118c542d103cbd9a5/py/legacypipe/coadds.py#L486-L519
 
         Args:
             brickname (str): brick name

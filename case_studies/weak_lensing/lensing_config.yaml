@@ -6,8 +6,6 @@ defaults:
 
 paths:
     root: ${oc.env:BLISS_HOME}
-    data: ${paths.root}/data
-    sdss: ${paths.data}/sdss
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior

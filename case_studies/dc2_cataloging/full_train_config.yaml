@@ -1,0 +1,70 @@
+---
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+mode: train
+
+global_setting:
+    min_flux_threshold: 100  # you need to regenerate split_results after changing this number
+
+encoder:
+    survey_bands: ["g", "i", "r", "u", "y", "z"]
+    tile_slen: 4
+    double_detect: false
+    tiles_to_crop: 1
+    min_flux_threshold_during_test: 100
+    do_data_augmentation: true
+    image_normalizer:
+        bands: [0, 1, 2, 3, 4, 5]
+        num_psf_params: 4  # for SDSS, 4 for DC2
+        log_transform_stdevs: []
+        use_clahe: true
+        asinh_params:
+            scale: 1000
+            thresholds: [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738]
+        concat_psf_params: true
+        include_background: false
+    vd_spec:
+        include_galaxy_property_loss: false
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        metrics:
+          detection_performance:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            bin_unit_is_flux: true
+          detection_performance_star:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            source_type_filter: "star"
+            bin_unit_is_flux: true
+          detection_performance_galaxy:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            source_type_filter: "galaxy"
+            bin_unit_is_flux: true
+          source_type_accuracy:
+            _target_: bliss.encoder.metrics.SourceTypeAccuracy
+          flux_error:
+            _target_: bliss.encoder.metrics.FluxError
+            survey_bands: ${encoder.survey_bands}
+          galaxy_shape_error:
+            _target_: bliss.encoder.metrics.GalaxyShapeError
+
+train:
+    trainer:
+        logger:
+            name: DC2_experiments
+            version: DC2_psf_aug_asinh_05-30-2  # change it before running the code
+        strategy:
+          _target_: pytorch_lightning.strategies.DDPStrategy
+          process_group_backend: nccl
+          timeout:
+            _target_: datetime.timedelta
+            seconds: 180000
+        devices: [1, 2]  # change it before running the code
+    data_source: ${surveys.dc2}
+    pretrained_weights: null

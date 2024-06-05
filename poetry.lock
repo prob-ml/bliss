@@ -4374,6 +4374,17 @@ files = [
 global = ["pybind11-global (==2.10.3)"]
 
 [[package]]
+name = "pyclean"
+version = "3.0.0"
+description = "Pure Python cross-platform pyclean. Clean up your Python bytecode."
+optional = false
+python-versions = ">=3.5"
+files = [
+    {file = "pyclean-3.0.0-py3-none-any.whl", hash = "sha256:a1d8114991cf09994bc511cd0b050f3e398ae2bc8bfc0bbd1bdbec8ba048e6dd"},
+    {file = "pyclean-3.0.0.tar.gz", hash = "sha256:a48be7afd512b1923a7b9decc1219bbbe2d73199c939b46c936448f904a180ce"},
+]
+
+[[package]]
 name = "pycodestyle"
 version = "2.8.0"
 description = "Python style guide checker"
@@ -6481,5 +6492,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "2264ab514f2e8a682610bb681574c9aef67cc383872832fad919326e0bf7838d"
-content-hash = "bb1f81bd46a51e5b24a5006ff44398ef3c761c62485aefa526632371c85d00aa"
+content-hash = "8e5415cd380d47ff4b43fc9463486a56f36fdaec54d57964a06bd658127e97fe"

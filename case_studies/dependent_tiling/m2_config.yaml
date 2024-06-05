@@ -20,9 +20,10 @@ encoder:
     metrics:
         _target_: torchmetrics.MetricCollection
         metrics:
-          - _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
-            exclude_last_bin: true
+            detection_performance:
+                _target_: bliss.encoder.metrics.DetectionPerformance
+                mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
+                exclude_last_bin: true
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
