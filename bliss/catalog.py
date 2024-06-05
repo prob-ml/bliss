@@ -53,6 +53,7 @@ class TileCatalog(UserDict):
         "loc_sd",
         "shear",
         "convergence",
+        "membership",
         "redshift",
     }
 
