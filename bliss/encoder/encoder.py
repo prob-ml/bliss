@@ -83,29 +83,38 @@ class Encoder(pl.LightningModule):
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
+        self.compile_model = compile_model
         self.double_detect = double_detect
         self.use_checkerboard = use_checkerboard
         self.reference_band = reference_band
 
+        self.initialize_networks()
+
+    def initialize_networks(self):
+        """Load the convolutional neural networks that map normalized images to catalog parameters.
+        This method can be overridden to use different network architectures.
+        `checkerboard_net` and `second_net` can be left as None if not needed.
+        """
+        assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         ch_per_band = self.image_normalizer.num_channels_per_band()
-        assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         num_features = 256
         self.features_net = FeaturesNet(
-            len(image_normalizer.bands),
+            len(self.image_normalizer.bands),
             ch_per_band,
             num_features,
-            double_downsample=(tile_slen == 4),
+            double_downsample=(self.tile_slen == 4),
         )
-        n_params_per_source = vd_spec.n_params_per_source
+        n_params_per_source = self.vd_spec.n_params_per_source
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
         if self.double_detect:
             self.second_net = CatalogNet(num_features, n_params_per_source)
 
-        if compile_model:
+        if self.compile_model:
             self.features_net = torch.compile(self.features_net)
             self.marginal_net = torch.compile(self.marginal_net)
-            self.checkerboard_net = torch.compile(self.checkerboard_net)
+            if self.use_checkerboard:
+                self.checkerboard_net = torch.compile(self.checkerboard_net)
             if self.double_detect:
                 self.second_net = torch.compile(self.second_net)
 
