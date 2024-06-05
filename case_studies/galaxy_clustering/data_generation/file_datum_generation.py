@@ -10,6 +10,8 @@ from astropy.io import fits
 
 from bliss.catalog import FullCatalog, TileCatalog
 
+# pylint: disable=duplicate-code
+
 TileCatalog.allowed_params.update(["membership", "fracdev", "g1g2"])
 
 MIN_FLUX_THRESHOLD = 0
