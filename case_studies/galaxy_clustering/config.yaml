@@ -37,10 +37,10 @@ train:
         precision: 32-true
 
 encoder:
-    _target_: bliss.encoder.encoder.Encoder
+    _target_: case_studies.galaxy_clustering.encoder.encoder.Encoder
     survey_bands: ["g", "r", "i", "z"]
     vd_spec:
-        _target_: case_studies.galaxy_clustering.variational_dist.GalaxyClusterVariationlDistSpec
+        _target_: case_studies.galaxy_clustering.encoder.variational_dist.GalaxyClusterVariationlDistSpec
         survey_bands: ${encoder.survey_bands}
         tile_slen: ${encoder.tile_slen}
     image_normalizer:
@@ -58,4 +58,4 @@ encoder:
         _convert_: "partial"
         metrics:
             cluster_membership_error:
-                _target_: case_studies.galaxy_clustering.metrics.ClusterMembershipAccuracy
+                _target_: case_studies.galaxy_clustering.encoder.metrics.ClusterMembershipAccuracy
