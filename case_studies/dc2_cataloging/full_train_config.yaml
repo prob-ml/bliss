@@ -10,24 +10,39 @@ global_setting:
     min_flux_threshold: 100  # you need to regenerate split_results after changing this number
 
 encoder:
+    _target_: case_studies.dc2_cataloging.utils.encoder.MyEncoder
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
-    double_detect: false
     tiles_to_crop: 1
+    min_flux_threshold: ${global_setting.min_flux_threshold}
     min_flux_threshold_during_test: 100
-    do_data_augmentation: true
+    optimizer_params:
+        lr: 1e-3
+    scheduler_params:
+        milestones: [32]
+        gamma: 0.1
     image_normalizer:
+        _target_: case_studies.dc2_cataloging.utils.image_normalizer.BasicAsinhImageNormalizer
         bands: [0, 1, 2, 3, 4, 5]
+        include_original: false
+        include_background: false
+        concat_psf_params: true
         num_psf_params: 4  # for SDSS, 4 for DC2
         log_transform_stdevs: []
         use_clahe: true
+        clahe_min_stdev: 200
         asinh_params:
             scale: 1000
             thresholds: [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738]
-        concat_psf_params: true
-        include_background: false
     vd_spec:
-        include_galaxy_property_loss: false
+        _target_: case_studies.dc2_cataloging.utils.variational_dist.VariationalDistSpecExcludeGalaxyParams
+        survey_bands: ${encoder.survey_bands}
+        tile_slen: ${encoder.tile_slen}
+    matcher:
+        _target_: bliss.encoder.metrics.CatalogMatcher
+        dist_slack: 1.0
+        mag_slack: null
+        mag_band: 2  # SDSS r-band
     metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
@@ -48,17 +63,39 @@ encoder:
             bin_unit_is_flux: true
           source_type_accuracy:
             _target_: bliss.encoder.metrics.SourceTypeAccuracy
+            flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+          source_type_accuracy_star:
+            _target_: bliss.encoder.metrics.SourceTypeAccuracy
+            flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+            source_type_filter: "star"
+          source_type_accuracy_galaxy:
+            _target_: bliss.encoder.metrics.SourceTypeAccuracy
+            flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+            source_type_filter: "galaxy"
           flux_error:
             _target_: bliss.encoder.metrics.FluxError
             survey_bands: ${encoder.survey_bands}
-          galaxy_shape_error:
-            _target_: bliss.encoder.metrics.GalaxyShapeError
+          # galaxy_shape_error:
+          #   _target_: bliss.encoder.metrics.GalaxyShapeError
+    sample_image_renders:
+        _target_: torchmetrics.MetricCollection
+        metrics:
+          - _target_: bliss.encoder.sample_image_renders.PlotSampleImages
+            frequency: 1
+            restrict_batch: 0
+            tiles_to_crop: 1
+            tile_slen: ${simulator.prior.tile_slen}
+
+    do_data_augmentation: true
+    compile_model: false
+    double_detect: false
+    use_checkerboard: true
 
 train:
     trainer:
         logger:
             name: DC2_experiments
-            version: DC2_psf_aug_asinh_05-30-2  # change it before running the code
+            version: DC2_psf_aug_asinh_06-06-1  # change it before running the code
         strategy:
           _target_: pytorch_lightning.strategies.DDPStrategy
           process_group_backend: nccl

@@ -1,3 +1,5 @@
+from typing import List
+
 import torch
 from einops import rearrange
 
@@ -11,13 +13,13 @@ from bliss.encoder.unconstrained_dists import (
 
 
 class VariationalDistSpec(torch.nn.Module):
-    def __init__(self, survey_bands, tile_slen, include_galaxy_property_loss: bool = True):
+    def __init__(self, survey_bands, tile_slen):
         super().__init__()
 
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
-        self.include_galaxy_property_loss = include_galaxy_property_loss
 
+        # overriding this dict in subclass enables you to exclude loss
         self.factor_specs = {
             "on_prob": UnconstrainedBernoulli(),
             "loc": UnconstrainedTDBN(),
@@ -55,20 +57,32 @@ class VariationalDistSpec(torch.nn.Module):
         # one with additional distribution parameter groups
         factors = self._parse_factors(x_cat)
         return VariationalDist(
-            factors, self.survey_bands, self.tile_slen, self.include_galaxy_property_loss
+            factors,
+            self.survey_bands,
+            self.tile_slen,
         )
 
 
 class VariationalDist(torch.nn.Module):
     GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
 
-    def __init__(self, factors, survey_bands, tile_slen, include_galaxy_property_loss: bool = True):
+    def __init__(self, factors, survey_bands, tile_slen):
         super().__init__()
 
         self.factors = factors
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
-        self.include_galaxy_property_loss = include_galaxy_property_loss
+        self.factors_name_set = set(self.factors.keys())
+
+        self.location_factors_name_list = ["loc"]
+        self.star_flux_factors_name_list = [f"star_flux_{band}" for band in self.survey_bands]
+        self.source_type_factors_name_list = ["galaxy_prob"]
+        self.galaxy_params_factors_name_list = [f"galsim_{name}" for name in self.GALSIM_NAMES]
+        self.galaxy_flux_factors_name_list = [f"galaxy_flux_{band}" for band in self.survey_bands]
+        self.n_sources_factors_name_list = ["on_prob"]
+
+    def _factors_are_available(self, factors_name_list: List[str]) -> bool:
+        return set(factors_name_list).issubset(self.factors_name_set)
 
     def sample(self, use_mode=False) -> TileCatalog:
         """Sample the variational distribution.
@@ -78,32 +92,42 @@ class VariationalDist(torch.nn.Module):
 
         Returns:
             TileCatalog: Sampled catalog
+
+        Raises:
+            KeyError: factors should have on_prob
         """
         q = self.factors
 
-        locs = q["loc"].mode if use_mode else q["loc"].sample().squeeze(0)
-        est_cat = {"locs": locs}
+        est_cat = {}
+
+        if self._factors_are_available(self.location_factors_name_list):
+            locs = q["loc"].mode if use_mode else q["loc"].sample().squeeze(0)
+            est_cat["locs"] = locs
 
         # populate catalog with per-band (log) star fluxes
-        sf_factors = [q[f"star_flux_{band}"] for band in self.survey_bands]
-        sf_lst = [p.mode if use_mode else p.sample() for p in sf_factors]
-        est_cat["star_fluxes"] = torch.stack(sf_lst, dim=3)
+        if self._factors_are_available(self.star_flux_factors_name_list):
+            sf_factors = [q[factor] for factor in self.star_flux_factors_name_list]
+            sf_lst = [p.mode if use_mode else p.sample() for p in sf_factors]
+            est_cat["star_fluxes"] = torch.stack(sf_lst, dim=3)
 
         # populate catalog with source type
-        galaxy_bools = q["galaxy_prob"].mode if use_mode else q["galaxy_prob"].sample()
-        galaxy_bools = galaxy_bools.unsqueeze(3)
-        star_bools = 1 - galaxy_bools
-        est_cat["source_type"] = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
+        if self._factors_are_available(self.source_type_factors_name_list):
+            galaxy_bools = q["galaxy_prob"].mode if use_mode else q["galaxy_prob"].sample()
+            galaxy_bools = galaxy_bools.unsqueeze(3)
+            star_bools = 1 - galaxy_bools
+            est_cat["source_type"] = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
 
         # populate catalog with galaxy parameters
-        gs_dists = [q[f"galsim_{name}"] for name in self.GALSIM_NAMES]
-        gs_param_lst = [d.icdf(torch.tensor(0.5)) if use_mode else d.sample() for d in gs_dists]
-        est_cat["galaxy_params"] = torch.stack(gs_param_lst, dim=3)
+        if self._factors_are_available(self.galaxy_params_factors_name_list):
+            gs_dists = [q[factor] for factor in self.galaxy_params_factors_name_list]
+            gs_param_lst = [d.icdf(torch.tensor(0.5)) if use_mode else d.sample() for d in gs_dists]
+            est_cat["galaxy_params"] = torch.stack(gs_param_lst, dim=3)
 
         # populate catalog with per-band galaxy fluxes
-        gf_dists = [q[f"galaxy_flux_{band}"] for band in self.survey_bands]
-        gf_lst = [d.icdf(torch.tensor(0.5)) if use_mode else d.sample() for d in gf_dists]
-        est_cat["galaxy_fluxes"] = torch.stack(gf_lst, dim=3)
+        if self._factors_are_available(self.galaxy_flux_factors_name_list):
+            gf_dists = [q[factor] for factor in self.galaxy_flux_factors_name_list]
+            gf_lst = [d.icdf(torch.tensor(0.5)) if use_mode else d.sample() for d in gf_dists]
+            est_cat["galaxy_fluxes"] = torch.stack(gf_lst, dim=3)
 
         # we have to unsqueeze these tensors because a TileCatalog can store multiple
         # light sources per tile, but we sample only one source per tile
@@ -112,7 +136,10 @@ class VariationalDist(torch.nn.Module):
 
         # n_sources is not unsqueezed because it is a single integer per tile regardless of
         # how many light sources are stored per tile
-        est_cat["n_sources"] = q["on_prob"].mode if use_mode else q["on_prob"].sample()
+        if self._factors_are_available(self.n_sources_factors_name_list):
+            est_cat["n_sources"] = q["on_prob"].mode if use_mode else q["on_prob"].sample()
+        else:
+            raise KeyError("factors should have on_prob")
 
         return TileCatalog(self.tile_slen, est_cat)
 
@@ -120,48 +147,74 @@ class VariationalDist(torch.nn.Module):
         q = self.factors
 
         # counter loss
-        counter_loss = -q["on_prob"].log_prob(true_tile_cat.n_sources)
-        loss = counter_loss
+        if self._factors_are_available(self.n_sources_factors_name_list):
+            counter_loss = -q["on_prob"].log_prob(true_tile_cat.n_sources)
+            loss = counter_loss
+        else:
+            raise KeyError("factors should have on_prob")
 
         # all the squeezing/rearranging below is because a TileCatalog can store multiple
         # light sources per tile, which is annoying here, but helpful for storing samples
         # and real catalogs. Still, there may be a better way.
 
         # location loss
-        true_locs = true_tile_cat.locs.squeeze(3)
-        locs_loss = -q["loc"].log_prob(true_locs)
-        locs_loss *= true_tile_cat.n_sources
-        loss += locs_loss
+        if self._factors_are_available(self.location_factors_name_list):
+            true_locs = true_tile_cat.locs.squeeze(3)
+            locs_loss = -q["loc"].log_prob(true_locs)
+            locs_loss *= true_tile_cat.n_sources
+            loss += locs_loss
 
         # star/galaxy classification loss
-        true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
-        binary_loss = -q["galaxy_prob"].log_prob(true_gal_bools)
-        binary_loss *= true_tile_cat.n_sources
-        loss += binary_loss
+        if self._factors_are_available(self.source_type_factors_name_list):
+            true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
+            binary_loss = -q["galaxy_prob"].log_prob(true_gal_bools)
+            binary_loss *= true_tile_cat.n_sources
+            loss += binary_loss
 
         # flux losses
-        true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
-        star_fluxes = rearrange(true_tile_cat["star_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
-        galaxy_fluxes = rearrange(true_tile_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
+        star_galaxy_flux_factors_available = self._factors_are_available(
+            self.star_flux_factors_name_list
+        ) and self._factors_are_available(self.galaxy_flux_factors_name_list)
+        if star_galaxy_flux_factors_available:
+            true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
+            star_fluxes = rearrange(true_tile_cat["star_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
+            galaxy_fluxes = rearrange(
+                true_tile_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd"
+            )
 
-        # only compute loss over bands we're using
-        for i, band in enumerate(self.survey_bands):
-            # star flux loss
-            star_name = f"star_flux_{band}"
-            star_flux_loss = -q[star_name].log_prob(star_fluxes[..., i] + 1e-9) * true_star_bools
-            loss += star_flux_loss
+            # only compute loss over bands we're using
+            sg_flux_name_list = zip(
+                self.star_flux_factors_name_list, self.galaxy_flux_factors_name_list
+            )
+            for i, (star_flux_factor, galaxy_flux_factor) in enumerate(sg_flux_name_list):
+                # star flux loss
+                star_flux_loss = (
+                    -q[star_flux_factor].log_prob(star_fluxes[..., i] + 1e-9) * true_star_bools
+                )
+                loss += star_flux_loss
 
-            # galaxy flux loss
-            gal_name = f"galaxy_flux_{band}"
-            gal_flux_loss = -q[gal_name].log_prob(galaxy_fluxes[..., i] + 1e-9) * true_gal_bools
-            loss += gal_flux_loss
+                # galaxy flux loss
+                gal_flux_loss = (
+                    -q[galaxy_flux_factor].log_prob(galaxy_fluxes[..., i] + 1e-9) * true_gal_bools
+                )
+                loss += gal_flux_loss
+
+        only_one_type_flux = self._factors_are_available(
+            self.star_flux_factors_name_list
+        ) != self._factors_are_available(self.galaxy_flux_factors_name_list)
+        if only_one_type_flux:
+            raise ValueError(
+                "you only use one type (star/galaxy) of flux error, which is not permitted"
+            )
 
         # galaxy properties loss
-        if self.include_galaxy_property_loss:
+        if self._factors_are_available(self.galaxy_params_factors_name_list):
             galsim_true_vals = rearrange(true_tile_cat["galaxy_params"], "b ht wt 1 d -> b ht wt d")
-            for i, param_name in enumerate(self.GALSIM_NAMES):
-                galsim_pn = f"galsim_{param_name}"
-                loss_term = -q[galsim_pn].log_prob(galsim_true_vals[..., i] + 1e-9) * true_gal_bools
+            for i, galaxy_params_factor in enumerate(self.galaxy_params_factors_name_list):
+                loss_term = (
+                    -q[galaxy_params_factor].log_prob(galsim_true_vals[..., i] + 1e-9)
+                    * true_gal_bools
+                )
                 loss += loss_term
 
         return loss
