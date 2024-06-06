@@ -400,6 +400,7 @@ class Dc2FullCatalog(FullCatalog):
                 galaxy_a_b * galaxy_bools,
             )
         ).t()
+        redshift = torch.tensor(catalog["redshift"].values)
 
         keep = galaxy_bools | star_bools
         source_type = torch.from_numpy(np.array(catalog["truth_type"])[keep])
@@ -413,6 +414,7 @@ class Dc2FullCatalog(FullCatalog):
         galaxy_params = galaxy_params[keep]
         galaxy_fluxes = flux[keep]
         objid = objid[keep]
+        redshift = redshift[keep]
 
         pt, pr = wcs.all_world2pix(ra, dec, 0)  # convert to pixel coordinates
         plocs = torch.stack((torch.tensor(pr), torch.tensor(pt)), dim=-1)
@@ -432,6 +434,7 @@ class Dc2FullCatalog(FullCatalog):
 
         plocs = plocs[x_mask]
         source_type = source_type[x_mask]
+        redshift = redshift[x_mask]
 
         nobj = source_type.shape[0]
         d = {
@@ -443,6 +446,7 @@ class Dc2FullCatalog(FullCatalog):
             "galaxy_params": galaxy_params.reshape(1, nobj, 6),
             "star_fluxes": star_fluxes.reshape(1, nobj, 6),
             "star_log_fluxes": star_log_fluxes.reshape(1, nobj, 6),
+            "redshift": redshift.reshape(1, nobj, 1)
         }
 
         return cls(height, width, d), torch.stack(psf_params), match_id

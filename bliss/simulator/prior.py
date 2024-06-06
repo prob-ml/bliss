@@ -8,6 +8,7 @@ import torch
 from scipy.stats import truncpareto
 from torch import Tensor
 from torch.distributions import Gamma, Poisson, Uniform
+import pandas as pd
 
 from bliss.catalog import SourceType, TileCatalog
 
@@ -111,6 +112,23 @@ class CatalogPrior(pl.LightningModule):
         self.reference_band = reference_band
         self.gmm_star, self.gmm_gal = self._load_color_models()
 
+        # self.array = (
+        #     pd.read_csv(
+        #         "/data/scratch/declan/dc2_truth_galaxies_mini_clean.csv",
+        #         header=0,
+        #         dtype={
+        #             "mag_u": float,
+        #             "mag_g": float,
+        #             "mag_r": float,
+        #             "mag_i": float,
+        #             "mag_z": float,
+        #             "redshift": float,
+        #         },
+        #     )
+        #     .to_numpy()[:, 1:]
+        #     .astype(float)
+        # )
+
     def sample(self) -> TileCatalog:
         """Samples latent variables from the prior of an astronomical image.
 
@@ -126,6 +144,7 @@ class CatalogPrior(pl.LightningModule):
 
         n_sources = self._sample_n_sources()
         source_type = self._sample_source_type()
+        # redshift = self._sample_redshift(indices)
 
         catalog_params = {
             "n_sources": n_sources,
@@ -134,6 +153,7 @@ class CatalogPrior(pl.LightningModule):
             "galaxy_fluxes": galaxy_fluxes,
             "galaxy_params": galaxy_params,
             "star_fluxes": star_fluxes,
+            # "redshift": redshift,
         }
 
         return TileCatalog(self.tile_slen, catalog_params)
@@ -177,6 +197,12 @@ class CatalogPrior(pl.LightningModule):
         # select specified bands
         bands = np.array(range(self.n_bands))
         return total_flux[..., bands]
+    
+    # def _sample_indices(self):
+    #     return np.random.choice(range(len(self.array)), size=self.latent_dims, replace=True)
+    
+    # def _sample_redshift(self, indices):
+    #     return torch.from_numpy(np.take(self.array[:, -1], indices))
 
     def _load_color_models(self):
         # Load models from disk

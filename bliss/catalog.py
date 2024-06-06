@@ -144,7 +144,7 @@ class TileCatalog(BaseTileCatalog):
         plocs = self.get_full_locs_from_tiles()
         param_names_to_mask = {"plocs"}.union(set(self.keys()))
         tile_params_to_gather = {"plocs": plocs}
-        tile_params_to_gather.update(self)
+        tile_params_to_gather.update(self)   # add other params
 
         params = {}
         indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()

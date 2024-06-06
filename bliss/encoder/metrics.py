@@ -503,3 +503,79 @@ class GalaxyShapeError(Metric):
             results[f"{gs_name}_mae"] = avg_galsim_param_err[i]
 
         return results
+
+class RedshiftMeanSquaredError(Metric):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # self.add_state("preds", default=torch.tensor([]), dist_reduce_fx="cat")
+        # self.add_state("truth", default=torch.tensor([]), dist_reduce_fx="cat")
+        self.add_state("sum_squared_error", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state("total",  default=torch.zeros(1), dist_reduce_fx="sum")
+
+    def update(self, true_cat, est_cat, matching):
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            self.total += tcat_matches.size(0)
+
+            true_red = true_cat["redshift"][i][tcat_matches]
+            est_red = est_cat["redshift"][i][ecat_matches]
+            red_err = ((true_red - est_red).abs()** 2).sum()
+
+            self.sum_squared_error += red_err
+
+    def compute(self):
+        mse = self.sum_squared_error / self.total
+        return {"Mean squared error": mse.item()}
+
+
+# class RedshiftNLL(Metric):
+#     def __init__(self,  **kwargs):
+#         super().__init__(**kwargs)
+
+#         # self.add_state("preds_loc", default=torch.tensor([]), dist_reduce_fx="cat")
+#         # self.add_state("preds_scale", default=torch.tensor([]), dist_reduce_fx="cat")
+#         # self.add_state("truth", default=torch.tensor([]), dist_reduce_fx="cat")
+#         self.add_state("negative_loglikelihood", default=torch.zeros(1), dist_reduce_fx="sum")
+#         self.add_state("total", default=torch.zeros(1), dist_reduce_fx="sum")
+
+#     def update(self, true_cat, marginal_dist):
+
+#         for i in range(true_cat.shape[0]):
+#             #tcat_matches, ecat_matches = matching[i]
+#             #self.total += tcat_matches.size(0)
+#             self.total += true_cat.shape[0]
+#             est_miu = marginal_dist.factors["redshift"].loc[i]
+#             est_sigma = marginal_dist.factors["redshift"].scale[i]
+#             true_miu = true_cat[i, :, :]
+#             distribution = torch.distributions.Normal(est_miu, est_sigma)
+#             nll = -distribution.log_prob(true_miu)
+#             self.negative_loglikelihood += nll.sum()
+
+
+#     def compute(self):
+
+#         nll = self.negative_loglikelihood / self.total
+#         return {"negative loglikelihood": nll.item()}
+
+# class RedshiftCatastrophicErrorRate(Metric):
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+
+#         self.add_state("catastrophic_errors", default=torch.zeros(1), dist_reduce_fx="sum")
+#         self.add_state("total", default=torch.zeros(1), dist_reduce_fx="sum")
+
+#     def update(self, true_cat, marginal_dist):
+#         for i in range(true_cat.batch_size):
+#             tcat_matches, ecat_matches = matching[i]
+#             self.total += tcat_matches.size(0)
+
+#             est_miu = marginal_dist["redshifts"].loc[i][ecat_matches]
+#             est_sigma = marginal_dist["redshifts"].scale[i][ecat_matches]
+#             true_miu = true_cat["redshifts"].loc[i][tcat_matches]
+#             temp = abs(true_miu - est_miu ) > 5 * est_sigma
+#             self.catastrophic_errors += temp.sum()
+
+
+#     def compute(self):
+#         csr = self.catastrophic_errors.float() / self.total
+#         return {"Catastrophic error rate": csr.item()}
