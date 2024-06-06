@@ -525,7 +525,7 @@ class RedshiftMeanSquaredError(Metric):
 
     def compute(self):
         mse = self.sum_squared_error / self.total
-        return {"Mean squared error": mse.item()}
+        return {"redshift_mse": mse.item()}
 
 
 # class RedshiftNLL(Metric):

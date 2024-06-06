@@ -6,15 +6,6 @@ defaults:
 
 mode: train
 
-paths:
-    root: ${oc.env:BLISS_HOME}
-    data: ${paths.root}/data
-    sdss: ${paths.data}/sdss
-    decals: ${paths.data}/decals
-    des: ${paths.data}/des
-    dc2: ${paths.data}/dc2
-    output: ${paths.root}/output
-
 encoder:
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
@@ -70,6 +61,14 @@ train:
           timeout:
             _target_: datetime.timedelta
             seconds: 180000
+        callbacks:
+            - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+              filename: encoder_{val_loss:.6f}
+              save_top_k: 5
+              verbose: True
+              monitor: val/_loss
+              mode: min
+        val_check_interval: 0.5
         devices: [0, 2, 3, 4]
         # devices: [0]
     data_source: ${surveys.dc2}
