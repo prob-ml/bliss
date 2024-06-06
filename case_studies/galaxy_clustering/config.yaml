@@ -13,7 +13,7 @@ prior:
     gal_color_model_path: ${simulator.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 56
     n_tiles_w: 56
-    tile_slen: 64
+    tile_slen: 8
     batch_size: 1
     max_sources: 6
     mean_sources: 0.48
@@ -37,7 +37,7 @@ train:
         precision: 32-true
 
 encoder:
-    _target_: case_studies.galaxy_clustering.encoder.encoder.Encoder
+    _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
     survey_bands: ["g", "r", "i", "z"]
     vd_spec:
         _target_: case_studies.galaxy_clustering.encoder.variational_dist.GalaxyClusterVariationlDistSpec
