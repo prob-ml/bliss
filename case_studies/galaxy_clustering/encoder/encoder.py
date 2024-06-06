@@ -1,5 +1,6 @@
 from typing import Optional
 
+import pytorch_lightning as pl
 import torch
 from torchmetrics import MetricCollection
 
@@ -55,7 +56,7 @@ class GalaxyClusterEncoder(Encoder):
             reference_band: band to use for filtering sources
             downsample_at_front: whether to downsample at front of network
         """
-        super().__init__()
+        pl.LightningModule.__init__(self)
 
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
