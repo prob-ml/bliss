@@ -145,7 +145,7 @@ class Encoder(pl.LightningModule):
     def interleave_catalogs(self, marginal_cat, cond_cat, marginal_mask):
         d = {}
         mm5d = rearrange(marginal_mask, "b ht wt -> b ht wt 1 1")
-        for k, v in marginal_cat.to_dict().items():
+        for k, v in marginal_cat.items():
             mm = marginal_mask if k == "n_sources" else mm5d
             d[k] = v * mm + cond_cat[k] * (1 - mm)
         return TileCatalog(self.tile_slen, d)

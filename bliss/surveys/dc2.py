@@ -247,7 +247,7 @@ def load_image_and_catalog(
     full_cat, psf_params, match_id = Dc2FullCatalog.from_file(
         cat_path, wcs, height, width, bands, min_flux_threshold
     )
-    tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile().to_dict()
+    tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile()
     tile_dict = squeeze_tile_dict(tile_dict)
     tile_dict["star_fluxes"] = tile_dict["star_fluxes"].clamp(min=1e-18)
     tile_dict["galaxy_fluxes"] = tile_dict["galaxy_fluxes"].clamp(min=1e-18)

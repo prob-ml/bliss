@@ -80,13 +80,13 @@ class TestBasicTileAndFullCatalogs:
         }
         tile_cat = TileCatalog(4, d_tile)
 
-        keys = tile_cat.to_dict().keys()
+        keys = tile_cat.keys()
         assert "locs" in keys
         assert "source_type" in keys
         assert "galaxy_bools" not in keys
 
         full_cat = tile_cat.to_full_catalog()
-        keys = full_cat.to_dict().keys()
+        keys = full_cat.keys()
         assert "plocs" in keys
 
     def test_restrict_tile_cat_to_brightest(self, multi_source_tilecat):

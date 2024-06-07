@@ -50,7 +50,7 @@ class BaseTileCatalog(UserDict):
 
     def to(self, device):
         out = {}
-        for k, v in self.to_dict().items():
+        for k, v in self.items():
             out[k] = v.to(device)
         return type(self)(self.tile_slen, out)
 
@@ -108,7 +108,7 @@ class TileCatalog(BaseTileCatalog):
 
     def crop(self, hlims_tile, wlims_tile):
         out = {}
-        for k, v in self.to_dict().items():
+        for k, v in self.items():
             out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
         return type(self)(self.tile_slen, out)
 
@@ -206,14 +206,6 @@ class TileCatalog(BaseTileCatalog):
         is_on_array = torch.gather(tile_is_on_array, dim=1, index=indices_sorted)
         return indices_sorted, is_on_array
 
-    def to_dict(self) -> Dict[str, Tensor]:
-        out = {}
-        out["locs"] = self["locs"]
-        out["n_sources"] = self["n_sources"]
-        for k, v in self.items():
-            out[k] = v
-        return out
-
     def gather_param_at_tiles(self, param_name: str, indices: Tensor) -> Tensor:
         """Gets the tile parameters at the desired indices.
 
@@ -238,7 +230,7 @@ class TileCatalog(BaseTileCatalog):
         top_indexes = on_fluxes.argsort(dim=3, descending=True)
 
         d = {"n_sources": self["n_sources"]}
-        for key, val in self.to_dict().items():
+        for key, val in self.items():
             if key != "n_sources":
                 param_dim = val.size(-1)
                 idx_to_gather = repeat(top_indexes, "... -> ... pd", pd=param_dim)
@@ -261,14 +253,14 @@ class TileCatalog(BaseTileCatalog):
             return self
 
         if exclude_num >= self.max_sources:
-            tc = TileCatalog(self.tile_slen, self.to_dict())
+            tc = TileCatalog(self.tile_slen, self.data)
             tc["n_sources"] = torch.zeros_like(tc["n_sources"])
             return tc
 
         sorted_self = self._sort_sources_by_flux(band=band)
 
         d = {}
-        for key, val in sorted_self.to_dict().items():
+        for key, val in sorted_self.items():
             if key == "n_sources":
                 d[key] = (sorted_self["n_sources"] - exclude_num).clamp(min=0, max=top_k)
             else:
@@ -295,7 +287,7 @@ class TileCatalog(BaseTileCatalog):
         flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
 
         d = {}
-        for key, val in sorted_self.to_dict().items():
+        for key, val in sorted_self.items():
             if key in {"shear", "convergence"}:
                 d[key] = val
             elif key == "n_sources":
@@ -325,7 +317,7 @@ class TileCatalog(BaseTileCatalog):
 
         d = {}
         ns11 = rearrange(self["n_sources"], "b ht wt -> b ht wt 1 1")
-        for k, v in self.to_dict().items():
+        for k, v in self.items():
             if k == "n_sources":
                 d[k] = v + other[k]
             else:
@@ -396,15 +388,9 @@ class FullCatalog(UserDict):
         assert x.shape[0] == self.batch_size
         assert x.device == self.device
 
-    def to_dict(self) -> Dict[str, Tensor]:
-        out = {}
-        for k, v in self.items():
-            out[k] = v
-        return out
-
     def to(self, device):
         out = {}
-        for k, v in self.to_dict().items():
+        for k, v in self.items():
             out[k] = v.to(device)
         return type(self)(self.height, self.width, out)
 
@@ -448,7 +434,7 @@ class FullCatalog(UserDict):
     def one_source(self, b: int, s: int):
         """Return a dict containing all parameter for one specified light source."""
         out = {}
-        for k, v in self.to_dict().items():
+        for k, v in self.items():
             if k == "n_sources":
                 assert s < v[b]
                 continue
@@ -614,7 +600,7 @@ class FullCatalog(UserDict):
         # Convert dictionary of tensors to list of dictionaries
         on_vals = {}
         is_on_mask = self.is_on_mask
-        for k, v in self.to_dict().items():
+        for k, v in self.items():
             if k == "n_sources":
                 continue
             if k == "galaxy_params":
@@ -692,7 +678,7 @@ class FullCatalog(UserDict):
 
         d = {}
         new_max_sources = plocs_mask.sum(dim=1).max()
-        for k, v in self.to_dict().items():
+        for k, v in self.items():
             if k == "n_sources":
                 d[k] = plocs_mask.sum(dim=1)
             else:
