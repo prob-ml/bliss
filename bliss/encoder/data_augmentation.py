@@ -35,9 +35,7 @@ def augment_data(tile_catalog, image):
         aug_image, aug_full = flip_choice(aug_full, aug_image)
 
     aug_image, aug_full = aug_shift(aug_full, aug_image)
-    aug_tile = (
-        aug_full.to_tile_catalog(4, 4, filter_oob=True).get_brightest_sources_per_tile().to_dict()
-    )
+    aug_tile = aug_full.to_tile_catalog(4, 4, filter_oob=True).get_brightest_sources_per_tile()
     return aug_image, aug_tile
 
 

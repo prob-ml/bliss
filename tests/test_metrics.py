@@ -74,7 +74,7 @@ class TestMetrics:
             bliss_cat = encoder.sample(batch, use_mode=True)
             bliss_cat = bliss_cat.to(torch.device("cpu")).to_full_catalog()
 
-        bliss_cat.plocs += torch.tensor(
+        bliss_cat["plocs"] += torch.tensor(
             [h_lim[0] + cfg.encoder.tile_slen, w_lim[0] + cfg.encoder.tile_slen]
         )  # coords in original image
 

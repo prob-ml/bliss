@@ -132,11 +132,11 @@ class Encoder(pl.LightningModule):
         masked_cat = copy(history_cat)
         # masks not just n_sources; n_sources controls access to all fields.
         # does not mutate history_cat because we aren't using *=
-        masked_cat.n_sources = masked_cat.n_sources * history_mask
+        masked_cat["n_sources"] = masked_cat["n_sources"] * history_mask
 
         # we may want to use richer conditioning information in the future;
         # e.g., a residual image based on the catalog so far
-        detection_history = masked_cat.n_sources > 0
+        detection_history = masked_cat["n_sources"] > 0
 
         context = torch.stack([detection_history, history_mask], dim=1).float()
         x_cat = self.checkerboard_net(x_features, context)
@@ -145,7 +145,7 @@ class Encoder(pl.LightningModule):
     def interleave_catalogs(self, marginal_cat, cond_cat, marginal_mask):
         d = {}
         mm5d = rearrange(marginal_mask, "b ht wt -> b ht wt 1 1")
-        for k, v in marginal_cat.to_dict().items():
+        for k, v in marginal_cat.items():
             mm = marginal_mask if k == "n_sources" else mm5d
             d[k] = v * mm + cond_cat[k] * (1 - mm)
         return TileCatalog(self.tile_slen, d)
@@ -198,7 +198,7 @@ class Encoder(pl.LightningModule):
             est_cat_s = pred["second"].sample(use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
             # if the first detection is empty for that tile
-            est_cat_s.n_sources *= est_cat.n_sources
+            est_cat_s["n_sources"] *= est_cat["n_sources"]
             est_cat = est_cat.union(est_cat_s)
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
@@ -229,13 +229,13 @@ class Encoder(pl.LightningModule):
         nll_marginal_z2 = self._single_detection_nll(target_cat2, pred)
         nll_cond_z1 = pred["second"].compute_nll(target_cat1)
 
-        none_mask = target_cat.n_sources == 0
+        none_mask = target_cat["n_sources"] == 0
         loss0 = nll_marginal_z1 * none_mask
 
-        one_mask = target_cat.n_sources == 1
+        one_mask = target_cat["n_sources"] == 1
         loss1 = (nll_marginal_z1 + nll_cond_z2) * one_mask
 
-        two_mask = target_cat.n_sources >= 2
+        two_mask = target_cat["n_sources"] >= 2
         loss2a = nll_marginal_z1 + nll_cond_z2
         loss2b = nll_marginal_z2 + nll_cond_z1
         lse_stack = torch.stack([loss2a, loss2b], dim=-1)

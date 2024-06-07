@@ -80,7 +80,7 @@ def main(**kwargs):
         tile_catalog = tile_catalog.filter_tile_catalog_by_flux(min_flux=MIN_FLUX_THRESHOLD)
         tile_catalog = tile_catalog.get_brightest_sources_per_tile(band=2, exclude_num=0)
 
-        tile_catalog_dict = tile_catalog.to_dict()
+        tile_catalog_dict = tile_catalog
         for key, value in tile_catalog_dict.items():
             tile_catalog_dict[key] = torch.squeeze(value, 0)
 

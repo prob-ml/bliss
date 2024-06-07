@@ -174,7 +174,7 @@ surveys:
         _target_: bliss.surveys.dc2.DC2
         data_dir: ${paths.dc2}/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
         cat_path: ${paths.dc2}/merged_catalog_with_flux_over_50.pkl
-        split_result_folder: split_results
+        split_results_dir: ${paths.output}/dc2_split_results
         batch_size: 64
         n_split: 50
         image_lim: [4000, 4000]

@@ -55,7 +55,7 @@ class DC2(Survey):
         n_split,
         image_lim,
         num_workers,
-        split_result_folder,
+        split_results_dir,
         split_processes_num,
         min_flux_threshold,
     ):
@@ -73,7 +73,7 @@ class DC2(Survey):
         self.n_split = n_split
         self.image_lim = image_lim
         self.num_workers = num_workers
-        self.split_file_path = pathlib.Path(data_dir) / split_result_folder
+        self.split_results_dir = pathlib.Path(split_results_dir)
         self.split_processes_num = split_processes_num
         self.min_flux_threshold = min_flux_threshold
 
@@ -124,9 +124,9 @@ class DC2(Survey):
         return n_image
 
     def prepare_data(self):  # noqa: WPS324
-        if self.split_file_path.exists():
+        if self.split_results_dir.exists():
             return None
-        self.split_file_path.mkdir(parents=True)
+        self.split_results_dir.mkdir(parents=True)
 
         n_image = self._load_image_and_bg_files_list()
         generate_split_file_params_dict = {
@@ -137,7 +137,7 @@ class DC2(Survey):
             "cat_path": self.cat_path,
             "bands": self.bands,
             "n_split": self.n_split,
-            "split_file_path": self.split_file_path,
+            "split_file_path": self.split_results_dir,
             "min_flux_threshold": self.min_flux_threshold,
         }
 
@@ -158,7 +158,7 @@ class DC2(Survey):
         return None
 
     def setup(self, stage="fit"):
-        self.split_files_list = list(self.split_file_path.glob("split_*.pt"))
+        self.split_files_list = list(self.split_results_dir.glob("split_*.pt"))
         random.Random(218).shuffle(self.split_files_list)
 
         data_len = len(self.split_files_list)
@@ -214,7 +214,9 @@ class DC2(Survey):
 
 
 def squeeze_tile_dict(tile_dict):
-    tile_dict_copy = copy.copy(tile_dict)
+    # by calling `.data` here I circumevent the requirement of TileCatalogs that the length
+    # of the first dimension is the batch size
+    tile_dict_copy = copy.copy(tile_dict).data
     for k, v in tile_dict_copy.items():
         if k != "n_sources":
             tile_dict_copy[k] = rearrange(v, "1 h w nh nw -> h w nh nw")
@@ -247,7 +249,7 @@ def load_image_and_catalog(
     full_cat, psf_params, match_id = Dc2FullCatalog.from_file(
         cat_path, wcs, height, width, bands, min_flux_threshold
     )
-    tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile().to_dict()
+    tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile()
     tile_dict = squeeze_tile_dict(tile_dict)
     tile_dict["star_fluxes"] = tile_dict["star_fluxes"].clamp(min=1e-18)
     tile_dict["galaxy_fluxes"] = tile_dict["galaxy_fluxes"].clamp(min=1e-18)

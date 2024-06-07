@@ -38,6 +38,7 @@ surveys:
         load_image_data: true
     dc2:
         data_dir: ${paths.dc2}/dc2_multiband/
+        split_results_dir: ${paths.output}/dc2_split_results
         n_split: 5
         image_lim: [800, 800]
         batch_size: 4
