@@ -1,6 +1,5 @@
 from typing import Optional
 
-import pytorch_lightning as pl
 import torch
 from torchmetrics import MetricCollection
 
@@ -56,30 +55,27 @@ class GalaxyClusterEncoder(Encoder):
             reference_band: band to use for filtering sources
             downsample_at_front: whether to downsample at front of network
         """
-        pl.LightningModule.__init__(self)
 
-        self.survey_bands = survey_bands
-        self.tile_slen = tile_slen
-        self.tiles_to_crop = tiles_to_crop
-        self.image_normalizer = image_normalizer
-        self.vd_spec = vd_spec
-        self.mode_metrics = metrics.clone()
-        self.sample_metrics = metrics.clone()
-        self.sample_image_renders = sample_image_renders
-        self.matcher = matcher
-        self.min_flux_threshold = min_flux_threshold
-        self.min_flux_threshold_during_test = min_flux_threshold_during_test
-        assert self.min_flux_threshold <= self.min_flux_threshold_during_test, "invalid threshold"
-        self.optimizer_params = optimizer_params
-        self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
-        self.do_data_augmentation = do_data_augmentation
-        self.compile_model = compile_model
-        self.double_detect = double_detect
-        self.use_checkerboard = use_checkerboard
-        self.reference_band = reference_band
         self.downsample_at_front = downsample_at_front
-
-        self.initialize_networks()
+        super().__init__(
+            survey_bands,
+            tile_slen,
+            tiles_to_crop,
+            image_normalizer,
+            vd_spec,
+            metrics,
+            sample_image_renders,
+            matcher,
+            min_flux_threshold,
+            min_flux_threshold_during_test,
+            optimizer_params,
+            scheduler_params,
+            do_data_augmentation,
+            compile_model,
+            double_detect,
+            use_checkerboard,
+            reference_band,
+        )
 
     def initialize_networks(self):
         """Load the convolutional neural networks that map normalized images to catalog parameters.
