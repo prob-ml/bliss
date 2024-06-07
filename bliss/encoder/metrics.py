@@ -344,7 +344,7 @@ class SourceTypeAccuracy(SourceFilterMetric):
         cutoffs = torch.tensor(self.flux_bin_cutoffs, device=self.device)
         n_bins = len(cutoffs) + 1
 
-        true_fluxes = true_cat["on_fluxes"][:, :, self.ref_band].contiguous()
+        true_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
 
         true_filter_bools, _ = self._get_filter_bools(true_cat, est_cat)
 
