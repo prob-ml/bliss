@@ -89,8 +89,8 @@ def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, 
             break
 
         img_id = img_ids[ax_idx]
-        true_n_sources = int(true_cat.n_sources[img_id].item())
-        n_sources = int(est_cat.n_sources[img_id].item())
+        true_n_sources = int(true_cat["n_sources"][img_id].item())
+        n_sources = int(est_cat["n_sources"][img_id].item())
         ax.set_xlabel(f"True num: {true_n_sources}; Est num: {n_sources}")
 
         # add white border showing where centers of stars and galaxies can be
@@ -164,12 +164,12 @@ def plot_plocs(catalog, ax, idx, filter_by="all", bp=0, **kwargs):
         case "star":
             keep = catalog.star_bools[idx, :].squeeze(-1).bool()
         case "all":
-            keep = torch.ones(catalog.max_sources, dtype=torch.bool, device=catalog.plocs.device)
+            keep = torch.ones(catalog.max_sources, dtype=torch.bool, device=catalog["plocs"].device)
         case list():
             keep = filter_by
         case _:
             raise NotImplementedError(f"Unknown filter option {filter} specified")
 
-    plocs = catalog.plocs[idx, keep] + bp
+    plocs = catalog["plocs"][idx, keep] + bp
     plocs = plocs.detach().cpu()
     ax.scatter(plocs[:, 1], plocs[:, 0], **kwargs)

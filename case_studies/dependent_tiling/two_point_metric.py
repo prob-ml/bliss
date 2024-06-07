@@ -16,8 +16,8 @@ class TwoPointMetric(Metric):
 
     def update(self, _true_cat, est_cat, _matching):
         for i in range(est_cat.batch_size):
-            ne_all = est_cat.n_sources[i].item()
-            locs_all = est_cat.plocs[i, :ne_all]
+            ne_all = est_cat["n_sources"][i].item()
+            locs_all = est_cat["plocs"][i, :ne_all]
 
             is_inner = ((locs_all > 10) & (locs_all < 98)).all(dim=1)
             locs_inner = locs_all[is_inner]

@@ -156,15 +156,21 @@ class VariationalDist(torch.nn.Module):
         q = self.factors
 
         # counter loss
+<<<<<<< HEAD
         if self.n_sources_available:
             counter_loss = -q["on_prob"].log_prob(true_tile_cat.n_sources)
             loss = counter_loss
+=======
+        counter_loss = -q["on_prob"].log_prob(true_tile_cat["n_sources"])
+        loss = counter_loss
+>>>>>>> 4c78cbf4 (make locs and n_sources like all the rest)
 
         # all the squeezing/rearranging below is because a TileCatalog can store multiple
         # light sources per tile, which is annoying here, but helpful for storing samples
         # and real catalogs. Still, there may be a better way.
 
         # location loss
+<<<<<<< HEAD
         if self.loc_available:
             true_locs = true_tile_cat.locs.squeeze(3)
             locs_loss = -q["loc"].log_prob(true_locs)
@@ -177,6 +183,18 @@ class VariationalDist(torch.nn.Module):
             binary_loss = -q["galaxy_prob"].log_prob(true_gal_bools)
             binary_loss *= true_tile_cat.n_sources
             loss += binary_loss
+=======
+        true_locs = true_tile_cat["locs"].squeeze(3)
+        locs_loss = -q["loc"].log_prob(true_locs)
+        locs_loss *= true_tile_cat["n_sources"]
+        loss += locs_loss
+
+        # star/galaxy classification loss
+        true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
+        binary_loss = -q["galaxy_prob"].log_prob(true_gal_bools)
+        binary_loss *= true_tile_cat["n_sources"]
+        loss += binary_loss
+>>>>>>> 4c78cbf4 (make locs and n_sources like all the rest)
 
         # flux losses
         star_galaxy_flux_factors_available = self.star_flux_available and self.galaxy_flux_available

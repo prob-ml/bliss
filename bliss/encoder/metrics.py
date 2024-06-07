@@ -30,11 +30,11 @@ class CatalogMatcher:
 
         matching = []
         for i in range(true_cat.batch_size):
-            n_true = int(true_cat.n_sources[i].int().sum().item())
-            n_est = int(est_cat.n_sources[i].int().sum().item())
+            n_true = int(true_cat["n_sources"][i].int().sum().item())
+            n_est = int(est_cat["n_sources"][i].int().sum().item())
 
-            true_locs = true_cat.plocs[i, :n_true]
-            est_locs = est_cat.plocs[i, :n_est]
+            true_locs = true_cat["plocs"][i, :n_true]
+            est_locs = est_cat["plocs"][i, :n_est]
 
             locs_diff = rearrange(true_locs, "i j -> i 1 j") - rearrange(est_locs, "i j -> 1 i j")
             locs_dist = locs_diff.norm(dim=2)
@@ -124,14 +124,15 @@ class DetectionPerformance(SourceFilterMetric):
         assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
 
         if self.mag_band is not None:
-            unit = "on_fluxes" if self.bin_unit_is_flux else "magnitudes"
-            true_mags = true_cat[unit][:, :, self.mag_band].contiguous()
-            est_mags = est_cat[unit][:, :, self.mag_band].contiguous()
+            true_mags = true_cat.on_fluxes if self.bin_unit_is_flux else true_cat.magnitudes
+            true_mags = true_mags[:, :, self.mag_band].contiguous()
+            est_mags = est_cat.on_fluxes if self.bin_unit_is_flux else est_cat.magnitudes
+            est_mags = est_mags[:, :, self.mag_band].contiguous()
         else:
             # hack to match regardless of magnitude; intended for
             # catalogs from surveys with incompatible filter bands
-            true_mags = torch.ones_like(true_cat.plocs[:, :, 0])
-            est_mags = torch.ones_like(est_cat.plocs[:, :, 0])
+            true_mags = torch.ones_like(true_cat["plocs"][:, :, 0])
+            est_mags = torch.ones_like(est_cat["plocs"][:, :, 0])
 
         true_filter_bools, est_filter_bools = self._get_filter_bools(true_cat, est_cat)
 
@@ -145,8 +146,8 @@ class DetectionPerformance(SourceFilterMetric):
             tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
                 device=self.device
             )
-            n_true = true_cat.n_sources[i].sum().item()
-            n_est = est_cat.n_sources[i].sum().item()
+            n_true = true_cat["n_sources"][i].sum().item()
+            n_est = est_cat["n_sources"][i].sum().item()
 
             cur_batch_true_mags = true_mags[i, :n_true]
             cur_batch_est_mags = est_mags[i, :n_est]

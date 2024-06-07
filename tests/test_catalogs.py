@@ -79,8 +79,6 @@ class TestBasicTileAndFullCatalogs:
             "source_type": torch.tensor([[[1], [1]], [[1], [0]]]).reshape((1, 2, 2, 1, 1)),
         }
         tile_cat = TileCatalog(4, d_tile)
-        assert tile_cat.locs.equal(tile_cat["locs"])
-        assert tile_cat.galaxy_bools.equal(tile_cat["galaxy_bools"])
 
         keys = tile_cat.to_dict().keys()
         assert "locs" in keys
@@ -88,14 +86,14 @@ class TestBasicTileAndFullCatalogs:
         assert "galaxy_bools" not in keys
 
         full_cat = tile_cat.to_full_catalog()
-        assert full_cat.plocs.equal(full_cat["plocs"])
-        assert full_cat.galaxy_bools.equal(full_cat["galaxy_bools"])
+        keys = full_cat.to_dict().keys()
+        assert "plocs" in keys
 
     def test_restrict_tile_cat_to_brightest(self, multi_source_tilecat):
         cat = multi_source_tilecat.get_brightest_sources_per_tile(band=2)
         assert cat.max_sources == 1
-        assert cat.n_sources.max() == 1
-        assert cat.n_sources.sum() == 3
+        assert cat["n_sources"].max() == 1
+        assert cat["n_sources"].sum() == 3
         assert cat["galaxy_fluxes"].sum() == 11600.0
         assert cat["galaxy_fluxes"].max() == 10000.0
 
@@ -105,7 +103,7 @@ class TestBasicTileAndFullCatalogs:
     def test_filter_tile_cat_by_flux(self, multi_source_tilecat):
         cat = multi_source_tilecat.filter_tile_catalog_by_flux(300, 2000)
         assert cat.max_sources == 2
-        assert cat.n_sources.sum() == 3
+        assert cat["n_sources"].sum() == 3
         assert cat["galaxy_fluxes"].sum() == 2100.0
         assert cat["galaxy_fluxes"].max() == 1000.0
 
@@ -117,8 +115,8 @@ class TestBasicTileAndFullCatalogs:
             "mags": torch.tensor([20, 23, 22]).reshape(1, 3, 1),
         }
         binned_cat = FullCatalog(40, 40, d).apply_param_bin("mags", 21, 24)
-        new_plocs = binned_cat.plocs[:, 0 : binned_cat.n_sources]
-        new_mags = binned_cat["mags"][:, 0 : binned_cat.n_sources]
+        new_plocs = binned_cat["plocs"][:, 0 : binned_cat["n_sources"]]
+        new_mags = binned_cat["mags"][:, 0 : binned_cat["n_sources"]]
 
         assert new_plocs.shape == (1, 2, 2)
         assert new_mags.max() < 24
@@ -138,14 +136,14 @@ class TestBasicTileAndFullCatalogs:
 
         # should return only first source in first tile.
         tile_cat = full_cat.to_tile_catalog(1, 1, ignore_extra_sources=True)
-        assert torch.equal(tile_cat.n_sources, torch.tensor([[[1, 0], [0, 0]]]))
+        assert torch.equal(tile_cat["n_sources"], torch.tensor([[[1, 0], [0, 0]]]))
 
         # test to_tile_coords and to_full_coords (set max_sources_per_tile to 2)
         convert_full_cat = full_cat.to_tile_catalog(1, 2).to_full_catalog()
-        assert torch.allclose(convert_full_cat.plocs, full_cat.plocs)
+        assert torch.allclose(convert_full_cat["plocs"], full_cat["plocs"])
 
         correct_locs = torch.tensor([[[0.5, 0.5], [0, 0]], [[0, 0], [0, 0]]]).reshape(1, 2, 2, 1, 2)
-        assert torch.allclose(tile_cat.locs, correct_locs)
+        assert torch.allclose(tile_cat["locs"], correct_locs)
 
         correct_gbs = torch.tensor([[[1], [0]], [[0], [0]]]).reshape(1, 2, 2, 1, 1)
         assert torch.equal(tile_cat.galaxy_bools, correct_gbs)

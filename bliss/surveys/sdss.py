@@ -435,12 +435,13 @@ class PhotoFullCatalog(FullCatalog):
         dec = self["dec"].squeeze()
 
         keep = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec >= dec_lim[0]) & (dec <= dec_lim[1])
-        plocs = self.plocs[:, keep]
+        plocs = self["plocs"][:, keep]
         n_sources = torch.tensor([plocs.size()[1]])
 
-        d = {"plocs": plocs, "n_sources": n_sources}
+        d = {"n_sources": n_sources}
         for key, val in self.items():
-            d[key] = val[:, keep]
+            if key != "n_sources":
+                d[key] = val[:, keep]
 
         return PhotoFullCatalog(
             int(plocs[0, :, 0].max() - plocs[0, :, 0].min()),  # new height
