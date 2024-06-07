@@ -27,64 +27,31 @@ class SourceType(IntEnum):
     GALAXY = 1
 
 
-class TileCatalog(UserDict):
-    allowed_params = {
-        "n_source_log_probs",
-        "fluxes",
-        "star_fluxes",
-        "star_log_fluxes",
-        "mags",
-        "ellips",
-        "snr",
-        "blendedness",
-        "source_type",
-        "galaxy_params",
-        "galaxy_fluxes",
-        "galaxy_probs",
-        "galaxy_blends",
-        "objid",
-        "hlr",
-        "ra",
-        "dec",
-        "matched",
-        "mismatched",
-        "detection_thresholds",
-        "log_flux_sd",
-        "loc_sd",
-        "shear",
-        "convergence",
-        "membership",
-        "redshift",
-    }
-
+class BaseTileCatalog(UserDict):
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.tile_slen = tile_slen
-        d = copy(d)  # shallow copy, so we don't mutate the argument
-        self.locs = d.pop("locs")
-        self.n_sources = d.pop("n_sources")
-        self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources = self.locs.shape[:-1]
+        v = next(iter(d.values()))
+        self.batch_size, self.n_tiles_h, self.n_tiles_w = v.shape[:3]
+        self.device = v.device
         super().__init__(**d)
 
     def __setitem__(self, key: str, item: Tensor) -> None:
-        if key not in self.allowed_params:
-            msg = f"The key '{key}' is not in the allowed parameters for {self.__class__}"
-            raise ValueError(msg)
         self._validate(item)
         # TODO: all data should be torch.float32, fix this
         if item.dtype == torch.float64:
             item = item.float()
         super().__setitem__(key, item)
 
+    def _validate(self, x: Tensor):
+        assert isinstance(x, Tensor)
+        assert x.shape[:3] == (self.batch_size, self.n_tiles_h, self.n_tiles_w)
+        assert x.device == self.device
+
     def __getitem__(self, key: str) -> Tensor:
         assert isinstance(key, str)
         if hasattr(self, key):  # noqa: WPS421
             return getattr(self, key)
         return super().__getitem__(key)
-
-    def _validate(self, x: Tensor):
-        assert isinstance(x, Tensor)
-        assert x.shape[:4] == (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
-        assert x.device == self.device
 
     @property
     def height(self) -> int:
@@ -93,6 +60,21 @@ class TileCatalog(UserDict):
     @property
     def width(self) -> int:
         return self.n_tiles_w * self.tile_slen
+
+    def to(self, device):
+        out = {}
+        for k, v in self.to_dict().items():
+            out[k] = v.to(device)
+        return type(self)(self.tile_slen, out)
+
+
+class TileCatalog(BaseTileCatalog):
+    def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
+        d = copy(d)  # shallow copy, so we don't mutate the argument
+        self.locs = d.pop("locs")
+        self.n_sources = d.pop("n_sources")
+        self.max_sources = self.locs.shape[3]
+        super().__init__(tile_slen, d)
 
     @property
     def is_on_mask(self) -> Tensor:
@@ -139,16 +121,6 @@ class TileCatalog(UserDict):
     @property
     def magnitudes(self):
         return convert_nmgy_to_mag(self.on_fluxes)
-
-    @property
-    def device(self):
-        return self.locs.device
-
-    def to(self, device):
-        out = {}
-        for k, v in self.to_dict().items():
-            out[k] = v.to(device)
-        return type(self)(self.tile_slen, out)
 
     def crop(self, hlims_tile, wlims_tile):
         out = {}
@@ -377,8 +349,6 @@ class TileCatalog(UserDict):
 
 
 class FullCatalog(UserDict):
-    allowed_params = TileCatalog.allowed_params
-
     @staticmethod
     def plocs_from_ra_dec(ras, decs, wcs: WCS):
         """Converts RA/DEC coordinates into BLISS's pixel coordinates.
@@ -427,11 +397,6 @@ class FullCatalog(UserDict):
         super().__init__(**d)
 
     def __setitem__(self, key: str, item: Tensor) -> None:
-        if key not in self.allowed_params:
-            raise ValueError(
-                f"The key '{key}' is not in the allowed parameters for FullCatalog"
-                " (check spelling?)"
-            )
         self._validate(item)
         super().__setitem__(key, item)
 

@@ -72,23 +72,6 @@ def multi_source_fullcat():
 
 
 class TestBasicTileAndFullCatalogs:
-    def test_unallowed_param(self):
-        d_tile = {
-            "n_sources": torch.zeros((1, 2, 2)),
-            "locs": torch.zeros((1, 2, 2, 1, 2)),
-            "unallowed": torch.zeros((1, 2, 2, 1, 2)),
-        }
-        with pytest.raises(ValueError):
-            TileCatalog(4, d_tile)
-
-        d_full = {
-            "n_sources": torch.tensor([1]),
-            "plocs": torch.tensor([5, 5]).reshape(1, 1, 2),
-            "unallowed": torch.zeros(1, 1, 1),
-        }
-        with pytest.raises(ValueError):
-            FullCatalog(10, 10, d_full)
-
     def test_param_accessors(self):
         d_tile = {
             "n_sources": torch.tensor([[[[1], [0]], [[1], [1]]]]).reshape((1, 2, 2)),
