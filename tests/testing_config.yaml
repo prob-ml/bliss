@@ -43,6 +43,29 @@ surveys:
         batch_size: 4
         split_processes_num: 1
 
+encoder:
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        metrics:
+            detection_performance:
+                _target_: bliss.encoder.metrics.DetectionPerformance
+                mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
+            source_type_accuracy:
+                _target_: bliss.encoder.metrics.SourceTypeAccuracy
+                flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+            source_type_accuracy_star:
+                _target_: bliss.encoder.metrics.SourceTypeAccuracy
+                flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+                source_type_filter: "star"
+            source_type_accuracy_galaxy:
+                _target_: bliss.encoder.metrics.SourceTypeAccuracy
+                flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+                source_type_filter: "galaxy"
+            flux_error:
+                _target_: bliss.encoder.metrics.FluxError
+                survey_bands: ${encoder.survey_bands}
+
 #########################################
 
 generate:

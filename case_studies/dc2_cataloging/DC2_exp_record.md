@@ -27,7 +27,7 @@ it gives strange results but recovers when rebooting the server
 
 2. add dynamic asinh; use the setting of 05-26-1; run experiment on previous data using 4 GPUs
 
-3. add dynamic asinh; use the setting of 05-26-1; run experiment on current data using 2 GPUs; 
+3. add dynamic asinh; use the setting of 05-26-1; run experiment on current data using 2 GPUs;
 
 (write a test and find that the new DC2 class can generate the same data as previous DC2 does)
 
@@ -171,10 +171,10 @@ processed_asinh_params, _ = processed_asinh_params.view(1, self.num_features, -1
             asinh_params_var = asinh_params.var(dim=2, keepdim=True)
             normalized_asinh_params = (asinh_params - asinh_params_mean) / torch.sqrt(asinh_params_var + 1e-5)
             encoded_asinh_params = self.asinh_param_encoder(normalized_asinh_params.unsqueeze(0))
-            
+
             encoded_backbone_x = self.x_encoder(backbone_x)
             attn_backbone_x = self.merge_block(encoded_backbone_x, encoded_asinh_params)
-        
+
         return backbone_x + attn_backbone_x if asinh_params is not None else backbone_x
 ```
 
@@ -237,7 +237,7 @@ class AsinhParamsPreprocess(nn.Module):
         return x
 
     ...
-    
+
         self.asinh_param_preprocess = AsinhParamsPreprocess(in_channels=2)
         self.asinh_param_encoder = nn.Sequential(*[TransformerBlock(num_features) for _ in range(2)])
         self.x_encoder = nn.Sequential(*[TransformerBlock(num_features) for _ in range(2)])
@@ -253,10 +253,10 @@ class AsinhParamsPreprocess(nn.Module):
             normalized_asinh_params = (asinh_params - asinh_params_mean) / torch.sqrt(asinh_params_var + 1e-5)
             preprocessed_asinh_params = self.asinh_param_preprocess(normalized_asinh_params.unsqueeze(0))
             encoded_asinh_params = self.asinh_param_encoder(preprocessed_asinh_params)
-            
+
             encoded_backbone_x = self.x_encoder(backbone_x)
             attn_backbone_x = self.merge_block(encoded_backbone_x, encoded_asinh_params)
-        
+
         return backbone_x + attn_backbone_x if asinh_params is not None else backbone_x
 
 ```
@@ -271,7 +271,7 @@ class AsinhParamsPreprocess(nn.Module):
                 nn.Upsample(scale_factor=2, mode="nearest"),
                 ConvBlock(nch_hidden_for_asinh_params, nch_hidden_for_asinh_params, use_group_norm=True),
                 nn.Upsample(scale_factor=5, mode="nearest"),
-                ConvBlock(nch_hidden_for_asinh_params, nch_hidden_for_asinh_params, 
+                ConvBlock(nch_hidden_for_asinh_params, nch_hidden_for_asinh_params,
                           kernel_size=7, padding=3, use_group_norm=True),
             )
         else:
@@ -279,7 +279,7 @@ class AsinhParamsPreprocess(nn.Module):
 
     def forward(self, x, asinh_params):
         if self.use_asinh:
-            assert asinh_params is not None 
+            assert asinh_params is not None
         preprocessed_x = self.preprocess3d(x).squeeze(2)
 
         if self.use_asinh:
@@ -301,4 +301,31 @@ class AsinhParamsPreprocess(nn.Module):
 
 1. try to disable flux error, but this will break the model
 
-2. try to diable psf and CLAHE
+2. try to diable psf and CLAHE, and it gives similar results
+
+### 06-04
+
+1. use moving average over per band to process asinh thresholds
+
+2. use moving average over full raw image to process asinh thresholds
+
+3. use moving average over full raw image to process asinh thresholds, and use relu to filter image
+
+```python
+processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.asinh_params["scale"]
+```
+
+### 06-05
+
+1. use the new method, detach tensors when doing asinh normalization, don't normalize asinh params (forget to add psf params)
+
+2. use the new method, and change asinh scale to 100
+
+3. use the new method, detach tensors when using neural network to preporcess asinh params
+
+4. use moving average over full raw image to process asinh thresholds, and set scale to 100
+
+
+### 06-06
+
+1. use the new method but trained using refactored code
