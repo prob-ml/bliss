@@ -38,7 +38,7 @@ class BaseTileCatalog(UserDict):
 
     def __setitem__(self, key: str, item: Tensor) -> None:
         self._validate(item)
-        # TODO: all data should be torch.float32, fix this
+        # TODO: all float data should be torch.float32, fix this
         if item.dtype == torch.float64:
             item = item.float()
         super().__setitem__(key, item)
@@ -70,17 +70,9 @@ class TileCatalog(BaseTileCatalog):
         Returns:
             Tensor indicating how many sources are present for each batch.
         """
-        is_on_mask = torch.zeros(
-            *self["n_sources"].shape,
-            self.max_sources,
-            device=self["n_sources"].device,
-            dtype=torch.bool,
-        )
-
-        for i in range(self.max_sources):
-            is_on_mask[..., i] = self["n_sources"] > i
-
-        return is_on_mask
+        arange = torch.arange(self.max_sources, device=self.device)
+        arange = arange.expand(*self["n_sources"].shape, self.max_sources)
+        return arange < self["n_sources"].unsqueeze(-1)
 
     @property
     def star_bools(self) -> Tensor:
