@@ -65,24 +65,11 @@ class CatalogMatcher:
 
 
 class SourceFilterMetric(Metric):
-    def __init__(self, source_type_filter: str | None):
+    def __init__(self, source_type_filter: str):
         super().__init__()
 
         self.source_type_filter = source_type_filter
-        assert (
-            source_type_filter is None
-            or source_type_filter == "star"
-            or source_type_filter == "galaxy"
-        ), "invalid source_type_filter"
-
-        if self.source_type_filter is None:
-            self.source_type_name = "total"
-        elif self.source_type_filter == "star":
-            self.source_type_name = "star"
-        elif self.source_type_filter == "galaxy":
-            self.source_type_name = "galaxy"
-        else:
-            raise NotImplementedError()
+        assert source_type_filter in {"total", "star", "galaxy"}, "invalid source_type_filter"
 
     def _get_filter_bools(self, true_cat, est_cat):
         if self.source_type_filter == "star":
@@ -91,7 +78,7 @@ class SourceFilterMetric(Metric):
         elif self.source_type_filter == "galaxy":
             true_filter_bools = true_cat.galaxy_bools.squeeze(2)
             est_filter_bools = est_cat.galaxy_bools.squeeze(2)
-        elif self.source_type_filter is None:
+        elif self.source_type_filter == "total":
             true_filter_bools = torch.ones_like(true_cat.star_bools.squeeze(2)).bool()
             est_filter_bools = torch.ones_like(est_cat.star_bools.squeeze(2)).bool()
         else:
@@ -111,7 +98,7 @@ class DetectionPerformance(SourceFilterMetric):
         mag_band: int = 2,
         mag_bin_cutoffs: list = None,
         exclude_last_bin: bool = False,
-        source_type_filter: str = None,
+        source_type_filter: str = "total",
         bin_unit_is_flux: bool = False,
     ):
         super().__init__(source_type_filter)
@@ -153,9 +140,8 @@ class DetectionPerformance(SourceFilterMetric):
 
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            assert len(tcat_matches) == len(
-                ecat_matches
-            ), "tcat_matches and ecat_matches should be of the same size"
+            error_msg = "tcat_matches and ecat_matches should be of the same size"
+            assert len(tcat_matches) == len(ecat_matches), error_msg
             tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
                 device=self.device
             )
@@ -199,18 +185,18 @@ class DetectionPerformance(SourceFilterMetric):
         f1 = 2 * precision * recall / (precision + recall)
 
         detection_precision_name = (
-            f"detection_precision_{self.source_type_name}"
-            if self.source_type_name != "total"
+            f"detection_precision_{self.source_type_filter}"
+            if self.source_type_filter != "total"
             else "detection_precision"
         )
         detection_recall_name = (
-            f"detection_recall_{self.source_type_name}"
-            if self.source_type_name != "total"
+            f"detection_recall_{self.source_type_filter}"
+            if self.source_type_filter != "total"
             else "detection_recall"
         )
         detection_f1_name = (
-            f"detection_f1_{self.source_type_name}"
-            if self.source_type_name != "total"
+            f"detection_f1_{self.source_type_filter}"
+            if self.source_type_filter != "total"
             else "detection_f1"
         )
 
@@ -240,7 +226,7 @@ class DetectionPerformance(SourceFilterMetric):
         precision = (self.n_est_matches / self.n_est_sources).nan_to_num(0)
         f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
 
-        if self.source_type_name == "total":
+        if self.source_type_filter == "total":
             return {
                 "detection_precision": precision,
                 "detection_recall": recall,
@@ -248,9 +234,9 @@ class DetectionPerformance(SourceFilterMetric):
             }
 
         return {
-            f"detection_precision_{self.source_type_name}": precision,
-            f"detection_recall_{self.source_type_name}": recall,
-            f"detection_f1_{self.source_type_name}": f1,
+            f"detection_precision_{self.source_type_filter}": precision,
+            f"detection_recall_{self.source_type_filter}": recall,
+            f"detection_f1_{self.source_type_filter}": f1,
         }
 
     def plot(self):
@@ -287,21 +273,21 @@ class DetectionPerformance(SourceFilterMetric):
             recall.tolist(),
             linestyle="solid",
             color=c1,
-            label=f"BLISS Recall ({self.source_type_name})",
+            label=f"BLISS Recall ({self.source_type_filter})",
         )
         axes[1].plot(
             range(len(xlabels)),
             precision.tolist(),
             linestyle="solid",
             color=c2,
-            label=f"BLISS Precision ({self.source_type_name})",
+            label=f"BLISS Precision ({self.source_type_filter})",
         )
         axes[1].plot(
             range(len(xlabels)),
             f1.tolist(),
             linestyle="solid",
             color=c3,
-            label=f"BLISS F1 ({self.source_type_name})",
+            label=f"BLISS F1 ({self.source_type_filter})",
         )
         axes[1].set_xlabel("Flux" if self.bin_unit_is_flux else "Magnitudes")
         axes[1].set_xticks(range(len(xlabels)))
@@ -312,14 +298,14 @@ class DetectionPerformance(SourceFilterMetric):
         axes[0].step(
             range(len(xlabels)),
             n_true_sources.tolist(),
-            label=f"# true sources ({self.source_type_name})",
+            label=f"# true sources ({self.source_type_filter})",
             where="mid",
             color=c4,
         )
         axes[0].step(
             range(len(xlabels)),
             n_true_matches.tolist(),
-            label=f"# BLISS matches ({self.source_type_name})",
+            label=f"# BLISS matches ({self.source_type_filter})",
             ls="--",
             where="mid",
             color=c4,
@@ -337,7 +323,9 @@ class DetectionPerformance(SourceFilterMetric):
 
 
 class SourceTypeAccuracy(SourceFilterMetric):
-    def __init__(self, flux_bin_cutoffs: list, ref_band: int = 2, source_type_filter: str = None):
+    def __init__(
+        self, flux_bin_cutoffs: list, ref_band: int = 2, source_type_filter: str = "total"
+    ):
         super().__init__(source_type_filter)
 
         self.flux_bin_cutoffs = flux_bin_cutoffs
@@ -381,8 +369,8 @@ class SourceTypeAccuracy(SourceFilterMetric):
             true_gal = true_cat.galaxy_bools[i][tcat_matches][to_bin_mapping]
             est_gal = est_cat.galaxy_bools[i][ecat_matches][to_bin_mapping]
 
-            gal_tp_bool = list(torch.split(true_gal * est_gal, per_bin_elements_count.tolist()))
-            star_tp_bool = list(torch.split(~true_gal * ~est_gal, per_bin_elements_count.tolist()))
+            gal_tp_bool = torch.split(true_gal * est_gal, per_bin_elements_count.tolist())
+            star_tp_bool = torch.split(~true_gal * ~est_gal, per_bin_elements_count.tolist())
 
             gal_tp = torch.tensor([i.sum() for i in gal_tp_bool], device=self.device)
             star_tp = torch.tensor([i.sum() for i in star_tp_bool], device=self.device)
@@ -396,8 +384,8 @@ class SourceTypeAccuracy(SourceFilterMetric):
         acc_per_bin = ((self.gal_tp + self.star_tp) / self.n_matches).nan_to_num(0)
 
         acc_name = (
-            f"classification_acc_{self.source_type_name}"
-            if self.source_type_name != "total"
+            f"classification_acc_{self.source_type_filter}"
+            if self.source_type_filter != "total"
             else "classification_acc"
         )
 
@@ -408,6 +396,18 @@ class SourceTypeAccuracy(SourceFilterMetric):
         return {
             f"{acc_name}": acc.item(),
             **acc_per_bin_results,
+        }
+
+    def get_results_on_per_flux_bin(self):
+        acc = ((self.gal_tp + self.star_tp) / self.n_matches).nan_to_num(0)
+
+        if self.source_type_filter == "total":
+            return {
+                "classification_acc": acc,
+            }
+
+        return {
+            f"classification_acc_{self.source_type_filter}": acc,
         }
 
 

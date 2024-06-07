@@ -58,14 +58,16 @@ class BasicAsinhImageNormalizer(ImageNormalizer):
         processed_images = filtered_images * torch.exp(self.asinh_scales_tensor)
         processed_images = torch.asinh(processed_images)
 
-        return (
-            torch.cat((pre_input_tensor, processed_images), dim=2)
-            if pre_input_tensor is not None
-            else processed_images,
-            torch.stack(
-                (self.asinh_thresholds_tensor.squeeze(), self.asinh_scales_tensor.squeeze())
-            ),
+        if pre_input_tensor is not None:
+            input_tensor = torch.cat((pre_input_tensor, processed_images), dim=2)
+        else:
+            input_tensor = processed_images
+
+        stacked_asinh_params = torch.stack(
+            (self.asinh_thresholds_tensor.squeeze(), self.asinh_scales_tensor.squeeze())
         )
+
+        return input_tensor, stacked_asinh_params
 
 
 class MovingAvgAsinhImageNormalizer(ImageNormalizer):
@@ -107,9 +109,6 @@ class MovingAvgAsinhImageNormalizer(ImageNormalizer):
         self.asinh_quantiles_tensor = torch.tensor([0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99])
         buffer_shape = (self.asinh_buffer_size, *self.asinh_thresholds_tensor.squeeze().shape)
         self.asinh_thresholds_buffer = torch.full(buffer_shape, torch.nan)
-        # it's hard to get the device type of torch.nn.Module
-        # https://stackoverflow.com/questions/58926054/how-to-get-the-device-type-of-a-pytorch-module-conveniently
-        self.device_indicator = torch.nn.Parameter(torch.tensor([0]), requires_grad=False)
 
     def num_channels_per_band(self):
         pre_nch = super().num_channels_per_band()
@@ -119,15 +118,9 @@ class MovingAvgAsinhImageNormalizer(ImageNormalizer):
         pre_input_tensor = super().get_input_tensor(batch)
         raw_images = batch["images"][:, self.bands].unsqueeze(2)
 
-        self.asinh_thresholds_tensor = self.asinh_thresholds_tensor.to(
-            device=self.device_indicator.device
-        )
-        self.asinh_quantiles_tensor = self.asinh_quantiles_tensor.to(
-            device=self.device_indicator.device
-        )
-        self.asinh_thresholds_buffer = self.asinh_thresholds_buffer.to(
-            device=self.device_indicator.device
-        )
+        self.asinh_thresholds_tensor = self.asinh_thresholds_tensor.to(device=raw_images.device)
+        self.asinh_quantiles_tensor = self.asinh_quantiles_tensor.to(device=raw_images.device)
+        self.asinh_thresholds_buffer = self.asinh_thresholds_buffer.to(device=raw_images.device)
 
         if self.training:
             self.asinh_buffer_ptr %= self.asinh_buffer_size
@@ -143,11 +136,13 @@ class MovingAvgAsinhImageNormalizer(ImageNormalizer):
         filtered_images = raw_images - self.asinh_thresholds_tensor
         processed_images = filtered_images * self.asinh_params["scale"]
         processed_images = torch.asinh(processed_images)
-        return (
-            torch.cat((pre_input_tensor, processed_images), dim=2)
-            if pre_input_tensor is not None
-            else processed_images
-        )
+
+        if pre_input_tensor is not None:
+            input_tensor = torch.cat((pre_input_tensor, processed_images), dim=2)
+        else:
+            input_tensor = processed_images
+
+        return input_tensor
 
 
 class PerbandMovingAvgAsinhImageNormalizer(ImageNormalizer):
@@ -191,9 +186,6 @@ class PerbandMovingAvgAsinhImageNormalizer(ImageNormalizer):
         self.asinh_quantiles_tensor = torch.tensor([0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99])
         buffer_shape = (self.asinh_buffer_size, *self.asinh_thresholds_tensor.squeeze().shape)
         self.asinh_thresholds_buffer = torch.full(buffer_shape, torch.nan)
-        # it's hard to get the device type of torch.nn.Module
-        # https://stackoverflow.com/questions/58926054/how-to-get-the-device-type-of-a-pytorch-module-conveniently
-        self.device_indicator = torch.nn.Parameter(torch.tensor([0]), requires_grad=False)
 
     def num_channels_per_band(self):
         pre_nch = super().num_channels_per_band()
@@ -203,15 +195,9 @@ class PerbandMovingAvgAsinhImageNormalizer(ImageNormalizer):
         pre_input_tensor = super().get_input_tensor(batch)
         raw_images = batch["images"][:, self.bands].unsqueeze(2)
 
-        self.asinh_thresholds_tensor = self.asinh_thresholds_tensor.to(
-            device=self.device_indicator.device
-        )
-        self.asinh_quantiles_tensor = self.asinh_quantiles_tensor.to(
-            device=self.device_indicator.device
-        )
-        self.asinh_thresholds_buffer = self.asinh_thresholds_buffer.to(
-            device=self.device_indicator.device
-        )
+        self.asinh_thresholds_tensor = self.asinh_thresholds_tensor.to(device=raw_images.device)
+        self.asinh_quantiles_tensor = self.asinh_quantiles_tensor.to(device=raw_images.device)
+        self.asinh_thresholds_buffer = self.asinh_thresholds_buffer.to(device=raw_images.device)
 
         if self.training:
             self.asinh_buffer_ptr %= self.asinh_buffer_size
@@ -235,8 +221,10 @@ class PerbandMovingAvgAsinhImageNormalizer(ImageNormalizer):
         filtered_images = raw_images - self.asinh_thresholds_tensor
         processed_images = filtered_images * self.asinh_params["scale"]
         processed_images = torch.asinh(processed_images)
-        return (
-            torch.cat((pre_input_tensor, processed_images), dim=2)
-            if pre_input_tensor is not None
-            else processed_images
-        )
+
+        if pre_input_tensor is not None:
+            input_tensor = torch.cat((pre_input_tensor, processed_images), dim=2)
+        else:
+            input_tensor = processed_images
+
+        return input_tensor

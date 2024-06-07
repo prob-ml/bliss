@@ -24,15 +24,6 @@ class ConvBlock(nn.Module):
         return self.activation(self.norm(self.conv(x)))
 
 
-class Detect(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=True)
-
-    def forward(self, x):
-        return self.conv(x).permute([0, 2, 3, 1])
-
-
 class Bottleneck(nn.Module):
     def __init__(self, c1, c2, shortcut=True, e=0.5, use_group_norm=False):
         super().__init__()
@@ -104,59 +95,11 @@ class FeaturesNet(nn.Module):
         asinh_params = x[1]
 
         asinh_params_mean = asinh_params.mean(dim=2, keepdim=True)
-        asinh_params_var = asinh_params.var(dim=2, keepdim=True)
-        normalized_asinh_params = (asinh_params - asinh_params_mean) / torch.sqrt(
-            asinh_params_var + 1e-5
-        )
+        asinh_params_var = asinh_params.var(dim=2, keepdim=True) + 1e-5
+        normalized_asinh_params = (asinh_params - asinh_params_mean) / torch.sqrt(asinh_params_var)
         preprocessed_asinh_params = self.asinh_preprocess(normalized_asinh_params.unsqueeze(0))
         expanded_asinh_params = preprocessed_asinh_params.expand(
             preprocessed_x.shape[0], -1, -1, -1
         ).clone()
 
         return self.backbone(torch.cat((preprocessed_x, expanded_asinh_params), dim=1))
-
-
-class CatalogNet(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-
-        net_layers = [
-            C3(in_channels, 256, n=6),  # 0
-            ConvBlock(256, 512, stride=2),
-            C3(512, 512, n=3, shortcut=False),
-            ConvBlock(512, 256, kernel_size=1, padding=0),
-            nn.Upsample(scale_factor=2, mode="nearest"),  # 4
-            C3(768, 256, n=3, shortcut=False),
-            Detect(256, out_channels),
-        ]
-        self.net_ml = nn.ModuleList(net_layers)
-
-    def forward(self, x):
-        save_lst = [x]
-        for i, m in enumerate(self.net_ml):
-            x = m(x)
-            if i in {0, 4}:
-                save_lst.append(x)
-            if i == 4:
-                x = torch.cat(save_lst, dim=1)
-        return x
-
-
-class ContextNet(nn.Module):
-    def __init__(self, num_features, out_channels):
-        super().__init__()
-
-        context_dim = 64
-        self.encode_context = nn.Sequential(
-            ConvBlock(2, 64),
-            ConvBlock(64, 64),
-            ConvBlock(64, context_dim),
-        )
-        self.merge = ConvBlock(num_features + context_dim, num_features)
-        self.catalog_net = CatalogNet(num_features, out_channels)
-
-    def forward(self, x_features, context):
-        x_context = self.encode_context(context)
-        x = torch.cat((x_features, x_context), dim=1)
-        x = self.merge(x)
-        return self.catalog_net(x)

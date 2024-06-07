@@ -1,7 +1,8 @@
 import torch
 
+from bliss.encoder.convnet import CatalogNet, ContextNet
 from bliss.encoder.encoder import Encoder
-from case_studies.dc2_cataloging.utils.convnet import CatalogNet, ContextNet, FeaturesNet
+from case_studies.dc2_cataloging.utils.convnet import FeaturesNet
 
 
 class MyEncoder(Encoder):
