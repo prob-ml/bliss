@@ -181,10 +181,6 @@ class TestDC2:
         # log transform doesn't work in this test because the DC2 background is sometimes negative.
         # why would the background be negative? are we using the wrong background estimate?
         train_dc2_cfg.encoder.image_normalizer.log_transform_stdevs = []
-        train_dc2_cfg.encoder.image_normalizer.asinh_params = {
-            "scale": 1000,
-            "thresholds": [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738],
-        }
         train_dc2_cfg.encoder.image_normalizer.use_clahe = True
         train_dc2_cfg.encoder.image_normalizer.include_background = False
         train(train_dc2_cfg.train)
