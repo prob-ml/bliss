@@ -54,6 +54,18 @@ class BaseTileCatalog(UserDict):
             out[k] = v.to(device)
         return type(self)(self.tile_slen, out)
 
+    def crop(self, hlims_tile, wlims_tile):
+        out = {}
+        for k, v in self.items():
+            out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
+        return type(self)(self.tile_slen, out)
+
+    def symmetric_crop(self, tiles_to_crop):
+        return self.crop(
+            [tiles_to_crop, self.n_tiles_h - tiles_to_crop],
+            [tiles_to_crop, self.n_tiles_w - tiles_to_crop],
+        )
+
 
 class TileCatalog(BaseTileCatalog):
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
@@ -97,19 +109,6 @@ class TileCatalog(BaseTileCatalog):
     @property
     def magnitudes(self):
         return convert_nmgy_to_mag(self.on_fluxes)
-
-    def crop(self, hlims_tile, wlims_tile):
-        out = {}
-        for k, v in self.items():
-            out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
-        return type(self)(self.tile_slen, out)
-
-    def symmetric_crop(self, tiles_to_crop):
-        _batch_size, tile_height, tile_width = self["n_sources"].shape
-        return self.crop(
-            [tiles_to_crop, tile_height - tiles_to_crop],
-            [tiles_to_crop, tile_width - tiles_to_crop],
-        )
 
     def to_full_catalog(self):
         """Converts image parameters in tiles to parameters of full image.
