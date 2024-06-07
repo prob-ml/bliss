@@ -156,7 +156,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
                 tile_catalog, image_ids, image_id_indices
             )
             return {
-                "tile_catalog": tile_catalog.to_dict(),
+                "tile_catalog": tile_catalog,
                 "images": images,
                 "background": background,
                 "psf_params": psf_params,

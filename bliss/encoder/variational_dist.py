@@ -157,7 +157,7 @@ class VariationalDist(torch.nn.Module):
 
         # counter loss
         if self.n_sources_available:
-            counter_loss = -q["on_prob"].log_prob(true_tile_cat.n_sources)
+            counter_loss = -q["on_prob"].log_prob(true_tile_cat["n_sources"])
             loss = counter_loss
 
         # all the squeezing/rearranging below is because a TileCatalog can store multiple
@@ -166,16 +166,16 @@ class VariationalDist(torch.nn.Module):
 
         # location loss
         if self.loc_available:
-            true_locs = true_tile_cat.locs.squeeze(3)
+            true_locs = true_tile_cat["locs"].squeeze(3)
             locs_loss = -q["loc"].log_prob(true_locs)
-            locs_loss *= true_tile_cat.n_sources
+            locs_loss *= true_tile_cat["n_sources"]
             loss += locs_loss
 
         # star/galaxy classification loss
         if self.source_type_available:
             true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
             binary_loss = -q["galaxy_prob"].log_prob(true_gal_bools)
-            binary_loss *= true_tile_cat.n_sources
+            binary_loss *= true_tile_cat["n_sources"]
             loss += binary_loss
 
         # flux losses

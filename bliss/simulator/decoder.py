@@ -164,7 +164,7 @@ class ImageDecoder(nn.Module):
             Tuple[Tensor, List, Tensor]: tensor of images, list of PSFs, tensor of PSF params
         """
         tile_cat = copy.deepcopy(tile_cat)  # make a copy to avoid modifying input
-        batch_size, n_tiles_h, n_tiles_w = tile_cat.n_sources.shape
+        batch_size, n_tiles_h, n_tiles_w = tile_cat["n_sources"].shape
         assert (
             len(image_ids) == batch_size
         ), "image_ids array should contain `batch_size` identical values"
@@ -197,7 +197,7 @@ class ImageDecoder(nn.Module):
         # TODO: replace this painfully slow loop and remove our dependence on galsim by writing
         # our own vectorized (and GPU accelerated) rendering function using torch.fft/ifft
         for i in range(batch_size):
-            n_sources = int(full_cat.n_sources[i].item())
+            n_sources = int(full_cat["n_sources"][i].item())
             psf = psfs[i]
             for d in range(coadd_depth):
                 depth_band_shifts, depth_band_wcs_list = self.pixel_shifts(
