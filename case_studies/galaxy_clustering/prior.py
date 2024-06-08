@@ -1,8 +1,9 @@
 import pickle
 
+import cluster_utils as utils
 import numpy as np
 import pandas as pd
-from astropy.cosmology.realizations import WMAP7
+from astropy import units
 from hmf import MassFunction
 from scipy.stats import gennorm
 
@@ -16,35 +17,24 @@ class GalaxyClusterPrior:
         self.center_offset = (self.width / 2) - 0.5
         self.bands = ["G", "R", "I", "Z"]
         self.n_bands = 4
-        self.reference_band = 1
+        self.reference_band = 1  # !!! FIX !!!
         self.ra_cen = 50.64516228577292
         self.dec_cen = -40.228830895890404
-        self.mass_min = (10**14.5) * 1.989 * (10**33)  # Minimum value of the range solar mass
-        self.mass_max = (10**15.5) * 1.989 * (10**33)  # Maximum value of the range
+        self.mass_min = (10**14.5) * (units.solMass)  # Minimum value of the range
+        self.mass_max = (10**15.5) * (units.solMass)  # Maximum value of the range
         self.scale_pixels_per_au = 80
         self.mean_sources = 0.004
-        self.tsize_s = 0.64
-        self.tsize_loc = 0.017
-        self.tsize_scale = 0.23
         self.mag_ex = 1.3
         self.mag_max = 25
-        self.bg_min_z = 0
-        self.bg_max_z = 0.3
-        self.cluster_min_z = 0.2
-        self.cluster_max_z = 0.5
         self.G1_beta = 0.6
         self.G1_loc = 0
         self.G1_scale = 0.035
         self.G2_beta = 0.6
         self.G2_loc = 0
         self.G2_scale = 0.032
-        self.tiles_width = 25
-        self.tiles_height = 25
         with open("gal_gmm_nmgy.pkl", "rb") as f:
             self.gmm_gal = pickle.load(f)
         self.tsize_poly = np.poly1d([-6.88890387e-11, 3.70584026e-5, 4.34623392e-2])
-        self.folder_path = "data5/"
-        self.threadings = 8
         self.redshift_alpha = 1.24
         self.redshift_beta = 1.01
         self.redshift0 = 0.51
@@ -66,19 +56,16 @@ class GalaxyClusterPrior:
             "G2",
         ]
 
-    #  Source: https://github.com/LSSTDESC/CLMM/blob/main/clmm/redshift/distributions.py
-    def _redshift_distribution(self, redshift):
-        return (redshift**self.redshift_alpha) * np.exp(
-            -((redshift / self.redshift0) ** self.redshift_beta)
-        )
-
-    def _toflux(self, mag):
-        return 10 ** ((mag - 30) / -2.5)
-
     def _cluster_threshold(self, r):
         return 3 / (2 * np.pi * (r**2))
 
     def _sample_mass(self):
+        """Samples masses in the range [10**14.5, 10**15.5] solar masses.
+        Uses the HMF (Halo Mass Function) package
+
+        Returns:
+            returns self.size samples of masses in the units of solar mass
+        """
         hmf = MassFunction()
         hmf.update(Mmin=14.5, Mmax=15.5)
         mass_func = hmf.dndlnm
@@ -92,54 +79,84 @@ class GalaxyClusterPrior:
                 mass_sample.append(self.mass_min + (sample_mass_index * delta_mass))
         return mass_sample
 
-    def z_to_zis(self, z, mass, size):
-        delta = (WMAP7.H(z).value / 100 * mass / (10**15 * 1.989 * 10**33)) ** (1 / 3) * 1082.9
+    def z_to_zis(self, z, mass, size):  # SUBREDSHFT SAMPLING -- NEEDS TO BE FIXED !!!
+        delta = (utils.hubble_parameter(z).value / 100 * mass / (10**15 * units.solMass)) ** (
+            1 / 3
+        ) * 1082.9
         # light speed
         c = 899377.37
         speed_mean = (c * (1 + z) ** 2 - c) / ((1 + z) ** 2 + 1)
         zi = np.random.normal(speed_mean, delta, size)
         return [max(0, np.sqrt((c + x) / (c - x)) - 1) for x in zi]
 
-    def z_m_to_r(self, mass, z):
-        pho_z = WMAP7.critical_density(z).value
-        return (mass / (4 / 3 * np.pi * pho_z)) ** (1 / 3)
-
     def _sample_redshift(self):
-        redshift_bins = np.linspace(0.01, 7, 100)
-        redshift_pdf = [self._redshift_distribution(z) for z in redshift_bins]
-        redshift_pdf = redshift_pdf / np.sum(redshift_pdf)
-        redshift_samples = np.random.choice(
-            np.linspace(0.01, 7, 100), size=self.size, p=redshift_pdf
-        )
-        for i in range(self.size):
-            redshift_samples[i] += (np.random.random()) * 0.07
-        return redshift_samples
+        """Samples redshifts for the cluster.
+        Sampled using the functional form present in cluster_utils
 
-    def _sample_radius(self, mass_samples, redshift_samples):
+        Returns:
+            returns self.size samples of redshift in the range [0,3]
+        """
+        redshift_bins = np.linspace(0.01, 3, 100)
+        redshift_pdf = [
+            utils.redshift_distribution(z, self.redshift_alpha, self.redshift_beta, self.redshift0)
+            for z in redshift_bins
+        ]
+        redshift_pdf = redshift_pdf / np.sum(redshift_pdf)
+        return np.random.choice(np.linspace(0.01, 3, 100), size=self.size, p=redshift_pdf)
+
+    def _sample_radius(self, mass_samples, redshift_samples):  # !!!!!! NEEDS TO BE FIXED !!!!!!
         radius_samples = []
         for i in range(self.size):
-            unscaled_r = self.z_m_to_r(mass_samples[i], redshift_samples[i])
-            radius_samples.append(unscaled_r * self.scale_pixels_per_au / (3.086 * 10**24))
+            unscaled_r = utils.m200_to_r200(mass_samples[i], redshift_samples[i]).to(units.cm)
+            radius_samples.append(
+                (unscaled_r * self.scale_pixels_per_au / (3.086 * 10**24)).value
+            )
         return radius_samples
 
     def _sample_n_cluster(self, mass_samples):
-        m0 = (1.989 * 10**33) * (1.4 * 10**13)
-        beta = 1.35
+        """Samples number of clustered galaxies for each catalog based on cluster mass.
+        Cluster probability is set to self.cluster_prob
+
+        Args:
+            mass_samples: samples for virial masses in units of solar mass
+
+        Returns:
+            samples of number of clustered galaxies for each corresponding virial mass
+        """
         n_galaxy_cluster = []
         for i in range(self.size):
             if np.random.random() < self.cluster_prob:
-                n_galaxy_cluster.append(int(20 * (mass_samples[i] / m0) ** (1 / beta)))
+                n_galaxy_cluster.append(utils.m200_to_n200(mass_samples[i]))
             else:
                 n_galaxy_cluster.append(0)
         return n_galaxy_cluster
 
     def _sample_center(self):
+        """Samples cluster center on image grid.
+        Sampled uniformly within a bounding box of 60% centered at image center
+
+        Returns:
+            self.size samples of cluster centers
+        """
         x_coords = np.random.uniform(self.width * 0.2, self.width * 0.8, self.size)
         y_coords = np.random.uniform(self.height * 0.2, self.height * 0.8, self.size)
         return np.vstack((x_coords, y_coords)).T
 
-    # Spherical Sampling Method: https://stackoverflow.com/a/5408843
     def _sample_cluster_locs(self, center_samples, radius_samples, n_galaxy_cluster):
+        """Samples locations of clustered galaxies.
+        Galaxies are assumed to be uniformly distributed in a sphere around cluster center
+        We sample uniformly first in spherical coordinates following
+        the sampling method outlined in https://stackoverflow.com/a/5408843
+        Spherical coordinates are converted to cartesian coordinates and then one is discarded
+
+        Args:
+            center_samples: samples of cluster centers
+            radius_samples: cluster radius for each catalog
+            n_galaxy_cluster: number of clustered galaxies in each catalog
+
+        Returns:
+            list of arrays of clustered galaxy locations for each catalog
+        """
         galaxy_locs_cluster = []
         for i in range(self.size):
             center_x, center_y = center_samples[i]
@@ -160,9 +177,25 @@ class GalaxyClusterPrior:
         return galaxy_locs_cluster
 
     def _sample_n_galaxy(self):
+        """Samples number of background galaxies.
+        Assumes a Poisson distribution with 1 added to account for small images
+        Ensures that each catalog has at least 1 background galaxy
+
+        Returns:
+            self.size samples of number of background galaxies
+        """
         return 1 + np.random.poisson(self.mean_sources * self.width * self.height / 49, self.size)
 
     def _sample_galaxy_locs(self, n_galaxy):
+        """Samples locations of background galaxies.
+        Assumed to be uniformly distributed over the image
+
+        Args:
+            n_galaxy: list containing number of background galaxies for each catalog
+
+        Returns:
+            list of arrays of background galaxy locations for each catalog
+        """
         galaxy_locs = []
         for i in range(self.size):
             x = np.random.uniform(0, self.width, n_galaxy[i])
@@ -171,6 +204,16 @@ class GalaxyClusterPrior:
         return galaxy_locs
 
     def cartesian2geo(self, coordinates, pixel_scale=0.2):
+        """Converts cartesian coordinates on the image to (Ra, Dec).
+        Pixel scale assumed to be 0.2, needs to be calibrated with DES
+
+        Args:
+            coordinates: cartesian coordinates of galaxies
+            pixel_scale: pixel_scale to be used for the transformation
+
+        Returns:
+            galactic coordinates of galaxies
+        """
         image_offset = (self.center_offset, self.center_offset)
         sky_center = (self.ra_cen, self.dec_cen)
         geo_coordinates = []
@@ -191,7 +234,10 @@ class GalaxyClusterPrior:
 
     def _sample_redshift_bg(self):
         redshift_bins = np.linspace(0.01, 7, 100)
-        redshift_pdf = [self._redshift_distribution(z) for z in redshift_bins]
+        redshift_pdf = [
+            utils.redshift_distribution(z, self.redshift_alpha, self.redshift_beta, self.redshift0)
+            for z in redshift_bins
+        ]
         redshift_pdf = redshift_pdf / np.sum(redshift_pdf)
         sampled_redshift = np.random.choice(np.linspace(0.01, 7, 100), p=redshift_pdf)
         offset_redshift = (np.random.random()) * 0.07
@@ -205,7 +251,7 @@ class GalaxyClusterPrior:
             for j, _ in enumerate(mag_samples):
                 while mag_samples[j] < 15.75:
                     mag_samples[j] = (self.mag_max - np.random.exponential(self.mag_ex, 1))[0]
-                mag_samples[j] = self._toflux(mag_samples[j])
+                mag_samples[j] = utils.mag_to_flux(mag_samples[j])
                 if j <= len(galaxy_locs_cluster[i]):
                     mag_samples[j] *= 1 + self.z_to_zis(redshift_samples[i], mass_samples[i], 1)[0]
                 else:
@@ -214,6 +260,20 @@ class GalaxyClusterPrior:
         return flux_samples
 
     def _sample_shape(self, galaxy_locs, galaxy_locs_cluster):
+        """Samples shape of galaxies in each catalog.
+        (G1, G2) are both assumed to have a generalized normal distribution
+        We use rejection sampling to ensure:
+            G1^2 + G2^2 <= 1
+            G1 <= 0.8
+            G2 <= 0.8
+
+        Args:
+            galaxy_locs: locations of background galaxies
+            galaxy_locs_cluster: locations of clustered galaxies
+
+        Returns:
+            samples for (G1, G2) for each
+        """
         g1_size_samples = []
         g2_size_samples = []
         for i in range(self.size):

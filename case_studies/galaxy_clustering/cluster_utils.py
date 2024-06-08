@@ -121,3 +121,19 @@ def mag_to_flux(mag):
         flux
     """
     return 10 ** ((mag - 30) / -2.5)
+
+
+def redshift_distribution(z, alpha, beta, z0):
+    """Redshift distribution which follows the functional form in Chang et al (2013).
+    Source: https://github.com/LSSTDESC/CLMM/blob/main/clmm/redshift/distributions.py
+
+    Args:
+        z: redshift
+        alpha: exponent for z
+        beta: exponent for z/z0
+        z0: scaling parameter
+
+    Returns:
+        p(z): the probability density at the given redshift
+    """
+    return (z**alpha) * np.exp(-((z / z0) ** beta))
