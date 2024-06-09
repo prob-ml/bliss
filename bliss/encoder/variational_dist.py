@@ -3,7 +3,7 @@ from typing import List
 import torch
 from einops import rearrange
 
-from bliss.catalog import SourceType, TileCatalog
+from bliss.catalog import TileCatalog
 from bliss.encoder.unconstrained_dists import (
     UnconstrainedBernoulli,
     UnconstrainedLogitNormal,
@@ -81,13 +81,6 @@ class VariationalDist(torch.nn.Module):
         self.galaxy_flux_available = self._factors_are_available(self.galaxy_flux_name_lst)
         self.n_sources_available = self._factors_are_available(self.n_sources_name_lst)
 
-        assert self.loc_available, "factors should have loc"
-        assert self.n_sources_available, "factors should have on_prob"
-
-        two_type_flux = self.star_flux_available == self.galaxy_flux_available
-        error_msg = "you only use one type (star/galaxy) of flux error, which is not permitted"
-        assert two_type_flux, error_msg
-
     def _factors_are_available(self, factors_name_list: List[str]) -> bool:
         return set(factors_name_list).issubset(self.factors_name_set)
 
@@ -104,8 +97,15 @@ class VariationalDist(torch.nn.Module):
 
         est_cat = {}
 
+        # populate catalog with locations
         if self.loc_available:
             est_cat["locs"] = q["locs"].mode if use_mode else q["locs"].sample()
+
+        # populate catalog with source type
+        if self.source_type_available:
+            est_cat["source_type"] = (
+                q["source_type"].mode if use_mode else q["source_type"].sample()
+            ).unsqueeze(-1)
 
         # populate catalog with per-band (log) star fluxes
         if self.star_flux_available:
@@ -113,24 +113,17 @@ class VariationalDist(torch.nn.Module):
                 q["star_fluxes"].mode if use_mode else q["star_fluxes"].sample()
             )
 
-        # populate catalog with source type
-        if self.source_type_available:
-            galaxy_bools = q["source_type"].mode if use_mode else q["source_type"].sample()
-            galaxy_bools = galaxy_bools.unsqueeze(3)
-            star_bools = 1 - galaxy_bools
-            est_cat["source_type"] = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
+        # populate catalog with per-band galaxy fluxes
+        if self.galaxy_flux_available:
+            est_cat["galaxy_fluxes"] = (
+                q["galaxy_fluxes"].mode if use_mode else q["galaxy_fluxes"].sample()
+            )
 
         # populate catalog with galaxy parameters
         if self.galaxy_params_available:
             gs_dists = [q[factor] for factor in self.galsim_params_name_lst]
             gs_param_lst = [d.mode if use_mode else d.sample() for d in gs_dists]
             est_cat["galaxy_params"] = torch.concat(gs_param_lst, dim=3)
-
-        # populate catalog with per-band galaxy fluxes
-        if self.galaxy_flux_available:
-            est_cat["galaxy_fluxes"] = (
-                q["galaxy_fluxes"].mode if use_mode else q["galaxy_fluxes"].sample()
-            )
 
         # we have to unsqueeze these tensors because a TileCatalog can store multiple
         # light sources per tile, but we sample only one source per tile
