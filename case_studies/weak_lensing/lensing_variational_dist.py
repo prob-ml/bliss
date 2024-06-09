@@ -19,7 +19,7 @@ class LensingVariationalDistSpec(VariationalDistSpec):
         # override this method to instantiate a subclass of VariationalGrid, e.g.,
         # one with additional distribution parameter groups
         factors = self._parse_factors(x_cat)
-        return LensingVariationalDist(factors, self.survey_bands, self.tile_slen)
+        return LensingVariationalDist(factors, self.tile_slen)
 
 
 class LensingVariationalDist(VariationalDist):
