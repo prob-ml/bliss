@@ -14,7 +14,7 @@ from bliss.catalog import FullCatalog, TileCatalog
 
 TileCatalog.allowed_params.update(["membership", "fracdev", "g1g2"])
 
-MIN_FLUX_THRESHOLD = 0
+min_flux_for_loss = 0
 DATA_PATH = Path(os.getcwd()) / Path("data")
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
@@ -77,7 +77,7 @@ def main(**kwargs):
             tile_slen=tile_size,
             max_sources_per_tile=12 * tile_size,
         )
-        tile_catalog = tile_catalog.filter_tile_catalog_by_flux(min_flux=MIN_FLUX_THRESHOLD)
+        tile_catalog = tile_catalog.filter_tile_catalog_by_flux(min_flux=min_flux_for_loss)
         tile_catalog = tile_catalog.get_brightest_sources_per_tile(band=2, exclude_num=0)
 
         tile_catalog_dict = tile_catalog
