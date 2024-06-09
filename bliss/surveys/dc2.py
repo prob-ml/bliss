@@ -57,7 +57,7 @@ class DC2(Survey):
         num_workers,
         split_results_dir,
         split_processes_num,
-        min_flux_threshold,
+        min_flux_for_loss,
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -75,7 +75,7 @@ class DC2(Survey):
         self.num_workers = num_workers
         self.split_results_dir = pathlib.Path(split_results_dir)
         self.split_processes_num = split_processes_num
-        self.min_flux_threshold = min_flux_threshold
+        self.min_flux_for_loss = min_flux_for_loss
 
         self.image_files = None
         self.bg_files = None
@@ -138,7 +138,7 @@ class DC2(Survey):
             "bands": self.bands,
             "n_split": self.n_split,
             "split_file_path": self.split_results_dir,
-            "min_flux_threshold": self.min_flux_threshold,
+            "min_flux_for_loss": self.min_flux_for_loss,
         }
 
         if self.split_processes_num > 1:
@@ -200,7 +200,7 @@ class DC2(Survey):
             self.bands,
             self.n_bands,
             self.cat_path,
-            self.min_flux_threshold,
+            self.min_flux_for_loss,
         )
         return {
             "tile_catalog": result_dict["tile_dict"],
@@ -234,7 +234,7 @@ def unsqueeze_tile_dict(tile_dict):
 
 
 def load_image_and_catalog(
-    image_idx, image_files, bg_files, image_lim, bands, n_bands, cat_path, min_flux_threshold
+    image_idx, image_files, bg_files, image_lim, bands, n_bands, cat_path, min_flux_for_loss
 ):
     image_list, bg_list, wcs_header_str = read_frame_for_band(
         image_files, bg_files, image_idx, n_bands, image_lim
@@ -247,7 +247,7 @@ def load_image_and_catalog(
     height = plocs_lim[0]
     width = plocs_lim[1]
     full_cat, psf_params, match_id = Dc2FullCatalog.from_file(
-        cat_path, wcs, height, width, bands, min_flux_threshold
+        cat_path, wcs, height, width, bands, min_flux_for_loss
     )
     tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile()
     tile_dict = squeeze_tile_dict(tile_dict)
@@ -282,7 +282,7 @@ def generate_split_file(image_index, self_copy):
         self_copy["bands"],
         self_copy["n_bands"],
         self_copy["cat_path"],
-        self_copy["min_flux_threshold"],
+        self_copy["min_flux_for_loss"],
     )
 
     image = result_dict["inputs"]["image"]
@@ -355,10 +355,10 @@ class Dc2FullCatalog(FullCatalog):
     """
 
     @classmethod
-    def from_file(cls, cat_path, wcs, height, width, band, min_flux_threshold):
+    def from_file(cls, cat_path, wcs, height, width, band, min_flux_for_loss):
         catalog = pd.read_pickle(cat_path)
         flux_r_band = catalog["flux_r"].values
-        catalog = catalog.loc[flux_r_band > min_flux_threshold]
+        catalog = catalog.loc[flux_r_band > min_flux_for_loss]
         objid = torch.tensor(catalog["id"].values)
         match_id = torch.tensor(catalog["match_objectId"].values)
         ra = torch.tensor(catalog["ra"].values).numpy().squeeze()

@@ -7,7 +7,7 @@ defaults:
 encoder:
     survey_bands: ["r"]
     tile_slen: 4
-    min_flux_threshold: 1.59  # 22 magnitude (0.63 is 23 mag; 0.25 is 24 mag)
+    min_flux_for_loss: 1.59  # 22 magnitude (0.63 is 23 mag; 0.25 is 24 mag)
     double_detect: false
     tiles_to_crop: 1
     image_normalizer:

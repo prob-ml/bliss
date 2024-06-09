@@ -20,9 +20,6 @@ paths:
 
     output: ${paths.root}/output
 
-global_setting:
-    min_flux_threshold: 0  # default 0 to take all sources
-
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
     survey_bands: ["u", "g", "r", "i", "z"]  # SDSS available band filters
@@ -74,8 +71,8 @@ encoder:
     survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
-    min_flux_threshold: ${global_setting.min_flux_threshold}  # default 0 to take all sources
-    min_flux_threshold_during_test: 0  # default 0 to take all sources
+    min_flux_for_loss: 0  # set to 0 to include all sources
+    min_flux_for_metrics: 0  # set to 0 to include all sources
     optimizer_params:
         lr: 1e-3
     scheduler_params:
@@ -180,7 +177,7 @@ surveys:
         image_lim: [4000, 4000]
         num_workers: 4
         split_processes_num: 4
-        min_flux_threshold: ${global_setting.min_flux_threshold}
+        min_flux_for_loss: ${encoder.min_flux_for_loss}
 
 
 #######################################################################

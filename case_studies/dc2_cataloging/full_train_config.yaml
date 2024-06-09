@@ -7,15 +7,15 @@ defaults:
 mode: train
 
 global_setting:
-    min_flux_threshold: 100  # you need to regenerate split_results after changing this number
+    min_flux_for_loss: 100  # you need to regenerate split_results after changing this number
 
 encoder:
     _target_: case_studies.dc2_cataloging.utils.encoder.MyEncoder
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
     tiles_to_crop: 1
-    min_flux_threshold: ${global_setting.min_flux_threshold}
-    min_flux_threshold_during_test: 100
+    min_flux_for_loss: ${global_setting.min_flux_for_loss}
+    min_flux_for_metrics: 100
     optimizer_params:
         lr: 1e-3
     scheduler_params:
