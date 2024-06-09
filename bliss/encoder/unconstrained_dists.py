@@ -85,17 +85,17 @@ class TruncatedDiagonalMVN(Distribution):
         """
 
         shape = sample_shape + self.base_dist.batch_shape + self.base_dist.event_shape
-        uniform_samples = torch.rand(shape, device=self.base_dist.mean.device)
 
-        with torch.no_grad():
-            # draw using inverse cdf method
-            # if Fi is the cdf of the relavant gaussian, then
-            # Gi(u) = Fi(u*(F(b) - F(a)) + F(a)) is the cdf of the truncated gaussian
-            # if u_transformed is within machine precision of 0 or 1
-            # the icdf will be -inf or inf, respectively, so we have to clamp
-            return self.base_dist.base_dist.icdf(
-                uniform_samples * (self.upper_cdf - self.lower_cdf) + self.lower_cdf,
-            ).clamp(self.a, self.b)
+        # draw using inverse cdf method
+        # if Fi is the cdf of the relavant gaussian, then
+        # Gi(u) = Fi(u*(F(b) - F(a)) + F(a)) is the cdf of the truncated gaussian
+        uniform01_samples = torch.rand(shape, device=self.base_dist.mean.device)
+        uniform_fafb = uniform01_samples * (self.upper_cdf - self.lower_cdf) + self.lower_cdf
+        trunc_normal_samples = self.base_dist.base_dist.icdf(uniform_fafb)
+
+        # if u_transformed is within machine precision of 0 or 1
+        # the icdf will be -inf or inf, respectively, so we have to clamp
+        return trunc_normal_samples.clamp(self.a, self.b)
 
     @property
     def a(self):
