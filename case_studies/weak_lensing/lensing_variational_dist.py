@@ -31,7 +31,7 @@ class LensingVariationalDist(VariationalDist):
         Returns:
             TileCatalog: Sampled catalog
         """
-        est_cat = super().sample(use_mode=use_mode)
+        est_cat = {}
 
         q = self.factors
 
