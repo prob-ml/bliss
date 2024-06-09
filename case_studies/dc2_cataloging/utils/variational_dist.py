@@ -11,9 +11,9 @@ class VariationalDistSpecExcludeGalaxyParams(VariationalDistSpec):
         super().__init__(survey_bands, tile_slen)
 
         self.factor_specs = {
-            "on_prob": UnconstrainedBernoulli(),
+            "n_sources": UnconstrainedBernoulli(),
             "locs": UnconstrainedTDBN(),
-            "galaxy_prob": UnconstrainedBernoulli(),
+            "source_type": UnconstrainedBernoulli(),
         }
         for band in survey_bands:
             self.factor_specs[f"star_flux_{band}"] = UnconstrainedLogNormal()

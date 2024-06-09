@@ -21,9 +21,9 @@ class VariationalDistSpec(torch.nn.Module):
 
         # overriding this dict in subclass enables you to exclude loss
         self.factor_specs = {
-            "on_prob": UnconstrainedBernoulli(),
+            "n_sources": UnconstrainedBernoulli(),
             "locs": UnconstrainedTDBN(),
-            "galaxy_prob": UnconstrainedBernoulli(),
+            "source_type": UnconstrainedBernoulli(),
             # galsim parameters
             "galsim_disk_frac": UnconstrainedLogitNormal(),
             "galsim_beta_radians": UnconstrainedLogitNormal(high=torch.pi),
@@ -76,10 +76,10 @@ class VariationalDist(torch.nn.Module):
 
         self.loc_name_lst = ["locs"]
         self.star_flux_name_lst = [f"star_flux_{band}" for band in self.survey_bands]
-        self.source_type_name_lst = ["galaxy_prob"]
+        self.source_type_name_lst = ["source_type"]
         self.galaxy_params_name_lst = [f"galsim_{name}" for name in self.GALSIM_NAMES]
         self.galaxy_flux_name_lst = [f"galaxy_flux_{band}" for band in self.survey_bands]
-        self.n_sources_name_lst = ["on_prob"]
+        self.n_sources_name_lst = ["n_sources"]
 
         self.loc_available = self._factors_are_available(self.loc_name_lst)
         self.star_flux_available = self._factors_are_available(self.star_flux_name_lst)
@@ -112,8 +112,7 @@ class VariationalDist(torch.nn.Module):
         est_cat = {}
 
         if self.loc_available:
-            locs = q["locs"].mode if use_mode else q["locs"].sample().squeeze(0)
-            est_cat["locs"] = locs
+            est_cat["locs"] = q["locs"].mode if use_mode else q["locs"].sample()
 
         # populate catalog with per-band (log) star fluxes
         if self.star_flux_available:
@@ -123,7 +122,7 @@ class VariationalDist(torch.nn.Module):
 
         # populate catalog with source type
         if self.source_type_available:
-            galaxy_bools = q["galaxy_prob"].mode if use_mode else q["galaxy_prob"].sample()
+            galaxy_bools = q["source_type"].mode if use_mode else q["source_type"].sample()
             galaxy_bools = galaxy_bools.unsqueeze(3)
             star_bools = 1 - galaxy_bools
             est_cat["source_type"] = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
@@ -148,7 +147,7 @@ class VariationalDist(torch.nn.Module):
         # n_sources is not unsqueezed because it is a single integer per tile regardless of
         # how many light sources are stored per tile
         if self.n_sources_available:
-            est_cat["n_sources"] = q["on_prob"].mode if use_mode else q["on_prob"].sample()
+            est_cat["n_sources"] = q["n_sources"].mode if use_mode else q["n_sources"].sample()
 
         return TileCatalog(self.tile_slen, est_cat)
 
@@ -157,7 +156,7 @@ class VariationalDist(torch.nn.Module):
 
         # counter loss
         if self.n_sources_available:
-            counter_loss = -q["on_prob"].log_prob(true_tile_cat["n_sources"])
+            counter_loss = -q["n_sources"].log_prob(true_tile_cat["n_sources"])
             loss = counter_loss
 
         # all the squeezing/rearranging below is because a TileCatalog can store multiple
@@ -174,7 +173,7 @@ class VariationalDist(torch.nn.Module):
         # star/galaxy classification loss
         if self.source_type_available:
             true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
-            binary_loss = -q["galaxy_prob"].log_prob(true_gal_bools)
+            binary_loss = -q["source_type"].log_prob(true_gal_bools)
             binary_loss *= true_tile_cat["n_sources"]
             loss += binary_loss
 

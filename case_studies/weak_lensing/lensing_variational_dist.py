@@ -43,7 +43,7 @@ class LensingVariationalDist(VariationalDist):
         est_cat["star_fluxes"] = torch.stack(sf_lst, dim=3)
 
         # populate catalog with source type
-        galaxy_bools = q["galaxy_prob"].mode if use_mode else q["galaxy_prob"].sample()
+        galaxy_bools = q["source_type"].mode if use_mode else q["source_type"].sample()
         galaxy_bools = galaxy_bools.unsqueeze(3)
         star_bools = 1 - galaxy_bools
         est_cat["source_type"] = SourceType.STAR * star_bools + SourceType.GALAXY * galaxy_bools
@@ -73,7 +73,7 @@ class LensingVariationalDist(VariationalDist):
 
         # n_sources is not unsqueezed because it is a single integer per tile regardless of
         # how many light sources are stored per tile
-        est_cat["n_sources"] = q["on_prob"].mode if use_mode else q["on_prob"].sample()
+        est_cat["n_sources"] = q["n_sources"].mode if use_mode else q["n_sources"].sample()
 
         return TileCatalog(self.tile_slen, est_cat)
 

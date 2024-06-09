@@ -73,7 +73,7 @@ class TruncatedDiagonalMVN(Distribution):
     def __repr__(self):
         return f"{self.__class__.__name__}({self.base_dist.base_dist})"
 
-    def sample(self, sample_shape=(1,)):
+    def sample(self, sample_shape=()):
         """Generate sample.
 
         Args:
