@@ -12,7 +12,7 @@ class VariationalDistSpecExcludeGalaxyParams(VariationalDistSpec):
 
         self.factor_specs = {
             "on_prob": UnconstrainedBernoulli(),
-            "loc": UnconstrainedTDBN(),
+            "locs": UnconstrainedTDBN(),
             "galaxy_prob": UnconstrainedBernoulli(),
         }
         for band in survey_bands:

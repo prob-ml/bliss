@@ -34,7 +34,7 @@ class LensingVariationalDist(VariationalDist):
         """
         q = self.factors
 
-        locs = q["loc"].mode if use_mode else q["loc"].sample().squeeze(0)
+        locs = q["locs"].mode if use_mode else q["locs"].sample().squeeze(0)
         est_cat = {"locs": locs}
 
         # populate catalog with per-band (log) star fluxes

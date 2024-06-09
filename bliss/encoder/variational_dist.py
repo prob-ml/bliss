@@ -22,7 +22,7 @@ class VariationalDistSpec(torch.nn.Module):
         # overriding this dict in subclass enables you to exclude loss
         self.factor_specs = {
             "on_prob": UnconstrainedBernoulli(),
-            "loc": UnconstrainedTDBN(low_clamp=-5),
+            "locs": UnconstrainedTDBN(),
             "galaxy_prob": UnconstrainedBernoulli(),
             # galsim parameters
             "galsim_disk_frac": UnconstrainedLogitNormal(),
@@ -74,7 +74,7 @@ class VariationalDist(torch.nn.Module):
         self.tile_slen = tile_slen
         self.factors_name_set = set(self.factors.keys())
 
-        self.loc_name_lst = ["loc"]
+        self.loc_name_lst = ["locs"]
         self.star_flux_name_lst = [f"star_flux_{band}" for band in self.survey_bands]
         self.source_type_name_lst = ["galaxy_prob"]
         self.galaxy_params_name_lst = [f"galsim_{name}" for name in self.GALSIM_NAMES]
@@ -112,7 +112,7 @@ class VariationalDist(torch.nn.Module):
         est_cat = {}
 
         if self.loc_available:
-            locs = q["loc"].mode if use_mode else q["loc"].sample().squeeze(0)
+            locs = q["locs"].mode if use_mode else q["locs"].sample().squeeze(0)
             est_cat["locs"] = locs
 
         # populate catalog with per-band (log) star fluxes
@@ -167,7 +167,7 @@ class VariationalDist(torch.nn.Module):
         # location loss
         if self.loc_available:
             true_locs = true_tile_cat["locs"].squeeze(3)
-            locs_loss = -q["loc"].log_prob(true_locs)
+            locs_loss = -q["locs"].log_prob(true_locs)
             locs_loss *= true_tile_cat["n_sources"]
             loss += locs_loss
 
