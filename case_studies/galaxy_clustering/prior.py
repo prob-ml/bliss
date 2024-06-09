@@ -233,15 +233,7 @@ class GalaxyClusterPrior:
         return t_size_samples
 
     def _sample_redshift_bg(self):
-        redshift_bins = np.linspace(0.01, 7, 100)
-        redshift_pdf = [
-            utils.redshift_distribution(z, self.redshift_alpha, self.redshift_beta, self.redshift0)
-            for z in redshift_bins
-        ]
-        redshift_pdf = redshift_pdf / np.sum(redshift_pdf)
-        sampled_redshift = np.random.choice(np.linspace(0.01, 7, 100), p=redshift_pdf)
-        offset_redshift = (np.random.random()) * 0.07
-        return sampled_redshift + offset_redshift
+        return np.random.uniform(0.01, 7)
 
     def _sample_flux(self, galaxy_locs, galaxy_locs_cluster, redshift_samples, mass_samples):
         flux_samples = []
