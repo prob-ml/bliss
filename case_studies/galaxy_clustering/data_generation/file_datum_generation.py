@@ -10,10 +10,6 @@ from astropy.io import fits
 
 from bliss.catalog import FullCatalog, TileCatalog
 
-# pylint: disable=duplicate-code
-
-TileCatalog.allowed_params.update(["membership", "fracdev", "g1g2"])
-
 min_flux_for_loss = 0
 DATA_PATH = Path(os.getcwd()) / Path("data")
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
