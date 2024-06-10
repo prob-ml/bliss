@@ -25,25 +25,25 @@ encoder:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
         metrics:
-          detection_performance:
-            _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            bin_unit_is_flux: true
-          detection_performance_star:
-            _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            source_type_filter: "star"
-            bin_unit_is_flux: true
-          detection_performance_galaxy:
-            _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            source_type_filter: "galaxy"
-            bin_unit_is_flux: true
-          source_type_accuracy:
-            _target_: bliss.encoder.metrics.SourceTypeAccuracy
-          flux_error:
-            _target_: bliss.encoder.metrics.FluxError
-            survey_bands: ${encoder.survey_bands}
+          # detection_performance:
+          #   _target_: bliss.encoder.metrics.DetectionPerformance
+          #   mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+          #   bin_unit_is_flux: true
+          # detection_performance_star:
+          #   _target_: bliss.encoder.metrics.DetectionPerformance
+          #   mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+          #   source_type_filter: "star"
+          #   bin_unit_is_flux: true
+          # detection_performance_galaxy:
+          #   _target_: bliss.encoder.metrics.DetectionPerformance
+          #   mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+          #   source_type_filter: "galaxy"
+          #   bin_unit_is_flux: true
+          # source_type_accuracy:
+          #   _target_: bliss.encoder.metrics.SourceTypeAccuracy
+          # flux_error:
+          #   _target_: bliss.encoder.metrics.FluxError
+          #   survey_bands: ${encoder.survey_bands}
           # galaxy_shape_error:
           #   _target_: bliss.encoder.metrics.GalaxyShapeError
           redshift_mearn_square_error:
@@ -53,7 +53,7 @@ train:
     trainer:
         logger:
             name: DC2_redshift
-            version: DC2_psf_aug_asinh
+            version: DC2_redshift_only
         precision: 32
         strategy:
           _target_: pytorch_lightning.strategies.DDPStrategy
@@ -69,7 +69,7 @@ train:
               monitor: val/_loss
               mode: min
         val_check_interval: 0.5
-        devices: [0, 2, 3, 4]
-        # devices: [0]
+        # devices: [0, 2, 3, 4]
+        devices: [0]
     data_source: ${surveys.dc2}
     pretrained_weights: null
