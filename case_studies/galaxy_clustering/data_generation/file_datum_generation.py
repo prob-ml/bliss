@@ -10,10 +10,6 @@ from astropy.io import fits
 
 from bliss.catalog import FullCatalog, TileCatalog
 
-# pylint: disable=duplicate-code
-
-TileCatalog.allowed_params.update(["membership", "fracdev", "g1g2"])
-
 min_flux_for_loss = 0
 DATA_PATH = Path(os.getcwd()) / Path("data")
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
@@ -31,7 +27,7 @@ COL_NAMES = (
     "FLUX_G",
     "FLUX_I",
     "FLUX_Z",
-    "TSIZE",
+    "HLR",
     "FRACDEV",
     "G1",
     "G2",
@@ -69,7 +65,7 @@ def main(**kwargs):
         catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
         catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
         catalog_dict["galaxy_params"] = torch.tensor(
-            [catalog[["TSIZE", "G1", "G2", "FRACDEV"]].to_numpy()]
+            [catalog[["HLR", "G1", "G2", "FRACDEV"]].to_numpy()]
         )
         catalog_dict["source_type"] = torch.ones_like(catalog_dict["membership"])
         full_catalog = FullCatalog(height=image_size, width=image_size, d=catalog_dict)
@@ -80,8 +76,8 @@ def main(**kwargs):
         tile_catalog = tile_catalog.filter_tile_catalog_by_flux(min_flux=min_flux_for_loss)
         tile_catalog = tile_catalog.get_brightest_sources_per_tile(band=2, exclude_num=0)
 
-        tile_catalog_dict = tile_catalog
-        for key, value in tile_catalog_dict.items():
+        tile_catalog_dict = {}
+        for key, value in tile_catalog.items():
             tile_catalog_dict[key] = torch.squeeze(value, 0)
 
         filename = catalog_path.stem
