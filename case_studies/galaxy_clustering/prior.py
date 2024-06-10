@@ -1,11 +1,12 @@
 import pickle
 
-import cluster_utils as utils
 import numpy as np
 import pandas as pd
 from astropy import units
 from hmf import MassFunction
 from scipy.stats import gennorm
+
+from case_studies.galaxy_clustering import cluster_utils as utils
 
 
 class GalaxyClusterPrior:
