@@ -10,6 +10,8 @@ from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDistSpec
 from case_studies.galaxy_clustering.encoder.convnet import GalaxyClusterFeaturesNet
 
+# pylint: disable=duplicate-code
+
 
 class GalaxyClusterEncoder(Encoder):
     def __init__(
