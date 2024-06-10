@@ -31,7 +31,7 @@ COL_NAMES = (
     "FLUX_G",
     "FLUX_I",
     "FLUX_Z",
-    "TSIZE",
+    "HLR",
     "FRACDEV",
     "G1",
     "G2",
@@ -69,7 +69,7 @@ def main(**kwargs):
         catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
         catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
         catalog_dict["galaxy_params"] = torch.tensor(
-            [catalog[["TSIZE", "G1", "G2", "FRACDEV"]].to_numpy()]
+            [catalog[["HLR", "G1", "G2", "FRACDEV"]].to_numpy()]
         )
         catalog_dict["source_type"] = torch.ones_like(catalog_dict["membership"])
         full_catalog = FullCatalog(height=image_size, width=image_size, d=catalog_dict)
