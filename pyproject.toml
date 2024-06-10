@@ -42,6 +42,7 @@ astropy = ">=4.2.1"
 galsim = ">=2.4.10"
 reproject = ">=0.11.0"
 pyvo = "^1.4.1"
+colossus = "^1.3.5"
 
 [tool.poetry.dev-dependencies]
 Cython = ">=0.29.21"

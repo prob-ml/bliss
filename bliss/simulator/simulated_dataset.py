@@ -271,3 +271,7 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
         return DataLoader(
             self.data[self.slices[2]], batch_size=self.batch_size, num_workers=self.num_workers
         )
+
+    def predict_dataloader(self):
+        assert self.data, "No cached data found; run `generate.py` first"
+        return DataLoader(self.data, batch_size=self.batch_size, num_workers=self.num_workers)
