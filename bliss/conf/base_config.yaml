@@ -12,14 +12,13 @@ hydra:
 
 paths:
     root: ${oc.env:BLISS_HOME}
-    data: ${paths.root}/data
-    sdss: ${paths.data}/sdss
-    decals: ${paths.data}/decals
-    des: ${paths.data}/des
-    dc2: ${paths.data}/dc2
+
+    sdss: /data/scratch/sdss
+    decals: /data/scratch/decals
+    des: /data/scratch/des
+    dc2: /data/scratch/dc2local
+
     output: ${paths.root}/output
-    pretrained_models: ${paths.data}/pretrained_models
-    dc2_catalog: ${paths.root}/case_studies/dc2/merged_catalog
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
@@ -72,7 +71,8 @@ encoder:
     survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
-    min_flux_threshold: 0  # default 0 to take all sources
+    min_flux_for_loss: 0  # set to 0 to include all sources
+    min_flux_for_metrics: 0  # set to 0 to include all sources
     optimizer_params:
         lr: 1e-3
     scheduler_params:
@@ -82,12 +82,12 @@ encoder:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
         bands: [0, 1, 2, 3, 4]
         include_original: false
+        include_background: true
         concat_psf_params: false
         num_psf_params: 6  # for SDSS, 4 for DC2
         log_transform_stdevs: [-3, 0, 1, 3]
         use_clahe: true
         clahe_min_stdev: 200
-        asinh_params: null
     vd_spec:
         _target_: bliss.encoder.variational_dist.VariationalDistSpec
         survey_bands: ${encoder.survey_bands}
@@ -106,11 +106,10 @@ encoder:
                 mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
             source_type_accuracy:
                 _target_: bliss.encoder.metrics.SourceTypeAccuracy
+                flux_bin_cutoffs: [200, 400, 600, 800, 1000]
             flux_error:
                 _target_: bliss.encoder.metrics.FluxError
                 survey_bands: ${encoder.survey_bands}
-            galaxy_shape_error:
-                _target_: bliss.encoder.metrics.GalaxyShapeError
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
@@ -170,14 +169,15 @@ surveys:
         pixel_shift: 2
     dc2:
         _target_: bliss.surveys.dc2.DC2
-        data_dir: /data/scratch/dc2local/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
-        split_result_folder: split_results
-        cat_path: ${paths.dc2_catalog}/merged_catalog_with_flux_over_100.pkl
+        data_dir: ${paths.dc2}/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
+        cat_path: ${paths.dc2}/merged_catalog_with_flux_over_50.pkl
+        split_results_dir: ${paths.output}/dc2_split_results
         batch_size: 64
         n_split: 50
         image_lim: [4000, 4000]
         num_workers: 4
-        split_processes_num: 2
+        split_processes_num: 4
+        min_flux_for_loss: ${encoder.min_flux_for_loss}
 
 
 #######################################################################
@@ -189,7 +189,7 @@ generate:
     n_image_files: 32
     n_batches_per_file: 16
     simulator: ${simulator}
-    cached_data_path: ${paths.data}/cached_dataset
+    cached_data_path: null
     file_prefix: dataset
 
 train:

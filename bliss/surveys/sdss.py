@@ -201,13 +201,13 @@ class SloanDigitalSkySurvey(Survey):
     def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
         frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
         frame_path = str(field_dir.joinpath(frame_name))
-        calibration = fits.getdata(frame_path, 1)  # pylint: disable=maybe-no-member
+        calibration = fits.getdata(frame_path, 1)
         nelec_per_nmgy = gain / calibration
 
-        sky_data = fits.getdata(frame_path, 2)  # pylint: disable=maybe-no-member
-        sky_small = sky_data["ALLSKY"][0]  # pylint: disable=maybe-no-member
-        sky_x = sky_data["XINTERP"][0]  # pylint: disable=maybe-no-member
-        sky_y = sky_data["YINTERP"][0]  # pylint: disable=maybe-no-member
+        sky_data = fits.getdata(frame_path, 2)
+        sky_small = sky_data["ALLSKY"][0]
+        sky_x = sky_data["XINTERP"][0]
+        sky_y = sky_data["YINTERP"][0]
 
         small_rows = np.mgrid[0 : sky_small.shape[0]]
         small_cols = np.mgrid[0 : sky_small.shape[1]]
@@ -221,7 +221,7 @@ class SloanDigitalSkySurvey(Survey):
         large_sky_nelec = large_sky * gain
 
         if self.load_image_data:
-            pixels_ss_nmgy = fits.getdata(frame_path, 0)  # pylint: disable=maybe-no-member
+            pixels_ss_nmgy = fits.getdata(frame_path, 0)
             pixels_ss_nelec = pixels_ss_nmgy * nelec_per_nmgy
             pixels_nelec = pixels_ss_nelec + large_sky_nelec
 
@@ -285,7 +285,7 @@ class SDSSDownloader:
         """Get field extents table."""
         if not getattr(cls, "_field_extents", None):
             cls.download_field_extents()
-        return cls._field_extents  # pylint: disable=no-member
+        return cls._field_extents
 
     def download_pfs(self):
         for image_id in self.image_ids:
@@ -435,12 +435,13 @@ class PhotoFullCatalog(FullCatalog):
         dec = self["dec"].squeeze()
 
         keep = (ra > ra_lim[0]) & (ra < ra_lim[1]) & (dec >= dec_lim[0]) & (dec <= dec_lim[1])
-        plocs = self.plocs[:, keep]
+        plocs = self["plocs"][:, keep]
         n_sources = torch.tensor([plocs.size()[1]])
 
-        d = {"plocs": plocs, "n_sources": n_sources}
+        d = {"n_sources": n_sources}
         for key, val in self.items():
-            d[key] = val[:, keep]
+            if key != "n_sources":
+                d[key] = val[:, keep]
 
         return PhotoFullCatalog(
             int(plocs[0, :, 0].max() - plocs[0, :, 0].min()),  # new height

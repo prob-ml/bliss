@@ -13,7 +13,7 @@ from torch.distributions import (
 
 class UnconstrainedBernoulli:
     def __init__(self):
-        self.dim = 1
+        self.n_params = 1
 
     def get_dist(self, params):
         yes_prob = params.sigmoid().clamp(1e-4, 1 - 1e-4)
@@ -25,7 +25,7 @@ class UnconstrainedBernoulli:
 
 class UnconstrainedNormal:
     def __init__(self, low_clamp=-20, high_clamp=20):
-        self.dim = 2
+        self.n_params = 2
         self.low_clamp = low_clamp
         self.high_clamp = high_clamp
 
@@ -37,7 +37,7 @@ class UnconstrainedNormal:
 
 class UnconstrainedBivariateNormal:
     def __init__(self, low_clamp=-20, high_clamp=20):
-        self.dim = 4
+        self.n_params = 4
         self.low_clamp = low_clamp
         self.high_clamp = high_clamp
 
@@ -52,37 +52,50 @@ class TruncatedDiagonalMVN(Distribution):
     """A truncated diagonal multivariate normal distribution."""
 
     def __init__(self, mu, sigma):
+        """Initialize a truncated diagonal multivariate normal distribution.
+
+        Args:
+            mu (Tensor): Mean of the distribution (must be at least 1d)
+            sigma (Tensor): Standard deviation of the distribution (must be at least 1d)
+
+        Distribution is "multivariate" in that the last dimension of mu and sigma
+        are considered event dimensions.
+        """
+
         super().__init__(validate_args=False)
+        multiple_normals = Normal(mu, sigma)  # all dims are batch dims, none are event
+        self.base_dist = Independent(multiple_normals, 1)  # now last dim is event dim
 
-        multiple_normals = Normal(mu, sigma)
-        self.base_dist = Independent(multiple_normals, 1)
-
+        # we'll need these calculations later for log_prob
         prob_in_unit_box_hw = multiple_normals.cdf(self.b) - multiple_normals.cdf(self.a)
         self.log_prob_in_unit_box = prob_in_unit_box_hw.log().sum(dim=-1)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.base_dist.base_dist})"
 
-    def sample(self, sample_shape=(1,)):
-        """Generate sample using rejection sampling.
-
-        This isn't very efficient, but it's good enough for sampling one catalog at a time. A more
-        efficient method could be to use inverse cdf sampling on each dimension independently.
+    def sample(self, sample_shape=()):
+        """Generate sample.
 
         Args:
             sample_shape (Tuple): Shape of samples to draw
 
         Returns:
             Tensor: (sample_shape, self.batch_shape, self.event_shape) shaped sample
+
         """
-        q = Independent(Normal(self.base_dist.mean, self.base_dist.stddev), 1)
-        samples = q.sample(sample_shape)
-        valid = (samples.min(dim=-1)[0] >= 0) & (samples.max(dim=-1)[0] < 1)
-        while not valid.all():
-            new_samples = q.sample(sample_shape)
-            samples[~valid] = new_samples[~valid]
-            valid = (samples.min(dim=-1)[0] >= 0) & (samples.max(dim=-1)[0] < 1)
-        return samples
+
+        shape = sample_shape + self.base_dist.batch_shape + self.base_dist.event_shape
+
+        # draw using inverse cdf method
+        # if Fi is the cdf of the relavant gaussian, then
+        # Gi(u) = Fi(u*(F(b) - F(a)) + F(a)) is the cdf of the truncated gaussian
+        uniform01_samples = torch.rand(shape, device=self.base_dist.mean.device)
+        uniform_fafb = uniform01_samples * (self.upper_cdf - self.lower_cdf) + self.lower_cdf
+        trunc_normal_samples = self.base_dist.base_dist.icdf(uniform_fafb)
+
+        # if u_transformed is within machine precision of 0 or 1
+        # the icdf will be -inf or inf, respectively, so we have to clamp
+        return trunc_normal_samples.clamp(self.a, self.b)
 
     @property
     def a(self):
@@ -91,6 +104,14 @@ class TruncatedDiagonalMVN(Distribution):
     @property
     def b(self):
         return torch.ones_like(self.base_dist.mean)
+
+    @property
+    def lower_cdf(self):
+        return self.base_dist.base_dist.cdf(self.a)
+
+    @property
+    def upper_cdf(self):
+        return self.base_dist.base_dist.cdf(self.b)
 
     @property
     def mean(self):
@@ -121,7 +142,7 @@ class TruncatedDiagonalMVN(Distribution):
 
     def cdf(self, value):
         cdf_at_val = self.base_dist.base_dist.cdf(value)
-        cdf_at_lb = self.base_dist.base_dist.cdf(torch.zeros_like(self.mean))
+        cdf_at_lb = self.lower_cdf
         log_cdf = (cdf_at_val - cdf_at_lb + 1e-9).log().sum(dim=-1) - self.log_prob_in_unit_box
         return log_cdf.exp()
 
@@ -129,34 +150,64 @@ class TruncatedDiagonalMVN(Distribution):
 class UnconstrainedTDBN:
     """Produces truncated bivariate normal distributions from unconstrained parameters."""
 
-    def __init__(self):
-        self.dim = 4
+    def __init__(self, low_clamp=-6, high_clamp=3):
+        self.n_params = 4
+        self.low_clamp = low_clamp
+        self.high_clamp = high_clamp
 
     def get_dist(self, params):
         mu = params[:, :, :, :2].sigmoid()
-        sigma = params[:, :, :, 2:].clamp(-6, 3).exp().sqrt()
+        sigma = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
         return TruncatedDiagonalMVN(mu, sigma)
 
 
 class UnconstrainedLogNormal:
-    def __init__(self):
-        self.dim = 2
+    def __init__(self, dim=1):
+        self.dim = dim  # the dimension of a multivariate lognormal
+        self.n_params = 2 * dim  # mean and std for each dimension (diagonal covariance)
 
     def get_dist(self, params):
-        mu = params[:, :, :, 0]
-        sigma = params[:, :, :, 1].clamp(-6, 10).exp().sqrt()
-        return LogNormal(mu, sigma, validate_args=False)  # we may evaluate at 0 for masked tiles
+        mu = params[:, :, :, 0 : self.dim]
+        sigma = params[:, :, :, self.dim : self.n_params].clamp(-6, 10).exp().sqrt()
+        iid_dist = LogNormal(mu, sigma, validate_args=False)  # may evaluate at 0 for masked tiles
+        return Independent(iid_dist, 1)
+
+
+class RescaledLogitNormal(Distribution):
+    def __init__(self, mu, sigma, low=0, high=1):
+        super().__init__(validate_args=False)
+
+        self.low = low
+        self.high = high
+
+        self.mu = mu
+        self.sigma = sigma
+
+        base_dist = Normal(mu, sigma)
+        transforms = [SigmoidTransform(), AffineTransform(loc=self.low, scale=self.high)]
+        self.iid_dist = TransformedDistribution(base_dist, transforms)
+
+    def sample(self):
+        return self.iid_dist.sample()
+
+    def log_prob(self, value):
+        return self.iid_dist.log_prob(value).sum(-1)
+
+    @property
+    def mode(self):
+        # this is actual the median, not the mode. The median is suitable as a point estimate
+        # and the mode doesn't have an analytic form.
+        return self.iid_dist.icdf(torch.tensor(0.5))
 
 
 class UnconstrainedLogitNormal:
-    def __init__(self, low=0, high=1):
-        self.dim = 2
+    def __init__(self, low=0, high=1, dim=1):
+        self.dim = dim  # the dimension of a multivariate logitnormal
+        self.n_params = 2 * dim
         self.low = low
         self.high = high
 
     def get_dist(self, params):
-        mu = params[:, :, :, 0]
-        sigma = params[:, :, :, 1].clamp(-10, 10).exp().sqrt()
-        base_dist = Normal(mu, sigma)
-        transforms = [SigmoidTransform(), AffineTransform(loc=self.low, scale=self.high)]
-        return TransformedDistribution(base_dist, transforms)
+        mu = params[:, :, :, 0 : self.dim]
+        sigma = params[:, :, :, self.dim : self.n_params].clamp(-10, 10).exp().sqrt()
+        return RescaledLogitNormal(mu, sigma, low=self.low, high=self.high)

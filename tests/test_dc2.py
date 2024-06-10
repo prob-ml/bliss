@@ -16,7 +16,7 @@ from bliss.main import train
 
 
 def _test_tensor_all_close(left, right):
-    return torch.allclose(left, right, atol=1e-4)
+    return torch.allclose(left, right)
 
 
 def _test_data_equal(left_data, right_data):
@@ -43,10 +43,10 @@ def _test_tile_catalog_equal(left, right):
             right.tile_slen,
         )
 
-    if not _test_tensor_all_close(left.locs, right.locs):
+    if not _test_tensor_all_close(left["locs"], right["locs"]):
         logger.warning("locs are different")
 
-    if not _test_tensor_all_close(left.n_sources, right.n_sources):
+    if not _test_tensor_all_close(left["n_sources"], right["n_sources"]):
         logger.warning("n_sources are different")
 
     if left.batch_size != right.batch_size:
@@ -81,8 +81,8 @@ def _test_tile_catalog_equal(left, right):
 
     return (
         left.tile_slen == right.tile_slen  # noqa: WPS222
-        and _test_tensor_all_close(left.locs, right.locs)
-        and _test_tensor_all_close(left.n_sources, right.n_sources)
+        and _test_tensor_all_close(left["locs"], right["locs"])
+        and _test_tensor_all_close(left["n_sources"], right["n_sources"])
         and left.batch_size == right.batch_size
         and left.n_tiles_h == right.n_tiles_h
         and left.n_tiles_w == right.n_tiles_w
@@ -111,10 +111,10 @@ def _test_full_catalog_equal(left, right):
             right.width,
         )
 
-    if not _test_tensor_all_close(left.plocs, right.plocs):
+    if not _test_tensor_all_close(left["plocs"], right["plocs"]):
         logger.warning("plocs are different")
 
-    if not _test_tensor_all_close(left.n_sources, right.n_sources):
+    if not _test_tensor_all_close(left["n_sources"], right["n_sources"]):
         logger.warning("n_sources are different")
 
     if left.batch_size != right.batch_size:
@@ -136,8 +136,8 @@ def _test_full_catalog_equal(left, right):
     return (
         left.height == right.height  # noqa:WPS222
         and left.width == right.width
-        and _test_tensor_all_close(left.plocs, right.plocs)
-        and _test_tensor_all_close(left.n_sources, right.n_sources)
+        and _test_tensor_all_close(left["plocs"], right["plocs"])
+        and _test_tensor_all_close(left["n_sources"], right["n_sources"])
         and left.batch_size == right.batch_size
         and left.max_sources == right.max_sources
         and _test_data_equal(left.data, right.data)
@@ -181,10 +181,8 @@ class TestDC2:
         # log transform doesn't work in this test because the DC2 background is sometimes negative.
         # why would the background be negative? are we using the wrong background estimate?
         train_dc2_cfg.encoder.image_normalizer.log_transform_stdevs = []
-        train_dc2_cfg.encoder.image_normalizer.asinh_params = {
-            "scale": 0.1,
-            "thresholds": [-3, 0, 1, 3],
-        }
+        train_dc2_cfg.encoder.image_normalizer.use_clahe = True
+        train_dc2_cfg.encoder.image_normalizer.include_background = False
         train(train_dc2_cfg.train)
 
     def test_dc2_augmentation(self, cfg):
@@ -215,7 +213,7 @@ class TestDC2:
             aug_image, aug_full = aug_method(ori_full, aug_input_images)
             assert aug_image[0, :, 0, :, :].shape == dc2_first_data["images"].shape
             assert aug_image[0, :, 1, :, :].shape == dc2_first_data["background"].shape
-            assert aug_full["n_sources"] <= ori_full.n_sources
+            assert aug_full["n_sources"] <= ori_full["n_sources"]
 
         # test rotatation
         aug_image90, aug_full90 = aug_rotate90(ori_full, aug_input_images)

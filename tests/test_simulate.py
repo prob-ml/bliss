@@ -28,7 +28,7 @@ class TestSimulate:
     def test_simulate_and_predict(self, cfg, encoder):
         """Test simulating an image from a fixed catalog and making predictions on that catalog."""
         # load cached simulated catalog
-        true_catalog = torch.load(cfg.paths.data + "/tests/test_image/dataset_0.pt")
+        true_catalog = torch.load(cfg.paths.test_data + "/test_image/dataset_0.pt")
         true_catalog = TileCatalog(4, true_catalog)
 
         # simulate image from catalog
@@ -36,7 +36,7 @@ class TestSimulate:
         # don't add noise to simulated image; with noise we intermittently generate what looks like
         # extra sources in the image, which causes the test to fail
         image_simulator.apply_noise = lambda img: img
-        rcfs, rcf_indices = image_simulator.randomized_image_ids(true_catalog.n_sources.size(0))
+        rcfs, rcf_indices = image_simulator.randomized_image_ids(true_catalog["n_sources"].size(0))
         image, background, _ = image_simulator.simulate_images(true_catalog, rcfs, rcf_indices)
 
         # make predictions on simulated image
@@ -55,7 +55,7 @@ class TestSimulate:
         true_galaxy_bools = true_catalog.galaxy_bools[:, ttc:-ttc, ttc:-ttc]
         true_star_bools = true_catalog.star_bools[:, ttc:-ttc, ttc:-ttc]
 
-        assert est_catalog.n_sources.sum() == 1
+        assert est_catalog["n_sources"].sum() == 1
         assert est_catalog.star_bools.sum() == 1
         assert torch.equal(true_galaxy_bools, est_catalog.galaxy_bools)
         assert torch.equal(true_star_bools, est_catalog.star_bools)

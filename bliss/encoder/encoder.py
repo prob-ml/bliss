@@ -35,13 +35,15 @@ class Encoder(pl.LightningModule):
         metrics: MetricCollection,
         sample_image_renders: MetricCollection,
         matcher: CatalogMatcher,
-        min_flux_threshold: float = 0,
+        min_flux_for_loss: float = 0,
+        min_flux_for_metrics: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
         do_data_augmentation: bool = False,
         compile_model: bool = False,
         double_detect: bool = False,
         use_checkerboard: bool = True,
+        reference_band: int = 2,
     ):
         """Initializes Encoder.
 
@@ -54,13 +56,15 @@ class Encoder(pl.LightningModule):
             sample_image_renders: for plotting relevant images (overlays, shear maps)
             metrics: for scoring predicted catalogs during training
             matcher: for matching predicted catalogs to ground truth catalogs
-            min_flux_threshold: Sources with a lower flux will not be considered when computing loss
+            min_flux_for_loss: Sources with a lower flux will not be considered when computing loss
+            min_flux_for_metrics: filter sources by flux during test
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
             do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
             double_detect: whether to make up to two detections per tile rather than one
             use_checkerboard: whether to use dependent tiling
+            reference_band: band to use for filtering sources
         """
         super().__init__()
 
@@ -73,32 +77,44 @@ class Encoder(pl.LightningModule):
         self.sample_metrics = metrics.clone()
         self.sample_image_renders = sample_image_renders
         self.matcher = matcher
-        self.min_flux_threshold = min_flux_threshold
+        self.min_flux_for_loss = min_flux_for_loss
+        self.min_flux_for_metrics = min_flux_for_metrics
+        assert self.min_flux_for_loss <= self.min_flux_for_metrics, "invalid threshold"
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.do_data_augmentation = do_data_augmentation
+        self.compile_model = compile_model
         self.double_detect = double_detect
         self.use_checkerboard = use_checkerboard
+        self.reference_band = reference_band
 
+        self.initialize_networks()
+
+    def initialize_networks(self):
+        """Load the convolutional neural networks that map normalized images to catalog parameters.
+        This method can be overridden to use different network architectures.
+        `checkerboard_net` and `second_net` can be left as None if not needed.
+        """
+        assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         ch_per_band = self.image_normalizer.num_channels_per_band()
-        assert tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         num_features = 256
         self.features_net = FeaturesNet(
-            len(image_normalizer.bands),
+            len(self.image_normalizer.bands),
             ch_per_band,
             num_features,
-            double_downsample=(tile_slen == 4),
+            double_downsample=(self.tile_slen == 4),
         )
-        n_params_per_source = vd_spec.n_params_per_source
+        n_params_per_source = self.vd_spec.n_params_per_source
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
         if self.double_detect:
             self.second_net = CatalogNet(num_features, n_params_per_source)
 
-        if compile_model:
+        if self.compile_model:
             self.features_net = torch.compile(self.features_net)
             self.marginal_net = torch.compile(self.marginal_net)
-            self.checkerboard_net = torch.compile(self.checkerboard_net)
+            if self.use_checkerboard:
+                self.checkerboard_net = torch.compile(self.checkerboard_net)
             if self.double_detect:
                 self.second_net = torch.compile(self.second_net)
 
@@ -116,11 +132,11 @@ class Encoder(pl.LightningModule):
         masked_cat = copy(history_cat)
         # masks not just n_sources; n_sources controls access to all fields.
         # does not mutate history_cat because we aren't using *=
-        masked_cat.n_sources = masked_cat.n_sources * history_mask
+        masked_cat["n_sources"] = masked_cat["n_sources"] * history_mask
 
         # we may want to use richer conditioning information in the future;
         # e.g., a residual image based on the catalog so far
-        detection_history = masked_cat.n_sources > 0
+        detection_history = masked_cat["n_sources"] > 0
 
         context = torch.stack([detection_history, history_mask], dim=1).float()
         x_cat = self.checkerboard_net(x_features, context)
@@ -129,7 +145,7 @@ class Encoder(pl.LightningModule):
     def interleave_catalogs(self, marginal_cat, cond_cat, marginal_mask):
         d = {}
         mm5d = rearrange(marginal_mask, "b ht wt -> b ht wt 1 1")
-        for k, v in marginal_cat.to_dict().items():
+        for k, v in marginal_cat.items():
             mm = marginal_mask if k == "n_sources" else mm5d
             d[k] = v * mm + cond_cat[k] * (1 - mm)
         return TileCatalog(self.tile_slen, d)
@@ -182,7 +198,7 @@ class Encoder(pl.LightningModule):
             est_cat_s = pred["second"].sample(use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
             # if the first detection is empty for that tile
-            est_cat_s.n_sources *= est_cat.n_sources
+            est_cat_s["n_sources"] *= est_cat["n_sources"]
             est_cat = est_cat.union(est_cat_s)
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
@@ -204,20 +220,22 @@ class Encoder(pl.LightningModule):
         return (marginal_loss + white_loss + black_loss) / 2
 
     def _double_detection_nll(self, target_cat1, target_cat, pred):
-        target_cat2 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=1)
+        target_cat2 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=1
+        )
 
         nll_marginal_z1 = self._single_detection_nll(target_cat1, pred)
         nll_cond_z2 = pred["second"].compute_nll(target_cat2)
         nll_marginal_z2 = self._single_detection_nll(target_cat2, pred)
         nll_cond_z1 = pred["second"].compute_nll(target_cat1)
 
-        none_mask = target_cat.n_sources == 0
+        none_mask = target_cat["n_sources"] == 0
         loss0 = nll_marginal_z1 * none_mask
 
-        one_mask = target_cat.n_sources == 1
+        one_mask = target_cat["n_sources"] == 1
         loss1 = (nll_marginal_z1 + nll_cond_z2) * one_mask
 
-        two_mask = target_cat.n_sources >= 2
+        two_mask = target_cat["n_sources"] >= 2
         loss2a = nll_marginal_z1 + nll_cond_z2
         loss2b = nll_marginal_z2 + nll_cond_z1
         lse_stack = torch.stack([loss2a, loss2b], dim=-1)
@@ -231,10 +249,15 @@ class Encoder(pl.LightningModule):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
         # filter out undetectable sources
-        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat = target_cat.filter_tile_catalog_by_flux(
+            min_flux=self.min_flux_for_loss,
+            band=self.reference_band,
+        )
 
         # make predictions/inferences
-        target_cat1 = target_cat.get_brightest_sources_per_tile(band=2, exclude_num=0)
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
         truth_callback = lambda _: target_cat1
         pred = self.infer(batch, truth_callback)
 
@@ -261,15 +284,23 @@ class Encoder(pl.LightningModule):
 
     def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat = target_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_threshold)
+        target_cat = target_cat.filter_tile_catalog_by_flux(
+            min_flux=self.min_flux_for_loss,
+            band=self.reference_band,
+        )
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
-        mode_cat_tile = self.sample(batch, use_mode=True)
+        mode_cat_tile = self.sample(batch, use_mode=True).filter_tile_catalog_by_flux(
+            min_flux=self.min_flux_for_metrics
+        )
         mode_cat = mode_cat_tile.to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, matching)
 
-        sample_cat = self.sample(batch, use_mode=False).to_full_catalog()
+        sample_cat = self.sample(batch, use_mode=False)
+        sample_cat = sample_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_for_metrics)
+        sample_cat = sample_cat.to_full_catalog()
+
         matching = self.matcher.match_catalogs(target_cat, sample_cat)
         self.sample_metrics.update(target_cat, sample_cat, matching)
 
@@ -294,11 +325,10 @@ class Encoder(pl.LightningModule):
         for metric_name, metric in metrics.items():
             if hasattr(metric, "plot"):  # noqa: WPS421
                 plot_or_none = metric.plot()
-                if plot_or_none:
-                    fig, _axes = plot_or_none
                 name = f"Epoch:{self.current_epoch}" if show_epoch else ""
                 name += f"/{logging_name} {metric_name}"
                 if self.logger and plot_or_none:
+                    fig, _axes = plot_or_none
                     self.logger.experiment.add_figure(name, fig)
 
         metrics.reset()

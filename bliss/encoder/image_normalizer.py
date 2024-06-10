@@ -1,5 +1,4 @@
 import warnings
-from typing import Dict
 
 import torch
 
@@ -9,12 +8,12 @@ class ImageNormalizer(torch.nn.Module):
         self,
         bands: list,
         include_original: bool,
+        include_background: bool,
         concat_psf_params: bool,
         num_psf_params: int,
         log_transform_stdevs: list,
         use_clahe: bool,
         clahe_min_stdev: float,
-        asinh_params: Dict[str, float],
     ):
         """Initializes DetectionEncoder.
 
@@ -26,25 +25,24 @@ class ImageNormalizer(torch.nn.Module):
             log_transform_stdevs: list of thresholds to apply log transform to (can be empty)
             use_clahe: whether to apply Contrast Limited Adaptive Histogram Equalization to images
             clahe_min_stdev: minimum standard deviation for CLAHE
-            asinh_params: parameters for asinh normalization
+            include_background: whether to include background as an input channel
         """
         super().__init__()
 
         self.bands = bands
         self.include_original = include_original
+        self.include_background = include_background
         self.concat_psf_params = concat_psf_params
         self.num_psf_params = num_psf_params
         self.log_transform_stdevs = log_transform_stdevs
         self.use_clahe = use_clahe
         self.clahe_min_stdev = clahe_min_stdev
-        self.asinh_params = asinh_params
-
-        if not (log_transform_stdevs or use_clahe or asinh_params):
-            warnings.warn("Normalization should be enabled (you could use log/clahe/asinh).")
 
     def num_channels_per_band(self):
         """Determine number of input channels for model based on desired input transforms."""
-        nch = 1  # background is always included
+        nch = 0
+        if self.include_background:
+            nch += 1
         if self.include_original:
             nch += 1
         if self.concat_psf_params:
@@ -53,8 +51,6 @@ class ImageNormalizer(torch.nn.Module):
             nch += len(self.log_transform_stdevs)
         if self.use_clahe:
             nch += 1
-        if self.asinh_params:
-            nch += len(self.asinh_params["thresholds"])
         return nch
 
     def get_input_tensor(self, batch):
@@ -70,9 +66,6 @@ class ImageNormalizer(torch.nn.Module):
         assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
         assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
 
-        if self.log_transform_stdevs:
-            assert batch["background"].min() > 1e-6, "background must be positive"
-
         input_bands = batch["images"].shape[1]
         if input_bands < len(self.bands):
             msg = f"Expected >= {len(self.bands)} bands in the input but found only {input_bands}"
@@ -80,10 +73,13 @@ class ImageNormalizer(torch.nn.Module):
 
         raw_images = batch["images"][:, self.bands].unsqueeze(2)
         backgrounds = batch["background"][:, self.bands].unsqueeze(2)
-        inputs = [backgrounds]
+        inputs = []
+
+        if self.include_background:
+            inputs.append(backgrounds)
 
         if self.include_original:
-            inputs.insert(0, raw_images)  # add extra dim for 5d input
+            inputs.append(raw_images)
 
         if self.concat_psf_params:
             msg = "concat_psf_params specified but psf params not present in data"
@@ -94,10 +90,12 @@ class ImageNormalizer(torch.nn.Module):
             psf_params = psf_params.expand(n, c, self.num_psf_params * i, h, w)
             inputs.append(psf_params)
 
-        for threshold in self.log_transform_stdevs:
-            image_offsets = (raw_images - backgrounds) / backgrounds.sqrt() - threshold
-            transformed_img = torch.log(torch.clamp(image_offsets + 1.0, min=1.0))
-            inputs.append(transformed_img)
+        if self.log_transform_stdevs:
+            assert batch["background"].min() > 1e-6, "background must be positive"
+            for threshold in self.log_transform_stdevs:
+                image_offsets = (raw_images - backgrounds) / backgrounds.sqrt() - threshold
+                transformed_img = torch.log(torch.clamp(image_offsets + 1.0, min=1.0))
+                inputs.append(transformed_img)
 
         # we should revisit normalizing the whole 80x80 image to see if that still performs
         # better than CLAHE. if so, we can remove CLAHE and for large images partition them
@@ -106,19 +104,11 @@ class ImageNormalizer(torch.nn.Module):
         if self.use_clahe:
             renormalized_img = self.clahe(raw_images, self.clahe_min_stdev)
             inputs.append(renormalized_img)
-            inputs[0] = self.clahe(backgrounds, self.clahe_min_stdev)
+            # also normalize background
+            if self.include_background:
+                inputs[0] = self.clahe(backgrounds, self.clahe_min_stdev)
 
-        if self.asinh_params:
-            backgrounds = backgrounds.clamp(min=1e-6)
-            for threshold in self.asinh_params["thresholds"]:
-                inputs.append(
-                    torch.asinh(
-                        ((raw_images - backgrounds) / backgrounds.sqrt() - threshold)
-                        * self.asinh_params["scale"],
-                    )
-                )
-
-        return torch.cat(inputs, dim=2)
+        return torch.cat(inputs, dim=2) if inputs else None
 
     @classmethod
     def clahe(cls, images, min_stdev, kernel_size=9, padding=4):

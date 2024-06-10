@@ -44,14 +44,16 @@ DESImageID = TypedDict(
 class DarkEnergySurvey(Survey):
     BANDS = ("g", "r", "i", "z")
 
-    GAIN = 4.0  # e-/ADU (cf. https://noirlab.edu/science/programs/ctio/instruments/Dark-Energy-Camera/characteristics) # noqa: E501 # pylint: disable=line-too-long
+    # cf. https://noirlab.edu/science/programs/ctio/instruments/Dark-Energy-Camera/characteristics
+    GAIN = 4.0  # e-/ADU
     EXPTIME = 90.0  # s
 
     @staticmethod
     def zpt_to_scale(zpt):
         """Converts a magnitude zero point per sec to nelec/nmgy scale.
 
-        See also https://github.com/dstndstn/tractor/blob/cdb82000422e85c9c97b134edadff31d68bced0c/tractor/brightness.py#L217C6-L217C6. # noqa: E501 # pylint: disable=line-too-long
+        See also https://github.com/dstndstn/tractor/blob/ \
+            cdb82000422e85c9c97b134edadff31d68bced0c/tractor/brightness.py#L217C6-L217C6
 
         Args:
             zpt (float): magnitude zero point per sec
@@ -162,7 +164,7 @@ class DarkEnergySurvey(Survey):
         ccdname = des_image_id["ccdname"]
         image_basename = DESDownloader.image_basename_from_filename(des_image_id[band], band)
         img_fits_filename = self.des_path / brickname[:3] / brickname / f"{image_basename}.fits"
-        hr = fits.getheader(img_fits_filename, 0)  # pylint: disable=no-member
+        hr = fits.getheader(img_fits_filename, 0)
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=FITSFixedWarning)
             wcs = WCS(hr)
@@ -179,8 +181,7 @@ class DarkEnergySurvey(Survey):
             "flux_calibration_list": np.array([[[flux_calibration]]]),
         }
         if self.load_image_data:
-            # compute sig1 (cf. https://github.com/dstndstn/tractor/blob/cdb82000422e85c9c97b134edadff31d68bced0c/projects/desi/decam.py#L313-L333) # noqa: E501 # pylint: disable=line-too-long
-            image = fits.getdata(img_fits_filename, 0)  # pylint: disable=no-member
+            image = fits.getdata(img_fits_filename, 0)
 
             # TODO: don't use image data to compute sig1 - so DECaLS gen won't load DES images
             diffs = image[:-5:10, :-5:10] - image[5::10, 5::10]
@@ -450,11 +451,9 @@ class DES_PSF(ImagePSF):  # noqa: N801
         psfex_table_hdu = psfex_fits[1]
 
         # Get `row` corresponding to DECam image (i.e., CCD)
-        rows = np.where(psfex_table_hdu.data["ccdname"] == ccdname)[0]  # pylint: disable=no-member
+        rows = np.where(psfex_table_hdu.data["ccdname"] == ccdname)[0]
         assert len(rows) == 1, f"Found {len(rows)} rows for ccdname {ccdname}; expected 1."
-        psfex_table_hdu.data = psfex_table_hdu.data[  # pylint: disable=no-member
-            rows[0] : rows[0] + 1
-        ]
+        psfex_table_hdu.data = psfex_table_hdu.data[rows[0] : rows[0] + 1]
         return psfex_table_hdu
 
     def _psf_params_for_band(self, des_image_id, bl):
@@ -462,7 +461,7 @@ class DES_PSF(ImagePSF):  # noqa: N801
 
         psf_params = np.zeros(len(DES_PSF.PARAM_NAMES))
         for i, param in enumerate(DES_PSF.PARAM_NAMES):
-            psf_params[i] = band_psfex_table_hdu.data[param]  # pylint: disable=no-member
+            psf_params[i] = band_psfex_table_hdu.data[param]
 
         return torch.tensor(psf_params, dtype=torch.float32)
 

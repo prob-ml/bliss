@@ -1,4 +1,5 @@
 import collections
+import copy
 import math
 import multiprocessing
 import pathlib
@@ -28,78 +29,6 @@ def map_nested_dicts(cur_dict, func):
     return func(cur_dict)
 
 
-def generate_split_file(image_index, self_copy):
-    split_count = 0
-    image_list, bg_list, wcs_header_str = read_frame_for_band(
-        self_copy["image_files"],
-        self_copy["bg_files"],
-        image_index,
-        self_copy["n_bands"],
-        self_copy["image_lim"],
-    )
-    wcs = from_wcs_header_str_to_wcs(wcs_header_str)
-    image = np.stack(image_list)
-    bg = np.stack(bg_list)
-
-    plocs_lim = image[0].shape
-    height = plocs_lim[0]
-    width = plocs_lim[1]
-    full_cat, psf_params, _ = Dc2FullCatalog.from_file(
-        self_copy["cat_path"], wcs, height, width, self_copy["bands"]
-    )
-    tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile().to_dict()
-
-    for k, v in tile_dict.items():
-        if k != "n_sources":
-            tile_dict[k] = rearrange(v, "1 h w nh nw -> h w nh nw")
-    tile_dict["n_sources"] = rearrange(tile_dict["n_sources"], "1 h w -> h w")
-
-    tile_dict["star_fluxes"] = tile_dict["star_fluxes"].clamp(min=1e-18)
-    tile_dict["galaxy_fluxes"] = tile_dict["galaxy_fluxes"].clamp(min=1e-18)
-    tile_dict["galaxy_params"][..., 3] = tile_dict["galaxy_params"][..., 3].clamp(min=1e-18)
-    tile_dict["galaxy_params"][..., 5] = tile_dict["galaxy_params"][..., 5].clamp(min=1e-18)
-
-    # split image
-    split_lim = self_copy["image_lim"][0] // self_copy["n_split"]
-    image = torch.from_numpy(image)
-    split_image = split_full_image(image, split_lim)
-    bg = torch.from_numpy(bg)
-    split_bg = split_full_image(bg, split_lim)
-
-    tile_split = {}
-    param_list = [
-        "locs",
-        "n_sources",
-        "source_type",
-        "galaxy_fluxes",
-        "galaxy_params",
-        "star_fluxes",
-        "star_log_fluxes",
-    ]
-    for i in param_list:
-        split1_tile = torch.stack(torch.split(tile_dict[i], split_lim // 4, dim=0))
-        split2_tile = torch.stack(torch.split(split1_tile, split_lim // 4, dim=2))
-        tile_split[i] = torch.split(split2_tile.flatten(0, 2), split_lim // 4)
-
-    data_split = {
-        "tile_catalog": [dict(zip(tile_split, i)) for i in zip(*tile_split.values())],
-        "images": split_image,
-        "background": split_bg,
-        "psf_params": [psf_params for _ in range(self_copy["n_split"] ** 2)],
-    }
-
-    data_splits = [dict(zip(data_split, i)) for i in zip(*data_split.values())]
-    for cur_split in data_splits:
-        with open(
-            self_copy["split_file_path"] / f"split_image_{image_index:04d}_{split_count:08d}.pt",
-            "wb",
-        ) as split_file:
-            cur_split_copy = map_nested_dicts(cur_split, lambda x: x.clone())
-            cur_split_copy.update(wcs_header_str=wcs_header_str)
-            torch.save(cur_split_copy, split_file)
-        split_count += 1
-
-
 class DC2Dataset(Dataset):
     def __init__(self, split_files_list) -> None:
         super().__init__()
@@ -126,8 +55,9 @@ class DC2(Survey):
         n_split,
         image_lim,
         num_workers,
-        split_result_folder,
+        split_results_dir,
         split_processes_num,
+        min_flux_for_loss,
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -143,8 +73,9 @@ class DC2(Survey):
         self.n_split = n_split
         self.image_lim = image_lim
         self.num_workers = num_workers
-        self.split_file_path = pathlib.Path(data_dir) / split_result_folder
+        self.split_results_dir = pathlib.Path(split_results_dir)
         self.split_processes_num = split_processes_num
+        self.min_flux_for_loss = min_flux_for_loss
 
         self.image_files = None
         self.bg_files = None
@@ -157,45 +88,6 @@ class DC2(Survey):
 
     def __getitem__(self, idx):
         return self.total_dataset[idx]
-
-    def get_plotting_sample(self, image_idx):
-        if self.image_files is None or self.bg_files is None:
-            self._load_image_and_bg_files_list()
-
-        image_list, bg_list, wcs_header_str = read_frame_for_band(
-            self.image_files, self.bg_files, image_idx, self.n_bands, self.image_lim
-        )
-        wcs = from_wcs_header_str_to_wcs(wcs_header_str)
-        image = np.stack(image_list)
-        bg = np.stack(bg_list)
-
-        plocs_lim = image[0].shape
-        height = plocs_lim[0]
-        width = plocs_lim[1]
-        full_cat, psf_params, match_id = Dc2FullCatalog.from_file(
-            self.cat_path, wcs, height, width, self.bands
-        )
-        tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile().to_dict()
-
-        for k, v in tile_dict.items():
-            if k != "n_sources":
-                tile_dict[k] = rearrange(v, "1 h w nh nw -> h w nh nw")
-        tile_dict["n_sources"] = rearrange(tile_dict["n_sources"], "1 h w -> h w")
-
-        tile_dict["star_fluxes"] = tile_dict["star_fluxes"].clamp(min=1e-18)
-        tile_dict["galaxy_fluxes"] = tile_dict["galaxy_fluxes"].clamp(min=1e-18)
-        tile_dict["galaxy_params"][..., 3] = tile_dict["galaxy_params"][..., 3].clamp(min=1e-18)
-        tile_dict["galaxy_params"][..., 5] = tile_dict["galaxy_params"][..., 5].clamp(min=1e-18)
-
-        return {
-            "tile_catalog": tile_dict,
-            "image": torch.from_numpy(image),
-            "background": torch.from_numpy(bg),
-            "match_id": match_id,
-            "full_catalog": full_cat,
-            "wcs": wcs,
-            "psf_params": psf_params,
-        }
 
     def image_id(self, idx: int):
         return self.split_files_list[idx].name
@@ -232,38 +124,41 @@ class DC2(Survey):
         return n_image
 
     def prepare_data(self):  # noqa: WPS324
-        if self.split_file_path.exists():
+        if self.split_results_dir.exists():
             return None
-        self.split_file_path.mkdir(parents=True)
+        self.split_results_dir.mkdir(parents=True)
 
         n_image = self._load_image_and_bg_files_list()
+        generate_split_file_params_dict = {
+            "image_files": self.image_files,
+            "bg_files": self.bg_files,
+            "n_bands": self.n_bands,
+            "image_lim": self.image_lim,
+            "cat_path": self.cat_path,
+            "bands": self.bands,
+            "n_split": self.n_split,
+            "split_file_path": self.split_results_dir,
+            "min_flux_for_loss": self.min_flux_for_loss,
+        }
 
-        with multiprocessing.Pool(processes=self.split_processes_num) as process_pool:
-            process_pool.starmap(
-                generate_split_file,
-                zip(
-                    list(range(n_image)),
-                    [
-                        {
-                            "image_files": self.image_files,
-                            "bg_files": self.bg_files,
-                            "n_bands": self.n_bands,
-                            "image_lim": self.image_lim,
-                            "cat_path": self.cat_path,
-                            "bands": self.bands,
-                            "n_split": self.n_split,
-                            "split_file_path": self.split_file_path,
-                        }
-                        for _ in range(n_image)
-                    ],
-                ),
-                chunksize=4,
-            )
+        if self.split_processes_num > 1:
+            with multiprocessing.Pool(processes=self.split_processes_num) as process_pool:
+                process_pool.starmap(
+                    generate_split_file,
+                    zip(
+                        list(range(n_image)),
+                        [generate_split_file_params_dict for _ in range(n_image)],
+                    ),
+                    chunksize=4,
+                )
+        else:
+            for i in range(n_image):
+                generate_split_file(i, generate_split_file_params_dict)
 
         return None
 
     def setup(self, stage="fit"):
-        self.split_files_list = list(self.split_file_path.glob("split_*.pt"))
+        self.split_files_list = list(self.split_results_dir.glob("split_*.pt"))
         random.Random(218).shuffle(self.split_files_list)
 
         data_len = len(self.split_files_list)
@@ -293,6 +188,163 @@ class DC2(Survey):
             self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers // 2
         )
 
+    def get_plotting_sample(self, image_idx):
+        if self.image_files is None or self.bg_files is None:
+            self._load_image_and_bg_files_list()
+
+        result_dict = load_image_and_catalog(
+            image_idx,
+            self.image_files,
+            self.bg_files,
+            self.image_lim,
+            self.bands,
+            self.n_bands,
+            self.cat_path,
+            self.min_flux_for_loss,
+        )
+        return {
+            "tile_catalog": result_dict["tile_dict"],
+            "image": torch.from_numpy(result_dict["inputs"]["image"]),
+            "background": torch.from_numpy(result_dict["inputs"]["bg"]),
+            "match_id": result_dict["other_info"]["match_id"],
+            "full_catalog": result_dict["other_info"]["full_cat"],
+            "wcs": result_dict["other_info"]["wcs"],
+            "psf_params": result_dict["inputs"]["psf_params"],
+        }
+
+
+def squeeze_tile_dict(tile_dict):
+    # by calling `.data` here I circumevent the requirement of TileCatalogs that the length
+    # of the first dimension is the batch size
+    tile_dict_copy = copy.copy(tile_dict).data
+    for k, v in tile_dict_copy.items():
+        if k != "n_sources":
+            tile_dict_copy[k] = rearrange(v, "1 h w nh nw -> h w nh nw")
+    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "1 h w -> h w")
+    return tile_dict_copy
+
+
+def unsqueeze_tile_dict(tile_dict):
+    tile_dict_copy = copy.copy(tile_dict)
+    for k, v in tile_dict_copy.items():
+        if k != "n_sources":
+            tile_dict_copy[k] = rearrange(v, "h w nh nw -> 1 h w nh nw")
+    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "h w -> 1 h w")
+    return tile_dict_copy
+
+
+def load_image_and_catalog(
+    image_idx, image_files, bg_files, image_lim, bands, n_bands, cat_path, min_flux_for_loss
+):
+    image_list, bg_list, wcs_header_str = read_frame_for_band(
+        image_files, bg_files, image_idx, n_bands, image_lim
+    )
+    wcs = from_wcs_header_str_to_wcs(wcs_header_str)
+    image = np.stack(image_list)
+    bg = np.stack(bg_list)
+
+    plocs_lim = image[0].shape
+    height = plocs_lim[0]
+    width = plocs_lim[1]
+    full_cat, psf_params, match_id = Dc2FullCatalog.from_file(
+        cat_path, wcs, height, width, bands, min_flux_for_loss
+    )
+    tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile()
+    tile_dict = squeeze_tile_dict(tile_dict)
+    tile_dict["star_fluxes"] = tile_dict["star_fluxes"].clamp(min=1e-18)
+    tile_dict["galaxy_fluxes"] = tile_dict["galaxy_fluxes"].clamp(min=1e-18)
+    tile_dict["galaxy_params"][..., 3] = tile_dict["galaxy_params"][..., 3].clamp(min=1e-18)
+    tile_dict["galaxy_params"][..., 5] = tile_dict["galaxy_params"][..., 5].clamp(min=1e-18)
+
+    return {
+        "tile_dict": tile_dict,
+        "inputs": {
+            "image": image,
+            "bg": bg,
+            "psf_params": psf_params,
+        },
+        "other_info": {
+            "full_cat": full_cat,
+            "wcs": wcs,
+            "wcs_header_str": wcs_header_str,
+            "match_id": match_id,
+        },
+    }
+
+
+def generate_split_file(image_index, self_copy):
+    split_count = 0
+    result_dict = load_image_and_catalog(
+        image_index,
+        self_copy["image_files"],
+        self_copy["bg_files"],
+        self_copy["image_lim"],
+        self_copy["bands"],
+        self_copy["n_bands"],
+        self_copy["cat_path"],
+        self_copy["min_flux_for_loss"],
+    )
+
+    image = result_dict["inputs"]["image"]
+    bg = result_dict["inputs"]["bg"]
+    tile_dict = result_dict["tile_dict"]
+    wcs_header_str = result_dict["other_info"]["wcs_header_str"]
+    psf_params = result_dict["inputs"]["psf_params"]
+
+    # split image
+    split_lim = self_copy["image_lim"][0] // self_copy["n_split"]
+    image = torch.from_numpy(image)
+    split_image = split_full_image(image, split_lim)
+    image_height_pixels = image.shape[1]
+    split_image_num_on_height = image_height_pixels // split_lim
+    bg = torch.from_numpy(bg)
+    split_bg = split_full_image(bg, split_lim)
+
+    # split tile
+    tile_split = {}
+    param_list = [
+        "locs",
+        "n_sources",
+        "source_type",
+        "galaxy_fluxes",
+        "galaxy_params",
+        "star_fluxes",
+        "star_log_fluxes",
+    ]
+    for i in param_list:
+        split1_tile = torch.stack(torch.split(tile_dict[i], split_lim // 4, dim=0))
+        split2_tile = torch.stack(torch.split(split1_tile, split_lim // 4, dim=2))
+        tile_split[i] = torch.split(split2_tile.flatten(0, 2), split_lim // 4)
+
+    data_split = {
+        "tile_catalog": [dict(zip(tile_split, i)) for i in zip(*tile_split.values())],
+        "images": split_image,
+        "image_height_index": (
+            torch.arange(0, len(split_image)) % split_image_num_on_height
+        ).tolist(),
+        "image_width_index": (
+            torch.arange(0, len(split_image)) // split_image_num_on_height
+        ).tolist(),
+        "background": split_bg,
+        "psf_params": [psf_params for _ in range(self_copy["n_split"] ** 2)],
+    }
+
+    data_splits = [dict(zip(data_split, i)) for i in zip(*data_split.values())]
+    for cur_split in data_splits:  # noqa: WPS426
+        assert split_count < 1e6 and image_index < 1e5, "too many splits"
+        split_file_name = f"split_image_{image_index:04d}_{split_count:05d}.pt"
+        with open(
+            self_copy["split_file_path"] / split_file_name,
+            "wb",
+        ) as split_file:
+            cur_split_copy = map_nested_dicts(
+                cur_split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
+            )
+            cur_split_copy.update(wcs_header_str=wcs_header_str)
+            cur_split_copy.update(split_id=split_file_name)
+            torch.save(cur_split_copy, split_file)
+        split_count += 1
+
 
 class Dc2FullCatalog(FullCatalog):
     """Class for the LSST PHOTO Catalog.
@@ -303,8 +355,10 @@ class Dc2FullCatalog(FullCatalog):
     """
 
     @classmethod
-    def from_file(cls, cat_path, wcs, height, width, band):
+    def from_file(cls, cat_path, wcs, height, width, band, min_flux_for_loss):
         catalog = pd.read_pickle(cat_path)
+        flux_r_band = catalog["flux_r"].values
+        catalog = catalog.loc[flux_r_band > min_flux_for_loss]
         objid = torch.tensor(catalog["id"].values)
         match_id = torch.tensor(catalog["match_objectId"].values)
         ra = torch.tensor(catalog["ra"].values).numpy().squeeze()
@@ -393,8 +447,8 @@ def read_frame_for_band(image_files, bg_files, n, n_bands, image_lim):
     for b in range(n_bands):
         image_frame = fits.open(image_files[b][n])
         bg_frame = fits.open(bg_files[b][n])
-        image_data = image_frame[1].data  # pylint: disable=maybe-no-member
-        bg_data = bg_frame[0].data  # pylint: disable=maybe-no-member
+        image_data = image_frame[1].data
+        bg_data = bg_frame[0].data
 
         if wcs_header_str is None:
             wcs_header_str = image_frame[1].header.tostring()

@@ -4,7 +4,14 @@ defaults:
     - _self_
 
 paths:
-    dc2_pytest_data: ${paths.root}/case_studies/dc2/pytest_data/
+    test_data: ${oc.env:BLISS_HOME}/tests/data
+
+    sdss: ${paths.test_data}/sdss
+    decals: ${paths.test_data}/decals
+    des: ${paths.test_data}/des
+    dc2: ${paths.test_data}/dc2
+
+    pretrained_models: ${paths.test_data}/pretrained_models
 
 prior:
     n_tiles_h: 4
@@ -30,10 +37,35 @@ surveys:
               fields: [12]
         load_image_data: true
     dc2:
-        data_dir: ${paths.data}/tests/dc2/dc2_multiband/
+        data_dir: ${paths.dc2}/dc2_multiband/
+        split_results_dir: ${paths.output}/dc2_split_results
         n_split: 5
         image_lim: [800, 800]
         batch_size: 4
+        split_processes_num: 1
+
+encoder:
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        metrics:
+            detection_performance:
+                _target_: bliss.encoder.metrics.DetectionPerformance
+                mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
+            source_type_accuracy:
+                _target_: bliss.encoder.metrics.SourceTypeAccuracy
+                flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+            source_type_accuracy_star:
+                _target_: bliss.encoder.metrics.SourceTypeAccuracy
+                flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+                source_type_filter: "star"
+            source_type_accuracy_galaxy:
+                _target_: bliss.encoder.metrics.SourceTypeAccuracy
+                flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+                source_type_filter: "galaxy"
+            flux_error:
+                _target_: bliss.encoder.metrics.FluxError
+                survey_bands: ${encoder.survey_bands}
 
 #########################################
 

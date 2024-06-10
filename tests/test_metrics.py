@@ -74,7 +74,7 @@ class TestMetrics:
             bliss_cat = encoder.sample(batch, use_mode=True)
             bliss_cat = bliss_cat.to(torch.device("cpu")).to_full_catalog()
 
-        bliss_cat.plocs += torch.tensor(
+        bliss_cat["plocs"] += torch.tensor(
             [h_lim[0] + cfg.encoder.tile_slen, w_lim[0] + cfg.encoder.tile_slen]
         )  # coords in original image
 
@@ -123,7 +123,7 @@ class TestMetrics:
         assert np.isclose(dresults["detection_precision"], 2 / (2 + 2))
         assert np.isclose(dresults["detection_recall"], 2 / 3)
 
-        acc_metrics = SourceTypeAccuracy()
+        acc_metrics = SourceTypeAccuracy(flux_bin_cutoffs=[200, 400, 600, 800, 1000])
         acc_results = acc_metrics(true_params, est_params, matching)
         assert np.isclose(acc_results["classification_acc"], 1 / 2)
 
@@ -178,7 +178,7 @@ class TestMetrics:
         dresults = detection_metrics(full_catalog, full_catalog, matching)
         assert dresults["detection_f1"] == 1
 
-        acc_metrics = SourceTypeAccuracy()
+        acc_metrics = SourceTypeAccuracy(flux_bin_cutoffs=[200, 400, 600, 800, 1000])
         acc_results = acc_metrics(full_catalog, full_catalog, matching)
         assert acc_results["classification_acc"] == 1
 
