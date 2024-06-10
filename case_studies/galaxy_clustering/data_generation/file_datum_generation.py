@@ -76,8 +76,8 @@ def main(**kwargs):
         tile_catalog = tile_catalog.filter_tile_catalog_by_flux(min_flux=min_flux_for_loss)
         tile_catalog = tile_catalog.get_brightest_sources_per_tile(band=2, exclude_num=0)
 
-        tile_catalog_dict = tile_catalog
-        for key, value in tile_catalog_dict.items():
+        tile_catalog_dict = {}
+        for key, value in tile_catalog.items():
             tile_catalog_dict[key] = torch.squeeze(value, 0)
 
         filename = catalog_path.stem
