@@ -215,16 +215,9 @@ class TruncatedDiagonalMVN(Distribution):
         # the icdf will be -inf or inf, respectively, so we have to clamp
         return trunc_normal_samples.clamp(self.a, self.b)
 
-<<<<<<< HEAD
     @property
     def a(self):
         return torch.zeros_like(self.base_dist.mean)
-=======
-        # populate catalog with galaxy parameters
-        gs_dists = [q[f"galsim_{name}"] for name in self.GALSIM_NAMES]
-        gs_param_lst = [d.icdf(torch.tensor(0.5)) if use_mode else d.sample() for d in gs_dists]
-        est_cat["galaxy_params"] = torch.stack(gs_param_lst, dim=3)
->>>>>>> d28f6aec (modify)
 
     @property
     def b(self):
