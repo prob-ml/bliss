@@ -34,7 +34,6 @@ class GalaxyClusterPrior:
         self.G2_scale = 0.032
         with open("gal_gmm_nmgy.pkl", "rb") as f:
             self.gmm_gal = pickle.load(f)
-        self.tsize_poly = np.poly1d([-6.88890387e-11, 3.70584026e-5, 4.34623392e-2])
         self.redshift_alpha = 1.24
         self.redshift_beta = 1.01
         self.redshift0 = 0.51
@@ -271,9 +270,9 @@ class GalaxyClusterPrior:
         """Samples shape of galaxies in each catalog.
         (G1, G2) are both assumed to have a generalized normal distribution
         We use rejection sampling to ensure:
-            G1^2 + G2^2 <= 1
-            G1 <= 0.8
-            G2 <= 0.8
+            G1^2 + G2^2 < 1
+            G1 < 0.8
+            G2 < 0.8
 
         Args:
             galaxy_locs: locations of background galaxies

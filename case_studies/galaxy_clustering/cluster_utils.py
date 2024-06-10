@@ -20,9 +20,6 @@ M0 = (
     1.4 * 10**13 * units.solMass
 )  # M0 for calculating number of clustered galaxies from virial mass (in solar masses)
 N_BETA = 1.35  # beta for calculating number of clustered galaxies from virial mass
-Z_ALPHA = 1.24  # alpha for shaping redshift distribution for galaxy clusters
-Z_BETA = 1.8  # beta for shaping redshift distribution for galaxy clusters
-Z0 = 0.8  # z0 for shaping redshift distribution for galaxy clusters
 
 
 def hubble_parameter(z):
