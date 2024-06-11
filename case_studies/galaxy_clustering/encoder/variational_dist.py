@@ -1,16 +1,15 @@
 from bliss.catalog import TileCatalog
-from bliss.encoder.unconstrained_dists import UnconstrainedBernoulli, UnconstrainedLogitNormal
-from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
+from bliss.encoder.variational_dist import BernoulliFactor, LogitNormalFactor, VariationalDist
 
 
-class GalaxyClusterVariationlDistSpec(VariationalDistSpec):
+class GalaxyClusterVariationlDistSpec(VariationalDist):
     def __init__(self, survey_bands, tile_slen):
         super().__init__(survey_bands, tile_slen)
 
-        self.factor_specs["mem_prob"] = UnconstrainedBernoulli()
-        self.factor_specs["galsim_hlr"] = UnconstrainedLogitNormal()
-        self.factor_specs["galsim_g1"] = UnconstrainedLogitNormal()
-        self.factor_specs["galsim_g2"] = UnconstrainedLogitNormal()
+        self.factors["mem_prob"] = BernoulliFactor()
+        self.factors["galsim_hlr"] = LogitNormalFactor()
+        self.factors["galsim_g1"] = LogitNormalFactor()
+        self.factors["galsim_g2"] = LogitNormalFactor()
 
     def make_dist(self, x_cat):
         factors = self._parse_factors(x_cat)

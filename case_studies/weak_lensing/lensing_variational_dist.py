@@ -1,9 +1,8 @@
 from bliss.catalog import TileCatalog
-from bliss.encoder.unconstrained_dists import UnconstrainedBivariateNormal, UnconstrainedNormal
-from bliss.encoder.variational_dist import VariationalDist, VariationalDistSpec
+from bliss.encoder.variational_dist import BivariateNormalFactor, NormalFactor, VariationalDist
 
 
-class LensingVariationalDistSpec(VariationalDistSpec):
+class LensingVariationalDistSpec(VariationalDist):
     def __init__(
         self,
         *args,
@@ -11,8 +10,8 @@ class LensingVariationalDistSpec(VariationalDistSpec):
     ):
         super().__init__(*args, **kwargs)
 
-        self.factor_specs["shear"] = UnconstrainedBivariateNormal()
-        self.factor_specs["convergence"] = UnconstrainedNormal()
+        self.factors["shear"] = BivariateNormalFactor()
+        self.factors["convergence"] = NormalFactor()
 
     def make_dist(self, x_cat):
         # override this method to instantiate a subclass of VariationalGrid, e.g.,

@@ -1,19 +1,19 @@
-from bliss.encoder.unconstrained_dists import (
-    UnconstrainedBernoulli,
-    UnconstrainedLogNormal,
-    UnconstrainedTDBN,
+from bliss.encoder.variational_dist import (
+    BernoulliFactor,
+    LogNormalFactor,
+    TDBNFactor,
+    VariationalDist,
 )
-from bliss.encoder.variational_dist import VariationalDistSpec
 
 
-class VariationalDistSpecExcludeGalaxyParams(VariationalDistSpec):
+class VariationalDistSpecExcludeGalaxyParams(VariationalDist):
     def __init__(self, survey_bands, tile_slen):
         super().__init__(survey_bands, tile_slen)
 
         self.factor_specs = {
-            "n_sources": UnconstrainedBernoulli(),
-            "locs": UnconstrainedTDBN(),
-            "source_type": UnconstrainedBernoulli(),
-            "star_fluxes": UnconstrainedLogNormal(dim=len(survey_bands)),
-            "galaxy_fluxes": UnconstrainedLogNormal(dim=len(survey_bands)),
+            "n_sources": BernoulliFactor(),
+            "locs": TDBNFactor(),
+            "source_type": BernoulliFactor(),
+            "star_fluxes": LogNormalFactor(dim=len(survey_bands)),
+            "galaxy_fluxes": LogNormalFactor(dim=len(survey_bands)),
         }

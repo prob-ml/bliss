@@ -35,7 +35,5 @@ class TestPredict:
         bliss_cats = predict(the_cfg.predict)
         assert len(bliss_cats) == len(the_cfg.surveys.sdss.fields)
 
-        bands = cfg.encoder.survey_bands
         mode_cats = [c["mode_cat"] for c in bliss_cats.values()]
-        astropy_cats = [c.to_full_catalog().to_astropy_table(bands) for c in mode_cats]
-        assert len(astropy_cats) == len(the_cfg.surveys.sdss.fields)
+        assert len(mode_cats) == len(the_cfg.surveys.sdss.fields)

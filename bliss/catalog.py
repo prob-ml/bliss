@@ -5,8 +5,6 @@ from typing import Dict, Tuple
 
 import torch
 import torch.nn.functional as F  # noqa: WPS301
-from astropy import units as u  # noqa: WPS347
-from astropy.table import Table, hstack
 from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from torch import Tensor
@@ -318,7 +316,8 @@ class TileCatalog(BaseTileCatalog):
         return TileCatalog(self.tile_slen, d)
 
     def __repr__(self):
-        return f"TileCatalog({self.batch_size} x {self.n_tiles_h} x {self.n_tiles_w})"
+        keys = ", ".join(self.keys())
+        return f"TileCatalog({self.batch_size} x {self.n_tiles_h} x {self.n_tiles_w}; {keys})"
 
 
 class FullCatalog(UserDict):
@@ -578,77 +577,6 @@ class FullCatalog(UserDict):
             tile_params["locs"][ii] = (tile_params["locs"][ii] % tile_slen) / tile_slen
         tile_params.update({"n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
-
-    def to_astropy_table(self, encoder_survey_bands: Tuple[str]) -> Table:
-        required_keys = [
-            "star_fluxes",
-            "source_type",
-            "galaxy_params",
-            "galaxy_fluxes",
-        ]
-        assert all(k in self.keys() for k in required_keys), "`est_cat` missing required keys"
-
-        # Convert dictionary of tensors to list of dictionaries
-        on_vals = {}
-        is_on_mask = self.is_on_mask
-        for k, v in self.items():
-            if k == "n_sources":
-                continue
-            if k == "galaxy_params":
-                # reshape is_on_mask to have same last dimension as galaxy_params
-                galaxy_params_mask = is_on_mask.unsqueeze(-1).expand_as(v)
-                on_vals[k] = v[galaxy_params_mask].reshape(-1, v.shape[-1]).cpu()
-            else:
-                on_vals[k] = v[is_on_mask].cpu()
-        # Split to different columns for each band
-        for b, bl in enumerate(encoder_survey_bands):
-            on_vals[f"star_flux_{bl}"] = on_vals["star_fluxes"][..., b]
-            on_vals[f"galaxy_flux_{bl}"] = on_vals["galaxy_fluxes"][..., b]
-        # Remove combined flux columns
-        on_vals.pop("star_fluxes")
-        on_vals.pop("galaxy_fluxes")
-        n = is_on_mask.sum()  # number of (predicted) objects
-        rows = []
-        for i in range(n):
-            row = {}
-            for k, v in on_vals.items():
-                row[k] = v[i].cpu().float()
-            # Convert `source_type` to string "star" or "galaxy" labels
-            row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
-            # Force `plocs` to be "({x}, {y})" tuple strings for readability
-            row["plocs"] = str(tuple(row["plocs"].tolist()))
-            rows.append(row)
-
-        # Convert to astropy table
-        est_cat_table = Table(rows)
-        # Convert all _fluxes columns to u.Quantity
-        for bl in encoder_survey_bands:
-            est_cat_table[f"star_flux_{bl}"].unit = u.nmgy
-            est_cat_table[f"galaxy_flux_{bl}"].unit = u.nmgy
-
-        # Create inner table for galaxy_params
-        # Convert list of tensors to list of dictionaries
-        galaxy_params_names = [
-            "galaxy_disk_frac",
-            "galaxy_beta_radians",
-            "galaxy_disk_q",
-            "galaxy_a_d",
-            "galaxy_bulge_q",
-            "galaxy_a_b",
-        ]
-        galaxy_params_list = []
-        for galaxy_params in est_cat_table["galaxy_params"]:
-            galaxy_params_dic = {}
-            for i, name in enumerate(galaxy_params_names):
-                galaxy_params_dic[name] = galaxy_params[i]
-            galaxy_params_dic["galaxy_beta_radians"].unit = u.radian
-            galaxy_params_dic["galaxy_a_d"].unit = u.arcsec
-            galaxy_params_dic["galaxy_a_b"].unit = u.arcsec
-            galaxy_params_list.append(galaxy_params_dic)
-        galaxy_params_table = Table(galaxy_params_list)
-        est_cat_table.remove_column("galaxy_params")
-
-        return hstack([est_cat_table, galaxy_params_table])
 
     def filter_full_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
         assert box_origin[0] + box_len < self.height, "invalid box"
