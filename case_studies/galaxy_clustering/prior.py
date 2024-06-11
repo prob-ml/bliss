@@ -35,9 +35,9 @@ class GalaxyClusterPrior:
         self.G2_scale = 0.032
         with open("gal_gmm_nmgy.pkl", "rb") as f:
             self.gmm_gal = pickle.load(f)
-        self.redshift_alpha = 1.24
-        self.redshift_beta = 1.01
-        self.redshift0 = 0.51
+        self.redshift_alpha = 1.65
+        self.redshift_beta = 3.33
+        self.redshift0 = 0.9
         self.cluster_prob = 0.5
 
     def sample_mass(self):
@@ -81,6 +81,7 @@ class GalaxyClusterPrior:
     def sample_redshift(self):
         """Samples redshifts for the cluster.
         Sampled using the functional form present in cluster_utils
+        Parameter empirically estimated using DES and unWISE data
 
         Returns:
             returns self.size samples of redshift in the range [0,3]
