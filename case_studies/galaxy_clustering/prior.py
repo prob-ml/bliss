@@ -62,7 +62,7 @@ class GalaxyClusterPrior:
                 mass_sample.append(self.mass_min + (sample_mass_index * delta_mass))
         return mass_sample
 
-    def sample_redshift(self):
+    def sample_cluster_redshift(self):
         """Samples redshifts for the cluster.
         Sampled using the functional form present in cluster_utils
         Parameter empirically estimated using DES and unWISE data
@@ -240,7 +240,7 @@ class GalaxyClusterPrior:
             hlr_samples.append(np.random.uniform(1.0, 4.0, len(flux_samples[i])))
         return hlr_samples
 
-    def sample_redshift_bg(self):
+    def sample_background_redshift(self):
         """Sample redshift of background galaxies.
         Assumed to be uniform in [0,7]
 
@@ -263,7 +263,7 @@ class GalaxyClusterPrior:
                         redshift_samples[i], mass_samples[i]
                     )
                 else:
-                    mag_samples[j] = mag_samples[j] * (1 + self.sample_redshift_bg())
+                    mag_samples[j] = mag_samples[j] * (1 + self.sample_background_redshift())
             flux_samples.append(mag_samples)
         return flux_samples
 
@@ -373,7 +373,7 @@ class GalaxyClusterPrior:
 
     def sample(self):
         mass_samples = self.sample_mass()
-        redshift_samples = self.sample_redshift()
+        redshift_samples = self.sample_cluster_redshift()
         radius_samples = self.sample_radius(mass_samples, redshift_samples)
         n_galaxy_cluster = self.sample_n_cluster(mass_samples)
         center_samples = self.sample_center()
