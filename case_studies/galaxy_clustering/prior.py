@@ -65,10 +65,10 @@ class GalaxyClusterPrior:
     def sample_cluster_redshift(self):
         """Samples redshifts for the cluster.
         Sampled using the functional form present in cluster_utils
-        Parameter empirically estimated using DES and unWISE data
+        Parameters empirically estimated using DES and unWISE data
 
         Returns:
-            returns self.size samples of redshift in the range [0,3]
+            returns self.size samples of redshift in the range [0,1.25]
         """
         redshift_bins = np.linspace(0.01, 1.25, 100)
         redshift_pdf = [
