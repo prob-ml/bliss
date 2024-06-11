@@ -11,6 +11,8 @@ from torch.distributions import (
     TransformedDistribution,
 )
 
+from bliss.catalog import TileCatalog
+
 
 class VariationalDist(torch.nn.Module):
     def __init__(self, factors, tile_slen):
@@ -23,23 +25,19 @@ class VariationalDist(torch.nn.Module):
     def n_params_per_source(self):
         return sum(fs.n_params for fs in self.factors)
 
-    def _dist_params(self, x_cat):
+    def _factor_param_pairs(self, x_cat):
         split_sizes = [v.n_params for v in self.factors]
-        return torch.split(x_cat, split_sizes, 3)
+        dist_params_lst = torch.split(x_cat, split_sizes, 3)
+        return zip(self.factors, dist_params_lst)
 
     def sample(self, x_cat, use_mode=False):
-        dist_params_lst = self._dist_params(x_cat)
-
-        est_cat = {}
-        for qk, params in zip(self.factors, dist_params_lst):
-            est_cat[qk.name] = qk.sample(params, use_mode)
-
-        return est_cat
+        fp_pairs = self._factor_param_pairs(x_cat)
+        d = {qk.name: qk.sample(params, use_mode) for qk, params in fp_pairs}
+        return TileCatalog(self.tile_slen, d)
 
     def compute_nll(self, x_cat, true_tile_cat):
-        dist_params_lst = self._dist_params(x_cat)
-        qk_params = zip(self.factors, dist_params_lst)
-        return sum(qk.compute_nll(params, true_tile_cat) for qk, params in qk_params)
+        fp_pairs = self._factor_param_pairs(x_cat)
+        return sum(qk.compute_nll(params, true_tile_cat) for qk, params in fp_pairs)
 
 
 class VariationalFactor:

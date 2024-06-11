@@ -118,7 +118,10 @@ class TileCatalog(BaseTileCatalog):
         Returns:
             Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
         """
-        fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
+        if "galaxy_fluxes" not in self:
+            fluxes = self["star_fluxes"]
+        else:
+            fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
     @property
@@ -427,9 +430,9 @@ class FullCatalog(UserDict):
         Returns:
             Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
         """
-        if "fluxes" in self:
-            # ideally we'd always store fluxes rather than star_fluxes and galaxy_fluxes
-            fluxes = self.get("fluxes")
+        # ideally we'd always store fluxes rather than star_fluxes and galaxy_fluxes
+        if "galaxy_fluxes" not in self:
+            fluxes = self["star_fluxes"]
         else:
             fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
