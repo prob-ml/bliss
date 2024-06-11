@@ -23,7 +23,7 @@ class GalaxyClusterPrior:
         self.dec_cen = -40.228830895890404
         self.mass_min = (10**14.5) * (units.solMass)
         self.mass_max = (10**15.5) * (units.solMass)
-        self.scale_pixels_per_au = 80
+        self.pixels_per_mpc = 80
         self.mean_sources = 0.004
         self.mag_ex = 1.3
         self.mag_max = 25
@@ -39,6 +39,8 @@ class GalaxyClusterPrior:
         self.redshift_beta = 3.33
         self.redshift0 = 0.9
         self.cluster_prob = 0.5
+        self.light_speed = 299792.46  # in km/s
+        self.sigma_DM15 = 1028.9  # in km/s
 
     def sample_mass(self):
         """Samples masses in the range [10**14.5, 10**15.5] solar masses.
@@ -60,24 +62,6 @@ class GalaxyClusterPrior:
                 mass_sample.append(self.mass_min + (sample_mass_index * delta_mass))
         return mass_sample
 
-    def sample_subredshift(self, z, mass):
-        """Sample redshift of clustered galaxy given cluster redshift and virial mass.
-        Assumes a normal distribution around centered at the cluster redshift.
-
-        Args:
-            z: redshift
-            mass: virial mass in solar masses
-
-        Returns:
-            sample for redshift of clustered galaxy
-        """
-        hubble_z = utils.hubble_parameter(z).value / 100
-        sigma_v = (hubble_z * mass / (10**15 * units.solMass)) ** (1.0 / 3.0) * 1082.9
-        c = 899377.37
-        v_cl = (c * (1 + z) ** 2 - c) / ((1 + z) ** 2 + 1)
-        v = np.random.normal(v_cl, sigma_v)
-        return np.sqrt((c + v) / (c - v)) - 1
-
     def sample_redshift(self):
         """Samples redshifts for the cluster.
         Sampled using the functional form present in cluster_utils
@@ -94,7 +78,24 @@ class GalaxyClusterPrior:
         redshift_pdf = redshift_pdf / np.sum(redshift_pdf)
         return np.random.choice(np.linspace(0.01, 3, 100), size=self.size, p=redshift_pdf)
 
-    def sample_radius(self, mass_samples, redshift_samples):  # !!!!!! NEEDS TO BE FIXED !!!!!!
+    def sample_subredshift(self, z, mass):
+        """Sample redshift of clustered galaxy given cluster redshift and virial mass.
+        Assumes a normal distribution around centered at the cluster redshift.
+
+        Args:
+            z: redshift
+            mass: virial mass in solar masses
+
+        Returns:
+            sample for redshift of clustered galaxy
+        """
+        hubble_z = utils.hubble_parameter(z).value / 100
+        sigma_v = (hubble_z * mass / (10**15 * units.solMass)) ** (1.0 / 3.0) * self.sigma_DM15
+        v_cl = self.light_speed * (((1 + z) ** 2 - 1) / ((1 + z) ** 2 + 1))
+        v = np.random.normal(v_cl, sigma_v)
+        return np.sqrt((self.light_speed + v) / (self.light_speed - v)) - 1
+
+    def sample_radius(self, mass_samples, redshift_samples):
         """Samples radius given virial mass and redshift.
         Uses conversion function from utils
 
@@ -103,14 +104,12 @@ class GalaxyClusterPrior:
             redshift_samples: cluster redshifts for each catalog
 
         Returns:
-            samples for cluster radius for each catalog
+            samples for cluster radius for each catalog (in pixels)
         """
         radius_samples = []
         for i in range(self.size):
-            unscaled_r = utils.m200_to_r200(mass_samples[i], redshift_samples[i]).to(units.cm)
-            radius_samples.append(
-                (unscaled_r * self.scale_pixels_per_au / (3.086 * 10**24)).value
-            )
+            unscaled_r = utils.m200_to_r200(mass_samples[i], redshift_samples[i])
+            radius_samples.append((unscaled_r * self.pixels_per_mpc).value)
         return radius_samples
 
     def sample_n_cluster(self, mass_samples):
