@@ -183,6 +183,11 @@ class TestDC2:
         train_dc2_cfg.encoder.image_normalizer.log_transform_stdevs = []
         train_dc2_cfg.encoder.image_normalizer.use_clahe = True
         train_dc2_cfg.encoder.image_normalizer.include_background = False
+
+        for f in train_dc2_cfg.variational_factors:
+            if f.name in {"star_fluxes", "galaxy_fluxes"}:
+                f.dim = 6
+
         train(train_dc2_cfg.train)
 
     def test_dc2_augmentation(self, cfg):

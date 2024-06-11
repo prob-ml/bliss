@@ -66,9 +66,26 @@ class BaseTileCatalog(UserDict):
 
 
 class TileCatalog(BaseTileCatalog):
+    galaxy_params = [
+        "galaxy_disk_frac",
+        "galaxy_beta_radians",
+        "galaxy_disk_q",
+        "galaxy_a_d",
+        "galaxy_bulge_q",
+        "galaxy_a_b",
+    ]
+    galaxy_params_index = {k: i for i, k in enumerate(galaxy_params)}
+
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.max_sources = d["locs"].shape[3]
         super().__init__(tile_slen, d)
+
+    def __getitem__(self, name: str):
+        # a temporary hack until we stop storing galaxy_params as an array
+        if "galaxy_params" in self.keys() and name in self.galaxy_params:
+            idx = self.galaxy_params_index[name]
+            return self.data["galaxy_params"][..., idx : (idx + 1)]
+        return super().__getitem__(name)
 
     @property
     def is_on_mask(self) -> Tensor:

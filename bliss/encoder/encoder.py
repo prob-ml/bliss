@@ -180,16 +180,16 @@ class Encoder(pl.LightningModule):
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
     def _single_detection_nll(self, target_cat, pred):
-        marginal_loss = pred["marginal"].compute_nll(target_cat)
+        marginal_loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat)
 
         if not self.use_checkerboard:
             return marginal_loss
 
-        white_loss = pred["white"].compute_nll(target_cat)
+        white_loss = self.var_dist.compute_nll(pred["x_cat_white"], target_cat)
         white_loss_mask = 1 - pred["white_history_mask"]
         white_loss *= white_loss_mask
 
-        black_loss = pred["black"].compute_nll(target_cat)
+        black_loss = self.var_dist.compute_nll(pred["x_cat_black"], target_cat)
         black_loss_mask = pred["white_history_mask"]
         black_loss *= black_loss_mask
 
@@ -202,9 +202,9 @@ class Encoder(pl.LightningModule):
         )
 
         nll_marginal_z1 = self._single_detection_nll(target_cat1, pred)
-        nll_cond_z2 = pred["second"].compute_nll(target_cat2)
+        nll_cond_z2 = self.var_dist.compute_nll(pred["x_cat_second"], target_cat2)
         nll_marginal_z2 = self._single_detection_nll(target_cat2, pred)
-        nll_cond_z1 = pred["second"].compute_nll(target_cat1)
+        nll_cond_z1 = self.var_dist.compute_nll(pred["x_cat_second"], target_cat1)
 
         none_mask = target_cat["n_sources"] == 0
         loss0 = nll_marginal_z1 * none_mask
@@ -250,8 +250,11 @@ class Encoder(pl.LightningModule):
             white_history_mask = tile_cb.expand([batch_size, -1, -1])
             pred["white_history_mask"] = white_history_mask
 
-            pred["white_context"] = self.make_context(target_cat1, white_history_mask)
-            pred["black_context"] = self.make_context(target_cat1, 1 - white_history_mask)
+            white_context = self.make_context(target_cat1, white_history_mask)
+            pred["x_cat_white"] = self.checkerboard_net(x_features, white_context)
+
+            black_context = self.make_context(target_cat1, 1 - white_history_mask)
+            pred["x_cat_black"] = self.checkerboard_net(x_features, black_context)
 
         # compute loss
         if not self.double_detect:

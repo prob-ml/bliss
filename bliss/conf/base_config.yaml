@@ -80,6 +80,7 @@ variational_factors:
   - _target_: bliss.encoder.variational_dist.BernoulliFactor
     name: source_type
     sample_rearrange: "b ht wt -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt"
     nll_gating: n_sources
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: star_fluxes
@@ -96,26 +97,33 @@ variational_factors:
   - _target_: bliss.encoder.variational_dist.LogitNormalFactor
     name: galaxy_disk_frac
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
     nll_gating: is_galaxy
   - _target_: bliss.encoder.variational_dist.LogitNormalFactor
     name: galaxy_beta_radians
     high: 3.1415926
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
     nll_gating: is_galaxy
   - _target_: bliss.encoder.variational_dist.LogitNormalFactor
     name: galaxy_disk_q
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
     nll_gating: is_galaxy
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: galaxy_a_d
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
     nll_gating: is_galaxy
   - _target_: bliss.encoder.variational_dist.LogitNormalFactor
     name: galaxy_bulge_q
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+    nll_gating: is_galaxy
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: galaxy_a_b
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
     nll_gating: is_galaxy
 
 encoder:
