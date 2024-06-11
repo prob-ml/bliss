@@ -70,13 +70,13 @@ class GalaxyClusterPrior:
         Returns:
             returns self.size samples of redshift in the range [0,3]
         """
-        redshift_bins = np.linspace(0.01, 3, 100)
+        redshift_bins = np.linspace(0.01, 1.25, 100)
         redshift_pdf = [
             utils.redshift_distribution(z, self.redshift_alpha, self.redshift_beta, self.redshift0)
             for z in redshift_bins
         ]
         redshift_pdf = redshift_pdf / np.sum(redshift_pdf)
-        return np.random.choice(np.linspace(0.01, 3, 100), size=self.size, p=redshift_pdf)
+        return np.random.choice(np.linspace(0.01, 1.25, 100), size=self.size, p=redshift_pdf)
 
     def sample_subredshift(self, z, mass):
         """Sample redshift of clustered galaxy given cluster redshift and virial mass.
