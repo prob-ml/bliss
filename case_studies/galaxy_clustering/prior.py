@@ -350,8 +350,7 @@ class GalaxyClusterPrior:
         Returns:
             flux ratios for all bands
         """
-        gmm_gal = self.gmm_gal
-        flux_logdiff, _ = gmm_gal.sample(size)
+        flux_logdiff, _ = self.gmm_gal.sample(size)
         flux_logdiff = flux_logdiff[:][:, 1:]
         flux_logdiff = np.clip(flux_logdiff, -2.76, 2.76)
         flux_ratio = np.exp(flux_logdiff)
