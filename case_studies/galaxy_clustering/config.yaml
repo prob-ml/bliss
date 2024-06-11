@@ -58,3 +58,14 @@ encoder:
         metrics:
             cluster_membership_error:
                 _target_: case_studies.galaxy_clustering.encoder.metrics.ClusterMembershipAccuracy
+
+
+predict:
+    dataset: ${surveys.des}
+    trainer:
+        _target_: pytorch_lightning.Trainer
+        accelerator: "gpu"
+        precision: ${train.trainer.precision}
+    encoder: ${encoder}
+    weight_save_path: ${paths.root}/output/version_186/checkpoints/best_encoder.ckpt
+    device: "cuda:0"
