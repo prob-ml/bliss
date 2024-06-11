@@ -342,6 +342,14 @@ class GalaxyClusterPrior:
         return g1_size_samples, g2_size_samples
 
     def galaxy_flux_ratio(self, size):
+        """Samples flux ratios from Gaussian Mixture Model (color model).
+
+        Args:
+            size: samples to be generated (number of galaxies)
+
+        Returns:
+            flux ratios for all bands
+        """
         gmm_gal = self.gmm_gal
         flux_logdiff, _ = gmm_gal.sample(size)
         flux_logdiff = flux_logdiff[:][:, 1:]
