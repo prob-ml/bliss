@@ -22,8 +22,8 @@ class ImageBackground(nn.Module):
         super().__init__()
 
         backgrounds = []
-        for i in range(len(image_items)):
-            backgrounds.append(image_items[i]["background"][list(bands)])
+        for image_item in image_items:
+            backgrounds.append(image_item["background"][list(bands)])
         background = torch.from_numpy(np.stack(backgrounds, axis=0))
 
         self.register_buffer("background", background, persistent=False)
@@ -37,8 +37,8 @@ class ImageBackground(nn.Module):
 
         # select region to sample from (same for all images in batch for simplicity)
         h_diff, w_diff = self.height - hlen, self.width - wlen
-        h = 0 #if h_diff == 0 else np.random.randint(h_diff)
-        w = 0 #if w_diff == 0 else np.random.randint(w_diff)
+        h = 0 if h_diff == 0 else np.random.randint(h_diff)
+        w = 0 if w_diff == 0 else np.random.randint(w_diff)
 
         # sample region from specified background for each image in batch
         return self.background[image_id_indices, :, h : (h + hlen), w : (w + wlen)]

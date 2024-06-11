@@ -36,8 +36,6 @@ class TestSimulate:
         # don't add noise to simulated image; with noise we intermittently generate what looks like
         # extra sources in the image, which causes the test to fail
         image_simulator.apply_noise = lambda img: img
-        image_simulator.image_decoder.pixel_shifts = lambda _a,_b,_c: (np.zeros((1, 5, 2)), [])
-        image_simulator.align_images = lambda images, _: images
         rcfs, rcf_indices = image_simulator.randomized_image_ids(true_catalog["n_sources"].size(0))
         image, background, _ = image_simulator.simulate_images(true_catalog, rcfs, rcf_indices)
 

@@ -155,7 +155,7 @@ class Encoder(pl.LightningModule):
         x_features = self.features_net(x)
 
         x_cat_marginal = self.marginal_net(x_features)
-        marginal_cat = self.var_dist.sample(x_cat_marginal)
+        marginal_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
 
         if not self.use_checkerboard:
             est_cat = marginal_cat
@@ -166,7 +166,7 @@ class Encoder(pl.LightningModule):
 
             white_context = self.make_context(marginal_cat, white_history_mask)
             x_cat_white = self.checkerboard_net(x_features, white_context)
-            white_cat = self.var_dist.sample(x_cat_white)
+            white_cat = self.var_dist.sample(x_cat_white, use_mode=use_mode)
             est_cat = self.interleave_catalogs(marginal_cat, white_cat, white_history_mask)
 
         if self.double_detect:
