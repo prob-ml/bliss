@@ -38,10 +38,37 @@ train:
 
 variational_factors:
   - _target_: bliss.encoder.variational_dist.BernoulliFactor
-    name: mem_prob
-    sample_rearrange: "b ht wt d -> b ht wt 1 1"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    name: n_sources
+    sample_rearrange: null
+    nll_rearrange: null
     nll_gating: null
+  - _target_: bliss.encoder.variational_dist.TDBNFactor
+    name: locs
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: n_sources
+  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+    name: source_type
+    sample_rearrange: "b ht wt -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    nll_gating: n_sources
+  - _target_: bliss.encoder.variational_dist.LogNormalFactor
+    name: star_fluxes
+    dim: 4
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: is_star
+  - _target_: bliss.encoder.variational_dist.LogNormalFactor
+    name: galaxy_fluxes
+    dim: 4
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: is_galaxy
+  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+    name: membership
+    sample_rearrange: "b ht wt -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    nll_gating: n_sources
 
 encoder:
     _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
