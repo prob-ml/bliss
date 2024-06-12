@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List, Tuple, TypedDict
 from urllib.error import HTTPError
 
-import galsim.des  # noqa: WPS301
+import galsim
 import numpy as np
 import torch
 from astropy.io import fits

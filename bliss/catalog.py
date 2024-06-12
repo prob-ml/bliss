@@ -4,7 +4,6 @@ from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
-import torch.nn.functional as F  # noqa: WPS301
 from astropy import units
 from astropy.table import Table
 from astropy.wcs import WCS
@@ -584,7 +583,7 @@ class FullCatalog(UserDict):
                 # pad first tensor to desired length
                 # the second argument of pad function is
                 # padding_left, padding_right, padding_top, padding_bottom
-                params_on_tile[0] = F.pad(
+                params_on_tile[0] = torch.nn.functional.pad(
                     params_on_tile[0],
                     (0, 0, 0, (max_sources_per_tile - params_on_tile[0].shape[0])),
                 )
