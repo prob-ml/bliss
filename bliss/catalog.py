@@ -4,9 +4,8 @@ from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
-import torch.nn.functional as F  # noqa: WPS301
-from astropy import units as u  # noqa: WPS347
-from astropy.table import Table, hstack
+from astropy import units
+from astropy.table import Table
 from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from torch import Tensor
@@ -68,9 +67,26 @@ class BaseTileCatalog(UserDict):
 
 
 class TileCatalog(BaseTileCatalog):
+    galaxy_params = [
+        "galaxy_disk_frac",
+        "galaxy_beta_radians",
+        "galaxy_disk_q",
+        "galaxy_a_d",
+        "galaxy_bulge_q",
+        "galaxy_a_b",
+    ]
+    galaxy_params_index = {k: i for i, k in enumerate(galaxy_params)}
+
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.max_sources = d["locs"].shape[3]
         super().__init__(tile_slen, d)
+
+    def __getitem__(self, name: str):
+        # a temporary hack until we stop storing galaxy_params as an array
+        if "galaxy_params" in self.keys() and name in self.galaxy_params:
+            idx = self.galaxy_params_index[name]
+            return self.data["galaxy_params"][..., idx : (idx + 1)]
+        return super().__getitem__(name)
 
     @property
     def is_on_mask(self) -> Tensor:
@@ -103,7 +119,10 @@ class TileCatalog(BaseTileCatalog):
         Returns:
             Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
         """
-        fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
+        if "galaxy_fluxes" not in self:
+            fluxes = self["star_fluxes"]
+        else:
+            fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
     @property
@@ -318,7 +337,8 @@ class TileCatalog(BaseTileCatalog):
         return TileCatalog(self.tile_slen, d)
 
     def __repr__(self):
-        return f"TileCatalog({self.batch_size} x {self.n_tiles_h} x {self.n_tiles_w})"
+        keys = ", ".join(self.keys())
+        return f"TileCatalog({self.batch_size} x {self.n_tiles_h} x {self.n_tiles_w}; {keys})"
 
 
 class FullCatalog(UserDict):
@@ -411,9 +431,9 @@ class FullCatalog(UserDict):
         Returns:
             Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
         """
-        if "fluxes" in self:
-            # ideally we'd always store fluxes rather than star_fluxes and galaxy_fluxes
-            fluxes = self.get("fluxes")
+        # ideally we'd always store fluxes rather than star_fluxes and galaxy_fluxes
+        if "galaxy_fluxes" not in self:
+            fluxes = self["star_fluxes"]
         else:
             fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
@@ -563,7 +583,7 @@ class FullCatalog(UserDict):
                 # pad first tensor to desired length
                 # the second argument of pad function is
                 # padding_left, padding_right, padding_top, padding_bottom
-                params_on_tile[0] = F.pad(
+                params_on_tile[0] = torch.nn.functional.pad(
                     params_on_tile[0],
                     (0, 0, 0, (max_sources_per_tile - params_on_tile[0].shape[0])),
                 )
@@ -580,33 +600,23 @@ class FullCatalog(UserDict):
         return TileCatalog(tile_slen, tile_params)
 
     def to_astropy_table(self, encoder_survey_bands: Tuple[str]) -> Table:
-        required_keys = [
-            "star_fluxes",
-            "source_type",
-            "galaxy_params",
-            "galaxy_fluxes",
-        ]
-        assert all(k in self.keys() for k in required_keys), "`est_cat` missing required keys"
-
         # Convert dictionary of tensors to list of dictionaries
         on_vals = {}
         is_on_mask = self.is_on_mask
         for k, v in self.items():
             if k == "n_sources":
                 continue
-            if k == "galaxy_params":
-                # reshape is_on_mask to have same last dimension as galaxy_params
-                galaxy_params_mask = is_on_mask.unsqueeze(-1).expand_as(v)
-                on_vals[k] = v[galaxy_params_mask].reshape(-1, v.shape[-1]).cpu()
-            else:
-                on_vals[k] = v[is_on_mask].cpu()
+            on_vals[k] = v[is_on_mask].cpu()
+
         # Split to different columns for each band
         for b, bl in enumerate(encoder_survey_bands):
             on_vals[f"star_flux_{bl}"] = on_vals["star_fluxes"][..., b]
             on_vals[f"galaxy_flux_{bl}"] = on_vals["galaxy_fluxes"][..., b]
+
         # Remove combined flux columns
         on_vals.pop("star_fluxes")
         on_vals.pop("galaxy_fluxes")
+
         n = is_on_mask.sum()  # number of (predicted) objects
         rows = []
         for i in range(n):
@@ -621,34 +631,18 @@ class FullCatalog(UserDict):
 
         # Convert to astropy table
         est_cat_table = Table(rows)
-        # Convert all _fluxes columns to u.Quantity
+
+        # Convert all _fluxes columns to units.Quantity
         for bl in encoder_survey_bands:
-            est_cat_table[f"star_flux_{bl}"].unit = u.nmgy
-            est_cat_table[f"galaxy_flux_{bl}"].unit = u.nmgy
+            est_cat_table[f"star_flux_{bl}"].unit = units.nmgy
+            est_cat_table[f"galaxy_flux_{bl}"].unit = units.nmgy
 
-        # Create inner table for galaxy_params
-        # Convert list of tensors to list of dictionaries
-        galaxy_params_names = [
-            "galaxy_disk_frac",
-            "galaxy_beta_radians",
-            "galaxy_disk_q",
-            "galaxy_a_d",
-            "galaxy_bulge_q",
-            "galaxy_a_b",
-        ]
-        galaxy_params_list = []
-        for galaxy_params in est_cat_table["galaxy_params"]:
-            galaxy_params_dic = {}
-            for i, name in enumerate(galaxy_params_names):
-                galaxy_params_dic[name] = galaxy_params[i]
-            galaxy_params_dic["galaxy_beta_radians"].unit = u.radian
-            galaxy_params_dic["galaxy_a_d"].unit = u.arcsec
-            galaxy_params_dic["galaxy_a_b"].unit = u.arcsec
-            galaxy_params_list.append(galaxy_params_dic)
-        galaxy_params_table = Table(galaxy_params_list)
-        est_cat_table.remove_column("galaxy_params")
+        # add units to some galaxy shape properties
+        est_cat_table["galaxy_beta_radians"].unit = units.radian
+        est_cat_table["galaxy_a_d"].unit = units.arcsec
+        est_cat_table["galaxy_a_b"].unit = units.arcsec
 
-        return hstack([est_cat_table, galaxy_params_table])
+        return est_cat_table
 
     def filter_full_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
         assert box_origin[0] + box_len < self.height, "invalid box"

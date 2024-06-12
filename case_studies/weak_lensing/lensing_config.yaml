@@ -7,6 +7,18 @@ defaults:
 paths:
     root: ${oc.env:BLISS_HOME}
 
+variational_factors:
+  - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
+    name: shear
+    sample_rearrange: "1 ht wt d -> ht wt 1 d"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+    nll_gating: null
+  - _target_: bliss.encoder.variational_dist.NormalFactor
+    name: convergence
+    sample_rearrange: "b ht wt -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    nll_gating: null
+
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
     n_tiles_h: 48
@@ -40,7 +52,8 @@ encoder:
     metrics:
         _target_: torchmetrics.MetricCollection
         metrics:
-          - _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
+            lensing_map:
+                _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
 
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
@@ -55,8 +68,6 @@ encoder:
             restrict_batch: 0
             tiles_to_crop: 1
             tile_slen: ${simulator.prior.tile_slen}
-    vd_spec:
-        _target_: case_studies.weak_lensing.lensing_variational_dist.LensingVariationalDistSpec
     double_detect: false
     use_checkerboard: false
 

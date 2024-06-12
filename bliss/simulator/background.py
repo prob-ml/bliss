@@ -22,7 +22,8 @@ class ImageBackground(nn.Module):
         super().__init__()
 
         backgrounds = []
-        backgrounds.extend(item["background"][list(bands)] for item in image_items)
+        for image_item in image_items:
+            backgrounds.append(image_item["background"][list(bands)])
         background = torch.from_numpy(np.stack(backgrounds, axis=0))
 
         self.register_buffer("background", background, persistent=False)

@@ -3,7 +3,7 @@ from hydra.utils import instantiate
 
 
 class TestEncoder:
-    def test_encode_multi_source_catalog(self, cfg, multi_source_dataloader):
+    def test_sample_multisource_catalog(self, cfg, multi_source_dataloader):
         batch = next(iter(multi_source_dataloader))
         for key, val in batch.items():
             if isinstance(val, torch.Tensor):
@@ -11,7 +11,7 @@ class TestEncoder:
         encoder = instantiate(cfg.encoder).to(cfg.predict.device)
         encoder.sample(batch, use_mode=True)
 
-    def test_encode_with_psf(self, cfg, multiband_dataloader):
+    def test_sample_with_psf(self, cfg, multiband_dataloader):
         batch = next(iter(multiband_dataloader))
         for key, val in batch.items():
             if isinstance(val, torch.Tensor):

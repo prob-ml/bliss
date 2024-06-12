@@ -4,6 +4,29 @@ defaults:
     - _self_
     - override hydra/job_logging: stdout
 
+variational_factors:
+  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+    name: n_sources
+    sample_rearrange: null
+    nll_rearrange: null
+    nll_gating: null
+  - _target_: bliss.encoder.variational_dist.TDBNFactor
+    name: locs
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: n_sources
+  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+    name: source_type
+    sample_rearrange: "b ht wt -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    nll_gating: n_sources
+  - _target_: bliss.encoder.variational_dist.LogNormalFactor
+    name: star_fluxes
+    dim: 5
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: is_star
+
 encoder:
     tile_slen: 2
     min_flux_for_loss: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
@@ -61,11 +84,12 @@ generate:
 
 cached_simulator:
     cached_data_path: /data/scratch/regier/m2
-    batch_size: 23
+    batch_size: 12
 
 train:
     trainer:
-        precision: 16-mixed
+        precision: 32
+        accumulate_grad_batches: 2
 
 predict:
     dataset:
