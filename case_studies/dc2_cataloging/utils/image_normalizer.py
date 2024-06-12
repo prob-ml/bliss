@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Dict
 
 import torch
@@ -6,7 +5,7 @@ import torch
 from bliss.encoder.image_normalizer import ImageNormalizer
 
 
-class BasicAsinhImageNormalizer(ImageNormalizer):
+class DynamicAsinhImageNormalizer(ImageNormalizer):
     def __init__(
         self,
         bands: list,
@@ -242,7 +241,7 @@ class FixedThresholdsAsinhImageNormalizer(ImageNormalizer):
         log_transform_stdevs: list,
         use_clahe: bool,
         clahe_min_stdev: float,
-        thresholds_tensor_file: str,
+        asinh_params: Dict[str, float],
     ):
         super().__init__(
             bands,
@@ -254,9 +253,16 @@ class FixedThresholdsAsinhImageNormalizer(ImageNormalizer):
             use_clahe,
             clahe_min_stdev,
         )
-        thresholds_tensor_file_path = Path(thresholds_tensor_file)
-        with open(thresholds_tensor_file_path, "rb") as input_f:
-            self.asinh_thresholds_tensor = torch.load(input_f)
+        self.asinh_params = asinh_params
+
+        assert self.asinh_params, "asinh_params can't be None"
+        assert (
+            not self.include_background
+        ), "if you want to use asinh, please don't include background"
+
+        self.asinh_thresholds_tensor = torch.tensor(self.asinh_params["thresholds"]).view(
+            1, 1, -1, 1, 1
+        )
 
     def num_channels_per_band(self):
         pre_nch = super().num_channels_per_band()

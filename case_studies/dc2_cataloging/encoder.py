@@ -3,7 +3,7 @@ from bliss.encoder.encoder import Encoder
 from case_studies.dc2_cataloging.utils.convnet import FeaturesNet
 
 
-class MyEncoder(Encoder):
+class EncoderForDynamicAsinh(Encoder):
     def initialize_networks(self):
         assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         ch_per_band = self.image_normalizer.num_channels_per_band()

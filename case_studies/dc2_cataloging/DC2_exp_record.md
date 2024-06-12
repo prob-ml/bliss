@@ -329,3 +329,7 @@ processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.
 ### 06-06
 
 1. use the new method but trained using refactored code
+
+### 06-12
+
+1. train with fixed thresholds using the latest code
