@@ -89,7 +89,7 @@ def train(train_cfg: DictConfig):
 
 def predict(predict_cfg):
     encoder = instantiate(predict_cfg.encoder)
-    enc_state_dict = torch.load(predict_cfg.weight_save_path)
+    enc_state_dict = torch.load(predict_cfg.weight_save_path, map_location=predict_cfg.device)
     if predict_cfg.weight_save_path.endswith(".ckpt"):
         enc_state_dict = enc_state_dict["state_dict"]
     encoder.load_state_dict(enc_state_dict)
