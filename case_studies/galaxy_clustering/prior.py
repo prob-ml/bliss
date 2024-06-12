@@ -411,6 +411,36 @@ class GalaxyClusterPrior:
             res.append(mock_catalog)
         return res
 
+    def make_global_catalog(self, mass_samples, redshift_samples, radius_samples, n_galaxy_cluster):
+        """Makes global catalog of all clusters generated.
+
+        Args:
+            mass_samples: cluster virial masses (in solar masses)
+            redshift_samples: cluster redshifts
+            radius_samples: cluster virial radii (in pixels, to be converted to Mpc)
+            n_galaxy_cluster: number of clustered galaxies
+
+        Returns:
+            dataframe containing all the clusters generated
+            (where number of clustered galaxies is positive)
+            Columns include:
+                ImageID: ID of file where cluster is present
+                M200: virial mass in units of 10**14 solar masses
+                R200: virial radii in units of Mpc
+                z_cl: cluster redshift
+                N200: number of clustered galaxies within R200
+        """
+        df = pd.DataFrame()
+        mass_samples = [mass.value / 10**14 for mass in mass_samples]
+        radius_samples = [radius / self.pixels_per_mpc for radius in radius_samples]
+        cluster_ids = list(np.nonzero(n_galaxy_cluster)[0])
+        df["ImageID"] = cluster_ids
+        df["M200"] = np.take(mass_samples, cluster_ids)
+        df["R200"] = np.take(radius_samples, cluster_ids)
+        df["z_cl"] = np.take(redshift_samples, cluster_ids)
+        df["N200"] = np.take(n_galaxy_cluster, cluster_ids)
+        return df
+
     def sample(self):
         mass_samples = self.sample_mass()
         cluster_redshift_samples = self.sample_cluster_redshift()
@@ -430,7 +460,7 @@ class GalaxyClusterPrior:
         r_flux_samples = self.sample_flux_r(redshift_samples)
         hlr_samples = self.sample_hlr(r_flux_samples)
         g1_size_samples, g2_size_samples = self.sample_shape(cartesian_locs, cartesian_cluster_locs)
-        return self.make_catalog(
+        cluster_catalogs = self.make_catalog(
             r_flux_samples,
             hlr_samples,
             g1_size_samples,
@@ -441,3 +471,7 @@ class GalaxyClusterPrior:
             cartesian_cluster_locs,
             redshift_samples,
         )
+        global_catalog = self.make_global_catalog(
+            mass_samples, cluster_redshift_samples, radius_samples, n_galaxy_cluster
+        )
+        return cluster_catalogs, global_catalog
