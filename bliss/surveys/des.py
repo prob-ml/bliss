@@ -9,6 +9,7 @@ import torch
 from astropy.io import fits
 from astropy.table import Table
 from astropy.wcs import WCS, FITSFixedWarning
+from galsim import des as galsim_des
 from numpy.core import defchararray
 from omegaconf import DictConfig
 from pyvo.dal import sia
@@ -496,7 +497,7 @@ class DES_PSF(ImagePSF):  # noqa: N801
                     / brickname
                     / f"{image_basename}.fits"
                 )
-                des_psfex_band = galsim.des.DES_PSFEx(
+                des_psfex_band = galsim_des.DES_PSFEx(
                     fmt_psfex_table_hdu,
                     str(image_filename),
                 )
