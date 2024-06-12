@@ -36,11 +36,6 @@ train:
     trainer:
         precision: 32-true
 
-        self.factors[""] = ()
-        self.factors[""] = ()
-        self.factors[""] = ()
-        self.factors[""] = ()
-
 variational_factors:
   - _target_: bliss.encoder.variational_dist.BernoulliFactor
     name: mem_prob
