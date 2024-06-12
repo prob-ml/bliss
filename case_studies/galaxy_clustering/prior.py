@@ -373,6 +373,22 @@ class GalaxyClusterPrior:
         cartesian_cluster_locs,
         redshift_samples,
     ):
+        """Makes list of catalogs from generated samples.
+
+        Args:
+            r_flux_samples: flux samples in R band
+            hlr_samples: samples of HLR
+            g1_size_samples: samples of G1
+            g2_size_samples: samples of G2
+            gal_locs: samples of background locations in galactic coordinates
+            gal_cluster_locs: samples of clustered galaxy locations in galactic coordinates
+            cartesian_locs: samples of background locations in cartesian coordinates
+            cartesian_cluster_locs: samples of clustered galaxy locations in cartesian coordinates
+            redshift_samples: samples of redshifts
+
+        Returns:
+            list of dataframes (one for each catalog)
+        """
         res = []
         for i, r_flux in enumerate(r_flux_samples):
             mock_catalog = pd.DataFrame()
@@ -442,6 +458,12 @@ class GalaxyClusterPrior:
         return df
 
     def sample(self):
+        """Main sample function.
+
+        Returns:
+            cluster_catalogs: list of catalogs for each image
+            global_catalogs: global catalog of cluster-wide data
+        """
         mass_samples = self.sample_mass()
         cluster_redshift_samples = self.sample_cluster_redshift()
         radius_samples = self.sample_radius(mass_samples, cluster_redshift_samples)
