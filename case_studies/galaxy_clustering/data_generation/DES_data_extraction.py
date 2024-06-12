@@ -1,13 +1,14 @@
 import os
-from urllib import request
 
-import cluster_utils as utils
 import numpy as np
+import requests
 from astropy import units
 from numpy.core.defchararray import startswith
 from pyvo.dal import sia
 
-DES_DATAPATH = os.getcwd() + "/data/DES_images"
+from case_studies.galaxy_clustering import cluster_utils as utils
+
+DES_DATAPATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data/DES_images"
 if not os.path.exists(DES_DATAPATH):
     os.makedirs(DES_DATAPATH)
 
@@ -26,9 +27,8 @@ def compute_fov(m500, z):
 
 def download_image(m500, z, ra, dec, band):
     fov = compute_fov(m500, z)
-    img_table = svc.search(
-        (ra, dec), (fov / np.cos(dec * np.pi / 180), fov), verbosity=2
-    ).to_table()
+    dec_radian = dec * np.pi / 180
+    img_table = svc.search((ra, dec), (fov / np.cos(dec_radian), fov), verbosity=2).to_table()
     sel = (
         (img_table["proctype"] == "Stack")
         & (img_table["prodtype"] == "image")
@@ -37,4 +37,11 @@ def download_image(m500, z, ra, dec, band):
     row = img_table[sel][0]
     url = row["access_url"]  # get the download URL
     filename = DES_DATAPATH + "/" + str(ra) + "_" + str(dec) + "_" + band + ".fits"
-    request.urlretrieve(url, filename)
+    if not url.lower().startswith("http"):
+        raise ValueError("URL must start with http")
+    response = requests.get(url, timeout=200)
+    if response.status_code == 200:
+        with open(filename, "wb") as file:
+            file.write(response.content)
+    else:
+        raise ValueError("Failed to download file.")
