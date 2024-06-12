@@ -52,7 +52,8 @@ encoder:
     metrics:
         _target_: torchmetrics.MetricCollection
         metrics:
-          - _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
+            lensing_map:
+                _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
 
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
