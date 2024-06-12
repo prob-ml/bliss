@@ -106,6 +106,8 @@ filterwarnings = [
   "ignore:.*when logging on epoch level in distributed setting.*",
   "ignore:.*pkg_resources.declare_namespace.*:DeprecationWarning",
   "ignore:.*distutils Version classes are deprecated.*:DeprecationWarning",
+  "ignore:.*Total length of `DataLoader` across ranks is zero.*:UserWarning",
+  "ignore:.*Total length of `CombinedLoader` across ranks is zero.*:UserWarning",
 ]
 minversion = "6.0"
 testpaths = [

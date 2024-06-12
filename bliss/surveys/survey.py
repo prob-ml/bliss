@@ -36,6 +36,10 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
     def __getitem__(self, idx):
         """Dataset override."""
 
+    def __iter__(self):
+        for i in range(self.__len__()):
+            yield self[i]
+
     @abstractmethod
     def image_id(self, idx: int):
         """Return the image_id for the given index."""
@@ -50,7 +54,7 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
 
     def predict_dataloader(self):
         """Return a DataLoader for prediction."""
-        return DataLoader(SurveyDataset(self), batch_size=1)
+        return DataLoader(SurveyPredictIterator(self), batch_size=1)
 
     def get_flux_calibrations(self):
         d = {}
@@ -61,7 +65,7 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         return d
 
 
-class SurveyDataset:
+class SurveyPredictIterator:
     def __init__(self, survey):
         self.survey = survey
 
@@ -71,6 +75,10 @@ class SurveyDataset:
 
     def __len__(self):
         return len(self.survey)
+
+    def __iter__(self):
+        for i in range(self.__len__()):
+            yield self[i]
 
 
 class SurveyDownloader:

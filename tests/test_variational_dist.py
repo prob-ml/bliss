@@ -1,10 +1,10 @@
 import torch
 from torch.distributions import Normal
 
-from bliss.encoder.unconstrained_dists import TruncatedDiagonalMVN
+from bliss.encoder.variational_dist import TruncatedDiagonalMVN
 
 
-class TestUnconstrainedDists:
+class TestVariationalDist:
     def test_tdbn_univariate(self, cfg):
         # first check that a univariate normal distribution with neglible probablity mass
         # outside of the unit interval is equivalent to a truncated mvn with the same parameters
