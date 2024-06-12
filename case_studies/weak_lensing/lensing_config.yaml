@@ -67,8 +67,6 @@ encoder:
             restrict_batch: 0
             tiles_to_crop: 1
             tile_slen: ${simulator.prior.tile_slen}
-    vd_spec:
-        _target_: case_studies.weak_lensing.lensing_variational_dist.LensingVariationalDistSpec
     double_detect: false
     use_checkerboard: false
 
