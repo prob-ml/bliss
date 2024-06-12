@@ -36,13 +36,21 @@ train:
     trainer:
         precision: 32-true
 
+        self.factors[""] = ()
+        self.factors[""] = ()
+        self.factors[""] = ()
+        self.factors[""] = ()
+
+variational_factors:
+  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+    name: mem_prob
+    sample_rearrange: "b ht wt d -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    nll_gating: null
+
 encoder:
     _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
     survey_bands: ["g", "r", "i", "z"]
-    vd_spec:
-        _target_: case_studies.galaxy_clustering.encoder.variational_dist.GalaxyClusterVariationlDistSpec
-        survey_bands: ${encoder.survey_bands}
-        tile_slen: ${encoder.tile_slen}
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
         bands: [0, 1, 2, 3]
