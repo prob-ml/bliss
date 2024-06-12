@@ -283,17 +283,17 @@ class Encoder(pl.LightningModule):
         return self._compute_loss(batch, "train")
 
     def update_metrics(self, batch, batch_idx):
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat = target_cat.filter_tile_catalog_by_flux(
+        target_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_tile_cat = target_tile_cat.filter_tile_catalog_by_flux(
             min_flux=self.min_flux_for_loss,
             band=self.reference_band,
         )
-        target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
+        target_cat = target_tile_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
-        mode_cat_tile = self.sample(batch, use_mode=True).filter_tile_catalog_by_flux(
+        mode_tile_cat = self.sample(batch, use_mode=True).filter_tile_catalog_by_flux(
             min_flux=self.min_flux_for_metrics
         )
-        mode_cat = mode_cat_tile.to_full_catalog()
+        mode_cat = mode_tile_cat.to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, matching)
 
@@ -307,7 +307,7 @@ class Encoder(pl.LightningModule):
         self.sample_image_renders.update(
             batch,
             target_cat,
-            mode_cat_tile,
+            mode_tile_cat,
             mode_cat,
             self.current_epoch,
             batch_idx,

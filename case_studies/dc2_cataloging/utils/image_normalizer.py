@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Dict
 
 import torch
@@ -217,6 +218,55 @@ class PerbandMovingAvgAsinhImageNormalizer(ImageNormalizer):
                 *self.asinh_thresholds_tensor.shape,
             )
             self.asinh_buffer_ptr += 1
+
+        filtered_images = raw_images - self.asinh_thresholds_tensor
+        processed_images = filtered_images * self.asinh_params["scale"]
+        processed_images = torch.asinh(processed_images)
+
+        if pre_input_tensor is not None:
+            input_tensor = torch.cat((pre_input_tensor, processed_images), dim=2)
+        else:
+            input_tensor = processed_images
+
+        return input_tensor
+
+
+class FixedThresholdsAsinhImageNormalizer(ImageNormalizer):
+    def __init__(
+        self,
+        bands: list,
+        include_original: bool,
+        include_background: bool,
+        concat_psf_params: bool,
+        num_psf_params: int,
+        log_transform_stdevs: list,
+        use_clahe: bool,
+        clahe_min_stdev: float,
+        thresholds_tensor_file: str,
+    ):
+        super().__init__(
+            bands,
+            include_original,
+            include_background,
+            concat_psf_params,
+            num_psf_params,
+            log_transform_stdevs,
+            use_clahe,
+            clahe_min_stdev,
+        )
+        thresholds_tensor_file_path = Path(thresholds_tensor_file)
+        with open(thresholds_tensor_file_path, "rb") as input_f:
+            self.asinh_thresholds_tensor = torch.load(input_f)
+
+    def num_channels_per_band(self):
+        pre_nch = super().num_channels_per_band()
+        return pre_nch + len(self.asinh_params["thresholds"])
+
+    def get_input_tensor(self, batch):
+        pre_input_tensor = super().get_input_tensor(batch)
+        raw_images = batch["images"][:, self.bands].unsqueeze(2)
+
+        self.asinh_thresholds_tensor = self.asinh_thresholds_tensor.to(device=raw_images.device)
 
         filtered_images = raw_images - self.asinh_thresholds_tensor
         processed_images = filtered_images * self.asinh_params["scale"]

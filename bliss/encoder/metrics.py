@@ -370,8 +370,8 @@ class SourceTypeAccuracy(SourceFilterMetric):
             true_gal = true_cat.galaxy_bools[i][tcat_matches][to_bin_mapping]
             est_gal = est_cat.galaxy_bools[i][ecat_matches][to_bin_mapping]
 
-            gal_tp_bool = torch.split(true_gal * est_gal, per_bin_elements_count.tolist())
-            star_tp_bool = torch.split(~true_gal * ~est_gal, per_bin_elements_count.tolist())
+            gal_tp_bool = torch.split(true_gal & est_gal, per_bin_elements_count.tolist())
+            star_tp_bool = torch.split(~true_gal & ~est_gal, per_bin_elements_count.tolist())
 
             gal_tp = torch.tensor([i.sum() for i in gal_tp_bool], device=self.device)
             star_tp = torch.tensor([i.sum() for i in star_tp_bool], device=self.device)
