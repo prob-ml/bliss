@@ -34,6 +34,7 @@ def cfg(pytestconfig, cached_data_path, output_path):
     # pytest-specific overrides
     overrides = {
         "train.trainer.accelerator": "gpu" if use_gpu else "cpu",
+        "predict.trainer.accelerator": "gpu" if use_gpu else "cpu",
         "predict.device": "cuda:0" if use_gpu else "cpu",
         "paths.root": Path(__file__).parents[1].as_posix(),
         "paths.output": str(output_path),
@@ -49,7 +50,7 @@ def cfg(pytestconfig, cached_data_path, output_path):
 @pytest.fixture(scope="session")
 def encoder(cfg):
     encoder = instantiate(cfg.encoder).to(cfg.predict.device)
-    enc_state_dict = torch.load(cfg.predict.weight_save_path)
+    enc_state_dict = torch.load(cfg.predict.weight_save_path, map_location=cfg.predict.device)
     encoder.load_state_dict(enc_state_dict)
     # remember to put encoder in eval mode if using it for prediction
     return encoder

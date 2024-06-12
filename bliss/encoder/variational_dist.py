@@ -1,186 +1,298 @@
-from typing import List
-
 import torch
 from einops import rearrange
-
-from bliss.catalog import TileCatalog
-from bliss.encoder.unconstrained_dists import (
-    UnconstrainedBernoulli,
-    UnconstrainedLogitNormal,
-    UnconstrainedLogNormal,
-    UnconstrainedTDBN,
+from torch.distributions import (
+    AffineTransform,
+    Categorical,
+    Distribution,
+    Independent,
+    LogNormal,
+    Normal,
+    SigmoidTransform,
+    TransformedDistribution,
 )
 
-
-class VariationalDistSpec(torch.nn.Module):
-    def __init__(self, survey_bands, tile_slen):
-        super().__init__()
-
-        self.survey_bands = survey_bands
-        self.tile_slen = tile_slen
-
-        # overriding this dict in subclass enables you to exclude loss
-        self.factor_specs = {
-            "n_sources": UnconstrainedBernoulli(),
-            "locs": UnconstrainedTDBN(),
-            "source_type": UnconstrainedBernoulli(),
-            "star_fluxes": UnconstrainedLogNormal(dim=len(survey_bands)),
-            "galaxy_fluxes": UnconstrainedLogNormal(dim=len(survey_bands)),
-            # galsim parameters
-            "galsim_disk_frac": UnconstrainedLogitNormal(),
-            "galsim_beta_radians": UnconstrainedLogitNormal(high=torch.pi),
-            "galsim_disk_q": UnconstrainedLogitNormal(),
-            "galsim_a_d": UnconstrainedLogNormal(),
-            "galsim_bulge_q": UnconstrainedLogitNormal(),
-            "galsim_a_b": UnconstrainedLogNormal(),
-        }
-
-    @property
-    def n_params_per_source(self):
-        return sum(fs.n_params for fs in self.factor_specs.values())
-
-    def _parse_factors(self, x_cat):
-        split_sizes = [v.n_params for v in self.factor_specs.values()]
-        dist_params_split = torch.split(x_cat, split_sizes, 3)
-        names = self.factor_specs.keys()
-        factors = dict(zip(names, dist_params_split))
-
-        for k, v in factors.items():
-            factors[k] = self.factor_specs[k].get_dist(v)
-
-        return factors
-
-    def make_dist(self, x_cat):
-        # override this method to instantiate a subclass of VariationalGrid, e.g.,
-        # one with additional distribution parameter groups
-        factors = self._parse_factors(x_cat)
-        return VariationalDist(factors, self.tile_slen)
+from bliss.catalog import TileCatalog
 
 
 class VariationalDist(torch.nn.Module):
-    GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
-
     def __init__(self, factors, tile_slen):
         super().__init__()
 
         self.factors = factors
         self.tile_slen = tile_slen
-        self.factors_name_set = set(self.factors.keys())
 
-        self.loc_name_lst = ["locs"]
-        self.star_flux_name_lst = ["star_fluxes"]
-        self.source_type_name_lst = ["source_type"]
-        self.galsim_params_name_lst = [f"galsim_{name}" for name in self.GALSIM_NAMES]
-        self.galaxy_flux_name_lst = ["galaxy_fluxes"]
-        self.n_sources_name_lst = ["n_sources"]
+    @property
+    def n_params_per_source(self):
+        return sum(fs.n_params for fs in self.factors)
 
-        self.loc_available = self._factors_are_available(self.loc_name_lst)
-        self.star_flux_available = self._factors_are_available(self.star_flux_name_lst)
-        self.source_type_available = self._factors_are_available(self.source_type_name_lst)
-        self.galaxy_params_available = self._factors_are_available(self.galsim_params_name_lst)
-        self.galaxy_flux_available = self._factors_are_available(self.galaxy_flux_name_lst)
-        self.n_sources_available = self._factors_are_available(self.n_sources_name_lst)
+    def _factor_param_pairs(self, x_cat):
+        split_sizes = [v.n_params for v in self.factors]
+        dist_params_lst = torch.split(x_cat, split_sizes, 3)
+        return zip(self.factors, dist_params_lst)
 
-    def _factors_are_available(self, factors_name_list: List[str]) -> bool:
-        return set(factors_name_list).issubset(self.factors_name_set)
+    def sample(self, x_cat, use_mode=False):
+        fp_pairs = self._factor_param_pairs(x_cat)
+        d = {qk.name: qk.sample(params, use_mode) for qk, params in fp_pairs}
+        return TileCatalog(self.tile_slen, d)
 
-    def sample(self, use_mode=False) -> TileCatalog:
-        """Sample the variational distribution.
+    def compute_nll(self, x_cat, true_tile_cat):
+        fp_pairs = self._factor_param_pairs(x_cat)
+        return sum(qk.compute_nll(params, true_tile_cat) for qk, params in fp_pairs)
+
+
+class VariationalFactor:
+    def __init__(
+        self,
+        n_params,
+        name,
+        sample_rearrange=None,
+        nll_rearrange=None,
+        nll_gating=None,
+    ):
+        self.name = name
+        self.n_params = n_params
+        self.sample_rearrange = sample_rearrange
+        self.nll_rearrange = nll_rearrange
+        self.nll_gating = nll_gating
+
+    def sample(self, params, use_mode=False):
+        qk = self._get_dist(params)
+        sample_cat = qk.mode if use_mode else qk.sample()
+        if self.sample_rearrange is not None:
+            sample_cat = rearrange(sample_cat, self.sample_rearrange)
+        return sample_cat
+
+    def compute_nll(self, params, true_tile_cat):
+        target = true_tile_cat[self.name]
+        if self.nll_rearrange is not None:
+            target = rearrange(target, self.nll_rearrange)
+
+        qk = self._get_dist(params)
+        ungated_nll = -qk.log_prob(target)
+
+        if self.nll_gating is None:
+            gating = 1
+        elif self.nll_gating == "n_sources":
+            gating = true_tile_cat["n_sources"]
+        elif self.nll_gating == "is_star":
+            gating = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
+        elif self.nll_gating == "is_galaxy":
+            gating = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
+        else:
+            raise ValueError(f"Invalid nll_gating: {self.nll_gating}")
+
+        return ungated_nll * gating
+
+
+class BernoulliFactor(VariationalFactor):
+    def __init__(self, *args, **kwargs):
+        super().__init__(1, *args, **kwargs)
+
+    def _get_dist(self, params):
+        yes_prob = params.sigmoid().clamp(1e-4, 1 - 1e-4)
+        no_yes_prob = torch.cat([1 - yes_prob, yes_prob], dim=3)
+        # this next line may be helpful with nans encountered during training with fp16s
+        no_yes_prob = no_yes_prob.nan_to_num(nan=0.5)
+        return Categorical(no_yes_prob)
+
+
+class NormalFactor(VariationalFactor):
+    def __init__(self, *args, low_clamp=-20, high_clamp=20, **kwargs):
+        super().__init__(2, *args, **kwargs)
+        self.low_clamp = low_clamp
+        self.high_clamp = high_clamp
+
+    def _get_dist(self, params):
+        mean = params[:, :, :, 0]
+        sd = params[:, :, :, 1].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        return Normal(mean, sd)
+
+
+class BivariateNormalFactor(VariationalFactor):
+    def __init__(self, *args, low_clamp=-20, high_clamp=20, **kwargs):
+        super().__init__(4, *args, **kwargs)
+        self.low_clamp = low_clamp
+        self.high_clamp = high_clamp
+
+    def _get_dist(self, params):
+        mean = params[:, :, :, :2]
+        sd = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+
+        return Independent(Normal(mean, sd), 1)
+
+
+class TDBNFactor(VariationalFactor):
+    """Produces truncated bivariate normal distributions from unconstrained parameters."""
+
+    def __init__(self, *args, low_clamp=-6, high_clamp=3, **kwargs):
+        super().__init__(4, *args, **kwargs)
+        self.low_clamp = low_clamp
+        self.high_clamp = high_clamp
+
+    def _get_dist(self, params):
+        mu = params[:, :, :, :2].sigmoid()
+        sigma = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        return TruncatedDiagonalMVN(mu, sigma)
+
+
+class LogNormalFactor(VariationalFactor):
+    def __init__(self, *args, dim=1, **kwargs):
+        self.dim = dim  # the dimension of a multivariate lognormal
+        n_params = 2 * dim  # mean and std for each dimension (diagonal covariance)
+        super().__init__(n_params, *args, **kwargs)
+
+    def _get_dist(self, params):
+        mu = params[:, :, :, 0 : self.dim]
+        sigma = params[:, :, :, self.dim : self.n_params].clamp(-6, 10).exp().sqrt()
+        iid_dist = LogNormalEpsilon(
+            mu, sigma, validate_args=False
+        )  # may evaluate at 0 for masked tiles
+        return Independent(iid_dist, 1)
+
+
+class LogitNormalFactor(VariationalFactor):
+    def __init__(self, *args, low=0, high=1, dim=1, **kwargs):
+        self.dim = dim  # the dimension of a multivariate logitnormal
+        n_params = 2 * dim
+        self.low = low
+        self.high = high
+        super().__init__(n_params, *args, **kwargs)
+
+    def _get_dist(self, params):
+        mu = params[:, :, :, 0 : self.dim]
+        sigma = params[:, :, :, self.dim : self.n_params].clamp(-10, 10).exp().sqrt()
+        return RescaledLogitNormal(mu, sigma, low=self.low, high=self.high)
+
+
+#####################
+
+
+class TruncatedDiagonalMVN(Distribution):
+    """A truncated diagonal multivariate normal distribution."""
+
+    def __init__(self, mu, sigma):
+        """Initialize a truncated diagonal multivariate normal distribution.
 
         Args:
-            use_mode: whether to use the mode of the distribution instead of random sampling
+            mu (Tensor): Mean of the distribution (must be at least 1d)
+            sigma (Tensor): Standard deviation of the distribution (must be at least 1d)
+
+        Distribution is "multivariate" in that the last dimension of mu and sigma
+        are considered event dimensions.
+        """
+
+        super().__init__(validate_args=False)
+        multiple_normals = Normal(mu, sigma)  # all dims are batch dims, none are event
+        self.base_dist = Independent(multiple_normals, 1)  # now last dim is event dim
+
+        # we'll need these calculations later for log_prob
+        prob_in_unit_box_hw = multiple_normals.cdf(self.b) - multiple_normals.cdf(self.a)
+        self.log_prob_in_unit_box = prob_in_unit_box_hw.log().sum(dim=-1)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.base_dist.base_dist})"
+
+    def sample(self, sample_shape=()):
+        """Generate sample.
+
+        Args:
+            sample_shape (Tuple): Shape of samples to draw
 
         Returns:
-            TileCatalog: Sampled catalog
+            Tensor: (sample_shape, self.batch_shape, self.event_shape) shaped sample
+
         """
-        q = self.factors
 
-        est_cat = {}
+        shape = sample_shape + self.base_dist.batch_shape + self.base_dist.event_shape
 
-        # populate catalog with locations
-        if self.loc_available:
-            est_cat["locs"] = q["locs"].mode if use_mode else q["locs"].sample()
+        # draw using inverse cdf method
+        # if Fi is the cdf of the relavant gaussian, then
+        # Gi(u) = Fi(u*(F(b) - F(a)) + F(a)) is the cdf of the truncated gaussian
+        uniform01_samples = torch.rand(shape, device=self.base_dist.mean.device)
+        uniform_fafb = uniform01_samples * (self.upper_cdf - self.lower_cdf) + self.lower_cdf
+        trunc_normal_samples = self.base_dist.base_dist.icdf(uniform_fafb)
 
-        # populate catalog with source type
-        if self.source_type_available:
-            est_cat["source_type"] = (
-                q["source_type"].mode if use_mode else q["source_type"].sample()
-            ).unsqueeze(-1)
+        # if u_transformed is within machine precision of 0 or 1
+        # the icdf will be -inf or inf, respectively, so we have to clamp
+        return trunc_normal_samples.clamp(self.a, self.b)
 
-        # populate catalog with per-band (log) star fluxes
-        if self.star_flux_available:
-            est_cat["star_fluxes"] = (
-                q["star_fluxes"].mode if use_mode else q["star_fluxes"].sample()
-            )
+    @property
+    def a(self):
+        return torch.zeros_like(self.base_dist.mean)
 
-        # populate catalog with per-band galaxy fluxes
-        if self.galaxy_flux_available:
-            est_cat["galaxy_fluxes"] = (
-                q["galaxy_fluxes"].mode if use_mode else q["galaxy_fluxes"].sample()
-            )
+    @property
+    def b(self):
+        return torch.ones_like(self.base_dist.mean)
 
-        # populate catalog with galaxy parameters
-        if self.galaxy_params_available:
-            gs_dists = [q[factor] for factor in self.galsim_params_name_lst]
-            gs_param_lst = [d.mode if use_mode else d.sample() for d in gs_dists]
-            est_cat["galaxy_params"] = torch.concat(gs_param_lst, dim=3)
+    @property
+    def lower_cdf(self):
+        return self.base_dist.base_dist.cdf(self.a)
 
-        # we have to unsqueeze these tensors because a TileCatalog can store multiple
-        # light sources per tile, but we sample only one source per tile
-        for k, v in est_cat.items():
-            est_cat[k] = v.unsqueeze(3)
+    @property
+    def upper_cdf(self):
+        return self.base_dist.base_dist.cdf(self.b)
 
-        # n_sources is not unsqueezed because it is a single integer per tile regardless of
-        # how many light sources are stored per tile
-        if self.n_sources_available:
-            est_cat["n_sources"] = q["n_sources"].mode if use_mode else q["n_sources"].sample()
+    @property
+    def mean(self):
+        mu = self.base_dist.mean
+        offset = self.base_dist.log_prob(self.a).exp() - self.base_dist.log_prob(self.b).exp()
+        offset /= self.log_prob_in_unit_box.exp()
+        return mu + (offset.unsqueeze(-1) * self.base_dist.stddev)
 
-        return TileCatalog(self.tile_slen, est_cat)
+    @property
+    def stddev(self):
+        # See https://arxiv.org/pdf/1206.5387.pdf for the formula for the variance of a truncated
+        # multivariate normal. The covariance terms simplify since our dimensions are independent,
+        # but it's still tricky to compute.
+        raise NotImplementedError("Standard deviation for truncated normal is not implemented yet")
 
-    def compute_nll(self, true_tile_cat: TileCatalog):
-        q = self.factors
+    @property
+    def mode(self):
+        # a mode still exists if this assertion is false, but I haven't implemented code
+        # to compute it because I don't think we need it
+        assert (self.base_dist.mean >= 0).all() and (self.base_dist.mean <= 1).all()
+        return self.base_dist.mode
 
-        # counter loss
-        if self.n_sources_available:
-            counter_loss = -q["n_sources"].log_prob(true_tile_cat["n_sources"])
-            loss = counter_loss
+    def log_prob(self, value):
+        assert (value >= 0).all() and (value <= 1).all()
+        # subtracting log probability that the base RV is in the unit box
+        # is equivalent in log space to dividing the normal pdf by the normalizing constant
+        return self.base_dist.log_prob(value) - self.log_prob_in_unit_box
 
-        # all the squeezing/rearranging below is because a TileCatalog can store multiple
-        # light sources per tile, which is annoying here, but helpful for storing samples
-        # and real catalogs. Still, there may be a better way.
+    def cdf(self, value):
+        cdf_at_val = self.base_dist.base_dist.cdf(value)
+        cdf_at_lb = self.lower_cdf
+        log_cdf = (cdf_at_val - cdf_at_lb + 1e-9).log().sum(dim=-1) - self.log_prob_in_unit_box
+        return log_cdf.exp()
 
-        # location loss
-        if self.loc_available:
-            true_locs = true_tile_cat["locs"].squeeze(3)
-            locs_loss = -q["locs"].log_prob(true_locs)
-            locs_loss *= true_tile_cat["n_sources"]
-            loss += locs_loss
 
-        # star/galaxy classification loss
-        if self.source_type_available:
-            true_gal_bools = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
-            binary_loss = -q["source_type"].log_prob(true_gal_bools)
-            binary_loss *= true_tile_cat["n_sources"]
-            loss += binary_loss
+class RescaledLogitNormal(Distribution):
+    def __init__(self, mu, sigma, low=0, high=1):
+        super().__init__(validate_args=False)
 
-        # star flux loss
-        if self.star_flux_available:
-            true_star_bools = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
-            star_fluxes = rearrange(true_tile_cat["star_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
-            star_flux_loss = -q["star_fluxes"].log_prob(star_fluxes + 1e-9) * true_star_bools
-            loss += star_flux_loss
+        self.low = low
+        self.high = high
 
-        # galaxy flux loss
-        if self.galaxy_flux_available:
-            gal_fluxes = rearrange(true_tile_cat["galaxy_fluxes"], "b ht wt 1 bnd -> b ht wt bnd")
-            gal_flux_loss = -q["galaxy_fluxes"].log_prob(gal_fluxes + 1e-9) * true_gal_bools
-            loss += gal_flux_loss
+        self.mu = mu
+        self.sigma = sigma
 
-        # galaxy properties loss
-        if self.galaxy_params_available:
-            for i, gs_param in enumerate(self.galsim_params_name_lst):
-                gs_true = true_tile_cat["galaxy_params"][..., i]
-                loss_term = -q[gs_param].log_prob(gs_true + 1e-9) * true_gal_bools
-                loss += loss_term
+        base_dist = Normal(mu, sigma)
+        transforms = [SigmoidTransform(), AffineTransform(loc=self.low, scale=self.high)]
+        self.iid_dist = TransformedDistribution(base_dist, transforms)
 
-        return loss
+    def sample(self):
+        return self.iid_dist.sample()
+
+    def log_prob(self, value):
+        return self.iid_dist.log_prob(value).sum(-1)
+
+    @property
+    def mode(self):
+        # this is actual the median, not the mode. The median is suitable as a point estimate
+        # and the mode doesn't have an analytic form.
+        return self.iid_dist.icdf(torch.tensor(0.5))
+
+
+class LogNormalEpsilon(LogNormal):
+    def log_prob(self, value):
+        return super().log_prob(value + 1e-9)

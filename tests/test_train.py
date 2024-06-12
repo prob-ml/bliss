@@ -1,24 +1,8 @@
 import os
-import shutil
-from pathlib import Path
-
-import pytest
 
 from bliss.main import generate, train
 from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
 from bliss.surveys.des import DarkEnergySurvey as DES
-
-
-@pytest.fixture(autouse=True)
-def clear_checkpoints(cfg):
-    checkpoints_dir = cfg.paths.root + "/checkpoints"
-    if Path(checkpoints_dir).exists():
-        shutil.rmtree(checkpoints_dir)
-
-    yield
-
-    if Path(checkpoints_dir).exists():
-        shutil.rmtree(checkpoints_dir)
 
 
 class TestTrain:
@@ -31,6 +15,10 @@ class TestTrain:
         train_des_cfg.simulator.survey = "${surveys.des}"
         train_des_cfg.simulator.prior.reference_band = DES.BANDS.index("r")
         train_des_cfg.simulator.prior.survey_bands = DES.BANDS
+
+        for f in train_des_cfg.variational_factors:
+            if f.name in {"star_fluxes", "galaxy_fluxes"}:
+                f.dim = 4
 
         train_des_cfg.encoder.image_normalizer.bands = [
             DES.BANDS.index("g"),
@@ -47,6 +35,10 @@ class TestTrain:
         train_decals_cfg.simulator.survey = "${surveys.decals}"
         train_decals_cfg.simulator.prior.reference_band = DECaLS.BANDS.index("r")
         train_decals_cfg.simulator.prior.survey_bands = DECaLS.BANDS
+
+        for f in train_decals_cfg.variational_factors:
+            if f.name in {"star_fluxes", "galaxy_fluxes"}:
+                f.dim = 4
 
         train_decals_cfg.encoder.image_normalizer.log_transform_stdevs = []
         train_decals_cfg.encoder.image_normalizer.bands = [
