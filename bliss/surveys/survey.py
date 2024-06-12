@@ -54,7 +54,7 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
 
     def predict_dataloader(self):
         """Return a DataLoader for prediction."""
-        return DataLoader(self, batch_size=1)
+        return DataLoader(SurveyPredictIterator(self), batch_size=1)
 
     def get_flux_calibrations(self):
         d = {}
@@ -63,6 +63,22 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
             avg_nelec_conv = np.squeeze(np.mean(nelec_conv_for_frame, axis=1))
             d[image_id] = avg_nelec_conv
         return d
+
+
+class SurveyPredictIterator:
+    def __init__(self, survey):
+        self.survey = survey
+
+    def __getitem__(self, idx):
+        x = self.survey[idx]
+        return {"images": x["image"], "background": x["background"]}
+
+    def __len__(self):
+        return len(self.survey)
+
+    def __iter__(self):
+        for i in range(self.__len__()):
+            yield self[i]
 
 
 class SurveyDownloader:
