@@ -39,9 +39,9 @@ surveys:
             - run: 94
               camcol: 1
               fields: [12] #${range:22,460,20}
-            # - run: 3900
-            #   camcol: 6
-            #   fields: ${range:26,820,20}
+            - run: 125
+              camcol: 1
+              fields: [45] #${range:26,820,20}
             # - run: 752
             #   camcol: 1
             #   fields: ${range:25,700,20}
