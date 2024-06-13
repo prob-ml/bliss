@@ -9,7 +9,6 @@ import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning.callbacks import ModelCheckpoint
 from tqdm import tqdm
 
 from bliss.simulator.simulated_dataset import FileDatum
@@ -85,12 +84,8 @@ def train(train_cfg: DictConfig):
     trainer.fit(encoder, datamodule=dataset)
 
     # load best model for test
-    if train_cfg.test_best is True:
-        for callback in trainer.callbacks:
-            if isinstance(callback, ModelCheckpoint):
-                model_checkpoint = callback
-                break
-        best_model_path = model_checkpoint.best_model_path
+    if train_cfg.test_best:
+        best_model_path = trainer.callbacks["checkpointing"].best_model_path
         enc_state_dict = torch.load(best_model_path)
         enc_state_dict = enc_state_dict["state_dict"]
         encoder.load_state_dict(enc_state_dict)

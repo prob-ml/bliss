@@ -9,6 +9,23 @@ mode: train
 global_setting:
     min_flux_for_loss: 100  # you need to regenerate split_results after changing this number
 
+variational_factors:
+  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+    name: n_sources
+    sample_rearrange: null
+    nll_rearrange: null
+    nll_gating: null
+  - _target_: bliss.encoder.variational_dist.TDBNFactor
+    name: locs
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: n_sources
+  - _target_: bliss.encoder.variational_dist.NormalFactor
+    name: redshifts
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: is_galaxy
+
 encoder:
     _target_: case_studies.dc2_cataloging.utils.encoder.MyEncoder
     survey_bands: ["g", "i", "r", "u", "y", "z"]
@@ -21,10 +38,6 @@ encoder:
     scheduler_params:
         milestones: [32]
         gamma: 0.1
-    vd_spec:
-        _target_: case_studies.redshift.redshift_from_img.variational_dist.RedshiftVariationalDistSpec
-        survey_bands: ${encoder.survey_bands}
-        tile_slen: ${encoder.tile_slen}
     image_normalizer:
         _target_: case_studies.dc2_cataloging.utils.image_normalizer.BasicAsinhImageNormalizer
         bands: [0, 1, 2, 3, 4, 5]
@@ -75,7 +88,7 @@ train:
     trainer:
         logger:
             name: DC2_redshift_training
-            version: DC2_redshift_all_best
+            version: DC2_redshift_test
             save_dir: ${paths.root}/case_studies/redshift/redshift_from_img/
         precision: 32
         strategy:
@@ -85,24 +98,25 @@ train:
             _target_: datetime.timedelta
             seconds: 180000
         callbacks:
-            - _target_: pytorch_lightning.callbacks.ModelCheckpoint
-              filename: encoder_{val/mode/Mean squared error:.6f}
-              save_top_k: 5
-              verbose: True
-            #   monitor: val/_loss
-              monitor: val/mode/Mean squared error
-              mode: min
+            checkpointing:
+                _target_: pytorch_lightning.callbacks.ModelCheckpoint
+                filename: encoder_{val/mode/Mean squared error:.6f}
+                save_top_k: 5
+                verbose: True
+              #   monitor: val/_loss
+                monitor: val/mode/Mean squared error
+                mode: min
         # val_check_interval: 0.25
         check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
         devices: [1, 2, 3, 4]
-        max_epochs: 50
+        max_epochs: 1
     data_source: ${surveys.dc2}
-    pretrained_weights: ${paths.root}/case_studies/redshift/redshift_from_img/DC2_redshift/DC2_redshift_full/checkpoints/encoder_val/mode/Mean squared error=0.432428.ckpt
+    pretrained_weights: null
     test_best: true
 
 
 surveys:
     dc2:
         cat_path: ${paths.root}/case_studies/redshift/redshift_from_img/DC2_generate_catalog_output/merged_catalog_with_flux_over_50.pkl
-        split_results_dir: ${paths.root}/case_studies/redshift/redshift_from_img/DC2_split_result_all
+        split_results_dir: ${paths.root}/case_studies/redshift/redshift_from_img/DC2_split_result_test
