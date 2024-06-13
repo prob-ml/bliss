@@ -6,54 +6,77 @@ defaults:
 
 mode: train
 
+global_setting:
+    min_flux_for_loss: 100  # you need to regenerate split_results after changing this number
+
 encoder:
+    _target_: case_studies.dc2_cataloging.utils.encoder.MyEncoder
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
-    double_detect: false
     tiles_to_crop: 1
-    do_data_augmentation: true
+    min_flux_for_loss: ${global_setting.min_flux_for_loss}
+    min_flux_for_metrics: 100
+    optimizer_params:
+        lr: 1e-3
+    scheduler_params:
+        milestones: [32]
+        gamma: 0.1
+    vd_spec:
+        _target_: case_studies.redshift.redshift_from_img.variational_dist.RedshiftVariationalDistSpec
+        survey_bands: ${encoder.survey_bands}
+        tile_slen: ${encoder.tile_slen}
     image_normalizer:
+        _target_: case_studies.dc2_cataloging.utils.image_normalizer.BasicAsinhImageNormalizer
         bands: [0, 1, 2, 3, 4, 5]
+        include_original: false
+        include_background: false
+        concat_psf_params: true
         num_psf_params: 4  # for SDSS, 4 for DC2
         log_transform_stdevs: []
-        use_clahe: false
+        use_clahe: true
+        clahe_min_stdev: 200
         asinh_params:
-            scale: 0.1
-            thresholds: [-3, 0, 1, 3]
-        concat_psf_params: true
+            scale: 1000
+            thresholds: [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738]
+    matcher:
+        _target_: bliss.encoder.metrics.CatalogMatcher
+        dist_slack: 1.0
+        mag_slack: null
+        mag_band: 2  # SDSS r-band
     metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
         metrics:
-          # detection_performance:
-          #   _target_: bliss.encoder.metrics.DetectionPerformance
-          #   mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-          #   bin_unit_is_flux: true
-          # detection_performance_star:
-          #   _target_: bliss.encoder.metrics.DetectionPerformance
-          #   mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-          #   source_type_filter: "star"
-          #   bin_unit_is_flux: true
-          # detection_performance_galaxy:
-          #   _target_: bliss.encoder.metrics.DetectionPerformance
-          #   mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-          #   source_type_filter: "galaxy"
-          #   bin_unit_is_flux: true
-          # source_type_accuracy:
-          #   _target_: bliss.encoder.metrics.SourceTypeAccuracy
-          # flux_error:
-          #   _target_: bliss.encoder.metrics.FluxError
-          #   survey_bands: ${encoder.survey_bands}
-          # galaxy_shape_error:
-          #   _target_: bliss.encoder.metrics.GalaxyShapeError
+          detection_performance:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            bin_unit_is_flux: true
+          detection_performance_star:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            source_type_filter: "star"
+            bin_unit_is_flux: true
+          detection_performance_galaxy:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            source_type_filter: "galaxy"
+            bin_unit_is_flux: true
+          source_type_accuracy:
+            _target_: bliss.encoder.metrics.SourceTypeAccuracy
+          flux_error:
+            _target_: bliss.encoder.metrics.FluxError
+            survey_bands: ${encoder.survey_bands}
+          galaxy_shape_error:
+            _target_: bliss.encoder.metrics.GalaxyShapeError
           redshift_mearn_square_error:
-            _target_: bliss.encoder.metrics.RedshiftMeanSquaredError
+            _target_: case_studies.redshift.redshift_from_img.metrics.RedshiftMeanSquaredError
 
 train:
     trainer:
         logger:
-            name: DC2_redshift
-            version: DC2_redshift_only
+            name: DC2_redshift_training
+            version: DC2_redshift_all_best
+            save_dir: ${paths.root}/case_studies/redshift/redshift_from_img/
         precision: 32
         strategy:
           _target_: pytorch_lightning.strategies.DDPStrategy
@@ -63,13 +86,23 @@ train:
             seconds: 180000
         callbacks:
             - _target_: pytorch_lightning.callbacks.ModelCheckpoint
-              filename: encoder_{val_loss:.6f}
+              filename: encoder_{val/mode/Mean squared error:.6f}
               save_top_k: 5
               verbose: True
-              monitor: val/_loss
+            #   monitor: val/_loss
+              monitor: val/mode/Mean squared error
               mode: min
-        val_check_interval: 0.5
+        # val_check_interval: 0.25
+        check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
-        devices: [0]
+        devices: [1, 2, 3, 4]
+        max_epochs: 50
     data_source: ${surveys.dc2}
-    pretrained_weights: null
+    pretrained_weights: ${paths.root}/case_studies/redshift/redshift_from_img/DC2_redshift/DC2_redshift_full/checkpoints/encoder_val/mode/Mean squared error=0.432428.ckpt
+    test_best: true
+
+
+surveys:
+    dc2:
+        cat_path: ${paths.root}/case_studies/redshift/redshift_from_img/DC2_generate_catalog_output/merged_catalog_with_flux_over_50.pkl
+        split_results_dir: ${paths.root}/case_studies/redshift/redshift_from_img/DC2_split_result_all
