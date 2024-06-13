@@ -13,7 +13,7 @@ DES_DATAPATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data/DES_ima
 if not os.path.exists(DES_DATAPATH):
     os.makedirs(DES_DATAPATH)
 
-DATASET = "des_dr1"
+DATASET = "des_dr2"
 DEF_ACCESS_URL = "https://datalab.noirlab.edu/sia/" + DATASET
 svc = sia.SIAService(DEF_ACCESS_URL)
 
