@@ -82,6 +82,7 @@ encoder:
     metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
+        compute_groups: false
         metrics:
           detection_performance:
             _target_: bliss.encoder.metrics.DetectionPerformance
@@ -131,13 +132,13 @@ train:
     trainer:
         logger:
             name: DC2_experiments
-            version: DC2_psf_aug_asinh_06-12-1  # change it before running the code
+            version: DC2_psf_aug_asinh_06-12-2  # change it before running the code
         strategy:
           _target_: pytorch_lightning.strategies.DDPStrategy
           process_group_backend: nccl
           timeout:
             _target_: datetime.timedelta
             seconds: 180000
-        devices: [3, 7]  # change it before running the code
+        devices: [5, 6]  # change it before running the code
     data_source: ${surveys.dc2}
     pretrained_weights: null

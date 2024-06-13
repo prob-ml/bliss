@@ -1,10 +1,14 @@
 from bliss.encoder.convnet import CatalogNet, ContextNet
 from bliss.encoder.encoder import Encoder
 from case_studies.dc2_cataloging.utils.convnet import FeaturesNet
+from case_studies.dc2_cataloging.utils.image_normalizer import DynamicAsinhImageNormalizer
 
 
 class EncoderForDynamicAsinh(Encoder):
     def initialize_networks(self):
+        assert isinstance(
+            self.image_normalizer, DynamicAsinhImageNormalizer
+        ), "wrong image normalizer"
         assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         ch_per_band = self.image_normalizer.num_channels_per_band()
         num_features = 256

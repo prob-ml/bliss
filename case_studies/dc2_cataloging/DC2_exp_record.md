@@ -333,3 +333,5 @@ processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.
 ### 06-12
 
 1. train with fixed thresholds using the latest code
+
+2. train with fixed thresholds using the latest code and fix the `compute_groups` bug in `MetricCollection`
