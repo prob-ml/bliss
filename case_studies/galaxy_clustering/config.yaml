@@ -63,7 +63,6 @@ encoder:
       _target_: torchmetrics.MetricCollection
       _convert_: "partial"
       metrics: ${my_metrics}
-    sample_image_renders: null
     var_dist:
         _target_: case_studies.galaxy_clustering.encoder.variational_dist.GalaxyClusterVariationalDist
         tile_slen: ${encoder.tile_slen}
