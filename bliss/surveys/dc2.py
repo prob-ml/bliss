@@ -58,6 +58,7 @@ class DC2(Survey):
         split_results_dir,
         split_processes_num,
         min_flux_for_loss,
+        subset_fraction: float = None,
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -76,6 +77,7 @@ class DC2(Survey):
         self.split_results_dir = pathlib.Path(split_results_dir)
         self.split_processes_num = split_processes_num
         self.min_flux_for_loss = min_flux_for_loss
+        self.subset_fraction = subset_fraction
 
         self.image_files = None
         self.bg_files = None
@@ -160,6 +162,12 @@ class DC2(Survey):
     def setup(self, stage="fit"):
         self.split_files_list = list(self.split_results_dir.glob("split_*.pt"))
         random.Random(218).shuffle(self.split_files_list)
+
+        if self.subset_fraction is not None:
+            ori_data_len = len(self.split_files_list)
+            self.split_files_list = random.Random(218).sample(
+                self.split_files_list, math.ceil(ori_data_len * self.subset_fraction)
+            )
 
         data_len = len(self.split_files_list)
         train_len = int(data_len * 0.8)

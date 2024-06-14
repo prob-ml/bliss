@@ -59,7 +59,7 @@ class FeaturesNet(nn.Module):
         super().__init__()
 
         nch_hidden = 64
-        nch_hidden_for_asinh_params = 64
+        nch_hidden_for_asinh_params = 32
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, nch_hidden, [ch_per_band, 5, 5], padding=[0, 2, 2]),
             nn.BatchNorm3d(nch_hidden),
@@ -75,7 +75,7 @@ class FeaturesNet(nn.Module):
 
         self.asinh_preprocess = nn.Sequential(
             nn.ZeroPad2d(padding=(0, 1, 1, 1)),
-            C3(2, nch_hidden_for_asinh_params, n=4, use_group_norm=True),
+            C3(1, nch_hidden_for_asinh_params, n=4, use_group_norm=True),
             nn.Upsample(scale_factor=2, mode="nearest"),
             ConvBlock(
                 nch_hidden_for_asinh_params, nch_hidden_for_asinh_params, use_group_norm=True
@@ -93,11 +93,7 @@ class FeaturesNet(nn.Module):
     def forward(self, x):
         preprocessed_x = self.preprocess3d(x[0]).squeeze(2)
         asinh_params = x[1]
-
-        asinh_params_mean = asinh_params.mean(dim=2, keepdim=True)
-        asinh_params_var = asinh_params.var(dim=2, keepdim=True) + 1e-5
-        normalized_asinh_params = (asinh_params - asinh_params_mean) / torch.sqrt(asinh_params_var)
-        preprocessed_asinh_params = self.asinh_preprocess(normalized_asinh_params.unsqueeze(0))
+        preprocessed_asinh_params = self.asinh_preprocess(asinh_params.unsqueeze(0))
         expanded_asinh_params = preprocessed_asinh_params.expand(
             preprocessed_x.shape[0], -1, -1, -1
         ).clone()
