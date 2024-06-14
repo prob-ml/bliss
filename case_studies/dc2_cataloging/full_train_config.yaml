@@ -36,8 +36,8 @@ variational_factors:
     nll_gating: is_galaxy
 
 encoder:
-    # _target_: case_studies.dc2_cataloging.utils.encoder.EncoderForDynamicAsinh
-    _target_: bliss.encoder.encoder.Encoder
+    _target_: case_studies.dc2_cataloging.utils.encoder.EncoderForDynamicAsinh
+    # _target_: bliss.encoder.encoder.Encoder
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
     tiles_to_crop: 1
@@ -48,8 +48,21 @@ encoder:
     scheduler_params:
         milestones: [32]
         gamma: 0.1
+    image_normalizer:
+        _target_: case_studies.dc2_cataloging.utils.image_normalizer.DynamicAsinhImageNormalizer
+        bands: [0, 1, 2, 3, 4, 5]
+        include_original: false
+        include_background: false
+        concat_psf_params: false
+        num_psf_params: 4  # for SDSS, 4 for DC2
+        log_transform_stdevs: []
+        use_clahe: false
+        clahe_min_stdev: 200
+        asinh_params:
+            scale: 1000
+            thresholds: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
     # image_normalizer:
-    #     _target_: case_studies.dc2_cataloging.utils.image_normalizer.DynamicAsinhImageNormalizer
+    #     _target_: case_studies.dc2_cataloging.utils.image_normalizer.FixedThresholdsAsinhImageNormalizer
     #     bands: [0, 1, 2, 3, 4, 5]
     #     include_original: false
     #     include_background: false
@@ -60,20 +73,7 @@ encoder:
     #     clahe_min_stdev: 200
     #     asinh_params:
     #         scale: 1000
-    #         thresholds: [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738]
-    image_normalizer:
-        _target_: case_studies.dc2_cataloging.utils.image_normalizer.FixedThresholdsAsinhImageNormalizer
-        bands: [0, 1, 2, 3, 4, 5]
-        include_original: false
-        include_background: false
-        concat_psf_params: true
-        num_psf_params: 4  # for SDSS, 4 for DC2
-        log_transform_stdevs: []
-        use_clahe: true
-        clahe_min_stdev: 200
-        asinh_params:
-            scale: 1000
-            thresholds: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
+    #         thresholds: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -140,13 +140,14 @@ train:
     trainer:
         logger:
             name: DC2_experiments
-            version: DC2_psf_aug_asinh_06-12-2  # change it before running the code
-        strategy:
-          _target_: pytorch_lightning.strategies.DDPStrategy
-          process_group_backend: nccl
-          timeout:
-            _target_: datetime.timedelta
-            seconds: 180000
-        devices: [5, 6]  # change it before running the code
+            version: DC2_psf_aug_asinh_06-13-5  # change it before running the code
+        # strategy:
+        #   _target_: pytorch_lightning.strategies.DDPStrategy
+        #   process_group_backend: nccl
+        #   timeout:
+        #     _target_: datetime.timedelta
+        #     seconds: 180000
+        devices: [0]  # change it before running the code
     data_source: ${surveys.dc2}
     pretrained_weights: null
+    seed: 1024
