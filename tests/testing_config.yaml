@@ -67,7 +67,7 @@ encoder:
                 flux_bin_cutoffs: [200, 400, 600, 800, 1000]
                 filter_list:
                     - _target_: bliss.encoder.metrics.SourceTypeFilter
-                      filter_type: "star"
+                      filter_type: "galaxy"
             flux_error:
                 _target_: bliss.encoder.metrics.FluxError
                 survey_bands: ${encoder.survey_bands}
