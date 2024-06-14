@@ -264,21 +264,6 @@ train:
             name: null
             version: null
             default_hp_metric: False
-        callbacks:
-            checkpointing:
-                _target_: pytorch_lightning.callbacks.ModelCheckpoint
-                filename: best_encoder
-                save_top_k: 1
-                verbose: True
-                monitor: val/_loss
-                mode: min
-                save_on_train_epoch_end: False
-                auto_insert_metric_name: False
-            early_stopping:
-              _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
-              monitor: val/_loss
-              mode: min
-              patience: 5
         reload_dataloaders_every_n_epochs: 0
         check_val_every_n_epoch: 1
         log_every_n_steps: 10  # corresponds to n_batches
@@ -287,12 +272,27 @@ train:
         accelerator: "gpu"
         devices: 1
         precision: 32
+    callbacks:
+        checkpointing:
+            _target_: pytorch_lightning.callbacks.ModelCheckpoint
+            filename: best_encoder
+            save_top_k: 1
+            verbose: True
+            monitor: val/_loss
+            mode: min
+            save_on_train_epoch_end: False
+            auto_insert_metric_name: False
+        early_stopping:
+            _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+            monitor: val/_loss
+            mode: min
+            patience: 5
     data_source: ${cached_simulator}
     encoder: ${encoder}
     seed: 42
     pretrained_weights: null
     testing: true
-    test_best: true
+    test_best: false
 
 predict:
     dataset: ${surveys.sdss}
