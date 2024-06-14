@@ -292,7 +292,7 @@ train:
     seed: 42
     pretrained_weights: null
     testing: true
-    test_best: false
+    test_best: true
 
 predict:
     dataset: ${surveys.sdss}
