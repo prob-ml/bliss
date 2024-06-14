@@ -347,3 +347,19 @@ processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.
 4. repeat 06-13-1 but set asinh_scales_tensor to constant. (seed is 1024) (bug; ignore this exp)
 
 5. use the new method, detach tensors when doing asinh normalization, don't normalize asinh params, exclude psf and clahe, set initial thresholds to [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423], and set asinh_scales_tensor to constant. (only one GPU is used) (seed is 1024)
+
+(use 06-13-5 as the default setting of dynamic asinh)
+
+### 06-14
+
+(hereafter, use one GPU, and set seed to random)
+
+1. run dynamic asinh
+
+2. run dynamic asinh
+
+3. run dynamic asinh
+
+4. run dynamic asinh
+
+5. run dynamic asinh

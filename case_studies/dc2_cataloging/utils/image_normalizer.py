@@ -40,11 +40,7 @@ class DynamicAsinhImageNormalizer(ImageNormalizer):
         thresholds = thresholds.expand(len(self.bands), thresholds_num)
         thresholds = thresholds.view(1, len(self.bands), thresholds_num, 1, 1).clone()
 
-        scales = torch.log(torch.tensor([self.asinh_params["scale"]]))
-        scales = scales.expand(1, len(self.bands), thresholds_num, 1, 1).clone()
-
         self.asinh_thresholds_tensor = torch.nn.Parameter(thresholds, requires_grad=True)
-        self.asinh_scales_tensor = torch.nn.Parameter(scales, requires_grad=False)
 
     def num_channels_per_band(self):
         pre_nch = super().num_channels_per_band()
@@ -55,9 +51,8 @@ class DynamicAsinhImageNormalizer(ImageNormalizer):
         raw_images = batch["images"][:, self.bands].unsqueeze(2)
 
         asinh_thresholds_tensor = self.asinh_thresholds_tensor.detach()
-        asinh_scales_tensor = self.asinh_scales_tensor.detach()
         filtered_images = raw_images - asinh_thresholds_tensor
-        processed_images = filtered_images * torch.exp(asinh_scales_tensor)
+        processed_images = filtered_images * self.asinh_params["scale"]
         processed_images = torch.asinh(processed_images)
 
         if pre_input_tensor is not None:
