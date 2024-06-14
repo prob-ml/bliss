@@ -23,7 +23,7 @@ class GalaxyClusterPrior:
         self.dec_cen = -40.228830895890404
         self.mass_min = (10**14.5) * (units.solMass)
         self.mass_max = (10**15.5) * (units.solMass)
-        self.scale_pixels_per_au = 80
+        self.pixels_per_mpc = 80
         self.mean_sources = 0.004
         self.mag_ex = 1.3
         self.mag_max = 25
@@ -35,10 +35,12 @@ class GalaxyClusterPrior:
         self.G2_scale = 0.032
         with open("gal_gmm_nmgy.pkl", "rb") as f:
             self.gmm_gal = pickle.load(f)
-        self.redshift_alpha = 1.24
-        self.redshift_beta = 1.01
-        self.redshift0 = 0.51
+        self.redshift_alpha = 1.65
+        self.redshift_beta = 3.33
+        self.redshift0 = 0.9
         self.cluster_prob = 0.5
+        self.light_speed = 299792.46  # in km/s
+        self.sigma_DM15 = 1028.9  # in km/s
 
     def sample_mass(self):
         """Samples masses in the range [10**14.5, 10**15.5] solar masses.
@@ -60,40 +62,75 @@ class GalaxyClusterPrior:
                 mass_sample.append(self.mass_min + (sample_mass_index * delta_mass))
         return mass_sample
 
-    def sample_subredshift(self, z, mass):
+    def sample_cluster_redshift(self):
+        """Samples redshifts for the cluster.
+        Sampled using the functional form present in cluster_utils
+        Parameters empirically estimated using DES and unWISE data
+
+        Returns:
+            returns self.size samples of redshift in the range [0,1.25]
+        """
+        redshift_bins = np.linspace(0.01, 1.25, 100)
+        redshift_pdf = [
+            utils.redshift_distribution(z, self.redshift_alpha, self.redshift_beta, self.redshift0)
+            for z in redshift_bins
+        ]
+        redshift_pdf = redshift_pdf / np.sum(redshift_pdf)
+        return np.random.choice(np.linspace(0.01, 1.25, 100), size=self.size, p=redshift_pdf)
+
+    def sample_subredshift(self, z, mass, num_samples):
         """Sample redshift of clustered galaxy given cluster redshift and virial mass.
         Assumes a normal distribution around centered at the cluster redshift.
 
         Args:
             z: redshift
             mass: virial mass in solar masses
+            num_samples: number of samples to generate
 
         Returns:
             sample for redshift of clustered galaxy
         """
         hubble_z = utils.hubble_parameter(z).value / 100
-        sigma_v = (hubble_z * mass / (10**15 * units.solMass)) ** (1.0 / 3.0) * 1082.9
-        c = 899377.37
-        v_cl = (c * (1 + z) ** 2 - c) / ((1 + z) ** 2 + 1)
-        v = np.random.normal(v_cl, sigma_v)
-        return np.sqrt((c + v) / (c - v)) - 1
+        sigma_v = (hubble_z * mass / (10**15 * units.solMass)) ** (1.0 / 3.0) * self.sigma_DM15
+        v_cl = self.light_speed * (((1 + z) ** 2 - 1) / ((1 + z) ** 2 + 1))
+        v_samples = np.random.normal(v_cl, sigma_v, num_samples)
+        return [np.sqrt((self.light_speed + v) / (self.light_speed - v)) - 1 for v in v_samples]
 
-    def sample_redshift(self):
-        """Samples redshifts for the cluster.
-        Sampled using the functional form present in cluster_utils
+    def sample_background_redshift(self, num_samples):
+        """Sample redshift of background galaxies.
+        Assumed to be uniform in [0,7]
+
+        Args:
+            num_samples: number of samples to be generated
 
         Returns:
-            returns self.size samples of redshift in the range [0,3]
+            sample for background redshift
         """
-        redshift_bins = np.linspace(0.01, 3, 100)
-        redshift_pdf = [
-            utils.redshift_distribution(z, self.redshift_alpha, self.redshift_beta, self.redshift0)
-            for z in redshift_bins
-        ]
-        redshift_pdf = redshift_pdf / np.sum(redshift_pdf)
-        return np.random.choice(np.linspace(0.01, 3, 100), size=self.size, p=redshift_pdf)
+        return np.random.uniform(0, 7, num_samples)
 
-    def sample_radius(self, mass_samples, redshift_samples):  # !!!!!! NEEDS TO BE FIXED !!!!!!
+    def sample_redshift(self, cluster_redshift_samples, mass_samples, n_galaxy_cluster, n_galaxy):
+        """Samples redshifts for all galaxies.
+
+        Args:
+            cluster_redshift_samples: samples for cluster redshifts across catalogs
+            mass_samples: samples for virial mass across catalogs
+            n_galaxy_cluster: samples for number of clustered galaxies across catalogs
+            n_galaxy: samples for number of background galaxies across catalogs
+
+        Returns:
+            redshift_samples: list containing redshift samples for all galaxies
+        """
+        redshift_samples = []
+        for i in range(self.size):
+            cluster_subredshifts = self.sample_subredshift(
+                cluster_redshift_samples[i], mass_samples[i], n_galaxy_cluster[i]
+            )
+            background_redshifts = self.sample_background_redshift(n_galaxy[i])
+            redshift_sample = np.append(cluster_subredshifts, background_redshifts)
+            redshift_samples.append(redshift_sample)
+        return redshift_samples
+
+    def sample_radius(self, mass_samples, redshift_samples):
         """Samples radius given virial mass and redshift.
         Uses conversion function from utils
 
@@ -102,14 +139,12 @@ class GalaxyClusterPrior:
             redshift_samples: cluster redshifts for each catalog
 
         Returns:
-            samples for cluster radius for each catalog
+            samples for cluster radius for each catalog (in pixels)
         """
         radius_samples = []
         for i in range(self.size):
-            unscaled_r = utils.m200_to_r200(mass_samples[i], redshift_samples[i]).to(units.cm)
-            radius_samples.append(
-                (unscaled_r * self.scale_pixels_per_au / (3.086 * 10**24)).value
-            )
+            unscaled_r = utils.m200_to_r200(mass_samples[i], redshift_samples[i])
+            radius_samples.append((unscaled_r * self.pixels_per_mpc).value)
         return radius_samples
 
     def sample_n_cluster(self, mass_samples):
@@ -125,7 +160,7 @@ class GalaxyClusterPrior:
         n_galaxy_cluster = []
         for i in range(self.size):
             if np.random.random() < self.cluster_prob:
-                n_galaxy_cluster.append(utils.m200_to_n200(mass_samples[i]))
+                n_galaxy_cluster.append(int(utils.m200_to_n200(mass_samples[i]).value))
             else:
                 n_galaxy_cluster.append(0)
         return n_galaxy_cluster
@@ -160,7 +195,7 @@ class GalaxyClusterPrior:
         for i in range(self.size):
             center_x, center_y = center_samples[i]
             samples = []
-            while len(samples) < int(n_galaxy_cluster[i]):
+            while len(samples) < n_galaxy_cluster[i]:
                 phi = np.random.uniform(0, 2 * np.pi, 1)
                 sintheta = np.random.uniform(-1, 1, 1)
                 u = np.random.uniform(0, 1, 1)
@@ -240,30 +275,26 @@ class GalaxyClusterPrior:
             hlr_samples.append(np.random.uniform(1.0, 4.0, len(flux_samples[i])))
         return hlr_samples
 
-    def sample_redshift_bg(self):
-        """Sample redshift of background galaxies.
-        Assumed to be uniform in [0,7]
+    def sample_flux_r(self, redshift_samples):
+        """Sample fluxes for r band.
+        First samples magnitudes from an exponential distribution and subtracts from 25
+        Rejection sampling to ensure magnitude is more than 15.75
+
+        Args:
+            redshift_samples: samples for redshifts of all galaxies
 
         Returns:
-            sample for background redshift
+            flux_samples: samples for flux in r band
         """
-        return np.random.uniform(0, 7)
-
-    def sample_flux(self, galaxy_locs, galaxy_locs_cluster, redshift_samples, mass_samples):
         flux_samples = []
         for i in range(self.size):
-            total_element = len(galaxy_locs[i]) + len(galaxy_locs_cluster[i])
+            total_element = len(redshift_samples[i])
             mag_samples = self.mag_max - np.random.exponential(self.mag_ex, total_element)
             for j, _ in enumerate(mag_samples):
                 while mag_samples[j] < 15.75:
                     mag_samples[j] = (self.mag_max - np.random.exponential(self.mag_ex, 1))[0]
                 mag_samples[j] = utils.mag_to_flux(mag_samples[j])
-                if j <= len(galaxy_locs_cluster[i]):
-                    mag_samples[j] *= 1 + self.sample_subredshift(
-                        redshift_samples[i], mass_samples[i]
-                    )
-                else:
-                    mag_samples[j] = mag_samples[j] * (1 + self.sample_redshift_bg())
+            mag_samples *= 1 + redshift_samples[i]
             flux_samples.append(mag_samples)
         return flux_samples
 
@@ -311,8 +342,15 @@ class GalaxyClusterPrior:
         return g1_size_samples, g2_size_samples
 
     def galaxy_flux_ratio(self, size):
-        gmm_gal = self.gmm_gal
-        flux_logdiff, _ = gmm_gal.sample(size)
+        """Samples flux ratios from Gaussian Mixture Model (color model).
+
+        Args:
+            size: samples to be generated (number of galaxies)
+
+        Returns:
+            flux ratios for all bands
+        """
+        flux_logdiff, _ = self.gmm_gal.sample(size)
         flux_logdiff = flux_logdiff[:][:, 1:]
         flux_logdiff = np.clip(flux_logdiff, -2.76, 2.76)
         flux_ratio = np.exp(flux_logdiff)
@@ -325,7 +363,7 @@ class GalaxyClusterPrior:
 
     def make_catalog(
         self,
-        flux_samples,
+        r_flux_samples,
         hlr_samples,
         g1_size_samples,
         g2_size_samples,
@@ -333,12 +371,29 @@ class GalaxyClusterPrior:
         gal_cluster_locs,
         cartesian_locs,
         cartesian_cluster_locs,
+        redshift_samples,
     ):
+        """Makes list of catalogs from generated samples.
+
+        Args:
+            r_flux_samples: flux samples in R band
+            hlr_samples: samples of HLR
+            g1_size_samples: samples of G1
+            g2_size_samples: samples of G2
+            gal_locs: samples of background locations in galactic coordinates
+            gal_cluster_locs: samples of clustered galaxy locations in galactic coordinates
+            cartesian_locs: samples of background locations in cartesian coordinates
+            cartesian_cluster_locs: samples of clustered galaxy locations in cartesian coordinates
+            redshift_samples: samples of redshifts
+
+        Returns:
+            list of dataframes (one for each catalog)
+        """
         res = []
-        for i, _ in enumerate(flux_samples):
+        for i, r_flux in enumerate(r_flux_samples):
             mock_catalog = pd.DataFrame()
             ratios = self.galaxy_flux_ratio(len(gal_cluster_locs[i]) + len(gal_locs[i]))
-            fluxes = np.array(flux_samples[i])[:, np.newaxis] * np.array(ratios)
+            fluxes = np.array(r_flux)[:, np.newaxis] * np.array(ratios)
             if gal_cluster_locs[i] and gal_locs[i]:
                 mock_catalog["RA"] = np.append(
                     np.array(gal_cluster_locs[i])[:, 0], np.array(gal_locs[i])[:, 0]
@@ -368,29 +423,67 @@ class GalaxyClusterPrior:
             mock_catalog["FRACDEV"] = 0
             mock_catalog["G1"] = g1_size_samples[i]
             mock_catalog["G2"] = g2_size_samples[i]
+            mock_catalog["Z"] = redshift_samples[i]
             res.append(mock_catalog)
         return res
 
+    def make_global_catalog(self, mass_samples, redshift_samples, radius_samples, n_galaxy_cluster):
+        """Makes global catalog of all clusters generated.
+
+        Args:
+            mass_samples: cluster virial masses (in solar masses)
+            redshift_samples: cluster redshifts
+            radius_samples: cluster virial radii (in pixels, to be converted to Mpc)
+            n_galaxy_cluster: number of clustered galaxies
+
+        Returns:
+            dataframe containing all the clusters generated
+            (where number of clustered galaxies is positive)
+            Columns include:
+                ImageID: ID of file where cluster is present
+                M200: virial mass in units of 10**14 solar masses
+                R200: virial radii in units of Mpc
+                z_cl: cluster redshift
+                N200: number of clustered galaxies within R200
+        """
+        df = pd.DataFrame()
+        mass_samples = [mass.value / 10**14 for mass in mass_samples]
+        radius_samples = [radius / self.pixels_per_mpc for radius in radius_samples]
+        cluster_ids = list(np.nonzero(n_galaxy_cluster)[0])
+        df["ImageID"] = cluster_ids
+        df["M200"] = np.take(mass_samples, cluster_ids)
+        df["R200"] = np.take(radius_samples, cluster_ids)
+        df["z_cl"] = np.take(redshift_samples, cluster_ids)
+        df["N200"] = np.take(n_galaxy_cluster, cluster_ids)
+        return df
+
     def sample(self):
+        """Main sample function.
+
+        Returns:
+            cluster_catalogs: list of catalogs for each image
+            global_catalogs: global catalog of cluster-wide data
+        """
         mass_samples = self.sample_mass()
-        redshift_samples = self.sample_redshift()
-        radius_samples = self.sample_radius(mass_samples, redshift_samples)
+        cluster_redshift_samples = self.sample_cluster_redshift()
+        radius_samples = self.sample_radius(mass_samples, cluster_redshift_samples)
         n_galaxy_cluster = self.sample_n_cluster(mass_samples)
         center_samples = self.sample_center()
         cartesian_cluster_locs = self.sample_cluster_locs(
             center_samples, radius_samples, n_galaxy_cluster
         )
         n_galaxy = self.sample_n_galaxy()
+        redshift_samples = self.sample_redshift(
+            cluster_redshift_samples, mass_samples, n_galaxy_cluster, n_galaxy
+        )
         cartesian_locs = self.sample_galaxy_locs(n_galaxy)
         gal_locs = self.cartesian_to_gal(cartesian_locs)
         gal_cluster_locs = self.cartesian_to_gal(cartesian_cluster_locs)
-        flux_samples = self.sample_flux(
-            cartesian_locs, cartesian_cluster_locs, redshift_samples, mass_samples
-        )
-        hlr_samples = self.sample_hlr(flux_samples)
+        r_flux_samples = self.sample_flux_r(redshift_samples)
+        hlr_samples = self.sample_hlr(r_flux_samples)
         g1_size_samples, g2_size_samples = self.sample_shape(cartesian_locs, cartesian_cluster_locs)
-        return self.make_catalog(
-            flux_samples,
+        cluster_catalogs = self.make_catalog(
+            r_flux_samples,
             hlr_samples,
             g1_size_samples,
             g2_size_samples,
@@ -398,4 +491,9 @@ class GalaxyClusterPrior:
             gal_cluster_locs,
             cartesian_locs,
             cartesian_cluster_locs,
+            redshift_samples,
         )
+        global_catalog = self.make_global_catalog(
+            mass_samples, cluster_redshift_samples, radius_samples, n_galaxy_cluster
+        )
+        return cluster_catalogs, global_catalog
