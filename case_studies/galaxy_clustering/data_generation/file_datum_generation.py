@@ -31,6 +31,7 @@ COL_NAMES = (
     "FRACDEV",
     "G1",
     "G2",
+    "Z",
 )
 BANDS = ("g", "r", "i", "z")
 N_CATALOGS_PER_FILE = 10
@@ -64,6 +65,7 @@ def main(**kwargs):
         )
         catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
         catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
+        catalog_dict["redshift"] = torch.tensor([catalog[["Z"]].to_numpy()])
         catalog_dict["galaxy_params"] = torch.tensor(
             [catalog[["HLR", "G1", "G2", "FRACDEV"]].to_numpy()]
         )

@@ -6,8 +6,8 @@ from astropy.table import Table
 
 from case_studies.galaxy_clustering.prior import GalaxyClusterPrior
 
-ENVIRONMENT_PATH = os.getcwd()
-CATALOG_PATH = os.path.join(ENVIRONMENT_PATH, "data/catalogs")
+DATA_PATH = os.path.join(os.getcwd(), "data/")
+CATALOG_PATH = os.path.join(DATA_PATH, "catalogs")
 FILE_PREFIX = "galsim_des"
 
 
@@ -19,7 +19,9 @@ def main(**kwargs):
         size=int(kwargs.get("nfiles", 100)), image_size=int(kwargs.get("image_size", 4800))
     )
 
-    catalogs = cluster_prior_obj.sample()
+    catalogs, global_catalog = cluster_prior_obj.sample()
+    global_filename = f"{DATA_PATH}/global_catalog.dat"
+    global_catalog.to_csv(global_filename)
     for i, catalog in enumerate(catalogs):
         file_name = f"data/catalogs/{FILE_PREFIX}_{i:03}.dat"
         catalog_table = Table.from_pandas(catalog)

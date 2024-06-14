@@ -16,6 +16,7 @@
 #   10: FRACDEV
 #   11: G1
 #   12: G2
+#   13: Z
 
 variables :
   nfiles : 100
