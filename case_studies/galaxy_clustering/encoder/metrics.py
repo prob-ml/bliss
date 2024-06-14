@@ -12,13 +12,10 @@ class ClusterMembershipAccuracy(Metric):
         self.add_state("membership_fn", default=torch.zeros(1), dist_reduce_fx="sum")
         self.add_state("n_matches", default=torch.zeros(1), dist_reduce_fx="sum")
 
-    def update(self, true_cat, est_cat, matching):
+    def update(self, true_cat, est_cat):
         for i in range(true_cat.batch_size):
-            tcat_matches, ecat_matches = matching[i]
-            self.n_matches += tcat_matches.size(0)
-
-            true_membership = true_cat["membership"][i][tcat_matches].to(torch.bool)
-            est_membership = est_cat["membership"][i][ecat_matches].to(torch.bool)
+            true_membership = true_cat["membership"][i].to(torch.bool)
+            est_membership = est_cat["membership"][i].to(torch.bool)
 
             self.membership_tp += (true_membership * est_membership).sum()
             self.membership_tn += (~true_membership * ~est_membership).sum()
