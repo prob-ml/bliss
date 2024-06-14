@@ -1,4 +1,5 @@
 import logging
+import random
 from os import environ, getenv
 from pathlib import Path
 from typing import List
@@ -57,7 +58,10 @@ def generate(gen_cfg: DictConfig):
 
 def train(train_cfg: DictConfig):
     # setup seed
-    pl.seed_everything(train_cfg.seed)
+    if train_cfg.seed == "random":
+        pl.seed_everything(random.randint(1e4, 1e5 - 1))
+    else:
+        pl.seed_everything(train_cfg.seed)
 
     # setup dataset, encoder, and trainer
     dataset = instantiate(train_cfg.data_source)
