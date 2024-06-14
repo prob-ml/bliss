@@ -63,7 +63,7 @@ def train(train_cfg: DictConfig):
     else:
         pl.seed_everything(train_cfg.seed)
 
-    # setup dataset, encoder, and trainer
+    # setup dataset, encoder, callbacks and trainer
     dataset = instantiate(train_cfg.data_source)
     encoder = instantiate(train_cfg.encoder)
     callbacks = instantiate(train_cfg.callbacks)
