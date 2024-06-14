@@ -1,0 +1,74 @@
+
+variables :
+  output_directory : data/images
+
+# Define the galaxy profile
+gal :
+    type : Sum
+    items :
+        -   type : Sersic
+            n : { type: Random, min: 2.5, max: 4.5 }
+            half_light_radius : {type: Random, min: 1, max: 3}
+            flux : {type: Random, min: 0.2, max: 0.4}
+        -   type : Sersic
+            n : {type: Random, min: .5, max: 2.5}
+            scale_radius : {type: Random, min: 0.5, max: 1.5}
+            flux : {type: Random, min: 0.6, max: 0.8}
+  
+    shear :
+        type : QBeta
+        q : {type: Random, min: 0.5, max: 0.9}
+        beta : {type: Random}
+
+    flux : 1.e6
+
+# Define the PSF profile
+psf :
+    type : Convolution
+    items :
+        -
+            type : Kolmogorov
+            fwhm : {type: Random, min: 1.5, max: 2.5}
+            ellip:
+                type : EBeta
+                e : {type: Random, min: 0.0, max: 0.2}
+
+                beta :
+                    type : Random
+                    
+        -
+            type : OpticalPSF
+            lam_over_diam : 0.041253
+            defocus : {type: Random, min: 0, max: 0.6}
+            astig1 : {type: Random, min: -0.3, max: 0.3}
+            astig2 : {type: Random, min: -0.3, max: 0.3}
+            coma1 : {type: Random, min: -0.3, max: 0.7}
+            coma2 : {type: Random, min: -0.3, max: 0.3}
+            obscuration : {type: Random, min: 0.2, max: 0.4}
+
+
+# Define some other information about the images
+image :
+    pixel_scale : 0.23
+    size : 128
+    wcs :
+        type : Shear
+        shear :
+            type : G1G2
+            g1 : {type: Random, min: -0.03, max: 0.03}
+            g2 : {type: Random, min: -0.03, max: 0.03}
+
+    noise :
+        type : CCD
+        sky_level : 2.5e4
+        gain : 1.7
+        read_noise : 0.3
+    random_seed : 5687  # Use the index as the seed for reproducibility
+
+# Define the name and format of the output file
+output :
+    dir : '@variables.output_directory'
+    file_name : galsim.fits
+    psf :
+        file_name : galsim_epsf.fits
+

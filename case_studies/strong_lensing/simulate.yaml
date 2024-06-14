@@ -1,0 +1,143 @@
+
+variables :
+  nfiles : 1
+  image_size: 2000
+  nobjects: 10
+
+
+psf:
+    type: Convolve
+
+    index_key : file_num
+
+    items:
+    # The atmospheric component
+    -   type: Kolmogorov
+        # To avoid PSFs that were "too round", the ellipticity was drawn from a uniform
+        # distribution from sqrt(1.e-4) to sqrt(9.e-4), based on an estimate of the
+        # typical variance of e in ground-based imaging.
+        ellip:
+            type: EBeta
+            e:
+                type: Random
+                min: 0.01
+                max: 0.03
+            beta:
+                type: Random
+
+        # The seeing is taken from a plausible distribution of seeing values
+        # ranging from 0.6 to 1.1.
+        fwhm:
+            type: RandomDistribution
+            x: [ 0.6, 0.7, 0.8, 0.9, 1.0, 1.1 ]
+            f: [  0., 10., 20., 40., 30.,  0. ]
+
+    # The optical component
+    -   type: OpticalPSF
+        # Take lambda = 800 nm.  D = 4 m.  lam/D = 0.04 arcsec
+        lam_over_diam: "$800 * 1.e-9 / 4 * 206265"
+
+        # I don't know what the right value of this is.  This is a guess.
+        obscuration: 0.3
+
+        # DECam has 4 struts.  Not sure what strut_thick or strut_angle is appropriate here.
+        # So these are just guesses.
+        nstruts: 4
+        strut_thick: 0.05  # In units of pupil diameter.
+        strut_angle: 10 degrees
+
+        # According to Aaron Roodman, for DES the appropriate rms values are
+        # [ 0.13, 0.13, 0.14, 0.06, 0.06, 0.05, 0.06, 0.03 ]
+        defocus: { type: RandomGaussian, sigma: 0.13 }
+        astig1: { type: RandomGaussian, sigma: 0.13 }
+        astig2: { type: RandomGaussian, sigma: 0.14 }
+        coma1: { type: RandomGaussian, sigma: 0.06 }
+        coma2: { type: RandomGaussian, sigma: 0.06 }
+        trefoil1: { type: RandomGaussian, sigma: 0.05 }
+        trefoil2: { type: RandomGaussian, sigma: 0.06 }
+        spher: { type: RandomGaussian, sigma: 0.03 }
+
+        suppress_warning: true
+
+# Define some other information about the images
+image :
+    # The pixel size applies to both outputs, so put that here in the first document.
+    pixel_scale : 0.1  # arcsec / pixel
+
+---
+
+# Define the name and format of the output file
+output :
+    dir : output_yaml
+    file_name : psf_real.fits
+
+---
+
+# The next document is for the galaxy output.
+
+# Define some other information about the images
+image :
+    type: Scattered
+    nobjects: '@variables.nobjects'
+    xsize : '@variables.image_size'
+    ysize : '@variables.image_size'
+    # If we specify the sky_level as an image attribute, it will be used
+    # as a background level for the image.  (The background level per pixel is
+    # 1.e6 * (0.15)^2 = 2250.)
+    sky_level : 1.e6  # ADU / arcsec^2
+
+    noise:
+        type: Gaussian
+        variance:
+            type: Random
+            min: 0.002
+            max: 0.006
+
+    offset :
+        type : XY
+        x : { type : Random, min : -0.5, max : 0.5 }
+        y : { type : Random, min : -0.5, max : 0.5 }
+
+    random_seed : 1512413
+
+
+# Define the galaxy profile
+gal :
+    type : RealGalaxy
+    flux : 1.e5
+
+    index :
+        type : Random
+        min: 0
+        max: '@variables.nobjects'
+
+    rotate :
+        # An angle of type Random means uniform within 0 .. 2pi radians
+        type : Random
+
+    shear :
+        type : G1G2
+        g1 : -0.027
+        g2 : 0.031
+
+    # Also apply a magnification mu = ( (1-kappa)^2 - |gamma|^2 )^-1
+    # This conserves surface brightness, so it scales both the area and flux.
+    magnify : 12.082
+
+# Define the input files
+input :
+
+    real_catalog :
+        dir : data
+        file_name : real_galaxy_catalog_combined.fits
+
+output :
+    type : Fits
+    dir : output_yaml
+    file_name :
+        type : FormattedStr
+        format : "galsim_realgalaxy_%03d.fits"
+        items :
+        - { type : Sequence, nitems: '@variables.nfiles'}
+
+    nfiles : '@variables.nfiles'
