@@ -24,7 +24,7 @@ class GalaxyClusterEncoder(Encoder):
             tile_slen=self.tile_slen,
             downsample_at_front=self.downsample_at_front,
         )
-        n_params_per_source = self.vd_spec.n_params_per_source
+        n_params_per_source = self.var_dist.n_params_per_source
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
         if self.double_detect:

@@ -1,6 +1,7 @@
 import numpy as np
 from astropy import constants as astroc
 from astropy import units
+from astropy.cosmology import FlatLambdaCDM
 from colossus.cosmology import cosmology
 from colossus.halo import concentration, mass_defs
 
@@ -134,3 +135,16 @@ def redshift_distribution(z, alpha, beta, z0):
         p(z): the probability density at the given redshift
     """
     return (z**alpha) * np.exp(-((z / z0) ** beta))
+
+
+def angular_diameter_distance(z):
+    """Get angular diameter distance at a given redshift.
+
+    Args:
+        z: redshift
+
+    Returns:
+        Da(z) in Mpc
+    """
+    cosmo = FlatLambdaCDM(H0=H0, Om0=OM0)
+    return cosmo.angular_diameter_distance(z)
