@@ -272,7 +272,7 @@ class GalaxyClusterPrior:
         """
         hlr_samples = []
         for i in range(self.size):
-            hlr_samples.append(np.random.uniform(1.0, 4.0, len(flux_samples[i])))
+            hlr_samples.append(np.random.uniform(0.5, 1.0, len(flux_samples[i])))
         return hlr_samples
 
     def sample_flux_r(self, redshift_samples):
