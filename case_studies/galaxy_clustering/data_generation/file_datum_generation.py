@@ -91,13 +91,14 @@ def main(**kwargs):
                 image_data = hdul[0].data.astype(np.float32)
                 image_bands.append(torch.from_numpy(image_data))
         stacked_image = torch.stack(image_bands, dim=0)
+        os.remove(fits_filepath)
 
         data.append(
             FileDatum(
                 {
                     "tile_catalog": tile_catalog_dict,
                     "images": stacked_image,
-                    "background": stacked_image,
+                    "background": None,
                 }
             )
         )
