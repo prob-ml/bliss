@@ -13,7 +13,7 @@ DES_DATAPATH = os.environ["BLISS_HOME"] + "/case_studies/galaxy_clustering/data/
 if not os.path.exists(DES_DATAPATH):
     os.makedirs(DES_DATAPATH)
 
-DATASET = "des_dr2"
+DATASET = "des_dr1"
 DEF_ACCESS_URL = "https://datalab.noirlab.edu/sia/" + DATASET
 svc = sia.SIAService(DEF_ACCESS_URL)
 
