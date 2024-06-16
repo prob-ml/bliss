@@ -360,6 +360,26 @@ processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.
 
 3. run dynamic asinh
 
-4. run dynamic asinh
+### 06-15
 
-5. run dynamic asinh
+1. run dynamic asinh
+
+2. run dynamic asinh
+
+3. run fixed thresholds asinh
+
+4. run fixed thresholds asinh
+
+5. run fixed thresholds asinh
+
+### 06-16
+
+1. run fixed thresholds asinh
+
+2. run fixed thresholds asinh
+
+3. run moving avg thresholds asinh
+
+4. run moving avg thresholds asinh
+
+5. run moving avg thresholds asinh
