@@ -58,6 +58,7 @@ From: ubuntu:22.04
    CUR_COMMAND=$2
 
    # run git checkout with the first argument
+   git config --global --add safe.directory /home/container_files/bliss
    git pull
    git checkout "$GIT_BRANCH"
    if [ $? -ne 0 ]; then

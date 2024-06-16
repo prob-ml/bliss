@@ -1,20 +1,14 @@
 #!/bin/bash
 
-## change this before running the code
-#SBATCH --job-name=great_lake_exp_06-16-1
 #SBATCH --mail-user=pduan@umich.edu
 #SBATCH --mail-type=BEGIN,END,FAIL
-
-## change this before running the code
-#SBATCH --output=great_lake_exp_06-16-1.out
-#SBATCH --error=great_lake_exp_06-16-1.err
 
 #SBATCH --account=regier0
 #SBATCH --partition=spgpu
 
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-node=1:a40
+#SBATCH --gpus-per-node=a40:1
 #SBATCH --cpus-per-gpu=16
 #SBATCH --mem-per-gpu=32GB
 
