@@ -27,6 +27,12 @@ variational_factors:
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
     nll_gating: is_star
 
+star_metrics:
+    detection_performance:
+        _target_: bliss.encoder.metrics.DetectionPerformance
+        mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
+        exclude_last_bin: true
+
 encoder:
     tile_slen: 2
     min_flux_for_loss: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
@@ -43,11 +49,7 @@ encoder:
         mag_band: 2  # SDSS r-band
     metrics:
         _target_: torchmetrics.MetricCollection
-        metrics:
-            detection_performance:
-                _target_: bliss.encoder.metrics.DetectionPerformance
-                mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
-                exclude_last_bin: true
+        metrics: ${star_metrics}
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
@@ -85,6 +87,7 @@ generate:
 cached_simulator:
     cached_data_path: /data/scratch/regier/m2
     batch_size: 12
+    num_workers: 2
 
 train:
     trainer:

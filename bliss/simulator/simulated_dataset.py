@@ -1,3 +1,4 @@
+import math
 import os
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, TypedDict
@@ -6,11 +7,11 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from torch import Tensor
-from torch.utils.data import DataLoader, Dataset, IterableDataset
+from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
 from bliss.align import align
-from bliss.catalog import TileCatalog
+from bliss.catalog import FullCatalog, TileCatalog
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
@@ -195,31 +196,55 @@ FileDatum = TypedDict(
 )
 
 
-class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
+class MyIterableDataset(IterableDataset):
+    def __init__(self, file_paths):
+        self.file_paths = file_paths
+
+    def get_stream(self, files):
+        # TODO: shuffle files
+        for file_path in files:
+            examples = torch.load(file_path)
+            # TODO: randomly sort examples
+            for ex in examples:
+                if "full_catalog" in ex:
+                    full_cat = FullCatalog(112, 112, ex["full_catalog"])
+                    tile_cat = full_cat.to_tile_catalog(2, 6).data
+                    d = {k: v.squeeze(0) for k, v in tile_cat.items()}
+                    ex["tile_catalog"] = d
+                    del ex["full_catalog"]
+                yield ex
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:  # single-process data loading
+            files = self.file_paths
+        else:  # in a worker process
+            # Split workload
+            per_worker = int(math.ceil(len(self.file_paths) / float(worker_info.num_workers)))
+            worker_id = worker_info.id
+            files = self.file_paths[worker_id * per_worker : (worker_id + 1) * per_worker]
+
+        return iter(self.get_stream(files))
+
+
+class CachedSimulatedDataset(pl.LightningDataModule):
     def __init__(
         self,
         splits: str,
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
-        file_prefix: str,
     ):
         super().__init__()
 
         self.num_workers = num_workers
         self.batch_size = batch_size
-        self.cached_data_path = cached_data_path
-        self.file_prefix = file_prefix
 
-        # assume cached image files exist, read from disk
-        self.data: List[FileDatum] = []
-        for filename in os.listdir(self.cached_data_path):
-            if not filename.endswith(".pt"):
-                continue
-            self.data += self.read_file(f"{self.cached_data_path}/{filename}")
+        file_names = [f for f in os.listdir(cached_data_path) if f.endswith(".pt")]
+        self.file_paths = [os.path.join(cached_data_path, f) for f in file_names]
 
         # parse slices from percentages to indices
-        self.slices = self.parse_slices(splits, len(self.data))
+        self.slices = self.parse_slices(splits, len(self.file_paths))
 
     def _percent_to_idx(self, x, length):
         """Converts string in percent to an integer index."""
@@ -232,46 +257,30 @@ class CachedSimulatedDataset(pl.LightningDataModule, Dataset):
             slices[i] = slice(*(self._percent_to_idx(val, length) for val in data_split.split(":")))
         return slices
 
-    def read_file(self, filename: str) -> List[FileDatum]:
-        with open(filename, "rb") as f:
-            return torch.load(f)
-
-    def __len__(self):
-        return len(self.data[self.slices[0]])
-
-    def __getitem__(self, idx):
-        return self.data[idx]
-
     def train_dataloader(self):
-        assert self.data, "No cached train data loaded; run `generate.py` first"
-        assert len(self.data[self.slices[0]]) >= self.batch_size, (
-            f"Insufficient cached data loaded; "
-            f"need at least {self.batch_size} "
-            f"but only have {len(self.data[self.slices[0]])}. Re-run `generate.py` with "
-            f"different generation `train_n_batches` and/or `batch_size`."
-        )
-        # TODO: consider adding pixelwise Poisson noise to the *training* images on the fly
-        # to reduce overfitting rather than adding noise while simulating training images.
-        # (validation and test images should still be simulated with noise, though)
+        assert self.file_paths[self.slices[0]], "No cached validation data found"
         return DataLoader(
-            self.data[self.slices[0]],
-            shuffle=True,
+            MyIterableDataset(self.file_paths[self.slices[0]]),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
         )
 
     def val_dataloader(self):
-        assert self.data[self.slices[1]], "No cached validation data found; run `generate.py` first"
+        assert self.file_paths[self.slices[1]], "No cached validation data found"
         return DataLoader(
-            self.data[self.slices[1]], batch_size=self.batch_size, num_workers=self.num_workers
+            MyIterableDataset(self.file_paths[self.slices[1]]),
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
         )
 
     def test_dataloader(self):
-        assert self.data[self.slices[2]], "No cached test data found; run `generate.py` first"
+        assert self.file_paths[self.slices[2]], "No cached test data found"
         return DataLoader(
-            self.data[self.slices[2]], batch_size=self.batch_size, num_workers=self.num_workers
+            MyIterableDataset(self.file_paths[self.slices[2]]),
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
         )
 
     def predict_dataloader(self):
-        assert self.data, "No cached data found; run `generate.py` first"
-        return DataLoader(self.data, batch_size=self.batch_size, num_workers=self.num_workers)
+        assert self.file_paths, "No cached data found"
+        return DataLoader(self.file_paths, batch_size=self.batch_size, num_workers=self.num_workers)

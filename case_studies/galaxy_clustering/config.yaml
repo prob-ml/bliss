@@ -28,9 +28,8 @@ cached_simulator:
     _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
     batch_size: 5
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
-    num_workers: 1
+    num_workers: 2
     cached_data_path: ${paths.root}/case_studies/galaxy_clustering/data/file_data/
-    file_prefix: file_data_
 
 train:
     trainer:
