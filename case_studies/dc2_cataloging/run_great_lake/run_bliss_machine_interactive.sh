@@ -18,7 +18,7 @@ mkdir -p ./overlay_imgs
 
 singularity overlay create --sparse --size 5120 "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img"
 singularity run --nv \
- --bind "/scratch/regier_root/regier0/pduan/dc2local/dc2_split_results:${EXP_CUR_PATH}/output/" \
+ --bind "/scratch/regier_root/regier0/pduan/dc2local:${EXP_CUR_PATH}/output/" \
  --overlay "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img" \
  bliss_machine.sif \
  yd/test_container \
