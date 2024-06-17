@@ -38,7 +38,7 @@ class DC2Dataset(Dataset):
         self.in_memory_data = []
         if self.in_memory:
             logger = logging.getLogger("DC2")
-            logger.warning("WARNING: you are using in-memory DC2")
+            logger.warning("WARNING: you are using in-memory DC2; it takes time to load")
             for split_file in self.split_files_list:
                 with open(split_file, "rb") as sf:
                     split = torch.load(sf)
@@ -201,7 +201,7 @@ class DC2(Survey):
         self.test_dataset = DC2Dataset(
             self.split_files_list[(train_len + val_len) :], in_memory=self.in_memory_dataset
         )
-        self.total_dataset = DC2Dataset(self.split_files_list)
+        self.total_dataset = DC2Dataset(self.split_files_list, in_memory=False)
 
     def train_dataloader(self):
         return DataLoader(
