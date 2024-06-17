@@ -318,6 +318,7 @@ def generate_split_file(image_index, self_copy):
         "galaxy_params",
         "star_fluxes",
         "star_log_fluxes",
+        "redshifts",
     ]
     for i in param_list:
         split1_tile = torch.stack(torch.split(tile_dict[i], split_lim // 4, dim=0))
@@ -363,7 +364,9 @@ class Dc2FullCatalog(FullCatalog):
     """
 
     @classmethod
-    def from_file(cls, cat_path, wcs, height, width, band, min_flux_for_loss):
+    def from_file(
+        cls, cat_path, wcs, height, width, band, min_flux_for_loss
+    ):  # pylint: disable=too-many-statements
         catalog = pd.read_pickle(cat_path)
         flux_r_band = catalog["flux_r"].values
         catalog = catalog.loc[flux_r_band > min_flux_for_loss]
@@ -400,6 +403,7 @@ class Dc2FullCatalog(FullCatalog):
                 galaxy_a_b * galaxy_bools,
             )
         ).t()
+        redshifts = torch.tensor(catalog["redshifts"].values)
 
         keep = galaxy_bools | star_bools
         source_type = torch.from_numpy(np.array(catalog["truth_type"])[keep])
@@ -413,6 +417,7 @@ class Dc2FullCatalog(FullCatalog):
         galaxy_params = galaxy_params[keep]
         galaxy_fluxes = flux[keep]
         objid = objid[keep]
+        redshifts = redshifts[keep]
 
         pt, pr = wcs.all_world2pix(ra, dec, 0)  # convert to pixel coordinates
         plocs = torch.stack((torch.tensor(pr), torch.tensor(pt)), dim=-1)
@@ -432,6 +437,7 @@ class Dc2FullCatalog(FullCatalog):
 
         plocs = plocs[x_mask]
         source_type = source_type[x_mask]
+        redshifts = redshifts[x_mask]
 
         nobj = source_type.shape[0]
         d = {
@@ -443,6 +449,7 @@ class Dc2FullCatalog(FullCatalog):
             "galaxy_params": galaxy_params.reshape(1, nobj, 6),
             "star_fluxes": star_fluxes.reshape(1, nobj, 6),
             "star_log_fluxes": star_log_fluxes.reshape(1, nobj, 6),
+            "redshifts": redshifts.reshape(1, nobj, 1),
         }
 
         return cls(height, width, d), torch.stack(psf_params), match_id
