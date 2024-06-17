@@ -10,7 +10,7 @@ paths:
 surveys:
    dc2:
       split_results_dir: ${paths.output}/dc2_split_results
-      batch_size: 256
+      batch_size: 128
       num_workers: 8
 
 train:
