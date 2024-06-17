@@ -191,9 +191,16 @@ class DC2(Survey):
         train_len = int(data_len * 0.8)
         val_len = int(data_len * 0.1)
 
-        self.train_dataset = DC2Dataset(self.split_files_list[:train_len])
-        self.valid_dataset = DC2Dataset(self.split_files_list[train_len : (train_len + val_len)])
-        self.test_dataset = DC2Dataset(self.split_files_list[(train_len + val_len) :])
+        self.train_dataset = DC2Dataset(
+            self.split_files_list[:train_len], in_memory=self.in_memory_dataset
+        )
+        self.valid_dataset = DC2Dataset(
+            self.split_files_list[train_len : (train_len + val_len)],
+            in_memory=self.in_memory_dataset,
+        )
+        self.test_dataset = DC2Dataset(
+            self.split_files_list[(train_len + val_len) :], in_memory=self.in_memory_dataset
+        )
         self.total_dataset = DC2Dataset(self.split_files_list)
 
     def train_dataloader(self):
