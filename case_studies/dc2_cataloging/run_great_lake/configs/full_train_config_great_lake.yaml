@@ -13,6 +13,7 @@ surveys:
       split_results_dir: ${paths.dc2}/dc2_split_results
       batch_size: 128
       num_workers: 8
+      in_memory_dataset: true
 
 train:
     trainer:

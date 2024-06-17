@@ -5,7 +5,7 @@ salloc --job-name=interactive \
        --ntasks=1 \
        --gpus-per-node=a40:1 \
        --cpus-per-gpu=16 \
-       --mem-per-gpu=32GB \
+       --mem-per-gpu=150GB \
        --time=00:10:00
 
 module load singularity/4.1.2 cuda/12.1.1 cudnn/12.1-v8.9.0
