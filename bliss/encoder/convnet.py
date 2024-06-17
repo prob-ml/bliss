@@ -5,6 +5,17 @@ from torch import nn
 # https://github.com/ultralytics/yolov5/
 
 
+class ConvBlockGN(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
+        self.gn = nn.GroupNorm(out_channels // 2, out_channels)
+        self.activation = nn.SiLU(inplace=True)
+
+    def forward(self, x):
+        return self.activation(self.gn(self.conv(x)))
+
+
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         super().__init__()
@@ -66,30 +77,22 @@ class FeaturesNet(nn.Module):
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
             ConvBlock(64, 128, stride=2),
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
-            ConvBlock(128, num_features, stride=(2 if double_downsample else 1)),  # 4
+            ConvBlock(128, 256, stride=(2 if double_downsample else 1)),  # 4
         )
-
-    def forward(self, x):
-        x = self.preprocess3d(x).squeeze(2)
-        return self.backbone(x)
-
-
-class CatalogNet(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-
         net_layers = [
-            C3(in_channels, 256, n=6),  # 0
+            C3(256, 256, n=6),  # 0
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),
             ConvBlock(512, 256, kernel_size=1, padding=0),
             nn.Upsample(scale_factor=2, mode="nearest"),  # 4
-            C3(768, 256, n=3, shortcut=False),
-            Detect(256, out_channels),
+            C3(768, num_features, n=3, shortcut=False),
         ]
         self.net_ml = nn.ModuleList(net_layers)
 
     def forward(self, x):
+        x = self.preprocess3d(x).squeeze(2)
+        x = self.backbone(x)
+
         save_lst = [x]
         for i, m in enumerate(self.net_ml):
             x = m(x)
@@ -97,6 +100,7 @@ class CatalogNet(nn.Module):
                 save_lst.append(x)
             if i == 4:
                 x = torch.cat(save_lst, dim=1)
+
         return x
 
 
@@ -110,11 +114,14 @@ class ContextNet(nn.Module):
             ConvBlock(64, 64),
             ConvBlock(64, context_dim),
         )
-        self.merge = ConvBlock(num_features + context_dim, num_features)
-        self.catalog_net = CatalogNet(num_features, out_channels)
+        self.merge = nn.Sequential(
+            ConvBlockGN(num_features + context_dim, num_features),
+            ConvBlockGN(num_features, num_features),
+            ConvBlockGN(num_features, num_features),
+            Detect(num_features, out_channels),
+        )
 
     def forward(self, x_features, context):
         x_context = self.encode_context(context)
         x = torch.cat((x_features, x_context), dim=1)
-        x = self.merge(x)
-        return self.catalog_net(x)
+        return self.merge(x)

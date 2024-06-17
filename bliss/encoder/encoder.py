@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
-from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
+from bliss.encoder.convnet import ContextNet, FeaturesNet
 from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
@@ -92,9 +92,8 @@ class Encoder(pl.LightningModule):
 
         if self.compile_model:
             self.features_net = torch.compile(self.features_net)
-            self.marginal_net = torch.compile(self.marginal_net)
             if self.use_checkerboard:
-                self.checkerboard_net = torch.compile(self.checkerboard_net)
+                self.context_net = torch.compile(self.context_net)
             if self.double_detect:
                 self.second_net = torch.compile(self.second_net)
 
@@ -105,6 +104,7 @@ class Encoder(pl.LightningModule):
         """
         assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         ch_per_band = self.image_normalizer.num_channels_per_band()
+
         num_features = 256
         self.features_net = FeaturesNet(
             len(self.image_normalizer.bands),
@@ -113,10 +113,9 @@ class Encoder(pl.LightningModule):
             double_downsample=(self.tile_slen == 4),
         )
         n_params_per_source = self.var_dist.n_params_per_source
-        self.marginal_net = CatalogNet(num_features, n_params_per_source)
-        self.checkerboard_net = ContextNet(num_features, n_params_per_source)
+        self.context_net = ContextNet(num_features, n_params_per_source)
         if self.double_detect:
-            self.second_net = CatalogNet(num_features, n_params_per_source)
+            self.second_net = ContextNet(num_features, n_params_per_source)
 
     def _get_checkerboard(self, ht, wt):
         # make/store a checkerboard of tiles
@@ -154,7 +153,8 @@ class Encoder(pl.LightningModule):
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
 
-        x_cat_marginal = self.marginal_net(x_features)
+        empty_context = torch.zeros_like(x_features[:, 0:2, :, :])
+        x_cat_marginal = self.context_net(x_features, empty_context)
         marginal_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
 
         if not self.use_checkerboard:
@@ -165,7 +165,7 @@ class Encoder(pl.LightningModule):
             white_history_mask = tile_cb.expand([batch_size, -1, -1])
 
             white_context = self.make_context(marginal_cat, white_history_mask)
-            x_cat_white = self.checkerboard_net(x_features, white_context)
+            x_cat_white = self.context_net(x_features, white_context)
             white_cat = self.var_dist.sample(x_cat_white, use_mode=use_mode)
             est_cat = self.interleave_catalogs(marginal_cat, white_cat, white_history_mask)
 
@@ -241,8 +241,8 @@ class Encoder(pl.LightningModule):
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
 
-        pred["x_cat_marginal"] = self.marginal_net(x_features)
-        x_features = x_features.detach()  # is this helpful? doing it here to match old code
+        empty_context = torch.zeros_like(x_features[:, 0:2, :, :])
+        pred["x_cat_marginal"] = self.context_net(x_features, empty_context)
 
         if self.use_checkerboard:
             ht, wt = h // self.tile_slen, w // self.tile_slen
@@ -251,10 +251,10 @@ class Encoder(pl.LightningModule):
             pred["white_history_mask"] = white_history_mask
 
             white_context = self.make_context(target_cat1, white_history_mask)
-            pred["x_cat_white"] = self.checkerboard_net(x_features, white_context)
+            pred["x_cat_white"] = self.context_net(x_features, white_context)
 
             black_context = self.make_context(target_cat1, 1 - white_history_mask)
-            pred["x_cat_black"] = self.checkerboard_net(x_features, black_context)
+            pred["x_cat_black"] = self.context_net(x_features, black_context)
 
         # compute loss
         if not self.double_detect:
