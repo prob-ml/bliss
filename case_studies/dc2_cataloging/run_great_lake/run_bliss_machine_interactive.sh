@@ -9,6 +9,17 @@ salloc --job-name=interactive \
        --time=00:10:00
 
 module load singularity/4.1.2 cuda/12.1.1 cudnn/12.1-v8.9.0
-singularity overlay create --sparse --size 5120 "bliss_machine_overlay_test.img"
-singularity run --nv --overlay bliss_machine_overlay_test.img bliss_machine.sif yd/test_container \
- "bliss -cp /home/container_files/bliss/case_studies/dc2_cataloging/run_great_lake/configs -cn full_train_config_great_lake_exp_06-16-1"
+
+EXP_POSTFIX="test"
+EXP_CUR_PATH=`pwd`
+
+mkdir -p ./output
+mkdir -p ./overlay_imgs
+
+singularity overlay create --sparse --size 5120 "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img"
+singularity run --nv \
+ --bind "/scratch/regier_root/regier0/pduan/dc2local/dc2_split_results:${EXP_CUR_PATH}/output/" \
+ --overlay "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img" \
+ bliss_machine.sif \
+ yd/test_container \
+ "bliss -cp /home/container_files/bliss/case_studies/dc2_cataloging/run_great_lake/configs -cn full_train_config_great_lake train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX}"

@@ -23,13 +23,25 @@ module list
 ####  Commands your job should run follow this line
 
 echo "running on: $SLURM_JOB_NODELIST"
-echo "running in: $(pwd)"
 
 EXP_POSTFIX=$1
-echo "postfix is: $EXP_POSTFIX"
+echo "experiment postfix is: $EXP_POSTFIX"
 
-singularity overlay create --sparse --size 5120 "bliss_machine_overlay_${EXP_POSTFIX}.img"
+EXP_CUR_PATH=`pwd`
+echo "current directory is: ${EXP_CUR_PATH}"
 
-srun singularity run --nv --overlay "bliss_machine_overlay_${EXP_POSTFIX}.img" bliss_machine.sif \
+echo "create output folder if not exists"
+mkdir -p ./output
+echo "create overlay image folder if not exists"
+mkdir -p ./overlay_imgs
+
+echo "create overlay image"
+singularity overlay create --sparse --size 5120 "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img"
+
+echo "run the bliss"
+srun singularity run --nv \
+ --bind "/scratch/regier_root/regier0/pduan/dc2local/dc2_split_results:${EXP_CUR_PATH}/output/" \
+ --overlay "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img" \
+ bliss_machine.sif \
  yd/test_container \
- "bliss -cp /home/container_files/bliss/case_studies/dc2_cataloging/run_great_lake/configs -cn full_train_config_great_lake_$EXP_POSTFIX"
+ "bliss -cp /home/container_files/bliss/case_studies/dc2_cataloging/run_great_lake/configs -cn full_train_config_great_lake train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX}"
