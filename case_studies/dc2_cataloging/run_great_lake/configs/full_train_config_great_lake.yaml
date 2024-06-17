@@ -1,6 +1,6 @@
 ---
 defaults:
-    - ../../@_here_: full_train_config
+    - ../..@_here_: full_train_config
     - _self_
     - override hydra/job_logging: stdout
 
