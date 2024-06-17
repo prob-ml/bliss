@@ -87,7 +87,11 @@ generate:
 cached_simulator:
     cached_data_path: /data/scratch/regier/m2
     batch_size: 12
-    num_workers: 2
+    num_workers: 0
+    transform:
+        _target_: bliss.simulator.cached_dataset.FullCatalogToTileTransform
+        tile_slen: 2
+        max_sources: 6
 
 train:
     trainer:

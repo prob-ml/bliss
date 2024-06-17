@@ -1,7 +1,5 @@
-import math
-import os
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
@@ -11,7 +9,7 @@ from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
 from bliss.align import align
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import TileCatalog
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
@@ -183,104 +181,3 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
     def test_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)
-
-
-FileDatum = TypedDict(
-    "FileDatum",
-    {
-        "tile_catalog": TileCatalog,
-        "images": torch.Tensor,
-        "background": torch.Tensor,
-        "psf_params": torch.Tensor,
-    },
-)
-
-
-class MyIterableDataset(IterableDataset):
-    def __init__(self, file_paths):
-        self.file_paths = file_paths
-
-    def get_stream(self, files):
-        # TODO: shuffle files
-        for file_path in files:
-            examples = torch.load(file_path)
-            # TODO: randomly sort examples
-            for ex in examples:
-                if "full_catalog" in ex:
-                    full_cat = FullCatalog(112, 112, ex["full_catalog"])
-                    tile_cat = full_cat.to_tile_catalog(2, 6).data
-                    d = {k: v.squeeze(0) for k, v in tile_cat.items()}
-                    ex["tile_catalog"] = d
-                    del ex["full_catalog"]
-                yield ex
-
-    def __iter__(self):
-        worker_info = torch.utils.data.get_worker_info()
-        if worker_info is None:  # single-process data loading
-            files = self.file_paths
-        else:  # in a worker process
-            # Split workload
-            per_worker = int(math.ceil(len(self.file_paths) / float(worker_info.num_workers)))
-            worker_id = worker_info.id
-            files = self.file_paths[worker_id * per_worker : (worker_id + 1) * per_worker]
-
-        return iter(self.get_stream(files))
-
-
-class CachedSimulatedDataset(pl.LightningDataModule):
-    def __init__(
-        self,
-        splits: str,
-        batch_size: int,
-        num_workers: int,
-        cached_data_path: str,
-    ):
-        super().__init__()
-
-        self.num_workers = num_workers
-        self.batch_size = batch_size
-
-        file_names = [f for f in os.listdir(cached_data_path) if f.endswith(".pt")]
-        self.file_paths = [os.path.join(cached_data_path, f) for f in file_names]
-
-        # parse slices from percentages to indices
-        self.slices = self.parse_slices(splits, len(self.file_paths))
-
-    def _percent_to_idx(self, x, length):
-        """Converts string in percent to an integer index."""
-        return int(float(x.strip()) / 100 * length) if x.strip() else None
-
-    def parse_slices(self, splits: str, length: int):
-        slices = [slice(0, 0) for _ in range(3)]  # default to empty slice for each split
-        for i, data_split in enumerate(splits.split("/")):
-            # map "start_percent:stop_percent" to slice(start_idx, stop_idx)
-            slices[i] = slice(*(self._percent_to_idx(val, length) for val in data_split.split(":")))
-        return slices
-
-    def train_dataloader(self):
-        assert self.file_paths[self.slices[0]], "No cached validation data found"
-        return DataLoader(
-            MyIterableDataset(self.file_paths[self.slices[0]]),
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )
-
-    def val_dataloader(self):
-        assert self.file_paths[self.slices[1]], "No cached validation data found"
-        return DataLoader(
-            MyIterableDataset(self.file_paths[self.slices[1]]),
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )
-
-    def test_dataloader(self):
-        assert self.file_paths[self.slices[2]], "No cached test data found"
-        return DataLoader(
-            MyIterableDataset(self.file_paths[self.slices[2]]),
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )
-
-    def predict_dataloader(self):
-        assert self.file_paths, "No cached data found"
-        return DataLoader(self.file_paths, batch_size=self.batch_size, num_workers=self.num_workers)
