@@ -95,8 +95,8 @@ train:
         # val_check_interval: 0.25
         check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
-        devices: [5]
-        max_epochs: 1
+        devices: [5, 7]
+        max_epochs: 25
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
