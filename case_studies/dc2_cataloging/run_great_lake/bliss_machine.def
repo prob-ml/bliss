@@ -39,6 +39,10 @@ From: ubuntu:22.04
 %environment
    export PATH="/home/container_files/poetry/bin:$PATH"
    export POETRY_VIRTUALENVS_IN_PROJECT=1
+   export OMP_NUM_THREADS=16
+   export MKL_NUM_THREADS=16
+   export NUMEXPR_NUM_THREADS=16
+   export NUMEXPR_MAX_THREADS=16
 
 %runscript
    echo "This image is created at: $BLISS_BUILD_TIME"

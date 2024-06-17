@@ -66,7 +66,7 @@ encoder:
     #         scale: 1000
     #         thresholds: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
     image_normalizer:
-        _target_: case_studies.dc2_cataloging.utils.image_normalizer.FixedAsinhImageNormalizer
+        _target_: case_studies.dc2_cataloging.utils.image_normalizer.FixedThresholdsAsinhImageNormalizer
         bands: [0, 1, 2, 3, 4, 5]
         include_original: false
         include_background: false
