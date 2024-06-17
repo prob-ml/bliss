@@ -13,7 +13,7 @@
 #SBATCH --mem-per-gpu=32GB
 
 ## wall time hours:minutes:seconds
-#SBATCH --time=12:00:00
+#SBATCH --time=16:00:00
 
 ###   Load software modules
 
