@@ -1,12 +1,11 @@
 ---
 defaults:
-    - ../..@_here_: full_train_config
+    - full_train_config
     - _self_
     - override hydra/job_logging: stdout
 
 paths:
   output: /home/pduan/bliss_related/output
-
 
 surveys:
    dc2:
