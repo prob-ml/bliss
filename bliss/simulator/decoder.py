@@ -188,7 +188,7 @@ class ImageDecoder(nn.Module):
             # Convert from (linear) physical units to electron counts
             tile_cat["star_fluxes"][i] *= flux_calibration_rats[i]
             if "galaxy_fluxes" in tile_cat:
-                tile_cat["galaxy_fluxes"][i] *= flux_calibration_rats[i]
+                tile_cat["galaxy_fluxes"][i] *= flux_calibration_rats[i]  # noqa: WPS529
 
         full_cat = tile_cat.to_full_catalog()
 
