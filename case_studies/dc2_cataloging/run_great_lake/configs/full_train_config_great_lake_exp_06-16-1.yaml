@@ -143,6 +143,8 @@ encoder:
 surveys:
    dc2:
       split_results_dir: ${paths.dc2}/dc2_split_results
+      batch_size: 128
+      num_workers: 8
 
 train:
     trainer:
@@ -156,6 +158,8 @@ train:
         #     _target_: datetime.timedelta
         #     seconds: 180000
         devices: 1  # change it before running the code
+        precision: "32-true"
     data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: "random"
+    matmul_precision: "high"

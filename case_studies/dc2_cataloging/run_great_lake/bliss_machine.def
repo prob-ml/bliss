@@ -20,7 +20,6 @@ From: ubuntu:22.04
    # clone repos
    git-lfs install
    git clone https://github.com/prob-ml/bliss.git
-   git config --global --add safe.directory /home/container_files/bliss
 
    # create poetry env
    cd bliss
