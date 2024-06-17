@@ -110,7 +110,7 @@ def main(**kwargs):
                 {
                     "tile_catalog": tile_catalog_dict,
                     "images": stacked_image,
-                    "background": None,
+                    "background": stacked_image,
                 }
             )
         )
