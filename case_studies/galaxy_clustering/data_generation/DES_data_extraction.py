@@ -9,7 +9,7 @@ from pyvo.dal import sia
 
 from case_studies.galaxy_clustering import cluster_utils as utils
 
-DES_DATAPATH = os.environ["BLISS_HOME"] + "/case_studies/galaxy_clustering/data/DES_images"
+DES_DATAPATH = os.environ["HOME"] + "/bliss/case_studies/galaxy_clustering/data/DES_images"
 if not os.path.exists(DES_DATAPATH):
     os.makedirs(DES_DATAPATH)
 

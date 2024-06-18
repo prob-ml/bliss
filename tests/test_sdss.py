@@ -21,7 +21,6 @@ class TestSDSS:
 
     def test_sdss_custom_dir(self, cfg, tmpdir_factory):
         the_cfg = cfg.copy()
-        the_cfg.paths.root = str(tmpdir_factory.mktemp("root"))
         if cfg.surveys.sdss.dir_path != the_cfg.surveys.sdss.dir_path:
             copytree(cfg.surveys.sdss.dir_path, the_cfg.surveys.sdss.dir_path, dirs_exist_ok=True)
         # Also tests images loaded

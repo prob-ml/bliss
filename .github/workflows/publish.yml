@@ -15,9 +15,6 @@ jobs:
       - name: Checkout github repo
         uses: actions/checkout@v3
 
-      - name: Create environment variables
-        run: echo "BLISS_HOME=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-
       - name: Install poetry
         run: pipx install poetry
 
