@@ -136,12 +136,6 @@ encoder:
     double_detect: false
     use_checkerboard: true
 
-# to save space, we don't generate dc2_split_results in output folder
-# on great lake, we generate dc2_split_results in output folder
-surveys:
-   dc2:
-      split_results_dir: ${paths.dc2}/dc2_split_results
-
 train:
     trainer:
         logger:
