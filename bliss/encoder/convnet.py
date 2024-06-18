@@ -110,9 +110,9 @@ class ContextNet(nn.Module):
 
         context_dim = 64
         self.encode_context = nn.Sequential(
-            ConvBlock(2, 64),
-            ConvBlock(64, 64),
-            ConvBlock(64, context_dim),
+            ConvBlockGN(2, 64),
+            ConvBlockGN(64, 64),
+            ConvBlockGN(64, context_dim),
         )
         self.merge = nn.Sequential(
             ConvBlockGN(num_features + context_dim, num_features),
