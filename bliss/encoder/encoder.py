@@ -121,17 +121,23 @@ class Encoder(pl.LightningModule):
         tile_cb = indices.sum(axis=0) % 2
         return rearrange(tile_cb, "ht wt -> 1 1 ht wt")
 
-    def make_context(self, history_cat, history_mask):
-        masked_cat = copy(history_cat)
-        # masks not just n_sources; n_sources controls access to all fields.
-        # does not mutate history_cat because we aren't using *=
-        masked_cat["n_sources"] = masked_cat["n_sources"] * history_mask
+    def make_context(self, history_cat, history_mask, detection2=False):
+        if history_cat is None:
+            detection_history = torch.zeros_like(history_mask)
+        else:
+            masked_cat = copy(history_cat)
+            # masks not just n_sources; n_sources controls access to all fields.
+            # does not mutate history_cat because we aren't using *=
 
-        # we may want to use richer conditioning information in the future;
-        # e.g., a residual image based on the catalog so far
-        detection_history = masked_cat["n_sources"] > 0
+            masked_cat["n_sources"] = masked_cat["n_sources"] * history_mask
+            # we may want to use richer conditioning information in the future;
+            # e.g., a residual image based on the catalog so far
+            detection_history = masked_cat["n_sources"] > 0
 
-        return torch.stack([detection_history, history_mask], dim=1).float()
+        id_func = torch.ones_like if detection2 else torch.zeros_like
+        detection_id = id_func(detection_history)
+
+        return torch.stack([detection_history, history_mask, detection_id], dim=1).float()
 
     def interleave_catalogs(self, marginal_cat, cond_cat, marginal_mask):
         d = {}
@@ -147,8 +153,9 @@ class Encoder(pl.LightningModule):
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
 
-        empty_context = torch.zeros_like(x_features[:, 0:2, :, :])
-        x_cat_marginal = self.context_net(x_features, empty_context)
+        mask_all = torch.zeros_like(x_features[:, 0, :, :])
+        marginal_context = self.make_context(None, mask_all)
+        x_cat_marginal = self.context_net(x_features, marginal_context)
         marginal_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
 
         if not self.use_checkerboard:
@@ -164,8 +171,7 @@ class Encoder(pl.LightningModule):
             est_cat = self.interleave_catalogs(marginal_cat, white_cat, white_history_mask)
 
         if self.double_detect:
-            no_mask = torch.ones_like(x_features[:, 0:2, :, :])
-            second_context = self.make_context(est_cat, no_mask)
+            second_context = self.make_context(None, mask_all, detection2=True)
             x_cat_second = self.context_net(x_features, second_context)
             second_cat = self.var_dist.sample(x_cat_second, use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
@@ -237,8 +243,9 @@ class Encoder(pl.LightningModule):
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
 
-        empty_context = torch.zeros_like(x_features[:, 0:2, :, :])
-        pred["x_cat_marginal"] = self.context_net(x_features, empty_context)
+        mask_all = torch.zeros_like(x_features[:, 0, :, :])
+        marginal_context = self.make_context(target_cat1, mask_all)
+        pred["x_cat_marginal"] = self.context_net(x_features, marginal_context)
 
         if self.use_checkerboard:
             ht, wt = h // self.tile_slen, w // self.tile_slen
@@ -256,7 +263,8 @@ class Encoder(pl.LightningModule):
         if not self.double_detect:
             loss = self._single_detection_nll(target_cat1, pred)
         else:
-            pred["x_cat_second"] = self.second_net(x_features)
+            second_context = self.make_context(target_cat1, mask_all, detection2=True)
+            pred["x_cat_second"] = self.context_net(x_features, second_context)
             loss = self._double_detection_nll(target_cat1, target_cat, pred)
 
         # exclude border tiles and report average per-tile loss
