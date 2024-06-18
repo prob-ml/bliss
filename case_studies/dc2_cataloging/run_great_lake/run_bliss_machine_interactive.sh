@@ -5,8 +5,8 @@ salloc --job-name=interactive \
        --ntasks=1 \
        --gpus-per-node=a40:1 \
        --cpus-per-gpu=16 \
-       --mem-per-gpu=150GB \
-       --time=00:30:00
+       --mem-per-gpu=32GB \
+       --time=02:00:00
 
 module load singularity/4.1.2 cuda/12.1.1 cudnn/12.1-v8.9.0
 
@@ -16,6 +16,12 @@ EXP_CUR_PATH=`pwd`
 mkdir -p ./output
 mkdir -p ./overlay_imgs
 mkdir -p /tmp_data/pduan/dc2local/
+
+rsync -av --info=progress2 \
+ -e "ssh -i ~/.ssh/jeffbox_great_lake_side_rsa" \
+ pduan@deeplearning-01.stat.lsa.umich.edu:/data/scratch/dc2local/dc2_split_results.tar \
+ /tmp_data/pduan/dc2local/
+pv /tmp_data/pduan/dc2local/dc2_split_results.tar | tar -xf - -C /tmp_data/pduan/dc2local/
 
 singularity overlay create --sparse --size 5120 "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img"
 singularity run --nv \

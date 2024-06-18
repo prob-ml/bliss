@@ -10,7 +10,7 @@
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=a40:1
 #SBATCH --cpus-per-gpu=16
-#SBATCH --mem-per-gpu=150GB
+#SBATCH --mem-per-gpu=32GB
 
 ## wall time hours:minutes:seconds
 #SBATCH --time=16:00:00
@@ -37,7 +37,11 @@ mkdir -p ./overlay_imgs
 
 echo "copy dc2local from remote server to /tmp_data/"
 mkdir -p /tmp_data/pduan/dc2local/
-rsync -avz pduan@deeplearning-01:/data/scratch/dc2local/dc2_split_results /tmp_data/pduan/dc2local/
+rsync -av --info=progress2 \
+ -e "ssh -i ~/.ssh/jeffbox_great_lake_side_rsa" \
+ pduan@deeplearning-01.stat.lsa.umich.edu:/data/scratch/dc2local/dc2_split_results.tar \
+ /tmp_data/pduan/dc2local/
+pv /tmp_data/pduan/dc2local/dc2_split_results.tar | tar -xf - -C /tmp_data/pduan/dc2local/
 
 echo "create overlay image"
 singularity overlay create --sparse --size 5120 "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img"
