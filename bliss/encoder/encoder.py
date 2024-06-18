@@ -92,15 +92,11 @@ class Encoder(pl.LightningModule):
 
         if self.compile_model:
             self.features_net = torch.compile(self.features_net)
-            if self.use_checkerboard:
-                self.context_net = torch.compile(self.context_net)
-            if self.double_detect:
-                self.second_net = torch.compile(self.second_net)
+            self.context_net = torch.compile(self.context_net)
 
     def initialize_networks(self):
         """Load the convolutional neural networks that map normalized images to catalog parameters.
         This method can be overridden to use different network architectures.
-        `checkerboard_net` and `second_net` can be left as None if not needed.
         """
         assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         ch_per_band = self.image_normalizer.num_channels_per_band()
@@ -114,8 +110,6 @@ class Encoder(pl.LightningModule):
         )
         n_params_per_source = self.var_dist.n_params_per_source
         self.context_net = ContextNet(num_features, n_params_per_source)
-        if self.double_detect:
-            self.second_net = ContextNet(num_features, n_params_per_source)
 
     def _get_checkerboard(self, ht, wt):
         # make/store a checkerboard of tiles
@@ -170,7 +164,9 @@ class Encoder(pl.LightningModule):
             est_cat = self.interleave_catalogs(marginal_cat, white_cat, white_history_mask)
 
         if self.double_detect:
-            x_cat_second = self.second_net(x_features)
+            no_mask = torch.ones_like(x_features[:, 0:2, :, :])
+            second_context = self.make_context(est_cat, no_mask)
+            x_cat_second = self.context_net(x_features, second_context)
             second_cat = self.var_dist.sample(x_cat_second, use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
             # if the first detection is empty for that tile
