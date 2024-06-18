@@ -25,23 +25,22 @@ prior:
     star_flux_scale: 1.4137911256506595
 
 cached_simulator:
-    _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
+    _target_: bliss.simulator.cached_dataset.CachedSimulatedDataset
     batch_size: 5
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
-    num_workers: 1
-    cached_data_path: ${paths.root}/case_studies/galaxy_clustering/data/file_data/
-    file_prefix: file_data_
+    num_workers: 2
+    cached_data_path: ${paths.output}/case_studies/galaxy_clustering/data/file_data/
 
 train:
     trainer:
         precision: 32-true
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
-    name: membership
-    sample_rearrange: "b ht wt -> b ht wt 1 1"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt"
-    nll_gating: null
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: membership
+      sample_rearrange: "b ht wt -> b ht wt 1 1"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt"
+      nll_gating: null
 
 my_metrics:
   cluster_membership_acc:
@@ -69,7 +68,6 @@ encoder:
         factors: ${variational_factors}
     use_checkerboard: false
 
-
 predict:
     dataset: ${surveys.des}
     trainer:
@@ -77,5 +75,5 @@ predict:
         accelerator: "gpu"
         precision: ${train.trainer.precision}
     encoder: ${encoder}
-    weight_save_path: ${paths.root}/output/version_186/checkpoints/best_encoder.ckpt
+    weight_save_path: ${paths.output}/version_186/checkpoints/best_encoder.ckpt
     device: "cuda:0"

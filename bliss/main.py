@@ -1,6 +1,4 @@
-import logging
 import random
-from os import environ, getenv
 from pathlib import Path
 from typing import List
 
@@ -11,7 +9,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from bliss.simulator.simulated_dataset import FileDatum
+from bliss.simulator.cached_dataset import FileDatum
 
 # ============================== Data Generation ==============================
 
@@ -116,17 +114,6 @@ def predict(predict_cfg):
 @hydra.main(config_path="conf", config_name="base_config", version_base=None)
 def main(cfg):
     """Main entry point(s) for BLISS."""
-    if not getenv("BLISS_HOME"):
-        project_path = Path(__file__).resolve()
-        bliss_home = project_path.parents[1]
-        environ["BLISS_HOME"] = bliss_home.as_posix()
-
-        logger = logging.getLogger(__name__)
-        logger.warning(
-            "WARNING: BLISS_HOME not set, setting to project root %s\n",  # noqa: WPS323
-            environ["BLISS_HOME"],
-        )
-
     if cfg.mode == "generate":
         generate(cfg.generate)
     elif cfg.mode == "train":

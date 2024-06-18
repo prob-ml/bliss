@@ -151,6 +151,8 @@ class TileCatalog(BaseTileCatalog):
         for param_name, tile_param in tile_params_to_gather.items():
             if param_name == "n_sources":
                 continue
+            if param_name == "locs":  # full catalog uses plocs instead of locs
+                continue
             k = tile_param.shape[-1]
             param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
             indices_for_param = repeat(indices_to_retrieve, "b nth_ntw_s -> b nth_ntw_s k", k=k)
@@ -594,6 +596,7 @@ class FullCatalog(UserDict):
                     tile_to_source_mapping[:, 0].unique(sorted=True).tolist(), :max_fill
                 ] = params_on_tile[:, :max_fill].to(dtype=v.dtype)
 
+            del tile_params["plocs"]
             # modify tile location
             tile_params["locs"][ii] = (tile_params["locs"][ii] % tile_slen) / tile_slen
         tile_params.update({"n_sources": tile_n_sources})
