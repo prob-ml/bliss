@@ -5,7 +5,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    dc2: /scratch/regier_root/regier0/pduan/dc2local
+    dc2: /tmp_data/pduan/dc2local
     output: /home/pduan/bliss_related/output
 
 surveys:
@@ -13,7 +13,7 @@ surveys:
       split_results_dir: ${paths.dc2}/dc2_split_results
       batch_size: 128
       num_workers: 8
-      in_memory_dataset: true
+      in_memory_dataset: false
 
 train:
     trainer:

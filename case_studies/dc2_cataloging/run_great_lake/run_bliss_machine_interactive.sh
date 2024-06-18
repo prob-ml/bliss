@@ -15,9 +15,11 @@ EXP_CUR_PATH=`pwd`
 
 mkdir -p ./output
 mkdir -p ./overlay_imgs
+mkdir -p /tmp_data/pduan/dc2local/
 
 singularity overlay create --sparse --size 5120 "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img"
 singularity run --nv \
+ --bind /tmp_data/:/tmp_data/ \
  --overlay "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img" \
  bliss_machine.sif \
  yd/test_container \
