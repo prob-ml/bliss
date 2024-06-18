@@ -53,3 +53,6 @@ srun singularity run --nv \
  bliss_machine.sif \
  yd/test_container \
  "bliss -cp /home/container_files/bliss/case_studies/dc2_cataloging -cn full_train_config_great_lake train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX}"
+
+echo "clean directory"
+rm -r /tmp_data/pduan/dc2local/dc2_split_results

@@ -5,13 +5,12 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    dc2: /tmp_data/pduan/dc2local
     output: /home/pduan/bliss_related/output
 
 surveys:
    dc2:
-      split_results_dir: ${paths.dc2}/dc2_split_results
-      batch_size: 128
+      split_results_dir: ${paths.output}/dc2_split_results
+      batch_size: 256
       num_workers: 8
       in_memory_dataset: false
 

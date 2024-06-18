@@ -25,8 +25,10 @@ pv /tmp_data/pduan/dc2local/dc2_split_results.tar | tar -xf - -C /tmp_data/pduan
 
 singularity overlay create --sparse --size 5120 "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img"
 singularity run --nv \
- --bind /tmp_data/:/tmp_data/ \
+ --bind /tmp_data/pduan/dc2local/dc2_split_results:/home/pduan/bliss_related/output/ \
  --overlay "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img" \
  bliss_machine.sif \
  yd/test_container \
  "bliss -cp /home/container_files/bliss/case_studies/dc2_cataloging -cn full_train_config_great_lake train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX}"
+
+rm -r /tmp_data/pduan/dc2local/dc2_split_results
