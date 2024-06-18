@@ -215,8 +215,8 @@ surveys:
         dir_path: ${paths.des}
         image_ids:
             - sky_coord:
-              ra: 336.6643042496718
-              dec: -0.9316385797930247
+                  ra: 336.6643042496718
+                  dec: -0.9316385797930247
               decals_brickname: "3366m010"
               ccdname: "S28"
               g: "decam/CP/V4.8.2a/CP20171108/c4d_171109_002003_ooi_g_ls9"
