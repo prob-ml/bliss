@@ -1,14 +1,15 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, TypedDict
+from typing import List
 
 import numpy as np
 import pandas as pd
 import torch
 from astropy.io import fits
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog
+from bliss.simulator.cached_dataset import FileDatum
 
 min_flux_for_loss = 0
 SCRATCH_DATA_PATH = "/data/scratch/kapnadak"
@@ -36,16 +37,6 @@ COL_NAMES = (
 )
 BANDS = ("g", "r", "i", "z")
 N_CATALOGS_PER_FILE = 10
-
-FileDatum = TypedDict(
-    "FileDatum",
-    {
-        "tile_catalog": TileCatalog,
-        "images": torch.Tensor,
-        "background": torch.Tensor,
-        "psf_params": torch.Tensor,
-    },
-)
 
 
 def main(**kwargs):
