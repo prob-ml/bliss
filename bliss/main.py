@@ -61,6 +61,9 @@ def train(train_cfg: DictConfig):
     else:
         pl.seed_everything(train_cfg.seed)
 
+    if train_cfg.matmul_precision:
+        torch.set_float32_matmul_precision(train_cfg.matmul_precision)
+
     # setup dataset, encoder, and trainer
     dataset = instantiate(train_cfg.data_source)
     encoder = instantiate(train_cfg.encoder)

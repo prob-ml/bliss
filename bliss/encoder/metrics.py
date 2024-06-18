@@ -357,7 +357,6 @@ class DetectionPerformance(FilterMetric):
         axes[0].legend()
 
         plt.tight_layout()
-        plt.show()
 
         return fig, axes
 
