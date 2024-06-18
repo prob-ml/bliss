@@ -11,14 +11,12 @@ hydra:
         dir: .
 
 paths:
-    root: ${oc.env:BLISS_HOME}
-
     sdss: /data/scratch/sdss
     decals: /data/scratch/decals
     des: /data/scratch/des
     dc2: /data/scratch/dc2local
 
-    output: ${paths.root}/output
+    output: ${oc.env:HOME}/bliss_output
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
@@ -66,64 +64,64 @@ cached_simulator:
     cached_data_path: ${generate.cached_data_path}
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
-    name: n_sources
-    sample_rearrange: null
-    nll_rearrange: null
-    nll_gating: null
-  - _target_: bliss.encoder.variational_dist.TDBNFactor
-    name: locs
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 d -> b ht wt d"
-    nll_gating: n_sources
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
-    name: source_type
-    sample_rearrange: "b ht wt -> b ht wt 1 1"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt"
-    nll_gating: n_sources
-  - _target_: bliss.encoder.variational_dist.LogNormalFactor
-    name: star_fluxes
-    dim: 5
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 d -> b ht wt d"
-    nll_gating: is_star
-  - _target_: bliss.encoder.variational_dist.LogNormalFactor
-    name: galaxy_fluxes
-    dim: 5
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 d -> b ht wt d"
-    nll_gating: is_galaxy
-  - _target_: bliss.encoder.variational_dist.LogitNormalFactor
-    name: galaxy_disk_frac
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-    nll_gating: is_galaxy
-  - _target_: bliss.encoder.variational_dist.LogitNormalFactor
-    name: galaxy_beta_radians
-    high: 3.1415926
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-    nll_gating: is_galaxy
-  - _target_: bliss.encoder.variational_dist.LogitNormalFactor
-    name: galaxy_disk_q
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-    nll_gating: is_galaxy
-  - _target_: bliss.encoder.variational_dist.LogNormalFactor
-    name: galaxy_a_d
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-    nll_gating: is_galaxy
-  - _target_: bliss.encoder.variational_dist.LogitNormalFactor
-    name: galaxy_bulge_q
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-    nll_gating: is_galaxy
-  - _target_: bliss.encoder.variational_dist.LogNormalFactor
-    name: galaxy_a_b
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-    nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: n_sources
+      sample_rearrange: null
+      nll_rearrange: null
+      nll_gating: null
+    - _target_: bliss.encoder.variational_dist.TDBNFactor
+      name: locs
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      nll_gating: n_sources
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: source_type
+      sample_rearrange: "b ht wt -> b ht wt 1 1"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt"
+      nll_gating: n_sources
+    - _target_: bliss.encoder.variational_dist.LogNormalFactor
+      name: star_fluxes
+      dim: 5
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      nll_gating: is_star
+    - _target_: bliss.encoder.variational_dist.LogNormalFactor
+      name: galaxy_fluxes
+      dim: 5
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogitNormalFactor
+      name: galaxy_disk_frac
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogitNormalFactor
+      name: galaxy_beta_radians
+      high: 3.1415926
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogitNormalFactor
+      name: galaxy_disk_q
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogNormalFactor
+      name: galaxy_a_d
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogitNormalFactor
+      name: galaxy_bulge_q
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogNormalFactor
+      name: galaxy_a_b
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
 
 metrics:
     detection_performance:
@@ -175,11 +173,11 @@ encoder:
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
-          - _target_: bliss.encoder.sample_image_renders.PlotSampleImages
-            frequency: 1
-            restrict_batch: 0
-            tiles_to_crop: 1
-            tile_slen: ${simulator.prior.tile_slen}
+            - _target_: bliss.encoder.sample_image_renders.PlotSampleImages
+              frequency: 1
+              restrict_batch: 0
+              tiles_to_crop: 1
+              tile_slen: ${simulator.prior.tile_slen}
 
     do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
@@ -203,22 +201,22 @@ surveys:
     decals:
         _target_: bliss.surveys.decals.DarkEnergyCameraLegacySurvey
         dir_path: ${paths.decals}
-        sky_coords: # in degrees
+        sky_coords:  # in degrees
             # brick '3366m010' corresponds to SDSS RCF 94-1-12
             - ra: 336.6643042496718
               dec: -0.9316385797930247
-        bands: [0, 1, 3] # grz
+        bands: [0, 1, 3]  # grz
         psf_config:
-            pixel_scale: 0.262 # see https://github.com/legacysurvey/legacypipe/blob/6811e465cf1d6f0beb9824a2f1964de8a1a8cc12/py/legacyanalysis/deep-coadd.py#L20
-            psf_slen: 63 # see https://github.com/legacysurvey/legacypipe/blob/ba1ffd4969c1f920566e780118c542d103cbd9a5/py/legacypipe/config/common.psfex#L8
+            pixel_scale: 0.262
+            psf_slen: 63
         pixel_shift: 2
     des:
         _target_: bliss.surveys.des.DarkEnergySurvey
         dir_path: ${paths.des}
         image_ids:
             - sky_coord:
-                ra: 336.6643042496718
-                dec: -0.9316385797930247
+              ra: 336.6643042496718
+              dec: -0.9316385797930247
               decals_brickname: "3366m010"
               ccdname: "S28"
               g: "decam/CP/V4.8.2a/CP20171108/c4d_171109_002003_ooi_g_ls9"
@@ -262,16 +260,16 @@ train:
             save_dir: ${paths.output}
             name: null
             version: null
-            default_hp_metric: False
+            default_hp_metric: false
         callbacks:
             - _target_: pytorch_lightning.callbacks.ModelCheckpoint
               filename: best_encoder
               save_top_k: 1
-              verbose: True
+              verbose: true
               monitor: val/_loss
               mode: min
-              save_on_train_epoch_end: False
-              auto_insert_metric_name: False
+              save_on_train_epoch_end: false
+              auto_insert_metric_name: false
             - _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
               monitor: val/_loss
               mode: min

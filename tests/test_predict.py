@@ -11,7 +11,7 @@ def setup_teardown(cfg, monkeypatch):
     # override `align` for now (kernprof analyzes ~40% runtime); TODO: test alignment
     monkeypatch.setattr("bliss.align.align", lambda x, **_args: x)
 
-    checkpoint_dir = cfg.paths.root + "/checkpoints"
+    checkpoint_dir = cfg.paths.output + "/checkpoints"
     if Path(checkpoint_dir).exists():
         shutil.rmtree(checkpoint_dir)
 
