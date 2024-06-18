@@ -36,11 +36,11 @@ train:
         precision: 32-true
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
-    name: membership
-    sample_rearrange: "b ht wt -> b ht wt 1 1"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt"
-    nll_gating: null
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: membership
+      sample_rearrange: "b ht wt -> b ht wt 1 1"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt"
+      nll_gating: null
 
 my_metrics:
   cluster_membership_acc:
