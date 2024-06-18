@@ -287,6 +287,7 @@ train:
     seed: 42
     pretrained_weights: null
     testing: true
+    matmul_precision: null
 
 predict:
     dataset: ${surveys.sdss}
