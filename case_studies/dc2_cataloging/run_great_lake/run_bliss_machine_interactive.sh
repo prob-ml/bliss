@@ -22,10 +22,11 @@ rsync -av --info=progress2 \
  pduan@deeplearning-01.stat.lsa.umich.edu:/data/scratch/dc2local/dc2_split_results.tar \
  /tmp_data/pduan/dc2local/
 pv /tmp_data/pduan/dc2local/dc2_split_results.tar | tar -xf - -C /tmp_data/pduan/dc2local/
+ln -sf /tmp_data/pduan/dc2local/dc2_split_results /home/pduan/bliss_related/output/dc2_split_results
 
 singularity overlay create --sparse --size 5120 "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img"
 singularity run --nv \
- --bind /tmp_data/pduan/dc2local/dc2_split_results:/home/pduan/bliss_related/output/ \
+ --bind /tmp_data/:/tmp_data/ \
  --overlay "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img" \
  bliss_machine.sif \
  yd/test_container \
