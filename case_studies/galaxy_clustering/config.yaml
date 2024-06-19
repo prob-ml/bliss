@@ -29,12 +29,27 @@ cached_simulator:
     batch_size: 3
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
     num_workers: 2
-    cached_data_path: /data/scratch/kapnadak/file_data1/
-    #file_prefix: file_data_
+    cached_data_path: /data/scratch/kapnadak/file_data/
 
 train:
     trainer:
         precision: 32-true
+        accumulate_grad_batches: 10
+        min_epochs: 1
+        max_epochs: 75
+        callbacks:
+            - _target_: pytorch_lightning.callbacks.ModelCheckpoint
+              filename: best_encoder
+              save_top_k: 1
+              verbose: True
+              monitor: val/_loss
+              mode: min
+              save_on_train_epoch_end: False
+              auto_insert_metric_name: False
+            - _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+              monitor: val/_loss
+              mode: min
+              patience: 10
 
 variational_factors:
   - _target_: bliss.encoder.variational_dist.BernoulliFactor
@@ -78,5 +93,5 @@ predict:
         accelerator: "gpu"
         precision: ${train.trainer.precision}
     encoder: ${encoder}
-    weight_save_path: ${paths.root}/output/version_188/checkpoints/best_encoder.ckpt
+    weight_save_path: ${paths.root}/output/version_198/checkpoints/best_encoder.ckpt
     device: "cuda:0"
