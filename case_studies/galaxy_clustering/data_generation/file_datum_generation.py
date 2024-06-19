@@ -8,8 +8,8 @@ import pandas as pd
 import torch
 from astropy.io import fits
 
+from bliss.cached_dataset import FileDatum
 from bliss.catalog import FullCatalog
-from bliss.simulator.cached_dataset import FileDatum
 
 min_flux_for_loss = 0
 DATA_PATH = Path(os.getcwd()) / Path("data")

@@ -131,7 +131,6 @@ encoder:
             tiles_to_crop: 1
             tile_slen: ${simulator.prior.tile_slen}
 
-    do_data_augmentation: true
     compile_model: false
     double_detect: false
     use_checkerboard: true

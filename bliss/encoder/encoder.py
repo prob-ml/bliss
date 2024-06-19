@@ -11,7 +11,6 @@ from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.convnet import ContextNet, FeaturesNet
-from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDist
@@ -39,7 +38,6 @@ class Encoder(pl.LightningModule):
         min_flux_for_metrics: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
-        do_data_augmentation: bool = False,
         compile_model: bool = False,
         double_detect: bool = False,
         use_checkerboard: bool = True,
@@ -60,7 +58,6 @@ class Encoder(pl.LightningModule):
             min_flux_for_metrics: filter sources by flux during test
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
-            do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
             double_detect: whether to make up to two detections per tile rather than one
             use_checkerboard: whether to use dependent tiling
@@ -82,7 +79,6 @@ class Encoder(pl.LightningModule):
         assert self.min_flux_for_loss <= self.min_flux_for_metrics, "invalid threshold"
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
-        self.do_data_augmentation = do_data_augmentation
         self.compile_model = compile_model
         self.double_detect = double_detect
         self.use_checkerboard = use_checkerboard
@@ -277,9 +273,6 @@ class Encoder(pl.LightningModule):
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
-        if self.do_data_augmentation:
-            augment_batch(batch)
-
         return self._compute_loss(batch, "train")
 
     def update_metrics(self, batch, batch_idx):

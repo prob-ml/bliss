@@ -9,7 +9,7 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from bliss.simulator.cached_dataset import FileDatum
+from bliss.cached_dataset import FileDatum
 
 # ============================== Data Generation ==============================
 
