@@ -12,11 +12,10 @@ from bliss.catalog import FullCatalog
 from bliss.simulator.cached_dataset import FileDatum
 
 min_flux_for_loss = 0
-SCRATCH_DATA_PATH = "/data/scratch/kapnadak"
-DATA_PATH = Path(os.getcwd()) / Path("data")
+DATA_PATH = "/data/scratch/kapnadak/data"
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
-FILE_DATA_PATH = SCRATCH_DATA_PATH / Path("file_data")
+FILE_DATA_PATH = DATA_PATH / Path("file_data")
 if not os.path.exists(FILE_DATA_PATH):
     os.makedirs(FILE_DATA_PATH)
 COL_NAMES = (
