@@ -34,7 +34,7 @@ class RotateFlipTransform(torch.nn.Module):
                 # Rotate 90 degrees clockwise (in pixel coordinates)
                 locs = torch.stack((1 - locs[..., 1], locs[..., 0]), dim=3)
             if do_flip:
-                locs = torch.stack((locs[..., 0], 1 - locs[..., 1]), dim=3)
+                locs = torch.stack((1 - locs[..., 0], locs[..., 1]), dim=3)
             datum_out["tile_catalog"]["locs"] = locs
 
         return datum_out
