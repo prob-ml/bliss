@@ -30,6 +30,6 @@ singularity run --nv \
  --overlay "./overlay_imgs/bliss_machine_overlay_${EXP_POSTFIX}.img" \
  bliss_machine.sif \
  yd/test_container \
- "bliss -cp /home/container_files/bliss/case_studies/dc2_cataloging -cn full_train_config_great_lake train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX}"
+ "bliss -cp /home/container_files/bliss/case_studies/dc2_cataloging -cn train_config_great_lake train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX}"
 
 rm -r /tmp_data/pduan/dc2local/dc2_split_results
