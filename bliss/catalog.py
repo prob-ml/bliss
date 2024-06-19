@@ -648,8 +648,8 @@ class FullCatalog(UserDict):
         return est_cat_table
 
     def filter_full_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
-        assert box_origin[0] + box_len < self.height, "invalid box"
-        assert box_origin[1] + box_len < self.width, "invalid box"
+        assert box_origin[0] + box_len <= self.height, "invalid box"
+        assert box_origin[1] + box_len <= self.width, "invalid box"
 
         box_origin_tensor = box_origin.view(1, 1, 2).to(device=self.device)
         box_end_tensor = (box_origin + box_len).view(1, 1, 2).to(device=self.device)
