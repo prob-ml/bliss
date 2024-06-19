@@ -95,7 +95,7 @@ image :
 
   nproc : 24
   type : Scattered
-  pixel_scale : 0.2636
+  pixel_scale : 0.27
   xsize : '@variables.image_size'
   ysize : '@variables.image_size'
   stamp_size : 100
