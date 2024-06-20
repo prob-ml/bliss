@@ -1,5 +1,5 @@
 import itertools
-from copy import copy, deepcopy
+from copy import copy
 from typing import Optional
 
 import pytorch_lightning as pl
@@ -157,22 +157,18 @@ class Encoder(pl.LightningModule):
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
 
-        # initialize empty catalog
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat1 = target_cat.get_brightest_sources_per_tile(
-            band=self.reference_band, exclude_num=0
-        )
-        est_cat1 = TileCatalog(self.tile_slen, deepcopy(target_cat1))
-        est_cat1["n_sources"].fill_(0)
-
+        est_cat1 = None
         for mask_pattern in self.mask_patterns[(0, 8, 12, 14), ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
             context1 = self.make_context(est_cat1, mask)
             x_cat1 = self.context_net(x_features, context1)
             new_est_cat = self.var_dist.sample(x_cat1, use_mode=use_mode)
             new_est_cat["n_sources"] *= 1 - mask
-            est_cat1["n_sources"] *= mask
-            est_cat1 = est_cat1.union(new_est_cat, disjoint=True)
+            if est_cat1 is None:
+                est_cat1 = new_est_cat
+            else:
+                est_cat1["n_sources"] *= mask
+                est_cat1 = est_cat1.union(new_est_cat, disjoint=True)
 
             if not self.use_checkerboard:
                 break

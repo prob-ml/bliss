@@ -5,26 +5,18 @@ from torch import nn
 # https://github.com/ultralytics/yolov5/
 
 
-class ConvBlockGN(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
-        super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
-        self.gn = nn.GroupNorm(out_channels // 2, out_channels)
-        self.activation = nn.SiLU(inplace=True)
-
-    def forward(self, x):
-        return self.activation(self.gn(self.conv(x)))
-
-
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, use_gn=False):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
-        self.bn = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0.03)
+        if use_gn:
+            self.norm = nn.GroupNorm(out_channels // 8, out_channels)
+        else:
+            self.norm = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0.03)
         self.activation = nn.SiLU(inplace=True)
 
     def forward(self, x):
-        return self.activation(self.bn(self.conv(x)))
+        return self.activation(self.norm(self.conv(x)))
 
 
 class Detect(nn.Module):
@@ -79,7 +71,7 @@ class FeaturesNet(nn.Module):
             nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
             ConvBlock(128, 256, stride=(2 if double_downsample else 1)),  # 4
         )
-        net_layers = [
+        u_net_layers = [
             C3(256, 256, n=6),  # 0
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),
@@ -87,14 +79,14 @@ class FeaturesNet(nn.Module):
             nn.Upsample(scale_factor=2, mode="nearest"),  # 4
             C3(768, num_features, n=3, shortcut=False),
         ]
-        self.net_ml = nn.ModuleList(net_layers)
+        self.u_net = nn.ModuleList(u_net_layers)
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
         x = self.backbone(x)
 
         save_lst = [x]
-        for i, m in enumerate(self.net_ml):
+        for i, m in enumerate(self.u_net):
             x = m(x)
             if i in {0, 4}:
                 save_lst.append(x)
@@ -110,14 +102,14 @@ class ContextNet(nn.Module):
 
         context_dim = 64
         self.encode_context = nn.Sequential(
-            ConvBlockGN(3, 64),
-            ConvBlockGN(64, 64),
-            ConvBlockGN(64, context_dim),
+            ConvBlock(3, 64, use_gn=True),
+            ConvBlock(64, 64, use_gn=True),
+            ConvBlock(64, context_dim, use_gn=True),
         )
         self.merge = nn.Sequential(
-            ConvBlockGN(num_features + context_dim, num_features),
-            ConvBlockGN(num_features, num_features),
-            ConvBlockGN(num_features, num_features),
+            ConvBlock(num_features + context_dim, num_features, use_gn=True),
+            ConvBlock(num_features, num_features, use_gn=True),
+            ConvBlock(num_features, num_features, use_gn=True),
             Detect(num_features, out_channels),
         )
 
