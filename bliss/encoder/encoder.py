@@ -1,4 +1,5 @@
-from copy import copy
+import itertools
+from copy import copy, deepcopy
 from typing import Optional
 
 import pytorch_lightning as pl
@@ -84,6 +85,12 @@ class Encoder(pl.LightningModule):
         self.use_checkerboard = use_checkerboard
         self.reference_band = reference_band
 
+        # Generate all binary combinations for n^2 elements
+        n = 2
+        binary_combinations = list(itertools.product([0, 1], repeat=n * n))
+        mask_patterns = torch.tensor(binary_combinations).view(-1, n, n)  # noqa: WPS114
+        self.register_buffer("mask_patterns", mask_patterns)
+
         self.initialize_networks()
 
         if self.compile_model:
@@ -145,127 +152,93 @@ class Encoder(pl.LightningModule):
 
     def sample(self, batch, use_mode=True):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
+        ht, wt = h // self.tile_slen, w // self.tile_slen
 
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
 
-        mask_all = torch.zeros_like(x_features[:, 0, :, :])
-        marginal_context = self.make_context(None, mask_all)
-        x_cat_marginal = self.context_net(x_features, marginal_context)
-        marginal_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
+        # initialize empty catalog
+        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        est_cat1 = TileCatalog(self.tile_slen, deepcopy(target_cat1))
+        est_cat1["n_sources"].fill_(0)
 
-        if not self.use_checkerboard:
-            est_cat = marginal_cat
-        else:
-            ht, wt = h // self.tile_slen, w // self.tile_slen
-            tile_cb = self._get_checkerboard(ht, wt).squeeze(1)
-            white_history_mask = tile_cb.expand([batch_size, -1, -1])
+        for mask_pattern in self.mask_patterns[(0, 8, 12, 14), ...]:
+            mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
+            context1 = self.make_context(est_cat1, mask)
+            x_cat1 = self.context_net(x_features, context1)
+            new_est_cat = self.var_dist.sample(x_cat1, use_mode=use_mode)
+            new_est_cat["n_sources"] *= 1 - mask
+            est_cat1["n_sources"] *= mask
+            est_cat1 = est_cat1.union(new_est_cat, disjoint=True)
 
-            white_context = self.make_context(marginal_cat, white_history_mask)
-            x_cat_white = self.context_net(x_features, white_context)
-            white_cat = self.var_dist.sample(x_cat_white, use_mode=use_mode)
-            est_cat = self.interleave_catalogs(marginal_cat, white_cat, white_history_mask)
+            if not self.use_checkerboard:
+                break
 
         if self.double_detect:
-            second_context = self.make_context(None, mask_all, detection2=True)
-            x_cat_second = self.context_net(x_features, second_context)
-            second_cat = self.var_dist.sample(x_cat_second, use_mode=use_mode)
+            no_mask = torch.ones_like(mask)
+            # could add some context from target_cat2 here, masked by `mask`
+            context2 = self.make_context(est_cat1, no_mask, detection2=True)
+            x_cat2 = self.context_net(x_features, context2)
+            est_cat2 = self.var_dist.sample(x_cat2, use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
             # if the first detection is empty for that tile
-            second_cat["n_sources"] *= est_cat["n_sources"]
-            est_cat = est_cat.union(second_cat)
+            est_cat2["n_sources"] *= est_cat1["n_sources"]
+            est_cat = est_cat1.union(est_cat2, disjoint=False)
 
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
-    def _single_detection_nll(self, target_cat, pred):
-        marginal_loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat)
-
-        if not self.use_checkerboard:
-            return marginal_loss
-
-        white_loss = self.var_dist.compute_nll(pred["x_cat_white"], target_cat)
-        white_loss_mask = 1 - pred["white_history_mask"]
-        white_loss *= white_loss_mask
-
-        black_loss = self.var_dist.compute_nll(pred["x_cat_black"], target_cat)
-        black_loss_mask = pred["white_history_mask"]
-        black_loss *= black_loss_mask
-
-        # we divide by two because we score two predictions for each tile
-        return (marginal_loss + white_loss + black_loss) / 2
-
-    def _double_detection_nll(self, target_cat1, target_cat, pred):
-        target_cat2 = target_cat.get_brightest_sources_per_tile(
-            band=self.reference_band, exclude_num=1
-        )
-
-        nll_marginal_z1 = self._single_detection_nll(target_cat1, pred)
-        nll_cond_z2 = self.var_dist.compute_nll(pred["x_cat_second"], target_cat2)
-        nll_marginal_z2 = self._single_detection_nll(target_cat2, pred)
-        nll_cond_z1 = self.var_dist.compute_nll(pred["x_cat_second"], target_cat1)
-
-        none_mask = target_cat["n_sources"] == 0
-        loss0 = nll_marginal_z1 * none_mask
-
-        one_mask = target_cat["n_sources"] == 1
-        loss1 = (nll_marginal_z1 + nll_cond_z2) * one_mask
-
-        two_mask = target_cat["n_sources"] >= 2
-        loss2a = nll_marginal_z1 + nll_cond_z2
-        loss2b = nll_marginal_z2 + nll_cond_z1
-        lse_stack = torch.stack([loss2a, loss2b], dim=-1)
-        loss2_unmasked = -torch.logsumexp(-lse_stack, dim=-1)
-        loss2 = loss2_unmasked * two_mask
-
-        return loss0 + loss1 + loss2
-
     def _compute_loss(self, batch, logging_name):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
+        ht, wt = h // self.tile_slen, w // self.tile_slen
 
+        # filter out undetectable sources and split catalog by flux
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-
-        # filter out undetectable sources
-        target_cat = target_cat.filter_tile_catalog_by_flux(
+        target_cat = target_cat.filter_by_flux(
             min_flux=self.min_flux_for_loss,
             band=self.reference_band,
         )
         target_cat1 = target_cat.get_brightest_sources_per_tile(
             band=self.reference_band, exclude_num=0
         )
+        target_cat2 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=1
+        )
 
-        # make predictions/inferences
-        pred = {}
-
+        # new loss calculation
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
 
-        mask_all = torch.zeros_like(x_features[:, 0, :, :])
-        marginal_context = self.make_context(target_cat1, mask_all)
-        pred["x_cat_marginal"] = self.context_net(x_features, marginal_context)
+        loss = torch.zeros_like(x_features[:, 0, :, :])
 
-        if self.use_checkerboard:
-            ht, wt = h // self.tile_slen, w // self.tile_slen
-            tile_cb = self._get_checkerboard(ht, wt).squeeze(1)
-            white_history_mask = tile_cb.expand([batch_size, -1, -1])
-            pred["white_history_mask"] = white_history_mask
+        # could use all the mask patterns but memory is tight and these 4 are the ones
+        # we actually use for sampling
+        for mask_pattern in self.mask_patterns[(0, 8, 12, 14), ...]:
+            mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
+            context1 = self.make_context(target_cat1, mask)
+            x_cat1 = self.context_net(x_features, context1)
+            loss11 = self.var_dist.compute_nll(x_cat1, target_cat1)
 
-            white_context = self.make_context(target_cat1, white_history_mask)
-            pred["x_cat_white"] = self.context_net(x_features, white_context)
+            # could upweight some patterns that are under-represented or limit loss to
+            # the quarter of tiles that are actually used for sampling
+            loss += loss11 * (1 - mask)
 
-            black_context = self.make_context(target_cat1, 1 - white_history_mask)
-            pred["x_cat_black"] = self.context_net(x_features, black_context)
+            if not self.use_checkerboard:
+                break
 
-        # compute loss
-        if not self.double_detect:
-            loss = self._single_detection_nll(target_cat1, pred)
-        else:
-            second_context = self.make_context(target_cat1, mask_all, detection2=True)
-            pred["x_cat_second"] = self.context_net(x_features, second_context)
-            loss = self._double_detection_nll(target_cat1, target_cat, pred)
+        if self.double_detect:
+            no_mask = torch.ones_like(mask)
+            context2 = self.make_context(target_cat1, no_mask, detection2=True)
+            x_cat2 = self.context_net(x_features, context2)
+            loss22 = self.var_dist.compute_nll(x_cat2, target_cat2)
+            loss += loss22
 
         # exclude border tiles and report average per-tile loss
         ttc = self.tiles_to_crop
         interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
+        # could normalize by the number of tile predictions, rather than number of tiles
         loss = interior_loss.sum() / interior_loss.numel()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
@@ -277,21 +250,25 @@ class Encoder(pl.LightningModule):
 
     def update_metrics(self, batch, batch_idx):
         target_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_tile_cat = target_tile_cat.filter_tile_catalog_by_flux(
-            min_flux=self.min_flux_for_loss,
+        target_tile_cat = target_tile_cat.filter_by_flux(
+            min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
         )
         target_cat = target_tile_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
-        mode_tile_cat = self.sample(batch, use_mode=True).filter_tile_catalog_by_flux(
-            min_flux=self.min_flux_for_metrics
+        mode_tile_cat = self.sample(batch, use_mode=True).filter_by_flux(
+            min_flux=self.min_flux_for_metrics,
+            band=self.reference_band,
         )
         mode_cat = mode_tile_cat.to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, matching)
 
         sample_cat = self.sample(batch, use_mode=False)
-        sample_cat = sample_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_for_metrics)
+        sample_cat = sample_cat.filter_by_flux(
+            min_flux=self.min_flux_for_metrics,
+            band=self.reference_band,
+        )
         sample_cat = sample_cat.to_full_catalog()
 
         matching = self.matcher.match_catalogs(target_cat, sample_cat)
