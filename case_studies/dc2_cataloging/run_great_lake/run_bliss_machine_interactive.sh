@@ -13,7 +13,7 @@ module load singularity/4.1.2 cuda/12.1.1 cudnn/12.1-v8.9.0
 EXP_POSTFIX="test"
 EXP_CUR_PATH=`pwd`
 
-mkdir -p ./output
+mkdir -p /home/pduan/bliss_output
 mkdir -p ./overlay_imgs
 mkdir -p /tmp_data/pduan/dc2local/
 

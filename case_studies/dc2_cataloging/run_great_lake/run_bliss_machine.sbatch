@@ -31,7 +31,7 @@ EXP_CUR_PATH=`pwd`
 echo "current directory is: ${EXP_CUR_PATH}"
 
 echo "create output folder if not exists"
-mkdir -p ./output
+mkdir -p /home/pduan/bliss_output
 echo "create overlay image folder if not exists"
 mkdir -p ./overlay_imgs
 
