@@ -102,6 +102,7 @@ train:
     trainer:
         precision: 32
         accumulate_grad_batches: 1
+    seed: random
 
 predict:
     dataset:
