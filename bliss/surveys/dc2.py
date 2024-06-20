@@ -1,5 +1,6 @@
 import collections
 import copy
+import logging
 import math
 import multiprocessing
 import pathlib
@@ -30,16 +31,28 @@ def map_nested_dicts(cur_dict, func):
 
 
 class DC2Dataset(Dataset):
-    def __init__(self, split_files_list) -> None:
+    def __init__(self, split_files_list, in_memory: bool) -> None:
         super().__init__()
         self.split_files_list = split_files_list
+        self.in_memory = in_memory
+        self.in_memory_data = []
+        if self.in_memory:
+            logger = logging.getLogger("DC2")
+            logger.warning("WARNING: you are using in-memory DC2; it takes time to load")
+            for split_file in self.split_files_list:
+                with open(split_file, "rb") as sf:
+                    split = torch.load(sf)
+                    self.in_memory_data.append(split)
 
     def __len__(self):
         return len(self.split_files_list)
 
     def __getitem__(self, idx):
-        with open(self.split_files_list[idx], "rb") as split_file:
-            split = torch.load(split_file)
+        if not self.in_memory:
+            with open(self.split_files_list[idx], "rb") as split_file:
+                split = torch.load(split_file)
+        else:
+            split = self.in_memory_data[idx]
         return split
 
 
@@ -59,6 +72,7 @@ class DC2(Survey):
         split_processes_num,
         min_flux_for_loss,
         subset_fraction: float = None,
+        in_memory_dataset: bool = False,
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -78,6 +92,7 @@ class DC2(Survey):
         self.split_processes_num = split_processes_num
         self.min_flux_for_loss = min_flux_for_loss
         self.subset_fraction = subset_fraction
+        self.in_memory_dataset = in_memory_dataset
 
         self.image_files = None
         self.bg_files = None
@@ -127,6 +142,9 @@ class DC2(Survey):
 
     def prepare_data(self):  # noqa: WPS324
         if self.split_results_dir.exists():
+            logger = logging.getLogger("DC2")
+            warning_msg = "WARNING: split_results already exists at [%s], we directly use it\n"
+            logger.warning(warning_msg, str(self.split_results_dir))
             return None
         self.split_results_dir.mkdir(parents=True)
 
@@ -173,10 +191,17 @@ class DC2(Survey):
         train_len = int(data_len * 0.8)
         val_len = int(data_len * 0.1)
 
-        self.train_dataset = DC2Dataset(self.split_files_list[:train_len])
-        self.valid_dataset = DC2Dataset(self.split_files_list[train_len : (train_len + val_len)])
-        self.test_dataset = DC2Dataset(self.split_files_list[(train_len + val_len) :])
-        self.total_dataset = DC2Dataset(self.split_files_list)
+        self.train_dataset = DC2Dataset(
+            self.split_files_list[:train_len], in_memory=self.in_memory_dataset
+        )
+        self.valid_dataset = DC2Dataset(
+            self.split_files_list[train_len : (train_len + val_len)],
+            in_memory=self.in_memory_dataset,
+        )
+        self.test_dataset = DC2Dataset(
+            self.split_files_list[(train_len + val_len) :], in_memory=self.in_memory_dataset
+        )
+        self.total_dataset = DC2Dataset(self.split_files_list, in_memory=False)
 
     def train_dataloader(self):
         return DataLoader(

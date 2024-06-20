@@ -52,11 +52,11 @@ train:
               patience: 10
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
-    name: membership
-    sample_rearrange: "b ht wt -> b ht wt 1 1"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt"
-    nll_gating: null
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: membership
+      sample_rearrange: "b ht wt -> b ht wt 1 1"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt"
+      nll_gating: null
 
 my_metrics:
   cluster_membership_acc:
@@ -93,5 +93,5 @@ predict:
         accelerator: "gpu"
         precision: ${train.trainer.precision}
     encoder: ${encoder}
-    weight_save_path: ${paths.root}/output/version_198/checkpoints/best_encoder.ckpt
+    weight_save_path: ${paths.output}/version_186/checkpoints/best_encoder.ckpt
     device: "cuda:0"

@@ -1,6 +1,4 @@
-import logging
 import random
-from os import environ, getenv
 from pathlib import Path
 from typing import List
 
@@ -63,6 +61,9 @@ def train(train_cfg: DictConfig):
     else:
         pl.seed_everything(train_cfg.seed)
 
+    if train_cfg.matmul_precision:
+        torch.set_float32_matmul_precision(train_cfg.matmul_precision)
+
     # setup dataset, encoder, and trainer
     dataset = instantiate(train_cfg.data_source)
     encoder = instantiate(train_cfg.encoder)
@@ -113,17 +114,6 @@ def predict(predict_cfg):
 @hydra.main(config_path="conf", config_name="base_config", version_base=None)
 def main(cfg):
     """Main entry point(s) for BLISS."""
-    if not getenv("BLISS_HOME"):
-        project_path = Path(__file__).resolve()
-        bliss_home = project_path.parents[1]
-        environ["BLISS_HOME"] = bliss_home.as_posix()
-
-        logger = logging.getLogger(__name__)
-        logger.warning(
-            "WARNING: BLISS_HOME not set, setting to project root %s\n",  # noqa: WPS323
-            environ["BLISS_HOME"],
-        )
-
     if cfg.mode == "generate":
         generate(cfg.generate)
     elif cfg.mode == "train":
