@@ -78,19 +78,19 @@ class SourceCountFilter(CatFilter):
         super().__init__()
         self.filter_source_count = filter_source_count
         assert filter_source_count in {
-            "one_source_mask",
-            "two_sources_mask",
-            "more_than_two_sources_mask",
+            "1m",
+            "2m",
+            "2plus",
         }, "invalid filter_source_count"
 
     def get_cur_filter_bools(self, true_cat, est_cat):
-        if self.filter_source_count == "one_source_mask":
+        if self.filter_source_count == "1m":
             true_filter_bools = true_cat["one_source_mask"].squeeze(2)
             est_filter_bools = est_cat["one_source_mask"].squeeze(2)
-        elif self.filter_source_count == "two_sources_mask":
+        elif self.filter_source_count == "2m":
             true_filter_bools = true_cat["two_sources_mask"].squeeze(2)
             est_filter_bools = est_cat["two_sources_mask"].squeeze(2)
-        elif self.filter_source_count == "more_than_two_sources_mask":
+        elif self.filter_source_count == "2plus":
             true_filter_bools = true_cat["more_than_two_sources_mask"].squeeze(2)
             est_filter_bools = est_cat["more_than_two_sources_mask"].squeeze(2)
         else:

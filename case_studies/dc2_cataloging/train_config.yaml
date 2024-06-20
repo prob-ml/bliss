@@ -103,21 +103,21 @@ encoder:
             bin_unit_is_flux: true
             filter_list:
               - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-                filter_source_count: "one_source_mask"
+                filter_source_count: "1m"
           detection_performance_two_sources_mask:
             _target_: bliss.encoder.metrics.DetectionPerformance
             mag_bin_cutoffs: [200, 400, 600, 800, 1000]
             bin_unit_is_flux: true
             filter_list:
               - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-                filter_source_count: "two_sources_mask"
+                filter_source_count: "2m"
           detection_performance_more_than_two_sources_mask:
             _target_: bliss.encoder.metrics.DetectionPerformance
             mag_bin_cutoffs: [200, 400, 600, 800, 1000]
             bin_unit_is_flux: true
             filter_list:
               - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-                filter_source_count: "more_than_two_sources_mask"
+                filter_source_count: "2plus"
           source_type_accuracy_galaxy:
             _target_: bliss.encoder.metrics.SourceTypeAccuracy
             flux_bin_cutoffs: [200, 400, 600, 800, 1000]
