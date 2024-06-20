@@ -2,7 +2,7 @@ from einops import rearrange
 
 from bliss.encoder.convnet import CatalogNet, ContextNet
 from bliss.encoder.encoder import Encoder
-from case_studies.dc2_cataloging.utils.convnet import FeaturesNet
+from case_studies.dc2_cataloging.utils.dynamic_asinh_convnet import FeaturesNet
 from case_studies.dc2_cataloging.utils.image_normalizer import DynamicAsinhImageNormalizer
 
 
