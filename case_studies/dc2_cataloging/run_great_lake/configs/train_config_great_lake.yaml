@@ -5,7 +5,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    output: /home/pduan/bliss_related/output
+    output: /home/pduan/bliss_output
 
 surveys:
    dc2:
