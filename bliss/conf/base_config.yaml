@@ -274,7 +274,7 @@ train:
             - _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
               monitor: val/_loss
               mode: min
-              patience: 5
+              patience: 10
         reload_dataloaders_every_n_epochs: 0
         check_val_every_n_epoch: 1
         log_every_n_steps: 10  # corresponds to n_batches
