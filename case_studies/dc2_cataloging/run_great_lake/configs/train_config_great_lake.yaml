@@ -1,16 +1,16 @@
 ---
 defaults:
-    - full_train_config
+    - train_config
     - _self_
     - override hydra/job_logging: stdout
 
 paths:
-    output: /home/pduan/bliss_related/output
+    output: /home/pduan/bliss_output
 
 surveys:
    dc2:
       batch_size: 256
-      num_workers: 16
+      num_workers: 8
       in_memory_dataset: false
 
 train:
