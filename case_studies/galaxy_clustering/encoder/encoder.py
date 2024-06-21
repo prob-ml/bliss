@@ -1,3 +1,5 @@
+import torch
+
 from bliss.catalog import BaseTileCatalog
 from bliss.encoder.convnet import CatalogNet, ContextNet
 from bliss.encoder.encoder import Encoder
@@ -30,6 +32,42 @@ class GalaxyClusterEncoder(Encoder):
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
         if self.double_detect:
             self.second_net = CatalogNet(num_features, n_params_per_source)
+    
+    def get_features_and_parameters(self, batch):
+        x = self.image_normalizer.get_input_tensor(batch)
+        x_features = self.features_net(x)
+        x_cat_marginal = self.marginal_net(x_features)
+        return x_features, x_cat_marginal
+
+
+    def sample(self, batch, use_mode=True):
+        batch_size, _n_bands, h, w = batch["images"].shape[0:4]
+
+        x_features, x_cat_marginal = self.get_features_and_parameters(batch)
+
+        marginal_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
+
+        if not self.use_checkerboard:
+            est_cat = marginal_cat
+        else:
+            ht, wt = h // self.tile_slen, w // self.tile_slen
+            tile_cb = self._get_checkerboard(ht, wt).squeeze(1)
+            white_history_mask = tile_cb.expand([batch_size, -1, -1])
+
+            white_context = self.make_context(marginal_cat, white_history_mask)
+            x_cat_white = self.checkerboard_net(x_features, white_context)
+            white_cat = self.var_dist.sample(x_cat_white, use_mode=use_mode)
+            est_cat = self.interleave_catalogs(marginal_cat, white_cat, white_history_mask)
+
+        if self.double_detect:
+            x_cat_second = self.second_net(x_features)
+            second_cat = self.var_dist.sample(x_cat_second, use_mode=use_mode)
+            # our loss function implies that the second detection is ignored for a tile
+            # if the first detection is empty for that tile
+            second_cat["n_sources"] *= est_cat["n_sources"]
+            est_cat = est_cat.union(second_cat)
+
+        return est_cat.symmetric_crop(self.tiles_to_crop)
 
     def update_metrics(self, batch, batch_idx):
         target_cat = BaseTileCatalog(self.tile_slen, batch["tile_catalog"])
@@ -44,3 +82,13 @@ class GalaxyClusterEncoder(Encoder):
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
         self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        """Pytorch lightning method."""
+        with torch.no_grad():
+            return {
+                "mode_cat": self.sample(batch, use_mode=True),
+                # we may want multiple samples
+                "sample_cat": self.sample(batch, use_mode=False),
+                'parameters': self.get_features_and_parameters(batch)[1],
+            }
