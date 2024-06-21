@@ -32,13 +32,12 @@ class GalaxyClusterEncoder(Encoder):
         self.checkerboard_net = ContextNet(num_features, n_params_per_source)
         if self.double_detect:
             self.second_net = CatalogNet(num_features, n_params_per_source)
-    
+
     def get_features_and_parameters(self, batch):
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
         x_cat_marginal = self.marginal_net(x_features)
         return x_features, x_cat_marginal
-
 
     def sample(self, batch, use_mode=True):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
@@ -90,5 +89,5 @@ class GalaxyClusterEncoder(Encoder):
                 "mode_cat": self.sample(batch, use_mode=True),
                 # we may want multiple samples
                 "sample_cat": self.sample(batch, use_mode=False),
-                'parameters': self.get_features_and_parameters(batch)[1],
+                "parameters": self.get_features_and_parameters(batch)[1],
             }
