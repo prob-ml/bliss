@@ -23,7 +23,7 @@ def compute_fov(m500, z):
     r200 = utils.m200_to_r200(m200, z)
     da = utils.angular_diameter_distance(z)
     fov = (r200 / da) * (360 / (2 * np.pi))
-    return 2 * fov.value
+    return 4 * fov.value
 
 
 def download_image(m500, z, ra, dec, band):
