@@ -17,8 +17,8 @@ from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.des import DarkEnergySurvey as DES
 from bliss.surveys.des import DESImageID, SkyCoord, TractorFullCatalog
+from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.survey import Survey, SurveyDownloader
-from bliss.utils.download_utils import download_file_to_dst
 
 
 class DarkEnergyCameraLegacySurvey(Survey):

@@ -10,7 +10,6 @@ paths:
     decals: ${paths.test_data}/decals
     des: ${paths.test_data}/des
     dc2: ${paths.test_data}/dc2
-    pretrained_models: ${paths.test_data}/pretrained_models
 
 prior:
     n_tiles_h: 4
@@ -94,3 +93,4 @@ train:
 predict:
     decals_frame: ${paths.decals}/336/3366m010/tractor-3366m010.fits
     device: "cpu"
+    weight_save_path: ${paths.test_data}/base_config_trained_encoder.pt
