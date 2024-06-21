@@ -15,7 +15,7 @@ paths:
     decals: /data/scratch/decals
     des: /data/scratch/des
     dc2: /data/scratch/dc2local
-
+    cached_data: null
     output: ${oc.env:HOME}/bliss_output
 
 prior:
@@ -57,11 +57,14 @@ simulator:
     fix_validation_set: true
 
 cached_simulator:
-    _target_: bliss.simulator.cached_dataset.CachedSimulatedDataset
+    _target_: bliss.cached_dataset.CachedSimulatedDataset
     batch_size: 64
     splits: 0:80/80:90/90:100  # train/val/test splits as percent ranges
-    num_workers: 0
-    cached_data_path: ${generate.cached_data_path}
+    num_workers: 2
+    cached_data_path: ${paths.cached_data}
+    train_transforms:
+        - _target_: bliss.data_augmentation.RotateFlipTransform
+    nontrain_transforms: []
 
 variational_factors:
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
@@ -179,7 +182,6 @@ encoder:
               tiles_to_crop: 1
               tile_slen: ${simulator.prior.tile_slen}
 
-    do_data_augmentation: false
     compile_model: false  # if true, compile model for potential performance
     double_detect: false
     use_checkerboard: true
@@ -249,7 +251,7 @@ generate:
     n_image_files: 32
     n_batches_per_file: 16
     simulator: ${simulator}
-    cached_data_path: null
+    cached_data_path: ${paths.cached_data}
     file_prefix: dataset
 
 train:
@@ -273,7 +275,7 @@ train:
             - _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
               monitor: val/_loss
               mode: min
-              patience: 5
+              patience: 10
         reload_dataloaders_every_n_epochs: 0
         check_val_every_n_epoch: 1
         log_every_n_steps: 10  # corresponds to n_batches
@@ -296,5 +298,5 @@ predict:
         accelerator: "gpu"
         precision: ${train.trainer.precision}
     encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/clahed_logged_20percent.pt
+    weight_save_path: null
     device: "cuda:0"
