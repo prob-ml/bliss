@@ -48,7 +48,10 @@ pv /tmp_data/pduan/dc2local/dc2_split_results.tar | tar -xf - -C /tmp_data/pduan
 ln -sf /tmp_data/pduan/dc2local/dc2_split_results ~/bliss_output/dc2_split_results
 
 echo "run the bliss"
-poetry run bliss -cp ~/bliss/case_studies/dc2_cataloging -cn train_config_great_lake train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX}
+poetry run bliss \
+ -cp ~/bliss/case_studies/dc2_cataloging \
+ -cn train_config_great_lake \
+  train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX}
 
 echo "clean directory"
 rm -r /tmp_data/pduan/dc2local/dc2_split_results
