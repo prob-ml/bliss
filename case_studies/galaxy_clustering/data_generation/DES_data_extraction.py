@@ -23,11 +23,11 @@ def compute_fov(m500, z):
     r200 = utils.m200_to_r200(m200, z)
     da = utils.angular_diameter_distance(z)
     fov = (r200 / da) * (360 / (2 * np.pi))
-    return 4 * fov.value
+    return fov.value
 
 
-def download_image(m500, z, ra, dec, band):
-    fov = compute_fov(m500, z)
+def download_image(m500, z, ra, dec, band, fov_scale=4):
+    fov = fov_scale * compute_fov(m500, z)
     dec_radian = dec * np.pi / 180
     img_table = svc.search((ra, dec), (fov / np.cos(dec_radian), fov), verbosity=2).to_table()
     sel = (
