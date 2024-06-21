@@ -186,6 +186,8 @@ class Encoder(pl.LightningModule):
 
         # filter out undetectable sources and split catalog by flux
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+
+        # filter out undetectable sources
         target_cat = target_cat.filter_by_flux(
             min_flux=self.min_flux_for_loss,
             band=self.reference_band,
