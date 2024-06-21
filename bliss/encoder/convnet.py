@@ -6,10 +6,12 @@ from torch import nn
 
 
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, use_gn=False):
+    def __init__(
+        self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, use_group_norm=False
+    ):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
-        if use_gn:
+        if use_group_norm:
             self.norm = nn.GroupNorm(out_channels // 8, out_channels)
         else:
             self.norm = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0.03)
@@ -100,16 +102,17 @@ class ContextNet(nn.Module):
     def __init__(self, num_features, out_channels):
         super().__init__()
 
-        context_dim = 64
+        context_channels_in = 6
+        context_channels_out = 64
         self.encode_context = nn.Sequential(
-            ConvBlock(3, 64, use_gn=True),
-            ConvBlock(64, 64, use_gn=True),
-            ConvBlock(64, context_dim, use_gn=True),
+            ConvBlock(context_channels_in, 64, use_group_norm=True),
+            ConvBlock(64, 64, use_group_norm=True),
+            ConvBlock(64, context_channels_out, use_group_norm=True),
         )
         self.merge = nn.Sequential(
-            ConvBlock(num_features + context_dim, num_features, use_gn=True),
-            ConvBlock(num_features, num_features, use_gn=True),
-            ConvBlock(num_features, num_features, use_gn=True),
+            ConvBlock(num_features + context_channels_out, num_features, use_group_norm=True),
+            ConvBlock(num_features, num_features, use_group_norm=True),
+            ConvBlock(num_features, num_features, use_group_norm=True),
             Detect(num_features, out_channels),
         )
 

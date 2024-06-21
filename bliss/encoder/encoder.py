@@ -1,5 +1,4 @@
 import itertools
-from copy import copy
 from typing import Optional
 
 import pytorch_lightning as pl
@@ -125,29 +124,25 @@ class Encoder(pl.LightningModule):
 
     def make_context(self, history_cat, history_mask, detection2=False):
         if history_cat is None:
-            detection_history = torch.zeros_like(history_mask)
+            # detections (1), flux (1), and locs (2) are the properties we condition on
+            masked_history = (
+                torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1).expand(-1, 4, -1, -1)
+            )
         else:
-            masked_cat = copy(history_cat)
-            # masks not just n_sources; n_sources controls access to all fields.
-            # does not mutate history_cat because we aren't using *=
-
-            masked_cat["n_sources"] = masked_cat["n_sources"] * history_mask
-            # we may want to use richer conditioning information in the future;
-            # e.g., a residual image based on the catalog so far
-            detection_history = masked_cat["n_sources"] > 0
+            history_encoding_lst = [
+                (history_cat["n_sources"] > 0).float(),  # detection history
+                (history_cat.on_fluxes.squeeze(3).sum(-1) + 1).log(),  # flux history
+                history_cat["locs"][..., 0, 0],  # x history
+                history_cat["locs"][..., 0, 1],  # y history
+            ]
+            masked_history_lst = [v * history_mask for v in history_encoding_lst]
+            masked_history = torch.stack(masked_history_lst, dim=1)
 
         id_func = torch.ones_like if detection2 else torch.zeros_like
-        detection_id = id_func(detection_history)
+        detection_id = id_func(history_mask)
+        iteration_context = torch.stack([detection_id, history_mask], dim=1)
 
-        return torch.stack([detection_history, history_mask, detection_id], dim=1).float()
-
-    def interleave_catalogs(self, marginal_cat, cond_cat, marginal_mask):
-        d = {}
-        mm5d = rearrange(marginal_mask, "b ht wt -> b ht wt 1 1")
-        for k, v in marginal_cat.items():
-            mm = marginal_mask if k == "n_sources" else mm5d
-            d[k] = v * mm + cond_cat[k] * (1 - mm)
-        return TileCatalog(self.tile_slen, d)
+        return torch.concat([iteration_context, masked_history], dim=1)
 
     def sample(self, batch, use_mode=True):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
@@ -228,6 +223,7 @@ class Encoder(pl.LightningModule):
             context2 = self.make_context(target_cat1, no_mask, detection2=True)
             x_cat2 = self.context_net(x_features, context2)
             loss22 = self.var_dist.compute_nll(x_cat2, target_cat2)
+            loss22 *= target_cat1["n_sources"]
             loss += loss22
 
         # exclude border tiles and report average per-tile loss

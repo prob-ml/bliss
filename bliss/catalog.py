@@ -100,7 +100,8 @@ class TileCatalog(BaseTileCatalog):
         Returns:
             Tensor indicating how many sources are present for each batch.
         """
-        # TODO: a tile catalog should store the is_on_mask explicitly, not derive it from n_sources
+        # TODO: a tile catalog should store the is_on_mask explicitly, not derive it from n_sources.
+        # perhaps we should have some catalog format that can store at most one source per tile
         arange = torch.arange(self.max_sources, device=self.device)
         arange = arange.expand(*self["n_sources"].shape, self.max_sources)
         return arange < self["n_sources"].unsqueeze(-1)

@@ -298,5 +298,5 @@ predict:
         accelerator: "gpu"
         precision: ${train.trainer.precision}
     encoder: ${encoder}
-    weight_save_path: ${paths.pretrained_models}/clahed_logged_20percent.pt
+    weight_save_path: ${paths.pretrained_models}/base_config_trained_encoder.pt
     device: "cuda:0"
