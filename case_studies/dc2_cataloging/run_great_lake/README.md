@@ -24,3 +24,11 @@ Transfer the `bliss_machine.sif` to your Great Lake home folder, and run it with
 * The `paths` override in `configs/full_train_config_great_lake_exp_xxx`: make sure your data is on Great Lake and the output path is what you expect.
 * The `matmul_precision` in `configs/full_train_config_great_lake_exp_xxx`: it may be helpful to set this tag if you are using GPU with Tensor Cores (like NVIDIA A40)
 * The detailed settings in `run_bliss_machine.sbatch` and `run_bliss_machine.sh`
+
+### Run directly on Great Lake
+
+You can also run bliss directly on Great Lake. We provide two scripts (`run_great_lake.sbatch` and `run_great_lake.sh`) to show how to do. Due to this, we will not maintain the scripts and code w.r.t container. However, we still keep the container here because it may be useful if we want to run on other HPC.
+
+### If you want to use Container in Future
+
+You may need to fix the bug in `runscript` part of `bliss_machine.def`. The permission of `bliss` folder may be inconsistent with the git repository and cause failure when checking out.

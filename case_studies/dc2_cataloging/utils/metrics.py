@@ -71,3 +71,32 @@ class OutBoundaryFilter(CatFilter):
 
     def get_cur_postfix(self):
         return "out_boundary"
+
+
+class SourceCountFilter(CatFilter):
+    def __init__(self, filter_source_count: str) -> None:
+        super().__init__()
+        self.filter_source_count = filter_source_count
+        assert filter_source_count in {
+            "1m",
+            "2m",
+            "2plus",
+        }, "invalid filter_source_count"
+
+    def get_cur_filter_bools(self, true_cat, est_cat):
+        if self.filter_source_count == "1m":
+            true_filter_bools = true_cat["one_source_mask"].squeeze(2)
+            est_filter_bools = est_cat["one_source_mask"].squeeze(2)
+        elif self.filter_source_count == "2m":
+            true_filter_bools = true_cat["two_sources_mask"].squeeze(2)
+            est_filter_bools = est_cat["two_sources_mask"].squeeze(2)
+        elif self.filter_source_count == "2plus":
+            true_filter_bools = true_cat["more_than_two_sources_mask"].squeeze(2)
+            est_filter_bools = est_cat["more_than_two_sources_mask"].squeeze(2)
+        else:
+            raise NotImplementedError()
+
+        return true_filter_bools, est_filter_bools
+
+    def get_cur_postfix(self):
+        return self.filter_source_count

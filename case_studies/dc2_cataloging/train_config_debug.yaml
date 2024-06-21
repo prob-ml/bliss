@@ -1,6 +1,6 @@
 ---
 defaults:
-    - full_train_config.yaml
+    - train_config
     - _self_
     - override hydra/job_logging: stdout
 

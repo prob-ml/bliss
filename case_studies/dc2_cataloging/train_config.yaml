@@ -36,8 +36,7 @@ variational_factors:
     nll_gating: is_galaxy
 
 encoder:
-    # _target_: case_studies.dc2_cataloging.utils.encoder.EncoderForDynamicAsinh
-    _target_: bliss.encoder.encoder.Encoder
+    _target_: case_studies.dc2_cataloging.utils.encoder.EncoderAddingSourceMask
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
     tiles_to_crop: 1
@@ -48,19 +47,6 @@ encoder:
     scheduler_params:
         milestones: [32]
         gamma: 0.1
-    # image_normalizer:
-    #     _target_: case_studies.dc2_cataloging.utils.image_normalizer.DynamicAsinhImageNormalizer
-    #     bands: [0, 1, 2, 3, 4, 5]
-    #     include_original: false
-    #     include_background: false
-    #     concat_psf_params: false
-    #     num_psf_params: 4  # for SDSS, 4 for DC2
-    #     log_transform_stdevs: []
-    #     use_clahe: false
-    #     clahe_min_stdev: 200
-    #     asinh_params:
-    #         scale: 1000
-    #         thresholds: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
     image_normalizer:
         _target_: case_studies.dc2_cataloging.utils.image_normalizer.FixedThresholdsAsinhImageNormalizer
         bands: [0, 1, 2, 3, 4, 5]
@@ -111,6 +97,27 @@ encoder:
             filter_list:
               - _target_: bliss.encoder.metrics.SourceTypeFilter
                 filter_type: "star"
+          detection_performance_one_source_mask:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            bin_unit_is_flux: true
+            filter_list:
+              - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+                filter_source_count: "1m"
+          detection_performance_two_sources_mask:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            bin_unit_is_flux: true
+            filter_list:
+              - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+                filter_source_count: "2m"
+          detection_performance_more_than_two_sources_mask:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            bin_unit_is_flux: true
+            filter_list:
+              - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+                filter_source_count: "2plus"
           source_type_accuracy_galaxy:
             _target_: bliss.encoder.metrics.SourceTypeAccuracy
             flux_bin_cutoffs: [200, 400, 600, 800, 1000]
@@ -132,14 +139,14 @@ encoder:
             tile_slen: ${simulator.prior.tile_slen}
 
     compile_model: false
-    double_detect: false
+    double_detect: true
     use_checkerboard: true
 
 train:
     trainer:
         logger:
             name: DC2_cataloging_exp
-            version: exp_06-16-5  # change it before running the code
+            version: exp_06-20-1  # change it before running the code
         # strategy:
         #   _target_: pytorch_lightning.strategies.DDPStrategy
         #   process_group_backend: nccl
