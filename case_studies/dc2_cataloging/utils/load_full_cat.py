@@ -35,8 +35,8 @@ def get_full_cat(
 
     batch = {
         "tile_catalog": unsqueeze_tile_dict(test_sample["tile_catalog"]),
-        "images": rearrange(test_sample["image"], "h w c -> 1 h w c"),
-        "background": rearrange(test_sample["background"], "h w c -> 1 h w c"),
+        "images": rearrange(test_sample["image"], "c h w -> 1 c h w"),
+        "background": rearrange(test_sample["background"], "c h w -> 1 c h w"),
         "psf_params": rearrange(test_sample["psf_params"], "h w -> 1 h w"),
     }
     batch = move_data_to_device(batch, device=device)
