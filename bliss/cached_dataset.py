@@ -2,11 +2,12 @@ import math
 import os
 import random
 import warnings
-from typing import Optional, TypedDict
+from typing import List, TypedDict
 
 import pytorch_lightning as pl
 import torch
 from torch.utils.data import DataLoader, IterableDataset
+from torchvision import transforms
 
 from bliss.catalog import FullCatalog, TileCatalog
 
@@ -42,6 +43,7 @@ class FullCatalogToTileTransform(torch.nn.Module):
         d = {k: v.squeeze(0) for k, v in tile_cat.items()}
         ex["tile_catalog"] = d
         del ex["full_catalog"]
+
         return ex
 
 
@@ -90,13 +92,15 @@ class CachedSimulatedDataset(pl.LightningDataModule):
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
-        transform: Optional[torch.nn.Module] = None,
+        train_transforms: List,
+        nontrain_transforms: List,
     ):
         super().__init__()
 
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.transform = transform
+        self.train_transforms = train_transforms
+        self.nontrain_transforms = nontrain_transforms
 
         file_names = [f for f in os.listdir(cached_data_path) if f.endswith(".pt")]
         self.file_paths = [os.path.join(cached_data_path, f) for f in file_names]
@@ -115,13 +119,13 @@ class CachedSimulatedDataset(pl.LightningDataModule):
             slices[i] = slice(*(self._percent_to_idx(val, length) for val in data_split.split(":")))
         return slices
 
-    def _get_dataloader(self, file_paths_subset, shuffle=False):
-        assert file_paths_subset, "No cached data found"
+    def train_dataloader(self):
+        assert self.file_paths[self.slices[0]], "No cached data found"
+        transform = transforms.Compose(self.train_transforms)
         my_dataset = MyIterableDataset(
-            file_paths_subset,
-            shuffle=shuffle,
-            transform=self.transform,
+            self.file_paths[self.slices[0]], transform=transform, shuffle=True
         )
+
         return DataLoader(
             my_dataset,
             batch_size=self.batch_size,
@@ -129,14 +133,22 @@ class CachedSimulatedDataset(pl.LightningDataModule):
             worker_init_fn=random.seed,
         )
 
-    def train_dataloader(self):
-        return self._get_dataloader(self.file_paths[self.slices[0]], shuffle=True)
+    def _get_nontrain_dataloader(self, file_paths_subset):
+        assert file_paths_subset, "No cached data found"
+        transform = transforms.Compose(self.nontrain_transforms)
+        my_dataset = MyIterableDataset(file_paths_subset, transform=transform)
+        return DataLoader(
+            my_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            worker_init_fn=random.seed,
+        )
 
     def val_dataloader(self):
-        return self._get_dataloader(self.file_paths[self.slices[1]])
+        return self._get_nontrain_dataloader(self.file_paths[self.slices[1]])
 
     def test_dataloader(self):
-        return self._get_dataloader(self.file_paths[self.slices[2]])
+        return self._get_nontrain_dataloader(self.file_paths[self.slices[2]])
 
     def predict_dataloader(self):
-        return self._get_dataloader(self.file_paths)
+        return self._get_nontrain_dataloader(self.file_paths)

@@ -1,17 +1,9 @@
 import logging
 
 import torch
-from einops import rearrange
 from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.encoder.data_augmentation import (
-    aug_rotate90,
-    aug_rotate180,
-    aug_rotate270,
-    aug_shift,
-    aug_vflip,
-)
 from bliss.main import train
 
 
@@ -176,7 +168,6 @@ class TestDC2:
         # are ordered correctly?
         train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]
         train_dc2_cfg.train.data_source = train_dc2_cfg.surveys.dc2
-        train_dc2_cfg.encoder.do_data_augmentation = True
         train_dc2_cfg.train.pretrained_weights = None
         # log transform doesn't work in this test because the DC2 background is sometimes negative.
         # why would the background be negative? are we using the wrong background estimate?
@@ -189,43 +180,3 @@ class TestDC2:
                 f.dim = 6
 
         train(train_dc2_cfg.train)
-
-    def test_dc2_augmentation(self, cfg):
-        dc2 = instantiate(cfg.surveys.dc2)
-        dc2.prepare_data()
-        dc2.setup()
-
-        dc2_first_data = dc2[0]
-        tile_dict = dc2_first_data["tile_catalog"]
-
-        for k, v in tile_dict.items():
-            if k != "n_sources":
-                tile_dict[k] = rearrange(v, "h w nh nw -> 1 h w nh nw")
-        tile_dict["n_sources"] = rearrange(tile_dict["n_sources"], "h w -> 1 h w")
-
-        ori_tile = TileCatalog(4, tile_dict)
-        ori_full = ori_tile.to_full_catalog()
-
-        imgs = rearrange(dc2_first_data["images"], "b h w -> 1 b 1 h w")
-        bgs = rearrange(dc2_first_data["background"], "b h w -> 1 b 1 h w")
-
-        aug_input_images = [imgs, bgs]
-        aug_input_images = torch.cat(aug_input_images, dim=2)
-
-        aug_list = [aug_vflip, aug_rotate90, aug_rotate180, aug_rotate270, aug_shift]
-
-        for aug_method in aug_list:
-            aug_image, aug_full = aug_method(ori_full, aug_input_images)
-            assert aug_image[0, :, 0, :, :].shape == dc2_first_data["images"].shape
-            assert aug_image[0, :, 1, :, :].shape == dc2_first_data["background"].shape
-            assert aug_full["n_sources"] <= ori_full["n_sources"]
-
-        # test rotatation
-        aug_image90, aug_full90 = aug_rotate90(ori_full, aug_input_images)
-        _, aug_full270 = aug_rotate270(ori_full, aug_input_images)
-
-        _, aug_full90180 = aug_rotate180(aug_full90, aug_image90)
-        _, aug_full90270 = aug_rotate270(aug_full90, aug_image90)
-
-        assert _test_full_catalog_equal(aug_full90270, ori_full)
-        assert _test_full_catalog_equal(aug_full90180, aug_full270)
