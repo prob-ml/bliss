@@ -71,8 +71,7 @@ class Encoder(pl.LightningModule):
         self.tiles_to_crop = tiles_to_crop
         self.image_normalizer = image_normalizer
         self.var_dist = var_dist
-        self.mode_metrics = metrics.clone()
-        self.sample_metrics = metrics.clone()
+        self.metrics = metrics
         self.sample_image_renders = sample_image_renders
         self.matcher = matcher
         self.min_flux_for_loss = min_flux_for_loss
@@ -157,18 +156,18 @@ class Encoder(pl.LightningModule):
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
 
-        est_cat1 = None
+        est_cat = None
         for mask_pattern in self.mask_patterns[(0, 8, 12, 14), ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
-            context1 = self.make_context(est_cat1, mask)
+            context1 = self.make_context(est_cat, mask)
             x_cat1 = self.context_net(x_features, context1)
             new_est_cat = self.var_dist.sample(x_cat1, use_mode=use_mode)
             new_est_cat["n_sources"] *= 1 - mask
-            if est_cat1 is None:
-                est_cat1 = new_est_cat
+            if est_cat is None:
+                est_cat = new_est_cat
             else:
-                est_cat1["n_sources"] *= mask
-                est_cat1 = est_cat1.union(new_est_cat, disjoint=True)
+                est_cat["n_sources"] *= mask
+                est_cat = est_cat.union(new_est_cat, disjoint=True)
 
             if not self.use_checkerboard:
                 break
@@ -176,13 +175,13 @@ class Encoder(pl.LightningModule):
         if self.double_detect:
             no_mask = torch.ones_like(mask)
             # could add some context from target_cat2 here, masked by `mask`
-            context2 = self.make_context(est_cat1, no_mask, detection2=True)
+            context2 = self.make_context(est_cat, no_mask, detection2=True)
             x_cat2 = self.context_net(x_features, context2)
             est_cat2 = self.var_dist.sample(x_cat2, use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
             # if the first detection is empty for that tile
-            est_cat2["n_sources"] *= est_cat1["n_sources"]
-            est_cat = est_cat1.union(est_cat2, disjoint=False)
+            est_cat2["n_sources"] *= est_cat["n_sources"]
+            est_cat = est_cat.union(est_cat2, disjoint=False)
 
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
@@ -258,17 +257,7 @@ class Encoder(pl.LightningModule):
         )
         mode_cat = mode_tile_cat.to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
-        self.mode_metrics.update(target_cat, mode_cat, matching)
-
-        sample_cat = self.sample(batch, use_mode=False)
-        sample_cat = sample_cat.filter_by_flux(
-            min_flux=self.min_flux_for_metrics,
-            band=self.reference_band,
-        )
-        sample_cat = sample_cat.to_full_catalog()
-
-        matching = self.matcher.match_catalogs(target_cat, sample_cat)
-        self.sample_metrics.update(target_cat, sample_cat, matching)
+        self.metrics.update(target_cat, mode_cat, matching)
 
         self.sample_image_renders.update(
             batch,
@@ -300,8 +289,7 @@ class Encoder(pl.LightningModule):
         metrics.reset()
 
     def on_validation_epoch_end(self):
-        self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
-        self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
+        self.report_metrics(self.metrics, "val/mode", show_epoch=True)
         self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
@@ -310,8 +298,7 @@ class Encoder(pl.LightningModule):
         self.update_metrics(batch, batch_idx)
 
     def on_test_epoch_end(self):
-        self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)
-        self.report_metrics(self.sample_metrics, "test/sample", show_epoch=False)
+        self.report_metrics(self.metrics, "test/mode", show_epoch=False)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
