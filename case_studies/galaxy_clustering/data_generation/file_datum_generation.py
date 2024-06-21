@@ -8,8 +8,8 @@ import pandas as pd
 import torch
 from astropy.io import fits
 
+from bliss.cached_dataset import FileDatum
 from bliss.catalog import FullCatalog
-from bliss.simulator.cached_dataset import FileDatum
 
 min_flux_for_loss = 0
 DATA_PATH = Path(os.getcwd()) / Path("data")
@@ -66,7 +66,7 @@ def main(**kwargs):
             tile_slen=tile_size,
             max_sources_per_tile=12 * tile_size,
         )
-        tile_catalog = tile_catalog.filter_tile_catalog_by_flux(min_flux=min_flux_for_loss)
+        tile_catalog = tile_catalog.filter_by_flux(min_flux=min_flux_for_loss)
         tile_catalog = tile_catalog.get_brightest_sources_per_tile(band=2, exclude_num=0)
 
         tile_catalog_dict = {}
