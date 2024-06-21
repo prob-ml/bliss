@@ -23,12 +23,12 @@ class ClusterMembershipAccuracy(Metric):
             self.membership_fn += (true_membership * ~est_membership).sum()
 
     def compute(self):
-        precision = self.membership_tp / (self.membership_tp + self.membership_fp)
-        recall = self.membership_tp / (self.membership_tp + self.membership_fn)
+        precision = self.membership_tp / (self.membership_tp + self.membership_fp + 1e-6)
+        recall = self.membership_tp / (self.membership_tp + self.membership_fn + 1e-6)
         accuracy = (self.membership_tp + self.membership_tn) / (
             self.membership_tp + self.membership_tn + self.membership_fp + self.membership_fn
         )
-        f1 = 2 * precision * recall / (precision + recall)
+        f1 = 2 * precision * recall / (precision + recall + 1e-6)
         return {
             "membership_accuracy": accuracy,
             "membership_precision": precision,

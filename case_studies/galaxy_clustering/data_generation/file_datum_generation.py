@@ -12,7 +12,7 @@ from bliss.cached_dataset import FileDatum
 from bliss.catalog import FullCatalog
 
 min_flux_for_loss = 0
-DATA_PATH = Path(os.getcwd()) / Path("data")
+DATA_PATH = "/data/scratch/kapnadak/data"
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
@@ -41,6 +41,7 @@ N_CATALOGS_PER_FILE = 10
 def main(**kwargs):
     image_size = int(kwargs.get("image_size", 4800))
     tile_size = int(kwargs.get("tile_size", 4))
+    n_tiles = int(image_size / tile_size)
     data: List[FileDatum] = []
 
     for catalog_path in CATALOGS_PATH.glob("*.dat"):
@@ -48,7 +49,6 @@ def main(**kwargs):
 
         catalog_dict = {}
         catalog_dict["plocs"] = torch.tensor([catalog[["X", "Y"]].to_numpy()])
-        catalog_dict["plocs"][:, :, 1] = image_size - catalog_dict["plocs"][:, :, 1]
         n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
         catalog_dict["n_sources"] = n_sources
         catalog_dict["galaxy_fluxes"] = torch.tensor(
@@ -68,6 +68,18 @@ def main(**kwargs):
         )
         tile_catalog = tile_catalog.filter_by_flux(min_flux=min_flux_for_loss)
         tile_catalog = tile_catalog.get_brightest_sources_per_tile(band=2, exclude_num=0)
+
+        membership_array = np.zeros((n_tiles, n_tiles), dtype=bool)
+        for i, coords in enumerate(full_catalog["plocs"].squeeze()):
+            if full_catalog["membership"][0, i, 0] > 0:
+                tile_coord_y, tile_coord_x = (
+                    torch.div(coords, tile_size, rounding_mode="trunc").to(torch.int).tolist()
+                )
+                membership_array[tile_coord_x, tile_coord_y] = True
+
+        tile_catalog["membership"] = (
+            torch.tensor(membership_array).unsqueeze(0).unsqueeze(3).unsqueeze(4)
+        )
 
         tile_catalog_dict = {}
         for key, value in tile_catalog.items():
@@ -95,7 +107,7 @@ def main(**kwargs):
 
     chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
     for i, chunk in enumerate(chunks):
-        torch.save(chunk, f"{DATA_PATH}/file_data/file_data_{i}.pt")
+        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}.pt")
 
 
 if __name__ == "__main__":
