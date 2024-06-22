@@ -98,14 +98,17 @@ class FeaturesNet(nn.Module):
         return x
 
 
-class ContextNet(nn.Module):
+class CatalogNet(nn.Module):
     def __init__(self, num_features, out_channels):
         super().__init__()
 
-        context_channels_in = 6
+        embedding_dim = 8
+        self.mode_embedding = nn.Embedding(2, embedding_dim)
+
+        context_channels_in = 5
         context_channels_out = 64
         self.encode_context = nn.Sequential(
-            ConvBlock(context_channels_in, 64, use_group_norm=True),
+            ConvBlock(context_channels_in + embedding_dim, 64, use_group_norm=True),
             ConvBlock(64, 64, use_group_norm=True),
             ConvBlock(64, context_channels_out, use_group_norm=True),
         )
@@ -116,7 +119,13 @@ class ContextNet(nn.Module):
             Detect(num_features, out_channels),
         )
 
-    def forward(self, x_features, context):
-        x_context = self.encode_context(context)
+    def forward(self, x_features, context, detection_id):
+        d_id_tensor = torch.tensor(detection_id - 1, device=context.device)
+        mode = self.mode_embedding(d_id_tensor)
+        dims = context.shape
+        mode = mode.view(1, -1, 1, 1).expand(dims[0], -1, dims[2], dims[3])
+        full_context = torch.cat((context, mode), dim=1)
+        x_context = self.encode_context(full_context)
+
         x = torch.cat((x_features, x_context), dim=1)
         return self.merge(x)

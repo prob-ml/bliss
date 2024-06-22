@@ -1,5 +1,5 @@
 from bliss.catalog import BaseTileCatalog
-from bliss.encoder.convnet import ContextNet
+from bliss.encoder.convnet import CatalogNet
 from bliss.encoder.encoder import Encoder
 from case_studies.galaxy_clustering.encoder.convnet import GalaxyClusterFeaturesNet
 
@@ -26,7 +26,7 @@ class GalaxyClusterEncoder(Encoder):
             downsample_at_front=self.downsample_at_front,
         )
         n_params_per_source = self.var_dist.n_params_per_source
-        self.context_net = ContextNet(num_features, n_params_per_source)
+        self.context_net = CatalogNet(num_features, n_params_per_source)
 
     def update_metrics(self, batch, batch_idx):
         target_cat = BaseTileCatalog(self.tile_slen, batch["tile_catalog"])

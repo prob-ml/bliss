@@ -1,4 +1,4 @@
-from bliss.encoder.convnet import CatalogNet, ContextNet
+from bliss.encoder.convnet import CatalogNet
 from bliss.encoder.encoder import Encoder
 from case_studies.dc2_cataloging.utils.convnet import FeaturesNet
 from case_studies.dc2_cataloging.utils.image_normalizer import DynamicAsinhImageNormalizer
@@ -20,6 +20,6 @@ class EncoderForDynamicAsinh(Encoder):
         )
         n_params_per_source = self.var_dist.n_params_per_source
         self.marginal_net = CatalogNet(num_features, n_params_per_source)
-        self.checkerboard_net = ContextNet(num_features, n_params_per_source)
+        self.checkerboard_net = CatalogNet(num_features, n_params_per_source)
         if self.double_detect:
             self.second_net = CatalogNet(num_features, n_params_per_source)

@@ -3,14 +3,13 @@ from typing import Optional
 
 import pytorch_lightning as pl
 import torch
-from einops import rearrange
 from torch.nn.functional import pad
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
-from bliss.encoder.convnet import ContextNet, FeaturesNet
+from bliss.encoder.convnet import CatalogNet, FeaturesNet
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDist
@@ -93,7 +92,7 @@ class Encoder(pl.LightningModule):
 
         if self.compile_model:
             self.features_net = torch.compile(self.features_net)
-            self.context_net = torch.compile(self.context_net)
+            self.catalog_net = torch.compile(self.catalog_net)
 
     def initialize_networks(self):
         """Load the convolutional neural networks that map normalized images to catalog parameters.
@@ -110,19 +109,9 @@ class Encoder(pl.LightningModule):
             double_downsample=(self.tile_slen == 4),
         )
         n_params_per_source = self.var_dist.n_params_per_source
-        self.context_net = ContextNet(num_features, n_params_per_source)
+        self.catalog_net = CatalogNet(num_features, n_params_per_source)
 
-    def _get_checkerboard(self, ht, wt):
-        # make/store a checkerboard of tiles
-        # https://stackoverflow.com/questions/72874737/how-to-make-a-checkerboard-in-pytorch
-        arange_ht = torch.arange(ht, device=self.device)
-        arange_wt = torch.arange(wt, device=self.device)
-        mg = torch.meshgrid(arange_ht, arange_wt, indexing="ij")
-        indices = torch.stack(mg)
-        tile_cb = indices.sum(axis=0) % 2
-        return rearrange(tile_cb, "ht wt -> 1 1 ht wt")
-
-    def make_context(self, history_cat, history_mask, detection2=False):
+    def make_context(self, history_cat, history_mask):
         if history_cat is None:
             # detections (1), flux (1), and locs (2) are the properties we condition on
             masked_history = (
@@ -140,16 +129,14 @@ class Encoder(pl.LightningModule):
             masked_history_lst = [v * history_mask for v in history_encoding_lst]
             masked_history = torch.stack(masked_history_lst, dim=1)
 
-        id_func = torch.ones_like if detection2 else torch.zeros_like
-        detection_id = id_func(history_mask)
-        iteration_context = torch.stack([detection_id, history_mask], dim=1)
-
-        return torch.concat([iteration_context, masked_history], dim=1)
+        return torch.concat([history_mask.unsqueeze(1), masked_history], dim=1)
 
     def sample(self, batch, use_mode=True):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
         ht, wt = h // self.tile_slen, w // self.tile_slen
 
+        # TODO: move logic duplicated in sample and _compute_loss to FeaturesNet
+        # and CatalogNet
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
 
@@ -157,7 +144,7 @@ class Encoder(pl.LightningModule):
         for mask_pattern in self.mask_patterns[(0, 8, 12, 14), ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
             context1 = self.make_context(est_cat, mask)
-            x_cat1 = self.context_net(x_features, context1)
+            x_cat1 = self.catalog_net(x_features, context1, 1)
             new_est_cat = self.var_dist.sample(x_cat1, use_mode=use_mode)
             new_est_cat["n_sources"] *= 1 - mask
             if est_cat is None:
@@ -172,8 +159,8 @@ class Encoder(pl.LightningModule):
         if self.double_detect:
             no_mask = torch.ones_like(mask)
             # could add some context from target_cat2 here, masked by `mask`
-            context2 = self.make_context(est_cat, no_mask, detection2=True)
-            x_cat2 = self.context_net(x_features, context2)
+            context2 = self.make_context(est_cat, no_mask)
+            x_cat2 = self.catalog_net(x_features, context2, 2)
             est_cat2 = self.var_dist.sample(x_cat2, use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
             # if the first detection is empty for that tile
@@ -189,11 +176,14 @@ class Encoder(pl.LightningModule):
         # filter out undetectable sources and split catalog by flux
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
-        # filter out undetectable sources
+        # TODO: move tile_cat filtering to the dataloader and from the encoder remove
+        # `reference_band`, `min_flux_for_loss`, and `min_flux_for_metrics`
+        # (metrics can be computed with the original full catalog if necessary)
         target_cat = target_cat.filter_by_flux(
             min_flux=self.min_flux_for_loss,
             band=self.reference_band,
         )
+        # TODO: don't order the light sources by brightness; softmax instead
         target_cat1 = target_cat.get_brightest_sources_per_tile(
             band=self.reference_band, exclude_num=0
         )
@@ -212,7 +202,7 @@ class Encoder(pl.LightningModule):
         for mask_pattern in self.mask_patterns[(0, 8, 12, 14), ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
             context1 = self.make_context(target_cat1, mask)
-            x_cat1 = self.context_net(x_features, context1)
+            x_cat1 = self.catalog_net(x_features, context1, 1)
             loss11 = self.var_dist.compute_nll(x_cat1, target_cat1)
 
             # could upweight some patterns that are under-represented or limit loss to
@@ -224,8 +214,8 @@ class Encoder(pl.LightningModule):
 
         if self.double_detect:
             no_mask = torch.ones_like(mask)
-            context2 = self.make_context(target_cat1, no_mask, detection2=True)
-            x_cat2 = self.context_net(x_features, context2)
+            context2 = self.make_context(target_cat1, no_mask)
+            x_cat2 = self.catalog_net(x_features, context2, 2)
             loss22 = self.var_dist.compute_nll(x_cat2, target_cat2)
             loss22 *= target_cat1["n_sources"]
             loss += loss22
