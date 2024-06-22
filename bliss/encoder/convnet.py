@@ -110,11 +110,13 @@ class CatalogNet(nn.Module):
         self.encode_context = nn.Sequential(
             ConvBlock(context_channels_in + embedding_dim, 64, use_group_norm=True),
             ConvBlock(64, 64, use_group_norm=True),
+            C3(64, 64, n=2),
             ConvBlock(64, context_channels_out, use_group_norm=True),
         )
         self.merge = nn.Sequential(
             ConvBlock(num_features + context_channels_out, num_features, use_group_norm=True),
             ConvBlock(num_features, num_features, use_group_norm=True),
+            C3(num_features, num_features, n=2),
             ConvBlock(num_features, num_features, use_group_norm=True),
             Detect(num_features, out_channels),
         )
