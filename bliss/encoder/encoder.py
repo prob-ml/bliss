@@ -129,11 +129,13 @@ class Encoder(pl.LightningModule):
                 torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1).expand(-1, 4, -1, -1)
             )
         else:
+            centered_locs = history_cat["locs"][..., 0, :] - 0.5
+            log_fluxes = (history_cat.on_fluxes.squeeze(3).sum(-1) + 1).log()
             history_encoding_lst = [
-                (history_cat["n_sources"] > 0).float(),  # detection history
-                (history_cat.on_fluxes.squeeze(3).sum(-1) + 1).log(),  # flux history
-                history_cat["locs"][..., 0, 0],  # x history
-                history_cat["locs"][..., 0, 1],  # y history
+                history_cat["n_sources"].float(),  # detection history
+                log_fluxes * history_cat["n_sources"],  # flux history
+                centered_locs[..., 0] * history_cat["n_sources"],  # x history
+                centered_locs[..., 1] * history_cat["n_sources"],  # y history
             ]
             masked_history_lst = [v * history_mask for v in history_encoding_lst]
             masked_history = torch.stack(masked_history_lst, dim=1)
