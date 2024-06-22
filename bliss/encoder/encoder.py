@@ -197,9 +197,9 @@ class Encoder(pl.LightningModule):
 
         loss = torch.zeros_like(x_features[:, 0, :, :])
 
-        # could use all the mask patterns but memory is tight and these 4 are the ones
-        # we actually use for sampling
-        for mask_pattern in self.mask_patterns[(0, 8, 12, 14), ...]:
+        # could use all the mask patterns but memory is tight
+        mask_patterns = self.mask_patterns[torch.randperm(15)[:4]]
+        for mask_pattern in mask_patterns:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
             context1 = self.make_context(target_cat1, mask)
             x_cat1 = self.catalog_net(x_features, context1, 1)
