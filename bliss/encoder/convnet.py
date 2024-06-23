@@ -82,17 +82,17 @@ class CatalogNet(nn.Module):
 
         # initalization for detection head
         context_channels_in = 6
-        context_channels_out = 64
+        context_channels_out = 128
         self.encode_context = nn.Sequential(
-            ConvBlock(context_channels_in, 64),
-            ConvBlock(64, 64),
-            C3(64, 64, n=2),
-            ConvBlock(64, context_channels_out),
+            ConvBlock(context_channels_in, context_channels_out),
+            ConvBlock(context_channels_out, context_channels_out),
+            C3(context_channels_out, context_channels_out, n=4),
+            ConvBlock(context_channels_out, context_channels_out),
         )
         self.merge = nn.Sequential(
             ConvBlock(num_features + context_channels_out, num_features),
             ConvBlock(num_features, num_features),
-            C3(num_features, num_features, n=2),
+            C3(num_features, num_features, n=4),
             ConvBlock(num_features, num_features),
             Detect(num_features, out_channels),
         )
@@ -111,7 +111,7 @@ class CatalogNet(nn.Module):
 
         return x
 
-    def forward(self, x_features, context):
+    def catalog_head(self, x_features, context):
         x_context = self.encode_context(context)
         x = torch.cat((x_features, x_context), dim=1)
         return self.merge(x)

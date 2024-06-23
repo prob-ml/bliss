@@ -142,7 +142,7 @@ class Encoder(pl.LightningModule):
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
             context1 = self.make_context(est_cat, mask)
-            x_cat1 = self.catalog_net(x_features, context1)
+            x_cat1 = self.catalog_net.catalog_head(x_features, context1)
             new_est_cat = self.var_dist.sample(x_cat1, use_mode=use_mode)
             new_est_cat["n_sources"] *= 1 - mask
             if est_cat is None:
@@ -155,7 +155,7 @@ class Encoder(pl.LightningModule):
             no_mask = torch.ones_like(mask)
             # could add some context from target_cat2 here, masked by `mask`
             context2 = self.make_context(est_cat, no_mask, detection2=True)
-            x_cat2 = self.catalog_net(x_features, context2)
+            x_cat2 = self.catalog_net.catalog_head(x_features, context2)
             est_cat2 = self.var_dist.sample(x_cat2, use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
             # if the first detection is empty for that tile
@@ -197,7 +197,7 @@ class Encoder(pl.LightningModule):
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
             context1 = self.make_context(target_cat1, mask)
-            x_cat1 = self.catalog_net(x_features, context1)
+            x_cat1 = self.catalog_net.catalog_head(x_features, context1)
             loss11 = self.var_dist.compute_nll(x_cat1, target_cat1)
 
             # could upweight some patterns that are under-represented or limit loss to
@@ -210,7 +210,7 @@ class Encoder(pl.LightningModule):
         if self.double_detect:
             no_mask = torch.ones_like(mask)
             context2 = self.make_context(target_cat1, no_mask, detection2=True)
-            x_cat2 = self.catalog_net(x_features, context2)
+            x_cat2 = self.catalog_net.catalog_head(x_features, context2)
             loss22 = self.var_dist.compute_nll(x_cat2, target_cat2)
             loss22 *= target_cat1["n_sources"]
             loss += loss22
