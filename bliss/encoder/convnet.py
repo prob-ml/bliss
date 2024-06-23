@@ -71,12 +71,12 @@ class CatalogNet(nn.Module):
             ConvBlock(128, 256, stride=(2 if double_downsample else 1)),  # 4
         )
         u_net_layers = [
-            C3(256, 256, n=6),  # 0
+            C3(256, 256, n=3),  # 0
             ConvBlock(256, 512, stride=2),
-            C3(512, 512, n=3, shortcut=False),
+            C3(512, 512, n=1, shortcut=False),
             ConvBlock(512, 256, kernel_size=1, padding=0),
             nn.Upsample(scale_factor=2, mode="nearest"),  # 4
-            C3(768, num_features, n=3, shortcut=False),
+            C3(768, num_features, n=1, shortcut=False),
         ]
         self.u_net = nn.ModuleList(u_net_layers)
 
