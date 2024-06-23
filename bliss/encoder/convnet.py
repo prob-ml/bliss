@@ -6,15 +6,11 @@ from torch import nn
 
 
 class ConvBlock(nn.Module):
-    def __init__(
-        self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, use_group_norm=True
-    ):
+    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
-        if use_group_norm:
-            self.norm = nn.GroupNorm(out_channels // 8, out_channels)
-        else:
-            self.norm = nn.BatchNorm2d(out_channels, eps=0.001, momentum=0.03)
+        # seems to work just as well as BatchNorm2d
+        self.norm = nn.GroupNorm(out_channels // 8, out_channels)
         self.activation = nn.SiLU(inplace=True)
 
     def forward(self, x):
@@ -56,10 +52,11 @@ class C3(nn.Module):
         return self.cv3(torch.cat((self.m(self.cv1(x)), self.cv2(x)), 1))
 
 
-class FeaturesNet(nn.Module):
-    def __init__(self, n_bands, ch_per_band, num_features, double_downsample=True):
+class CatalogNet(nn.Module):
+    def __init__(self, n_bands, ch_per_band, num_features, out_channels, double_downsample=True):
         super().__init__()
 
+        # initialization for shared features
         nch_hidden = 64
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, nch_hidden, [ch_per_band, 5, 5], padding=[0, 2, 2]),
@@ -83,7 +80,24 @@ class FeaturesNet(nn.Module):
         ]
         self.u_net = nn.ModuleList(u_net_layers)
 
-    def forward(self, x):
+        # initalization for detection head
+        context_channels_in = 6
+        context_channels_out = 64
+        self.encode_context = nn.Sequential(
+            ConvBlock(context_channels_in, 64),
+            ConvBlock(64, 64),
+            C3(64, 64, n=2),
+            ConvBlock(64, context_channels_out),
+        )
+        self.merge = nn.Sequential(
+            ConvBlock(num_features + context_channels_out, num_features),
+            ConvBlock(num_features, num_features),
+            C3(num_features, num_features, n=2),
+            ConvBlock(num_features, num_features),
+            Detect(num_features, out_channels),
+        )
+
+    def get_features(self, x):
         x = self.preprocess3d(x).squeeze(2)
         x = self.backbone(x)
 
@@ -97,37 +111,7 @@ class FeaturesNet(nn.Module):
 
         return x
 
-
-class CatalogNet(nn.Module):
-    def __init__(self, num_features, out_channels):
-        super().__init__()
-
-        embedding_dim = 8
-        self.mode_embedding = nn.Embedding(2, embedding_dim)
-
-        context_channels_in = 5
-        context_channels_out = 64
-        self.encode_context = nn.Sequential(
-            ConvBlock(context_channels_in + embedding_dim, 64, use_group_norm=True),
-            ConvBlock(64, 64, use_group_norm=True),
-            C3(64, 64, n=2),
-            ConvBlock(64, context_channels_out, use_group_norm=True),
-        )
-        self.merge = nn.Sequential(
-            ConvBlock(num_features + context_channels_out, num_features, use_group_norm=True),
-            ConvBlock(num_features, num_features, use_group_norm=True),
-            C3(num_features, num_features, n=2),
-            ConvBlock(num_features, num_features, use_group_norm=True),
-            Detect(num_features, out_channels),
-        )
-
-    def forward(self, x_features, context, detection_id):
-        d_id_tensor = torch.tensor(detection_id - 1, device=context.device)
-        mode = self.mode_embedding(d_id_tensor)
-        dims = context.shape
-        mode = mode.view(1, -1, 1, 1).expand(dims[0], -1, dims[2], dims[3])
-        full_context = torch.cat((context, mode), dim=1)
-        x_context = self.encode_context(full_context)
-
+    def forward(self, x_features, context):
+        x_context = self.encode_context(context)
         x = torch.cat((x_features, x_context), dim=1)
         return self.merge(x)
