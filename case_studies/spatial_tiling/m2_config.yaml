@@ -50,6 +50,11 @@ encoder:
     metrics:
         _target_: torchmetrics.MetricCollection
         metrics: ${star_metrics}
+    optimizer_params:
+        lr: 1e-3
+    scheduler_params:
+        milestones: [5]
+        gamma: 0.1
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
