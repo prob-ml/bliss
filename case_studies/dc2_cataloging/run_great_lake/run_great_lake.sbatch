@@ -30,28 +30,8 @@ echo "experiment postfix is: $EXP_POSTFIX"
 echo "go to bliss"
 cd ~/bliss/
 
-GO_TO_BANCH=$2
-echo "go to branch ${GO_TO_BRANCH}"
-git pull
-eval "git checkout ${GO_TO_BRANCH}"
-
-echo "create output folder if not exists"
-mkdir -p ~/bliss_output
-
-echo "copy dc2local from remote server to /tmp_data/"
-mkdir -p /tmp_data/pduan/dc2local/
-rsync -av --info=progress2 \
- -e "ssh -i ~/.ssh/jeffbox_great_lake_side_rsa" \
- pduan@deeplearning-01.stat.lsa.umich.edu:/data/scratch/dc2local/dc2_cached_data.tar \
- /tmp_data/pduan/dc2local/
-pv /tmp_data/pduan/dc2local/dc2_cached_data.tar | tar -xf - -C /tmp_data/pduan/dc2local/
-ln -sf /tmp_data/pduan/dc2local/dc2_cached_data ~/bliss_output/dc2_cached_data
-
 echo "run the bliss"
 poetry run bliss \
  -cp ~/bliss/case_studies/dc2_cataloging \
  -cn train_config_great_lake \
   train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX}
-
-echo "clean directory"
-rm -r /tmp_data/pduan/dc2local/dc2_cached_data

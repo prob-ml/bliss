@@ -177,12 +177,11 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.slices = None
 
     def setup(self, stage: str) -> None:
-        if stage == "fit":
-            file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
-            self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
+        file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
+        self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
 
-            # parse slices from percentages to indices
-            self.slices = self.parse_slices(self.splits, len(self.file_paths))
+        # parse slices from percentages to indices
+        self.slices = self.parse_slices(self.splits, len(self.file_paths))
 
     def _percent_to_idx(self, x, length):
         """Converts string in percent to an integer index."""
