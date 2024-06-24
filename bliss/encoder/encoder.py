@@ -106,10 +106,7 @@ class Encoder(pl.LightningModule):
             double_downsample=(self.tile_slen == 4),
         )
 
-    def make_context(self, history_cat, history_mask, detection2=False):
-        detection_id = (
-            torch.ones_like(history_mask) if detection2 else torch.zeros_like(history_mask)
-        ).unsqueeze(1)
+    def make_context(self, history_cat, history_mask):
         if history_cat is None:
             # detections (1), flux (1), and locs (2) are the properties we condition on
             masked_history = (
@@ -127,7 +124,7 @@ class Encoder(pl.LightningModule):
             masked_history_lst = [v * history_mask for v in history_encoding_lst]
             masked_history = torch.stack(masked_history_lst, dim=1)
 
-        return torch.concat([detection_id, history_mask.unsqueeze(1), masked_history], dim=1)
+        return torch.concat([history_mask.unsqueeze(1), masked_history], dim=1)
 
     def sample(self, batch, use_mode=True):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
@@ -142,7 +139,7 @@ class Encoder(pl.LightningModule):
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
             context1 = self.make_context(est_cat, mask)
-            x_cat1 = self.catalog_net.catalog_head(x_features, context1)
+            x_cat1 = self.catalog_net.detection1_head(x_features, context1)
             new_est_cat = self.var_dist.sample(x_cat1, use_mode=use_mode)
             new_est_cat["n_sources"] *= 1 - mask
             if est_cat is None:
@@ -153,9 +150,8 @@ class Encoder(pl.LightningModule):
 
         if self.double_detect:
             no_mask = torch.ones_like(mask)
-            # could add some context from target_cat2 here, masked by `mask`
-            context2 = self.make_context(est_cat, no_mask, detection2=True)
-            x_cat2 = self.catalog_net.catalog_head(x_features, context2)
+            context2 = self.make_context(est_cat, no_mask)
+            x_cat2 = self.catalog_net.detection2_head(x_features, context2)
             est_cat2 = self.var_dist.sample(x_cat2, use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
             # if the first detection is empty for that tile
@@ -197,7 +193,7 @@ class Encoder(pl.LightningModule):
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
             context1 = self.make_context(target_cat1, mask)
-            x_cat1 = self.catalog_net.catalog_head(x_features, context1)
+            x_cat1 = self.catalog_net.detection1_head(x_features, context1)
             loss11 = self.var_dist.compute_nll(x_cat1, target_cat1)
 
             # could upweight some patterns that are under-represented or limit loss to
@@ -209,8 +205,8 @@ class Encoder(pl.LightningModule):
 
         if self.double_detect:
             no_mask = torch.ones_like(mask)
-            context2 = self.make_context(target_cat1, no_mask, detection2=True)
-            x_cat2 = self.catalog_net.catalog_head(x_features, context2)
+            context2 = self.make_context(target_cat1, no_mask)
+            x_cat2 = self.catalog_net.detection2_head(x_features, context2)
             loss22 = self.var_dist.compute_nll(x_cat2, target_cat2)
             loss22 *= target_cat1["n_sources"]
             loss += loss22

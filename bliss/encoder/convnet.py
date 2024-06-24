@@ -80,16 +80,31 @@ class CatalogNet(nn.Module):
         ]
         self.u_net = nn.ModuleList(u_net_layers)
 
-        # initalization for detection head
-        context_channels_in = 6
+        # initalization for first detection head
+        context_channels_in = 5
         context_channels_out = 128
-        self.encode_context = nn.Sequential(
+        self.context1_net = nn.Sequential(
             ConvBlock(context_channels_in, context_channels_out),
             ConvBlock(context_channels_out, context_channels_out),
             C3(context_channels_out, context_channels_out, n=4),
             ConvBlock(context_channels_out, context_channels_out),
         )
-        self.merge = nn.Sequential(
+        self.detection1_net = nn.Sequential(
+            ConvBlock(num_features + context_channels_out, num_features),
+            ConvBlock(num_features, num_features),
+            C3(num_features, num_features, n=4),
+            ConvBlock(num_features, num_features),
+            Detect(num_features, out_channels),
+        )
+
+        # initialization for second detection head
+        self.context2_net = nn.Sequential(
+            ConvBlock(context_channels_in, context_channels_out),
+            ConvBlock(context_channels_out, context_channels_out),
+            C3(context_channels_out, context_channels_out, n=4),
+            ConvBlock(context_channels_out, context_channels_out),
+        )
+        self.detection2_net = nn.Sequential(
             ConvBlock(num_features + context_channels_out, num_features),
             ConvBlock(num_features, num_features),
             C3(num_features, num_features, n=4),
@@ -111,7 +126,12 @@ class CatalogNet(nn.Module):
 
         return x
 
-    def catalog_head(self, x_features, context):
-        x_context = self.encode_context(context)
+    def detection1_head(self, x_features, context):
+        x_context = self.context1_net(context)
         x = torch.cat((x_features, x_context), dim=1)
-        return self.merge(x)
+        return self.detection1_net(x)
+
+    def detection2_head(self, x_features, context):
+        x_context = self.context2_net(context)
+        x = torch.cat((x_features, x_context), dim=1)
+        return self.detection2_net(x)
