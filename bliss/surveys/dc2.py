@@ -52,7 +52,6 @@ class DC2DataModule(CachedSimulatedDataModule):
         cached_data_path: str,
         train_transforms: List,
         nontrain_transforms: List,
-        use_iterable_dataset: bool,
     ):
         super().__init__(
             splits,
@@ -61,7 +60,6 @@ class DC2DataModule(CachedSimulatedDataModule):
             cached_data_path,
             train_transforms,
             nontrain_transforms,
-            use_iterable_dataset,
         )
 
         self.dc2_image_dir = dc2_image_dir

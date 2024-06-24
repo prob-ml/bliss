@@ -1,5 +1,4 @@
 import logging
-import math
 import os
 import pathlib
 import random
@@ -10,7 +9,7 @@ from typing import List, TypedDict
 import pytorch_lightning as pl
 import torch
 from torch import distributed as dist
-from torch.utils.data import DataLoader, Dataset, DistributedSampler, IterableDataset, Sampler
+from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 from torchvision import transforms
 
 from bliss.catalog import FullCatalog, TileCatalog
@@ -155,44 +154,6 @@ class ChunkingDataset(Dataset):
         return list(range(0, len(self)))
 
 
-class MyIterableDataset(IterableDataset):
-    def __init__(self, file_paths, shuffle=False, transform=None):
-        self.file_paths = file_paths
-        self.shuffle = shuffle
-        self.transform = transform
-
-    def get_stream(self, files):
-        for file_path in files:
-            examples = torch.load(file_path)
-
-            # each training worker also shuffles the examples within each file
-            if self.shuffle:
-                random.shuffle(examples)
-
-            for ex in examples:
-                if self.transform is not None:
-                    ex = self.transform(ex)
-                yield ex
-
-    def __iter__(self):
-        worker_info = torch.utils.data.get_worker_info()
-
-        # shuffle files use for training each epoch
-        files = self.file_paths.copy()
-        if self.shuffle:
-            random.shuffle(files)
-
-        if worker_info is None:  # single-process data loading
-            files_subset = files
-        else:  # in a worker process
-            # split files evenly amongst workers
-            per_worker = int(math.ceil(len(files) / float(worker_info.num_workers)))
-            worker_id = worker_info.id
-            files_subset = files[worker_id * per_worker : (worker_id + 1) * per_worker]
-
-        return iter(self.get_stream(files_subset))
-
-
 class CachedSimulatedDataModule(pl.LightningDataModule):
     def __init__(
         self,
@@ -202,7 +163,6 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         cached_data_path: str,
         train_transforms: List,
         nontrain_transforms: List,
-        use_iterable_dataset: bool = True,
     ):
         super().__init__()
 
@@ -212,7 +172,6 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.cached_data_path = pathlib.Path(cached_data_path)
         self.train_transforms = train_transforms
         self.nontrain_transforms = nontrain_transforms
-        self.use_iterable_dataset = use_iterable_dataset
 
         self.file_paths = None
         self.slices = None
@@ -239,42 +198,32 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
     def train_dataloader(self):
         assert self.file_paths[self.slices[0]], "No cached data found"
         transform = transforms.Compose(self.train_transforms)
-        dataset_type = MyIterableDataset if self.use_iterable_dataset else ChunkingDataset
-        my_dataset = dataset_type(
+        my_dataset = ChunkingDataset(
             self.file_paths[self.slices[0]], transform=transform, shuffle=True
         )
 
         distributed_is_used = dist.is_available() and dist.is_initialized()
-        if distributed_is_used and self.use_iterable_dataset:
-            err_msg = "currently, our iterable dataset doesn't support distributed training"
-            raise RuntimeError(err_msg)
         sampler_type = DistributedChunkingSampler if distributed_is_used else ChunkingSampler
 
         return DataLoader(
             my_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            worker_init_fn=random.seed if self.use_iterable_dataset else None,
-            sampler=None if self.use_iterable_dataset else sampler_type(my_dataset),
+            sampler=sampler_type(my_dataset),
         )
 
     def _get_nontrain_dataloader(self, file_paths_subset):
         assert file_paths_subset, "No cached data found"
         transform = transforms.Compose(self.nontrain_transforms)
-        dataset_type = MyIterableDataset if self.use_iterable_dataset else ChunkingDataset
-        my_dataset = dataset_type(file_paths_subset, transform=transform)
+        my_dataset = ChunkingDataset(file_paths_subset, transform=transform)
 
         distributed_is_used = dist.is_available() and dist.is_initialized()
-        if distributed_is_used and self.use_iterable_dataset:
-            err_msg = "currently, our iterable dataset doesn't support distributed training"
-            raise RuntimeError(err_msg)
         sampler_type = DistributedChunkingSampler if distributed_is_used else ChunkingSampler
         return DataLoader(
             my_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            worker_init_fn=random.seed if self.use_iterable_dataset else None,
-            sampler=None if self.use_iterable_dataset else sampler_type(my_dataset),
+            sampler=sampler_type(my_dataset),
         )
 
     def val_dataloader(self):

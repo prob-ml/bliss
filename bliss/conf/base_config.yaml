@@ -245,7 +245,6 @@ surveys:
         train_transforms:
             - _target_: bliss.data_augmentation.RotateFlipTransform
         nontrain_transforms: []
-        use_iterable_dataset: false
 
 
 #######################################################################
