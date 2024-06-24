@@ -79,6 +79,7 @@ hmf = "^3.4.4"
 healpy = "^1.16.6"
 h5py = "^3.11.0"
 pyclean = "^3.0.0"
+pathos = "^0.3.2"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"

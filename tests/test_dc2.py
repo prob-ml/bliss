@@ -140,10 +140,12 @@ class TestDC2:
     def test_dc2_size_and_type(self, cfg):
         dc2 = instantiate(cfg.surveys.dc2)
         dc2.prepare_data()
-        dc2.setup()
+        dc2.setup(stage="fit")
 
-        assert dc2[0]["images"].shape[0] == 6
-        assert len(dc2.image_ids()) == 25
+        dc2 = list(dc2.train_dataloader())
+
+        assert dc2[0]["images"].shape[1] == 6
+        assert len(dc2) == 5
 
         params = (
             "locs",
