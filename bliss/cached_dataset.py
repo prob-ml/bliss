@@ -175,13 +175,50 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
 
         self.file_paths = None
         self.slices = None
+        self.train_dataset = None
+        self.val_dataset = None
+        self.test_dataset = None
+        self.predict_dataset = None
 
-    def setup(self, stage: str) -> None:
-        file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
-        self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
+    def setup(self, stage: str) -> None:  # noqa: WPS324
+        if stage == "fit":
+            file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
+            self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
 
-        # parse slices from percentages to indices
-        self.slices = self.parse_slices(self.splits, len(self.file_paths))
+            # parse slices from percentages to indices
+            self.slices = self.parse_slices(self.splits, len(self.file_paths))
+
+            assert self.file_paths[self.slices[0]], "No cached data found"
+            transform = transforms.Compose(self.train_transforms)
+            self.train_dataset = ChunkingDataset(
+                self.file_paths[self.slices[0]], transform=transform, shuffle=True
+            )
+
+            assert self.file_paths[self.slices[1]], "No cached data found"
+            nontrain_transform = transforms.Compose(self.nontrain_transforms)
+            self.val_dataset = ChunkingDataset(
+                self.file_paths[self.slices[1]], transform=nontrain_transform
+            )
+            return None
+
+        if stage == "validate":
+            return None
+
+        if stage == "test":
+            assert self.file_paths[self.slices[2]], "No cached data found"
+            nontrain_transform = transforms.Compose(self.nontrain_transforms)
+            self.test_dataset = ChunkingDataset(
+                self.file_paths[self.slices[2]], transform=nontrain_transform
+            )
+            return None
+
+        if stage == "predict":
+            assert self.file_paths, "No cached data found"
+            nontrain_transform = transforms.Compose(self.nontrain_transforms)
+            self.predict_dataset = ChunkingDataset(self.file_paths, transform=nontrain_transform)
+            return None
+
+        raise RuntimeError(f"setup skips stage {stage}")
 
     def _percent_to_idx(self, x, length):
         """Converts string in percent to an integer index."""
@@ -194,42 +231,24 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
             slices[i] = slice(*(self._percent_to_idx(val, length) for val in data_split.split(":")))
         return slices
 
+    def _get_dataloader(self, my_dataset):
+        distributed_is_used = dist.is_available() and dist.is_initialized()
+        sampler_type = DistributedChunkingSampler if distributed_is_used else ChunkingSampler
+        return DataLoader(
+            my_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            sampler=sampler_type(my_dataset),
+        )
+
     def train_dataloader(self):
-        assert self.file_paths[self.slices[0]], "No cached data found"
-        transform = transforms.Compose(self.train_transforms)
-        my_dataset = ChunkingDataset(
-            self.file_paths[self.slices[0]], transform=transform, shuffle=True
-        )
-
-        distributed_is_used = dist.is_available() and dist.is_initialized()
-        sampler_type = DistributedChunkingSampler if distributed_is_used else ChunkingSampler
-
-        return DataLoader(
-            my_dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            sampler=sampler_type(my_dataset),
-        )
-
-    def _get_nontrain_dataloader(self, file_paths_subset):
-        assert file_paths_subset, "No cached data found"
-        transform = transforms.Compose(self.nontrain_transforms)
-        my_dataset = ChunkingDataset(file_paths_subset, transform=transform)
-
-        distributed_is_used = dist.is_available() and dist.is_initialized()
-        sampler_type = DistributedChunkingSampler if distributed_is_used else ChunkingSampler
-        return DataLoader(
-            my_dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            sampler=sampler_type(my_dataset),
-        )
+        return self._get_dataloader(self.train_dataset)
 
     def val_dataloader(self):
-        return self._get_nontrain_dataloader(self.file_paths[self.slices[1]])
+        return self._get_dataloader(self.val_dataset)
 
     def test_dataloader(self):
-        return self._get_nontrain_dataloader(self.file_paths[self.slices[2]])
+        return self._get_dataloader(self.test_dataset)
 
     def predict_dataloader(self):
-        return self._get_nontrain_dataloader(self.file_paths)
+        return self._get_dataloader(self.predict_dataset)
