@@ -129,7 +129,7 @@ class ChunkingDataset(Dataset):
             with open(self.file_paths[converted_index], "rb") as f:
                 self.buffered_data = torch.load(f)
         output_data = self.buffered_data[converted_sub_index]
-        return output_data if self.transform is None else self.transform(output_data)
+        return self.transform(output_data)
 
     def get_chunked_indices(self):
         accumulated_file_sizes_list = self.accumulated_file_sizes.tolist()
@@ -188,16 +188,12 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
             # parse slices from percentages to indices
             self.slices = self.parse_slices(self.splits, len(self.file_paths))
 
-            assert self.file_paths[self.slices[0]], "No cached data found"
-            transform = transforms.Compose(self.train_transforms)
-            self.train_dataset = ChunkingDataset(
-                self.file_paths[self.slices[0]], transform=transform, shuffle=True
+            self.train_dataset = self._get_dataset(
+                self.file_paths[self.slices[0]], self.train_transforms, shuffle=True
             )
 
-            assert self.file_paths[self.slices[1]], "No cached data found"
-            nontrain_transform = transforms.Compose(self.nontrain_transforms)
-            self.val_dataset = ChunkingDataset(
-                self.file_paths[self.slices[1]], transform=nontrain_transform
+            self.val_dataset = self._get_dataset(
+                self.file_paths[self.slices[1]], self.nontrain_transforms
             )
             return None
 
@@ -205,17 +201,13 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
             return None
 
         if stage == "test":
-            assert self.file_paths[self.slices[2]], "No cached data found"
-            nontrain_transform = transforms.Compose(self.nontrain_transforms)
-            self.test_dataset = ChunkingDataset(
-                self.file_paths[self.slices[2]], transform=nontrain_transform
+            self.test_dataset = self._get_dataset(
+                self.file_paths[self.slices[2]], self.nontrain_transforms
             )
             return None
 
         if stage == "predict":
-            assert self.file_paths, "No cached data found"
-            nontrain_transform = transforms.Compose(self.nontrain_transforms)
-            self.predict_dataset = ChunkingDataset(self.file_paths, transform=nontrain_transform)
+            self.predict_dataset = self._get_dataset(self.file_paths, self.nontrain_transforms)
             return None
 
         raise RuntimeError(f"setup skips stage {stage}")
@@ -230,6 +222,11 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
             # map "start_percent:stop_percent" to slice(start_idx, stop_idx)
             slices[i] = slice(*(self._percent_to_idx(val, length) for val in data_split.split(":")))
         return slices
+
+    def _get_dataset(self, sub_file_paths, defined_transforms, shuffle: bool = False):
+        assert sub_file_paths, "No cached data found"
+        transform = transforms.Compose(defined_transforms)
+        return ChunkingDataset(sub_file_paths, shuffle=shuffle, transform=transform)
 
     def _get_dataloader(self, my_dataset):
         distributed_is_used = dist.is_available() and dist.is_initialized()
