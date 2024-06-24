@@ -48,7 +48,7 @@ encoder:
         include_original: false
         include_background: false
         concat_psf_params: false
-        use_clahe: false
+        use_clahe: true
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 0.5
