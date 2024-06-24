@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader, Dataset, DistributedSampler, IterableDa
 from torchvision import transforms
 
 from bliss.catalog import FullCatalog, TileCatalog
+from bliss.global_settings import GlobalSettings
 
 # prevent pytorch_lightning warning for num_workers = 2 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -51,9 +52,9 @@ class FullCatalogToTileTransform(torch.nn.Module):
         return ex
 
 
-class MySampler(Sampler):
+class ChunkingSampler(Sampler):
     def __init__(self, dataset: Dataset) -> None:
-        assert isinstance(dataset, MyDataset), "dataset should be MyDataset"
+        assert isinstance(dataset, ChunkingDataset), "dataset should be MyDataset"
         self.dataset = dataset
 
     def __len__(self):
@@ -64,7 +65,7 @@ class MySampler(Sampler):
 
 
 # note that for this DistributedSampler, we don't need to call `set_epoch()`
-class MyDistributedSampler(DistributedSampler):
+class DistributedChunkingSampler(DistributedSampler):
     def __init__(
         self,
         dataset: Dataset,
@@ -74,7 +75,7 @@ class MyDistributedSampler(DistributedSampler):
         seed: int = 0,
         drop_last: bool = False,
     ) -> None:
-        assert isinstance(dataset, MyDataset), "dataset should be MyDataset"
+        assert isinstance(dataset, ChunkingDataset), "dataset should be MyDataset"
         assert not shuffle, "you should not use shuffle"
         super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
 
@@ -85,7 +86,7 @@ class MyDistributedSampler(DistributedSampler):
         return iter([chunked_indices[i] for i in pre_indices])
 
 
-class MyDataset(Dataset):
+class ChunkingDataset(Dataset):
     def __init__(self, file_paths, shuffle=False, transform=None) -> None:
         super().__init__()
         self.file_paths = file_paths
@@ -136,10 +137,18 @@ class MyDataset(Dataset):
 
         output_list = []
         if self.shuffle:
+            epoch_seed = GlobalSettings.seed_in_this_program + GlobalSettings.current_encoder_epoch
+            logger = logging.getLogger("ChunkingDataset")
+            logger.info(
+                "INFO: seed is %d; current epoch is %d; epoch_seed is set to %d",
+                GlobalSettings.seed_in_this_program,
+                GlobalSettings.current_encoder_epoch,
+                epoch_seed,
+            )
             right_shift_list = [0, *accumulated_file_sizes_list[:-1]]
             for start, end in zip(right_shift_list, accumulated_file_sizes_list):
-                output_list.append(random.sample(range(start, end), end - start))
-            random.shuffle(output_list)
+                output_list.append(random.Random(epoch_seed).sample(range(start, end), end - start))
+            random.Random(epoch_seed).shuffle(output_list)
             # flatten the list
             return sum(output_list, [])
 
@@ -230,7 +239,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
     def train_dataloader(self):
         assert self.file_paths[self.slices[0]], "No cached data found"
         transform = transforms.Compose(self.train_transforms)
-        dataset_type = MyIterableDataset if self.use_iterable_dataset else MyDataset
+        dataset_type = MyIterableDataset if self.use_iterable_dataset else ChunkingDataset
         my_dataset = dataset_type(
             self.file_paths[self.slices[0]], transform=transform, shuffle=True
         )
@@ -239,7 +248,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         if distributed_is_used and self.use_iterable_dataset:
             err_msg = "currently, our iterable dataset doesn't support distributed training"
             raise RuntimeError(err_msg)
-        sampler_type = MyDistributedSampler if distributed_is_used else MySampler
+        sampler_type = DistributedChunkingSampler if distributed_is_used else ChunkingSampler
 
         return DataLoader(
             my_dataset,
@@ -252,14 +261,14 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
     def _get_nontrain_dataloader(self, file_paths_subset):
         assert file_paths_subset, "No cached data found"
         transform = transforms.Compose(self.nontrain_transforms)
-        dataset_type = MyIterableDataset if self.use_iterable_dataset else MyDataset
+        dataset_type = MyIterableDataset if self.use_iterable_dataset else ChunkingDataset
         my_dataset = dataset_type(file_paths_subset, transform=transform)
 
         distributed_is_used = dist.is_available() and dist.is_initialized()
         if distributed_is_used and self.use_iterable_dataset:
             err_msg = "currently, our iterable dataset doesn't support distributed training"
             raise RuntimeError(err_msg)
-        sampler_type = MyDistributedSampler if distributed_is_used else MySampler
+        sampler_type = DistributedChunkingSampler if distributed_is_used else ChunkingSampler
         return DataLoader(
             my_dataset,
             batch_size=self.batch_size,
