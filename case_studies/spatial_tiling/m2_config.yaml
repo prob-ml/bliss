@@ -41,7 +41,14 @@ encoder:
     tiles_to_crop: 1
     image_normalizer:
         bands: [2]
-        log_transform_stdevs: [3, 10, 35, 150, 350, 700]
+        log_transform_stdevs: null
+        asinh_cutoffs: [3.2974e+00, 7.5877e+01, 1.2642e+02, 1.7975e+02, 2.4340e+02, 3.2515e+02,
+            4.3817e+02, 6.1258e+02, 9.3131e+02, 1.7869e+03, 1.3727e+04, 9.1571e+04,
+            3.4912e+05, 6.7166e+05]
+        include_original: false
+        include_background: false
+        concat_psf_params: false
+        use_clahe: false
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 0.5
@@ -87,10 +94,10 @@ surveys:
 generate:
     n_image_files: 16
     n_batches_per_file: 16
-    cached_data_path: /data/scratch/regier/m2
+    cached_data_path: /data/scratch/regier/m2_full_cat
 
 cached_simulator:
-    cached_data_path: /data/scratch/regier/m2
+    cached_data_path: /data/scratch/regier/m2_full_cat
     batch_size: 10
     num_workers: 4
     train_transforms:
