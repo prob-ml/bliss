@@ -1,4 +1,3 @@
-import random
 from pathlib import Path
 from typing import List
 
@@ -10,6 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
 from bliss.cached_dataset import FileDatum
+from bliss.global_settings import GlobalSettings
 
 # ============================== Data Generation ==============================
 
@@ -56,10 +56,8 @@ def generate(gen_cfg: DictConfig):
 
 def train(train_cfg: DictConfig):
     # setup seed
-    if train_cfg.seed == "random":
-        pl.seed_everything(random.randint(1e4, 1e5 - 1))
-    else:
-        pl.seed_everything(train_cfg.seed)
+    seed = pl.seed_everything(train_cfg.seed)
+    GlobalSettings.seed_in_this_program = seed
 
     if train_cfg.matmul_precision:
         torch.set_float32_matmul_precision(train_cfg.matmul_precision)
