@@ -510,6 +510,7 @@ class FullCatalog(UserDict):
         Raises:
             ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
                 `ignore_extra_sources` is False.
+            KeyError: If the tile_params contain `plocs` or `n_sources`.
         """
         # TODO: a FullCatalog only needs to "know" its height and width to convert itself to a
         # TileCatalog. So those parameters should be passed on conversion, not initialization.
@@ -523,6 +524,8 @@ class FullCatalog(UserDict):
         tile_n_sources = torch.zeros(tile_cat_shape[:3], dtype=torch.int64, device=self.device)
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
+            if k in {"plocs", "n_sources"}:
+                continue
             dtype = torch.int64 if k == "objid" else torch.float
             size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
             tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
@@ -569,10 +572,12 @@ class FullCatalog(UserDict):
             )
 
             for k, v in tile_params.items():
+                if k == "plocs":
+                    raise KeyError("plocs should not be in tile_params")
                 if k == "locs":
                     k = "plocs"
                 if k == "n_sources":
-                    continue
+                    raise KeyError("n_sources should not be in tile_params")
                 param_matrix = self[k][ii][:n_sources]
                 if filter_oob:
                     param_matrix = param_matrix[x_mask]
@@ -595,7 +600,6 @@ class FullCatalog(UserDict):
                     tile_to_source_mapping[:, 0].unique(sorted=True).tolist(), :max_fill
                 ] = params_on_tile[:, :max_fill].to(dtype=v.dtype)
 
-            del tile_params["plocs"]
             # modify tile location
             tile_params["locs"][ii] = (tile_params["locs"][ii] % tile_slen) / tile_slen
         tile_params.update({"n_sources": tile_n_sources})
@@ -647,8 +651,8 @@ class FullCatalog(UserDict):
         return est_cat_table
 
     def filter_full_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
-        assert box_origin[0] + box_len < self.height, "invalid box"
-        assert box_origin[1] + box_len < self.width, "invalid box"
+        assert box_origin[0] + box_len <= self.height, "invalid box"
+        assert box_origin[1] + box_len <= self.width, "invalid box"
 
         box_origin_tensor = box_origin.view(1, 1, 2).to(device=self.device)
         box_end_tensor = (box_origin + box_len).view(1, 1, 2).to(device=self.device)

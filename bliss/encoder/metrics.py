@@ -242,9 +242,9 @@ class DetectionPerformance(FilterMetric):
             2 * precision_per_bin * recall_per_bin / (precision_per_bin + recall_per_bin)
         ).nan_to_num(0)
 
-        precision = n_est_matches.sum() / n_est_sources.sum()
-        recall = n_true_matches.sum() / n_true_sources.sum()
-        f1 = 2 * precision * recall / (precision + recall)
+        precision = (n_est_matches.sum() / n_est_sources.sum()).nan_to_num(0)
+        recall = (n_true_matches.sum() / n_true_sources.sum()).nan_to_num(0)
+        f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
 
         precision_bin_results = {
             f"detection_precision{self.postfix_str}_bin_{i}": precision_per_bin[i]

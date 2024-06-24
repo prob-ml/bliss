@@ -383,3 +383,13 @@ processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.
 4. run moving avg thresholds asinh
 
 5. run moving avg thresholds asinh
+
+(hereafter, use fixed thresholds asinh)
+
+### 06-19
+
+1. run with double detection
+
+2. run with double detection
+
+3. run with double detection

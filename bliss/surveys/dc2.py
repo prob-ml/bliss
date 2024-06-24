@@ -146,6 +146,10 @@ class DC2(Survey):
             warning_msg = "WARNING: split_results already exists at [%s], we directly use it\n"
             logger.warning(warning_msg, str(self.split_results_dir))
             return None
+
+        logger = logging.getLogger("DC2")
+        warning_msg = "WARNING: can't find split_results, we generate it at [%s]\n"
+        logger.warning(warning_msg, str(self.split_results_dir))
         self.split_results_dir.mkdir(parents=True)
 
         n_image = self._load_image_and_bg_files_list()
@@ -246,14 +250,14 @@ class DC2(Survey):
         }
 
 
-def squeeze_tile_dict(tile_dict):
+def squeeze_tile_cat(tile_cat):
     # by calling `.data` here I circumevent the requirement of TileCatalogs that the length
     # of the first dimension is the batch size
-    tile_dict_copy = copy.copy(tile_dict).data
+    tile_dict_copy = copy.copy(tile_cat.data)
     for k, v in tile_dict_copy.items():
         if k != "n_sources":
-            tile_dict_copy[k] = rearrange(v, "1 h w nh nw -> h w nh nw")
-    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "1 h w -> h w")
+            tile_dict_copy[k] = rearrange(v, "1 nth ntw s k -> nth ntw s k")
+    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "1 nth ntw -> nth ntw")
     return tile_dict_copy
 
 
@@ -261,8 +265,8 @@ def unsqueeze_tile_dict(tile_dict):
     tile_dict_copy = copy.copy(tile_dict)
     for k, v in tile_dict_copy.items():
         if k != "n_sources":
-            tile_dict_copy[k] = rearrange(v, "h w nh nw -> 1 h w nh nw")
-    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "h w -> 1 h w")
+            tile_dict_copy[k] = rearrange(v, "nth ntw s k -> 1 nth ntw s k")
+    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "nth ntw -> 1 nth ntw")
     return tile_dict_copy
 
 
@@ -282,12 +286,23 @@ def load_image_and_catalog(
     full_cat, psf_params, match_id = Dc2FullCatalog.from_file(
         cat_path, wcs, height, width, bands, min_flux_for_loss
     )
-    tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile()
-    tile_dict = squeeze_tile_dict(tile_dict)
+    tile_cat = full_cat.to_tile_catalog(4, 5)
+    tile_dict = squeeze_tile_cat(tile_cat)
     tile_dict["star_fluxes"] = tile_dict["star_fluxes"].clamp(min=1e-18)
     tile_dict["galaxy_fluxes"] = tile_dict["galaxy_fluxes"].clamp(min=1e-18)
     tile_dict["galaxy_params"][..., 3] = tile_dict["galaxy_params"][..., 3].clamp(min=1e-18)
     tile_dict["galaxy_params"][..., 5] = tile_dict["galaxy_params"][..., 5].clamp(min=1e-18)
+
+    # add one/two/more_than_two source mask
+    on_mask = rearrange(tile_cat.is_on_mask, "1 nth ntw s -> nth ntw s 1")
+    on_mask_count = on_mask.sum(dim=(-2, -1))
+    tile_dict["one_source_mask"] = rearrange(on_mask_count == 1, "nth ntw -> nth ntw 1 1") & on_mask
+    tile_dict["two_sources_mask"] = (
+        rearrange(on_mask_count == 2, "nth ntw -> nth ntw 1 1") & on_mask
+    )
+    tile_dict["more_than_two_sources_mask"] = (
+        rearrange(on_mask_count > 2, "nth ntw -> nth ntw 1 1") & on_mask
+    )
 
     return {
         "tile_dict": tile_dict,
@@ -306,7 +321,6 @@ def load_image_and_catalog(
 
 
 def generate_split_file(image_index, self_copy):
-    split_count = 0
     result_dict = load_image_and_catalog(
         image_index,
         self_copy["image_files"],
@@ -343,6 +357,9 @@ def generate_split_file(image_index, self_copy):
         "galaxy_params",
         "star_fluxes",
         "star_log_fluxes",
+        "one_source_mask",
+        "two_sources_mask",
+        "more_than_two_sources_mask",
     ]
     for i in param_list:
         split1_tile = torch.stack(torch.split(tile_dict[i], split_lim // 4, dim=0))
@@ -363,6 +380,7 @@ def generate_split_file(image_index, self_copy):
     }
 
     data_splits = [dict(zip(data_split, i)) for i in zip(*data_split.values())]
+    split_count = 0
     for cur_split in data_splits:  # noqa: WPS426
         assert split_count < 1e6 and image_index < 1e5, "too many splits"
         split_file_name = f"split_image_{image_index:04d}_{split_count:05d}.pt"
