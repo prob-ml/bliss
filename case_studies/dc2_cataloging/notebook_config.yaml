@@ -20,7 +20,6 @@ encoder:
             scale: 1000
             thresholds: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
 
-    do_data_augmentation: true
     compile_model: false
     double_detect: false
     use_checkerboard: true

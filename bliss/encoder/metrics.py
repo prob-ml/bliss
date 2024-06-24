@@ -278,6 +278,14 @@ class DetectionPerformance(FilterMetric):
             f"detection_f1{self.postfix_str}": f1,
         }
 
+    def get_internal_states(self):
+        return {
+            f"n_true_sources{self.postfix_str}": self.n_true_sources,
+            f"n_est_sources{self.postfix_str}": self.n_est_sources,
+            f"n_true_matches{self.postfix_str}": self.n_true_matches,
+            f"n_est_matches{self.postfix_str}": self.n_est_matches,
+        }
+
     def plot(self):
         # Compute recall, precision, and F1 score
         recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)

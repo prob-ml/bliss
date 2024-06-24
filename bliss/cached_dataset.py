@@ -1,15 +1,19 @@
-import math
+import logging
 import os
+import pathlib
 import random
+import re
 import warnings
 from typing import List, TypedDict
 
 import pytorch_lightning as pl
 import torch
-from torch.utils.data import DataLoader, IterableDataset
+from torch import distributed as dist
+from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 from torchvision import transforms
 
 from bliss.catalog import FullCatalog, TileCatalog
+from bliss.global_settings import GlobalSettings
 
 # prevent pytorch_lightning warning for num_workers = 2 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -47,45 +51,110 @@ class FullCatalogToTileTransform(torch.nn.Module):
         return ex
 
 
-class MyIterableDataset(IterableDataset):
-    def __init__(self, file_paths, shuffle=False, transform=None):
+class ChunkingSampler(Sampler):
+    def __init__(self, dataset: Dataset) -> None:
+        assert isinstance(dataset, ChunkingDataset), "dataset should be MyDataset"
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __iter__(self):
+        return iter(self.dataset.get_chunked_indices())
+
+
+# note that for this DistributedSampler, we don't need to call `set_epoch()`
+class DistributedChunkingSampler(DistributedSampler):
+    def __init__(
+        self,
+        dataset: Dataset,
+        num_replicas: int | None = None,
+        rank: int | None = None,
+        shuffle: bool = False,
+        seed: int = 0,
+        drop_last: bool = False,
+    ) -> None:
+        assert isinstance(dataset, ChunkingDataset), "dataset should be MyDataset"
+        assert not shuffle, "you should not use shuffle"
+        super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
+
+    def __iter__(self):
+        pre_indices = list(super().__iter__())
+        chunked_indices = self.dataset.get_chunked_indices()
+
+        return iter([chunked_indices[i] for i in pre_indices])
+
+
+class ChunkingDataset(Dataset):
+    def __init__(self, file_paths, shuffle=False, transform=None) -> None:
+        super().__init__()
         self.file_paths = file_paths
         self.shuffle = shuffle
         self.transform = transform
 
-    def get_stream(self, files):
-        for file_path in files:
-            examples = torch.load(file_path)
+        self.accumulated_file_sizes = torch.zeros(len(self.file_paths), dtype=torch.int64)
+        for i, file_path in enumerate(self.file_paths):
+            file_size_match = re.search(r"size_(\d+)", file_path)
+            if file_size_match:
+                cached_data_len = int(file_size_match.group(1))
+            else:
+                if i == 0:
+                    logger = logging.getLogger("MyDataset")
+                    warning_msg = (
+                        "WARNING: add postfix '_size_XXXX' to file name; "
+                        "otherwise it'll be very slow\n"
+                    )
+                    logger.warning(warning_msg)
+                with open(file_path, "rb") as f:
+                    cached_data_len = len(torch.load(f))
 
-            # each training worker also shuffles the examples within each file
-            if self.shuffle:
-                random.shuffle(examples)
+            if i == 0:
+                self.accumulated_file_sizes[i] = cached_data_len
+            else:
+                self.accumulated_file_sizes[i] = (
+                    self.accumulated_file_sizes[i - 1] + cached_data_len
+                )
 
-            for ex in examples:
-                if self.transform is not None:
-                    ex = self.transform(ex)
-                yield ex
+        self.buffered_file_index = None
+        self.buffered_data = None
 
-    def __iter__(self):
-        worker_info = torch.utils.data.get_worker_info()
+    def __len__(self):
+        return self.accumulated_file_sizes[-1].item()
 
-        # shuffle files use for training each epoch
-        files = self.file_paths.copy()
+    def __getitem__(self, index):
+        converted_index = (self.accumulated_file_sizes <= index).sum().item()
+        converted_sub_index = (index - self.accumulated_file_sizes[converted_index]).item()
+        if self.buffered_file_index != converted_index:
+            self.buffered_file_index = converted_index
+            with open(self.file_paths[converted_index], "rb") as f:
+                self.buffered_data = torch.load(f)
+        output_data = self.buffered_data[converted_sub_index]
+        return self.transform(output_data)
+
+    def get_chunked_indices(self):
+        accumulated_file_sizes_list = self.accumulated_file_sizes.tolist()
+
+        output_list = []
         if self.shuffle:
-            random.shuffle(files)
+            epoch_seed = GlobalSettings.seed_in_this_program + GlobalSettings.current_encoder_epoch
+            logger = logging.getLogger("ChunkingDataset")
+            logger.info(
+                "INFO: seed is %d; current epoch is %d; epoch_seed is set to %d",
+                GlobalSettings.seed_in_this_program,
+                GlobalSettings.current_encoder_epoch,
+                epoch_seed,
+            )
+            right_shift_list = [0, *accumulated_file_sizes_list[:-1]]
+            for start, end in zip(right_shift_list, accumulated_file_sizes_list):
+                output_list.append(random.Random(epoch_seed).sample(range(start, end), end - start))
+            random.Random(epoch_seed).shuffle(output_list)
+            # flatten the list
+            return sum(output_list, [])
 
-        if worker_info is None:  # single-process data loading
-            files_subset = files
-        else:  # in a worker process
-            # split files evenly amongst workers
-            per_worker = int(math.ceil(len(files) / float(worker_info.num_workers)))
-            worker_id = worker_info.id
-            files_subset = files[worker_id * per_worker : (worker_id + 1) * per_worker]
-
-        return iter(self.get_stream(files_subset))
+        return list(range(0, len(self)))
 
 
-class CachedSimulatedDataset(pl.LightningDataModule):
+class CachedSimulatedDataModule(pl.LightningDataModule):
     def __init__(
         self,
         splits: str,
@@ -97,16 +166,51 @@ class CachedSimulatedDataset(pl.LightningDataModule):
     ):
         super().__init__()
 
+        self.splits = splits
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.cached_data_path = pathlib.Path(cached_data_path)
         self.train_transforms = train_transforms
         self.nontrain_transforms = nontrain_transforms
 
-        file_names = [f for f in os.listdir(cached_data_path) if f.endswith(".pt")]
-        self.file_paths = [os.path.join(cached_data_path, f) for f in file_names]
+        self.file_paths = None
+        self.slices = None
+        self.train_dataset = None
+        self.val_dataset = None
+        self.test_dataset = None
+        self.predict_dataset = None
 
-        # parse slices from percentages to indices
-        self.slices = self.parse_slices(splits, len(self.file_paths))
+    def setup(self, stage: str) -> None:  # noqa: WPS324
+        if stage == "fit":
+            file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
+            self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
+
+            # parse slices from percentages to indices
+            self.slices = self.parse_slices(self.splits, len(self.file_paths))
+
+            self.train_dataset = self._get_dataset(
+                self.file_paths[self.slices[0]], self.train_transforms, shuffle=True
+            )
+
+            self.val_dataset = self._get_dataset(
+                self.file_paths[self.slices[1]], self.nontrain_transforms
+            )
+            return None
+
+        if stage == "validate":
+            return None
+
+        if stage == "test":
+            self.test_dataset = self._get_dataset(
+                self.file_paths[self.slices[2]], self.nontrain_transforms
+            )
+            return None
+
+        if stage == "predict":
+            self.predict_dataset = self._get_dataset(self.file_paths, self.nontrain_transforms)
+            return None
+
+        raise RuntimeError(f"setup skips stage {stage}")
 
     def _percent_to_idx(self, x, length):
         """Converts string in percent to an integer index."""
@@ -119,36 +223,29 @@ class CachedSimulatedDataset(pl.LightningDataModule):
             slices[i] = slice(*(self._percent_to_idx(val, length) for val in data_split.split(":")))
         return slices
 
+    def _get_dataset(self, sub_file_paths, defined_transforms, shuffle: bool = False):
+        assert sub_file_paths, "No cached data found"
+        transform = transforms.Compose(defined_transforms)
+        return ChunkingDataset(sub_file_paths, shuffle=shuffle, transform=transform)
+
+    def _get_dataloader(self, my_dataset):
+        distributed_is_used = dist.is_available() and dist.is_initialized()
+        sampler_type = DistributedChunkingSampler if distributed_is_used else ChunkingSampler
+        return DataLoader(
+            my_dataset,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            sampler=sampler_type(my_dataset),
+        )
+
     def train_dataloader(self):
-        assert self.file_paths[self.slices[0]], "No cached data found"
-        transform = transforms.Compose(self.train_transforms)
-        my_dataset = MyIterableDataset(
-            self.file_paths[self.slices[0]], transform=transform, shuffle=True
-        )
-
-        return DataLoader(
-            my_dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            worker_init_fn=random.seed,
-        )
-
-    def _get_nontrain_dataloader(self, file_paths_subset):
-        assert file_paths_subset, "No cached data found"
-        transform = transforms.Compose(self.nontrain_transforms)
-        my_dataset = MyIterableDataset(file_paths_subset, transform=transform)
-        return DataLoader(
-            my_dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            worker_init_fn=random.seed,
-        )
+        return self._get_dataloader(self.train_dataset)
 
     def val_dataloader(self):
-        return self._get_nontrain_dataloader(self.file_paths[self.slices[1]])
+        return self._get_dataloader(self.val_dataset)
 
     def test_dataloader(self):
-        return self._get_nontrain_dataloader(self.file_paths[self.slices[2]])
+        return self._get_dataloader(self.test_dataset)
 
     def predict_dataloader(self):
-        return self._get_nontrain_dataloader(self.file_paths)
+        return self._get_dataloader(self.predict_dataset)

@@ -9,9 +9,8 @@ paths:
 
 surveys:
    dc2:
-      batch_size: 256
-      num_workers: 8
-      in_memory_dataset: false
+      batch_size: 64
+      num_workers: 4
 
 train:
     trainer:
@@ -20,4 +19,4 @@ train:
             version: null  # override this in command line
         devices: 1
         precision: "32-true"
-    matmul_precision: "high"
+    matmul_precision: "highest"
