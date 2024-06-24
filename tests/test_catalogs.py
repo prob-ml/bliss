@@ -101,7 +101,7 @@ class TestBasicTileAndFullCatalogs:
         assert cat.get_brightest_sources_per_tile(band=2).max_sources == 1
 
     def test_filter_tile_cat_by_flux(self, multi_source_tilecat):
-        cat = multi_source_tilecat.filter_tile_catalog_by_flux(300, 2000)
+        cat = multi_source_tilecat.filter_by_flux(300, 2000)
         assert cat.max_sources == 2
         assert cat["n_sources"].sum() == 3
         assert cat["galaxy_fluxes"].sum() == 2100.0

@@ -6,9 +6,6 @@ defaults:
 
 mode: train
 
-global_setting:
-    min_flux_for_loss: 100  # you need to regenerate split_results after changing this number
-
 variational_factors:
   - _target_: bliss.encoder.variational_dist.BernoulliFactor
     name: n_sources
@@ -27,23 +24,23 @@ variational_factors:
     nll_gating: n_sources
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: star_fluxes
-    dim: 5
+    dim: 6
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
     nll_gating: is_star
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: galaxy_fluxes
-    dim: 5
+    dim: 6
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
     nll_gating: is_galaxy
 
 encoder:
-    _target_: case_studies.dc2_cataloging.utils.encoder.MyEncoder
+    _target_: case_studies.dc2_cataloging.utils.encoder.EncoderAddingSourceMask
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
     tiles_to_crop: 1
-    min_flux_for_loss: ${global_setting.min_flux_for_loss}
+    min_flux_for_loss: 100  # you need to regenerate split_results after changing this number
     min_flux_for_metrics: 100
     optimizer_params:
         lr: 1e-3
@@ -51,18 +48,18 @@ encoder:
         milestones: [32]
         gamma: 0.1
     image_normalizer:
-        _target_: case_studies.dc2_cataloging.utils.image_normalizer.BasicAsinhImageNormalizer
+        _target_: case_studies.dc2_cataloging.utils.image_normalizer.FixedThresholdsAsinhImageNormalizer
         bands: [0, 1, 2, 3, 4, 5]
         include_original: false
         include_background: false
-        concat_psf_params: true
+        concat_psf_params: false
         num_psf_params: 4  # for SDSS, 4 for DC2
         log_transform_stdevs: []
-        use_clahe: true
+        use_clahe: false
         clahe_min_stdev: 200
         asinh_params:
             scale: 1000
-            thresholds: [-0.38, -0.1, -0.03, 0.008, 0.06, 0.18, 0.738]
+            thresholds: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -71,6 +68,7 @@ encoder:
     metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
+        compute_groups: false
         metrics:
           detection_performance:
             _target_: bliss.encoder.metrics.DetectionPerformance
@@ -79,24 +77,53 @@ encoder:
           detection_performance_star:
             _target_: bliss.encoder.metrics.DetectionPerformance
             mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            source_type_filter: "star"
             bin_unit_is_flux: true
+            filter_list:
+              - _target_: bliss.encoder.metrics.SourceTypeFilter
+                filter_type: "star"
           detection_performance_galaxy:
             _target_: bliss.encoder.metrics.DetectionPerformance
             mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            source_type_filter: "galaxy"
             bin_unit_is_flux: true
+            filter_list:
+              - _target_: bliss.encoder.metrics.SourceTypeFilter
+                filter_type: "galaxy"
           source_type_accuracy:
             _target_: bliss.encoder.metrics.SourceTypeAccuracy
             flux_bin_cutoffs: [200, 400, 600, 800, 1000]
           source_type_accuracy_star:
             _target_: bliss.encoder.metrics.SourceTypeAccuracy
             flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-            source_type_filter: "star"
+            filter_list:
+              - _target_: bliss.encoder.metrics.SourceTypeFilter
+                filter_type: "star"
+          detection_performance_one_source_mask:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            bin_unit_is_flux: true
+            filter_list:
+              - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+                filter_source_count: "1m"
+          detection_performance_two_sources_mask:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            bin_unit_is_flux: true
+            filter_list:
+              - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+                filter_source_count: "2m"
+          detection_performance_more_than_two_sources_mask:
+            _target_: bliss.encoder.metrics.DetectionPerformance
+            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+            bin_unit_is_flux: true
+            filter_list:
+              - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+                filter_source_count: "2plus"
           source_type_accuracy_galaxy:
             _target_: bliss.encoder.metrics.SourceTypeAccuracy
             flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-            source_type_filter: "galaxy"
+            filter_list:
+              - _target_: bliss.encoder.metrics.SourceTypeFilter
+                filter_type: "galaxy"
           flux_error:
             _target_: bliss.encoder.metrics.FluxError
             survey_bands: ${encoder.survey_bands}
@@ -111,22 +138,22 @@ encoder:
             tiles_to_crop: 1
             tile_slen: ${simulator.prior.tile_slen}
 
-    do_data_augmentation: true
     compile_model: false
-    double_detect: false
+    double_detect: true
     use_checkerboard: true
 
 train:
     trainer:
         logger:
-            name: DC2_experiments
-            version: DC2_psf_aug_asinh_06-06-1  # change it before running the code
-        strategy:
-          _target_: pytorch_lightning.strategies.DDPStrategy
-          process_group_backend: nccl
-          timeout:
-            _target_: datetime.timedelta
-            seconds: 180000
-        devices: [1, 2]  # change it before running the code
+            name: DC2_cataloging_exp
+            version: exp_06-20-1  # change it before running the code
+        # strategy:
+        #   _target_: pytorch_lightning.strategies.DDPStrategy
+        #   process_group_backend: nccl
+        #   timeout:
+        #     _target_: datetime.timedelta
+        #     seconds: 180000
+        devices: [5]  # change it before running the code
     data_source: ${surveys.dc2}
     pretrained_weights: null
+    seed: "random"

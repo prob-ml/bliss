@@ -1,5 +1,6 @@
 import collections
 import copy
+import logging
 import math
 import multiprocessing
 import pathlib
@@ -30,16 +31,28 @@ def map_nested_dicts(cur_dict, func):
 
 
 class DC2Dataset(Dataset):
-    def __init__(self, split_files_list) -> None:
+    def __init__(self, split_files_list, in_memory: bool) -> None:
         super().__init__()
         self.split_files_list = split_files_list
+        self.in_memory = in_memory
+        self.in_memory_data = []
+        if self.in_memory:
+            logger = logging.getLogger("DC2")
+            logger.warning("WARNING: you are using in-memory DC2; it takes time to load")
+            for split_file in self.split_files_list:
+                with open(split_file, "rb") as sf:
+                    split = torch.load(sf)
+                    self.in_memory_data.append(split)
 
     def __len__(self):
         return len(self.split_files_list)
 
     def __getitem__(self, idx):
-        with open(self.split_files_list[idx], "rb") as split_file:
-            split = torch.load(split_file)
+        if not self.in_memory:
+            with open(self.split_files_list[idx], "rb") as split_file:
+                split = torch.load(split_file)
+        else:
+            split = self.in_memory_data[idx]
         return split
 
 
@@ -58,6 +71,8 @@ class DC2(Survey):
         split_results_dir,
         split_processes_num,
         min_flux_for_loss,
+        subset_fraction: float = None,
+        in_memory_dataset: bool = False,
     ):
         super().__init__()
         self.data_dir = data_dir
@@ -76,6 +91,8 @@ class DC2(Survey):
         self.split_results_dir = pathlib.Path(split_results_dir)
         self.split_processes_num = split_processes_num
         self.min_flux_for_loss = min_flux_for_loss
+        self.subset_fraction = subset_fraction
+        self.in_memory_dataset = in_memory_dataset
 
         self.image_files = None
         self.bg_files = None
@@ -125,7 +142,14 @@ class DC2(Survey):
 
     def prepare_data(self):  # noqa: WPS324
         if self.split_results_dir.exists():
+            logger = logging.getLogger("DC2")
+            warning_msg = "WARNING: split_results already exists at [%s], we directly use it\n"
+            logger.warning(warning_msg, str(self.split_results_dir))
             return None
+
+        logger = logging.getLogger("DC2")
+        warning_msg = "WARNING: can't find split_results, we generate it at [%s]\n"
+        logger.warning(warning_msg, str(self.split_results_dir))
         self.split_results_dir.mkdir(parents=True)
 
         n_image = self._load_image_and_bg_files_list()
@@ -161,14 +185,27 @@ class DC2(Survey):
         self.split_files_list = list(self.split_results_dir.glob("split_*.pt"))
         random.Random(218).shuffle(self.split_files_list)
 
+        if self.subset_fraction is not None:
+            ori_data_len = len(self.split_files_list)
+            self.split_files_list = random.Random(218).sample(
+                self.split_files_list, math.ceil(ori_data_len * self.subset_fraction)
+            )
+
         data_len = len(self.split_files_list)
         train_len = int(data_len * 0.8)
         val_len = int(data_len * 0.1)
 
-        self.train_dataset = DC2Dataset(self.split_files_list[:train_len])
-        self.valid_dataset = DC2Dataset(self.split_files_list[train_len : (train_len + val_len)])
-        self.test_dataset = DC2Dataset(self.split_files_list[(train_len + val_len) :])
-        self.total_dataset = DC2Dataset(self.split_files_list)
+        self.train_dataset = DC2Dataset(
+            self.split_files_list[:train_len], in_memory=self.in_memory_dataset
+        )
+        self.valid_dataset = DC2Dataset(
+            self.split_files_list[train_len : (train_len + val_len)],
+            in_memory=self.in_memory_dataset,
+        )
+        self.test_dataset = DC2Dataset(
+            self.split_files_list[(train_len + val_len) :], in_memory=self.in_memory_dataset
+        )
+        self.total_dataset = DC2Dataset(self.split_files_list, in_memory=False)
 
     def train_dataloader(self):
         return DataLoader(
@@ -213,14 +250,14 @@ class DC2(Survey):
         }
 
 
-def squeeze_tile_dict(tile_dict):
+def squeeze_tile_cat(tile_cat):
     # by calling `.data` here I circumevent the requirement of TileCatalogs that the length
     # of the first dimension is the batch size
-    tile_dict_copy = copy.copy(tile_dict).data
+    tile_dict_copy = copy.copy(tile_cat.data)
     for k, v in tile_dict_copy.items():
         if k != "n_sources":
-            tile_dict_copy[k] = rearrange(v, "1 h w nh nw -> h w nh nw")
-    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "1 h w -> h w")
+            tile_dict_copy[k] = rearrange(v, "1 nth ntw s k -> nth ntw s k")
+    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "1 nth ntw -> nth ntw")
     return tile_dict_copy
 
 
@@ -228,8 +265,8 @@ def unsqueeze_tile_dict(tile_dict):
     tile_dict_copy = copy.copy(tile_dict)
     for k, v in tile_dict_copy.items():
         if k != "n_sources":
-            tile_dict_copy[k] = rearrange(v, "h w nh nw -> 1 h w nh nw")
-    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "h w -> 1 h w")
+            tile_dict_copy[k] = rearrange(v, "nth ntw s k -> 1 nth ntw s k")
+    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "nth ntw -> 1 nth ntw")
     return tile_dict_copy
 
 
@@ -249,12 +286,23 @@ def load_image_and_catalog(
     full_cat, psf_params, match_id = Dc2FullCatalog.from_file(
         cat_path, wcs, height, width, bands, min_flux_for_loss
     )
-    tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile()
-    tile_dict = squeeze_tile_dict(tile_dict)
+    tile_cat = full_cat.to_tile_catalog(4, 5)
+    tile_dict = squeeze_tile_cat(tile_cat)
     tile_dict["star_fluxes"] = tile_dict["star_fluxes"].clamp(min=1e-18)
     tile_dict["galaxy_fluxes"] = tile_dict["galaxy_fluxes"].clamp(min=1e-18)
     tile_dict["galaxy_params"][..., 3] = tile_dict["galaxy_params"][..., 3].clamp(min=1e-18)
     tile_dict["galaxy_params"][..., 5] = tile_dict["galaxy_params"][..., 5].clamp(min=1e-18)
+
+    # add one/two/more_than_two source mask
+    on_mask = rearrange(tile_cat.is_on_mask, "1 nth ntw s -> nth ntw s 1")
+    on_mask_count = on_mask.sum(dim=(-2, -1))
+    tile_dict["one_source_mask"] = rearrange(on_mask_count == 1, "nth ntw -> nth ntw 1 1") & on_mask
+    tile_dict["two_sources_mask"] = (
+        rearrange(on_mask_count == 2, "nth ntw -> nth ntw 1 1") & on_mask
+    )
+    tile_dict["more_than_two_sources_mask"] = (
+        rearrange(on_mask_count > 2, "nth ntw -> nth ntw 1 1") & on_mask
+    )
 
     return {
         "tile_dict": tile_dict,
@@ -273,7 +321,6 @@ def load_image_and_catalog(
 
 
 def generate_split_file(image_index, self_copy):
-    split_count = 0
     result_dict = load_image_and_catalog(
         image_index,
         self_copy["image_files"],
@@ -310,6 +357,9 @@ def generate_split_file(image_index, self_copy):
         "galaxy_params",
         "star_fluxes",
         "star_log_fluxes",
+        "one_source_mask",
+        "two_sources_mask",
+        "more_than_two_sources_mask",
     ]
     for i in param_list:
         split1_tile = torch.stack(torch.split(tile_dict[i], split_lim // 4, dim=0))
@@ -330,6 +380,7 @@ def generate_split_file(image_index, self_copy):
     }
 
     data_splits = [dict(zip(data_split, i)) for i in zip(*data_split.values())]
+    split_count = 0
     for cur_split in data_splits:  # noqa: WPS426
         assert split_count < 1e6 and image_index < 1e5, "too many splits"
         split_file_name = f"split_image_{image_index:04d}_{split_count:05d}.pt"

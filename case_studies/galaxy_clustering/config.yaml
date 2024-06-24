@@ -13,7 +13,7 @@ prior:
     gal_color_model_path: ${simulator.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 56
     n_tiles_w: 56
-    tile_slen: 64
+    tile_slen: 128
     batch_size: 1
     max_sources: 6
     mean_sources: 0.48
@@ -25,39 +25,58 @@ prior:
     star_flux_scale: 1.4137911256506595
 
 cached_simulator:
-    _target_: bliss.simulator.simulated_dataset.CachedSimulatedDataset
-    batch_size: 3
+    _target_: bliss.cached_dataset.CachedSimulatedDataset
+    batch_size: 5
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
-    num_workers: 1
-    cached_data_path: ${paths.root}/case_studies/galaxy_clustering/data/file_data/
-    file_prefix: file_data_
+    num_workers: 2
+    cached_data_path: /data/scratch/kapnadak/data/files
 
 train:
     trainer:
         precision: 32-true
+        accumulate_grad_batches: 10
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
-    name: mem_prob
-    sample_rearrange: "b ht wt d -> b ht wt 1 1"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt"
-    nll_gating: null
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: membership
+      sample_rearrange: "b ht wt -> b ht wt 1 1"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt"
+      nll_gating: null
+
+my_metrics:
+  cluster_membership_acc:
+    _target_: case_studies.galaxy_clustering.encoder.metrics.ClusterMembershipAccuracy
 
 encoder:
     _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
     survey_bands: ["g", "r", "i", "z"]
+    tiles_to_crop: 0
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
         bands: [0, 1, 2, 3]
-        include_original: false
+        include_original: true
+        include_background: false
         concat_psf_params: false
         num_psf_params: 6  # for SDSS, 4 for DC2
         log_transform_stdevs: null
         use_clahe: false
         clahe_min_stdev: null
     metrics:
-        _target_: torchmetrics.MetricCollection
-        _convert_: "partial"
-        metrics:
-            cluster_membership_error:
-                _target_: case_studies.galaxy_clustering.encoder.metrics.ClusterMembershipAccuracy
+      _target_: torchmetrics.MetricCollection
+      _convert_: "partial"
+      metrics: ${my_metrics}
+    var_dist:
+        _target_: case_studies.galaxy_clustering.encoder.variational_dist.GalaxyClusterVariationalDist
+        tile_slen: ${encoder.tile_slen}
+        factors: ${variational_factors}
+    use_checkerboard: false
+
+predict:
+    dataset: ${surveys.des}
+    trainer:
+        _target_: pytorch_lightning.Trainer
+        accelerator: "gpu"
+        precision: ${train.trainer.precision}
+    encoder: ${encoder}
+    weight_save_path: ${paths.output}/version_1/checkpoints/best_encoder.ckpt
+    device: "cuda:0"

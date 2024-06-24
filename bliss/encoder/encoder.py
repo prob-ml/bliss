@@ -11,7 +11,6 @@ from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.convnet import CatalogNet, ContextNet, FeaturesNet
-from bliss.encoder.data_augmentation import augment_batch
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDist
@@ -39,7 +38,6 @@ class Encoder(pl.LightningModule):
         min_flux_for_metrics: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
-        do_data_augmentation: bool = False,
         compile_model: bool = False,
         double_detect: bool = False,
         use_checkerboard: bool = True,
@@ -60,7 +58,6 @@ class Encoder(pl.LightningModule):
             min_flux_for_metrics: filter sources by flux during test
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
-            do_data_augmentation: used for determining whether or not do data augmentation
             compile_model: compile model for potential performance improvements
             double_detect: whether to make up to two detections per tile rather than one
             use_checkerboard: whether to use dependent tiling
@@ -73,8 +70,7 @@ class Encoder(pl.LightningModule):
         self.tiles_to_crop = tiles_to_crop
         self.image_normalizer = image_normalizer
         self.var_dist = var_dist
-        self.mode_metrics = metrics.clone()
-        self.sample_metrics = metrics.clone()
+        self.metrics = metrics
         self.sample_image_renders = sample_image_renders
         self.matcher = matcher
         self.min_flux_for_loss = min_flux_for_loss
@@ -82,7 +78,6 @@ class Encoder(pl.LightningModule):
         assert self.min_flux_for_loss <= self.min_flux_for_metrics, "invalid threshold"
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
-        self.do_data_augmentation = do_data_augmentation
         self.compile_model = compile_model
         self.double_detect = double_detect
         self.use_checkerboard = use_checkerboard
@@ -227,7 +222,7 @@ class Encoder(pl.LightningModule):
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
         # filter out undetectable sources
-        target_cat = target_cat.filter_tile_catalog_by_flux(
+        target_cat = target_cat.filter_by_flux(
             min_flux=self.min_flux_for_loss,
             band=self.reference_band,
         )
@@ -273,37 +268,27 @@ class Encoder(pl.LightningModule):
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
-        if self.do_data_augmentation:
-            augment_batch(batch)
-
         return self._compute_loss(batch, "train")
 
     def update_metrics(self, batch, batch_idx):
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat = target_cat.filter_tile_catalog_by_flux(
-            min_flux=self.min_flux_for_loss,
+        target_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_tile_cat = target_tile_cat.filter_by_flux(
+            min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
         )
-        target_cat = target_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
+        target_cat = target_tile_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
 
-        mode_cat_tile = self.sample(batch, use_mode=True).filter_tile_catalog_by_flux(
+        mode_tile_cat = self.sample(batch, use_mode=True).filter_by_flux(
             min_flux=self.min_flux_for_metrics
         )
-        mode_cat = mode_cat_tile.to_full_catalog()
+        mode_cat = mode_tile_cat.to_full_catalog()
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
-        self.mode_metrics.update(target_cat, mode_cat, matching)
-
-        sample_cat = self.sample(batch, use_mode=False)
-        sample_cat = sample_cat.filter_tile_catalog_by_flux(min_flux=self.min_flux_for_metrics)
-        sample_cat = sample_cat.to_full_catalog()
-
-        matching = self.matcher.match_catalogs(target_cat, sample_cat)
-        self.sample_metrics.update(target_cat, sample_cat, matching)
+        self.metrics.update(target_cat, mode_cat, matching)
 
         self.sample_image_renders.update(
             batch,
             target_cat,
-            mode_cat_tile,
+            mode_tile_cat,
             mode_cat,
             self.current_epoch,
             batch_idx,
@@ -330,8 +315,7 @@ class Encoder(pl.LightningModule):
         metrics.reset()
 
     def on_validation_epoch_end(self):
-        self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
-        self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
+        self.report_metrics(self.metrics, "val/mode", show_epoch=True)
         self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
@@ -340,8 +324,7 @@ class Encoder(pl.LightningModule):
         self.update_metrics(batch, batch_idx)
 
     def on_test_epoch_end(self):
-        self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)
-        self.report_metrics(self.sample_metrics, "test/sample", show_epoch=False)
+        self.report_metrics(self.metrics, "test/mode", show_epoch=False)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
