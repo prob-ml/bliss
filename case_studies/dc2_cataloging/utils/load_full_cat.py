@@ -6,14 +6,14 @@ from hydra.utils import instantiate
 from pytorch_lightning.utilities import move_data_to_device
 
 from bliss.catalog import FullCatalog
-from bliss.surveys.dc2 import DC2Dataset, unsqueeze_tile_dict
+from bliss.surveys.dc2 import DC2DataModule, unsqueeze_tile_dict
 from case_studies.dc2_cataloging.utils.load_lsst import get_lsst_full_cat
 
 
 def get_full_cat(
     notebook_cfg, test_img_idx, model_path, lsst_root_dir, device
 ) -> Tuple[torch.Tensor, FullCatalog, FullCatalog, FullCatalog]:
-    dc2: DC2Dataset = instantiate(notebook_cfg.surveys.dc2)
+    dc2: DC2DataModule = instantiate(notebook_cfg.surveys.dc2)
     test_sample = dc2.get_plotting_sample(test_img_idx)
     cur_image_wcs = test_sample["wcs"]
     cur_image_true_full_catalog = test_sample["full_catalog"]

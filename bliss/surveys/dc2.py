@@ -14,7 +14,7 @@ from astropy.wcs import WCS
 from einops import rearrange
 from pathos import multiprocessing
 
-from bliss.cached_dataset import CachedSimulatedDataset
+from bliss.cached_dataset import CachedSimulatedDataModule
 from bliss.catalog import FullCatalog
 
 
@@ -33,7 +33,7 @@ def split_list(ori_list, sub_list_len):
     return [ori_list[i : (i + sub_list_len)] for i in range(0, len(ori_list), sub_list_len)]
 
 
-class DC2Dataset(CachedSimulatedDataset):
+class DC2DataModule(CachedSimulatedDataModule):
     # why are these bands out of order? why does a test break if they are ordered correctly?
     BANDS = ("g", "i", "r", "u", "y", "z")
 

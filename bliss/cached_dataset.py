@@ -184,7 +184,7 @@ class MyIterableDataset(IterableDataset):
         return iter(self.get_stream(files_subset))
 
 
-class CachedSimulatedDataset(pl.LightningDataModule):
+class CachedSimulatedDataModule(pl.LightningDataModule):
     def __init__(
         self,
         splits: str,
