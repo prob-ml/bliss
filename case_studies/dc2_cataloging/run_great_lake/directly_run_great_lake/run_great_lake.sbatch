@@ -10,7 +10,7 @@
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=a40:2
 #SBATCH --cpus-per-gpu=4
-#SBATCH --mem-per-gpu=32GB
+#SBATCH --mem-per-gpu=64GB
 
 ## wall time hours:minutes:seconds
 #SBATCH --time=24:00:00
