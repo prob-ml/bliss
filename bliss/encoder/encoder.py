@@ -9,7 +9,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
-from bliss.encoder.convnet import CatalogNet
+from bliss.encoder.convnets import CatalogNet, FeaturesNet
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDist
@@ -38,8 +38,7 @@ class Encoder(pl.LightningModule):
         min_flux_for_metrics: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
-        compile_model: bool = False,
-        double_detect: bool = False,
+        use_double_detect: bool = False,
         use_checkerboard: bool = True,
         reference_band: int = 2,
     ):
@@ -58,8 +57,7 @@ class Encoder(pl.LightningModule):
             min_flux_for_metrics: filter sources by flux during test
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
-            compile_model: compile model for potential performance improvements
-            double_detect: whether to make up to two detections per tile rather than one
+            use_double_detect: whether to make up to two detections per tile rather than one
             use_checkerboard: whether to use dependent tiling
             reference_band: band to use for filtering sources
         """
@@ -78,8 +76,7 @@ class Encoder(pl.LightningModule):
         assert self.min_flux_for_loss <= self.min_flux_for_metrics, "invalid threshold"
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
-        self.compile_model = compile_model
-        self.double_detect = double_detect
+        self.use_double_detect = use_double_detect
         self.use_checkerboard = use_checkerboard
         self.reference_band = reference_band
 
@@ -91,23 +88,26 @@ class Encoder(pl.LightningModule):
 
         self.initialize_networks()
 
-        if self.compile_model:
-            self.catalog_net = torch.compile(self.catalog_net)
-
     def initialize_networks(self):
-        """Load the convolutional neural networks that map normalized images to catalog parameters.
-        This method can be overridden to use different network architectures.
-        """
         assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
-        self.catalog_net = CatalogNet(
+
+        num_features = 256
+
+        self.features_net = FeaturesNet(
             n_bands=len(self.image_normalizer.bands),
             ch_per_band=self.image_normalizer.num_channels_per_band(),
-            num_features=256,
-            out_channels=self.var_dist.n_params_per_source,
+            num_features=num_features,
             double_downsample=(self.tile_slen == 4),
         )
+        self.catalog_net = CatalogNet(
+            num_features=num_features,
+            out_channels=self.var_dist.n_params_per_source,
+        )
 
-    def make_context(self, history_cat, history_mask):
+    def make_context(self, history_cat, history_mask, detection2=False):
+        detection_id = (
+            torch.ones_like(history_mask) if detection2 else torch.zeros_like(history_mask)
+        ).unsqueeze(1)
         if history_cat is None:
             # detections (1), flux (1), and locs (2) are the properties we condition on
             masked_history = (
@@ -125,14 +125,14 @@ class Encoder(pl.LightningModule):
             masked_history_lst = [v * history_mask for v in history_encoding_lst]
             masked_history = torch.stack(masked_history_lst, dim=1)
 
-        return torch.concat([history_mask.unsqueeze(1), masked_history], dim=1)
+        return torch.concat([detection_id, history_mask.unsqueeze(1), masked_history], dim=1)
 
     def sample(self, batch, use_mode=True):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
         ht, wt = h // self.tile_slen, w // self.tile_slen
 
         x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.catalog_net.get_features(x)
+        x_features = self.features_net(x)
 
         est_cat = None
         patterns_to_use = (0, 8, 12, 14) if self.use_checkerboard else (0,)
@@ -140,7 +140,7 @@ class Encoder(pl.LightningModule):
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
             context1 = self.make_context(est_cat, mask)
-            x_cat1 = self.catalog_net.detection1_head(x_features, context1)
+            x_cat1 = self.catalog_net(x_features, context1)
             new_est_cat = self.var_dist.sample(x_cat1, use_mode=use_mode)
             new_est_cat["n_sources"] *= 1 - mask
             if est_cat is None:
@@ -149,10 +149,10 @@ class Encoder(pl.LightningModule):
                 est_cat["n_sources"] *= mask
                 est_cat = est_cat.union(new_est_cat, disjoint=True)
 
-        if self.double_detect:
+        if self.use_double_detect:
             no_mask = torch.ones_like(mask)
-            context2 = self.make_context(est_cat, no_mask)
-            x_cat2 = self.catalog_net.detection2_head(x_features, context2)
+            context2 = self.make_context(est_cat, no_mask, detection2=True)
+            x_cat2 = self.catalog_net(x_features, context2)
             est_cat2 = self.var_dist.sample(x_cat2, use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
             # if the first detection is empty for that tile
@@ -184,7 +184,7 @@ class Encoder(pl.LightningModule):
         )
 
         x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.catalog_net.get_features(x)
+        x_features = self.features_net(x)
 
         loss = torch.zeros_like(x_features[:, 0, :, :])
 
@@ -194,7 +194,7 @@ class Encoder(pl.LightningModule):
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
             context1 = self.make_context(target_cat1, mask)
-            x_cat1 = self.catalog_net.detection1_head(x_features, context1)
+            x_cat1 = self.catalog_net(x_features, context1)
             loss11 = self.var_dist.compute_nll(x_cat1, target_cat1)
 
             # could upweight some patterns that are under-represented or limit loss to
@@ -204,10 +204,10 @@ class Encoder(pl.LightningModule):
             if not self.use_checkerboard:
                 break
 
-        if self.double_detect:
+        if self.use_double_detect:
             no_mask = torch.ones_like(mask)
-            context2 = self.make_context(target_cat1, no_mask)
-            x_cat2 = self.catalog_net.detection2_head(x_features, context2)
+            context2 = self.make_context(target_cat1, no_mask, detection2=True)
+            x_cat2 = self.catalog_net(x_features, context2)
             loss22 = self.var_dist.compute_nll(x_cat2, target_cat2)
             loss22 *= target_cat1["n_sources"]
             loss += loss22

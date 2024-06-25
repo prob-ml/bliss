@@ -37,7 +37,7 @@ encoder:
     tile_slen: 2
     min_flux_for_loss: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
     min_flux_for_metrics: 0.9419
-    double_detect: true
+    use_double_detect: true
     tiles_to_crop: 1
     image_normalizer:
         bands: [2]
@@ -99,7 +99,7 @@ generate:
 cached_simulator:
     cached_data_path: /data/scratch/regier/m2_full_cat
     batch_size: 10
-    num_workers: 4
+    num_workers: 8
     train_transforms:
         - _target_: bliss.cached_dataset.FullCatalogToTileTransform
           tile_slen: 2
@@ -114,7 +114,7 @@ train:
     trainer:
         precision: 32
         accumulate_grad_batches: 1
-    seed: random
+    seed: null
 
 predict:
     dataset:

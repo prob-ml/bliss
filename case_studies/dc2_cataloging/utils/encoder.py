@@ -1,6 +1,6 @@
 from einops import rearrange
 
-from bliss.encoder.convnet import CatalogNet
+from bliss.encoder.convnets import CatalogNet
 from bliss.encoder.encoder import Encoder
 from case_studies.dc2_cataloging.utils.dynamic_asinh_convnet import FeaturesNet
 from case_studies.dc2_cataloging.utils.image_normalizer import DynamicAsinhImageNormalizer
@@ -21,11 +21,8 @@ class EncoderForDynamicAsinh(Encoder):
             double_downsample=(self.tile_slen == 4),
         )
         self.catalog_net = CatalogNet(
-            n_bands=len(self.image_normalizer.bands),
-            ch_per_band=self.image_normalizer.num_channels_per_band(),
             num_features=256,
             out_channels=self.var_dist.n_params_per_source,
-            double_downsample=(self.tile_slen == 4),
         )
 
 

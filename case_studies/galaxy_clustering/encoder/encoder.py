@@ -1,7 +1,7 @@
 import torch
 
 from bliss.catalog import BaseTileCatalog
-from bliss.encoder.convnet import CatalogNet
+from bliss.encoder.convnets import CatalogNet
 from bliss.encoder.encoder import Encoder
 from case_studies.galaxy_clustering.encoder.convnet import GalaxyClusterFeaturesNet
 
@@ -55,7 +55,7 @@ class GalaxyClusterEncoder(Encoder):
             white_cat = self.var_dist.sample(x_cat_white, use_mode=use_mode)
             est_cat = self.interleave_catalogs(marginal_cat, white_cat, white_history_mask)
 
-        if self.double_detect:
+        if self.use_double_detect:
             x_cat_second = self.second_net(x_features)
             second_cat = self.var_dist.sample(x_cat_second, use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
