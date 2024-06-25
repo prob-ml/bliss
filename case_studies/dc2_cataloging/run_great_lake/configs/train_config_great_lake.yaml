@@ -9,8 +9,8 @@ paths:
 
 surveys:
    dc2:
-      batch_size: 64
-      num_workers: 4
+      batch_size: 256
+      num_workers: 8
 
 train:
     trainer:
@@ -20,3 +20,4 @@ train:
         devices: 1
         precision: "32-true"
     matmul_precision: "highest"
+    seed: null  # override this in command line

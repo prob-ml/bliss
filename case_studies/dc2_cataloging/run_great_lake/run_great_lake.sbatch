@@ -10,10 +10,10 @@
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=a40:1
 #SBATCH --cpus-per-gpu=16
-#SBATCH --mem-per-gpu=32GB
+#SBATCH --mem-per-gpu=128GB
 
 ## wall time hours:minutes:seconds
-#SBATCH --time=16:00:00
+#SBATCH --time=24:00:00
 
 ###   Load software modules
 
@@ -25,7 +25,10 @@ module list
 echo "running on: $SLURM_JOB_NODELIST"
 
 EXP_POSTFIX=$1
-echo "experiment postfix is: $EXP_POSTFIX"
+echo "experiment postfix is: ${EXP_POSTFIX}"
+
+USER_SEED=$2
+echo "seed is ${USER_SEED}"
 
 echo "go to bliss"
 cd ~/bliss/
@@ -34,4 +37,5 @@ echo "run the bliss"
 poetry run bliss \
  -cp ~/bliss/case_studies/dc2_cataloging \
  -cn train_config_great_lake \
-  train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX}
+  train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX} \
+  train.seed=${USER_SEED}

@@ -146,15 +146,9 @@ train:
     trainer:
         logger:
             name: DC2_cataloging_exp
-            version: exp_06-23-1  # change it before running the code
-        # strategy:
-        #   _target_: pytorch_lightning.strategies.DDPStrategy
-        #   process_group_backend: nccl
-        #   timeout:
-        #     _target_: datetime.timedelta
-        #     seconds: 180000
-        devices: [6]  # change it before running the code
+            version: exp_06-24-3  # change it before running the code
+        devices: [7]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
     data_source: ${surveys.dc2}
     pretrained_weights: null
-    seed: 123123
+    seed: 5252

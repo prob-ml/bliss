@@ -393,3 +393,13 @@ processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.
 2. run with double detection
 
 3. run with double detection
+
+(hereafter, always use double detection)
+
+### 06-24
+
+1. train with the new DC2
+
+2. train with the new DC2
+
+3. train with the new DC2
