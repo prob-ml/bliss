@@ -7,9 +7,9 @@
 #SBATCH --partition=spgpu
 
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=2
-#SBATCH --gpus-per-node=a40:2
-#SBATCH --cpus-per-gpu=4
+#SBATCH --ntasks-per-node=1
+#SBATCH --gpus-per-node=a40:1
+#SBATCH --cpus-per-gpu=8
 #SBATCH --mem-per-gpu=64GB
 
 ## wall time hours:minutes:seconds
