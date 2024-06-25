@@ -1,6 +1,3 @@
- 
-
-
 from astropy.io import fits
 import matplotlib.pyplot as plt
 
@@ -11,10 +8,13 @@ import matplotlib.pyplot as plt
 
 from astropy.io import fits
 from matplotlib.colors import LogNorm
+import sys
 
-image_file = "output_yaml/galsim_realgalaxy_004.fits"
+i = sys.argv[1]
+output_dir = sys.argv[2]
+
+image_file = f"{output_dir}/image{i}.fits"
 image_data = fits.getdata(image_file)
-# print(image_data[0].shape)
 c = plt.imshow(image_data)
 plt.colorbar(c)
-plt.savefig("output_yaml/galsim_realgalaxy_004.png")
+plt.savefig(f"{output_dir}/image{i}.png")

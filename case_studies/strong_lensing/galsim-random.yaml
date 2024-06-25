@@ -1,24 +1,32 @@
 
 variables :
   output_directory : data/images
+  n1 : 2.5
+  half_light_radius : 2
+  flux1 : .3
+  n2 : 1.5
+  scale_radius : 1
+  flux2 : .7
+  q : .7
+  beta : 23
 
 # Define the galaxy profile
 gal :
     type : Sum
     items :
         -   type : Sersic
-            n : { type: Random, min: 2.5, max: 4.5 }
-            half_light_radius : {type: Random, min: 1, max: 3}
-            flux : {type: Random, min: 0.2, max: 0.4}
+            n : '@variables.n1'
+            half_light_radius : '@variables.half_light_radius'
+            flux : '@variables.flux1'
         -   type : Sersic
-            n : {type: Random, min: .5, max: 2.5}
-            scale_radius : {type: Random, min: 0.5, max: 1.5}
-            flux : {type: Random, min: 0.6, max: 0.8}
+            n : '@variables.n2'
+            scale_radius : '@variables.scale_radius'
+            flux : '@variables.flux2'
   
     shear :
         type : QBeta
-        q : {type: Random, min: 0.5, max: 0.9}
-        beta : {type: Random}
+        q : '@variables.q'
+        beta : '@variables.beta'
 
     flux : 1.e6
 
@@ -46,7 +54,6 @@ psf :
             coma2 : {type: Random, min: -0.3, max: 0.3}
             obscuration : {type: Random, min: 0.2, max: 0.4}
 
-
 # Define some other information about the images
 image :
     pixel_scale : 0.23
@@ -63,12 +70,10 @@ image :
         sky_level : 2.5e4
         gain : 1.7
         read_noise : 0.3
-    random_seed : 5687  # Use the index as the seed for reproducibility
+    random_seed : 5687  
 
-# Define the name and format of the output file
 output :
     dir : '@variables.output_directory'
     file_name : galsim.fits
     psf :
         file_name : galsim_epsf.fits
-

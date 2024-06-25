@@ -13,7 +13,10 @@ import sys
 import glob
 
 
-input_fits_files = glob.glob(sys.argv[1] + "/lensed_*.fits") + glob.glob(sys.argv[1] + "/galsim_iter*.fits")
+
+input_fits_files = glob.glob(sys.argv[1] + "/galsim_iter*.fits")
+
+
 print(input_fits_files)
 # Create a list to hold the HDUs
 hdulist = []
@@ -35,8 +38,4 @@ hdul.writeto(output_fits_file, overwrite=True)
 
 print(f'Combined FITS file created: {output_fits_file}')
 
-# Verify the combined FITS file
-with fits.open(output_fits_file) as hdul:
-    hdul.info()
-    print(len(hdulist))
 

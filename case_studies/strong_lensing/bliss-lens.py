@@ -3,6 +3,9 @@ import galsim
 import torch
 import sys
 
+import random
+
+
 
 def sie_deflection(x, y, lens_params):
         """
@@ -80,7 +83,6 @@ def lens_galsim(unlensed_image, lens_params):
 
 
 
-
 image_path = sys.argv[1]
 image = galsim.fits.read(image_path)
 image = image.array
@@ -95,26 +97,11 @@ e2 = np.random.uniform(0.1, 0.7) # Ellipticity component e2
 lens_params = torch.tensor([theta_E, center_x, center_y, e1, e2])
 
 lensed_img = lens_galsim(image, lens_params)
-# print(lensed_img.shape)
-# print(image.shape)
-
 
 
 output_dir = sys.argv[2]
-lensed_image_path = sys.argv[3]
 lensed_image = galsim.ImageF(lensed_img)
-lensed_image.write(output_dir + '/lensed_image.fits')
+lensed_image.write(output_dir + '/galsim.fits')
 
-
-from astropy.io import fits
-import matplotlib.pyplot as plt
-
-image_file = output_dir + "/lensed_image.fits"
-image_data = fits.getdata(image_file)
-
-
-c = plt.imshow(image_data)
-plt.colorbar(c)
-plt.savefig(lensed_image_path)
-
-
+lens_params = [theta_E, center_x, center_y, e1, e2]
+print(' '.join(map(str, lens_params)))
