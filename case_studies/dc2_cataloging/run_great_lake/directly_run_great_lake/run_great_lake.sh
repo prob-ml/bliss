@@ -4,4 +4,4 @@ sbatch --job-name=great_lake_exp_06-25-2 \
        run_great_lake.sbatch \
        exp_06-25-2 \
        4242 \
-       -1
+       2
