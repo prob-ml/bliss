@@ -33,6 +33,12 @@ echo "seed is ${USER_SEED}"
 GPUS_WE_USE=$3
 echo "use ${GPUS_WE_USE} GPUs"
 
+echo "prepare data"
+mkdir -p /tmpssd/pduan/dc2local
+rsync -av --info=progress2 \
+ /scratch/regier_root/regier0/pduan/dc2local/dc2_cached_data \
+ /tmpssd/pduan/dc2local/
+
 echo "go to bliss"
 cd ~/bliss/
 
