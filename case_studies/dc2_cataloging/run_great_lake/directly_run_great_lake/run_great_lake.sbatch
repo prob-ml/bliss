@@ -7,7 +7,7 @@
 #SBATCH --partition=spgpu
 
 #SBATCH --nodes=1
-#SBATCH --ntasks=2
+#SBATCH --ntasks-per-node=2
 #SBATCH --gpus-per-node=a40:2
 #SBATCH --cpus-per-gpu=4
 #SBATCH --mem-per-gpu=64GB
