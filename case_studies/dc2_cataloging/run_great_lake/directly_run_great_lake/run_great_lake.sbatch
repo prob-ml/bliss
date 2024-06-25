@@ -8,9 +8,9 @@
 
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-node=a40:1
-#SBATCH --cpus-per-gpu=16
-#SBATCH --mem-per-gpu=128GB
+#SBATCH --gpus-per-node=a40:2
+#SBATCH --cpus-per-gpu=4
+#SBATCH --mem-per-gpu=32GB
 
 ## wall time hours:minutes:seconds
 #SBATCH --time=24:00:00
@@ -30,6 +30,9 @@ echo "experiment postfix is: ${EXP_POSTFIX}"
 USER_SEED=$2
 echo "seed is ${USER_SEED}"
 
+GPUS_WE_USE=$3
+echo "use ${GPUS_WE_USE} GPUs"
+
 echo "go to bliss"
 cd ~/bliss/
 
@@ -38,4 +41,5 @@ poetry run bliss \
  -cp ~/bliss/case_studies/dc2_cataloging \
  -cn train_config_great_lake \
   train.trainer.logger.version=great_lake_exp_${EXP_POSTFIX} \
-  train.seed=${USER_SEED}
+  train.seed=${USER_SEED} \
+  train.trainer.devices=${GPUS_WE_USE}

@@ -244,6 +244,9 @@ surveys:
         cached_data_path: ${paths.output}/dc2_cached_data
         train_transforms:
             - _target_: bliss.data_augmentation.RotateFlipTransform
+            - _target_: bliss.data_augmentation.RandomShiftTransform
+              tile_slen: 4
+              max_sources_per_tile: 5
         nontrain_transforms: []
 
 
