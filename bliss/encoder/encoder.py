@@ -287,7 +287,7 @@ class Encoder(pl.LightningModule):
 
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
-        self.report_metrics(self.sample_metrics, "val/mode", show_epoch=True)
+        self.report_metrics(self.sample_metrics, "sample/mode", show_epoch=True)
         self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
