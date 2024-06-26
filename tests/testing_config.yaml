@@ -24,7 +24,7 @@ simulator:
 
 cached_simulator:
     num_workers: 0
-    splits: 0:34/34:67/67:100  # train/val/test splits as percent ranges
+    splits: 0.34/0.33/0.33  # train/val/test splits as proportions
     batch_size: 1
 
 surveys:
@@ -36,12 +36,13 @@ surveys:
         load_image_data: true
     dc2:
         dc2_image_dir: ${paths.dc2}/dc2_multiband/
-        cached_data_path: ${paths.output}/dc2_tmp_cached_data
+        split_file_dir: ${paths.output}/dc2_tmp_cached_data
         n_image_split: 5
         image_lim: [800, 800]
         batch_size: 4
         prepare_data_processes_num: 1
         data_in_one_cached_file: 1
+        num_workers: 0
 
 encoder:
     metrics:
@@ -89,6 +90,8 @@ train:
         devices: 1
         max_epochs: 1
     testing: true
+    limit_train_batches: 1
+    limit_val_batches: 1
     data_source: ${simulator}
 
 predict:
