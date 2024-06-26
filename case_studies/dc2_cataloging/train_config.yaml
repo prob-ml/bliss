@@ -146,9 +146,9 @@ train:
     trainer:
         logger:
             name: DC2_cataloging_exp
-            version: exp_06-24-3  # change it before running the code
-        devices: [7]  # change it before running the code
+            version: exp_06-26-1  # change it before running the code
+        devices: [0]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
     data_source: ${surveys.dc2}
     pretrained_weights: null
-    seed: 5252
+    seed: 6262

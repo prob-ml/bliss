@@ -450,6 +450,13 @@ class SourceTypeAccuracy(FilterMetric):
             f"classification_acc{self.postfix_str}": acc,
         }
 
+    def get_internal_states(self):
+        return {
+            f"n_matches{self.postfix_str}": self.n_matches,
+            f"gal_tp{self.postfix_str}": self.gal_tp,
+            f"star_tp{self.postfix_str}": self.star_tp,
+        }
+
 
 class FluxError(Metric):
     def __init__(self, survey_bands):

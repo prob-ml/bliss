@@ -413,3 +413,5 @@ processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.
 3. train with new DC2 and new data aug (both transforms) (on Great Lake)
 
 4. train with new DC2 and new data aug (both transforms) (on Great Lake)
+
+5. train with new DC2 (no transforms)
