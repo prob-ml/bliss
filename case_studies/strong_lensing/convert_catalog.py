@@ -71,7 +71,7 @@ col_dtypes = [
 
 # Read the data from the text file
 data = []
-with open("data/catalog.txt", "r") as file:
+with open("data/catalog.txt", "r", encoding="utf-8") as file:
     for line in file:
         # Remove any quotes from string fields and split the line by comma
         values = line.replace("'", "").split(", ")

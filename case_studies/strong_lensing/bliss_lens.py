@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 
-def sie_deflection(x, y, lens_params):
+def sie_deflection(x_coord, y_coord, lens_params):
     """Calculate the deflection angles for a Singular Isothermal Ellipsoid (SIE) lens model.
 
     Args:
@@ -23,78 +23,74 @@ def sie_deflection(x, y, lens_params):
 
     Adopted from: Adam S. Bolton, U of Utah, 2009.
     """
-    b, center_x, center_y, e1, e2 = lens_params.cpu().numpy()
-    ell = np.sqrt(e1**2 + e2**2)
-    q = (1 - ell) / (1 + ell)
-    phirad = np.arctan(e2 / e1)
+    b_rad, center_x, center_y, e_1, e_2 = lens_params.cpu().numpy()
+    ell = np.sqrt(e_1**2 + e_2**2)
+    q_val = (1 - ell) / (1 + ell)
+    phirad = np.arctan(e_2 / e_1)
 
     # Go into shifted coordinats of the potential:
-    xsie = (x - center_x) * np.cos(phirad) + (y - center_y) * np.sin(phirad)
-    ysie = (y - center_y) * np.cos(phirad) - (x - center_x) * np.sin(phirad)
+    xsie = (x_coord - center_x) * np.cos(phirad) + (y_coord - center_y) * np.sin(phirad)
+    ysie = (y_coord - center_y) * np.cos(phirad) - (x_coord - center_x) * np.sin(phirad)
 
     # Compute potential gradient in the transformed system:
-    r_ell = np.sqrt(q * xsie**2 + ysie**2 / q)
-    qfact = np.sqrt(1.0 / q - q)
+    r_ell = np.sqrt(q_val * xsie**2 + ysie**2 / q_val)
+    qfact = np.sqrt(1.0 / q_val - q_val)
 
     # (r_ell == 0) terms prevent divide-by-zero problems
     eps = 0.001
     if qfact >= eps:
-        xtg = (b / qfact) * np.arctan(qfact * xsie / (r_ell + (r_ell == 0)))
-        ytg = (b / qfact) * np.arctanh(qfact * ysie / (r_ell + (r_ell == 0)))
+        xtg = (b_rad / qfact) * np.arctan(qfact * xsie / (r_ell + (r_ell == 0)))
+        ytg = (b_rad / qfact) * np.arctanh(qfact * ysie / (r_ell + (r_ell == 0)))
     else:
-        xtg = b * xsie / (r_ell + (r_ell == 0))
-        ytg = b * ysie / (r_ell + (r_ell == 0))
+        xtg = b_rad * xsie / (r_ell + (r_ell == 0))
+        ytg = b_rad * ysie / (r_ell + (r_ell == 0))
 
     # Transform back to un-rotated system:
-    xg = xtg * np.cos(phirad) - ytg * np.sin(phirad)
-    yg = ytg * np.cos(phirad) + xtg * np.sin(phirad)
-    return (xg, yg)
+    x_g = xtg * np.cos(phirad) - ytg * np.sin(phirad)
+    y_g = ytg * np.cos(phirad) + xtg * np.sin(phirad)
+    return (x_g, y_g)
 
 
-def bilinear_interpolate_numpy(im, x, y):
-    x0 = np.floor(x).astype(int)
-    x1 = x0 + 1
-    y0 = np.floor(y).astype(int)
-    y1 = y0 + 1
+def bilinear_interpolate_numpy(i_m, x_coord, y_coord):
+    x_0 = np.floor(x_coord).astype(int)
+    x_1 = x_0 + 1
+    y_0 = np.floor(y_coord).astype(int)
+    y_1 = y_0 + 1
 
-    x0 = np.clip(x0, 0, im.shape[1] - 1)
-    x1 = np.clip(x1, 0, im.shape[1] - 1)
-    y0 = np.clip(y0, 0, im.shape[0] - 1)
-    y1 = np.clip(y1, 0, im.shape[0] - 1)
+    x_0 = np.clip(x_0, 0, i_m.shape[1] - 1)
+    x_1 = np.clip(x_1, 0, i_m.shape[1] - 1)
+    y_0 = np.clip(y_0, 0, i_m.shape[0] - 1)
+    y_1 = np.clip(y_1, 0, i_m.shape[0] - 1)
 
-    i_a = im[y0, x0]
-    i_b = im[y1, x0]
-    i_c = im[y0, x1]
-    i_d = im[y1, x1]
+    i_a = i_m[y_0, x_0]
+    i_b = i_m[y_1, x_0]
+    i_c = i_m[y_0, x_1]
+    i_d = i_m[y_1, x_1]
 
-    wa = (x1 - x) * (y1 - y)
-    wb = (x1 - x) * (y - y0)
-    wc = (x - x0) * (y1 - y)
-    wd = (x - x0) * (y - y0)
+    w_a = (x_1 - x_coord) * (y_1 - y_coord)
+    w_b = (x_1 - x_coord) * (y_coord - y_0)
+    w_c = (x_coord - x_0) * (y_1 - y_coord)
+    w_d = (x_coord - x_0) * (y_coord - y_0)
 
-    return (i_a.T * wa).T + (i_b.T * wb).T + (i_c.T * wc).T + (i_d.T * wd).T
+    return (i_a.T * w_a).T + (i_b.T * w_b).T + (i_c.T * w_c).T + (i_d.T * w_d).T
 
 
 def lens_galsim(unlensed_image, lens_params):
-    nx, ny = unlensed_image.shape
-    x_range = [-nx // 2, nx // 2]
-    y_range = [-ny // 2, ny // 2]
-    x = (x_range[1] - x_range[0]) * np.outer(np.ones(ny), np.arange(nx)) / float(nx - 1) + x_range[
-        0
-    ]
-    y = (y_range[1] - y_range[0]) * np.outer(np.arange(ny), np.ones(nx)) / float(ny - 1) + y_range[
-        0
-    ]
+    n_x, n_y = unlensed_image.shape
+    x_range = [-n_x // 2, n_x // 2]
+    y_range = [-n_y // 2, n_y // 2]
+    x_coord = (x_range[1] - x_range[0]) * np.outer(np.ones(n_y), np.arange(n_x)) / float(n_x - 1) + x_range[0]
+    y_coord = (y_range[1] - y_range[0]) * np.outer(np.arange(n_y), np.ones(n_x)) / float(n_y - 1) + y_range[0]
 
-    (xg, yg) = sie_deflection(x, y, lens_params)
+    (x_g, y_g) = sie_deflection(x_coord, y_coord, lens_params)
     lensed_image = bilinear_interpolate_numpy(
-        unlensed_image, (x - xg) + nx // 2, (y - yg) + ny // 2
+        unlensed_image, (x_coord - x_g) + n_x // 2, (y_coord - y_g) + n_y // 2
     )
     return lensed_image.astype(unlensed_image.dtype)
 
 
-image_path = sys.argv[1]
-image = galsim.fits.read(image_path)
+IMAGE_PATH = sys.argv[1]
+image = galsim.fits.read(IMAGE_PATH)
 image = image.array
 
 theta_e = np.random.uniform(10, 20)  # Einstein radius
@@ -104,7 +100,7 @@ e1 = np.random.uniform(0.1, 0.7)  # Ellipticity component e1
 e2 = np.random.uniform(0.1, 0.7)  # Ellipticity component e2
 
 # Initialize lens_params as a PyTorch tensor
-lens_params = torch.tensor([theta_e, center_x, center_y, e1, e2])
+lens_params = torch.tensor([theta_e, center_x, center_y, e1, e2])  # pylint: disable=E1101
 
 lensed_img = lens_galsim(image, lens_params)
 

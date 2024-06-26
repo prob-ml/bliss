@@ -12,11 +12,11 @@ q = random.uniform(0.5, 0.9)
 
 beta = random.randint(0, 90)
 
-size = int(sys.argv[1])
+SIZE = int(sys.argv[1])
 
 # X-Y coordinates in final image
-x = random.randint(0, size)
-y = random.randint(0, size)
+x = random.randint(0, SIZE)
+y = random.randint(0, SIZE)
 
 
 gal_params = [n1, half_light_radius, flux1, n2, scale_radius, flux2, q, beta, x, y]
