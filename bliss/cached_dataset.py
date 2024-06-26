@@ -7,8 +7,10 @@ import pytorch_lightning as pl
 import torch
 from torchdata.dataloader2 import (
     DataLoader2,
+    DistributedReadingService,
     InProcessReadingService,
     MultiProcessingReadingService,
+    SequentialReadingService,
 )
 from torchdata.datapipes import functional_datapipe
 from torchdata.datapipes.iter import FileLister, IterableWrapper, IterDataPipe
@@ -182,9 +184,15 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.test_pipe = None
 
         if self.num_workers == 0:
-            self.reading_service = InProcessReadingService()
+            mp_rs = InProcessReadingService()
         else:
-            self.reading_service = MultiProcessingReadingService(num_workers=self.num_workers)
+            mp_rs = MultiProcessingReadingService(num_workers=self.num_workers)
+
+        if torch.cuda.device_count() > 1:
+            dist_rs = DistributedReadingService()
+            self.reading_service = SequentialReadingService(dist_rs, mp_rs)
+        else:
+            self.reading_service = mp_rs
 
     def setup(self, stage=None):
         self.all_pipe = FileLister([self.data_dir]).filter(filter_fn=lambda f: f.endswith(".pt"))
