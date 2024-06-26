@@ -4,7 +4,6 @@ import torch
 from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.global_settings import GlobalSettings
 from bliss.main import train
 
 
@@ -143,14 +142,13 @@ class TestDC2:
         dc2.prepare_data()
         dc2.setup(stage="fit")
 
-        # temporarily set global settings
-        GlobalSettings.seed_in_this_program = 0
-        GlobalSettings.current_encoder_epoch = 0
+        train_data_points = list(dc2.train_dataloader())
 
-        dc2 = list(dc2.train_dataloader())
+        assert train_data_points[0]["images"].shape[1] == 6
 
-        assert dc2[0]["images"].shape[1] == 6
-        assert len(dc2) == 5
+        # the precise number of batches can vary based on the number of workers,
+        # but the number of training data points should always be the same
+        assert sum(x["images"].size(0) for x in train_data_points) == 19
 
         params = (
             "locs",
@@ -163,14 +161,10 @@ class TestDC2:
         )
 
         for k in params:
-            assert isinstance(dc2[0]["tile_catalog"][k], torch.Tensor)
+            assert isinstance(train_data_points[0]["tile_catalog"][k], torch.Tensor)
 
         for k in ("images", "background", "psf_params"):
-            assert isinstance(dc2[0][k], torch.Tensor)
-
-        # reset global settings to None
-        GlobalSettings.seed_in_this_program = None
-        GlobalSettings.current_encoder_epoch = None
+            assert isinstance(train_data_points[0][k], torch.Tensor)
 
     def test_train_on_dc2(self, cfg):
         train_dc2_cfg = cfg.copy()
