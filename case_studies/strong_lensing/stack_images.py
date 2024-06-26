@@ -13,7 +13,6 @@ import sys
 import glob
 
 
-
 input_fits_files = glob.glob(sys.argv[1] + "/galsim_iter*.fits")
 
 
@@ -32,10 +31,8 @@ for file in input_fits_files[1:]:
     hdulist.append(image_hdu)
 
 # Write the combined HDUs to a new FITS file
-output_fits_file = 'data/combined_images.fits'
+output_fits_file = "data/combined_images.fits"
 hdul = fits.HDUList(hdulist)
 hdul.writeto(output_fits_file, overwrite=True)
 
-print(f'Combined FITS file created: {output_fits_file}')
-
-
+print(f"Combined FITS file created: {output_fits_file}")
