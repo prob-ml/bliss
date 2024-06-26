@@ -165,6 +165,8 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         batch_size: int = 32,
         num_workers: int = 0,
         convert_full_cat=False,
+        use_rotate_and_flip=True,
+        use_random_shift=False,
         tile_slen=None,
         max_sources=None,
     ):
@@ -174,9 +176,11 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.split_seed = split_seed
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.convert_full_cat = convert_full_cat
+        self.use_rotate_and_flip = use_rotate_and_flip
+        self.use_random_shift = use_random_shift
         self.tile_slen = tile_slen
         self.max_sources_per_tile = max_sources
-        self.convert_full_cat = convert_full_cat
 
         self.all_pipe = None
         self.train_pipe = None
@@ -206,11 +210,17 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         )
 
     def train_dataloader(self) -> DataLoader2:
-        pipe = self.train_pipe.shuffle().sharding_filter()  # shuffle files
-        pipe = pipe.parse_pt(shuffle=True)
+        pipe = self.train_pipe.shuffle().sharding_filter().parse_pt(shuffle=True)
+
         if self.convert_full_cat:
             pipe = pipe.full_catalog_to_tile(self.tile_slen, self.max_sources_per_tile)
-        pipe = pipe.rotate_and_flip()  # .random_shift(self.tile_slen, self.max_sources_per_tile)
+
+        if self.use_rotate_and_flip:
+            pipe = pipe.rotate_and_flip()
+
+        if self.use_random_shift:
+            pipe = pipe.random_shift(self.tile_slen, self.max_sources_per_tile)
+
         pipe = pipe.batch(self.batch_size).collate()
         return DataLoader2(pipe, reading_service=self.reading_service)
 
