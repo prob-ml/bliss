@@ -9,11 +9,11 @@ from pyvo.dal import sia
 
 from case_studies.galaxy_clustering import cluster_utils as utils
 
-DES_DATAPATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data/DES_images"
+DES_DATAPATH = os.environ["HOME"] + "/bliss/case_studies/galaxy_clustering/data/DES_images"
 if not os.path.exists(DES_DATAPATH):
     os.makedirs(DES_DATAPATH)
 
-DATASET = "des_dr2"
+DATASET = "des_dr1"
 DEF_ACCESS_URL = "https://datalab.noirlab.edu/sia/" + DATASET
 svc = sia.SIAService(DEF_ACCESS_URL)
 
@@ -23,11 +23,11 @@ def compute_fov(m500, z):
     r200 = utils.m200_to_r200(m200, z)
     da = utils.angular_diameter_distance(z)
     fov = (r200 / da) * (360 / (2 * np.pi))
-    return 2 * fov.value
+    return fov.value
 
 
-def download_image(m500, z, ra, dec, band):
-    fov = compute_fov(m500, z)
+def download_image(m500, z, ra, dec, band, fov_scale=4):
+    fov = fov_scale * compute_fov(m500, z)
     dec_radian = dec * np.pi / 180
     img_table = svc.search((ra, dec), (fov / np.cos(dec_radian), fov), verbosity=2).to_table()
     sel = (

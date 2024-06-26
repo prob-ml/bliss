@@ -17,8 +17,8 @@ from bliss.align import align, crop_to_mult16
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
+from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.survey import Survey
-from bliss.utils.download_utils import download_file_to_dst
 
 SDSSFields = List[TypedDict("SDSSField", {"run": int, "camcol": int, "fields": List[int]})]
 

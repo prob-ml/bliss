@@ -1,9 +1,9 @@
 import collections
 import copy
+import logging
 import math
-import multiprocessing
 import pathlib
-import random
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -12,10 +12,10 @@ from astropy.io import fits
 from astropy.io.fits import Header
 from astropy.wcs import WCS
 from einops import rearrange
-from torch.utils.data import DataLoader, Dataset
+from pathos import multiprocessing
 
+from bliss.cached_dataset import CachedSimulatedDataModule
 from bliss.catalog import FullCatalog
-from bliss.surveys.survey import Survey
 
 
 def from_wcs_header_str_to_wcs(wcs_header_str: str):
@@ -29,78 +29,53 @@ def map_nested_dicts(cur_dict, func):
     return func(cur_dict)
 
 
-class DC2Dataset(Dataset):
-    def __init__(self, split_files_list) -> None:
-        super().__init__()
-        self.split_files_list = split_files_list
-
-    def __len__(self):
-        return len(self.split_files_list)
-
-    def __getitem__(self, idx):
-        with open(self.split_files_list[idx], "rb") as split_file:
-            split = torch.load(split_file)
-        return split
+def split_list(ori_list, sub_list_len):
+    return [ori_list[i : (i + sub_list_len)] for i in range(0, len(ori_list), sub_list_len)]
 
 
-class DC2(Survey):
+class DC2DataModule(CachedSimulatedDataModule):
     # why are these bands out of order? why does a test break if they are ordered correctly?
     BANDS = ("g", "i", "r", "u", "y", "z")
 
     def __init__(
         self,
-        data_dir,
-        cat_path,
-        batch_size,
-        n_split,
-        image_lim,
-        num_workers,
-        split_results_dir,
-        split_processes_num,
-        min_flux_for_loss,
+        dc2_image_dir: str,
+        dc2_cat_path: str,
+        image_lim: List[int],
+        n_image_split: int,
+        min_flux_for_loss: int,
+        prepare_data_processes_num: int,
+        data_in_one_cached_file: int,
+        splits: str,
+        batch_size: int,
+        num_workers: int,
+        cached_data_path: str,
+        train_transforms: List,
+        nontrain_transforms: List,
     ):
-        super().__init__()
-        self.data_dir = data_dir
-        self.cat_path = cat_path
-        self.batch_size = batch_size
+        super().__init__(
+            splits,
+            batch_size,
+            num_workers,
+            cached_data_path,
+            train_transforms,
+            nontrain_transforms,
+        )
+
+        self.dc2_image_dir = dc2_image_dir
+        self.dc2_cat_path = dc2_cat_path
+
+        self.image_lim = image_lim
+        self.n_image_split = n_image_split
+        self.min_flux_for_loss = min_flux_for_loss
+        self.prepare_data_processes_num = prepare_data_processes_num
+        self.data_in_one_cached_file = data_in_one_cached_file
+
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
-        self.split_files_list = None
-        self.train_dataset = None
-        self.valid_dataset = None
-        self.test_dataset = None
-        self.total_dataset = None
-        self.n_split = n_split
-        self.image_lim = image_lim
-        self.num_workers = num_workers
-        self.split_results_dir = pathlib.Path(split_results_dir)
-        self.split_processes_num = split_processes_num
-        self.min_flux_for_loss = min_flux_for_loss
 
-        self.image_files = None
-        self.bg_files = None
-
-        self._predict_batch = None
-        self._image_ids = None
-
-    def __len__(self):
-        return len(self.split_files_list)
-
-    def __getitem__(self, idx):
-        return self.total_dataset[idx]
-
-    def image_id(self, idx: int):
-        return self.split_files_list[idx].name
-
-    def idx(self, image_id: str) -> int:
-        if self._image_ids is None:
-            self._image_ids = [split_file.name for split_file in self.split_files_list]
-        return self._image_ids.index(image_id)
-
-    def image_ids(self):
-        if self._image_ids is None:
-            self._image_ids = [split_file.name for split_file in self.split_files_list]
-        return self._image_ids
+        self._image_files = None
+        self._bg_files = None
 
     def _load_image_and_bg_files_list(self):
         img_pattern = "**/*/calexp*.fits"
@@ -109,7 +84,7 @@ class DC2(Survey):
         bg_files = []
 
         for band in self.bands:
-            band_path = self.data_dir + str(band)
+            band_path = self.dc2_image_dir + str(band)
             img_file_list = list(pathlib.Path(band_path).glob(img_pattern))
             bg_file_list = list(pathlib.Path(band_path).glob(bg_pattern))
 
@@ -118,88 +93,66 @@ class DC2(Survey):
         n_image = len(bg_files[0])
 
         # assign state only in main process
-        self.image_files = image_files
-        self.bg_files = bg_files
+        self._image_files = image_files
+        self._bg_files = bg_files
 
         return n_image
 
     def prepare_data(self):  # noqa: WPS324
-        if self.split_results_dir.exists():
+        if self.cached_data_path.exists():
+            logger = logging.getLogger("DC2Dataset")
+            warning_msg = "WARNING: cached data already exists at [%s], we directly use it\n"
+            logger.warning(warning_msg, str(self.cached_data_path))
             return None
-        self.split_results_dir.mkdir(parents=True)
+
+        logger = logging.getLogger("DC2Dataset")
+        warning_msg = "WARNING: can't find cached data, we generate it at [%s]\n"
+        logger.warning(warning_msg, str(self.cached_data_path))
+        self.cached_data_path.mkdir(parents=True)
 
         n_image = self._load_image_and_bg_files_list()
-        generate_split_file_params_dict = {
-            "image_files": self.image_files,
-            "bg_files": self.bg_files,
-            "n_bands": self.n_bands,
-            "image_lim": self.image_lim,
-            "cat_path": self.cat_path,
-            "bands": self.bands,
-            "n_split": self.n_split,
-            "split_file_path": self.split_results_dir,
-            "min_flux_for_loss": self.min_flux_for_loss,
-        }
+        generate_cached_data_wrapper = lambda image_index: generate_cached_data(
+            image_index,
+            self._image_files,
+            self._bg_files,
+            self.n_bands,
+            self.image_lim,
+            self.dc2_cat_path,
+            self.bands,
+            self.n_image_split,
+            self.cached_data_path,
+            self.min_flux_for_loss,
+            self.data_in_one_cached_file,
+        )
 
-        if self.split_processes_num > 1:
-            with multiprocessing.Pool(processes=self.split_processes_num) as process_pool:
-                process_pool.starmap(
-                    generate_split_file,
-                    zip(
-                        list(range(n_image)),
-                        [generate_split_file_params_dict for _ in range(n_image)],
-                    ),
+        if self.prepare_data_processes_num > 1:
+            with multiprocessing.Pool(processes=self.prepare_data_processes_num) as process_pool:
+                process_pool.map(
+                    generate_cached_data_wrapper,
+                    list(range(n_image)),
                     chunksize=4,
                 )
         else:
             for i in range(n_image):
-                generate_split_file(i, generate_split_file_params_dict)
+                generate_cached_data_wrapper(i)
 
         return None
 
-    def setup(self, stage="fit"):
-        self.split_files_list = list(self.split_results_dir.glob("split_*.pt"))
-        random.Random(218).shuffle(self.split_files_list)
-
-        data_len = len(self.split_files_list)
-        train_len = int(data_len * 0.8)
-        val_len = int(data_len * 0.1)
-
-        self.train_dataset = DC2Dataset(self.split_files_list[:train_len])
-        self.valid_dataset = DC2Dataset(self.split_files_list[train_len : (train_len + val_len)])
-        self.test_dataset = DC2Dataset(self.split_files_list[(train_len + val_len) :])
-        self.total_dataset = DC2Dataset(self.split_files_list)
-
-    def train_dataloader(self):
-        return DataLoader(
-            self.train_dataset,
-            shuffle=True,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )
-
-    def val_dataloader(self):
-        return DataLoader(
-            self.valid_dataset, batch_size=self.batch_size, num_workers=self.num_workers
-        )
-
-    def test_dataloader(self):
-        return DataLoader(
-            self.test_dataset, batch_size=self.batch_size, num_workers=self.num_workers // 2
-        )
-
     def get_plotting_sample(self, image_idx):
-        if self.image_files is None or self.bg_files is None:
+        if self._image_files is None or self._bg_files is None:
             self._load_image_and_bg_files_list()
+
+        if image_idx < 0 or image_idx >= len(self._image_files):
+            raise IndexError("invalid image_idx")
 
         result_dict = load_image_and_catalog(
             image_idx,
-            self.image_files,
-            self.bg_files,
+            self._image_files,
+            self._bg_files,
             self.image_lim,
             self.bands,
             self.n_bands,
-            self.cat_path,
+            self.dc2_cat_path,
             self.min_flux_for_loss,
         )
         return {
@@ -213,14 +166,14 @@ class DC2(Survey):
         }
 
 
-def squeeze_tile_dict(tile_dict):
+def squeeze_tile_cat(tile_cat):
     # by calling `.data` here I circumevent the requirement of TileCatalogs that the length
     # of the first dimension is the batch size
-    tile_dict_copy = copy.copy(tile_dict).data
+    tile_dict_copy = copy.copy(tile_cat.data)
     for k, v in tile_dict_copy.items():
         if k != "n_sources":
-            tile_dict_copy[k] = rearrange(v, "1 h w nh nw -> h w nh nw")
-    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "1 h w -> h w")
+            tile_dict_copy[k] = rearrange(v, "1 nth ntw s k -> nth ntw s k")
+    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "1 nth ntw -> nth ntw")
     return tile_dict_copy
 
 
@@ -228,13 +181,13 @@ def unsqueeze_tile_dict(tile_dict):
     tile_dict_copy = copy.copy(tile_dict)
     for k, v in tile_dict_copy.items():
         if k != "n_sources":
-            tile_dict_copy[k] = rearrange(v, "h w nh nw -> 1 h w nh nw")
-    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "h w -> 1 h w")
+            tile_dict_copy[k] = rearrange(v, "nth ntw s k -> 1 nth ntw s k")
+    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "nth ntw -> 1 nth ntw")
     return tile_dict_copy
 
 
 def load_image_and_catalog(
-    image_idx, image_files, bg_files, image_lim, bands, n_bands, cat_path, min_flux_for_loss
+    image_idx, image_files, bg_files, image_lim, bands, n_bands, dc2_cat_path, min_flux_for_loss
 ):
     image_list, bg_list, wcs_header_str = read_frame_for_band(
         image_files, bg_files, image_idx, n_bands, image_lim
@@ -246,15 +199,26 @@ def load_image_and_catalog(
     plocs_lim = image[0].shape
     height = plocs_lim[0]
     width = plocs_lim[1]
-    full_cat, psf_params, match_id = Dc2FullCatalog.from_file(
-        cat_path, wcs, height, width, bands, min_flux_for_loss
+    full_cat, psf_params, match_id = DC2FullCatalog.from_file(
+        dc2_cat_path, wcs, height, width, bands, min_flux_for_loss
     )
-    tile_dict = full_cat.to_tile_catalog(4, 5).get_brightest_sources_per_tile()
-    tile_dict = squeeze_tile_dict(tile_dict)
+    tile_cat = full_cat.to_tile_catalog(4, 5)
+    tile_dict = squeeze_tile_cat(tile_cat)
     tile_dict["star_fluxes"] = tile_dict["star_fluxes"].clamp(min=1e-18)
     tile_dict["galaxy_fluxes"] = tile_dict["galaxy_fluxes"].clamp(min=1e-18)
     tile_dict["galaxy_params"][..., 3] = tile_dict["galaxy_params"][..., 3].clamp(min=1e-18)
     tile_dict["galaxy_params"][..., 5] = tile_dict["galaxy_params"][..., 5].clamp(min=1e-18)
+
+    # add one/two/more_than_two source mask
+    on_mask = rearrange(tile_cat.is_on_mask, "1 nth ntw s -> nth ntw s 1")
+    on_mask_count = on_mask.sum(dim=(-2, -1))
+    tile_dict["one_source_mask"] = rearrange(on_mask_count == 1, "nth ntw -> nth ntw 1 1") & on_mask
+    tile_dict["two_sources_mask"] = (
+        rearrange(on_mask_count == 2, "nth ntw -> nth ntw 1 1") & on_mask
+    )
+    tile_dict["more_than_two_sources_mask"] = (
+        rearrange(on_mask_count > 2, "nth ntw -> nth ntw 1 1") & on_mask
+    )
 
     return {
         "tile_dict": tile_dict,
@@ -272,17 +236,28 @@ def load_image_and_catalog(
     }
 
 
-def generate_split_file(image_index, self_copy):
-    split_count = 0
+def generate_cached_data(
+    image_index,
+    image_files,
+    bg_files,
+    n_bands,
+    image_lim,
+    dc2_cat_path,
+    bands,
+    n_image_split,
+    cached_data_path,
+    min_flux_for_loss,
+    data_in_one_cached_file,
+):
     result_dict = load_image_and_catalog(
         image_index,
-        self_copy["image_files"],
-        self_copy["bg_files"],
-        self_copy["image_lim"],
-        self_copy["bands"],
-        self_copy["n_bands"],
-        self_copy["cat_path"],
-        self_copy["min_flux_for_loss"],
+        image_files,
+        bg_files,
+        image_lim,
+        bands,
+        n_bands,
+        dc2_cat_path,
+        min_flux_for_loss,
     )
 
     image = result_dict["inputs"]["image"]
@@ -292,7 +267,7 @@ def generate_split_file(image_index, self_copy):
     psf_params = result_dict["inputs"]["psf_params"]
 
     # split image
-    split_lim = self_copy["image_lim"][0] // self_copy["n_split"]
+    split_lim = image_lim[0] // n_image_split
     image = torch.from_numpy(image)
     split_image = split_full_image(image, split_lim)
     image_height_pixels = image.shape[1]
@@ -310,6 +285,9 @@ def generate_split_file(image_index, self_copy):
         "galaxy_params",
         "star_fluxes",
         "star_log_fluxes",
+        "one_source_mask",
+        "two_sources_mask",
+        "more_than_two_sources_mask",
     ]
     for i in param_list:
         split1_tile = torch.stack(torch.split(tile_dict[i], split_lim // 4, dim=0))
@@ -326,27 +304,36 @@ def generate_split_file(image_index, self_copy):
             torch.arange(0, len(split_image)) // split_image_num_on_height
         ).tolist(),
         "background": split_bg,
-        "psf_params": [psf_params for _ in range(self_copy["n_split"] ** 2)],
+        "psf_params": [psf_params for _ in range(n_image_split**2)],
     }
 
-    data_splits = [dict(zip(data_split, i)) for i in zip(*data_split.values())]
-    for cur_split in data_splits:  # noqa: WPS426
-        assert split_count < 1e6 and image_index < 1e5, "too many splits"
-        split_file_name = f"split_image_{image_index:04d}_{split_count:05d}.pt"
-        with open(
-            self_copy["split_file_path"] / split_file_name,
-            "wb",
-        ) as split_file:
-            cur_split_copy = map_nested_dicts(
-                cur_split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
+    data_splits = split_list(
+        [dict(zip(data_split, i)) for i in zip(*data_split.values())],
+        sub_list_len=data_in_one_cached_file,
+    )
+    data_count = 0
+    for sub_splits in data_splits:  # noqa: WPS426
+        tmp_data_cached = []
+        for split in sub_splits:  # noqa: WPS426
+            split_clone = map_nested_dicts(
+                split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
             )
-            cur_split_copy.update(wcs_header_str=wcs_header_str)
-            cur_split_copy.update(split_id=split_file_name)
-            torch.save(cur_split_copy, split_file)
-        split_count += 1
+            split_clone.update(wcs_header_str=wcs_header_str)
+            tmp_data_cached.append(split_clone)
+        assert data_count < 1e6 and image_index < 1e5, "too many cached data files"
+        assert len(tmp_data_cached) < 1e5, "too many cached data in one file"
+        cached_data_file_name = (
+            f"cached_data_{image_index:04d}_{data_count:05d}_size_{len(tmp_data_cached):04d}.pt"
+        )
+        with open(
+            cached_data_path / cached_data_file_name,
+            "wb",
+        ) as cached_data_file:
+            torch.save(tmp_data_cached, cached_data_file)
+        data_count += 1
 
 
-class Dc2FullCatalog(FullCatalog):
+class DC2FullCatalog(FullCatalog):
     """Class for the LSST PHOTO Catalog.
 
     Some resources:

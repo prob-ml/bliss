@@ -1,6 +1,6 @@
 ---
 defaults:
-    - full_train_config.yaml
+    - train_config
     - _self_
     - override hydra/job_logging: stdout
 
@@ -9,9 +9,8 @@ train:
         logger:
             name: DC2_debug
             version: DC2_debug
-        devices: [7]
+        devices: [1, 2]
 
 surveys:
     dc2:
-        split_result_folder: split_results
-        split_processes_num: 4
+        prepare_data_processes_num: 4

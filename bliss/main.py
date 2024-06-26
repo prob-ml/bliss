@@ -1,5 +1,3 @@
-import logging
-from os import environ, getenv
 from pathlib import Path
 from typing import List
 
@@ -10,7 +8,8 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from bliss.simulator.simulated_dataset import FileDatum
+from bliss.cached_dataset import FileDatum
+from bliss.global_settings import GlobalSettings
 
 # ============================== Data Generation ==============================
 
@@ -57,7 +56,11 @@ def generate(gen_cfg: DictConfig):
 
 def train(train_cfg: DictConfig):
     # setup seed
-    pl.seed_everything(train_cfg.seed)
+    seed = pl.seed_everything(train_cfg.seed)
+    GlobalSettings.seed_in_this_program = seed
+
+    if train_cfg.matmul_precision:
+        torch.set_float32_matmul_precision(train_cfg.matmul_precision)
 
     # setup dataset, encoder, and trainer
     dataset = instantiate(train_cfg.data_source)
@@ -109,17 +112,6 @@ def predict(predict_cfg):
 @hydra.main(config_path="conf", config_name="base_config", version_base=None)
 def main(cfg):
     """Main entry point(s) for BLISS."""
-    if not getenv("BLISS_HOME"):
-        project_path = Path(__file__).resolve()
-        bliss_home = project_path.parents[1]
-        environ["BLISS_HOME"] = bliss_home.as_posix()
-
-        logger = logging.getLogger(__name__)
-        logger.warning(
-            "WARNING: BLISS_HOME not set, setting to project root %s\n",  # noqa: WPS323
-            environ["BLISS_HOME"],
-        )
-
     if cfg.mode == "generate":
         generate(cfg.generate)
     elif cfg.mode == "train":

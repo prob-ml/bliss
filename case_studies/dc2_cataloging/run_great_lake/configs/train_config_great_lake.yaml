@@ -1,0 +1,22 @@
+---
+defaults:
+    - train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+paths:
+    output: /home/pduan/bliss_output
+
+surveys:
+   dc2:
+      batch_size: 64
+      num_workers: 4
+
+train:
+    trainer:
+        logger:
+            name: DC2_cataloging_exp
+            version: null  # override this in command line
+        devices: 1
+        precision: "32-true"
+    matmul_precision: "highest"
