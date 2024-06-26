@@ -1,22 +1,10 @@
-from astropy.io import fits
-import matplotlib.pyplot as plt
-
-import numpy as np
-
-# Set up matplotlib
-import matplotlib.pyplot as plt
-
-from astropy.io import fits
-from matplotlib.colors import LogNorm
+import glob
 import sys
 
-import glob
-
+from astropy.io import fits
 
 input_fits_files = glob.glob(sys.argv[1] + "/galsim_iter*.fits")
 
-
-print(input_fits_files)
 # Create a list to hold the HDUs
 hdulist = []
 
@@ -34,5 +22,3 @@ for file in input_fits_files[1:]:
 output_fits_file = "data/combined_images.fits"
 hdul = fits.HDUList(hdulist)
 hdul.writeto(output_fits_file, overwrite=True)
-
-print(f"Combined FITS file created: {output_fits_file}")

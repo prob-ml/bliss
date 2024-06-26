@@ -1,23 +1,27 @@
-import numpy as np
-import galsim
-import torch
 import sys
 
-import random
+import galsim
+import numpy as np
+import torch
 
 
 def sie_deflection(x, y, lens_params):
-    """
-    args:
-    x, y: vectors or images of coordinates;
-    par: vector of parameters with 1 to 5 elements, defined as follows:
-        par[0]: lens strength, or 'Einstein radius'
-        par[1]: (optional) x-center
-        par[2]: (optional) y-center
-        par[3]: (optional) e1 ellipticity
-        par[4]: (optional) e2 ellipticity
-    RETURNS: tuple (xg, yg) of gradients at the positions (x, y)
-    Adopted from: Adam S. Bolton, U of Utah, 2009
+    """Calculate the deflection angles for a Singular Isothermal Ellipsoid (SIE) lens model.
+
+    Args:
+        x (vector): Vector or image of x coordinates.
+        y (vector): Vector or image of y coordinates.
+        lens_params (vector): Vector of parameters with 1 to 5 elements, defined as follows:
+            par[0]: Lens strength, or 'Einstein radius'.
+            par[1]: (optional) x-center.
+            par[2]: (optional) y-center.
+            par[3]: (optional) e1 ellipticity.
+            par[4]: (optional) e2 ellipticity.
+
+    Returns:
+        tuple: (xg, yg) of gradients at the positions (x, y).
+
+    Adopted from: Adam S. Bolton, U of Utah, 2009.
     """
     b, center_x, center_y, e1, e2 = lens_params.cpu().numpy()
     ell = np.sqrt(e1**2 + e2**2)
@@ -58,17 +62,17 @@ def bilinear_interpolate_numpy(im, x, y):
     y0 = np.clip(y0, 0, im.shape[0] - 1)
     y1 = np.clip(y1, 0, im.shape[0] - 1)
 
-    Ia = im[y0, x0]
-    Ib = im[y1, x0]
-    Ic = im[y0, x1]
-    Id = im[y1, x1]
+    i_a = im[y0, x0]
+    i_b = im[y1, x0]
+    i_c = im[y0, x1]
+    i_d = im[y1, x1]
 
     wa = (x1 - x) * (y1 - y)
     wb = (x1 - x) * (y - y0)
     wc = (x - x0) * (y1 - y)
     wd = (x - x0) * (y - y0)
 
-    return (Ia.T * wa).T + (Ib.T * wb).T + (Ic.T * wc).T + (Id.T * wd).T
+    return (i_a.T * wa).T + (i_b.T * wb).T + (i_c.T * wc).T + (i_d.T * wd).T
 
 
 def lens_galsim(unlensed_image, lens_params):
@@ -93,14 +97,14 @@ image_path = sys.argv[1]
 image = galsim.fits.read(image_path)
 image = image.array
 
-theta_E = np.random.uniform(10, 20)  # Einstein radius
+theta_e = np.random.uniform(10, 20)  # Einstein radius
 center_x = np.random.uniform(-10, 10)  # Center x-coordinate
 center_y = np.random.uniform(-10, 10)  # Center y-coordinate
 e1 = np.random.uniform(0.1, 0.7)  # Ellipticity component e1
 e2 = np.random.uniform(0.1, 0.7)  # Ellipticity component e2
 
 # Initialize lens_params as a PyTorch tensor
-lens_params = torch.tensor([theta_E, center_x, center_y, e1, e2])
+lens_params = torch.tensor([theta_e, center_x, center_y, e1, e2])
 
 lensed_img = lens_galsim(image, lens_params)
 
@@ -109,5 +113,5 @@ output_dir = sys.argv[2]
 lensed_image = galsim.ImageF(lensed_img)
 lensed_image.write(output_dir + "/galsim.fits")
 
-lens_params = [theta_E, center_x, center_y, e1, e2]
-print(" ".join(map(str, lens_params)))
+lens_params = [theta_e, center_x, center_y, e1, e2]
+print(" ".join(map(str, lens_params)))  # noqa: WPS421

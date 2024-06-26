@@ -70,7 +70,7 @@ for i in $(seq 1 $num_files); do
       # First Python script - Galaxy Parameter Generation
       PYTHON_SCRIPT_1="random_galaxy_gen.py"
       # Second Python script - Lenstronomy Lensing Logic
-      PYTHON_SCRIPT_2="bliss-lens.py"
+      PYTHON_SCRIPT_2="bliss_lens.py"
 
 
       output=$(python $PYTHON_SCRIPT_1 $img_size)

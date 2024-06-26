@@ -1,14 +1,7 @@
-from astropy.io import fits
-import matplotlib.pyplot as plt
-
-import numpy as np
-
-# Set up matplotlib
-import matplotlib.pyplot as plt
-
-from astropy.io import fits
-from matplotlib.colors import LogNorm
 import sys
+
+from astropy.io import fits
+from matplotlib import pyplot as plt
 
 i = sys.argv[1]
 output_dir = sys.argv[2]
