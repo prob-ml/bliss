@@ -40,15 +40,16 @@ class FullCatalogToTileTransform(torch.nn.Module):
         self.tile_slen = tile_slen
         self.max_sources = max_sources
 
-    def __call__(self, ex):
-        h_pixels, w_pixels = ex["images"].shape[1:]
-        full_cat = FullCatalog(h_pixels, w_pixels, ex["full_catalog"])
+    def __call__(self, datum_in):
+        datum_out = {k: v for k, v in datum_in.items() if k != "full_catalog"}
+
+        h_pixels, w_pixels = datum_in["images"].shape[1:]
+        full_cat = FullCatalog(h_pixels, w_pixels, datum_in["full_catalog"])
         tile_cat = full_cat.to_tile_catalog(self.tile_slen, self.max_sources).data
         d = {k: v.squeeze(0) for k, v in tile_cat.items()}
-        ex["tile_catalog"] = d
-        del ex["full_catalog"]
+        datum_out["tile_catalog"] = d
 
-        return ex
+        return datum_out
 
 
 class ChunkingSampler(Sampler):

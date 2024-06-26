@@ -137,9 +137,7 @@ encoder:
             restrict_batch: 0
             tiles_to_crop: 1
             tile_slen: ${simulator.prior.tile_slen}
-
-    compile_model: false
-    double_detect: true
+    use_double_detect: true
     use_checkerboard: true
 
 train:
