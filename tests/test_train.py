@@ -57,11 +57,11 @@ class TestTrain:
     def test_train_with_cached_data(self, cfg, tmp_path):
         the_cfg = cfg.copy()
         the_cfg.paths.output = tmp_path
-        the_cfg.paths.cached_data = tmp_path
         the_cfg.generate.cached_data_path = tmp_path
         generate(the_cfg.generate)
 
         the_cfg.train.data_source = "${cached_simulator}"
+        the_cfg.cached_simulator.cached_data_path = tmp_path
         os.chdir(tmp_path)
         the_cfg.train.weight_save_path = str(tmp_path / "encoder.pt")
         train(the_cfg.train)

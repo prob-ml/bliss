@@ -13,6 +13,7 @@ from bliss.encoder.convnets import CatalogNet, FeaturesNet
 from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDist
+from bliss.global_settings import GlobalSettings
 
 
 class Encoder(pl.LightningModule):
@@ -220,6 +221,12 @@ class Encoder(pl.LightningModule):
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         return loss
+
+    def on_fit_start(self):
+        GlobalSettings.current_encoder_epoch = self.current_epoch
+
+    def on_train_epoch_start(self):
+        GlobalSettings.current_encoder_epoch = self.current_epoch
 
     def training_step(self, batch, batch_idx, optimizer_idx=0):
         """Training step (pytorch lightning)."""
