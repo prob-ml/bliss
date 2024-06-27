@@ -49,18 +49,17 @@ class DC2DataModule(CachedSimulatedDataModule):
         splits: str,
         batch_size: int,
         num_workers: int,
-        split_file_dir: str,
-        split_seed: int = 0,
+        cached_data_path: str,
+        train_transforms: List,
+        nontrain_transforms: List,
     ):
         super().__init__(
-            data_dir=split_file_dir,
-            splits=splits,
-            split_seed=split_seed,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            convert_full_cat=False,
-            tile_slen=4,
-            max_sources=1,
+            splits,
+            batch_size,
+            num_workers,
+            cached_data_path,
+            train_transforms,
+            nontrain_transforms,
         )
 
         self.dc2_image_dir = dc2_image_dir
@@ -100,16 +99,16 @@ class DC2DataModule(CachedSimulatedDataModule):
         return n_image
 
     def prepare_data(self):  # noqa: WPS324
-        if self.data_dir.exists():
+        if self.cached_data_path.exists():
             logger = logging.getLogger("DC2Dataset")
             warning_msg = "WARNING: cached data already exists at [%s], we directly use it\n"
-            logger.warning(warning_msg, str(self.data_dir))
+            logger.warning(warning_msg, str(self.cached_data_path))
             return None
 
         logger = logging.getLogger("DC2Dataset")
         warning_msg = "WARNING: can't find cached data, we generate it at [%s]\n"
-        logger.warning(warning_msg, str(self.data_dir))
-        self.data_dir.mkdir(parents=True)
+        logger.warning(warning_msg, str(self.cached_data_path))
+        self.cached_data_path.mkdir(parents=True)
 
         n_image = self._load_image_and_bg_files_list()
         generate_cached_data_wrapper = lambda image_index: generate_cached_data(
@@ -121,7 +120,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             self.dc2_cat_path,
             self.bands,
             self.n_image_split,
-            self.data_dir,
+            self.cached_data_path,
             self.min_flux_for_loss,
             self.data_in_one_cached_file,
         )
@@ -246,7 +245,7 @@ def generate_cached_data(
     dc2_cat_path,
     bands,
     n_image_split,
-    data_dir,
+    cached_data_path,
     min_flux_for_loss,
     data_in_one_cached_file,
 ):
@@ -327,7 +326,7 @@ def generate_cached_data(
             f"cached_data_{image_index:04d}_{data_count:05d}_size_{len(tmp_data_cached):04d}.pt"
         )
         with open(
-            data_dir / cached_data_file_name,
+            cached_data_path / cached_data_file_name,
             "wb",
         ) as cached_data_file:
             torch.save(tmp_data_cached, cached_data_file)

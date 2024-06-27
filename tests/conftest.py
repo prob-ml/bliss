@@ -39,7 +39,7 @@ def cfg(pytestconfig, cached_data_path, output_path):
         "predict.device": "cuda:0" if use_gpu else "cpu",
         "paths.test_data": test_data_dir,
         "paths.output": str(output_path),
-        "paths.cached_data": str(cached_data_path),
+        "cached_simulator.cached_data_path": str(cached_data_path),
         "generate.cached_data_path": str(cached_data_path),
     }
     overrides = [f"{k}={v}" if v is not None else f"{k}=null" for k, v in overrides.items()]
