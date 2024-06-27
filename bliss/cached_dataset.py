@@ -182,13 +182,13 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.predict_dataset = None
 
     def setup(self, stage: str) -> None:  # noqa: WPS324
+        file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
+        self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
+
+        # parse slices from percentages to indices
+        self.slices = self.parse_slices(self.splits, len(self.file_paths))
+
         if stage == "fit":
-            file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
-            self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
-
-            # parse slices from percentages to indices
-            self.slices = self.parse_slices(self.splits, len(self.file_paths))
-
             self.train_dataset = self._get_dataset(
                 self.file_paths[self.slices[0]], self.train_transforms, shuffle=True
             )
