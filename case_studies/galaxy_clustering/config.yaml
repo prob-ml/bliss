@@ -79,5 +79,5 @@ predict:
         accelerator: "gpu"
         precision: ${train.trainer.precision}
     encoder: ${encoder}
-    weight_save_path: ${paths.output}/version_1/checkpoints/best_encoder.ckpt
+    weight_save_path: ${paths.output}/version_23/checkpoints/best_encoder.ckpt
     device: "cuda:0"
