@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 
+from bliss.encoder.convnet_layers import C3, Detect
+
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
@@ -12,6 +14,32 @@ class ConvBlock(nn.Module):
 
     def forward(self, x):
         return self.activation(self.gn(self.conv(x)))
+
+
+class GalaxyClusterCatalogNet(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+
+        net_layers = [
+            C3(in_channels, 256, n=6),  # 0
+            ConvBlock(256, 512, stride=2),
+            C3(512, 512, n=3, shortcut=False),
+            ConvBlock(512, 256, kernel_size=1, padding=0),
+            nn.Upsample(scale_factor=2, mode="nearest"),  # 4
+            C3(768, 256, n=3, shortcut=False),
+            Detect(256, out_channels),
+        ]
+        self.net_ml = nn.ModuleList(net_layers)
+
+    def forward(self, x):
+        save_lst = [x]
+        for i, m in enumerate(self.net_ml):
+            x = m(x)
+            if i in {0, 4}:
+                save_lst.append(x)
+            if i == 4:
+                x = torch.cat(save_lst, dim=1)
+        return x
 
 
 class GalaxyClusterFeaturesNet(nn.Module):
@@ -61,3 +89,23 @@ class GalaxyClusterFeaturesNet(nn.Module):
         for layer in self.backbone:
             x = layer(x)
         return x
+
+
+class GalaxyClusterContextNet(nn.Module):
+    def __init__(self, num_features, out_channels):
+        super().__init__()
+
+        context_dim = 64
+        self.encode_context = nn.Sequential(
+            ConvBlock(2, 64),
+            ConvBlock(64, 64),
+            ConvBlock(64, context_dim),
+        )
+        self.merge = ConvBlock(num_features + context_dim, num_features)
+        self.catalog_net = GalaxyClusterCatalogNet(num_features, out_channels)
+
+    def forward(self, x_features, context):
+        x_context = self.encode_context(context)
+        x = torch.cat((x_features, x_context), dim=1)
+        x = self.merge(x)
+        return self.catalog_net(x)

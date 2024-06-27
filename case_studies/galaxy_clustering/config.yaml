@@ -25,11 +25,12 @@ prior:
     star_flux_scale: 1.4137911256506595
 
 cached_simulator:
-    _target_: bliss.cached_dataset.CachedSimulatedDataset
-    batch_size: 5
+    _target_: bliss.cached_dataset.CachedSimulatedDataModule
+    batch_size: 2
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
     num_workers: 2
-    cached_data_path: /data/scratch/kapnadak/data/files
+    cached_data_path: /data/scratch/kapnadak/data_s1280_t128_n1000
+    train_transforms: []
 
 train:
     trainer:
@@ -78,5 +79,5 @@ predict:
         accelerator: "gpu"
         precision: ${train.trainer.precision}
     encoder: ${encoder}
-    weight_save_path: ${paths.output}/version_1/checkpoints/best_encoder.ckpt
+    weight_save_path: ${paths.output}/version_23/checkpoints/best_encoder.ckpt
     device: "cuda:0"

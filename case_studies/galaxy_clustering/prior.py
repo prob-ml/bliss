@@ -6,7 +6,7 @@ from astropy import units
 from hmf import MassFunction
 from scipy.stats import gennorm
 
-from case_studies.galaxy_clustering import cluster_utils as utils
+from case_studies.galaxy_clustering.utils import cluster_utils as utils
 
 
 class GalaxyClusterPrior:
