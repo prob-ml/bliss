@@ -29,7 +29,7 @@ cached_simulator:
     batch_size: 2
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
     num_workers: 8
-    cached_data_path: /data/scratch/kapnadak/data/files
+    cached_data_path: /data/scratch/kapnadak/data/file_data
     train_transforms: []
 
 train:
