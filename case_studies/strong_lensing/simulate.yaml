@@ -50,7 +50,7 @@ psf:
         suppress_warning: true
 
 image :
-    pixel_scale : 0.1  # arcsec / pixel
+    pixel_scale : 0.27  # arcsec / pixel
 
 ---
 
@@ -69,12 +69,17 @@ image :
 
     sky_level : 1.e6  # ADU / arcsec^2
 
+    # noise:
+    #     type: Gaussian
+    #     variance:
+    #         type: Random
+    #         min: 0.002
+    #         max: 0.006
+    # Poisson noise
     noise:
-        type: Gaussian
-        variance:
-            type: Random
-            min: 0.002
-            max: 0.006
+        type: Poisson
+        sky_level: 800
+        whiten: True  # Only relevant for gal_type = real, but it doesn't hurt to leave this in.
 
     random_seed : 1512413
 
@@ -103,7 +108,7 @@ input :
         dir : data
         file_name : catalog.fits
 
-    catalog : 
+    catalog :
         dir : data
         file_name : catalog.fits
 

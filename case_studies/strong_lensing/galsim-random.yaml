@@ -8,7 +8,12 @@ variables :
   scale_radius : 1
   flux2 : .7
   q : .7
-  beta : 23
+  beta : 23 degrees
+
+
+# modules:
+#     # Use the extra features from the galsim.des module
+#     - galsim.des
 
 # Define the galaxy profile
 gal :
@@ -22,7 +27,7 @@ gal :
             n : '@variables.n2'
             scale_radius : '@variables.scale_radius'
             flux : '@variables.flux2'
-  
+
     shear :
         type : QBeta
         q : '@variables.q'
@@ -43,7 +48,7 @@ psf :
 
                 beta :
                     type : Random
-                    
+
         -
             type : OpticalPSF
             lam_over_diam : 0.041253
@@ -53,6 +58,8 @@ psf :
             coma1 : {type: Random, min: -0.3, max: 0.7}
             coma2 : {type: Random, min: -0.3, max: 0.3}
             obscuration : {type: Random, min: 0.2, max: 0.4}
+
+
 
 # Define some other information about the images
 image :
@@ -70,7 +77,7 @@ image :
         sky_level : 2.5e4
         gain : 1.7
         read_noise : 0.3
-    random_seed : 5687  
+    random_seed : 5687
 
 output :
     dir : '@variables.output_directory'

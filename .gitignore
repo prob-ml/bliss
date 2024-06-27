@@ -36,5 +36,3 @@ nohup.out
 multirun
 DC2_*.out
 input_images/
-case_studies/strong_lensing/output_yaml
-case_studies/strong_lensing/galsim_run.log
