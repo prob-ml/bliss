@@ -94,16 +94,26 @@ surveys:
 generate:
     n_image_files: 16
     n_batches_per_file: 16
+    cached_data_path: /data/scratch/regier/m2_full_cat
 
 cached_simulator:
+    cached_data_path: /data/scratch/regier/m2_full_cat
     batch_size: 10
-    tile_slen: 2
-    max_sources: 6
-    convert_full_cat: true
+    num_workers: 8
+    train_transforms:
+        - _target_: bliss.cached_dataset.FullCatalogToTileTransform
+          tile_slen: 2
+          max_sources: 6
+        - _target_: bliss.data_augmentation.RotateFlipTransform
+    nontrain_transforms:
+        - _target_: bliss.cached_dataset.FullCatalogToTileTransform
+          tile_slen: 2
+          max_sources: 6
 
 train:
     trainer:
         precision: 32
+        accumulate_grad_batches: 1
     seed: null
 
 predict:
