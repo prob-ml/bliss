@@ -11,9 +11,10 @@ variables :
   beta : 23 degrees
 
 
-# modules:
-#     # Use the extra features from the galsim.des module
-#     - galsim.des
+modules:
+    # Use the extra features from the galsim.des module
+    - galsim.des
+
 
 # Define the galaxy profile
 gal :
@@ -35,30 +36,11 @@ gal :
 
     flux : 1.e6
 
+
 # Define the PSF profile
-psf :
-    type : Convolution
-    items :
-        -
-            type : Kolmogorov
-            fwhm : {type: Random, min: 1.5, max: 2.5}
-            ellip:
-                type : EBeta
-                e : {type: Random, min: 0.0, max: 0.2}
-
-                beta :
-                    type : Random
-
-        -
-            type : OpticalPSF
-            lam_over_diam : 0.041253
-            defocus : {type: Random, min: 0, max: 0.6}
-            astig1 : {type: Random, min: -0.3, max: 0.3}
-            astig2 : {type: Random, min: -0.3, max: 0.3}
-            coma1 : {type: Random, min: -0.3, max: 0.7}
-            coma2 : {type: Random, min: -0.3, max: 0.3}
-            obscuration : {type: Random, min: 0.2, max: 0.4}
-
+psf:
+    # Use a PSFEx PSF as measured from DES SV data.
+    type: DES_PSFEx
 
 
 # Define some other information about the images
@@ -78,6 +60,11 @@ image :
         gain : 1.7
         read_noise : 0.3
     random_seed : 5687
+
+input :
+    des_psfex :
+        dir : 'data'
+        file_name : 'DECam_00154912_12_psfcat.psf'
 
 output :
     dir : '@variables.output_directory'
