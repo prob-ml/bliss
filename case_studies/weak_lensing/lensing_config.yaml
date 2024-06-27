@@ -52,7 +52,6 @@ encoder:
         metrics:
             lensing_map:
                 _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
-
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
@@ -66,7 +65,7 @@ encoder:
             restrict_batch: 0
             tiles_to_crop: 1
             tile_slen: ${simulator.prior.tile_slen}
-    double_detect: false
+    use_double_detect: false
     use_checkerboard: false
 
 surveys:

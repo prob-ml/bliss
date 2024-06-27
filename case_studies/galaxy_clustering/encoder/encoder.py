@@ -1,7 +1,7 @@
 import torch
 
 from bliss.catalog import BaseTileCatalog
-from bliss.encoder.convnet import CatalogNet, ContextNet
+from bliss.encoder.convnets import CatalogNet
 from bliss.encoder.encoder import Encoder
 from case_studies.galaxy_clustering.encoder.convnet import GalaxyClusterFeaturesNet
 
@@ -28,10 +28,7 @@ class GalaxyClusterEncoder(Encoder):
             downsample_at_front=self.downsample_at_front,
         )
         n_params_per_source = self.var_dist.n_params_per_source
-        self.marginal_net = CatalogNet(num_features, n_params_per_source)
-        self.checkerboard_net = ContextNet(num_features, n_params_per_source)
-        if self.double_detect:
-            self.second_net = CatalogNet(num_features, n_params_per_source)
+        self.context_net = CatalogNet(num_features, n_params_per_source)
 
     def get_features_and_parameters(self, batch):
         x = self.image_normalizer.get_input_tensor(batch)
@@ -58,7 +55,7 @@ class GalaxyClusterEncoder(Encoder):
             white_cat = self.var_dist.sample(x_cat_white, use_mode=use_mode)
             est_cat = self.interleave_catalogs(marginal_cat, white_cat, white_history_mask)
 
-        if self.double_detect:
+        if self.use_double_detect:
             x_cat_second = self.second_net(x_features)
             second_cat = self.var_dist.sample(x_cat_second, use_mode=use_mode)
             # our loss function implies that the second detection is ignored for a tile
@@ -73,13 +70,13 @@ class GalaxyClusterEncoder(Encoder):
         target_cat = target_cat.symmetric_crop(self.tiles_to_crop)
 
         mode_cat = self.sample(batch, use_mode=True)
-        self.metrics.update(target_cat, mode_cat)
+        self.mode_metrics.update(target_cat, mode_cat)
 
         sample_cat = self.sample(batch, use_mode=False)
         self.sample_metrics.update(target_cat, sample_cat)
 
     def on_validation_epoch_end(self):
-        self.report_metrics(self.metrics, "val/mode", show_epoch=True)
+        self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
         self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
