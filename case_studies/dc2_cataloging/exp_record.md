@@ -393,3 +393,33 @@ processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.
 2. run with double detection
 
 3. run with double detection
+
+(hereafter, always use double detection)
+
+### 06-24
+
+1. train with the new DC2
+
+2. train with the new DC2
+
+3. train with the new DC2
+
+### 06-25
+
+1. train with new DC2 and old data aug
+
+2. train with new DC2 and new data aug (both transforms) (on Great Lake)
+
+3. train with new DC2 and new data aug (both transforms) (on Great Lake)
+
+4. train with new DC2 and new data aug (both transforms) (on Great Lake)
+
+5. train with new DC2 (no transforms)
+
+### 06-27
+
+1. train using the new data augmentation but rotate/flip plocs in fullcat
+
+2. train using the new data augmentation but only rotate/flip locs
+
+3. train using the old rotate/flip and new random shift
