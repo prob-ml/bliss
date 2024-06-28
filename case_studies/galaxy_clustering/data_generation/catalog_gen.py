@@ -6,7 +6,7 @@ from astropy.table import Table
 
 from case_studies.galaxy_clustering.prior import GalaxyClusterPrior
 
-DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
+DATA_PATH = "/data/scratch/kapnadak/data_new"
 CATALOG_PATH = os.path.join(DATA_PATH, "catalogs")
 FILE_PREFIX = "galsim_des"
 
@@ -16,7 +16,7 @@ def main(**kwargs):
         os.makedirs(CATALOG_PATH)
 
     cluster_prior_obj = GalaxyClusterPrior(
-        size=int(kwargs.get("nfiles", 100)), image_size=int(kwargs.get("image_size", 4800))
+        size=int(kwargs.get("nfiles", 100)), image_size=int(kwargs.get("image_size", 1280))
     )
 
     catalogs, global_catalog = cluster_prior_obj.sample()
