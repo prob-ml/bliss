@@ -16,8 +16,8 @@ class GalaxyClusterPrior:
         self.width = image_size
         self.height = image_size
         self.center_offset = (self.width / 2) - 0.5
-        self.bands = ["G", "R", "I", "Z"]
-        self.n_bands = 4
+        self.bands = ["G", "R", "I", "Z", "Y"]
+        self.n_bands = 5
         self.reference_band = 1
         self.ra_cen = 50.64516228577292
         self.dec_cen = -40.228830895890404
@@ -357,7 +357,6 @@ class GalaxyClusterPrior:
             flux ratios for all bands
         """
         flux_logdiff, _ = gmm.sample(size)
-        flux_logdiff = flux_logdiff[:][:, 1:]
         flux_logdiff = np.clip(flux_logdiff, -2.76, 2.76)
         flux_ratio = np.exp(flux_logdiff)
         flux_prop = np.ones((flux_logdiff.shape[0], self.n_bands))
@@ -488,6 +487,7 @@ class GalaxyClusterPrior:
             mock_catalog["FLUX_G"] = fluxes[:, 0]
             mock_catalog["FLUX_I"] = fluxes[:, 2]
             mock_catalog["FLUX_Z"] = fluxes[:, 3]
+            mock_catalog["FLUX_Y"] = fluxes[:, 4]
             mock_catalog["HLR"] = hlr_samples[i]
             mock_catalog["FRACDEV"] = 0
             mock_catalog["G1"] = g1_size_samples[i]
@@ -579,11 +579,9 @@ class GalaxyClusterPrior:
         cartesian_star_locs = self.sample_star_locs(n_stars)
         gal_star_locs = self.cartesian_to_gal(cartesian_star_locs)
         r_flux_samples = self.sample_star_flux_r(n_stars)
-        hlr_samples = self.sample_hlr(n_stars)
         g1_size_samples, g2_size_samples = self.sample_shape(n_stars)
         return self.make_star_catalog(
             r_flux_samples,
-            hlr_samples,
             g1_size_samples,
             g2_size_samples,
             gal_star_locs,
@@ -593,7 +591,6 @@ class GalaxyClusterPrior:
     def make_star_catalog(
         self,
         r_flux_samples,
-        hlr_samples,
         g1_size_samples,
         g2_size_samples,
         gal_star_locs,
@@ -626,7 +623,8 @@ class GalaxyClusterPrior:
             mock_catalog["FLUX_G"] = fluxes[:, 0]
             mock_catalog["FLUX_I"] = fluxes[:, 2]
             mock_catalog["FLUX_Z"] = fluxes[:, 3]
-            mock_catalog["HLR"] = hlr_samples[i]
+            mock_catalog["FLUX_Y"] = fluxes[:, 4]
+            mock_catalog["HLR"] = 1e-4
             mock_catalog["FRACDEV"] = 0
             mock_catalog["G1"] = g1_size_samples[i]
             mock_catalog["G2"] = g2_size_samples[i]

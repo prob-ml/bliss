@@ -12,7 +12,7 @@ from bliss.cached_dataset import FileDatum
 from bliss.catalog import FullCatalog
 
 min_flux_for_loss = 0
-DATA_PATH = "/data/scratch/kapnadak/data"
+DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
@@ -28,13 +28,14 @@ COL_NAMES = (
     "FLUX_G",
     "FLUX_I",
     "FLUX_Z",
+    "FLUX_Y",
     "HLR",
     "FRACDEV",
     "G1",
     "G2",
     "Z",
 )
-BANDS = ("g", "r", "i", "z")
+BANDS = ("g", "r", "i", "z", "Y")
 N_CATALOGS_PER_FILE = 500
 
 
@@ -52,7 +53,7 @@ def main(**kwargs):
         n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
         catalog_dict["n_sources"] = n_sources
         catalog_dict["galaxy_fluxes"] = torch.tensor(
-            [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z"]].to_numpy()]
+            [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z", "FLUX_Y"]].to_numpy()]
         )
         catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
         catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])

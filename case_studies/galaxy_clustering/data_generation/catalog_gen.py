@@ -6,7 +6,7 @@ from astropy.table import Table
 
 from case_studies.galaxy_clustering.prior import GalaxyClusterPrior
 
-DATA_PATH = "/data/scratch/kapnadak/data"
+DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
 CATALOG_PATH = os.path.join(DATA_PATH, "catalogs")
 FILE_PREFIX = "galsim_des"
 

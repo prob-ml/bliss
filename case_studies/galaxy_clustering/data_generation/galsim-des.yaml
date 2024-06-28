@@ -12,12 +12,13 @@
 #   6: FLUX_G
 #   7: FLUX_I
 #   8: FLUX_Z
-#   9: HLR
-#   10: FRACDEV
-#   11: G1
-#   12: G2
-#   13: Z
-#   14: SOURCE_TYPE
+#   9: FLUX_Y
+#   10: HLR
+#   11: FRACDEV
+#   12: G1
+#   13: G2
+#   14: Z
+#   15: SOURCE_TYPE
 
 variables :
   nfiles : 100
@@ -139,13 +140,13 @@ input :
 gal :
 
   type : Gaussian
-  half_light_radius : { type: Catalog, col: 9 }
+  half_light_radius : { type: Catalog, col: 10 }
   flux : { type: Catalog, col: 5 } #using R band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 11 }
-    g2 : { type: Catalog, col: 12 }
+    g1 : { type: Catalog, col: 12}
+    g2 : { type: Catalog, col: 13 }
 
 output :
   type : Fits
@@ -163,13 +164,13 @@ output :
 gal :
 
   type : Gaussian
-  half_light_radius : { type: Catalog, col: 9 }
+  half_light_radius : { type: Catalog, col: 10 }
   flux : { type: Catalog, col: 6 } #using G band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 11 }
-    g2 : { type: Catalog, col: 12 }
+    g1 : { type: Catalog, col: 12 }
+    g2 : { type: Catalog, col: 13 }
 
 output :
   type : Fits
@@ -187,13 +188,13 @@ output :
 gal :
 
   type : Gaussian
-  half_light_radius : { type: Catalog, col: 9 }
+  half_light_radius : { type: Catalog, col: 10 }
   flux : { type: Catalog, col: 7 } #using I band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 11 }
-    g2 : { type: Catalog, col: 12 }
+    g1 : { type: Catalog, col: 12 }
+    g2 : { type: Catalog, col: 13 }
 
 output :
   type : Fits
@@ -211,13 +212,13 @@ output :
 gal :
 
   type : Gaussian
-  half_light_radius : { type: Catalog, col: 9 }
+  half_light_radius : { type: Catalog, col: 10 }
   flux : { type: Catalog, col: 8 } #using Z band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 11 }
-    g2 : { type: Catalog, col: 12 }
+    g1 : { type: Catalog, col: 12 }
+    g2 : { type: Catalog, col: 13 }
 
 output :
   type : Fits
@@ -225,6 +226,30 @@ output :
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_z.fits"
+    items :
+    - { type : Sequence, nitems: '@variables.nfiles'}
+
+  nfiles : '@variables.nfiles'
+
+---
+
+gal :
+
+  type : Gaussian
+  half_light_radius : { type: Catalog, col: 10 }
+  flux : { type: Catalog, col: 9 } #using Y band
+
+  shear :
+    type : G1G2
+    g1 : { type: Catalog, col: 12}
+    g2 : { type: Catalog, col: 13 }
+
+output :
+  type : Fits
+  dir : '@variables.output_dir'
+  file_name :
+    type : FormattedStr
+    format : "galsim_des_%03d_Y.fits"
     items :
     - { type : Sequence, nitems: '@variables.nfiles'}
 
