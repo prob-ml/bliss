@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 from torchvision import transforms
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.global_settings import GlobalSettings
+from bliss.global_env import GlobalEnv
 
 # prevent pytorch_lightning warning for num_workers = 2 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -53,7 +53,7 @@ class FullCatalogToTileTransform(torch.nn.Module):
 
 class ChunkingSampler(Sampler):
     def __init__(self, dataset: Dataset) -> None:
-        assert isinstance(dataset, ChunkingDataset), "dataset should be MyDataset"
+        assert isinstance(dataset, ChunkingDataset), "dataset should be ChunkingDataset"
         self.dataset = dataset
 
     def __len__(self):
@@ -74,12 +74,12 @@ class DistributedChunkingSampler(DistributedSampler):
         seed: int = 0,
         drop_last: bool = False,
     ) -> None:
-        assert isinstance(dataset, ChunkingDataset), "dataset should be MyDataset"
+        assert isinstance(dataset, ChunkingDataset), "dataset should be ChunkingDataset"
         assert not shuffle, "you should not use shuffle"
         super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
 
     def __iter__(self):
-        pre_indices = list(super().__iter__())
+        pre_indices = super().__iter__()
         chunked_indices = self.dataset.get_chunked_indices()
 
         return iter([chunked_indices[i] for i in pre_indices])
@@ -99,10 +99,14 @@ class ChunkingDataset(Dataset):
                 cached_data_len = int(file_size_match.group(1))
             else:
                 if i == 0:
-                    logger = logging.getLogger("MyDataset")
+                    # we assume in your data file, you use a list to hold the data points
+                    # the postfix '_size_<chunk size>' is the length of this list
+                    logger = logging.getLogger("ChunkingDataset")
                     warning_msg = (
-                        "WARNING: add postfix '_size_XXXX' to file name; "
-                        "otherwise it'll be very slow\n"
+                        "WARNING: add postfix '_size_<chunk size>' to file name; "
+                        "otherwise it'll be very slow \n"
+                        "for instance, a valid file name can be 'cached_data_size_500.pt' "
+                        "(for more details, please see cached_dataset.py)\n"
                     )
                     logger.warning(warning_msg)
                 with open(file_path, "rb") as f:
@@ -136,12 +140,12 @@ class ChunkingDataset(Dataset):
 
         output_list = []
         if self.shuffle:
-            epoch_seed = GlobalSettings.seed_in_this_program + GlobalSettings.current_encoder_epoch
+            epoch_seed = GlobalEnv.seed_in_this_program + GlobalEnv.current_encoder_epoch
             logger = logging.getLogger("ChunkingDataset")
             logger.info(
                 "INFO: seed is %d; current epoch is %d; epoch_seed is set to %d",
-                GlobalSettings.seed_in_this_program,
-                GlobalSettings.current_encoder_epoch,
+                GlobalEnv.seed_in_this_program,
+                GlobalEnv.current_encoder_epoch,
                 epoch_seed,
             )
             right_shift_list = [0, *accumulated_file_sizes_list[:-1]]
@@ -181,13 +185,10 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.predict_dataset = None
 
     def setup(self, stage: str) -> None:  # noqa: WPS324
+        if self.file_paths is None or self.slices is None:
+            self._load_file_paths_and_slices()
+
         if stage == "fit":
-            file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
-            self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
-
-            # parse slices from percentages to indices
-            self.slices = self.parse_slices(self.splits, len(self.file_paths))
-
             self.train_dataset = self._get_dataset(
                 self.file_paths[self.slices[0]], self.train_transforms, shuffle=True
             )
@@ -211,6 +212,13 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
             return None
 
         raise RuntimeError(f"setup skips stage {stage}")
+
+    def _load_file_paths_and_slices(self):
+        file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
+        self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
+
+        # parse slices from percentages to indices
+        self.slices = self.parse_slices(self.splits, len(self.file_paths))
 
     def _percent_to_idx(self, x, length):
         """Converts string in percent to an integer index."""

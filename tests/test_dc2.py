@@ -4,7 +4,7 @@ import torch
 from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.global_settings import GlobalSettings
+from bliss.global_env import GlobalEnv
 from bliss.main import train
 
 
@@ -144,8 +144,8 @@ class TestDC2:
         dc2.setup(stage="fit")
 
         # temporarily set global settings
-        GlobalSettings.seed_in_this_program = 0
-        GlobalSettings.current_encoder_epoch = 0
+        GlobalEnv.seed_in_this_program = 0
+        GlobalEnv.current_encoder_epoch = 0
 
         dc2 = list(dc2.train_dataloader())
 
@@ -169,8 +169,8 @@ class TestDC2:
             assert isinstance(dc2[0][k], torch.Tensor)
 
         # reset global settings to None
-        GlobalSettings.seed_in_this_program = None
-        GlobalSettings.current_encoder_epoch = None
+        GlobalEnv.seed_in_this_program = None
+        GlobalEnv.current_encoder_epoch = None
 
     def test_train_on_dc2(self, cfg):
         train_dc2_cfg = cfg.copy()

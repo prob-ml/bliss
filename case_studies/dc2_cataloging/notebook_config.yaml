@@ -23,3 +23,7 @@ encoder:
     compile_model: false
     double_detect: false
     use_checkerboard: true
+
+surveys:
+    dc2:
+        train_transforms: []

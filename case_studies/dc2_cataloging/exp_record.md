@@ -415,3 +415,11 @@ processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.
 4. train with new DC2 and new data aug (both transforms) (on Great Lake)
 
 5. train with new DC2 (no transforms)
+
+### 06-27
+
+1. train using the new data augmentation but rotate/flip plocs in fullcat
+
+2. train using the new data augmentation but only rotate/flip locs
+
+3. train using the old rotate/flip and new random shift
