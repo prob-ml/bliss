@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from astropy import units
 from hmf import MassFunction
-from scipy.stats import gennorm
+from scipy.stats import gennorm, truncpareto
 
 from case_studies.galaxy_clustering.utils import cluster_utils as utils
 
@@ -35,12 +35,19 @@ class GalaxyClusterPrior:
         self.G2_scale = 0.032
         with open("gal_gmm_nmgy.pkl", "rb") as f:
             self.gmm_gal = pickle.load(f)
+        with open("star_gmm_nmgy.pkl", "rb") as f:
+            self.gmm_star = pickle.load(f)
         self.redshift_alpha = 1.65
         self.redshift_beta = 3.33
         self.redshift0 = 0.9
         self.cluster_prob = 0.5
         self.light_speed = 299792.46  # in km/s
         self.sigma_DM15 = 1028.9  # in km/s
+        self.star_density = 0.001
+        self.star_flux_exponent = 0.43
+        self.star_flux_truncation = 640  # too low -- refit this
+        self.star_flux_loc = 0.0
+        self.star_flux_scale = 0.63094948  # also the min becauae star_flux_loc is 0
 
     def sample_mass(self):
         """Samples masses in the range [10**14.5, 10**15.5] solar masses.
@@ -260,19 +267,19 @@ class GalaxyClusterPrior:
             gal_coordinates.append(temp)
         return gal_coordinates
 
-    def sample_hlr(self, flux_samples):
+    def sample_hlr(self, num_elements):
         """Samples half light radius for each galaxy in the catalog.
         Currently assumes uniform half light radius
 
         Args:
-            flux_samples: flux samples, used just to get number of galaxies in each catalog
+            num_elements: number of elements to sample
 
         Returns:
             samples for half light radius for each galaxy in each catalog
         """
         hlr_samples = []
         for i in range(self.size):
-            hlr_samples.append(np.random.uniform(0.5, 1.0, len(flux_samples[i])))
+            hlr_samples.append(np.random.uniform(0.5, 1.0, num_elements[i]))
         return hlr_samples
 
     def sample_flux_r(self, redshift_samples):
@@ -298,7 +305,7 @@ class GalaxyClusterPrior:
             flux_samples.append(mag_samples)
         return flux_samples
 
-    def sample_shape(self, galaxy_locs, galaxy_locs_cluster):
+    def sample_shape(self, num_elements):
         """Samples shape of galaxies in each catalog.
         (G1, G2) are both assumed to have a generalized normal distribution
         We use rejection sampling to ensure:
@@ -307,8 +314,7 @@ class GalaxyClusterPrior:
             G2 < 0.8
 
         Args:
-            galaxy_locs: locations of background galaxies
-            galaxy_locs_cluster: locations of clustered galaxies
+            num_elements: number of elements to sample
 
         Returns:
             samples for (G1, G2) for each
@@ -316,14 +322,13 @@ class GalaxyClusterPrior:
         g1_size_samples = []
         g2_size_samples = []
         for i in range(self.size):
-            total_element = len(galaxy_locs[i]) + len(galaxy_locs_cluster[i])
             g1_size_samples.append(
-                gennorm.rvs(self.G1_beta, self.G1_loc, self.G1_scale, total_element)
+                gennorm.rvs(self.G1_beta, self.G1_loc, self.G1_scale, num_elements[i])
             )
             g2_size_samples.append(
-                gennorm.rvs(self.G2_beta, self.G2_loc, self.G2_scale, total_element)
+                gennorm.rvs(self.G2_beta, self.G2_loc, self.G2_scale, num_elements[i])
             )
-            for j in range(total_element):
+            for j in range(num_elements[i]):
                 flag_large = g1_size_samples[i][j] ** 2 + g2_size_samples[i][j] ** 2 >= 1
                 flag_g1_large = g1_size_samples[i][j] >= 0.8
                 flag_g2_large = g2_size_samples[i][j] >= 0.8
@@ -341,16 +346,17 @@ class GalaxyClusterPrior:
                     flag_reject = flag_large or flag_g1_large or flag_g2_large
         return g1_size_samples, g2_size_samples
 
-    def galaxy_flux_ratio(self, size):
+    def sample_flux_ratios(self, gmm, size):
         """Samples flux ratios from Gaussian Mixture Model (color model).
 
         Args:
+            gmm: Gaussian Mixture Model (galaxy or star)
             size: samples to be generated (number of galaxies)
 
         Returns:
             flux ratios for all bands
         """
-        flux_logdiff, _ = self.gmm_gal.sample(size)
+        flux_logdiff, _ = gmm.sample(size)
         flux_logdiff = flux_logdiff[:][:, 1:]
         flux_logdiff = np.clip(flux_logdiff, -2.76, 2.76)
         flux_ratio = np.exp(flux_logdiff)
@@ -361,7 +367,68 @@ class GalaxyClusterPrior:
             flux_prop[:, band] = flux_prop[:, band - 1] * flux_ratio[:, band - 1]
         return flux_prop
 
-    def make_catalog(
+    def sample_n_stars(self):
+        """Samples number of background stars (from a Poisson distribution).
+
+        Returns:
+            samples for number of background stars
+        """
+        return np.random.poisson(self.star_density * self.width * self.height / 49, self.size)
+
+    def sample_star_locs(self, n_stars):
+        """Samples locations of stars.
+
+        Args:
+            n_stars: number of stars in each catalog
+
+        Returns:
+            star_locs: (X,Y) coordinates for each star drawn uniformly at random
+        """
+        star_locs = []
+        for i in range(self.size):
+            x = np.random.uniform(0, self.width, n_stars[i])
+            y = np.random.uniform(0, self.height, n_stars[i])
+            star_locs.append(np.column_stack((x, y)))
+        return star_locs
+
+    def draw_truncated_pareto(self, exponent, truncation, loc, scale, n_samples):
+        """Draws samples from a truncated Pareto distribution.
+
+        Args:
+            exponent: exponent for distribution
+            truncation: truncation parameter for distribution
+            loc: locaton parameter for distribution
+            scale: scale parameter for distribution
+            n_samples: number of samples to be drawn
+
+        Returns:
+            samples from the specified distribution
+        """
+        return truncpareto.rvs(exponent, truncation, loc=loc, scale=scale, size=n_samples)
+
+    def sample_star_flux_r(self, n_stars):
+        """Sample star fluxes for r band from a truncated Pareto distribution.
+
+        Args:
+            n_stars: number of stars in each catalog
+
+        Returns:
+            flux_samples: samples for flux in r band for each star
+        """
+        flux_samples = []
+        for i in range(self.size):
+            flux_samples.append(
+                self.draw_truncated_pareto(
+                    self.star_flux_exponent,
+                    self.star_flux_truncation,
+                    self.star_flux_loc,
+                    self.star_flux_scale,
+                    n_stars[i],
+                )
+            )
+        return flux_samples
+
+    def make_galaxy_catalog(
         self,
         r_flux_samples,
         hlr_samples,
@@ -373,7 +440,7 @@ class GalaxyClusterPrior:
         cartesian_cluster_locs,
         redshift_samples,
     ):
-        """Makes list of catalogs from generated samples.
+        """Makes list of galaxy catalogs from generated samples.
 
         Args:
             r_flux_samples: flux samples in R band
@@ -392,7 +459,9 @@ class GalaxyClusterPrior:
         res = []
         for i, r_flux in enumerate(r_flux_samples):
             mock_catalog = pd.DataFrame()
-            ratios = self.galaxy_flux_ratio(len(gal_cluster_locs[i]) + len(gal_locs[i]))
+            ratios = self.sample_flux_ratios(
+                self.gmm_gal, len(gal_cluster_locs[i]) + len(gal_locs[i])
+            )
             fluxes = np.array(r_flux)[:, np.newaxis] * np.array(ratios)
             if gal_cluster_locs[i] and gal_locs[i]:
                 mock_catalog["RA"] = np.append(
@@ -424,6 +493,7 @@ class GalaxyClusterPrior:
             mock_catalog["G1"] = g1_size_samples[i]
             mock_catalog["G2"] = g2_size_samples[i]
             mock_catalog["Z"] = redshift_samples[i]
+            mock_catalog["SOURCE_TYPE"] = 1
             res.append(mock_catalog)
         return res
 
@@ -457,12 +527,12 @@ class GalaxyClusterPrior:
         df["N200"] = np.take(n_galaxy_cluster, cluster_ids)
         return df
 
-    def sample(self):
-        """Main sample function.
+    def sample_galaxies(self):
+        """Samples galaxy clusters.
 
         Returns:
-            cluster_catalogs: list of catalogs for each image
-            global_catalogs: global catalog of cluster-wide data
+            cluster_catalogs: list of galaxy catalogs for each image
+            global_catalogs: global galaxy catalog of cluster-wide data
         """
         mass_samples = self.sample_mass()
         cluster_redshift_samples = self.sample_cluster_redshift()
@@ -479,10 +549,11 @@ class GalaxyClusterPrior:
         cartesian_locs = self.sample_galaxy_locs(n_galaxy)
         gal_locs = self.cartesian_to_gal(cartesian_locs)
         gal_cluster_locs = self.cartesian_to_gal(cartesian_cluster_locs)
+        total_galaxies = n_galaxy + n_galaxy_cluster
         r_flux_samples = self.sample_flux_r(redshift_samples)
-        hlr_samples = self.sample_hlr(r_flux_samples)
-        g1_size_samples, g2_size_samples = self.sample_shape(cartesian_locs, cartesian_cluster_locs)
-        cluster_catalogs = self.make_catalog(
+        hlr_samples = self.sample_hlr(total_galaxies)
+        g1_size_samples, g2_size_samples = self.sample_shape(total_galaxies)
+        cluster_catalogs = self.make_galaxy_catalog(
             r_flux_samples,
             hlr_samples,
             g1_size_samples,
@@ -497,3 +568,85 @@ class GalaxyClusterPrior:
             mass_samples, cluster_redshift_samples, radius_samples, n_galaxy_cluster
         )
         return cluster_catalogs, global_catalog
+
+    def sample_stars(self):
+        """Samples stars.
+
+        Returns:
+            star_catalogs: list of star catalogs for each image
+        """
+        n_stars = self.sample_n_stars()
+        cartesian_star_locs = self.sample_star_locs(n_stars)
+        gal_star_locs = self.cartesian_to_gal(cartesian_star_locs)
+        r_flux_samples = self.sample_star_flux_r(n_stars)
+        hlr_samples = self.sample_hlr(n_stars)
+        g1_size_samples, g2_size_samples = self.sample_shape(n_stars)
+        return self.make_star_catalog(
+            r_flux_samples,
+            hlr_samples,
+            g1_size_samples,
+            g2_size_samples,
+            gal_star_locs,
+            cartesian_star_locs,
+        )
+
+    def make_star_catalog(
+        self,
+        r_flux_samples,
+        hlr_samples,
+        g1_size_samples,
+        g2_size_samples,
+        gal_star_locs,
+        cartesian_star_locs,
+    ):
+        """Makes list of star catalogs from generated samples.
+
+        Args:
+            r_flux_samples: flux samples in R band
+            hlr_samples: samples of HLR
+            g1_size_samples: samples of G1
+            g2_size_samples: samples of G2
+            gal_star_locs: samples of star locations in galactic coordinates
+            cartesian_star_locs: samples of star locations in cartesian coordinates
+
+        Returns:
+            list of dataframes (one for each catalog)
+        """
+        res = []
+        for i, r_flux in enumerate(r_flux_samples):
+            mock_catalog = pd.DataFrame()
+            ratios = self.sample_flux_ratios(self.gmm_star, len(gal_star_locs[i]))
+            fluxes = np.array(r_flux)[:, np.newaxis] * np.array(ratios)
+            mock_catalog["RA"] = np.array(gal_star_locs[i])[:, 0]
+            mock_catalog["DEC"] = np.array(gal_star_locs[i])[:, 1]
+            mock_catalog["X"] = np.array(cartesian_star_locs[i])[:, 0]
+            mock_catalog["Y"] = np.array(cartesian_star_locs[i])[:, 1]
+            mock_catalog["MEM"] = 0
+            mock_catalog["FLUX_R"] = fluxes[:, 1]
+            mock_catalog["FLUX_G"] = fluxes[:, 0]
+            mock_catalog["FLUX_I"] = fluxes[:, 2]
+            mock_catalog["FLUX_Z"] = fluxes[:, 3]
+            mock_catalog["HLR"] = hlr_samples[i]
+            mock_catalog["FRACDEV"] = 0
+            mock_catalog["G1"] = g1_size_samples[i]
+            mock_catalog["G2"] = g2_size_samples[i]
+            mock_catalog["Z"] = 0
+            mock_catalog["SOURCE_TYPE"] = 0
+            res.append(mock_catalog)
+        return res
+
+    def sample(self):
+        """Main sample function.
+        Draws catalogs for galaxies and stars, and then collates them.
+
+        Returns:
+            list of catalogs (containing both stars and galaxies)
+            global_catalogs (containing cluster information)
+        """
+        galaxy_catalogs, global_catalogs = self.sample_galaxies()
+        star_catalogs = self.sample_stars()
+        res = []
+        for i, gal_catalog in enumerate(galaxy_catalogs):
+            df_combined = pd.concat([gal_catalog, star_catalogs[i]])
+            res.append(df_combined)
+        return res, global_catalogs
