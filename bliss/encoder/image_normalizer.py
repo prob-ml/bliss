@@ -14,6 +14,7 @@ class ImageNormalizer(torch.nn.Module):
         log_transform_stdevs: list,
         use_clahe: bool,
         clahe_min_stdev: float,
+        asinh_cutoffs: list,
     ):
         """Initializes DetectionEncoder.
 
@@ -26,6 +27,7 @@ class ImageNormalizer(torch.nn.Module):
             use_clahe: whether to apply Contrast Limited Adaptive Histogram Equalization to images
             clahe_min_stdev: minimum standard deviation for CLAHE
             include_background: whether to include background as an input channel
+            asinh_cutoffs: list of asinh cutoffs to apply to images
         """
         super().__init__()
 
@@ -37,6 +39,7 @@ class ImageNormalizer(torch.nn.Module):
         self.log_transform_stdevs = log_transform_stdevs
         self.use_clahe = use_clahe
         self.clahe_min_stdev = clahe_min_stdev
+        self.asinh_cutoffs = asinh_cutoffs
 
     def num_channels_per_band(self):
         """Determine number of input channels for model based on desired input transforms."""
@@ -51,6 +54,8 @@ class ImageNormalizer(torch.nn.Module):
             nch += len(self.log_transform_stdevs)
         if self.use_clahe:
             nch += 1
+        if self.asinh_cutoffs:
+            nch += len(self.asinh_cutoffs)
         return nch
 
     def get_input_tensor(self, batch):
@@ -96,6 +101,12 @@ class ImageNormalizer(torch.nn.Module):
                 image_offsets = (raw_images - backgrounds) / backgrounds.sqrt() - threshold
                 transformed_img = torch.log(torch.clamp(image_offsets + 1.0, min=1.0))
                 inputs.append(transformed_img)
+
+        if self.asinh_cutoffs:
+            ss_images = raw_images - backgrounds
+            for cutoff in self.asinh_cutoffs:
+                asinh_img = torch.asinh((ss_images - cutoff) / (0.1 * cutoff)) * 10
+                inputs.append(asinh_img)
 
         # we should revisit normalizing the whole 80x80 image to see if that still performs
         # better than CLAHE. if so, we can remove CLAHE and for large images partition them
