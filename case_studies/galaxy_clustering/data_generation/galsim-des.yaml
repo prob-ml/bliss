@@ -17,6 +17,7 @@
 #   11: G1
 #   12: G2
 #   13: Z
+#   14: SOURCE_TYPE
 
 variables :
   nfiles : 100
