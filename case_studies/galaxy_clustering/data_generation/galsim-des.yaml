@@ -21,6 +21,8 @@
 variables :
   nfiles : 100
   image_size: 4800
+  input_dir : /home/kapnadak/bliss/case_studies/galaxy_clustering/data/catalogs
+  output_dir : /home/kapnadak/bliss/case_studies/galaxy_clustering/data/images
 
 psf:
     type: Convolve
@@ -95,7 +97,7 @@ image :
 
   nproc : 24
   type : Scattered
-  pixel_scale : 0.27
+  pixel_scale : 0.26
   xsize : '@variables.image_size'
   ysize : '@variables.image_size'
   stamp_size : 100
@@ -124,7 +126,7 @@ stamp :
 
 input :
   catalog :
-    dir : /data/scratch/kapnadak/data/catalogs
+    dir : '@variables.input_dir'
     file_name :
       type : FormattedStr
       format : "galsim_des_%03d.dat"
@@ -135,8 +137,7 @@ input :
 
 gal :
 
-  type : Exponential
-  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  type : Gaussian
   half_light_radius : { type: Catalog, col: 9 }
   flux : { type: Catalog, col: 5 } #using R band
 
@@ -147,7 +148,7 @@ gal :
 
 output :
   type : Fits
-  dir : /data/scratch/kapnadak/data/images
+  dir : '@variables.output_dir'
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_r.fits"
@@ -160,8 +161,7 @@ output :
 
 gal :
 
-  type : Exponential
-  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  type : Gaussian
   half_light_radius : { type: Catalog, col: 9 }
   flux : { type: Catalog, col: 6 } #using G band
 
@@ -172,7 +172,7 @@ gal :
 
 output :
   type : Fits
-  dir : /data/scratch/kapnadak/data/images
+  dir : '@variables.output_dir'
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_g.fits"
@@ -185,8 +185,7 @@ output :
 
 gal :
 
-  type : Exponential
-  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  type : Gaussian
   half_light_radius : { type: Catalog, col: 9 }
   flux : { type: Catalog, col: 7 } #using I band
 
@@ -197,7 +196,7 @@ gal :
 
 output :
   type : Fits
-  dir : /data/scratch/kapnadak/data/images
+  dir : '@variables.output_dir'
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_i.fits"
@@ -210,8 +209,7 @@ output :
 
 gal :
 
-  type : Exponential
-  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  type : Gaussian
   half_light_radius : { type: Catalog, col: 9 }
   flux : { type: Catalog, col: 8 } #using Z band
 
@@ -222,7 +220,7 @@ gal :
 
 output :
   type : Fits
-  dir : /data/scratch/kapnadak/data/images
+  dir : '@variables.output_dir'
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_z.fits"
