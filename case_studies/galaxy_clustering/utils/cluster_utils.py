@@ -18,7 +18,7 @@ OB0 = 0.049  # Baryon fraction
 SIGMA8 = 0.81  # sigma8
 NS = 0.95  # ?
 M0 = (
-    8 * 10**13 * units.solMass
+    4 * 10**13 * units.solMass
 )  # M0 for calculating number of clustered galaxies from virial mass (in solar masses)
 N_BETA = 1.35  # beta for calculating number of clustered galaxies from virial mass
 
