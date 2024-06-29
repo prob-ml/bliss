@@ -9,7 +9,7 @@ from scipy.stats import gennorm
 from case_studies.galaxy_clustering.utils import cluster_utils as utils
 
 
-class GalaxyClusterPrior:
+class ClusterPrior:
     def __init__(self, size=100, image_size=4800):
         super().__init__()
         self.size = size
@@ -317,6 +317,7 @@ class GalaxyClusterPrior:
 
     def make_galaxy_catalog(
         self,
+        n_galaxy_cluster,
         r_flux_samples,
         hlr_samples,
         g1_size_samples,
@@ -328,6 +329,7 @@ class GalaxyClusterPrior:
         """Makes list of galaxy catalogs from generated samples.
 
         Args:
+            n_galaxy_cluster: number of clustered galaxies
             r_flux_samples: flux samples in R band
             hlr_samples: samples of HLR
             g1_size_samples: samples of G1
@@ -342,7 +344,7 @@ class GalaxyClusterPrior:
         res = []
         for i, r_flux in enumerate(r_flux_samples):
             mock_catalog = pd.DataFrame()
-            ratios = self.sample_flux_ratios(self.gmm_gal, len(gal_locs[i]))
+            ratios = self.sample_flux_ratios(self.gmm_gal, n_galaxy_cluster[i])
             fluxes = np.array(r_flux)[:, np.newaxis] * np.array(ratios)
             mock_catalog["RA"] = np.array(gal_locs[i])[:, 0]
             mock_catalog["DEC"] = np.array(gal_locs[i])[:, 1]
@@ -414,6 +416,7 @@ class GalaxyClusterPrior:
         hlr_samples = self.sample_hlr(n_galaxy_cluster)
         g1_size_samples, g2_size_samples = self.sample_shape(n_galaxy_cluster)
         cluster_catalogs = self.make_galaxy_catalog(
+            n_galaxy_cluster,
             r_flux_samples,
             hlr_samples,
             g1_size_samples,
