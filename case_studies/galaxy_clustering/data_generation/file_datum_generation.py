@@ -37,7 +37,7 @@ COL_NAMES = (
     "SOURCE_TYPE",
 )
 BANDS = ("g", "r", "i", "z", "Y")
-N_CATALOGS_PER_FILE = 1
+N_CATALOGS_PER_FILE = 500
 
 
 def main(**kwargs):

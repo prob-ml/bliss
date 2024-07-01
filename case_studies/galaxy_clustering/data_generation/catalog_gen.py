@@ -6,8 +6,8 @@ import pandas as pd
 from astropy.io import ascii as astro_ascii
 from astropy.table import Table
 
-from case_studies.galaxy_clustering.background_prior import BackgroundPrior
-from case_studies.galaxy_clustering.cluster_prior import ClusterPrior
+from case_studies.galaxy_clustering.data_generation.background_prior import BackgroundPrior
+from case_studies.galaxy_clustering.data_generation.cluster_prior import ClusterPrior
 
 DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
 CATALOG_PATH = os.path.join(DATA_PATH, "catalogs")
