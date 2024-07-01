@@ -171,10 +171,10 @@ class BackgroundPrior:
             ]
         )
 
-        mags_clamped = np.clip(mags, 15.75, 40)
+        mags_clamped = np.clip(mags, 15, 25)
         fluxes = utils.mag_to_flux(mags_clamped)
 
-        return 1 + (fluxes * (fluxes > 0))
+        return fluxes * (fluxes > 0)
 
     def sample_shape(self, num_elements):
         """Samples shape of sources.
