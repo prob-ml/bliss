@@ -35,8 +35,6 @@ class ClusterPrior:
         self.G2_scale = 0.032
         with open("gal_gmm_nmgy.pkl", "rb") as f:
             self.gmm_gal = pickle.load(f)
-        with open("star_gmm_nmgy.pkl", "rb") as f:
-            self.gmm_star = pickle.load(f)
         self.redshift_alpha = 1.65
         self.redshift_beta = 3.33
         self.redshift0 = 0.9
