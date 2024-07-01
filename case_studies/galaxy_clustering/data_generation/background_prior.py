@@ -7,6 +7,8 @@ import pandas as pd
 from astropy.io import fits
 from scipy.stats import gennorm
 
+from case_studies.galaxy_clustering.utils import cluster_utils as utils
+
 DES_DIR = Path(
     "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles/"
 )
@@ -52,13 +54,13 @@ class BackgroundPrior:
         """
         tile_choice = random.choice(DES_SUBDIRS)
         main_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_main.fits")
-        flux_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_flux.fits")
+        mag_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_magnitude.fits")
         main_data = fits.getdata(main_path)
         main_df = pd.DataFrame(main_data)
-        flux_data = fits.getdata(flux_path)
-        flux_df = pd.DataFrame(flux_data)
+        mag_data = fits.getdata(mag_path)
+        mag_df = pd.DataFrame(mag_data)
         full_df = pd.merge(
-            main_df, flux_df, left_on="COADD_OBJECT_ID", right_on="COADD_OBJECT_ID", how="left"
+            main_df, mag_df, left_on="COADD_OBJECT_ID", right_on="COADD_OBJECT_ID", how="left"
         )
         return full_df.sample(n_sources)
 
@@ -157,17 +159,21 @@ class BackgroundPrior:
         Returns:
             5-band array containing fluxes (clamped at 1 from below)
         """
-        fluxes = np.array(
+        mags = np.array(
             sources[
                 [
-                    "FLUX_AUTO_G_x",
-                    "FLUX_AUTO_R_x",
-                    "FLUX_AUTO_I_x",
-                    "FLUX_AUTO_Z_x",
-                    "FLUX_AUTO_Y_x",
+                    "MAG_AUTO_G_x",
+                    "MAG_AUTO_R_x",
+                    "MAG_AUTO_I_x",
+                    "MAG_AUTO_Z_x",
+                    "MAG_AUTO_Y_x",
                 ]
             ]
         )
+
+        mags_clamped = np.clip(mags, 15.75, 40)
+        fluxes = utils.mag_to_flux(mags_clamped)
+
         return 1 + (fluxes * (fluxes > 0))
 
     def sample_shape(self, num_elements):
