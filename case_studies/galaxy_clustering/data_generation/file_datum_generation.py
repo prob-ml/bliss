@@ -34,6 +34,7 @@ COL_NAMES = (
     "G1",
     "G2",
     "Z",
+    "SOURCE_TYPE",
 )
 BANDS = ("g", "r", "i", "z", "Y")
 N_CATALOGS_PER_FILE = 1
