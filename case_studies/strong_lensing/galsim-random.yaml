@@ -1,0 +1,73 @@
+
+variables :
+  output_directory : data/images
+  n1 : 2.5
+  half_light_radius : 2
+  flux1 : .3
+  n2 : 1.5
+  scale_radius : 1
+  flux2 : .7
+  q : .7
+  beta : 23 degrees
+
+
+modules:
+    # Use the extra features from the galsim.des module
+    - galsim.des
+
+
+# Define the galaxy profile
+gal :
+    type : Sum
+    items :
+        -   type : Sersic
+            n : '@variables.n1'
+            half_light_radius : '@variables.half_light_radius'
+            flux : '@variables.flux1'
+        -   type : Sersic
+            n : '@variables.n2'
+            scale_radius : '@variables.scale_radius'
+            flux : '@variables.flux2'
+
+    shear :
+        type : QBeta
+        q : '@variables.q'
+        beta : '@variables.beta'
+
+    flux : 1.e6
+
+
+# Define the PSF profile
+psf:
+    # Use a PSFEx PSF as measured from DES SV data.
+    type: DES_PSFEx
+
+
+# Define some other information about the images
+image :
+    pixel_scale : 0.23
+    size : 128
+    wcs :
+        type : Shear
+        shear :
+            type : G1G2
+            g1 : {type: Random, min: -0.03, max: 0.03}
+            g2 : {type: Random, min: -0.03, max: 0.03}
+
+    noise :
+        type : CCD
+        sky_level : 2.5e4
+        gain : 1.7
+        read_noise : 0.3
+    random_seed : 5687
+
+input :
+    des_psfex :
+        dir : 'data'
+        file_name : 'DECam_00154912_12_psfcat.psf'
+
+output :
+    dir : '@variables.output_directory'
+    file_name : galsim.fits
+    psf :
+        file_name : galsim_epsf.fits
