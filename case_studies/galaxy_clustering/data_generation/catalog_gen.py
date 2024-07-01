@@ -22,16 +22,14 @@ def main(**kwargs):
     cluster_prior = ClusterPrior(
         size=int(kwargs.get("nfiles", 100)), image_size=int(kwargs.get("image_size", 1280))
     )
-    background_prior = BackgroundPrior(
-        size=int(kwargs.get("nfiles", 100)), image_size=int(kwargs.get("image_size", 1280))
-    )
+    background_prior = BackgroundPrior(image_size=int(kwargs.get("image_size", 1280)))
 
-    catalogs, global_catalog = cluster_prior.sample_cluster()
-    background_catalogs = background_prior.sample_background()
+    cluster_catalogs, global_catalog = cluster_prior.sample_cluster()
     combined_catalogs = []
-    for i, background_catalog in enumerate(background_catalogs):
+    for i, cluster_catalog in enumerate(cluster_catalogs):
+        background_catalog = background_prior.sample_background()
         if np.random.uniform() < CLUSTER_PROB:
-            combined_catalogs.append(pd.concat([catalogs[i], background_catalog]))
+            combined_catalogs.append(pd.concat([cluster_catalog, background_catalog]))
         else:
             combined_catalogs.append(background_catalog)
             global_catalog.drop(i, inplace=True)
