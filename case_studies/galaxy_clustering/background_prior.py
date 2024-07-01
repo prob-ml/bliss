@@ -1,11 +1,18 @@
+import os
 import pickle
+import random
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from astropy import units
+from astropy.io import fits
 from scipy.stats import gennorm
 
-from case_studies.galaxy_clustering.utils import cluster_utils as utils
+DES_DIR = Path(
+    "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles/"
+)
+DES_SUBDIRS = os.listdir(DES_DIR)
 
 
 class BackgroundPrior:
@@ -48,16 +55,37 @@ class BackgroundPrior:
         """
         return np.random.poisson(self.mean_sources * self.width * self.height / 49)
 
-    def sample_source_types(self, n_sources):
-        """Sample source type for each source.
+    def sample_sources(self, n_sources):
+        """Sample some random sources from a random DES tile.
 
         Args:
-            n_sources: number of sources for each catalog
+            n_sources: number of background sources to sample
+
+        Returns:
+            dataframe from DES containing randomly chosen objects
+        """
+        tile_choice = random.choice(DES_SUBDIRS)
+        main_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_main.fits")
+        flux_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_flux.fits")
+        main_data = fits.getdata(main_path)
+        main_df = pd.DataFrame(main_data)
+        flux_data = fits.getdata(flux_path)
+        flux_df = pd.DataFrame(flux_data)
+        full_df = pd.merge(
+            main_df, flux_df, left_on="COADD_OBJECT_ID", right_on="COADD_OBJECT_ID", how="left"
+        )
+        return full_df.sample(n_sources)
+
+    def sample_source_types(self, sources):
+        """Sample source type for each source, by thresholding DES estimator of source type.
+
+        Args:
+            sources: dataframe containing DES sources
 
         Returns:
             source_types: source types (0 for star, 1 for galaxy)
         """
-        return np.random.uniform(size=n_sources) < self.gal_prob
+        return np.array((sources["CLASS_STAR_R"] < 0.5))
 
     def sample_background_redshift(self, num_samples):
         """Sample redshift of background galaxies.
@@ -118,41 +146,43 @@ class BackgroundPrior:
             gal_coordinates.append((ra, dec))
         return gal_coordinates
 
-    def sample_hlr(self, n_sources, source_types):
+    def sample_hlr(self, sources, source_types):
         """Samples half light radius for each source in the catalog.
-        Currently assumes uniform half light radius for galaxies
+        HLR taken from DES table
         HLR set to 1e-4 for stars
 
         Args:
-            n_sources: number of background sources
+            sources: Dataframe of DES sources
             source_types: source type for each source (0 for star, 1 for galaxy)
 
         Returns:
             samples for half light radius for each source
         """
-        hlr_samples = np.random.uniform(0.5, 1.0, n_sources)
-        hlr_samples[~source_types] = 1e-4
-        return hlr_samples
+        hlr_samples = np.array(sources["FLUX_RADIUS_R"])
+        hlr_samples[~source_types] = 0
+        return 1e-4 + (hlr_samples * (hlr_samples > 0))
 
-    def sample_flux_r(self, redshift_samples):
-        """Sample fluxes for r band.
-        First samples magnitudes from an exponential distribution and subtracts from 25
-        Rejection sampling to ensure magnitude is more than 15.75
+    def sample_fluxes(self, sources):
+        """Samples fluxes for all bands for each source.
 
         Args:
-            redshift_samples: samples for redshifts of all sources
+            sources: Dataframe of DES sources
 
         Returns:
-            flux_samples: samples for flux in r band
+            5-band array containing fluxes (clamped at 1 from below)
         """
-        total_element = len(redshift_samples)
-        mag_samples = self.mag_max - np.random.exponential(self.mag_ex, total_element)
-        for i, _ in enumerate(mag_samples):
-            while mag_samples[i] < 15.75:
-                mag_samples[i] = (self.mag_max - np.random.exponential(self.mag_ex, 1))[0]
-            mag_samples[i] = utils.mag_to_flux(mag_samples[i])
-            mag_samples[i] *= 1 + redshift_samples[i]
-        return mag_samples
+        fluxes = np.array(
+            sources[
+                [
+                    "FLUX_AUTO_G_x",
+                    "FLUX_AUTO_R_x",
+                    "FLUX_AUTO_I_x",
+                    "FLUX_AUTO_Z_x",
+                    "FLUX_AUTO_Y_x",
+                ]
+            ]
+        )
+        return 1 + (fluxes * (fluxes > 0))
 
     def sample_shape(self, num_elements):
         """Samples shape of sources.
@@ -206,8 +236,7 @@ class BackgroundPrior:
 
     def make_background_catalog(
         self,
-        n_sources,
-        r_flux_samples,
+        flux_samples,
         hlr_samples,
         g1_size_samples,
         g2_size_samples,
@@ -219,8 +248,7 @@ class BackgroundPrior:
         """Makes a background catalog from generated samples.
 
         Args:
-            n_sources: number of sources
-            r_flux_samples: flux samples in R band
+            flux_samples: flux samples in all bands
             hlr_samples: samples of HLR
             g1_size_samples: samples of G1
             g2_size_samples: samples of G2
@@ -233,18 +261,16 @@ class BackgroundPrior:
             dataframe of catalog
         """
         mock_catalog = pd.DataFrame()
-        ratios = self.sample_flux_ratios(self.gmm_gal, n_sources)
-        fluxes = np.array(r_flux_samples)[:, np.newaxis] * np.array(ratios)
         mock_catalog["RA"] = np.array(gal_source_locs)[:, 0]
         mock_catalog["DEC"] = np.array(gal_source_locs)[:, 1]
         mock_catalog["X"] = np.array(cartesian_source_locs)[:, 0]
         mock_catalog["Y"] = np.array(cartesian_source_locs)[:, 1]
         mock_catalog["MEM"] = 0
-        mock_catalog["FLUX_R"] = fluxes[:, 1]
-        mock_catalog["FLUX_G"] = fluxes[:, 0]
-        mock_catalog["FLUX_I"] = fluxes[:, 2]
-        mock_catalog["FLUX_Z"] = fluxes[:, 3]
-        mock_catalog["FLUX_Y"] = fluxes[:, 4]
+        mock_catalog["FLUX_R"] = flux_samples[:, 1]
+        mock_catalog["FLUX_G"] = flux_samples[:, 0]
+        mock_catalog["FLUX_I"] = flux_samples[:, 2]
+        mock_catalog["FLUX_Z"] = flux_samples[:, 3]
+        mock_catalog["FLUX_Y"] = flux_samples[:, 4]
         mock_catalog["HLR"] = hlr_samples
         mock_catalog["FRACDEV"] = 0
         mock_catalog["G1"] = g1_size_samples
@@ -260,16 +286,16 @@ class BackgroundPrior:
             background_catalog: a single background catalogs for one image
         """
         n_sources = self.sample_n_sources()
+        des_sources = self.sample_sources(n_sources)
         cartesian_source_locs = self.sample_source_locs(n_sources)
         gal_source_locs = self.cartesian_to_gal(cartesian_source_locs)
-        source_types = self.sample_source_types(n_sources)
+        source_types = self.sample_source_types(des_sources)
         redshift_samples = self.sample_redshifts(n_sources, source_types)
-        r_flux_samples = self.sample_flux_r(redshift_samples)
+        flux_samples = self.sample_fluxes(des_sources)
         g1_size_samples, g2_size_samples = self.sample_shape(n_sources)
-        hlr_samples = self.sample_hlr(n_sources, source_types)
+        hlr_samples = self.sample_hlr(des_sources, source_types)
         return self.make_background_catalog(
-            n_sources,
-            r_flux_samples,
+            flux_samples,
             hlr_samples,
             g1_size_samples,
             g2_size_samples,
