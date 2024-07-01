@@ -9,9 +9,8 @@ from case_studies.galaxy_clustering.utils import cluster_utils as utils
 
 
 class BackgroundPrior:
-    def __init__(self, size=100, image_size=4800):
+    def __init__(self, image_size=4800):
         super().__init__()
-        self.size = size
         self.width = image_size
         self.height = image_size
         self.center_offset = (self.width / 2) - 0.5
@@ -47,7 +46,7 @@ class BackgroundPrior:
         Returns:
             Poisson sample for number of background sources
         """
-        return np.random.poisson(self.mean_sources * self.width * self.height / 49, self.size)
+        return np.random.poisson(self.mean_sources * self.width * self.height / 49)
 
     def sample_source_types(self, n_sources):
         """Sample source type for each source.
@@ -58,10 +57,7 @@ class BackgroundPrior:
         Returns:
             source_types: source types (0 for star, 1 for galaxy)
         """
-        source_types = []
-        for i in range(self.size):
-            source_types.append((np.random.uniform(size=n_sources[i]) < self.gal_prob))
-        return source_types
+        return np.random.uniform(size=n_sources) < self.gal_prob
 
     def sample_background_redshift(self, num_samples):
         """Sample redshift of background galaxies.
@@ -80,35 +76,28 @@ class BackgroundPrior:
         Sampled uniformly for galaxies, set to zero for stars
 
         Args:
-            n_sources: number of sources in each catalog
+            n_sources: number of background sources
             source_types: source types for each source (0 for star, 1 for galaxy)
 
         Returns:
             redshift_samples: list containing redshift samples for all sources
         """
-        redshift_samples = []
-        for i in range(self.size):
-            background_redshifts = self.sample_background_redshift(n_sources[i])
-            masked_redshifts = background_redshifts * source_types[i]
-            redshift_samples.append(masked_redshifts)
-        return redshift_samples
+        background_redshifts = self.sample_background_redshift(n_sources)
+        return background_redshifts * source_types
 
     def sample_source_locs(self, n_sources):
         """Samples locations of background sources.
         Assumed to be uniformly distributed over the image
 
         Args:
-            n_sources: number of sources for each catalog
+            n_sources: number of background sources
 
         Returns:
-            list of arrays of background source locations for each catalog
+            array of background source locations
         """
-        source_locs = []
-        for i in range(self.size):
-            x = np.random.uniform(0, self.width, n_sources[i])
-            y = np.random.uniform(0, self.height, n_sources[i])
-            source_locs.append(np.column_stack((x, y)))
-        return source_locs
+        x = np.random.uniform(0, self.width, n_sources)
+        y = np.random.uniform(0, self.height, n_sources)
+        return np.column_stack((x, y))
 
     def cartesian_to_gal(self, coordinates, pixel_scale=0.2):
         """Converts cartesian coordinates on the image to (Ra, Dec).
@@ -123,13 +112,10 @@ class BackgroundPrior:
         image_offset = (self.center_offset, self.center_offset)
         sky_center = (self.ra_cen, self.dec_cen)
         gal_coordinates = []
-        for coord_i in coordinates:
-            temp = []
-            for coord_ij in coord_i:
-                ra = (coord_ij[0] - image_offset[0]) * pixel_scale / (60 * 60) + sky_center[0]
-                dec = (coord_ij[1] - image_offset[1]) * pixel_scale / (60 * 60) + sky_center[1]
-                temp.append((ra, dec))
-            gal_coordinates.append(temp)
+        for coord in coordinates:
+            ra = (coord[0] - image_offset[0]) * pixel_scale / (60 * 60) + sky_center[0]
+            dec = (coord[1] - image_offset[1]) * pixel_scale / (60 * 60) + sky_center[1]
+            gal_coordinates.append((ra, dec))
         return gal_coordinates
 
     def sample_hlr(self, n_sources, source_types):
@@ -138,17 +124,14 @@ class BackgroundPrior:
         HLR set to 1e-4 for stars
 
         Args:
-            n_sources: number of sources for each catalog
+            n_sources: number of background sources
             source_types: source type for each source (0 for star, 1 for galaxy)
 
         Returns:
-            samples for half light radius for each source in each catalog
+            samples for half light radius for each source
         """
-        hlr_samples = []
-        for i in range(self.size):
-            hlr_samples_ii = np.random.uniform(0.5, 1.0, n_sources[i])
-            hlr_samples_ii[~source_types[i]] = 1e-4
-            hlr_samples.append(hlr_samples_ii)
+        hlr_samples = np.random.uniform(0.5, 1.0, n_sources)
+        hlr_samples[~source_types] = 1e-4
         return hlr_samples
 
     def sample_flux_r(self, redshift_samples):
@@ -162,20 +145,17 @@ class BackgroundPrior:
         Returns:
             flux_samples: samples for flux in r band
         """
-        flux_samples = []
-        for i in range(self.size):
-            total_element = len(redshift_samples[i])
-            mag_samples = self.mag_max - np.random.exponential(self.mag_ex, total_element)
-            for j, _ in enumerate(mag_samples):
-                while mag_samples[j] < 15.75:
-                    mag_samples[j] = (self.mag_max - np.random.exponential(self.mag_ex, 1))[0]
-                mag_samples[j] = utils.mag_to_flux(mag_samples[j])
-                mag_samples[j] *= 1 + redshift_samples[i][j]
-            flux_samples.append(mag_samples)
-        return flux_samples
+        total_element = len(redshift_samples)
+        mag_samples = self.mag_max - np.random.exponential(self.mag_ex, total_element)
+        for i, _ in enumerate(mag_samples):
+            while mag_samples[i] < 15.75:
+                mag_samples[i] = (self.mag_max - np.random.exponential(self.mag_ex, 1))[0]
+            mag_samples[i] = utils.mag_to_flux(mag_samples[i])
+            mag_samples[i] *= 1 + redshift_samples[i]
+        return mag_samples
 
     def sample_shape(self, num_elements):
-        """Samples shape of sources in each catalog.
+        """Samples shape of sources.
         (G1, G2) are both assumed to have a generalized normal distribution
         We use rejection sampling to ensure:
             G1^2 + G2^2 < 1
@@ -186,46 +166,35 @@ class BackgroundPrior:
             num_elements: number of elements to sample
 
         Returns:
-            samples for (G1, G2) for each
+            samples for (G1, G2) for each source
         """
-        g1_size_samples = []
-        g2_size_samples = []
-        for i in range(self.size):
-            g1_size_samples.append(
-                gennorm.rvs(self.G1_beta, self.G1_loc, self.G1_scale, num_elements[i])
-            )
-            g2_size_samples.append(
-                gennorm.rvs(self.G2_beta, self.G2_loc, self.G2_scale, num_elements[i])
-            )
-            for j in range(num_elements[i]):
-                flag_large = g1_size_samples[i][j] ** 2 + g2_size_samples[i][j] ** 2 >= 1
-                flag_g1_large = g1_size_samples[i][j] >= 0.8
-                flag_g2_large = g2_size_samples[i][j] >= 0.8
+        g1_size_samples = gennorm.rvs(self.G1_beta, self.G1_loc, self.G1_scale, num_elements)
+        g2_size_samples = gennorm.rvs(self.G2_beta, self.G2_loc, self.G2_scale, num_elements)
+        for i in range(num_elements):
+            flag_large = g1_size_samples[i] ** 2 + g2_size_samples[i] ** 2 >= 1
+            flag_g1_large = g1_size_samples[i] >= 0.8
+            flag_g2_large = g2_size_samples[i] >= 0.8
+            flag_reject = flag_large or flag_g1_large or flag_g2_large
+            while flag_reject:
+                g1_size_samples[i] = gennorm.rvs(self.G1_beta, self.G1_loc, self.G1_scale, 1)[0]
+                g2_size_samples[i] = gennorm.rvs(self.G2_beta, self.G2_loc, self.G2_scale, 1)[0]
+                flag_large = g1_size_samples[i] ** 2 + g2_size_samples[i] ** 2 >= 1
+                flag_g1_large = g1_size_samples[i] >= 0.8
+                flag_g2_large = g2_size_samples[i] >= 0.8
                 flag_reject = flag_large or flag_g1_large or flag_g2_large
-                while flag_reject:
-                    g1_size_samples[i][j] = gennorm.rvs(
-                        self.G1_beta, self.G1_loc, self.G1_scale, 1
-                    )[0]
-                    g2_size_samples[i][j] = gennorm.rvs(
-                        self.G2_beta, self.G2_loc, self.G2_scale, 1
-                    )[0]
-                    flag_large = g1_size_samples[i][j] ** 2 + g2_size_samples[i][j] ** 2 >= 1
-                    flag_g1_large = g1_size_samples[i][j] >= 0.8
-                    flag_g2_large = g2_size_samples[i][j] >= 0.8
-                    flag_reject = flag_large or flag_g1_large or flag_g2_large
         return g1_size_samples, g2_size_samples
 
-    def sample_flux_ratios(self, gmm, size):
+    def sample_flux_ratios(self, gmm, num_elements):
         """Samples flux ratios from Gaussian Mixture Model (color model).
 
         Args:
             gmm: Gaussian Mixture Model
-            size: samples to be generated (number of sources)
+            num_elements: Number of elements to sample (number of sources)
 
         Returns:
             flux ratios for all bands
         """
-        flux_logdiff, _ = gmm.sample(size)
+        flux_logdiff, _ = gmm.sample(num_elements)
         flux_logdiff = np.clip(flux_logdiff, -2.76, 2.76)
         flux_ratio = np.exp(flux_logdiff)
         flux_prop = np.ones((flux_logdiff.shape[0], self.n_bands))
@@ -247,7 +216,7 @@ class BackgroundPrior:
         redshift_samples,
         source_types,
     ):
-        """Makes list of background catalogs from generated samples.
+        """Makes a background catalog from generated samples.
 
         Args:
             n_sources: number of sources
@@ -261,37 +230,34 @@ class BackgroundPrior:
             source_types: source types for each source (0 for star, 1 for galaxy)
 
         Returns:
-            list of dataframes (one for each catalog)
+            dataframe of catalog
         """
-        res = []
-        for i, r_flux in enumerate(r_flux_samples):
-            mock_catalog = pd.DataFrame()
-            ratios = self.sample_flux_ratios(self.gmm_gal, n_sources[i])
-            fluxes = np.array(r_flux)[:, np.newaxis] * np.array(ratios)
-            mock_catalog["RA"] = np.array(gal_source_locs[i])[:, 0]
-            mock_catalog["DEC"] = np.array(gal_source_locs[i])[:, 1]
-            mock_catalog["X"] = np.array(cartesian_source_locs[i])[:, 0]
-            mock_catalog["Y"] = np.array(cartesian_source_locs[i])[:, 1]
-            mock_catalog["MEM"] = 0
-            mock_catalog["FLUX_R"] = fluxes[:, 1]
-            mock_catalog["FLUX_G"] = fluxes[:, 0]
-            mock_catalog["FLUX_I"] = fluxes[:, 2]
-            mock_catalog["FLUX_Z"] = fluxes[:, 3]
-            mock_catalog["FLUX_Y"] = fluxes[:, 4]
-            mock_catalog["HLR"] = hlr_samples[i]
-            mock_catalog["FRACDEV"] = 0
-            mock_catalog["G1"] = g1_size_samples[i]
-            mock_catalog["G2"] = g2_size_samples[i]
-            mock_catalog["Z"] = redshift_samples[i]
-            mock_catalog["SOURCE_TYPE"] = source_types[i].astype(int)
-            res.append(mock_catalog)
-        return res
+        mock_catalog = pd.DataFrame()
+        ratios = self.sample_flux_ratios(self.gmm_gal, n_sources)
+        fluxes = np.array(r_flux_samples)[:, np.newaxis] * np.array(ratios)
+        mock_catalog["RA"] = np.array(gal_source_locs)[:, 0]
+        mock_catalog["DEC"] = np.array(gal_source_locs)[:, 1]
+        mock_catalog["X"] = np.array(cartesian_source_locs)[:, 0]
+        mock_catalog["Y"] = np.array(cartesian_source_locs)[:, 1]
+        mock_catalog["MEM"] = 0
+        mock_catalog["FLUX_R"] = fluxes[:, 1]
+        mock_catalog["FLUX_G"] = fluxes[:, 0]
+        mock_catalog["FLUX_I"] = fluxes[:, 2]
+        mock_catalog["FLUX_Z"] = fluxes[:, 3]
+        mock_catalog["FLUX_Y"] = fluxes[:, 4]
+        mock_catalog["HLR"] = hlr_samples
+        mock_catalog["FRACDEV"] = 0
+        mock_catalog["G1"] = g1_size_samples
+        mock_catalog["G2"] = g2_size_samples
+        mock_catalog["Z"] = redshift_samples
+        mock_catalog["SOURCE_TYPE"] = source_types.astype(int)
+        return mock_catalog
 
     def sample_background(self):
         """Samples backgrounds.
 
         Returns:
-            background_catalogs: list of background catalogs for each image
+            background_catalog: a single background catalogs for one image
         """
         n_sources = self.sample_n_sources()
         cartesian_source_locs = self.sample_source_locs(n_sources)
