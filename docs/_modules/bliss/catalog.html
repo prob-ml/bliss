@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bliss.catalog &mdash; bliss  documentation</title>
+      <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+        <script data-url_root="../../" id="documentation_options" src="../../_static/documentation_options.js"></script>
+        <script src="../../_static/doctools.js"></script>
+        <script src="../../_static/sphinx_highlight.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            bliss
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul>
+<li class="toctree-l1"><a class="reference internal" href="../../Installation.html">Installation Guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../api/index.html">Bliss API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../tutorials/index.html">Tutorials</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">bliss</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">bliss.catalog</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for bliss.catalog</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">UserDict</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="kn">import</span> <span class="n">IntEnum</span>
+<span class="kn">from</span> <span class="nn">typing</span> <span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Tuple</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">from</span> <span class="nn">astropy</span> <span class="kn">import</span> <span class="n">units</span>
+<span class="kn">from</span> <span class="nn">astropy.table</span> <span class="kn">import</span> <span class="n">Table</span>
+<span class="kn">from</span> <span class="nn">astropy.wcs</span> <span class="kn">import</span> <span class="n">WCS</span>
+<span class="kn">from</span> <span class="nn">einops</span> <span class="kn">import</span> <span class="n">rearrange</span><span class="p">,</span> <span class="n">reduce</span><span class="p">,</span> <span class="n">repeat</span>
+<span class="kn">from</span> <span class="nn">torch</span> <span class="kn">import</span> <span class="n">Tensor</span>
+<span class="kn">from</span> <span class="nn">torch.nn.utils.rnn</span> <span class="kn">import</span> <span class="n">pad_sequence</span>
+
+
+<span class="k">def</span> <span class="nf">convert_mag_to_nmgy</span><span class="p">(</span><span class="n">mag</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mi">10</span> <span class="o">**</span> <span class="p">((</span><span class="mf">22.5</span> <span class="o">-</span> <span class="n">mag</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.5</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">convert_nmgy_to_mag</span><span class="p">(</span><span class="n">nmgy</span><span class="p">):</span>
+    <span class="k">return</span> <span class="mf">22.5</span> <span class="o">-</span> <span class="mf">2.5</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="n">nmgy</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="SourceType"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.SourceType">[docs]</a><span class="k">class</span> <span class="nc">SourceType</span><span class="p">(</span><span class="n">IntEnum</span><span class="p">):</span>
+    <span class="n">STAR</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">GALAXY</span> <span class="o">=</span> <span class="mi">1</span></div>
+
+
+<div class="viewcode-block" id="BaseTileCatalog"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.BaseTileCatalog">[docs]</a><span class="k">class</span> <span class="nc">BaseTileCatalog</span><span class="p">(</span><span class="n">UserDict</span><span class="p">):</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">d</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]):</span>
+        <span class="c1"># TODO: a tile catalog shouldn&#39;t know it&#39;s side length</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">=</span> <span class="n">tile_slen</span>
+
+        <span class="n">v</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">values</span><span class="p">()))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">device</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">d</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">item</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="c1"># TODO: all float data should be torch.float32, fix this</span>
+        <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">torch</span><span class="o">.</span><span class="n">float64</span><span class="p">:</span>
+            <span class="n">item</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span> <span class="o">==</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="k">def</span> <span class="nf">to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">crop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hlims_tile</span><span class="p">,</span> <span class="n">wlims_tile</span><span class="p">):</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[:,</span> <span class="n">hlims_tile</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="p">:</span> <span class="n">hlims_tile</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">wlims_tile</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="p">:</span> <span class="n">wlims_tile</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">symmetric_crop</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiles_to_crop</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">crop</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">tiles_to_crop</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span> <span class="o">-</span> <span class="n">tiles_to_crop</span><span class="p">],</span>
+            <span class="p">[</span><span class="n">tiles_to_crop</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span> <span class="o">-</span> <span class="n">tiles_to_crop</span><span class="p">],</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TileCatalog"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.TileCatalog">[docs]</a><span class="k">class</span> <span class="nc">TileCatalog</span><span class="p">(</span><span class="n">BaseTileCatalog</span><span class="p">):</span>
+    <span class="n">galaxy_params</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="s2">&quot;galaxy_disk_frac&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_beta_radians&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_disk_q&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_a_d&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_bulge_q&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;galaxy_a_b&quot;</span><span class="p">,</span>
+    <span class="p">]</span>
+    <span class="n">galaxy_params_index</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">galaxy_params</span><span class="p">)}</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tile_slen</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">d</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__getitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="c1"># a temporary hack until we stop storing galaxy_params as an array</span>
+        <span class="c1"># TODO: remove this hack</span>
+        <span class="k">if</span> <span class="s2">&quot;galaxy_params&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="ow">and</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_params</span><span class="p">:</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">galaxy_params_index</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;galaxy_params&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="n">idx</span> <span class="p">:</span> <span class="p">(</span><span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__getitem__</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_on_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Provides tensor which indicates how many sources are present for each batch.</span>
+
+<span class="sd">        Return a boolean array of `shape=(*n_sources.shape, max_sources)` whose `(*,l)th` entry</span>
+<span class="sd">        indicates whether there are more than l sources on the `*th` index.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tensor indicating how many sources are present for each batch.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># TODO: a tile catalog should store the is_on_mask explicitly, not derive it from n_sources.</span>
+        <span class="c1"># perhaps we should have some catalog format that can store at most one source per tile</span>
+        <span class="n">arange</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">arange</span> <span class="o">=</span> <span class="n">arange</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">arange</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">star_bools</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">is_star</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;source_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">SourceType</span><span class="o">.</span><span class="n">STAR</span>
+        <span class="k">return</span> <span class="n">is_star</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_on_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">galaxy_bools</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">is_galaxy</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;source_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">SourceType</span><span class="o">.</span><span class="n">GALAXY</span>
+        <span class="k">return</span> <span class="n">is_galaxy</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_on_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">on_fluxes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gets fluxes of &quot;on&quot; sources based on whether the source is a star or galaxy.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># TODO: a tile catalog should store fluxes rather than star_fluxes and galaxy_fluxes</span>
+        <span class="c1"># because that&#39;s all that&#39;s needed to render the source</span>
+        <span class="k">if</span> <span class="s2">&quot;galaxy_fluxes&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+            <span class="n">fluxes</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;star_fluxes&quot;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">fluxes</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">galaxy_bools</span><span class="p">,</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;galaxy_fluxes&quot;</span><span class="p">],</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;star_fluxes&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">is_on_mask</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">fluxes</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">fluxes</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">magnitudes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="c1"># TODO: we shouldn&#39;t assume fluxes are stored in nanomaggies because they aren&#39;t for DC2</span>
+        <span class="k">return</span> <span class="n">convert_nmgy_to_mag</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_fluxes</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TileCatalog.to_full_catalog"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.TileCatalog.to_full_catalog">[docs]</a>    <span class="k">def</span> <span class="nf">to_full_catalog</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Converts image parameters in tiles to parameters of full image.</span>
+
+<span class="sd">        By parameters, we mean samples from the variational distribution, not the variational</span>
+<span class="sd">        parameters.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            The FullCatalog instance corresponding to the TileCatalog instance.</span>
+
+<span class="sd">            NOTE: The locations (`&quot;locs&quot;`) are between 0 and 1. The output also contains</span>
+<span class="sd">            pixel locations (&quot;plocs&quot;) that are between 0 and `slen`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># TODO: tile_slen should be an argument to this function, not stored in a tile catalog</span>
+        <span class="n">plocs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_full_locs_from_tiles</span><span class="p">()</span>
+        <span class="n">param_names_to_mask</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;plocs&quot;</span><span class="p">}</span><span class="o">.</span><span class="n">union</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">()))</span>
+        <span class="n">tile_params_to_gather</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;plocs&quot;</span><span class="p">:</span> <span class="n">plocs</span><span class="p">}</span>
+        <span class="n">tile_params_to_gather</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+
+        <span class="n">params</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">indices_to_retrieve</span><span class="p">,</span> <span class="n">is_on_array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_indices_of_on_sources</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">param_name</span><span class="p">,</span> <span class="n">tile_param</span> <span class="ow">in</span> <span class="n">tile_params_to_gather</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">param_name</span> <span class="o">==</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">param_name</span> <span class="o">==</span> <span class="s2">&quot;locs&quot;</span><span class="p">:</span>  <span class="c1"># full catalog uses plocs instead of locs</span>
+                <span class="k">continue</span>
+            <span class="n">k</span> <span class="o">=</span> <span class="n">tile_param</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">param</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">tile_param</span><span class="p">,</span> <span class="s2">&quot;b nth ntw s k -&gt; b (nth ntw s) k&quot;</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">)</span>
+            <span class="n">indices_for_param</span> <span class="o">=</span> <span class="n">repeat</span><span class="p">(</span><span class="n">indices_to_retrieve</span><span class="p">,</span> <span class="s2">&quot;b nth_ntw_s -&gt; b nth_ntw_s k&quot;</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">k</span><span class="p">)</span>
+            <span class="n">param</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">param</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">indices_for_param</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">param_name</span> <span class="ow">in</span> <span class="n">param_names_to_mask</span><span class="p">:</span>
+                <span class="n">param</span> <span class="o">=</span> <span class="n">param</span> <span class="o">*</span> <span class="n">is_on_array</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">params</span><span class="p">[</span><span class="n">param_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">param</span>
+
+        <span class="n">params</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">reduce</span><span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">],</span> <span class="s2">&quot;b nth ntw -&gt; b&quot;</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">)</span>
+
+        <span class="n">height_px</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span>
+        <span class="n">width_px</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span>
+
+        <span class="k">return</span> <span class="n">FullCatalog</span><span class="p">(</span><span class="n">height_px</span><span class="p">,</span> <span class="n">width_px</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TileCatalog.get_full_locs_from_tiles"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.TileCatalog.get_full_locs_from_tiles">[docs]</a>    <span class="k">def</span> <span class="nf">get_full_locs_from_tiles</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the full image locations from tile locations.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tensor: pixel coordinates of each source (between 0 and slen).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">slen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span>
+        <span class="n">wlen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span>
+        <span class="c1"># coordinates on tiles.</span>
+        <span class="n">x_coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">y_coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">wlen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="n">tile_coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cartesian_prod</span><span class="p">(</span><span class="n">x_coords</span><span class="p">,</span> <span class="n">y_coords</span><span class="p">)</span>
+
+        <span class="c1"># recenter and renormalize locations.</span>
+        <span class="n">locs</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">],</span> <span class="s2">&quot;b nth ntw d xy -&gt; (b nth ntw) d xy&quot;</span><span class="p">,</span> <span class="n">xy</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">bias</span> <span class="o">=</span> <span class="n">repeat</span><span class="p">(</span><span class="n">tile_coords</span><span class="p">,</span> <span class="s2">&quot;n xy -&gt; (r n) 1 xy&quot;</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+
+        <span class="n">plocs</span> <span class="o">=</span> <span class="n">locs</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">+</span> <span class="n">bias</span>
+        <span class="k">return</span> <span class="n">rearrange</span><span class="p">(</span>
+            <span class="n">plocs</span><span class="p">,</span>
+            <span class="s2">&quot;(b nth ntw) d xy -&gt; b nth ntw d xy&quot;</span><span class="p">,</span>
+            <span class="n">b</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span>
+            <span class="n">nth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span><span class="p">,</span>
+            <span class="n">ntw</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+<div class="viewcode-block" id="TileCatalog.get_indices_of_on_sources"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.TileCatalog.get_indices_of_on_sources">[docs]</a>    <span class="k">def</span> <span class="nf">get_indices_of_on_sources</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the indices of detected sources from each tile.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A 2-D tensor of integers with shape `n_samples x max(n_sources)`,</span>
+<span class="sd">            where `max(n_sources)` is the maximum number of sources detected across all samples.</span>
+
+<span class="sd">            Each element of this tensor is an index of a particular source within a particular tile.</span>
+<span class="sd">            For a particular sample i that had N detections,</span>
+<span class="sd">            the first N indices of indices_sorted[i. :] will be the detected sources.</span>
+<span class="sd">            This is accomplished by flattening the n_tiles_per_image and max_detections.</span>
+<span class="sd">            For example, if we had 3 tiles with a maximum of two sources each,</span>
+<span class="sd">            the elements of this tensor would take values from 0 up to and including 5.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tile_is_on_array_sampled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_on_mask</span>
+        <span class="n">n_sources</span> <span class="o">=</span> <span class="n">reduce</span><span class="p">(</span><span class="n">tile_is_on_array_sampled</span><span class="p">,</span> <span class="s2">&quot;b nth ntw d -&gt; b&quot;</span><span class="p">,</span> <span class="s2">&quot;sum&quot;</span><span class="p">)</span>
+        <span class="n">max_sources</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_sources</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">int</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+        <span class="n">tile_is_on_array</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="n">tile_is_on_array_sampled</span><span class="p">,</span> <span class="s2">&quot;b nth ntw d -&gt; b (nth ntw d)&quot;</span><span class="p">)</span>
+        <span class="n">indices_sorted</span> <span class="o">=</span> <span class="n">tile_is_on_array</span><span class="o">.</span><span class="n">long</span><span class="p">()</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">descending</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">indices_sorted</span> <span class="o">=</span> <span class="n">indices_sorted</span><span class="p">[:,</span> <span class="p">:</span><span class="n">max_sources</span><span class="p">]</span>
+
+        <span class="n">is_on_array</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">tile_is_on_array</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="n">indices_sorted</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">indices_sorted</span><span class="p">,</span> <span class="n">is_on_array</span></div>
+
+    <span class="k">def</span> <span class="nf">_sort_sources_by_flux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">band</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+        <span class="c1"># sort by fluxes of &quot;on&quot; sources to get brightest source per tile</span>
+        <span class="n">on_fluxes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">on_fluxes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">band</span><span class="p">]</span>  <span class="c1"># shape n x nth x ntw x d</span>
+        <span class="n">top_indexes</span> <span class="o">=</span> <span class="n">on_fluxes</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">descending</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;n_sources&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="o">!=</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                <span class="n">param_dim</span> <span class="o">=</span> <span class="n">val</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">idx_to_gather</span> <span class="o">=</span> <span class="n">repeat</span><span class="p">(</span><span class="n">top_indexes</span><span class="p">,</span> <span class="s2">&quot;... -&gt; ... pd&quot;</span><span class="p">,</span> <span class="n">pd</span><span class="o">=</span><span class="n">param_dim</span><span class="p">)</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">take_along_dim</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="n">idx_to_gather</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TileCatalog.get_brightest_sources_per_tile"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.TileCatalog.get_brightest_sources_per_tile">[docs]</a>    <span class="k">def</span> <span class="nf">get_brightest_sources_per_tile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">exclude_num</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">band</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restrict TileCatalog to only the brightest &#39;on&#39; source per tile.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            top_k (int): The number of sources to keep per tile. Defaults to 1.</span>
+<span class="sd">            exclude_num (int): A number of the brightest sources to exclude. Defaults to 0.</span>
+<span class="sd">            band (int): The band to compare fluxes in. Defaults to 2 (r-band).</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TileCatalog: a new catalog with only one source per tile</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">top_k</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">exclude_num</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span>
+
+        <span class="k">if</span> <span class="n">exclude_num</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">:</span>
+            <span class="n">tc</span> <span class="o">=</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+            <span class="n">tc</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">tc</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">])</span>
+            <span class="k">return</span> <span class="n">tc</span>
+
+        <span class="n">sorted_self</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sort_sources_by_flux</span><span class="p">(</span><span class="n">band</span><span class="o">=</span><span class="n">band</span><span class="p">)</span>
+
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">sorted_self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">sorted_self</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">-</span> <span class="n">exclude_num</span><span class="p">)</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="nb">max</span><span class="o">=</span><span class="n">top_k</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:,</span> <span class="n">exclude_num</span> <span class="p">:</span> <span class="p">(</span><span class="n">exclude_num</span> <span class="o">+</span> <span class="n">top_k</span><span class="p">)]</span>
+
+        <span class="k">return</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TileCatalog.filter_by_flux"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.TileCatalog.filter_by_flux">[docs]</a>    <span class="k">def</span> <span class="nf">filter_by_flux</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">min_flux</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_flux</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="n">band</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Restricts TileCatalog to sources that have a flux between min_flux and max_flux.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            min_flux (float): Minimum flux value to keep. Defaults to 0.</span>
+<span class="sd">            max_flux (float): Maximum flux value to keep. Defaults to infinity.</span>
+<span class="sd">            band (int): The band to compare fluxes in. Defaults to 2 (r-band).</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TileCatalog: a new catalog with only sources within the flux range. Note that the size</span>
+<span class="sd">                of the tensors stays the same, but params at sources outside the range are set to 0.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sorted_self</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sort_sources_by_flux</span><span class="p">(</span><span class="n">band</span><span class="o">=</span><span class="n">band</span><span class="p">)</span>
+
+        <span class="c1"># get fluxes of &quot;on&quot; sources to mask by</span>
+        <span class="n">on_fluxes</span> <span class="o">=</span> <span class="n">sorted_self</span><span class="o">.</span><span class="n">on_fluxes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">band</span><span class="p">]</span>
+        <span class="n">flux_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">on_fluxes</span> <span class="o">&gt;</span> <span class="n">min_flux</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">on_fluxes</span> <span class="o">&lt;</span> <span class="n">max_flux</span><span class="p">)</span>
+
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">sorted_self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;shear&quot;</span><span class="p">,</span> <span class="s2">&quot;convergence&quot;</span><span class="p">}:</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+            <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">flux_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>  <span class="c1"># number of sources within range in tile</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">flux_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">val</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">val</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="TileCatalog.union"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.TileCatalog.union">[docs]</a>    <span class="k">def</span> <span class="nf">union</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">,</span> <span class="n">disjoint</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns a new TileCatalog containing the union of the sources in self and other.</span>
+<span class="sd">        The maximum number of sources in the returned catalog is the sum of the maximum number</span>
+<span class="sd">        of sources in self and other if disjoint is false, otherwise it is unchanged.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            other: Another TileCatalog.</span>
+<span class="sd">            disjoint: whether the catalogs cannot have sources in the same tiles</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A new TileCatalog containing the union of the sources in self and other.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">tile_slen</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">n_tiles_h</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">n_tiles_w</span>
+
+        <span class="c1"># if not, we could store is_on_mask and derive n_sources by summing is_on_mask,</span>
+        <span class="c1"># rather than storing n_sources and deriving is_on_mask by assuming sorted sources</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">max_sources</span> <span class="o">==</span> <span class="mi">1</span>
+
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">ns11</span> <span class="o">=</span> <span class="n">rearrange</span><span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">],</span> <span class="s2">&quot;b ht wt -&gt; b ht wt 1 1&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span> <span class="o">+</span> <span class="n">other</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">disjoint</span><span class="p">:</span>
+                    <span class="k">assert</span> <span class="n">d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="mi">1</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">disjoint</span><span class="p">:</span>
+                    <span class="n">d1</span> <span class="o">=</span> <span class="n">v</span>
+                    <span class="n">d2</span> <span class="o">=</span> <span class="n">other</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">d1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">v</span><span class="p">,</span> <span class="n">other</span><span class="p">[</span><span class="n">k</span><span class="p">]),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="n">d2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">other</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="n">v</span><span class="p">),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">2</span><span class="p">)</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">ns11</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">d1</span><span class="p">,</span> <span class="n">d2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">keys</span> <span class="o">=</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;TileCatalog(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="si">}</span><span class="s2"> x </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_h</span><span class="si">}</span><span class="s2"> x </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_tiles_w</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">keys</span><span class="si">}</span><span class="s2">)&quot;</span></div>
+
+
+<div class="viewcode-block" id="FullCatalog"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.FullCatalog">[docs]</a><span class="k">class</span> <span class="nc">FullCatalog</span><span class="p">(</span><span class="n">UserDict</span><span class="p">):</span>
+<div class="viewcode-block" id="FullCatalog.plocs_from_ra_dec"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.FullCatalog.plocs_from_ra_dec">[docs]</a>    <span class="nd">@staticmethod</span>
+    <span class="k">def</span> <span class="nf">plocs_from_ra_dec</span><span class="p">(</span><span class="n">ras</span><span class="p">,</span> <span class="n">decs</span><span class="p">,</span> <span class="n">wcs</span><span class="p">:</span> <span class="n">WCS</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Converts RA/DEC coordinates into BLISS&#39;s pixel coordinates.</span>
+<span class="sd">            BLISS pixel coordinates have (0, 0) as the lower-left corner, whereas standard pixel</span>
+<span class="sd">            coordinates begin at (-0.5, -0.5). BLISS pixel coordinates are in row-column order,</span>
+<span class="sd">            whereas standard pixel coordinates are in column-row order.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ras (Tensor): (b, n) tensor of RA coordinates in degrees.</span>
+<span class="sd">            decs (Tensor): (b, n) tensor of DEC coordinates in degrees.</span>
+<span class="sd">            wcs (WCS): WCS object to use for transformation.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            A 1xNx2 tensor containing the locations of the light sources in pixel coordinates. This</span>
+<span class="sd">            function does not write self[&quot;plocs&quot;], so you should do that manually if necessary.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ras</span> <span class="o">=</span> <span class="n">ras</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+        <span class="n">decs</span> <span class="o">=</span> <span class="n">decs</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+
+        <span class="n">pt</span><span class="p">,</span> <span class="n">pr</span> <span class="o">=</span> <span class="n">wcs</span><span class="o">.</span><span class="n">all_world2pix</span><span class="p">(</span><span class="n">ras</span><span class="p">,</span> <span class="n">decs</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># convert to pixel coordinates</span>
+        <span class="n">pt</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">pt</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.5</span>  <span class="c1"># For consistency with BLISS</span>
+        <span class="n">pr</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">pr</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.5</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">((</span><span class="n">pr</span><span class="p">,</span> <span class="n">pt</span><span class="p">),</span> <span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="FullCatalog.from_file"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.FullCatalog.from_file">[docs]</a>    <span class="nd">@classmethod</span>
+    <span class="k">def</span> <span class="nf">from_file</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">cat_path</span><span class="p">,</span> <span class="n">wcs</span><span class="p">,</span> <span class="n">height</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;FullCatalog&quot;</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Loads FullCatalog from disk.&quot;&quot;&quot;</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">height</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">width</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">d</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize FullCatalog.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            height: In pixels, without accounting for border padding.</span>
+<span class="sd">            width: In pixels, without accounting for border padding.</span>
+<span class="sd">            d: Dictionary containing parameters of FullCatalog with correct shape.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">height</span> <span class="o">=</span> <span class="n">height</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">width</span> <span class="o">=</span> <span class="n">width</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">device</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">device</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">,</span> <span class="n">hw</span> <span class="o">=</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+        <span class="k">assert</span> <span class="n">hw</span> <span class="o">==</span> <span class="mi">2</span>
+        <span class="k">assert</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">int</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span>
+        <span class="k">assert</span> <span class="n">d</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">**</span><span class="n">d</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="fm">__setitem__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">item</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__setitem__</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">item</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">_validate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span>
+        <span class="k">assert</span> <span class="n">x</span><span class="o">.</span><span class="n">device</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span>
+
+    <span class="k">def</span> <span class="nf">to</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">device</span><span class="p">):</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">width</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">is_on_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">arange</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">arange</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">star_bools</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">is_star</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;source_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">SourceType</span><span class="o">.</span><span class="n">STAR</span>
+        <span class="k">assert</span> <span class="n">is_star</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span>
+        <span class="k">assert</span> <span class="n">is_star</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">is_star</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_on_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">galaxy_bools</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">is_galaxy</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;source_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">SourceType</span><span class="o">.</span><span class="n">GALAXY</span>
+        <span class="k">assert</span> <span class="n">is_galaxy</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span>
+        <span class="k">assert</span> <span class="n">is_galaxy</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">is_galaxy</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_on_mask</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">on_fluxes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Gets fluxes of &quot;on&quot; sources based on whether the source is a star or galaxy.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># ideally we&#39;d always store fluxes rather than star_fluxes and galaxy_fluxes</span>
+        <span class="k">if</span> <span class="s2">&quot;galaxy_fluxes&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+            <span class="n">fluxes</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;star_fluxes&quot;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">fluxes</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">galaxy_bools</span><span class="p">,</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;galaxy_fluxes&quot;</span><span class="p">],</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;star_fluxes&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">is_on_mask</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="kc">None</span><span class="p">],</span> <span class="n">fluxes</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">fluxes</span><span class="p">))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">magnitudes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">convert_nmgy_to_mag</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">on_fluxes</span><span class="p">)</span>
+
+<div class="viewcode-block" id="FullCatalog.one_source"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.FullCatalog.one_source">[docs]</a>    <span class="k">def</span> <span class="nf">one_source</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">s</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return a dict containing all parameter for one specified light source.&quot;&quot;&quot;</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="n">s</span> <span class="o">&lt;</span> <span class="n">v</span><span class="p">[</span><span class="n">b</span><span class="p">]</span>
+                <span class="k">continue</span>
+            <span class="n">out</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="n">b</span><span class="p">][</span><span class="n">s</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">out</span></div>
+
+<div class="viewcode-block" id="FullCatalog.apply_param_bin"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.FullCatalog.apply_param_bin">[docs]</a>    <span class="k">def</span> <span class="nf">apply_param_bin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pname</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">p_min</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">p_max</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply magnitude bin to given parameters.&quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="n">pname</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Parameter &#39;</span><span class="si">{</span><span class="n">pname</span><span class="si">}</span><span class="s2">&#39; required to apply mag cut.&quot;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Can only be applied to scalar parameters.&quot;</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Cannot use this function with </span><span class="si">{</span><span class="n">pname</span><span class="si">}</span><span class="s2">.&quot;</span>
+        <span class="k">assert</span> <span class="n">p_min</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;`p_min` should be at least 0 &quot;</span>
+
+        <span class="c1"># get indices to collect</span>
+        <span class="n">keep</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">p_max</span>
+        <span class="n">keep</span> <span class="o">=</span> <span class="n">keep</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">p_min</span><span class="p">)</span>
+        <span class="n">n_batches</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">keep</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">as_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">n_batches</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">to_collect</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">keep</span><span class="p">,</span> <span class="n">as_indices</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">keep</span><span class="p">)</span> <span class="o">*</span> <span class="n">max_sources</span><span class="p">)</span>
+        <span class="n">to_collect</span> <span class="o">=</span> <span class="n">to_collect</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c1"># get dictionary with all params (including plocs)</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+        <span class="n">d_new</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">d</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">pdim</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">to_collect_v</span> <span class="o">=</span> <span class="n">to_collect</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">n_batches</span><span class="p">,</span> <span class="n">max_sources</span><span class="p">,</span> <span class="n">pdim</span><span class="p">)</span>
+            <span class="n">v_expand</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">hstack</span><span class="p">([</span><span class="n">v</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])])</span>
+            <span class="n">d_new</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">gather</span><span class="p">(</span><span class="n">v_expand</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">to_collect_v</span><span class="p">)</span>
+        <span class="n">d_new</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">keep</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)(</span><span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">width</span><span class="p">,</span> <span class="n">d_new</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">_get_tile_to_source_mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mapping_matrix</span><span class="p">:</span> <span class="n">Tensor</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tensor</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">mapping_matrix</span><span class="o">.</span><span class="n">nonzero</span><span class="p">()</span>
+
+<div class="viewcode-block" id="FullCatalog.to_tile_catalog"><a class="viewcode-back" href="../../api/bliss.html#bliss.catalog.FullCatalog.to_tile_catalog">[docs]</a>    <span class="k">def</span> <span class="nf">to_tile_catalog</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">tile_slen</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">max_sources_per_tile</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">ignore_extra_sources</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">filter_oob</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TileCatalog</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Returns the TileCatalog corresponding to this FullCatalog.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            tile_slen: The side length of the tiles.</span>
+<span class="sd">            max_sources_per_tile: The maximum number of sources in one tile.</span>
+<span class="sd">            ignore_extra_sources: If False (default), raises an error if the number of sources</span>
+<span class="sd">                in one tile exceeds the `max_sources_per_tile`. If True, only adds the tile</span>
+<span class="sd">                parameters of the first `max_sources_per_tile` sources to the new TileCatalog.</span>
+<span class="sd">            filter_oob: If filter_oob is true, filter out the sources outside the image. (e.g. In</span>
+<span class="sd">                case of data augmentation, there is a chance of some sources located outside the</span>
+<span class="sd">                image)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            TileCatalog correspond to the each source in the FullCatalog.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and</span>
+<span class="sd">                `ignore_extra_sources` is False.</span>
+<span class="sd">            KeyError: If the tile_params contain `plocs` or `n_sources`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># TODO: a FullCatalog only needs to &quot;know&quot; its height and width to convert itself to a</span>
+        <span class="c1"># TileCatalog. So those parameters should be passed on conversion, not initialization.</span>
+        <span class="n">tile_coords</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">div</span><span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">],</span> <span class="n">tile_slen</span><span class="p">,</span> <span class="n">rounding_mode</span><span class="o">=</span><span class="s2">&quot;trunc&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+        <span class="n">n_tiles_h</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">height</span> <span class="o">/</span> <span class="n">tile_slen</span><span class="p">)</span>
+        <span class="n">n_tiles_w</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">width</span> <span class="o">/</span> <span class="n">tile_slen</span><span class="p">)</span>
+
+        <span class="c1"># prepare tiled tensors</span>
+        <span class="n">tile_cat_shape</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">n_tiles_h</span><span class="p">,</span> <span class="n">n_tiles_w</span><span class="p">,</span> <span class="n">max_sources_per_tile</span><span class="p">)</span>
+        <span class="n">tile_locs</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="o">*</span><span class="n">tile_cat_shape</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">tile_n_sources</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">tile_cat_shape</span><span class="p">[:</span><span class="mi">3</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">tile_params</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;plocs&quot;</span><span class="p">,</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">}:</span>
+                <span class="k">continue</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">int64</span> <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;objid&quot;</span> <span class="k">else</span> <span class="n">torch</span><span class="o">.</span><span class="n">float</span>
+            <span class="n">size</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">n_tiles_h</span><span class="p">,</span> <span class="n">n_tiles_w</span><span class="p">,</span> <span class="n">max_sources_per_tile</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">tile_params</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">tile_params</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tile_locs</span>
+
+        <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">):</span>
+            <span class="n">n_sources</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;n_sources&quot;</span><span class="p">][</span><span class="n">ii</span><span class="p">]</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+            <span class="n">plocs_ii</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">][</span><span class="n">ii</span><span class="p">][:</span><span class="n">n_sources</span><span class="p">]</span>
+            <span class="n">filter_sources</span> <span class="o">=</span> <span class="n">n_sources</span>
+            <span class="n">source_tile_coords</span> <span class="o">=</span> <span class="n">tile_coords</span><span class="p">[</span><span class="n">ii</span><span class="p">][:</span><span class="n">n_sources</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">filter_oob</span><span class="p">:</span>
+                <span class="n">x0_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">plocs_ii</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">plocs_ii</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">)</span>
+                <span class="n">x1_mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">plocs_ii</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">plocs_ii</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">width</span><span class="p">)</span>
+                <span class="n">x_mask</span> <span class="o">=</span> <span class="n">x0_mask</span> <span class="o">*</span> <span class="n">x1_mask</span>
+                <span class="n">filter_sources</span> <span class="o">=</span> <span class="n">x_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+                <span class="n">source_tile_coords</span> <span class="o">=</span> <span class="n">source_tile_coords</span><span class="p">[</span><span class="n">x_mask</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">filter_sources</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="n">source_indices</span> <span class="o">=</span> <span class="n">source_tile_coords</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">n_tiles_w</span> <span class="o">+</span> <span class="n">source_tile_coords</span><span class="p">[</span>
+                <span class="p">:,</span> <span class="mi">1</span>
+            <span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">tile_indices</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n_tiles_h</span> <span class="o">*</span> <span class="n">n_tiles_w</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="n">tile_to_source_mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_tile_to_source_mapping</span><span class="p">(</span>
+                <span class="n">source_indices</span> <span class="o">==</span> <span class="n">tile_indices</span>
+            <span class="p">)</span>
+            <span class="n">tile_source_count</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">Tensor</span><span class="p">]</span> <span class="o">=</span> <span class="n">tile_to_source_mapping</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span>
+                <span class="nb">sorted</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>  <span class="c1"># first element is tile index; second element is source count</span>
+            <span class="k">if</span> <span class="n">tile_source_count</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">&gt;</span> <span class="n">max_sources_per_tile</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">ignore_extra_sources</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>  <span class="c1"># noqa: WPS220</span>
+                        <span class="s2">&quot;# of sources per tile exceeds `max_sources_per_tile`.&quot;</span>
+                    <span class="p">)</span>
+
+            <span class="c1"># get n_sources for each tile</span>
+            <span class="n">tile_n_sources</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="n">tile_source_count</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">where</span><span class="p">(</span>
+                <span class="n">tile_source_count</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">max_sources_per_tile</span><span class="p">,</span>
+                <span class="n">tile_source_count</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">max_sources_per_tile</span><span class="p">,</span>
+            <span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">tile_params</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;plocs&quot;</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;plocs should not be in tile_params&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;locs&quot;</span><span class="p">:</span>
+                    <span class="n">k</span> <span class="o">=</span> <span class="s2">&quot;plocs&quot;</span>
+                <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">KeyError</span><span class="p">(</span><span class="s2">&quot;n_sources should not be in tile_params&quot;</span><span class="p">)</span>
+                <span class="n">param_matrix</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="n">ii</span><span class="p">][:</span><span class="n">n_sources</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">filter_oob</span><span class="p">:</span>
+                    <span class="n">param_matrix</span> <span class="o">=</span> <span class="n">param_matrix</span><span class="p">[</span><span class="n">x_mask</span><span class="p">]</span>
+                <span class="n">params_on_tile</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span>
+                    <span class="n">param_matrix</span><span class="p">[</span><span class="n">tile_to_source_mapping</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span>
+                        <span class="n">tile_source_count</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                    <span class="p">)</span>
+                <span class="p">)</span>
+                <span class="c1"># pad first tensor to desired length</span>
+                <span class="c1"># the second argument of pad function is</span>
+                <span class="c1"># padding_left, padding_right, padding_top, padding_bottom</span>
+                <span class="n">params_on_tile</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">functional</span><span class="o">.</span><span class="n">pad</span><span class="p">(</span>
+                    <span class="n">params_on_tile</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                    <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">max_sources_per_tile</span> <span class="o">-</span> <span class="n">params_on_tile</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])),</span>
+                <span class="p">)</span>
+                <span class="c1"># pad all tensors</span>
+                <span class="n">params_on_tile</span> <span class="o">=</span> <span class="n">pad_sequence</span><span class="p">(</span><span class="n">params_on_tile</span><span class="p">,</span> <span class="n">batch_first</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">max_fill</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">filter_sources</span><span class="p">,</span> <span class="n">max_sources_per_tile</span><span class="p">)</span>
+                <span class="n">v</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">:])[</span>
+                    <span class="n">tile_to_source_mapping</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="nb">sorted</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="p">:</span><span class="n">max_fill</span>
+                <span class="p">]</span> <span class="o">=</span> <span class="n">params_on_tile</span><span class="p">[:,</span> <span class="p">:</span><span class="n">max_fill</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">v</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+            <span class="c1"># modify tile location</span>
+            <span class="n">tile_params</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">][</span><span class="n">ii</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">tile_params</span><span class="p">[</span><span class="s2">&quot;locs&quot;</span><span class="p">][</span><span class="n">ii</span><span class="p">]</span> <span class="o">%</span> <span class="n">tile_slen</span><span class="p">)</span> <span class="o">/</span> <span class="n">tile_slen</span>
+        <span class="n">tile_params</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;n_sources&quot;</span><span class="p">:</span> <span class="n">tile_n_sources</span><span class="p">})</span>
+        <span class="k">return</span> <span class="n">TileCatalog</span><span class="p">(</span><span class="n">tile_slen</span><span class="p">,</span> <span class="n">tile_params</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">to_astropy_table</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">encoder_survey_bands</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Table</span><span class="p">:</span>
+        <span class="c1"># Convert dictionary of tensors to list of dictionaries</span>
+        <span class="n">on_vals</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">is_on_mask</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_on_mask</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">on_vals</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="n">is_on_mask</span><span class="p">]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span>
+
+        <span class="c1"># Split to different columns for each band</span>
+        <span class="k">for</span> <span class="n">b</span><span class="p">,</span> <span class="n">bl</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">encoder_survey_bands</span><span class="p">):</span>
+            <span class="n">on_vals</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;star_flux_</span><span class="si">{</span><span class="n">bl</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">on_vals</span><span class="p">[</span><span class="s2">&quot;star_fluxes&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="n">b</span><span class="p">]</span>
+            <span class="n">on_vals</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;galaxy_flux_</span><span class="si">{</span><span class="n">bl</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">on_vals</span><span class="p">[</span><span class="s2">&quot;galaxy_fluxes&quot;</span><span class="p">][</span><span class="o">...</span><span class="p">,</span> <span class="n">b</span><span class="p">]</span>
+
+        <span class="c1"># Remove combined flux columns</span>
+        <span class="n">on_vals</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;star_fluxes&quot;</span><span class="p">)</span>
+        <span class="n">on_vals</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;galaxy_fluxes&quot;</span><span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="n">is_on_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>  <span class="c1"># number of (predicted) objects</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+            <span class="n">row</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">on_vals</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">row</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+            <span class="c1"># Convert `source_type` to string &quot;star&quot; or &quot;galaxy&quot; labels</span>
+            <span class="n">row</span><span class="p">[</span><span class="s2">&quot;source_type&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;star&quot;</span> <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="s2">&quot;source_type&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">SourceType</span><span class="o">.</span><span class="n">STAR</span> <span class="k">else</span> <span class="s2">&quot;galaxy&quot;</span>
+            <span class="c1"># Force `plocs` to be &quot;({x}, {y})&quot; tuple strings for readability</span>
+            <span class="n">row</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()))</span>
+            <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">row</span><span class="p">)</span>
+
+        <span class="c1"># Convert to astropy table</span>
+        <span class="n">est_cat_table</span> <span class="o">=</span> <span class="n">Table</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span>
+
+        <span class="c1"># Convert all _fluxes columns to units.Quantity</span>
+        <span class="k">for</span> <span class="n">bl</span> <span class="ow">in</span> <span class="n">encoder_survey_bands</span><span class="p">:</span>
+            <span class="n">est_cat_table</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;star_flux_</span><span class="si">{</span><span class="n">bl</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unit</span> <span class="o">=</span> <span class="n">units</span><span class="o">.</span><span class="n">nmgy</span>
+            <span class="n">est_cat_table</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;galaxy_flux_</span><span class="si">{</span><span class="n">bl</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unit</span> <span class="o">=</span> <span class="n">units</span><span class="o">.</span><span class="n">nmgy</span>
+
+        <span class="c1"># add units to some galaxy shape properties</span>
+        <span class="n">est_cat_table</span><span class="p">[</span><span class="s2">&quot;galaxy_beta_radians&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unit</span> <span class="o">=</span> <span class="n">units</span><span class="o">.</span><span class="n">radian</span>
+        <span class="n">est_cat_table</span><span class="p">[</span><span class="s2">&quot;galaxy_a_d&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unit</span> <span class="o">=</span> <span class="n">units</span><span class="o">.</span><span class="n">arcsec</span>
+        <span class="n">est_cat_table</span><span class="p">[</span><span class="s2">&quot;galaxy_a_b&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">unit</span> <span class="o">=</span> <span class="n">units</span><span class="o">.</span><span class="n">arcsec</span>
+
+        <span class="k">return</span> <span class="n">est_cat_table</span>
+
+    <span class="k">def</span> <span class="nf">filter_full_catalog_by_ploc_box</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">box_origin</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">,</span> <span class="n">box_len</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="n">box_origin</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">box_len</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">height</span><span class="p">,</span> <span class="s2">&quot;invalid box&quot;</span>
+        <span class="k">assert</span> <span class="n">box_origin</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">box_len</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">width</span><span class="p">,</span> <span class="s2">&quot;invalid box&quot;</span>
+
+        <span class="n">box_origin_tensor</span> <span class="o">=</span> <span class="n">box_origin</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+        <span class="n">box_end_tensor</span> <span class="o">=</span> <span class="p">(</span><span class="n">box_origin</span> <span class="o">+</span> <span class="n">box_len</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+
+        <span class="n">plocs_mask</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">all</span><span class="p">(</span>
+            <span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="n">box_end_tensor</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="bp">self</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">box_origin_tensor</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span>
+        <span class="p">)</span>
+
+        <span class="n">plocs_mask_indexes</span> <span class="o">=</span> <span class="n">plocs_mask</span><span class="o">.</span><span class="n">nonzero</span><span class="p">()</span>
+        <span class="n">plocs_inverse_mask_indexes</span> <span class="o">=</span> <span class="p">(</span><span class="o">~</span><span class="n">plocs_mask</span><span class="p">)</span><span class="o">.</span><span class="n">nonzero</span><span class="p">()</span>
+        <span class="n">plocs_full_mask_indexes</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">plocs_mask_indexes</span><span class="p">,</span> <span class="n">plocs_inverse_mask_indexes</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">index_order</span> <span class="o">=</span> <span class="n">plocs_full_mask_indexes</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">stable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">plocs_full_mask_sorted_indexes</span> <span class="o">=</span> <span class="n">plocs_full_mask_indexes</span><span class="p">[</span><span class="n">index_order</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span> <span class="p">:]</span>
+
+        <span class="n">d</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">new_max_sources</span> <span class="o">=</span> <span class="n">plocs_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;n_sources&quot;</span><span class="p">:</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">plocs_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">d</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="p">[</span>
+                    <span class="n">plocs_full_mask_sorted_indexes</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+                    <span class="n">plocs_full_mask_sorted_indexes</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+                <span class="p">]</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_sources</span><span class="p">,</span> <span class="n">v</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])[:,</span> <span class="p">:</span><span class="n">new_max_sources</span><span class="p">,</span> <span class="p">:]</span>
+
+        <span class="n">d</span><span class="p">[</span><span class="s2">&quot;plocs&quot;</span><span class="p">]</span> <span class="o">-=</span> <span class="n">box_origin_tensor</span>
+
+        <span class="k">return</span> <span class="n">FullCatalog</span><span class="p">(</span><span class="n">box_len</span><span class="p">,</span> <span class="n">box_len</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span></div>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Probabilistic Machine Learning Research Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

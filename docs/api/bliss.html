@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bliss package &mdash; bliss  documentation</title>
+      <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+        <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/sphinx_highlight.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Tutorials" href="../tutorials/index.html" />
+    <link rel="prev" title="Bliss API" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            bliss
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../Installation.html">Installation Guide</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">Bliss API</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">bliss package</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/index.html">Tutorials</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">bliss</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Bliss API</a></li>
+      <li class="breadcrumb-item active">bliss package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/bliss.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="bliss-package">
+<h1>bliss package<a class="headerlink" href="#bliss-package" title="Permalink to this heading"></a></h1>
+<section id="bliss-api-module">
+<h2>bliss.api module<a class="headerlink" href="#bliss-api-module" title="Permalink to this heading"></a></h2>
+</section>
+<section id="bliss-generate-module">
+<h2>bliss.generate module<a class="headerlink" href="#bliss-generate-module" title="Permalink to this heading"></a></h2>
+</section>
+<section id="bliss-train-module">
+<h2>bliss.train module<a class="headerlink" href="#bliss-train-module" title="Permalink to this heading"></a></h2>
+</section>
+<section id="bliss-predict-module">
+<h2>bliss.predict module<a class="headerlink" href="#bliss-predict-module" title="Permalink to this heading"></a></h2>
+</section>
+<section id="bliss-metrics-module">
+<h2>bliss.metrics module<a class="headerlink" href="#bliss-metrics-module" title="Permalink to this heading"></a></h2>
+</section>
+<section id="bliss-plotting-module">
+<h2>bliss.plotting module<a class="headerlink" href="#bliss-plotting-module" title="Permalink to this heading"></a></h2>
+</section>
+<section id="module-bliss.catalog">
+<span id="bliss-catalog-module"></span><h2>bliss.catalog module<a class="headerlink" href="#module-bliss.catalog" title="Permalink to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="bliss.catalog.BaseTileCatalog">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bliss.catalog.</span></span><span class="sig-name descname"><span class="pre">BaseTileCatalog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tile_slen</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">d</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.12)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (2.1.0a0+gitbe0b12e ))"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#BaseTileCatalog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.BaseTileCatalog" title="Permalink to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="bliss.catalog.FullCatalog">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bliss.catalog.</span></span><span class="sig-name descname"><span class="pre">FullCatalog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">height</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">d</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.12)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (2.1.0a0+gitbe0b12e ))"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#FullCatalog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.FullCatalog" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.FullCatalog.apply_param_bin">
+<span class="sig-name descname"><span class="pre">apply_param_bin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pname</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">p_min</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.12)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">p_max</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.12)"><span class="pre">float</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#FullCatalog.apply_param_bin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.FullCatalog.apply_param_bin" title="Permalink to this definition"></a></dt>
+<dd><p>Apply magnitude bin to given parameters.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.FullCatalog.from_file">
+<em class="property"><span class="pre">classmethod</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cat_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wcs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">height</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">width</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#bliss.catalog.FullCatalog" title="bliss.catalog.FullCatalog"><span class="pre">FullCatalog</span></a></span></span><a class="reference internal" href="../_modules/bliss/catalog.html#FullCatalog.from_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.FullCatalog.from_file" title="Permalink to this definition"></a></dt>
+<dd><p>Loads FullCatalog from disk.</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="bliss.catalog.FullCatalog.on_fluxes">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">on_fluxes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (2.1.0a0+gitbe0b12e ))"><span class="pre">Tensor</span></a></em><a class="headerlink" href="#bliss.catalog.FullCatalog.on_fluxes" title="Permalink to this definition"></a></dt>
+<dd><p>Gets fluxes of “on” sources based on whether the source is a star or galaxy.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>a tensor of fluxes of size (b x nth x ntw x max_sources x 1)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.FullCatalog.one_source">
+<span class="sig-name descname"><span class="pre">one_source</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">b</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#FullCatalog.one_source"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.FullCatalog.one_source" title="Permalink to this definition"></a></dt>
+<dd><p>Return a dict containing all parameter for one specified light source.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.FullCatalog.plocs_from_ra_dec">
+<em class="property"><span class="pre">static</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">plocs_from_ra_dec</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ras</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">decs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wcs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">WCS</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#FullCatalog.plocs_from_ra_dec"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.FullCatalog.plocs_from_ra_dec" title="Permalink to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>Converts RA/DEC coordinates into BLISS’s pixel coordinates.</dt><dd><p>BLISS pixel coordinates have (0, 0) as the lower-left corner, whereas standard pixel
+coordinates begin at (-0.5, -0.5). BLISS pixel coordinates are in row-column order,
+whereas standard pixel coordinates are in column-row order.</p>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ras</strong> (<em>Tensor</em>) – (b, n) tensor of RA coordinates in degrees.</p></li>
+<li><p><strong>decs</strong> (<em>Tensor</em>) – (b, n) tensor of DEC coordinates in degrees.</p></li>
+<li><p><strong>wcs</strong> (<em>WCS</em>) – WCS object to use for transformation.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A 1xNx2 tensor containing the locations of the light sources in pixel coordinates. This
+function does not write self[“plocs”], so you should do that manually if necessary.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.FullCatalog.to_tile_catalog">
+<span class="sig-name descname"><span class="pre">to_tile_catalog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tile_slen</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_sources_per_tile</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_extra_sources</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filter_oob</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#bliss.catalog.TileCatalog" title="bliss.catalog.TileCatalog"><span class="pre">TileCatalog</span></a></span></span><a class="reference internal" href="../_modules/bliss/catalog.html#FullCatalog.to_tile_catalog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.FullCatalog.to_tile_catalog" title="Permalink to this definition"></a></dt>
+<dd><p>Returns the TileCatalog corresponding to this FullCatalog.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>tile_slen</strong> – The side length of the tiles.</p></li>
+<li><p><strong>max_sources_per_tile</strong> – The maximum number of sources in one tile.</p></li>
+<li><p><strong>ignore_extra_sources</strong> – If False (default), raises an error if the number of sources
+in one tile exceeds the <cite>max_sources_per_tile</cite>. If True, only adds the tile
+parameters of the first <cite>max_sources_per_tile</cite> sources to the new TileCatalog.</p></li>
+<li><p><strong>filter_oob</strong> – If filter_oob is true, filter out the sources outside the image. (e.g. In
+case of data augmentation, there is a chance of some sources located outside the
+image)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>TileCatalog correspond to the each source in the FullCatalog.</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.12)"><strong>ValueError</strong></a> – If the number of sources in one tile exceeds <cite>max_sources_per_tile</cite> and
+    <cite>ignore_extra_sources</cite> is False.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#KeyError" title="(in Python v3.12)"><strong>KeyError</strong></a> – If the tile_params contain <cite>plocs</cite> or <cite>n_sources</cite>.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="bliss.catalog.SourceType">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bliss.catalog.</span></span><span class="sig-name descname"><span class="pre">SourceType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#SourceType"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.SourceType" title="Permalink to this definition"></a></dt>
+<dd><p>An enumeration.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="bliss.catalog.TileCatalog">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">bliss.catalog.</span></span><span class="sig-name descname"><span class="pre">TileCatalog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tile_slen</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">d</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.12)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (2.1.0a0+gitbe0b12e ))"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#TileCatalog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.TileCatalog" title="Permalink to this definition"></a></dt>
+<dd><dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.TileCatalog.filter_by_flux">
+<span class="sig-name descname"><span class="pre">filter_by_flux</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">min_flux</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_flux</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">inf</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">band</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#TileCatalog.filter_by_flux"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.TileCatalog.filter_by_flux" title="Permalink to this definition"></a></dt>
+<dd><p>Restricts TileCatalog to sources that have a flux between min_flux and max_flux.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>min_flux</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.12)"><em>float</em></a>) – Minimum flux value to keep. Defaults to 0.</p></li>
+<li><p><strong>max_flux</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.12)"><em>float</em></a>) – Maximum flux value to keep. Defaults to infinity.</p></li>
+<li><p><strong>band</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><em>int</em></a>) – The band to compare fluxes in. Defaults to 2 (r-band).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>a new catalog with only sources within the flux range. Note that the size</dt><dd><p>of the tensors stays the same, but params at sources outside the range are set to 0.</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#bliss.catalog.TileCatalog" title="bliss.catalog.TileCatalog">TileCatalog</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.TileCatalog.get_brightest_sources_per_tile">
+<span class="sig-name descname"><span class="pre">get_brightest_sources_per_tile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">top_k</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_num</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">band</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#TileCatalog.get_brightest_sources_per_tile"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.TileCatalog.get_brightest_sources_per_tile" title="Permalink to this definition"></a></dt>
+<dd><p>Restrict TileCatalog to only the brightest ‘on’ source per tile.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>top_k</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><em>int</em></a>) – The number of sources to keep per tile. Defaults to 1.</p></li>
+<li><p><strong>exclude_num</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><em>int</em></a>) – A number of the brightest sources to exclude. Defaults to 0.</p></li>
+<li><p><strong>band</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.12)"><em>int</em></a>) – The band to compare fluxes in. Defaults to 2 (r-band).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>a new catalog with only one source per tile</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#bliss.catalog.TileCatalog" title="bliss.catalog.TileCatalog">TileCatalog</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.TileCatalog.get_full_locs_from_tiles">
+<span class="sig-name descname"><span class="pre">get_full_locs_from_tiles</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (2.1.0a0+gitbe0b12e ))"><span class="pre">Tensor</span></a></span></span><a class="reference internal" href="../_modules/bliss/catalog.html#TileCatalog.get_full_locs_from_tiles"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.TileCatalog.get_full_locs_from_tiles" title="Permalink to this definition"></a></dt>
+<dd><p>Get the full image locations from tile locations.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>pixel coordinates of each source (between 0 and slen).</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.TileCatalog.get_indices_of_on_sources">
+<span class="sig-name descname"><span class="pre">get_indices_of_on_sources</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.12)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (2.1.0a0+gitbe0b12e ))"><span class="pre">Tensor</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (2.1.0a0+gitbe0b12e ))"><span class="pre">Tensor</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../_modules/bliss/catalog.html#TileCatalog.get_indices_of_on_sources"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.TileCatalog.get_indices_of_on_sources" title="Permalink to this definition"></a></dt>
+<dd><p>Get the indices of detected sources from each tile.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><p>A 2-D tensor of integers with shape <cite>n_samples x max(n_sources)</cite>,
+where <cite>max(n_sources)</cite> is the maximum number of sources detected across all samples.</p>
+<p>Each element of this tensor is an index of a particular source within a particular tile.
+For a particular sample i that had N detections,
+the first N indices of indices_sorted[i. :] will be the detected sources.
+This is accomplished by flattening the n_tiles_per_image and max_detections.
+For example, if we had 3 tiles with a maximum of two sources each,
+the elements of this tensor would take values from 0 up to and including 5.</p>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="bliss.catalog.TileCatalog.is_on_mask">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_on_mask</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://pytorch.org/docs/master/tensors.html#torch.Tensor" title="(in PyTorch vmaster (2.1.0a0+gitbe0b12e ))"><span class="pre">Tensor</span></a></em><a class="headerlink" href="#bliss.catalog.TileCatalog.is_on_mask" title="Permalink to this definition"></a></dt>
+<dd><p>Provides tensor which indicates how many sources are present for each batch.</p>
+<p>Return a boolean array of <cite>shape=(*n_sources.shape, max_sources)</cite> whose <cite>(*,l)th</cite> entry
+indicates whether there are more than l sources on the <cite>*th</cite> index.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Tensor indicating how many sources are present for each batch.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="bliss.catalog.TileCatalog.on_fluxes">
+<em class="property"><span class="pre">property</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">on_fluxes</span></span><a class="headerlink" href="#bliss.catalog.TileCatalog.on_fluxes" title="Permalink to this definition"></a></dt>
+<dd><p>Gets fluxes of “on” sources based on whether the source is a star or galaxy.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>a tensor of fluxes of size (b x nth x ntw x max_sources x 1)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.TileCatalog.to_full_catalog">
+<span class="sig-name descname"><span class="pre">to_full_catalog</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#TileCatalog.to_full_catalog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.TileCatalog.to_full_catalog" title="Permalink to this definition"></a></dt>
+<dd><p>Converts image parameters in tiles to parameters of full image.</p>
+<p>By parameters, we mean samples from the variational distribution, not the variational
+parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><p>The FullCatalog instance corresponding to the TileCatalog instance.</p>
+<p>NOTE: The locations (<cite>“locs”</cite>) are between 0 and 1. The output also contains
+pixel locations (“plocs”) that are between 0 and <cite>slen</cite>.</p>
+</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="bliss.catalog.TileCatalog.union">
+<span class="sig-name descname"><span class="pre">union</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">other</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">disjoint</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/bliss/catalog.html#TileCatalog.union"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#bliss.catalog.TileCatalog.union" title="Permalink to this definition"></a></dt>
+<dd><p>Returns a new TileCatalog containing the union of the sources in self and other.
+The maximum number of sources in the returned catalog is the sum of the maximum number
+of sources in self and other if disjoint is false, otherwise it is unchanged.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>other</strong> – Another TileCatalog.</p></li>
+<li><p><strong>disjoint</strong> – whether the catalogs cannot have sources in the same tiles</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A new TileCatalog containing the union of the sources in self and other.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-bliss.encoder">
+<span id="bliss-encoder-module"></span><h2>bliss.encoder module<a class="headerlink" href="#module-bliss.encoder" title="Permalink to this heading"></a></h2>
+</section>
+<section id="module-bliss.surveys">
+<span id="bliss-surveys-module"></span><h2>bliss.surveys module<a class="headerlink" href="#module-bliss.surveys" title="Permalink to this heading"></a></h2>
+</section>
+<section id="module-bliss.simulator">
+<span id="bliss-simulator-module"></span><h2>bliss.simulator module<a class="headerlink" href="#module-bliss.simulator" title="Permalink to this heading"></a></h2>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Bliss API" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../tutorials/index.html" class="btn btn-neutral float-right" title="Tutorials" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, Probabilistic Machine Learning Research Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
