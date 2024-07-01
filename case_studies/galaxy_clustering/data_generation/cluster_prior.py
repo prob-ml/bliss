@@ -26,7 +26,7 @@ class ClusterPrior:
         self.pixels_per_mpc = 80
         self.mean_sources = 0.004
         self.mag_ex = 1.3
-        self.mag_max = 25
+        self.mag_max = 30
         self.G1_beta = 0.6
         self.G1_loc = 0
         self.G1_scale = 0.035
@@ -245,7 +245,7 @@ class ClusterPrior:
             total_element = len(redshift_samples[i])
             mag_samples = self.mag_max - np.random.exponential(self.mag_ex, total_element)
             for j, _ in enumerate(mag_samples):
-                while mag_samples[j] < 15.75:
+                while mag_samples[j] < 20:
                     mag_samples[j] = (self.mag_max - np.random.exponential(self.mag_ex, 1))[0]
                 mag_samples[j] = utils.mag_to_flux(mag_samples[j])
                 mag_samples[j] *= 1 + redshift_samples[i][j]

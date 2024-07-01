@@ -171,7 +171,7 @@ class BackgroundPrior:
             ]
         )
 
-        mags_clamped = np.clip(mags, 15, 25)
+        mags_clamped = np.clip(mags, 20, 30)
         fluxes = utils.mag_to_flux(mags_clamped)
 
         return fluxes * (fluxes > 0)
