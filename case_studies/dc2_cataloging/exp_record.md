@@ -393,3 +393,94 @@ processed_raw_images = F.relu(raw_images - self.asinh_thresholds_tensor) * self.
 2. run with double detection
 
 3. run with double detection
+
+(hereafter, always use double detection)
+
+### 06-24
+
+1. train with the new DC2
+
+2. train with the new DC2
+
+3. train with the new DC2
+
+### 06-25
+
+1. train with new DC2 and old data aug
+
+2. train with new DC2 and new data aug (both transforms) (on Great Lake)
+
+3. train with new DC2 and new data aug (both transforms) (on Great Lake)
+
+4. train with new DC2 and new data aug (both transforms) (on Great Lake)
+
+5. train with new DC2 (no transforms)
+
+### 06-27
+
+1. train using the new data augmentation but rotate/flip plocs in fullcat
+
+2. train using the new data augmentation but only rotate/flip locs
+
+3. train using the old rotate/flip and new random shift
+
+### 06-30
+
+1. old data aug but change rotate and flip func
+
+```python
+def plocs_rot90(plocs, image_size):
+    plocs_clone = plocs.clone()
+    plocs_clone[..., 0], plocs_clone[..., 1] = image_size - plocs[..., 1], plocs[..., 0]
+    return plocs_clone
+
+
+def plocs_vflip(plocs, image_size):
+    plocs_clone = plocs.clone()
+    plocs_clone[..., 0] = image_size - plocs[..., 0]
+    return plocs_clone
+```
+
+2. new data aug but use on_mask
+
+```python
+ # locations require special logic
+if "locs" in datum["tile_catalog"]:
+    locs = datum_out["tile_catalog"]["locs"]
+    max_sources = locs.shape[-2]
+    n_sources = datum_out["tile_catalog"]["n_sources"]
+    on_mask = is_on_mask(n_sources=n_sources, max_sources=max_sources)
+    for _ in range(rotate_id):
+        # Rotate 90 degrees clockwise (in pixel coordinates)
+        locs = torch.stack((1 - locs[..., 1], locs[..., 0]), dim=3) * on_mask.unsqueeze(-1)
+    if do_flip:
+        locs = torch.stack((1 - locs[..., 0], locs[..., 1]), dim=3) * on_mask.unsqueeze(-1)
+    datum_out["tile_catalog"]["locs"] = locs
+```
+
+
+3. old data aug
+
+4. old data aug
+
+5. new data aug
+
+6. old data aug but change rotate and flip func
+
+### 07-01
+
+1. new rotate flip + new shift (shift_image=False)
+
+2. new shift (shift_image=False)
+
+3. new rotate flip
+
+4. old rotate flip (bug fixed) + new shift (shift_image=False) + new shift (shift_image=True)
+
+5. old rotate flip (bug fixed) + new shift (shift_image=False) + new shift (shift_image=True) (shift_ub and shift_lb fixed)
+
+6. new shift (shift_image=False) (shift_ub and shift_lb fixed)
+
+7. new rotate flip (rotate_id=1; do_flip=False)
+
+8. without data aug
