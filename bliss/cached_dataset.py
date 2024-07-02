@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import pathlib
 import random
@@ -168,6 +169,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         cached_data_path: str,
         train_transforms: List,
         nontrain_transforms: List,
+        subset_fraction: float = None,
     ):
         super().__init__()
 
@@ -177,6 +179,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.cached_data_path = pathlib.Path(cached_data_path)
         self.train_transforms = train_transforms
         self.nontrain_transforms = nontrain_transforms
+        self.subset_fraction = subset_fraction
 
         self.file_paths = None
         self.slices = None
@@ -216,6 +219,8 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
 
     def _load_file_paths_and_slices(self):
         file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
+        if self.subset_fraction:
+            file_names = file_names[: math.ceil(len(file_names) * self.subset_fraction)]
         self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
 
         # parse slices from percentages to indices

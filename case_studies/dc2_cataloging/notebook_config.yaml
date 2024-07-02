@@ -6,22 +6,3 @@ defaults:
 
 encoder:
     tiles_to_crop: 0
-    image_normalizer:
-        _target_: case_studies.dc2_cataloging.utils.image_normalizer.FixedThresholdsAsinhImageNormalizer
-        bands: [0, 1, 2, 3, 4, 5]
-        include_original: false
-        include_background: false
-        concat_psf_params: false
-        num_psf_params: 4  # for SDSS, 4 for DC2
-        log_transform_stdevs: []
-        use_clahe: false
-        clahe_min_stdev: 200
-        asinh_params:
-            scale: 1000
-            thresholds: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
-    use_double_detect: false
-    use_checkerboard: true
-
-surveys:
-    dc2:
-        train_transforms: []
