@@ -33,6 +33,9 @@ class BackgroundPrior:
         self.G2_loc = 0
         self.G2_scale = 0.032
         self.pixel_scale = 0.26
+        self.catalogs_sampled = 0
+        self.catalogs_per_tile = 40
+        self.sample_des_catalog()
 
     def sample_n_sources(self):
         """Sample number of background sources.
@@ -42,15 +45,8 @@ class BackgroundPrior:
         """
         return np.random.poisson(self.mean_sources * self.width * self.height / 49)
 
-    def sample_sources(self, n_sources):
-        """Sample some random sources from a random DES tile.
-
-        Args:
-            n_sources: number of background sources to sample
-
-        Returns:
-            dataframe from DES containing randomly chosen objects
-        """
+    def sample_des_catalog(self):
+        """Sample a random DES dataframe."""
         tile_choice = random.choice(DES_SUBDIRS)
         main_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_main.fits")
         flux_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_flux.fits")
@@ -58,10 +54,20 @@ class BackgroundPrior:
         main_df = pd.DataFrame(main_data)
         flux_data = fits.getdata(flux_path)
         flux_df = pd.DataFrame(flux_data)
-        full_df = pd.merge(
+        self.source_df = pd.merge(
             main_df, flux_df, left_on="COADD_OBJECT_ID", right_on="COADD_OBJECT_ID", how="left"
         )
-        return full_df.sample(n_sources)
+
+    def sample_sources(self, n_sources):
+        """Samples random sources from the current DES catalog.
+
+        Args:
+            n_sources: number of sources to sample
+
+        Returns:
+            a random sample of rows from the DES catalog
+        """
+        return self.source_df.sample(n_sources)
 
     def sample_source_types(self, sources):
         """Sample source type for each source, by thresholding DES estimator of source type.
@@ -275,7 +281,11 @@ class BackgroundPrior:
             background_catalog: a single background catalogs for one image
         """
         n_sources = self.sample_n_sources()
+        if self.catalogs_sampled == self.catalogs_per_tile:
+            self.catalogs_sampled = 0
+            self.sample_des_catalog()
         des_sources = self.sample_sources(n_sources)
+        self.catalogs_sampled += 1
         cartesian_source_locs = self.sample_source_locs(n_sources)
         gal_source_locs = self.cartesian_to_gal(cartesian_source_locs)
         source_types = self.sample_source_types(des_sources)
