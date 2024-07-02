@@ -19,7 +19,6 @@
 #   13: G2
 #   14: Z
 #   15: SOURCE_TYPE
-#   16: STAMP_SIZE
 
 variables :
   nfiles : 100
@@ -103,11 +102,11 @@ image :
   pixel_scale : 0.263
   xsize : '@variables.image_size'
   ysize : '@variables.image_size'
-  stamp_size : { type: Catalog, col: 16 }
 
   random_seed : 8241573
 
-  gsparams : {maximum_fft_size : 50000}
+  gsparams :
+    maximum_fft_size : 50000
 
   noise:
     type: Gaussian

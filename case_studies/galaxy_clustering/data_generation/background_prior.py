@@ -251,7 +251,6 @@ class BackgroundPrior:
         mock_catalog["G2"] = g2_size_samples
         mock_catalog["Z"] = redshift_samples
         mock_catalog["SOURCE_TYPE"] = source_types.astype(int)
-        mock_catalog["STAMP_SIZE"] = 100 * (hlr_samples / self.pixel_scale).astype(int)
         return mock_catalog
 
     def sample_background(self):
