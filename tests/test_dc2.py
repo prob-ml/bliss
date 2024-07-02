@@ -157,9 +157,7 @@ class TestDC2:
             "n_sources",
             "source_type",
             "galaxy_fluxes",
-            "galaxy_params",
             "star_fluxes",
-            "star_log_fluxes",
         )
 
         for k in params:
@@ -175,9 +173,7 @@ class TestDC2:
     def test_train_on_dc2(self, cfg):
         train_dc2_cfg = cfg.copy()
         train_dc2_cfg.encoder.image_normalizer.bands = [0, 1, 2, 3, 4, 5]
-        # why are these bands out of order? (should be "ugrizy") why does the test break if they
-        # are ordered correctly?
-        train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]
+        train_dc2_cfg.encoder.survey_bands = ["u", "g", "r", "i", "z", "y"]
         train_dc2_cfg.train.data_source = train_dc2_cfg.surveys.dc2
         train_dc2_cfg.train.pretrained_weights = None
         # log transform doesn't work in this test because the DC2 background is sometimes negative.
@@ -185,6 +181,46 @@ class TestDC2:
         train_dc2_cfg.encoder.image_normalizer.log_transform_stdevs = []
         train_dc2_cfg.encoder.image_normalizer.use_clahe = True
         train_dc2_cfg.encoder.image_normalizer.include_background = False
+
+        train_dc2_cfg.encoder.var_dist.factors = [
+            {
+                "_target_": "bliss.encoder.variational_dist.BernoulliFactor",
+                "name": "n_sources",
+                "sample_rearrange": None,
+                "nll_rearrange": None,
+                "nll_gating": None,
+            },
+            {
+                "_target_": "bliss.encoder.variational_dist.TDBNFactor",
+                "name": "locs",
+                "sample_rearrange": "b ht wt d -> b ht wt 1 d",
+                "nll_rearrange": "b ht wt 1 d -> b ht wt d",
+                "nll_gating": "n_sources",
+            },
+            {
+                "_target_": "bliss.encoder.variational_dist.BernoulliFactor",
+                "name": "source_type",
+                "sample_rearrange": "b ht wt -> b ht wt 1 1",
+                "nll_rearrange": "b ht wt 1 1 -> b ht wt",
+                "nll_gating": "n_sources",
+            },
+            {
+                "_target_": "bliss.encoder.variational_dist.LogNormalFactor",
+                "name": "star_fluxes",
+                "dim": 6,
+                "sample_rearrange": "b ht wt d -> b ht wt 1 d",
+                "nll_rearrange": "b ht wt 1 d -> b ht wt d",
+                "nll_gating": "is_star",
+            },
+            {
+                "_target_": "bliss.encoder.variational_dist.LogNormalFactor",
+                "name": "galaxy_fluxes",
+                "dim": 6,
+                "sample_rearrange": "b ht wt d -> b ht wt 1 d",
+                "nll_rearrange": "b ht wt 1 d -> b ht wt d",
+                "nll_gating": "is_galaxy",
+            },
+        ]
 
         for f in train_dc2_cfg.variational_factors:
             if f.name in {"star_fluxes", "galaxy_fluxes"}:

@@ -44,8 +44,7 @@ def split_tensor(
 
 
 class DC2DataModule(CachedSimulatedDataModule):
-    # why are these bands out of order? why does a test break if they are ordered correctly?
-    BANDS = ("g", "i", "r", "u", "y", "z")
+    BANDS = ("u", "g", "r", "i", "z", "y")
 
     def __init__(
         self,
