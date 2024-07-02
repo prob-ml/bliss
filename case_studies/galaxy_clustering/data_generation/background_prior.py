@@ -176,7 +176,7 @@ class BackgroundPrior:
             ]
         )
 
-        return 1 + fluxes * (fluxes > 0)
+        return fluxes * (fluxes > 0)
 
     def sample_shape(self, num_elements):
         """Samples shape of sources.
@@ -207,26 +207,6 @@ class BackgroundPrior:
                 flag_g2_large = g2_size_samples[i] >= 0.8
                 flag_reject = flag_large or flag_g1_large or flag_g2_large
         return g1_size_samples, g2_size_samples
-
-    def sample_flux_ratios(self, gmm, num_elements):
-        """Samples flux ratios from Gaussian Mixture Model (color model).
-
-        Args:
-            gmm: Gaussian Mixture Model
-            num_elements: Number of elements to sample (number of sources)
-
-        Returns:
-            flux ratios for all bands
-        """
-        flux_logdiff, _ = gmm.sample(num_elements)
-        flux_logdiff = np.clip(flux_logdiff, -2.76, 2.76)
-        flux_ratio = np.exp(flux_logdiff)
-        flux_prop = np.ones((flux_logdiff.shape[0], self.n_bands))
-        for band in range(self.reference_band - 1, -1, -1):
-            flux_prop[:, band] = flux_prop[:, band + 1] / flux_ratio[:, band]
-        for band in range(self.reference_band + 1, self.n_bands):
-            flux_prop[:, band] = flux_prop[:, band - 1] * flux_ratio[:, band - 1]
-        return flux_prop
 
     def make_background_catalog(
         self,
