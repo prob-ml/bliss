@@ -360,6 +360,7 @@ class ClusterPrior:
             mock_catalog["G2"] = g2_size_samples[i]
             mock_catalog["Z"] = redshift_samples[i]
             mock_catalog["SOURCE_TYPE"] = 1
+            mock_catalog["STAMP_SIZE"] = 100 * hlr_samples[i].astype(int)
             res.append(mock_catalog)
         return res
 

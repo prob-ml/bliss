@@ -7,8 +7,6 @@ import pandas as pd
 from astropy.io import fits
 from scipy.stats import gennorm
 
-from case_studies.galaxy_clustering.utils import cluster_utils as utils
-
 DES_DIR = Path(
     "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles/"
 )
@@ -34,6 +32,7 @@ class BackgroundPrior:
         self.G2_beta = 0.6
         self.G2_loc = 0
         self.G2_scale = 0.032
+        self.pixel_scale = 0.26
 
     def sample_n_sources(self):
         """Sample number of background sources.
@@ -54,13 +53,13 @@ class BackgroundPrior:
         """
         tile_choice = random.choice(DES_SUBDIRS)
         main_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_main.fits")
-        mag_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_magnitude.fits")
+        flux_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_flux.fits")
         main_data = fits.getdata(main_path)
         main_df = pd.DataFrame(main_data)
-        mag_data = fits.getdata(mag_path)
-        mag_df = pd.DataFrame(mag_data)
+        flux_data = fits.getdata(flux_path)
+        flux_df = pd.DataFrame(flux_data)
         full_df = pd.merge(
-            main_df, mag_df, left_on="COADD_OBJECT_ID", right_on="COADD_OBJECT_ID", how="left"
+            main_df, flux_df, left_on="COADD_OBJECT_ID", right_on="COADD_OBJECT_ID", how="left"
         )
         return full_df.sample(n_sources)
 
@@ -146,7 +145,7 @@ class BackgroundPrior:
         Returns:
             samples for half light radius for each source
         """
-        hlr_samples = np.array(sources["FLUX_RADIUS_R"])
+        hlr_samples = self.pixel_scale * np.array(sources["FLUX_RADIUS_R"])
         hlr_samples[~source_types] = 0
         return 1e-4 + (hlr_samples * (hlr_samples > 0))
 
@@ -159,22 +158,19 @@ class BackgroundPrior:
         Returns:
             5-band array containing fluxes (clamped at 1 from below)
         """
-        mags = np.array(
+        fluxes = np.array(
             sources[
                 [
-                    "MAG_AUTO_G_x",
-                    "MAG_AUTO_R_x",
-                    "MAG_AUTO_I_x",
-                    "MAG_AUTO_Z_x",
-                    "MAG_AUTO_Y_x",
+                    "FLUX_AUTO_G_x",
+                    "FLUX_AUTO_R_x",
+                    "FLUX_AUTO_I_x",
+                    "FLUX_AUTO_Z_x",
+                    "FLUX_AUTO_Y_x",
                 ]
             ]
         )
 
-        mags_clamped = np.clip(mags, 20, 30)
-        fluxes = utils.mag_to_flux(mags_clamped)
-
-        return fluxes * (fluxes > 0)
+        return 1 + fluxes * (fluxes > 0)
 
     def sample_shape(self, num_elements):
         """Samples shape of sources.
@@ -269,6 +265,7 @@ class BackgroundPrior:
         mock_catalog["G2"] = g2_size_samples
         mock_catalog["Z"] = redshift_samples
         mock_catalog["SOURCE_TYPE"] = source_types.astype(int)
+        mock_catalog["STAMP_SIZE"] = 100 * (hlr_samples / self.pixel_scale).astype(int)
         return mock_catalog
 
     def sample_background(self):

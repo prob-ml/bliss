@@ -19,6 +19,7 @@
 #   13: G2
 #   14: Z
 #   15: SOURCE_TYPE
+#   16: STAMP_SIZE
 
 variables :
   nfiles : 100
@@ -97,12 +98,12 @@ psf:
 
 image :
 
-  nproc : 24
+  nproc : 32
   type : Scattered
   pixel_scale : 0.26
   xsize : '@variables.image_size'
   ysize : '@variables.image_size'
-  stamp_size : 100
+  stamp_size : { type: Catalog, col: 16 }
 
   random_seed : 8241573
 
@@ -112,8 +113,8 @@ image :
     type: Gaussian
     variance:
       type: Random
-      min: 0.002
-      max: 0.006
+      min: 0.000
+      max: 0.00001
 
 stamp :
 
