@@ -308,7 +308,7 @@ class ClusterPrior:
         flux_ratio = np.exp(flux_logdiff)
         flux_prop = np.ones((flux_logdiff.shape[0], self.n_bands))
         for band in range(self.reference_band - 1, -1, -1):
-            flux_prop[:, band] = flux_prop[:, band + 1] / flux_ratio[:, band]
+            flux_prop[:, band] = flux_prop[:, band + 1] * flux_ratio[:, band]
         for band in range(self.reference_band + 1, self.n_bands):
             flux_prop[:, band] = flux_prop[:, band - 1] * flux_ratio[:, band - 1]
         return flux_prop
