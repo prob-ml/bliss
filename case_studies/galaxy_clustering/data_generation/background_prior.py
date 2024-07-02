@@ -32,7 +32,7 @@ class BackgroundPrior:
         self.G2_beta = 0.6
         self.G2_loc = 0
         self.G2_scale = 0.032
-        self.pixel_scale = 0.26
+        self.pixel_scale = 0.263
         self.catalogs_sampled = 0
         self.catalogs_per_tile = 40
         self.sample_des_catalog()

@@ -192,7 +192,7 @@ class ClusterPrior:
             galaxy_locs_cluster.append(samples)
         return galaxy_locs_cluster
 
-    def cartesian_to_gal(self, coordinates, pixel_scale=0.26):
+    def cartesian_to_gal(self, coordinates, pixel_scale=0.263):
         """Converts cartesian coordinates on the image to (Ra, Dec).
 
         Args:
