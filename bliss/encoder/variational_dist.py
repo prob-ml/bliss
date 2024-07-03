@@ -132,6 +132,8 @@ class TDBNFactor(VariationalFactor):
     def _get_dist(self, params):
         mu = params[:, :, :, :2].sigmoid()
         sigma = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        assert not mu.isnan().any() and not mu.isinf().any(), "mu contains invalid values"
+        assert not sigma.isnan().any() and not sigma.isinf().any(), "sigma contains invalid values"
         return TruncatedDiagonalMVN(mu, sigma)
 
 

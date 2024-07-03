@@ -9,7 +9,7 @@ paths:
 
 surveys:
    dc2:
-      batch_size: 64
+      batch_size: 256
       num_workers: 4
 
 train:
@@ -17,6 +17,7 @@ train:
         logger:
             name: DC2_cataloging_exp
             version: null  # override this in command line
-        devices: 1
+        devices: null  # override this in command line
         precision: "32-true"
     matmul_precision: "highest"
+    seed: null  # override this in command line
