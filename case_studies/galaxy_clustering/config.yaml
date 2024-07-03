@@ -28,8 +28,8 @@ cached_simulator:
     _target_: bliss.cached_dataset.CachedSimulatedDataModule
     batch_size: 2
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
-    num_workers: 2
-    cached_data_path: /data/scratch/kapnadak/data_s1280_t128_n1000
+    num_workers: 8
+    cached_data_path: /home/kapnadak/bliss/case_studies/galaxy_clustering/data/file_data
     train_transforms: []
 
 train:
@@ -50,11 +50,11 @@ my_metrics:
 
 encoder:
     _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
-    survey_bands: ["g", "r", "i", "z"]
+    survey_bands: ["g", "r", "i", "z", "y"]
     tiles_to_crop: 0
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
-        bands: [0, 1, 2, 3]
+        bands: [0, 1, 2, 3, 4]
         include_original: true
         include_background: false
         concat_psf_params: false
