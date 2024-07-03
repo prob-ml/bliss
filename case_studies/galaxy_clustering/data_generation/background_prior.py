@@ -152,7 +152,6 @@ class BackgroundPrior:
             samples for half light radius for each source
         """
         hlr_samples = self.pixel_scale * np.array(sources["FLUX_RADIUS_R"])
-        hlr_samples[~source_types] = 0
         return 1e-4 + (hlr_samples * (hlr_samples > 0))
 
     def sample_fluxes(self, sources):
