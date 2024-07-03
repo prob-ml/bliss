@@ -54,9 +54,15 @@ encoder:
         dist_slack: 0.5
         mag_slack: 0.5
         mag_band: 2  # SDSS r-band
-    metrics:
+    mode_metrics:
         _target_: torchmetrics.MetricCollection
         metrics: ${star_metrics}
+    sample_metrics:
+        _convert_: "partial"
+        _target_: torchmetrics.MetricCollection
+        metrics:
+            two_point:
+                _target_: case_studies.spatial_tiling.two_point_metric.TwoPointMetric
     optimizer_params:
         lr: 1e-3
     scheduler_params:
