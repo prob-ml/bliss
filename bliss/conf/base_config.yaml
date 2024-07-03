@@ -16,7 +16,8 @@ paths:
     des: /data/scratch/des
     dc2: /data/scratch/dc2local
     cached_data: null
-    output: ${oc.env:HOME}/bliss_output
+    #output: ${oc.env:HOME}/bliss_output
+    output: /data/scratch/shreyasc/bliss_output
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
@@ -143,8 +144,8 @@ encoder:
     survey_bands: ["u", "g", "r", "i", "z"]
     tile_slen: ${simulator.prior.tile_slen}
     tiles_to_crop: 1
-    min_flux_for_loss: 0  # set to 0 to include all sources
-    min_flux_for_metrics: 0  # set to 0 to include all sources
+    min_flux_for_loss: 10  # set to 0 to include all sources
+    min_flux_for_metrics: 10  # set to 0 to include all sources
     optimizer_params:
         lr: 1e-3
     scheduler_params:
@@ -152,15 +153,15 @@ encoder:
         gamma: 0.1
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
-        bands: [0, 1, 2, 3, 4]
+        bands: [0, 1, 2, 3, 4, 5]
         include_original: false
-        include_background: true
+        include_background: false
         concat_psf_params: false
-        num_psf_params: 6  # for SDSS, 4 for DC2
-        log_transform_stdevs: [-3, 0, 1, 3]
-        use_clahe: true
+        num_psf_params: 4  # for SDSS, 4 for DC2
+        log_transform_stdevs: []
+        use_clahe: false
         clahe_min_stdev: 200
-        asinh_cutoffs: null
+        asinh_cutoffs: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
         tile_slen: ${encoder.tile_slen}
@@ -183,7 +184,7 @@ encoder:
               tiles_to_crop: 1
               tile_slen: ${simulator.prior.tile_slen}
     use_double_detect: false
-    use_checkerboard: true
+    use_checkerboard: false
 
 surveys:
     sdss:
@@ -231,7 +232,7 @@ surveys:
     dc2:
         _target_: bliss.surveys.dc2.DC2DataModule
         dc2_image_dir: ${paths.dc2}/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
-        dc2_cat_path: ${paths.dc2}/merged_catalog_with_flux_over_50.pkl
+        dc2_cat_path: /data/scratch/shreyasc/toy_dc2_catalog.pkl
         image_lim: [4000, 4000]
         n_image_split: 50
         tile_slen: 4
@@ -240,8 +241,8 @@ surveys:
         prepare_data_processes_num: 4
         data_in_one_cached_file: 1250
         splits: 0:80/80:90/90:100
-        batch_size: 64
-        num_workers: 4
+        batch_size: 1
+        num_workers: 1
         cached_data_path: ${paths.output}/dc2_cached_data
         train_transforms:
             - _target_: bliss.data_augmentation.RotateFlipTransform
@@ -249,7 +250,6 @@ surveys:
               tile_slen: ${surveys.dc2.tile_slen}
               max_sources_per_tile: ${surveys.dc2.tile_slen}
         nontrain_transforms: []
-
 
 #######################################################################
 # things above matter only if they are referenced below
@@ -301,7 +301,7 @@ train:
     matmul_precision: null
 
 predict:
-    dataset: ${surveys.sdss}
+    dataset: ${surveys.dc2}
     trainer:
         _target_: pytorch_lightning.Trainer
         accelerator: "gpu"
