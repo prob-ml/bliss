@@ -13,11 +13,11 @@ from torch.nn.utils.rnn import pad_sequence
 
 
 def convert_mag_to_nmgy(mag):
-    return 10 ** ((22.5 - mag) / 2.5)
+    return 10 ** ((22.5 - mag) / 2.5) * 3631
 
 
 def convert_nmgy_to_mag(nmgy):
-    return 22.5 - 2.5 * torch.log10(nmgy)
+    return 22.5 - 2.5 * torch.log10(nmgy / 3631)  # dc2
 
 
 class SourceType(IntEnum):
@@ -64,6 +64,38 @@ class BaseTileCatalog(UserDict):
             [tiles_to_crop, self.n_tiles_h - tiles_to_crop],
             [tiles_to_crop, self.n_tiles_w - tiles_to_crop],
         )
+
+    def filter_base_tile_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
+        assert box_origin[0] + box_len < self.height, "invalid box"
+        assert box_origin[1] + box_len < self.width, "invalid box"
+
+        box_origin_tensor = box_origin.view(1, 1, 2).to(device=self.device)
+        box_end_tensor = (box_origin + box_len).view(1, 1, 2).to(device=self.device)
+
+        plocs_mask = torch.all(
+            (self["plocs"] < box_end_tensor) & (self["plocs"] > box_origin_tensor), dim=2
+        )
+
+        plocs_mask_indexes = plocs_mask.nonzero()
+        plocs_inverse_mask_indexes = (~plocs_mask).nonzero()
+        plocs_full_mask_indexes = torch.cat((plocs_mask_indexes, plocs_inverse_mask_indexes), dim=0)
+        _, index_order = plocs_full_mask_indexes[:, 0].sort(stable=True)
+        plocs_full_mask_sorted_indexes = plocs_full_mask_indexes[index_order.tolist(), :]
+
+        d = {}
+        new_max_sources = plocs_mask.sum(dim=1).max()
+        for k, v in self.items():
+            if k == "n_sources":
+                d[k] = plocs_mask.sum(dim=1)
+            else:
+                d[k] = v[
+                    plocs_full_mask_sorted_indexes[:, 0].tolist(),
+                    plocs_full_mask_sorted_indexes[:, 1].tolist(),
+                ].view(-1, self.max_sources, v.shape[-1])[:, :new_max_sources, :]
+
+        d["plocs"] -= box_origin_tensor
+
+        return FullCatalog(box_len, box_len, d)
 
 
 class TileCatalog(BaseTileCatalog):
@@ -298,6 +330,32 @@ class TileCatalog(BaseTileCatalog):
 
         d = {}
         for key, val in sorted_self.items():
+            if key in {"shear", "convergence"}:
+                d[key] = val
+            elif key == "n_sources":
+                d[key] = flux_mask.sum(dim=3)  # number of sources within range in tile
+            else:
+                d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
+
+        return TileCatalog(self.tile_slen, d)
+
+    def filter_tile_catalog_by_flux_no_sort(self, min_flux=0, max_flux=torch.inf, band=2):
+        """Restricts TileCatalog to sources that have a flux between min_flux and max_flux.
+
+        Args:
+            min_flux (float): Minimum flux value to keep. Defaults to 0.
+            max_flux (float): Maximum flux value to keep. Defaults to infinity.
+            band (int): The band to compare fluxes in. Defaults to 2 (r-band).
+
+        Returns:
+            TileCatalog: a new catalog with only sources within the flux range. Note that the size
+                of the tensors stays the same, but params at sources outside the range are set to 0.
+        """
+        on_fluxes = self.on_fluxes[..., band]
+        flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
+
+        d = {}
+        for key, val in self.items():
             if key in {"shear", "convergence"}:
                 d[key] = val
             elif key == "n_sources":
