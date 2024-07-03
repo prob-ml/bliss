@@ -12,7 +12,7 @@ from bliss.cached_dataset import FileDatum
 from bliss.catalog import FullCatalog
 
 min_flux_for_loss = 0
-DATA_PATH = "/data/scratch/kapnadak/data"
+DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
@@ -28,19 +28,21 @@ COL_NAMES = (
     "FLUX_G",
     "FLUX_I",
     "FLUX_Z",
+    "FLUX_Y",
     "HLR",
     "FRACDEV",
     "G1",
     "G2",
     "Z",
+    "SOURCE_TYPE",
 )
-BANDS = ("g", "r", "i", "z")
-N_CATALOGS_PER_FILE = 10
+BANDS = ("g", "r", "i", "z", "Y")
+N_CATALOGS_PER_FILE = 500
 
 
 def main(**kwargs):
-    image_size = int(kwargs.get("image_size", 4800))
-    tile_size = int(kwargs.get("tile_size", 4))
+    image_size = int(kwargs.get("image_size", 1280))
+    tile_size = int(kwargs.get("tile_size", 128))
     n_tiles = int(image_size / tile_size)
     data: List[FileDatum] = []
 
@@ -52,7 +54,7 @@ def main(**kwargs):
         n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
         catalog_dict["n_sources"] = n_sources
         catalog_dict["galaxy_fluxes"] = torch.tensor(
-            [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z"]].to_numpy()]
+            [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z", "FLUX_Y"]].to_numpy()]
         )
         catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
         catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
@@ -107,7 +109,7 @@ def main(**kwargs):
 
     chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
     for i, chunk in enumerate(chunks):
-        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}.pt")
+        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}_size_500.pt")
 
 
 if __name__ == "__main__":

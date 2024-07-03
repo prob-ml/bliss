@@ -38,7 +38,7 @@ class GalaxyClusterEncoder(Encoder):
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
         mask = torch.zeros([batch_size, ht, wt])
-        context = self.make_context(None, mask).cuda()
+        context = self.make_context(None, mask).to("cuda")
         x_cat_marginal = self.catalog_net(x_features, context)
         return x_features, x_cat_marginal
 
@@ -93,7 +93,7 @@ class GalaxyClusterEncoder(Encoder):
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
         mask = torch.zeros([batch_size, ht, wt])
-        context = self.make_context(None, mask).cuda()
+        context = self.make_context(None, mask).to("cuda")
         pred["x_cat_marginal"] = self.catalog_net(x_features, context)
         x_features = x_features.detach()  # is this helpful? doing it here to match old code
 
