@@ -12,7 +12,7 @@ from bliss.cached_dataset import FileDatum
 from bliss.catalog import FullCatalog
 
 min_flux_for_loss = 0
-DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
+DATA_PATH = "/data/scratch/kapnadak/new_data"
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
