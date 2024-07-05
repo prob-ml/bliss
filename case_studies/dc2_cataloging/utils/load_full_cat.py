@@ -10,7 +10,7 @@ from bliss.surveys.dc2 import DC2DataModule, split_tensor, unsqueeze_tile_dict
 from case_studies.dc2_cataloging.utils.load_lsst import get_lsst_full_cat
 
 
-def concatenate_tile_dict(tile_dict_list):
+def concatenate_tile_dicts(tile_dict_list):
     output_tile_cat_dict = {}
     for k in tile_dict_list[0].keys():
         if k not in output_tile_cat_dict:
@@ -82,7 +82,7 @@ def get_full_cat(
             bliss_output = move_data_to_device(bliss_output, device="cpu")
             bliss_output_list.append(bliss_output)
 
-        d = concatenate_tile_dict(bliss_output_list)
+        d = concatenate_tile_dicts(bliss_output_list)
         n_image_split = notebook_cfg.surveys.dc2.n_image_split
         for k, v in d.items():
             if k != "n_sources":

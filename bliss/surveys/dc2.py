@@ -17,7 +17,7 @@ from bliss.cached_dataset import CachedSimulatedDataModule
 from bliss.catalog import FullCatalog, SourceType
 
 
-def from_wcs_header_str_to_wcs(wcs_header_str: str):
+def wcs_from_wcs_header_str(wcs_header_str: str):
     return WCS(Header.fromstring(wcs_header_str))
 
 
@@ -225,7 +225,7 @@ def unsqueeze_tile_dict(tile_dict):
 
 def load_image_and_catalog(image_index, **kwargs):
     image, bg, wcs_header_str = read_image_for_bands(image_index, **kwargs)
-    wcs = from_wcs_header_str_to_wcs(wcs_header_str)
+    wcs = wcs_from_wcs_header_str(wcs_header_str)
 
     plocs_lim = image[0].shape
     height = plocs_lim[0]

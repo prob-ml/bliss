@@ -31,12 +31,12 @@ def get_lsst_catalog_tensors_dict(lsst_root_dir: str):
     )
     lsst_catalog_df = pd.DataFrame(lsst_catalog_sub)
     lsst_flux_lst = [
-        lsst_catalog_df["cModelFlux_g"],
-        lsst_catalog_df["cModelFlux_i"],
-        lsst_catalog_df["cModelFlux_r"],
         lsst_catalog_df["cModelFlux_u"],
-        lsst_catalog_df["cModelFlux_y"],
+        lsst_catalog_df["cModelFlux_g"],
+        lsst_catalog_df["cModelFlux_r"],
+        lsst_catalog_df["cModelFlux_i"],
         lsst_catalog_df["cModelFlux_z"],
+        lsst_catalog_df["cModelFlux_y"],
     ]
     lsst_flux_tensors_lst = [torch.from_numpy(flux.values).view(-1, 1) for flux in lsst_flux_lst]
     return {
@@ -56,11 +56,8 @@ def get_lsst_params(
 ):
     lsst_ra = lsst_catalog_tensors_dict["ra"]
     lsst_dec = lsst_catalog_tensors_dict["dec"]
-    lsst_pt, lsst_pr = cur_image_wcs.all_world2pix(lsst_ra, lsst_dec, 0)
-    lsst_pt = torch.from_numpy(lsst_pt)
-    lsst_pr = torch.from_numpy(lsst_pr)
+    lsst_plocs = FullCatalog.plocs_from_ra_dec(lsst_ra, lsst_dec, cur_image_wcs)
 
-    lsst_plocs = torch.stack((lsst_pr, lsst_pt), dim=-1)
     lsst_source_type = lsst_catalog_tensors_dict["type"]
     lsst_flux = lsst_catalog_tensors_dict["flux"]
 
