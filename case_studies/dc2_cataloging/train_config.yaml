@@ -93,12 +93,6 @@ encoder:
           source_type_accuracy:
             _target_: bliss.encoder.metrics.SourceTypeAccuracy
             flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-          source_type_accuracy_star:
-            _target_: bliss.encoder.metrics.SourceTypeAccuracy
-            flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-            filter_list:
-              - _target_: bliss.encoder.metrics.SourceTypeFilter
-                filter_type: "star"
           detection_performance_one_source_mask:
             _target_: bliss.encoder.metrics.DetectionPerformance
             mag_bin_cutoffs: [200, 400, 600, 800, 1000]
@@ -120,17 +114,9 @@ encoder:
             filter_list:
               - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
                 filter_source_count: "2plus"
-          source_type_accuracy_galaxy:
-            _target_: bliss.encoder.metrics.SourceTypeAccuracy
-            flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-            filter_list:
-              - _target_: bliss.encoder.metrics.SourceTypeFilter
-                filter_type: "galaxy"
           flux_error:
             _target_: bliss.encoder.metrics.FluxError
             survey_bands: ${encoder.survey_bands}
-          # galaxy_shape_error:
-          #   _target_: bliss.encoder.metrics.GalaxyShapeError
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
@@ -146,9 +132,9 @@ train:
     trainer:
         logger:
             name: DC2_cataloging_exp_07
-            version: exp_07-02-2  # change it before running the code
-        devices: [7]  # change it before running the code
+            version: exp_07-03-3  # change it before running the code
+        devices: [5]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
     data_source: ${surveys.dc2}
     pretrained_weights: null
-    seed: 6262
+    seed: 8282
