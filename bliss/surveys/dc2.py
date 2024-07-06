@@ -17,7 +17,7 @@ from bliss.cached_dataset import CachedSimulatedDataModule
 from bliss.catalog import FullCatalog, SourceType
 
 
-def from_wcs_header_str_to_wcs(wcs_header_str: str):
+def wcs_from_wcs_header_str(wcs_header_str: str):
     return WCS(Header.fromstring(wcs_header_str))
 
 
@@ -39,7 +39,7 @@ def split_tensor(
     ori_tensor: torch.Tensor, split_size: int, split_first_dim: int, split_second_dim: int
 ):
     tensor_splits = torch.stack(ori_tensor.split(split_size, dim=split_first_dim))
-    tensor_splits = torch.stack(tensor_splits.split(split_size, dim=split_second_dim + 1))
+    tensor_splits = torch.stack(tensor_splits.split(split_size, dim=split_second_dim + 1), dim=1)
     return [sub_tensor.squeeze(0) for sub_tensor in tensor_splits.flatten(0, 1).split(1, dim=0)]
 
 
@@ -171,11 +171,11 @@ class DC2DataModule(CachedSimulatedDataModule):
 
         return None
 
-    def get_plotting_sample(self, image_idx):
+    def get_plotting_sample(self, image_index):
         if self._image_files is None or self._bg_files is None:
             self._load_image_and_bg_files_list()
 
-        if image_idx < 0 or image_idx >= len(self._image_files):
+        if image_index < 0 or image_index >= len(self._image_files[0]):
             raise IndexError("invalid image_idx")
 
         kwargs = {
@@ -193,11 +193,11 @@ class DC2DataModule(CachedSimulatedDataModule):
             "data_in_one_cached_file": self.data_in_one_cached_file,
         }
 
-        result_dict = load_image_and_catalog(image_idx, **kwargs)
+        result_dict = load_image_and_catalog(image_index, **kwargs)
         return {
             "tile_catalog": result_dict["tile_dict"],
-            "image": torch.from_numpy(result_dict["inputs"]["image"]),
-            "background": torch.from_numpy(result_dict["inputs"]["bg"]),
+            "image": result_dict["inputs"]["image"],
+            "background": result_dict["inputs"]["bg"],
             "match_id": result_dict["other_info"]["match_id"],
             "full_catalog": result_dict["other_info"]["full_cat"],
             "wcs": result_dict["other_info"]["wcs"],
@@ -225,7 +225,7 @@ def unsqueeze_tile_dict(tile_dict):
 
 def load_image_and_catalog(image_index, **kwargs):
     image, bg, wcs_header_str = read_image_for_bands(image_index, **kwargs)
-    wcs = from_wcs_header_str_to_wcs(wcs_header_str)
+    wcs = wcs_from_wcs_header_str(wcs_header_str)
 
     plocs_lim = image[0].shape
     height = plocs_lim[0]
@@ -281,8 +281,8 @@ def generate_cached_data(image_index, **kwargs):
     # split image
     split_lim = kwargs["image_lim"][0] // kwargs["n_image_split"]
     image_splits = split_tensor(image, split_lim, 1, 2)
-    image_height_pixels = image.shape[1]
-    split_image_num_on_height = image_height_pixels // split_lim
+    image_width_pixels = image.shape[2]
+    split_image_num_on_width = image_width_pixels // split_lim
     bg_splits = split_tensor(bg, split_lim, 1, 2)
 
     # split tile cat
@@ -306,10 +306,10 @@ def generate_cached_data(image_index, **kwargs):
         "tile_catalog": unpack_dict(tile_cat_splits),
         "images": image_splits,
         "image_height_index": (
-            torch.arange(0, len(image_splits)) % split_image_num_on_height
+            torch.arange(0, len(image_splits)) // split_image_num_on_width
         ).tolist(),
         "image_width_index": (
-            torch.arange(0, len(image_splits)) // split_image_num_on_height
+            torch.arange(0, len(image_splits)) % split_image_num_on_width
         ).tolist(),
         "background": bg_splits,
         "psf_params": [psf_params for _ in range(kwargs["n_image_split"] ** 2)],
