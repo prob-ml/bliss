@@ -13,11 +13,16 @@ from torch.nn.utils.rnn import pad_sequence
 
 
 def convert_mag_to_nmgy(mag):
-    return 10 ** ((22.5 - mag) / 2.5) * 3631
+    return 10 ** ((22.5 - mag) / 2.5)
 
 
 def convert_nmgy_to_mag(nmgy):
-    return 22.5 - 2.5 * torch.log10(nmgy / 3631)  # dc2
+    return 22.5 - 2.5 * torch.log10(nmgy)
+
+
+def convert_nmgy_to_njymag(nmgy):
+    """Convert from flux (nano-maggie) to mag (nano-jansky), which is the format used by DC2."""
+    return 22.5 - 2.5 * torch.log10(nmgy / 3631)
 
 
 class SourceType(IntEnum):
@@ -161,6 +166,10 @@ class TileCatalog(BaseTileCatalog):
     def magnitudes(self):
         return convert_nmgy_to_mag(self.on_fluxes)
 
+    @property
+    def magnitudes_njy(self):
+        return convert_nmgy_to_njymag(self.on_fluxes)
+
     def to_full_catalog(self):
         """Converts image parameters in tiles to parameters of full image.
 
@@ -176,7 +185,7 @@ class TileCatalog(BaseTileCatalog):
         plocs = self.get_full_locs_from_tiles()
         param_names_to_mask = {"plocs"}.union(set(self.keys()))
         tile_params_to_gather = {"plocs": plocs}
-        tile_params_to_gather.update(self)  # add other params
+        tile_params_to_gather.update(self)
 
         params = {}
         indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()
