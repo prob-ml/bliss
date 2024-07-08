@@ -203,6 +203,10 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
             return None
 
         if stage == "validate":
+            if self.val_dataset is None:
+                self.val_dataset = self._get_dataset(
+                    self.file_paths[self.slices[1]], self.nontrain_transforms
+                )
             return None
 
         if stage == "test":

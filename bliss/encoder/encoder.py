@@ -232,27 +232,34 @@ class Encoder(pl.LightningModule):
         """Training step (pytorch lightning)."""
         return self._compute_loss(batch, "train")
 
-    def update_metrics(self, batch, batch_idx):
+    def sample_for_metrics(self, batch):
         target_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         target_tile_cat = target_tile_cat.filter_by_flux(
             min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
-        )
-        target_cat = target_tile_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
+        ).symmetric_crop(self.tiles_to_crop)
 
-        sample_tile_cat = self.sample(batch, use_mode=True).filter_by_flux(
+        mode_tile_cat = self.sample(batch, use_mode=True).filter_by_flux(
             min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
         )
-        sample_cat = sample_tile_cat.to_full_catalog()
-        matching = self.matcher.match_catalogs(target_cat, sample_cat)
-        self.mode_metrics.update(target_cat, sample_cat, matching)
 
         sample_tile_cat = self.sample(batch, use_mode=False).filter_by_flux(
             min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
         )
+
+        return target_tile_cat, mode_tile_cat, sample_tile_cat
+
+    def update_metrics(self, batch, batch_idx):
+        target_tile_cat, mode_tile_cat, sample_tile_cat = self.sample_for_metrics(batch)
+        target_cat = target_tile_cat.to_full_catalog()
+        mode_cat = mode_tile_cat.to_full_catalog()
         sample_cat = sample_tile_cat.to_full_catalog()
+
+        matching = self.matcher.match_catalogs(target_cat, mode_cat)
+        self.mode_metrics.update(target_cat, mode_cat, matching)
+
         smatching = self.matcher.match_catalogs(target_cat, sample_cat)
         self.sample_metrics.update(target_cat, sample_cat, smatching)
 

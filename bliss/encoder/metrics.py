@@ -386,7 +386,9 @@ class SourceTypeAccuracy(FilterMetric):
         n_bins = len(self.flux_bin_cutoffs) + 1
 
         self.add_state("gal_tp", default=torch.zeros(n_bins), dist_reduce_fx="sum")
+        self.add_state("gal_fp", default=torch.zeros(n_bins), dist_reduce_fx="sum")
         self.add_state("star_tp", default=torch.zeros(n_bins), dist_reduce_fx="sum")
+        self.add_state("star_fp", default=torch.zeros(n_bins), dist_reduce_fx="sum")
         self.add_state("n_matches", default=torch.zeros(n_bins), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
@@ -420,41 +422,81 @@ class SourceTypeAccuracy(FilterMetric):
             est_gal = est_cat.galaxy_bools[i][ecat_matches][to_bin_mapping]
 
             gal_tp_bool = torch.split(true_gal & est_gal, per_bin_elements_count.tolist())
+            gal_fp_bool = torch.split(~true_gal & est_gal, per_bin_elements_count.tolist())
             star_tp_bool = torch.split(~true_gal & ~est_gal, per_bin_elements_count.tolist())
+            star_fp_bool = torch.split(true_gal & ~est_gal, per_bin_elements_count.tolist())
 
             gal_tp = torch.tensor([i.sum() for i in gal_tp_bool], device=self.device)
+            gal_fp = torch.tensor([i.sum() for i in gal_fp_bool], device=self.device)
             star_tp = torch.tensor([i.sum() for i in star_tp_bool], device=self.device)
+            star_fp = torch.tensor([i.sum() for i in star_fp_bool], device=self.device)
 
             self.n_matches += per_bin_elements_count
             self.gal_tp += gal_tp
+            self.gal_fp += gal_fp
             self.star_tp += star_tp
+            self.star_fp += star_fp
 
     def compute(self):
         acc = ((self.gal_tp.sum() + self.star_tp.sum()) / self.n_matches.sum()).nan_to_num(0)
         acc_per_bin = ((self.gal_tp + self.star_tp) / self.n_matches).nan_to_num(0)
+
+        star_acc = (
+            self.star_tp.sum() / (self.n_matches.sum() - self.gal_tp.sum() - self.star_fp.sum())
+        ).nan_to_num(0)
+        star_acc_per_bin = (
+            self.star_tp / (self.n_matches - self.gal_tp - self.star_fp)
+        ).nan_to_num(0)
+
+        gal_acc = (
+            self.gal_tp.sum() / (self.n_matches.sum() - self.star_tp.sum() - self.gal_fp.sum())
+        ).nan_to_num(0)
+        gal_acc_per_bin = (self.gal_tp / (self.n_matches - self.star_tp - self.gal_fp)).nan_to_num(
+            0
+        )
 
         acc_per_bin_results = {
             f"classification_acc{self.postfix_str}_bin_{i}": acc_per_bin[i]
             for i in range(len(acc_per_bin))
         }
 
+        star_acc_per_bin_results = {
+            f"classification_acc_star{self.postfix_str}_bin_{i}": star_acc_per_bin[i]
+            for i in range(len(star_acc_per_bin))
+        }
+
+        gal_acc_per_bin_results = {
+            f"classification_acc_galaxy{self.postfix_str}_bin_{i}": gal_acc_per_bin[i]
+            for i in range(len(gal_acc_per_bin))
+        }
+
         return {
             f"classification_acc{self.postfix_str}": acc.item(),
+            f"classification_acc_star{self.postfix_str}": star_acc.item(),
+            f"classification_acc_galaxy{self.postfix_str}": gal_acc.item(),
             **acc_per_bin_results,
+            **star_acc_per_bin_results,
+            **gal_acc_per_bin_results,
         }
 
     def get_results_on_per_flux_bin(self):
         acc = ((self.gal_tp + self.star_tp) / self.n_matches).nan_to_num(0)
+        star_acc = (self.star_tp / (self.n_matches - self.gal_tp - self.star_fp)).nan_to_num(0)
+        gal_acc = (self.gal_tp / (self.n_matches - self.star_tp - self.gal_fp)).nan_to_num(0)
 
         return {
             f"classification_acc{self.postfix_str}": acc,
+            f"classification_acc_star{self.postfix_str}": star_acc,
+            f"classification_acc_galaxy{self.postfix_str}": gal_acc,
         }
 
     def get_internal_states(self):
         return {
             f"n_matches{self.postfix_str}": self.n_matches,
             f"gal_tp{self.postfix_str}": self.gal_tp,
+            f"gal_fp{self.postfix_str}": self.gal_fp,
             f"star_tp{self.postfix_str}": self.star_tp,
+            f"star_fp{self.postfix_str}": self.star_fp,
         }
 
 
