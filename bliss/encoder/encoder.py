@@ -3,7 +3,6 @@ from typing import Optional
 
 import pytorch_lightning as pl
 import torch
-from torch.nn.functional import pad
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
@@ -28,7 +27,6 @@ class Encoder(pl.LightningModule):
         self,
         survey_bands: list,
         tile_slen: int,
-        tiles_to_crop: int,
         image_normalizer: ImageNormalizer,
         var_dist: VariationalDist,
         matcher: CatalogMatcher,
@@ -48,7 +46,6 @@ class Encoder(pl.LightningModule):
         Args:
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
-            tiles_to_crop: margin of tiles not to use for computing loss
             image_normalizer: object that applies input transforms to images
             var_dist: object that makes a variational distribution from raw convnet output
             matcher: for matching predicted catalogs to ground truth catalogs
@@ -67,7 +64,6 @@ class Encoder(pl.LightningModule):
 
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
-        self.tiles_to_crop = tiles_to_crop
         self.image_normalizer = image_normalizer
         self.var_dist = var_dist
         self.mode_metrics = mode_metrics
@@ -162,7 +158,7 @@ class Encoder(pl.LightningModule):
             est_cat2["n_sources"] *= est_cat["n_sources"]
             est_cat = est_cat.union(est_cat2, disjoint=False)
 
-        return est_cat.symmetric_crop(self.tiles_to_crop)
+        return est_cat
 
     def _compute_loss(self, batch, logging_name):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
@@ -215,11 +211,8 @@ class Encoder(pl.LightningModule):
             loss22 *= target_cat1["n_sources"]
             loss += loss22
 
-        # exclude border tiles and report average per-tile loss
-        ttc = self.tiles_to_crop
-        interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
         # could normalize by the number of tile predictions, rather than number of tiles
-        loss = interior_loss.sum() / interior_loss.numel()
+        loss = loss.sum() / loss.numel()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         return loss
@@ -240,7 +233,6 @@ class Encoder(pl.LightningModule):
             min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
         )
-        target_tile_cat = target_tile_cat.symmetric_crop(self.tiles_to_crop)
         target_cat = target_tile_cat.to_full_catalog()
 
         mode_tile_cat = self.sample(batch, use_mode=True).filter_by_flux(
@@ -263,8 +255,8 @@ class Encoder(pl.LightningModule):
         self.sample_image_renders.update(
             batch,
             target_cat,
-            sample_tile_cat,
-            sample_cat,
+            mode_tile_cat,
+            mode_cat,
             self.current_epoch,
             batch_idx,
         )

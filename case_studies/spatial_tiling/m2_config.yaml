@@ -38,7 +38,6 @@ encoder:
     min_flux_for_loss: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
     min_flux_for_metrics: 0.9419
     use_double_detect: true
-    tiles_to_crop: 1
     image_normalizer:
         bands: [2]
         log_transform_stdevs: null
