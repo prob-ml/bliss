@@ -30,13 +30,14 @@ def output_path(tmpdir_factory):
 @pytest.fixture(scope="session")
 def cfg(pytestconfig, cached_data_path, output_path):
     use_gpu = pytestconfig.getoption("gpu")
+    test_data_dir = Path(__file__).parent / "data"
 
     # pytest-specific overrides
     overrides = {
         "train.trainer.accelerator": "gpu" if use_gpu else "cpu",
         "predict.trainer.accelerator": "gpu" if use_gpu else "cpu",
         "predict.device": "cuda:0" if use_gpu else "cpu",
-        "paths.root": Path(__file__).parents[1].as_posix(),
+        "paths.test_data": test_data_dir,
         "paths.output": str(output_path),
         "cached_simulator.cached_data_path": str(cached_data_path),
         "generate.cached_data_path": str(cached_data_path),

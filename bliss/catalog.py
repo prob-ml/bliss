@@ -32,6 +32,7 @@ class SourceType(IntEnum):
 
 class BaseTileCatalog(UserDict):
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
+        # TODO: a tile catalog shouldn't know it's side length
         self.tile_slen = tile_slen
 
         v = next(iter(d.values()))
@@ -120,6 +121,7 @@ class TileCatalog(BaseTileCatalog):
 
     def __getitem__(self, name: str):
         # a temporary hack until we stop storing galaxy_params as an array
+        # TODO: remove this hack
         if "galaxy_params" in self.keys() and name in self.galaxy_params:
             idx = self.galaxy_params_index[name]
             return self.data["galaxy_params"][..., idx : (idx + 1)]
@@ -135,6 +137,8 @@ class TileCatalog(BaseTileCatalog):
         Returns:
             Tensor indicating how many sources are present for each batch.
         """
+        # TODO: a tile catalog should store the is_on_mask explicitly, not derive it from n_sources.
+        # perhaps we should have some catalog format that can store at most one source per tile
         arange = torch.arange(self.max_sources, device=self.device)
         arange = arange.expand(*self["n_sources"].shape, self.max_sources)
         return arange < self["n_sources"].unsqueeze(-1)
@@ -156,6 +160,8 @@ class TileCatalog(BaseTileCatalog):
         Returns:
             Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
         """
+        # TODO: a tile catalog should store fluxes rather than star_fluxes and galaxy_fluxes
+        # because that's all that's needed to render the source
         if "galaxy_fluxes" not in self:
             fluxes = self["star_fluxes"]
         else:
@@ -164,6 +170,7 @@ class TileCatalog(BaseTileCatalog):
 
     @property
     def magnitudes(self):
+        # TODO: we shouldn't assume fluxes are stored in nanomaggies because they aren't for DC2
         return convert_nmgy_to_mag(self.on_fluxes)
 
     @property
@@ -182,6 +189,7 @@ class TileCatalog(BaseTileCatalog):
             NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
             pixel locations ("plocs") that are between 0 and `slen`.
         """
+        # TODO: tile_slen should be an argument to this function, not stored in a tile catalog
         plocs = self.get_full_locs_from_tiles()
         param_names_to_mask = {"plocs"}.union(set(self.keys()))
         tile_params_to_gather = {"plocs": plocs}
@@ -191,6 +199,8 @@ class TileCatalog(BaseTileCatalog):
         indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()
         for param_name, tile_param in tile_params_to_gather.items():
             if param_name == "n_sources":
+                continue
+            if param_name == "locs":  # full catalog uses plocs instead of locs
                 continue
             k = tile_param.shape[-1]
             param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
@@ -257,24 +267,6 @@ class TileCatalog(BaseTileCatalog):
         is_on_array = torch.gather(tile_is_on_array, dim=1, index=indices_sorted)
         return indices_sorted, is_on_array
 
-    def gather_param_at_tiles(self, param_name: str, indices: Tensor) -> Tensor:
-        """Gets the tile parameters at the desired indices.
-
-        Args:
-            param_name (str): Param name. Must be either "locs" or in keys of catalog.
-            indices (Tensor): The indices to gather. Normally this will come from
-                get_indices_of_on_sources, but notably, we use the indices of the true catalog to
-                gather from the tile catalog when computing metrics.
-
-        Returns:
-            Tensor: (b, n, k) tensor, where b=batch size, n=length of indices, and k=param dims
-        """
-        assert param_name == "locs" or param_name in self.keys(), f"'{param_name}' not in catalog"
-        param = self.get_full_locs_from_tiles() if param_name == "locs" else self[param_name]
-        param = rearrange(param, "b h w s k -> b (h w s) k")
-        idx_to_gather = repeat(indices, "... -> ... k", k=param.size(-1))
-        return torch.gather(param, dim=1, index=idx_to_gather)
-
     def _sort_sources_by_flux(self, band=2):
         # sort by fluxes of "on" sources to get brightest source per tile
         on_fluxes = self.on_fluxes[..., band]  # shape n x nth x ntw x d
@@ -319,7 +311,7 @@ class TileCatalog(BaseTileCatalog):
 
         return TileCatalog(self.tile_slen, d)
 
-    def filter_tile_catalog_by_flux(self, min_flux=0, max_flux=torch.inf, band=2):
+    def filter_by_flux(self, min_flux=0, max_flux=torch.inf, band=2):
         """Restricts TileCatalog to sources that have a flux between min_flux and max_flux.
 
         Args:
@@ -348,37 +340,14 @@ class TileCatalog(BaseTileCatalog):
 
         return TileCatalog(self.tile_slen, d)
 
-    def filter_tile_catalog_by_flux_no_sort(self, min_flux=0, max_flux=torch.inf, band=2):
-        """Restricts TileCatalog to sources that have a flux between min_flux and max_flux.
-
-        Args:
-            min_flux (float): Minimum flux value to keep. Defaults to 0.
-            max_flux (float): Maximum flux value to keep. Defaults to infinity.
-            band (int): The band to compare fluxes in. Defaults to 2 (r-band).
-
-        Returns:
-            TileCatalog: a new catalog with only sources within the flux range. Note that the size
-                of the tensors stays the same, but params at sources outside the range are set to 0.
-        """
-        on_fluxes = self.on_fluxes[..., band]
-        flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
-
-        d = {}
-        for key, val in self.items():
-            if key in {"shear", "convergence"}:
-                d[key] = val
-            elif key == "n_sources":
-                d[key] = flux_mask.sum(dim=3)  # number of sources within range in tile
-            else:
-                d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
-
-        return TileCatalog(self.tile_slen, d)
-
-    def union(self, other: "TileCatalog") -> "TileCatalog":
+    def union(self, other, disjoint=False):
         """Returns a new TileCatalog containing the union of the sources in self and other.
+        The maximum number of sources in the returned catalog is the sum of the maximum number
+        of sources in self and other if disjoint is false, otherwise it is unchanged.
 
         Args:
             other: Another TileCatalog.
+            disjoint: whether the catalogs cannot have sources in the same tiles
 
         Returns:
             A new TileCatalog containing the union of the sources in self and other.
@@ -397,9 +366,15 @@ class TileCatalog(BaseTileCatalog):
         for k, v in self.items():
             if k == "n_sources":
                 d[k] = v + other[k]
+                if disjoint:
+                    assert d[k].max() <= 1
             else:
-                d1 = torch.cat((v, other[k]), dim=-2)
-                d2 = torch.cat((other[k], v), dim=-2)
+                if disjoint:
+                    d1 = v
+                    d2 = other[k]
+                else:
+                    d1 = torch.cat((v, other[k]), dim=-2)
+                    d2 = torch.cat((other[k], v), dim=-2)
                 d[k] = torch.where(ns11 > 0, d1, d2)
         return TileCatalog(self.tile_slen, d)
 
@@ -576,6 +551,7 @@ class FullCatalog(UserDict):
         Raises:
             ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
                 `ignore_extra_sources` is False.
+            KeyError: If the tile_params contain `plocs` or `n_sources`.
         """
         # TODO: a FullCatalog only needs to "know" its height and width to convert itself to a
         # TileCatalog. So those parameters should be passed on conversion, not initialization.
@@ -589,6 +565,8 @@ class FullCatalog(UserDict):
         tile_n_sources = torch.zeros(tile_cat_shape[:3], dtype=torch.int64, device=self.device)
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
+            if k in {"plocs", "n_sources"}:
+                continue
             dtype = torch.int64 if k == "objid" else torch.float
             size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
             tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
@@ -635,10 +613,12 @@ class FullCatalog(UserDict):
             )
 
             for k, v in tile_params.items():
+                if k == "plocs":
+                    raise KeyError("plocs should not be in tile_params")
                 if k == "locs":
                     k = "plocs"
                 if k == "n_sources":
-                    continue
+                    raise KeyError("n_sources should not be in tile_params")
                 param_matrix = self[k][ii][:n_sources]
                 if filter_oob:
                     param_matrix = param_matrix[x_mask]
@@ -712,8 +692,8 @@ class FullCatalog(UserDict):
         return est_cat_table
 
     def filter_full_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
-        assert box_origin[0] + box_len < self.height, "invalid box"
-        assert box_origin[1] + box_len < self.width, "invalid box"
+        assert box_origin[0] + box_len <= self.height, "invalid box"
+        assert box_origin[1] + box_len <= self.width, "invalid box"
 
         box_origin_tensor = box_origin.view(1, 1, 2).to(device=self.device)
         box_end_tensor = (box_origin + box_len).view(1, 1, 2).to(device=self.device)

@@ -1,0 +1,17 @@
+---
+defaults:
+    - train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+train:
+    trainer:
+        logger:
+            name: DC2_debug
+            version: DC2_debug
+        devices: [7]
+
+surveys:
+    dc2:
+        prepare_data_processes_num: 4
+        subset_fraction: 0.05

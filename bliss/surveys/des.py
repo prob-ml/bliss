@@ -19,9 +19,9 @@ from scipy.ndimage import zoom
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
+from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.sdss import column_to_tensor
 from bliss.surveys.survey import Survey, SurveyDownloader
-from bliss.utils.download_utils import download_file_to_dst
 
 SkyCoord = TypedDict(
     "SkyCoord",

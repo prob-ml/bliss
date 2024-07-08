@@ -27,15 +27,28 @@ variational_factors:
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
     nll_gating: is_star
 
+star_metrics:
+    detection_performance:
+        _target_: bliss.encoder.metrics.DetectionPerformance
+        mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
+        exclude_last_bin: true
+
 encoder:
     tile_slen: 2
     min_flux_for_loss: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
     min_flux_for_metrics: 0.9419
-    double_detect: true
+    use_double_detect: true
     tiles_to_crop: 1
     image_normalizer:
         bands: [2]
-        log_transform_stdevs: [3, 10, 35, 150, 350, 700]
+        log_transform_stdevs: null
+        asinh_cutoffs: [3.2974e+00, 7.5877e+01, 1.2642e+02, 1.7975e+02, 2.4340e+02, 3.2515e+02,
+            4.3817e+02, 6.1258e+02, 9.3131e+02, 1.7869e+03, 1.3727e+04, 9.1571e+04,
+            3.4912e+05, 6.7166e+05]
+        include_original: false
+        include_background: false
+        concat_psf_params: false
+        use_clahe: true
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 0.5
@@ -43,11 +56,12 @@ encoder:
         mag_band: 2  # SDSS r-band
     metrics:
         _target_: torchmetrics.MetricCollection
-        metrics:
-            detection_performance:
-                _target_: bliss.encoder.metrics.DetectionPerformance
-                mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
-                exclude_last_bin: true
+        metrics: ${star_metrics}
+    optimizer_params:
+        lr: 1e-3
+    scheduler_params:
+        milestones: []
+        gamma: 0.1
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
@@ -80,16 +94,27 @@ surveys:
 generate:
     n_image_files: 16
     n_batches_per_file: 16
-    cached_data_path: /data/scratch/regier/m2
+    cached_data_path: /data/scratch/regier/m2_full_cat
 
 cached_simulator:
-    cached_data_path: /data/scratch/regier/m2
-    batch_size: 12
+    cached_data_path: /data/scratch/regier/m2_full_cat
+    batch_size: 10
+    num_workers: 8
+    train_transforms:
+        - _target_: bliss.cached_dataset.FullCatalogToTileTransform
+          tile_slen: 2
+          max_sources: 6
+        - _target_: bliss.data_augmentation.RotateFlipTransform
+    nontrain_transforms:
+        - _target_: bliss.cached_dataset.FullCatalogToTileTransform
+          tile_slen: 2
+          max_sources: 6
 
 train:
     trainer:
         precision: 32
-        accumulate_grad_batches: 2
+        accumulate_grad_batches: 1
+    seed: null
 
 predict:
     dataset:
