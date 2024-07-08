@@ -1,5 +1,4 @@
 import torch
-from torch.nn.functional import pad
 
 from bliss.catalog import BaseTileCatalog, TileCatalog
 from bliss.encoder.convnets import CatalogNet
@@ -44,13 +43,10 @@ class GalaxyClusterEncoder(Encoder):
 
     def sample(self, batch, use_mode=True):
         _, x_cat_marginal = self.get_features_and_parameters(batch)
-        est_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
-
-        return est_cat.symmetric_crop(self.tiles_to_crop)
+        return self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
 
     def update_metrics(self, batch, batch_idx):
         target_cat = BaseTileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat = target_cat.symmetric_crop(self.tiles_to_crop)
 
         mode_cat = self.sample(batch, use_mode=True)
         self.mode_metrics.update(target_cat, mode_cat)
@@ -100,9 +96,7 @@ class GalaxyClusterEncoder(Encoder):
         loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat1)
 
         # exclude border tiles and report average per-tile loss
-        ttc = self.tiles_to_crop
-        interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
-        loss = interior_loss.sum() / interior_loss.numel()
+        loss = loss.sum() / loss.numel()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         return loss
