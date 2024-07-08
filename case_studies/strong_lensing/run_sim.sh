@@ -3,7 +3,7 @@
 # Script to automate running the galsim command with the yaml configuration
 
 # Default Values
-num_files=10
+num_files=3
 num_galaxies=3
 img_size=500
 
@@ -32,16 +32,22 @@ done
 # base image config file
 GALAXY_CONFIG_FILE="galsim-random.yaml"
 # final image config file
-IMAGE_CONFIG_FILE="simulate.yaml" 
+IMAGE_CONFIG_FILE="simulate.yaml"
 
 
 NUM_ITERATIONS=$((num_galaxies+1))
 
 # Set the output directory for base images
 OUTPUT_DIR="data/images"
+
 # Output directory for final images
 FINAL_OUTPUT_DIR="output_yaml"
 
+# Catalog Directory
+CATALOG_DIR="catalogs"
+if [ ! -d "$OUTPUT_DIR" ]; then
+  mkdir -p "$CATALOG_DIR"
+fi
 
 MAG=0.029999
 # Create the output directory if it doesn't exist
@@ -109,7 +115,7 @@ for i in $(seq 1 $num_files); do
           echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, False, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta" >> data/catalog.txt
 
       # Write lensed images to combined files
-      else 
+      else
           # Running Lenstronomy lensing (Generating lensed image)
           echo "Running Python script $PYTHON_SCRIPT_2 on iteration $j..." &>> $LOG_FILE
           output=$(python "$PYTHON_SCRIPT_2" "$FITS_FILE" "$OUTPUT_DIR")
@@ -150,7 +156,7 @@ for i in $(seq 1 $num_files); do
     echo "Running python file $PYTHON_SCRIPT_4 to convert text catalog..." &>> $LOG_FILE
     python "$PYTHON_SCRIPT_4" "$OUTPUT_DIR" &>> $LOG_FILE
 
-    # Run Galsim to produce final image  
+    # Run Galsim to produce final image
     echo "Running galsim with $IMAGE_CONFIG_FILE..." &>> $LOG_FILE
     galsim "$IMAGE_CONFIG_FILE" variables.output_dir="$FINAL_OUTPUT_DIR" variables.nobjects="$num_galaxies" variables.image_size="$img_size" &>> $LOG_FILE
 
@@ -160,12 +166,17 @@ for i in $(seq 1 $num_files); do
     python "$OPEN_FITS" "$i" "$FINAL_OUTPUT_DIR" &>> $LOG_FILE
 
     rm -r data/images
-    rm data/catalog.fits data/catalog.txt data/combined_images.fits
+    rm data/catalog.fits data/combined_images.fits
+    sed -i '$d' data/catalog.txt
+    mv data/catalog.txt $CATALOG_DIR/image${i}.txt
 done
 
 # Move all image pngs to separate folder
 mkdir $FINAL_OUTPUT_DIR/images
+mkdir $FINAL_OUTPUT_DIR/data
+
 mv $FINAL_OUTPUT_DIR/*.png $FINAL_OUTPUT_DIR/images/
+mv $FINAL_OUTPUT_DIR/*.fits $FINAL_OUTPUT_DIR/data/
 
 echo "Data generation completed."
 echo "Data generation ended."&>> $LOG_FILE
