@@ -36,8 +36,8 @@ COL_NAMES = (
     "Z",
     "SOURCE_TYPE",
 )
-BANDS = ("g", "r", "i", "z", "Y")
-N_CATALOGS_PER_FILE = 500
+BANDS = ("g", "r", "i", "z")
+N_CATALOGS_PER_FILE = 50
 
 
 def main(**kwargs):
@@ -109,7 +109,7 @@ def main(**kwargs):
 
     chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
     for i, chunk in enumerate(chunks):
-        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}_size_500.pt")
+        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}_size_{N_CATALOGS_PER_FILE}.pt")
 
 
 if __name__ == "__main__":
