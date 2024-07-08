@@ -51,7 +51,6 @@ my_metrics:
 encoder:
     _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
     survey_bands: ["g", "r", "i", "z"]
-    tiles_to_crop: 0
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
         bands: [0, 1, 2, 3]
