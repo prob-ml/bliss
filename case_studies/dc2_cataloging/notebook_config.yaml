@@ -3,3 +3,7 @@ defaults:
     - train_config
     - _self_
     - override hydra/job_logging: stdout
+
+surveys:
+    dc2:
+        num_workers: 0
