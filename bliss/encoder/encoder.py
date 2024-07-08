@@ -187,13 +187,27 @@ class Encoder(pl.LightningModule):
 
         loss = torch.zeros_like(x_features[:, 0, :, :])
 
-        # could use all the mask patterns but memory is tight
-        patterns_to_use = torch.randperm(15)[:4] if self.use_checkerboard else (0,)
+        est_cat = None
+        patterns_to_use = (0, 8, 12, 14) if self.use_checkerboard else (0,)
 
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
-            context1 = self.make_context(target_cat1, mask)
+            context1_true = self.make_context(target_cat1, mask)
+
+            with torch.no_grad():
+                context1_est = self.make_context(est_cat, mask)
+                x_cat1_est = self.catalog_net(x_features, context1_est)
+                new_est_cat = self.var_dist.sample(x_cat1_est, use_mode=False)
+                new_est_cat["n_sources"] *= 1 - mask
+                if est_cat is None:
+                    est_cat = new_est_cat
+                else:
+                    est_cat["n_sources"] *= mask
+                    est_cat = est_cat.union(new_est_cat, disjoint=True)
+
+            context1 = context1_true if torch.rand(1).item() < 0.9 else context1_est
             x_cat1 = self.catalog_net(x_features, context1)
+
             loss11 = self.var_dist.compute_nll(x_cat1, target_cat1)
 
             # could upweight some patterns that are under-represented or limit loss to
@@ -204,9 +218,11 @@ class Encoder(pl.LightningModule):
                 break
 
         if self.use_double_detect:
+            history_cat = target_cat1 if torch.rand(1).item() < 0.9 else est_cat
             no_mask = torch.ones_like(mask)
-            context2 = self.make_context(target_cat1, no_mask, detection2=True)
+            context2 = self.make_context(history_cat, no_mask, detection2=True)
             x_cat2 = self.catalog_net(x_features, context2)
+
             loss22 = self.var_dist.compute_nll(x_cat2, target_cat2)
             loss22 *= target_cat1["n_sources"]
             loss += loss22
