@@ -51,14 +51,10 @@ class TestSimulate:
         est_catalog = est_catalog.to(cfg.predict.device)
 
         # Compare predicted and true source types
-        ttc = cfg.encoder.tiles_to_crop
-        true_galaxy_bools = true_catalog.galaxy_bools[:, ttc:-ttc, ttc:-ttc]
-        true_star_bools = true_catalog.star_bools[:, ttc:-ttc, ttc:-ttc]
-
         assert est_catalog["n_sources"].sum() == 1
         assert est_catalog.star_bools.sum() == 1
-        assert torch.equal(true_galaxy_bools, est_catalog.galaxy_bools)
-        assert torch.equal(true_star_bools, est_catalog.star_bools)
+        assert torch.equal(true_catalog.galaxy_bools, est_catalog.galaxy_bools)
+        assert torch.equal(true_catalog.star_bools, est_catalog.star_bools)
 
         # Convert predicted fluxes from electron counts to nanomaggies for comparison
         flux_ratios = image_simulator.survey.flux_calibration_dict[(94, 1, 12)]
@@ -68,7 +64,7 @@ class TestSimulate:
         true_star_fluxes = true_catalog["star_fluxes"] * true_catalog.star_bools
         true_galaxy_fluxes = true_catalog["galaxy_fluxes"] * true_catalog.galaxy_bools
         true_fluxes = true_star_fluxes + true_galaxy_fluxes
-        true_fluxes_crop = true_fluxes[0, ttc:-ttc, ttc:-ttc, 0, 2]
+        true_fluxes_crop = true_fluxes[0, :, :, 0, 2]
 
         est_star_fluxes = est_catalog["star_fluxes"] * est_catalog.star_bools
         est_galaxy_fluxes = est_catalog["galaxy_fluxes"] * est_catalog.galaxy_bools

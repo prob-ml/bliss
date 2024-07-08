@@ -44,7 +44,7 @@ surveys:
         data_in_one_cached_file: 1
 
 encoder:
-    metrics:
+    mode_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
         compute_groups: false

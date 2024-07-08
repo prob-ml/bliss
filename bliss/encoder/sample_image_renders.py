@@ -16,7 +16,7 @@ class PlotSampleImages(Metric):
         self,
         frequency: int = 1,
         restrict_batch: int = 0,
-        tiles_to_crop: int = 0,  # note must match encoder tiles_to_crop
+        tiles_to_crop: int = 0,
         tile_slen: int = 0,  # note must match encoder tile_slen
     ):
         super().__init__()

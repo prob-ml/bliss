@@ -3,7 +3,6 @@ from typing import Optional
 
 import pytorch_lightning as pl
 import torch
-from torch.nn.functional import pad
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
@@ -28,12 +27,12 @@ class Encoder(pl.LightningModule):
         self,
         survey_bands: list,
         tile_slen: int,
-        tiles_to_crop: int,
         image_normalizer: ImageNormalizer,
         var_dist: VariationalDist,
-        metrics: MetricCollection,
-        sample_image_renders: MetricCollection,
         matcher: CatalogMatcher,
+        sample_image_renders: MetricCollection,
+        mode_metrics: MetricCollection,
+        sample_metrics: Optional[MetricCollection] = None,
         min_flux_for_loss: float = 0,
         min_flux_for_metrics: float = 0,
         optimizer_params: Optional[dict] = None,
@@ -47,12 +46,12 @@ class Encoder(pl.LightningModule):
         Args:
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
-            tiles_to_crop: margin of tiles not to use for computing loss
             image_normalizer: object that applies input transforms to images
             var_dist: object that makes a variational distribution from raw convnet output
-            sample_image_renders: for plotting relevant images (overlays, shear maps)
-            metrics: for scoring predicted catalogs during training
             matcher: for matching predicted catalogs to ground truth catalogs
+            sample_image_renders: for plotting relevant images (overlays, shear maps)
+            mode_metrics: for scoring predicted mode catalogs during training
+            sample_metrics: for scoring predicted sampled catalogs during training
             min_flux_for_loss: Sources with a lower flux will not be considered when computing loss
             min_flux_for_metrics: filter sources by flux during test
             optimizer_params: arguments passed to the Adam optimizer
@@ -65,11 +64,10 @@ class Encoder(pl.LightningModule):
 
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
-        self.tiles_to_crop = tiles_to_crop
         self.image_normalizer = image_normalizer
         self.var_dist = var_dist
-        self.mode_metrics = metrics.clone()
-        self.sample_metrics = metrics.clone()
+        self.mode_metrics = mode_metrics
+        self.sample_metrics = sample_metrics
         self.sample_image_renders = sample_image_renders
         self.matcher = matcher
         self.min_flux_for_loss = min_flux_for_loss
@@ -160,7 +158,7 @@ class Encoder(pl.LightningModule):
             est_cat2["n_sources"] *= est_cat["n_sources"]
             est_cat = est_cat.union(est_cat2, disjoint=False)
 
-        return est_cat.symmetric_crop(self.tiles_to_crop)
+        return est_cat
 
     def _compute_loss(self, batch, logging_name):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
@@ -213,11 +211,8 @@ class Encoder(pl.LightningModule):
             loss22 *= target_cat1["n_sources"]
             loss += loss22
 
-        # exclude border tiles and report average per-tile loss
-        ttc = self.tiles_to_crop
-        interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
         # could normalize by the number of tile predictions, rather than number of tiles
-        loss = interior_loss.sum() / interior_loss.numel()
+        loss = loss.sum() / loss.numel()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         return loss
@@ -232,42 +227,36 @@ class Encoder(pl.LightningModule):
         """Training step (pytorch lightning)."""
         return self._compute_loss(batch, "train")
 
-    def sample_for_metrics(self, batch):
+    def update_metrics(self, batch, batch_idx):
         target_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         target_tile_cat = target_tile_cat.filter_by_flux(
             min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
-        ).symmetric_crop(self.tiles_to_crop)
+        )
+        target_cat = target_tile_cat.to_full_catalog()
 
         mode_tile_cat = self.sample(batch, use_mode=True).filter_by_flux(
             min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
         )
-
-        sample_tile_cat = self.sample(batch, use_mode=False).filter_by_flux(
-            min_flux=self.min_flux_for_metrics,
-            band=self.reference_band,
-        )
-
-        return target_tile_cat, mode_tile_cat, sample_tile_cat
-
-    def update_metrics(self, batch, batch_idx):
-        target_tile_cat, mode_tile_cat, sample_tile_cat = self.sample_for_metrics(batch)
-        target_cat = target_tile_cat.to_full_catalog()
         mode_cat = mode_tile_cat.to_full_catalog()
-        sample_cat = sample_tile_cat.to_full_catalog()
+        mode_matching = self.matcher.match_catalogs(target_cat, mode_cat)
+        self.mode_metrics.update(target_cat, mode_cat, mode_matching)
 
-        matching = self.matcher.match_catalogs(target_cat, mode_cat)
-        self.mode_metrics.update(target_cat, mode_cat, matching)
-
-        smatching = self.matcher.match_catalogs(target_cat, sample_cat)
-        self.sample_metrics.update(target_cat, sample_cat, smatching)
+        if self.sample_metrics is not None:
+            sample_tile_cat = self.sample(batch, use_mode=False).filter_by_flux(
+                min_flux=self.min_flux_for_metrics,
+                band=self.reference_band,
+            )
+            sample_cat = sample_tile_cat.to_full_catalog()
+            sample_matching = self.matcher.match_catalogs(target_cat, sample_cat)
+            self.sample_metrics.update(target_cat, sample_cat, sample_matching)
 
         self.sample_image_renders.update(
             batch,
             target_cat,
-            sample_tile_cat,
-            sample_cat,
+            mode_tile_cat,
+            mode_cat,
             self.current_epoch,
             batch_idx,
         )
@@ -294,7 +283,8 @@ class Encoder(pl.LightningModule):
 
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
-        self.report_metrics(self.sample_metrics, "sample/mode", show_epoch=True)
+        if self.sample_metrics is not None:
+            self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
         self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
@@ -304,7 +294,8 @@ class Encoder(pl.LightningModule):
 
     def on_test_epoch_end(self):
         self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)
-        self.report_metrics(self.sample_metrics, "test/mode", show_epoch=False)
+        if self.sample_metrics is not None:
+            self.report_metrics(self.sample_metrics, "test/sample", show_epoch=False)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""

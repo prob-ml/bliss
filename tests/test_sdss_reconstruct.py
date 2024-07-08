@@ -26,9 +26,8 @@ class TestSdssReconstruct:
         imgs = torch.squeeze(imgs, dim=1)
         recon_img = imgs[0, SDSS.BANDS.index("r")]
 
-        ptc = cfg.encoder.tile_slen * cfg.encoder.tiles_to_crop
-        true_img_crop = true_img[SDSS.BANDS.index("r"), 0, ptc:-ptc, ptc:-ptc]
-        true_bg_crop = true_bg[SDSS.BANDS.index("r"), 0, ptc:-ptc, ptc:-ptc]
+        true_img_crop = true_img[SDSS.BANDS.index("r"), 0, 4:-4, 4:-4]
+        true_bg_crop = true_bg[SDSS.BANDS.index("r"), 0, 4:-4, 4:-4]
         true_bright = true_img_crop - true_bg_crop
 
         bright_pix_mask = (recon_img - 100) > 0  # originally 100

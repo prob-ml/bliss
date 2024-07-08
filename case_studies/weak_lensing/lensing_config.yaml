@@ -45,7 +45,6 @@ cached_simulator:
     batch_size: 24
 
 encoder:
-    tiles_to_crop: 0
     metrics:
         _target_: torchmetrics.MetricCollection
         metrics:
@@ -57,12 +56,12 @@ encoder:
           - _target_: bliss.encoder.sample_image_renders.PlotSampleImages
             frequency: 1
             restrict_batch: 0
-            tiles_to_crop: 1
+            tiles_to_crop: 0
             tile_slen: ${simulator.prior.tile_slen}
           - _target_: case_studies.weak_lensing.lensing_plots.PlotWeakLensingShearConvergence
             frequency: 1
             restrict_batch: 0
-            tiles_to_crop: 1
+            tiles_to_crop: 0
             tile_slen: ${simulator.prior.tile_slen}
     use_double_detect: false
     use_checkerboard: false
