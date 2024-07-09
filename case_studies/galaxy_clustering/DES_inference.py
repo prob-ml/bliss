@@ -7,17 +7,25 @@ import torch.multiprocessing as mp
 import torch.distributed as distributed
 
 
-DES_DATAPATH = "nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles"
-navigate_out_str = "../" * 5
-DES_DIRECTORIES = f"{navigate_out_str}{DES_DATAPATH}"
+from hydra import initialize, compose
+from hydra.utils import instantiate
+
+DES_DATAPATH = "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles"
+DES_DIRECTORIES = f"{DES_DATAPATH}"
 
 import os
 
 def load_model(model_path, device):
-    print(os.path.exists(model_path))
-    model = torch.load(model_path).to(device)
-    model.eval()
-    return model
+    with initialize(config_path=".", version_base=None):
+        cfg = compose("config")
+    encoder = instantiate(cfg.predict.encoder)
+    enc_state_dict = torch.load(cfg.predict.weight_save_path)
+    enc_state_dict = enc_state_dict["state_dict"]
+    encoder.load_state_dict(enc_state_dict).to(device)
+    #print(os.path.exists(model_path))
+    #model = torch.load(model_path)["state_dict"].to(device)
+    #model.eval()
+    return encoder
 
 def inference(rank, world_size, cached_data_path, model_path, gpu_ids):
     #distributed.init_process_group(backend='nccl', rank=rank, world_size=world_size)
