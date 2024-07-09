@@ -17,6 +17,7 @@ from bliss.catalog import TileCatalog
 class VariationalDist(torch.nn.Module):
     def __init__(self, factors, tile_slen):
         super().__init__()
+
         self.factors = factors
         self.tile_slen = tile_slen
 

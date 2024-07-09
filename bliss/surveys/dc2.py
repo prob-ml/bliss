@@ -357,8 +357,10 @@ class DC2FullCatalog(FullCatalog):
         star_bools = torch.from_numpy((catalog["truth_type"] == 2).values)
         flux, psf_params = get_bands_flux_and_psf(kwargs["bands"], catalog)
         do_have_redshifts = catalog.get("redshifts", "")
-        if do_have_redshifts:
-            redshifts = torch.tensor(catalog["redshifts"].values)
+        initial_redshifts = torch.zeros_like(objid)
+        redshifts = (
+            torch.tensor(catalog["redshifts"].values) if do_have_redshifts else initial_redshifts
+        )
 
         star_galaxy_filter = galaxy_bools | star_bools
         objid = objid[star_galaxy_filter]
@@ -369,8 +371,7 @@ class DC2FullCatalog(FullCatalog):
         source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
         star_fluxes = flux[star_galaxy_filter]
         galaxy_fluxes = flux[star_galaxy_filter]
-        if do_have_redshifts:
-            redshifts = redshifts[star_galaxy_filter]
+        redshifts = redshifts[star_galaxy_filter] if do_have_redshifts else initial_redshifts
 
         plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
         x0_mask = (plocs[:, 0] > 0) & (plocs[:, 0] < height)
@@ -383,8 +384,7 @@ class DC2FullCatalog(FullCatalog):
         source_type = source_type[plocs_mask]
         star_fluxes = star_fluxes[plocs_mask]
         galaxy_fluxes = galaxy_fluxes[plocs_mask]
-        if do_have_redshifts:
-            redshifts = redshifts[plocs_mask]
+        redshifts = redshifts[plocs_mask] if do_have_redshifts else initial_redshifts
 
         nobj = source_type.shape[0]
         d = {
@@ -392,9 +392,7 @@ class DC2FullCatalog(FullCatalog):
             "n_sources": torch.tensor((nobj,)),
             "source_type": source_type.reshape(1, nobj, 1),
             "plocs": plocs.reshape(1, nobj, 2),
-            "redshifts": redshifts.reshape(1, nobj, 1)
-            if do_have_redshifts
-            else torch.zeros(1, nobj, 1),
+            "redshifts": redshifts.reshape(1, nobj, 1),
             "galaxy_fluxes": galaxy_fluxes.reshape(1, nobj, kwargs["n_bands"]),
             "star_fluxes": star_fluxes.reshape(1, nobj, kwargs["n_bands"]),
         }

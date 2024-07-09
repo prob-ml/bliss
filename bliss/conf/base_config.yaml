@@ -294,13 +294,12 @@ train:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
             monitor: val/_loss
             mode: min
-            patience: 5
+            patience: 10
     data_source: ${cached_simulator}
     encoder: ${encoder}
     seed: null
     pretrained_weights: null
     testing: true
-    test_best: true
     matmul_precision: null
 
 predict:

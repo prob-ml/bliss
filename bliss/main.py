@@ -83,15 +83,13 @@ def train(train_cfg: DictConfig):
     # train!
     trainer.fit(encoder, datamodule=dataset)
 
-    # load best model for test
-    if train_cfg.test_best:
+    # test!
+    if train_cfg.testing:
+        # load best model for test
         best_model_path = callbacks["checkpointing"].best_model_path
         enc_state_dict = torch.load(best_model_path)
         enc_state_dict = enc_state_dict["state_dict"]
         encoder.load_state_dict(enc_state_dict)
-
-    # test!
-    if train_cfg.testing:
         trainer.test(encoder, datamodule=dataset)
 
 
