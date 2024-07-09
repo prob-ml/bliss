@@ -6,7 +6,10 @@ from torchmetrics import Metric
 
 
 class TwoPointMetric(Metric):
-    radii = torch.tensor([0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0])
+    start = torch.log10(torch.tensor(0.1))
+    end = torch.log10(torch.tensor(3.0))
+    n_points = 20
+    radii = torch.logspace(start, end, n_points)
 
     def __init__(self):
         super().__init__()
