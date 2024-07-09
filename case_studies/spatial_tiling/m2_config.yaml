@@ -22,7 +22,7 @@ variational_factors:
     nll_gating: n_sources
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: star_fluxes
-    dim: 5
+    dim: 1
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
     nll_gating: is_star
@@ -31,10 +31,12 @@ star_metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
         mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
+        mag_band: 0  # SDSS r-band
         exclude_last_bin: true
 
 encoder:
     tile_slen: 2
+    reference_band: 0
     min_flux_for_loss: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
     min_flux_for_metrics: 0.9419
     use_double_detect: true
@@ -52,7 +54,7 @@ encoder:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 0.5
         mag_slack: 0.5
-        mag_band: 2  # SDSS r-band
+        mag_band: 0  # SDSS r-band
     mode_metrics:
         _target_: torchmetrics.MetricCollection
         metrics: ${star_metrics}

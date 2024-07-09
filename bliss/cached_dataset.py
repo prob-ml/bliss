@@ -48,6 +48,7 @@ class FullCatalogToTileTransform(torch.nn.Module):
         full_cat = FullCatalog(h_pixels, w_pixels, datum_in["full_catalog"])
         tile_cat = full_cat.to_tile_catalog(self.tile_slen, self.max_sources).data
         d = {k: v.squeeze(0) for k, v in tile_cat.items()}
+        d["star_fluxes"] = d["star_fluxes"][:, :, :, 2:3]
         datum_out["tile_catalog"] = d
 
         return datum_out
