@@ -67,7 +67,7 @@ encoder:
         dist_slack: 1.0
         mag_slack: null
         mag_band: 2  # SDSS r-band
-    metrics:
+    mode_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
         compute_groups: false
@@ -117,6 +117,7 @@ encoder:
           flux_error:
             _target_: bliss.encoder.metrics.FluxError
             survey_bands: ${encoder.survey_bands}
+    sample_metrics: ${encoder.mode_metrics}
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:

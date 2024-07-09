@@ -9,7 +9,7 @@ train:
         logger:
             name: DC2_debug
             version: DC2_debug
-        devices: [4]
+        devices: [1]
 
 surveys:
     dc2:

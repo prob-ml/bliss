@@ -1,7 +1,6 @@
 import copy
 
 from einops import rearrange
-from torch.nn.functional import pad
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.convnets import CatalogNet, FeaturesNet
@@ -62,7 +61,7 @@ class MultiDetectEncoder(EncoderAddingSourceMask):
         assert isinstance(
             self.var_dist, MultiVariationalDist
         ), "var_dist should be MultiVariationalDist"
-        assert self.tile_slen in {2, 4, 8}, "tile_slen must be 2, 4 or 8"
+        assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
         assert not self.use_double_detect, "we disable double detect"
         assert not self.use_checkerboard, "we disable checkerboard"
 
@@ -88,9 +87,8 @@ class MultiDetectEncoder(EncoderAddingSourceMask):
 
         x_cat = self.catalog_net(x_features)
         est_cat = self.var_dist.sample(x_cat, use_mode=use_mode)
-        cropped_est_cat = est_cat.symmetric_crop(self.tiles_to_crop)
 
-        return self._add_source_mask(cropped_est_cat)
+        return self._add_source_mask(est_cat)
 
     def _compute_loss(self, batch, logging_name):
         batch_size = batch["images"].shape[0]
@@ -117,11 +115,8 @@ class MultiDetectEncoder(EncoderAddingSourceMask):
         x_cat = self.catalog_net(x_features)
         loss = self.var_dist.compute_nll(x_cat, target_cat)
 
-        # exclude border tiles and report average per-tile loss
-        ttc = self.tiles_to_crop
-        interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
         # could normalize by the number of tile predictions, rather than number of tiles
-        loss = interior_loss.sum() / interior_loss.numel()
+        loss = loss.sum() / loss.numel()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         return loss
