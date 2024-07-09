@@ -1,8 +1,5 @@
-import pickle
-
 import numpy as np
 import pandas as pd
-from astropy import units
 from astropy.table import Table
 from scipy.stats import gennorm
 
@@ -22,26 +19,13 @@ class ClusterPrior:
         self.reference_band = 1
         self.ra_cen = 50.64516228577292
         self.dec_cen = -40.228830895890404
-        self.mass_min = (10**14.5) * (units.solMass)
-        self.mass_max = (10**15.5) * (units.solMass)
         self.pixels_per_mpc = 80
-        self.mean_sources = 0.004
-        self.mag_ex = 1.3
-        self.mag_max = 30
         self.G1_beta = 0.6
         self.G1_loc = 0
         self.G1_scale = 0.035
         self.G2_beta = 0.6
         self.G2_loc = 0
         self.G2_scale = 0.032
-        with open("gal_gmm_nmgy.pkl", "rb") as f:
-            self.gmm_gal = pickle.load(f)
-        self.redshift_alpha = 1.65
-        self.redshift_beta = 3.33
-        self.redshift0 = 0.9
-        self.light_speed = 299792.46  # in km/s
-        self.sigma_DM15 = 1028.9  # in km/s
-        self.star_density = 0.001
 
         self.full_cluster_df = Table.read(CLUSTER_CATALOG_PATH).to_pandas()
         self.cluster_indices = pd.unique(self.full_cluster_df["ID"])
