@@ -34,7 +34,7 @@ class TwoPointMetric(Metric):
             n_obs = kd_inner.count_neighbors(kd_all, self.radii) - ne_inner
             self.obs_neighbors += torch.from_numpy(n_obs).to(self.device)
 
-            other_per_pixel = (ne_all - 1) / 108**2  # adjust for image size (108 x 108 outer)
+            other_per_pixel = (ne_all - 1) / 112**2  # adjust for image size (112 x 112 outer)
             other_per_disk = other_per_pixel * torch.pi * self.radii**2
             n_expected = other_per_disk * ne_inner
             self.expected_neighbors += n_expected.to(self.device)

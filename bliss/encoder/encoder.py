@@ -114,7 +114,9 @@ class Encoder(pl.LightningModule):
             )
         else:
             centered_locs = history_cat["locs"][..., 0, :] - 0.5
-            log_fluxes = (history_cat.on_fluxes.squeeze(3).sum(-1) + 1).log()
+            # we use r band fluxes here because there's uncertainty and miscalibration in the
+            # others without using multiband images
+            log_fluxes = (history_cat.on_fluxes[:, :, :, 0, 2] + 1).log()
             history_encoding_lst = [
                 history_cat["n_sources"].float(),  # detection history
                 log_fluxes * history_cat["n_sources"],  # flux history
