@@ -484,3 +484,24 @@ if "locs" in datum["tile_catalog"]:
 7. new rotate flip (rotate_id=1; do_flip=False)
 
 8. without data aug
+
+### 07-06
+
+1. without checkerboard (tiles_to_crop set to 0) (crush due to disk limit)
+
+2. with checkerboard (tiles_to_crop set to 0) (crush due to disk limit)
+
+3. with checkerboard (16-mixed) (tiles_to_crop set to 0)
+
+4. without checkerboard (tiles_to_crop set to 0)
+
+5. with checkerboard (tiles_to_crop set to 0)
+
+(hereafter, always set tiles_to_crop to 0)
+
+
+### 07-08
+
+1. test MultiDetectEncoder
+
+2. test MultiDetectEncoder
