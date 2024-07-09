@@ -28,7 +28,6 @@ COL_NAMES = (
     "FLUX_G",
     "FLUX_I",
     "FLUX_Z",
-    "FLUX_Y",
     "HLR",
     "FRACDEV",
     "G1",
