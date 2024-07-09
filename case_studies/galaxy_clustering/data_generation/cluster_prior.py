@@ -12,9 +12,8 @@ CLUSTER_CATALOG_PATH = "redmapper_sva1-expanded_public_v6.3_members.fits"
 
 
 class ClusterPrior:
-    def __init__(self, size=100, image_size=4800):
+    def __init__(self, image_size=4800):
         super().__init__()
-        self.size = size
         self.width = image_size
         self.height = image_size
         self.center_offset = (self.width / 2) - 0.5
