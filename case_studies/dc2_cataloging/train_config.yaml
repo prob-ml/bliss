@@ -39,7 +39,6 @@ encoder:
     _target_: case_studies.dc2_cataloging.utils.encoder.MultiDetectEncoder
     survey_bands: ["u", "g", "r", "i", "z", "y"]
     tile_slen: ${surveys.dc2.tile_slen}
-    tiles_to_crop: 0
     min_flux_for_loss: 100  # you need to regenerate split_results after changing this number
     min_flux_for_metrics: 100
     optimizer_params:
@@ -124,7 +123,7 @@ encoder:
           - _target_: bliss.encoder.sample_image_renders.PlotSampleImages
             frequency: 1
             restrict_batch: 0
-            tiles_to_crop: 1
+            tiles_to_crop: 0
             tile_slen: ${surveys.dc2.tile_slen}
     use_double_detect: false
     use_checkerboard: false

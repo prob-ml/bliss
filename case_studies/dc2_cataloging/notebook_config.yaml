@@ -4,9 +4,6 @@ defaults:
     - _self_
     - override hydra/job_logging: stdout
 
-# encoder:
-#     tiles_to_crop: 0
-
 surveys:
     dc2:
         prepare_data_processes_num: 1
