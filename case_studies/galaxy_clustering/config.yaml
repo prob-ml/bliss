@@ -61,7 +61,7 @@ encoder:
         log_transform_stdevs: null
         use_clahe: false
         clahe_min_stdev: null
-    metrics:
+    mode_metrics:
       _target_: torchmetrics.MetricCollection
       _convert_: "partial"
       metrics: ${my_metrics}
@@ -78,5 +78,5 @@ predict:
         accelerator: "gpu"
         precision: ${train.trainer.precision}
     encoder: ${encoder}
-    weight_save_path: ${paths.output}/version_23/checkpoints/best_encoder.ckpt
+    weight_save_path: /nfs/turbo/lsa-regier/scratch/gapatron/best_encoder.ckpt
     device: "cuda:0"
