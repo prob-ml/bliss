@@ -12,21 +12,25 @@ class LensingMapMSE(Metric):
         self.add_state("total", default=torch.zeros(1), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching) -> None:
-        for i, match in enumerate(matching):
-            true_idx, est_idx = match
-            true_shear = true_cat["shear"][i, true_idx, :].flatten(end_dim=-2)
-            pred_shear = est_cat["shear"][i, est_idx, :].flatten(end_dim=-2)
-            true_convergence = true_cat["convergence"][i, true_idx, :].flatten()
-            pred_convergence = est_cat["convergence"][i, est_idx, :].flatten()
+        # along dim 2
+        true_shear = true_cat["shear"]
+        pred_shear = est_cat["shear"]
 
-            shear1_sq_err = ((true_shear[:, 0].flatten() - pred_shear[:, 0].flatten()) ** 2).sum()
-            shear2_sq_err = ((true_shear[:, 1].flatten() - pred_shear[:, 1].flatten()) ** 2).sum()
-            convergence_sq_err = ((true_convergence - pred_convergence) ** 2).sum()
+        true_convergence = true_cat["convergence"]
+        pred_convergence = est_cat["convergence"]
 
-            self.total += true_idx.size(0)
-            self.shear1_sum_squared_err += shear1_sq_err
-            self.shear2_sum_squared_err += shear2_sq_err
-            self.convergence_sum_squared_err += convergence_sq_err
+        shear1_sq_err = ((true_shear[:, :, 0].flatten() - pred_shear[:, :, 0].flatten()) ** 2).sum()
+        shear2_sq_err = ((true_shear[:, :, 1].flatten() - pred_shear[:, :, 1].flatten()) ** 2).sum()
+
+        true_convergence = true_cat["convergence"].flatten()
+        pred_convergence = est_cat["convergence"].flatten()
+        convergence_sq_err = ((true_convergence - pred_convergence) ** 2).sum()
+
+        self.shear1_sum_squared_err += shear1_sq_err
+        self.shear2_sum_squared_err += shear2_sq_err
+        self.convergence_sum_squared_err += convergence_sq_err
+
+        self.total = torch.tensor(true_cat["shear"].shape[1])
 
     def compute(self):
         shear1_mse = self.shear1_sum_squared_err / self.total

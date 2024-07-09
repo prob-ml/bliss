@@ -79,7 +79,13 @@ class TileCatalog(BaseTileCatalog):
     galaxy_params_index = {k: i for i, k in enumerate(galaxy_params)}
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
-        self.max_sources = d["locs"].shape[3]
+        self.locations_sources = True
+
+        if "locs" in d:
+            self.max_sources = d["locs"].shape[3]
+        else:
+            self.max_sources = tile_slen**2
+            self.locations_sources = False
         super().__init__(tile_slen, d)
 
     def __getitem__(self, name: str):
@@ -149,27 +155,44 @@ class TileCatalog(BaseTileCatalog):
             pixel locations ("plocs") that are between 0 and `slen`.
         """
         # TODO: tile_slen should be an argument to this function, not stored in a tile catalog
-        plocs = self.get_full_locs_from_tiles()
-        param_names_to_mask = {"plocs"}.union(set(self.keys()))
-        tile_params_to_gather = {"plocs": plocs}
-        tile_params_to_gather.update(self)
+        if self.locations_sources:
+            plocs = self.get_full_locs_from_tiles()
+            param_names_to_mask = {"plocs"}.union(set(self.keys()))
+            tile_params_to_gather = {"plocs": plocs}
+            tile_params_to_gather.update(self)
+        else:
+            tile_params_to_gather = {}
+            tile_params_to_gather.update(self)
 
         params = {}
-        indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()
+        if self.locations_sources:
+            indices_to_retrieve, is_on_array = self.get_indices_of_on_sources()
         for param_name, tile_param in tile_params_to_gather.items():
             if param_name == "n_sources":
                 continue
             if param_name == "locs":  # full catalog uses plocs instead of locs
                 continue
             k = tile_param.shape[-1]
+            # unsqueeze shear and conv
+            if param_name == "shear":
+                continue
+            if param_name == "convergence":
+                continue
             param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
-            indices_for_param = repeat(indices_to_retrieve, "b nth_ntw_s -> b nth_ntw_s k", k=k)
-            param = torch.gather(param, dim=1, index=indices_for_param)
-            if param_name in param_names_to_mask:
-                param = param * is_on_array.unsqueeze(-1)
+            if self.locations_sources:
+                indices_for_param = repeat(indices_to_retrieve, "b nth_ntw_s -> b nth_ntw_s k", k=k)
+                param = torch.gather(param, dim=1, index=indices_for_param)
+                if param_name in param_names_to_mask:
+                    param = param * is_on_array.unsqueeze(-1)
             params[param_name] = param
 
-        params["n_sources"] = reduce(self["n_sources"], "b nth ntw -> b", "sum")
+        if self.locations_sources:
+            params["n_sources"] = reduce(self["n_sources"], "b nth ntw -> b", "sum")
+
+        if "shear" in self:
+            params["shear"] = self["shear"].view(1, -1, 2)
+        if "convergence" in self:
+            params["convergence"] = self["convergence"].view(1, -1, 1)
 
         height_px = self.n_tiles_h * self.tile_slen
         width_px = self.n_tiles_w * self.tile_slen
@@ -185,8 +208,8 @@ class TileCatalog(BaseTileCatalog):
         slen = self.n_tiles_h * self.tile_slen
         wlen = self.n_tiles_w * self.tile_slen
         # coordinates on tiles.
-        x_coords = torch.arange(0, slen, self.tile_slen, device=self["locs"].device).long()
-        y_coords = torch.arange(0, wlen, self.tile_slen, device=self["locs"].device).long()
+        x_coords = torch.arange(0, slen, self.tile_slen, device=self.device).long()
+        y_coords = torch.arange(0, wlen, self.tile_slen, device=self.device).long()
         tile_coords = torch.cartesian_prod(x_coords, y_coords)
 
         # recenter and renormalize locations.
@@ -382,12 +405,15 @@ class FullCatalog(UserDict):
         """
         self.height = height
         self.width = width
-
-        self.device = d["plocs"].device
-        self.batch_size, self.max_sources, hw = d["plocs"].shape
-        assert hw == 2
-        assert d["n_sources"].max().int().item() <= self.max_sources
-        assert d["n_sources"].shape == (self.batch_size,)
+        if "plocs" in d:
+            self.device = d["plocs"].device
+            self.batch_size, self.max_sources, hw = d["plocs"].shape
+            assert hw == 2
+            assert d["n_sources"].max().int().item() <= self.max_sources
+            assert d["n_sources"].shape == (self.batch_size,)
+        else:
+            self.batch_size = 1
+            self.device = d[list(d.keys())[0]].device
 
         super().__init__(**d)
 
