@@ -19,8 +19,8 @@ class BackgroundPrior:
         self.width = image_size
         self.height = image_size
         self.center_offset = (self.width / 2) - 0.5
-        self.bands = ["G", "R", "I", "Z", "Y"]
-        self.n_bands = 5
+        self.bands = ["G", "R", "I", "Z"]
+        self.n_bands = 4
         self.reference_band = 1
         self.ra_cen = 50.64516228577292
         self.dec_cen = -40.228830895890404
@@ -79,32 +79,6 @@ class BackgroundPrior:
             source_types: source types (0 for star, 1 for galaxy)
         """
         return np.array((sources["CLASS_STAR_R"] < 0.5))
-
-    def sample_background_redshift(self, num_samples):
-        """Sample redshift of background galaxies.
-        Assumed to be uniform in [0,4]
-
-        Args:
-            num_samples: number of samples to be generated
-
-        Returns:
-            sample for background redshift
-        """
-        return np.random.uniform(0, 4, num_samples)
-
-    def sample_redshifts(self, n_sources, source_types):
-        """Samples redshifts for all background sources.
-        Sampled uniformly for galaxies, set to zero for stars
-
-        Args:
-            n_sources: number of background sources
-            source_types: source types for each source (0 for star, 1 for galaxy)
-
-        Returns:
-            redshift_samples: list containing redshift samples for all sources
-        """
-        background_redshifts = self.sample_background_redshift(n_sources)
-        return background_redshifts * source_types
 
     def sample_source_locs(self, n_sources):
         """Samples locations of background sources.
@@ -170,7 +144,6 @@ class BackgroundPrior:
                     "FLUX_AUTO_R_x",
                     "FLUX_AUTO_I_x",
                     "FLUX_AUTO_Z_x",
-                    "FLUX_AUTO_Y_x",
                 ]
             ]
         )
@@ -215,7 +188,6 @@ class BackgroundPrior:
         g2_size_samples,
         gal_source_locs,
         cartesian_source_locs,
-        redshift_samples,
         source_types,
     ):
         """Makes a background catalog from generated samples.
@@ -227,7 +199,6 @@ class BackgroundPrior:
             g2_size_samples: samples of G2
             gal_source_locs: samples of background locations in galactic coordinates
             cartesian_source_locs: samples of background locations in cartesian coordinates
-            redshift_samples: samples of redshifts
             source_types: source types for each source (0 for star, 1 for galaxy)
 
         Returns:
@@ -239,16 +210,15 @@ class BackgroundPrior:
         mock_catalog["X"] = np.array(cartesian_source_locs)[:, 0]
         mock_catalog["Y"] = np.array(cartesian_source_locs)[:, 1]
         mock_catalog["MEM"] = 0
-        mock_catalog["FLUX_R"] = flux_samples[:, 1]
         mock_catalog["FLUX_G"] = flux_samples[:, 0]
+        mock_catalog["FLUX_R"] = flux_samples[:, 1]
         mock_catalog["FLUX_I"] = flux_samples[:, 2]
         mock_catalog["FLUX_Z"] = flux_samples[:, 3]
-        mock_catalog["FLUX_Y"] = flux_samples[:, 4]
         mock_catalog["HLR"] = hlr_samples
         mock_catalog["FRACDEV"] = 0
         mock_catalog["G1"] = g1_size_samples
         mock_catalog["G2"] = g2_size_samples
-        mock_catalog["Z"] = redshift_samples
+        mock_catalog["Z"] = -1.0
         mock_catalog["SOURCE_TYPE"] = source_types.astype(int)
         return mock_catalog
 
@@ -267,7 +237,6 @@ class BackgroundPrior:
         cartesian_source_locs = self.sample_source_locs(n_sources)
         gal_source_locs = self.cartesian_to_gal(cartesian_source_locs)
         source_types = self.sample_source_types(des_sources)
-        redshift_samples = self.sample_redshifts(n_sources, source_types)
         flux_samples = self.sample_fluxes(des_sources)
         g1_size_samples, g2_size_samples = self.sample_shape(n_sources)
         hlr_samples = self.sample_hlr(des_sources, source_types)
@@ -278,6 +247,5 @@ class BackgroundPrior:
             g2_size_samples,
             gal_source_locs,
             cartesian_source_locs,
-            redshift_samples,
             source_types,
         )
