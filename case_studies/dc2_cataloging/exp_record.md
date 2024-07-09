@@ -505,3 +505,8 @@ if "locs" in datum["tile_catalog"]:
 1. test MultiDetectEncoder
 
 2. test MultiDetectEncoder
+
+
+### 07-09
+
+1. test MultiDetectEncoder (with fast one-to-one match)

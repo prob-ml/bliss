@@ -46,7 +46,8 @@ class MultiVariationalDist(torch.nn.Module):
         chunk_size = sum(self.split_sizes)
         return torch.split(x_cat, chunk_size, 3)
 
-    def _union_tile_cat(self, tile_cat_list: List[TileCatalog]):
+    @classmethod
+    def _union_tile_cat(cls, tile_cat_list: List[TileCatalog]):
         output_tile_cat = None
         for tile_cat in tile_cat_list:
             if output_tile_cat is None:
@@ -60,8 +61,8 @@ class MultiVariationalDist(torch.nn.Module):
     def _fast_one_to_one_match(
         cls, dist_matrix: torch.Tensor, est_is_on_mask: torch.Tensor, true_is_on_mask: torch.Tensor
     ):
-        assert dist_matrix.shape[0] == dist_matrix.shape[1]
-        m = dist_matrix.shape[0]
+        assert dist_matrix.shape[1] == dist_matrix.shape[2]
+        m = dist_matrix.shape[1]
         _, match1 = torch.min(dist_matrix, dim=-2)  # (B, m)
         _, match2 = torch.min(dist_matrix, dim=-1)  # (B, m)
         matches = (match1, match2)
@@ -139,17 +140,17 @@ class MultiVariationalDist(torch.nn.Module):
             est_to_true_indices, "(b nth ntw) m k -> b nth ntw m k", b=b, nth=nth, ntw=ntw
         )
 
-        # build an extended tile dict due to the requirement of `_fast_one_to_one_match`
+        # build an padded tile dict due to the requirement of `_fast_one_to_one_match`
         # it's also compatible with `_linear_sum_assignment`
-        extended_true_tile_dict = {
+        padded_true_tile_dict = {
             k: self._pad_max_sources(v)
             for k, v in true_tile_dict.items()
             if k != "n_sources" and k in est_tile_dict
         }
-        extended_true_tile_dict["n_sources"] = self._pad_max_sources(true_is_on_mask).to(
+        padded_true_tile_dict["n_sources"] = self._pad_max_sources(true_is_on_mask).to(
             dtype=true_tile_dict["n_sources"].dtype
         )
-        target_tile_dict = {k: torch.zeros_like(v) for k, v in extended_true_tile_dict.items()}
+        target_tile_dict = {k: torch.zeros_like(v) for k, v in padded_true_tile_dict.items()}
 
         flat_index_offset = torch.arange(
             b * nth * ntw,
@@ -166,7 +167,7 @@ class MultiVariationalDist(torch.nn.Module):
         for k, v in target_tile_dict.items():
             ori_v_shape = v.shape
             v = v.view(-1, v.shape[-1])
-            true_v = extended_true_tile_dict[k]
+            true_v = padded_true_tile_dict[k]
             true_v = true_v.view(-1, true_v.shape[-1])
             v[flat_est_indices, :] = true_v[flat_true_indices, :]
             v = v.view(*ori_v_shape)[:, :, :, :-1, :].unbind(dim=-2)
@@ -206,7 +207,9 @@ class MultiVariationalDist(torch.nn.Module):
 
     def compute_nll(self, x_cat, true_tile_cat):
         x_tile_cat = self.sample(x_cat, use_mode=True)
-        matched_true_tile_cat_list = self._match_tile_cat(true_tile_cat, x_tile_cat)
+        matched_true_tile_cat_list = self._match_tile_cat(
+            true_tile_cat, x_tile_cat, use_linear_sum_assignment=True
+        )
         fp_pairs_list = self._factor_param_pairs(x_cat)
         total_nll = None
         for fp_pairs, matched_true_tile_cat in zip(fp_pairs_list, matched_true_tile_cat_list):
