@@ -102,7 +102,7 @@ class DESDataset(Dataset):
             image_item = self._build_image(self.des_dir_path)
             print("Finished")
             # Resulting items are (4, 8, 8, 1280, 1280)
-            self.item = image_item.unfold(dimension=1,size=1280,step=1245).unfold(dimension=2,size=1280,step=1235)
+            self.item = image_item.unfold(dimension=1,size=1280,step=1235).unfold(dimension=2,size=1280,step=1235)
             # Finally obtain (4, 64, 1280, 1280)
             self.item = self.item.reshape(4, -1, 1280, 1280)
             self.buffer = (dir_idx, self.item)
