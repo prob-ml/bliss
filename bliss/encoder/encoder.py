@@ -207,8 +207,7 @@ class Encoder(pl.LightningModule):
                     est_cat["n_sources"] *= mask
                     est_cat = est_cat.union(new_est_cat, disjoint=True)
 
-            context1 = context1_true if torch.rand(1).item() < 0.9 else context1_est
-            x_cat1 = self.catalog_net(x_features, context1)
+            x_cat1 = self.catalog_net(x_features, context1_true)
 
             loss11 = self.var_dist.compute_nll(x_cat1, target_cat1)
 
