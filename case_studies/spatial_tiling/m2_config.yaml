@@ -123,7 +123,7 @@ cached_simulator:
 
 train:
     trainer:
-        precision: 32
+        precision: 16-mixed
         accumulate_grad_batches: 1
     seed: null
 
