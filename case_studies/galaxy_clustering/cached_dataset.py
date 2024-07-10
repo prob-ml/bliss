@@ -49,7 +49,6 @@ class DistributedDESSampler(DistributedSampler):
         assert isinstance(dataset, Dataset), "dataset should be Dataset"
         assert not shuffle, "you should not use shuffle"
         super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
-
     def __iter__(self):
         num_big_images = len(self.dataset.directories)
         #num_big_images_per_proc = math.ceil(num_big_images / self.num_replicas)
@@ -79,7 +78,6 @@ class DESDataset(Dataset):
         dir_files = {band:[f for f in os.listdir(f"{directory_path}") if f.endswith(f"{band}_nobkg.fits.fz")][0] for band in DES_BANDS}    
         image_bands = []
         for band in DES_BANDS:
-            print(band)
             band_filepath = f"{directory_path}/{dir_files[band]}"
             with fits.open(band_filepath) as f:
                     #Data seems to be on HDU 1, not 0.
@@ -98,9 +96,7 @@ class DESDataset(Dataset):
         if self.buffer is None or dir_idx != self.buffer[0]:
             self.des_dir_path = Path(self.directory_paths, self.directories[dir_idx])
             # Resulting items are (4, 10000, 10000)
-            print("Begin build image")
             image_item = self._build_image(self.des_dir_path)
-            print("Finished")
             # Resulting items are (4, 8, 8, 1280, 1280)
             self.item = image_item.unfold(dimension=1,size=1280,step=1235).unfold(dimension=2,size=1280,step=1235)
             # Finally obtain (4, 64, 1280, 1280)
@@ -121,7 +117,7 @@ class DESDataset(Dataset):
 class CachedDESModule(pl.LightningDataModule):
     def __init__(self,
                 cached_data_path: str,
-                tile_per_img: int,
+                tiles_per_img: int,
                 batch_size: int,
                 num_workers: int, 
                 ):
@@ -130,33 +126,32 @@ class CachedDESModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.cached_data_path = Path(cached_data_path)
-        self.tiles_per_img = tile_per_img
+        self.tiles_per_img = tiles_per_img
     
     def setup(self, stage=None):
-        self.predict_dataset = self._get_dataset(self.cached_data_path, self.tiles_per_img)
+        self.predict_dataset = self._get_dataset()
 
     def _get_dataset(self):
         return DESDataset(self.cached_data_path, self.tiles_per_img)
     
     def _get_dataloader(self, dataset):
         distributed_is_used = distributed.is_available() and distributed.is_initialized()
-
         if distributed_is_used:
             sampler = DistributedDESSampler(
                 dataset,
                 num_replicas=distributed.get_world_size(),
                 rank=distributed.get_rank(),
-                shuffle=True,
+                shuffle=False,
                 seed=42  
             )
         else:
-            sampler = DESSampler
+            sampler = DESSampler()
 
         return DataLoader(
             dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            sampler=sampler(dataset),
+            sampler=sampler,
         )
 
     def predict_dataloader(self):
