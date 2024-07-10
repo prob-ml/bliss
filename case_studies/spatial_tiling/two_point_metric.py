@@ -22,7 +22,7 @@ class TwoPointMetric(Metric):
             ne_all = est_cat["n_sources"][i].item()
             locs_all = est_cat["plocs"][i, :ne_all]
 
-            is_inner = ((locs_all > 10) & (locs_all < 98)).all(dim=1)
+            is_inner = ((locs_all > 3) & (locs_all < 109)).all(dim=1)
             locs_inner = locs_all[is_inner]
 
             ne_inner = locs_inner.shape[0]

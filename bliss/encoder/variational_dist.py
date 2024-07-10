@@ -296,6 +296,16 @@ class RescaledLogitNormal(Distribution):
         return self.iid_dist.icdf(torch.tensor(0.5))
 
 
+empty_shape = torch.Size([])
+
+
 class LogNormalEpsilon(LogNormal):
+    def sample(self, sample_shape=empty_shape):
+        sample = super().sample(sample_shape)
+        max_value = torch.finfo(sample.dtype).max
+        if sample.isinf().any():
+            print("sample has inf values: clamping!")
+        return sample.clamp(1e-9, max_value)
+
     def log_prob(self, value):
         return super().log_prob(value + 1e-9)

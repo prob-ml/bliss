@@ -36,12 +36,12 @@ star_metrics:
 
 encoder:
     tile_slen: 2
+    survey_bands: ['r']
     reference_band: 0
     min_flux_for_loss: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
     min_flux_for_metrics: 0.9419
     use_double_detect: true
     image_normalizer:
-        bands: [2]
         log_transform_stdevs: null
         asinh_cutoffs: [3.2974e+00, 7.5877e+01, 1.2642e+02, 1.7975e+02, 2.4340e+02, 3.2515e+02,
             4.3817e+02, 6.1258e+02, 9.3131e+02, 1.7869e+03, 1.3727e+04, 9.1571e+04,
@@ -108,11 +108,15 @@ cached_simulator:
     batch_size: 10
     num_workers: 8
     train_transforms:
+        - _target_: bliss.cached_dataset.OneBandTransform
+          band_idx: 2
         - _target_: bliss.cached_dataset.FullCatalogToTileTransform
           tile_slen: 2
           max_sources: 6
         - _target_: bliss.data_augmentation.RotateFlipTransform
     nontrain_transforms:
+        - _target_: bliss.cached_dataset.OneBandTransform
+          band_idx: 2
         - _target_: bliss.cached_dataset.FullCatalogToTileTransform
           tile_slen: 2
           max_sources: 6

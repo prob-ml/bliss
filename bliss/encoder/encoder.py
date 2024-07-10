@@ -93,7 +93,7 @@ class Encoder(pl.LightningModule):
         num_features = 256
 
         self.features_net = FeaturesNet(
-            n_bands=len(self.image_normalizer.bands),
+            n_bands=len(self.survey_bands),
             ch_per_band=self.image_normalizer.num_channels_per_band(),
             num_features=num_features,
             double_downsample=(self.tile_slen == 4),
