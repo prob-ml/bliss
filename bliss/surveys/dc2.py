@@ -173,20 +173,12 @@ class DC2DataModule(CachedSimulatedDataModule):
     @classmethod
     def squeeze_tile_dict(cls, tile_dict):
         tile_dict_copy = copy.copy(tile_dict)
-        for k, v in tile_dict_copy.items():
-            if k != "n_sources":
-                tile_dict_copy[k] = rearrange(v, "1 nth ntw s k -> nth ntw s k")
-        tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "1 nth ntw -> nth ntw")
-        return tile_dict_copy
+        return {k: v.squeeze(0) for k, v in tile_dict_copy.items()}
 
     @classmethod
     def unsqueeze_tile_dict(cls, tile_dict):
         tile_dict_copy = copy.copy(tile_dict)
-        for k, v in tile_dict_copy.items():
-            if k != "n_sources":
-                tile_dict_copy[k] = rearrange(v, "nth ntw s k -> 1 nth ntw s k")
-        tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "nth ntw -> 1 nth ntw")
-        return tile_dict_copy
+        return {k: v.unsqueeze(0) for k, v in tile_dict_copy.items()}
 
     def load_image_and_catalog(self, image_index):
         image, bg, wcs_header_str = self.read_image_for_bands(image_index)
@@ -299,10 +291,8 @@ class DC2DataModule(CachedSimulatedDataModule):
             cached_data_file_name = (
                 f"cached_data_{image_index:04d}_{data_count:04d}_size_{len(tmp_data_cached):04d}.pt"
             )
-            with open(
-                self.cached_data_path / cached_data_file_name,
-                "wb",
-            ) as cached_data_file:
+            cached_data_file_path = self.cached_data_path / cached_data_file_name
+            with open(cached_data_file_path, "wb") as cached_data_file:
                 torch.save(tmp_data_cached, cached_data_file)
             data_count += 1
 
