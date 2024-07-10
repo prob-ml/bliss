@@ -31,6 +31,7 @@ class GalaxyClusterEncoder(Encoder):
         self.catalog_net = CatalogNet(num_features, n_params_per_source)
 
     def get_features_and_parameters(self, batch):
+        batch = batch if type(batch)==dict else {"images": batch, "background": torch.zeros_like(batch)}
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
         ht, wt = h // self.tile_slen, w // self.tile_slen
 
