@@ -105,6 +105,7 @@ filterwarnings = [
   "ignore:.*distutils Version classes are deprecated.*:DeprecationWarning",
   "ignore:.*Total length of `DataLoader` across ranks is zero.*:UserWarning",
   "ignore:.*Total length of `CombinedLoader` across ranks is zero.*:UserWarning",
+  "ignore:.*Detected call of `lr_scheduler.step()` before `optimizer.step()`.*:UserWarning",
 ]
 minversion = "6.0"
 testpaths = [
