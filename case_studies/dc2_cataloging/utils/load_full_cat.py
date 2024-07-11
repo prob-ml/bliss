@@ -6,7 +6,7 @@ from hydra.utils import instantiate
 from pytorch_lightning.utilities import move_data_to_device
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.surveys.dc2 import DC2DataModule, split_tensor, unsqueeze_tile_dict
+from bliss.surveys.dc2 import DC2DataModule, split_tensor
 from case_studies.dc2_cataloging.utils.load_lsst import get_lsst_full_cat
 
 
@@ -89,7 +89,7 @@ def get_full_cat(
                 d[k] = rearrange(v, "(a b) nth ntw m k -> (a nth) (b ntw) m k", a=n_image_split)
             else:
                 d[k] = rearrange(v, "(a b) nth ntw -> (a nth) (b ntw)", a=n_image_split)
-        d = unsqueeze_tile_dict(d)
+        d = DC2DataModule.unsqueeze_tile_dict(d)
         bliss_full_cat = TileCatalog(notebook_cfg.surveys.dc2.tile_slen, d).to_full_catalog()
 
     return test_sample["image"], cur_image_true_full_catalog, bliss_full_cat, lsst_full_cat

@@ -8,13 +8,16 @@ from case_studies.dc2_cataloging.utils.load_lsst import get_lsst_catalog_tensors
 
 class LSSTPredictor:
     def __init__(
-        self, lsst_root_dir, r_band_min_flux, tile_slen, max_sources_per_tile, tiles_to_crop
+        self,
+        lsst_root_dir,
+        r_band_min_flux,
+        tile_slen,
+        max_sources_per_tile,
     ) -> None:
         self.lsst_data = get_lsst_catalog_tensors_dict(lsst_root_dir)
         self.r_band_min_flux = r_band_min_flux
         self.tile_slen = tile_slen
         self.max_sources_per_tile = max_sources_per_tile
-        self.tiles_to_crop = tiles_to_crop
 
         self.buffered_wcs_header_str = None
         self.buffered_lsst_plocs = None
@@ -74,4 +77,4 @@ class LSSTPredictor:
             )
 
         merged_tile_dict = concatenate_tile_dicts(tile_dict_list)
-        return TileCatalog(self.tile_slen, merged_tile_dict).symmetric_crop(self.tiles_to_crop)
+        return TileCatalog(self.tile_slen, merged_tile_dict)
