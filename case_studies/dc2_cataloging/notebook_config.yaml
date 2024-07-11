@@ -6,4 +6,5 @@ defaults:
 
 surveys:
     dc2:
+        prepare_data_processes_num: 1
         num_workers: 0

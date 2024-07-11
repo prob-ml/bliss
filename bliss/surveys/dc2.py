@@ -1,6 +1,7 @@
 import collections
 import copy
 import logging
+import multiprocessing
 import pathlib
 from typing import List
 
@@ -11,7 +12,6 @@ from astropy.io import fits
 from astropy.io.fits import Header
 from astropy.wcs import WCS
 from einops import rearrange
-from pathos import multiprocessing
 
 from bliss.cached_dataset import CachedSimulatedDataModule
 from bliss.catalog import FullCatalog, SourceType
@@ -139,35 +139,16 @@ class DC2DataModule(CachedSimulatedDataModule):
 
         n_image = self._load_image_and_bg_files_list()
 
-        generate_cached_data_kwargs = {
-            "image_files": self._image_files,
-            "bg_files": self._bg_files,
-            "image_lim": self.image_lim,
-            "n_image_split": self.n_image_split,
-            "tile_slen": self.tile_slen,
-            "max_sources_per_tile": self.max_sources_per_tile,
-            "bands": self.bands,
-            "n_bands": self.n_bands,
-            "dc2_cat_path": self.dc2_cat_path,
-            "cached_data_path": self.cached_data_path,
-            "min_flux_for_loss": self.min_flux_for_loss,
-            "data_in_one_cached_file": self.data_in_one_cached_file,
-        }
-        generate_cached_data_wrapper = lambda image_index: generate_cached_data(
-            image_index,
-            **generate_cached_data_kwargs,
-        )
-
         if self.prepare_data_processes_num > 1:
             with multiprocessing.Pool(processes=self.prepare_data_processes_num) as process_pool:
                 process_pool.map(
-                    generate_cached_data_wrapper,
+                    self.generate_cached_data,
                     list(range(n_image)),
                     chunksize=4,
                 )
         else:
             for i in range(n_image):
-                generate_cached_data_wrapper(i)
+                self.generate_cached_data(i)
 
         return None
 
@@ -178,22 +159,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         if image_index < 0 or image_index >= len(self._image_files[0]):
             raise IndexError("invalid image_idx")
 
-        kwargs = {
-            "image_files": self._image_files,
-            "bg_files": self._bg_files,
-            "image_lim": self.image_lim,
-            "n_image_split": self.n_image_split,
-            "tile_slen": self.tile_slen,
-            "max_sources_per_tile": self.max_sources_per_tile,
-            "bands": self.bands,
-            "n_bands": self.n_bands,
-            "dc2_cat_path": self.dc2_cat_path,
-            "cached_data_path": self.cached_data_path,
-            "min_flux_for_loss": self.min_flux_for_loss,
-            "data_in_one_cached_file": self.data_in_one_cached_file,
-        }
-
-        result_dict = load_image_and_catalog(image_index, **kwargs)
+        result_dict = self.load_image_and_catalog(image_index)
         return {
             "tile_catalog": result_dict["tile_dict"],
             "image": result_dict["inputs"]["image"],
@@ -204,142 +170,161 @@ class DC2DataModule(CachedSimulatedDataModule):
             "psf_params": result_dict["inputs"]["psf_params"],
         }
 
+    @classmethod
+    def squeeze_tile_dict(cls, tile_dict):
+        tile_dict_copy = copy.copy(tile_dict)
+        return {k: v.squeeze(0) for k, v in tile_dict_copy.items()}
 
-def squeeze_tile_dict(tile_dict):
-    tile_dict_copy = copy.copy(tile_dict)
-    for k, v in tile_dict_copy.items():
-        if k != "n_sources":
-            tile_dict_copy[k] = rearrange(v, "1 nth ntw s k -> nth ntw s k")
-    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "1 nth ntw -> nth ntw")
-    return tile_dict_copy
+    @classmethod
+    def unsqueeze_tile_dict(cls, tile_dict):
+        tile_dict_copy = copy.copy(tile_dict)
+        return {k: v.unsqueeze(0) for k, v in tile_dict_copy.items()}
 
+    def load_image_and_catalog(self, image_index):
+        image, bg, wcs_header_str = self.read_image_for_bands(image_index)
+        wcs = wcs_from_wcs_header_str(wcs_header_str)
 
-def unsqueeze_tile_dict(tile_dict):
-    tile_dict_copy = copy.copy(tile_dict)
-    for k, v in tile_dict_copy.items():
-        if k != "n_sources":
-            tile_dict_copy[k] = rearrange(v, "nth ntw s k -> 1 nth ntw s k")
-    tile_dict_copy["n_sources"] = rearrange(tile_dict_copy["n_sources"], "nth ntw -> 1 nth ntw")
-    return tile_dict_copy
+        plocs_lim = image[0].shape
+        height = plocs_lim[0]
+        width = plocs_lim[1]
+        full_cat, psf_params, match_id = DC2FullCatalog.from_file(
+            self.dc2_cat_path,
+            wcs,
+            height,
+            width,
+            bands=self.bands,
+            n_bands=self.n_bands,
+            min_flux_for_loss=self.min_flux_for_loss,
+        )
+        tile_cat = full_cat.to_tile_catalog(self.tile_slen, self.max_sources_per_tile)
+        tile_dict = self.squeeze_tile_dict(tile_cat.data)
 
-
-def load_image_and_catalog(image_index, **kwargs):
-    image, bg, wcs_header_str = read_image_for_bands(image_index, **kwargs)
-    wcs = wcs_from_wcs_header_str(wcs_header_str)
-
-    plocs_lim = image[0].shape
-    height = plocs_lim[0]
-    width = plocs_lim[1]
-    full_cat, psf_params, match_id = DC2FullCatalog.from_file(
-        kwargs["dc2_cat_path"],
-        wcs,
-        height,
-        width,
-        bands=kwargs["bands"],
-        n_bands=kwargs["n_bands"],
-        min_flux_for_loss=kwargs["min_flux_for_loss"],
-    )
-    tile_cat = full_cat.to_tile_catalog(kwargs["tile_slen"], kwargs["max_sources_per_tile"])
-    tile_dict = squeeze_tile_dict(tile_cat.data)
-
-    # add one/two/more_than_two source mask
-    on_mask = rearrange(tile_cat.is_on_mask, "1 nth ntw s -> nth ntw s 1")
-    on_mask_count = on_mask.sum(dim=(-2, -1))
-    tile_dict["one_source_mask"] = rearrange(on_mask_count == 1, "nth ntw -> nth ntw 1 1") & on_mask
-    tile_dict["two_sources_mask"] = (
-        rearrange(on_mask_count == 2, "nth ntw -> nth ntw 1 1") & on_mask
-    )
-    tile_dict["more_than_two_sources_mask"] = (
-        rearrange(on_mask_count > 2, "nth ntw -> nth ntw 1 1") & on_mask
-    )
-
-    return {
-        "tile_dict": tile_dict,
-        "inputs": {
-            "image": image,
-            "bg": bg,
-            "psf_params": psf_params,
-        },
-        "other_info": {
-            "full_cat": full_cat,
-            "wcs": wcs,
-            "wcs_header_str": wcs_header_str,
-            "match_id": match_id,
-        },
-    }
-
-
-def generate_cached_data(image_index, **kwargs):
-    result_dict = load_image_and_catalog(image_index, **kwargs)
-
-    image = result_dict["inputs"]["image"]
-    bg = result_dict["inputs"]["bg"]
-    tile_dict = result_dict["tile_dict"]
-    wcs_header_str = result_dict["other_info"]["wcs_header_str"]
-    psf_params = result_dict["inputs"]["psf_params"]
-
-    # split image
-    split_lim = kwargs["image_lim"][0] // kwargs["n_image_split"]
-    image_splits = split_tensor(image, split_lim, 1, 2)
-    image_width_pixels = image.shape[2]
-    split_image_num_on_width = image_width_pixels // split_lim
-    bg_splits = split_tensor(bg, split_lim, 1, 2)
-
-    # split tile cat
-    tile_cat_splits = {}
-    param_list = [
-        "locs",
-        "n_sources",
-        "source_type",
-        "galaxy_fluxes",
-        "star_fluxes",
-        "redshifts",
-        "one_source_mask",
-        "two_sources_mask",
-        "more_than_two_sources_mask",
-    ]
-    for param_name in param_list:
-        tile_cat_splits[param_name] = split_tensor(
-            tile_dict[param_name], split_lim // kwargs["tile_slen"], 0, 1
+        # add one/two/more_than_two source mask
+        on_mask = rearrange(tile_cat.is_on_mask, "1 nth ntw s -> nth ntw s 1")
+        on_mask_count = on_mask.sum(dim=(-2, -1))
+        tile_dict["one_source_mask"] = (
+            rearrange(on_mask_count == 1, "nth ntw -> nth ntw 1 1") & on_mask
+        )
+        tile_dict["two_sources_mask"] = (
+            rearrange(on_mask_count == 2, "nth ntw -> nth ntw 1 1") & on_mask
+        )
+        tile_dict["more_than_two_sources_mask"] = (
+            rearrange(on_mask_count > 2, "nth ntw -> nth ntw 1 1") & on_mask
         )
 
-    data_splits = {
-        "tile_catalog": unpack_dict(tile_cat_splits),
-        "images": image_splits,
-        "image_height_index": (
-            torch.arange(0, len(image_splits)) // split_image_num_on_width
-        ).tolist(),
-        "image_width_index": (
-            torch.arange(0, len(image_splits)) % split_image_num_on_width
-        ).tolist(),
-        "background": bg_splits,
-        "psf_params": [psf_params for _ in range(kwargs["n_image_split"] ** 2)],
-    }
-    data_splits = split_list(
-        unpack_dict(data_splits),
-        sub_list_len=kwargs["data_in_one_cached_file"],
-    )
+        return {
+            "tile_dict": tile_dict,
+            "inputs": {
+                "image": image,
+                "bg": bg,
+                "psf_params": psf_params,
+            },
+            "other_info": {
+                "full_cat": full_cat,
+                "wcs": wcs,
+                "wcs_header_str": wcs_header_str,
+                "match_id": match_id,
+            },
+        }
 
-    data_count = 0
-    for sub_splits in data_splits:  # noqa: WPS426
-        tmp_data_cached = []
-        for split in sub_splits:  # noqa: WPS426
-            split_clone = map_nested_dicts(
-                split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
+    def generate_cached_data(self, image_index):
+        result_dict = self.load_image_and_catalog(image_index)
+
+        image = result_dict["inputs"]["image"]
+        bg = result_dict["inputs"]["bg"]
+        tile_dict = result_dict["tile_dict"]
+        wcs_header_str = result_dict["other_info"]["wcs_header_str"]
+        psf_params = result_dict["inputs"]["psf_params"]
+
+        # split image
+        split_lim = self.image_lim[0] // self.n_image_split
+        image_splits = split_tensor(image, split_lim, 1, 2)
+        image_width_pixels = image.shape[2]
+        split_image_num_on_width = image_width_pixels // split_lim
+        bg_splits = split_tensor(bg, split_lim, 1, 2)
+
+        # split tile cat
+        tile_cat_splits = {}
+        param_list = [
+            "locs",
+            "n_sources",
+            "source_type",
+            "galaxy_fluxes",
+            "star_fluxes",
+            "redshifts",
+            "one_source_mask",
+            "two_sources_mask",
+            "more_than_two_sources_mask",
+        ]
+        for param_name in param_list:
+            tile_cat_splits[param_name] = split_tensor(
+                tile_dict[param_name], split_lim // self.tile_slen, 0, 1
             )
-            split_clone.update(wcs_header_str=wcs_header_str)
-            tmp_data_cached.append(split_clone)
-        assert data_count < 1e5 and image_index < 1e5, "too many cached data files"
-        assert len(tmp_data_cached) < 1e5, "too many cached data in one file"
-        cached_data_file_name = (
-            f"cached_data_{image_index:04d}_{data_count:04d}_size_{len(tmp_data_cached):04d}.pt"
+
+        data_splits = {
+            "tile_catalog": unpack_dict(tile_cat_splits),
+            "images": image_splits,
+            "image_height_index": (
+                torch.arange(0, len(image_splits)) // split_image_num_on_width
+            ).tolist(),
+            "image_width_index": (
+                torch.arange(0, len(image_splits)) % split_image_num_on_width
+            ).tolist(),
+            "background": bg_splits,
+            "psf_params": [psf_params for _ in range(self.n_image_split**2)],
+        }
+        data_splits = split_list(
+            unpack_dict(data_splits),
+            sub_list_len=self.data_in_one_cached_file,
         )
-        with open(
-            kwargs["cached_data_path"] / cached_data_file_name,
-            "wb",
-        ) as cached_data_file:
-            torch.save(tmp_data_cached, cached_data_file)
-        data_count += 1
+
+        data_count = 0
+        for sub_splits in data_splits:  # noqa: WPS426
+            tmp_data_cached = []
+            for split in sub_splits:  # noqa: WPS426
+                split_clone = map_nested_dicts(
+                    split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
+                )
+                split_clone.update(wcs_header_str=wcs_header_str)
+                tmp_data_cached.append(split_clone)
+            assert data_count < 1e5 and image_index < 1e5, "too many cached data files"
+            assert len(tmp_data_cached) < 1e5, "too many cached data in one file"
+            cached_data_file_name = (
+                f"cached_data_{image_index:04d}_{data_count:04d}_size_{len(tmp_data_cached):04d}.pt"
+            )
+            cached_data_file_path = self.cached_data_path / cached_data_file_name
+            with open(cached_data_file_path, "wb") as cached_data_file:
+                torch.save(tmp_data_cached, cached_data_file)
+            data_count += 1
+
+    def read_image_for_bands(self, image_index):
+        image_list = []
+        bg_list = []
+        wcs_header_str = None
+        for b in range(self.n_bands):
+            image_frame = fits.open(self._image_files[b][image_index])
+            bg_frame = fits.open(self._bg_files[b][image_index])
+            image_data = image_frame[1].data
+            bg_data = bg_frame[0].data
+
+            if wcs_header_str is None:
+                wcs_header_str = image_frame[1].header.tostring()
+
+            image_frame.close()
+            bg_frame.close()
+
+            image = torch.nan_to_num(
+                torch.from_numpy(image_data)[: self.image_lim[0], : self.image_lim[1]]
+            )
+            bg = torch.from_numpy(bg_data.astype(np.float32)).expand(
+                self.image_lim[0], self.image_lim[1]
+            )
+
+            image += bg
+            image_list.append(image)
+            bg_list.append(bg)
+
+        return torch.stack(image_list), torch.stack(bg_list), wcs_header_str
 
 
 class DC2FullCatalog(FullCatalog):
@@ -355,10 +340,10 @@ class DC2FullCatalog(FullCatalog):
         dec = torch.from_numpy(catalog["dec"].values).squeeze()
         galaxy_bools = torch.from_numpy((catalog["truth_type"] == 1).values)
         star_bools = torch.from_numpy((catalog["truth_type"] == 2).values)
-        flux, psf_params = get_bands_flux_and_psf(kwargs["bands"], catalog)
+        flux, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
         do_have_redshifts = catalog.get("redshifts", "")
         if do_have_redshifts:
-            redshifts = torch.tensor(catalog["redshifts"].values)
+            redshifts = torch.from_numpy(catalog["redshifts"].values)
 
         star_galaxy_filter = galaxy_bools | star_bools
         objid = objid[star_galaxy_filter]
@@ -400,47 +385,17 @@ class DC2FullCatalog(FullCatalog):
 
         return cls(height, width, d), psf_params, match_id
 
+    @classmethod
+    def get_bands_flux_and_psf(cls, bands, catalog):
+        flux_list = []
+        psf_params_list = []
+        for b in bands:
+            flux_list.append(torch.from_numpy((catalog["flux_" + b]).values))
+            psf_params_name = ["IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_"]
+            psf_params_cur_band = []
+            for i in psf_params_name:
+                median_psf = np.nanmedian((catalog[i + b]).values).astype(np.float32)
+                psf_params_cur_band.append(median_psf)
+            psf_params_list.append(torch.tensor(psf_params_cur_band))
 
-def read_image_for_bands(image_index, **kwargs):
-    image_list = []
-    bg_list = []
-    wcs_header_str = None
-    for b in range(kwargs["n_bands"]):
-        image_frame = fits.open(kwargs["image_files"][b][image_index])
-        bg_frame = fits.open(kwargs["bg_files"][b][image_index])
-        image_data = image_frame[1].data
-        bg_data = bg_frame[0].data
-
-        if wcs_header_str is None:
-            wcs_header_str = image_frame[1].header.tostring()
-
-        image_frame.close()
-        bg_frame.close()
-
-        image = torch.nan_to_num(
-            torch.from_numpy(image_data)[: kwargs["image_lim"][0], : kwargs["image_lim"][1]]
-        )
-        bg = torch.from_numpy(bg_data.astype(np.float32)).expand(
-            kwargs["image_lim"][0], kwargs["image_lim"][1]
-        )
-
-        image += bg
-        image_list.append(image)
-        bg_list.append(bg)
-
-    return torch.stack(image_list), torch.stack(bg_list), wcs_header_str
-
-
-def get_bands_flux_and_psf(bands, catalog):
-    flux_list = []
-    psf_params_list = []
-    for b in bands:
-        flux_list.append(torch.from_numpy((catalog["flux_" + b]).values))
-        psf_params_name = ["IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_"]
-        psf_params_cur_band = []
-        for i in psf_params_name:
-            median_psf = np.nanmedian((catalog[i + b]).values).astype(np.float32)
-            psf_params_cur_band.append(median_psf)
-        psf_params_list.append(torch.tensor(psf_params_cur_band))
-
-    return torch.stack(flux_list).t(), torch.stack(psf_params_list)
+        return torch.stack(flux_list).t(), torch.stack(psf_params_list)

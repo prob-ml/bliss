@@ -357,10 +357,6 @@ class TileCatalog(BaseTileCatalog):
         assert self.n_tiles_h == other.n_tiles_h
         assert self.n_tiles_w == other.n_tiles_w
 
-        # if not, we could store is_on_mask and derive n_sources by summing is_on_mask,
-        # rather than storing n_sources and deriving is_on_mask by assuming sorted sources
-        assert self.max_sources == other.max_sources == 1
-
         d = {}
         ns11 = rearrange(self["n_sources"], "b ht wt -> b ht wt 1 1")
         for k, v in self.items():

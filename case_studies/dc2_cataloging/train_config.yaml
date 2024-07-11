@@ -17,7 +17,7 @@ variational_factors:
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
     nll_gating: n_sources
-  - _target_: case_studies.dc2_cataloging.utils.variational_dist.BernoulliFactorReturnProbs
+  - _target_: bliss.encoder.variational_dist.BernoulliFactor
     name: source_type
     sample_rearrange: "b ht wt -> b ht wt 1 1"
     nll_rearrange: "b ht wt 1 1 -> b ht wt"
@@ -36,7 +36,7 @@ variational_factors:
     nll_gating: is_galaxy
 
 encoder:
-    _target_: case_studies.dc2_cataloging.utils.encoder.EncoderAddingSourceMask
+    _target_: case_studies.dc2_cataloging.utils.encoder.MultiDetectEncoder
     survey_bands: ["u", "g", "r", "i", "z", "y"]
     tile_slen: ${surveys.dc2.tile_slen}
     min_flux_for_loss: 100  # you need to regenerate split_results after changing this number
@@ -57,15 +57,16 @@ encoder:
         clahe_min_stdev: 200
         asinh_cutoffs: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
     var_dist:
-        _target_: case_studies.dc2_cataloging.utils.variational_dist.VariationalDistReturnProbs
+        _target_: case_studies.dc2_cataloging.utils.variational_dist.MultiVariationalDist
         tile_slen: ${surveys.dc2.tile_slen}
         factors: ${variational_factors}
+        repeat_times: 2
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
         mag_slack: null
         mag_band: 2  # SDSS r-band
-    metrics:
+    mode_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
         compute_groups: false
@@ -115,6 +116,7 @@ encoder:
           flux_error:
             _target_: bliss.encoder.metrics.FluxError
             survey_bands: ${encoder.survey_bands}
+    sample_metrics: ${encoder.mode_metrics}
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
@@ -123,15 +125,15 @@ encoder:
             restrict_batch: 0
             tiles_to_crop: 0
             tile_slen: ${surveys.dc2.tile_slen}
-    use_double_detect: true
-    use_checkerboard: true
+    use_double_detect: false
+    use_checkerboard: false
 
 train:
     trainer:
         logger:
             name: DC2_cataloging_exp_07
-            version: exp_07-03-3  # change it before running the code
-        devices: [5]  # change it before running the code
+            version: exp_07-09-1  # change it before running the code
+        devices: [7]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
     data_source: ${surveys.dc2}
     pretrained_weights: null
