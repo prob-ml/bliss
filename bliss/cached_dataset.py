@@ -5,6 +5,7 @@ import pathlib
 import random
 import re
 import warnings
+from copy import copy
 from typing import List, TypedDict
 
 import pytorch_lightning as pl
@@ -53,8 +54,33 @@ class FullCatalogToTileTransform(torch.nn.Module):
         return datum_out
 
 
+class OneBandTransform(torch.nn.Module):
+    def __init__(self, band_idx):
+        super().__init__()
+        self.band_idx = band_idx
+
+    def __call__(self, datum_in):
+        datum_out = {
+            "images": datum_in["images"][self.band_idx : self.band_idx + 1],
+            "background": datum_in["background"][self.band_idx : self.band_idx + 1],
+            "psf_params": datum_in["psf_params"][self.band_idx : self.band_idx + 1],
+        }
+
+        for cat_name in ("tile_catalog", "full_catalog"):
+            if cat_name not in datum_in:
+                continue
+            cat = copy(datum_in[cat_name])
+            for k, v in cat.items():
+                if k.endswith("fluxes"):
+                    cat[k] = v[..., self.band_idx : self.band_idx + 1]
+            datum_out[cat_name] = cat
+
+        return datum_out
+
+
 class ChunkingSampler(Sampler):
     def __init__(self, dataset: Dataset) -> None:
+        super().__init__()
         assert isinstance(dataset, ChunkingDataset), "dataset should be ChunkingDataset"
         self.dataset = dataset
 
