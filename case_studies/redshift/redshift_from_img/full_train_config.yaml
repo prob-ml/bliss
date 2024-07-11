@@ -1,0 +1,137 @@
+---
+defaults:
+    - ../../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+mode: train
+
+global_setting:
+    min_flux_for_loss: 50  # you need to regenerate split_results after changing this number
+
+variational_factors:
+  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+    name: n_sources
+    sample_rearrange: null
+    nll_rearrange: null
+    nll_gating: null
+  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+    name: source_type
+    sample_rearrange: "b ht wt -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    nll_gating: n_sources
+  - _target_: bliss.encoder.variational_dist.TDBNFactor
+    name: locs
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: n_sources
+  - _target_: bliss.encoder.variational_dist.LogNormalFactor
+    name: star_fluxes
+    dim: 6
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: is_star
+  - _target_: bliss.encoder.variational_dist.LogNormalFactor
+    name: galaxy_fluxes
+    dim: 6
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: is_galaxy
+  - _target_: bliss.encoder.variational_dist.NormalFactor
+    name: redshifts
+    sample_rearrange: "b ht wt -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    nll_gating: is_galaxy
+
+encoder:
+    # _target_: case_studies.redshift.redshift_from_img.encoder.encoder.RedshiftsEncoder
+    _target_: bliss.encoder.encoder.Encoder
+    survey_bands: ["g", "i", "r", "u", "y", "z"]
+    tile_slen: 4
+    tiles_to_crop: 1
+    min_flux_for_loss: ${global_setting.min_flux_for_loss}
+    min_flux_for_metrics: 100
+    optimizer_params:
+        lr: 1e-3
+    scheduler_params:
+        milestones: [32]
+        gamma: 0.1
+    image_normalizer:
+      _target_: bliss.encoder.image_normalizer.ImageNormalizer
+      bands: [0, 1, 2, 3, 4, 5]
+      include_original: false
+      include_background: false
+      concat_psf_params: false
+      num_psf_params: 4  # for SDSS, 4 for DC2
+      log_transform_stdevs: []
+      use_clahe: true
+      clahe_min_stdev: 200
+    # matcher:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftsCatalogMatcher
+    #     match_gating: is_galaxy
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        metrics: ${my_metrics}
+    var_dist:
+        # _target_: case_studies.redshift.redshift_from_img.encoder.variational_dist.RedshiftVariationalDist
+        _target_: bliss.encoder.variational_dist.VariationalDist
+        tile_slen: ${encoder.tile_slen}
+        factors: ${variational_factors}
+    use_checkerboard: true
+
+my_metrics:
+    redshift_mearn_square_error:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredError
+    redshift_outlier_fraction:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFraction
+    redshift_nmad:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDev
+    redshift_outlier_fraction_catastrophic:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCata
+    redshift_bias:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBias
+
+train:
+    trainer:
+        logger:
+            name: DC2_redshift_training
+            version: DC2_redshift_only_all_3metrics_100fluxfilter_6att_hascheckandfilter
+            save_dir: ${paths.root}/case_studies/redshift/redshift_from_img/
+        precision: 32
+        strategy:
+          _target_: pytorch_lightning.strategies.DDPStrategy
+          find_unused_parameters: true
+          process_group_backend: nccl
+          timeout:
+            _target_: datetime.timedelta
+            seconds: 180000
+        val_check_interval: 0.1
+        # check_val_every_n_epoch: 1
+        # devices: [0, 2, 3, 4]
+        devices: [5, 6]
+        max_epochs: 50
+    callbacks:
+        checkpointing:
+            _target_: pytorch_lightning.callbacks.ModelCheckpoint
+            filename: encoder_{val/mode/redshifts/mse:.6f}
+            save_top_k: 5
+            verbose: True
+            #  monitor: val/_loss
+            monitor: val/mode/redshifts/mse
+            mode: min
+        early_stopping:
+            _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+            monitor: val/_loss
+            mode: min
+            patience: 500
+    data_source: ${surveys.dc2}
+    # pretrained_weights: /home/qiaozhih/bliss/case_studies/redshift/redshift_from_img/DC2_redshift_training/DC2_redshift_only_all_3metrics/checkpoints/encoder_0.351515.ckpt
+    test_best: true
+
+
+surveys:
+    dc2:
+        cat_path: ${paths.root}/case_studies/redshift/redshift_from_img/DC2_generate_catalog_output/merged_catalog_with_flux_over_50.pkl
+        split_results_dir: /data/scratch/qiaozhih/DC2_split_result_all
+        batch_size: 64

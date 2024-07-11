@@ -62,10 +62,11 @@ def train(train_cfg: DictConfig):
     if train_cfg.matmul_precision:
         torch.set_float32_matmul_precision(train_cfg.matmul_precision)
 
-    # setup dataset, encoder, and trainer
+    # setup dataset, encoder, callbacks and trainer
     dataset = instantiate(train_cfg.data_source)
     encoder = instantiate(train_cfg.encoder)
-    trainer = instantiate(train_cfg.trainer)
+    callbacks = instantiate(train_cfg.callbacks)
+    trainer = instantiate(train_cfg.trainer, callbacks=list(callbacks.values()))
 
     # load pretrained weights
     if train_cfg.pretrained_weights is not None:
@@ -83,6 +84,11 @@ def train(train_cfg: DictConfig):
     trainer.fit(encoder, datamodule=dataset, ckpt_path=train_cfg.ckpt_path)
 
     # test!
+    # load best model for test
+    best_model_path = callbacks["checkpointing"].best_model_path
+    enc_state_dict = torch.load(best_model_path)
+    enc_state_dict = enc_state_dict["state_dict"]
+    encoder.load_state_dict(enc_state_dict)
     trainer.test(encoder, datamodule=dataset)
 
 
