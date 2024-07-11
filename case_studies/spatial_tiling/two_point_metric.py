@@ -22,7 +22,7 @@ class TwoPointMetric(Metric):
             ne_all = est_cat["n_sources"][i].item()
             locs_all = est_cat["plocs"][i, :ne_all]
 
-            is_inner = ((locs_all > 10) & (locs_all < 98)).all(dim=1)
+            is_inner = ((locs_all > 3) & (locs_all < 109)).all(dim=1)
             locs_inner = locs_all[is_inner]
 
             ne_inner = locs_inner.shape[0]
@@ -34,7 +34,7 @@ class TwoPointMetric(Metric):
             n_obs = kd_inner.count_neighbors(kd_all, self.radii) - ne_inner
             self.obs_neighbors += torch.from_numpy(n_obs).to(self.device)
 
-            other_per_pixel = (ne_all - 1) / 108**2  # adjust for image size (108 x 108 outer)
+            other_per_pixel = (ne_all - 1) / 112**2  # adjust for image size (112 x 112 outer)
             other_per_disk = other_per_pixel * torch.pi * self.radii**2
             n_expected = other_per_disk * ne_inner
             self.expected_neighbors += n_expected.to(self.device)

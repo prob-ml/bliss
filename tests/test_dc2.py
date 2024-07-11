@@ -172,7 +172,6 @@ class TestDC2:
 
     def test_train_on_dc2(self, cfg):
         train_dc2_cfg = cfg.copy()
-        train_dc2_cfg.encoder.image_normalizer.bands = [0, 1, 2, 3, 4, 5]
         train_dc2_cfg.encoder.survey_bands = ["u", "g", "r", "i", "z", "y"]
         train_dc2_cfg.train.data_source = train_dc2_cfg.surveys.dc2
         train_dc2_cfg.train.pretrained_weights = None

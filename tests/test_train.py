@@ -20,11 +20,6 @@ class TestTrain:
             if f.name in {"star_fluxes", "galaxy_fluxes"}:
                 f.dim = 4
 
-        train_des_cfg.encoder.image_normalizer.bands = [
-            DES.BANDS.index("g"),
-            DES.BANDS.index("r"),
-            DES.BANDS.index("z"),
-        ]
         train_des_cfg.encoder.survey_bands = DES.BANDS
         train_des_cfg.train.pretrained_weights = None
         train_des_cfg.train.testing = True
@@ -41,11 +36,6 @@ class TestTrain:
                 f.dim = 4
 
         train_decals_cfg.encoder.image_normalizer.log_transform_stdevs = []
-        train_decals_cfg.encoder.image_normalizer.bands = [
-            DECaLS.BANDS.index("g"),
-            DECaLS.BANDS.index("r"),
-            DECaLS.BANDS.index("z"),
-        ]
         train_decals_cfg.encoder.survey_bands = DECaLS.BANDS
         train_decals_cfg.train.pretrained_weights = None
         train_decals_cfg.train.testing = True
