@@ -20,7 +20,6 @@ class TestEncoder:
         encoder_params = {
             "image_normalizer": {
                 "concat_psf_params": True,
-                "bands": [2],
             },
         }
         encoder = instantiate(cfg.encoder, **encoder_params).to(cfg.predict.device)

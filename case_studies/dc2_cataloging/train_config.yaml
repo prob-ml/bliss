@@ -48,7 +48,6 @@ encoder:
         gamma: 0.1
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
-        bands: [0, 1, 2, 3, 4, 5]
         include_original: false
         include_background: false
         concat_psf_params: false

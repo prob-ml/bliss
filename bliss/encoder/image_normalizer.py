@@ -1,12 +1,9 @@
-import warnings
-
 import torch
 
 
 class ImageNormalizer(torch.nn.Module):
     def __init__(
         self,
-        bands: list,
         include_original: bool,
         include_background: bool,
         concat_psf_params: bool,
@@ -19,7 +16,6 @@ class ImageNormalizer(torch.nn.Module):
         """Initializes DetectionEncoder.
 
         Args:
-            bands: list of bands to use for input
             include_original: whether to include the original image as an input channel
             concat_psf_params: whether to include the PSF parameters as input channels
             num_psf_params: number of PSF parameters
@@ -31,7 +27,6 @@ class ImageNormalizer(torch.nn.Module):
         """
         super().__init__()
 
-        self.bands = bands
         self.include_original = include_original
         self.include_background = include_background
         self.concat_psf_params = concat_psf_params
@@ -71,13 +66,8 @@ class ImageNormalizer(torch.nn.Module):
         assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
         assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
 
-        input_bands = batch["images"].shape[1]
-        if input_bands < len(self.bands):
-            msg = f"Expected >= {len(self.bands)} bands in the input but found only {input_bands}"
-            warnings.warn(msg)
-
-        raw_images = batch["images"][:, self.bands].unsqueeze(2)
-        backgrounds = batch["background"][:, self.bands].unsqueeze(2)
+        raw_images = batch["images"].unsqueeze(2)
+        backgrounds = batch["background"].unsqueeze(2)
         inputs = []
 
         if self.include_background:
@@ -90,7 +80,7 @@ class ImageNormalizer(torch.nn.Module):
             msg = "concat_psf_params specified but psf params not present in data"
             assert "psf_params" in batch, msg
             n, c, i, h, w = raw_images.shape
-            psf_params = batch["psf_params"][:, self.bands]
+            psf_params = batch["psf_params"]
             psf_params = psf_params.view(n, c, self.num_psf_params * i, 1, 1)
             psf_params = psf_params.expand(n, c, self.num_psf_params * i, h, w)
             inputs.append(psf_params)

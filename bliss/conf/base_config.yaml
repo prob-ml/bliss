@@ -130,6 +130,7 @@ metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
         mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
+        mag_band: 2
     source_type_accuracy:
         _target_: bliss.encoder.metrics.SourceTypeAccuracy
         flux_bin_cutoffs: [200, 400, 600, 800, 1000]
@@ -141,6 +142,7 @@ metrics:
 encoder:
     _target_: bliss.encoder.encoder.Encoder
     survey_bands: ["u", "g", "r", "i", "z"]
+    reference_band: 2  # SDSS r-band
     tile_slen: ${simulator.prior.tile_slen}
     min_flux_for_loss: 0  # set to 0 to include all sources
     min_flux_for_metrics: 0  # set to 0 to include all sources
@@ -151,7 +153,6 @@ encoder:
         gamma: 0.1
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
-        bands: [0, 1, 2, 3, 4]
         include_original: false
         include_background: true
         concat_psf_params: false
@@ -279,7 +280,7 @@ train:
         max_epochs: 50
         accelerator: "gpu"
         devices: 1
-        precision: 32
+        precision: 16-mixed
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
@@ -299,8 +300,8 @@ train:
     encoder: ${encoder}
     seed: null
     pretrained_weights: null
-    testing: true
-    matmul_precision: null
+    ckpt_path: null
+    matmul_precision: high
 
 predict:
     dataset: ${surveys.sdss}

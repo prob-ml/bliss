@@ -60,6 +60,7 @@ class VariationalFactor:
         sample_cat = qk.mode if use_mode else qk.sample()
         if self.sample_rearrange is not None:
             sample_cat = rearrange(sample_cat, self.sample_rearrange)
+            assert sample_cat.isfinite().all(), f"sample_cat has invalid values: {sample_cat}"
         return sample_cat
 
     def compute_nll(self, params, true_tile_cat):
@@ -144,8 +145,8 @@ class LogNormalFactor(VariationalFactor):
         super().__init__(n_params, *args, **kwargs)
 
     def _get_dist(self, params):
-        mu = params[:, :, :, 0 : self.dim]
-        sigma = params[:, :, :, self.dim : self.n_params].clamp(-6, 10).exp().sqrt()
+        mu = params[:, :, :, 0 : self.dim].clamp(-40, 40)
+        sigma = params[:, :, :, self.dim : self.n_params].clamp(-6, 5).exp().sqrt()
         iid_dist = LogNormalEpsilon(
             mu, sigma, validate_args=False
         )  # may evaluate at 0 for masked tiles
@@ -295,6 +296,14 @@ class RescaledLogitNormal(Distribution):
         return self.iid_dist.icdf(torch.tensor(0.5))
 
 
+empty_shape = torch.Size([])
+
+
 class LogNormalEpsilon(LogNormal):
+    def sample(self, sample_shape=empty_shape):
+        sample = super().sample(sample_shape)
+        max_value = torch.finfo(sample.dtype).max
+        return sample.clamp(1e-9, max_value)
+
     def log_prob(self, value):
         return super().log_prob(value + 1e-9)
