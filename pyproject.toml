@@ -106,6 +106,7 @@ filterwarnings = [
   "ignore:.*Total length of `DataLoader` across ranks is zero.*:UserWarning",
   "ignore:.*Total length of `CombinedLoader` across ranks is zero.*:UserWarning",
   "ignore:.*Detected call of `lr_scheduler.step()` before `optimizer.step()`.*:UserWarning",
+  "ignore:.*AMP with fp16 is not supported on CPU.*:UserWarning",
 ]
 minversion = "6.0"
 testpaths = [
