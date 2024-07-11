@@ -3,7 +3,7 @@
 # Script to automate running the galsim command with the yaml configuration
 
 # Default Values
-num_files=3
+num_files=100
 num_galaxies=3
 img_size=500
 
@@ -28,6 +28,10 @@ while getopts "f:s:g:" opt; do
   esac
 done
 
+echo "Running data generation script with the following parameters:"
+echo "$num_files output images"
+echo "$num_galaxies galaxies per output image"
+echo "each output image of size $img_size pixels"
 
 # base image config file
 GALAXY_CONFIG_FILE="galsim-random.yaml"
@@ -60,7 +64,8 @@ if [ ! -d "$OUTPUT_DIR" ]; then
 fi
 
 # Log file
-LOG_FILE="galsim_run.log"
+LOG_FILE="strong_lens_data_gen.log"
+echo "Check strong_lens_data_gen.log for logging information during the run"
 
 NUM_UNLENSED_IMAGES=$((num_galaxies/2))
 NUM_LENSED_IMAGES=$((num_galaxies-NUM_UNLENSED_IMAGES))
@@ -77,7 +82,6 @@ for i in $(seq 1 $num_files); do
       PYTHON_SCRIPT_1="random_galaxy_gen.py"
       # Second Python script - Lenstronomy Lensing Logic
       PYTHON_SCRIPT_2="bliss_lens.py"
-
 
       output=$(python $PYTHON_SCRIPT_1 $img_size)
       params=($output)
@@ -112,7 +116,7 @@ for i in $(seq 1 $num_files); do
 
       # Write unlensed images to combined files
       if [ "$j" -le "$NUM_UNLENSED_IMAGES" ]; then
-          echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, False, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta" >> data/catalog.txt
+          echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, 0.0, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta" >> data/catalog.txt
 
       # Write lensed images to combined files
       else
@@ -126,7 +130,7 @@ for i in $(seq 1 $num_files); do
           e1=${lens_params[3]}
           e2=${lens_params[4]}
         #   echo "$ITR, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $ITR, $ITR, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, True, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta, $theta_E, $center_x, $center_y, $e1, $e2" >> data/catalog.txt
-          echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, True, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta, $theta_E, $center_x, $center_y, $e1, $e2" >> data/catalog.txt
+          echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, 1.0, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta, $theta_E, $center_x, $center_y, $e1, $e2" >> data/catalog.txt
       fi
 
       # Rename the output files to include the iteration number

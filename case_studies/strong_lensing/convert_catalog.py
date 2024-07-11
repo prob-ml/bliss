@@ -17,7 +17,7 @@ t = {
     "NOISE_VARIANCE": "f8",
     "NOISE_FILENAME": "S36",
     "stamp_flux": "f8",
-    "LENSED": "S5",
+    "MEM": "f8",
     "X": "i4",
     "Y": "i4",
     "N1": "f8",
@@ -42,7 +42,7 @@ with open("data/catalog.txt", "r", encoding="utf-8") as file:
         # Remove any quotes from string fields and split the line by comma
         values = line.replace("'", "").split(", ")
         # Check if image is lensed and extract lensing parameters
-        if values[15] == "True":
+        if values[15] == "1.0":
             row = values[:31]
         else:
             row = values[:26] + [0, 0, 0, 0, 0]
