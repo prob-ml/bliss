@@ -80,11 +80,10 @@ def train(train_cfg: DictConfig):
         trainer.logger.log_hyperparams(train_cfg)
 
     # train!
-    trainer.fit(encoder, datamodule=dataset)
+    trainer.fit(encoder, datamodule=dataset, ckpt_path=train_cfg.ckpt_path)
 
     # test!
-    if train_cfg.testing:
-        trainer.test(encoder, datamodule=dataset)
+    trainer.test(encoder, datamodule=dataset)
 
 
 # ============================== Prediction mode ==============================

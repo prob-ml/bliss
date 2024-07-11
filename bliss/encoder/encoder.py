@@ -213,7 +213,7 @@ class Encoder(pl.LightningModule):
 
         if self.use_double_detect:
             with torch.no_grad():
-                est_cat1 = self.sample_first_detection(x_features, use_mode=True)
+                est_cat1 = self.sample_first_detection(x_features, use_mode=False)
             # occasionally we input an estimated catalog rather than a target catalog, to regularize
             # and avoid out-of-distribution inputs when sampling
             history_cat = target_cat1 if torch.rand(1).item() < 0.9 else est_cat1

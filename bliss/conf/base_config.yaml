@@ -293,12 +293,12 @@ train:
         max_epochs: 50
         accelerator: "gpu"
         devices: 1
-        precision: 16-mixed
+        precision: 32-true
     data_source: ${cached_simulator}
     encoder: ${encoder}
     seed: null
     pretrained_weights: null
-    testing: true
+    ckpt_path: null
     matmul_precision: high
 
 predict:
