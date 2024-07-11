@@ -171,7 +171,6 @@ class TestDecalsCatalog:
         )
         the_cfg = cfg.copy()
         the_cfg.predict.dataset = cfg.surveys.decals
-        the_cfg.encoder.image_normalizer.bands = [DECaLS.BANDS.index("r")]
         decals = instantiate(the_cfg.predict.dataset)
         decals_cat = TractorFullCatalog.from_file(
             cat_path=sample_file,

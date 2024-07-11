@@ -293,7 +293,7 @@ train:
         max_epochs: 50
         accelerator: "gpu"
         devices: 1
-        precision: 32-true
+        precision: 16-mixed
     data_source: ${cached_simulator}
     encoder: ${encoder}
     seed: null

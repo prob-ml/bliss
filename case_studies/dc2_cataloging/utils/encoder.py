@@ -15,7 +15,7 @@ class EncoderForDynamicAsinh(Encoder):
         ch_per_band = self.image_normalizer.num_channels_per_band()
         num_features = 256
         self.features_net = FeaturesNet(
-            len(self.image_normalizer.bands),
+            6,
             ch_per_band,
             num_features,
             double_downsample=(self.tile_slen == 4),

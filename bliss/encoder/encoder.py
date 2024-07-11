@@ -1,4 +1,5 @@
 import itertools
+import warnings
 from typing import Optional
 
 import pytorch_lightning as pl
@@ -225,6 +226,12 @@ class Encoder(pl.LightningModule):
             loss22 *= target_cat1["n_sources"]
             loss += loss22
 
+        nan_mask = torch.isnan(loss)
+        if nan_mask.any():
+            loss = loss[~nan_mask]
+            msg = f"NaN detected in loss. Ignored {nan_mask.sum().item()} NaN values."
+            warnings.warn(msg)
+
         # could normalize by the number of tile predictions, rather than number of tiles
         loss = loss.sum() / loss.numel()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
@@ -237,7 +244,7 @@ class Encoder(pl.LightningModule):
     def on_train_epoch_start(self):
         GlobalEnv.current_encoder_epoch = self.current_epoch
 
-    def training_step(self, batch, batch_idx, optimizer_idx=0):
+    def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
         return self._compute_loss(batch, "train")
 
@@ -286,7 +293,10 @@ class Encoder(pl.LightningModule):
 
         for metric_name, metric in metrics.items():
             if hasattr(metric, "plot"):  # noqa: WPS421
-                plot_or_none = metric.plot()
+                try:
+                    plot_or_none = metric.plot()
+                except NotImplementedError:
+                    continue
                 name = f"Epoch:{self.current_epoch}" if show_epoch else ""
                 name += f"/{logging_name} {metric_name}"
                 if self.logger and plot_or_none:
