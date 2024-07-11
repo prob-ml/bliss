@@ -28,7 +28,6 @@ COL_NAMES = (
     "FLUX_G",
     "FLUX_I",
     "FLUX_Z",
-    "FLUX_Y",
     "HLR",
     "FRACDEV",
     "G1",
@@ -36,8 +35,8 @@ COL_NAMES = (
     "Z",
     "SOURCE_TYPE",
 )
-BANDS = ("g", "r", "i", "z", "Y")
-N_CATALOGS_PER_FILE = 500
+BANDS = ("g", "r", "i", "z")
+N_CATALOGS_PER_FILE = 50
 
 
 def main(**kwargs):
@@ -54,7 +53,7 @@ def main(**kwargs):
         n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
         catalog_dict["n_sources"] = n_sources
         catalog_dict["galaxy_fluxes"] = torch.tensor(
-            [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z", "FLUX_Y"]].to_numpy()]
+            [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z"]].to_numpy()]
         )
         catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
         catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
@@ -109,7 +108,7 @@ def main(**kwargs):
 
     chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
     for i, chunk in enumerate(chunks):
-        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}_size_500.pt")
+        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}_size_{N_CATALOGS_PER_FILE}.pt")
 
 
 if __name__ == "__main__":
