@@ -120,7 +120,7 @@ cached_simulator:
 
 train:
     trainer:
-        precision: 16-mixed
+        precision: 32-true
     seed: null
 
 predict:
