@@ -21,7 +21,7 @@ class GalaxyClusterEncoder(Encoder):
         ch_per_band = self.image_normalizer.num_channels_per_band()
         num_features = 256
         self.features_net = GalaxyClusterFeaturesNet(
-            len(self.image_normalizer.bands),
+            len(self.survey_bands),
             ch_per_band,
             num_features,
             tile_slen=self.tile_slen,
