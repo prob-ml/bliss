@@ -8,7 +8,7 @@ from astropy.table import Table
 
 from case_studies.galaxy_clustering.data_generation.prior import BackgroundPrior, ClusterPrior
 
-DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
+DATA_PATH = "/nfs/turbo/lsa-regier/scratch/kapnadak/new_data"
 CATALOG_PATH = os.path.join(DATA_PATH, "catalogs")
 FILE_PREFIX = "galsim_des"
 CLUSTER_PROB = 0.5

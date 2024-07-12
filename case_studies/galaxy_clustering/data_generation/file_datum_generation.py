@@ -12,7 +12,7 @@ from bliss.cached_dataset import FileDatum
 from bliss.catalog import FullCatalog
 
 min_flux_for_loss = 0
-DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
+DATA_PATH = "/nfs/turbo/lsa-regier/scratch/kapnadak/new_data"
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
@@ -24,8 +24,8 @@ COL_NAMES = (
     "X",
     "Y",
     "MEM",
-    "FLUX_R",
     "FLUX_G",
+    "FLUX_R",
     "FLUX_I",
     "FLUX_Z",
     "HLR",
@@ -44,6 +44,8 @@ def main(**kwargs):
     tile_size = int(kwargs.get("tile_size", 128))
     n_tiles = int(image_size / tile_size)
     data: List[FileDatum] = []
+    catalog_counter = 0
+    file_counter = 0
 
     for catalog_path in CATALOGS_PATH.glob("*.dat"):
         catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=COL_NAMES)
@@ -53,7 +55,7 @@ def main(**kwargs):
         n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
         catalog_dict["n_sources"] = n_sources
         catalog_dict["galaxy_fluxes"] = torch.tensor(
-            [catalog[["FLUX_R", "FLUX_G", "FLUX_I", "FLUX_Z"]].to_numpy()]
+            [catalog[["FLUX_G", "FLUX_R", "FLUX_I", "FLUX_Z"]].to_numpy()]
         )
         catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
         catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
@@ -105,10 +107,13 @@ def main(**kwargs):
                 }
             )
         )
-
-    chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
-    for i, chunk in enumerate(chunks):
-        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}_size_{N_CATALOGS_PER_FILE}.pt")
+        catalog_counter += 1
+        if catalog_counter == N_CATALOGS_PER_FILE:
+            stackname = f"{FILE_DATA_PATH}/file_data_{file_counter}_size_{N_CATALOGS_PER_FILE}.pt"
+            torch.save(data, stackname)
+            file_counter += 1
+            catalog_counter = 0
+            data = []
 
 
 if __name__ == "__main__":

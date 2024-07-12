@@ -22,8 +22,8 @@
 variables :
   nfiles : 100
   image_size: 4800
-  input_dir : /home/kapnadak/bliss/case_studies/galaxy_clustering/data/catalogs
-  output_dir : /home/kapnadak/bliss/case_studies/galaxy_clustering/data/images
+  input_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data/catalogs
+  output_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data/images
 
 psf:
     type: Convolve
