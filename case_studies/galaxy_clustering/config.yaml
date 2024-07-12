@@ -53,7 +53,6 @@ encoder:
     survey_bands: ["g", "r", "i", "z"]
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
-        bands: [0, 1, 2, 3]
         include_original: true
         include_background: false
         concat_psf_params: false
