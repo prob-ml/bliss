@@ -18,7 +18,7 @@ CLUSTER_CATALOG_PATH = "redmapper_sva1-expanded_public_v6.3_members.fits"
 
 
 class Prior:
-    def __init__(self, image_size=4800):
+    def __init__(self, image_size=1280):
         super().__init__()
         self.width = image_size
         self.height = image_size
@@ -131,7 +131,7 @@ class Prior:
 
 
 class ClusterPrior(Prior):
-    def __init__(self, image_size=4800):
+    def __init__(self, image_size=1280):
         super().__init__(image_size)
 
         self.full_cluster_df = Table.read(CLUSTER_CATALOG_PATH).to_pandas()
@@ -246,7 +246,7 @@ class ClusterPrior(Prior):
 
 
 class BackgroundPrior(Prior):
-    def __init__(self, image_size=4800):
+    def __init__(self, image_size=1280):
         super().__init__(image_size)
 
         self.pixel_scale = 0.263

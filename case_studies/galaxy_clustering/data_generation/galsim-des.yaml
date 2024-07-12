@@ -21,7 +21,7 @@
 
 variables :
   nfiles : 100
-  image_size: 4800
+  image_size: 1280
   input_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data/catalogs
   output_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data/images
 
