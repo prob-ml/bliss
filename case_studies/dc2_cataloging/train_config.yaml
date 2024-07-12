@@ -35,8 +35,56 @@ variational_factors:
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
     nll_gating: is_galaxy
 
+metrics:
+  detection_performance:
+    _target_: bliss.encoder.metrics.DetectionPerformance
+    bin_cutoffs: [200, 400, 600, 800, 1000]
+    bin_type: "Flux"
+  detection_performance_star:
+    _target_: bliss.encoder.metrics.DetectionPerformance
+    bin_cutoffs: [200, 400, 600, 800, 1000]
+    bin_type: "Flux"
+    filter_list:
+      - _target_: bliss.encoder.metrics.SourceTypeFilter
+        filter_type: "star"
+  detection_performance_galaxy:
+    _target_: bliss.encoder.metrics.DetectionPerformance
+    bin_cutoffs: [200, 400, 600, 800, 1000]
+    bin_type: "Flux"
+    filter_list:
+      - _target_: bliss.encoder.metrics.SourceTypeFilter
+        filter_type: "galaxy"
+  detection_performance_one_source_mask:
+    _target_: bliss.encoder.metrics.DetectionPerformance
+    bin_cutoffs: [200, 400, 600, 800, 1000]
+    bin_type: "Flux"
+    filter_list:
+      - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+        filter_source_count: "1m"
+  detection_performance_two_sources_mask:
+    _target_: bliss.encoder.metrics.DetectionPerformance
+    bin_cutoffs: [200, 400, 600, 800, 1000]
+    bin_type: "Flux"
+    filter_list:
+      - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+        filter_source_count: "2m"
+  detection_performance_more_than_two_sources_mask:
+    _target_: bliss.encoder.metrics.DetectionPerformance
+    bin_cutoffs: [200, 400, 600, 800, 1000]
+    bin_type: "Flux"
+    filter_list:
+      - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+        filter_source_count: "2plus"
+  source_type_accuracy:
+    _target_: bliss.encoder.metrics.SourceTypeAccuracy
+    flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+  flux_error:
+    _target_: bliss.encoder.metrics.FluxError
+    survey_bands: ${encoder.survey_bands}
+
 encoder:
-    _target_: case_studies.dc2_cataloging.utils.encoder.MultiDetectEncoder
+    # _target_: case_studies.dc2_cataloging.utils.encoder.MultiDetectEncoder
+    _target_: case_studies.dc2_cataloging.utils.encoder.EncoderAddingSourceMask
     survey_bands: ["u", "g", "r", "i", "z", "y"]
     tile_slen: ${surveys.dc2.tile_slen}
     min_flux_for_loss: 100  # you need to regenerate split_results after changing this number
@@ -57,10 +105,11 @@ encoder:
         clahe_min_stdev: 200
         asinh_cutoffs: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
     var_dist:
-        _target_: case_studies.dc2_cataloging.utils.variational_dist.MultiVariationalDist
+        # _target_: case_studies.dc2_cataloging.utils.variational_dist.MultiVariationalDist
+        _target_: bliss.encoder.variational_dist.VariationalDist
         tile_slen: ${surveys.dc2.tile_slen}
         factors: ${variational_factors}
-        repeat_times: 2
+        # repeat_times: 2
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -70,53 +119,12 @@ encoder:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
         compute_groups: false
-        metrics:
-          detection_performance:
-            _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            bin_unit_is_flux: true
-          detection_performance_star:
-            _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            bin_unit_is_flux: true
-            filter_list:
-              - _target_: bliss.encoder.metrics.SourceTypeFilter
-                filter_type: "star"
-          detection_performance_galaxy:
-            _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            bin_unit_is_flux: true
-            filter_list:
-              - _target_: bliss.encoder.metrics.SourceTypeFilter
-                filter_type: "galaxy"
-          source_type_accuracy:
-            _target_: bliss.encoder.metrics.SourceTypeAccuracy
-            flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-          detection_performance_one_source_mask:
-            _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            bin_unit_is_flux: true
-            filter_list:
-              - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-                filter_source_count: "1m"
-          detection_performance_two_sources_mask:
-            _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            bin_unit_is_flux: true
-            filter_list:
-              - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-                filter_source_count: "2m"
-          detection_performance_more_than_two_sources_mask:
-            _target_: bliss.encoder.metrics.DetectionPerformance
-            mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-            bin_unit_is_flux: true
-            filter_list:
-              - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-                filter_source_count: "2plus"
-          flux_error:
-            _target_: bliss.encoder.metrics.FluxError
-            survey_bands: ${encoder.survey_bands}
-    sample_metrics: ${encoder.mode_metrics}
+        metrics: ${metrics}
+    sample_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        compute_groups: false
+        metrics: ${metrics}
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
@@ -125,16 +133,16 @@ encoder:
             restrict_batch: 0
             tiles_to_crop: 0
             tile_slen: ${surveys.dc2.tile_slen}
-    use_double_detect: false
-    use_checkerboard: false
+    use_double_detect: true
+    use_checkerboard: true
 
 train:
     trainer:
         logger:
             name: DC2_cataloging_exp_07
-            version: exp_07-09-1  # change it before running the code
-        devices: [7]  # change it before running the code
+            version: exp_07-11-2  # change it before running the code
+        devices: [4, 5]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
     data_source: ${surveys.dc2}
     pretrained_weights: null
-    seed: 8282
+    seed: 9292

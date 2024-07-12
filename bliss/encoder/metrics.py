@@ -156,18 +156,20 @@ class DetectionPerformance(FilterMetric):
 
     def __init__(
         self,
-        mag_band: int = 2,
-        mag_bin_cutoffs: list = None,
-        bin_unit_is_flux: bool = False,
+        bin_cutoffs: list = None,
+        ref_band: int = 2,
+        bin_type: str = "Flux",
         exclude_last_bin: bool = False,
         filter_list: List[CatFilter] = None,
     ):
         super().__init__(filter_list if filter_list else [NullFilter()])
 
-        self.mag_band = mag_band
-        self.mag_bin_cutoffs = mag_bin_cutoffs if mag_bin_cutoffs else []
-        self.bin_unit_is_flux = bin_unit_is_flux
+        self.bin_cutoffs = bin_cutoffs if bin_cutoffs else []
+        self.ref_band = ref_band
+        self.bin_type = bin_type
         self.exclude_last_bin = exclude_last_bin
+
+        assert self.bin_type in {"Flux", "Mag", "Blendedness"}, "invalid bin type"
 
         detection_metrics = [
             "n_true_sources",
@@ -176,7 +178,7 @@ class DetectionPerformance(FilterMetric):
             "n_est_matches",
         ]
         for metric in detection_metrics:
-            n_bins = len(self.mag_bin_cutoffs) + 1  # fencepost
+            n_bins = len(self.bin_cutoffs) + 1  # fencepost
             init_val = torch.zeros(n_bins)
             self.add_state(metric, default=init_val, dist_reduce_fx="sum")
 
@@ -184,20 +186,33 @@ class DetectionPerformance(FilterMetric):
         assert isinstance(true_cat, FullCatalog), "true_cat should be FullCatalog"
         assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
 
-        if self.mag_band is not None:
-            true_mags = true_cat.on_fluxes if self.bin_unit_is_flux else true_cat.magnitudes
-            true_mags = true_mags[:, :, self.mag_band].contiguous()
-            est_mags = est_cat.on_fluxes if self.bin_unit_is_flux else est_cat.magnitudes
-            est_mags = est_mags[:, :, self.mag_band].contiguous()
+        if self.ref_band is not None:
+            if self.bin_type == "Flux":
+                true_bin_measures = true_cat.on_fluxes
+                true_bin_measures = true_bin_measures[:, :, self.ref_band].contiguous()
+                est_bin_measures = est_cat.on_fluxes
+                est_bin_measures = est_bin_measures[:, :, self.ref_band].contiguous()
+            elif self.bin_type == "Mag":
+                true_bin_measures = true_cat.magnitudes
+                true_bin_measures = true_bin_measures[:, :, self.ref_band].contiguous()
+                est_bin_measures = est_cat.magnitudes
+                est_bin_measures = est_bin_measures[:, :, self.ref_band].contiguous()
+            elif self.bin_type == "Blendedness":
+                true_bin_measures = true_cat["Blendedness"]
+                # the blendedness is estimated by LSST, and we only have one set of blendedness
+                est_bin_measures = true_bin_measures
+            else:
+                raise NotImplementedError()
+
         else:
             # hack to match regardless of magnitude; intended for
             # catalogs from surveys with incompatible filter bands
-            true_mags = torch.ones_like(true_cat["plocs"][:, :, 0])
-            est_mags = torch.ones_like(est_cat["plocs"][:, :, 0])
+            true_bin_measures = torch.ones_like(true_cat["plocs"][:, :, 0])
+            est_bin_measures = torch.ones_like(est_cat["plocs"][:, :, 0])
 
         true_filter_bools, est_filter_bools = self.get_filter_bools(true_cat, est_cat)
 
-        cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+        cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
         n_bins = len(cutoffs) + 1
 
         for i in range(true_cat.batch_size):
@@ -210,20 +225,20 @@ class DetectionPerformance(FilterMetric):
             n_true = true_cat["n_sources"][i].sum().item()
             n_est = est_cat["n_sources"][i].sum().item()
 
-            cur_batch_true_mags = true_mags[i, :n_true]
-            cur_batch_est_mags = est_mags[i, :n_est]
+            cur_batch_true_bin_meas = true_bin_measures[i, :n_true]
+            cur_batch_est_bin_meas = est_bin_measures[i, :n_est]
 
             cur_batch_true_filter_bools = true_filter_bools[i, :n_true]
             cur_batch_est_filter_bools = est_filter_bools[i, :n_est]
 
-            tmi = cur_batch_true_mags[cur_batch_true_filter_bools]
-            emi = cur_batch_est_mags[cur_batch_est_filter_bools]
+            tmi = cur_batch_true_bin_meas[cur_batch_true_filter_bools]
+            emi = cur_batch_est_bin_meas[cur_batch_est_filter_bools]
 
             tcat_matches = tcat_matches[cur_batch_true_filter_bools[tcat_matches]]
             ecat_matches = ecat_matches[cur_batch_est_filter_bools[ecat_matches]]
 
-            tmim = cur_batch_true_mags[tcat_matches]
-            emim = cur_batch_est_mags[ecat_matches]
+            tmim = cur_batch_true_bin_meas[tcat_matches]
+            emim = cur_batch_est_bin_meas[ecat_matches]
 
             self.n_true_sources += torch.bucketize(tmi, cutoffs).bincount(minlength=n_bins)
             self.n_est_sources += torch.bucketize(emi, cutoffs).bincount(minlength=n_bins)
@@ -293,9 +308,9 @@ class DetectionPerformance(FilterMetric):
         f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
 
         xlabels = (
-            ["< " + str(self.mag_bin_cutoffs[0])]
-            + [f"{self.mag_bin_cutoffs[i + 1]}" for i in range(len(self.mag_bin_cutoffs) - 1)]
-            + ["> " + str(self.mag_bin_cutoffs[-1])]
+            ["< " + str(self.bin_cutoffs[0])]
+            + [f"{self.bin_cutoffs[i + 1]}" for i in range(len(self.bin_cutoffs) - 1)]
+            + ["> " + str(self.bin_cutoffs[-1])]
         )
 
         n_true_sources = self.n_true_sources
@@ -337,7 +352,7 @@ class DetectionPerformance(FilterMetric):
             color=c3,
             label=f"BLISS F1 {fig_tag}",
         )
-        axes[1].set_xlabel("Flux" if self.bin_unit_is_flux else "Magnitudes")
+        axes[1].set_xlabel(self.bin_type)
         axes[1].set_xticks(range(len(xlabels)))
         axes[1].set_xticklabels(xlabels, rotation=45)
         axes[1].set_ylim([0, 1])

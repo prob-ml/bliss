@@ -510,3 +510,7 @@ if "locs" in datum["tile_catalog"]:
 ### 07-09
 
 1. test MultiDetectEncoder (with fast one-to-one match)
+
+### 07-11
+
+1. retrain model

@@ -87,16 +87,12 @@ class DC2DataModule(CachedSimulatedDataModule):
         self.data_in_one_cached_file = data_in_one_cached_file
 
         assert (
-            self.image_lim[0] % self.n_image_split == 0
-        ), "image_lim is not divisible by n_image_split"
-        assert (
-            self.image_lim[1] % self.n_image_split == 0
-        ), "image_lim is not divisible by n_image_split"
-        assert (
             self.image_lim[0] == self.image_lim[1]
         ), "image_lim[0] should be equal to image_lim[1]"
+        assert (
+            self.image_lim[0] % self.n_image_split == 0
+        ), "image_lim is not divisible by n_image_split"
         assert (self.image_lim[0] // self.n_image_split) % self.tile_slen == 0, "invalid tile_slen"
-        assert (self.image_lim[1] // self.n_image_split) % self.tile_slen == 0, "invalid tile_slen"
 
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
@@ -252,6 +248,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             "galaxy_fluxes",
             "star_fluxes",
             "redshifts",
+            "blendedness",
             "one_source_mask",
             "two_sources_mask",
             "more_than_two_sources_mask",
@@ -341,6 +338,7 @@ class DC2FullCatalog(FullCatalog):
         galaxy_bools = torch.from_numpy((catalog["truth_type"] == 1).values)
         star_bools = torch.from_numpy((catalog["truth_type"] == 2).values)
         flux, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
+        blendedness = torch.from_numpy(catalog["blendedness"].values)
         do_have_redshifts = catalog.get("redshifts", "")
         if do_have_redshifts:
             redshifts = torch.from_numpy(catalog["redshifts"].values)
@@ -354,6 +352,7 @@ class DC2FullCatalog(FullCatalog):
         source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
         star_fluxes = flux[star_galaxy_filter]
         galaxy_fluxes = flux[star_galaxy_filter]
+        blendedness = blendedness[star_galaxy_filter]
         if do_have_redshifts:
             redshifts = redshifts[star_galaxy_filter]
 
@@ -368,6 +367,7 @@ class DC2FullCatalog(FullCatalog):
         source_type = source_type[plocs_mask]
         star_fluxes = star_fluxes[plocs_mask]
         galaxy_fluxes = galaxy_fluxes[plocs_mask]
+        blendedness = blendedness[plocs_mask]
         if do_have_redshifts:
             redshifts = redshifts[plocs_mask]
 
@@ -381,6 +381,7 @@ class DC2FullCatalog(FullCatalog):
             "redshifts": redshifts,
             "galaxy_fluxes": galaxy_fluxes.reshape(1, nobj, kwargs["n_bands"]),
             "star_fluxes": star_fluxes.reshape(1, nobj, kwargs["n_bands"]),
+            "blendedness": blendedness.reshape(1, nobj, 1),
         }
 
         return cls(height, width, d), psf_params, match_id
