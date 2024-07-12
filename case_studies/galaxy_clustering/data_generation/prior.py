@@ -96,15 +96,15 @@ class Prior:
         source_types,
         membership,
     ):
-        """Makes a background catalog from generated samples.
+        """Makes a catalog from generated samples.
 
         Args:
             flux_samples: flux samples in all bands
             hlr_samples: samples of HLR
             g1_size_samples: samples of G1
             g2_size_samples: samples of G2
-            gal_locs: samples of background locations in galactic coordinates
-            cartesian_locs: samples of background locations in cartesian coordinates
+            gal_locs: samples of locations in galactic coordinates
+            cartesian_locs: samples of locations in cartesian coordinates
             source_types: source types for each source (0 for star, 1 for galaxy)
             membership: background (0) or cluster (1)
 
@@ -266,15 +266,9 @@ class BackgroundPrior(Prior):
     def sample_des_catalog(self):
         """Sample a random DES dataframe."""
         tile_choice = random.choice(DES_SUBDIRS)
-        main_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_main.fits")
-        flux_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_flux.fits")
-        main_data = fits.getdata(main_path)
-        main_df = pd.DataFrame(main_data)
-        flux_data = fits.getdata(flux_path)
-        flux_df = pd.DataFrame(flux_data)
-        self.source_df = pd.merge(
-            main_df, flux_df, left_on="COADD_OBJECT_ID", right_on="COADD_OBJECT_ID", how="left"
-        )
+        catalog_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_main.fits")
+        catalog_data = fits.getdata(catalog_path)
+        self.source_df = pd.DataFrame(catalog_data)
 
     def sample_sources(self, n_sources):
         """Samples random sources from the current DES catalog.
@@ -335,17 +329,18 @@ class BackgroundPrior(Prior):
         Returns:
             5-band array containing fluxes (clamped at 1 from below)
         """
-        fluxes = np.array(
+        mags = np.array(
             sources[
                 [
-                    "FLUX_AUTO_G_x",
-                    "FLUX_AUTO_R_x",
-                    "FLUX_AUTO_I_x",
-                    "FLUX_AUTO_Z_x",
+                    "MAG_AUTO_G",
+                    "MAG_AUTO_R",
+                    "MAG_AUTO_I",
+                    "MAG_AUTO_Z",
                 ]
             ]
         )
 
+        fluxes = 1000 * convert_mag_to_nmgy(mags)
         return fluxes * (fluxes > 0)
 
     def sample_background(self):
