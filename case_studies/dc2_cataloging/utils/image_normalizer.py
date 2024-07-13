@@ -152,15 +152,9 @@ class FixedThresholdsAsinhImageNormalizer:
     def __init__(
         self,
         bands: list,
-        include_original: bool,
-        include_background: bool,
-        concat_psf_params: bool,
-        num_psf_params: int,
-        log_transform_stdevs: list,
-        use_clahe: bool,
-        clahe_min_stdev: float,
         asinh_params: Dict[str, float],
     ):
+        self.bands = bands
         self.asinh_params = asinh_params
 
         assert self.asinh_params, "asinh_params can't be None"
@@ -177,9 +171,7 @@ class FixedThresholdsAsinhImageNormalizer:
 
     def get_input_tensor(self, batch):
         raw_images = batch["images"][:, self.bands].unsqueeze(2)
-
         self.asinh_thresholds_tensor = self.asinh_thresholds_tensor.to(device=raw_images.device)
-
         filtered_images = raw_images - self.asinh_thresholds_tensor
         processed_images = filtered_images * self.asinh_params["scale"]
         return torch.asinh(processed_images)
