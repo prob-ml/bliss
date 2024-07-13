@@ -140,6 +140,7 @@ class SloanDigitalSkySurvey(Survey):
                     r1, r2, c1, c2 = self.crop_config
                     item[k] = item[k][:, r1:r2, c1:c2]
                 item[k] = self._crop_image(item[k])
+            item["psf_params"] = self.psf.psf_params[self.image_id(idx)]
             self.items[idx] = item
         return self.items[idx]
 

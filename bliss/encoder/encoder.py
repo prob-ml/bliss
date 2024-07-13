@@ -10,7 +10,6 @@ from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.convnets import CatalogNet, FeaturesNet
-from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDist
 from bliss.global_env import GlobalEnv
@@ -28,7 +27,7 @@ class Encoder(pl.LightningModule):
         self,
         survey_bands: list,
         tile_slen: int,
-        image_normalizer: ImageNormalizer,
+        image_normalizers: list,
         var_dist: VariationalDist,
         matcher: CatalogMatcher,
         sample_image_renders: MetricCollection,
@@ -47,7 +46,7 @@ class Encoder(pl.LightningModule):
         Args:
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
-            image_normalizer: object that applies input transforms to images
+            image_normalizers: collection of objects that applies input transforms to images
             var_dist: object that makes a variational distribution from raw convnet output
             matcher: for matching predicted catalogs to ground truth catalogs
             sample_image_renders: for plotting relevant images (overlays, shear maps)
@@ -65,7 +64,7 @@ class Encoder(pl.LightningModule):
 
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
-        self.image_normalizer = image_normalizer
+        self.image_normalizers = torch.nn.ModuleList(image_normalizers.values())
         self.var_dist = var_dist
         self.mode_metrics = mode_metrics
         self.sample_metrics = sample_metrics
@@ -90,12 +89,11 @@ class Encoder(pl.LightningModule):
 
     def initialize_networks(self):
         assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
-
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         num_features = 256
-
         self.features_net = FeaturesNet(
             n_bands=len(self.survey_bands),
-            ch_per_band=self.image_normalizer.num_channels_per_band(),
+            ch_per_band=ch_per_band,
             num_features=num_features,
             double_downsample=(self.tile_slen == 4),
         )
@@ -126,6 +124,15 @@ class Encoder(pl.LightningModule):
             masked_history = torch.stack(masked_history_lst, dim=1)
 
         return torch.concat([detection_id, history_mask.unsqueeze(1), masked_history], dim=1)
+
+    def get_features(self, batch):
+        assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
+        assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
+
+        input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
+        inputs = torch.cat(input_lst, dim=2)
+
+        return self.features_net(inputs)
 
     def sample_first_detection(self, x_features, use_mode=True):
         batch_size, _n_features, ht, wt = x_features.shape[0:4]
@@ -158,8 +165,7 @@ class Encoder(pl.LightningModule):
         return est_cat2
 
     def sample(self, batch, use_mode=True):
-        x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.features_net(x)
+        x_features = self.get_features(batch)
 
         est_cat = self.sample_first_detection(x_features, use_mode=use_mode)
 
@@ -191,8 +197,7 @@ class Encoder(pl.LightningModule):
             band=self.reference_band, exclude_num=1
         )
 
-        x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.features_net(x)
+        x_features = self.get_features(batch)
 
         loss = torch.zeros_like(x_features[:, 0, :, :])
 

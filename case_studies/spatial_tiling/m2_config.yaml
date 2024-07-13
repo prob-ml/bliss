@@ -40,16 +40,13 @@ encoder:
     reference_band: 0
     min_flux_for_loss: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
     min_flux_for_metrics: 0.9419
+    use_checkerboard: true
     use_double_detect: true
-    image_normalizer:
-        log_transform_stdevs: null
-        asinh_cutoffs: [3.2974e+00, 7.5877e+01, 1.2642e+02, 1.7975e+02, 2.4340e+02, 3.2515e+02,
-            4.3817e+02, 6.1258e+02, 9.3131e+02, 1.7869e+03, 1.3727e+04, 9.1571e+04,
-            3.4912e+05, 6.7166e+05]
-        include_original: false
-        include_background: false
-        concat_psf_params: false
-        use_clahe: true
+    image_normalizers:
+        - _target_: bliss.encoder.image_normalizer.ClaheNormalizer
+          min_stdev: 200
+        - _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+          q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 0.5
@@ -124,7 +121,6 @@ cached_simulator:
 train:
     trainer:
         precision: 32-true
-        accumulate_grad_batches: 1
     seed: null
 
 predict:
