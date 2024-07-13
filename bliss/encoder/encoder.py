@@ -46,7 +46,7 @@ class Encoder(pl.LightningModule):
         Args:
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
-            image_normalizers: list of objects that applies input transforms to images
+            image_normalizers: collection of objects that applies input transforms to images
             var_dist: object that makes a variational distribution from raw convnet output
             matcher: for matching predicted catalogs to ground truth catalogs
             sample_image_renders: for plotting relevant images (overlays, shear maps)
@@ -64,7 +64,7 @@ class Encoder(pl.LightningModule):
 
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
-        self.image_normalizers = torch.nn.ModuleList(image_normalizers)
+        self.image_normalizers = torch.nn.ModuleList(image_normalizers.values())
         self.var_dist = var_dist
         self.mode_metrics = mode_metrics
         self.sample_metrics = sample_metrics

@@ -169,9 +169,9 @@ class TestDecalsCatalog:
         sample_file = (
             Path(cfg.paths.decals) / brickname[:3] / brickname / f"tractor-{brickname}.fits"
         )
-        the_cfg = cfg.copy()
-        the_cfg.predict.dataset = cfg.surveys.decals
-        decals = instantiate(the_cfg.predict.dataset)
+        cfg = cfg.copy()
+        cfg.predict.dataset = cfg.surveys.decals
+        decals = instantiate(cfg.predict.dataset)
         decals_cat = TractorFullCatalog.from_file(
             cat_path=sample_file,
             wcs=decals[0]["wcs"][DECaLS.BANDS.index("r")],
