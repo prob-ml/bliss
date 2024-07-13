@@ -71,7 +71,7 @@ class TestMetrics:
             batch = {
                 "images": prep_image(image),
                 "background": prep_image(background),
-                "psf_params": sdss[0]["psf_params"],
+                "psf_params": sdss[0]["psf_params"].to(device=cfg.predict.device),
             }
             encoder.eval()
             encoder = encoder.float()
