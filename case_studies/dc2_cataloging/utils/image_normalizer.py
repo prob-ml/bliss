@@ -2,32 +2,14 @@ from typing import Dict
 
 import torch
 
-from bliss.encoder.image_normalizer import ImageNormalizer
 
-
-class DynamicAsinhImageNormalizer(ImageNormalizer):
+class DynamicAsinhImageNormalizer:
     def __init__(
         self,
         bands: list,
-        include_original: bool,
-        include_background: bool,
-        concat_psf_params: bool,
-        num_psf_params: int,
-        log_transform_stdevs: list,
-        use_clahe: bool,
-        clahe_min_stdev: float,
         asinh_params: Dict[str, float],
     ):
-        super().__init__(
-            bands,
-            include_original,
-            include_background,
-            concat_psf_params,
-            num_psf_params,
-            log_transform_stdevs,
-            use_clahe,
-            clahe_min_stdev,
-        )
+        self.bands = bands
         self.asinh_params = asinh_params
 
         assert self.asinh_params, "asinh_params can't be None"
@@ -43,11 +25,9 @@ class DynamicAsinhImageNormalizer(ImageNormalizer):
         self.asinh_thresholds_tensor = torch.nn.Parameter(thresholds, requires_grad=True)
 
     def num_channels_per_band(self):
-        pre_nch = super().num_channels_per_band()
-        return pre_nch + len(self.asinh_params["thresholds"])
+        return len(self.asinh_params["thresholds"])
 
     def get_input_tensor(self, batch):
-        pre_input_tensor = super().get_input_tensor(batch)
         raw_images = batch["images"][:, self.bands].unsqueeze(2)
 
         asinh_thresholds_tensor = self.asinh_thresholds_tensor.detach()
@@ -55,37 +35,16 @@ class DynamicAsinhImageNormalizer(ImageNormalizer):
         processed_images = filtered_images * self.asinh_params["scale"]
         processed_images = torch.asinh(processed_images)
 
-        if pre_input_tensor is not None:
-            input_tensor = torch.cat((pre_input_tensor, processed_images), dim=2)
-        else:
-            input_tensor = processed_images
-
-        return input_tensor, self.asinh_thresholds_tensor.squeeze().unsqueeze(0)
+        return processed_images, self.asinh_thresholds_tensor.squeeze().unsqueeze(0)
 
 
-class MovingAvgAsinhImageNormalizer(ImageNormalizer):
+class MovingAvgAsinhImageNormalizer:
     def __init__(
         self,
         bands: list,
-        include_original: bool,
-        include_background: bool,
-        concat_psf_params: bool,
-        num_psf_params: int,
-        log_transform_stdevs: list,
-        use_clahe: bool,
-        clahe_min_stdev: float,
         asinh_params: Dict[str, float],
     ):
-        super().__init__(
-            bands,
-            include_original,
-            include_background,
-            concat_psf_params,
-            num_psf_params,
-            log_transform_stdevs,
-            use_clahe,
-            clahe_min_stdev,
-        )
+        self.bands = bands
         self.asinh_params = asinh_params
 
         assert self.asinh_params, "asinh_params can't be None"
@@ -104,11 +63,9 @@ class MovingAvgAsinhImageNormalizer(ImageNormalizer):
         self.asinh_thresholds_buffer = torch.full(buffer_shape, torch.nan)
 
     def num_channels_per_band(self):
-        pre_nch = super().num_channels_per_band()
-        return pre_nch + len(self.asinh_params["thresholds"])
+        return len(self.asinh_params["thresholds"])
 
     def get_input_tensor(self, batch):
-        pre_input_tensor = super().get_input_tensor(batch)
         raw_images = batch["images"][:, self.bands].unsqueeze(2)
 
         self.asinh_thresholds_tensor = self.asinh_thresholds_tensor.to(device=raw_images.device)
@@ -128,39 +85,16 @@ class MovingAvgAsinhImageNormalizer(ImageNormalizer):
 
         filtered_images = raw_images - self.asinh_thresholds_tensor
         processed_images = filtered_images * self.asinh_params["scale"]
-        processed_images = torch.asinh(processed_images)
-
-        if pre_input_tensor is not None:
-            input_tensor = torch.cat((pre_input_tensor, processed_images), dim=2)
-        else:
-            input_tensor = processed_images
-
-        return input_tensor
+        return torch.asinh(processed_images)
 
 
-class PerbandMovingAvgAsinhImageNormalizer(ImageNormalizer):
+class PerbandMovingAvgAsinhImageNormalizer:
     def __init__(
         self,
         bands: list,
-        include_original: bool,
-        include_background: bool,
-        concat_psf_params: bool,
-        num_psf_params: int,
-        log_transform_stdevs: list,
-        use_clahe: bool,
-        clahe_min_stdev: float,
         asinh_params: Dict[str, float],
     ):
-        super().__init__(
-            bands,
-            include_original,
-            include_background,
-            concat_psf_params,
-            num_psf_params,
-            log_transform_stdevs,
-            use_clahe,
-            clahe_min_stdev,
-        )
+        self.bands = bands
         self.asinh_params = asinh_params
 
         assert self.asinh_params, "asinh_params can't be None"
@@ -181,11 +115,9 @@ class PerbandMovingAvgAsinhImageNormalizer(ImageNormalizer):
         self.asinh_thresholds_buffer = torch.full(buffer_shape, torch.nan)
 
     def num_channels_per_band(self):
-        pre_nch = super().num_channels_per_band()
-        return pre_nch + len(self.asinh_params["thresholds"])
+        return len(self.asinh_params["thresholds"])
 
     def get_input_tensor(self, batch):
-        pre_input_tensor = super().get_input_tensor(batch)
         raw_images = batch["images"][:, self.bands].unsqueeze(2)
 
         self.asinh_thresholds_tensor = self.asinh_thresholds_tensor.to(device=raw_images.device)
@@ -213,17 +145,10 @@ class PerbandMovingAvgAsinhImageNormalizer(ImageNormalizer):
 
         filtered_images = raw_images - self.asinh_thresholds_tensor
         processed_images = filtered_images * self.asinh_params["scale"]
-        processed_images = torch.asinh(processed_images)
-
-        if pre_input_tensor is not None:
-            input_tensor = torch.cat((pre_input_tensor, processed_images), dim=2)
-        else:
-            input_tensor = processed_images
-
-        return input_tensor
+        return torch.asinh(processed_images)
 
 
-class FixedThresholdsAsinhImageNormalizer(ImageNormalizer):
+class FixedThresholdsAsinhImageNormalizer:
     def __init__(
         self,
         bands: list,
@@ -236,16 +161,6 @@ class FixedThresholdsAsinhImageNormalizer(ImageNormalizer):
         clahe_min_stdev: float,
         asinh_params: Dict[str, float],
     ):
-        super().__init__(
-            bands,
-            include_original,
-            include_background,
-            concat_psf_params,
-            num_psf_params,
-            log_transform_stdevs,
-            use_clahe,
-            clahe_min_stdev,
-        )
         self.asinh_params = asinh_params
 
         assert self.asinh_params, "asinh_params can't be None"
@@ -258,22 +173,13 @@ class FixedThresholdsAsinhImageNormalizer(ImageNormalizer):
         )
 
     def num_channels_per_band(self):
-        pre_nch = super().num_channels_per_band()
-        return pre_nch + len(self.asinh_params["thresholds"])
+        return len(self.asinh_params["thresholds"])
 
     def get_input_tensor(self, batch):
-        pre_input_tensor = super().get_input_tensor(batch)
         raw_images = batch["images"][:, self.bands].unsqueeze(2)
 
         self.asinh_thresholds_tensor = self.asinh_thresholds_tensor.to(device=raw_images.device)
 
         filtered_images = raw_images - self.asinh_thresholds_tensor
         processed_images = filtered_images * self.asinh_params["scale"]
-        processed_images = torch.asinh(processed_images)
-
-        if pre_input_tensor is not None:
-            input_tensor = torch.cat((pre_input_tensor, processed_images), dim=2)
-        else:
-            input_tensor = processed_images
-
-        return input_tensor
+        return torch.asinh(processed_images)
