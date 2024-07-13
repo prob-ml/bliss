@@ -68,7 +68,11 @@ class TestMetrics:
             return torch.from_numpy(x).float().unsqueeze(0).to(device=cfg.predict.device)
 
         with torch.no_grad():
-            batch = {"images": prep_image(image), "background": prep_image(background)}
+            batch = {
+                "images": prep_image(image),
+                "background": prep_image(background),
+                "psf_params": sdss[0]["psf_params"].to(device=cfg.predict.device),
+            }
             encoder.eval()
             encoder = encoder.float()
             bliss_cat = encoder.sample(batch, use_mode=True)

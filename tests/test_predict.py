@@ -27,15 +27,15 @@ class TestPredict:
         method_str = "bliss.surveys.sdss.SloanDigitalSkySurvey._crop_image"
         monkeypatch.setattr(method_str, crop)
 
-        the_cfg = cfg.copy()
-        the_cfg.surveys.sdss.fields = [
+        cfg = cfg.copy()
+        cfg.surveys.sdss.fields = [
             {"run": 94, "camcol": 1, "fields": [12]},
             {"run": 3635, "camcol": 1, "fields": [169]},
         ]
-        bliss_cats = predict(the_cfg.predict)
-        assert len(bliss_cats) == len(the_cfg.surveys.sdss.fields)
+        bliss_cats = predict(cfg.predict)
+        assert len(bliss_cats) == len(cfg.surveys.sdss.fields)
 
         mode_cats = [c["mode_cat"] for c in bliss_cats.values()]
         bands = cfg.encoder.survey_bands
         astropy_cats = [c.to_full_catalog().to_astropy_table(bands) for c in mode_cats]
-        assert len(astropy_cats) == len(the_cfg.surveys.sdss.fields)
+        assert len(astropy_cats) == len(cfg.surveys.sdss.fields)

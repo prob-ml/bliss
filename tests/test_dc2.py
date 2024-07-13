@@ -171,17 +171,13 @@ class TestDC2:
         GlobalEnv.current_encoder_epoch = None
 
     def test_train_on_dc2(self, cfg):
-        train_dc2_cfg = cfg.copy()
-        train_dc2_cfg.encoder.survey_bands = ["u", "g", "r", "i", "z", "y"]
-        train_dc2_cfg.train.data_source = train_dc2_cfg.surveys.dc2
-        train_dc2_cfg.train.pretrained_weights = None
-        # log transform doesn't work in this test because the DC2 background is sometimes negative.
-        # why would the background be negative? are we using the wrong background estimate?
-        train_dc2_cfg.encoder.image_normalizer.log_transform_stdevs = []
-        train_dc2_cfg.encoder.image_normalizer.use_clahe = True
-        train_dc2_cfg.encoder.image_normalizer.include_background = False
+        cfg = cfg.copy()
+        cfg.encoder.survey_bands = ["u", "g", "r", "i", "z", "y"]
+        cfg.train.data_source = cfg.surveys.dc2
+        cfg.train.pretrained_weights = None
+        cfg.encoder.image_normalizers.psf.num_psf_params = 4
 
-        train_dc2_cfg.encoder.var_dist.factors = [
+        cfg.encoder.var_dist.factors = [
             {
                 "_target_": "bliss.encoder.variational_dist.BernoulliFactor",
                 "name": "n_sources",
@@ -221,8 +217,8 @@ class TestDC2:
             },
         ]
 
-        for f in train_dc2_cfg.variational_factors:
+        for f in cfg.variational_factors:
             if f.name in {"star_fluxes", "galaxy_fluxes"}:
                 f.dim = 6
 
-        train(train_dc2_cfg.train)
+        train(cfg.train)

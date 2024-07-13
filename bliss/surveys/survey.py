@@ -71,7 +71,7 @@ class SurveyPredictIterator:
 
     def __getitem__(self, idx):
         x = self.survey[idx]
-        return {"images": x["image"], "background": x["background"]}
+        return {"images": x["image"], "background": x["background"], "psf_params": x["psf_params"]}
 
     def __len__(self):
         return len(self.survey)
