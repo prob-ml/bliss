@@ -82,12 +82,12 @@ class WeakLensingEncoder(Encoder):
             tile_slen=self.tile_slen,
         )
         self.catalog_net = CatalogNet(
-            num_features=num_features,
+            num_features=num_features * 3,
             out_channels=self.var_dist.n_params_per_source,
         )
 
     def make_context(self, history_cat, history_mask):
-        return torch.zeros((1, 6, 8, 8))  # TODO: make dynamic based on slen
+        return torch.zeros((1, 6, 1, 1))  # TODO: make dynamic based on slen
 
     def sample(self, batch, use_mode=True):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]

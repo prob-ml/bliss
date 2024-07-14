@@ -41,9 +41,11 @@ class FeaturesNet(nn.Module):
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),
             ConvBlock(512, 256, kernel_size=1, padding=0),
-            nn.Upsample(scale_factor=2, mode="nearest"),  # 4
-            C3(768, num_features, n=3, shortcut=False),
-            # C3(256, num_features, n=3, shortcut=False), # fix back after
+            # nn.Upsample(scale_factor=2, mode="nearest"),  # 4
+            # C3(768, num_features, n=3, shortcut=False),
+            C3(256, num_features, n=3, shortcut=False), # fix back after
+            # nn.Linear(768, 256),
+            # (768, num_features, kernel_size=1, padding=0),
         ]
         self.u_net = nn.ModuleList(u_net_layers)
 
