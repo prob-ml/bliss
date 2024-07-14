@@ -28,9 +28,6 @@ class TestGenerate:
             assert isinstance(
                 cached_dataset[0]["images"], torch.Tensor
             ), "cached_dataset[0]['images'] must be a torch.Tensor"
-            assert isinstance(
-                cached_dataset[0]["background"], torch.Tensor
-            ), "cached_dataset[0]['background'] must be a torch.Tensor"
             correct_len = cfg.generate.n_batches_per_file * cfg.generate.simulator.prior.batch_size
             assert len(cached_dataset) == correct_len, (
                 f"cached_dataset has length {len(cached_dataset)}, "
@@ -40,10 +37,6 @@ class TestGenerate:
                 len(cached_dataset[0]["images"]) == 5
             ), "cached_dataset[0]['images'] must be a 5-D tensor"
             assert cached_dataset[0]["images"][0].shape == (
-                cfg.simulator.prior.n_tiles_h * cfg.simulator.prior.tile_slen,
-                cfg.simulator.prior.n_tiles_w * cfg.simulator.prior.tile_slen,
-            )
-            assert cached_dataset[0]["background"][0].shape == (
                 cfg.simulator.prior.n_tiles_h * cfg.simulator.prior.tile_slen,
                 cfg.simulator.prior.n_tiles_w * cfg.simulator.prior.tile_slen,
             )

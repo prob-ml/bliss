@@ -30,7 +30,6 @@ FileDatum = TypedDict(
     {
         "tile_catalog": TileCatalog,
         "images": torch.Tensor,
-        "background": torch.Tensor,
         "psf_params": torch.Tensor,
     },
 )
@@ -62,7 +61,6 @@ class OneBandTransform(torch.nn.Module):
     def __call__(self, datum_in):
         datum_out = {
             "images": datum_in["images"][self.band_idx : self.band_idx + 1],
-            "background": datum_in["background"][self.band_idx : self.band_idx + 1],
             "psf_params": datum_in["psf_params"][self.band_idx : self.band_idx + 1],
         }
 

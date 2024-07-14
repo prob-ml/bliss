@@ -1,5 +1,5 @@
 import warnings
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 import pytorch_lightning as pl
@@ -8,8 +8,6 @@ from torch import Tensor
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
-from bliss.align import align
-from bliss.catalog import TileCatalog
 from bliss.simulator.decoder import ImageDecoder
 from bliss.simulator.prior import CatalogPrior
 from bliss.surveys.survey import Survey
@@ -26,7 +24,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         survey: Survey,
         prior: CatalogPrior,
         n_batches: int,
-        use_coaddition: bool = False,
         coadd_depth: int = 1,
         num_workers: int = 0,
         valid_n_batches: Optional[int] = None,
@@ -38,28 +35,18 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         survey.prepare_data()
 
         self.catalog_prior = prior
-        self.background = self.survey.background
-        assert self.catalog_prior is not None, "Survey prior cannot be None."
-        assert self.background is not None, "Survey background cannot be None."
         self.catalog_prior.requires_grad_(False)
-        self.background.requires_grad_(False)
 
-        assert survey.psf is not None, "Survey psf cannot be None."
-        assert survey.pixel_shift is not None, "Survey pixel_shift cannot be None."
-        assert (
-            survey.flux_calibration_dict is not None
-        ), "Survey flux_calibration_dict cannot be None."
         self.image_decoder = ImageDecoder(
             psf=survey.psf,
             bands=survey.BANDS,
+            background=self.survey.background,
             pixel_shift=survey.pixel_shift,
             flux_calibration_dict=survey.flux_calibration_dict,
             ref_band=prior.reference_band,
         )
 
         self.n_batches = n_batches
-        self.batch_size = self.catalog_prior.batch_size
-        self.use_coaddition = use_coaddition
         self.coadd_depth = coadd_depth
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
@@ -67,74 +54,13 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
 
         self.image_ids = self.survey.image_ids()
 
-    def randomized_image_ids(self, num_samples=1) -> Tuple[List[Any], np.ndarray]:
-        """Get random image_id from loaded params.
-
-        Args:
-            num_samples (int, optional): number of random samples to get. Defaults to 1.
-
-        Returns:
-            Tuple[List[Any], np.ndarray]: tuple of image_ids and their corresponding
-                `self.image_ids` indices.
-        """
+    def randomized_image_ids(self, num_samples=1):
+        """Get random image_id from loaded params."""
         n = np.random.randint(len(self.image_ids), size=(num_samples,), dtype=int)
         # reorder self.image_ids to match the order of the sampled indices
         return [self.image_ids[i] for i in n], n
 
-    def apply_noise(self, images_mean):
-        images_mean = torch.clamp(images_mean, min=1e-6)
-        images = torch.sqrt(images_mean) * torch.randn_like(images_mean)
-        images += images_mean
-        return images
-
-    def coadd_images(self, images):
-        batch_size = images.shape[0]
-        assert self.coadd_depth > 1, "Coadd depth must be > 1 to use coaddition."
-        coadded_images = np.zeros((batch_size, *images.shape[-3:]))  # 4D
-        for b in range(batch_size):
-            coadded_images[b] = self.survey.coadd_images(images[b])
-        return torch.from_numpy(coadded_images).float()
-
-    def align_images(self, images, wcs_batch):
-        """Align images to the reference depth and band."""
-        batch_size = images.shape[0]
-        for b in range(batch_size):
-            aligned_image = align(
-                images[b].numpy(),
-                wcs_list=wcs_batch[b],
-                ref_depth=0,
-                ref_band=self.catalog_prior.reference_band,
-            )
-            images[b] = torch.from_numpy(aligned_image)
-        return images
-
-    def simulate_images(
-        self, tile_catalog: TileCatalog, image_ids, image_id_indices
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
-        """Simulate a batch of images.
-
-        Args:
-            tile_catalog (TileCatalog): The TileCatalog to render.
-            image_ids: List of image_ids to render, in `image_id_indices` order.
-            image_id_indices: Indices in self.image_ids to sample from.
-
-        Returns:
-            Tuple[Tensor, Tensor, Tensor]: tuple of images, backgrounds, and psf parameters.
-        """
-        images, _, psf_params, wcs_batch = self.image_decoder.render_images(
-            tile_catalog, image_ids, self.coadd_depth
-        )
-        images = self.align_images(images, wcs_batch)
-        if self.use_coaddition:
-            images = self.coadd_images(images)
-
-        background = self.background.sample(images.shape, image_id_indices=image_id_indices)
-        images += background
-
-        images = self.apply_noise(images)
-        return images, background, psf_params
-
-    def get_batch(self) -> Dict:
+    def get_batch(self):
         """Get a batch of simulated images.
 
         The images are simulated by first generating a tile catalog from the prior, followed
@@ -146,24 +72,24 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             Dict: A dictionary of the simulated TileCatalog, (batch_size, bands, height, width)
             tensors for images and background, and a (batch_size, 1, 6) tensor for the psf params.
         """
-        assert self.catalog_prior is not None, "Survey prior cannot be None."
-
+        tile_catalog = self.catalog_prior.sample()
         image_ids, image_id_indices = self.randomized_image_ids(self.catalog_prior.batch_size)
-        with torch.no_grad():
-            tile_catalog = self.catalog_prior.sample()
-            images, background, psf_params = self.simulate_images(
-                tile_catalog, image_ids, image_id_indices
-            )
-            return {
-                "tile_catalog": tile_catalog,
-                "images": images,
-                "background": background,
-                "psf_params": psf_params,
-            }
+        images, psf_params = self.image_decoder.render_images(
+            tile_catalog,
+            image_ids,
+            image_id_indices,
+            self.coadd_depth,
+        )
+        return {
+            "tile_catalog": tile_catalog,
+            "images": images,
+            "psf_params": psf_params,
+        }
 
     def __iter__(self):
-        for _ in range(self.n_batches):
-            yield self.get_batch()
+        with torch.no_grad():
+            for _ in range(self.n_batches):
+                yield self.get_batch()
 
     def train_dataloader(self):
         return DataLoader(self, batch_size=None, num_workers=self.num_workers)

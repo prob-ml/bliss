@@ -34,6 +34,14 @@ star_metrics:
         mag_band: 0  # SDSS r-band
         exclude_last_bin: true
 
+nopsf_image_normalizers:
+    clahe:
+        _target_: bliss.encoder.image_normalizer.ClaheNormalizer
+        min_stdev: 200
+    asinh:
+        _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+        q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
 encoder:
     tile_slen: 2
     survey_bands: ['r']
@@ -42,11 +50,7 @@ encoder:
     min_flux_for_metrics: 0.9419
     use_checkerboard: true
     use_double_detect: true
-    image_normalizers:
-        - _target_: bliss.encoder.image_normalizer.ClaheNormalizer
-          min_stdev: 200
-        - _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
-          q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+    image_normalizers: ${nopsf_image_normalizers}
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 0.5

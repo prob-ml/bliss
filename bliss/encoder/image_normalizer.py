@@ -74,7 +74,7 @@ class AsinhQuantileNormalizer(torch.nn.Module):
         return len(self.q)
 
     def get_input_tensor(self, batch):
-        ss_images = batch["images"] - batch["background"]
+        ss_images = batch["images"]  # assumes images are already sky subtracted
 
         if self.training and self.num_updates < 100:
             self.num_updates += 1

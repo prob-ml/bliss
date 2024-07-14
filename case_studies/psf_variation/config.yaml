@@ -4,6 +4,16 @@ defaults:
     - _self_
     - override hydra/job_logging: stdout
 
+prior:
+    star_flux_exponent: 0.43
+    star_flux_truncation: 640  # too low?
+    star_flux_loc: 0.0
+    star_flux_scale: 0.63094948  # also the min becauae star_flux_loc is 0
+    galaxy_flux_truncation: 1013
+    galaxy_flux_exponent: 0.47
+    galaxy_flux_scale: 0.6301037
+    galaxy_flux_loc: 0.0
+
 encoder:
     survey_bands: ["r"]
     tile_slen: 4

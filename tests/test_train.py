@@ -40,7 +40,6 @@ class TestTrain:
         cfg.train.pretrained_weights = None
         cfg.train.testing = True
 
-        cfg.simulator.use_coaddition = True
         cfg.simulator.coadd_depth = 2
         train(cfg.train)
 

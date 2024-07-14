@@ -22,7 +22,8 @@ class TestSdssReconstruct:
             max_sources_per_tile=cfg.simulator.prior.max_sources,
             ignore_extra_sources=True,
         )
-        imgs = decoder.render_images(tile_cat.to("cpu"), rcfs)[0]
+        rcfs_indices = torch.zeros(1, dtype=torch.long)
+        imgs = decoder.render_images(tile_cat.to("cpu"), rcfs, rcfs_indices)[0]
         imgs = torch.squeeze(imgs, dim=1)
         recon_img = imgs[0, SDSS.BANDS.index("r")]
 

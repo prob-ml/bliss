@@ -11,11 +11,10 @@ from bliss.surveys.sdss import nelec_to_nmgy_for_catalog
 
 
 class MockSDSS(pl.LightningDataModule):
-    def __init__(self, image, background, psf_params):
+    def __init__(self, image, psf_params):
         super().__init__()
         self.one_batch = {
             "images": image.squeeze(0),
-            "background": background.squeeze(0),
             "psf_params": psf_params.squeeze(0),
         }
 
@@ -37,31 +36,30 @@ class TestSimulate:
         # extra sources in the image, which causes the test to fail
         image_simulator.apply_noise = lambda img: img
         rcfs, rcf_indices = image_simulator.randomized_image_ids(true_catalog["n_sources"].size(0))
-        image, background, psf_params = image_simulator.simulate_images(
+        image, psf_params = image_simulator.image_decoder.render_images(
             true_catalog, rcfs, rcf_indices
         )
 
         # make predictions on simulated image
         true_catalog = true_catalog.to(cfg.predict.device)
         image = image.to(cfg.predict.device)
-        background = background.to(cfg.predict.device)
         psf_params = psf_params.to(cfg.predict.device)
 
-        sdss = MockSDSS(image, background, psf_params)
+        sdss = MockSDSS(image, psf_params)
         encoder.eval()
         trainer = instantiate(cfg.predict.trainer)
-        est_catalog = trainer.predict(encoder, datamodule=sdss)[0]["mode_cat"]
-        est_catalog = est_catalog.to(cfg.predict.device)
+        mode_cat = trainer.predict(encoder, datamodule=sdss)[0]["mode_cat"]
+        mode_cat = mode_cat.to(cfg.predict.device)
 
         # Compare predicted and true source types
-        assert est_catalog["n_sources"].sum() == 1
-        assert est_catalog.star_bools.sum() == 1
-        assert torch.equal(true_catalog.galaxy_bools, est_catalog.galaxy_bools)
-        assert torch.equal(true_catalog.star_bools, est_catalog.star_bools)
+        assert mode_cat["n_sources"].sum() == 1
+        assert mode_cat.star_bools.sum() == 1
+        assert torch.equal(true_catalog.galaxy_bools, mode_cat.galaxy_bools)
+        assert torch.equal(true_catalog.star_bools, mode_cat.star_bools)
 
         # Convert predicted fluxes from electron counts to nanomaggies for comparison
         flux_ratios = image_simulator.survey.flux_calibration_dict[(94, 1, 12)]
-        est_catalog = nelec_to_nmgy_for_catalog(est_catalog, flux_ratios)
+        mode_cat = nelec_to_nmgy_for_catalog(mode_cat, flux_ratios)
 
         # Compare predicted and true fluxes
         true_star_fluxes = true_catalog["star_fluxes"] * true_catalog.star_bools
@@ -69,8 +67,8 @@ class TestSimulate:
         true_fluxes = true_star_fluxes + true_galaxy_fluxes
         true_fluxes_crop = true_fluxes[0, :, :, 0, 2]
 
-        est_star_fluxes = est_catalog["star_fluxes"] * est_catalog.star_bools
-        est_galaxy_fluxes = est_catalog["galaxy_fluxes"] * est_catalog.galaxy_bools
+        est_star_fluxes = mode_cat["star_fluxes"] * mode_cat.star_bools
+        est_galaxy_fluxes = mode_cat["galaxy_fluxes"] * mode_cat.galaxy_bools
         est_fluxes = est_star_fluxes + est_galaxy_fluxes
         est_fluxes = est_fluxes[0, :, :, 0, 2]
 
@@ -89,12 +87,9 @@ class TestSimulate:
         assert (94, 1, 12) in simulator.image_decoder.psf_galsim.keys()
         assert (3900, 6, 269) in simulator.image_decoder.psf_galsim.keys()
 
-        assert simulator.background.background.size()[0] == 2
-
     def test_multi_band(self, cfg, monkeypatch):
         """Test simulating data with multiple bands."""
         monkeypatch.delattr("requests.get")  # make sure we don't download anything
         simulator = instantiate(cfg.simulator)
         batch = simulator.get_batch()
         assert batch["images"].size(1) == len(SDSS.BANDS)
-        assert batch["background"].size(1) == len(SDSS.BANDS)
