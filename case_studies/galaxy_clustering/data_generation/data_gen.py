@@ -170,11 +170,11 @@ def file_data_gen(cfg):
 # ============================== CLI ==============================
 
 
-@hydra.main(config_path="conf", config_name="gen_config", version_base=None)
+@hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg):
-    catalog_gen(cfg)
-    image_gen(cfg)
-    file_data_gen(cfg)
+    catalog_gen(cfg.data_gen)
+    image_gen(cfg.data_gen)
+    file_data_gen(cfg.data_gen)
 
 
 if __name__ == "__main__":

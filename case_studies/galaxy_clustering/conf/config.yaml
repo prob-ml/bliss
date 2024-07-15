@@ -4,6 +4,14 @@ defaults:
     - _self_
     - override hydra/job_logging: stdout
 
+data_gen:
+    data_dir: /home/kapnadak/bliss/case_studies/galaxy_clustering/data
+    image_size: 1280
+    tile_size: 128
+    nfiles: 2
+    n_catalogs_per_file: 1
+    bands: ["g", "r", "i", "z"]
+    min_flux_for_loss: 0
 
 prior:
     _target_: case_studies.galaxy_clustering.prior.GalaxyClusterPrior
