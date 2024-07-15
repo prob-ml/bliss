@@ -19,7 +19,6 @@ class ImageDecoder(nn.Module):
         bands: Tuple[int, ...],
         background,
         flux_calibration_dict: dict,
-        pixel_shift: int,
         ref_band: int,
     ) -> None:
         """Construct a decoder for a set of images.
@@ -30,7 +29,6 @@ class ImageDecoder(nn.Module):
             background: sky backgrounds for each image and each band
             flux_calibration_dict: dictionary specifying elec count conversions by imageid
             ref_band: reference band for pixel alignment
-            pixel_shift: int indicating parameters for a Unif() to model pixel shifting
         """
 
         super().__init__()
@@ -46,7 +44,6 @@ class ImageDecoder(nn.Module):
 
         self.pixel_scale = psf.pixel_scale
         self.ref_band = ref_band
-        self.shift = pixel_shift
 
         # why is this dict stored as a class attribute, rather than passed to render_images?
         # ditto for the psf parameters above.
@@ -111,7 +108,7 @@ class ImageDecoder(nn.Module):
             SourceType.GALAXY: self.render_galaxy,
         }
 
-    def pixel_shifts(self, coadd_depth: int, n_bands: int, ref_band: int, ref_depth: int = 0):
+    def pixel_shifts(self, coadd_depth: int, n_bands: int, ref_depth: int = 0, no_dither=False):
         """Generate random pixel shifts and corresponding WCS list.
         This function generates `n_shifts` random pixel shifts `shifts` and corresponding WCS list
         `wcs` to undo these shifts, relative to `wcs[ref_band]`.
@@ -120,21 +117,25 @@ class ImageDecoder(nn.Module):
             coadd_depth (int): number of images per band that will be co-added
             ref_depth (int): depth of the reference band
             n_bands (int): number of bands
-            ref_band (int): index of the reference band
+            no_dither (bool): if True, set all shifts to zero (primarily intended for testing)
 
         Returns:
             shifts (np.ndarray): array of pixel shifts
             wcs (List[WCS]): list of WCS objects
         """
-        shifts = np.random.uniform(-self.shift, self.shift, (coadd_depth, n_bands, 2))  # 2 for x, y
-        shifts[ref_depth, ref_band] = np.array([0.0, 0.0])
+        shifts = np.random.uniform(-0.5, 0.5, (coadd_depth, n_bands, 2))
+        shifts[ref_depth, self.ref_band] = np.array([0.0, 0.0])
+        if no_dither:
+            shifts.fill(0.0)
+
         wcs_base = WCS()
         base = np.array([5.0, 5.0])
         wcs_base.wcs.crpix = base
+
         wcs_list = [[] for _ in range(coadd_depth)]
         for d in range(coadd_depth):
             for b in range(n_bands):
-                if d == ref_depth and b == ref_band:
+                if d == ref_depth and b == self.ref_band:
                     wcs_list[d].append(wcs_base.low_level_wcs)
                     continue
                 bnd_wcs = WCS()
@@ -145,7 +146,7 @@ class ImageDecoder(nn.Module):
     def coadd_images(self, images):
         batch_size = images.shape[0]
         assert self.coadd_depth > 1, "Coadd depth must be > 1 to use coaddition."
-        coadded_images = np.zeros((batch_size, *images.shape[-3:]))  # 4D
+        coadded_images = np.zeros((batch_size, *images.shape[-3:]))
         for b in range(batch_size):
             coadded_images[b] = self.survey.coadd_images(images[b])
         return torch.from_numpy(coadded_images).float()
@@ -185,7 +186,9 @@ class ImageDecoder(nn.Module):
                 image=band_img,
             )
 
-    def render_images(self, tile_cat, image_ids, image_id_indices, coadd_depth=1, add_noise=True):
+    def render_images(
+        self, tile_cat, image_ids, image_id_indices, coadd_depth=1, add_dither=True, add_noise=True
+    ):
         """Render images from a tile catalog."""
         tile_cat = copy.deepcopy(tile_cat)  # make a copy to avoid modifying input
         batch_size, n_tiles_h, n_tiles_w = tile_cat["n_sources"].shape
@@ -229,7 +232,9 @@ class ImageDecoder(nn.Module):
             psf = psfs[i]
             for d in range(coadd_depth):
                 depth_band_shifts, depth_band_wcs_list = self.pixel_shifts(
-                    coadd_depth, self.n_bands, self.ref_band
+                    coadd_depth,
+                    self.n_bands,
+                    no_dither=(not add_dither),
                 )
                 wcs_batch.append(depth_band_wcs_list)
                 for band in range(self.n_bands):

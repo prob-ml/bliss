@@ -41,7 +41,6 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             psf=survey.psf,
             bands=survey.BANDS,
             background=self.survey.background,
-            pixel_shift=survey.pixel_shift,
             flux_calibration_dict=survey.flux_calibration_dict,
             ref_band=prior.reference_band,
         )

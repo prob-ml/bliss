@@ -15,7 +15,6 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         self.background = None
         self.psf = None
         self.flux_calibration_dict = None
-        self.pixel_shift = None
 
         self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
 

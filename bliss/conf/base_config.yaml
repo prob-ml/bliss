@@ -200,7 +200,6 @@ surveys:
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
-        pixel_shift: 2
         align_to_band: null  # we should set this to 2 (r-band)
         load_image_data: false
     decals:
@@ -214,7 +213,6 @@ surveys:
         psf_config:
             pixel_scale: 0.262
             psf_slen: 63
-        pixel_shift: 2
     des:
         _target_: bliss.surveys.des.DarkEnergySurvey
         dir_path: ${paths.des}
@@ -231,7 +229,6 @@ surveys:
         psf_config:
             pixel_scale: 0.262
             psf_slen: 63
-        pixel_shift: 2
     dc2:
         _target_: bliss.surveys.dc2.DC2DataModule
         dc2_image_dir: ${paths.dc2}/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
