@@ -2,7 +2,7 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 import hydra
 import numpy as np
@@ -12,7 +12,6 @@ from astropy.io import ascii as astro_ascii
 from astropy.io import fits
 from astropy.table import Table
 
-from bliss.cached_dataset import FileDatum
 from bliss.catalog import FullCatalog
 from case_studies.galaxy_clustering.data_generation.prior import BackgroundPrior, ClusterPrior
 
@@ -98,7 +97,7 @@ def file_data_gen(cfg):
     if not os.path.exists(file_path):
         os.makedirs(file_path)
     n_tiles = int(image_size / tile_size)
-    data: List[FileDatum] = []
+    data: List[Dict] = []
     catalog_counter = 0
     file_counter = 0
 
@@ -151,13 +150,10 @@ def file_data_gen(cfg):
         stacked_image = torch.stack(image_bands, dim=0)
 
         data.append(
-            FileDatum(
-                {
-                    "tile_catalog": tile_catalog_dict,
-                    "images": stacked_image,
-                    "background": stacked_image,
-                }
-            )
+            {
+                "tile_catalog": tile_catalog_dict,
+                "images": stacked_image,
+            }
         )
         catalog_counter += 1
         if catalog_counter == n_catalogs_per_file:
