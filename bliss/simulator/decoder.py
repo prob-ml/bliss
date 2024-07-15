@@ -48,6 +48,8 @@ class ImageDecoder(nn.Module):
         self.ref_band = ref_band
         self.shift = pixel_shift
 
+        # why is this dict stored as a class attribute, rather than passed to render_images?
+        # ditto for the psf parameters above.
         self.flux_calibration_dict = flux_calibration_dict
 
     def render_star(self, psf, band, source_params):
@@ -183,7 +185,7 @@ class ImageDecoder(nn.Module):
                 image=band_img,
             )
 
-    def render_images(self, tile_cat, image_ids, image_id_indices, coadd_depth=1):
+    def render_images(self, tile_cat, image_ids, image_id_indices, coadd_depth=1, add_noise=True):
         """Render images from a tile catalog."""
         tile_cat = copy.deepcopy(tile_cat)  # make a copy to avoid modifying input
         batch_size, n_tiles_h, n_tiles_w = tile_cat["n_sources"].shape
@@ -220,7 +222,7 @@ class ImageDecoder(nn.Module):
         # generate random WCS shifts as manual image dithering via unaligning WCS
         wcs_batch = []
 
-        # this loop is painfully slow and sort of messy; we should interact with
+        # this loop is painfully slow and somewhat messy; we should interact with
         # galsim in a more efficient way
         for i in range(batch_size):
             n_sources = int(full_cat["n_sources"][i].item())
@@ -242,8 +244,10 @@ class ImageDecoder(nn.Module):
                         image_dims=(slen_h, slen_w),
                         shift=depth_band_shifts[d, band],
                     )
-                    poisson_noise = galsim.PoissonNoise(sky_level=0.0)
-                    band_img.addNoise(poisson_noise)
+
+                    if add_noise:
+                        poisson_noise = galsim.PoissonNoise(sky_level=0.0)  # noqa: WPS220
+                        band_img.addNoise(poisson_noise)  # noqa: WPS220
 
                     # we're producing sky subtracted images
                     band_img -= background[i, d, band].numpy()
