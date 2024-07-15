@@ -102,10 +102,11 @@ surveys:
 generate:
     n_image_files: 16
     n_batches_per_file: 16
-    cached_data_path: /data/scratch/regier/m2_full_cat
+    cached_data_path: ${paths.cached_data}
+    store_full_catalog: true
 
 cached_simulator:
-    cached_data_path: /data/scratch/regier/m2_full_cat
+    cached_data_path: ${paths.cached_data}
     batch_size: 10
     num_workers: 8
     train_transforms:

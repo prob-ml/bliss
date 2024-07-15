@@ -6,7 +6,7 @@ import random
 import re
 import warnings
 from copy import copy
-from typing import List, TypedDict
+from typing import List
 
 import pytorch_lightning as pl
 import torch
@@ -14,7 +14,7 @@ from torch import distributed as dist
 from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 from torchvision import transforms
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog
 from bliss.global_env import GlobalEnv
 
 # prevent pytorch_lightning warning for num_workers = 2 in dataloaders with IterableDataset
@@ -23,16 +23,6 @@ warnings.filterwarnings(
 )
 # an IterableDataset isn't supposed to have a __len__ method
 warnings.filterwarnings("ignore", ".*Total length of .* across ranks is zero.*", UserWarning)
-
-
-FileDatum = TypedDict(
-    "FileDatum",
-    {
-        "tile_catalog": TileCatalog,
-        "images": torch.Tensor,
-        "psf_params": torch.Tensor,
-    },
-)
 
 
 class FullCatalogToTileTransform(torch.nn.Module):

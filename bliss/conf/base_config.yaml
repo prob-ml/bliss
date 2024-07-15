@@ -15,7 +15,7 @@ paths:
     decals: /data/scratch/decals
     des: /data/scratch/des
     dc2: /data/scratch/dc2local
-    cached_data: null
+    cached_data: /data/scratch/regier/m2
     output: ${oc.env:HOME}/bliss_output
 
 # this prior is sdss-like, except for the flux distribution, which is easier
@@ -266,6 +266,7 @@ generate:
     simulator: ${simulator}
     cached_data_path: ${paths.cached_data}
     file_prefix: dataset
+    store_full_catalog: false
 
 train:
     trainer:
