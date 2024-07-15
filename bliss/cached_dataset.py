@@ -80,7 +80,7 @@ class OneBandTransform(torch.nn.Module):
 
 class ChunkingSampler(Sampler):
     def __init__(self, dataset: Dataset) -> None:
-        super().__init__()
+        super().__init__(data_source=None)
         assert isinstance(dataset, ChunkingDataset), "dataset should be ChunkingDataset"
         self.dataset = dataset
 

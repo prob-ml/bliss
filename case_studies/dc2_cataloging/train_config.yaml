@@ -6,7 +6,7 @@ defaults:
 
 mode: train
 
-variational_factors:
+my_variational_factors:
   - _target_: bliss.encoder.variational_dist.BernoulliFactor
     name: n_sources
     sample_rearrange: null
@@ -35,7 +35,7 @@ variational_factors:
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
     nll_gating: is_galaxy
 
-metrics:
+my_metrics:
   detection_performance:
     _target_: bliss.encoder.metrics.DetectionPerformance
     bin_cutoffs: [200, 400, 600, 800, 1000]
@@ -82,10 +82,16 @@ metrics:
     _target_: bliss.encoder.metrics.FluxError
     survey_bands: ${encoder.survey_bands}
 
+my_image_normalizers:
+  asinh:
+      _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+      q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
 encoder:
     # _target_: case_studies.dc2_cataloging.utils.encoder.MultiDetectEncoder
     _target_: case_studies.dc2_cataloging.utils.encoder.EncoderAddingSourceMask
     survey_bands: ["u", "g", "r", "i", "z", "y"]
+    reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}
     min_flux_for_loss: 100  # you need to regenerate split_results after changing this number
     min_flux_for_metrics: 100
@@ -94,21 +100,12 @@ encoder:
     scheduler_params:
         milestones: [32]
         gamma: 0.1
-    image_normalizer:
-        _target_: bliss.encoder.image_normalizer.ImageNormalizer
-        include_original: false
-        include_background: false
-        concat_psf_params: false
-        num_psf_params: 4  # for SDSS, 4 for DC2
-        log_transform_stdevs: []
-        use_clahe: false
-        clahe_min_stdev: 200
-        asinh_cutoffs: [-0.3856, -0.1059, -0.0336,  0.0073,  0.0569,  0.1658,  0.6423]
+    image_normalizers: ${my_image_normalizers}
     var_dist:
         # _target_: case_studies.dc2_cataloging.utils.variational_dist.MultiVariationalDist
         _target_: case_studies.dc2_cataloging.utils.variational_dist.VariationalDistReturnProbs
         tile_slen: ${surveys.dc2.tile_slen}
-        factors: ${variational_factors}
+        factors: ${my_variational_factors}
         # repeat_times: 2
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
@@ -119,12 +116,12 @@ encoder:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
         compute_groups: false
-        metrics: ${metrics}
+        metrics: ${my_metrics}
     sample_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
         compute_groups: false
-        metrics: ${metrics}
+        metrics: ${my_metrics}
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
@@ -140,9 +137,10 @@ train:
     trainer:
         logger:
             name: DC2_cataloging_exp_07
-            version: exp_07-11-2  # change it before running the code
-        devices: [4, 5]  # change it before running the code
+            version: exp_07-15-1  # change it before running the code
+        devices: [7]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
+        precision: 32-true
     data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: 9292
