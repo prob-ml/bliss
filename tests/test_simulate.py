@@ -10,18 +10,17 @@ from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 from bliss.surveys.sdss import nelec_to_nmgy_for_catalog
 
 
-class SDSSTest(pl.LightningDataModule):
-    def __init__(self, image, background, cfg):
+class MockSDSS(pl.LightningDataModule):
+    def __init__(self, image, background, psf_params):
         super().__init__()
-        self.items = [{"images": image, "background": background}]
-        self.cfg = cfg
+        self.one_batch = {
+            "images": image.squeeze(0),
+            "background": background.squeeze(0),
+            "psf_params": psf_params.squeeze(0),
+        }
 
     def predict_dataloader(self) -> EVAL_DATALOADERS:
-        images, background = self.items[0].values()
-        batch = {"images": images, "background": background}
-        batch["images"] = batch["images"].squeeze(0)
-        batch["background"] = batch["background"].squeeze(0)
-        return DataLoader([batch], batch_size=1)
+        return DataLoader([self.one_batch], batch_size=1)
 
 
 class TestSimulate:
@@ -38,17 +37,20 @@ class TestSimulate:
         # extra sources in the image, which causes the test to fail
         image_simulator.apply_noise = lambda img: img
         rcfs, rcf_indices = image_simulator.randomized_image_ids(true_catalog["n_sources"].size(0))
-        image, background, _ = image_simulator.simulate_images(true_catalog, rcfs, rcf_indices)
+        image, background, psf_params = image_simulator.simulate_images(
+            true_catalog, rcfs, rcf_indices
+        )
 
         # make predictions on simulated image
         true_catalog = true_catalog.to(cfg.predict.device)
         image = image.to(cfg.predict.device)
         background = background.to(cfg.predict.device)
+        psf_params = psf_params.to(cfg.predict.device)
 
-        sdss_test = SDSSTest(image, background, cfg)
+        sdss = MockSDSS(image, background, psf_params)
         encoder.eval()
         trainer = instantiate(cfg.predict.trainer)
-        est_catalog = trainer.predict(encoder, datamodule=sdss_test)[0]["mode_cat"]
+        est_catalog = trainer.predict(encoder, datamodule=sdss)[0]["mode_cat"]
         est_catalog = est_catalog.to(cfg.predict.device)
 
         # Compare predicted and true source types
