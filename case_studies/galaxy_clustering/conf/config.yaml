@@ -48,18 +48,15 @@ my_metrics:
   cluster_membership_acc:
     _target_: case_studies.galaxy_clustering.encoder.metrics.ClusterMembershipAccuracy
 
+my_image_normalizers:
+    asinh:
+        _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+        q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
 encoder:
     _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
     survey_bands: ["g", "r", "i", "z"]
-    image_normalizer:
-        _target_: bliss.encoder.image_normalizer.ImageNormalizer
-        include_original: true
-        include_background: false
-        concat_psf_params: false
-        num_psf_params: 6  # for SDSS, 4 for DC2
-        log_transform_stdevs: null
-        use_clahe: false
-        clahe_min_stdev: null
+    image_normalizers: ${my_image_normalizers}
     mode_metrics:
       _target_: torchmetrics.MetricCollection
       _convert_: "partial"
