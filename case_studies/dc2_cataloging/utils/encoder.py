@@ -68,10 +68,10 @@ class MultiDetectEncoder(EncoderAddingSourceMask):
         assert not self.use_checkerboard, "we disable checkerboard"
 
         num_features = 256
-
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         self.features_net = FeaturesNet(
-            n_bands=len(self.image_normalizer.bands),
-            ch_per_band=self.image_normalizer.num_channels_per_band(),
+            n_bands=len(self.survey_bands),
+            ch_per_band=ch_per_band,
             num_features=num_features,
             double_downsample=(self.tile_slen == 4),
         )
