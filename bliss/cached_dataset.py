@@ -35,10 +35,11 @@ class FullCatalogToTileTransform(torch.nn.Module):
         datum_out = {k: v for k, v in datum_in.items() if k != "full_catalog"}
 
         h_pixels, w_pixels = datum_in["images"].shape[1:]
-        full_cat = FullCatalog(h_pixels, w_pixels, datum_in["full_catalog"])
+        d1 = {k: v.unsqueeze(0) for k, v in datum_in["full_catalog"].items()}
+        full_cat = FullCatalog(h_pixels, w_pixels, d1)
         tile_cat = full_cat.to_tile_catalog(self.tile_slen, self.max_sources).data
-        d = {k: v.squeeze(0) for k, v in tile_cat.items()}
-        datum_out["tile_catalog"] = d
+        d2 = {k: v.squeeze(0) for k, v in tile_cat.items()}
+        datum_out["tile_catalog"] = d2
 
         return datum_out
 
