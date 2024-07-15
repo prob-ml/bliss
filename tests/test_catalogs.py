@@ -160,6 +160,29 @@ class TestBasicTileAndFullCatalogs:
         assert torch.allclose(cat["galaxy_fluxes"][1, :, 2], torch.tensor([10000.0, 123.0]))
         assert torch.allclose(cat["galaxy_fluxes"][2, :, 2], torch.tensor([124.0, 0.0]))
 
+    def test_tile_full_round_trip(self, cfg):
+        with open(Path(cfg.paths.test_data) / "sdss_preds.pt", "rb") as f:
+            test_datum = torch.load(f)
+
+        # we'll do a "round trip" test: convert the catalog to a full catalog and back
+        true_tile_cat0 = TileCatalog(cfg.simulator.prior.tile_slen, test_datum["catalog"])
+        true_full_cat = true_tile_cat0.to_full_catalog()
+        true_tile_cat = true_full_cat.to_tile_catalog(
+            tile_slen=cfg.simulator.prior.tile_slen,
+            max_sources_per_tile=cfg.simulator.prior.max_sources,
+            ignore_extra_sources=True,
+        )
+
+        # fields only need to match if a source is present
+        assert (true_tile_cat0["n_sources"] == true_tile_cat["n_sources"]).all()
+        assert true_tile_cat.max_sources == 1
+        gating = true_tile_cat0["n_sources"].unsqueeze(-1).unsqueeze(-1)
+        keys_to_match = true_tile_cat0.keys() - "n_sources"
+        for k in keys_to_match:
+            v0 = true_tile_cat0[k] * gating
+            v1 = true_tile_cat[k] * gating
+            assert torch.isclose(v0, v1, rtol=1e-4, atol=1e-6).all()
+
 
 class TestDecalsCatalog:
     def test_load_decals_from_file(self, cfg, monkeypatch):

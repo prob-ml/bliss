@@ -1,14 +1,12 @@
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import pandas as pd
 import torch
 from astropy.io import fits
 
-from bliss.cached_dataset import FileDatum
 from bliss.catalog import FullCatalog
 
 min_flux_for_loss = 0
@@ -43,7 +41,7 @@ def main(**kwargs):
     image_size = int(kwargs.get("image_size", 1280))
     tile_size = int(kwargs.get("tile_size", 128))
     n_tiles = int(image_size / tile_size)
-    data: List[FileDatum] = []
+    data = []
 
     for catalog_path in CATALOGS_PATH.glob("*.dat"):
         catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=COL_NAMES)
@@ -96,15 +94,12 @@ def main(**kwargs):
                 image_bands.append(torch.from_numpy(image_data))
         stacked_image = torch.stack(image_bands, dim=0)
 
-        data.append(
-            FileDatum(
-                {
-                    "tile_catalog": tile_catalog_dict,
-                    "images": stacked_image,
-                    "background": stacked_image,
-                }
-            )
-        )
+        file_datum = {
+            "tile_catalog": tile_catalog_dict,
+            "images": stacked_image,
+            "background": stacked_image,
+        }
+        data.append(file_datum)
 
     chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
     for i, chunk in enumerate(chunks):

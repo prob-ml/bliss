@@ -30,7 +30,6 @@ def test_rotate_flip_with_full_catalog(cfg):
     assert not original_datum["tile_catalog"]["locs"].allclose(datum["tile_catalog"]["locs"])
     datum = fr_transform(datum, rotate_id=2, do_flip=False)
     assert original_datum["images"].allclose(datum["images"])
-    assert original_datum["background"].allclose(datum["background"])
     assert original_datum["tile_catalog"]["locs"].allclose(datum["tile_catalog"]["locs"])
 
     # rotate 270 degrees and flip, then flip, then rotate 90 degrees
@@ -50,7 +49,6 @@ def test_rotate_flip_with_toy_data(cfg):
     }
     datum = {
         "images": torch.zeros(1, 10, 10),
-        "background": torch.zeros(1, 10, 10),
         "tile_catalog": d,
         "psf_params": None,
     }
