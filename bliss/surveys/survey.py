@@ -15,7 +15,6 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         self.background = None
         self.psf = None
         self.flux_calibration_dict = None
-        self.pixel_shift = None
 
         self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
 
@@ -71,7 +70,7 @@ class SurveyPredictIterator:
 
     def __getitem__(self, idx):
         x = self.survey[idx]
-        return {"images": x["image"], "background": x["background"], "psf_params": x["psf_params"]}
+        return {"images": x["image"], "psf_params": x["psf_params"]}
 
     def __len__(self):
         return len(self.survey)

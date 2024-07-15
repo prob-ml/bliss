@@ -163,7 +163,7 @@ class TestDC2:
         for k in params:
             assert isinstance(dc2[0]["tile_catalog"][k], torch.Tensor)
 
-        for k in ("images", "background", "psf_params"):
+        for k in ("images", "psf_params"):
             assert isinstance(dc2[0][k], torch.Tensor)
 
         # reset global settings to None

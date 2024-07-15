@@ -563,9 +563,8 @@ class FullCatalog(UserDict):
         for k, v in self.items():
             if k in {"plocs", "n_sources"}:
                 continue
-            dtype = torch.int64 if k == "objid" else torch.float
             size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
-            tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
+            tile_params[k] = torch.zeros(size, dtype=v.dtype, device=self.device)
 
         tile_params["locs"] = tile_locs
 
@@ -660,20 +659,8 @@ class FullCatalog(UserDict):
         on_vals.pop("star_fluxes")
         on_vals.pop("galaxy_fluxes")
 
-        n = is_on_mask.sum()  # number of (predicted) objects
-        rows = []
-        for i in range(n):
-            row = {}
-            for k, v in on_vals.items():
-                row[k] = v[i].cpu().float()
-            # Convert `source_type` to string "star" or "galaxy" labels
-            row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
-            # Force `plocs` to be "({x}, {y})" tuple strings for readability
-            row["plocs"] = str(tuple(row["plocs"].tolist()))
-            rows.append(row)
-
-        # Convert to astropy table
-        est_cat_table = Table(rows)
+        # declare our astropy table
+        est_cat_table = Table(names=on_vals.keys())
 
         # Convert all _fluxes columns to units.Quantity
         for bl in encoder_survey_bands:
@@ -684,6 +671,18 @@ class FullCatalog(UserDict):
         est_cat_table["galaxy_beta_radians"].unit = units.radian
         est_cat_table["galaxy_a_d"].unit = units.arcsec
         est_cat_table["galaxy_a_b"].unit = units.arcsec
+
+        # load data into the astropy table
+        n = is_on_mask.sum()  # number of (predicted) objects
+        for i in range(n):
+            row = {}
+            for k, v in on_vals.items():
+                row[k] = v[i].cpu().float()
+            # Convert `source_type` to string "star" or "galaxy" labels
+            row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
+            # Force `plocs` to be "({x}, {y})" tuple strings for readability
+            row["plocs"] = str(tuple(row["plocs"].tolist()))
+            est_cat_table.add_row(row)
 
         return est_cat_table
 
