@@ -22,8 +22,8 @@
 variables :
   nfiles : 100
   image_size: 1280
-  input_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data/catalogs
-  output_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data/images
+  input_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data_2/catalogs
+  output_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data_2/images
 
 psf:
     type: Convolve
