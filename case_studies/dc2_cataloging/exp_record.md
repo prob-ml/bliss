@@ -514,3 +514,9 @@ if "locs" in datum["tile_catalog"]:
 ### 07-11
 
 1. retrain model
+
+2. retrain model
+
+### 07-15
+
+1. retrain model
