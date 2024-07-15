@@ -27,7 +27,7 @@ class Encoder(pl.LightningModule):
         self,
         survey_bands: list,
         tile_slen: int,
-        image_normalizers: list,
+        image_normalizers: dict,
         var_dist: VariationalDist,
         matcher: CatalogMatcher,
         sample_image_renders: MetricCollection,

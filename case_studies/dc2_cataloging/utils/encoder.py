@@ -1,5 +1,7 @@
 import copy
+import warnings
 
+import torch
 from einops import rearrange
 
 from bliss.catalog import TileCatalog
@@ -82,12 +84,9 @@ class MultiDetectEncoder(EncoderAddingSourceMask):
         raise NotImplementedError()
 
     def sample(self, batch, use_mode=True):
-        x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.features_net(x)
-
+        x_features = self.get_features(batch)
         x_cat = self.catalog_net(x_features)
         est_cat = self.var_dist.sample(x_cat, use_mode=use_mode)
-
         return self._add_source_mask(est_cat)
 
     def _compute_loss(self, batch, logging_name):
@@ -109,11 +108,15 @@ class MultiDetectEncoder(EncoderAddingSourceMask):
             band=self.reference_band,
         )
 
-        x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.features_net(x)
-
+        x_features = self.get_features(batch)
         x_cat = self.catalog_net(x_features)
         loss = self.var_dist.compute_nll(x_cat, target_cat)
+
+        nan_mask = torch.isnan(loss)
+        if nan_mask.any():
+            loss = loss[~nan_mask]
+            msg = f"NaN detected in loss. Ignored {nan_mask.sum().item()} NaN values."
+            warnings.warn(msg)
 
         # could normalize by the number of tile predictions, rather than number of tiles
         loss = loss.sum() / loss.numel()
