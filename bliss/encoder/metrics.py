@@ -169,7 +169,7 @@ class DetectionPerformance(FilterMetric):
         self.bin_type = bin_type
         self.exclude_last_bin = exclude_last_bin
 
-        assert self.bin_type in {"Flux", "Mag", "Blendedness"}, "invalid bin type"
+        assert self.bin_type in {"Flux", "Mag"}, "invalid bin type"
 
         detection_metrics = [
             "n_true_sources",
@@ -197,10 +197,6 @@ class DetectionPerformance(FilterMetric):
                 true_bin_measures = true_bin_measures[:, :, self.ref_band].contiguous()
                 est_bin_measures = est_cat.magnitudes
                 est_bin_measures = est_bin_measures[:, :, self.ref_band].contiguous()
-            elif self.bin_type == "Blendedness":
-                true_bin_measures = true_cat["Blendedness"]
-                # the blendedness is estimated by LSST, and we only have one set of blendedness
-                est_bin_measures = true_bin_measures
             else:
                 raise NotImplementedError()
 
@@ -282,7 +278,7 @@ class DetectionPerformance(FilterMetric):
             **f1_bin_results,
         }
 
-    def get_results_on_per_flux_bin(self):
+    def get_results_on_per_bin(self):
         recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)
         precision = (self.n_est_matches / self.n_est_sources).nan_to_num(0)
         f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
