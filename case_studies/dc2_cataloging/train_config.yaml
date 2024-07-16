@@ -77,15 +77,20 @@ my_metrics:
         filter_source_count: "2plus"
   source_type_accuracy:
     _target_: bliss.encoder.metrics.SourceTypeAccuracy
-    flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+    bin_cutoffs: [200, 400, 600, 800, 1000]
+    bin_type: "Flux"
   flux_error:
     _target_: bliss.encoder.metrics.FluxError
     survey_bands: ${encoder.survey_bands}
 
+# my_image_normalizers:
+#   asinh:
+#       _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+#       q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
 my_image_normalizers:
-  asinh:
-      _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
-      q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+  null_noramlize:
+      _target_: case_studies.dc2_cataloging.utils.image_normalizer.NullNormalizer
 
 encoder:
     # _target_: case_studies.dc2_cataloging.utils.encoder.MultiDetectEncoder
@@ -137,10 +142,10 @@ train:
     trainer:
         logger:
             name: DC2_cataloging_exp_07
-            version: exp_07-15-1  # change it before running the code
-        devices: [7]  # change it before running the code
+            version: exp_07-15-5  # change it before running the code
+        devices: [4]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
     data_source: ${surveys.dc2}
     pretrained_weights: null
-    seed: 9292
+    seed: 7272

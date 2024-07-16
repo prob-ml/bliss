@@ -520,3 +520,11 @@ if "locs" in datum["tile_catalog"]:
 ### 07-15
 
 1. retrain model
+
+2. test null image normalizer
+
+3. retrain model
+
+4. retrain model
+
+5. test null image normalizer

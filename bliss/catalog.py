@@ -480,6 +480,10 @@ class FullCatalog(UserDict):
     def magnitudes(self):
         return convert_nmgy_to_mag(self.on_fluxes)
 
+    @property
+    def magnitudes_njy(self):
+        return convert_nmgy_to_njymag(self.on_fluxes)
+
     def one_source(self, b: int, s: int):
         """Return a dict containing all parameter for one specified light source."""
         out = {}

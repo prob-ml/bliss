@@ -1,6 +1,7 @@
 from typing import Dict
 
 import torch
+from einops import rearrange
 
 
 class DynamicAsinhImageNormalizer:
@@ -175,3 +176,12 @@ class FixedThresholdsAsinhImageNormalizer:
         filtered_images = raw_images - self.asinh_thresholds_tensor
         processed_images = filtered_images * self.asinh_params["scale"]
         return torch.asinh(processed_images)
+
+
+class NullNormalizer(torch.nn.Module):
+    def num_channels_per_band(self):
+        return 1
+
+    def get_input_tensor(self, batch):
+        ss_images = batch["images"] - batch["background"]
+        return rearrange((ss_images + 0.5).clamp(1e-6) * 100, "b bands h w -> b bands 1 h w")

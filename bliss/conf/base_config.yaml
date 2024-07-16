@@ -130,10 +130,9 @@ metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
         bin_cutoffs: [200, 400, 600, 800, 1000]
-        ref_band: 2
     source_type_accuracy:
         _target_: bliss.encoder.metrics.SourceTypeAccuracy
-        flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+        bin_cutoffs: [200, 400, 600, 800, 1000]
     flux_error:
         _target_: bliss.encoder.metrics.FluxError
         survey_bands: ${encoder.survey_bands}
