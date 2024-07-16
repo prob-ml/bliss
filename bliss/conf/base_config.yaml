@@ -30,7 +30,7 @@ prior:
     tile_slen: 4
     batch_size: 64
     max_sources: 1
-    mean_sources: 0.0025
+    mean_sources: 0.0025  # realistic, but a higher value may help with training
     min_sources: 0
     prob_galaxy: 0.5144
     star_flux_exponent: 0.4689157382430609
