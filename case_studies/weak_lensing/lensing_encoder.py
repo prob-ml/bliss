@@ -15,7 +15,7 @@ from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDist
 from bliss.global_env import GlobalEnv
-from case_studies.weak_lensing.lensing_convnet import CatalogNet, FeaturesNet
+from case_studies.weak_lensing.lensing_convnet import WeakLensingCatalogNet, WeakLensingFeaturesNet
 
 
 class WeakLensingEncoder(Encoder):
@@ -75,14 +75,14 @@ class WeakLensingEncoder(Encoder):
 
         num_features = 256
 
-        self.features_net = FeaturesNet(
+        self.features_net = WeakLensingFeaturesNet(
             n_bands=len(self.image_normalizer.bands),
             ch_per_band=self.image_normalizer.num_channels_per_band(),
             num_features=num_features,
             tile_slen=self.tile_slen,
         )
-        self.catalog_net = CatalogNet(
-            num_features=num_features * 3,
+        self.catalog_net = WeakLensingCatalogNet(
+            in_channels=num_features,
             out_channels=self.var_dist.n_params_per_source,
         )
 
@@ -95,13 +95,18 @@ class WeakLensingEncoder(Encoder):
 
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
-        mask = torch.zeros([batch_size, ht, wt])
-        context = self.make_context(None, mask).to("cuda")
-        x_cat_marginal = self.catalog_net(x_features, context)
+        x_cat_marginal = self.catalog_net(x_features)
         est_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
         return est_cat.symmetric_crop(self.tiles_to_crop)
 
     def _compute_loss(self, batch, logging_name):
+        
+        # check where nans occur
+
+        # for name, param in self.named_parameters():
+        #     if param.grad is not None:
+        #         print(f'Gradient {name}: {param.grad.norm().item()}')
+
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
         ht, wt = h // self.tile_slen, w // self.tile_slen
 
@@ -111,11 +116,7 @@ class WeakLensingEncoder(Encoder):
 
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
-        mask = torch.zeros([batch_size, ht, wt])
-        context = self.make_context(None, mask).to("cuda")
-        pred["x_cat_marginal"] = self.catalog_net(x_features, context)
-
-        # todo: rewrite loss function as shear mse + conv mse
+        pred["x_cat_marginal"] = self.catalog_net(x_features)
         loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat)
 
         # exclude border tiles and report average per-tile loss
