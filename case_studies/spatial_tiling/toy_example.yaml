@@ -7,6 +7,19 @@ defaults:
 paths:
     cached_data: /data/scratch/regier/20percent
 
+# this prior is sdss-like, except for the flux distribution, which is easier
+# (i.e, flatter, always greater than 3 nmgy, and always less than 100 nmgy).
+# the source density is higher too.
+prior:
+    star_flux_exponent: 0.01
+    star_flux_truncation: 100
+    star_flux_loc: 3.0
+    star_flux_scale: 3.0
+    galaxy_flux_exponent: 0.01
+    galaxy_flux_truncation: 100
+    galaxy_flux_scale: 3.0
+    galaxy_flux_loc: 3.0
+
 variational_factors:
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
       name: n_sources
