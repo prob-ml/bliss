@@ -30,7 +30,7 @@ prior:
     tile_slen: 4
     batch_size: 64
     max_sources: 1
-    mean_sources: 0.0025  # realistic, but a higher value may help with training
+    mean_sources: 0.01  # 0.0025 is more realistic for SDSS but training takes more iterations
     min_sources: 0
     prob_galaxy: 0.5144
     star_flux_exponent: 0.4689157382430609
@@ -50,7 +50,7 @@ simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
     survey: ${surveys.sdss}
     prior: ${prior}
-    n_batches: 512
+    n_batches: 128
     coadd_depth: 1
     num_workers: 32
     valid_n_batches: 10  # 256
@@ -256,7 +256,7 @@ surveys:
 mode: train
 
 generate:
-    n_image_files: 32
+    n_image_files: 128
     n_batches_per_file: 16
     simulator: ${simulator}
     cached_data_path: ${paths.cached_data}
