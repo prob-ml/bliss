@@ -320,6 +320,23 @@ class BackgroundPrior(Prior):
         hlr_samples = self.pixel_scale * np.array(sources["FLUX_RADIUS_R"])
         return 1e-4 + (hlr_samples * (hlr_samples > 0))
 
+    def sample_shapes(self, sources):
+        """Samples shapes for each source in the catalog.
+        Shapes are from DES Table in the form of (a, b)
+        Converted to (g1, g2)
+
+        Args:
+            sources: Dataframe of DES sources
+
+        Returns:
+            samples for g1, g2 for each source
+        """
+        a = np.array(sources["A_IMAGE"])
+        b = np.array(sources["B_IMAGE"])
+        g = (a - b) / (a + b)
+        angle = np.arctan(b / a)
+        return g * np.cos(angle), g * np.sin(angle)
+
     def sample_fluxes(self, sources):
         """Samples fluxes for all bands for each source.
 
@@ -359,7 +376,7 @@ class BackgroundPrior(Prior):
         gal_source_locs = self.cartesian_to_gal(cartesian_source_locs)
         source_types = self.sample_source_types(des_sources)
         flux_samples = self.sample_fluxes(des_sources)
-        g1_size_samples, g2_size_samples = self.sample_shape(n_sources)
+        g1_size_samples, g2_size_samples = self.sample_shapes(n_sources)
         hlr_samples = self.sample_hlr(des_sources)
         return self.make_catalog(
             flux_samples,
