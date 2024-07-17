@@ -1,7 +1,7 @@
 import torch
 
-from bliss.catalog import BaseTileCatalog
-from bliss.encoder.convnet import CatalogNet, ContextNet
+from bliss.catalog import BaseTileCatalog, TileCatalog
+from bliss.encoder.convnets import CatalogNet
 from bliss.encoder.encoder import Encoder
 from case_studies.galaxy_clustering.encoder.convnet import GalaxyClusterFeaturesNet
 
@@ -28,58 +28,39 @@ class GalaxyClusterEncoder(Encoder):
             downsample_at_front=self.downsample_at_front,
         )
         n_params_per_source = self.var_dist.n_params_per_source
-        self.marginal_net = CatalogNet(num_features, n_params_per_source)
-        self.checkerboard_net = ContextNet(num_features, n_params_per_source)
-        if self.double_detect:
-            self.second_net = CatalogNet(num_features, n_params_per_source)
+        self.catalog_net = CatalogNet(num_features, n_params_per_source)
 
     def get_features_and_parameters(self, batch):
+        batch = (
+            batch
+            if isinstance(batch, dict)
+            else {"images": batch, "background": torch.zeros_like(batch)}
+        )
+        batch_size, _n_bands, h, w = batch["images"].shape[0:4]
+        ht, wt = h // self.tile_slen, w // self.tile_slen
+
         x = self.image_normalizer.get_input_tensor(batch)
         x_features = self.features_net(x)
-        x_cat_marginal = self.marginal_net(x_features)
+        mask = torch.zeros([batch_size, ht, wt])
+        context = self.make_context(None, mask).to("cuda")
+        x_cat_marginal = self.catalog_net(x_features, context)
         return x_features, x_cat_marginal
 
     def sample(self, batch, use_mode=True):
-        batch_size, _n_bands, h, w = batch["images"].shape[0:4]
-
-        x_features, x_cat_marginal = self.get_features_and_parameters(batch)
-
-        marginal_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
-
-        if not self.use_checkerboard:
-            est_cat = marginal_cat
-        else:
-            ht, wt = h // self.tile_slen, w // self.tile_slen
-            tile_cb = self._get_checkerboard(ht, wt).squeeze(1)
-            white_history_mask = tile_cb.expand([batch_size, -1, -1])
-
-            white_context = self.make_context(marginal_cat, white_history_mask)
-            x_cat_white = self.checkerboard_net(x_features, white_context)
-            white_cat = self.var_dist.sample(x_cat_white, use_mode=use_mode)
-            est_cat = self.interleave_catalogs(marginal_cat, white_cat, white_history_mask)
-
-        if self.double_detect:
-            x_cat_second = self.second_net(x_features)
-            second_cat = self.var_dist.sample(x_cat_second, use_mode=use_mode)
-            # our loss function implies that the second detection is ignored for a tile
-            # if the first detection is empty for that tile
-            second_cat["n_sources"] *= est_cat["n_sources"]
-            est_cat = est_cat.union(second_cat)
-
-        return est_cat.symmetric_crop(self.tiles_to_crop)
+        _, x_cat_marginal = self.get_features_and_parameters(batch)
+        return self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
 
     def update_metrics(self, batch, batch_idx):
         target_cat = BaseTileCatalog(self.tile_slen, batch["tile_catalog"])
-        target_cat = target_cat.symmetric_crop(self.tiles_to_crop)
 
         mode_cat = self.sample(batch, use_mode=True)
-        self.metrics.update(target_cat, mode_cat)
+        self.mode_metrics.update(target_cat, mode_cat)
 
         sample_cat = self.sample(batch, use_mode=False)
         self.sample_metrics.update(target_cat, sample_cat)
 
     def on_validation_epoch_end(self):
-        self.report_metrics(self.metrics, "val/mode", show_epoch=True)
+        self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
         self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -91,3 +72,36 @@ class GalaxyClusterEncoder(Encoder):
                 "sample_cat": self.sample(batch, use_mode=False),
                 "parameters": self.get_features_and_parameters(batch)[1],
             }
+
+    def _compute_loss(self, batch, logging_name):
+        batch_size, _n_bands, h, w = batch["images"].shape[0:4]
+        ht, wt = h // self.tile_slen, w // self.tile_slen
+
+        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+
+        # filter out undetectable sources
+        target_cat = target_cat.filter_by_flux(
+            min_flux=self.min_flux_for_loss,
+            band=self.reference_band,
+        )
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+
+        # make predictions/inferences
+        pred = {}
+
+        x = self.image_normalizer.get_input_tensor(batch)
+        x_features = self.features_net(x)
+        mask = torch.zeros([batch_size, ht, wt])
+        context = self.make_context(None, mask).to("cuda")
+        pred["x_cat_marginal"] = self.catalog_net(x_features, context)
+        x_features = x_features.detach()  # is this helpful? doing it here to match old code
+
+        loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat1)
+
+        # exclude border tiles and report average per-tile loss
+        loss = loss.sum() / loss.numel()
+        self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
+
+        return loss

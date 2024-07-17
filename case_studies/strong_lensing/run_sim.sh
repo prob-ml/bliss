@@ -3,10 +3,10 @@
 # Script to automate running the galsim command with the yaml configuration
 
 # Default Values
+
 num_files=100
 num_galaxies=3
 img_size=512
-
 
 while getopts "f:s:g:" opt; do
   case $opt in
@@ -123,7 +123,6 @@ for i in $(seq 1 $num_files); do
           center_y=${lens_params[2]}
           e1=${lens_params[3]}
           e2=${lens_params[4]}
-        #   echo "$ITR, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $ITR, $ITR, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, True, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta, $theta_E, $center_x, $center_y, $e1, $e2" >> data/catalog.txt
           echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, 1.0, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta, $theta_E, $center_x, $center_y, $e1, $e2" >> data/catalog.txt
       fi
 
@@ -143,7 +142,7 @@ for i in $(seq 1 $num_files); do
     echo "Running python file $PYTHON_SCRIPT_3 to stack all images..."
     python "$PYTHON_SCRIPT_3" "$OUTPUT_DIR"
 
-    # Fourht Python script - Converting Text Catalog to Fits
+    # Fourth Python script - Converting Text Catalog to Fits
     PYTHON_SCRIPT_4="convert_catalog.py"
     # Check if Python scripts exist
     if [ ! -f "$PYTHON_SCRIPT_4" ]; then
@@ -161,12 +160,14 @@ for i in $(seq 1 $num_files); do
     mv "$FINAL_OUTPUT_DIR/image.fits" "$FINAL_OUTPUT_DIR/image${i}.fits"
 
     OPEN_FITS="open_fits.py"
+
     python "$OPEN_FITS" "$i" "$FINAL_OUTPUT_DIR"
 
     rm -r data/images
     rm data/catalog.fits data/combined_images.fits
     sed -i '$d' data/catalog.txt
     mv data/catalog.txt $CATALOG_DIR/image${i}.txt
+
 done
 
 # Move all image pngs to separate folder
@@ -177,3 +178,4 @@ mv $FINAL_OUTPUT_DIR/*.png $FINAL_OUTPUT_DIR/images/
 mv $FINAL_OUTPUT_DIR/*.fits $FINAL_OUTPUT_DIR/data/
 
 echo "Data generation completed."
+

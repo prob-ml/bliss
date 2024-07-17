@@ -1,18 +1,16 @@
 import os
 import sys
 from pathlib import Path
-from typing import List
 
 import numpy as np
 import pandas as pd
 import torch
 from astropy.io import fits
 
-from bliss.cached_dataset import FileDatum
 from bliss.catalog import FullCatalog
 
 min_flux_for_loss = 0
-DATA_PATH = "/data/scratch/kapnadak/data"
+DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
@@ -33,16 +31,17 @@ COL_NAMES = (
     "G1",
     "G2",
     "Z",
+    "SOURCE_TYPE",
 )
 BANDS = ("g", "r", "i", "z")
-N_CATALOGS_PER_FILE = 10
+N_CATALOGS_PER_FILE = 50
 
 
 def main(**kwargs):
-    image_size = int(kwargs.get("image_size", 4800))
-    tile_size = int(kwargs.get("tile_size", 4))
+    image_size = int(kwargs.get("image_size", 1280))
+    tile_size = int(kwargs.get("tile_size", 128))
     n_tiles = int(image_size / tile_size)
-    data: List[FileDatum] = []
+    data = []
 
     for catalog_path in CATALOGS_PATH.glob("*.dat"):
         catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=COL_NAMES)
@@ -95,19 +94,16 @@ def main(**kwargs):
                 image_bands.append(torch.from_numpy(image_data))
         stacked_image = torch.stack(image_bands, dim=0)
 
-        data.append(
-            FileDatum(
-                {
-                    "tile_catalog": tile_catalog_dict,
-                    "images": stacked_image,
-                    "background": stacked_image,
-                }
-            )
-        )
+        file_datum = {
+            "tile_catalog": tile_catalog_dict,
+            "images": stacked_image,
+            "background": stacked_image,
+        }
+        data.append(file_datum)
 
     chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
     for i, chunk in enumerate(chunks):
-        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}.pt")
+        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}_size_{N_CATALOGS_PER_FILE}.pt")
 
 
 if __name__ == "__main__":

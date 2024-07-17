@@ -8,8 +8,8 @@
 #   2: X
 #   3: Y
 #   4: MEM
-#   5: FLUX_R
-#   6: FLUX_G
+#   5: FLUX_G
+#   6: FLUX_R
 #   7: FLUX_I
 #   8: FLUX_Z
 #   9: HLR
@@ -17,10 +17,13 @@
 #   11: G1
 #   12: G2
 #   13: Z
+#   14: SOURCE_TYPE
 
 variables :
   nfiles : 100
   image_size: 4800
+  input_dir : /home/kapnadak/bliss/case_studies/galaxy_clustering/data/catalogs
+  output_dir : /home/kapnadak/bliss/case_studies/galaxy_clustering/data/images
 
 psf:
     type: Convolve
@@ -93,16 +96,16 @@ psf:
 
 image :
 
-  nproc : 24
+  nproc : 32
   type : Scattered
-  pixel_scale : 0.27
+  pixel_scale : 0.263
   xsize : '@variables.image_size'
   ysize : '@variables.image_size'
-  stamp_size : 100
 
   random_seed : 8241573
 
-  gsparams : {maximum_fft_size : 50000}
+  gsparams :
+    maximum_fft_size : 50000
 
   noise:
     type: Gaussian
@@ -113,9 +116,7 @@ image :
 
 stamp :
 
-  draw_method :
-    type : List
-    items : [ fft, phot ]
+  draw_method : fft
 
   image_pos :
     type : XY
@@ -124,7 +125,7 @@ stamp :
 
 input :
   catalog :
-    dir : /data/scratch/kapnadak/data/catalogs
+    dir : '@variables.input_dir'
     file_name :
       type : FormattedStr
       format : "galsim_des_%03d.dat"
@@ -135,10 +136,9 @@ input :
 
 gal :
 
-  type : Exponential
-  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  type : Gaussian
   half_light_radius : { type: Catalog, col: 9 }
-  flux : { type: Catalog, col: 5 } #using R band
+  flux : { type: Catalog, col: 5 } #using G band
 
   shear :
     type : G1G2
@@ -147,32 +147,7 @@ gal :
 
 output :
   type : Fits
-  dir : /data/scratch/kapnadak/data/images
-  file_name :
-    type : FormattedStr
-    format : "galsim_des_%03d_r.fits"
-    items :
-    - { type : Sequence, nitems: '@variables.nfiles'}
-
-  nfiles : '@variables.nfiles'
-
----
-
-gal :
-
-  type : Exponential
-  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
-  half_light_radius : { type: Catalog, col: 9 }
-  flux : { type: Catalog, col: 6 } #using G band
-
-  shear :
-    type : G1G2
-    g1 : { type: Catalog, col: 11 }
-    g2 : { type: Catalog, col: 12 }
-
-output :
-  type : Fits
-  dir : /data/scratch/kapnadak/data/images
+  dir : '@variables.output_dir'
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_g.fits"
@@ -185,8 +160,31 @@ output :
 
 gal :
 
-  type : Exponential
-  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  type : Gaussian
+  half_light_radius : { type: Catalog, col: 9 }
+  flux : { type: Catalog, col: 6 } #using R band
+
+  shear :
+    type : G1G2
+    g1 : { type: Catalog, col: 11 }
+    g2 : { type: Catalog, col: 12 }
+
+output :
+  type : Fits
+  dir : '@variables.output_dir'
+  file_name :
+    type : FormattedStr
+    format : "galsim_des_%03d_r.fits"
+    items :
+    - { type : Sequence, nitems: '@variables.nfiles'}
+
+  nfiles : '@variables.nfiles'
+
+---
+
+gal :
+
+  type : Gaussian
   half_light_radius : { type: Catalog, col: 9 }
   flux : { type: Catalog, col: 7 } #using I band
 
@@ -197,7 +195,7 @@ gal :
 
 output :
   type : Fits
-  dir : /data/scratch/kapnadak/data/images
+  dir : '@variables.output_dir'
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_i.fits"
@@ -210,8 +208,7 @@ output :
 
 gal :
 
-  type : Exponential
-  #Using a constant half light radius for now, since there were some issues in the TSIZE prior
+  type : Gaussian
   half_light_radius : { type: Catalog, col: 9 }
   flux : { type: Catalog, col: 8 } #using Z band
 
@@ -222,7 +219,7 @@ gal :
 
 output :
   type : Fits
-  dir : /data/scratch/kapnadak/data/images
+  dir : '@variables.output_dir'
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_z.fits"

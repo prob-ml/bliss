@@ -1,10 +1,12 @@
 import logging
+import math
 import os
 import pathlib
 import random
 import re
 import warnings
-from typing import List, TypedDict
+from copy import copy
+from typing import List
 
 import pytorch_lightning as pl
 import torch
@@ -12,8 +14,8 @@ from torch import distributed as dist
 from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 from torchvision import transforms
 
-from bliss.catalog import FullCatalog, TileCatalog
-from bliss.global_settings import GlobalSettings
+from bliss.catalog import FullCatalog
+from bliss.global_env import GlobalEnv
 
 # prevent pytorch_lightning warning for num_workers = 2 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -23,37 +25,52 @@ warnings.filterwarnings(
 warnings.filterwarnings("ignore", ".*Total length of .* across ranks is zero.*", UserWarning)
 
 
-FileDatum = TypedDict(
-    "FileDatum",
-    {
-        "tile_catalog": TileCatalog,
-        "images": torch.Tensor,
-        "background": torch.Tensor,
-        "psf_params": torch.Tensor,
-    },
-)
-
-
 class FullCatalogToTileTransform(torch.nn.Module):
     def __init__(self, tile_slen, max_sources):
         super().__init__()
         self.tile_slen = tile_slen
         self.max_sources = max_sources
 
-    def __call__(self, ex):
-        h_pixels, w_pixels = ex["images"].shape[1:]
-        full_cat = FullCatalog(h_pixels, w_pixels, ex["full_catalog"])
-        tile_cat = full_cat.to_tile_catalog(self.tile_slen, self.max_sources).data
-        d = {k: v.squeeze(0) for k, v in tile_cat.items()}
-        ex["tile_catalog"] = d
-        del ex["full_catalog"]
+    def __call__(self, datum_in):
+        datum_out = {k: v for k, v in datum_in.items() if k != "full_catalog"}
 
-        return ex
+        h_pixels, w_pixels = datum_in["images"].shape[1:]
+        d1 = {k: v.unsqueeze(0) for k, v in datum_in["full_catalog"].items()}
+        full_cat = FullCatalog(h_pixels, w_pixels, d1)
+        tile_cat = full_cat.to_tile_catalog(self.tile_slen, self.max_sources).data
+        d2 = {k: v.squeeze(0) for k, v in tile_cat.items()}
+        datum_out["tile_catalog"] = d2
+
+        return datum_out
+
+
+class OneBandTransform(torch.nn.Module):
+    def __init__(self, band_idx):
+        super().__init__()
+        self.band_idx = band_idx
+
+    def __call__(self, datum_in):
+        datum_out = {
+            "images": datum_in["images"][self.band_idx : self.band_idx + 1],
+            "psf_params": datum_in["psf_params"][self.band_idx : self.band_idx + 1],
+        }
+
+        for cat_name in ("tile_catalog", "full_catalog"):
+            if cat_name not in datum_in:
+                continue
+            cat = copy(datum_in[cat_name])
+            for k, v in cat.items():
+                if k.endswith("fluxes"):
+                    cat[k] = v[..., self.band_idx : self.band_idx + 1]
+            datum_out[cat_name] = cat
+
+        return datum_out
 
 
 class ChunkingSampler(Sampler):
     def __init__(self, dataset: Dataset) -> None:
-        assert isinstance(dataset, ChunkingDataset), "dataset should be MyDataset"
+        super().__init__()
+        assert isinstance(dataset, ChunkingDataset), "dataset should be ChunkingDataset"
         self.dataset = dataset
 
     def __len__(self):
@@ -74,12 +91,12 @@ class DistributedChunkingSampler(DistributedSampler):
         seed: int = 0,
         drop_last: bool = False,
     ) -> None:
-        assert isinstance(dataset, ChunkingDataset), "dataset should be MyDataset"
+        assert isinstance(dataset, ChunkingDataset), "dataset should be ChunkingDataset"
         assert not shuffle, "you should not use shuffle"
         super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
 
     def __iter__(self):
-        pre_indices = list(super().__iter__())
+        pre_indices = super().__iter__()
         chunked_indices = self.dataset.get_chunked_indices()
 
         return iter([chunked_indices[i] for i in pre_indices])
@@ -99,10 +116,14 @@ class ChunkingDataset(Dataset):
                 cached_data_len = int(file_size_match.group(1))
             else:
                 if i == 0:
-                    logger = logging.getLogger("MyDataset")
+                    # we assume in your data file, you use a list to hold the data points
+                    # the postfix '_size_<chunk size>' is the length of this list
+                    logger = logging.getLogger("ChunkingDataset")
                     warning_msg = (
-                        "WARNING: add postfix '_size_XXXX' to file name; "
-                        "otherwise it'll be very slow\n"
+                        "WARNING: add postfix '_size_<chunk size>' to file name; "
+                        "otherwise it'll be very slow \n"
+                        "for instance, a valid file name can be 'cached_data_size_500.pt' "
+                        "(for more details, please see cached_dataset.py)\n"
                     )
                     logger.warning(warning_msg)
                 with open(file_path, "rb") as f:
@@ -136,12 +157,12 @@ class ChunkingDataset(Dataset):
 
         output_list = []
         if self.shuffle:
-            epoch_seed = GlobalSettings.seed_in_this_program + GlobalSettings.current_encoder_epoch
+            epoch_seed = GlobalEnv.seed_in_this_program + GlobalEnv.current_encoder_epoch
             logger = logging.getLogger("ChunkingDataset")
             logger.info(
                 "INFO: seed is %d; current epoch is %d; epoch_seed is set to %d",
-                GlobalSettings.seed_in_this_program,
-                GlobalSettings.current_encoder_epoch,
+                GlobalEnv.seed_in_this_program,
+                GlobalEnv.current_encoder_epoch,
                 epoch_seed,
             )
             right_shift_list = [0, *accumulated_file_sizes_list[:-1]]
@@ -163,6 +184,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         cached_data_path: str,
         train_transforms: List,
         nontrain_transforms: List,
+        subset_fraction: float = None,
     ):
         super().__init__()
 
@@ -172,6 +194,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.cached_data_path = pathlib.Path(cached_data_path)
         self.train_transforms = train_transforms
         self.nontrain_transforms = nontrain_transforms
+        self.subset_fraction = subset_fraction
 
         self.file_paths = None
         self.slices = None
@@ -181,13 +204,10 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.predict_dataset = None
 
     def setup(self, stage: str) -> None:  # noqa: WPS324
+        if self.file_paths is None or self.slices is None:
+            self._load_file_paths_and_slices()
+
         if stage == "fit":
-            file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
-            self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
-
-            # parse slices from percentages to indices
-            self.slices = self.parse_slices(self.splits, len(self.file_paths))
-
             self.train_dataset = self._get_dataset(
                 self.file_paths[self.slices[0]], self.train_transforms, shuffle=True
             )
@@ -198,6 +218,10 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
             return None
 
         if stage == "validate":
+            if self.val_dataset is None:
+                self.val_dataset = self._get_dataset(
+                    self.file_paths[self.slices[1]], self.nontrain_transforms
+                )
             return None
 
         if stage == "test":
@@ -211,6 +235,15 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
             return None
 
         raise RuntimeError(f"setup skips stage {stage}")
+
+    def _load_file_paths_and_slices(self):
+        file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
+        if self.subset_fraction:
+            file_names = file_names[: math.ceil(len(file_names) * self.subset_fraction)]
+        self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
+
+        # parse slices from percentages to indices
+        self.slices = self.parse_slices(self.splits, len(self.file_paths))
 
     def _percent_to_idx(self, x, length):
         """Converts string in percent to an integer index."""

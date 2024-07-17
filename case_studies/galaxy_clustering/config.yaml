@@ -7,8 +7,8 @@ defaults:
 
 prior:
     _target_: case_studies.galaxy_clustering.prior.GalaxyClusterPrior
-    survey_bands: ["u", "g", "r", "i", "z"]  # SDSS available band filters
-    reference_band: 2  # SDSS r-band
+    survey_bands: ["g", "r", "i", "z"]  # SDSS available band filters
+    reference_band: 1  # SDSS r-band
     star_color_model_path: ${simulator.survey.dir_path}/color_models/star_gmm_nmgy.pkl
     gal_color_model_path: ${simulator.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 56
@@ -25,11 +25,12 @@ prior:
     star_flux_scale: 1.4137911256506595
 
 cached_simulator:
-    _target_: bliss.cached_dataset.CachedSimulatedDataset
-    batch_size: 5
+    _target_: bliss.cached_dataset.CachedSimulatedDataModule
+    batch_size: 2
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
-    num_workers: 2
-    cached_data_path: /data/scratch/kapnadak/data/files
+    num_workers: 8
+    cached_data_path: /nfs/turbo/lsa-regier/scratch/kapnadak/new_data/file_data
+    train_transforms: []
 
 train:
     trainer:
@@ -50,7 +51,6 @@ my_metrics:
 encoder:
     _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
     survey_bands: ["g", "r", "i", "z"]
-    tiles_to_crop: 0
     image_normalizer:
         _target_: bliss.encoder.image_normalizer.ImageNormalizer
         bands: [0, 1, 2, 3]
@@ -61,7 +61,11 @@ encoder:
         log_transform_stdevs: null
         use_clahe: false
         clahe_min_stdev: null
-    metrics:
+    mode_metrics:
+      _target_: torchmetrics.MetricCollection
+      _convert_: "partial"
+      metrics: ${my_metrics}
+    sample_metrics:
       _target_: torchmetrics.MetricCollection
       _convert_: "partial"
       metrics: ${my_metrics}
@@ -72,11 +76,19 @@ encoder:
     use_checkerboard: false
 
 predict:
-    dataset: ${surveys.des}
+    cached_dataset:
+        _target_: case_studies.galaxy_clustering.cached_dataset.CachedDESModule
+        cached_data_path: /nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles
+        tiles_per_img: 64
+        batch_size: 1
+        num_workers: 4
     trainer:
         _target_: pytorch_lightning.Trainer
         accelerator: "gpu"
+        devices: "6,7"
+        strategy: "ddp"
         precision: ${train.trainer.precision}
     encoder: ${encoder}
-    weight_save_path: ${paths.output}/version_1/checkpoints/best_encoder.ckpt
+    weight_save_path: /nfs/turbo/lsa-regier/scratch/gapatron/best_encoder.ckpt
     device: "cuda:0"
+    output_save_path: "/data/scratch/des/dr2_detection_output/run_0"
