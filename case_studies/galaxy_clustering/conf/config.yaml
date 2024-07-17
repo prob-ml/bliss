@@ -89,9 +89,16 @@ predict:
     trainer:
         _target_: pytorch_lightning.Trainer
         accelerator: "gpu"
-        devices: "6,7"
+        devices: [6,5]
         strategy: "ddp"
         precision: ${train.trainer.precision}
+        callbacks: 
+            - ${predict.callbacks.writer}
+    callbacks:
+        writer:
+                _target_: case_studies.galaxy_clustering.inference.inference_callbacks.DESPredictionsWriter
+                output_dir: "/data/scratch/des/dr2_detection_output/run_1"
+                write_interval: "batch"
     encoder: ${encoder}
     weight_save_path: /nfs/turbo/lsa-regier/scratch/gapatron/best_encoder.ckpt
     device: "cuda:0"

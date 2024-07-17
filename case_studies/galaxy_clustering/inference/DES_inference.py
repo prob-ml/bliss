@@ -24,6 +24,7 @@ def inference(predict_cfg):
     encoder = load_encoder(predict_cfg)
     trainer = instantiate(predict_cfg.trainer)
     dataset = instantiate(predict_cfg.cached_dataset)
+    
     enc_output = trainer.predict(encoder, datamodule=dataset)
     gpu_rank = (
         distributed.get_rank() if distributed.is_available() and distributed.is_initialized() else 0
@@ -33,7 +34,7 @@ def inference(predict_cfg):
 
 
 def main():
-    with initialize(config_path=".", version_base=None):
+    with initialize(config_path="../conf", version_base=None):
         cfg = compose("config")
 
     predict_cfg = cfg.predict
