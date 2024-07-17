@@ -84,7 +84,7 @@ predict:
         _target_: case_studies.galaxy_clustering.cached_dataset.CachedDESModule
         cached_data_path: /nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles
         tiles_per_img: 64
-        batch_size: 1
+        batch_size: 2
         num_workers: 4
     trainer:
         _target_: pytorch_lightning.Trainer
