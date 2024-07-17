@@ -372,18 +372,18 @@ class DetectionPerformance(FilterMetric):
 class SourceTypeAccuracy(FilterMetric):
     def __init__(
         self,
-        flux_bin_cutoffs: list,
+        mag_bin_cutoffs: list,
         ref_band: int = 2,
         filter_list: List[CatFilter] = None,
     ):
         super().__init__(filter_list if filter_list else [NullFilter()])
 
-        self.flux_bin_cutoffs = flux_bin_cutoffs
+        self.mag_bin_cutoffs = mag_bin_cutoffs
         self.ref_band = ref_band
 
-        assert self.flux_bin_cutoffs, "flux_bin_cutoffs can't be None or empty"
+        assert self.mag_bin_cutoffs, "flux_bin_cutoffs can't be None or empty"
 
-        n_bins = len(self.flux_bin_cutoffs) + 1
+        n_bins = len(self.mag_bin_cutoffs) + 1
 
         self.add_state("gal_tp", default=torch.zeros(n_bins), dist_reduce_fx="sum")
         self.add_state("gal_fp", default=torch.zeros(n_bins), dist_reduce_fx="sum")
@@ -392,10 +392,10 @@ class SourceTypeAccuracy(FilterMetric):
         self.add_state("n_matches", default=torch.zeros(n_bins), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
-        cutoffs = torch.tensor(self.flux_bin_cutoffs, device=self.device)
+        cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
         n_bins = len(cutoffs) + 1
 
-        true_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
+        true_mags = true_cat.magnitudes[:, :, self.ref_band].contiguous()        
 
         true_filter_bools, _ = self.get_filter_bools(true_cat, est_cat)
 
@@ -413,8 +413,8 @@ class SourceTypeAccuracy(FilterMetric):
             tcat_matches = tcat_matches[tcat_matches_filter]
             ecat_matches = ecat_matches[tcat_matches_filter]
 
-            cur_batch_true_fluxes = true_fluxes[i][tcat_matches]
-            bin_indexes = torch.bucketize(cur_batch_true_fluxes, cutoffs)
+            cur_batch_true_mags = true_mags[i][tcat_matches]
+            bin_indexes = torch.bucketize(cur_batch_true_mags, cutoffs)
             _, to_bin_mapping = torch.sort(bin_indexes)
             per_bin_elements_count = bin_indexes.bincount(minlength=n_bins)
 
@@ -501,29 +501,80 @@ class SourceTypeAccuracy(FilterMetric):
 
 
 class FluxError(Metric):
-    def __init__(self, survey_bands):
+    def __init__(
+            self,
+            survey_bands,
+            mag_band: int = 2,
+            mag_bin_cutoffs: list = [],
+            exclude_last_bin: bool = False,
+        ):
         super().__init__()
-        self.survey_bands = survey_bands
+        self.survey_bands = survey_bands  # list of band names (e.g. "r")
 
-        fe_init = torch.zeros(len(self.survey_bands))
-        self.add_state("flux_err", default=fe_init, dist_reduce_fx="sum")
+        self.mag_band = mag_band
+        self.mag_bin_cutoffs = mag_bin_cutoffs
+        self.exclude_last_bin = exclude_last_bin
+        self.n_bins = len(self.mag_bin_cutoffs) + 1
 
-        self.add_state("n_matches", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state(
+            "flux_pct_err",
+            default=torch.zeros((len(self.survey_bands), self.n_bins)),  # n_bins per band
+            dist_reduce_fx="sum"
+        )
+        self.add_state(
+            "flux_abs_pct_err",
+            default=torch.zeros((len(self.survey_bands), self.n_bins)),  # n_bins per band
+            dist_reduce_fx="sum"
+        )
+        self.add_state("n_matches", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
+        true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
+        boundaries = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            self.n_matches += tcat_matches.size(0)
+            n_true = true_cat["n_sources"][i].int().sum().item()
+            true_matched_mags = true_mags[i, 0:n_true][tcat_matches]
+            bins = torch.bucketize(true_matched_mags, boundaries)
 
-            true_flux = true_cat.on_fluxes[i, tcat_matches, :]
-            est_flux = est_cat.on_fluxes[i, ecat_matches, :]
-            self.flux_err += (true_flux - est_flux).abs().sum(dim=0)
+            true_flux = true_cat.on_fluxes[i, tcat_matches]
+            est_flux = est_cat.on_fluxes[i, ecat_matches]
+
+            # Compute and update percent error per band
+            pct_err = (true_flux - est_flux) / true_flux
+            abs_pct_err = pct_err.abs()
+            for band in range(len(self.survey_bands)):
+                tmp = torch.zeros((self.n_bins,), dtype=torch.float, device=self.device)  
+                tmp = tmp.scatter_add(0, bins.reshape(-1), pct_err[..., band].reshape(-1))
+                self.flux_pct_err[band] += tmp
+
+                tmp = torch.zeros((self.n_bins,), dtype=torch.float, device=self.device)  
+                tmp = tmp.scatter_add(0, bins.reshape(-1), abs_pct_err[..., band].reshape(-1))
+                self.flux_abs_pct_err[band] += tmp.abs()
+            self.n_matches += bins.bincount(minlength=self.n_bins)
+
 
     def compute(self):
-        avg_flux_err = self.flux_err / self.n_matches
+        final_idx = -1 if self.exclude_last_bin else None
+        flux_pct_err = self.flux_pct_err[:, :final_idx]
+        flux_abs_pct_err = self.flux_abs_pct_err[:, :final_idx]
+        n_matches = self.n_matches[:final_idx]
+
+        # Compute mean percent error
+        mpe = flux_pct_err.sum(dim=1) / n_matches.sum()
+        binned_mpe = flux_pct_err / n_matches
+        mape = flux_abs_pct_err.sum(dim=1) / n_matches.sum()
+        binned_mape = flux_abs_pct_err / n_matches
+
         results = {}
         for i, band in enumerate(self.survey_bands):
-            results[f"flux_err_{band}_mae"] = avg_flux_err[i].item()
+            results[f"flux_err_{band}_mpe"] = mpe[i]
+            results[f"flux_err_{band}_mape"] = mape[i]
+            for j in range(binned_mpe.shape[1]):
+                results[f"flux_err_{band}_mpe_bin_{j}"] = binned_mpe[i, j]
+                results[f"flux_err_{band}_mape_bin_{j}"] = binned_mape[i, j]
+
         return results
 
 
