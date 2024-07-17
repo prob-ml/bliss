@@ -1,30 +1,26 @@
-from pathlib import Path
 import os
-from astropy.io import fits
-import pandas as pd
 import pickle
+from pathlib import Path
+
+import pandas as pd
+from astropy.io import fits
+
 
 def main():
-
-    n_tiles = 1
-    DES_DIR = Path(
+    des_dir = Path(
         "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles/"
     )
-    DES_SUBDIRS = [d for d in os.listdir(DES_DIR) if d.startswith('DES')]
+    des_subdirs = [d for d in os.listdir(des_dir) if d.startswith("DES")]
     obj_tile_mapping = {}
-    for DES_SUBDIR in DES_SUBDIRS:
-        catalog_path = DES_DIR / Path(DES_SUBDIR) / Path(f"{DES_SUBDIR}_dr2_main.fits")
-        # bad index for now
-        if DES_SUBDIR == 'DES2359-4540':
-            catalog_path = "/home/kapnadak/bliss/case_studies/galaxy_clustering/DES2359-4540_dr2_main.fits"
-        print(f"Processing tile {n_tiles} ...")
+    output_filename = "/data/scratch/des/obj_to_tile.pickle"
+    for des_subdir in des_subdirs:
+        catalog_path = des_dir / Path(des_subdir) / Path(f"{des_subdir}_dr2_main.fits")
         catalog_data = fits.getdata(catalog_path)
         source_df = pd.DataFrame(catalog_data)
         for obj_id in source_df["COADD_OBJECT_ID"]:
-            obj_tile_mapping[obj_id] = DES_SUBDIR
-        n_tiles += 1
-    
-    with open('obj_to_tile.pickle', 'wb') as handle:
+            obj_tile_mapping[obj_id] = des_subdir
+
+    with open(output_filename, "wb") as handle:
         pickle.dump(obj_tile_mapping, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
