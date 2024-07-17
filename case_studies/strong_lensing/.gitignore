@@ -1,2 +1,5 @@
 output_yaml
 galsim_run.log
+catalogs
+strong_lens_data_gen.log
+training_gc.out
