@@ -82,40 +82,48 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None):
     est_convergence = est_tile_cat["convergence"]
 
     for img_id in img_ids:
+        # print("true shear shape: ", true_shear[0].squeeze().shape)
+        # print("est shear shape: ", est_shear.shape)
         plot_maps_helper(
             x_label="True horizontal shear",
             mp=true_shear[img_id].squeeze()[:, :, 0],
-            ax=axes[img_id, 0],
+            # ax=axes[img_id, 0],
+            ax=axes[0],
             fig=fig,
         )
         plot_maps_helper(
             x_label="Estimated horizontal shear",
             mp=est_shear[img_id].squeeze()[:, :, 0],
-            ax=axes[img_id, 1],
+            # ax=axes[img_id, 1],
+            ax=axes[1],
             fig=fig,
         )
         plot_maps_helper(
             x_label="True diagonal shear",
             mp=true_shear[img_id].squeeze()[:, :, 1],
-            ax=axes[img_id, 2],
+            # ax=axes[img_id, 2],
+            ax=axes[2],
             fig=fig,
         )
         plot_maps_helper(
             x_label="Estimated diagonal shear",
             mp=est_shear[img_id].squeeze()[:, :, 1],
-            ax=axes[img_id, 3],
+            # ax=axes[img_id, 3],
+            ax = axes[3],
             fig=fig,
         )
         plot_maps_helper(
             x_label="True convergence",
             mp=true_convergence[img_id].squeeze(),
-            ax=axes[img_id, 4],
+            # ax=axes[img_id, 4],
+            ax = axes[4],
             fig=fig,
         )
         plot_maps_helper(
             x_label="Estimated convergence",
             mp=est_convergence[img_id].squeeze(),
-            ax=axes[img_id, 5],
+            # ax=axes[img_id, 5],
+            ax = axes[5],
             fig=fig,
         )
 
@@ -129,9 +137,10 @@ def plot_maps_helper(x_label: str, mp, ax, fig):
     mp = mp.cpu().numpy()
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
+    # print(mp.shape)
     im = ax.matshow(
         mp,
         cmap="viridis",
-        extent=(0, mp.shape[0], mp.shape[1], 0),
+        # extent=(0, mp.shape[0], mp.shape[1], 0),
     )
     fig.colorbar(im, cax=cax, orientation="vertical")

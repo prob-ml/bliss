@@ -55,7 +55,7 @@ class WeakLensingCatalogNet(nn.Module):
             ConvBlock(256, 512, stride=2),
             C3(512, 512, n=3, shortcut=False),
             ConvBlock(512, 256, kernel_size=1, padding=0),
-            # nn.Upsample(scale_factor=2, mode="nearest"),  # 4
+            nn.Upsample(scale_factor=2, mode="nearest"),  # 4
             C3(768, 256, n=3, shortcut=False),
             Detect(256, out_channels),
         
@@ -65,11 +65,11 @@ class WeakLensingCatalogNet(nn.Module):
     def forward(self, x):
         save_lst = [x]
         for i, m in enumerate(self.net):
-            # print("at input layer", i, x.shape, m)
+            # print("at input layer", i, x.shape)
             x = m(x)
             # print("layer", i, x.shape)
-            if i in {0, 3}:
+            if i in {0, 4}:
                 save_lst.append(x)
-            if i == 3:
+            if i == 4:
                 x = torch.cat(save_lst, dim=1)
         return x

@@ -172,59 +172,76 @@ def generate_cached_data(image_index, **kwargs):
     tile_dict["shear"] = avg_nonzero_shear
     tile_dict["convergence"] = avg_nonzero_convergence
 
-    # split image
-    split_lim = kwargs["image_lim"][0] // kwargs["n_image_split"]
-    image_splits = split_tensor(image, split_lim, 1, 2)
-    image_height_pixels = image.shape[1]
-    split_image_num_on_height = image_height_pixels // split_lim
-    bg_splits = split_tensor(bg, split_lim, 1, 2)
-
-    # split tile cat
-    tile_cat_splits = {}
-    param_list = ["locs", "n_sources", "shear", "convergence"]
-
-    for param_name in param_list:
-        tile_cat_splits[param_name] = split_tensor(
-            tile_dict[param_name], split_lim // kwargs["tile_slen"], 0, 1
-        )
-
-    data_splits = {
-        "tile_catalog": unpack_dict(tile_cat_splits),
-        "images": image_splits,
-        "image_height_index": (
-            torch.arange(0, len(image_splits)) % split_image_num_on_height
-        ).tolist(),
-        "image_width_index": (
-            torch.arange(0, len(image_splits)) // split_image_num_on_height
-        ).tolist(),
-        "background": bg_splits,
-        "psf_params": [psf_params for _ in range(kwargs["n_image_split"] ** 2)],
+    data_to_cache = {
+        "tile_catalog": tile_dict,
+        "images": image,
+        "background": bg,
+        "psf_params": psf_params,
+        "wcs_header_str": wcs_header_str,
     }
-    data_splits = split_list(
-        unpack_dict(data_splits),
-        sub_list_len=kwargs["data_in_one_cached_file"],
+
+    # Create file name for cached data
+    cached_data_file_name = (
+        f"cached_data_{image_index:04d}_size_{len(data_to_cache):04d}.pt"
     )
 
-    data_count = 0
-    for sub_splits in data_splits:  # noqa: WPS426
-        tmp_data_cached = []
-        for split in sub_splits:  # noqa: WPS426
-            split_clone = map_nested_dicts(
-                split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
-            )
-            split_clone.update(wcs_header_str=wcs_header_str)
-            tmp_data_cached.append(split_clone)
-        # assert data_count < 1e5 and image_index < 1e5, "too many cached data files"
-        # assert len(tmp_data_cached) < 1e5, "too many cached data in one file"
-        cached_data_file_name = (
-            f"cached_data_{image_index:04d}_{data_count:04d}_size_{len(tmp_data_cached):04d}.pt"
-        )
-        with open(
-            kwargs["cached_data_path"] / cached_data_file_name,
-            "wb",
-        ) as cached_data_file:
-            torch.save(tmp_data_cached, cached_data_file)
-        data_count += 1
+    # Save all data to a single file
+    with open(kwargs["cached_data_path"] / cached_data_file_name, "wb") as cached_data_file:
+        torch.save(data_to_cache, cached_data_file)
+
+    # # split image
+    # split_lim = kwargs["image_lim"][0] // kwargs["n_image_split"]
+    # image_splits = split_tensor(image, split_lim, 1, 2)
+    # image_height_pixels = image.shape[1]
+    # split_image_num_on_height = image_height_pixels // split_lim
+    # bg_splits = split_tensor(bg, split_lim, 1, 2)
+
+    # # split tile cat
+    # tile_cat_splits = {}
+    # param_list = ["locs", "n_sources", "shear", "convergence"]
+
+    # for param_name in param_list:
+    #     tile_cat_splits[param_name] = split_tensor(
+    #         tile_dict[param_name], split_lim // kwargs["tile_slen"], 0, 1
+    #     )
+
+    # data_splits = {
+    #     "tile_catalog": unpack_dict(tile_cat_splits),
+    #     "images": image_splits,
+    #     "image_height_index": (
+    #         torch.arange(0, len(image_splits)) % split_image_num_on_height
+    #     ).tolist(),
+    #     "image_width_index": (
+    #         torch.arange(0, len(image_splits)) // split_image_num_on_height
+    #     ).tolist(),
+    #     "background": bg_splits,
+    #     "psf_params": [psf_params for _ in range(kwargs["n_image_split"] ** 2)],
+    # }
+    # data_splits = split_list(
+    #     unpack_dict(data_splits),
+    #     sub_list_len=kwargs["data_in_one_cached_file"],
+    # )
+
+    # data_count = 0
+    # for sub_splits in data_splits:  # noqa: WPS426
+    #     tmp_data_cached = []
+    #     for split in sub_splits:  # noqa: WPS426
+    #         split_clone = map_nested_dicts(
+    #             split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
+    #         )
+    #         split_clone.update(wcs_header_str=wcs_header_str)
+    #         tmp_data_cached.append(split_clone)
+    #     # assert data_count < 1e5 and image_index < 1e5, "too many cached data files"
+    #     # assert len(tmp_data_cached) < 1e5, "too many cached data in one file"
+    #     cached_data_file_name = (
+    #         f"cached_data_{image_index:04d}_{data_count:04d}_size_{len(tmp_data_cached):04d}.pt"
+    #     )
+    #     with open(
+    #         kwargs["cached_data_path"] / cached_data_file_name,
+    #         "wb",
+    #     ) as cached_data_file:
+    #         torch.save(tmp_data_cached, cached_data_file)
+    #     data_count += 1
 
 
 class DC2FullCatalog(FullCatalog):

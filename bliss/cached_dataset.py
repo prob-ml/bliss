@@ -134,7 +134,10 @@ class ChunkingDataset(Dataset):
             self.buffered_file_index = converted_index
             with open(self.file_paths[converted_index], "rb") as f:
                 self.buffered_data = torch.load(f)
-        output_data = self.buffered_data[converted_sub_index]
+        try:
+            output_data = self.buffered_data[converted_sub_index]
+        except KeyError:
+            output_data = self.buffered_data
         return self.transform(output_data)
 
     def get_chunked_indices(self):
