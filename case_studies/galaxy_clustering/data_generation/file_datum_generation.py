@@ -1,17 +1,16 @@
 import os
 import sys
 from pathlib import Path
-from typing import List, TypedDict
 
 import numpy as np
 import pandas as pd
 import torch
 from astropy.io import fits
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog
 
 min_flux_for_loss = 0
-DATA_PATH = Path(os.getcwd()) / Path("data")
+DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
 FILE_DATA_PATH = DATA_PATH / Path("file_data")
@@ -32,32 +31,23 @@ COL_NAMES = (
     "G1",
     "G2",
     "Z",
+    "SOURCE_TYPE",
 )
 BANDS = ("g", "r", "i", "z")
-N_CATALOGS_PER_FILE = 10
-
-FileDatum = TypedDict(
-    "FileDatum",
-    {
-        "tile_catalog": TileCatalog,
-        "images": torch.Tensor,
-        "background": torch.Tensor,
-        "psf_params": torch.Tensor,
-    },
-)
+N_CATALOGS_PER_FILE = 50
 
 
 def main(**kwargs):
-    image_size = int(kwargs.get("image_size", 4800))
-    tile_size = int(kwargs.get("tile_size", 4))
-    data: List[FileDatum] = []
+    image_size = int(kwargs.get("image_size", 1280))
+    tile_size = int(kwargs.get("tile_size", 128))
+    n_tiles = int(image_size / tile_size)
+    data = []
 
     for catalog_path in CATALOGS_PATH.glob("*.dat"):
         catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=COL_NAMES)
 
         catalog_dict = {}
         catalog_dict["plocs"] = torch.tensor([catalog[["X", "Y"]].to_numpy()])
-        catalog_dict["plocs"][:, :, 1] = image_size - catalog_dict["plocs"][:, :, 1]
         n_sources = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
         catalog_dict["n_sources"] = n_sources
         catalog_dict["galaxy_fluxes"] = torch.tensor(
@@ -75,8 +65,20 @@ def main(**kwargs):
             tile_slen=tile_size,
             max_sources_per_tile=12 * tile_size,
         )
-        tile_catalog = tile_catalog.filter_tile_catalog_by_flux(min_flux=min_flux_for_loss)
+        tile_catalog = tile_catalog.filter_by_flux(min_flux=min_flux_for_loss)
         tile_catalog = tile_catalog.get_brightest_sources_per_tile(band=2, exclude_num=0)
+
+        membership_array = np.zeros((n_tiles, n_tiles), dtype=bool)
+        for i, coords in enumerate(full_catalog["plocs"].squeeze()):
+            if full_catalog["membership"][0, i, 0] > 0:
+                tile_coord_y, tile_coord_x = (
+                    torch.div(coords, tile_size, rounding_mode="trunc").to(torch.int).tolist()
+                )
+                membership_array[tile_coord_x, tile_coord_y] = True
+
+        tile_catalog["membership"] = (
+            torch.tensor(membership_array).unsqueeze(0).unsqueeze(3).unsqueeze(4)
+        )
 
         tile_catalog_dict = {}
         for key, value in tile_catalog.items():
@@ -92,19 +94,16 @@ def main(**kwargs):
                 image_bands.append(torch.from_numpy(image_data))
         stacked_image = torch.stack(image_bands, dim=0)
 
-        data.append(
-            FileDatum(
-                {
-                    "tile_catalog": tile_catalog_dict,
-                    "images": stacked_image,
-                    "background": stacked_image,
-                }
-            )
-        )
+        file_datum = {
+            "tile_catalog": tile_catalog_dict,
+            "images": stacked_image,
+            "background": stacked_image,
+        }
+        data.append(file_datum)
 
     chunks = [data[i : i + N_CATALOGS_PER_FILE] for i in range(0, len(data), N_CATALOGS_PER_FILE)]
     for i, chunk in enumerate(chunks):
-        torch.save(chunk, f"{DATA_PATH}/file_data/file_data_{i}.pt")
+        torch.save(chunk, f"{FILE_DATA_PATH}/file_data_{i}_size_{N_CATALOGS_PER_FILE}.pt")
 
 
 if __name__ == "__main__":

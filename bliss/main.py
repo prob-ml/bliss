@@ -1,8 +1,4 @@
-import logging
-import random
-from os import environ, getenv
 from pathlib import Path
-from typing import List
 
 import hydra
 import pytorch_lightning as pl
@@ -11,7 +7,8 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from bliss.simulator.simulated_dataset import FileDatum
+from bliss.catalog import TileCatalog
+from bliss.global_env import GlobalEnv
 
 # ============================== Data Generation ==============================
 
@@ -38,18 +35,28 @@ def generate(gen_cfg: DictConfig):
     # overwrites any existing cached image files
     file_idxs = range(files_start_idx, files_start_idx + gen_cfg.n_image_files)
     for file_idx in tqdm(file_idxs, desc="Generating and writing dataset files"):
-        file_data: List[FileDatum] = []
+        file_data = []
 
         for _ in tqdm(range(gen_cfg.n_batches_per_file), desc="Generating one dataset file"):
             batch = simulated_dataset.get_batch()
 
+            if gen_cfg.store_full_catalog:
+                tile_cat = TileCatalog(gen_cfg.simulator.prior.tile_slen, batch["tile_catalog"])
+                full_cat = tile_cat.to_full_catalog()
+
             # flatten batches
             for i in range(gen_cfg.simulator.prior.batch_size):
-                file_datum: FileDatum = {k: v[i] for k, v in batch.items() if k != "tile_catalog"}
-                file_datum["tile_catalog"] = {k: v[i] for k, v in batch["tile_catalog"].items()}
+                file_datum = {k: v[i] for k, v in batch.items() if k != "tile_catalog"}
+
+                if not gen_cfg.store_full_catalog:
+                    file_datum["tile_catalog"] = {k: v[i] for k, v in batch["tile_catalog"].items()}
+                else:
+                    file_datum["full_catalog"] = {k: v[i] for k, v in full_cat.items()}
+
                 file_data.append(file_datum)
 
-        with open(f"{cached_data_path}/{gen_cfg.file_prefix}_{file_idx}.pt", "wb") as f:
+        filename = f"{gen_cfg.file_prefix}_{file_idx}_size_{len(file_data)}.pt"
+        with open(cached_data_path / filename, "wb") as f:
             torch.save(file_data, f)
 
 
@@ -58,10 +65,11 @@ def generate(gen_cfg: DictConfig):
 
 def train(train_cfg: DictConfig):
     # setup seed
-    if train_cfg.seed == "random":
-        pl.seed_everything(random.randint(1e4, 1e5 - 1))
-    else:
-        pl.seed_everything(train_cfg.seed)
+    seed = pl.seed_everything(train_cfg.seed)
+    GlobalEnv.seed_in_this_program = seed
+
+    if train_cfg.matmul_precision:
+        torch.set_float32_matmul_precision(train_cfg.matmul_precision)
 
     # setup dataset, encoder, callbacks and trainer
     dataset = instantiate(train_cfg.data_source)
@@ -82,7 +90,7 @@ def train(train_cfg: DictConfig):
         trainer.logger.log_hyperparams(train_cfg)
 
     # train!
-    trainer.fit(encoder, datamodule=dataset)
+    trainer.fit(encoder, datamodule=dataset, ckpt_path=train_cfg.ckpt_path)
 
     # load best model for test
     if train_cfg.test_best:
@@ -92,8 +100,12 @@ def train(train_cfg: DictConfig):
         encoder.load_state_dict(enc_state_dict)
 
     # test!
-    if train_cfg.testing:
-        trainer.test(encoder, datamodule=dataset)
+    # load best model for test
+    best_model_path = callbacks["checkpointing"].best_model_path
+    enc_state_dict = torch.load(best_model_path)
+    enc_state_dict = enc_state_dict["state_dict"]
+    encoder.load_state_dict(enc_state_dict)
+    trainer.test(encoder, datamodule=dataset)
 
 
 # ============================== Prediction mode ==============================
@@ -121,17 +133,6 @@ def predict(predict_cfg):
 @hydra.main(config_path="conf", config_name="base_config", version_base=None)
 def main(cfg):
     """Main entry point(s) for BLISS."""
-    if not getenv("BLISS_HOME"):
-        project_path = Path(__file__).resolve()
-        bliss_home = project_path.parents[1]
-        environ["BLISS_HOME"] = bliss_home.as_posix()
-
-        logger = logging.getLogger(__name__)
-        logger.warning(
-            "WARNING: BLISS_HOME not set, setting to project root %s\n",  # noqa: WPS323
-            environ["BLISS_HOME"],
-        )
-
     if cfg.mode == "generate":
         generate(cfg.generate)
     elif cfg.mode == "train":

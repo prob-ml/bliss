@@ -1,17 +1,10 @@
 import logging
 
 import torch
-from einops import rearrange
 from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.encoder.data_augmentation import (
-    aug_rotate90,
-    aug_rotate180,
-    aug_rotate270,
-    aug_shift,
-    aug_vflip,
-)
+from bliss.global_env import GlobalEnv
 from bliss.main import train
 
 
@@ -148,84 +141,84 @@ class TestDC2:
     def test_dc2_size_and_type(self, cfg):
         dc2 = instantiate(cfg.surveys.dc2)
         dc2.prepare_data()
-        dc2.setup()
+        dc2.setup(stage="fit")
 
-        assert dc2[0]["images"].shape[0] == 6
-        assert len(dc2.image_ids()) == 25
+        # temporarily set global settings
+        GlobalEnv.seed_in_this_program = 0
+        GlobalEnv.current_encoder_epoch = 0
+
+        dc2 = list(dc2.train_dataloader())
+
+        assert dc2[0]["images"].shape[1] == 6
+        assert len(dc2) == 5
 
         params = (
             "locs",
             "n_sources",
             "source_type",
             "galaxy_fluxes",
-            "galaxy_params",
             "star_fluxes",
-            "star_log_fluxes",
         )
 
         for k in params:
             assert isinstance(dc2[0]["tile_catalog"][k], torch.Tensor)
 
-        for k in ("images", "background", "psf_params"):
+        for k in ("images", "psf_params"):
             assert isinstance(dc2[0][k], torch.Tensor)
 
-    def test_train_on_dc2(self, cfg):
-        train_dc2_cfg = cfg.copy()
-        train_dc2_cfg.encoder.image_normalizer.bands = [0, 1, 2, 3, 4, 5]
-        # why are these bands out of order? (should be "ugrizy") why does the test break if they
-        # are ordered correctly?
-        train_dc2_cfg.encoder.survey_bands = ["g", "i", "r", "u", "y", "z"]
-        train_dc2_cfg.train.data_source = train_dc2_cfg.surveys.dc2
-        train_dc2_cfg.encoder.do_data_augmentation = True
-        train_dc2_cfg.train.pretrained_weights = None
-        # log transform doesn't work in this test because the DC2 background is sometimes negative.
-        # why would the background be negative? are we using the wrong background estimate?
-        train_dc2_cfg.encoder.image_normalizer.log_transform_stdevs = []
-        train_dc2_cfg.encoder.image_normalizer.use_clahe = True
-        train_dc2_cfg.encoder.image_normalizer.include_background = False
+        # reset global settings to None
+        GlobalEnv.seed_in_this_program = None
+        GlobalEnv.current_encoder_epoch = None
 
-        for f in train_dc2_cfg.variational_factors:
+    def test_train_on_dc2(self, cfg):
+        cfg = cfg.copy()
+        cfg.encoder.survey_bands = ["u", "g", "r", "i", "z", "y"]
+        cfg.train.data_source = cfg.surveys.dc2
+        cfg.train.pretrained_weights = None
+        cfg.encoder.image_normalizers.psf.num_psf_params = 4
+
+        cfg.encoder.var_dist.factors = [
+            {
+                "_target_": "bliss.encoder.variational_dist.BernoulliFactor",
+                "name": "n_sources",
+                "sample_rearrange": None,
+                "nll_rearrange": None,
+                "nll_gating": None,
+            },
+            {
+                "_target_": "bliss.encoder.variational_dist.TDBNFactor",
+                "name": "locs",
+                "sample_rearrange": "b ht wt d -> b ht wt 1 d",
+                "nll_rearrange": "b ht wt 1 d -> b ht wt d",
+                "nll_gating": "n_sources",
+            },
+            {
+                "_target_": "bliss.encoder.variational_dist.BernoulliFactor",
+                "name": "source_type",
+                "sample_rearrange": "b ht wt -> b ht wt 1 1",
+                "nll_rearrange": "b ht wt 1 1 -> b ht wt",
+                "nll_gating": "n_sources",
+            },
+            {
+                "_target_": "bliss.encoder.variational_dist.LogNormalFactor",
+                "name": "star_fluxes",
+                "dim": 6,
+                "sample_rearrange": "b ht wt d -> b ht wt 1 d",
+                "nll_rearrange": "b ht wt 1 d -> b ht wt d",
+                "nll_gating": "is_star",
+            },
+            {
+                "_target_": "bliss.encoder.variational_dist.LogNormalFactor",
+                "name": "galaxy_fluxes",
+                "dim": 6,
+                "sample_rearrange": "b ht wt d -> b ht wt 1 d",
+                "nll_rearrange": "b ht wt 1 d -> b ht wt d",
+                "nll_gating": "is_galaxy",
+            },
+        ]
+
+        for f in cfg.variational_factors:
             if f.name in {"star_fluxes", "galaxy_fluxes"}:
                 f.dim = 6
 
-        train(train_dc2_cfg.train)
-
-    def test_dc2_augmentation(self, cfg):
-        dc2 = instantiate(cfg.surveys.dc2)
-        dc2.prepare_data()
-        dc2.setup()
-
-        dc2_first_data = dc2[0]
-        tile_dict = dc2_first_data["tile_catalog"]
-
-        for k, v in tile_dict.items():
-            if k != "n_sources":
-                tile_dict[k] = rearrange(v, "h w nh nw -> 1 h w nh nw")
-        tile_dict["n_sources"] = rearrange(tile_dict["n_sources"], "h w -> 1 h w")
-
-        ori_tile = TileCatalog(4, tile_dict)
-        ori_full = ori_tile.to_full_catalog()
-
-        imgs = rearrange(dc2_first_data["images"], "b h w -> 1 b 1 h w")
-        bgs = rearrange(dc2_first_data["background"], "b h w -> 1 b 1 h w")
-
-        aug_input_images = [imgs, bgs]
-        aug_input_images = torch.cat(aug_input_images, dim=2)
-
-        aug_list = [aug_vflip, aug_rotate90, aug_rotate180, aug_rotate270, aug_shift]
-
-        for aug_method in aug_list:
-            aug_image, aug_full = aug_method(ori_full, aug_input_images)
-            assert aug_image[0, :, 0, :, :].shape == dc2_first_data["images"].shape
-            assert aug_image[0, :, 1, :, :].shape == dc2_first_data["background"].shape
-            assert aug_full["n_sources"] <= ori_full["n_sources"]
-
-        # test rotatation
-        aug_image90, aug_full90 = aug_rotate90(ori_full, aug_input_images)
-        _, aug_full270 = aug_rotate270(ori_full, aug_input_images)
-
-        _, aug_full90180 = aug_rotate180(aug_full90, aug_image90)
-        _, aug_full90270 = aug_rotate270(aug_full90, aug_image90)
-
-        assert _test_full_catalog_equal(aug_full90270, ori_full)
-        assert _test_full_catalog_equal(aug_full90180, aug_full270)
+        train(cfg.train)

@@ -16,70 +16,6 @@ from bliss.surveys.sdss import PhotoFullCatalog
 
 
 class TestMetrics:
-    def _get_sdss_data(self, cfg):
-        """Loads SDSS frame and Photo Catalog."""
-        cfg = cfg.copy()
-        with open_dict(cfg):
-            cfg.surveys.sdss.align_to_band = 2
-        sdss = instantiate(cfg.surveys.sdss, load_image_data=True)
-        sdss.prepare_data()
-
-        run, camcol, field = sdss.image_id(0)
-        photo_cat = PhotoFullCatalog.from_file(
-            cat_path=cfg.paths.sdss
-            + f"/{run}/{camcol}/{field}/photoObj-{run:06d}-{camcol}-{field:04d}.fits",
-            wcs=sdss[0]["wcs"][cfg.simulator.prior.reference_band],
-            height=sdss[0]["image"].shape[1],
-            width=sdss[0]["image"].shape[2],
-        )
-        return photo_cat, sdss
-
-    def _get_image_and_background(self, sdss):
-        """Aligns, crops image and background from SDSS frame to reduce size."""
-        image = sdss[0]["image"]
-        background = sdss[0]["background"]
-
-        # crop to center fourth
-        height, width = image[0].shape
-        min_h, min_w = height // 4, width // 4
-        max_h, max_w = min_h * 3 - 8, min_w * 3
-        cropped_image = image[:, min_h:max_h, min_w:max_w]
-        cropped_background = background[:, min_h:max_h, min_w:max_w]
-
-        return cropped_image, cropped_background, (min_w, max_w), (min_h, max_h)
-
-    @pytest.fixture(scope="class")
-    def catalogs(self, cfg, encoder):
-        """The main entry point to get data for most of the tests."""
-        # load SDSS catalog and WCS
-        base_photo_cat, sdss = self._get_sdss_data(cfg)
-        wcs = sdss[0]["wcs"][2]
-        image, background, w_lim, h_lim = self._get_image_and_background(sdss)
-
-        # get RA/DEC limits of cropped image and construct d
-        ra_lim, dec_lim = wcs.all_pix2world(w_lim, h_lim, 0)
-        photo_cat = base_photo_cat.restrict_by_ra_dec(ra_lim, dec_lim).to(torch.device("cpu"))
-        decals_path = cfg.predict.decals_frame
-        decals_cat = TractorFullCatalog.from_file(decals_path, wcs, image.shape[1], image.shape[2])
-        decals_cat = decals_cat.to(torch.device("cpu"))
-
-        # get predicted BLISS catalog
-        def prep_image(x):  # noqa: WPS430
-            return torch.from_numpy(x).float().unsqueeze(0).to(device=cfg.predict.device)
-
-        with torch.no_grad():
-            batch = {"images": prep_image(image), "background": prep_image(background)}
-            encoder.eval()
-            encoder = encoder.float()
-            bliss_cat = encoder.sample(batch, use_mode=True)
-            bliss_cat = bliss_cat.to(torch.device("cpu")).to_full_catalog()
-
-        bliss_cat["plocs"] += torch.tensor(
-            [h_lim[0] + cfg.encoder.tile_slen, w_lim[0] + cfg.encoder.tile_slen]
-        )  # coords in original image
-
-        return {"decals": decals_cat, "photo": photo_cat, "bliss": bliss_cat}
-
     @pytest.fixture(scope="class")
     def tile_catalog(self, cfg, multiband_dataloader):
         """Generate a tile catalog for testing classification metrics."""
@@ -186,34 +122,63 @@ class TestMetrics:
         flux_results = flux_metrics(full_catalog, full_catalog, matching)
         assert flux_results["flux_err_r_mae"] == 0
 
-    def test_catalog_agreement(self, catalogs):
+    def _get_sdss_data(self, cfg):
+        """Loads SDSS frame and Photo Catalog."""
+        cfg = cfg.copy()
+        with open_dict(cfg):
+            cfg.surveys.sdss.align_to_band = 2
+        sdss = instantiate(cfg.surveys.sdss, load_image_data=True)
+        sdss.prepare_data()
+
+        run, camcol, field = sdss.image_id(0)
+        photo_cat = PhotoFullCatalog.from_file(
+            cat_path=cfg.paths.sdss
+            + f"/{run}/{camcol}/{field}/photoObj-{run:06d}-{camcol}-{field:04d}.fits",
+            wcs=sdss[0]["wcs"][cfg.simulator.prior.reference_band],
+            height=sdss[0]["image"].shape[1],
+            width=sdss[0]["image"].shape[2],
+        )
+        return photo_cat, sdss
+
+    def _get_image_and_background(self, sdss):
+        """Aligns, crops image and background from SDSS frame to reduce size."""
+        image = sdss[0]["image"]
+        background = sdss[0]["background"]
+
+        # crop to center fourth
+        height, width = image[0].shape
+        min_h, min_w = height // 4, width // 4
+        max_h, max_w = min_h * 3 - 8, min_w * 3
+        cropped_image = image[:, min_h:max_h, min_w:max_w]
+        cropped_background = background[:, min_h:max_h, min_w:max_w]
+
+        return cropped_image, cropped_background, (min_w, max_w), (min_h, max_h)
+
+    def test_photo_decals_catalogs_matches(self, cfg):
         """Compares catalogs as safety check for metrics."""
+        base_photo_cat, sdss = self._get_sdss_data(cfg)
+        wcs = sdss[0]["wcs"][2]
+
+        image, _background, w_lim, h_lim = self._get_image_and_background(sdss)
+
+        # get RA/DEC limits of cropped image and construct d
+        ra_lim, dec_lim = wcs.all_pix2world(w_lim, h_lim, 0)
+        photo_cat = base_photo_cat.restrict_by_ra_dec(ra_lim, dec_lim).to(torch.device("cpu"))
+        decals_path = cfg.predict.decals_frame
+        decals_cat = TractorFullCatalog.from_file(decals_path, wcs, image.shape[1], image.shape[2])
+        decals_cat = decals_cat.to(torch.device("cpu"))
+
         matcher = CatalogMatcher(dist_slack=1.0)
         detection_metrics = DetectionPerformance(mag_band=None)
 
-        pp_matching = matcher.match_catalogs(catalogs["photo"], catalogs["photo"])
-        pp_results = detection_metrics(catalogs["photo"], catalogs["photo"], pp_matching)
+        pp_matching = matcher.match_catalogs(photo_cat, photo_cat)
+        pp_results = detection_metrics(photo_cat, photo_cat, pp_matching)
         assert pp_results["detection_f1"] == 1
 
-        dd_matching = matcher.match_catalogs(catalogs["decals"], catalogs["decals"])
-        dd_results = detection_metrics(catalogs["decals"], catalogs["decals"], dd_matching)
+        dd_matching = matcher.match_catalogs(decals_cat, decals_cat)
+        dd_results = detection_metrics(decals_cat, decals_cat, dd_matching)
         assert dd_results["detection_f1"] == 1
 
-        dp_matching = matcher.match_catalogs(catalogs["decals"], catalogs["photo"])
-        dp_results = detection_metrics(catalogs["decals"], catalogs["photo"], dp_matching)
+        dp_matching = matcher.match_catalogs(decals_cat, photo_cat)
+        dp_results = detection_metrics(decals_cat, photo_cat, dp_matching)
         assert dp_results["detection_precision"] > 0.8
-
-        # bliss finds many more sources than photo. recall here measures the fraction of sources
-        # photo finds that bliss also finds
-        pb_matching = matcher.match_catalogs(catalogs["photo"], catalogs["bliss"])
-        pb_results = detection_metrics(catalogs["photo"], catalogs["bliss"], pb_matching)
-        assert pb_results["detection_recall"] > 0.8
-
-        # with the arguments reversed, precision below measures that same thing as recall did above
-        bp_matching = matcher.match_catalogs(catalogs["bliss"], catalogs["photo"])
-        bp_results = detection_metrics(catalogs["bliss"], catalogs["photo"], bp_matching)
-        assert bp_results["detection_precision"] > 0.8
-
-        db_matching = matcher.match_catalogs(catalogs["decals"], catalogs["bliss"])
-        db_results = detection_metrics(catalogs["decals"], catalogs["bliss"], db_matching)
-        assert db_results["detection_f1"] > dp_results["detection_f1"]

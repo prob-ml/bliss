@@ -1,0 +1,18 @@
+---
+defaults:
+    - train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+train:
+    trainer:
+        logger:
+            name: DC2_debug
+            version: DC2_debug
+        devices: [1]
+
+surveys:
+    dc2:
+        # cached_data_path: /data/scratch/dc2local/test_data/dc2_cached_data
+        prepare_data_processes_num: 4
+        subset_fraction: null

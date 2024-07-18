@@ -4,9 +4,6 @@ defaults:
     - _self_
     - override hydra/job_logging: stdout
 
-paths:
-    root: ${oc.env:BLISS_HOME}
-
 variational_factors:
   - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
     name: shear
@@ -48,27 +45,25 @@ cached_simulator:
     batch_size: 24
 
 encoder:
-    tiles_to_crop: 0
     metrics:
         _target_: torchmetrics.MetricCollection
         metrics:
             lensing_map:
                 _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
-
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         metrics:
           - _target_: bliss.encoder.sample_image_renders.PlotSampleImages
             frequency: 1
             restrict_batch: 0
-            tiles_to_crop: 1
+            tiles_to_crop: 0
             tile_slen: ${simulator.prior.tile_slen}
           - _target_: case_studies.weak_lensing.lensing_plots.PlotWeakLensingShearConvergence
             frequency: 1
             restrict_batch: 0
-            tiles_to_crop: 1
+            tiles_to_crop: 0
             tile_slen: ${simulator.prior.tile_slen}
-    double_detect: false
+    use_double_detect: false
     use_checkerboard: false
 
 surveys:
@@ -82,6 +77,5 @@ surveys:
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
-        pixel_shift: 2
         align_to_band: null
         load_image_data: true

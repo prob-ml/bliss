@@ -19,9 +19,9 @@ from scipy.ndimage import zoom
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
+from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.sdss import column_to_tensor
 from bliss.surveys.survey import Survey, SurveyDownloader
-from bliss.utils.download_utils import download_file_to_dst
 
 SkyCoord = TypedDict(
     "SkyCoord",
@@ -67,7 +67,6 @@ class DarkEnergySurvey(Survey):
     def __init__(
         self,
         psf_config: PSFConfig,
-        pixel_shift,
         dir_path="data/des",
         image_ids: Tuple[DESImageID] = (
             # TODO: maybe find a better/more general image_id representation?
@@ -92,7 +91,6 @@ class DarkEnergySurvey(Survey):
         self.image_id_list = self.process_image_ids(image_ids)
         self.bands = tuple(range(len(self.BANDS)))
         self.n_bands = len(self.BANDS)
-        self.pixel_shift = pixel_shift
 
         self.downloader = DESDownloader(self.image_id_list, self.des_path)
         self.prepare_data()
