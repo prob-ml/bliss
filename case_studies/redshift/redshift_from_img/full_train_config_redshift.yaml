@@ -39,9 +39,9 @@ encoder:
       log_transform_stdevs: []
       use_clahe: true
       clahe_min_stdev: 200
-    matcher:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftsCatalogMatcher
-        match_gating: is_galaxy
+    # matcher:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftsCatalogMatcher
+    #     match_gating: is_galaxy
     metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"

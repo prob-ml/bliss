@@ -32,10 +32,18 @@ class RedshiftMeanSquaredError(Metric):
     def update(self, true_cat, est_cat, matching):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            self.total += tcat_matches.sum()
 
-            true_red = true_cat["redshifts"][i][tcat_matches]
-            est_red = est_cat["redshifts"][i][ecat_matches]
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                self.total += tcat_matches.sum()
+                true_red = true_cat["redshifts"][i][tcat_matches]
+                est_red = est_cat["redshifts"][i][ecat_matches]
+            # For CatalogMatcher
+            else:
+                self.total += tcat_matches.size(0)
+                true_red = true_cat["redshifts"][i, tcat_matches, :]
+                est_red = est_cat["redshifts"][i, ecat_matches, :]
+
             red_err = ((true_red - est_red).abs() ** 2).sum()
 
             self.sum_squared_error += red_err
