@@ -61,10 +61,10 @@ class PlotWeakLensingShearConvergence(Metric):
             return None
         est_cat = self.sample_with_mode_tile
         true_tile_cat = TileCatalog(self.tile_slen, self.batch["tile_catalog"])
-        return plot_maps(self.images, true_tile_cat, est_cat, figsize=None)
+        return plot_maps(self.images, true_tile_cat, est_cat, figsize=None, current_epoch=self.current_epoch)
 
 
-def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None):
+def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0):
     """Plots weak lensing shear and convergence maps."""
     batch_size = images.size(0)
 
@@ -128,6 +128,7 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None):
         )
 
     fig.tight_layout()
+    fig.savefig(f"current_run_plots/wl_shear_conv_{current_epoch}.png")
     return fig, axes
 
 
