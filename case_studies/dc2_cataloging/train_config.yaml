@@ -83,14 +83,14 @@ my_metrics:
     _target_: bliss.encoder.metrics.FluxError
     survey_bands: ${encoder.survey_bands}
 
-# my_image_normalizers:
-#   asinh:
-#       _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
-#       q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
-
 my_image_normalizers:
-  null_noramlize:
-      _target_: case_studies.dc2_cataloging.utils.image_normalizer.NullNormalizer
+  asinh:
+      _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+      q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
+# my_image_normalizers:
+#   null_noramlize:
+#       _target_: case_studies.dc2_cataloging.utils.image_normalizer.NullNormalizer
 
 encoder:
     # _target_: case_studies.dc2_cataloging.utils.encoder.MultiDetectEncoder
