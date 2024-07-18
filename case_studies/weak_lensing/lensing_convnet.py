@@ -16,11 +16,12 @@ class WeakLensingFeaturesNet(nn.Module):
         )
 
         # downsample first for now
-        n_downsample = int(torch.round(torch.log2(torch.tensor(tile_slen)))) - 1
+        # self.n_downsample = int(torch.round(torch.log2(torch.tensor(tile_slen)))) - 1
+        self.n_downsample = 1
 
         module_list = []
 
-        for _ in range(n_downsample):
+        for _ in range(self.n_downsample):
             module_list.append(
                 ConvBlock(nch_hidden, 2 * nch_hidden, kernel_size=5, stride=2, padding=2)
             )
@@ -42,6 +43,9 @@ class WeakLensingFeaturesNet(nn.Module):
         x = self.preprocess3d(x).squeeze(2)
         for i, m in enumerate(self.net):
             x = m(x)
+            if i == self.n_downsample:
+                # save image
+                pass
 
         return x
 
@@ -57,6 +61,7 @@ class WeakLensingCatalogNet(nn.Module):
             ConvBlock(512, 256, kernel_size=1, padding=0),
             nn.Upsample(scale_factor=2, mode="nearest"),  # 4
             C3(768, 256, n=3, shortcut=False),
+            nn.AvgPool2d(kernel_size=64, stride=64),
             Detect(256, out_channels),
         
         ]
