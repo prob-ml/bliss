@@ -9,7 +9,7 @@ data_gen:
     image_size: 1280
     tile_size: 128
     nfiles: 5000
-    n_catalogs_per_file: 50
+    n_catalogs_per_file: 500
     bands: ["g", "r", "i", "z"]
     min_flux_for_loss: 0
 
@@ -92,7 +92,7 @@ predict:
         devices: [6,5]
         strategy: "ddp"
         precision: ${train.trainer.precision}
-        callbacks: 
+        callbacks:
             - ${predict.callbacks.writer}
     callbacks:
         writer:
