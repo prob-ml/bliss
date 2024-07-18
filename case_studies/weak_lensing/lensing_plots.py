@@ -84,12 +84,23 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
     for img_id in img_ids:
         # print("true shear shape: ", true_shear[0].squeeze().shape)
         # print("est shear shape: ", est_shear.shape)
+
+        shear1_vmin = torch.min(true_shear[img_id].squeeze()[:, :, 0])
+        shear1_vmax = torch.max(true_shear[img_id].squeeze()[:, :, 0])
+        shear2_vmin = torch.min(true_shear[img_id].squeeze()[:, :, 1])
+        shear2_vmax = torch.max(true_shear[img_id].squeeze()[:, :, 1])
+
+        convergence_vmin = torch.min(true_convergence[img_id].squeeze())
+        convergence_vmax = torch.max(true_convergence[img_id].squeeze())
+
         plot_maps_helper(
             x_label="True horizontal shear",
             mp=true_shear[img_id].squeeze()[:, :, 0],
             # ax=axes[img_id, 0],
             ax=axes[0],
             fig=fig,
+            vmin = shear1_vmin,
+            vmax = shear1_vmax,
         )
         plot_maps_helper(
             x_label="Estimated horizontal shear",
@@ -97,6 +108,8 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
             # ax=axes[img_id, 1],
             ax=axes[1],
             fig=fig,
+            vmin = shear1_vmin,
+            vmax = shear1_vmax,
         )
         plot_maps_helper(
             x_label="True diagonal shear",
@@ -104,6 +117,8 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
             # ax=axes[img_id, 2],
             ax=axes[2],
             fig=fig,
+            vmin = shear2_vmin,
+            vmax = shear2_vmax,
         )
         plot_maps_helper(
             x_label="Estimated diagonal shear",
@@ -111,6 +126,8 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
             # ax=axes[img_id, 3],
             ax = axes[3],
             fig=fig,
+            vmin = shear2_vmin,
+            vmax = shear2_vmax,
         )
         plot_maps_helper(
             x_label="True convergence",
@@ -118,6 +135,8 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
             # ax=axes[img_id, 4],
             ax = axes[4],
             fig=fig,
+            vmin = convergence_vmin,
+            vmax = convergence_vmax,
         )
         plot_maps_helper(
             x_label="Estimated convergence",
@@ -125,6 +144,8 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
             # ax=axes[img_id, 5],
             ax = axes[5],
             fig=fig,
+            vmin = convergence_vmin,
+            vmax = convergence_vmax,
         )
 
     fig.tight_layout()
@@ -132,7 +153,7 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
     return fig, axes
 
 
-def plot_maps_helper(x_label: str, mp, ax, fig):
+def plot_maps_helper(x_label: str, mp, ax, fig, vmin, vmax):
     ax.set_xlabel(x_label)
 
     mp = mp.cpu().numpy()
@@ -142,6 +163,8 @@ def plot_maps_helper(x_label: str, mp, ax, fig):
     im = ax.matshow(
         mp,
         cmap="viridis",
+        vmin = vmin, 
+        vmax = vmax,
         # extent=(0, mp.shape[0], mp.shape[1], 0),
     )
     fig.colorbar(im, cax=cax, orientation="vertical")
