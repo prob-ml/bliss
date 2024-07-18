@@ -48,8 +48,9 @@ FINAL_OUTPUT_DIR="output"
 
 # Catalog Directory
 CATALOG_DIR="catalogs"
-if [ ! -d "$OUTPUT_DIR" ]; then
+if [ ! -d "$CATALOG_DIR" ]; then
   mkdir -p "$CATALOG_DIR"
+  echo "Created catalogs directory"
 fi
 
 MAG=0.029999
@@ -178,4 +179,3 @@ mv $FINAL_OUTPUT_DIR/*.png $FINAL_OUTPUT_DIR/images/
 mv $FINAL_OUTPUT_DIR/*.fits $FINAL_OUTPUT_DIR/data/
 
 echo "Data generation completed."
-
