@@ -1,9 +1,17 @@
 ---
 defaults:
-    - ../../bliss/conf@_here_: base_config
+    - ../../../bliss/conf@_here_: base_config
     - _self_
     - override hydra/job_logging: stdout
 
+data_gen:
+    data_dir: /nfs/turbo/lsa-regier/scratch/kapnadak/new_data
+    image_size: 1280
+    tile_size: 128
+    nfiles: 5000
+    n_catalogs_per_file: 500
+    bands: ["g", "r", "i", "z"]
+    min_flux_for_loss: 0
 
 prior:
     _target_: case_studies.galaxy_clustering.prior.GalaxyClusterPrior
@@ -48,19 +56,15 @@ my_metrics:
   cluster_membership_acc:
     _target_: case_studies.galaxy_clustering.encoder.metrics.ClusterMembershipAccuracy
 
+my_image_normalizers:
+    asinh:
+        _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+        q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
 encoder:
     _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
     survey_bands: ["g", "r", "i", "z"]
-    image_normalizer:
-        _target_: bliss.encoder.image_normalizer.ImageNormalizer
-        bands: [0, 1, 2, 3]
-        include_original: true
-        include_background: false
-        concat_psf_params: false
-        num_psf_params: 6  # for SDSS, 4 for DC2
-        log_transform_stdevs: null
-        use_clahe: false
-        clahe_min_stdev: null
+    image_normalizers: ${my_image_normalizers}
     mode_metrics:
       _target_: torchmetrics.MetricCollection
       _convert_: "partial"
@@ -80,14 +84,21 @@ predict:
         _target_: case_studies.galaxy_clustering.cached_dataset.CachedDESModule
         cached_data_path: /nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles
         tiles_per_img: 64
-        batch_size: 1
+        batch_size: 2
         num_workers: 4
     trainer:
         _target_: pytorch_lightning.Trainer
         accelerator: "gpu"
-        devices: "6,7"
+        devices: [6,5]
         strategy: "ddp"
         precision: ${train.trainer.precision}
+        callbacks:
+            - ${predict.callbacks.writer}
+    callbacks:
+        writer:
+                _target_: case_studies.galaxy_clustering.inference.inference_callbacks.DESPredictionsWriter
+                output_dir: "/data/scratch/des/dr2_detection_output/run_1"
+                write_interval: "batch"
     encoder: ${encoder}
     weight_save_path: /nfs/turbo/lsa-regier/scratch/gapatron/best_encoder.ckpt
     device: "cuda:0"

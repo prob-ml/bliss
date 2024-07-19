@@ -18,7 +18,7 @@ CLUSTER_CATALOG_PATH = "redmapper_sva1-expanded_public_v6.3_members.fits"
 
 
 class Prior:
-    def __init__(self, image_size=4800):
+    def __init__(self, image_size=1280):
         super().__init__()
         self.width = image_size
         self.height = image_size
@@ -96,15 +96,15 @@ class Prior:
         source_types,
         membership,
     ):
-        """Makes a background catalog from generated samples.
+        """Makes a catalog from generated samples.
 
         Args:
             flux_samples: flux samples in all bands
             hlr_samples: samples of HLR
             g1_size_samples: samples of G1
             g2_size_samples: samples of G2
-            gal_locs: samples of background locations in galactic coordinates
-            cartesian_locs: samples of background locations in cartesian coordinates
+            gal_locs: samples of locations in galactic coordinates
+            cartesian_locs: samples of locations in cartesian coordinates
             source_types: source types for each source (0 for star, 1 for galaxy)
             membership: background (0) or cluster (1)
 
@@ -131,7 +131,7 @@ class Prior:
 
 
 class ClusterPrior(Prior):
-    def __init__(self, image_size=4800):
+    def __init__(self, image_size=1280):
         super().__init__(image_size)
 
         self.full_cluster_df = Table.read(CLUSTER_CATALOG_PATH).to_pandas()
@@ -246,7 +246,7 @@ class ClusterPrior(Prior):
 
 
 class BackgroundPrior(Prior):
-    def __init__(self, image_size=4800):
+    def __init__(self, image_size=1280):
         super().__init__(image_size)
 
         self.pixel_scale = 0.263
@@ -266,15 +266,9 @@ class BackgroundPrior(Prior):
     def sample_des_catalog(self):
         """Sample a random DES dataframe."""
         tile_choice = random.choice(DES_SUBDIRS)
-        main_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_main.fits")
-        flux_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_flux.fits")
-        main_data = fits.getdata(main_path)
-        main_df = pd.DataFrame(main_data)
-        flux_data = fits.getdata(flux_path)
-        flux_df = pd.DataFrame(flux_data)
-        self.source_df = pd.merge(
-            main_df, flux_df, left_on="COADD_OBJECT_ID", right_on="COADD_OBJECT_ID", how="left"
-        )
+        catalog_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_main.fits")
+        catalog_data = fits.getdata(catalog_path)
+        self.source_df = pd.DataFrame(catalog_data)
 
     def sample_sources(self, n_sources):
         """Samples random sources from the current DES catalog.
@@ -326,6 +320,23 @@ class BackgroundPrior(Prior):
         hlr_samples = self.pixel_scale * np.array(sources["FLUX_RADIUS_R"])
         return 1e-4 + (hlr_samples * (hlr_samples > 0))
 
+    def sample_shapes(self, sources):
+        """Samples shapes for each source in the catalog.
+        Shapes are from DES Table in the form of (a, b)
+        Converted to (g1, g2)
+
+        Args:
+            sources: Dataframe of DES sources
+
+        Returns:
+            samples for g1, g2 for each source
+        """
+        a = np.array(sources["A_IMAGE"])
+        b = np.array(sources["B_IMAGE"])
+        g = (a - b) / (a + b)
+        angle = np.arctan(b / a)
+        return g * np.cos(angle), g * np.sin(angle)
+
     def sample_fluxes(self, sources):
         """Samples fluxes for all bands for each source.
 
@@ -335,17 +346,18 @@ class BackgroundPrior(Prior):
         Returns:
             5-band array containing fluxes (clamped at 1 from below)
         """
-        fluxes = np.array(
+        mags = np.array(
             sources[
                 [
-                    "FLUX_AUTO_G_x",
-                    "FLUX_AUTO_R_x",
-                    "FLUX_AUTO_I_x",
-                    "FLUX_AUTO_Z_x",
+                    "MAG_AUTO_G",
+                    "MAG_AUTO_R",
+                    "MAG_AUTO_I",
+                    "MAG_AUTO_Z",
                 ]
             ]
         )
 
+        fluxes = 1000 * convert_mag_to_nmgy(mags)
         return fluxes * (fluxes > 0)
 
     def sample_background(self):
@@ -364,7 +376,7 @@ class BackgroundPrior(Prior):
         gal_source_locs = self.cartesian_to_gal(cartesian_source_locs)
         source_types = self.sample_source_types(des_sources)
         flux_samples = self.sample_fluxes(des_sources)
-        g1_size_samples, g2_size_samples = self.sample_shape(n_sources)
+        g1_size_samples, g2_size_samples = self.sample_shapes(n_sources)
         hlr_samples = self.sample_hlr(des_sources)
         return self.make_catalog(
             flux_samples,
