@@ -15,7 +15,7 @@ paths:
     decals: /data/scratch/decals
     des: /data/scratch/des
     dc2: /data/scratch/dc2local
-    cached_data: /data/scratch/aakash
+    cached_data: null  # TODO: override in other configs
     output: ${oc.env:HOME}/bliss_output
 
 # this prior is sdss-like; the flux parameters were fit using SDSS catalogs
@@ -46,6 +46,29 @@ prior:
     galaxy_a_scale: 4.432725319432478
     galaxy_a_bd_ratio: 2.0
 
+surveys:
+    sdss:
+        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
+        dir_path: ${paths.sdss}
+        fields:
+            - run: 94
+              camcol: 1
+              fields: [12]  #${range:12,482,20}
+            # - run: 125
+            #   camcol: 1
+            #   fields: ${range:15,565,20,435}
+            # - run: 752
+            #   camcol: 1
+            #   fields: ${range:15,685,20}
+            # - run: 3900
+            #   camcol: 6
+            #   fields: ${range:16,596,20,76}
+        psf_config:
+            pixel_scale: 0.396
+            psf_slen: 25
+        align_to_band: null  # we should set this to 2 (r-band)
+        load_image_data: false
+
 simulator:
     _target_: bliss.simulator.simulated_dataset.SimulatedDataset
     survey: ${surveys.sdss}
@@ -66,7 +89,67 @@ cached_simulator:
         - _target_: bliss.data_augmentation.RotateFlipTransform
     nontrain_transforms: []
 
-variational_factors:
+all_variational_factors:
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: n_sources
+      sample_rearrange: null
+      nll_rearrange: null
+      nll_gating: null
+    - _target_: bliss.encoder.variational_dist.TDBNFactor
+      name: locs
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      nll_gating: n_sources
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: source_type
+      sample_rearrange: "b ht wt -> b ht wt 1 1"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt"
+      nll_gating: n_sources
+    - _target_: bliss.encoder.variational_dist.LogNormalFactor
+      name: star_fluxes
+      dim: 5
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      nll_gating: is_star
+    - _target_: bliss.encoder.variational_dist.LogNormalFactor
+      name: galaxy_fluxes
+      dim: 5
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogitNormalFactor
+      name: galaxy_disk_frac
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogitNormalFactor
+      name: galaxy_beta_radians
+      high: 3.1415926
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogitNormalFactor
+      name: galaxy_disk_q
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogNormalFactor
+      name: galaxy_a_d
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogitNormalFactor
+      name: galaxy_bulge_q
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+    - _target_: bliss.encoder.variational_dist.LogNormalFactor
+      name: galaxy_a_b
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      nll_gating: is_galaxy
+
+no_gal_shape_variational_factors:
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
       name: n_sources
       sample_rearrange: null
@@ -95,6 +178,30 @@ variational_factors:
       nll_rearrange: "b ht wt 1 d -> b ht wt d"
       nll_gating: is_galaxy
 
+psf_asinh_normalizers:
+    psf:
+        _target_: bliss.encoder.image_normalizer.PsfAsImage
+        num_psf_params: 6  # 6 for SDSS, 4 for DC2, 10 for DES
+    asinh:
+        _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+        q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
+asinh_only_normalizer:
+    asinh:
+        _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+        q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
+all_normalizers:
+    psf:
+        _target_: bliss.encoder.image_normalizer.PsfAsImage
+        num_psf_params: 6  # 6 for SDSS, 4 for DC2, 10 for DES
+    clahe:
+        _target_: bliss.encoder.image_normalizer.ClaheNormalizer
+        min_stdev: 200
+    asinh:
+        _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+        q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
 metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
@@ -109,17 +216,8 @@ metrics:
         mag_bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
         mag_band: 2
         survey_bands: ${encoder.survey_bands}
-
-image_normalizers:
-    psf:
-        _target_: bliss.encoder.image_normalizer.PsfAsImage
-        num_psf_params: 6  # 6 for SDSS, 4 for DC2, 10 for DES
-    clahe:
-        _target_: bliss.encoder.image_normalizer.ClaheNormalizer
-        min_stdev: 200
-    asinh:
-        _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
-        q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+    # gal_shape_error:
+    #     _target_: bliss.encoder.metrics.GalaxyShapeError
 
 encoder:
     _target_: bliss.encoder.encoder.Encoder
@@ -133,11 +231,8 @@ encoder:
     scheduler_params:
         milestones: [32]
         gamma: 0.1
-    image_normalizers: ${image_normalizers}
-    var_dist:
-        _target_: bliss.encoder.variational_dist.VariationalDist
-        tile_slen: ${encoder.tile_slen}
-        factors: ${variational_factors}
+    image_normalizers: null  # TODO: override in other configs
+    var_dist: null  # TODO: override in other configs 
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -159,78 +254,6 @@ encoder:
     use_double_detect: false
     use_checkerboard: false
 
-surveys:
-    sdss:
-        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
-        dir_path: ${paths.sdss}
-        fields:  # TODO: better arbitary name for fields/bricks?
-            - run: 94
-              camcol: 1
-              fields: ${range:12,482,20}
-            - run: 125
-              camcol: 1
-              fields: ${range:15,565,20,435}
-            - run: 752
-              camcol: 1
-              fields: ${range:15,685,20}
-            - run: 3900
-              camcol: 6
-              fields: ${range:16,596,20,76}
-        psf_config:
-            pixel_scale: 0.396
-            psf_slen: 25
-        align_to_band: null  # we should set this to 2 (r-band)
-        load_image_data: false
-    decals:
-        _target_: bliss.surveys.decals.DarkEnergyCameraLegacySurvey
-        dir_path: ${paths.decals}
-        sky_coords:  # in degrees
-            # brick '3366m010' corresponds to SDSS RCF 94-1-12
-            - ra: 336.6643042496718
-              dec: -0.9316385797930247
-        bands: [0, 1, 3]  # grz
-        psf_config:
-            pixel_scale: 0.262
-            psf_slen: 63
-    des:
-        _target_: bliss.surveys.des.DarkEnergySurvey
-        dir_path: ${paths.des}
-        image_ids:
-            - sky_coord:
-                  ra: 336.6643042496718
-                  dec: -0.9316385797930247
-              decals_brickname: "3366m010"
-              ccdname: "S28"
-              g: "decam/CP/V4.8.2a/CP20171108/c4d_171109_002003_ooi_g_ls9"
-              r: "decam/CP/V4.8.2a/CP20170926/c4d_170927_025457_ooi_r_ls9"
-              i: ""
-              z: "decam/CP/V4.8.2a/CP20170926/c4d_170927_025655_ooi_z_ls9"
-        psf_config:
-            pixel_scale: 0.262
-            psf_slen: 63
-    dc2:
-        _target_: bliss.surveys.dc2.DC2DataModule
-        dc2_image_dir: ${paths.dc2}/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
-        dc2_cat_path: ${paths.dc2}/merged_catalog_with_flux_over_50.pkl
-        image_lim: [4000, 4000]
-        n_image_split: 50
-        tile_slen: 4
-        max_sources_per_tile: 5
-        min_flux_for_loss: ${encoder.min_flux_for_loss}
-        prepare_data_processes_num: 4
-        data_in_one_cached_file: 1250
-        splits: 0:80/80:90/90:100
-        batch_size: 64
-        num_workers: 4
-        cached_data_path: ${paths.output}/dc2_cached_data
-        train_transforms:
-            - _target_: bliss.data_augmentation.RotateFlipTransform
-            - _target_: bliss.data_augmentation.RandomShiftTransform
-              tile_slen: ${surveys.dc2.tile_slen}
-              max_sources_per_tile: ${surveys.dc2.tile_slen}
-        nontrain_transforms: []
-
-
 #######################################################################
 # things above matter only if they are referenced below
 
@@ -250,8 +273,8 @@ train:
         logger:
             _target_: pytorch_lightning.loggers.TensorBoardLogger
             save_dir: ${paths.output}
-            name: PSF_MODELS
-            version: multi_field_psf_aware
+            name: null  # TODO: override in other configs
+            version: null  # TODO: override in other configs
             default_hp_metric: false
         reload_dataloaders_every_n_epochs: 0
         check_val_every_n_epoch: 1
@@ -278,7 +301,7 @@ train:
             patience: 10
     data_source: ${cached_simulator}
     encoder: ${encoder}
-    seed: null
+    seed: 12345
     pretrained_weights: null
     ckpt_path: null
     matmul_precision: high
