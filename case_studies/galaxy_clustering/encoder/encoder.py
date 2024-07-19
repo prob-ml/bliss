@@ -18,10 +18,10 @@ class GalaxyClusterEncoder(Encoder):
         """
         power_of_two = (self.tile_slen != 0) & (self.tile_slen & (self.tile_slen - 1) == 0)
         assert power_of_two, "tile_slen must be a power of two"
-        ch_per_band = self.image_normalizer.num_channels_per_band()
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         num_features = 256
         self.features_net = GalaxyClusterFeaturesNet(
-            len(self.image_normalizer.bands),
+            len(self.survey_bands),
             ch_per_band,
             num_features,
             tile_slen=self.tile_slen,
@@ -39,7 +39,8 @@ class GalaxyClusterEncoder(Encoder):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
         ht, wt = h // self.tile_slen, w // self.tile_slen
 
-        x = self.image_normalizer.get_input_tensor(batch)
+        input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
+        x = torch.cat(input_lst, dim=2)
         x_features = self.features_net(x)
         mask = torch.zeros([batch_size, ht, wt])
         context = self.make_context(None, mask).to("cuda")
@@ -74,8 +75,7 @@ class GalaxyClusterEncoder(Encoder):
             }
 
     def _compute_loss(self, batch, logging_name):
-        batch_size, _n_bands, h, w = batch["images"].shape[0:4]
-        ht, wt = h // self.tile_slen, w // self.tile_slen
+        batch_size = batch["images"].shape[0]
 
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
@@ -91,11 +91,8 @@ class GalaxyClusterEncoder(Encoder):
         # make predictions/inferences
         pred = {}
 
-        x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.features_net(x)
-        mask = torch.zeros([batch_size, ht, wt])
-        context = self.make_context(None, mask).to("cuda")
-        pred["x_cat_marginal"] = self.catalog_net(x_features, context)
+        x_features, x_cat_marginal = self.get_features_and_parameters(batch)
+        pred["x_cat_marginal"] = x_cat_marginal
         x_features = x_features.detach()  # is this helpful? doing it here to match old code
 
         loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat1)
