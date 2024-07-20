@@ -149,7 +149,7 @@ class TestBasicTileAndFullCatalogs:
         assert torch.equal(tile_cat.galaxy_bools, correct_gbs)
 
     def test_filter_full_catalog_by_ploc_box(self, multi_source_fullcat):
-        cat = multi_source_fullcat.filter_full_catalog_by_ploc_box(torch.tensor([0.0, 0.0]), 1000.0)
+        cat = multi_source_fullcat.filter_by_ploc_box(torch.tensor([0.0, 0.0]), 1000.0)
         assert torch.equal(cat["n_sources"], torch.tensor([1, 2, 0]))
         assert cat["plocs"].shape[1] == 2
         assert torch.allclose(cat["plocs"][0, 0, :], torch.tensor([300.0, 600.0]))

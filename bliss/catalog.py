@@ -4,8 +4,6 @@ from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
-from astropy import units
-from astropy.table import Table
 from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from torch import Tensor
@@ -641,52 +639,7 @@ class FullCatalog(UserDict):
         tile_params.update({"n_sources": tile_n_sources})
         return TileCatalog(tile_slen, tile_params)
 
-    def to_astropy_table(self, encoder_survey_bands: Tuple[str]) -> Table:
-        # Convert dictionary of tensors to list of dictionaries
-        on_vals = {}
-        is_on_mask = self.is_on_mask
-        for k, v in self.items():
-            if k == "n_sources":
-                continue
-            on_vals[k] = v[is_on_mask].cpu()
-
-        # Split to different columns for each band
-        for b, bl in enumerate(encoder_survey_bands):
-            on_vals[f"star_flux_{bl}"] = on_vals["star_fluxes"][..., b]
-            on_vals[f"galaxy_flux_{bl}"] = on_vals["galaxy_fluxes"][..., b]
-
-        # Remove combined flux columns
-        on_vals.pop("star_fluxes")
-        on_vals.pop("galaxy_fluxes")
-
-        # declare our astropy table
-        est_cat_table = Table(names=on_vals.keys())
-
-        # Convert all _fluxes columns to units.Quantity
-        for bl in encoder_survey_bands:
-            est_cat_table[f"star_flux_{bl}"].unit = units.nmgy
-            est_cat_table[f"galaxy_flux_{bl}"].unit = units.nmgy
-
-        # add units to some galaxy shape properties
-        est_cat_table["galaxy_beta_radians"].unit = units.radian
-        est_cat_table["galaxy_a_d"].unit = units.arcsec
-        est_cat_table["galaxy_a_b"].unit = units.arcsec
-
-        # load data into the astropy table
-        n = is_on_mask.sum()  # number of (predicted) objects
-        for i in range(n):
-            row = {}
-            for k, v in on_vals.items():
-                row[k] = v[i].cpu().float()
-            # Convert `source_type` to string "star" or "galaxy" labels
-            row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
-            # Force `plocs` to be "({x}, {y})" tuple strings for readability
-            row["plocs"] = str(tuple(row["plocs"].tolist()))
-            est_cat_table.add_row(row)
-
-        return est_cat_table
-
-    def filter_full_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
+    def filter_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
         assert box_origin[0] + box_len <= self.height, "invalid box"
         assert box_origin[1] + box_len <= self.width, "invalid box"
 

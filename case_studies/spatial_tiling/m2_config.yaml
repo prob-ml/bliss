@@ -4,6 +4,9 @@ defaults:
     - _self_
     - override hydra/job_logging: stdout
 
+paths:
+    cached_data: /data/scratch/regier/m2
+
 variational_factors:
   - _target_: bliss.encoder.variational_dist.BernoulliFactor
     name: n_sources
