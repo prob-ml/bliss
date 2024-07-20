@@ -1,5 +1,4 @@
 import itertools
-import warnings
 from typing import Optional
 
 import pytorch_lightning as pl
@@ -33,7 +32,6 @@ class Encoder(pl.LightningModule):
         sample_image_renders: MetricCollection,
         mode_metrics: MetricCollection,
         sample_metrics: Optional[MetricCollection] = None,
-        min_flux_for_loss: float = 0,
         min_flux_for_metrics: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
@@ -52,7 +50,6 @@ class Encoder(pl.LightningModule):
             sample_image_renders: for plotting relevant images (overlays, shear maps)
             mode_metrics: for scoring predicted mode catalogs during training
             sample_metrics: for scoring predicted sampled catalogs during training
-            min_flux_for_loss: Sources with a lower flux will not be considered when computing loss
             min_flux_for_metrics: filter sources by flux during test
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
@@ -70,9 +67,7 @@ class Encoder(pl.LightningModule):
         self.sample_metrics = sample_metrics
         self.sample_image_renders = sample_image_renders
         self.matcher = matcher
-        self.min_flux_for_loss = min_flux_for_loss
         self.min_flux_for_metrics = min_flux_for_metrics
-        assert self.min_flux_for_loss <= self.min_flux_for_metrics, "invalid threshold"
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.use_double_detect = use_double_detect
@@ -180,21 +175,11 @@ class Encoder(pl.LightningModule):
         ht, wt = h // self.tile_slen, w // self.tile_slen
 
         # filter out undetectable sources and split catalog by flux
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = TileCatalog(batch["tile_catalog"])
 
-        # TODO: move tile_cat filtering to the dataloader and from the encoder remove
-        # `reference_band`, `min_flux_for_loss`, and `min_flux_for_metrics`
-        # (metrics can be computed with the original full catalog if necessary)
-        target_cat = target_cat.filter_by_flux(
-            min_flux=self.min_flux_for_loss,
-            band=self.reference_band,
-        )
         # TODO: don't order the light sources by brightness; softmax instead
         target_cat1 = target_cat.get_brightest_sources_per_tile(
             band=self.reference_band, exclude_num=0
-        )
-        target_cat2 = target_cat.get_brightest_sources_per_tile(
-            band=self.reference_band, exclude_num=1
         )
 
         x_features = self.get_features(batch)
@@ -218,6 +203,9 @@ class Encoder(pl.LightningModule):
                 break
 
         if self.use_double_detect:
+            target_cat2 = target_cat.get_brightest_sources_per_tile(
+                band=self.reference_band, exclude_num=1
+            )
             with torch.no_grad():
                 est_cat1 = self.sample_first_detection(x_features, use_mode=False)
             # occasionally we input an estimated catalog rather than a target catalog, to regularize
@@ -230,12 +218,6 @@ class Encoder(pl.LightningModule):
             loss22 = self.var_dist.compute_nll(x_cat2, target_cat2)
             loss22 *= target_cat1["n_sources"]
             loss += loss22
-
-        nan_mask = torch.isnan(loss)
-        if nan_mask.any():
-            loss = loss[~nan_mask]
-            msg = f"NaN detected in loss. Ignored {nan_mask.sum().item()} NaN values."
-            warnings.warn(msg)
 
         # could normalize by the number of tile predictions, rather than number of tiles
         loss = loss.sum() / loss.numel()
@@ -254,18 +236,18 @@ class Encoder(pl.LightningModule):
         return self._compute_loss(batch, "train")
 
     def update_metrics(self, batch, batch_idx):
-        target_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_tile_cat = TileCatalog(batch["tile_catalog"])
         target_tile_cat = target_tile_cat.filter_by_flux(
             min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
         )
-        target_cat = target_tile_cat.to_full_catalog()
+        target_cat = target_tile_cat.to_full_catalog(self.tile_slen)
 
         mode_tile_cat = self.sample(batch, use_mode=True).filter_by_flux(
             min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
         )
-        mode_cat = mode_tile_cat.to_full_catalog()
+        mode_cat = mode_tile_cat.to_full_catalog(self.tile_slen)
         mode_matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, mode_matching)
 
@@ -274,7 +256,7 @@ class Encoder(pl.LightningModule):
                 min_flux=self.min_flux_for_metrics,
                 band=self.reference_band,
             )
-            sample_cat = sample_tile_cat.to_full_catalog()
+            sample_cat = sample_tile_cat.to_full_catalog(self.tile_slen)
             sample_matching = self.matcher.match_catalogs(target_cat, sample_cat)
             self.sample_metrics.update(target_cat, sample_cat, sample_matching)
 

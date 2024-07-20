@@ -49,7 +49,6 @@ encoder:
     tile_slen: 2
     survey_bands: ['r']
     reference_band: 0
-    min_flux_for_loss: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
     min_flux_for_metrics: 0.9419
     use_checkerboard: true
     use_double_detect: true
@@ -82,7 +81,6 @@ prior:
     gal_color_model_path: ${simulator.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 56
     n_tiles_w: 56
-    tile_slen: 2
     batch_size: 32
     max_sources: 6
     mean_sources: 0.48
@@ -92,6 +90,9 @@ prior:
     star_flux_truncation: 5685.588160703261
     star_flux_loc: -1.162430157551662
     star_flux_scale: 1.4137911256506595
+
+simulator:
+    tile_slen: 2
 
 surveys:
     sdss:
@@ -118,6 +119,9 @@ cached_simulator:
         - _target_: bliss.cached_dataset.FullCatalogToTileTransform
           tile_slen: 2
           max_sources: 6
+        - _target_: bliss.cached_dataset.FluxFilterTransform
+          reference_band: 0  # formerly 2 before the OneBandTransform
+          min_flux: 0.9419
         - _target_: bliss.data_augmentation.RotateFlipTransform
     nontrain_transforms:
         - _target_: bliss.cached_dataset.OneBandTransform
@@ -125,6 +129,9 @@ cached_simulator:
         - _target_: bliss.cached_dataset.FullCatalogToTileTransform
           tile_slen: 2
           max_sources: 6
+        - _target_: bliss.cached_dataset.FluxFilterTransform
+          reference_band: 0
+          min_flux: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
 
 train:
     trainer:

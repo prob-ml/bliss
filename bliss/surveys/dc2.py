@@ -54,7 +54,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         n_image_split: int,
         tile_slen: int,
         max_sources_per_tile: int,
-        min_flux_for_loss: int,
+        min_flux: float,
         prepare_data_processes_num: int,
         data_in_one_cached_file: int,
         splits: str,
@@ -82,7 +82,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         self.n_image_split = n_image_split
         self.tile_slen = tile_slen
         self.max_sources_per_tile = max_sources_per_tile
-        self.min_flux_for_loss = min_flux_for_loss
+        self.min_flux = min_flux
         self.prepare_data_processes_num = prepare_data_processes_num
         self.data_in_one_cached_file = data_in_one_cached_file
 
@@ -194,7 +194,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             width,
             bands=self.bands,
             n_bands=self.n_bands,
-            min_flux_for_loss=self.min_flux_for_loss,
+            min_flux=self.min_flux,
         )
         tile_cat = full_cat.to_tile_catalog(self.tile_slen, self.max_sources_per_tile)
         tile_dict = self.squeeze_tile_dict(tile_cat.data)
@@ -332,7 +332,7 @@ class DC2FullCatalog(FullCatalog):
     def from_file(cls, cat_path, wcs, height, width, **kwargs):
         catalog = pd.read_pickle(cat_path)
         flux_r_band = catalog["flux_r"].values
-        catalog = catalog.loc[flux_r_band > kwargs["min_flux_for_loss"]]
+        catalog = catalog.loc[flux_r_band > kwargs["min_flux"]]
 
         objid = torch.from_numpy(catalog["id"].values)
         match_id = torch.from_numpy(catalog["match_objectId"].values)

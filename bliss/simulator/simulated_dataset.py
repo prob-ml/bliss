@@ -23,6 +23,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self,
         survey: Survey,
         prior: CatalogPrior,
+        tile_slen: int,
         n_batches: int,
         coadd_depth: int = 1,
         num_workers: int = 0,
@@ -38,6 +39,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
         self.catalog_prior.requires_grad_(False)
 
         self.image_decoder = ImageDecoder(
+            tile_slen=tile_slen,
             psf=survey.psf,
             bands=survey.BANDS,
             background=self.survey.background,

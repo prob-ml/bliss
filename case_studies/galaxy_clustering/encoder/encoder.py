@@ -51,7 +51,7 @@ class GalaxyClusterEncoder(Encoder):
         return self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
 
     def update_metrics(self, batch, batch_idx):
-        target_cat = BaseTileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = BaseTileCatalog(batch["tile_catalog"])
 
         mode_cat = self.sample(batch, use_mode=True)
         self.mode_metrics.update(target_cat, mode_cat)
@@ -77,13 +77,8 @@ class GalaxyClusterEncoder(Encoder):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
         ht, wt = h // self.tile_slen, w // self.tile_slen
 
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = TileCatalog(batch["tile_catalog"])
 
-        # filter out undetectable sources
-        target_cat = target_cat.filter_by_flux(
-            min_flux=self.min_flux_for_loss,
-            band=self.reference_band,
-        )
         target_cat1 = target_cat.get_brightest_sources_per_tile(
             band=self.reference_band, exclude_num=0
         )

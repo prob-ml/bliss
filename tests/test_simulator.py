@@ -30,7 +30,7 @@ class TestSimulate:
         # load cached simulated catalog
         true_catalog = torch.load(cfg.paths.test_data + "/test_image/dataset_0.pt")
         true_catalog["star_fluxes"][0, 10, 10] = 10.0
-        true_catalog = TileCatalog(4, true_catalog)
+        true_catalog = TileCatalog(true_catalog)
 
         # simulate image from catalog
         image_simulator = instantiate(cfg.simulator)
@@ -99,7 +99,7 @@ class TestSimulate:
         with open(Path(cfg.paths.test_data) / "sdss_preds.pt", "rb") as f:
             test_datum = torch.load(f)
 
-        true_tile_cat = TileCatalog(cfg.simulator.prior.tile_slen, test_datum["catalog"]).to("cpu")
+        true_tile_cat = TileCatalog(test_datum["catalog"]).to("cpu")
 
         # first we'll render the image from the catalog
         rcfs = [(94, 1, 12)]

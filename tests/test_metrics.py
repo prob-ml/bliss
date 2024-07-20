@@ -19,7 +19,7 @@ class TestMetrics:
     def tile_catalog(self, cfg, multiband_dataloader):
         """Generate a tile catalog for testing classification metrics."""
         tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
-        return TileCatalog(cfg.simulator.prior.tile_slen, tile_cat)
+        return TileCatalog(tile_cat)
 
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
@@ -104,7 +104,7 @@ class TestMetrics:
 
     def test_self_agreement(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
-        full_catalog = tile_catalog.to_full_catalog()
+        full_catalog = tile_catalog.to_full_catalog(4)
 
         matcher = CatalogMatcher(dist_slack=1.0, mag_band=2)
         matching = matcher.match_catalogs(full_catalog, full_catalog)

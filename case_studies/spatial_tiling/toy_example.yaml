@@ -5,7 +5,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    cached_data: /data/scratch/regier/20percent
+    cached_data: /data/scratch/regier/toy_example
 
 # this prior is sdss-like, except for the flux distribution, which is easier
 # (i.e, flatter, always greater than 3 nmgy, and always less than 100 nmgy).

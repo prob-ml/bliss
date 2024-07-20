@@ -15,6 +15,7 @@ from bliss.catalog import SourceType
 class ImageDecoder(nn.Module):
     def __init__(
         self,
+        tile_slen: int,
         psf,
         bands: Tuple[int, ...],
         background,
@@ -25,6 +26,7 @@ class ImageDecoder(nn.Module):
 
         Args:
             psf: PSF object
+            tile_slen: side length in pixels of a tile
             bands: bands to use for constructing the decoder, passed from Survey
             background: sky backgrounds for each image and each band
             flux_calibration_dict: dictionary specifying elec count conversions by imageid
@@ -33,6 +35,7 @@ class ImageDecoder(nn.Module):
 
         super().__init__()
 
+        self.tile_slen = tile_slen
         self.n_bands = len(bands)
 
         self.psf_galsim = psf.psf_galsim  # Dictionary indexed by image_id
@@ -194,8 +197,8 @@ class ImageDecoder(nn.Module):
         batch_size, n_tiles_h, n_tiles_w = tile_cat["n_sources"].shape
         assert len(image_ids) == batch_size
 
-        slen_h = tile_cat.tile_slen * n_tiles_h
-        slen_w = tile_cat.tile_slen * n_tiles_w
+        slen_h = self.tile_slen * n_tiles_h
+        slen_w = self.tile_slen * n_tiles_w
         images_shape = (batch_size * coadd_depth, self.n_bands, slen_h, slen_w)
         background = self.background.sample(images_shape, image_id_indices=image_id_indices)
         background = rearrange(
@@ -220,7 +223,7 @@ class ImageDecoder(nn.Module):
             if "galaxy_fluxes" in tile_cat:
                 tile_cat["galaxy_fluxes"][i] *= flux_calibration_rats[i]  # noqa: WPS529
 
-        full_cat = tile_cat.to_full_catalog()
+        full_cat = tile_cat.to_full_catalog(self.tile_slen)
 
         # generate random WCS shifts as manual image dithering via unaligning WCS
         wcs_batch = []
