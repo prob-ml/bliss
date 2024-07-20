@@ -321,6 +321,7 @@ class FullCatalog(UserDict):
                         raise ValueError(  # noqa: WPS220
                             "# of sources in at least one tile is larger than 1."
                         )
+                    # pylint: disable-next=possibly-used-before-assignment
                     flux1 = rearrange(tile_fluxes[ii, coords[0], coords[1]], "->")
                     flux2 = rearrange(self["fluxes"][ii, idx], "1 ->")
                     if flux1 > flux2:  # keep current source in tile
