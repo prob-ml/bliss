@@ -248,3 +248,118 @@ INFO: Overwriting dataset...
 INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
 INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
 INFO: Saving model as version 8
+
+./bin/run_deblender_train.py -o -s 55 -t 16_45
+
+Run training deblender script...
+        With tag 16_45 and seed 55 at 2024-05-17 16:04:29.020579
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 'None', batch_size 128, n_epochs 10001
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 9
+INFO: Saved checkpoint 'run/out/deblender/version_9/checkpoints/epoch=5343-val_loss=7457482.000.ckpt' as weights models/deblend.pt
+
+./bin/run_deblender_train.py -o -s 42 -t 17_42
+
+Run training deblender script...
+        With tag 17_42 and seed 42 at 2024-06-05 16:49:25.063393
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 256, n_epochs 10001
+
+
+./bin/run_deblender_train.py -o -s 42 -t 17_42
+
+Run training deblender script...
+        With tag 17_42 and seed 42 at 2024-06-05 16:58:10.725579
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 256, n_epochs 10001
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 10
+
+######### loss was changed to .mean() ############
+
+./bin/run_deblender_train.py -o -s 42 -t 18_42
+
+
+Run training deblender script...
+        With tag 18_42 and seed 42 at 2024-06-11 09:34:01.504886
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 64, n_epochs 10001
+
+INFO: Saved checkpoint 'run/out/deblender/version_10/checkpoints/epoch=7579-val_loss=14900386.000.ckpt' as weights models/deblend.pt
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 11
+
+./bin/run_deblender_train.py -s 43 -t 18_42 -b 128
+
+Run training deblender script...
+        With tag 18_42 and seed 43 at 2024-06-11 10:32:53.245244
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 128, n_epochs 10001
+
+INFO: Saving model as version 12
+
+./bin/run_deblender_train.py -s 42 -t 18_42 -b 256
+
+Run training deblender script...
+        With tag 18_42 and seed 42 at 2024-06-14 13:13:56.450948
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 256, n_epochs 10001
+
+
+./bin/run_deblender_train.py -s 42 -t 18_42 -b 256
+
+Run training deblender script...
+        With tag 18_42 and seed 42 at 2024-06-14 13:16:39.019141
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 256, n_epochs 10001
+
+INFO: Saved checkpoint 'run/out/deblender/version_11/checkpoints/epoch=2319-val_loss=8.073.ckpt' as weights models/deblend.pt
+INFO: Saved checkpoint 'run/out/deblender/version_12/checkpoints/epoch=1799-val_loss=8.080.ckpt' as weights models/deblend.pt
+
+
+########### testing dataset now has 100k blends (instead of 10k) #####################
+
+./bin/run_deblender_train.py -s 42 -t 18_42 -b 128
+
+Run training deblender script...
+        With tag 18_42 and seed 42 at 2024-06-19 16:44:29.527223
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 128, n_epochs 10001
+
+INFO: Saving model as version 14
+
+./bin/run_deblender_train.py -s 42 -t 18_42 -b 256
+
+Run training deblender script...
+        With tag 18_42 and seed 42 at 2024-06-20 23:59:21.176916
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 256, n_epochs 10001
+
+INFO: Saving model as version 15

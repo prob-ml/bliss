@@ -20,11 +20,11 @@ assert Path(AE_STATE_DICT).exists()
 
 @click.command()
 @click.option("-s", "--seed", default=42, type=int)
-@click.option("-n", "--n-samples", default=1028 * 20, type=int)
-@click.option("--split", default=1028 * 15, type=int)
-@click.option("-b", "--batch-size", default=128)
+@click.option("-n", "--n-samples", default=1280 * 20, type=int)
+@click.option("--split", default=1280 * 15, type=int)
+@click.option("-b", "--batch-size", default=64)
 @click.option("-e", "--n-epochs", default=10001)
-@click.option("--validate-every-n-epoch", default=1, type=int)
+@click.option("--validate-every-n-epoch", default=20, type=int)
 @click.option("-o", "--overwrite", is_flag=True, default=False)
 @click.option("-t", "--tag", required=True, type=str, help="Dataset tag")
 @click.option("--only-bright", is_flag=True, default=False)
@@ -60,13 +60,13 @@ def main(
 
     L.seed_everything(seed)
 
-    train_ds_file = f"ds/train_ds_{tag}.pt"
-    val_ds_file = f"ds/val_ds_{tag}.pt"
+    train_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/train_ds_{tag}.pt"
+    val_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/val_ds_{tag}.pt"
 
     if overwrite:
         with open("log.txt", "a") as f:
             # for max_n_sources choice, see:
-            # https://www.wolframalpha.com/input?i=Poisson+distribution+with+mean+4
+            # https://www.wolframalpha.com/input?i=Poisson+distribution+with+mean+3.5
             create_dataset(
                 catsim_file="../../../data/OneDegSq.fits",
                 stars_mag_file="../../../data/stars_med_june2018.fits",
@@ -74,7 +74,7 @@ def main(
                 train_val_split=split,
                 train_ds_file=train_ds_file,
                 val_ds_file=val_ds_file,
-                max_n_sources=15,
+                max_n_sources=10,
                 max_shift=0.5,  # uniformly random within central slen square.
                 only_bright=only_bright,
                 add_galaxies_in_padding=not no_padding_galaxies,
@@ -90,14 +90,15 @@ def main(
         train_ds = SavedGalsimBlends(train_ds_file, split, keep_padding=True)
         val_ds = SavedGalsimBlends(val_ds_file, n_samples - split, keep_padding=True)
         train_dl, val_dl, trainer = setup_training_objects(
-            train_ds,
-            val_ds,
-            batch_size,
-            NUM_WORKERS,
-            n_epochs,
-            validate_every_n_epoch,
-            None,
+            train_ds=train_ds,
+            val_ds=val_ds,
+            batch_size=batch_size,
+            num_workers=NUM_WORKERS,
+            n_epochs=n_epochs,
+            validate_every_n_epoch=validate_every_n_epoch,
+            val_check_interval=None,
             model_name="deblender",
+            log_every_n_steps=128,
             log_file=g,
         )
 

@@ -95,7 +95,22 @@ class GalaxyEncoder(pl.LightningModule):
         recon_losses: Tensor = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
         assert not torch.any(torch.logical_or(torch.isnan(recon_losses), torch.isinf(recon_losses)))
 
-        return recon_losses.sum()
+        return recon_losses.mean()
+
+    def variational_mode(self, images: Tensor, background: Tensor, tile_catalog: TileCatalog):
+        _, nth, ntw, _ = tile_catalog.locs.shape
+
+        images_with_background, _ = pack([images, background], "b * h w")
+        image_ptiles = get_images_in_tiles(
+            images_with_background,
+            self.tile_slen,
+            self.ptile_slen,
+        )
+        image_ptiles_flat = rearrange(image_ptiles, "n nth ntw c h w -> (n nth ntw) c h w")
+        tile_locs_flat = rearrange(tile_catalog.locs, "n nth ntw xy -> (n nth ntw) xy")
+        galaxy_params_flat: Tensor = self(image_ptiles_flat, tile_locs_flat)
+
+        return rearrange(galaxy_params_flat, "(b nth ntw) d -> b nth ntw d", nth=nth, ntw=ntw)
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""

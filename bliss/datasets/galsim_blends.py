@@ -32,7 +32,8 @@ class SavedGalsimBlends(Dataset):
         self.background = ds.pop("background").float()
 
         # don't need for training
-        ds.pop("individuals")
+        ds.pop("centered_sources")
+        ds.pop("uncentered_sources")
         ds.pop("noiseless")
 
         # avoid large memory usage if we don't need padding.
@@ -95,7 +96,8 @@ def generate_dataset(
 
     images_list = []
     noiseless_images_list = []
-    individuals_list = []
+    uncentered_sources_list = []
+    centered_sources_list = []
     paddings_list = []
     params_list = []
 
@@ -120,7 +122,9 @@ def generate_dataset(
             max_shift=max_shift,
             galaxy_prob=galaxy_prob,
         )
-        center_noiseless, individual_noiseless = render_full_catalog(full_cat, psf, slen, bp)
+        center_noiseless, uncentered_sources, centered_sources = render_full_catalog(
+            full_cat, psf, slen, bp
+        )
 
         if add_galaxies_in_padding:
             padding_noiseless = _render_padded_image(
@@ -134,29 +138,33 @@ def generate_dataset(
 
         images_list.append(noisy)
         noiseless_images_list.append(noiseless)
-        individuals_list.append(individual_noiseless)
+        uncentered_sources_list.append(uncentered_sources)
+        centered_sources_list.append(centered_sources)
         params_list.append(full_cat.to_tensor_dict())
 
         # separately keep padding since it's needed in the deblender loss function
         # for that same purpose we also add central stars
         sbool = rearrange(full_cat["star_bools"], "1 ms 1 -> ms 1 1 1")
-        all_stars = reduce(individual_noiseless * sbool, "ms 1 h w -> 1 h w", "sum")
+        all_stars = reduce(uncentered_sources * sbool, "ms 1 h w -> 1 h w", "sum")
         padding_with_stars_noiseless = padding_noiseless + all_stars
         paddings_list.append(padding_with_stars_noiseless)
 
     images, _ = pack(images_list, "* c h w")
-    noiseless_images, _ = pack(noiseless_images_list, "* c h w")
-    individuals, _ = pack(individuals_list, "* n c h w")
+    noiseless, _ = pack(noiseless_images_list, "* c h w")
+    centered_sources, _ = pack(centered_sources_list, "* n c h w")
+    uncentered_sources, _ = pack(uncentered_sources_list, "* n c h w")
     paddings, _ = pack(paddings_list, "* c h w")
     paramss = torch.cat(params_list, dim=0)
 
-    assert individuals.shape[:3] == (n_samples, max_n_sources, 1)
+    assert centered_sources.shape[:3] == (n_samples, max_n_sources, 1)
+    assert uncentered_sources.shape[:3] == (n_samples, max_n_sources, 1)
 
     return {
         "images": images,
         "background": background,
-        "noiseless": noiseless_images,
-        "individuals": individuals,
+        "noiseless": noiseless,
+        "uncentered_sources": uncentered_sources,
+        "centered_sources": centered_sources,
         "paddings": paddings,
         **paramss,
     }
@@ -279,7 +287,8 @@ def render_full_catalog(full_cat: FullCatalog, psf: galsim.GSObject, slen: int, 
     assert b == 1, "Only one batch supported for now."
 
     image = torch.zeros(1, size, size)
-    individual_noiseless = torch.zeros(max_n_sources, 1, size, size)
+    centered_noiseless = torch.zeros(max_n_sources, 1, size, size)
+    uncentered_noiseless = torch.zeros(max_n_sources, 1, size, size)
 
     n_sources = int(full_cat.n_sources.item())
     galaxy_params = full_cat["galaxy_params"][0]
@@ -292,15 +301,18 @@ def render_full_catalog(full_cat: FullCatalog, psf: galsim.GSObject, slen: int, 
         offset_y = plocs[ii][0] + bp - size / 2
         offset = torch.tensor([offset_x, offset_y])
         if galaxy_bools[ii] == 1:
-            source = _render_one_galaxy(galaxy_params[ii], psf, size, offset)
+            source_uncentered = _render_one_galaxy(galaxy_params[ii], psf, size, offset)
+            source_centered = _render_one_galaxy(galaxy_params[ii], psf, size, offset=None)
         elif star_bools[ii] == 1:
-            source = _render_one_star(psf, star_fluxes[ii][0].item(), size, offset)
+            source_uncentered = _render_one_star(psf, star_fluxes[ii][0].item(), size, offset)
+            source_centered = _render_one_star(psf, star_fluxes[ii][0].item(), size, offset=None)
         else:
             continue
-        individual_noiseless[ii] = source
-        image += source
+        centered_noiseless[ii] = source_centered
+        uncentered_noiseless[ii] = source_uncentered
+        image += source_uncentered
 
-    return image, individual_noiseless
+    return image, uncentered_noiseless, centered_noiseless
 
 
 def _sample_galaxy_params(catsim_table: Table, n_galaxies: int, max_n_sources: int) -> Tensor:

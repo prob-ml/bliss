@@ -480,7 +480,7 @@ def get_single_galaxy_measurements(
     psf_image: Tensor,
     pixel_scale: float = PIXEL_SCALE,
     no_bar: bool = True,
-) -> Dict[str, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor]:
     """Compute individual galaxy measurements from noiseless isolated images of galaxies.
 
     Args:

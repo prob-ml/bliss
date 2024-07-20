@@ -51,8 +51,8 @@ def main(
 
     L.seed_everything(seed)
 
-    train_ds_file = f"ds/train_ae_ds_{tag}.pt"
-    val_ds_file = f"ds/val_ae_ds_{tag}.pt"
+    train_ds_file = f"/nfs/turbo/lsa-regier/ismael/datasets/train_ae_ds_{tag}.pt"
+    val_ds_file = f"/nfs/turbo/lsa-regier/ismael/datasets/val_ae_ds_{tag}.pt"
 
     # setup model to train
     autoencoder = OneCenteredGalaxyAE()

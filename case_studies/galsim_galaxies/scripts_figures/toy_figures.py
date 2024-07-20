@@ -117,7 +117,7 @@ class ToySeparationFigure(BlissFigure):
                 "star_log_fluxes": torch.zeros(1, n_sources, 1),
             }
             full_cat = FullCatalog(slen, slen, d)
-            image, _ = render_full_catalog(full_cat, psf, slen, bp)
+            image, _, _ = render_full_catalog(full_cat, psf, slen, bp)
             images[ii] = add_noise_and_background(image, background[ii])
 
         # predictions from encoder
