@@ -154,7 +154,6 @@ encoder:
     survey_bands: ["u", "g", "r", "i", "z"]
     reference_band: 2  # SDSS r-band
     tile_slen: ${simulator.tile_slen}
-    min_flux_for_metrics: 0  # set to 0 to include all sources
     optimizer_params:
         lr: 1e-3
     scheduler_params:

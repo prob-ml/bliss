@@ -49,7 +49,6 @@ encoder:
     tile_slen: 2
     survey_bands: ['r']
     reference_band: 0
-    min_flux_for_metrics: 0.9419
     use_checkerboard: true
     use_double_detect: true
     image_normalizers: ${nopsf_image_normalizers}

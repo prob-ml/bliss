@@ -32,7 +32,6 @@ class Encoder(pl.LightningModule):
         sample_image_renders: MetricCollection,
         mode_metrics: MetricCollection,
         sample_metrics: Optional[MetricCollection] = None,
-        min_flux_for_metrics: float = 0,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
         use_double_detect: bool = False,
@@ -50,7 +49,6 @@ class Encoder(pl.LightningModule):
             sample_image_renders: for plotting relevant images (overlays, shear maps)
             mode_metrics: for scoring predicted mode catalogs during training
             sample_metrics: for scoring predicted sampled catalogs during training
-            min_flux_for_metrics: filter sources by flux during test
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
             use_double_detect: whether to make up to two detections per tile rather than one
@@ -67,7 +65,6 @@ class Encoder(pl.LightningModule):
         self.sample_metrics = sample_metrics
         self.sample_image_renders = sample_image_renders
         self.matcher = matcher
-        self.min_flux_for_metrics = min_flux_for_metrics
         self.optimizer_params = optimizer_params
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.use_double_detect = use_double_detect
@@ -237,25 +234,15 @@ class Encoder(pl.LightningModule):
 
     def update_metrics(self, batch, batch_idx):
         target_tile_cat = TileCatalog(batch["tile_catalog"])
-        target_tile_cat = target_tile_cat.filter_by_flux(
-            min_flux=self.min_flux_for_metrics,
-            band=self.reference_band,
-        )
         target_cat = target_tile_cat.to_full_catalog(self.tile_slen)
 
-        mode_tile_cat = self.sample(batch, use_mode=True).filter_by_flux(
-            min_flux=self.min_flux_for_metrics,
-            band=self.reference_band,
-        )
+        mode_tile_cat = self.sample(batch, use_mode=True)
         mode_cat = mode_tile_cat.to_full_catalog(self.tile_slen)
         mode_matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, mode_matching)
 
         if self.sample_metrics is not None:
-            sample_tile_cat = self.sample(batch, use_mode=False).filter_by_flux(
-                min_flux=self.min_flux_for_metrics,
-                band=self.reference_band,
-            )
+            sample_tile_cat = self.sample(batch, use_mode=False)
             sample_cat = sample_tile_cat.to_full_catalog(self.tile_slen)
             sample_matching = self.matcher.match_catalogs(target_cat, sample_cat)
             self.sample_metrics.update(target_cat, sample_cat, sample_matching)
