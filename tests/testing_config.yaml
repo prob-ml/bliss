@@ -51,19 +51,23 @@ encoder:
         metrics:
             detection_performance:
                 _target_: bliss.encoder.metrics.DetectionPerformance
-                mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
+                bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8]
+                bin_type: "Mag"
             source_type_accuracy:
                 _target_: bliss.encoder.metrics.SourceTypeAccuracy
-                flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+                bin_cutoffs: [200, 400, 600, 800, 1000]
+                bin_type: "Flux"
             source_type_accuracy_star:
                 _target_: bliss.encoder.metrics.SourceTypeAccuracy
-                flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+                bin_cutoffs: [200, 400, 600, 800, 1000]
+                bin_type: "Flux"
                 filter_list:
                     - _target_: bliss.encoder.metrics.SourceTypeFilter
                       filter_type: "star"
             source_type_accuracy_galaxy:
                 _target_: bliss.encoder.metrics.SourceTypeAccuracy
-                flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+                bin_cutoffs: [200, 400, 600, 800, 1000]
+                bin_type: "Flux"
                 filter_list:
                     - _target_: bliss.encoder.metrics.SourceTypeFilter
                       filter_type: "galaxy"

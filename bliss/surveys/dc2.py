@@ -384,7 +384,7 @@ class DC2FullCatalog(FullCatalog):
             d[k] = v[:, plocs_mask, :]
         match_id = match_id[plocs_mask]
 
-        cosmodc2_mask = d["cosmodc2_mask"]
+        cosmodc2_mask = rearrange(d["cosmodc2_mask"], "1 nobj 1 -> nobj")
         shear = d["shear"]
         ellipticity = d["ellipticity"]
         assert (
@@ -396,7 +396,7 @@ class DC2FullCatalog(FullCatalog):
             and torch.isnan(ellipticity[:, ~cosmodc2_mask, :]).all()
         )
 
-        nobj = d["source_type"].shape[0]
+        nobj = d["source_type"].shape[1]
         d["n_sources"] = torch.tensor((nobj,))
 
         return cls(height, width, d), psf_params, match_id
