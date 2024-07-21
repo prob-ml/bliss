@@ -249,6 +249,9 @@ class DC2DataModule(CachedSimulatedDataModule):
             "star_fluxes",
             "redshifts",
             "blendedness",
+            "shear",
+            "ellipticity",
+            "cosmodc2_mask",
             "one_source_mask",
             "two_sources_mask",
             "more_than_two_sources_mask",
@@ -317,7 +320,7 @@ class DC2DataModule(CachedSimulatedDataModule):
                 self.image_lim[0], self.image_lim[1]
             )
 
-            image += bg
+            # we assume image doesn't contain bg
             image_list.append(image)
             bg_list.append(bg)
 
@@ -333,56 +336,68 @@ class DC2FullCatalog(FullCatalog):
 
         objid = torch.from_numpy(catalog["id"].values)
         match_id = torch.from_numpy(catalog["match_objectId"].values)
-        ra = torch.from_numpy(catalog["ra"].values).squeeze()
-        dec = torch.from_numpy(catalog["dec"].values).squeeze()
+        ra = torch.from_numpy(catalog["ra"].values)
+        dec = torch.from_numpy(catalog["dec"].values)
+        plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
         galaxy_bools = torch.from_numpy((catalog["truth_type"] == 1).values)
         star_bools = torch.from_numpy((catalog["truth_type"] == 2).values)
+        source_type = torch.from_numpy(catalog["truth_type"].values)
+        # we ignore the supernova
+        source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
         flux, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
+        star_fluxes = flux
+        galaxy_fluxes = flux
         blendedness = torch.from_numpy(catalog["blendedness"].values)
-        do_have_redshifts = catalog.get("redshifts", "")
-        if do_have_redshifts:
-            redshifts = torch.from_numpy(catalog["redshifts"].values)
+        shear1 = torch.from_numpy(catalog["shear_1"].values)
+        shear2 = torch.from_numpy(catalog["shear_2"].values)
+        shear = torch.stack((shear1, shear2), dim=-1)
+        ellipticity1 = torch.from_numpy(catalog["ellipticity_1_true"].values)
+        ellipticity2 = torch.from_numpy(catalog["ellipticity_2_true"].values)
+        ellipticity = torch.stack((ellipticity1, ellipticity2), dim=-1)
+        cosmodc2_mask = torch.from_numpy(catalog["cosmodc2_mask"].values)
+        redshifts = torch.from_numpy(catalog["redshifts"].values)
+
+        ori_len = len(catalog)
+        d = {
+            "objid": objid.view(1, ori_len, 1),
+            "source_type": source_type.view(1, ori_len, 1),
+            "plocs": plocs.view(1, ori_len, 2),
+            "redshifts": redshifts.view(1, ori_len, 1),
+            "galaxy_fluxes": galaxy_fluxes.view(1, ori_len, kwargs["n_bands"]),
+            "star_fluxes": star_fluxes.view(1, ori_len, kwargs["n_bands"]),
+            "blendedness": blendedness.view(1, ori_len, 1),
+            "shear": shear.view(1, ori_len, 2),
+            "ellipticity": ellipticity.view(1, ori_len, 2),
+            "cosmodc2_mask": cosmodc2_mask.view(1, ori_len, 1),
+        }
 
         star_galaxy_filter = galaxy_bools | star_bools
-        objid = objid[star_galaxy_filter]
+        for k, v in d.items():
+            d[k] = v[:, star_galaxy_filter, :]
         match_id = match_id[star_galaxy_filter]
-        ra = ra[star_galaxy_filter]
-        dec = dec[star_galaxy_filter]
-        source_type = torch.from_numpy(catalog["truth_type"].values[star_galaxy_filter])
-        source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
-        star_fluxes = flux[star_galaxy_filter]
-        galaxy_fluxes = flux[star_galaxy_filter]
-        blendedness = blendedness[star_galaxy_filter]
-        if do_have_redshifts:
-            redshifts = redshifts[star_galaxy_filter]
 
-        plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
-        x0_mask = (plocs[:, 0] > 0) & (plocs[:, 0] < height)
-        x1_mask = (plocs[:, 1] > 0) & (plocs[:, 1] < width)
-        plocs_mask = x0_mask * x1_mask
-
-        objid = objid[plocs_mask]
+        plocs_start_point = torch.tensor([0.0, 0.0]).view(1, 1, -1)
+        plocs_end_point = torch.tensor([height, width]).view(1, 1, -1)
+        plocs_mask = ((d["plocs"] > plocs_start_point) & (d["plocs"] < plocs_end_point)).all(dim=-1)
+        plocs_mask = plocs_mask.squeeze(0)
+        for k, v in d.items():
+            d[k] = v[:, plocs_mask, :]
         match_id = match_id[plocs_mask]
-        plocs = plocs[plocs_mask]
-        source_type = source_type[plocs_mask]
-        star_fluxes = star_fluxes[plocs_mask]
-        galaxy_fluxes = galaxy_fluxes[plocs_mask]
-        blendedness = blendedness[plocs_mask]
-        if do_have_redshifts:
-            redshifts = redshifts[plocs_mask]
 
-        nobj = source_type.shape[0]
-        redshifts = redshifts.reshape(1, nobj, 1) if do_have_redshifts else torch.zeros(1, nobj, 1)
-        d = {
-            "objid": objid.reshape(1, nobj, 1),
-            "n_sources": torch.tensor((nobj,)),
-            "source_type": source_type.reshape(1, nobj, 1),
-            "plocs": plocs.reshape(1, nobj, 2),
-            "redshifts": redshifts,
-            "galaxy_fluxes": galaxy_fluxes.reshape(1, nobj, kwargs["n_bands"]),
-            "star_fluxes": star_fluxes.reshape(1, nobj, kwargs["n_bands"]),
-            "blendedness": blendedness.reshape(1, nobj, 1),
-        }
+        cosmodc2_mask = d["cosmodc2_mask"]
+        shear = d["shear"]
+        ellipticity = d["ellipticity"]
+        assert (
+            not torch.isnan(shear[:, cosmodc2_mask, :]).any()
+            and not torch.isnan(ellipticity[:, cosmodc2_mask, :]).any()
+        )
+        assert (
+            torch.isnan(shear[:, ~cosmodc2_mask, :]).all()
+            and torch.isnan(ellipticity[:, ~cosmodc2_mask, :]).all()
+        )
+
+        nobj = d["source_type"].shape[0]
+        d["n_sources"] = torch.tensor((nobj,))
 
         return cls(height, width, d), psf_params, match_id
 

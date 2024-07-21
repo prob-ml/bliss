@@ -5,36 +5,12 @@ import torch
 from einops import rearrange
 
 from bliss.catalog import TileCatalog
-from bliss.encoder.convnets import CatalogNet, FeaturesNet
+from bliss.encoder.convnets import FeaturesNet
 from bliss.encoder.encoder import Encoder
-from case_studies.dc2_cataloging.utils.dynamic_asinh_convnet import (
-    FeaturesNet as DynamicAsinhFeaturesNet,
-)
-from case_studies.dc2_cataloging.utils.image_normalizer import DynamicAsinhImageNormalizer
 from case_studies.dc2_cataloging.utils.multi_detect_convnet import (
     CatalogNet as MultiDetectCatalogNet,
 )
 from case_studies.dc2_cataloging.utils.variational_dist import MultiVariationalDist
-
-
-class EncoderForDynamicAsinh(Encoder):
-    def initialize_networks(self):
-        assert isinstance(
-            self.image_normalizer, DynamicAsinhImageNormalizer
-        ), "wrong image normalizer"
-        assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
-        ch_per_band = self.image_normalizer.num_channels_per_band()
-        num_features = 256
-        self.features_net = DynamicAsinhFeaturesNet(
-            6,
-            ch_per_band,
-            num_features,
-            double_downsample=(self.tile_slen == 4),
-        )
-        self.catalog_net = CatalogNet(
-            num_features=256,
-            out_channels=self.var_dist.n_params_per_source,
-        )
 
 
 class EncoderAddingSourceMask(Encoder):

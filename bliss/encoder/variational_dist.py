@@ -68,9 +68,6 @@ class VariationalFactor:
         if self.nll_rearrange is not None:
             target = rearrange(target, self.nll_rearrange)
 
-        qk = self._get_dist(params)
-        ungated_nll = -qk.log_prob(target)
-
         if self.nll_gating is None:
             gating = 1
         elif self.nll_gating == "n_sources":
@@ -79,9 +76,18 @@ class VariationalFactor:
             gating = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
         elif self.nll_gating == "is_galaxy":
             gating = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
+        elif self.nll_gating == "is_in_cosmodc2":
+            gating = rearrange(true_tile_cat["cosmodc2_mask"], "b ht wt 1 1 -> b ht wt")
         else:
             raise ValueError(f"Invalid nll_gating: {self.nll_gating}")
 
+        qk = self._get_dist(params)
+        # if we use `is_in_cosmodc2`, the true_tile_cat can contain nan values
+        if self.nll_gating == "is_in_cosmodc2":
+            target = torch.where(gating.unsqueeze(-1), target, 0)
+
+        assert not torch.isnan(target).any()
+        ungated_nll = -qk.log_prob(target)
         return ungated_nll * gating
 
 

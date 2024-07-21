@@ -34,6 +34,16 @@ my_variational_factors:
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
     nll_gating: is_galaxy
+  # - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
+  #   name: shear
+  #   sample_rearrange: "b ht wt d -> b ht wt 1 d"
+  #   nll_rearrange: "b ht wt 1 d -> b ht wt d"
+  #   nll_gating: is_in_cosmodc2
+  - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
+    name: ellipticity
+    sample_rearrange: "b ht wt d -> b ht wt 1 d"
+    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    nll_gating: is_in_cosmodc2
 
 my_metrics:
   detection_performance:
@@ -82,15 +92,23 @@ my_metrics:
   flux_error:
     _target_: bliss.encoder.metrics.FluxError
     survey_bands: ${encoder.survey_bands}
-
-my_image_normalizers:
-  asinh:
-      _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
-      q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+  # shear_error:
+  #   _target_: case_studies.dc2_cataloging.utils.metrics.ShearMSE
+  #   bin_cutoffs: [200, 400, 600, 800, 1000]
+  #   bin_type: "Flux"
+  ellipticity_error:
+    _target_: case_studies.dc2_cataloging.utils.metrics.EllipticityMSE
+    bin_cutoffs: [200, 400, 600, 800, 1000]
+    bin_type: "Flux"
 
 # my_image_normalizers:
-#   null_noramlize:
-#       _target_: case_studies.dc2_cataloging.utils.image_normalizer.NullNormalizer
+#   asinh:
+#       _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+#       q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
+my_image_normalizers:
+  null_noramlize:
+      _target_: case_studies.dc2_cataloging.utils.image_normalizer.NullNormalizer
 
 encoder:
     # _target_: case_studies.dc2_cataloging.utils.encoder.MultiDetectEncoder
@@ -142,10 +160,10 @@ train:
     trainer:
         logger:
             name: DC2_cataloging_exp_07
-            version: exp_07-15-5  # change it before running the code
+            version: exp_07-19-2  # change it before running the code
         devices: [4]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
     data_source: ${surveys.dc2}
     pretrained_weights: null
-    seed: 7272
+    seed: 8282

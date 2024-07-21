@@ -567,9 +567,8 @@ class FullCatalog(UserDict):
         for k, v in self.items():
             if k in {"plocs", "n_sources"}:
                 continue
-            dtype = torch.int64 if k == "objid" else torch.float
             size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
-            tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
+            tile_params[k] = torch.zeros(size, dtype=v.dtype, device=self.device)
 
         tile_params["locs"] = tile_locs
 

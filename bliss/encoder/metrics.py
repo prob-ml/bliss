@@ -149,11 +149,6 @@ class FilterMetric(Metric):
 
 
 class DetectionPerformance(FilterMetric):
-    """Calculates detection and classification metrics between two catalogs.
-    Note that galaxy classification metrics are only computed when the values are available in
-    both catalogs.
-    """
-
     def __init__(
         self,
         bin_cutoffs: list = None,
@@ -526,7 +521,6 @@ class FluxError(Metric):
 
         fe_init = torch.zeros(len(self.survey_bands))
         self.add_state("flux_err", default=fe_init, dist_reduce_fx="sum")
-
         self.add_state("n_matches", default=torch.zeros(1), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
@@ -554,7 +548,6 @@ class GalaxyShapeError(Metric):
 
         gpe_init = torch.zeros(len(self.GALSIM_NAMES))
         self.add_state("galsim_param_err", default=gpe_init, dist_reduce_fx="sum")
-
         self.add_state("n_true_galaxies", default=torch.zeros(1), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
