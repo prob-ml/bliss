@@ -15,9 +15,10 @@ paths:
     decals: /data/scratch/decals
     des: /data/scratch/des
     dc2: /data/scratch/dc2local
-    cached_data: null
+    cached_data: /data/scratch/regier/sdss_like
     output: ${oc.env:HOME}/bliss_output
 
+# this prior is sdss-like; the flux parameters were fit using SDSS catalogs
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
     survey_bands: ["u", "g", "r", "i", "z"]  # SDSS available band filters
@@ -29,17 +30,17 @@ prior:
     tile_slen: 4
     batch_size: 64
     max_sources: 1
-    mean_sources: 0.2
+    mean_sources: 0.01  # 0.0025 is more realistic for SDSS but training takes more iterations
     min_sources: 0
-    prob_galaxy: 0.72
-    star_flux_exponent: 0.43
-    star_flux_truncation: 640  # too low -- refit this
-    star_flux_loc: 0.0
-    star_flux_scale: 0.63094948  # also the min becauae star_flux_loc is 0
-    galaxy_flux_truncation: 1013
-    galaxy_flux_exponent: 0.47
-    galaxy_flux_scale: 0.6301037
-    galaxy_flux_loc: 0.0
+    prob_galaxy: 0.5144
+    star_flux_exponent: 0.4689157382430609
+    star_flux_truncation: 613313.768995269
+    star_flux_loc: -0.5534648001193676
+    star_flux_scale: 1.1846035501201129
+    galaxy_flux_exponent: 1.5609458661807678
+    galaxy_flux_truncation: 28790.449063519092
+    galaxy_flux_loc: -3.29383532288203
+    galaxy_flux_scale: 3.924799999613338
     galaxy_a_concentration: 0.39330758068481686
     galaxy_a_loc: 0.8371888967872619
     galaxy_a_scale: 4.432725319432478
@@ -50,7 +51,6 @@ simulator:
     survey: ${surveys.sdss}
     prior: ${prior}
     n_batches: 128
-    use_coaddition: false
     coadd_depth: 1
     num_workers: 32
     valid_n_batches: 10  # 256
@@ -197,7 +197,6 @@ surveys:
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
-        pixel_shift: 2
         align_to_band: null  # we should set this to 2 (r-band)
         load_image_data: false
     decals:
@@ -211,7 +210,6 @@ surveys:
         psf_config:
             pixel_scale: 0.262
             psf_slen: 63
-        pixel_shift: 2
     des:
         _target_: bliss.surveys.des.DarkEnergySurvey
         dir_path: ${paths.des}
@@ -228,7 +226,6 @@ surveys:
         psf_config:
             pixel_scale: 0.262
             psf_slen: 63
-        pixel_shift: 2
     dc2:
         _target_: bliss.surveys.dc2.DC2DataModule
         dc2_image_dir: ${paths.dc2}/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
@@ -258,11 +255,12 @@ surveys:
 mode: train
 
 generate:
-    n_image_files: 32
+    n_image_files: 128
     n_batches_per_file: 16
     simulator: ${simulator}
     cached_data_path: ${paths.cached_data}
     file_prefix: dataset
+    store_full_catalog: false
 
 train:
     trainer:
