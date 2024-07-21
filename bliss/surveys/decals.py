@@ -56,7 +56,7 @@ class DarkEnergyCameraLegacySurvey(Survey):
         return torch.from_numpy(cowimg)
 
     @classmethod
-    def create_constituent_objs(cls, dir_path, ccds_table_for_brick, pixel_shift: int) -> DES:
+    def create_constituent_objs(cls, dir_path, ccds_table_for_brick) -> DES:
         if getattr(cls, "constituent_objs", None):
             return cls.constituent_objs
 
@@ -74,7 +74,6 @@ class DarkEnergyCameraLegacySurvey(Survey):
             dir_path=dir_path,
             image_ids=tuple(des_image_ids),
             psf_config={"pixel_scale": 0.262, "psf_slen": 25},
-            pixel_shift=pixel_shift,
             load_image_data=True,  # TODO: make False once sig1 does not require image data
         )
         return cls.constituent_objs
@@ -108,7 +107,6 @@ class DarkEnergyCameraLegacySurvey(Survey):
         dir_path="data/decals",
         sky_coords=({"ra": 336.6643042496718, "dec": -0.9316385797930247},),
         bands=(0, 1, 2, 3),
-        pixel_shift: int = 2,
         load_image_data: bool = False,
     ):
         super().__init__()
@@ -119,7 +117,6 @@ class DarkEnergyCameraLegacySurvey(Survey):
 
         self.bands = bands
         self.bricknames = [DECaLS.brick_for_radec(c["ra"], c["dec"]) for c in sky_coords]
-        self.pixel_shift = pixel_shift
 
         self.downloader = DecalsDownloader(self.bricknames, self.decals_path)
         self.prepare_data()
@@ -136,7 +133,6 @@ class DarkEnergyCameraLegacySurvey(Survey):
             psf_config,
             self.ccds_table_for_brick,
             target_wcs,
-            pixel_shift,
         )
 
         self.flux_calibration_dict = self.get_flux_calibrations()
@@ -485,7 +481,6 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
         psf_config: PSFConfig,
         ccds_table_for_brick,
         target_wcs_for_brick,
-        pixel_shift,
     ):
         super().__init__(bands, **psf_config)
 
@@ -509,7 +504,7 @@ class DECaLS_PSF(ImagePSF):  # noqa: N801
             self.psf_params[brickname] = self._get_fit_file_psf_params(
                 ccds_annotated_filename, bands, ccds_for_brick, brick_fwhms
             )
-            DECaLS.create_constituent_objs(self.survey_data_dir, ccds_table_for_brick, pixel_shift)
+            DECaLS.create_constituent_objs(self.survey_data_dir, ccds_table_for_brick)
             self.psf_galsim[brickname] = self._get_psf_coadded(
                 brickname, ccds_table_for_brick[brickname], target_wcs_for_brick
             )

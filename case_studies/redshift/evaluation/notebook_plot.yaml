@@ -1,0 +1,61 @@
+---
+defaults:
+    - ../redshift_from_img@_here_: full_train_config_redshift
+    - _self_
+
+encoder:
+    _target_: case_studies.redshift.redshift_from_img.encoder.encoder.RedshiftsEncoder
+    # _target_: bliss.encoder.encoder.Encoder
+    survey_bands: ["g", "i", "r", "u", "y", "z"]
+    tile_slen: 4
+    tiles_to_crop: 1
+    min_flux_for_loss: ${global_setting.min_flux_for_loss}
+    min_flux_for_metrics: 100
+    optimizer_params:
+        lr: 1e-3
+    scheduler_params:
+        milestones: [32]
+        gamma: 0.1
+    image_normalizer:
+      _target_: bliss.encoder.image_normalizer.ImageNormalizer
+      bands: [0, 1, 2, 3, 4, 5]
+      include_original: false
+      include_background: false
+      concat_psf_params: false
+      num_psf_params: 4  # for SDSS, 4 for DC2
+      log_transform_stdevs: []
+      use_clahe: true
+      clahe_min_stdev: 200
+    matcher:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftsCatalogMatcher
+        match_gating: is_galaxy
+    metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        metrics: ${my_metrics_test}
+    var_dist:
+        _target_: case_studies.redshift.redshift_from_img.encoder.variational_dist.RedshiftVariationalDist
+        tile_slen: ${encoder.tile_slen}
+        factors: ${variational_factors}
+    use_checkerboard: false
+
+my_metrics_test:
+    redshift_mearn_square_error_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+        mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+    redshift_outlier_fraction_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+        mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+    redshift_nmad_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDevBin
+        mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+    redshift_outlier_fraction_catastrophic_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+        mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+    redshift_bias_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
+        mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+
+surveys:
+    dc2:
+        batch_size: 64

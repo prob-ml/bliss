@@ -8,23 +8,22 @@
 #   2: X
 #   3: Y
 #   4: MEM
-#   5: FLUX_R
-#   6: FLUX_G
+#   5: FLUX_G
+#   6: FLUX_R
 #   7: FLUX_I
 #   8: FLUX_Z
-#   9: FLUX_Y
-#   10: HLR
-#   11: FRACDEV
-#   12: G1
-#   13: G2
-#   14: Z
-#   15: SOURCE_TYPE
+#   9: HLR
+#   10: FRACDEV
+#   11: G1
+#   12: G2
+#   13: Z
+#   14: SOURCE_TYPE
 
 variables :
   nfiles : 100
-  image_size: 4800
-  input_dir : /home/kapnadak/bliss/case_studies/galaxy_clustering/data/catalogs
-  output_dir : /home/kapnadak/bliss/case_studies/galaxy_clustering/data/images
+  image_size: 1280
+  input_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data_2/catalogs
+  output_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data_2/images
 
 psf:
     type: Convolve
@@ -112,8 +111,8 @@ image :
     type: Gaussian
     variance:
       type: Random
-      min: 0.000
-      max: 0.00001
+      min: 0.002
+      max: 0.006
 
 stamp :
 
@@ -138,37 +137,13 @@ input :
 gal :
 
   type : Gaussian
-  half_light_radius : { type: Catalog, col: 10 }
-  flux : { type: Catalog, col: 5 } #using R band
+  half_light_radius : { type: Catalog, col: 9 }
+  flux : { type: Catalog, col: 5 } #using G band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 12}
-    g2 : { type: Catalog, col: 13 }
-
-output :
-  type : Fits
-  dir : '@variables.output_dir'
-  file_name :
-    type : FormattedStr
-    format : "galsim_des_%03d_r.fits"
-    items :
-    - { type : Sequence, nitems: '@variables.nfiles'}
-
-  nfiles : '@variables.nfiles'
-
----
-
-gal :
-
-  type : Gaussian
-  half_light_radius : { type: Catalog, col: 10 }
-  flux : { type: Catalog, col: 6 } #using G band
-
-  shear :
-    type : G1G2
-    g1 : { type: Catalog, col: 12 }
-    g2 : { type: Catalog, col: 13 }
+    g1 : { type: Catalog, col: 11 }
+    g2 : { type: Catalog, col: 12 }
 
 output :
   type : Fits
@@ -186,13 +161,37 @@ output :
 gal :
 
   type : Gaussian
-  half_light_radius : { type: Catalog, col: 10 }
+  half_light_radius : { type: Catalog, col: 9 }
+  flux : { type: Catalog, col: 6 } #using R band
+
+  shear :
+    type : G1G2
+    g1 : { type: Catalog, col: 11 }
+    g2 : { type: Catalog, col: 12 }
+
+output :
+  type : Fits
+  dir : '@variables.output_dir'
+  file_name :
+    type : FormattedStr
+    format : "galsim_des_%03d_r.fits"
+    items :
+    - { type : Sequence, nitems: '@variables.nfiles'}
+
+  nfiles : '@variables.nfiles'
+
+---
+
+gal :
+
+  type : Gaussian
+  half_light_radius : { type: Catalog, col: 9 }
   flux : { type: Catalog, col: 7 } #using I band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 12 }
-    g2 : { type: Catalog, col: 13 }
+    g1 : { type: Catalog, col: 11 }
+    g2 : { type: Catalog, col: 12 }
 
 output :
   type : Fits
@@ -210,13 +209,13 @@ output :
 gal :
 
   type : Gaussian
-  half_light_radius : { type: Catalog, col: 10 }
+  half_light_radius : { type: Catalog, col: 9 }
   flux : { type: Catalog, col: 8 } #using Z band
 
   shear :
     type : G1G2
-    g1 : { type: Catalog, col: 12 }
-    g2 : { type: Catalog, col: 13 }
+    g1 : { type: Catalog, col: 11 }
+    g2 : { type: Catalog, col: 12 }
 
 output :
   type : Fits
@@ -224,30 +223,6 @@ output :
   file_name :
     type : FormattedStr
     format : "galsim_des_%03d_z.fits"
-    items :
-    - { type : Sequence, nitems: '@variables.nfiles'}
-
-  nfiles : '@variables.nfiles'
-
----
-
-gal :
-
-  type : Gaussian
-  half_light_radius : { type: Catalog, col: 10 }
-  flux : { type: Catalog, col: 9 } #using Y band
-
-  shear :
-    type : G1G2
-    g1 : { type: Catalog, col: 12}
-    g2 : { type: Catalog, col: 13 }
-
-output :
-  type : Fits
-  dir : '@variables.output_dir'
-  file_name :
-    type : FormattedStr
-    format : "galsim_des_%03d_Y.fits"
     items :
     - { type : Sequence, nitems: '@variables.nfiles'}
 

@@ -1,7 +1,7 @@
-sbatch --job-name=great_lake_exp_06-25-2 \
-       --output=great_lake_exp_06-25-2.out \
-       --error=great_lake_exp_06-25-2.err \
+sbatch --job-name=great_lake_exp_07-09-1 \
+       --output=great_lake_exp_07-09-1.out \
+       --error=great_lake_exp_07-09-1.err \
        run_great_lake.sbatch \
-       exp_06-25-2 \
+       exp_07-09-1 \
        4242 \
        1

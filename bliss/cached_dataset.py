@@ -5,7 +5,8 @@ import pathlib
 import random
 import re
 import warnings
-from typing import List, TypedDict
+from copy import copy
+from typing import List
 
 import pytorch_lightning as pl
 import torch
@@ -13,7 +14,7 @@ from torch import distributed as dist
 from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 from torchvision import transforms
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog
 from bliss.global_env import GlobalEnv
 
 # prevent pytorch_lightning warning for num_workers = 2 in dataloaders with IterableDataset
@@ -22,17 +23,6 @@ warnings.filterwarnings(
 )
 # an IterableDataset isn't supposed to have a __len__ method
 warnings.filterwarnings("ignore", ".*Total length of .* across ranks is zero.*", UserWarning)
-
-
-FileDatum = TypedDict(
-    "FileDatum",
-    {
-        "tile_catalog": TileCatalog,
-        "images": torch.Tensor,
-        "background": torch.Tensor,
-        "psf_params": torch.Tensor,
-    },
-)
 
 
 class FullCatalogToTileTransform(torch.nn.Module):
@@ -45,16 +35,41 @@ class FullCatalogToTileTransform(torch.nn.Module):
         datum_out = {k: v for k, v in datum_in.items() if k != "full_catalog"}
 
         h_pixels, w_pixels = datum_in["images"].shape[1:]
-        full_cat = FullCatalog(h_pixels, w_pixels, datum_in["full_catalog"])
+        d1 = {k: v.unsqueeze(0) for k, v in datum_in["full_catalog"].items()}
+        full_cat = FullCatalog(h_pixels, w_pixels, d1)
         tile_cat = full_cat.to_tile_catalog(self.tile_slen, self.max_sources).data
-        d = {k: v.squeeze(0) for k, v in tile_cat.items()}
-        datum_out["tile_catalog"] = d
+        d2 = {k: v.squeeze(0) for k, v in tile_cat.items()}
+        datum_out["tile_catalog"] = d2
+
+        return datum_out
+
+
+class OneBandTransform(torch.nn.Module):
+    def __init__(self, band_idx):
+        super().__init__()
+        self.band_idx = band_idx
+
+    def __call__(self, datum_in):
+        datum_out = {
+            "images": datum_in["images"][self.band_idx : self.band_idx + 1],
+            "psf_params": datum_in["psf_params"][self.band_idx : self.band_idx + 1],
+        }
+
+        for cat_name in ("tile_catalog", "full_catalog"):
+            if cat_name not in datum_in:
+                continue
+            cat = copy(datum_in[cat_name])
+            for k, v in cat.items():
+                if k.endswith("fluxes"):
+                    cat[k] = v[..., self.band_idx : self.band_idx + 1]
+            datum_out[cat_name] = cat
 
         return datum_out
 
 
 class ChunkingSampler(Sampler):
     def __init__(self, dataset: Dataset) -> None:
+        super().__init__(dataset)
         assert isinstance(dataset, ChunkingDataset), "dataset should be ChunkingDataset"
         self.dataset = dataset
 

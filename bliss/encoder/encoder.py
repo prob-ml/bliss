@@ -1,16 +1,15 @@
 import itertools
+import warnings
 from typing import Optional
 
 import pytorch_lightning as pl
 import torch
-from torch.nn.functional import pad
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.convnets import CatalogNet, FeaturesNet
-from bliss.encoder.image_normalizer import ImageNormalizer
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDist
 from bliss.global_env import GlobalEnv
@@ -28,12 +27,12 @@ class Encoder(pl.LightningModule):
         self,
         survey_bands: list,
         tile_slen: int,
-        tiles_to_crop: int,
-        image_normalizer: ImageNormalizer,
+        image_normalizers: list,
         var_dist: VariationalDist,
-        metrics: MetricCollection,
-        sample_image_renders: MetricCollection,
         matcher: CatalogMatcher,
+        sample_image_renders: MetricCollection,
+        mode_metrics: MetricCollection,
+        sample_metrics: Optional[MetricCollection] = None,
         min_flux_for_loss: float = 0,
         min_flux_for_metrics: float = 0,
         optimizer_params: Optional[dict] = None,
@@ -47,12 +46,12 @@ class Encoder(pl.LightningModule):
         Args:
             survey_bands: all band-pass filters available for this survey
             tile_slen: dimension in pixels of a square tile
-            tiles_to_crop: margin of tiles not to use for computing loss
-            image_normalizer: object that applies input transforms to images
+            image_normalizers: collection of objects that applies input transforms to images
             var_dist: object that makes a variational distribution from raw convnet output
-            sample_image_renders: for plotting relevant images (overlays, shear maps)
-            metrics: for scoring predicted catalogs during training
             matcher: for matching predicted catalogs to ground truth catalogs
+            sample_image_renders: for plotting relevant images (overlays, shear maps)
+            mode_metrics: for scoring predicted mode catalogs during training
+            sample_metrics: for scoring predicted sampled catalogs during training
             min_flux_for_loss: Sources with a lower flux will not be considered when computing loss
             min_flux_for_metrics: filter sources by flux during test
             optimizer_params: arguments passed to the Adam optimizer
@@ -65,11 +64,10 @@ class Encoder(pl.LightningModule):
 
         self.survey_bands = survey_bands
         self.tile_slen = tile_slen
-        self.tiles_to_crop = tiles_to_crop
-        self.image_normalizer = image_normalizer
+        self.image_normalizers = torch.nn.ModuleList(image_normalizers.values())
         self.var_dist = var_dist
-        self.mode_metrics = metrics.clone()
-        self.sample_metrics = metrics.clone()
+        self.mode_metrics = mode_metrics
+        self.sample_metrics = sample_metrics
         self.sample_image_renders = sample_image_renders
         self.matcher = matcher
         self.min_flux_for_loss = min_flux_for_loss
@@ -91,12 +89,11 @@ class Encoder(pl.LightningModule):
 
     def initialize_networks(self):
         assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
-
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         num_features = 256
-
         self.features_net = FeaturesNet(
-            n_bands=len(self.image_normalizer.bands),
-            ch_per_band=self.image_normalizer.num_channels_per_band(),
+            n_bands=len(self.survey_bands),
+            ch_per_band=ch_per_band,
             num_features=num_features,
             double_downsample=(self.tile_slen == 4),
         )
@@ -128,12 +125,17 @@ class Encoder(pl.LightningModule):
 
         return torch.concat([detection_id, history_mask.unsqueeze(1), masked_history], dim=1)
 
-    def sample(self, batch, use_mode=True):
-        batch_size, _n_bands, h, w = batch["images"].shape[0:4]
-        ht, wt = h // self.tile_slen, w // self.tile_slen
+    def get_features(self, batch):
+        assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
+        assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
 
-        x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.features_net(x)
+        input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
+        inputs = torch.cat(input_lst, dim=2)
+
+        return self.features_net(inputs)
+
+    def sample_first_detection(self, x_features, use_mode=True):
+        batch_size, _n_features, ht, wt = x_features.shape[0:4]
 
         est_cat = None
         patterns_to_use = (0, 8, 12, 14) if self.use_checkerboard else (0,)
@@ -150,17 +152,28 @@ class Encoder(pl.LightningModule):
                 est_cat["n_sources"] *= mask
                 est_cat = est_cat.union(new_est_cat, disjoint=True)
 
+        return est_cat
+
+    def sample_second_detection(self, x_features, est_cat1, use_mode=True):
+        no_mask = torch.ones_like(est_cat1["n_sources"])
+        context2 = self.make_context(est_cat1, no_mask, detection2=True)
+        x_cat2 = self.catalog_net(x_features, context2)
+        est_cat2 = self.var_dist.sample(x_cat2, use_mode=use_mode)
+        # our loss function implies that the second detection is ignored for a tile
+        # if the first detection is empty for that tile
+        est_cat2["n_sources"] *= est_cat1["n_sources"]
+        return est_cat2
+
+    def sample(self, batch, use_mode=True):
+        x_features = self.get_features(batch)
+
+        est_cat = self.sample_first_detection(x_features, use_mode=use_mode)
+
         if self.use_double_detect:
-            no_mask = torch.ones_like(mask)
-            context2 = self.make_context(est_cat, no_mask, detection2=True)
-            x_cat2 = self.catalog_net(x_features, context2)
-            est_cat2 = self.var_dist.sample(x_cat2, use_mode=use_mode)
-            # our loss function implies that the second detection is ignored for a tile
-            # if the first detection is empty for that tile
-            est_cat2["n_sources"] *= est_cat["n_sources"]
+            est_cat2 = self.sample_second_detection(x_features, est_cat, use_mode=use_mode)
             est_cat = est_cat.union(est_cat2, disjoint=False)
 
-        return est_cat.symmetric_crop(self.tiles_to_crop)
+        return est_cat
 
     def _compute_loss(self, batch, logging_name):
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
@@ -184,8 +197,7 @@ class Encoder(pl.LightningModule):
             band=self.reference_band, exclude_num=1
         )
 
-        x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.features_net(x)
+        x_features = self.get_features(batch)
 
         loss = torch.zeros_like(x_features[:, 0, :, :])
 
@@ -206,18 +218,27 @@ class Encoder(pl.LightningModule):
                 break
 
         if self.use_double_detect:
+            with torch.no_grad():
+                est_cat1 = self.sample_first_detection(x_features, use_mode=False)
+            # occasionally we input an estimated catalog rather than a target catalog, to regularize
+            # and avoid out-of-distribution inputs when sampling
+            history_cat = target_cat1 if torch.rand(1).item() < 0.9 else est_cat1
             no_mask = torch.ones_like(mask)
-            context2 = self.make_context(target_cat1, no_mask, detection2=True)
+            context2 = self.make_context(history_cat, no_mask, detection2=True)
             x_cat2 = self.catalog_net(x_features, context2)
+
             loss22 = self.var_dist.compute_nll(x_cat2, target_cat2)
             loss22 *= target_cat1["n_sources"]
             loss += loss22
 
-        # exclude border tiles and report average per-tile loss
-        ttc = self.tiles_to_crop
-        interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
+        nan_mask = torch.isnan(loss)
+        if nan_mask.any():
+            loss = loss[~nan_mask]
+            msg = f"NaN detected in loss. Ignored {nan_mask.sum().item()} NaN values."
+            warnings.warn(msg)
+
         # could normalize by the number of tile predictions, rather than number of tiles
-        loss = interior_loss.sum() / interior_loss.numel()
+        loss = loss.sum() / loss.numel()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         return loss
@@ -228,46 +249,40 @@ class Encoder(pl.LightningModule):
     def on_train_epoch_start(self):
         GlobalEnv.current_encoder_epoch = self.current_epoch
 
-    def training_step(self, batch, batch_idx, optimizer_idx=0):
+    def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
         return self._compute_loss(batch, "train")
 
-    def sample_for_metrics(self, batch):
+    def update_metrics(self, batch, batch_idx):
         target_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
         target_tile_cat = target_tile_cat.filter_by_flux(
             min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
-        ).symmetric_crop(self.tiles_to_crop)
+        )
+        target_cat = target_tile_cat.to_full_catalog()
 
         mode_tile_cat = self.sample(batch, use_mode=True).filter_by_flux(
             min_flux=self.min_flux_for_metrics,
             band=self.reference_band,
         )
-
-        sample_tile_cat = self.sample(batch, use_mode=False).filter_by_flux(
-            min_flux=self.min_flux_for_metrics,
-            band=self.reference_band,
-        )
-
-        return target_tile_cat, mode_tile_cat, sample_tile_cat
-
-    def update_metrics(self, batch, batch_idx):
-        target_tile_cat, mode_tile_cat, sample_tile_cat = self.sample_for_metrics(batch)
-        target_cat = target_tile_cat.to_full_catalog()
         mode_cat = mode_tile_cat.to_full_catalog()
-        sample_cat = sample_tile_cat.to_full_catalog()
+        mode_matching = self.matcher.match_catalogs(target_cat, mode_cat)
+        self.mode_metrics.update(target_cat, mode_cat, mode_matching)
 
-        matching = self.matcher.match_catalogs(target_cat, mode_cat)
-        self.mode_metrics.update(target_cat, mode_cat, matching)
-
-        smatching = self.matcher.match_catalogs(target_cat, sample_cat)
-        self.sample_metrics.update(target_cat, sample_cat, smatching)
+        if self.sample_metrics is not None:
+            sample_tile_cat = self.sample(batch, use_mode=False).filter_by_flux(
+                min_flux=self.min_flux_for_metrics,
+                band=self.reference_band,
+            )
+            sample_cat = sample_tile_cat.to_full_catalog()
+            sample_matching = self.matcher.match_catalogs(target_cat, sample_cat)
+            self.sample_metrics.update(target_cat, sample_cat, sample_matching)
 
         self.sample_image_renders.update(
             batch,
             target_cat,
-            sample_tile_cat,
-            sample_cat,
+            mode_tile_cat,
+            mode_cat,
             self.current_epoch,
             batch_idx,
         )
@@ -283,7 +298,10 @@ class Encoder(pl.LightningModule):
 
         for metric_name, metric in metrics.items():
             if hasattr(metric, "plot"):  # noqa: WPS421
-                plot_or_none = metric.plot()
+                try:
+                    plot_or_none = metric.plot()
+                except NotImplementedError:
+                    continue
                 name = f"Epoch:{self.current_epoch}" if show_epoch else ""
                 name += f"/{logging_name} {metric_name}"
                 if self.logger and plot_or_none:
@@ -294,7 +312,8 @@ class Encoder(pl.LightningModule):
 
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
-        self.report_metrics(self.sample_metrics, "sample/mode", show_epoch=True)
+        if self.sample_metrics is not None:
+            self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
         self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
@@ -304,7 +323,8 @@ class Encoder(pl.LightningModule):
 
     def on_test_epoch_end(self):
         self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)
-        self.report_metrics(self.sample_metrics, "test/mode", show_epoch=False)
+        if self.sample_metrics is not None:
+            self.report_metrics(self.sample_metrics, "test/sample", show_epoch=False)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""

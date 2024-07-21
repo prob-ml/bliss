@@ -53,7 +53,6 @@ class SloanDigitalSkySurvey(Survey):
         self,
         psf_config: PSFConfig,
         fields,
-        pixel_shift=0.0,
         dir_path="data/sdss",
         load_image_data: bool = False,
         background_offset=0.0,
@@ -66,7 +65,6 @@ class SloanDigitalSkySurvey(Survey):
         self.sdss_fields = fields
         self.bands = tuple(range(len(self.BANDS)))
         self.n_bands = len(self.BANDS)
-        self.pixel_shift = pixel_shift
         self.load_image_data = load_image_data
         self.background_offset = background_offset
         self.align_to_band = align_to_band
@@ -140,6 +138,7 @@ class SloanDigitalSkySurvey(Survey):
                     r1, r2, c1, c2 = self.crop_config
                     item[k] = item[k][:, r1:r2, c1:c2]
                 item[k] = self._crop_image(item[k])
+            item["psf_params"] = self.psf.psf_params[self.image_id(idx)]
             self.items[idx] = item
         return self.items[idx]
 

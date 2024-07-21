@@ -20,6 +20,11 @@ def convert_nmgy_to_mag(nmgy):
     return 22.5 - 2.5 * torch.log10(nmgy)
 
 
+def convert_nmgy_to_njymag(nmgy):
+    """Convert from flux (nano-maggie) to mag (nano-jansky), which is the format used by DC2."""
+    return 22.5 - 2.5 * torch.log10(nmgy / 3631)
+
+
 class SourceType(IntEnum):
     STAR = 0
     GALAXY = 1
@@ -66,6 +71,38 @@ class BaseTileCatalog(UserDict):
             [tiles_to_crop, self.n_tiles_w - tiles_to_crop],
         )
 
+    def filter_base_tile_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
+        assert box_origin[0] + box_len < self.height, "invalid box"
+        assert box_origin[1] + box_len < self.width, "invalid box"
+
+        box_origin_tensor = box_origin.view(1, 1, 2).to(device=self.device)
+        box_end_tensor = (box_origin + box_len).view(1, 1, 2).to(device=self.device)
+
+        plocs_mask = torch.all(
+            (self["plocs"] < box_end_tensor) & (self["plocs"] > box_origin_tensor), dim=2
+        )
+
+        plocs_mask_indexes = plocs_mask.nonzero()
+        plocs_inverse_mask_indexes = (~plocs_mask).nonzero()
+        plocs_full_mask_indexes = torch.cat((plocs_mask_indexes, plocs_inverse_mask_indexes), dim=0)
+        _, index_order = plocs_full_mask_indexes[:, 0].sort(stable=True)
+        plocs_full_mask_sorted_indexes = plocs_full_mask_indexes[index_order.tolist(), :]
+
+        d = {}
+        new_max_sources = plocs_mask.sum(dim=1).max()
+        for k, v in self.items():
+            if k == "n_sources":
+                d[k] = plocs_mask.sum(dim=1)
+            else:
+                d[k] = v[
+                    plocs_full_mask_sorted_indexes[:, 0].tolist(),
+                    plocs_full_mask_sorted_indexes[:, 1].tolist(),
+                ].view(-1, self.max_sources, v.shape[-1])[:, :new_max_sources, :]
+
+        d["plocs"] -= box_origin_tensor
+
+        return FullCatalog(box_len, box_len, d)
+
 
 class TileCatalog(BaseTileCatalog):
     galaxy_params = [
@@ -82,7 +119,7 @@ class TileCatalog(BaseTileCatalog):
         self.locations_sources = True
 
         if "locs" in d:
-            self.max_sources = d["locs"].shape[3]
+            self.max_sources = d.get("locs").shape[3]
         else:
             self.max_sources = tile_slen**2
             self.locations_sources = False
@@ -142,7 +179,11 @@ class TileCatalog(BaseTileCatalog):
         # TODO: we shouldn't assume fluxes are stored in nanomaggies because they aren't for DC2
         return convert_nmgy_to_mag(self.on_fluxes)
 
-    def to_full_catalog(self):
+    @property
+    def magnitudes_njy(self):
+        return convert_nmgy_to_njymag(self.on_fluxes)
+
+    def to_full_catalog(self):  # pylint: disable=too-many-branches
         """Converts image parameters in tiles to parameters of full image.
 
         By parameters, we mean samples from the variational distribution, not the variational
@@ -174,9 +215,9 @@ class TileCatalog(BaseTileCatalog):
                 continue
             k = tile_param.shape[-1]
             # unsqueeze shear and conv
-            if param_name == "shear":
+            if param_name == "shear":  # pylint: disable=too-many-branches
                 continue
-            if param_name == "convergence":
+            if param_name == "convergence":  # pylint: disable=too-many-branches
                 continue
             param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
             if self.locations_sources:
@@ -189,10 +230,10 @@ class TileCatalog(BaseTileCatalog):
         if self.locations_sources:
             params["n_sources"] = reduce(self["n_sources"], "b nth ntw -> b", "sum")
 
-        if "shear" in self:
-            params["shear"] = self["shear"].view(1, -1, 2)
-        if "convergence" in self:
-            params["convergence"] = self["convergence"].view(1, -1, 1)
+        if "shear" in self:  # pylint: disable=too-many-branches
+            params["shear"] = self.get("shear").view(1, -1, 2)
+        if "convergence" in self:  # pylint: disable=too-many-branches
+            params["convergence"] = self.get("convergence").view(1, -1, 1)
 
         height_px = self.n_tiles_h * self.tile_slen
         width_px = self.n_tiles_w * self.tile_slen
@@ -339,10 +380,6 @@ class TileCatalog(BaseTileCatalog):
         assert self.n_tiles_h == other.n_tiles_h
         assert self.n_tiles_w == other.n_tiles_w
 
-        # if not, we could store is_on_mask and derive n_sources by summing is_on_mask,
-        # rather than storing n_sources and deriving is_on_mask by assuming sorted sources
-        assert self.max_sources == other.max_sources == 1
-
         d = {}
         ns11 = rearrange(self["n_sources"], "b ht wt -> b ht wt 1 1")
         for k, v in self.items():
@@ -406,8 +443,8 @@ class FullCatalog(UserDict):
         self.height = height
         self.width = width
         if "plocs" in d:
-            self.device = d["plocs"].device
-            self.batch_size, self.max_sources, hw = d["plocs"].shape
+            self.device = d.get("plocs").device
+            self.batch_size, self.max_sources, hw = d.get("plocs").shape
             assert hw == 2
             assert d["n_sources"].max().int().item() <= self.max_sources
             assert d["n_sources"].shape == (self.batch_size,)
@@ -552,9 +589,8 @@ class FullCatalog(UserDict):
         for k, v in self.items():
             if k in {"plocs", "n_sources"}:
                 continue
-            dtype = torch.int64 if k == "objid" else torch.float
             size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
-            tile_params[k] = torch.zeros(size, dtype=dtype, device=self.device)
+            tile_params[k] = torch.zeros(size, dtype=v.dtype, device=self.device)
 
         tile_params["locs"] = tile_locs
 
@@ -649,20 +685,8 @@ class FullCatalog(UserDict):
         on_vals.pop("star_fluxes")
         on_vals.pop("galaxy_fluxes")
 
-        n = is_on_mask.sum()  # number of (predicted) objects
-        rows = []
-        for i in range(n):
-            row = {}
-            for k, v in on_vals.items():
-                row[k] = v[i].cpu().float()
-            # Convert `source_type` to string "star" or "galaxy" labels
-            row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
-            # Force `plocs` to be "({x}, {y})" tuple strings for readability
-            row["plocs"] = str(tuple(row["plocs"].tolist()))
-            rows.append(row)
-
-        # Convert to astropy table
-        est_cat_table = Table(rows)
+        # declare our astropy table
+        est_cat_table = Table(names=on_vals.keys())
 
         # Convert all _fluxes columns to units.Quantity
         for bl in encoder_survey_bands:
@@ -673,6 +697,18 @@ class FullCatalog(UserDict):
         est_cat_table["galaxy_beta_radians"].unit = units.radian
         est_cat_table["galaxy_a_d"].unit = units.arcsec
         est_cat_table["galaxy_a_b"].unit = units.arcsec
+
+        # load data into the astropy table
+        n = is_on_mask.sum()  # number of (predicted) objects
+        for i in range(n):
+            row = {}
+            for k, v in on_vals.items():
+                row[k] = v[i].cpu().float()
+            # Convert `source_type` to string "star" or "galaxy" labels
+            row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
+            # Force `plocs` to be "({x}, {y})" tuple strings for readability
+            row["plocs"] = str(tuple(row["plocs"].tolist()))
+            est_cat_table.add_row(row)
 
         return est_cat_table
 
