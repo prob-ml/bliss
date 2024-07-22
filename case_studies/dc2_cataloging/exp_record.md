@@ -528,3 +528,9 @@ if "locs" in datum["tile_catalog"]:
 4. retrain model
 
 5. test null image normalizer
+
+### 07-22
+
+1. train with the latest code
+
+2. train with the latest code
