@@ -376,7 +376,7 @@ class BackgroundPrior(Prior):
         gal_source_locs = self.cartesian_to_gal(cartesian_source_locs)
         source_types = self.sample_source_types(des_sources)
         flux_samples = self.sample_fluxes(des_sources)
-        g1_size_samples, g2_size_samples = self.sample_shapes(n_sources)
+        g1_size_samples, g2_size_samples = self.sample_shapes(des_sources)
         hlr_samples = self.sample_hlr(des_sources)
         return self.make_catalog(
             flux_samples,
