@@ -231,9 +231,9 @@ class TileCatalog(BaseTileCatalog):
             params["n_sources"] = reduce(self["n_sources"], "b nth ntw -> b", "sum")
 
         if "shear" in self:  # pylint: disable=too-many-branches
-            params["shear"] = self.get("shear").view(1, -1, 2)
+            params["shear"] = self.get("shear")
         if "convergence" in self:  # pylint: disable=too-many-branches
-            params["convergence"] = self.get("convergence").view(1, -1, 1)
+            params["convergence"] = self.get("convergence")
 
         height_px = self.n_tiles_h * self.tile_slen
         width_px = self.n_tiles_w * self.tile_slen
