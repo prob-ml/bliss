@@ -278,7 +278,7 @@ class EllipticityMSE(FilterMetric):
         self.bin_type = bin_type
 
         assert self.bin_cutoffs, "flux_bin_cutoffs can't be None or empty"
-        assert self.bin_type in {"Flux", "Mag"}, "invalid bin type"
+        assert self.bin_type in {"Flux", "Mag", "Blendedness"}, "invalid bin type"
 
         n_bins = len(self.bin_cutoffs) + 1
 
@@ -295,6 +295,8 @@ class EllipticityMSE(FilterMetric):
             true_bin_measures = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
         elif self.bin_type == "Mag":
             true_bin_measures = true_cat.magnitudes_njy[:, :, self.ref_band].contiguous()
+        elif self.bin_type == "Blendedness":
+            true_bin_measures = true_cat["blendedness"].squeeze(-1).contiguous()
         else:
             raise NotImplementedError()
 
@@ -355,4 +357,13 @@ class EllipticityMSE(FilterMetric):
             "g2_mse": g2_mae,
             **g1_mse_per_bin_results,
             **g2_mse_per_bin_results,
+        }
+
+    def get_results_on_per_bin(self):
+        g1_mse_per_bin = (self.g1_sse / self.n_matches).nan_to_num(0)
+        g2_mse_per_bin = (self.g2_sse / self.n_matches).nan_to_num(0)
+
+        return {
+            "g1_mse": g1_mse_per_bin,
+            "g2_mse": g2_mse_per_bin,
         }
