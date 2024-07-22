@@ -320,7 +320,6 @@ class DC2DataModule(CachedSimulatedDataModule):
                 self.image_lim[0], self.image_lim[1]
             )
 
-            image += bg
             image_list.append(image)
             bg_list.append(bg)
 
