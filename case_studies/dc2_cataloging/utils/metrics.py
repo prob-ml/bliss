@@ -341,7 +341,7 @@ class EllipticityMSE(FilterMetric):
 
     def compute(self):
         g1_mse = (self.g1_sse.sum() / self.n_matches.sum()).nan_to_num(0)
-        g2_mae = (self.g2_sse.sum() / self.n_matches.sum()).nan_to_num(0)
+        g2_mse = (self.g2_sse.sum() / self.n_matches.sum()).nan_to_num(0)
         g1_mse_per_bin = (self.g1_sse / self.n_matches).nan_to_num(0)
         g2_mse_per_bin = (self.g2_sse / self.n_matches).nan_to_num(0)
 
@@ -354,7 +354,7 @@ class EllipticityMSE(FilterMetric):
 
         return {
             "g1_mse": g1_mse,
-            "g2_mse": g2_mae,
+            "g2_mse": g2_mse,
             **g1_mse_per_bin_results,
             **g2_mse_per_bin_results,
         }
@@ -366,4 +366,109 @@ class EllipticityMSE(FilterMetric):
         return {
             "g1_mse": g1_mse_per_bin,
             "g2_mse": g2_mse_per_bin,
+        }
+
+
+class EllipticityResidual(FilterMetric):
+    def __init__(
+        self,
+        bin_cutoffs: list,
+        ref_band: int = 2,
+        bin_type: str = "Flux",
+    ):
+        # ellipticity is only for cosmodc2
+        super().__init__([Cosmodc2Filter()])
+
+        self.bin_cutoffs = bin_cutoffs
+        self.ref_band = ref_band
+        self.bin_type = bin_type
+
+        assert self.bin_cutoffs, "flux_bin_cutoffs can't be None or empty"
+        assert self.bin_type in {"Flux", "Mag", "Blendedness"}, "invalid bin type"
+
+        n_bins = len(self.bin_cutoffs) + 1
+
+        self.add_state("g1_residual", default=torch.zeros(n_bins), dist_reduce_fx="sum")
+        self.add_state("g2_residual", default=torch.zeros(n_bins), dist_reduce_fx="sum")
+        self.add_state("n_matches", default=torch.zeros(n_bins), dist_reduce_fx="sum")
+
+    def update(self, true_cat, est_cat, matching):
+        cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
+        n_bins = len(cutoffs) + 1
+
+        if self.bin_type == "Flux":
+            true_bin_measures = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
+        elif self.bin_type == "Mag":
+            true_bin_measures = true_cat.magnitudes_njy[:, :, self.ref_band].contiguous()
+        elif self.bin_type == "Blendedness":
+            true_bin_measures = true_cat["blendedness"].squeeze(-1).contiguous()
+        else:
+            raise NotImplementedError()
+
+        true_filter_bools, _ = self.get_filter_bools(true_cat, est_cat)
+
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            assert len(tcat_matches) == len(
+                ecat_matches
+            ), "tcat_matches and ecat_matches should be of the same size"
+            if tcat_matches.shape[0] == 0 or ecat_matches.shape[0] == 0:
+                continue
+            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
+                device=self.device
+            )
+            tcat_matches_filter = true_filter_bools[i][tcat_matches]
+            tcat_matches = tcat_matches[tcat_matches_filter]
+            ecat_matches = ecat_matches[tcat_matches_filter]
+
+            cur_batch_true_bin_meas = true_bin_measures[i][tcat_matches]
+            bin_indexes = torch.bucketize(cur_batch_true_bin_meas, cutoffs)
+            _, to_bin_mapping = torch.sort(bin_indexes)
+            per_bin_elements_count = bin_indexes.bincount(minlength=n_bins)
+
+            g1_residual = (
+                est_cat["ellipticity"][i, ecat_matches, 0]
+                - true_cat["ellipticity"][i, tcat_matches, 0]
+            )
+            g2_residual = (
+                est_cat["ellipticity"][i, ecat_matches, 1]
+                - true_cat["ellipticity"][i, tcat_matches, 1]
+            )
+            g1_residual = torch.split(g1_residual[to_bin_mapping], per_bin_elements_count.tolist())
+            g2_residual = torch.split(g2_residual[to_bin_mapping], per_bin_elements_count.tolist())
+
+            g1_sum_residual = torch.tensor([i.sum() for i in g1_residual], device=self.device)
+            g2_sum_residual = torch.tensor([i.sum() for i in g2_residual], device=self.device)
+
+            self.g1_residual += g1_sum_residual
+            self.g2_residual += g2_sum_residual
+            self.n_matches += per_bin_elements_count
+
+    def compute(self):
+        g1_residual = (self.g1_residual.sum() / self.n_matches.sum()).nan_to_num(0)
+        g2_residual = (self.g2_residual.sum() / self.n_matches.sum()).nan_to_num(0)
+        g1_residual_per_bin = (self.g1_residual / self.n_matches).nan_to_num(0)
+        g2_residual_per_bin = (self.g2_residual / self.n_matches).nan_to_num(0)
+
+        g1_residual_per_bin_results = {
+            f"g1_residual_bin_{i}": g1_residual_per_bin[i] for i in range(len(g1_residual_per_bin))
+        }
+        g2_residual_per_bin_results = {
+            f"g2_residual_bin_{i}": g2_residual_per_bin[i] for i in range(len(g2_residual_per_bin))
+        }
+
+        return {
+            "g1_residual": g1_residual,
+            "g2_residual": g2_residual,
+            **g1_residual_per_bin_results,
+            **g2_residual_per_bin_results,
+        }
+
+    def get_results_on_per_bin(self):
+        g1_residual_per_bin = (self.g1_residual / self.n_matches).nan_to_num(0)
+        g2_residual_per_bin = (self.g2_residual / self.n_matches).nan_to_num(0)
+
+        return {
+            "g1_residual": g1_residual_per_bin,
+            "g2_residual": g2_residual_per_bin,
         }
