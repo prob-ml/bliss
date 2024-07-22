@@ -13,17 +13,13 @@ class LensingMapMSE(Metric):
 
     def update(self, true_cat, est_cat, matching) -> None:
         # along dim 2
-        true_shear = true_cat["shear"]
-        pred_shear = est_cat["shear"]
+        true_shear = true_cat["shear"].flatten(1, 2)
+        pred_shear = est_cat["shear"].flatten(1, 2)
+        true_convergence = true_cat["convergence"].flatten(1, 2)
+        pred_convergence = est_cat["convergence"].flatten(1, 2)
 
-        true_convergence = true_cat["convergence"]
-        pred_convergence = est_cat["convergence"]
-
-        shear1_sq_err = ((true_shear[:, :, 0].flatten() - pred_shear[:, :, 0].flatten()) ** 2).sum()
-        shear2_sq_err = ((true_shear[:, :, 1].flatten() - pred_shear[:, :, 1].flatten()) ** 2).sum()
-
-        true_convergence = true_cat["convergence"].flatten()
-        pred_convergence = est_cat["convergence"].flatten()
+        shear1_sq_err = ((true_shear[:, :, 0] - pred_shear[:, :, 0]) ** 2).sum()
+        shear2_sq_err = ((true_shear[:, :, 1] - pred_shear[:, :, 1]) ** 2).sum()
         convergence_sq_err = ((true_convergence - pred_convergence) ** 2).sum()
 
         self.shear1_sum_squared_err += shear1_sq_err
