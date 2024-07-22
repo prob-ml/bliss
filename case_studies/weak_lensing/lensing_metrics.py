@@ -30,7 +30,9 @@ class LensingMapMSE(Metric):
         self.shear2_sum_squared_err += shear2_sq_err
         self.convergence_sum_squared_err += convergence_sq_err
 
-        self.total = torch.tensor(true_cat["shear"].shape[1])
+        self.total = torch.tensor(  # pylint: disable=attribute-defined-outside-init
+            true_cat["shear"].shape[1]
+        )
 
     def compute(self):
         shear1_mse = self.shear1_sum_squared_err / self.total
