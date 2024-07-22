@@ -145,6 +145,7 @@ predict:
             - run: 2583
               camcol: 2
               fields: [136]
+        bands: [2]
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25

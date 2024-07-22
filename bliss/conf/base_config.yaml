@@ -193,6 +193,7 @@ surveys:
             - run: 94
               camcol: 1
               fields: [12]
+        bands: [0, 1, 2, 3, 4]
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
