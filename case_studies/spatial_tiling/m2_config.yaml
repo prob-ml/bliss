@@ -145,11 +145,11 @@ predict:
             - run: 2583
               camcol: 2
               fields: [136]
-        bands: [2]
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
         align_to_band: null
         load_image_data: true
-        crop_config: [624, 736, 304, 416]
+        crop_bands: [2]
+        crop_hw: [624, 736, 304, 416]
     weight_save_path: null

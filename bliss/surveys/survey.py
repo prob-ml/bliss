@@ -11,6 +11,8 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         super().__init__()
 
         self.align_to_band = None
+        self.crop_hw = None
+        self.crop_bands = None
 
         self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
 
@@ -49,16 +51,40 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
 
     def predict_dataloader(self):
         """Return a DataLoader for prediction."""
-        return DataLoader(SurveyPredictIterator(self), batch_size=1)
+        return DataLoader(SurveyPredictIterator(self, self.crop_bands, self.crop_hw), batch_size=1)
 
 
 class SurveyPredictIterator:
-    def __init__(self, survey):
+    def __init__(self, survey, crop_bands=None, crop_hw=None):
         self.survey = survey
+        self.crop_bands = crop_bands  # includes all bands if None
+        self.crop_hw = crop_hw
+
+    @classmethod
+    def crop_to_mult16(cls, x):
+        """Crop the image dimensions to a multiple of 16."""
+        # note: by cropping the top-right, we preserve the mapping between pixel coordinates
+        # and the original WCS coordinates
+        height = x.shape[1] - (x.shape[1] % 16)
+        width = x.shape[2] - (x.shape[2] % 16)
+        return x[:, :height, :width]
 
     def __getitem__(self, idx):
-        x = self.survey[idx]
-        return {"images": x["image"], "psf_params": x["psf_params"]}
+        item = self.survey[idx]
+
+        # back to physical units (and assuming image is sky subtracted)
+        images = item["image"] / item["flux_calibration"]
+
+        if self.crop_bands is not None:
+            images = images[self.crop_bands]
+
+        if self.crop_hw is not None:
+            r1, r2, c1, c2 = self.crop_hw
+            images = images[:, r1:r2, c1:c2]
+
+        images = self.crop_to_mult16(images)  # alternatively, could pad
+
+        return {"images": images, "psf_params": item["psf_params"]}
 
     def __len__(self):
         return len(self.survey)
