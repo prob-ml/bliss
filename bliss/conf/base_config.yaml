@@ -230,7 +230,7 @@ surveys:
     dc2:
         _target_: bliss.surveys.dc2.DC2DataModule
         dc2_image_dir: ${paths.dc2}/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
-        dc2_cat_path: /data/scratch/shreyasc/toy_dc2_catalog.pkl
+        dc2_cat_path: ${paths.dc2}/merged_catalog_with_flux_over_50.pkl
         image_lim: [4000, 4000]
         n_image_split: 50
         tile_slen: 4
