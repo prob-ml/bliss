@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 
-import numpy as np
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, Dataset
 
@@ -11,10 +10,7 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
     def __init__(self):
         super().__init__()
 
-        self.bands = None
-        self.background = None
-        self.psf = None
-        self.flux_calibration_dict = None
+        self.align_to_band = None
 
         self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
 
@@ -54,14 +50,6 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
     def predict_dataloader(self):
         """Return a DataLoader for prediction."""
         return DataLoader(SurveyPredictIterator(self), batch_size=1)
-
-    def get_flux_calibrations(self):
-        d = {}
-        for i, image_id in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["flux_calibration_list"]
-            avg_nelec_conv = np.squeeze(np.mean(nelec_conv_for_frame, axis=1))
-            d[image_id] = avg_nelec_conv
-        return d
 
 
 class SurveyPredictIterator:

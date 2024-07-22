@@ -42,7 +42,7 @@ def generate(gen_cfg: DictConfig):
 
             if gen_cfg.store_full_catalog:
                 tile_cat = TileCatalog(batch["tile_catalog"])
-                full_cat = tile_cat.to_full_catalog(gen_cfg.simulator.tile_slen)
+                full_cat = tile_cat.to_full_catalog(gen_cfg.simulator.decoder.tile_slen)
 
             # flatten batches
             for i in range(gen_cfg.simulator.prior.batch_size):

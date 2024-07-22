@@ -52,4 +52,4 @@ def align(img, wcs_list, ref_band, ref_depth=0):
 
     if reproj_out.shape[0] == 1:
         reproj_out = reproj_out.squeeze(axis=0)
-    return reproj_out
+    return np.float32(reproj_out)

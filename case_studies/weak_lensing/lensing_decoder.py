@@ -1,9 +1,9 @@
 import galsim
 
-from bliss.simulator.decoder import ImageDecoder
+from bliss.simulator.decoder import Decoder
 
 
-class LensingDecoder(ImageDecoder):
+class LensingDecoder(Decoder):
     def render_galaxy(self, psf, band, source_params):
         """Render a galaxy with given params and PSF.
 

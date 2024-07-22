@@ -57,12 +57,12 @@ encoder:
             frequency: 1
             restrict_batch: 0
             tiles_to_crop: 0
-            tile_slen: ${simulator.tile_slen}
+            tile_slen: ${simulator.decoder.tile_slen}
           - _target_: case_studies.weak_lensing.lensing_plots.PlotWeakLensingShearConvergence
             frequency: 1
             restrict_batch: 0
             tiles_to_crop: 0
-            tile_slen: ${simulator.tile_slen}
+            tile_slen: ${simulator.decoder.tile_slen}
     use_double_detect: false
     use_checkerboard: false
 

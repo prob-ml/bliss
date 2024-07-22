@@ -15,7 +15,6 @@ from scipy.interpolate import RegularGridInterpolator
 
 from bliss.align import align, crop_to_mult16
 from bliss.catalog import FullCatalog, SourceType
-from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.survey import Survey
@@ -53,7 +52,6 @@ class SloanDigitalSkySurvey(Survey):
         self,
         psf_config: PSFConfig,
         fields,
-        bands,
         dir_path="data/sdss",
         load_image_data: bool = False,
         background_offset=0.0,
@@ -64,7 +62,6 @@ class SloanDigitalSkySurvey(Survey):
 
         self.sdss_path = Path(dir_path)
         self.sdss_fields = fields
-        self.bands = bands
         self.load_image_data = load_image_data
         self.background_offset = background_offset
         self.align_to_band = align_to_band
@@ -116,9 +113,6 @@ class SloanDigitalSkySurvey(Survey):
                 frame_path = field_path / frame_name
                 assert Path(frame_path).exists(), f"{frame_path} does not exist."
 
-        self.background = ImageBackground(self, bands=range(len(self.bands)))
-        self.flux_calibration_dict = self.get_flux_calibrations()
-
     def __len__(self):
         return len(self.rcfgcs)
 
@@ -126,7 +120,9 @@ class SloanDigitalSkySurvey(Survey):
         if not self.items[idx]:
             item = self.get_from_disk(idx)
             item["background"] += self.background_offset
-            item["psf_params"] = self.psf.psf_params[self.image_id(idx)][self.bands]
+            item["psf_params"] = self.psf.psf_params[self.image_id(idx)]
+            item["psf_galsim"] = self.psf.psf_galsim[self.image_id(idx)]
+            item["flux_calibration"] = item["flux_calibration"]
             if not self.load_image_data:
                 # we're just using the background/metadata, so no need to align or crop
                 return item
@@ -138,7 +134,7 @@ class SloanDigitalSkySurvey(Survey):
                 if self.crop_config:
                     r1, r2, c1, c2 = self.crop_config
                     item[k] = item[k][:, r1:r2, c1:c2]
-                item[k] = self._crop_image(item[k])[self.bands]
+                item[k] = self._crop_image(item[k])
             self.items[idx] = item
         return self.items[idx]
 
@@ -231,8 +227,7 @@ class SloanDigitalSkySurvey(Survey):
         d = {
             "background": large_sky_nelec,
             "gain": np.array(gain),
-            "flux_calibration_list": nelec_per_nmgy,
-            "calibration": calibration,
+            "flux_calibration": nelec_per_nmgy,
             "wcs": wcs,
         }
         if self.load_image_data:

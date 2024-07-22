@@ -10,7 +10,7 @@ from bliss.encoder.metrics import (
     FluxError,
     SourceTypeAccuracy,
 )
-from bliss.surveys.decals import TractorFullCatalog
+from bliss.surveys.des import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 
 

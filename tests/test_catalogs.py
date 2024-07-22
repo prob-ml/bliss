@@ -1,13 +1,9 @@
 from pathlib import Path
 
-import numpy as np
 import pytest
 import torch
-from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
-from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
-from bliss.surveys.decals import TractorFullCatalog
 
 # TODO: Add PhotoFullCatalog-specific tests (like loading, restricting by RA/DEC, downloading)
 
@@ -168,9 +164,9 @@ class TestBasicTileAndFullCatalogs:
 
         # we'll do a "round trip" test: convert the catalog to a full catalog and back
         true_tile_cat0 = TileCatalog(test_datum["catalog"])
-        true_full_cat = true_tile_cat0.to_full_catalog(cfg.simulator.tile_slen)
+        true_full_cat = true_tile_cat0.to_full_catalog(cfg.simulator.decoder.tile_slen)
         true_tile_cat = true_full_cat.to_tile_catalog(
-            tile_slen=cfg.simulator.tile_slen,
+            tile_slen=cfg.simulator.decoder.tile_slen,
             max_sources_per_tile=cfg.simulator.prior.max_sources,
             ignore_extra_sources=True,
         )
@@ -184,30 +180,3 @@ class TestBasicTileAndFullCatalogs:
             v0 = true_tile_cat0[k] * gating
             v1 = true_tile_cat[k] * gating
             assert torch.isclose(v0, v1, rtol=1e-4, atol=1e-6).all()
-
-
-class TestDecalsCatalog:
-    def test_load_decals_from_file(self, cfg, monkeypatch):
-        monkeypatch.setattr("bliss.surveys.decals.DECaLS_PSF.__init__", lambda *_args: None)
-
-        brickname = "3366m010"
-        sample_file = (
-            Path(cfg.paths.decals) / brickname[:3] / brickname / f"tractor-{brickname}.fits"
-        )
-        cfg = cfg.copy()
-        cfg.predict.dataset = cfg.surveys.decals
-        decals = instantiate(cfg.predict.dataset)
-        decals_cat = TractorFullCatalog.from_file(
-            cat_path=sample_file,
-            wcs=decals[0]["wcs"][DECaLS.BANDS.index("r")],
-            height=decals[0]["background"].shape[1],
-            width=decals[0]["background"].shape[2],
-        )
-
-        ras = decals_cat["ra"].numpy()
-        decs = decals_cat["dec"].numpy()
-
-        assert np.isclose(np.min(ras), 336.5, atol=1e-4)
-        assert np.isclose(np.max(ras), 336.75, atol=1e-4)
-        assert np.isclose(np.min(decs), -1.125, atol=1e-4)
-        assert np.isclose(np.max(decs), -0.875, atol=1e-4)
