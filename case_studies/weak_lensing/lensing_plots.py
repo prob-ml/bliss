@@ -15,14 +15,12 @@ class PlotWeakLensingShearConvergence(Metric):
         self,
         frequency: int = 1,
         restrict_batch: int = 0,
-        tiles_to_crop: int = 0,  # note must match encoder tiles_to_crop
         tile_slen: int = 0,  # note must match encoder tile_slen
     ):
         super().__init__()
 
         self.frequency = frequency
         self.restrict_batch = restrict_batch
-        self.tiles_to_crop = tiles_to_crop
         self.tile_slen = tile_slen
 
         self.should_plot = False
@@ -61,7 +59,9 @@ class PlotWeakLensingShearConvergence(Metric):
             return None
         est_cat = self.sample_with_mode_tile
         true_tile_cat = TileCatalog(self.tile_slen, self.batch["tile_catalog"])
-        return plot_maps(self.images, true_tile_cat, est_cat, figsize=None, current_epoch=self.current_epoch)
+        return plot_maps(
+            self.images, true_tile_cat, est_cat, figsize=None, current_epoch=self.current_epoch
+        )
 
 
 def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0):
@@ -82,9 +82,6 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
     est_convergence = est_tile_cat["convergence"]
 
     for img_id in img_ids:
-        # print("true shear shape: ", true_shear[0].squeeze().shape)
-        # print("est shear shape: ", est_shear.shape)
-
         shear1_vmin = torch.min(true_shear[img_id].squeeze()[:, :, 0])
         shear1_vmax = torch.max(true_shear[img_id].squeeze()[:, :, 0])
         shear2_vmin = torch.min(true_shear[img_id].squeeze()[:, :, 1])
@@ -96,56 +93,50 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
         plot_maps_helper(
             x_label="True horizontal shear",
             mp=true_shear[img_id].squeeze()[:, :, 0],
-            # ax=axes[img_id, 0],
             ax=axes[0],
             fig=fig,
-            vmin = shear1_vmin,
-            vmax = shear1_vmax,
+            vmin=shear1_vmin,
+            vmax=shear1_vmax,
         )
         plot_maps_helper(
             x_label="Estimated horizontal shear",
             mp=est_shear[img_id].squeeze()[:, :, 0],
-            # ax=axes[img_id, 1],
             ax=axes[1],
             fig=fig,
-            vmin = shear1_vmin,
-            vmax = shear1_vmax,
+            vmin=shear1_vmin,
+            vmax=shear1_vmax,
         )
         plot_maps_helper(
             x_label="True diagonal shear",
             mp=true_shear[img_id].squeeze()[:, :, 1],
-            # ax=axes[img_id, 2],
             ax=axes[2],
             fig=fig,
-            vmin = shear2_vmin,
-            vmax = shear2_vmax,
+            vmin=shear2_vmin,
+            vmax=shear2_vmax,
         )
         plot_maps_helper(
             x_label="Estimated diagonal shear",
             mp=est_shear[img_id].squeeze()[:, :, 1],
-            # ax=axes[img_id, 3],
-            ax = axes[3],
+            ax=axes[3],
             fig=fig,
-            vmin = shear2_vmin,
-            vmax = shear2_vmax,
+            vmin=shear2_vmin,
+            vmax=shear2_vmax,
         )
         plot_maps_helper(
             x_label="True convergence",
             mp=true_convergence[img_id].squeeze(),
-            # ax=axes[img_id, 4],
-            ax = axes[4],
+            ax=axes[4],
             fig=fig,
-            vmin = convergence_vmin,
-            vmax = convergence_vmax,
+            vmin=convergence_vmin,
+            vmax=convergence_vmax,
         )
         plot_maps_helper(
             x_label="Estimated convergence",
             mp=est_convergence[img_id].squeeze(),
-            # ax=axes[img_id, 5],
-            ax = axes[5],
+            ax=axes[5],
             fig=fig,
-            vmin = convergence_vmin,
-            vmax = convergence_vmax,
+            vmin=convergence_vmin,
+            vmax=convergence_vmax,
         )
 
     fig.tight_layout()
@@ -159,12 +150,10 @@ def plot_maps_helper(x_label: str, mp, ax, fig, vmin, vmax):
     mp = mp.cpu().numpy()
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
-    # print(mp.shape)
     im = ax.matshow(
         mp,
         cmap="viridis",
-        vmin = vmin, 
-        vmax = vmax,
-        # extent=(0, mp.shape[0], mp.shape[1], 0),
+        vmin=vmin,
+        vmax=vmax,
     )
     fig.colorbar(im, cax=cax, orientation="vertical")

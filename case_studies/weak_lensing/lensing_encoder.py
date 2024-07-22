@@ -1,18 +1,13 @@
-import itertools
 import sys
 from typing import Optional
 
-import pytorch_lightning as pl
 import torch
-from torch.nn.functional import pad
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.encoder import Encoder
-from bliss.encoder.image_normalizer import ImageNormalizer
-from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDist
 from bliss.global_env import GlobalEnv
 from case_studies.weak_lensing.lensing_convnet import WeakLensingCatalogNet, WeakLensingFeaturesNet
@@ -23,61 +18,43 @@ class WeakLensingEncoder(Encoder):
         self,
         survey_bands: list,
         tile_slen: int,
-        tiles_to_crop: int,
-        image_normalizer: ImageNormalizer,
+        image_normalizers: list,
         var_dist: VariationalDist,
-        metrics: MetricCollection,
         sample_image_renders: MetricCollection,
-        matcher: CatalogMatcher,
+        mode_metrics: MetricCollection,
+        sample_metrics: Optional[MetricCollection] = None,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
-        use_checkerboard: bool = False,
         reference_band: int = 2,
         **kwargs,
     ):
         super().__init__(
-            survey_bands,
-            tile_slen,
-            tiles_to_crop,
-            image_normalizer,
-            var_dist,
-            metrics,
-            sample_image_renders,
-            matcher,
-            -sys.maxsize - 1,
-            -sys.maxsize - 1,
-            optimizer_params,
-            scheduler_params,
-            False,
-            use_checkerboard,
-            reference_band,
+            survey_bands=survey_bands,
+            tile_slen=tile_slen,
+            image_normalizers=image_normalizers,
+            var_dist=var_dist,
+            matcher=None,
+            sample_image_renders=sample_image_renders,
+            mode_metrics=mode_metrics,
+            sample_metrics=sample_metrics,
+            min_flux_for_loss=-sys.maxsize - 1,
+            min_flux_for_metrics=-sys.maxsize - 1,
+            optimizer_params=optimizer_params,
+            scheduler_params=scheduler_params,
+            use_double_detect=False,
+            use_checkerboard=False,
+            reference_band=reference_band,
         )
-
-        self.survey_bands = survey_bands
-        self.tile_slen = tile_slen
-        self.tiles_to_crop = tiles_to_crop
-        self.image_normalizer = image_normalizer
-        self.var_dist = var_dist
-        self.mode_metrics = metrics.clone()
-        self.sample_metrics = metrics.clone()
-        self.sample_image_renders = sample_image_renders
-        self.matcher = matcher
-        self.optimizer_params = optimizer_params
-        self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
-        self.use_checkerboard = use_checkerboard
-        self.reference_band = reference_band
 
         self.initialize_networks()
 
     # override
     def initialize_networks(self):
-        # assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
-
         num_features = 256
-
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         self.features_net = WeakLensingFeaturesNet(
-            n_bands=len(self.image_normalizer.bands),
-            ch_per_band=self.image_normalizer.num_channels_per_band(),
+            n_bands=len(self.survey_bands),
+            ch_per_band=ch_per_band,
             num_features=num_features,
             tile_slen=self.tile_slen,
         )
@@ -86,44 +63,31 @@ class WeakLensingEncoder(Encoder):
             out_channels=self.var_dist.n_params_per_source,
         )
 
-    def make_context(self, history_cat, history_mask):
-        return torch.zeros((1, 6, 1, 1))  # TODO: make dynamic based on slen
-
     def sample(self, batch, use_mode=True):
-        batch_size, _n_bands, h, w = batch["images"].shape[0:4]
-        ht, wt = h // self.tile_slen, w // self.tile_slen
+        # multiple image normalizers
+        input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
+        inputs = torch.cat(input_lst, dim=2)
 
-        x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.features_net(x)
+        x_features = self.features_net(inputs)
         x_cat_marginal = self.catalog_net(x_features)
-        est_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
-        return est_cat.symmetric_crop(self.tiles_to_crop)
+        # est cat
+        return self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
 
     def _compute_loss(self, batch, logging_name):
-        
-        # check where nans occur
-
-        # for name, param in self.named_parameters():
-        #     if param.grad is not None:
-        #         print(f'Gradient {name}: {param.grad.norm().item()}')
-
-        batch_size, _n_bands, h, w = batch["images"].shape[0:4]
-        ht, wt = h // self.tile_slen, w // self.tile_slen
+        batch_size, _, _, _ = batch["images"].shape[0:4]
 
         target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
-        pred = {}
+        # multiple image normalizers
+        input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
+        inputs = torch.cat(input_lst, dim=2)
 
-        x = self.image_normalizer.get_input_tensor(batch)
-        x_features = self.features_net(x)
+        pred = {}
+        x_features = self.features_net(inputs)
         pred["x_cat_marginal"] = self.catalog_net(x_features)
         loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat)
 
-        # exclude border tiles and report average per-tile loss
-        ttc = self.tiles_to_crop
-        interior_loss = pad(loss, [-ttc, -ttc, -ttc, -ttc])
-        # could normalize by the number of tile predictions, rather than number of tiles
-        loss = interior_loss.sum() / interior_loss.numel()
+        loss = loss.sum() / loss.numel()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         return loss
@@ -139,18 +103,14 @@ class WeakLensingEncoder(Encoder):
         return self._compute_loss(batch, "train")
 
     def update_metrics(self, batch, batch_idx):
-        target_tile_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
-
-        target_cat = target_tile_cat.symmetric_crop(self.tiles_to_crop).to_full_catalog()
+        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
 
         sample_tile_cat = self.sample(batch, use_mode=True)
         sample_cat = sample_tile_cat.to_full_catalog()
-        # matching = self.matcher.match_catalogs(target_cat, sample_cat)
         self.mode_metrics.update(target_cat, sample_cat, None)
 
         sample_tile_cat = self.sample(batch, use_mode=False)
         sample_cat = sample_tile_cat.to_full_catalog()
-        # smatching = self.matcher.match_catalogs(target_cat, sample_cat)
         self.sample_metrics.update(target_cat, sample_cat, None)
 
         self.sample_image_renders.update(

@@ -15,8 +15,7 @@ class WeakLensingFeaturesNet(nn.Module):
             nn.SiLU(),
         )
 
-        # downsample first for now
-        # self.n_downsample = int(torch.round(torch.log2(torch.tensor(tile_slen)))) - 1
+        # TODO: adaptive downsample
         self.n_downsample = 1
 
         module_list = []
@@ -36,7 +35,7 @@ class WeakLensingFeaturesNet(nn.Module):
                 ConvBlock(128, num_features, stride=1),
             ]
         )  # 4
-        
+
         self.net = nn.ModuleList(module_list)
 
     def forward(self, x):
@@ -63,16 +62,13 @@ class WeakLensingCatalogNet(nn.Module):
             C3(768, 256, n=3, shortcut=False),
             nn.AvgPool2d(kernel_size=64, stride=64),
             Detect(256, out_channels),
-        
         ]
         self.net = nn.ModuleList(net_layers)
 
     def forward(self, x):
         save_lst = [x]
         for i, m in enumerate(self.net):
-            # print("at input layer", i, x.shape)
             x = m(x)
-            # print("layer", i, x.shape)
             if i in {0, 4}:
                 save_lst.append(x)
             if i == 4:
