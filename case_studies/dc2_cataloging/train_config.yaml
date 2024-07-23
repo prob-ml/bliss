@@ -48,63 +48,58 @@ my_variational_factors:
 my_metrics:
   detection_performance:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [200, 400, 600, 800, 1000]
-    bin_type: "Flux"
+    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+    bin_type: "Mag"
   detection_performance_star:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [200, 400, 600, 800, 1000]
-    bin_type: "Flux"
+    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+    bin_type: "Mag"
     filter_list:
       - _target_: bliss.encoder.metrics.SourceTypeFilter
         filter_type: "star"
   detection_performance_galaxy:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [200, 400, 600, 800, 1000]
-    bin_type: "Flux"
+    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+    bin_type: "Mag"
     filter_list:
       - _target_: bliss.encoder.metrics.SourceTypeFilter
         filter_type: "galaxy"
   detection_performance_one_source_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [200, 400, 600, 800, 1000]
-    bin_type: "Flux"
+    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+    bin_type: "Mag"
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
         filter_source_count: "1m"
   detection_performance_two_sources_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [200, 400, 600, 800, 1000]
-    bin_type: "Flux"
+    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+    bin_type: "Mag"
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
         filter_source_count: "2m"
   detection_performance_more_than_two_sources_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [200, 400, 600, 800, 1000]
-    bin_type: "Flux"
+    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+    bin_type: "Mag"
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
         filter_source_count: "2plus"
   source_type_accuracy:
     _target_: bliss.encoder.metrics.SourceTypeAccuracy
-    bin_cutoffs: [200, 400, 600, 800, 1000]
-    bin_type: "Flux"
+    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+    bin_type: "Mag"
   flux_error:
     _target_: bliss.encoder.metrics.FluxError
     survey_bands: ${encoder.survey_bands}
   # shear_error:
   #   _target_: case_studies.dc2_cataloging.utils.metrics.ShearMSE
-  #   bin_cutoffs: [200, 400, 600, 800, 1000]
-  #   bin_type: "Flux"
+  #   bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+  #   bin_type: "Mag"
   ellipticity_error:
     _target_: case_studies.dc2_cataloging.utils.metrics.EllipticityMSE
-    bin_cutoffs: [200, 400, 600, 800, 1000]
-    bin_type: "Flux"
-
-# my_image_normalizers:
-#   asinh:
-#       _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
-#       q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+    bin_type: "Mag"
 
 my_image_normalizers:
   null_noramlize:

@@ -159,7 +159,6 @@ class DC2DataModule(CachedSimulatedDataModule):
         return {
             "tile_catalog": result_dict["tile_dict"],
             "image": result_dict["inputs"]["image"],
-            "background": result_dict["inputs"]["bg"],
             "match_id": result_dict["other_info"]["match_id"],
             "full_catalog": result_dict["other_info"]["full_cat"],
             "wcs": result_dict["other_info"]["wcs"],
@@ -177,7 +176,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         return {k: v.unsqueeze(0) for k, v in tile_dict_copy.items()}
 
     def load_image_and_catalog(self, image_index):
-        image, bg, wcs_header_str = self.read_image_for_bands(image_index)
+        image, wcs_header_str = self.read_image_for_bands(image_index)
         wcs = wcs_from_wcs_header_str(wcs_header_str)
 
         plocs_lim = image[0].shape
@@ -212,7 +211,6 @@ class DC2DataModule(CachedSimulatedDataModule):
             "tile_dict": tile_dict,
             "inputs": {
                 "image": image,
-                "bg": bg,
                 "psf_params": psf_params,
             },
             "other_info": {
@@ -227,7 +225,6 @@ class DC2DataModule(CachedSimulatedDataModule):
         result_dict = self.load_image_and_catalog(image_index)
 
         image = result_dict["inputs"]["image"]
-        bg = result_dict["inputs"]["bg"]
         tile_dict = result_dict["tile_dict"]
         wcs_header_str = result_dict["other_info"]["wcs_header_str"]
         psf_params = result_dict["inputs"]["psf_params"]
@@ -237,7 +234,6 @@ class DC2DataModule(CachedSimulatedDataModule):
         image_splits = split_tensor(image, split_lim, 1, 2)
         image_width_pixels = image.shape[2]
         split_image_num_on_width = image_width_pixels // split_lim
-        bg_splits = split_tensor(bg, split_lim, 1, 2)
 
         # split tile cat
         tile_cat_splits = {}
@@ -270,7 +266,6 @@ class DC2DataModule(CachedSimulatedDataModule):
             "image_width_index": (
                 torch.arange(0, len(image_splits)) % split_image_num_on_width
             ).tolist(),
-            "background": bg_splits,
             "psf_params": [psf_params for _ in range(self.n_image_split**2)],
         }
         data_splits = split_list(
@@ -299,32 +294,21 @@ class DC2DataModule(CachedSimulatedDataModule):
 
     def read_image_for_bands(self, image_index):
         image_list = []
-        bg_list = []
         wcs_header_str = None
         for b in range(self.n_bands):
             image_frame = fits.open(self._image_files[b][image_index])
-            bg_frame = fits.open(self._bg_files[b][image_index])
             image_data = image_frame[1].data
-            bg_data = bg_frame[0].data
-
             if wcs_header_str is None:
                 wcs_header_str = image_frame[1].header.tostring()
-
             image_frame.close()
-            bg_frame.close()
 
             image = torch.nan_to_num(
                 torch.from_numpy(image_data)[: self.image_lim[0], : self.image_lim[1]]
             )
-            bg = torch.from_numpy(bg_data.astype(np.float32)).expand(
-                self.image_lim[0], self.image_lim[1]
-            )
-
             # we assume image doesn't contain bg
             image_list.append(image)
-            bg_list.append(bg)
 
-        return torch.stack(image_list), torch.stack(bg_list), wcs_header_str
+        return torch.stack(image_list), wcs_header_str
 
 
 class DC2FullCatalog(FullCatalog):

@@ -76,6 +76,8 @@ class VariationalFactor:
             gating = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
         elif self.nll_gating == "is_galaxy":
             gating = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
+        # for DC2 experiments, truth catalog can't exactly match with cosmodc2 catalog
+        # so we add a mask to filter the nan values.
         elif self.nll_gating == "is_in_cosmodc2":
             gating = rearrange(true_tile_cat["cosmodc2_mask"], "b ht wt 1 1 -> b ht wt")
         else:

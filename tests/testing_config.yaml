@@ -55,19 +55,19 @@ encoder:
                 bin_type: "Mag"
             source_type_accuracy:
                 _target_: bliss.encoder.metrics.SourceTypeAccuracy
-                bin_cutoffs: [200, 400, 600, 800, 1000]
-                bin_type: "Flux"
+                bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+                bin_type: "Mag"
             source_type_accuracy_star:
                 _target_: bliss.encoder.metrics.SourceTypeAccuracy
-                bin_cutoffs: [200, 400, 600, 800, 1000]
-                bin_type: "Flux"
+                bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+                bin_type: "Mag"
                 filter_list:
                     - _target_: bliss.encoder.metrics.SourceTypeFilter
                       filter_type: "star"
             source_type_accuracy_galaxy:
                 _target_: bliss.encoder.metrics.SourceTypeAccuracy
-                bin_cutoffs: [200, 400, 600, 800, 1000]
-                bin_type: "Flux"
+                bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+                bin_type: "Mag"
                 filter_list:
                     - _target_: bliss.encoder.metrics.SourceTypeFilter
                       filter_type: "galaxy"

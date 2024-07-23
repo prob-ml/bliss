@@ -154,12 +154,7 @@ class TileCatalog(BaseTileCatalog):
         return is_galaxy * self.is_on_mask.unsqueeze(-1)
 
     @property
-    def on_fluxes(self):
-        """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
-
-        Returns:
-            Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
-        """
+    def on_nmgy(self):
         # TODO: a tile catalog should store fluxes rather than star_fluxes and galaxy_fluxes
         # because that's all that's needed to render the source
         if "galaxy_fluxes" not in self:
@@ -169,13 +164,12 @@ class TileCatalog(BaseTileCatalog):
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
     @property
-    def magnitudes(self):
-        # TODO: we shouldn't assume fluxes are stored in nanomaggies because they aren't for DC2
-        return convert_nmgy_to_mag(self.on_fluxes)
+    def on_mag(self) -> Tensor:
+        return convert_nmgy_to_mag(self.on_nmgy)
 
     @property
-    def magnitudes_njy(self):
-        return convert_nmgy_to_njymag(self.on_fluxes)
+    def on_njy(self) -> Tensor:
+        return convert_nmgy_to_njymag(self.on_nmgy)
 
     def to_full_catalog(self):
         """Converts image parameters in tiles to parameters of full image.
@@ -463,12 +457,7 @@ class FullCatalog(UserDict):
         return is_galaxy * self.is_on_mask.unsqueeze(2)
 
     @property
-    def on_fluxes(self) -> Tensor:
-        """Gets fluxes of "on" sources based on whether the source is a star or galaxy.
-
-        Returns:
-            Tensor: a tensor of fluxes of size (b x nth x ntw x max_sources x 1)
-        """
+    def on_nmgy(self) -> Tensor:
         # ideally we'd always store fluxes rather than star_fluxes and galaxy_fluxes
         if "galaxy_fluxes" not in self:
             fluxes = self["star_fluxes"]
@@ -477,12 +466,12 @@ class FullCatalog(UserDict):
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
     @property
-    def magnitudes(self):
-        return convert_nmgy_to_mag(self.on_fluxes)
+    def on_mag(self) -> Tensor:
+        return convert_nmgy_to_mag(self.on_nmgy)
 
     @property
-    def magnitudes_njy(self):
-        return convert_nmgy_to_njymag(self.on_fluxes)
+    def on_njy(self) -> Tensor:
+        return convert_nmgy_to_njymag(self.on_nmgy)
 
     def one_source(self, b: int, s: int):
         """Return a dict containing all parameter for one specified light source."""
