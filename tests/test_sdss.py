@@ -5,6 +5,13 @@ import pytest
 from hydra.utils import instantiate
 
 
+@pytest.fixture(autouse=True)
+def patch_align(monkeypatch):
+    # align is quite slow, so we replace it with the identity function
+    identity = lambda x, *_args, **_kwargs: x
+    monkeypatch.setattr("bliss.surveys.survey.align", identity)
+
+
 class TestSDSS:
     def test_sdss(self, cfg):
         cfg = cfg.copy()
@@ -12,7 +19,7 @@ class TestSDSS:
         sdss_obj = instantiate(cfg.surveys.sdss)
         sdss_obj.prepare_data()
         an_obj = sdss_obj[0]
-        for k in ("background", "gain", "flux_calibration_list", "calibration"):
+        for k in ("background", "gain", "flux_calibration"):
             assert isinstance(an_obj[k], np.ndarray)
 
         assert an_obj["field"] == 269
@@ -26,4 +33,4 @@ class TestSDSS:
         sdss_obj = instantiate(cfg.surveys.sdss, load_image_data=True)
         sdss_obj.prepare_data()
         frame0 = sdss_obj[0]
-        assert frame0["image"].shape == (5, 1488, 2048)
+        assert frame0["image"].shape == (5, 1489, 2048)

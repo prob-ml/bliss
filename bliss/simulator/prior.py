@@ -25,7 +25,6 @@ class CatalogPrior(pl.LightningModule):
         survey_bands: list,
         n_tiles_h: int,
         n_tiles_w: int,
-        tile_slen: int,
         batch_size: int,
         min_sources: int,
         max_sources: int,
@@ -53,7 +52,6 @@ class CatalogPrior(pl.LightningModule):
             survey_bands: all band-pass filters available for this survey
             n_tiles_h: Image height in tiles,
             n_tiles_w: Image width in tiles,
-            tile_slen: Tile side length in pixels,
             batch_size: int,
             min_sources: Minimum number of sources in a tile
             max_sources: Maximum number of sources in a tile
@@ -78,7 +76,6 @@ class CatalogPrior(pl.LightningModule):
         super().__init__()
         self.n_tiles_h = n_tiles_h
         self.n_tiles_w = n_tiles_w
-        self.tile_slen = tile_slen
         self.n_bands = len(survey_bands)
         # NOTE: bands have to be non-empty
         self.bands = range(self.n_bands)
@@ -136,7 +133,7 @@ class CatalogPrior(pl.LightningModule):
             "star_fluxes": star_fluxes,
         }
 
-        return TileCatalog(self.tile_slen, catalog_params)
+        return TileCatalog(catalog_params)
 
     def _sample_n_sources(self):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w)

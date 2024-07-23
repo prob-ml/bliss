@@ -13,9 +13,7 @@ from astropy.wcs import WCS, FITSFixedWarning
 from einops import rearrange
 from scipy.interpolate import RegularGridInterpolator
 
-from bliss.align import align, crop_to_mult16
 from bliss.catalog import FullCatalog, SourceType
-from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.survey import Survey
@@ -57,18 +55,16 @@ class SloanDigitalSkySurvey(Survey):
         load_image_data: bool = False,
         background_offset=0.0,
         align_to_band=None,
-        crop_config=None,
+        crop_to_bands=None,
+        crop_to_hw=None,
     ):
         super().__init__()
 
         self.sdss_path = Path(dir_path)
         self.sdss_fields = fields
-        self.bands = tuple(range(len(self.BANDS)))
-        self.n_bands = len(self.BANDS)
         self.load_image_data = load_image_data
         self.background_offset = background_offset
         self.align_to_band = align_to_band
-        self.crop_config = crop_config
 
         num_frames = sum(len(rcf_conf["fields"]) for rcf_conf in fields)
         self.items = [None for _ in range(num_frames)]
@@ -76,9 +72,10 @@ class SloanDigitalSkySurvey(Survey):
 
         self.downloader = SDSSDownloader(self.image_ids(), download_dir=str(self.sdss_path))
 
-        self.psf = SDSS_PSF(dir_path, self.image_ids(), self.bands, psf_config)
+        self.psf = SDSS_PSF(dir_path, self.image_ids(), range(len(self.BANDS)), psf_config)
 
-        self.catalog_cls = PhotoFullCatalog
+        self.crop_to_bands = crop_to_bands
+        self.crop_to_hw = crop_to_hw
 
     def prepare_data(self):
         self.downloader.download_pfs()
@@ -116,34 +113,16 @@ class SloanDigitalSkySurvey(Survey):
                 frame_path = field_path / frame_name
                 assert Path(frame_path).exists(), f"{frame_path} does not exist."
 
-        self.background = ImageBackground(self, bands=self.bands)
-        self.flux_calibration_dict = self.get_flux_calibrations()
-
     def __len__(self):
         return len(self.rcfgcs)
 
     def __getitem__(self, idx):
         if not self.items[idx]:
             item = self.get_from_disk(idx)
-            item["background"] += self.background_offset
-            if not self.load_image_data:
-                # we're just using the background/metadata, so no need to align or crop
-                return item
-            for k in ("image", "background"):
-                if k not in item:
-                    continue
-                if self.align_to_band is not None:
-                    item[k] = align(item[k], wcs_list=item["wcs"], ref_band=self.align_to_band)
-                if self.crop_config:
-                    r1, r2, c1, c2 = self.crop_config
-                    item[k] = item[k][:, r1:r2, c1:c2]
-                item[k] = self._crop_image(item[k])
             item["psf_params"] = self.psf.psf_params[self.image_id(idx)]
+            item["psf_galsim"] = self.psf.psf_galsim[self.image_id(idx)]
             self.items[idx] = item
         return self.items[idx]
-
-    def _crop_image(self, x):
-        return crop_to_mult16(x)
 
     def image_id(self, idx) -> Tuple[int, int, int]:
         """Return the image_id for the given index."""
@@ -231,8 +210,7 @@ class SloanDigitalSkySurvey(Survey):
         d = {
             "background": large_sky_nelec,
             "gain": np.array(gain),
-            "flux_calibration_list": nelec_per_nmgy,
-            "calibration": calibration,
+            "flux_calibration": nelec_per_nmgy,
             "wcs": wcs,
         }
         if self.load_image_data:

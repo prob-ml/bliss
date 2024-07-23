@@ -1,16 +1,14 @@
 import warnings
 from typing import Dict, List, Optional
 
-import numpy as np
 import pytorch_lightning as pl
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm import tqdm
 
-from bliss.simulator.decoder import ImageDecoder
+from bliss.simulator.decoder import Decoder
 from bliss.simulator.prior import CatalogPrior
-from bliss.surveys.survey import Survey
 
 # prevent pytorch_lightning warning for num_workers = 0 in dataloaders with IterableDataset
 warnings.filterwarnings(
@@ -21,43 +19,24 @@ warnings.filterwarnings(
 class SimulatedDataset(pl.LightningDataModule, IterableDataset):
     def __init__(
         self,
-        survey: Survey,
         prior: CatalogPrior,
+        decoder: Decoder,
         n_batches: int,
-        coadd_depth: int = 1,
         num_workers: int = 0,
         valid_n_batches: Optional[int] = None,
         fix_validation_set: bool = False,
     ):
         super().__init__()
 
-        self.survey = survey
-        survey.prepare_data()
-
         self.catalog_prior = prior
         self.catalog_prior.requires_grad_(False)
 
-        self.image_decoder = ImageDecoder(
-            psf=survey.psf,
-            bands=survey.BANDS,
-            background=self.survey.background,
-            flux_calibration_dict=survey.flux_calibration_dict,
-            ref_band=prior.reference_band,
-        )
+        self.decoder = decoder
 
         self.n_batches = n_batches
-        self.coadd_depth = coadd_depth
         self.num_workers = num_workers
         self.fix_validation_set = fix_validation_set
         self.valid_n_batches = n_batches if valid_n_batches is None else valid_n_batches
-
-        self.image_ids = self.survey.image_ids()
-
-    def randomized_image_ids(self, num_samples=1):
-        """Get random image_id from loaded params."""
-        n = np.random.randint(len(self.image_ids), size=(num_samples,), dtype=int)
-        # reorder self.image_ids to match the order of the sampled indices
-        return [self.image_ids[i] for i in n], n
 
     def get_batch(self):
         """Get a batch of simulated images.
@@ -72,13 +51,7 @@ class SimulatedDataset(pl.LightningDataModule, IterableDataset):
             tensors for images and background, and a (batch_size, 1, 6) tensor for the psf params.
         """
         tile_catalog = self.catalog_prior.sample()
-        image_ids, image_id_indices = self.randomized_image_ids(self.catalog_prior.batch_size)
-        images, psf_params = self.image_decoder.render_images(
-            tile_catalog,
-            image_ids,
-            image_id_indices,
-            self.coadd_depth,
-        )
+        images, psf_params = self.decoder.render_images(tile_catalog)
         return {
             "tile_catalog": tile_catalog,
             "images": images,

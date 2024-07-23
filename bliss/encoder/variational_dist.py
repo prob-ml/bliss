@@ -33,7 +33,7 @@ class VariationalDist(torch.nn.Module):
     def sample(self, x_cat, use_mode=False):
         fp_pairs = self._factor_param_pairs(x_cat)
         d = {qk.name: qk.sample(params, use_mode) for qk, params in fp_pairs}
-        return TileCatalog(self.tile_slen, d)
+        return TileCatalog(d)
 
     def compute_nll(self, x_cat, true_tile_cat):
         fp_pairs = self._factor_param_pairs(x_cat)

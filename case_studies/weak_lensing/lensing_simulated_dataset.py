@@ -21,9 +21,7 @@ class LensingSimulatedDataset(SimulatedDataset):
     ):
         super().__init__(*args, survey, prior, **kwargs)
 
-        self.image_decoder = LensingDecoder(
-            psf=survey.psf,
-            bands=survey.BANDS,
-            flux_calibration_dict=survey.flux_calibration_dict,
-            ref_band=prior.reference_band,
+        self.decoder = LensingDecoder(
+            tile_slen=4,
+            survey=survey,
         )

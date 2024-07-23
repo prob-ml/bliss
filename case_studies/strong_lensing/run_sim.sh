@@ -178,4 +178,3 @@ mv $FINAL_OUTPUT_DIR/*.png $FINAL_OUTPUT_DIR/images/
 mv $FINAL_OUTPUT_DIR/*.fits $FINAL_OUTPUT_DIR/data/
 
 echo "Data generation completed."
-

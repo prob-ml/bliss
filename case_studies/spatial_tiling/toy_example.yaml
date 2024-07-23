@@ -5,12 +5,14 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    cached_data: /data/scratch/regier/20percent
+    cached_data: /data/scratch/regier/toy_example_20_percent
 
 # this prior is sdss-like, except for the flux distribution, which is easier
 # (i.e, flatter, always greater than 3 nmgy, and always less than 100 nmgy).
 # the source density is higher too.
+# greatly increasing the source density too here
 prior:
+    mean_sources: 0.2
     star_flux_exponent: 0.01
     star_flux_truncation: 100
     star_flux_loc: 3.0
@@ -89,6 +91,7 @@ my_metrics:
 encoder:
     survey_bands: ['r']
     reference_band: 0
+    use_checkerboard: true
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0

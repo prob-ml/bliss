@@ -27,6 +27,10 @@ cached_simulator:
     splits: 0:34/34:67/67:100  # train/val/test splits as percent ranges
     batch_size: 1
 
+decoder:
+    with_dither: false
+    with_noise: false
+
 surveys:
     sdss:
         fields:

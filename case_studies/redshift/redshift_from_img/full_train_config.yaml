@@ -49,7 +49,6 @@ encoder:
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
     tiles_to_crop: 1
-    min_flux_for_loss: ${global_setting.min_flux_for_loss}
     min_flux_for_metrics: 100
     optimizer_params:
         lr: 1e-3
