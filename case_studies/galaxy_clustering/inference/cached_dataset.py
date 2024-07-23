@@ -130,7 +130,7 @@ class CachedDESModule(pl.LightningDataModule):
                 seed=42,
             )
         else:
-            sampler = DESSampler()
+            sampler = DESSampler(dataset)
 
         return DataLoader(
             dataset,
