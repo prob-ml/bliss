@@ -10,10 +10,6 @@ ignore =
     # high Jones complexity isn't always so bad
     WPS221,
 
-    # more than 3 `elif` branches will not be a problem
-    # the solutions found in network (like creating a class to do the `elif`) will make the code complicated
-    WPS223,
-
     # removing all magic numbers seems like overkill
     WPS432,
 

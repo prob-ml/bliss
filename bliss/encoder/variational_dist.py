@@ -46,31 +46,31 @@ class VariationalDist(torch.nn.Module):
 class NllGating(ABC):
     @classmethod
     @abstractmethod
-    def get_nll_gating(cls, true_tile_cat: TileCatalog):
+    def __call__(cls, true_tile_cat: TileCatalog):
         """Get Gating for nll."""
 
 
 class NullGating(NllGating):
     @classmethod
-    def get_nll_gating(cls, true_tile_cat: TileCatalog):
+    def __call__(cls, true_tile_cat: TileCatalog):
         return torch.ones_like(true_tile_cat["n_sources"]).bool()
 
 
 class SourcesGating(NllGating):
     @classmethod
-    def get_nll_gating(cls, true_tile_cat: TileCatalog):
+    def __call__(cls, true_tile_cat: TileCatalog):
         return true_tile_cat["n_sources"].bool()
 
 
 class StarGating(NllGating):
     @classmethod
-    def get_nll_gating(cls, true_tile_cat: TileCatalog):
+    def __call__(cls, true_tile_cat: TileCatalog):
         return rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
 
 
 class GalaxyGating(NllGating):
     @classmethod
-    def get_nll_gating(cls, true_tile_cat: TileCatalog):
+    def __call__(cls, true_tile_cat: TileCatalog):
         return rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
 
 
@@ -122,7 +122,7 @@ class VariationalFactor:
         if self.nll_rearrange is not None:
             target = rearrange(target, self.nll_rearrange)
 
-        gating = self.nll_gating.get_nll_gating(true_tile_cat)
+        gating = self.nll_gating(true_tile_cat)
 
         qk = self._get_dist(params)
         if gating.shape != target.shape:

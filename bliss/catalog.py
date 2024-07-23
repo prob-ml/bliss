@@ -19,7 +19,22 @@ def convert_nmgy_to_mag(nmgy):
 
 
 def convert_nmgy_to_njymag(nmgy):
-    """Convert from flux (nano-maggie) to mag (nano-jansky), which is the format used by DC2."""
+    """Convert from flux (nano-maggie) to mag (nano-jansky), which is the format used by DC2.
+
+    For the difference between mag (Pogson magnitude) and njymag (AB magnitude), please view
+    the "Flux units: maggies and nanomaggies" part of
+    https://www.sdss3.org/dr8/algorithms/magnitudes.php#nmgy
+    When we change the standard source to AB sources, we need to do the conversion
+    described in "2.10 AB magnitudes" at
+    https://pstn-001.lsst.io/fluxunits.pdf
+
+    Args:
+        nmgy: the fluxes in nanomaggies
+
+    Returns:
+        Tensor indicating fluxes in AB magnitude
+    """
+
     return 22.5 - 2.5 * torch.log10(nmgy / 3631)
 
 
@@ -148,6 +163,17 @@ class TileCatalog(BaseTileCatalog):
         is_galaxy = self["source_type"] == SourceType.GALAXY
         return is_galaxy * self.is_on_mask.unsqueeze(-1)
 
+    def on_fluxes(self, unit: str):
+        match unit:
+            case "nmgy":
+                return self.on_nmgy
+            case "mag":
+                return self.on_mag
+            case "njymag":
+                return self.on_njymag
+            case _:
+                raise NotImplementedError()
+
     @property
     def on_nmgy(self):
         # TODO: a tile catalog should store fluxes rather than star_fluxes and galaxy_fluxes
@@ -163,7 +189,7 @@ class TileCatalog(BaseTileCatalog):
         return convert_nmgy_to_mag(self.on_nmgy)
 
     @property
-    def on_njy(self) -> Tensor:
+    def on_njymag(self) -> Tensor:
         return convert_nmgy_to_njymag(self.on_nmgy)
 
     def to_full_catalog(self, tile_slen):
@@ -452,6 +478,17 @@ class FullCatalog(UserDict):
         assert is_galaxy.size(2) == 1
         return is_galaxy * self.is_on_mask.unsqueeze(2)
 
+    def on_fluxes(self, unit: str):
+        match unit:
+            case "nmgy":
+                return self.on_nmgy
+            case "mag":
+                return self.on_mag
+            case "njymag":
+                return self.on_njymag
+            case _:
+                raise NotImplementedError()
+
     @property
     def on_nmgy(self) -> Tensor:
         # ideally we'd always store fluxes rather than star_fluxes and galaxy_fluxes
@@ -466,7 +503,7 @@ class FullCatalog(UserDict):
         return convert_nmgy_to_mag(self.on_nmgy)
 
     @property
-    def on_njy(self) -> Tensor:
+    def on_njymag(self) -> Tensor:
         return convert_nmgy_to_njymag(self.on_nmgy)
 
     def one_source(self, b: int, s: int):

@@ -175,7 +175,7 @@ class ShearMSE(FilterMetric):
         self,
         bin_cutoffs: list,
         ref_band: int = 2,
-        bin_type: str = "Flux",
+        bin_type: str = "nmgy",
     ):
         # shear is only for cosmodc2
         super().__init__([Cosmodc2Filter()])
@@ -185,7 +185,7 @@ class ShearMSE(FilterMetric):
         self.bin_type = bin_type
 
         assert self.bin_cutoffs, "flux_bin_cutoffs can't be None or empty"
-        assert self.bin_type in {"Flux", "Mag"}, "invalid bin type"
+        assert self.bin_type in {"nmgy", "njymag"}, "invalid bin type"
 
         n_bins = len(self.bin_cutoffs) + 1
 
@@ -198,12 +198,7 @@ class ShearMSE(FilterMetric):
         cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
         n_bins = len(cutoffs) + 1
 
-        if self.bin_type == "Flux":
-            true_bin_measures = true_cat.on_nmgy[:, :, self.ref_band].contiguous()
-        elif self.bin_type == "Mag":
-            true_bin_measures = true_cat.on_njy[:, :, self.ref_band].contiguous()
-        else:
-            raise NotImplementedError()
+        true_bin_measures = true_cat.on_fluxes(self.bin_type)[:, :, self.ref_band].contiguous()
 
         true_filter_bools, _ = self.get_filter_bools(true_cat, est_cat)
 
@@ -268,7 +263,7 @@ class EllipticityMSE(FilterMetric):
         self,
         bin_cutoffs: list,
         ref_band: int = 2,
-        bin_type: str = "Flux",
+        bin_type: str = "nmgy",
     ):
         # ellipticity is only for cosmodc2
         super().__init__([Cosmodc2Filter()])
@@ -278,7 +273,7 @@ class EllipticityMSE(FilterMetric):
         self.bin_type = bin_type
 
         assert self.bin_cutoffs, "flux_bin_cutoffs can't be None or empty"
-        assert self.bin_type in {"Flux", "Mag", "Blendedness"}, "invalid bin type"
+        assert self.bin_type in {"nmgy", "njymag", "blendedness"}, "invalid bin type"
 
         n_bins = len(self.bin_cutoffs) + 1
 
@@ -291,11 +286,9 @@ class EllipticityMSE(FilterMetric):
         cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
         n_bins = len(cutoffs) + 1
 
-        if self.bin_type == "Flux":
-            true_bin_measures = true_cat.on_nmgy[:, :, self.ref_band].contiguous()
-        elif self.bin_type == "Mag":
-            true_bin_measures = true_cat.on_njy[:, :, self.ref_band].contiguous()
-        elif self.bin_type == "Blendedness":
+        if self.bin_type in {"nmgy", "mag", "njymag"}:
+            true_bin_measures = true_cat.on_fluxes(self.bin_type)[:, :, self.ref_band].contiguous()
+        elif self.bin_type == "blendedness":
             true_bin_measures = true_cat["blendedness"].squeeze(-1).contiguous()
         else:
             raise NotImplementedError()
@@ -374,7 +367,7 @@ class EllipticityResidual(FilterMetric):
         self,
         bin_cutoffs: list,
         ref_band: int = 2,
-        bin_type: str = "Flux",
+        bin_type: str = "nmgy",
     ):
         # ellipticity is only for cosmodc2
         super().__init__([Cosmodc2Filter()])
@@ -384,7 +377,7 @@ class EllipticityResidual(FilterMetric):
         self.bin_type = bin_type
 
         assert self.bin_cutoffs, "flux_bin_cutoffs can't be None or empty"
-        assert self.bin_type in {"Flux", "Mag", "Blendedness"}, "invalid bin type"
+        assert self.bin_type in {"nmgy", "njymag", "blendedness"}, "invalid bin type"
 
         n_bins = len(self.bin_cutoffs) + 1
 
@@ -396,11 +389,9 @@ class EllipticityResidual(FilterMetric):
         cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
         n_bins = len(cutoffs) + 1
 
-        if self.bin_type == "Flux":
-            true_bin_measures = true_cat.on_nmgy[:, :, self.ref_band].contiguous()
-        elif self.bin_type == "Mag":
-            true_bin_measures = true_cat.on_njy[:, :, self.ref_band].contiguous()
-        elif self.bin_type == "Blendedness":
+        if self.bin_type in {"nmgy", "mag", "njymag"}:
+            true_bin_measures = true_cat.on_fluxes(self.bin_type)[:, :, self.ref_band].contiguous()
+        elif self.bin_type == "blendedness":
             true_bin_measures = true_cat["blendedness"].squeeze(-1).contiguous()
         else:
             raise NotImplementedError()

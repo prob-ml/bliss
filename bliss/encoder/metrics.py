@@ -153,7 +153,7 @@ class DetectionPerformance(FilterMetric):
         self,
         bin_cutoffs: list = None,
         ref_band: int = 2,
-        bin_type: str = "Flux",
+        bin_type: str = "nmgy",
         exclude_last_bin: bool = False,
         filter_list: List[CatFilter] = None,
     ):
@@ -164,7 +164,7 @@ class DetectionPerformance(FilterMetric):
         self.bin_type = bin_type
         self.exclude_last_bin = exclude_last_bin
 
-        assert self.bin_type in {"Flux", "Mag"}, "invalid bin type"
+        assert self.bin_type in {"nmgy", "njymag"}, "invalid bin type"
 
         detection_metrics = [
             "n_true_sources",
@@ -182,19 +182,10 @@ class DetectionPerformance(FilterMetric):
         assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
 
         if self.ref_band is not None:
-            if self.bin_type == "Flux":
-                true_bin_measures = true_cat.on_nmgy
-                true_bin_measures = true_bin_measures[:, :, self.ref_band].contiguous()
-                est_bin_measures = est_cat.on_nmgy
-                est_bin_measures = est_bin_measures[:, :, self.ref_band].contiguous()
-            elif self.bin_type == "Mag":
-                true_bin_measures = true_cat.on_njy
-                true_bin_measures = true_bin_measures[:, :, self.ref_band].contiguous()
-                est_bin_measures = est_cat.on_njy
-                est_bin_measures = est_bin_measures[:, :, self.ref_band].contiguous()
-            else:
-                raise NotImplementedError()
-
+            true_bin_measures = true_cat.on_fluxes(self.bin_type)
+            true_bin_measures = true_bin_measures[:, :, self.ref_band].contiguous()
+            est_bin_measures = est_cat.on_fluxes(self.bin_type)
+            est_bin_measures = est_bin_measures[:, :, self.ref_band].contiguous()
         else:
             # hack to match regardless of magnitude; intended for
             # catalogs from surveys with incompatible filter bands
@@ -380,7 +371,7 @@ class SourceTypeAccuracy(FilterMetric):
         self,
         bin_cutoffs: list,
         ref_band: int = 2,
-        bin_type: str = "Flux",
+        bin_type: str = "nmgy",
         filter_list: List[CatFilter] = None,
     ):
         super().__init__(filter_list if filter_list else [NullFilter()])
@@ -390,7 +381,7 @@ class SourceTypeAccuracy(FilterMetric):
         self.bin_type = bin_type
 
         assert self.bin_cutoffs, "flux_bin_cutoffs can't be None or empty"
-        assert self.bin_type in {"Flux", "Mag"}, "invalid bin type"
+        assert self.bin_type in {"nmgy", "njymag"}, "invalid bin type"
 
         n_bins = len(self.bin_cutoffs) + 1
 
@@ -404,12 +395,7 @@ class SourceTypeAccuracy(FilterMetric):
         cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
         n_bins = len(cutoffs) + 1
 
-        if self.bin_type == "Flux":
-            true_bin_measures = true_cat.on_nmgy[:, :, self.ref_band].contiguous()
-        elif self.bin_type == "Mag":
-            true_bin_measures = true_cat.on_njy[:, :, self.ref_band].contiguous()
-        else:
-            raise NotImplementedError()
+        true_bin_measures = true_cat.on_fluxes(self.bin_type)[:, :, self.ref_band].contiguous()
 
         true_filter_bools, _ = self.get_filter_bools(true_cat, est_cat)
 

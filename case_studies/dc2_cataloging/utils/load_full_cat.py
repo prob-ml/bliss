@@ -38,7 +38,7 @@ def get_full_cat(
     cur_image_wcs = test_sample["wcs"]
     cur_image_true_full_catalog = test_sample["full_catalog"]
     image_lim = test_sample["image"].shape[1]
-    r_band_min_flux = notebook_cfg.encoder.min_flux_for_metrics
+    r_band_min_flux = notebook_cfg.notebook_var.r_band_min_flux
 
     lsst_full_cat = get_lsst_full_cat(
         lsst_root_dir=lsst_root_dir,

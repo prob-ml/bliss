@@ -39,7 +39,7 @@ class VariationalDistReturnProbs(VariationalDist):
 
 class Cosmodc2Gating(NllGating):
     @classmethod
-    def get_nll_gating(cls, true_tile_cat: TileCatalog):
+    def __call__(cls, true_tile_cat: TileCatalog):
         return rearrange(true_tile_cat["cosmodc2_mask"], "b ht wt 1 1 -> b ht wt")
 
 
