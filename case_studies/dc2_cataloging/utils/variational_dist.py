@@ -29,7 +29,7 @@ class VariationalDistReturnProbs(VariationalDist):
                 assert isinstance(qk, BernoulliFactorReturnProbs), "wrong source_type class"
                 d["source_type"], d["source_type_probs"] = qk.sample(params, use_mode)
 
-        return TileCatalog(self.tile_slen, d)
+        return TileCatalog(d)
 
 
 class MultiVariationalDist(torch.nn.Module):
@@ -113,7 +113,6 @@ class MultiVariationalDist(torch.nn.Module):
     ):
         assert est_tile_cat.max_sources == true_tile_cat.max_sources
         assert est_tile_cat.tile_slen == true_tile_cat.tile_slen
-        tile_slen = est_tile_cat.tile_slen
         est_tile_dict = copy.copy(est_tile_cat.data)
         true_tile_dict = copy.copy(true_tile_cat.data)
         b, nth, ntw, m = est_tile_dict["locs"].shape[:-1]
@@ -180,7 +179,7 @@ class MultiVariationalDist(torch.nn.Module):
 
         # get output
         target_tile_dict_list = unpack_dict(target_tile_dict)
-        return [TileCatalog(tile_slen, d) for d in target_tile_dict_list]
+        return [TileCatalog(d) for d in target_tile_dict_list]
 
     @property
     def n_params_per_source(self):
@@ -198,7 +197,7 @@ class MultiVariationalDist(torch.nn.Module):
         output_tile_cat_list = []
         for fp_pairs in fp_pairs_list:
             d = {qk.name: qk.sample(params, use_mode) for qk, params in fp_pairs}
-            output_tile_cat_list.append(TileCatalog(self.tile_slen, d))
+            output_tile_cat_list.append(TileCatalog(d))
         return output_tile_cat_list
 
     def sample(self, x_cat, use_mode=False):

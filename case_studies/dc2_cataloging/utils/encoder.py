@@ -27,7 +27,7 @@ class EncoderAddingSourceMask(Encoder):
             rearrange(on_mask_count > 2, "b nth ntw -> b nth ntw 1 1") & on_mask
         )
 
-        return TileCatalog(ori_tile_cat.tile_slen, d)
+        return TileCatalog(d)
 
     def sample(self, batch, use_mode=True):
         tile_cat = super().sample(batch, use_mode)
@@ -69,15 +69,8 @@ class MultiDetectEncoder(EncoderAddingSourceMask):
         batch_size = batch["images"].shape[0]
 
         # filter out undetectable sources and split catalog by flux
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = TileCatalog(batch["tile_catalog"])
 
-        # TODO: move tile_cat filtering to the dataloader and from the encoder remove
-        # `reference_band`, `min_flux_for_loss`, and `min_flux_for_metrics`
-        # (metrics can be computed with the original full catalog if necessary)
-        target_cat = target_cat.filter_by_flux(
-            min_flux=self.min_flux_for_loss,
-            band=self.reference_band,
-        )
         # TODO: don't order the light sources by brightness; softmax instead
         target_cat = target_cat.get_brightest_sources_per_tile(
             top_k=self.var_dist.repeat_times,
