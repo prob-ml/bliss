@@ -58,7 +58,7 @@ class PlotWeakLensingShearConvergence(Metric):
         if self.current_epoch % self.frequency != 0:
             return None
         est_cat = self.sample_with_mode_tile
-        true_tile_cat = TileCatalog(self.tile_slen, self.batch["tile_catalog"])
+        true_tile_cat = TileCatalog(self.batch["tile_catalog"])
         return plot_maps(
             self.images, true_tile_cat, est_cat, figsize=None, current_epoch=self.current_epoch
         )

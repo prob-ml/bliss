@@ -63,7 +63,7 @@ def get_full_cat(
         batch = move_data_to_device(batch, device=device)
         bliss_out_dict = bliss_encoder.predict_step(batch, None)
         bliss_full_cat: FullCatalog = (
-            bliss_out_dict["mode_cat"].filter_by_flux(min_flux=r_band_min_flux).to_full_catalog()
+            bliss_out_dict["mode_cat"].filter_by_flux(min_flux=r_band_min_flux).to_full_catalog(4)
         )
     else:
         split_size = notebook_cfg.surveys.dc2.image_lim[0] // notebook_cfg.surveys.dc2.n_image_split
@@ -90,6 +90,6 @@ def get_full_cat(
             else:
                 d[k] = rearrange(v, "(a b) nth ntw -> (a nth) (b ntw)", a=n_image_split)
         d = DC2DataModule.unsqueeze_tile_dict(d)
-        bliss_full_cat = TileCatalog(notebook_cfg.surveys.dc2.tile_slen, d).to_full_catalog()
+        bliss_full_cat = TileCatalog(d).to_full_catalog(notebook_cfg.surveys.dc2.tile_slen)
 
     return test_sample["image"], cur_image_true_full_catalog, bliss_full_cat, lsst_full_cat
