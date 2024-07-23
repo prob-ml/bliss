@@ -58,7 +58,6 @@ def get_full_cat(
     if predict_full_image:
         batch = {
             "images": rearrange(test_sample["image"], "c h w -> 1 c h w"),
-            "background": rearrange(test_sample["background"], "c h w -> 1 c h w"),
         }
         batch = move_data_to_device(batch, device=device)
         bliss_out_dict = bliss_encoder.predict_step(batch, None)
@@ -68,12 +67,10 @@ def get_full_cat(
     else:
         split_size = notebook_cfg.surveys.dc2.image_lim[0] // notebook_cfg.surveys.dc2.n_image_split
         image_splits = split_tensor(test_sample["image"], split_size, 1, 2)
-        bg_splits = split_tensor(test_sample["background"], split_size, 1, 2)
         bliss_output_list = []
         for i in range(0, len(image_splits), batch_size):
             batch = {
                 "images": torch.stack(image_splits[i : (i + batch_size)]),
-                "background": torch.stack(bg_splits[i : (i + batch_size)]),
             }
 
             batch = move_data_to_device(batch, device=device)
