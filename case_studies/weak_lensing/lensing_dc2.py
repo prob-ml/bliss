@@ -28,7 +28,7 @@ class LensingDC2DataModule(DC2DataModule):
             tile_slen=tile_slen,
             max_sources_per_tile=tile_slen
             ** 2,  # max of one source per pixel, TODO: calc max sources per tile
-            min_flux_for_loss=-sys.maxsize - 1,  # smaller than any int
+            min_flux=-sys.maxsize - 1,  # smaller than any int
             prepare_data_processes_num=1,
             data_in_one_cached_file=100000,
             splits=splits,
@@ -163,6 +163,8 @@ class LensingDC2Catalog(DC2FullCatalog):
         shear2 = torch.from_numpy(catalog["shear_2"].values).squeeze()
         convergence = torch.from_numpy(catalog["convergence"].values)
 
+        # TODO: create shear and convergence masks here (keep vs nonexistant)
+
         _, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
 
         plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
@@ -179,6 +181,7 @@ class LensingDC2Catalog(DC2FullCatalog):
         shear = torch.stack((shear1, shear2), dim=1)
 
         nobj = objid.shape[0]
+        # TODO: pass existant shear & convergence masks in d
         d = {
             "objid": objid.reshape(1, nobj, 1),
             "n_sources": torch.tensor((nobj,)),
