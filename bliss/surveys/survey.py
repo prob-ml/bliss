@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 
-import numpy as np
 import pytorch_lightning as pl
+from einops import rearrange
 from torch.utils.data import DataLoader, Dataset
+
+from bliss.align import align
 
 
 class Survey(pl.LightningDataModule, Dataset, ABC):
@@ -11,12 +13,9 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
     def __init__(self):
         super().__init__()
 
-        self.bands = None
-        self.background = None
-        self.psf = None
-        self.flux_calibration_dict = None
-
-        self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
+        self.align_to_band = None
+        self.crop_to_hw = None
+        self.crop_to_bands = None
 
     @staticmethod
     def coadd_images(constituent_images):
@@ -53,24 +52,51 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
 
     def predict_dataloader(self):
         """Return a DataLoader for prediction."""
-        return DataLoader(SurveyPredictIterator(self), batch_size=1)
-
-    def get_flux_calibrations(self):
-        d = {}
-        for i, image_id in enumerate(self.image_ids()):
-            nelec_conv_for_frame = self[i]["flux_calibration_list"]
-            avg_nelec_conv = np.squeeze(np.mean(nelec_conv_for_frame, axis=1))
-            d[image_id] = avg_nelec_conv
-        return d
+        survey_iterator = SurveyPredictIterator(self)
+        return DataLoader(survey_iterator, batch_size=1)
 
 
 class SurveyPredictIterator:
     def __init__(self, survey):
         self.survey = survey
 
+    @classmethod
+    def crop_to_mult16(cls, x):
+        """Crop the image dimensions to a multiple of 16."""
+        # note: by cropping the top-right, we preserve the mapping between pixel coordinates
+        # and the original WCS coordinates
+        height = x.shape[1] - (x.shape[1] % 16)
+        width = x.shape[2] - (x.shape[2] % 16)
+        return x[:, :height, :width]
+
     def __getitem__(self, idx):
-        x = self.survey[idx]
-        return {"images": x["image"], "psf_params": x["psf_params"]}
+        item = self.survey[idx]
+        images = item["image"]
+
+        if self.survey.background_offset is not None:
+            # maybe we should specify this in physical units, but we don't yet
+            images -= self.survey.background_offset
+
+        # back to physical units (and assuming image is sky subtracted)
+        images /= rearrange(item["flux_calibration"], "bands w -> bands 1 w")
+
+        # includes all bands if None
+        if self.survey.crop_to_bands is not None:
+            images = images[self.survey.crop_to_bands]
+            item["psf_params"] = item["psf_params"][self.survey.crop_to_bands]
+
+        if self.survey.crop_to_hw is not None:
+            r1, r2, c1, c2 = self.survey.crop_to_hw
+            images = images[:, r1:r2, c1:c2]
+
+        # alignment is done after cropping here for speed, mainly during testing,
+        # but this may not be a ideal in general
+        if self.survey.align_to_band is not None:
+            images = align(images, wcs_list=item["wcs"], ref_band=self.survey.align_to_band)
+
+        images = self.crop_to_mult16(images)  # alternatively, could pad
+
+        return {"images": images, "psf_params": item["psf_params"]}
 
     def __len__(self):
         return len(self.survey)

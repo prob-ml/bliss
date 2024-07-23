@@ -4,8 +4,6 @@ from enum import IntEnum
 from typing import Dict, Tuple
 
 import torch
-from astropy import units
-from astropy.table import Table
 from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from torch import Tensor
@@ -31,10 +29,7 @@ class SourceType(IntEnum):
 
 
 class BaseTileCatalog(UserDict):
-    def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
-        # TODO: a tile catalog shouldn't know it's side length
-        self.tile_slen = tile_slen
-
+    def __init__(self, d: Dict[str, Tensor]):
         v = next(iter(d.values()))
         self.batch_size, self.n_tiles_h, self.n_tiles_w = v.shape[:3]
         self.device = v.device
@@ -57,13 +52,13 @@ class BaseTileCatalog(UserDict):
         out = {}
         for k, v in self.items():
             out[k] = v.to(device)
-        return type(self)(self.tile_slen, out)
+        return type(self)(out)
 
     def crop(self, hlims_tile, wlims_tile):
         out = {}
         for k, v in self.items():
             out[k] = v[:, hlims_tile[0] : hlims_tile[1], wlims_tile[0] : wlims_tile[1]]
-        return type(self)(self.tile_slen, out)
+        return type(self)(out)
 
     def symmetric_crop(self, tiles_to_crop):
         return self.crop(
@@ -115,9 +110,9 @@ class TileCatalog(BaseTileCatalog):
     ]
     galaxy_params_index = {k: i for i, k in enumerate(galaxy_params)}
 
-    def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
+    def __init__(self, d: Dict[str, Tensor]):
         self.max_sources = d["locs"].shape[3]
-        super().__init__(tile_slen, d)
+        super().__init__(d)
 
     def __getitem__(self, name: str):
         # a temporary hack until we stop storing galaxy_params as an array
@@ -177,11 +172,11 @@ class TileCatalog(BaseTileCatalog):
     def magnitudes_njy(self):
         return convert_nmgy_to_njymag(self.on_fluxes)
 
-    def to_full_catalog(self):
+    def to_full_catalog(self, tile_slen):
         """Converts image parameters in tiles to parameters of full image.
 
-        By parameters, we mean samples from the variational distribution, not the variational
-        parameters.
+        Args:
+            tile_slen: The side length of the square tiles (in pixels).
 
         Returns:
             The FullCatalog instance corresponding to the TileCatalog instance.
@@ -189,8 +184,7 @@ class TileCatalog(BaseTileCatalog):
             NOTE: The locations (`"locs"`) are between 0 and 1. The output also contains
             pixel locations ("plocs") that are between 0 and `slen`.
         """
-        # TODO: tile_slen should be an argument to this function, not stored in a tile catalog
-        plocs = self.get_full_locs_from_tiles()
+        plocs = self._get_plocs_from_tiles(tile_slen)
         param_names_to_mask = {"plocs"}.union(set(self.keys()))
         tile_params_to_gather = {"plocs": plocs}
         tile_params_to_gather.update(self)
@@ -212,29 +206,32 @@ class TileCatalog(BaseTileCatalog):
 
         params["n_sources"] = reduce(self["n_sources"], "b nth ntw -> b", "sum")
 
-        height_px = self.n_tiles_h * self.tile_slen
-        width_px = self.n_tiles_w * self.tile_slen
+        height_px = self.n_tiles_h * tile_slen
+        width_px = self.n_tiles_w * tile_slen
 
         return FullCatalog(height_px, width_px, params)
 
-    def get_full_locs_from_tiles(self) -> Tensor:
+    def _get_plocs_from_tiles(self, tile_slen) -> Tensor:
         """Get the full image locations from tile locations.
+
+        Args:
+            tile_slen: The side length of the square tiles (in pixels).
 
         Returns:
             Tensor: pixel coordinates of each source (between 0 and slen).
         """
-        slen = self.n_tiles_h * self.tile_slen
-        wlen = self.n_tiles_w * self.tile_slen
+        slen = self.n_tiles_h * tile_slen
+        wlen = self.n_tiles_w * tile_slen
         # coordinates on tiles.
-        x_coords = torch.arange(0, slen, self.tile_slen, device=self["locs"].device).long()
-        y_coords = torch.arange(0, wlen, self.tile_slen, device=self["locs"].device).long()
+        x_coords = torch.arange(0, slen, tile_slen, device=self["locs"].device).long()
+        y_coords = torch.arange(0, wlen, tile_slen, device=self["locs"].device).long()
         tile_coords = torch.cartesian_prod(x_coords, y_coords)
 
         # recenter and renormalize locations.
         locs = rearrange(self["locs"], "b nth ntw d xy -> (b nth ntw) d xy", xy=2)
         bias = repeat(tile_coords, "n xy -> (r n) 1 xy", r=self.batch_size).float()
 
-        plocs = locs * self.tile_slen + bias
+        plocs = locs * tile_slen + bias
         return rearrange(
             plocs,
             "(b nth ntw) d xy -> b nth ntw d xy",
@@ -279,7 +276,7 @@ class TileCatalog(BaseTileCatalog):
                 idx_to_gather = repeat(top_indexes, "... -> ... pd", pd=param_dim)
                 d[key] = torch.take_along_dim(val, idx_to_gather, dim=3)
 
-        return TileCatalog(self.tile_slen, d)
+        return TileCatalog(d)
 
     def get_brightest_sources_per_tile(self, top_k=1, exclude_num=0, band=2):
         """Restrict TileCatalog to only the brightest 'on' source per tile.
@@ -296,7 +293,7 @@ class TileCatalog(BaseTileCatalog):
             return self
 
         if exclude_num >= self.max_sources:
-            tc = TileCatalog(self.tile_slen, self.data)
+            tc = TileCatalog(self.data)
             tc["n_sources"] = torch.zeros_like(tc["n_sources"])
             return tc
 
@@ -309,7 +306,7 @@ class TileCatalog(BaseTileCatalog):
             else:
                 d[key] = val[:, :, :, exclude_num : (exclude_num + top_k)]
 
-        return TileCatalog(self.tile_slen, d)
+        return TileCatalog(d)
 
     def filter_by_flux(self, min_flux=0, max_flux=torch.inf, band=2):
         """Restricts TileCatalog to sources that have a flux between min_flux and max_flux.
@@ -338,7 +335,7 @@ class TileCatalog(BaseTileCatalog):
             else:
                 d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
 
-        return TileCatalog(self.tile_slen, d)
+        return TileCatalog(d)
 
     def union(self, other, disjoint=False):
         """Returns a new TileCatalog containing the union of the sources in self and other.
@@ -352,7 +349,6 @@ class TileCatalog(BaseTileCatalog):
         Returns:
             A new TileCatalog containing the union of the sources in self and other.
         """
-        assert self.tile_slen == other.tile_slen
         assert self.batch_size == other.batch_size
         assert self.n_tiles_h == other.n_tiles_h
         assert self.n_tiles_w == other.n_tiles_w
@@ -372,7 +368,7 @@ class TileCatalog(BaseTileCatalog):
                     d1 = torch.cat((v, other[k]), dim=-2)
                     d2 = torch.cat((other[k], v), dim=-2)
                 d[k] = torch.where(ns11 > 0, d1, d2)
-        return TileCatalog(self.tile_slen, d)
+        return TileCatalog(d)
 
     def __repr__(self):
         keys = ", ".join(self.keys())
@@ -639,54 +635,9 @@ class FullCatalog(UserDict):
             # modify tile location
             tile_params["locs"][ii] = (tile_params["locs"][ii] % tile_slen) / tile_slen
         tile_params.update({"n_sources": tile_n_sources})
-        return TileCatalog(tile_slen, tile_params)
+        return TileCatalog(tile_params)
 
-    def to_astropy_table(self, encoder_survey_bands: Tuple[str]) -> Table:
-        # Convert dictionary of tensors to list of dictionaries
-        on_vals = {}
-        is_on_mask = self.is_on_mask
-        for k, v in self.items():
-            if k == "n_sources":
-                continue
-            on_vals[k] = v[is_on_mask].cpu()
-
-        # Split to different columns for each band
-        for b, bl in enumerate(encoder_survey_bands):
-            on_vals[f"star_flux_{bl}"] = on_vals["star_fluxes"][..., b]
-            on_vals[f"galaxy_flux_{bl}"] = on_vals["galaxy_fluxes"][..., b]
-
-        # Remove combined flux columns
-        on_vals.pop("star_fluxes")
-        on_vals.pop("galaxy_fluxes")
-
-        # declare our astropy table
-        est_cat_table = Table(names=on_vals.keys())
-
-        # Convert all _fluxes columns to units.Quantity
-        for bl in encoder_survey_bands:
-            est_cat_table[f"star_flux_{bl}"].unit = units.nmgy
-            est_cat_table[f"galaxy_flux_{bl}"].unit = units.nmgy
-
-        # add units to some galaxy shape properties
-        est_cat_table["galaxy_beta_radians"].unit = units.radian
-        est_cat_table["galaxy_a_d"].unit = units.arcsec
-        est_cat_table["galaxy_a_b"].unit = units.arcsec
-
-        # load data into the astropy table
-        n = is_on_mask.sum()  # number of (predicted) objects
-        for i in range(n):
-            row = {}
-            for k, v in on_vals.items():
-                row[k] = v[i].cpu().float()
-            # Convert `source_type` to string "star" or "galaxy" labels
-            row["source_type"] = "star" if row["source_type"] == SourceType.STAR else "galaxy"
-            # Force `plocs` to be "({x}, {y})" tuple strings for readability
-            row["plocs"] = str(tuple(row["plocs"].tolist()))
-            est_cat_table.add_row(row)
-
-        return est_cat_table
-
-    def filter_full_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
+    def filter_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
         assert box_origin[0] + box_len <= self.height, "invalid box"
         assert box_origin[1] + box_len <= self.width, "invalid box"
 

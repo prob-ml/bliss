@@ -77,4 +77,4 @@ class LSSTPredictor:
             )
 
         merged_tile_dict = concatenate_tile_dicts(tile_dict_list)
-        return TileCatalog(self.tile_slen, merged_tile_dict)
+        return TileCatalog(merged_tile_dict)
