@@ -199,9 +199,9 @@ class ShearMSE(FilterMetric):
         n_bins = len(cutoffs) + 1
 
         if self.bin_type == "Flux":
-            true_bin_measures = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
+            true_bin_measures = true_cat.on_nmgy[:, :, self.ref_band].contiguous()
         elif self.bin_type == "Mag":
-            true_bin_measures = true_cat.magnitudes_njy[:, :, self.ref_band].contiguous()
+            true_bin_measures = true_cat.on_njy[:, :, self.ref_band].contiguous()
         else:
             raise NotImplementedError()
 
@@ -292,9 +292,9 @@ class EllipticityMSE(FilterMetric):
         n_bins = len(cutoffs) + 1
 
         if self.bin_type == "Flux":
-            true_bin_measures = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
+            true_bin_measures = true_cat.on_nmgy[:, :, self.ref_band].contiguous()
         elif self.bin_type == "Mag":
-            true_bin_measures = true_cat.magnitudes_njy[:, :, self.ref_band].contiguous()
+            true_bin_measures = true_cat.on_njy[:, :, self.ref_band].contiguous()
         elif self.bin_type == "Blendedness":
             true_bin_measures = true_cat["blendedness"].squeeze(-1).contiguous()
         else:
@@ -397,9 +397,9 @@ class EllipticityResidual(FilterMetric):
         n_bins = len(cutoffs) + 1
 
         if self.bin_type == "Flux":
-            true_bin_measures = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
+            true_bin_measures = true_cat.on_nmgy[:, :, self.ref_band].contiguous()
         elif self.bin_type == "Mag":
-            true_bin_measures = true_cat.magnitudes_njy[:, :, self.ref_band].contiguous()
+            true_bin_measures = true_cat.on_njy[:, :, self.ref_band].contiguous()
         elif self.bin_type == "Blendedness":
             true_bin_measures = true_cat["blendedness"].squeeze(-1).contiguous()
         else:

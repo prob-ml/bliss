@@ -28,8 +28,8 @@ class CatalogMatcher:
         assert true_cat.batch_size == est_cat.batch_size
 
         if self.mag_slack:
-            true_mags = true_cat.magnitudes[:, :, self.mag_band]
-            est_mags = est_cat.magnitudes[:, :, self.mag_band]
+            true_mags = true_cat.on_mag[:, :, self.mag_band]
+            est_mags = est_cat.on_mag[:, :, self.mag_band]
 
         matching = []
         for i in range(true_cat.batch_size):
@@ -183,14 +183,14 @@ class DetectionPerformance(FilterMetric):
 
         if self.ref_band is not None:
             if self.bin_type == "Flux":
-                true_bin_measures = true_cat.on_fluxes
+                true_bin_measures = true_cat.on_nmgy
                 true_bin_measures = true_bin_measures[:, :, self.ref_band].contiguous()
-                est_bin_measures = est_cat.on_fluxes
+                est_bin_measures = est_cat.on_nmgy
                 est_bin_measures = est_bin_measures[:, :, self.ref_band].contiguous()
             elif self.bin_type == "Mag":
-                true_bin_measures = true_cat.magnitudes_njy
+                true_bin_measures = true_cat.on_njy
                 true_bin_measures = true_bin_measures[:, :, self.ref_band].contiguous()
-                est_bin_measures = est_cat.magnitudes_njy
+                est_bin_measures = est_cat.on_njy
                 est_bin_measures = est_bin_measures[:, :, self.ref_band].contiguous()
             else:
                 raise NotImplementedError()
@@ -405,9 +405,9 @@ class SourceTypeAccuracy(FilterMetric):
         n_bins = len(cutoffs) + 1
 
         if self.bin_type == "Flux":
-            true_bin_measures = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
+            true_bin_measures = true_cat.on_nmgy[:, :, self.ref_band].contiguous()
         elif self.bin_type == "Mag":
-            true_bin_measures = true_cat.magnitudes_njy[:, :, self.ref_band].contiguous()
+            true_bin_measures = true_cat.on_njy[:, :, self.ref_band].contiguous()
         else:
             raise NotImplementedError()
 
@@ -528,8 +528,8 @@ class FluxError(Metric):
             tcat_matches, ecat_matches = matching[i]
             self.n_matches += tcat_matches.size(0)
 
-            true_flux = true_cat.on_fluxes[i, tcat_matches, :]
-            est_flux = est_cat.on_fluxes[i, ecat_matches, :]
+            true_flux = true_cat.on_nmgy[i, tcat_matches, :]
+            est_flux = est_cat.on_nmgy[i, ecat_matches, :]
             self.flux_err += (true_flux - est_flux).abs().sum(dim=0)
 
     def compute(self):

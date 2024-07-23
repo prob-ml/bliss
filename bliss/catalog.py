@@ -263,8 +263,8 @@ class TileCatalog(BaseTileCatalog):
 
     def _sort_sources_by_flux(self, band=2):
         # sort by fluxes of "on" sources to get brightest source per tile
-        on_fluxes = self.on_fluxes[..., band]  # shape n x nth x ntw x d
-        top_indexes = on_fluxes.argsort(dim=3, descending=True)
+        on_nmgy = self.on_nmgy[..., band]  # shape n x nth x ntw x d
+        top_indexes = on_nmgy.argsort(dim=3, descending=True)
 
         d = {"n_sources": self["n_sources"]}
         for key, val in self.items():
@@ -320,8 +320,8 @@ class TileCatalog(BaseTileCatalog):
         sorted_self = self._sort_sources_by_flux(band=band)
 
         # get fluxes of "on" sources to mask by
-        on_fluxes = sorted_self.on_fluxes[..., band]
-        flux_mask = (on_fluxes > min_flux) & (on_fluxes < max_flux)
+        on_nmgy = sorted_self.on_nmgy[..., band]
+        flux_mask = (on_nmgy > min_flux) & (on_nmgy < max_flux)
 
         d = {}
         for key, val in sorted_self.items():

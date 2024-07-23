@@ -110,7 +110,7 @@ class TestSimulate:
         )
 
         # then we'll compare the reconstructed image to the true fluxes
-        source_fluxes = true_tile_cat.on_fluxes.sum([0, 1, 2, 3])
+        source_fluxes = true_tile_cat.on_nmgy.sum([0, 1, 2, 3])
         rendered_fluxes = rendered_image.sum([0, 2, 3])
         # some flux is outside of the image bounds
         assert (rendered_fluxes <= source_fluxes).all()
