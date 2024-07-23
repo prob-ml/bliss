@@ -11,7 +11,7 @@ from torch.distributions import (
     TransformedDistribution,
 )
 
-from bliss.catalog import TileCatalog
+from bliss.catalog import BaseTileCatalog, TileCatalog
 
 
 class VariationalDist(torch.nn.Module):
@@ -30,10 +30,10 @@ class VariationalDist(torch.nn.Module):
         dist_params_lst = torch.split(x_cat, split_sizes, 3)
         return zip(self.factors, dist_params_lst)
 
-    def sample(self, x_cat, use_mode=False):
+    def sample(self, x_cat, use_mode=False, return_base_cat=False):
         fp_pairs = self._factor_param_pairs(x_cat)
         d = {qk.name: qk.sample(params, use_mode) for qk, params in fp_pairs}
-        return TileCatalog(d)
+        return BaseTileCatalog(d) if return_base_cat else TileCatalog(d)
 
     def compute_nll(self, x_cat, true_tile_cat):
         fp_pairs = self._factor_param_pairs(x_cat)

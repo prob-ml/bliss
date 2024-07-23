@@ -1,4 +1,3 @@
-import sys
 from typing import Optional
 
 import torch
@@ -6,7 +5,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 
-from bliss.catalog import TileCatalog
+from bliss.catalog import BaseTileCatalog
 from bliss.encoder.encoder import Encoder
 from bliss.encoder.variational_dist import VariationalDist
 from bliss.global_env import GlobalEnv
@@ -37,8 +36,6 @@ class WeakLensingEncoder(Encoder):
             sample_image_renders=sample_image_renders,
             mode_metrics=mode_metrics,
             sample_metrics=sample_metrics,
-            min_flux_for_loss=-sys.maxsize - 1,
-            min_flux_for_metrics=-sys.maxsize - 1,
             optimizer_params=optimizer_params,
             scheduler_params=scheduler_params,
             use_double_detect=False,
@@ -71,12 +68,12 @@ class WeakLensingEncoder(Encoder):
         x_features = self.features_net(inputs)
         x_cat_marginal = self.catalog_net(x_features)
         # est cat
-        return self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
+        return self.var_dist.sample(x_cat_marginal, use_mode=use_mode, return_base_cat=True)
 
     def _compute_loss(self, batch, logging_name):
         batch_size, _, _, _ = batch["images"].shape[0:4]
 
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = BaseTileCatalog(batch["tile_catalog"])
 
         # multiple image normalizers
         input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
@@ -103,21 +100,19 @@ class WeakLensingEncoder(Encoder):
         return self._compute_loss(batch, "train")
 
     def update_metrics(self, batch, batch_idx):
-        target_cat = TileCatalog(self.tile_slen, batch["tile_catalog"])
+        target_cat = BaseTileCatalog(batch["tile_catalog"])
 
-        sample_tile_cat = self.sample(batch, use_mode=True)
-        sample_cat = sample_tile_cat.to_full_catalog()
-        self.mode_metrics.update(target_cat, sample_cat, None)
+        mode_cat = self.sample(batch, use_mode=True)
+        self.mode_metrics.update(target_cat, mode_cat, None)
 
-        sample_tile_cat = self.sample(batch, use_mode=False)
-        sample_cat = sample_tile_cat.to_full_catalog()
-        self.sample_metrics.update(target_cat, sample_cat, None)
+        sample_cat_no_mode = self.sample(batch, use_mode=False)
+        self.sample_metrics.update(target_cat, sample_cat_no_mode, None)
 
         self.sample_image_renders.update(
             batch,
             target_cat,
-            sample_tile_cat,
-            sample_cat,
+            mode_cat,
+            None,
             self.current_epoch,
             batch_idx,
         )

@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torchmetrics import Metric
 
-from bliss.catalog import TileCatalog
+from bliss.catalog import BaseTileCatalog
 
 
 class PlotWeakLensingShearConvergence(Metric):
@@ -58,7 +58,7 @@ class PlotWeakLensingShearConvergence(Metric):
         if self.current_epoch % self.frequency != 0:
             return None
         est_cat = self.sample_with_mode_tile
-        true_tile_cat = TileCatalog(self.batch["tile_catalog"])
+        true_tile_cat = BaseTileCatalog(self.batch["tile_catalog"])
         return plot_maps(
             self.images, true_tile_cat, est_cat, figsize=None, current_epoch=self.current_epoch
         )
