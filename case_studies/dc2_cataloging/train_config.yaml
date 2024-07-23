@@ -16,34 +16,40 @@ my_variational_factors:
     name: locs
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
-    nll_gating: n_sources
+    nll_gating:
+      _target_: bliss.encoder.variational_dist.SourcesGating
   - _target_: case_studies.dc2_cataloging.utils.variational_dist.BernoulliFactorReturnProbs
     name: source_type
     sample_rearrange: "b ht wt -> b ht wt 1 1"
     nll_rearrange: "b ht wt 1 1 -> b ht wt"
-    nll_gating: n_sources
+    nll_gating:
+      _target_: bliss.encoder.variational_dist.SourcesGating
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: star_fluxes
     dim: 6
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
-    nll_gating: is_star
+    nll_gating:
+      _target_: bliss.encoder.variational_dist.StarGating
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: galaxy_fluxes
     dim: 6
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
-    nll_gating: is_galaxy
+    nll_gating:
+      _target_: bliss.encoder.variational_dist.GalaxyGating
   # - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
   #   name: shear
   #   sample_rearrange: "b ht wt d -> b ht wt 1 d"
   #   nll_rearrange: "b ht wt 1 d -> b ht wt d"
-  #   nll_gating: is_in_cosmodc2
+  #   nll_gating:
+  #     _target_: case_studies.dc2_cataloging.utils.variational_dist.Cosmodc2Gating
   - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
     name: ellipticity
     sample_rearrange: "b ht wt d -> b ht wt 1 d"
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
-    nll_gating: is_in_cosmodc2
+    nll_gating:
+      _target_: case_studies.dc2_cataloging.utils.variational_dist.Cosmodc2Gating
 
 my_metrics:
   detection_performance:
@@ -111,8 +117,6 @@ encoder:
     survey_bands: ["u", "g", "r", "i", "z", "y"]
     reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}
-    min_flux_for_loss: 100  # you need to regenerate split_results after changing this number
-    min_flux_for_metrics: 100
     optimizer_params:
         lr: 1e-3
     scheduler_params:
