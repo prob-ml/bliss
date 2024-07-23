@@ -13,7 +13,6 @@ from astropy.wcs import WCS, FITSFixedWarning
 from einops import rearrange
 from scipy.interpolate import RegularGridInterpolator
 
-from bliss.align import align
 from bliss.catalog import FullCatalog, SourceType
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.download_utils import download_file_to_dst
@@ -56,8 +55,8 @@ class SloanDigitalSkySurvey(Survey):
         load_image_data: bool = False,
         background_offset=0.0,
         align_to_band=None,
-        crop_bands=None,
-        crop_hw=None,
+        crop_to_bands=None,
+        crop_to_hw=None,
     ):
         super().__init__()
 
@@ -75,10 +74,8 @@ class SloanDigitalSkySurvey(Survey):
 
         self.psf = SDSS_PSF(dir_path, self.image_ids(), range(len(self.BANDS)), psf_config)
 
-        self.crop_bands = crop_bands
-        self.crop_hw = crop_hw
-
-        self.catalog_cls = PhotoFullCatalog
+        self.crop_to_bands = crop_to_bands
+        self.crop_to_hw = crop_to_hw
 
     def prepare_data(self):
         self.downloader.download_pfs()
@@ -122,18 +119,8 @@ class SloanDigitalSkySurvey(Survey):
     def __getitem__(self, idx):
         if not self.items[idx]:
             item = self.get_from_disk(idx)
-            item["background"] += self.background_offset
             item["psf_params"] = self.psf.psf_params[self.image_id(idx)]
             item["psf_galsim"] = self.psf.psf_galsim[self.image_id(idx)]
-            item["flux_calibration"] = item["flux_calibration"]
-            if not self.load_image_data:
-                # we're just using the background/metadata, so no need to align
-                return item
-            for k in ("image", "background"):
-                if k not in item:
-                    continue
-                if self.align_to_band is not None:
-                    item[k] = align(item[k], wcs_list=item["wcs"], ref_band=self.align_to_band)
             self.items[idx] = item
         return self.items[idx]
 
@@ -223,7 +210,7 @@ class SloanDigitalSkySurvey(Survey):
         d = {
             "background": large_sky_nelec,
             "gain": np.array(gain),
-            "flux_calibration": np.expand_dims(nelec_per_nmgy, 0),
+            "flux_calibration": nelec_per_nmgy,
             "wcs": wcs,
         }
         if self.load_image_data:

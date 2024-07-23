@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 
 import pytorch_lightning as pl
+from einops import rearrange
 from torch.utils.data import DataLoader, Dataset
+
+from bliss.align import align
 
 
 class Survey(pl.LightningDataModule, Dataset, ABC):
@@ -11,10 +14,8 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
         super().__init__()
 
         self.align_to_band = None
-        self.crop_hw = None
-        self.crop_bands = None
-
-        self.catalog_cls = None  # TODO: better way than `survey.catalog_cls`?
+        self.crop_to_hw = None
+        self.crop_to_bands = None
 
     @staticmethod
     def coadd_images(constituent_images):
@@ -51,14 +52,13 @@ class Survey(pl.LightningDataModule, Dataset, ABC):
 
     def predict_dataloader(self):
         """Return a DataLoader for prediction."""
-        return DataLoader(SurveyPredictIterator(self, self.crop_bands, self.crop_hw), batch_size=1)
+        survey_iterator = SurveyPredictIterator(self)
+        return DataLoader(survey_iterator, batch_size=1)
 
 
 class SurveyPredictIterator:
-    def __init__(self, survey, crop_bands=None, crop_hw=None):
+    def __init__(self, survey):
         self.survey = survey
-        self.crop_bands = crop_bands  # includes all bands if None
-        self.crop_hw = crop_hw
 
     @classmethod
     def crop_to_mult16(cls, x):
@@ -71,16 +71,28 @@ class SurveyPredictIterator:
 
     def __getitem__(self, idx):
         item = self.survey[idx]
+        images = item["image"]
+
+        if self.survey.background_offset is not None:
+            # maybe we should specify this in physical units, but we don't yet
+            images -= self.survey.background_offset
 
         # back to physical units (and assuming image is sky subtracted)
-        images = item["image"] / item["flux_calibration"]
+        images /= rearrange(item["flux_calibration"], "bands w -> bands 1 w")
 
-        if self.crop_bands is not None:
-            images = images[self.crop_bands]
+        # includes all bands if None
+        if self.survey.crop_to_bands is not None:
+            images = images[self.survey.crop_to_bands]
+            item["psf_params"] = item["psf_params"][self.survey.crop_to_bands]
 
-        if self.crop_hw is not None:
-            r1, r2, c1, c2 = self.crop_hw
+        if self.survey.crop_to_hw is not None:
+            r1, r2, c1, c2 = self.survey.crop_to_hw
             images = images[:, r1:r2, c1:c2]
+
+        # alignment is done after cropping here for speed, mainly during testing,
+        # but this may not be a ideal in general
+        if self.survey.align_to_band is not None:
+            images = align(images, wcs_list=item["wcs"], ref_band=self.survey.align_to_band)
 
         images = self.crop_to_mult16(images)  # alternatively, could pad
 

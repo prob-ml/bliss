@@ -96,7 +96,6 @@ class DarkEnergySurvey(Survey):
 
         self.psf = DES_PSF(dir_path, self.image_ids(), self.bands, psf_config)
 
-        self.catalog_cls = TractorFullCatalog
         if self.load_image_data:
             self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
@@ -138,7 +137,7 @@ class DarkEnergySurvey(Survey):
                 image_list[b] = {
                     "background": np.random.rand(*img_shape).astype(np.float32),
                     "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
-                    "flux_calibration": np.ones((1, 1, 1)),
+                    "flux_calibration": np.ones((1,)),
                 }
                 if self.load_image_data:
                     image_list[b].update(
@@ -177,7 +176,7 @@ class DarkEnergySurvey(Survey):
         d = {
             "background": background_nelec,
             "wcs": wcs,
-            "flux_calibration": np.array([[[flux_calibration]]]),
+            "flux_calibration": np.array([flux_calibration]),
         }
         if self.load_image_data:
             image = fits.getdata(img_fits_filename, 0)

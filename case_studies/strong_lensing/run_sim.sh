@@ -32,7 +32,7 @@ done
 # base image config file
 GALAXY_CONFIG_FILE="galsim-random.yaml"
 # final image config file
-IMAGE_CONFIG_FILE="simulate.yaml" 
+IMAGE_CONFIG_FILE="simulate.yaml"
 
 
 NUM_ITERATIONS=$((num_galaxies+1))
@@ -109,7 +109,7 @@ for i in $(seq 1 $num_files); do
           echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, False, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta" >> data/catalog.txt
 
       # Write lensed images to combined files
-      else 
+      else
           # Running Lenstronomy lensing (Generating lensed image)
           echo "Running Python script $PYTHON_SCRIPT_2 on iteration $j..." &>> $LOG_FILE
           output=$(python "$PYTHON_SCRIPT_2" "$FITS_FILE" "$OUTPUT_DIR")
@@ -150,7 +150,7 @@ for i in $(seq 1 $num_files); do
     echo "Running python file $PYTHON_SCRIPT_4 to convert text catalog..." &>> $LOG_FILE
     python "$PYTHON_SCRIPT_4" "$OUTPUT_DIR" &>> $LOG_FILE
 
-    # Run Galsim to produce final image  
+    # Run Galsim to produce final image
     echo "Running galsim with $IMAGE_CONFIG_FILE..." &>> $LOG_FILE
     galsim "$IMAGE_CONFIG_FILE" variables.output_dir="$FINAL_OUTPUT_DIR" variables.nobjects="$num_galaxies" variables.image_size="$img_size" &>> $LOG_FILE
 

@@ -13,7 +13,7 @@ from bliss.surveys.des import DarkEnergySurvey as DES
 def patch_align(monkeypatch):
     # align is quite slow, so we replace it with the identity function
     identity = lambda x, *_args, **_kwargs: x
-    monkeypatch.setattr("bliss.surveys.sdss.align", identity)
+    monkeypatch.setattr("bliss.surveys.survey.align", identity)
 
 
 class TestGenerate:
@@ -88,12 +88,10 @@ class TestTrain:
 
 
 class TestPredict:
-    def test_predict_sdss_multiple_rcfs(self, cfg, monkeypatch):
+    def test_predict_sdss(self, cfg):
         # it's slow processing an entire image on the cpu, so we crop the image
-        crop = lambda _, img: img[:, 100:164, 100:164]
-        monkeypatch.setattr("bliss.surveys.sdss.SloanDigitalSkySurvey._crop_image", crop)
-
         cfg = cfg.copy()
+        cfg.surveys.sdss.crop_to_hw = [100, 164, 100, 164]
         cfg.surveys.sdss.fields = [
             {"run": 94, "camcol": 1, "fields": [12]},
             {"run": 3635, "camcol": 1, "fields": [169]},
