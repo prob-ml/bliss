@@ -125,11 +125,14 @@ class LensingDC2DataModule(DC2DataModule):
         # TODO: interpolation
         shear = tile_dict["shear"]
         convergence = tile_dict["convergence"]
-        nonzero_shear_mask = ~torch.all(shear == 0, dim=1)
-        nonzero_conv_mask = convergence != 0
+        objid = tile_dict["objid"]
+        nonzero_shear_conv_mask = objid != 0
+        nonzero_shear_mask = nonzero_shear_conv_mask.expand(-1, -1, -1, 2)
+        shear[~nonzero_shear_mask] = float("nan")  # noqa: WPS456
+        convergence[~nonzero_shear_conv_mask] = float("nan")  # noqa: WPS456
 
-        avg_nonzero_convergence = torch.mean(convergence * nonzero_conv_mask, axis=2)
-        avg_nonzero_shear = torch.mean(shear * nonzero_shear_mask, axis=2)
+        avg_nonzero_shear = torch.nanmean(shear, dim=2)
+        avg_nonzero_convergence = torch.nanmean(convergence, dim=2)
 
         tile_dict["shear"] = avg_nonzero_shear
         tile_dict["convergence"] = avg_nonzero_convergence
@@ -159,9 +162,9 @@ class LensingDC2Catalog(DC2FullCatalog):
         ra = torch.from_numpy(catalog["ra"].values).squeeze()
         dec = torch.from_numpy(catalog["dec"].values).squeeze()
 
-        shear1 = torch.from_numpy(catalog["shear_1"].values).squeeze()
-        shear2 = torch.from_numpy(catalog["shear_2"].values).squeeze()
-        convergence = torch.from_numpy(catalog["convergence"].values)
+        shear1 = torch.from_numpy(catalog["shear_1"].values).squeeze() * 10000
+        shear2 = torch.from_numpy(catalog["shear_2"].values).squeeze() * 10000
+        convergence = torch.from_numpy(catalog["convergence"].values) * 10000
 
         # TODO: create shear and convergence masks here (keep vs nonexistant)
 
