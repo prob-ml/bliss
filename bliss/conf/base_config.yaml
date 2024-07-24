@@ -213,7 +213,7 @@ surveys:
             psf_slen: 25
         load_image_data: false
         # options below only apply to prediction
-        align_to_band: null  # should be 2 but it's slower then
+        align_to_band: 2
         crop_to_bands: null
         crop_to_hw: null
 
