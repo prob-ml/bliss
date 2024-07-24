@@ -510,3 +510,27 @@ if "locs" in datum["tile_catalog"]:
 ### 07-09
 
 1. test MultiDetectEncoder (with fast one-to-one match)
+
+### 07-11
+
+1. retrain model
+
+2. retrain model
+
+### 07-15
+
+1. retrain model
+
+2. test null image normalizer
+
+3. retrain model
+
+4. retrain model
+
+5. test null image normalizer
+
+### 07-22
+
+1. train with the latest code
+
+2. train with the latest code
