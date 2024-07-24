@@ -7,7 +7,12 @@ from einops import rearrange
 from scipy.optimize import linear_sum_assignment
 
 from bliss.catalog import TileCatalog
-from bliss.encoder.variational_dist import BernoulliFactor, VariationalDist, VariationalFactor
+from bliss.encoder.variational_dist import (
+    BernoulliFactor,
+    NllGating,
+    VariationalDist,
+    VariationalFactor,
+)
 from bliss.surveys.dc2 import unpack_dict
 
 
@@ -30,6 +35,12 @@ class VariationalDistReturnProbs(VariationalDist):
                 d["source_type"], d["source_type_probs"] = qk.sample(params, use_mode)
 
         return TileCatalog(d)
+
+
+class Cosmodc2Gating(NllGating):
+    @classmethod
+    def __call__(cls, true_tile_cat: TileCatalog):
+        return rearrange(true_tile_cat["cosmodc2_mask"], "b ht wt 1 1 -> b ht wt")
 
 
 class MultiVariationalDist(torch.nn.Module):

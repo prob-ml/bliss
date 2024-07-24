@@ -1,3 +1,6 @@
+import logging
+from abc import ABC, abstractmethod
+
 import torch
 from einops import rearrange
 from torch.distributions import (
@@ -40,6 +43,37 @@ class VariationalDist(torch.nn.Module):
         return sum(qk.compute_nll(params, true_tile_cat) for qk, params in fp_pairs)
 
 
+class NllGating(ABC):
+    @classmethod
+    @abstractmethod
+    def __call__(cls, true_tile_cat: TileCatalog):
+        """Get Gating for nll."""
+
+
+class NullGating(NllGating):
+    @classmethod
+    def __call__(cls, true_tile_cat: TileCatalog):
+        return torch.ones_like(true_tile_cat["n_sources"]).bool()
+
+
+class SourcesGating(NllGating):
+    @classmethod
+    def __call__(cls, true_tile_cat: TileCatalog):
+        return true_tile_cat["n_sources"].bool()
+
+
+class StarGating(NllGating):
+    @classmethod
+    def __call__(cls, true_tile_cat: TileCatalog):
+        return rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
+
+
+class GalaxyGating(NllGating):
+    @classmethod
+    def __call__(cls, true_tile_cat: TileCatalog):
+        return rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
+
+
 class VariationalFactor:
     def __init__(
         self,
@@ -53,7 +87,27 @@ class VariationalFactor:
         self.n_params = n_params
         self.sample_rearrange = sample_rearrange
         self.nll_rearrange = nll_rearrange
-        self.nll_gating = nll_gating
+        if nll_gating is None:
+            self.nll_gating = NullGating()
+        elif isinstance(nll_gating, str):
+            self.nll_gating = self._get_nll_gating_instance(nll_gating)
+        elif issubclass(type(nll_gating), NllGating):
+            self.nll_gating = nll_gating
+        else:
+            raise TypeError("invalid nll_gating type")
+
+    # to be compatible with the old yaml files
+    def _get_nll_gating_instance(self, nll_gating: str):
+        logger = logging.getLogger("VariationalFactor")
+        warning_msg = "WARNING: please don't use str as nll_gating; it will be deprecated"
+        logger.warning(warning_msg)
+        if nll_gating == "n_sources":
+            return SourcesGating()
+        if nll_gating == "is_star":
+            return StarGating()
+        if nll_gating == "is_galaxy":
+            return GalaxyGating()
+        raise ValueError("invalide nll_gating string")
 
     def sample(self, params, use_mode=False):
         qk = self._get_dist(params)
@@ -68,20 +122,14 @@ class VariationalFactor:
         if self.nll_rearrange is not None:
             target = rearrange(target, self.nll_rearrange)
 
+        gating = self.nll_gating(true_tile_cat)
+
         qk = self._get_dist(params)
+        if gating.shape != target.shape:
+            assert gating.shape == target.shape[:-1]
+            target = torch.where(gating.unsqueeze(-1), target, 0)
+        assert not torch.isnan(target).any()
         ungated_nll = -qk.log_prob(target)
-
-        if self.nll_gating is None:
-            gating = 1
-        elif self.nll_gating == "n_sources":
-            gating = true_tile_cat["n_sources"]
-        elif self.nll_gating == "is_star":
-            gating = rearrange(true_tile_cat.star_bools, "b ht wt 1 1 -> b ht wt")
-        elif self.nll_gating == "is_galaxy":
-            gating = rearrange(true_tile_cat.galaxy_bools, "b ht wt 1 1 -> b ht wt")
-        else:
-            raise ValueError(f"Invalid nll_gating: {self.nll_gating}")
-
         return ungated_nll * gating
 
 

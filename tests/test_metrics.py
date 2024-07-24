@@ -58,7 +58,7 @@ class TestMetrics:
         assert np.isclose(dresults["detection_precision"], 2 / (2 + 2))
         assert np.isclose(dresults["detection_recall"], 2 / 3)
 
-        acc_metrics = SourceTypeAccuracy(flux_bin_cutoffs=[200, 400, 600, 800, 1000])
+        acc_metrics = SourceTypeAccuracy(bin_cutoffs=[200, 400, 600, 800, 1000])
         acc_results = acc_metrics(true_params, est_params, matching)
         assert np.isclose(acc_results["classification_acc"], 1 / 2)
 
@@ -113,7 +113,7 @@ class TestMetrics:
         dresults = detection_metrics(full_catalog, full_catalog, matching)
         assert dresults["detection_f1"] == 1
 
-        acc_metrics = SourceTypeAccuracy(flux_bin_cutoffs=[200, 400, 600, 800, 1000])
+        acc_metrics = SourceTypeAccuracy(bin_cutoffs=[200, 400, 600, 800, 1000])
         acc_results = acc_metrics(full_catalog, full_catalog, matching)
         assert acc_results["classification_acc"] == 1
 
@@ -149,7 +149,7 @@ class TestMetrics:
         decals_cat = decals_cat.to(torch.device("cpu"))
 
         matcher = CatalogMatcher(dist_slack=1.0)
-        detection_metrics = DetectionPerformance(mag_band=None)
+        detection_metrics = DetectionPerformance(ref_band=None)
 
         pp_matching = matcher.match_catalogs(photo_cat, photo_cat)
         pp_results = detection_metrics(photo_cat, photo_cat, pp_matching)
