@@ -48,10 +48,10 @@ FINAL_OUTPUT_DIR="output"
 
 # Catalog Directory
 CATALOG_DIR="catalogs"
+
 if [ ! -d "$CATALOG_DIR" ]; then
   mkdir -p "$CATALOG_DIR"
   echo "Created catalogs directory"
-fi
 
 MAG=0.029999
 # Create the output directory if it doesn't exist

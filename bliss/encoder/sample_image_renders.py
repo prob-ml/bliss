@@ -65,8 +65,11 @@ class PlotSampleImages(Metric):
         return plot_detections(self.images, self.target_cat_cropped, est_cat, margin_px=mp)
 
 
-def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, figsize=None):
+def plot_detections(images, true_cat, est_cat, margin_px, ticks=None, figsize=None):
     """Plots an image of true and estimated sources."""
+    assert isinstance(true_cat, FullCatalog)
+    assert isinstance(est_cat, FullCatalog)
+
     batch_size = images.size(0)
     n_samples = min(int(math.sqrt(batch_size)) ** 2, 16)
     nrows = int(n_samples**0.5)
@@ -76,13 +79,6 @@ def plot_detections(images, true_tile_cat, est_tile_cat, margin_px, ticks=None, 
         figsize = (20, 20)
     fig, axes = plt.subplots(nrows=nrows, ncols=nrows, figsize=figsize)
     axes = axes.flatten() if nrows > 1 else [axes]  # flatten
-
-    true_cat = true_tile_cat
-    if not isinstance(true_cat, FullCatalog):
-        true_cat = true_cat.to_full_catalog()
-    est_cat = est_tile_cat
-    if not isinstance(est_cat, FullCatalog):
-        est_cat = est_cat.to_full_catalog()
 
     for ax_idx, ax in enumerate(axes):
         if ax_idx >= len(img_ids):  # don't plot on this ax if there aren't enough images

@@ -9,7 +9,7 @@ from astropy.io import fits
 
 from bliss.catalog import FullCatalog
 
-min_flux_for_loss = 0
+min_flux = 0
 DATA_PATH = "/home/kapnadak/bliss/case_studies/galaxy_clustering/data"
 CATALOGS_PATH = DATA_PATH / Path("catalogs")
 IMAGES_PATH = DATA_PATH / Path("images")
@@ -65,7 +65,7 @@ def main(**kwargs):
             tile_slen=tile_size,
             max_sources_per_tile=12 * tile_size,
         )
-        tile_catalog = tile_catalog.filter_by_flux(min_flux=min_flux_for_loss)
+        tile_catalog = tile_catalog.filter_by_flux(min_flux=min_flux)
         tile_catalog = tile_catalog.get_brightest_sources_per_tile(band=2, exclude_num=0)
 
         membership_array = np.zeros((n_tiles, n_tiles), dtype=bool)

@@ -162,4 +162,4 @@ class LensingPrior(CatalogPrior):
             "star_fluxes": star_fluxes,
         }
 
-        return TileCatalog(self.tile_slen, catalog_params)
+        return TileCatalog(catalog_params)

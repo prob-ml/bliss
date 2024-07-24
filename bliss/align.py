@@ -2,15 +2,6 @@ import numpy as np
 from reproject import reproject_interp
 
 
-def crop_to_mult16(x):
-    """Crop the image dimensions to a multiple of 16."""
-    # note: by cropping the top-right, we preserve the mapping between pixel coordinates
-    # and the original WCS coordinates
-    height = x.shape[1] - (x.shape[1] % 16)
-    width = x.shape[2] - (x.shape[2] % 16)
-    return x[:, :height, :width]
-
-
 def align(img, wcs_list, ref_band, ref_depth=0):
     """Reproject images based on some reference WCS for pixel alignment."""
     reproj_d = {}
@@ -52,4 +43,4 @@ def align(img, wcs_list, ref_band, ref_depth=0):
 
     if reproj_out.shape[0] == 1:
         reproj_out = reproj_out.squeeze(axis=0)
-    return reproj_out
+    return np.float32(reproj_out)
