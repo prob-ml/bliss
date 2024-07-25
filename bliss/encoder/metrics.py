@@ -164,7 +164,7 @@ class DetectionPerformance(FilterMetric):
         self.bin_type = bin_type
         self.exclude_last_bin = exclude_last_bin
 
-        assert self.bin_type in {"nmgy", "njymag"}, "invalid bin type"
+        assert self.bin_type in {"nmgy", "njymag", "mag"}, "invalid bin type"
 
         detection_metrics = [
             "n_true_sources",

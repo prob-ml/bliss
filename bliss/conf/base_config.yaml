@@ -268,7 +268,7 @@ surveys:
 mode: train
 
 generate:
-    n_image_files: 128
+    n_image_files: 64
     n_batches_per_file: 16
     simulator: ${simulator}
     cached_data_path: ${paths.cached_data}

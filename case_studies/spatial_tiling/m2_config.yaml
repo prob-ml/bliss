@@ -8,33 +8,36 @@ paths:
     cached_data: /data/scratch/regier/m2
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
-    name: n_sources
-    sample_rearrange: null
-    nll_rearrange: null
-    nll_gating: null
-  - _target_: bliss.encoder.variational_dist.TDBNFactor
-    name: locs
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 d -> b ht wt d"
-    nll_gating: n_sources
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
-    name: source_type
-    sample_rearrange: "b ht wt -> b ht wt 1 1"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt"
-    nll_gating: n_sources
-  - _target_: bliss.encoder.variational_dist.LogNormalFactor
-    name: star_fluxes
-    dim: 1
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 d -> b ht wt d"
-    nll_gating: is_star
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: n_sources
+      sample_rearrange: null
+      nll_rearrange: null
+      nll_gating: null
+    - _target_: bliss.encoder.variational_dist.TDBNFactor
+      name: locs
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      nll_gating:
+          _target_: bliss.encoder.variational_dist.SourcesGating
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: source_type
+      sample_rearrange: "b ht wt -> b ht wt 1 1"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt"
+      nll_gating:
+          _target_: bliss.encoder.variational_dist.SourcesGating
+    - _target_: bliss.encoder.variational_dist.LogNormalFactor
+      name: star_fluxes
+      dim: 1
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      nll_gating:
+          _target_: bliss.encoder.variational_dist.StarGating
 
 star_metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
-        mag_bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
-        mag_band: 0  # SDSS r-band
+        bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
+        bin_type: "mag"
         exclude_last_bin: true
 
 nopsf_image_normalizers:
@@ -65,7 +68,7 @@ encoder:
         _target_: torchmetrics.MetricCollection
         metrics:
             two_point:
-                _target_: case_studies.spatial_tiling.two_point_metric.TwoPointMetric
+                _target_: case_studies.spatial_tiling.metrics.TwoPointMetric
     optimizer_params:
         lr: 1e-3
     scheduler_params:
@@ -76,8 +79,8 @@ prior:
     _target_: bliss.simulator.prior.CatalogPrior
     survey_bands: ["u", "g", "r", "i", "z"]  # SDSS available band filters
     reference_band: 2  # SDSS r-band
-    star_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
-    gal_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
+    star_color_model_path: ${paths.sdss}/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: ${paths.sdss}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 56
     n_tiles_w: 56
     batch_size: 32
