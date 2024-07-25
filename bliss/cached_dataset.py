@@ -14,7 +14,7 @@ from torch import distributed as dist
 from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 from torchvision import transforms
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, TileCatalog
 from bliss.global_env import GlobalEnv
 
 # prevent pytorch_lightning warning for num_workers = 2 in dataloaders with IterableDataset
@@ -67,9 +67,30 @@ class OneBandTransform(torch.nn.Module):
         return datum_out
 
 
+class FluxFilterTransform(torch.nn.Module):
+    def __init__(self, reference_band, min_flux):
+        super().__init__()
+        self.reference_band = reference_band
+        self.min_flux = min_flux
+
+    def __call__(self, datum_in):
+        datum_out = copy(datum_in)
+
+        d1 = {k: v.unsqueeze(0) for k, v in datum_in["tile_catalog"].items()}
+        target_cat = TileCatalog(d1)
+        target_cat = target_cat.filter_by_flux(
+            min_flux=self.min_flux,
+            band=self.reference_band,
+        )
+        d2 = {k: v.squeeze(0) for k, v in target_cat.items()}
+        datum_out["tile_catalog"] = d2
+
+        return datum_out
+
+
 class ChunkingSampler(Sampler):
     def __init__(self, dataset: Dataset) -> None:
-        super().__init__(dataset)
+        super().__init__()
         assert isinstance(dataset, ChunkingDataset), "dataset should be ChunkingDataset"
         self.dataset = dataset
 

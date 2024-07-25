@@ -17,7 +17,6 @@ from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage import zoom
 
 from bliss.catalog import FullCatalog, SourceType
-from bliss.simulator.background import ImageBackground
 from bliss.simulator.psf import ImagePSF, PSFConfig
 from bliss.surveys.download_utils import download_file_to_dst
 from bliss.surveys.sdss import column_to_tensor
@@ -95,11 +94,8 @@ class DarkEnergySurvey(Survey):
         self.downloader = DESDownloader(self.image_id_list, self.des_path)
         self.prepare_data()
 
-        self.background = ImageBackground(self, bands=self.bands)
         self.psf = DES_PSF(dir_path, self.image_ids(), self.bands, psf_config)
-        self.flux_calibration_dict = self.get_flux_calibrations()
 
-        self.catalog_cls = TractorFullCatalog
         if self.load_image_data:
             self._predict_batch = {"images": self[0]["image"], "background": self[0]["background"]}
 
@@ -141,7 +137,7 @@ class DarkEnergySurvey(Survey):
                 image_list[b] = {
                     "background": np.random.rand(*img_shape).astype(np.float32),
                     "wcs": first_present_bl_obj["wcs"],  # NOTE: junk; just for format
-                    "flux_calibration_list": np.ones((1, 1, 1)),
+                    "flux_calibration": np.ones((1,)),
                 }
                 if self.load_image_data:
                     image_list[b].update(
@@ -155,6 +151,9 @@ class DarkEnergySurvey(Survey):
                 ret[k] = np.stack(data_per_band)
             else:
                 ret[k] = data_per_band
+
+        ret["psf_params"] = self.psf.psf_params[self.image_id(idx)]
+        ret["psf_galsim"] = self.psf.psf_galsim[self.image_id(idx)]
 
         return ret
 
@@ -177,7 +176,7 @@ class DarkEnergySurvey(Survey):
         d = {
             "background": background_nelec,
             "wcs": wcs,
-            "flux_calibration_list": np.array([[[flux_calibration]]]),
+            "flux_calibration": np.array([flux_calibration]),
         }
         if self.load_image_data:
             image = fits.getdata(img_fits_filename, 0)
