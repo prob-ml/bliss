@@ -126,7 +126,7 @@ class TileCatalog(BaseTileCatalog):
     galaxy_params_index = {k: i for i, k in enumerate(galaxy_params)}
 
     def __init__(self, d: Dict[str, Tensor]):
-        self.max_sources = d["locs"].shape[3]
+        assert "locs" in d
         super().__init__(d)
 
     def __getitem__(self, name: str):
@@ -136,6 +136,10 @@ class TileCatalog(BaseTileCatalog):
             idx = self.galaxy_params_index[name]
             return self.data["galaxy_params"][..., idx : (idx + 1)]
         return super().__getitem__(name)
+
+    @property
+    def max_sources(self):
+        return self["locs"].shape[3]
 
     @property
     def is_on_mask(self) -> Tensor:
@@ -324,7 +328,14 @@ class TileCatalog(BaseTileCatalog):
             if key == "n_sources":
                 d[key] = (sorted_self["n_sources"] - exclude_num).clamp(min=0, max=top_k)
             else:
-                d[key] = val[:, :, :, exclude_num : (exclude_num + top_k)]
+                slicing_start = exclude_num
+                slicing_end = exclude_num + top_k
+                if slicing_end > val.shape[-2]:
+                    pad = torch.zeros_like(val)[:, :, :, 0:1, :].expand(
+                        -1, -1, -1, slicing_end - val.shape[-2], -1
+                    )
+                    val = torch.cat((val, pad), dim=-2)
+                d[key] = val[:, :, :, slicing_start:slicing_end, :]
 
         return TileCatalog(d)
 
@@ -388,6 +399,25 @@ class TileCatalog(BaseTileCatalog):
                     d1 = torch.cat((v, other[k]), dim=-2)
                     d2 = torch.cat((other[k], v), dim=-2)
                 d[k] = torch.where(ns11 > 0, d1, d2)
+        return TileCatalog(d)
+
+    def stack(self, other):
+        assert self.batch_size == other.batch_size
+        assert self.n_tiles_h == other.n_tiles_h
+        assert self.n_tiles_w == other.n_tiles_w
+        assert other.max_sources == 1
+        assert other["n_sources"].max() <= 1
+
+        if "n_sources_mask" not in self:
+            self["n_sources_mask"] = rearrange(self["n_sources"], "b nth ntw -> b nth ntw 1 1") > 0
+        other["n_sources_mask"] = rearrange(other["n_sources"], "b nth ntw -> b nth ntw 1 1") > 0
+
+        d = {}
+        for k, v in self.items():
+            if k == "n_sources":
+                d[k] = v + other[k]
+            else:
+                d[k] = torch.cat((v, other[k]), dim=-2)
         return TileCatalog(d)
 
     def __repr__(self):
