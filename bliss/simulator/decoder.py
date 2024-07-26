@@ -156,8 +156,8 @@ class Decoder(nn.Module):
 
         # calibration: convert from (linear) physical units to electron counts
         # use the specified flux_calibration ratios indexed by image_id
+        avg_nelec_conv = np.mean(frame["flux_calibration"], axis=-1)
         if n_sources > 0:
-            avg_nelec_conv = np.mean(frame["flux_calibration"], axis=-1)
             full_cat["star_fluxes"] *= rearrange(avg_nelec_conv, "bands -> 1 1 bands")
             if "galaxy_fluxes" in tile_cat:
                 full_cat["galaxy_fluxes"] *= avg_nelec_conv
@@ -196,8 +196,7 @@ class Decoder(nn.Module):
         image -= background
 
         # convert electron counts to physical units (now what we've subtracted the background)
-        if n_sources > 0:
-            image /= rearrange(avg_nelec_conv, "bands -> bands 1 1")
+        image /= rearrange(avg_nelec_conv, "bands -> bands 1 1")
 
         if self.with_dither:
             image = align(image, [wcs_list], self.survey.align_to_band)
