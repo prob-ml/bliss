@@ -199,6 +199,7 @@ encoder:
               tile_slen: ${simulator.decoder.tile_slen}
     use_double_detect: false
     use_checkerboard: false
+    predict_mode_not_samples: true
 
 surveys:
     sdss:

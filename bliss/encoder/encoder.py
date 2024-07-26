@@ -36,7 +36,9 @@ class Encoder(pl.LightningModule):
         scheduler_params: Optional[dict] = None,
         use_double_detect: bool = False,
         use_checkerboard: bool = True,
+        n_sampler_colors: int = 4,
         reference_band: int = 2,
+        predict_mode_not_samples: bool = True,
     ):
         """Initializes Encoder.
 
@@ -53,7 +55,9 @@ class Encoder(pl.LightningModule):
             scheduler_params: arguments passed to the learning rate scheduler
             use_double_detect: whether to make up to two detections per tile rather than one
             use_checkerboard: whether to use dependent tiling
+            n_sampler_colors: number of colors to use for checkerboard sampling
             reference_band: band to use for filtering sources
+            predict_mode_not_samples: whether to predict mode catalogs rather than sample catalogs
         """
         super().__init__()
 
@@ -69,7 +73,9 @@ class Encoder(pl.LightningModule):
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.use_double_detect = use_double_detect
         self.use_checkerboard = use_checkerboard
+        self.n_sampler_colors = n_sampler_colors
         self.reference_band = reference_band
+        self.predict_mode_not_samples = predict_mode_not_samples
 
         # Generate all binary combinations for n^2 elements
         n = 2
@@ -130,7 +136,14 @@ class Encoder(pl.LightningModule):
         batch_size, _n_features, ht, wt = x_features.shape[0:4]
 
         est_cat = None
-        patterns_to_use = (0, 8, 12, 14) if self.use_checkerboard else (0,)
+        if not self.use_checkerboard:
+            patterns_to_use = (0,)
+        elif self.n_sampler_colors == 4:
+            patterns_to_use = (0, 8, 12, 14)
+        elif self.n_sampler_colors == 2:
+            patterns_to_use = (0, 6)
+        else:
+            raise ValueError("n_colors must be 2 or 4")
 
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
@@ -167,11 +180,12 @@ class Encoder(pl.LightningModule):
 
         return est_cat
 
-    def _compute_loss(self, batch, logging_name):
+    def compute_masked_nll(self, batch, history_mask_patterns, loss_mask_patterns):
+        assert history_mask_patterns.shape == loss_mask_patterns.shape
+
         batch_size, _n_bands, h, w = batch["images"].shape[0:4]
         ht, wt = h // self.tile_slen, w // self.tile_slen
 
-        # filter out undetectable sources and split catalog by flux
         target_cat = TileCatalog(batch["tile_catalog"])
 
         # TODO: don't order the light sources by brightness; softmax instead
@@ -183,32 +197,34 @@ class Encoder(pl.LightningModule):
 
         loss = torch.zeros_like(x_features[:, 0, :, :])
 
-        # could use all the mask patterns but memory is tight
-        patterns_to_use = torch.randperm(15)[:4] if self.use_checkerboard else (0,)
+        for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns):
+            history_mask = hmp.repeat([batch_size, ht // 2, wt // 2])
 
-        for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
-            mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
-            context1 = self.make_context(target_cat1, mask)
+            context1 = self.make_context(target_cat1, history_mask)
             x_cat1 = self.catalog_net(x_features, context1)
             loss11 = self.var_dist.compute_nll(x_cat1, target_cat1)
 
-            # could upweight some patterns that are under-represented or limit loss to
-            # the quarter of tiles that are actually used for sampling
-            loss += loss11 * (1 - mask)
+            loss_mask = lmp.repeat([batch_size, ht // 2, wt // 2])
+            loss += loss11 * loss_mask
 
-            if not self.use_checkerboard:
-                break
+        # equals 1 if loss is unmasked for as many tiles as there are tiles;
+        # balances loss between layer1 and layer2, and reduces variation for random patterns
+        loss1_normalizer = loss_mask_patterns.sum() / 4
+        loss /= loss1_normalizer
 
         if self.use_double_detect:
             target_cat2 = target_cat.get_brightest_sources_per_tile(
                 band=self.reference_band, exclude_num=1
             )
-            with torch.no_grad():
-                est_cat1 = self.sample_first_detection(x_features, use_mode=False)
+
             # occasionally we input an estimated catalog rather than a target catalog, to regularize
             # and avoid out-of-distribution inputs when sampling
-            history_cat = target_cat1 if torch.rand(1).item() < 0.9 else est_cat1
-            no_mask = torch.ones_like(mask)
+            history_cat = target_cat1
+            if torch.rand(1).item() < 0.9:
+                with torch.no_grad():
+                    history_cat = self.sample_first_detection(x_features, use_mode=False)
+
+            no_mask = torch.ones_like(history_mask)
             context2 = self.make_context(history_cat, no_mask, detection2=True)
             x_cat2 = self.catalog_net(x_features, context2)
 
@@ -216,8 +232,37 @@ class Encoder(pl.LightningModule):
             loss22 *= target_cat1["n_sources"]
             loss += loss22
 
-        # could normalize by the number of tile predictions, rather than number of tiles
-        loss = loss.sum() / loss.numel()
+        return loss
+
+    def compute_sampler_nll(self, batch):
+        if not self.use_checkerboard:
+            history_pattern_ids = (0,)
+            loss_pattern_ids = (15,)
+        elif self.n_sampler_colors == 4:
+            history_pattern_ids = (0, 8, 12, 14)
+            loss_pattern_ids = (8, 4, 2, 1)
+        elif self.n_sampler_colors == 2:
+            history_pattern_ids = (0, 6)
+            loss_pattern_ids = (6, 9)
+        else:
+            raise ValueError("n_sampler_colors must be 2 or 4")
+
+        history_mask_patterns = self.mask_patterns[history_pattern_ids, ...]
+        loss_mask_patterns = self.mask_patterns[loss_pattern_ids, ...]
+
+        return self.compute_masked_nll(batch, history_mask_patterns, loss_mask_patterns)
+
+    def _compute_loss(self, batch, logging_name):
+        # could use all the mask patterns but memory is tight
+        patterns_to_use = torch.randperm(15)[:4] if self.use_checkerboard else (0,)
+        history_mask_patterns = self.mask_patterns[patterns_to_use, ...]
+
+        loss_mask_patterns = 1 - history_mask_patterns
+
+        loss = self.compute_masked_nll(batch, history_mask_patterns, loss_mask_patterns)
+        loss = loss.sum()
+
+        batch_size = batch["images"].size(0)
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         return loss
@@ -298,11 +343,7 @@ class Encoder(pl.LightningModule):
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         """Pytorch lightning method."""
         with torch.no_grad():
-            return {
-                "mode_cat": self.sample(batch, use_mode=True),
-                # we may want multiple samples
-                "sample_cat": self.sample(batch, use_mode=False),
-            }
+            return self.sample(batch, use_mode=self.predict_mode_not_samples)
 
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""

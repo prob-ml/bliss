@@ -44,7 +44,7 @@ class TestSimulate:
         sdss = MockSDSS(image, psf_params)
         encoder.eval()
         trainer = instantiate(cfg.predict.trainer)
-        mode_cat = trainer.predict(encoder, datamodule=sdss)[0]["mode_cat"]
+        mode_cat = trainer.predict(encoder, datamodule=sdss)[0]
         mode_cat = mode_cat.to(cfg.predict.device)
 
         # Compare predicted and true source types
