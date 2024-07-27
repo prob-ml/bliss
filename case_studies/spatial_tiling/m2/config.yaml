@@ -1,6 +1,6 @@
 ---
 defaults:
-    - ../../bliss/conf@_here_: base_config
+    - ../../../bliss/conf@_here_: base_config
     - _self_
     - override hydra/job_logging: stdout
 
@@ -68,7 +68,7 @@ encoder:
         _target_: torchmetrics.MetricCollection
         metrics:
             two_point:
-                _target_: case_studies.spatial_tiling.metrics.TwoPointMetric
+                _target_: case_studies.spatial_tiling.m2.metrics.TwoPointMetric
     optimizer_params:
         lr: 1e-3
     scheduler_params:
