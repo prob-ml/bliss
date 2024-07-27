@@ -107,7 +107,7 @@ surveys:
               camcol: 2
               fields: [136]
         align_to_band: null
-        background_offset: 0.09344719643795303
+        background_offset: 80
 
 generate:
     n_image_files: 16
