@@ -73,12 +73,19 @@ class SurveyPredictIterator:
         item = self.survey[idx]
         images = item["image"]
 
-        if self.survey.background_offset is not None:
-            # maybe we should specify this in physical units, but we don't yet
-            images -= self.survey.background_offset
+        # assume the images are already sky subtracted if no background is provided
+        images -= item.get("background", 0.0)
 
         # back to physical units (and assuming image is sky subtracted)
         images /= rearrange(item["flux_calibration"], "bands w -> bands 1 w")
+
+        if self.survey.background_offset is not None:
+            images -= self.survey.background_offset
+
+        # alignment is done after cropping here for speed, mainly during testing,
+        # but this may not be a ideal in general
+        if self.survey.align_to_band is not None:
+            images = align(images, wcs_list=item["wcs"], ref_band=self.survey.align_to_band)
 
         # includes all bands if None
         if self.survey.crop_to_bands is not None:
@@ -88,11 +95,6 @@ class SurveyPredictIterator:
         if self.survey.crop_to_hw is not None:
             r1, r2, c1, c2 = self.survey.crop_to_hw
             images = images[:, r1:r2, c1:c2]
-
-        # alignment is done after cropping here for speed, mainly during testing,
-        # but this may not be a ideal in general
-        if self.survey.align_to_band is not None:
-            images = align(images, wcs_list=item["wcs"], ref_band=self.survey.align_to_band)
 
         images = self.crop_to_mult16(images)  # alternatively, could pad
 

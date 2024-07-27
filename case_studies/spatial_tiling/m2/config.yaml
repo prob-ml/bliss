@@ -39,6 +39,7 @@ star_metrics:
         bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
         bin_type: "mag"
         exclude_last_bin: true
+        ref_band: 0
 
 nopsf_image_normalizers:
     clahe:
@@ -93,17 +94,20 @@ prior:
     star_flux_loc: -1.162430157551662
     star_flux_scale: 1.4137911256506595
 
-simulator:
+decoder:
     tile_slen: 2
+    with_dither: false
 
 surveys:
     sdss:
-        # need to override this for proper data generation
+        # need to override this for proper data generation.
+        # these settings are also used for prediction.
         fields:
             - run: 2583
               camcol: 2
               fields: [136]
-        background_offset: 80
+        align_to_band: null
+        background_offset: 0.09344719643795303
 
 generate:
     n_image_files: 16
@@ -142,16 +146,7 @@ train:
 
 predict:
     dataset:
-        _target_: bliss.surveys.sdss.SloanDigitalSkySurvey
-        dir_path: ${paths.sdss}
-        fields:
-            - run: 2583
-              camcol: 2
-              fields: [136]
-        psf_config:
-            pixel_scale: 0.396
-            psf_slen: 25
-        align_to_band: null
+        background_offset: 0.0
         load_image_data: true
         crop_to_bands: [2]
         crop_to_hw: [624, 736, 304, 416]
