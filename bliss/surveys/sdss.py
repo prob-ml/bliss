@@ -137,6 +137,9 @@ class SloanDigitalSkySurvey(Survey):
             band_data = [frame[k] for frame in frame_list]
             item[k] = np.stack(band_data) if isinstance(band_data[0], np.ndarray) else band_data
 
+        # a hack to deal with underestimated backgrounds
+        item["background"] += self.background_offset
+
         return item
 
     def image_id(self, idx) -> Tuple[int, int, int]:

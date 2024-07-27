@@ -79,9 +79,6 @@ class SurveyPredictIterator:
         # back to physical units (and assuming image is sky subtracted)
         images /= rearrange(item["flux_calibration"], "bands w -> bands 1 w")
 
-        if self.survey.background_offset is not None:
-            images -= self.survey.background_offset
-
         # alignment is done after cropping here for speed, mainly during testing,
         # but this may not be a ideal in general
         if self.survey.align_to_band is not None:

@@ -146,7 +146,6 @@ train:
 
 predict:
     dataset:
-        background_offset: 0.0
         load_image_data: true
         crop_to_bands: [2]
         crop_to_hw: [624, 736, 304, 416]
