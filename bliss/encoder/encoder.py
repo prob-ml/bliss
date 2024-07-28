@@ -322,12 +322,12 @@ class Encoder(pl.LightningModule):
                     fig, _axes = plot_or_none
                     self.logger.experiment.add_figure(name, fig)
 
-        metrics.reset()
-
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
+        self.mode_metrics.reset()
         if self.sample_metrics is not None:
             self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
+            self.sample_metrics.reset()
         self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
@@ -336,6 +336,7 @@ class Encoder(pl.LightningModule):
         self.update_metrics(batch, batch_idx)
 
     def on_test_epoch_end(self):
+        # note: metrics are not reset here, to give notebooks access to them
         self.report_metrics(self.mode_metrics, "test/mode", show_epoch=False)
         if self.sample_metrics is not None:
             self.report_metrics(self.sample_metrics, "test/sample", show_epoch=False)
