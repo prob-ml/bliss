@@ -1,13 +1,9 @@
 from pathlib import Path
 
-import numpy as np
 import pytest
 import torch
-from hydra.utils import instantiate
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
-from bliss.surveys.decals import DarkEnergyCameraLegacySurvey as DECaLS
-from bliss.surveys.decals import TractorFullCatalog
 
 # TODO: Add PhotoFullCatalog-specific tests (like loading, restricting by RA/DEC, downloading)
 
@@ -26,7 +22,7 @@ def basic_tilecat():
     d["locs"][0, 0, 1, 0] = torch.tensor([0.5, 0.5])
     d["locs"][0, 1, 1, 0] = torch.tensor([0.5, 0.02])
 
-    return TileCatalog(4, d)
+    return TileCatalog(d)
 
 
 @pytest.fixture(scope="module")
@@ -44,7 +40,7 @@ def multi_source_tilecat():
     d["galaxy_fluxes"][0, 1, 0, :, 2] = torch.tensor([0, 800])
     d["galaxy_fluxes"][0, 1, 1, :, 2] = torch.tensor([300, 600])
 
-    return TileCatalog(4, d)
+    return TileCatalog(d)
 
 
 @pytest.fixture(scope="module")
@@ -78,14 +74,14 @@ class TestBasicTileAndFullCatalogs:
             "locs": torch.zeros((1, 2, 2, 1, 2)),
             "source_type": torch.tensor([[[1], [1]], [[1], [0]]]).reshape((1, 2, 2, 1, 1)),
         }
-        tile_cat = TileCatalog(4, d_tile)
+        tile_cat = TileCatalog(d_tile)
 
         keys = tile_cat.keys()
         assert "locs" in keys
         assert "source_type" in keys
         assert "galaxy_bools" not in keys
 
-        full_cat = tile_cat.to_full_catalog()
+        full_cat = tile_cat.to_full_catalog(4)
         keys = full_cat.keys()
         assert "plocs" in keys
 
@@ -138,9 +134,11 @@ class TestBasicTileAndFullCatalogs:
         tile_cat = full_cat.to_tile_catalog(1, 1, ignore_extra_sources=True)
         assert torch.equal(tile_cat["n_sources"], torch.tensor([[[1, 0], [0, 0]]]))
 
-        # test to_tile_coords and to_full_coords (set max_sources_per_tile to 2)
-        convert_full_cat = full_cat.to_tile_catalog(1, 2).to_full_catalog()
-        assert torch.allclose(convert_full_cat["plocs"], full_cat["plocs"])
+        # test to_tile_coords and to_full_coords
+        tile_slen = 1
+        max_sources = 2
+        fc_converted = full_cat.to_tile_catalog(tile_slen, max_sources).to_full_catalog(tile_slen)
+        assert torch.allclose(fc_converted["plocs"], full_cat["plocs"])
 
         correct_locs = torch.tensor([[[0.5, 0.5], [0, 0]], [[0, 0], [0, 0]]]).reshape(1, 2, 2, 1, 2)
         assert torch.allclose(tile_cat["locs"], correct_locs)
@@ -149,7 +147,7 @@ class TestBasicTileAndFullCatalogs:
         assert torch.equal(tile_cat.galaxy_bools, correct_gbs)
 
     def test_filter_full_catalog_by_ploc_box(self, multi_source_fullcat):
-        cat = multi_source_fullcat.filter_full_catalog_by_ploc_box(torch.tensor([0.0, 0.0]), 1000.0)
+        cat = multi_source_fullcat.filter_by_ploc_box(torch.tensor([0.0, 0.0]), 1000.0)
         assert torch.equal(cat["n_sources"], torch.tensor([1, 2, 0]))
         assert cat["plocs"].shape[1] == 2
         assert torch.allclose(cat["plocs"][0, 0, :], torch.tensor([300.0, 600.0]))
@@ -165,10 +163,10 @@ class TestBasicTileAndFullCatalogs:
             test_datum = torch.load(f)
 
         # we'll do a "round trip" test: convert the catalog to a full catalog and back
-        true_tile_cat0 = TileCatalog(cfg.simulator.prior.tile_slen, test_datum["catalog"])
-        true_full_cat = true_tile_cat0.to_full_catalog()
+        true_tile_cat0 = TileCatalog(test_datum["catalog"])
+        true_full_cat = true_tile_cat0.to_full_catalog(cfg.simulator.decoder.tile_slen)
         true_tile_cat = true_full_cat.to_tile_catalog(
-            tile_slen=cfg.simulator.prior.tile_slen,
+            tile_slen=cfg.simulator.decoder.tile_slen,
             max_sources_per_tile=cfg.simulator.prior.max_sources,
             ignore_extra_sources=True,
         )
@@ -182,30 +180,3 @@ class TestBasicTileAndFullCatalogs:
             v0 = true_tile_cat0[k] * gating
             v1 = true_tile_cat[k] * gating
             assert torch.isclose(v0, v1, rtol=1e-4, atol=1e-6).all()
-
-
-class TestDecalsCatalog:
-    def test_load_decals_from_file(self, cfg, monkeypatch):
-        monkeypatch.setattr("bliss.surveys.decals.DECaLS_PSF.__init__", lambda *_args: None)
-
-        brickname = "3366m010"
-        sample_file = (
-            Path(cfg.paths.decals) / brickname[:3] / brickname / f"tractor-{brickname}.fits"
-        )
-        cfg = cfg.copy()
-        cfg.predict.dataset = cfg.surveys.decals
-        decals = instantiate(cfg.predict.dataset)
-        decals_cat = TractorFullCatalog.from_file(
-            cat_path=sample_file,
-            wcs=decals[0]["wcs"][DECaLS.BANDS.index("r")],
-            height=decals[0]["background"].shape[1],
-            width=decals[0]["background"].shape[2],
-        )
-
-        ras = decals_cat["ra"].numpy()
-        decs = decals_cat["dec"].numpy()
-
-        assert np.isclose(np.min(ras), 336.5, atol=1e-4)
-        assert np.isclose(np.max(ras), 336.75, atol=1e-4)
-        assert np.isclose(np.min(decs), -1.125, atol=1e-4)
-        assert np.isclose(np.max(decs), -0.875, atol=1e-4)

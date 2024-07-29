@@ -6,7 +6,6 @@ from bliss.catalog import TileCatalog
 
 
 def bootstrap_tile_cat(ori_tile_cat: TileCatalog, seed: int):
-    tile_slen = ori_tile_cat.tile_slen
     batch_size = ori_tile_cat.batch_size
     n_tiles_h = ori_tile_cat.n_tiles_h
     n_tiles_w = ori_tile_cat.n_tiles_w
@@ -21,4 +20,4 @@ def bootstrap_tile_cat(ori_tile_cat: TileCatalog, seed: int):
             cur_batch_v = cur_batch_v[random_indices.tolist()]
             tile_dict[k][i] = cur_batch_v.view(n_tiles_h, n_tiles_w, *cur_batch_v.shape[1:])
 
-    return TileCatalog(tile_slen, tile_dict)
+    return TileCatalog(tile_dict)

@@ -60,7 +60,7 @@ def encoder(cfg):
 @pytest.fixture(scope="session")
 def decoder(cfg):
     simulator = instantiate(cfg.simulator)
-    return simulator.image_decoder
+    return simulator.decoder
 
 
 @pytest.fixture(scope="session")

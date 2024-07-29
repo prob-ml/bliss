@@ -1,6 +1,3 @@
-import copy
-from typing import Tuple
-
 import galsim
 import numpy as np
 import torch
@@ -9,45 +6,35 @@ from einops import rearrange
 from torch import nn
 
 from bliss.align import align
-from bliss.catalog import SourceType
+from bliss.catalog import SourceType, TileCatalog
+from bliss.surveys.survey import Survey
 
 
-class ImageDecoder(nn.Module):
+class Decoder(nn.Module):
     def __init__(
         self,
-        psf,
-        bands: Tuple[int, ...],
-        background,
-        flux_calibration_dict: dict,
-        ref_band: int,
+        tile_slen: int,
+        survey: Survey,
+        with_dither: bool = True,
+        with_noise: bool = True,
     ) -> None:
         """Construct a decoder for a set of images.
 
         Args:
-            psf: PSF object
-            bands: bands to use for constructing the decoder, passed from Survey
-            background: sky backgrounds for each image and each band
-            flux_calibration_dict: dictionary specifying elec count conversions by imageid
-            ref_band: reference band for pixel alignment
+            tile_slen: side length in pixels of a tile
+            survey: survey to mimic (psf, background, calibration, etc.)
+            with_dither: if True, apply random pixel shifts to the images and align them
+            with_noise: if True, add Poisson noise to the image pixels
         """
 
         super().__init__()
 
-        self.n_bands = len(bands)
+        self.tile_slen = tile_slen
+        self.survey = survey
+        self.with_dither = with_dither
+        self.with_noise = with_noise
 
-        self.psf_galsim = psf.psf_galsim  # Dictionary indexed by image_id
-        self.psf_params = psf.psf_params  # Dictionary indexed by image_id
-        self.psf_draw_method = getattr(psf, "psf_draw_method", "auto")
-
-        self.background = background
-        self.background.requires_grad_(False)
-
-        self.pixel_scale = psf.pixel_scale
-        self.ref_band = ref_band
-
-        # why is this dict stored as a class attribute, rather than passed to render_images?
-        # ditto for the psf parameters above.
-        self.flux_calibration_dict = flux_calibration_dict
+        survey.prepare_data()
 
     def render_star(self, psf, band, source_params):
         """Render a star with given params and PSF.
@@ -108,39 +95,31 @@ class ImageDecoder(nn.Module):
             SourceType.GALAXY: self.render_galaxy,
         }
 
-    def pixel_shifts(self, coadd_depth: int, n_bands: int, ref_depth: int = 0, no_dither=False):
+    def pixel_shifts(self):
         """Generate random pixel shifts and corresponding WCS list.
         This function generates `n_shifts` random pixel shifts `shifts` and corresponding WCS list
         `wcs` to undo these shifts, relative to `wcs[ref_band]`.
-
-        Args:
-            coadd_depth (int): number of images per band that will be co-added
-            ref_depth (int): depth of the reference band
-            n_bands (int): number of bands
-            no_dither (bool): if True, set all shifts to zero (primarily intended for testing)
 
         Returns:
             shifts (np.ndarray): array of pixel shifts
             wcs (List[WCS]): list of WCS objects
         """
-        shifts = np.random.uniform(-0.5, 0.5, (coadd_depth, n_bands, 2))
-        shifts[ref_depth, self.ref_band] = np.array([0.0, 0.0])
-        if no_dither:
-            shifts.fill(0.0)
+        n_bands = len(self.survey.BANDS)
+        shifts = np.random.uniform(-0.5, 0.5, (n_bands, 2))
+        shifts[self.survey.align_to_band] = np.array([0.0, 0.0])
 
         wcs_base = WCS()
-        base = np.array([5.0, 5.0])
+        base = np.array([5.0, 5.0])  # dither this too for coadds?
         wcs_base.wcs.crpix = base
 
-        wcs_list = [[] for _ in range(coadd_depth)]
-        for d in range(coadd_depth):
-            for b in range(n_bands):
-                if d == ref_depth and b == self.ref_band:
-                    wcs_list[d].append(wcs_base.low_level_wcs)
-                    continue
-                bnd_wcs = WCS()
-                bnd_wcs.wcs.crpix = base + shifts[d, b]
-                wcs_list[d].append(bnd_wcs.low_level_wcs)
+        wcs_list = []
+        for b in range(n_bands):
+            if b == self.survey.align_to_band:
+                wcs_list.append(wcs_base.low_level_wcs)
+                continue
+            bnd_wcs = WCS()
+            bnd_wcs.wcs.crpix = base + shifts[b]
+            wcs_list.append(bnd_wcs.low_level_wcs)
         return shifts, wcs_list
 
     def coadd_images(self, images):
@@ -151,120 +130,90 @@ class ImageDecoder(nn.Module):
             coadded_images[b] = self.survey.coadd_images(images[b])
         return torch.from_numpy(coadded_images).float()
 
-    def align_images(self, images, wcs_batch):
-        """Align images to the reference depth and band."""
-        batch_size = images.shape[0]
-        for b in range(batch_size):
-            aligned_image = align(
-                images[b].numpy(),
-                wcs_list=wcs_batch[b],
-                ref_depth=0,
-                ref_band=self.ref_band,
-            )
-            images[b] = torch.from_numpy(aligned_image)
-        return images
-
-    def draw_sources_on_band_image(
-        self, band_img, n_sources, full_cat, batch, psf, band, image_dims, shift
-    ):
-        slen_h, slen_w = image_dims
-        for s in range(n_sources):
-            source_params = full_cat.one_source(batch, s)
-            source_type = source_params["source_type"].item()
-            renderer = self.source_renderers[source_type]
-            galsim_obj = renderer(psf, band, source_params)
-            plocs0, plocs1 = source_params["plocs"]
-            offset = np.array([plocs1 - (slen_w / 2), plocs0 - (slen_h / 2)])
-            offset += shift
-
-            # essentially all the runtime of the simulator is incurred by this call
-            # to drawImage
-            galsim_obj.drawImage(
-                offset=offset,
-                method=self.psf_draw_method,
-                add_to_image=True,
-                image=band_img,
-            )
-
-    def render_images(
-        self, tile_cat, image_ids, image_id_indices, coadd_depth=1, add_dither=True, add_noise=True
-    ):
-        """Render images from a tile catalog."""
-        tile_cat = copy.deepcopy(tile_cat)  # make a copy to avoid modifying input
+    def render_image(self, tile_cat):
+        """Render a single image from a tile catalog."""
         batch_size, n_tiles_h, n_tiles_w = tile_cat["n_sources"].shape
-        assert len(image_ids) == batch_size
+        assert batch_size == 1
 
-        slen_h = tile_cat.tile_slen * n_tiles_h
-        slen_w = tile_cat.tile_slen * n_tiles_w
-        images_shape = (batch_size * coadd_depth, self.n_bands, slen_h, slen_w)
-        background = self.background.sample(images_shape, image_id_indices=image_id_indices)
-        background = rearrange(
-            background, "b (cd bands) h w -> b cd bands h w", cd=coadd_depth, bands=self.n_bands
-        )
-        images = background.clone()
-        images_np = images.numpy()  # memory is shared between images and images_np
+        slen_h = self.tile_slen * n_tiles_h
+        slen_w = self.tile_slen * n_tiles_w
 
-        # use the PSF from specified image_id
-        psfs = [self.psf_galsim[image_ids[b]] for b in range(batch_size)]
-        param_list = [self.psf_params[image_ids[b]] for b in range(batch_size)]
-        psf_params = torch.stack(param_list, dim=0)
+        image = np.zeros((len(self.survey.BANDS), slen_h, slen_w), dtype=np.float32)
 
+        image_idx = np.random.randint(len(self.survey), dtype=int)
+        frame = self.survey[image_idx]
+
+        # sample background from a random position in the frame
+        height, width = frame["background"].shape[-2:]
+        h_diff, w_diff = height - slen_h, width - slen_w
+        h = 0 if h_diff == 0 else np.random.randint(h_diff)
+        w = 0 if w_diff == 0 else np.random.randint(w_diff)
+        background = frame["background"][:, h : (h + slen_h), w : (w + slen_w)]
+        image += background
+
+        full_cat = tile_cat.to_full_catalog(self.tile_slen)
+        n_sources = int(full_cat["n_sources"][0].item())
+
+        # calibration: convert from (linear) physical units to electron counts
         # use the specified flux_calibration ratios indexed by image_id
-        flux_calibration_rats = [
-            self.flux_calibration_dict[image_ids[b]] for b in range(batch_size)
-        ]
-
-        for i in range(batch_size):
-            # Convert from (linear) physical units to electron counts
-            tile_cat["star_fluxes"][i] *= flux_calibration_rats[i]
+        avg_nelec_conv = np.mean(frame["flux_calibration"], axis=-1)
+        if n_sources > 0:
+            full_cat["star_fluxes"] *= rearrange(avg_nelec_conv, "bands -> 1 1 bands")
             if "galaxy_fluxes" in tile_cat:
-                tile_cat["galaxy_fluxes"][i] *= flux_calibration_rats[i]  # noqa: WPS529
-
-        full_cat = tile_cat.to_full_catalog()
+                full_cat["galaxy_fluxes"] *= avg_nelec_conv
 
         # generate random WCS shifts as manual image dithering via unaligning WCS
-        wcs_batch = []
+        if self.with_dither:
+            pixel_shifts, wcs_list = self.pixel_shifts()
 
-        # this loop is painfully slow and somewhat messy; we should interact with
-        # galsim in a more efficient way
-        for i in range(batch_size):
-            n_sources = int(full_cat["n_sources"][i].item())
-            psf = psfs[i]
-            for d in range(coadd_depth):
-                depth_band_shifts, depth_band_wcs_list = self.pixel_shifts(
-                    coadd_depth,
-                    self.n_bands,
-                    no_dither=(not add_dither),
+        for band, _band_letter in enumerate(self.survey.BANDS):
+            band_img = galsim.Image(array=image[band], scale=self.survey.psf.pixel_scale)
+
+            for s in range(n_sources):
+                source_params = full_cat.one_source(0, s)
+                source_type = source_params["source_type"].item()
+                renderer = self.source_renderers[source_type]
+                galsim_obj = renderer(frame["psf_galsim"], band, source_params)
+                plocs0, plocs1 = source_params["plocs"]
+                offset = np.array([plocs1 - (slen_w / 2), plocs0 - (slen_h / 2)])
+                if self.with_dither:
+                    offset += pixel_shifts[band]
+
+                # essentially all the runtime of the simulator is incurred by this call
+                # to drawImage
+                galsim_obj.drawImage(
+                    offset=offset,
+                    method=getattr(self.survey.psf, "psf_draw_method", "auto"),
+                    add_to_image=True,
+                    image=band_img,
                 )
-                wcs_batch.append(depth_band_wcs_list)
-                for band in range(self.n_bands):
-                    band_img = galsim.Image(array=images_np[i, d, band], scale=self.pixel_scale)
-                    self.draw_sources_on_band_image(
-                        band_img,
-                        n_sources,
-                        full_cat,
-                        i,
-                        psf,
-                        band,
-                        image_dims=(slen_h, slen_w),
-                        shift=depth_band_shifts[d, band],
-                    )
 
-                    if add_noise:
-                        poisson_noise = galsim.PoissonNoise(sky_level=0.0)  # noqa: WPS220
-                        band_img.addNoise(poisson_noise)  # noqa: WPS220
+            if self.with_noise:
+                poisson_noise = galsim.PoissonNoise(sky_level=0.0)
+                band_img.addNoise(poisson_noise)
 
-                    # we're producing sky subtracted images
-                    band_img -= background[i, d, band].numpy()
+        # we're producing sky subtracted images
+        image -= background
 
-                    # convert electron counts to physical units
-                    band_img /= flux_calibration_rats[i][band]
+        # convert electron counts to physical units (now what we've subtracted the background)
+        image /= rearrange(avg_nelec_conv, "bands -> bands 1 1")
 
-        images = self.align_images(images, wcs_batch)
+        if self.with_dither:
+            image = align(image, [wcs_list], self.survey.align_to_band)
 
-        if coadd_depth > 1:
-            images = self.coadd_images(images)
-        else:
-            images = images.squeeze(1)
+        return torch.from_numpy(image), frame["psf_params"]
 
-        return images, psf_params
+    def render_images(self, tile_cat):
+        """Render images from a tile catalog."""
+        batch_size = tile_cat["n_sources"].shape[0]
+
+        images = []
+        psf_params = []
+        for i in range(batch_size):
+            d = {k: v[i : (i + 1)] for k, v in tile_cat.items()}
+            tc_one = TileCatalog(d)
+            image, psf_param = self.render_image(tc_one)
+            images.append(image)
+            psf_params.append(psf_param)
+
+        return torch.stack(images, dim=0), torch.stack(psf_params, dim=0)

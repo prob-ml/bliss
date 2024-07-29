@@ -1,0 +1,105 @@
+---
+defaults:
+    - ../../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+data_gen:
+    data_dir: /nfs/turbo/lsa-regier/scratch/kapnadak/new_data
+    image_size: 1280
+    tile_size: 128
+    nfiles: 5000
+    n_catalogs_per_file: 500
+    bands: ["g", "r", "i", "z"]
+    min_flux_for_loss: 0
+
+prior:
+    _target_: case_studies.galaxy_clustering.prior.GalaxyClusterPrior
+    survey_bands: ["g", "r", "i", "z"]  # SDSS available band filters
+    reference_band: 1  # SDSS r-band
+    star_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
+    n_tiles_h: 56
+    n_tiles_w: 56
+    tile_slen: 128
+    batch_size: 1
+    max_sources: 6
+    mean_sources: 0.48
+    min_sources: 0
+    prob_galaxy: 0.2
+    star_flux_exponent: 0.9859821185389767
+    star_flux_truncation: 5685.588160703261
+    star_flux_loc: -1.162430157551662
+    star_flux_scale: 1.4137911256506595
+
+cached_simulator:
+    _target_: bliss.cached_dataset.CachedSimulatedDataModule
+    batch_size: 2
+    splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
+    num_workers: 8
+    cached_data_path: /nfs/turbo/lsa-regier/scratch/kapnadak/new_data/file_data
+    train_transforms: []
+
+train:
+    trainer:
+        precision: 32-true
+        accumulate_grad_batches: 10
+
+variational_factors:
+    - _target_: bliss.encoder.variational_dist.BernoulliFactor
+      name: membership
+      sample_rearrange: "b ht wt -> b ht wt 1 1"
+      nll_rearrange: "b ht wt 1 1 -> b ht wt"
+      nll_gating: null
+
+my_metrics:
+  cluster_membership_acc:
+    _target_: case_studies.galaxy_clustering.encoder.metrics.ClusterMembershipAccuracy
+
+my_image_normalizers:
+    asinh:
+        _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+        q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
+encoder:
+    _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
+    survey_bands: ["g", "r", "i", "z"]
+    image_normalizers: ${my_image_normalizers}
+    mode_metrics:
+      _target_: torchmetrics.MetricCollection
+      _convert_: "partial"
+      metrics: ${my_metrics}
+    sample_metrics:
+      _target_: torchmetrics.MetricCollection
+      _convert_: "partial"
+      metrics: ${my_metrics}
+    var_dist:
+        _target_: case_studies.galaxy_clustering.encoder.variational_dist.GalaxyClusterVariationalDist
+        tile_slen: ${encoder.tile_slen}
+        factors: ${variational_factors}
+    use_checkerboard: false
+
+predict:
+    cached_dataset:
+        _target_: case_studies.galaxy_clustering.cached_dataset.CachedDESModule
+        cached_data_path: /nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles
+        tiles_per_img: 64
+        batch_size: 2
+        num_workers: 4
+    trainer:
+        _target_: pytorch_lightning.Trainer
+        accelerator: "gpu"
+        devices: [6,5]
+        strategy: "ddp"
+        precision: ${train.trainer.precision}
+        callbacks:
+            - ${predict.callbacks.writer}
+    callbacks:
+        writer:
+                _target_: case_studies.galaxy_clustering.inference.inference_callbacks.DESPredictionsWriter
+                output_dir: "/data/scratch/des/dr2_detection_output/run_1"
+                write_interval: "batch"
+    encoder: ${encoder}
+    weight_save_path: /nfs/turbo/lsa-regier/scratch/gapatron/best_encoder.ckpt
+    device: "cuda:0"
+    output_save_path: "/data/scratch/des/dr2_detection_output/run_0"

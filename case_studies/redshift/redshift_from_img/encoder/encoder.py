@@ -6,9 +6,7 @@ from bliss.encoder.encoder import Encoder
 
 class RedshiftsEncoder(Encoder):
     def update_metrics(self, batch, batch_idx):
-        target_cat = TileCatalog(
-            self.tile_slen, batch["tile_catalog"]
-        ).get_brightest_sources_per_tile()
+        target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
         target_cat = target_cat.filter_by_flux(
             min_flux=self.min_flux_for_loss,
             band=self.reference_band,
