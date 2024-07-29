@@ -24,12 +24,6 @@ my_variational_factors:
     nll_rearrange: "b ht wt 1 1 -> b ht wt"
     nll_gating:
       _target_: bliss.encoder.variational_dist.SourcesGating
-  # - _target_: case_studies.dc2_cataloging.utils.variational_dist.BernoulliFactorReturnProbs
-  #   name: source_type
-  #   sample_rearrange: "b ht wt -> b ht wt 1 1"
-  #   nll_rearrange: "b ht wt 1 1 -> b ht wt"
-  #   nll_gating:
-  #     _target_: bliss.encoder.variational_dist.SourcesGating
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: star_fluxes
     dim: 6
@@ -130,7 +124,6 @@ encoder:
     image_normalizers: ${my_image_normalizers}
     var_dist:
         _target_: case_studies.dc2_multidetection.utils.variational_dist.MultiVariationalDist
-        # _target_: case_studies.dc2_cataloging.utils.variational_dist.VariationalDistReturnProbs
         tile_slen: ${surveys.dc2.tile_slen}
         factors: ${my_variational_factors}
         repeat_times: 5

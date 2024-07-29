@@ -7,12 +7,12 @@ from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.metrics import CatalogMatcher
-from case_studies.dc2_cataloging.utils.encoder import EncoderAddingSourceMask
+from case_studies.dc2_cataloging.utils.encoder import MyEncoder
 from case_studies.dc2_multidetection.utils.convnet import SimpleCatalogNet, SimpleFeaturesNet
 from case_studies.dc2_multidetection.utils.variational_dist import MultiVariationalDist
 
 
-class MultiDetectEncoder(EncoderAddingSourceMask):
+class MultiDetectEncoder(MyEncoder):
     def __init__(
         self,
         survey_bands: list,

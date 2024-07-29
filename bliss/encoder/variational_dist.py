@@ -169,6 +169,16 @@ class BivariateNormalFactor(VariationalFactor):
 
         return Independent(Normal(mean, sd), 1)
 
+    def get_first_dist(self, params):
+        mean = params[:, :, :, 0]
+        sd = params[:, :, :, 2].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        return Normal(mean, sd)
+
+    def get_second_dist(self, params):
+        mean = params[:, :, :, 1]
+        sd = params[:, :, :, 3].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        return Normal(mean, sd)
+
 
 class TDBNFactor(VariationalFactor):
     """Produces truncated bivariate normal distributions from unconstrained parameters."""
