@@ -1,12 +1,8 @@
-# flake8: noqa
-# darglint: ignore
-
 import torch
 from torch import nn
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
-    """Pad to 'same' shape outputs."""
     if d > 1:
         k = (
             d * (k - 1) + 1 if isinstance(k, int) else [d * (x - 1) + 1 for x in k]
@@ -79,8 +75,6 @@ class C3(nn.Module):
 
 
 class C2f(nn.Module):
-    """Faster Implementation of CSP Bottleneck with 2 convolutions."""
-
     def __init__(self, c1, c2, n=1, shortcut=False, e=0.5):
         super().__init__()
         self.c = int(c2 * e)  # hidden channels
@@ -92,7 +86,6 @@ class C2f(nn.Module):
         )
 
     def forward(self, x):
-        """Forward pass through C2f layer."""
         y = list(self.cv1(x).chunk(2, 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
@@ -121,8 +114,6 @@ class RepVGGDW(torch.nn.Module):
 
 
 class CIB(nn.Module):
-    """Standard bottleneck."""
-
     def __init__(self, c1, c2, shortcut=True, e=0.5, lk=False):
         super().__init__()
         ch = int(c2 * e)  # hidden channels
@@ -137,21 +128,16 @@ class CIB(nn.Module):
         self.add = shortcut and c1 == c2
 
     def forward(self, x):
-        """'forward()' applies the YOLO FPN to input data."""
         return x + self.cv1(x) if self.add else self.cv1(x)
 
 
 class C2fCIB(C2f):
-    """Faster Implementation of CSP Bottleneck with 2 convolutions."""
-
     def __init__(self, c1, c2, n=1, shortcut=False, lk=False, e=0.5):
         super().__init__(c1, c2, n, shortcut, e)
         self.m = nn.ModuleList(CIB(self.c, self.c, shortcut, e=1.0, lk=lk) for _ in range(n))
 
 
 class SPPF(nn.Module):
-    """Spatial Pyramid Pooling - Fast (SPPF) layer for YOLOv5 by Glenn Jocher."""
-
     def __init__(self, c1, c2, k=5):
         super().__init__()
         ch = c1 // 2  # hidden channels
@@ -160,7 +146,6 @@ class SPPF(nn.Module):
         self.m = nn.MaxPool2d(kernel_size=k, stride=1, padding=k // 2)
 
     def forward(self, x):
-        """Forward pass through Ghost Convolution block."""
         x = self.cv1(x)
         y1 = self.m(x)
         y2 = self.m(y1)
@@ -174,25 +159,24 @@ class Attention(nn.Module):
         self.head_dim = dim // num_heads
         self.key_dim = int(self.head_dim * attn_ratio)
         self.scale = self.key_dim**-0.5
-        nh_kd = nh_kd = self.key_dim * num_heads
+        nh_kd = self.key_dim * num_heads
         h = dim + nh_kd * 2
         self.qkv = ConvBlock(dim, h, 1, use_activation=False)
         self.proj = ConvBlock(dim, dim, 1, use_activation=False)
         self.pe = ConvBlock(dim, dim, 3, 1, groups=dim, use_activation=False)
 
     def forward(self, x):
-        B, C, H, W = x.shape
-        N = H * W
+        b, c, h, w = x.shape
+        n = h * w
         qkv = self.qkv(x)
-        q, k, v = qkv.view(B, self.num_heads, self.key_dim * 2 + self.head_dim, N).split(
+        q, k, v = qkv.view(b, self.num_heads, self.key_dim * 2 + self.head_dim, n).split(
             [self.key_dim, self.key_dim, self.head_dim], dim=2
         )
 
         attn = (q.transpose(-2, -1) @ k) * self.scale
         attn = attn.softmax(dim=-1)
-        x = (v @ attn.transpose(-2, -1)).view(B, C, H, W) + self.pe(v.reshape(B, C, H, W))
-        x = self.proj(x)
-        return x
+        x = (v @ attn.transpose(-2, -1)).view(b, c, h, w) + self.pe(v.reshape(b, c, h, w))
+        return self.proj(x)
 
 
 class PSA(nn.Module):

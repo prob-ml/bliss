@@ -151,8 +151,9 @@ class LinearSumAssigner(DistAssigner):
 
 
 class TaskAlignedAssigner(PartialDistAssigner):
-    def _get_est_to_true_mapping(self, est_tile_cat, true_tile_cat, topk):
-        est_to_true_locs_dist, true_mask = self._get_partial_dist_matrix(
+    @classmethod
+    def _get_est_to_true_mapping(cls, est_tile_cat, true_tile_cat, topk):
+        est_to_true_locs_dist, true_mask = cls._get_partial_dist_matrix(
             est_tile_cat, true_tile_cat
         )  # (B, m, m), (B, 1, m)
         true_to_est_locs_dist, true_mask = est_to_true_locs_dist.permute(
@@ -199,7 +200,7 @@ class TaskAlignedAssigner(PartialDistAssigner):
         est_to_true_mapping, est_mask = self._get_est_to_true_mapping(
             est_tile_cat, true_tile_cat, topk
         )  # (B, m, m), (B, m, 1)
-        assert (est_to_true_mapping.sum(-1) <= 1).all()
+        assert (est_to_true_mapping.sum(dim=-1) <= 1).all()
         est_to_true_indices = est_to_true_mapping.to(dtype=torch.int8).argmax(
             dim=-1, keepdim=True
         )  # (B, m, 1)
@@ -274,7 +275,7 @@ class MultiVariationalDist(torch.nn.Module):
             dtype=true_tile_dict["n_sources"].dtype
         )
         cosmodc2_mask = true_tile_dict.get("cosmodc2_mask", None)
-        if cosmodc2_mask:
+        if cosmodc2_mask is not None:
             padded_true_tile_dict["cosmodc2_mask"] = self._pad_along_max_sources(cosmodc2_mask)
         target_tile_dict = {k: torch.zeros_like(v) for k, v in padded_true_tile_dict.items()}
 
@@ -334,11 +335,14 @@ class MultiVariationalDist(torch.nn.Module):
             topk,
         )
         fp_pairs_list = self._factor_param_pairs(x_cat)
-        total_nll = None
+        total_nll = 0
         for fp_pairs, matched_true_tile_cat in zip(fp_pairs_list, matched_true_tile_cat_list):
-            cur_nll = sum(qk.compute_nll(params, matched_true_tile_cat) for qk, params in fp_pairs)
-            if total_nll is not None:
-                total_nll += cur_nll
-            else:
-                total_nll = cur_nll
+            cur_nll = []
+            for qk, params in fp_pairs:
+                nll = qk.compute_nll(params, matched_true_tile_cat)
+                if qk.name == "n_sources":
+                    n_sources = matched_true_tile_cat["n_sources"].bool()
+                    nll = torch.where(n_sources, nll, 0.1 * nll)
+                cur_nll.append(nll)
+            total_nll += sum(cur_nll)
         return total_nll

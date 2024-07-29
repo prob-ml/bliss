@@ -168,8 +168,8 @@ train:
     trainer:
         logger:
             name: DC2_cataloging_exp_07
-            version: exp_07-26-2  # change it before running the code
-        devices: [4]  # change it before running the code
+            version: exp_07-29-1  # change it before running the code
+        devices: [7]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
     data_source: ${surveys.dc2}
