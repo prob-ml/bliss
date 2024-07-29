@@ -36,13 +36,13 @@ class RedshiftMeanSquaredError(Metric):
             # For RedshiftsCatalogMatcher
             if isinstance(est_cat, BaseTileCatalog):
                 self.total += tcat_matches.sum()
-                true_red = true_cat["redshifts"][i][tcat_matches]
-                est_red = est_cat["redshifts"][i][ecat_matches]
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
             # For CatalogMatcher
             else:
                 self.total += tcat_matches.size(0)
-                true_red = true_cat["redshifts"][i, tcat_matches, :]
-                est_red = est_cat["redshifts"][i, ecat_matches, :]
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
             red_err = ((true_red - est_red).abs() ** 2).sum()
 
@@ -68,17 +68,22 @@ class RedshiftMeanSquaredErrorBin(MetricBin):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
 
-            true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
-            est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+                tcat_matches = rearrange(tcat_matches, "h w 1 1 -> h w 1")
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_mag = (
-                true_cat.on_fluxes[i][..., self.mag_band]
-                .unsqueeze(-1)[tcat_matches]
-                .to(self.device)
-            )
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)
 
             red_err = (true_red - est_red).abs() ** 2
+            if len(red_err.shape) > 1:
+                red_err = red_err.squeeze(-1)
 
             self.total += bin_indices.bincount(minlength=self.n_bins)
             for bin_idx, err in zip(bin_indices, red_err):
@@ -89,6 +94,50 @@ class RedshiftMeanSquaredErrorBin(MetricBin):
         mse_per_bin = self.sum_squared_error / self.total
         mse_per_bin_results = {
             f"redshifts/mse_bin_{i}": mse_per_bin[i].item() for i in range(len(mse_per_bin))
+        }
+        return {**mse_per_bin_results}
+
+
+class RedshiftMeanSquaredErrorBlendedness(MetricBin):
+    def __init__(
+        self,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.add_state("sum_squared_error", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
+
+    def update(self, true_cat, est_cat, matching):
+        cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+                tcat_matches = rearrange(tcat_matches, "h w 1 1 -> h w 1")
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
+
+            true_blendedness = true_cat["blendedness"][i][..., 0][tcat_matches].to(self.device)
+            bin_indices = torch.bucketize(true_blendedness, cutoffs)
+
+            red_err = (true_red - est_red).abs() ** 2
+            if len(red_err.shape) > 1:
+                red_err = red_err.squeeze(-1)
+
+            self.total += bin_indices.bincount(minlength=self.n_bins)
+            for bin_idx, err in zip(bin_indices, red_err):
+                self.sum_squared_error[bin_idx] += err
+
+    def compute(self):
+        print(f"total num of pts: {self.total}")  # noqa: WPS421
+        mse_per_bin = self.sum_squared_error / self.total
+        mse_per_bin_results = {
+            f"redshifts/mse_blend_{i}": mse_per_bin[i].item() for i in range(len(mse_per_bin))
         }
         return {**mse_per_bin_results}
 
@@ -107,10 +156,17 @@ class RedshiftOutlierFraction(Metric):
     def update(self, true_cat, est_cat, matching):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            self.total += tcat_matches.sum()
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                self.total += tcat_matches.sum()
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+            # For CatalogMatcher
+            else:
+                self.total += tcat_matches.size(0)
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_red = true_cat["redshifts"][i][tcat_matches]
-            est_red = est_cat["redshifts"][i][ecat_matches]
             metric_outlier = torch.abs(true_red - est_red) / (1 + true_red)
             self.num_outlier += (metric_outlier > 0.15).sum()
 
@@ -138,17 +194,23 @@ class RedshiftOutlierFractionBin(MetricBin):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
 
-            true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
-            est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
-            true_mag = (
-                true_cat.on_fluxes[i][..., self.mag_band]
-                .unsqueeze(-1)[tcat_matches]
-                .to(self.device)
-            )
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+                tcat_matches = rearrange(tcat_matches, "h w 1 1 -> h w 1")
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
+
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)
 
             metric_outlier = torch.abs(true_red - est_red) / (1 + true_red)
             metric_outlier = metric_outlier > 0.15
+            if len(metric_outlier.shape) > 1:
+                metric_outlier = metric_outlier.squeeze(-1)
 
             self.total += bin_indices.bincount(minlength=self.n_bins)
             for bin_idx, outlier in zip(bin_indices, metric_outlier):
@@ -177,10 +239,18 @@ class RedshiftOutlierFractionCata(Metric):
     def update(self, true_cat, est_cat, matching):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
-            self.total += tcat_matches.sum()
 
-            true_red = true_cat["redshifts"][i][tcat_matches]
-            est_red = est_cat["redshifts"][i][ecat_matches]
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                self.total += tcat_matches.sum()
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+            # For CatalogMatcher
+            else:
+                self.total += tcat_matches.size(0)
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
+
             metric_outlier_cata = torch.abs(true_red - est_red)
             self.num_outlier_cata += (metric_outlier_cata > 1).sum()
 
@@ -208,17 +278,23 @@ class RedshiftOutlierFractionCataBin(MetricBin):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
 
-            true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
-            est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
-            true_mag = (
-                true_cat.on_fluxes[i][..., self.mag_band]
-                .unsqueeze(-1)[tcat_matches]
-                .to(self.device)
-            )
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+                tcat_matches = rearrange(tcat_matches, "h w 1 1 -> h w 1")
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
+
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)
 
             metric_outlier_cata = torch.abs(true_red - est_red)
             metric_outlier_cata = metric_outlier_cata > 1
+            if len(metric_outlier_cata.shape) > 1:
+                metric_outlier_cata = metric_outlier_cata.squeeze(-1)
 
             self.total += bin_indices.bincount(minlength=self.n_bins)
             for bin_idx, outlier in zip(bin_indices, metric_outlier_cata):
@@ -246,14 +322,21 @@ class RedshiftNormalizedMedianAbsDev(Metric):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
 
-            true_red = true_cat["redshifts"][i][tcat_matches]
-            est_red = est_cat["redshifts"][i][ecat_matches]
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
             metrics = (true_red - est_red) / (1 + true_red)
             self.metrics.append(metrics)
 
     def compute(self):
-        bias = torch.median(dim_zero_cat(self.metrics))
-        nmad_all = torch.abs(self.metrics - bias)
+        concat_metrics = dim_zero_cat(self.metrics)
+        bias = torch.median(concat_metrics)
+        nmad_all = torch.abs(concat_metrics - bias)
         nmad = 1.4826 * torch.median(nmad_all)
         return {"redshifts/nmad": nmad.item()}
 
@@ -272,17 +355,22 @@ class RedshiftNormalizedMedianAbsDevBin(MetricBin):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
 
-            true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
-            est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+                tcat_matches = rearrange(tcat_matches, "h w 1 1 -> h w 1")
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_mag = (
-                true_cat.on_fluxes[i][..., self.mag_band]
-                .unsqueeze(-1)[tcat_matches]
-                .to(self.device)
-            )
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)
 
             metrics = (true_red - est_red) / (1 + true_red)
+            if len(metrics.shape) > 1:
+                metrics = metrics.squeeze(-1)
 
             for bin_idx, metric in zip(bin_indices, metrics):
                 metric = metric.to(self.metrics[bin_idx].device)
@@ -329,8 +417,15 @@ class RedshiftBias(Metric):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
 
-            true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
-            est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
+
             metrics = (true_red - est_red) / (1 + true_red)
             self.bias.append(metrics)
 
@@ -353,17 +448,22 @@ class RedshiftBiasBin(MetricBin):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
 
-            true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
-            est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+                tcat_matches = rearrange(tcat_matches, "h w 1 1 -> h w 1")
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_mag = (
-                true_cat.on_fluxes[i][..., self.mag_band]
-                .unsqueeze(-1)[tcat_matches]
-                .to(self.device)
-            )
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)
 
             metrics = (true_red - est_red) / (1 + true_red)
+            if len(metrics.shape) > 1:
+                metrics = metrics.squeeze(-1)
 
             for bin_idx, metric in zip(bin_indices, metrics):
                 metric = metric.to(self.bias[bin_idx].device)
@@ -381,6 +481,93 @@ class RedshiftBiasBin(MetricBin):
         # compute
         bias_per_bin = [torch.median(metric) for metric in metrics]
         return {f"redshifts/bias_bin_{i}": bias_per_bin[i].item() for i in range(len(bias_per_bin))}
+
+    def reset(self):
+        # Reset the state to the initial empty tensors
+        self.bias = []  # pylint: disable=attribute-defined-outside-init
+        for _ in range(self.n_bins):
+            self.bias.append(torch.tensor([]))
+
+
+class RedshiftAbsBias(Metric):
+    """bias = Median(abs(z_true - z_pred) / (1 + z_true)))."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_state(
+            "bias", default=[], dist_reduce_fx="cat"
+        )  # store (z_true - z_pred) / (1 + z_true)  # pylint: disable=line-too-long
+
+    def update(self, true_cat, est_cat, matching):
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
+
+            metrics = torch.abs(true_red - est_red) / (1 + true_red)
+            self.bias.append(metrics)
+
+    def compute(self):
+        bias = torch.median(dim_zero_cat(self.bias))
+        return {"redshifts/bias_abs": bias.item()}
+
+
+class RedshiftAbsBiasBin(MetricBin):
+    """bias = Median(abs(z_true - z_pred) / (1 + z_true)))."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_state("bias", default=[])  # store (z_true - z_pred) / (1 + z_true)
+        for _ in range(self.n_bins):
+            self.bias.append(torch.tensor([]))
+
+    def update(self, true_cat, est_cat, matching):
+        cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+                tcat_matches = rearrange(tcat_matches, "h w 1 1 -> h w 1")
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
+
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
+            bin_indices = torch.bucketize(true_mag, cutoffs)
+
+            metrics = torch.abs(true_red - est_red) / (1 + true_red)
+            if len(metrics.shape) > 1:
+                metrics = metrics.squeeze(-1)
+
+            for bin_idx, metric in zip(bin_indices, metrics):
+                metric = metric.to(self.bias[bin_idx].device)
+                self.bias[bin_idx] = torch.cat((self.bias[bin_idx], metric.unsqueeze(0)), dim=0)
+
+    def compute(self):
+        # reduce across distributed system
+        metrics = []
+        for _ in range(self.n_bins):
+            metrics.append(torch.tensor([], device=self.device))
+        for i, metric in enumerate(self.bias):
+            metric = metric.to(self.device)
+            metrics[i % self.n_bins] = torch.cat((metrics[i % self.n_bins], metric), dim=0)
+
+        # compute
+        bias_per_bin = [torch.median(metric) for metric in metrics]
+        return {
+            f"redshifts/bias_abs_bin_{i}": bias_per_bin[i].item() for i in range(len(bias_per_bin))
+        }
 
     def reset(self):
         # Reset the state to the initial empty tensors

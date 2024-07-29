@@ -9,6 +9,9 @@ mode: train
 global_setting:
     min_flux_for_loss: 50  # you need to regenerate split_results after changing this number
 
+paths:
+    root: /home/qiaozhih/bliss
+
 variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
     name: redshifts
@@ -21,7 +24,6 @@ encoder:
     # _target_: bliss.encoder.encoder.Encoder
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
-    tiles_to_crop: 1
     min_flux_for_loss: ${global_setting.min_flux_for_loss}
     min_flux_for_metrics: 100
     optimizer_params:
@@ -29,20 +31,24 @@ encoder:
     scheduler_params:
         milestones: [32]
         gamma: 0.1
-    image_normalizer:
-      _target_: bliss.encoder.image_normalizer.ImageNormalizer
-      bands: [0, 1, 2, 3, 4, 5]
-      include_original: false
-      include_background: false
-      concat_psf_params: false
-      num_psf_params: 4  # for SDSS, 4 for DC2
-      log_transform_stdevs: []
-      use_clahe: true
-      clahe_min_stdev: 200
-    # matcher:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftsCatalogMatcher
-    #     match_gating: is_galaxy
-    metrics:
+    image_normalizers:
+        psf:
+            _target_: bliss.encoder.image_normalizer.PsfAsImage
+            num_psf_params: 4  # 6 for SDSS, 4 for DC2, 10 for DES
+        clahe:
+            _target_: bliss.encoder.image_normalizer.ClaheNormalizer
+            min_stdev: 200
+        asinh:
+            _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+            q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+    matcher:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftsCatalogMatcher
+        match_gating: is_galaxy
+    mode_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        metrics: ${my_metrics}
+    sample_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
         metrics: ${my_metrics}
@@ -53,31 +59,31 @@ encoder:
     use_checkerboard: false
 
 my_metrics:
-    redshift_mearn_square_error:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredError
-    redshift_mearn_square_error_bin:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
-        mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-    redshift_outlier_fraction:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFraction
-    redshift_outlier_fraction_bin:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
-        mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-    redshift_nmad:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDev
-    redshift_nmad_bin:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDevBin
-        mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-    redshift_outlier_fraction_catastrophic:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCata
-    redshift_outlier_fraction_catastrophic_bin:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
-        mag_bin_cutoffs: [200, 400, 600, 800, 1000]
-    redshift_bias:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBias
-    redshift_bias_bin:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
-        mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+    # redshift_mearn_square_error:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredError
+    # redshift_mearn_square_error_bin:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+    #     mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+    # redshift_outlier_fraction:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFraction
+    # redshift_outlier_fraction_bin:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+    #     mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+    # redshift_nmad:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDev
+    # redshift_nmad_bin:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDevBin
+    #     mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+    # redshift_outlier_fraction_catastrophic:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCata
+    # redshift_outlier_fraction_catastrophic_bin:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+    #     mag_bin_cutoffs: [200, 400, 600, 800, 1000]
+    # redshift_bias:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBias
+    # redshift_bias_bin:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
+    #     mag_bin_cutoffs: [200, 400, 600, 800, 1000]
 
 train:
     trainer:
@@ -96,8 +102,8 @@ train:
         val_check_interval: 0.5
         # check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
-        devices: [5, 6]
-        max_epochs: 0
+        devices: [1, 4]
+        max_epochs: 50
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
@@ -113,12 +119,11 @@ train:
             mode: min
             patience: 500
     data_source: ${surveys.dc2}
-    pretrained_weights: /home/qiaozhih/bliss/case_studies/redshift/redshift_from_img/DC2_redshift_training/DC2_redshift_only_bin/checkpoints/encoder_0.174964.ckpt
-    test_best: false
-
+    pretrained_weights: null
 
 surveys:
     dc2:
-        cat_path: ${paths.root}/case_studies/redshift/redshift_from_img/DC2_generate_catalog_output/merged_catalog_with_flux_over_50.pkl
-        split_results_dir: /data/scratch/qiaozhih/DC2_split_result_all
-        batch_size: 128
+        dc2_cat_path: /home/qiaozhih/bliss/case_studies/redshift/redshift_from_img/DC2_generate_catalog_output/merged_catalog_with_flux_over_50.pkl
+        cached_data_path: /data/scratch/qiaozhih/dc2_cached_data
+        batch_size: 64
+        max_sources_per_tile: 5
