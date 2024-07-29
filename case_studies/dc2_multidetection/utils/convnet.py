@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from case_studies.dc2_cataloging.utils.conv_layers import (
+from case_studies.dc2_multidetection.utils.conv_layers import (
     C3,
     PSA,
     SPPF,

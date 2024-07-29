@@ -118,7 +118,7 @@ my_image_normalizers:
       _target_: case_studies.dc2_cataloging.utils.image_normalizer.NullNormalizer
 
 encoder:
-    _target_: case_studies.dc2_cataloging.utils.encoder.EncoderAddingSourceMask
+    _target_: case_studies.dc2_multidetection.utils.encoder.MultiDetectEncoder
     survey_bands: ["u", "g", "r", "i", "z", "y"]
     reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}
@@ -129,10 +129,14 @@ encoder:
         gamma: 0.1
     image_normalizers: ${my_image_normalizers}
     var_dist:
-        _target_: bliss.encoder.variational_dist.VariationalDist
+        _target_: case_studies.dc2_multidetection.utils.variational_dist.MultiVariationalDist
         # _target_: case_studies.dc2_cataloging.utils.variational_dist.VariationalDistReturnProbs
         tile_slen: ${surveys.dc2.tile_slen}
         factors: ${my_variational_factors}
+        repeat_times: 5
+        assigner:
+          _target_: case_studies.dc2_multidetection.utils.variational_dist.TaskAlignedAssigner
+    one_to_topk: 4
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -156,14 +160,14 @@ encoder:
             restrict_batch: 0
             tiles_to_crop: 0
             tile_slen: ${surveys.dc2.tile_slen}
-    use_double_detect: true
-    use_checkerboard: true
+    use_double_detect: false
+    use_checkerboard: false
 
 train:
     trainer:
         logger:
-            name: DC2_cataloging_exp_07
-            version: exp_07-29-2  # change it before running the code
+            name: DC2_multidetection_exp
+            version: exp_07-29-3  # change it before running the code
         devices: [2]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
