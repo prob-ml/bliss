@@ -1,0 +1,16 @@
+---
+defaults:
+    - ../../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+paths:
+    cached_data: /data/scratch/regier/sdss_like
+
+encoder:
+    use_checkerboard: true
+
+train:
+    trainer:
+        logger:
+            name: sdsslike
