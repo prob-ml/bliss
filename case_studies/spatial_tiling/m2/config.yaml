@@ -86,7 +86,7 @@ prior:
     n_tiles_w: 56
     batch_size: 32
     max_sources: 6
-    mean_sources: 0.48
+    mean_sources: 0.8029160898574715
     min_sources: 0
     prob_galaxy: 0.0
     star_flux_exponent: 0.9859821185389767
@@ -111,7 +111,7 @@ surveys:
 
 generate:
     n_image_files: 16
-    n_batches_per_file: 16
+    n_batches_per_file: 32
     cached_data_path: ${paths.cached_data}
     store_full_catalog: true
 
