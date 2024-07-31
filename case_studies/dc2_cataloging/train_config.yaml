@@ -7,7 +7,7 @@ defaults:
 mode: train
 
 my_variational_factors:
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+  - _target_: case_studies.dc2_cataloging.utils.variational_dist.MyBernoulliFactor
     name: n_sources
     sample_rearrange: null
     nll_rearrange: null
@@ -112,7 +112,7 @@ my_image_normalizers:
       _target_: case_studies.dc2_cataloging.utils.image_normalizer.NullNormalizer
 
 encoder:
-    _target_: case_studies.dc2_cataloging.utils.encoder.MyEncoder
+    _target_: case_studies.dc2_cataloging.utils.encoder.VSBCEncoder
     survey_bands: ["u", "g", "r", "i", "z", "y"]
     reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}

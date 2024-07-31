@@ -2,17 +2,17 @@ import warnings
 from typing import Optional
 
 import torch
-from einops import rearrange
+from einops import rearrange, repeat
 from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.metrics import CatalogMatcher
-from case_studies.dc2_cataloging.utils.encoder import MyEncoder
+from case_studies.dc2_cataloging.utils.encoder import MyBasicEncoder
 from case_studies.dc2_multidetection.utils.convnet import SimpleCatalogNet, SimpleFeaturesNet
 from case_studies.dc2_multidetection.utils.variational_dist import MultiVariationalDist
 
 
-class MultiDetectEncoder(MyEncoder):
+class MultiDetectEncoder(MyBasicEncoder):
     def __init__(
         self,
         survey_bands: list,
@@ -102,6 +102,31 @@ class MultiDetectEncoder(MyEncoder):
                 d[k] = torch.gather(v, dim=-2, index=expanded_accumulated_indices)
         return TileCatalog(d)
 
+    @classmethod
+    def _choose_topk(cls, est_cat: TileCatalog, topk: int):
+        assert topk >= 1
+        n_sources_probs = est_cat["n_sources_probs"][..., 1:2]  # yes_probs (b, nth, ntw, m, 1)
+        _, topk_indices = torch.topk(
+            n_sources_probs, k=topk, dim=-2, largest=True
+        )  # (b, nth, ntw, topk, 1)
+        d = {}
+        for k, v in est_cat.items():
+            if k != "n_sources":
+                repeated_topk_indices = repeat(
+                    topk_indices, "b nth ntw topk 1 -> b nth ntw topk (d 1)", d=v.shape[-1]
+                )
+                d[k] = torch.gather(v, dim=-2, index=repeated_topk_indices)
+            else:
+                repeated_topk_indices = repeat(
+                    topk_indices,
+                    "b nth ntw topk 1 -> b nth ntw topk (d 1)",
+                    d=est_cat["n_sources_mask"].shape[-1],
+                )
+                d["n_sources"] = torch.gather(
+                    est_cat["n_sources_mask"], dim=-2, index=repeated_topk_indices
+                ).sum(dim=(-2, -1))
+        return TileCatalog(d)
+
     @torch.no_grad()
     def sample(self, batch, use_mode=True):
         assert not self.training
@@ -109,6 +134,7 @@ class MultiDetectEncoder(MyEncoder):
         x_cat = self.one_to_one_catalog_net(x_features)
         est_cat = self.var_dist.sample(x_cat, use_mode=use_mode, filter_by_n_sources=True)
         est_cat = self._accumulate_stacked_tile_cat(est_cat)
+        est_cat = self._choose_topk(est_cat, topk=2)
         return self._add_source_mask(est_cat)
 
     def _compute_loss(self, batch, logging_name):
@@ -116,7 +142,6 @@ class MultiDetectEncoder(MyEncoder):
 
         # filter out undetectable sources and split catalog by flux
         target_cat = TileCatalog(batch["tile_catalog"])
-
         # TODO: don't order the light sources by brightness; softmax instead
         target_cat = target_cat.get_brightest_sources_per_tile(
             top_k=self.var_dist.repeat_times,

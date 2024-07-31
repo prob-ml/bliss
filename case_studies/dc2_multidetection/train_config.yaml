@@ -7,7 +7,7 @@ defaults:
 mode: train
 
 my_variational_factors:
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+  - _target_: case_studies.dc2_cataloging.utils.variational_dist.MyBernoulliFactor
     name: n_sources
     sample_rearrange: null
     nll_rearrange: null
@@ -18,7 +18,7 @@ my_variational_factors:
     nll_rearrange: "b ht wt 1 d -> b ht wt d"
     nll_gating:
       _target_: bliss.encoder.variational_dist.SourcesGating
-  - _target_: bliss.encoder.variational_dist.BernoulliFactor
+  - _target_: case_studies.dc2_cataloging.utils.variational_dist.MyBernoulliFactor
     name: source_type
     sample_rearrange: "b ht wt -> b ht wt 1 1"
     nll_rearrange: "b ht wt 1 1 -> b ht wt"
@@ -129,7 +129,7 @@ encoder:
         repeat_times: 5
         assigner:
           _target_: case_studies.dc2_multidetection.utils.variational_dist.TaskAlignedAssigner
-    one_to_topk: 4
+    one_to_topk: 3
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -160,10 +160,10 @@ train:
     trainer:
         logger:
             name: DC2_multidetection_exp
-            version: exp_07-29-3  # change it before running the code
-        devices: [2]  # change it before running the code
+            version: exp_07-30-2  # change it before running the code
+        devices: [5]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
     data_source: ${surveys.dc2}
     pretrained_weights: null
-    seed: 7272
+    seed: 8282

@@ -10,6 +10,7 @@ from scipy.optimize import linear_sum_assignment
 from bliss.catalog import TileCatalog
 from bliss.encoder.variational_dist import VariationalFactor
 from bliss.surveys.dc2 import unpack_dict
+from case_studies.dc2_cataloging.utils.variational_dist import MyBernoulliFactor
 
 
 class Assigner(ABC):
@@ -277,7 +278,16 @@ class MultiVariationalDist(torch.nn.Module):
         fp_pairs_list = self._factor_param_pairs(x_cat)
         output_tile_cat_list = []
         for fp_pairs in fp_pairs_list:
-            d = {qk.name: qk.sample(params, use_mode) for qk, params in fp_pairs}
+            d = {}
+            for qk, params in fp_pairs:
+                if qk.name == "source_type":
+                    assert isinstance(qk, MyBernoulliFactor), "wrong source_type class"
+                    d["source_type"], d["source_type_probs"] = qk.sample(params, use_mode)
+                elif qk.name == "n_sources":
+                    assert isinstance(qk, MyBernoulliFactor), "wrong n_sources class"
+                    d["n_sources"], d["n_sources_probs"] = qk.sample(params, use_mode)
+                else:
+                    d[qk.name] = qk.sample(params, use_mode)
             output_tile_cat_list.append(TileCatalog(d))
         return output_tile_cat_list
 

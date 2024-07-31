@@ -7,7 +7,7 @@ from bliss.catalog import TileCatalog
 from bliss.encoder.encoder import Encoder
 
 
-class MyEncoder(Encoder):
+class MyBasicEncoder(Encoder):
     @classmethod
     def _add_source_mask(cls, ori_tile_cat: TileCatalog):
         d = copy.copy(ori_tile_cat.data)
@@ -26,6 +26,8 @@ class MyEncoder(Encoder):
         tile_cat = super().sample(batch, use_mode)
         return self._add_source_mask(tile_cat)
 
+
+class VSBCEncoder(MyBasicEncoder):
     def sample_vsbc_first_detection(self, x_features, true_tile_cat, use_mode=True):
         batch_size, _n_features, ht, wt = x_features.shape[0:4]
 

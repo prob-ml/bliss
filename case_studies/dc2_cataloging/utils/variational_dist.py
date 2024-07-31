@@ -17,11 +17,14 @@ class MyVariationalDist(VariationalDist):
         fp_pairs = self._factor_param_pairs(x_cat)
         d = {}
         for qk, params in fp_pairs:
-            if qk.name != "source_type":
-                d[qk.name] = qk.sample(params, use_mode)
-            else:
+            if qk.name == "source_type":
                 assert isinstance(qk, MyBernoulliFactor), "wrong source_type class"
                 d["source_type"], d["source_type_probs"] = qk.sample(params, use_mode)
+            elif qk.name == "n_sources":
+                assert isinstance(qk, MyBernoulliFactor), "wrong b_sources class"
+                d["n_sources"], d["n_sources_probs"] = qk.sample(params, use_mode)
+            else:
+                d[qk.name] = qk.sample(params, use_mode)
         return TileCatalog(d)
 
     def sample_vsbc(self, x_cat: torch.Tensor, true_tile_cat: TileCatalog, use_mode=False):
