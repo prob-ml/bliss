@@ -358,12 +358,23 @@ class TileCatalog(BaseTileCatalog):
         flux_mask = (on_nmgy > min_flux) & (on_nmgy < max_flux)
 
         d = {}
+        nan_ok_variables = {
+            "shear",
+            "convergence",
+            "ellipticity",
+            "blendedness",
+            "ellipticity_vsbc",
+            "star_fluxes_vsbc",
+            "galaxy_fluxes_vsbc",
+        }
         for key, val in sorted_self.items():
-            if key in {"shear", "convergence"}:
+            if key in nan_ok_variables:
                 d[key] = val
             elif key == "n_sources":
                 d[key] = flux_mask.sum(dim=3)  # number of sources within range in tile
             else:
+                # TODO: we should consider the case where nan is in tensor; don't simply fill with 0
+                assert not val.isnan().any()
                 d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
 
         return TileCatalog(d)

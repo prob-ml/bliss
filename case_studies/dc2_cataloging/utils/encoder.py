@@ -59,12 +59,18 @@ class VSBCEncoder(MyBasicEncoder):
     def sample_vsbc(self, batch, use_mode=True):
         true_tile_cat = TileCatalog(batch["tile_catalog"])
         x_features = self.get_features(batch)
+        true_tile_cat1 = true_tile_cat.get_brightest_sources_per_tile(
+            top_k=1, exclude_num=0, band=2
+        )
         est_vsbc_cat = self.sample_vsbc_first_detection(
-            x_features, true_tile_cat, use_mode=use_mode
+            x_features, true_tile_cat1, use_mode=use_mode
         )
         if self.use_double_detect:
+            true_tile_cat2 = true_tile_cat.get_brightest_sources_per_tile(
+                top_k=1, exclude_num=1, band=2
+            )
             est_vsbc_cat2 = self.sample_vsbc_second_detection(
-                x_features, est_vsbc_cat, true_tile_cat, use_mode=use_mode
+                x_features, est_vsbc_cat, true_tile_cat2, use_mode=use_mode
             )
             est_vsbc_cat = est_vsbc_cat.union(est_vsbc_cat2, disjoint=False)
         return est_vsbc_cat

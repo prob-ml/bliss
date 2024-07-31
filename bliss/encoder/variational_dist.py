@@ -163,20 +163,27 @@ class BivariateNormalFactor(VariationalFactor):
         self.low_clamp = low_clamp
         self.high_clamp = high_clamp
 
+    def _filter_arg(self, mean, sd):
+        mean_f = mean
+        sd_f = sd.clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        return mean_f, sd_f
+
     def _get_dist(self, params):
         mean = params[:, :, :, :2]
-        sd = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
-
+        sd = params[:, :, :, 2:]
+        mean, sd = self._filter_arg(mean, sd)
         return Independent(Normal(mean, sd), 1)
 
     def get_first_dist(self, params):
         mean = params[:, :, :, 0]
-        sd = params[:, :, :, 2].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        sd = params[:, :, :, 2]
+        mean, sd = self._filter_arg(mean, sd)
         return Normal(mean, sd)
 
     def get_second_dist(self, params):
         mean = params[:, :, :, 1]
-        sd = params[:, :, :, 3].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        sd = params[:, :, :, 3]
+        mean, sd = self._filter_arg(mean, sd)
         return Normal(mean, sd)
 
 
@@ -202,13 +209,26 @@ class LogNormalFactor(VariationalFactor):
         n_params = 2 * dim  # mean and std for each dimension (diagonal covariance)
         super().__init__(n_params, *args, **kwargs)
 
+    def _filter_arg(self, mu, sigma):
+        mu_f = mu.clamp(-40, 40)
+        sigma_f = sigma.clamp(-6, 5).exp().sqrt()
+        return mu_f, sigma_f
+
     def _get_dist(self, params):
-        mu = params[:, :, :, 0 : self.dim].clamp(-40, 40)
-        sigma = params[:, :, :, self.dim : self.n_params].clamp(-6, 5).exp().sqrt()
+        mu = params[:, :, :, 0 : self.dim]
+        sigma = params[:, :, :, self.dim : self.n_params]
+        mu, sigma = self._filter_arg(mu, sigma)
         iid_dist = LogNormalEpsilon(
             mu, sigma, validate_args=False
         )  # may evaluate at 0 for masked tiles
         return Independent(iid_dist, 1)
+
+    def get_dist_at_dim(self, params, dim: int):
+        assert dim < self.dim
+        mu = params[:, :, :, dim]
+        sigma = params[:, :, :, self.dim + dim]
+        mu, sigma = self._filter_arg(mu, sigma)
+        return LogNormalEpsilon(mu, sigma, validate_args=False)
 
 
 class LogitNormalFactor(VariationalFactor):

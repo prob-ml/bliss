@@ -134,7 +134,7 @@ class MultiDetectEncoder(MyBasicEncoder):
         x_cat = self.one_to_one_catalog_net(x_features)
         est_cat = self.var_dist.sample(x_cat, use_mode=use_mode, filter_by_n_sources=True)
         est_cat = self._accumulate_stacked_tile_cat(est_cat)
-        est_cat = self._choose_topk(est_cat, topk=2)
+        est_cat = self._choose_topk(est_cat, topk=1)
         return self._add_source_mask(est_cat)
 
     def _compute_loss(self, batch, logging_name):
