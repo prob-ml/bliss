@@ -7,7 +7,7 @@ from torch import Tensor
 from tqdm import tqdm
 
 from bliss.catalog import FullCatalog
-from bliss.datasets.lsst import PIXEL_SCALE, get_default_lsst_psf_tensor
+from bliss.datasets.lsst import PIXEL_SCALE
 from bliss.encoders.autoencoder import CenteredGalaxyDecoder
 from bliss.encoders.encoder import Encoder
 from bliss.plotting import BlissFigure, scatter_shade_plot
@@ -55,9 +55,6 @@ class BlendSimulationFigure(BlissFigure):
         n_batches, _, size, _ = images.shape
         assert background.shape == images.shape
 
-        # get psf
-        psf_tensor = get_default_lsst_psf_tensor(size)
-
         # obtain `FullCatalog` from saved data
         slen = size - 2 * (encoder.detection_encoder.bp)
         truth = FullCatalog(slen, slen, blend_data)
@@ -69,7 +66,7 @@ class BlendSimulationFigure(BlissFigure):
         flat_indiv = rearrange(centered_sources, "b ms c h w -> (b ms) c h w")
         flat_bg1 = repeat(background, "b c h w -> (b ms) c h w", ms=ms1, h=size, w=size)
         tflux, tsnr, tellip = get_single_galaxy_measurements(
-            flat_indiv, flat_bg1, psf_tensor, PIXEL_SCALE, no_bar=False
+            flat_indiv, flat_bg1, PIXEL_SCALE, no_bar=False
         )
         truth["galaxy_fluxes"] = rearrange(tflux, "(b ms) -> b ms 1", ms=ms1)
         truth["snr"] = rearrange(tsnr, "(b ms) -> b ms 1", ms=ms1)
@@ -87,7 +84,6 @@ class BlendSimulationFigure(BlissFigure):
         flat_galaxy_bools = rearrange(est["galaxy_bools"], "b ms 1 -> (b ms) 1")
 
         # not sure if batches are necessary here
-        psf_tensor2 = get_default_lsst_psf_tensor(decoder.slen)
         b, ms2, _ = est["galaxy_params"].shape
         n_total = b * ms2
         flat_bg2 = repeat(
@@ -115,9 +111,7 @@ class BlendSimulationFigure(BlissFigure):
 
             egals_ii_raw = decoder(galaxy_params_ii.to(encoder.device)).cpu()
             egals_ii = egals_ii_raw * rearrange(galaxy_bools_ii, "npt 1 -> npt 1 1 1")
-            eflux_ii, esnr_ii, eellip_ii = get_single_galaxy_measurements(
-                egals_ii, bg_ii, psf_tensor2
-            )
+            eflux_ii, esnr_ii, eellip_ii = get_single_galaxy_measurements(egals_ii, bg_ii)
 
             eflux[n1:n2, 0] = eflux_ii
             esnr[n1:n2, 0] = esnr_ii
@@ -243,41 +237,45 @@ class BlendSimulationFigure(BlissFigure):
         ax2.axhline(0, ls="--", color="k")
         ax2.set_ylim(-0.5, 0.5)
 
+        # need to mask the (very few) ellipticities that are NaNs from adaptive moments
+        te1, te2 = true_ellips[:, 0], true_ellips[:, 1]
+        pe1, pe2 = est_ellips[:, 0], est_ellips[:, 1]
+        mask = ~np.isnan(te1) & ~np.isnan(pe1)  # only need one component bc who func is written
         xlims = (0.5, 3)
         ylabel = r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$"
-        x, y = np.log10(snr), est_ellips[:, 0] - true_ellips[:, 0]
+        x, y = np.log10(snr)[mask], (pe1 - te1)[mask]
         scatter_shade_plot(ax3, x, y, xlims, delta=0.2)
         ax3.set_ylabel(ylabel)
         ax3.axhline(0, ls="--", color="k")
-        ax3.set_ylim(-0.5, 0.5)
+        ax3.set_ylim(-0.2, 0.2)
 
         xlims = (0, 0.5)
-        x, y = blendedness, est_ellips[:, 0] - true_ellips[:, 0]
+        x, y = blendedness[mask], (pe1 - te1)[mask]
         scatter_shade_plot(ax4, x, y, xlims, delta=0.05)
         ax4.axhline(0, ls="--", color="k")
-        ax4.set_ylim(-0.5, 0.5)
+        ax4.set_ylim(-0.2, 0.2)
 
         xticks = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
         xlims = (0.5, 3)
         xlabel = r"$\log_{10} \rm SNR$"
         ylabel = r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$"
-        x, y = np.log10(snr), est_ellips[:, 1] - true_ellips[:, 1]
+        x, y = np.log10(snr)[mask], (pe2 - te2)[mask]
         scatter_shade_plot(ax5, x, y, xlims, delta=0.2)
         ax5.set_xlabel(xlabel)
         ax5.set_ylabel(ylabel)
         ax5.set_xticks(xticks)
         ax5.axhline(0, ls="--", color="k")
-        ax5.set_ylim(-0.5, 0.5)
+        ax5.set_ylim(-0.2, 0.2)
 
         xticks = [0, 0.1, 0.2, 0.3, 0.4, 0.5]
         xlims = (0, 0.5)
         xlabel = "$B$"
-        x, y = blendedness, est_ellips[:, 1] - true_ellips[:, 1]
+        x, y = blendedness[mask], (pe2 - te2)[mask]
         scatter_shade_plot(ax6, x, y, xlims=xlims, delta=0.05)
         ax6.set_xlabel(xlabel)
         ax6.set_xticks(xticks)
         ax6.axhline(0, ls="--", color="k")
-        ax6.set_ylim(-0.5, 0.5)
+        ax6.set_ylim(-0.2, 0.2)
 
         plt.tight_layout()
 

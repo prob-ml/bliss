@@ -4,9 +4,9 @@ import torch
 from matplotlib.figure import Figure
 from torch import Tensor
 
-from bliss.datasets.lsst import PIXEL_SCALE
 from bliss.encoders.autoencoder import OneCenteredGalaxyAE
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
+from bliss.reporting import get_single_galaxy_measurements
 
 
 class AutoEncoderFigures(BlissFigure):
@@ -39,6 +39,7 @@ class AutoEncoderFigures(BlissFigure):
         image_data = torch.load(images_file)
         images: Tensor = image_data["images"]
         recon_means = torch.tensor([])
+        backgrounds = image_data["background"]
         background: Tensor = image_data["background"][0].reshape(1, 1, 53, 53).to(device)
         noiseless_images: Tensor = image_data["noiseless"]
         snr: Tensor = image_data["snr"].reshape(-1)
@@ -67,19 +68,12 @@ class AutoEncoderFigures(BlissFigure):
         absolute_residual = residuals.abs().sum(axis=(1, 2, 3))
         worst_indices = absolute_residual.argsort()[-self.n_examples - q : -q]
 
-        # measurements
-        psf_image = get_default_lsst_psf_tensor(53)
-
         recon_no_background = recon_means - background.cpu()
         assert torch.all(recon_no_background.sum(axis=(1, 2, 3)) > 0)
-        true_meas = reporting.get_single_galaxy_measurements(
-            noiseless_images, psf_image, PIXEL_SCALE
-        )
-        true_meas = {f"true_{k}": v for k, v in true_meas.items()}
-        recon_meas = reporting.get_single_galaxy_measurements(
-            recon_no_background, psf_image, PIXEL_SCALE
-        )
-        recon_meas = {f"recon_{k}": v for k, v in recon_meas.items()}
+        tflux, _, tellips = get_single_galaxy_measurements(noiseless_images, backgrounds)
+        eflux, _, pellips = get_single_galaxy_measurements(recon_no_background, backgrounds)
+        true_meas = {"true_fluxes": tflux, "true_ellips": tellips}
+        recon_meas = {"recon_fluxes": eflux, "recon_ellips": pellips}
         measurements = {**true_meas, **recon_meas, "snr": snr}
 
         return {
@@ -125,6 +119,7 @@ class AutoEncoderFigures(BlissFigure):
         ax2.set_ylabel(r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$")
         ax2.set_xticks(xticks)
         ax2.axhline(0, ls="--", color="k")
+        ax2.set_ylim(-0.1, 0.1)
 
         true_ellip2, recon_ellip2 = meas["true_ellips"][:, 1], meas["recon_ellips"][:, 1]
         x, y = np.log10(snr), recon_ellip2 - true_ellip2
@@ -134,6 +129,7 @@ class AutoEncoderFigures(BlissFigure):
         ax3.set_ylabel(r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$")
         ax3.set_xticks(xticks)
         ax3.axhline(0, ls="--", color="k")
+        ax3.set_ylim(-0.1, 0.1)
 
         return fig
 
