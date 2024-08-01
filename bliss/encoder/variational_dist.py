@@ -110,7 +110,7 @@ class VariationalFactor:
         raise ValueError("invalide nll_gating string")
 
     def sample(self, params, use_mode=False):
-        qk = self._get_dist(params)
+        qk = self.get_dist(params)
         sample_cat = qk.mode if use_mode else qk.sample()
         if self.sample_rearrange is not None:
             sample_cat = rearrange(sample_cat, self.sample_rearrange)
@@ -124,7 +124,7 @@ class VariationalFactor:
 
         gating = self.nll_gating(true_tile_cat)
 
-        qk = self._get_dist(params)
+        qk = self.get_dist(params)
         if gating.shape != target.shape:
             assert gating.shape == target.shape[:-1]
             target = torch.where(gating.unsqueeze(-1), target, 0)
@@ -137,7 +137,7 @@ class BernoulliFactor(VariationalFactor):
     def __init__(self, *args, **kwargs):
         super().__init__(1, *args, **kwargs)
 
-    def _get_dist(self, params):
+    def get_dist(self, params):
         yes_prob = params.sigmoid().clamp(1e-4, 1 - 1e-4)
         no_yes_prob = torch.cat([1 - yes_prob, yes_prob], dim=3)
         # this next line may be helpful with nans encountered during training with fp16s
@@ -151,7 +151,7 @@ class NormalFactor(VariationalFactor):
         self.low_clamp = low_clamp
         self.high_clamp = high_clamp
 
-    def _get_dist(self, params):
+    def get_dist(self, params):
         mean = params[:, :, :, 0]
         sd = params[:, :, :, 1].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
         return Normal(mean, sd)
@@ -163,28 +163,11 @@ class BivariateNormalFactor(VariationalFactor):
         self.low_clamp = low_clamp
         self.high_clamp = high_clamp
 
-    def _filter_arg(self, mean, sd):
-        mean_f = mean
-        sd_f = sd.clamp(self.low_clamp, self.high_clamp).exp().sqrt()
-        return mean_f, sd_f
-
-    def _get_dist(self, params):
+    def get_dist(self, params):
         mean = params[:, :, :, :2]
-        sd = params[:, :, :, 2:]
-        mean, sd = self._filter_arg(mean, sd)
+        sd = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+
         return Independent(Normal(mean, sd), 1)
-
-    def get_first_dist(self, params):
-        mean = params[:, :, :, 0]
-        sd = params[:, :, :, 2]
-        mean, sd = self._filter_arg(mean, sd)
-        return Normal(mean, sd)
-
-    def get_second_dist(self, params):
-        mean = params[:, :, :, 1]
-        sd = params[:, :, :, 3]
-        mean, sd = self._filter_arg(mean, sd)
-        return Normal(mean, sd)
 
 
 class TDBNFactor(VariationalFactor):
@@ -195,7 +178,7 @@ class TDBNFactor(VariationalFactor):
         self.low_clamp = low_clamp
         self.high_clamp = high_clamp
 
-    def _get_dist(self, params):
+    def get_dist(self, params):
         mu = params[:, :, :, :2].sigmoid()
         sigma = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
         assert not mu.isnan().any() and not mu.isinf().any(), "mu contains invalid values"
@@ -209,26 +192,13 @@ class LogNormalFactor(VariationalFactor):
         n_params = 2 * dim  # mean and std for each dimension (diagonal covariance)
         super().__init__(n_params, *args, **kwargs)
 
-    def _filter_arg(self, mu, sigma):
-        mu_f = mu.clamp(-40, 40)
-        sigma_f = sigma.clamp(-6, 5).exp().sqrt()
-        return mu_f, sigma_f
-
-    def _get_dist(self, params):
-        mu = params[:, :, :, 0 : self.dim]
-        sigma = params[:, :, :, self.dim : self.n_params]
-        mu, sigma = self._filter_arg(mu, sigma)
+    def get_dist(self, params):
+        mu = params[:, :, :, 0 : self.dim].clamp(-40, 40)
+        sigma = params[:, :, :, self.dim : self.n_params].clamp(-6, 5).exp().sqrt()
         iid_dist = LogNormalEpsilon(
             mu, sigma, validate_args=False
         )  # may evaluate at 0 for masked tiles
         return Independent(iid_dist, 1)
-
-    def get_dist_at_dim(self, params, dim: int):
-        assert dim < self.dim
-        mu = params[:, :, :, dim]
-        sigma = params[:, :, :, self.dim + dim]
-        mu, sigma = self._filter_arg(mu, sigma)
-        return LogNormalEpsilon(mu, sigma, validate_args=False)
 
 
 class LogitNormalFactor(VariationalFactor):
@@ -239,7 +209,7 @@ class LogitNormalFactor(VariationalFactor):
         self.high = high
         super().__init__(n_params, *args, **kwargs)
 
-    def _get_dist(self, params):
+    def get_dist(self, params):
         mu = params[:, :, :, 0 : self.dim]
         sigma = params[:, :, :, self.dim : self.n_params].clamp(-10, 10).exp().sqrt()
         return RescaledLogitNormal(mu, sigma, low=self.low, high=self.high)
@@ -268,7 +238,8 @@ class TruncatedDiagonalMVN(Distribution):
 
         # we'll need these calculations later for log_prob
         prob_in_unit_box_hw = multiple_normals.cdf(self.b) - multiple_normals.cdf(self.a)
-        self.log_prob_in_unit_box = prob_in_unit_box_hw.log().sum(dim=-1)
+        self.log_event_prob_in_unit_box = prob_in_unit_box_hw.log()
+        self.log_prob_in_unit_box = self.log_event_prob_in_unit_box.sum(dim=-1)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.base_dist.base_dist})"
@@ -284,7 +255,7 @@ class TruncatedDiagonalMVN(Distribution):
 
         """
 
-        shape = sample_shape + self.base_dist.batch_shape + self.base_dist.event_shape
+        shape = sample_shape + self.batch_shape + self.event_shape
 
         # draw using inverse cdf method
         # if Fi is the cdf of the relavant gaussian, then
@@ -334,6 +305,14 @@ class TruncatedDiagonalMVN(Distribution):
         assert (self.base_dist.mean >= 0).all() and (self.base_dist.mean <= 1).all()
         return self.base_dist.mode
 
+    @property
+    def batch_shape(self):
+        return self.base_dist.batch_shape
+
+    @property
+    def event_shape(self):
+        return self.base_dist.event_shape
+
     def log_prob(self, value):
         assert (value >= 0).all() and (value <= 1).all()
         # subtracting log probability that the base RV is in the unit box
@@ -345,6 +324,20 @@ class TruncatedDiagonalMVN(Distribution):
         cdf_at_lb = self.lower_cdf
         log_cdf = (cdf_at_val - cdf_at_lb + 1e-9).log().sum(dim=-1) - self.log_prob_in_unit_box
         return log_cdf.exp()
+
+    def event_cdf(self, value):
+        cdf_at_val = self.base_dist.base_dist.cdf(value)
+        cdf_at_lb = self.lower_cdf
+        log_cdf = (cdf_at_val - cdf_at_lb + 1e-9).log() - self.log_event_prob_in_unit_box
+        return log_cdf.exp()
+
+    def event_icdf(self, value):
+        assert isinstance(value, torch.Tensor)
+        assert value.shape == self.lower_cdf.shape
+        assert (value > 0).all() and (value < 1).all()
+        converted_cdf = value * (self.upper_cdf - self.lower_cdf) + self.lower_cdf
+        converted_icdf = self.base_dist.base_dist.icdf(converted_cdf)
+        return converted_icdf.clamp(self.a, self.b)
 
 
 class RescaledLogitNormal(Distribution):

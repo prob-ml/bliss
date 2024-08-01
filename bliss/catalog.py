@@ -363,6 +363,7 @@ class TileCatalog(BaseTileCatalog):
             "convergence",
             "ellipticity",
             "blendedness",
+            "locs_vsbc",
             "ellipticity_vsbc",
             "star_fluxes_vsbc",
             "galaxy_fluxes_vsbc",

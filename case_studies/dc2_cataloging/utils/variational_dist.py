@@ -1,18 +1,30 @@
 import torch
 from einops import rearrange
+from torch.distributions import Independent
 
 from bliss.catalog import TileCatalog
-from bliss.encoder.variational_dist import BernoulliFactor, NllGating, VariationalDist
+from bliss.encoder.variational_dist import (
+    BernoulliFactor,
+    NllGating,
+    TruncatedDiagonalMVN,
+    VariationalDist,
+)
+
+
+class Cosmodc2Gating(NllGating):
+    @classmethod
+    def __call__(cls, true_tile_cat: TileCatalog):
+        return rearrange(true_tile_cat["cosmodc2_mask"], "b ht wt 1 1 -> b ht wt")
 
 
 class MyBernoulliFactor(BernoulliFactor):
     def sample(self, params, use_mode=False):
-        qk_probs = self._get_dist(params).probs
+        qk_probs = self.get_dist(params).probs
         qk_probs = rearrange(qk_probs, "b ht wt d -> b ht wt 1 d")
         return super().sample(params, use_mode), qk_probs
 
 
-class MyVariationalDist(VariationalDist):
+class MyBasicVariationalDist(VariationalDist):
     def sample(self, x_cat, use_mode=False):
         fp_pairs = self._factor_param_pairs(x_cat)
         d = {}
@@ -27,57 +39,79 @@ class MyVariationalDist(VariationalDist):
                 d[qk.name] = qk.sample(params, use_mode)
         return TileCatalog(d)
 
+
+class CalibrationVariationalDist(MyBasicVariationalDist):
+    @classmethod
+    def _get_vsbc(cls, qk, params, true_tile_cat):
+        dist = qk.get_dist(params)
+        if isinstance(dist, Independent):
+            dist = dist.base_dist
+
+        true_value = true_tile_cat[qk.name][..., 0, :]
+        if qk.name == "ellipticity":
+            true_value = true_value.nan_to_num(0)
+
+        if isinstance(dist, TruncatedDiagonalMVN):
+            vsbc = 1 - dist.event_cdf(true_value)
+        else:
+            vsbc = 1 - dist.cdf(true_value)
+        vsbc = rearrange(vsbc, "b nth ntw d -> b nth ntw 1 d")
+
+        nll_gating = qk.nll_gating(true_tile_cat)
+        nll_gating = rearrange(nll_gating, "b nth ntw -> b nth ntw 1 1")
+        return torch.where(nll_gating, vsbc, torch.nan)
+
     def sample_vsbc(self, x_cat: torch.Tensor, true_tile_cat: TileCatalog, use_mode=False):
         assert true_tile_cat.max_sources == 1
         sample_result = self.sample(x_cat, use_mode=use_mode)
         assert sample_result.max_sources == 1
         fp_pairs = self._factor_param_pairs(x_cat)
-        # for now, only test the vsbc for ellipticity and flux
+        # for now, only test the vsbc for locs, ellipticity and flux
+        vsbc_variables = {
+            "locs",
+            "ellipticity",
+            "star_fluxes",
+            "galaxy_fluxes",
+        }
         for qk, params in fp_pairs:
-            match qk.name:
-                case "ellipticity":
-                    first_dist = qk.get_first_dist(params)
-                    second_dist = qk.get_second_dist(params)
-                    first_vsbc = 1 - first_dist.cdf(
-                        true_tile_cat["ellipticity"][..., 0, 0].nan_to_num(0)
-                    )
-                    second_vsbc = 1 - second_dist.cdf(
-                        true_tile_cat["ellipticity"][..., 0, 1].nan_to_num(0)
-                    )
-                    first_vsbc = rearrange(first_vsbc, "b nth ntw -> b nth ntw 1 1")
-                    second_vsbc = rearrange(second_vsbc, "b nth ntw -> b nth ntw 1 1")
-                    cosmodc2_mask = true_tile_cat["cosmodc2_mask"]
-                    first_vsbc = torch.where(cosmodc2_mask, first_vsbc, torch.nan)
-                    second_vsbc = torch.where(cosmodc2_mask, second_vsbc, torch.nan)
-                    sample_result["ellipticity_vsbc"] = torch.cat((first_vsbc, second_vsbc), dim=-1)
-                case "star_fluxes":
-                    flux_dist = [qk.get_dist_at_dim(params, d) for d in range(qk.dim)]
-                    flux_vsbc = [
-                        1 - dist.cdf(true_tile_cat["star_fluxes"][..., 0, d])
-                        for d, dist in enumerate(flux_dist)
-                    ]
-                    flux_vsbc = [
-                        rearrange(vsbc, "b nth ntw -> b nth ntw 1 1") for vsbc in flux_vsbc
-                    ]
-                    star_mask = true_tile_cat.star_bools
-                    flux_vsbc = [torch.where(star_mask, vsbc, torch.nan) for vsbc in flux_vsbc]
-                    sample_result["star_fluxes_vsbc"] = torch.cat(flux_vsbc, dim=-1)
-                case "galaxy_fluxes":
-                    flux_dist = [qk.get_dist_at_dim(params, d) for d in range(qk.dim)]
-                    flux_vsbc = [
-                        1 - dist.cdf(true_tile_cat["galaxy_fluxes"][..., 0, d])
-                        for d, dist in enumerate(flux_dist)
-                    ]
-                    flux_vsbc = [
-                        rearrange(vsbc, "b nth ntw -> b nth ntw 1 1") for vsbc in flux_vsbc
-                    ]
-                    galaxy_mask = true_tile_cat.galaxy_bools
-                    flux_vsbc = [torch.where(galaxy_mask, vsbc, torch.nan) for vsbc in flux_vsbc]
-                    sample_result["galaxy_fluxes_vsbc"] = torch.cat(flux_vsbc, dim=-1)
+            if qk.name in vsbc_variables:
+                sample_result[qk.name + "_vsbc"] = self._get_vsbc(qk, params, true_tile_cat)
         return sample_result
 
-
-class Cosmodc2Gating(NllGating):
     @classmethod
-    def __call__(cls, true_tile_cat: TileCatalog):
-        return rearrange(true_tile_cat["cosmodc2_mask"], "b ht wt 1 1 -> b ht wt")
+    def _get_credible_interval(cls, qk, params, lower_q, upper_q):
+        dist = qk.get_dist(params)
+        if isinstance(dist, Independent):
+            dist = dist.base_dist
+
+        dist_shape = dist.batch_shape + dist.event_shape
+        lower_q_tensor = torch.full(dist_shape, fill_value=lower_q, device=params.device)
+        upper_q_tensor = torch.full(dist_shape, fill_value=upper_q, device=params.device)
+        if isinstance(dist, TruncatedDiagonalMVN):
+            lower_b = dist.event_icdf(lower_q_tensor)
+            upper_b = dist.event_icdf(upper_q_tensor)
+        else:
+            lower_b = dist.icdf(lower_q_tensor)
+            upper_b = dist.icdf(upper_q_tensor)
+        lower_b = rearrange(lower_b, "b nth ntw d -> b nth ntw 1 d")
+        upper_b = rearrange(upper_b, "b nth ntw d -> b nth ntw 1 d")
+        return lower_b, upper_b
+
+    def sample_credible_interval(
+        self, x_cat: torch.Tensor, lower_q: float, upper_q: float, use_mode=False
+    ):
+        assert lower_q < upper_q
+        sample_result = self.sample(x_cat, use_mode=use_mode)
+        fp_pairs = self._factor_param_pairs(x_cat)
+        credible_interval_variables = {
+            "locs",
+            "ellipticity",
+            "star_fluxes",
+            "galaxy_fluxes",
+        }
+        for qk, params in fp_pairs:
+            if qk.name in credible_interval_variables:
+                lower_b, upper_b = self._get_credible_interval(qk, params, lower_q, upper_q)
+                sample_result[qk.name + "_ci_lower"] = lower_b
+                sample_result[qk.name + "_ci_upper"] = upper_b
+        return sample_result

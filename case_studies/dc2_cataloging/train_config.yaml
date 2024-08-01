@@ -112,7 +112,7 @@ my_image_normalizers:
       _target_: case_studies.dc2_cataloging.utils.image_normalizer.NullNormalizer
 
 encoder:
-    _target_: case_studies.dc2_cataloging.utils.encoder.VSBCEncoder
+    _target_: case_studies.dc2_cataloging.utils.encoder.CalibrationEncoder
     survey_bands: ["u", "g", "r", "i", "z", "y"]
     reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}
@@ -123,7 +123,7 @@ encoder:
         gamma: 0.1
     image_normalizers: ${my_image_normalizers}
     var_dist:
-        _target_: case_studies.dc2_cataloging.utils.variational_dist.MyVariationalDist
+        _target_: case_studies.dc2_cataloging.utils.variational_dist.CalibrationVariationalDist
         tile_slen: ${surveys.dc2.tile_slen}
         factors: ${my_variational_factors}
     matcher:
