@@ -103,7 +103,7 @@ class AutoEncoderFigures(BlissFigure):
         # fluxes
         true_fluxes, recon_fluxes = meas["true_fluxes"], meas["recon_fluxes"]
         x, y = np.log10(snr), (recon_fluxes - true_fluxes) / true_fluxes
-        scatter_shade_plot(ax1, x, y, xlims, delta=0.2)
+        scatter_shade_plot(ax1, x, y, xlims, delta=0.2, use_boot=True)
         ax1.set_xlim(xlims)
         ax1.set_xlabel(xlabel)
         ax1.set_ylabel(r"$(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
@@ -113,7 +113,7 @@ class AutoEncoderFigures(BlissFigure):
         # ellipticities
         true_ellip1, recon_ellip1 = meas["true_ellips"][:, 0], meas["recon_ellips"][:, 0]
         x, y = np.log10(snr), recon_ellip1 - true_ellip1
-        scatter_shade_plot(ax2, x, y, xlims, delta=0.2)
+        scatter_shade_plot(ax2, x, y, xlims, delta=0.2, use_boot=True)
         ax2.set_xlim(xlims)
         ax2.set_xlabel(xlabel)
         ax2.set_ylabel(r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$")
@@ -123,7 +123,7 @@ class AutoEncoderFigures(BlissFigure):
 
         true_ellip2, recon_ellip2 = meas["true_ellips"][:, 1], meas["recon_ellips"][:, 1]
         x, y = np.log10(snr), recon_ellip2 - true_ellip2
-        scatter_shade_plot(ax3, x, y, xlims, delta=0.2)
+        scatter_shade_plot(ax3, x, y, xlims, delta=0.2, use_boot=True)
         ax3.set_xlim(xlims)
         ax3.set_xlabel(xlabel)
         ax3.set_ylabel(r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$")

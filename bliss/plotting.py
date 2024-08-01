@@ -225,16 +225,26 @@ def add_loc_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s
     )
 
 
+def _bootstrap_quantiles(x, fnc, qs, n_boots=10000) -> float:
+    """Return boostrap error of function `fnc` applied to array `x`."""
+    x_boot = np.random.choice(x, size=(n_boots, len(x)), replace=True)
+    x_hat = fnc(x_boot, axis=-1)
+    return np.quantile(x_hat, qs[0]), np.quantile(x_hat, qs[1])
+
+
 def scatter_shade_plot(
     ax: Axes,
     x: np.ndarray,
     y: np.ndarray,
     xlims: Tuple[float, float],
     delta: float,
-    qs: Tuple[float, float] = (0.25, 0.75),
     color: str = "#377eb8",
     alpha: float = 0.5,
+    qs: Tuple[float, float] = (0.025, 0.975),  # 95% confidence interval
+    use_boot=False,
+    use_mean=False,
 ):
+    assert x.ndim == y.ndim == 1
     xbins = np.arange(xlims[0], xlims[1], delta)
 
     xs = np.zeros(len(xbins))
@@ -252,8 +262,13 @@ def scatter_shade_plot(
             yqs[i] = (np.nan, np.nan)
             continue
 
-        ys[i] = np.median(y_bin)
-        yqs[i, :] = np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1])
+        fnc = np.mean if use_mean else np.median
+
+        ys[i] = fnc(y_bin)
+        if use_boot:
+            yqs[i, :] = _bootstrap_quantiles(y_bin, fnc, qs)
+        else:
+            yqs[i, :] = np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1])
 
     ax.plot(xs, ys, marker="o", c=color, linestyle="-")
     ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=alpha)
