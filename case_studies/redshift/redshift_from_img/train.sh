@@ -1,5 +1,5 @@
 #!/bin/bash
-DIRNAME="DC2_redshift_only_bin_allmetrics"
+DIRNAME="DC2_redshift_only_large_split_blend"
 
 # Create the directory if it does not already exist
 if [ ! -d "/home/qiaozhih/bliss/case_studies/redshift/redshift_from_img/DC2_redshift_training/$DIRNAME" ]; then
