@@ -4,7 +4,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    cached_data: /data/scratch/aakash/single_field_train
+    cached_data: /data/scratch/aakash/single_field
 
 surveys:
     sdss:

@@ -4,7 +4,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    cached_data: /data/scratch/aakash/multi_field_train
+    cached_data: /data/scratch/aakash/multi_field
 
 encoder:
     image_normalizers: ${asinh_only_normalizer}
