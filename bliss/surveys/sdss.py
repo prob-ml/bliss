@@ -117,6 +117,11 @@ class SloanDigitalSkySurvey(Survey):
         return len(self.rcfgcs)
 
     def __getitem__(self, idx):
+        if self.items[idx] is None:
+            self.items[idx] = self.get_from_disk(idx)
+        return self.items[idx]
+
+    def get_from_disk(self, idx):
         run, camcol, field, gain = self.rcfgcs[idx]
 
         camcol_dir = self.sdss_path.joinpath(str(run), str(camcol))
