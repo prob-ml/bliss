@@ -518,6 +518,11 @@ class FluxError(Metric):
         self.n_bins = len(self.bin_cutoffs) + 1
 
         self.add_state(
+            "flux_abs_err",
+            default=torch.zeros((len(self.survey_bands), self.n_bins)),  # n_bins per band
+            dist_reduce_fx="sum",
+        )
+        self.add_state(
             "flux_pct_err",
             default=torch.zeros((len(self.survey_bands), self.n_bins)),  # n_bins per band
             dist_reduce_fx="sum",
@@ -543,9 +548,14 @@ class FluxError(Metric):
             est_flux = est_cat.on_fluxes("nmgy")[i, ecat_matches]
 
             # Compute and update percent error per band
+            abs_err = (true_flux - est_flux).abs()
             pct_err = (true_flux - est_flux) / true_flux
             abs_pct_err = pct_err.abs()
             for band in range(len(self.survey_bands)):  # noqa: WPS518
+                tmp = torch.zeros((self.n_bins,), dtype=torch.float, device=self.device)
+                tmp = tmp.scatter_add(0, bins.reshape(-1), abs_err[..., band].reshape(-1))
+                self.flux_abs_err[band] += tmp
+
                 tmp = torch.zeros((self.n_bins,), dtype=torch.float, device=self.device)
                 tmp = tmp.scatter_add(0, bins.reshape(-1), pct_err[..., band].reshape(-1))
                 self.flux_pct_err[band] += tmp
@@ -557,11 +567,14 @@ class FluxError(Metric):
 
     def compute(self):
         final_idx = -1 if self.exclude_last_bin else None
+        flux_abs_err = self.flux_abs_err[:, :final_idx]
         flux_pct_err = self.flux_pct_err[:, :final_idx]
         flux_abs_pct_err = self.flux_abs_pct_err[:, :final_idx]
         n_matches = self.n_matches[:final_idx]
 
-        # Compute mean percent error
+        # Compute final metrics
+        mae = flux_abs_err.sum(dim=1) / n_matches.sum()
+        binned_mae = flux_abs_err / n_matches
         mpe = flux_pct_err.sum(dim=1) / n_matches.sum()
         binned_mpe = flux_pct_err / n_matches
         mape = flux_abs_pct_err.sum(dim=1) / n_matches.sum()
@@ -569,9 +582,11 @@ class FluxError(Metric):
 
         results = {}
         for i, band in enumerate(self.survey_bands):
+            results[f"flux_err_{band}_mae"] = mae[i]
             results[f"flux_err_{band}_mpe"] = mpe[i]
             results[f"flux_err_{band}_mape"] = mape[i]
             for j in range(binned_mpe.shape[1]):
+                results[f"flux_err_{band}_mae_bin_{j}"] = binned_mae[i, j]
                 results[f"flux_err_{band}_mpe_bin_{j}"] = binned_mpe[i, j]
                 results[f"flux_err_{band}_mape_bin_{j}"] = binned_mape[i, j]
 

@@ -117,7 +117,7 @@ class TestMetrics:
         acc_results = acc_metrics(full_catalog, full_catalog, matching)
         assert acc_results["classification_acc"] == 1
 
-        flux_metrics = FluxError("ugriz")
+        flux_metrics = FluxError("ugriz", bin_cutoffs=[200, 400, 600, 800, 1000])
         flux_results = flux_metrics(full_catalog, full_catalog, matching)
         assert flux_results["flux_err_r_mae"] == 0
 
