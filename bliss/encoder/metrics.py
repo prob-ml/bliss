@@ -579,34 +579,123 @@ class FluxError(Metric):
 
 
 class GalaxyShapeError(Metric):
-    GALSIM_NAMES = ["disk_frac", "beta_radians", "disk_q", "a_d", "bulge_q", "a_b"]
+    galaxy_params = [
+        "galaxy_disk_frac",
+        "galaxy_beta_radians",
+        "galaxy_disk_q",
+        "galaxy_a_d",
+        "galaxy_bulge_q",
+        "galaxy_a_b",
+    ]
+    galaxy_param_to_idx = {param: i for i, param in enumerate(galaxy_params)}
 
-    def __init__(self):
+    def __init__(
+        self,
+        mag_bin_cutoffs,
+        mag_band=2,
+        exclude_last_bin=False,
+    ):
         super().__init__()
 
-        gpe_init = torch.zeros(len(self.GALSIM_NAMES))
-        self.add_state("galsim_param_err", default=gpe_init, dist_reduce_fx="sum")
+        self.mag_band = mag_band
+        self.mag_bin_cutoffs = mag_bin_cutoffs
+        self.n_bins = len(self.mag_bin_cutoffs) + 1
+        self.exclude_last_bin = exclude_last_bin  # used to ignore dim objects
 
-        self.add_state("n_true_galaxies", default=torch.zeros(1), dist_reduce_fx="sum")
+        gpe_init = torch.zeros((len(self.galaxy_params), self.n_bins))
+        self.add_state("galaxy_param_err", default=gpe_init, dist_reduce_fx="sum")
+        self.add_state("disk_hlr_err", torch.zeros(self.n_bins), dist_reduce_fx="sum")
+        self.add_state("bulge_hlr_err", torch.zeros(self.n_bins), dist_reduce_fx="sum")
+        self.add_state("n_true_galaxies", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
+        true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
+        mag_boundaries = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
+            n_true = true_cat["n_sources"][i].sum().item()
 
-            true_gal = true_cat.galaxy_bools[i][tcat_matches]
-            self.n_true_galaxies += true_gal.sum()
+            is_gal = true_cat.galaxy_bools[i][tcat_matches][:, 0]
+            # Skip if no galaxies in this image
+            if (~is_gal).all():
+                continue
+            true_matched_mags = true_mags[i, 0:n_true][tcat_matches]
+            true_gal_mags = true_matched_mags[is_gal]
 
-            # TODO: only compute error for *true* galaxies
-            true_gp = true_cat["galaxy_params"][i, tcat_matches, :]
-            est_gp = est_cat["galaxy_params"][i, ecat_matches, :]
-            gp_err = (true_gp - est_gp).abs().sum(dim=0)
-            # TODO: angle is a special case, need to wrap around pi (not 2pi due to symmetry)
-            self.galsim_param_err += gp_err
+            # get magnitude bin for each matched galaxy
+            mag_bins = torch.bucketize(true_gal_mags, mag_boundaries)
+            self.n_true_galaxies += mag_bins.bincount(minlength=self.n_bins)
+
+            true_gal_params = true_cat["galaxy_params"][i, tcat_matches][is_gal]
+
+            for j, name in enumerate(self.galaxy_params):
+                true_param = true_gal_params[:, j]
+                est_param = est_cat[name][i, ecat_matches][is_gal, 0]
+                abs_res = (true_param - est_param).abs()
+                
+                # Wrap angle around pi
+                if name == "galaxy_beta_radians":
+                    abs_res = abs_res % torch.pi
+
+                # Update bins
+                tmp = torch.zeros(self.n_bins, dtype=torch.float, device=self.device)  
+                self.galaxy_param_err[j] += tmp.scatter_add(0, mag_bins, abs_res)
+
+            # Compute HLRs for disk and bulge
+            true_a_d = true_gal_params[:, self.galaxy_param_to_idx["galaxy_a_d"]]
+            true_disk_q = true_gal_params[:, self.galaxy_param_to_idx["galaxy_disk_q"]]
+            true_b_d = true_a_d * true_disk_q
+            true_disk_hlr = torch.sqrt(true_a_d * true_b_d)
+
+            est_a_d = est_cat["galaxy_a_d"][i, ecat_matches][is_gal, 0]
+            est_disk_q = est_cat["galaxy_disk_q"][i, ecat_matches][is_gal, 0]
+            est_b_d = est_a_d * est_disk_q
+            est_disk_hlr = torch.sqrt(est_a_d * est_b_d)
+
+            true_a_b = true_gal_params[:, self.galaxy_param_to_idx["galaxy_a_b"]]
+            true_bulge_q = true_gal_params[:, self.galaxy_param_to_idx["galaxy_bulge_q"]]
+            true_b_b = true_a_b * true_bulge_q
+            true_bulge_hlr = torch.sqrt(true_a_b * true_b_b)
+
+            est_a_b = est_cat["galaxy_a_b"][i, ecat_matches][is_gal, 0]
+            est_bulge_q = est_cat["galaxy_bulge_q"][i, ecat_matches][is_gal, 0]
+            est_b_b = est_a_b * est_bulge_q
+            est_bulge_hlr = torch.sqrt(est_a_b * est_b_b)
+
+            abs_disk_hlr_res = (true_disk_hlr - est_disk_hlr).abs()
+            tmp = torch.zeros(self.n_bins, dtype=torch.float, device=self.device)  
+            self.disk_hlr_err += tmp.scatter_add(0, mag_bins, abs_disk_hlr_res)
+
+            abs_bulge_hlr_res = (true_bulge_hlr - est_bulge_hlr).abs()
+            tmp = torch.zeros(self.n_bins, dtype=torch.float, device=self.device)  
+            self.bulge_hlr_err += tmp.scatter_add(0, mag_bins, abs_bulge_hlr_res)
 
     def compute(self):
-        avg_galsim_param_err = self.galsim_param_err / self.n_true_galaxies
+        final_idx = -1 if self.exclude_last_bin else None
+        galaxy_param_err = self.galaxy_param_err[:, :final_idx]
+        disk_hlr_err = self.disk_hlr_err[:final_idx]
+        bulge_hlr_err = self.bulge_hlr_err[:final_idx]
+        n_galaxies = self.n_true_galaxies[:final_idx]
+
+        gal_param_mae = galaxy_param_err.sum(dim=1) / n_galaxies.sum()
+        binned_gal_param_mae = galaxy_param_err / n_galaxies
+
+        disk_hlr_mae = disk_hlr_err.sum() / n_galaxies.sum()
+        binned_disk_hlr_mae = disk_hlr_err / n_galaxies
+        bulge_hlr_mae = bulge_hlr_err.sum() / n_galaxies.sum()
+        binned_bulge_hlr_mae = bulge_hlr_err / n_galaxies
+
         results = {}
-        for i, gs_name in enumerate(self.GALSIM_NAMES):
-            results[f"{gs_name}_mae"] = avg_galsim_param_err[i]
+        for i, name in enumerate(self.galaxy_params):
+            results[f"{name}_mae"] = gal_param_mae[i]
+            for j in range(self.n_bins):
+                results[f"{name}_mae_bin_{j}"] = binned_gal_param_mae[i, j]
+
+        results["galaxy_disk_hlr_mae"] = disk_hlr_mae
+        results["galaxy_bulge_hlr_mae"] = bulge_hlr_mae
+        for j in range(self.n_bins):
+            results[f"galaxy_disk_hlr_mae_bin_{j}"] = binned_disk_hlr_mae[j]
+            results[f"galaxy_bulge_hlr_mae_bin_{j}"] = binned_bulge_hlr_mae[j]
 
         return results
