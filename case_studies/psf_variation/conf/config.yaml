@@ -91,7 +91,7 @@ cached_simulator:
         - _target_: bliss.data_augmentation.RotateFlipTransform
     nontrain_transforms: []
 
-all_variational_factors:
+variational_factors:
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
       name: n_sources
       sample_rearrange: null
@@ -101,84 +101,65 @@ all_variational_factors:
       name: locs
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
       nll_rearrange: "b ht wt 1 d -> b ht wt d"
-      nll_gating: n_sources
+      nll_gating:
+        _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
       name: source_type
       sample_rearrange: "b ht wt -> b ht wt 1 1"
       nll_rearrange: "b ht wt 1 1 -> b ht wt"
-      nll_gating: n_sources
+      nll_gating:
+        _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: star_fluxes
       dim: 5
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
       nll_rearrange: "b ht wt 1 d -> b ht wt d"
-      nll_gating: is_star
+      nll_gating:
+        _target_: bliss.encoder.variational_dist.StarGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: galaxy_fluxes
       dim: 5
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
       nll_rearrange: "b ht wt 1 d -> b ht wt d"
-      nll_gating: is_galaxy
+      nll_gating:
+        _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_disk_frac
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
       nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-      nll_gating: is_galaxy
+      nll_gating:
+        _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_beta_radians
       high: 3.1415926
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
       nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-      nll_gating: is_galaxy
+      nll_gating:
+        _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_disk_q
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
       nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-      nll_gating: is_galaxy
+      nll_gating:
+        _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: galaxy_a_d
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
       nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-      nll_gating: is_galaxy
+      nll_gating:
+        _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_bulge_q
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
       nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-      nll_gating: is_galaxy
+      nll_gating:
+        _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: galaxy_a_b
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
       nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
-      nll_gating: is_galaxy
-
-no_gal_shape_variational_factors:
-    - _target_: bliss.encoder.variational_dist.BernoulliFactor
-      name: n_sources
-      sample_rearrange: null
-      nll_rearrange: null
-      nll_gating: null
-    - _target_: bliss.encoder.variational_dist.TDBNFactor
-      name: locs
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 d -> b ht wt d"
-      nll_gating: n_sources
-    - _target_: bliss.encoder.variational_dist.BernoulliFactor
-      name: source_type
-      sample_rearrange: "b ht wt -> b ht wt 1 1"
-      nll_rearrange: "b ht wt 1 1 -> b ht wt"
-      nll_gating: n_sources
-    - _target_: bliss.encoder.variational_dist.LogNormalFactor
-      name: star_fluxes
-      dim: 5
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 d -> b ht wt d"
-      nll_gating: is_star
-    - _target_: bliss.encoder.variational_dist.LogNormalFactor
-      name: galaxy_fluxes
-      dim: 5
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 d -> b ht wt d"
-      nll_gating: is_galaxy
+      nll_gating:
+        _target_: bliss.encoder.variational_dist.GalaxyGating
 
 psf_asinh_normalizers:
     psf:
@@ -207,29 +188,31 @@ all_normalizers:
 metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
-        mag_bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
-        mag_band: 2
+        bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
+        ref_band: 2
+        bin_type: mag
     source_type_accuracy:
         _target_: bliss.encoder.metrics.SourceTypeAccuracy
-        mag_bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
+        bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
         ref_band: 2
+        bin_type: mag
     flux_error:
         _target_: bliss.encoder.metrics.FluxError
-        mag_bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
-        mag_band: 2
+        bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
+        ref_band: 2
         survey_bands: ${encoder.survey_bands}
+        bin_type: mag
     gal_shape_error:
         _target_: bliss.encoder.metrics.GalaxyShapeError
-        mag_bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
-        mag_band: 2
+        bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
+        ref_band: 2
+        bin_type: mag
 
 encoder:
     _target_: bliss.encoder.encoder.Encoder
     survey_bands: ["u", "g", "r", "i", "z"]
     reference_band: 2  # SDSS r-band
     tile_slen: ${simulator.prior.tile_slen}
-    min_flux_for_loss: 1.59  # set to 0 to include all sources
-    min_flux_for_metrics: 1.59  # set to 0 to include all sources
     optimizer_params:
         lr: 1e-3
     scheduler_params:

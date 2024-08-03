@@ -54,7 +54,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         n_image_split: int,
         tile_slen: int,
         max_sources_per_tile: int,
-        min_flux_for_loss: int,
+        catalog_min_r_flux: float,
         prepare_data_processes_num: int,
         data_in_one_cached_file: int,
         splits: str,
@@ -82,21 +82,17 @@ class DC2DataModule(CachedSimulatedDataModule):
         self.n_image_split = n_image_split
         self.tile_slen = tile_slen
         self.max_sources_per_tile = max_sources_per_tile
-        self.min_flux_for_loss = min_flux_for_loss
+        self.catalog_min_r_flux = catalog_min_r_flux
         self.prepare_data_processes_num = prepare_data_processes_num
         self.data_in_one_cached_file = data_in_one_cached_file
 
         assert (
-            self.image_lim[0] % self.n_image_split == 0
-        ), "image_lim is not divisible by n_image_split"
-        assert (
-            self.image_lim[1] % self.n_image_split == 0
-        ), "image_lim is not divisible by n_image_split"
-        assert (
             self.image_lim[0] == self.image_lim[1]
         ), "image_lim[0] should be equal to image_lim[1]"
+        assert (
+            self.image_lim[0] % self.n_image_split == 0
+        ), "image_lim is not divisible by n_image_split"
         assert (self.image_lim[0] // self.n_image_split) % self.tile_slen == 0, "invalid tile_slen"
-        assert (self.image_lim[1] // self.n_image_split) % self.tile_slen == 0, "invalid tile_slen"
 
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
@@ -163,7 +159,6 @@ class DC2DataModule(CachedSimulatedDataModule):
         return {
             "tile_catalog": result_dict["tile_dict"],
             "image": result_dict["inputs"]["image"],
-            "background": result_dict["inputs"]["bg"],
             "match_id": result_dict["other_info"]["match_id"],
             "full_catalog": result_dict["other_info"]["full_cat"],
             "wcs": result_dict["other_info"]["wcs"],
@@ -181,7 +176,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         return {k: v.unsqueeze(0) for k, v in tile_dict_copy.items()}
 
     def load_image_and_catalog(self, image_index):
-        image, bg, wcs_header_str = self.read_image_for_bands(image_index)
+        image, wcs_header_str = self.read_image_for_bands(image_index)
         wcs = wcs_from_wcs_header_str(wcs_header_str)
 
         plocs_lim = image[0].shape
@@ -194,7 +189,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             width,
             bands=self.bands,
             n_bands=self.n_bands,
-            min_flux_for_loss=self.min_flux_for_loss,
+            catalog_min_r_flux=self.catalog_min_r_flux,
         )
         tile_cat = full_cat.to_tile_catalog(self.tile_slen, self.max_sources_per_tile)
         tile_dict = self.squeeze_tile_dict(tile_cat.data)
@@ -216,7 +211,6 @@ class DC2DataModule(CachedSimulatedDataModule):
             "tile_dict": tile_dict,
             "inputs": {
                 "image": image,
-                "bg": bg,
                 "psf_params": psf_params,
             },
             "other_info": {
@@ -231,7 +225,6 @@ class DC2DataModule(CachedSimulatedDataModule):
         result_dict = self.load_image_and_catalog(image_index)
 
         image = result_dict["inputs"]["image"]
-        bg = result_dict["inputs"]["bg"]
         tile_dict = result_dict["tile_dict"]
         wcs_header_str = result_dict["other_info"]["wcs_header_str"]
         psf_params = result_dict["inputs"]["psf_params"]
@@ -241,7 +234,6 @@ class DC2DataModule(CachedSimulatedDataModule):
         image_splits = split_tensor(image, split_lim, 1, 2)
         image_width_pixels = image.shape[2]
         split_image_num_on_width = image_width_pixels // split_lim
-        bg_splits = split_tensor(bg, split_lim, 1, 2)
 
         # split tile cat
         tile_cat_splits = {}
@@ -252,6 +244,10 @@ class DC2DataModule(CachedSimulatedDataModule):
             "galaxy_fluxes",
             "star_fluxes",
             "redshifts",
+            "blendedness",
+            "shear",
+            "ellipticity",
+            "cosmodc2_mask",
             "one_source_mask",
             "two_sources_mask",
             "more_than_two_sources_mask",
@@ -270,7 +266,6 @@ class DC2DataModule(CachedSimulatedDataModule):
             "image_width_index": (
                 torch.arange(0, len(image_splits)) % split_image_num_on_width
             ).tolist(),
-            "background": bg_splits,
             "psf_params": [psf_params for _ in range(self.n_image_split**2)],
         }
         data_splits = split_list(
@@ -299,32 +294,21 @@ class DC2DataModule(CachedSimulatedDataModule):
 
     def read_image_for_bands(self, image_index):
         image_list = []
-        bg_list = []
         wcs_header_str = None
         for b in range(self.n_bands):
             image_frame = fits.open(self._image_files[b][image_index])
-            bg_frame = fits.open(self._bg_files[b][image_index])
             image_data = image_frame[1].data
-            bg_data = bg_frame[0].data
-
             if wcs_header_str is None:
                 wcs_header_str = image_frame[1].header.tostring()
-
             image_frame.close()
-            bg_frame.close()
 
             image = torch.nan_to_num(
                 torch.from_numpy(image_data)[: self.image_lim[0], : self.image_lim[1]]
             )
-            bg = torch.from_numpy(bg_data.astype(np.float32)).expand(
-                self.image_lim[0], self.image_lim[1]
-            )
-
-            image += bg
+            # we assume image doesn't contain bg
             image_list.append(image)
-            bg_list.append(bg)
 
-        return torch.stack(image_list), torch.stack(bg_list), wcs_header_str
+        return torch.stack(image_list), wcs_header_str
 
 
 class DC2FullCatalog(FullCatalog):
@@ -332,56 +316,72 @@ class DC2FullCatalog(FullCatalog):
     def from_file(cls, cat_path, wcs, height, width, **kwargs):
         catalog = pd.read_pickle(cat_path)
         flux_r_band = catalog["flux_r"].values
-        catalog = catalog.loc[flux_r_band > kwargs["min_flux_for_loss"]]
+        catalog = catalog.loc[flux_r_band > kwargs["catalog_min_r_flux"]]
 
         objid = torch.from_numpy(catalog["id"].values)
         match_id = torch.from_numpy(catalog["match_objectId"].values)
-        ra = torch.from_numpy(catalog["ra"].values).squeeze()
-        dec = torch.from_numpy(catalog["dec"].values).squeeze()
+        ra = torch.from_numpy(catalog["ra"].values)
+        dec = torch.from_numpy(catalog["dec"].values)
+        plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
         galaxy_bools = torch.from_numpy((catalog["truth_type"] == 1).values)
         star_bools = torch.from_numpy((catalog["truth_type"] == 2).values)
+        source_type = torch.from_numpy(catalog["truth_type"].values)
+        # we ignore the supernova
+        source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
         flux, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
-        do_have_redshifts = catalog.get("redshifts", "")
-        if do_have_redshifts:
-            redshifts = torch.from_numpy(catalog["redshifts"].values)
+        star_fluxes = flux
+        galaxy_fluxes = flux
+        blendedness = torch.from_numpy(catalog["blendedness"].values)
+        shear1 = torch.from_numpy(catalog["shear_1"].values)
+        shear2 = torch.from_numpy(catalog["shear_2"].values)
+        shear = torch.stack((shear1, shear2), dim=-1)
+        ellipticity1 = torch.from_numpy(catalog["ellipticity_1_true"].values)
+        ellipticity2 = torch.from_numpy(catalog["ellipticity_2_true"].values)
+        ellipticity = torch.stack((ellipticity1, ellipticity2), dim=-1)
+        cosmodc2_mask = torch.from_numpy(catalog["cosmodc2_mask"].values)
+        redshifts = torch.from_numpy(catalog["redshifts"].values)
+
+        ori_len = len(catalog)
+        d = {
+            "objid": objid.view(1, ori_len, 1),
+            "source_type": source_type.view(1, ori_len, 1),
+            "plocs": plocs.view(1, ori_len, 2),
+            "redshifts": redshifts.view(1, ori_len, 1),
+            "galaxy_fluxes": galaxy_fluxes.view(1, ori_len, kwargs["n_bands"]),
+            "star_fluxes": star_fluxes.view(1, ori_len, kwargs["n_bands"]),
+            "blendedness": blendedness.view(1, ori_len, 1),
+            "shear": shear.view(1, ori_len, 2),
+            "ellipticity": ellipticity.view(1, ori_len, 2),
+            "cosmodc2_mask": cosmodc2_mask.view(1, ori_len, 1),
+        }
 
         star_galaxy_filter = galaxy_bools | star_bools
-        objid = objid[star_galaxy_filter]
+        for k, v in d.items():
+            d[k] = v[:, star_galaxy_filter, :]
         match_id = match_id[star_galaxy_filter]
-        ra = ra[star_galaxy_filter]
-        dec = dec[star_galaxy_filter]
-        source_type = torch.from_numpy(catalog["truth_type"].values[star_galaxy_filter])
-        source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
-        star_fluxes = flux[star_galaxy_filter]
-        galaxy_fluxes = flux[star_galaxy_filter]
-        if do_have_redshifts:
-            redshifts = redshifts[star_galaxy_filter]
 
-        plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
-        x0_mask = (plocs[:, 0] > 0) & (plocs[:, 0] < height)
-        x1_mask = (plocs[:, 1] > 0) & (plocs[:, 1] < width)
-        plocs_mask = x0_mask * x1_mask
-
-        objid = objid[plocs_mask]
+        plocs_start_point = torch.tensor([0.0, 0.0]).view(1, 1, -1)
+        plocs_end_point = torch.tensor([height, width]).view(1, 1, -1)
+        plocs_mask = ((d["plocs"] > plocs_start_point) & (d["plocs"] < plocs_end_point)).all(dim=-1)
+        plocs_mask = plocs_mask.squeeze(0)
+        for k, v in d.items():
+            d[k] = v[:, plocs_mask, :]
         match_id = match_id[plocs_mask]
-        plocs = plocs[plocs_mask]
-        source_type = source_type[plocs_mask]
-        star_fluxes = star_fluxes[plocs_mask]
-        galaxy_fluxes = galaxy_fluxes[plocs_mask]
-        if do_have_redshifts:
-            redshifts = redshifts[plocs_mask]
 
-        nobj = source_type.shape[0]
-        redshifts = redshifts.reshape(1, nobj, 1) if do_have_redshifts else torch.zeros(1, nobj, 1)
-        d = {
-            "objid": objid.reshape(1, nobj, 1),
-            "n_sources": torch.tensor((nobj,)),
-            "source_type": source_type.reshape(1, nobj, 1),
-            "plocs": plocs.reshape(1, nobj, 2),
-            "redshifts": redshifts,
-            "galaxy_fluxes": galaxy_fluxes.reshape(1, nobj, kwargs["n_bands"]),
-            "star_fluxes": star_fluxes.reshape(1, nobj, kwargs["n_bands"]),
-        }
+        cosmodc2_mask = rearrange(d["cosmodc2_mask"], "1 nobj 1 -> nobj")
+        shear = d["shear"]
+        ellipticity = d["ellipticity"]
+        assert (
+            not torch.isnan(shear[:, cosmodc2_mask, :]).any()
+            and not torch.isnan(ellipticity[:, cosmodc2_mask, :]).any()
+        )
+        assert (
+            torch.isnan(shear[:, ~cosmodc2_mask, :]).all()
+            and torch.isnan(ellipticity[:, ~cosmodc2_mask, :]).all()
+        )
+
+        nobj = d["source_type"].shape[1]
+        d["n_sources"] = torch.tensor((nobj,))
 
         return cls(height, width, d), psf_params, match_id
 

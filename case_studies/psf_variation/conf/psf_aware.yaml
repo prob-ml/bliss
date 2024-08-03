@@ -11,7 +11,7 @@ encoder:
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
         tile_slen: ${encoder.tile_slen}
-        factors: ${all_variational_factors}
+        factors: ${variational_factors}
 
 train:
     trainer:

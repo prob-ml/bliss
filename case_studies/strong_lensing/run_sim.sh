@@ -3,10 +3,10 @@
 # Script to automate running the galsim command with the yaml configuration
 
 # Default Values
-num_files=10
-num_galaxies=3
-img_size=500
 
+num_files=100
+num_galaxies=3
+img_size=512
 
 while getopts "f:s:g:" opt; do
   case $opt in
@@ -28,20 +28,30 @@ while getopts "f:s:g:" opt; do
   esac
 done
 
+echo "Running data generation script with the following parameters:"
+echo "output images: $num_files"
+echo "galaxies per output image: $num_galaxies"
+echo "output image size: $img_size pixels"
 
 # base image config file
 GALAXY_CONFIG_FILE="galsim-random.yaml"
 # final image config file
-IMAGE_CONFIG_FILE="simulate.yaml" 
-
+IMAGE_CONFIG_FILE="simulate.yaml"
 
 NUM_ITERATIONS=$((num_galaxies+1))
 
 # Set the output directory for base images
 OUTPUT_DIR="data/images"
-# Output directory for final images
-FINAL_OUTPUT_DIR="output_yaml"
 
+# Output directory for final images
+FINAL_OUTPUT_DIR="output"
+
+# Catalog Directory
+CATALOG_DIR="catalogs"
+
+if [ ! -d "$CATALOG_DIR" ]; then
+  mkdir -p "$CATALOG_DIR"
+  echo "Created catalogs directory"
 
 MAG=0.029999
 # Create the output directory if it doesn't exist
@@ -53,25 +63,20 @@ if [ ! -d "$OUTPUT_DIR" ]; then
     fi
 fi
 
-# Log file
-LOG_FILE="galsim_run.log"
-
 NUM_UNLENSED_IMAGES=$((num_galaxies/2))
 NUM_LENSED_IMAGES=$((num_galaxies-NUM_UNLENSED_IMAGES))
 
 echo "Starting data generation..."
-echo "Data generation beginning..." &> $LOG_FILE
 for i in $(seq 1 $num_files); do
-    echo "Starting File $i / $num_files..." &>> $LOG_FILE
+    echo "Starting File $i / $num_files..."
 
     for j in $(seq 1 $NUM_ITERATIONS); do
-      echo "Iteration $j..." &>> $LOG_FILE
+      echo "Iteration $j..."
 
       # First Python script - Galaxy Parameter Generation
       PYTHON_SCRIPT_1="random_galaxy_gen.py"
       # Second Python script - Lenstronomy Lensing Logic
       PYTHON_SCRIPT_2="bliss_lens.py"
-
 
       output=$(python $PYTHON_SCRIPT_1 $img_size)
       params=($output)
@@ -87,31 +92,31 @@ for i in $(seq 1 $num_files); do
       x=${params[8]}
       y=${params[9]}
 
-      galsim "$GALAXY_CONFIG_FILE" variables.output_directory="$OUTPUT_DIR" variables.n1="$n1" variables.half_light_radius="$half_light_radius" variables.flux1="$flux1" variables.n2="$n2" variables.scale_radius="$scale_radius" variables.flux2="$flux2" variables.q="$q" variables.beta="$beta degrees" &>> $LOG_FILE
+      galsim "$GALAXY_CONFIG_FILE" variables.output_directory="$OUTPUT_DIR" variables.n1="$n1" variables.half_light_radius="$half_light_radius" variables.flux1="$flux1" variables.n2="$n2" variables.scale_radius="$scale_radius" variables.flux2="$flux2" variables.q="$q" variables.beta="$beta degrees"
 
       # Check if galsim command was successful
       if [ $? -eq 0 ]; then
-          echo "GalSim ran successfully for file $i iteration $j. Output files are in $OUTPUT_DIR." &>> $LOG_FILE
+          echo "GalSim ran successfully for file $i iteration $j. Output files are in $OUTPUT_DIR."
       else
-          echo "GalSim encountered an error during file $i iteration $j. Check the log file $LOG_FILE for details." &>> $LOG_FILE
+          echo "GalSim encountered an error during file $i iteration $j."
           exit 1
       fi
 
       # Find the generated .fits file
       FITS_FILE=$(find "$OUTPUT_DIR" -name "galsim.fits" -print -quit)
       if [ -z "$FITS_FILE" ]; then
-          echo "No .fits file found in $OUTPUT_DIR for file $i iteration $j!" &>> $LOG_FILE
+          echo "No .fits file found in $OUTPUT_DIR for file $i iteration $j!"
           exit 1
       fi
 
       # Write unlensed images to combined files
       if [ "$j" -le "$NUM_UNLENSED_IMAGES" ]; then
-          echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, False, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta" >> data/catalog.txt
+          echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, 0.0, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta" >> data/catalog.txt
 
       # Write lensed images to combined files
-      else 
+      else
           # Running Lenstronomy lensing (Generating lensed image)
-          echo "Running Python script $PYTHON_SCRIPT_2 on iteration $j..." &>> $LOG_FILE
+          echo "Running Python script $PYTHON_SCRIPT_2 on iteration $j..."
           output=$(python "$PYTHON_SCRIPT_2" "$FITS_FILE" "$OUTPUT_DIR")
           lens_params=($output)
           theta_E=${lens_params[0]}
@@ -119,8 +124,7 @@ for i in $(seq 1 $num_files); do
           center_y=${lens_params[2]}
           e1=${lens_params[3]}
           e2=${lens_params[4]}
-        #   echo "$ITR, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $ITR, $ITR, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, True, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta, $theta_E, $center_x, $center_y, $e1, $e2" >> data/catalog.txt
-          echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, True, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta, $theta_E, $center_x, $center_y, $e1, $e2" >> data/catalog.txt
+          echo "$j, 0, 0, 0, 'F814W', 0, 'combined_images.fits', 'real_galaxy_PSF_images.fits', $j, $j, $MAG, 0, 1.33700996e-05, 'acs_I_unrot_sci_20_cf.fits', 0, 1.0, $x, $y, $n1, $half_light_radius, $flux1, $n2, $scale_radius, $flux2, $q, $beta, $theta_E, $center_x, $center_y, $e1, $e2" >> data/catalog.txt
       fi
 
       # Rename the output files to include the iteration number
@@ -136,10 +140,10 @@ for i in $(seq 1 $num_files); do
         exit 1
     fi
 
-    echo "Running python file $PYTHON_SCRIPT_3 to stack all images..." &>> $LOG_FILE
-    python "$PYTHON_SCRIPT_3" "$OUTPUT_DIR" &>> $LOG_FILE
+    echo "Running python file $PYTHON_SCRIPT_3 to stack all images..."
+    python "$PYTHON_SCRIPT_3" "$OUTPUT_DIR"
 
-    # Fourht Python script - Converting Text Catalog to Fits
+    # Fourth Python script - Converting Text Catalog to Fits
     PYTHON_SCRIPT_4="convert_catalog.py"
     # Check if Python scripts exist
     if [ ! -f "$PYTHON_SCRIPT_4" ]; then
@@ -147,25 +151,31 @@ for i in $(seq 1 $num_files); do
         exit 1
     fi
 
-    echo "Running python file $PYTHON_SCRIPT_4 to convert text catalog..." &>> $LOG_FILE
-    python "$PYTHON_SCRIPT_4" "$OUTPUT_DIR" &>> $LOG_FILE
+    echo "Running python file $PYTHON_SCRIPT_4 to convert text catalog..."
+    python "$PYTHON_SCRIPT_4" "$OUTPUT_DIR"
 
-    # Run Galsim to produce final image  
-    echo "Running galsim with $IMAGE_CONFIG_FILE..." &>> $LOG_FILE
-    galsim "$IMAGE_CONFIG_FILE" variables.output_dir="$FINAL_OUTPUT_DIR" variables.nobjects="$num_galaxies" variables.image_size="$img_size" &>> $LOG_FILE
+    # Run Galsim to produce final image
+    echo "Running galsim with $IMAGE_CONFIG_FILE..."
+    galsim "$IMAGE_CONFIG_FILE" variables.output_dir="$FINAL_OUTPUT_DIR" variables.nobjects="$num_galaxies" variables.image_size="$img_size"
 
     mv "$FINAL_OUTPUT_DIR/image.fits" "$FINAL_OUTPUT_DIR/image${i}.fits"
 
     OPEN_FITS="open_fits.py"
-    python "$OPEN_FITS" "$i" "$FINAL_OUTPUT_DIR" &>> $LOG_FILE
+
+    python "$OPEN_FITS" "$i" "$FINAL_OUTPUT_DIR"
 
     rm -r data/images
-    rm data/catalog.fits data/catalog.txt data/combined_images.fits
+    rm data/catalog.fits data/combined_images.fits
+    sed -i '$d' data/catalog.txt
+    mv data/catalog.txt $CATALOG_DIR/image${i}.txt
+
 done
 
 # Move all image pngs to separate folder
 mkdir $FINAL_OUTPUT_DIR/images
+mkdir $FINAL_OUTPUT_DIR/data
+
 mv $FINAL_OUTPUT_DIR/*.png $FINAL_OUTPUT_DIR/images/
+mv $FINAL_OUTPUT_DIR/*.fits $FINAL_OUTPUT_DIR/data/
 
 echo "Data generation completed."
-echo "Data generation ended."&>> $LOG_FILE

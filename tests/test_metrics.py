@@ -2,7 +2,6 @@ import numpy as np
 import pytest
 import torch
 from hydra.utils import instantiate
-from omegaconf import open_dict
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.encoder.metrics import (
@@ -11,7 +10,7 @@ from bliss.encoder.metrics import (
     FluxError,
     SourceTypeAccuracy,
 )
-from bliss.surveys.decals import TractorFullCatalog
+from bliss.surveys.des import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 
 
@@ -20,7 +19,7 @@ class TestMetrics:
     def tile_catalog(self, cfg, multiband_dataloader):
         """Generate a tile catalog for testing classification metrics."""
         tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
-        return TileCatalog(cfg.simulator.prior.tile_slen, tile_cat)
+        return TileCatalog(tile_cat)
 
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
@@ -59,7 +58,7 @@ class TestMetrics:
         assert np.isclose(dresults["detection_precision"], 2 / (2 + 2))
         assert np.isclose(dresults["detection_recall"], 2 / 3)
 
-        acc_metrics = SourceTypeAccuracy(flux_bin_cutoffs=[200, 400, 600, 800, 1000])
+        acc_metrics = SourceTypeAccuracy(bin_cutoffs=[200, 400, 600, 800, 1000])
         acc_results = acc_metrics(true_params, est_params, matching)
         assert np.isclose(acc_results["classification_acc"], 1 / 2)
 
@@ -105,7 +104,7 @@ class TestMetrics:
 
     def test_self_agreement(self, tile_catalog):
         """Test galaxy classification metrics on full catalog."""
-        full_catalog = tile_catalog.to_full_catalog()
+        full_catalog = tile_catalog.to_full_catalog(4)
 
         matcher = CatalogMatcher(dist_slack=1.0, mag_band=2)
         matching = matcher.match_catalogs(full_catalog, full_catalog)
@@ -114,7 +113,7 @@ class TestMetrics:
         dresults = detection_metrics(full_catalog, full_catalog, matching)
         assert dresults["detection_f1"] == 1
 
-        acc_metrics = SourceTypeAccuracy(flux_bin_cutoffs=[200, 400, 600, 800, 1000])
+        acc_metrics = SourceTypeAccuracy(bin_cutoffs=[200, 400, 600, 800, 1000])
         acc_results = acc_metrics(full_catalog, full_catalog, matching)
         assert acc_results["classification_acc"] == 1
 
@@ -122,54 +121,35 @@ class TestMetrics:
         flux_results = flux_metrics(full_catalog, full_catalog, matching)
         assert flux_results["flux_err_r_mae"] == 0
 
-    def _get_sdss_data(self, cfg):
-        """Loads SDSS frame and Photo Catalog."""
-        cfg = cfg.copy()
-        with open_dict(cfg):
-            cfg.surveys.sdss.align_to_band = 2
-        sdss = instantiate(cfg.surveys.sdss, load_image_data=True)
+    def test_photo_decals_catalogs_matches(self, cfg):
+        """Compares catalogs as safety check for metrics."""
+        sdss = instantiate(cfg.surveys.sdss, load_image_data=False)
         sdss.prepare_data()
 
         run, camcol, field = sdss.image_id(0)
-        photo_cat = PhotoFullCatalog.from_file(
+        base_photo_cat = PhotoFullCatalog.from_file(
             cat_path=cfg.paths.sdss
             + f"/{run}/{camcol}/{field}/photoObj-{run:06d}-{camcol}-{field:04d}.fits",
-            wcs=sdss[0]["wcs"][cfg.simulator.prior.reference_band],
-            height=sdss[0]["image"].shape[1],
-            width=sdss[0]["image"].shape[2],
+            wcs=sdss[0]["wcs"][2],
+            height=1488,
+            width=2048,
         )
-        return photo_cat, sdss
 
-    def _get_image_and_background(self, sdss):
-        """Aligns, crops image and background from SDSS frame to reduce size."""
-        image = sdss[0]["image"]
-        background = sdss[0]["background"]
-
-        # crop to center fourth
-        height, width = image[0].shape
-        min_h, min_w = height // 4, width // 4
-        max_h, max_w = min_h * 3 - 8, min_w * 3
-        cropped_image = image[:, min_h:max_h, min_w:max_w]
-        cropped_background = background[:, min_h:max_h, min_w:max_w]
-
-        return cropped_image, cropped_background, (min_w, max_w), (min_h, max_h)
-
-    def test_photo_decals_catalogs_matches(self, cfg):
-        """Compares catalogs as safety check for metrics."""
-        base_photo_cat, sdss = self._get_sdss_data(cfg)
         wcs = sdss[0]["wcs"][2]
 
-        image, _background, w_lim, h_lim = self._get_image_and_background(sdss)
+        w_lim, h_lim = ((512, 1536), (372, 1108))
 
         # get RA/DEC limits of cropped image and construct d
         ra_lim, dec_lim = wcs.all_pix2world(w_lim, h_lim, 0)
         photo_cat = base_photo_cat.restrict_by_ra_dec(ra_lim, dec_lim).to(torch.device("cpu"))
         decals_path = cfg.predict.decals_frame
-        decals_cat = TractorFullCatalog.from_file(decals_path, wcs, image.shape[1], image.shape[2])
+        decals_cat = TractorFullCatalog.from_file(
+            decals_path, wcs, h_lim[1] - h_lim[0], w_lim[1] - w_lim[0]
+        )
         decals_cat = decals_cat.to(torch.device("cpu"))
 
         matcher = CatalogMatcher(dist_slack=1.0)
-        detection_metrics = DetectionPerformance(mag_band=None)
+        detection_metrics = DetectionPerformance(ref_band=None)
 
         pp_matching = matcher.match_catalogs(photo_cat, photo_cat)
         pp_results = detection_metrics(photo_cat, photo_cat, pp_matching)

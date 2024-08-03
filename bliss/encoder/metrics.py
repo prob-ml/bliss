@@ -28,8 +28,8 @@ class CatalogMatcher:
         assert true_cat.batch_size == est_cat.batch_size
 
         if self.mag_slack:
-            true_mags = true_cat.magnitudes[:, :, self.mag_band]
-            est_mags = est_cat.magnitudes[:, :, self.mag_band]
+            true_mags = true_cat.on_mag[:, :, self.mag_band]
+            est_mags = est_cat.on_mag[:, :, self.mag_band]
 
         matching = []
         for i in range(true_cat.batch_size):
@@ -149,25 +149,22 @@ class FilterMetric(Metric):
 
 
 class DetectionPerformance(FilterMetric):
-    """Calculates detection and classification metrics between two catalogs.
-    Note that galaxy classification metrics are only computed when the values are available in
-    both catalogs.
-    """
-
     def __init__(
         self,
-        mag_band: int = 2,
-        mag_bin_cutoffs: list = None,
-        bin_unit_is_flux: bool = False,
+        bin_cutoffs: list = None,
+        ref_band: int = 2,
+        bin_type: str = "nmgy",
         exclude_last_bin: bool = False,
         filter_list: List[CatFilter] = None,
     ):
         super().__init__(filter_list if filter_list else [NullFilter()])
 
-        self.mag_band = mag_band
-        self.mag_bin_cutoffs = mag_bin_cutoffs if mag_bin_cutoffs else []
-        self.bin_unit_is_flux = bin_unit_is_flux
+        self.bin_cutoffs = bin_cutoffs if bin_cutoffs else []
+        self.ref_band = ref_band
+        self.bin_type = bin_type
         self.exclude_last_bin = exclude_last_bin
+
+        assert self.bin_type in {"mag", "nmgy", "njymag"}, "invalid bin type"
 
         detection_metrics = [
             "n_true_sources",
@@ -176,7 +173,7 @@ class DetectionPerformance(FilterMetric):
             "n_est_matches",
         ]
         for metric in detection_metrics:
-            n_bins = len(self.mag_bin_cutoffs) + 1  # fencepost
+            n_bins = len(self.bin_cutoffs) + 1  # fencepost
             init_val = torch.zeros(n_bins)
             self.add_state(metric, default=init_val, dist_reduce_fx="sum")
 
@@ -184,20 +181,20 @@ class DetectionPerformance(FilterMetric):
         assert isinstance(true_cat, FullCatalog), "true_cat should be FullCatalog"
         assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
 
-        if self.mag_band is not None:
-            true_mags = true_cat.on_fluxes if self.bin_unit_is_flux else true_cat.magnitudes
-            true_mags = true_mags[:, :, self.mag_band].contiguous()
-            est_mags = est_cat.on_fluxes if self.bin_unit_is_flux else est_cat.magnitudes
-            est_mags = est_mags[:, :, self.mag_band].contiguous()
+        if self.ref_band is not None:
+            true_bin_measures = true_cat.on_fluxes(self.bin_type)
+            true_bin_measures = true_bin_measures[:, :, self.ref_band].contiguous()
+            est_bin_measures = est_cat.on_fluxes(self.bin_type)
+            est_bin_measures = est_bin_measures[:, :, self.ref_band].contiguous()
         else:
             # hack to match regardless of magnitude; intended for
             # catalogs from surveys with incompatible filter bands
-            true_mags = torch.ones_like(true_cat["plocs"][:, :, 0])
-            est_mags = torch.ones_like(est_cat["plocs"][:, :, 0])
+            true_bin_measures = torch.ones_like(true_cat["plocs"][:, :, 0])
+            est_bin_measures = torch.ones_like(est_cat["plocs"][:, :, 0])
 
         true_filter_bools, est_filter_bools = self.get_filter_bools(true_cat, est_cat)
 
-        cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+        cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
         n_bins = len(cutoffs) + 1
 
         for i in range(true_cat.batch_size):
@@ -210,20 +207,20 @@ class DetectionPerformance(FilterMetric):
             n_true = true_cat["n_sources"][i].sum().item()
             n_est = est_cat["n_sources"][i].sum().item()
 
-            cur_batch_true_mags = true_mags[i, :n_true]
-            cur_batch_est_mags = est_mags[i, :n_est]
+            cur_batch_true_bin_meas = true_bin_measures[i, :n_true]
+            cur_batch_est_bin_meas = est_bin_measures[i, :n_est]
 
             cur_batch_true_filter_bools = true_filter_bools[i, :n_true]
             cur_batch_est_filter_bools = est_filter_bools[i, :n_est]
 
-            tmi = cur_batch_true_mags[cur_batch_true_filter_bools]
-            emi = cur_batch_est_mags[cur_batch_est_filter_bools]
+            tmi = cur_batch_true_bin_meas[cur_batch_true_filter_bools]
+            emi = cur_batch_est_bin_meas[cur_batch_est_filter_bools]
 
             tcat_matches = tcat_matches[cur_batch_true_filter_bools[tcat_matches]]
             ecat_matches = ecat_matches[cur_batch_est_filter_bools[ecat_matches]]
 
-            tmim = cur_batch_true_mags[tcat_matches]
-            emim = cur_batch_est_mags[ecat_matches]
+            tmim = cur_batch_true_bin_meas[tcat_matches]
+            emim = cur_batch_est_bin_meas[ecat_matches]
 
             self.n_true_sources += torch.bucketize(tmi, cutoffs).bincount(minlength=n_bins)
             self.n_est_sources += torch.bucketize(emi, cutoffs).bincount(minlength=n_bins)
@@ -267,7 +264,7 @@ class DetectionPerformance(FilterMetric):
             **f1_bin_results,
         }
 
-    def get_results_on_per_flux_bin(self):
+    def get_results_on_per_bin(self):
         recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)
         precision = (self.n_est_matches / self.n_est_sources).nan_to_num(0)
         f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
@@ -293,9 +290,9 @@ class DetectionPerformance(FilterMetric):
         f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
 
         xlabels = (
-            ["< " + str(self.mag_bin_cutoffs[0])]
-            + [f"{self.mag_bin_cutoffs[i + 1]}" for i in range(len(self.mag_bin_cutoffs) - 1)]
-            + ["> " + str(self.mag_bin_cutoffs[-1])]
+            ["< " + str(self.bin_cutoffs[0])]
+            + [f"{self.bin_cutoffs[i + 1]}" for i in range(len(self.bin_cutoffs) - 1)]
+            + ["> " + str(self.bin_cutoffs[-1])]
         )
 
         n_true_sources = self.n_true_sources
@@ -337,7 +334,7 @@ class DetectionPerformance(FilterMetric):
             color=c3,
             label=f"BLISS F1 {fig_tag}",
         )
-        axes[1].set_xlabel("Flux" if self.bin_unit_is_flux else "Magnitudes")
+        axes[1].set_xlabel(self.bin_type)
         axes[1].set_xticks(range(len(xlabels)))
         axes[1].set_xticklabels(xlabels, rotation=45)
         axes[1].set_ylim([0, 1])
@@ -346,14 +343,14 @@ class DetectionPerformance(FilterMetric):
         axes[0].step(
             range(len(xlabels)),
             n_true_sources.tolist(),
-            label=f"# true sources {fig_tag}",
+            label=f"\# true sources {fig_tag}",
             where="mid",
             color=c4,
         )
         axes[0].step(
             range(len(xlabels)),
             n_true_matches.tolist(),
-            label=f"# BLISS matches {fig_tag}",
+            label=f"\# BLISS matches {fig_tag}",
             ls="--",
             where="mid",
             color=c4,
@@ -372,18 +369,21 @@ class DetectionPerformance(FilterMetric):
 class SourceTypeAccuracy(FilterMetric):
     def __init__(
         self,
-        mag_bin_cutoffs: list,
+        bin_cutoffs: list,
         ref_band: int = 2,
+        bin_type: str = "nmgy",
         filter_list: List[CatFilter] = None,
     ):
         super().__init__(filter_list if filter_list else [NullFilter()])
 
-        self.mag_bin_cutoffs = mag_bin_cutoffs
+        self.bin_cutoffs = bin_cutoffs
         self.ref_band = ref_band
+        self.bin_type = bin_type
 
-        assert self.mag_bin_cutoffs, "flux_bin_cutoffs can't be None or empty"
+        assert self.bin_cutoffs, "flux_bin_cutoffs can't be None or empty"
+        assert self.bin_type in {"mag", "nmgy", "njymag"}, "invalid bin type"
 
-        n_bins = len(self.mag_bin_cutoffs) + 1
+        n_bins = len(self.bin_cutoffs) + 1
 
         self.add_state("gal_tp", default=torch.zeros(n_bins), dist_reduce_fx="sum")
         self.add_state("gal_fp", default=torch.zeros(n_bins), dist_reduce_fx="sum")
@@ -392,10 +392,10 @@ class SourceTypeAccuracy(FilterMetric):
         self.add_state("n_matches", default=torch.zeros(n_bins), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
-        cutoffs = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+        cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
         n_bins = len(cutoffs) + 1
 
-        true_mags = true_cat.magnitudes[:, :, self.ref_band].contiguous()        
+        true_bin_measures = true_cat.on_fluxes(self.bin_type)[:, :, self.ref_band].contiguous()
 
         true_filter_bools, _ = self.get_filter_bools(true_cat, est_cat)
 
@@ -413,8 +413,8 @@ class SourceTypeAccuracy(FilterMetric):
             tcat_matches = tcat_matches[tcat_matches_filter]
             ecat_matches = ecat_matches[tcat_matches_filter]
 
-            cur_batch_true_mags = true_mags[i][tcat_matches]
-            bin_indexes = torch.bucketize(cur_batch_true_mags, cutoffs)
+            cur_batch_true_bin_meas = true_bin_measures[i][tcat_matches]
+            bin_indexes = torch.bucketize(cur_batch_true_bin_meas, cutoffs)
             _, to_bin_mapping = torch.sort(bin_indexes)
             per_bin_elements_count = bin_indexes.bincount(minlength=n_bins)
 
@@ -479,7 +479,7 @@ class SourceTypeAccuracy(FilterMetric):
             **gal_acc_per_bin_results,
         }
 
-    def get_results_on_per_flux_bin(self):
+    def get_results_on_per_bin(self):
         acc = ((self.gal_tp + self.star_tp) / self.n_matches).nan_to_num(0)
         star_acc = (self.star_tp / (self.n_matches - self.gal_tp - self.star_fp)).nan_to_num(0)
         gal_acc = (self.gal_tp / (self.n_matches - self.star_tp - self.gal_fp)).nan_to_num(0)
@@ -504,17 +504,18 @@ class FluxError(Metric):
     def __init__(
             self,
             survey_bands,
-            mag_band: int = 2,
-            mag_bin_cutoffs: list = [],
+            ref_band: int = 2,
+            bin_cutoffs: list = [],
+            bin_type: str = "mag",
             exclude_last_bin: bool = False,
         ):
         super().__init__()
         self.survey_bands = survey_bands  # list of band names (e.g. "r")
-
-        self.mag_band = mag_band
-        self.mag_bin_cutoffs = mag_bin_cutoffs
+        self.ref_band = ref_band
+        self.bin_cutoffs = bin_cutoffs
+        self.bin_type = bin_type
         self.exclude_last_bin = exclude_last_bin
-        self.n_bins = len(self.mag_bin_cutoffs) + 1
+        self.n_bins = len(self.bin_cutoffs) + 1
 
         self.add_state(
             "flux_pct_err",
@@ -529,17 +530,18 @@ class FluxError(Metric):
         self.add_state("n_matches", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
-        true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
-        boundaries = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+        cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
+        true_bin_measures = true_cat.on_fluxes(self.bin_type)[:, :, self.ref_band].contiguous()
 
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
             n_true = true_cat["n_sources"][i].int().sum().item()
-            true_matched_mags = true_mags[i, 0:n_true][tcat_matches]
-            bins = torch.bucketize(true_matched_mags, boundaries)
+            bin_measure = true_cat.on_fluxes(self.bin_type)
+            bin_measure = bin_measure[i, 0:n_true, self.ref_band][tcat_matches].contiguous()
+            bins = torch.bucketize(bin_measure, cutoffs)
 
-            true_flux = true_cat.on_fluxes[i, tcat_matches]
-            est_flux = est_cat.on_fluxes[i, ecat_matches]
+            true_flux = true_cat.on_fluxes("nmgy")[i, tcat_matches]
+            est_flux = est_cat.on_fluxes("nmgy")[i, ecat_matches]
 
             # Compute and update percent error per band
             pct_err = (true_flux - est_flux) / true_flux
@@ -591,15 +593,17 @@ class GalaxyShapeError(Metric):
 
     def __init__(
         self,
-        mag_bin_cutoffs,
-        mag_band=2,
+        bin_cutoffs,
+        ref_band=2,
+        bin_type="mag",
         exclude_last_bin=False,
     ):
         super().__init__()
 
-        self.mag_band = mag_band
-        self.mag_bin_cutoffs = mag_bin_cutoffs
-        self.n_bins = len(self.mag_bin_cutoffs) + 1
+        self.ref_band = ref_band
+        self.bin_cutoffs = bin_cutoffs
+        self.n_bins = len(self.bin_cutoffs) + 1
+        self.bin_type = bin_type
         self.exclude_last_bin = exclude_last_bin  # used to ignore dim objects
 
         gpe_init = torch.zeros((len(self.galaxy_params), self.n_bins))
@@ -609,8 +613,8 @@ class GalaxyShapeError(Metric):
         self.add_state("n_true_galaxies", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching):
-        true_mags = true_cat.magnitudes[:, :, self.mag_band].contiguous()
-        mag_boundaries = torch.tensor(self.mag_bin_cutoffs, device=self.device)
+        true_bin_meas = true_cat.on_fluxes(self.bin_type)[:, :, self.ref_band].contiguous()
+        cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
 
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
@@ -620,11 +624,11 @@ class GalaxyShapeError(Metric):
             # Skip if no galaxies in this image
             if (~is_gal).all():
                 continue
-            true_matched_mags = true_mags[i, 0:n_true][tcat_matches]
+            true_matched_mags = true_bin_meas[i, 0:n_true][tcat_matches]
             true_gal_mags = true_matched_mags[is_gal]
 
             # get magnitude bin for each matched galaxy
-            mag_bins = torch.bucketize(true_gal_mags, mag_boundaries)
+            mag_bins = torch.bucketize(true_gal_mags, cutoffs)
             self.n_true_galaxies += mag_bins.bincount(minlength=self.n_bins)
 
             true_gal_params = true_cat["galaxy_params"][i, tcat_matches][is_gal]
