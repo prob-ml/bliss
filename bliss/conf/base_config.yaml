@@ -81,64 +81,64 @@ variational_factors:
       sample_rearrange: b ht wt d -> b ht wt 1 d
       nll_rearrange: b ht wt 1 d -> b ht wt d
       nll_gating:
-        _target_: bliss.encoder.variational_dist.SourcesGating
+          _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
       name: source_type
       sample_rearrange: b ht wt -> b ht wt 1 1
       nll_rearrange: b ht wt 1 1 -> b ht wt
       nll_gating:
-        _target_: bliss.encoder.variational_dist.SourcesGating
+          _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: star_fluxes
       dim: 5
       sample_rearrange: b ht wt d -> b ht wt 1 d
       nll_rearrange: b ht wt 1 d -> b ht wt d
       nll_gating:
-        _target_: bliss.encoder.variational_dist.StarGating
+          _target_: bliss.encoder.variational_dist.StarGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: galaxy_fluxes
       dim: 5
       sample_rearrange: b ht wt d -> b ht wt 1 d
       nll_rearrange: b ht wt 1 d -> b ht wt d
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_disk_frac
       sample_rearrange: b ht wt d -> b ht wt 1 d
       nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_beta_radians
       high: 3.1415926
       sample_rearrange: b ht wt d -> b ht wt 1 d
       nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_disk_q
       sample_rearrange: b ht wt d -> b ht wt 1 d
       nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: galaxy_a_d
       sample_rearrange: b ht wt d -> b ht wt 1 d
       nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_bulge_q
       sample_rearrange: b ht wt d -> b ht wt 1 d
       nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: galaxy_a_b
       sample_rearrange: b ht wt d -> b ht wt 1 d
       nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
 
 metrics:
     detection_performance:
@@ -299,11 +299,11 @@ train:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
             filename: best_encoder
             save_top_k: 1
-            verbose: True
+            verbose: true
             monitor: val/_loss
             mode: min
-            save_on_train_epoch_end: False
-            auto_insert_metric_name: False
+            save_on_train_epoch_end: false
+            auto_insert_metric_name: false
         early_stopping:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
             monitor: val/_loss
