@@ -14,3 +14,7 @@ train:
     trainer:
         logger:
             name: sdsslike
+
+predict:
+    dataset:
+        load_image_data: true
