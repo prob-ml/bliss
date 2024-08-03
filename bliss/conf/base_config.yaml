@@ -209,7 +209,10 @@ surveys:
         fields:  # TODO: better arbitary name for fields/bricks?
             - run: 94
               camcol: 1
-              fields: [12]
+              fields: [12]  # can also use ${range:start,stop,step,*exclude}
+            - run: 3900
+              camcol: 6
+              fields: [269]
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
