@@ -8,6 +8,7 @@ from bliss.encoder.metrics import (
     CatalogMatcher,
     DetectionPerformance,
     FluxError,
+    GalaxyShapeError,
     SourceTypeAccuracy,
 )
 from bliss.surveys.des import TractorFullCatalog
@@ -46,7 +47,12 @@ class TestMetrics:
             "source_type": est_source_type,
             "star_fluxes": torch.ones(2, 2, 5),
             "galaxy_fluxes": torch.ones(2, 2, 5),
-            "galaxy_params": torch.ones(2, 2, 6),
+            "galaxy_disk_frac": torch.ones(2, 2, 1),
+            "galaxy_beta_radians": torch.ones(2, 2, 1),
+            "galaxy_disk_q": torch.ones(2, 2, 1),
+            "galaxy_a_d": torch.ones(2, 2, 1),
+            "galaxy_bulge_q": torch.ones(2, 2, 1),
+            "galaxy_a_b": torch.ones(2, 2, 1),
         }
         est_params = FullCatalog(slen, slen, d_est)
 
@@ -61,6 +67,10 @@ class TestMetrics:
         acc_metrics = SourceTypeAccuracy(bin_cutoffs=[200, 400, 600, 800, 1000])
         acc_results = acc_metrics(true_params, est_params, matching)
         assert np.isclose(acc_results["classification_acc"], 1 / 2)
+
+        gal_shape_metrics = GalaxyShapeError(bin_cutoffs=[200, 400, 600, 800, 1000])
+        gal_shape_results = gal_shape_metrics(true_params, est_params, matching)
+        assert gal_shape_results["galaxy_disk_hlr_mae"] == 0
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
