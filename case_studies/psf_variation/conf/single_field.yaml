@@ -4,17 +4,24 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    cached_data: /data/scratch/aakash/multi_field_train
+    cached_data: /data/scratch/aakash/single_field_train
+
+surveys:
+    sdss:
+        fields:
+            - run: 94
+              camcol: 1
+              fields: [12]
 
 encoder:
     image_normalizers: ${asinh_only_normalizer}
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
         tile_slen: ${encoder.tile_slen}
-        factors: ${no_gal_shape_variational_factors}
+        factors: ${all_variational_factors}
 
 train:
     trainer:
         logger:
             name: PSF_MODELS
-            version: multi_field_psf_unaware
+            version: single_field

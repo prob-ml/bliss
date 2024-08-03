@@ -34,11 +34,13 @@ prior:
     min_sources: 0
     prob_galaxy: 0.5144
     star_flux_exponent: 0.4689157382430609
-    star_flux_truncation: 613313.768995269
+    # star_flux_truncation: 613313.768995269
+    star_flux_truncation: 1000
     star_flux_loc: -0.5534648001193676
     star_flux_scale: 1.1846035501201129
     galaxy_flux_exponent: 1.5609458661807678
-    galaxy_flux_truncation: 28790.449063519092
+    # galaxy_flux_truncation: 28790.449063519092
+    galaxy_flux_truncation: 1000
     galaxy_flux_loc: -3.29383532288203
     galaxy_flux_scale: 3.924799999613338
     galaxy_a_concentration: 0.39330758068481686
@@ -53,16 +55,16 @@ surveys:
         fields:
             - run: 94
               camcol: 1
-              fields: [12]  #${range:12,482,20}
-            # - run: 125
-            #   camcol: 1
-            #   fields: ${range:15,565,20,435}
-            # - run: 752
-            #   camcol: 1
-            #   fields: ${range:15,685,20}
-            # - run: 3900
-            #   camcol: 6
-            #   fields: ${range:16,596,20,76}
+              fields: ${range:12,482,20}
+            - run: 125
+              camcol: 1
+              fields: ${range:15,565,20,435}
+            - run: 752
+              camcol: 1
+              fields: ${range:15,685,20}
+            - run: 3900
+              camcol: 6
+              fields: ${range:16,596,20,76}
         psf_config:
             pixel_scale: 0.396
             psf_slen: 25
@@ -216,8 +218,10 @@ metrics:
         mag_bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
         mag_band: 2
         survey_bands: ${encoder.survey_bands}
-    # gal_shape_error:
-    #     _target_: bliss.encoder.metrics.GalaxyShapeError
+    gal_shape_error:
+        _target_: bliss.encoder.metrics.GalaxyShapeError
+        mag_bin_cutoffs: [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
+        mag_band: 2
 
 encoder:
     _target_: bliss.encoder.encoder.Encoder
