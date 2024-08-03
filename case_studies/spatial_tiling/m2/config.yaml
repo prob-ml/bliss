@@ -5,7 +5,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    cached_data: /data/scratch/regier/m2
+    cached_data: /data/scratch/regier/m2_jul31
 
 variational_factors:
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
@@ -110,8 +110,8 @@ surveys:
         background_offset: 80
 
 generate:
-    n_image_files: 16
-    n_batches_per_file: 32
+    n_image_files: 64
+    n_batches_per_file: 64
     cached_data_path: ${paths.cached_data}
     store_full_catalog: true
 
