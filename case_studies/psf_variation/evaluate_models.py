@@ -1,3 +1,7 @@
+# flake8: noqa
+# pylint: skip-file
+# Ignoring flake8/pylint for this file since this is just a plotting script
+
 import os
 import argparse
 
@@ -20,7 +24,7 @@ from bliss.catalog import TileCatalog, convert_mag_to_nmgy
 
 # Set up plots, colors, global constants
 sns.set_theme("paper")
-matplotlib.rc('text', usetex=True)
+matplotlib.rc("text", usetex=True)
 plt.rc("font", family="serif")
 
 COLORS = [
@@ -29,7 +33,7 @@ COLORS = [
     "#EDB120",  # yellow
     "#7E2F8E",  # purple
     "#77AC30",  # green
-	"#4DBEEE",  # light blue
+    "#4DBEEE",  # light blue
     "#A2142F",  # dark red
 ]
 
@@ -50,10 +54,12 @@ args = parser.parse_args()
 with initialize(config_path="./conf", version_base=None):
     base_cfg = compose("config")
 
-data_path = args.data_path  #"/data/scratch/aakash/multi_field"
+data_path = args.data_path  # "/data/scratch/aakash/multi_field"
 dataset_name = data_path.split("/")[-1]  # used for save directory names
 
-cached_dataset = instantiate(base_cfg.cached_simulator, cached_data_path=data_path, splits="0:0/0:0/90:100")
+cached_dataset = instantiate(
+    base_cfg.cached_simulator, cached_data_path=data_path, splits="0:0/0:0/90:100"
+)
 cached_dataset.setup(stage="test")
 calib_dataloader = cached_dataset.test_dataloader()
 print(f"Test dataset size: {len(cached_dataset.test_dataset)}")
@@ -74,7 +80,7 @@ models = {
     "psf_aware": {
         "ckpt_path": "/home/aakashdp/bliss_output/PSF_MODELS/psf_aware_with_gal_params/checkpoints/best_encoder.ckpt",
         "config_path": "psf_aware.yaml",
-        "plot_config": {"name": "PSF-aware", "marker": "^", "color": COLORS[2]}
+        "plot_config": {"name": "PSF-aware", "marker": "^", "color": COLORS[2]},
     },
 }
 
@@ -86,7 +92,7 @@ for model_name, model_info in models.items():
 
     encoder = instantiate(cfg.encoder)
     encoder.load_state_dict(torch.load(model_info["ckpt_path"], map_location="cpu")["state_dict"])
-    encoder.eval();
+    encoder.eval()
     model_info["encoder"] = encoder
     model_info["config"] = cfg
 
@@ -96,10 +102,11 @@ def run_eval():
     # Compute metrics for each model
     for model_name in models:
         print(f"Evaluating {model_name} model...")
-        results = trainer.test(models[model_name]["encoder"], datamodule=cached_dataset, verbose=False)
+        results = trainer.test(
+            models[model_name]["encoder"], datamodule=cached_dataset, verbose=False
+        )
         models[model_name]["results"] = results
 
-    
     # Compute bootstrap variance
     N_samples = 5
     orig_test_slice = cached_dataset.slices[2]
@@ -107,8 +114,7 @@ def run_eval():
     orig_stop = orig_test_slice.stop
 
     data_for_var = {
-        model: { key: [] for key in models[rep_key]["results"][0].keys() }
-        for model in models
+        model: {key: [] for key in models[rep_key]["results"][0].keys()} for model in models
     }
 
     for i in tqdm(range(N_samples), desc=f"Bootstrapping {N_samples} samples"):
@@ -117,7 +123,9 @@ def run_eval():
         cached_dataset.setup(stage="test")
 
         for model_name in models:
-            results = trainer.test(models[model_name]["encoder"], dataloaders=cached_dataset, verbose=False)
+            results = trainer.test(
+                models[model_name]["encoder"], dataloaders=cached_dataset, verbose=False
+            )
 
             for key, val in results[0].items():
                 data_for_var[model_name][key].append(val)
@@ -125,12 +133,10 @@ def run_eval():
     cached_dataset.slices[2] = orig_test_slice
 
     stds = {
-        model: {
-            f"{key}_std": np.nanstd(val) for key, val in data_for_var[model].items()
-        } for model in data_for_var
+        model: {f"{key}_std": np.nanstd(val) for key, val in data_for_var[model].items()}
+        for model in data_for_var
     }
 
-    
     # Concatenate results into dataframe
     keys = list(models[rep_key]["results"][0].keys())
     keys.extend(stds[rep_key].keys())
@@ -141,7 +147,9 @@ def run_eval():
         model_vals = [results[key] for key in keys]
         data[model_name] = model_vals
 
-    data_flat = pd.DataFrame.from_dict(data, orient="index", columns=[key.split("/")[-1] for key in keys]).reset_index()
+    data_flat = pd.DataFrame.from_dict(
+        data, orient="index", columns=[key.split("/")[-1] for key in keys]
+    ).reset_index()
     data_flat = data_flat.rename(columns={"index": "model"})
     data_flat = data_flat.set_index("model")
 
@@ -162,7 +170,9 @@ def run_calibration():
             encoder = model["encoder"].to(device)
             pred_dists[model_name] = []
 
-            for batch in tqdm(calib_dataloader, desc=f"Getting calibration metrics for {model_name}..."):
+            for batch in tqdm(
+                calib_dataloader, desc=f"Getting calibration metrics for {model_name}..."
+            ):
                 batch_size, _n_bands, h, w = batch["images"].shape[0:4]
                 ht, wt = h // encoder.tile_slen, w // encoder.tile_slen
 
@@ -208,11 +218,11 @@ def plot_metric(data, metric, metric_cfg):
     bins = [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
     n_bins = len(bins)
     xlabel = "r-band magnitude"
-    
+
     # Plot each model
     for i, name in enumerate(data[metric].keys()):
         plot_config = models[name]["plot_config"]
-        
+
         # Get metric values in each bin
         binned_vals = np.array([data[f"{metric}_bin_{j}"][name] for j in range(n_bins)])
 
@@ -239,11 +249,7 @@ def plot_metric(data, metric, metric_cfg):
             upper = binned_vals + binned_stds
 
             ax.fill_between(
-                np.arange(len(lower)),
-                lower,
-                upper,
-                color=plot_config["color"],
-                alpha=0.2
+                np.arange(len(lower)), lower, upper, color=plot_config["color"], alpha=0.2
             )
 
     # Place bin values on xticks
@@ -277,14 +283,14 @@ def compute_expected_sources(pred_dists, bins, cached_path):
         dict: Dictionary of results.
     """
     n_bins = len(bins)
-    sum_all = { name: torch.zeros(n_bins) for name in models }
-    all_count = { name: torch.zeros(n_bins) for name in models }
+    sum_all = {name: torch.zeros(n_bins) for name in models}
+    all_count = {name: torch.zeros(n_bins) for name in models}
 
-    sum_bright = { name: torch.zeros(n_bins) for name in models }
-    bright_count = { name: torch.zeros(n_bins) for name in models }
+    sum_bright = {name: torch.zeros(n_bins) for name in models}
+    bright_count = {name: torch.zeros(n_bins) for name in models}
 
-    sum_dim = { name: torch.zeros(n_bins) for name in models }
-    dim_count = { name: torch.zeros(n_bins) for name in models }
+    sum_dim = {name: torch.zeros(n_bins) for name in models}
+    dim_count = {name: torch.zeros(n_bins) for name in models}
 
     for i, batch in enumerate(tqdm(calib_dataloader, desc="Computing expected number of sources")):
         target_cat = TileCatalog(batch["tile_catalog"])
@@ -294,9 +300,9 @@ def compute_expected_sources(pred_dists, bins, cached_path):
         bright_mask = (target_cat.on_fluxes("mag")[..., 2] < BRIGHT_THRESHOLD).squeeze()
         dim_mask = (target_cat.on_fluxes("mag")[..., 2] > FAINT_THRESHOLD).squeeze() * normal_mask
 
-        true_sources = (target_cat["n_sources"].bool() * normal_mask).sum(dim=(1,2))
-        true_bright = (target_cat["n_sources"].bool() * bright_mask).sum(dim=(1,2))
-        true_dim = (target_cat["n_sources"].bool() * dim_mask).sum(dim=(1,2))
+        true_sources = (target_cat["n_sources"].bool() * normal_mask).sum(dim=(1, 2))
+        true_bright = (target_cat["n_sources"].bool() * bright_mask).sum(dim=(1, 2))
+        true_dim = (target_cat["n_sources"].bool() * dim_mask).sum(dim=(1, 2))
 
         binned_true = torch.bucketize(true_sources, bins)
         binned_bright = torch.bucketize(true_bright, bins)
@@ -321,7 +327,6 @@ def compute_expected_sources(pred_dists, bins, cached_path):
             sum_dim[name] += tmp.scatter_add(0, binned_dim, dim_on)
             dim_count[name] += binned_dim.bincount(minlength=n_bins)
 
-
     source_data = {"mean_sources_per_bin": {}, "mean_bright_per_bin": {}, "mean_dim_per_bin": {}}
     for name in models:
         source_data["mean_sources_per_bin"][name] = sum_all[name] / all_count[name]
@@ -340,35 +345,62 @@ def plot_expected_vs_predicted_sources(mean_sources_per_bin, mean_bright_per_bin
         mean_bright_per_bin (dict): Average number of bright sources in each bin.
         mean_dim_per_bin (dict): Average number of dim sources in each bin.
     """
-    fig, ax = plt.subplots(1, 3, figsize=(5*3, 5))
+    fig, ax = plt.subplots(1, 3, figsize=(5 * 3, 5))
 
     bins = torch.arange(20)
     n_bins = len(bins)
     shared_params = {"markeredgecolor": "k", "markersize": 6, "linewidth": 1}
 
     # All
-    max_n_all = max([torch.argmax(torch.arange(n_bins) * ~mean_sources_per_bin[name].isnan()) for name in models])
+    max_n_all = max(
+        [
+            torch.argmax(torch.arange(n_bins) * ~mean_sources_per_bin[name].isnan())
+            for name in models
+        ]
+    )
     ax[0].plot(torch.arange(max_n_all + 1), c="darkgray", linewidth=1, linestyle="dashed")
     for name in mean_sources_per_bin:
         plot_config = models[name]["plot_config"]
-        ax[0].plot(mean_sources_per_bin[name], c=plot_config["color"], marker=plot_config["marker"], label=plot_config["name"], **shared_params)
+        ax[0].plot(
+            mean_sources_per_bin[name],
+            c=plot_config["color"],
+            marker=plot_config["marker"],
+            label=plot_config["name"],
+            **shared_params,
+        )
     ax[0].legend(fontsize="x-large")
     ax[0].set_title("All sources", fontsize="xx-large")
 
     # Bright
-    max_n_bright = max([torch.argmax(torch.arange(n_bins) * ~mean_bright_per_bin[name].isnan()) for name in models])
+    max_n_bright = max(
+        [torch.argmax(torch.arange(n_bins) * ~mean_bright_per_bin[name].isnan()) for name in models]
+    )
     ax[1].plot(torch.arange(max_n_bright + 1), c="darkgray", linewidth=1, linestyle="dashed")
     for name in mean_bright_per_bin:
         plot_config = models[name]["plot_config"]
-        ax[1].plot(mean_bright_per_bin[name], c=plot_config["color"], marker=plot_config["marker"], label=plot_config["name"], **shared_params)
+        ax[1].plot(
+            mean_bright_per_bin[name],
+            c=plot_config["color"],
+            marker=plot_config["marker"],
+            label=plot_config["name"],
+            **shared_params,
+        )
     ax[1].set_title(f"Bright (magnitude $<$ {BRIGHT_THRESHOLD:.2f})", fontsize="xx-large")
 
     # Faint
-    max_n_dim = max([torch.argmax(torch.arange(n_bins) * ~mean_dim_per_bin[name].isnan()) for name in models])
+    max_n_dim = max(
+        [torch.argmax(torch.arange(n_bins) * ~mean_dim_per_bin[name].isnan()) for name in models]
+    )
     ax[2].plot(torch.arange(max_n_dim + 1), c="darkgray", linewidth=1, linestyle="dashed")
     for name in mean_dim_per_bin:
         plot_config = models[name]["plot_config"]
-        ax[2].plot(mean_dim_per_bin[name], c=plot_config["color"], marker=plot_config["marker"], label=plot_config["name"], **shared_params)
+        ax[2].plot(
+            mean_dim_per_bin[name],
+            c=plot_config["color"],
+            marker=plot_config["marker"],
+            label=plot_config["name"],
+            **shared_params,
+        )
     ax[2].set_title(f"Faint (magnitude {FAINT_THRESHOLD:.2f}-22)", fontsize="xx-large")
 
     for a in ax:
@@ -392,8 +424,8 @@ def compute_prob_flux_within_one_mag(pred_dists, bins, cached_path):
         Dict: dictionary of results
     """
     n_bins = len(bins)
-    sum_probs = { name: torch.zeros(n_bins) for name in models }
-    bin_count = { name: torch.zeros(n_bins) for name in models }
+    sum_probs = {name: torch.zeros(n_bins) for name in models}
+    bin_count = {name: torch.zeros(n_bins) for name in models}
 
     for i, batch in enumerate(tqdm(calib_dataloader, desc="Prob flux within 1 of true mag")):
         # Get target catalog and magnitudes, construct upper and lower bounds
@@ -415,7 +447,9 @@ def compute_prob_flux_within_one_mag(pred_dists, bins, cached_path):
             star_flux_probs = q_star_flux.cdf(ub) - q_star_flux.cdf(lb)
             gal_flux_probs = q_gal_flux.cdf(ub) - q_gal_flux.cdf(lb)
 
-            pred_probs = torch.where(target_cat.star_bools, star_flux_probs.unsqueeze(-2), gal_flux_probs.unsqueeze(-2))
+            pred_probs = torch.where(
+                target_cat.star_bools, star_flux_probs.unsqueeze(-2), gal_flux_probs.unsqueeze(-2)
+            )
             pred_probs = pred_probs[target_cat.is_on_mask][:, 2]
 
             probs_per_bin = torch.zeros(n_bins, dtype=pred_probs.dtype)
@@ -444,7 +478,7 @@ def plot_flux_within_one_mag(binned_avg_flux_probs, bins):
         plot_config = models[name]["plot_config"]
 
         binned_vals = binned_avg_flux_probs[name].detach()
-        label = plot_config['name']
+        label = plot_config["name"]
         ax.plot(
             binned_vals,
             c=plot_config["color"],
@@ -479,9 +513,9 @@ def compute_prop_flux_in_interval(pred_dists, intervals, cached_path):
     Returns:
         Dict: dictionary of results
     """
-    sum_all_in_eti = { name: torch.zeros(len(intervals)) for name in models }
-    sum_bright_in_eti = { name: torch.zeros(len(intervals)) for name in models }
-    sum_dim_in_eti = { name: torch.zeros(len(intervals)) for name in models }
+    sum_all_in_eti = {name: torch.zeros(len(intervals)) for name in models}
+    sum_bright_in_eti = {name: torch.zeros(len(intervals)) for name in models}
+    sum_dim_in_eti = {name: torch.zeros(len(intervals)) for name in models}
     all_count = 0
     bright_count = 0
     dim_count = 0
@@ -514,7 +548,9 @@ def compute_prop_flux_in_interval(pred_dists, intervals, cached_path):
                 star_flux_in_eti = (true_fluxes >= star_lb) & (true_fluxes <= star_ub)
                 gal_flux_in_eti = (true_fluxes >= gal_lb) & (true_fluxes <= gal_ub)
 
-                source_in_eti = torch.where(target_cat.star_bools.squeeze(), star_flux_in_eti, gal_flux_in_eti)
+                source_in_eti = torch.where(
+                    target_cat.star_bools.squeeze(), star_flux_in_eti, gal_flux_in_eti
+                )
 
                 sum_all_in_eti[name][j] += (source_in_eti * target_cat.is_on_mask.squeeze()).sum()
                 sum_bright_in_eti[name][j] += (source_in_eti * bright_mask).sum()
@@ -532,7 +568,7 @@ def compute_prop_flux_in_interval(pred_dists, intervals, cached_path):
     data = {
         "prop_all_in_eti": prop_all_in_eti,
         "prop_bright_in_eti": prop_bright_in_eti,
-        "prop_dim_in_eti": prop_dim_in_eti
+        "prop_dim_in_eti": prop_dim_in_eti,
     }
     torch.save(data, cached_path)
     return data
@@ -547,7 +583,7 @@ def plot_prop_flux_in_interval(prop_all_in_eti, prop_bright_in_eti, prop_dim_in_
         prop_dim_in_eti (dict): From compute_prop_in_interval
         intervals (List): List of credible intervals
     """
-    fig, ax = plt.subplots(1, 3, figsize=(5*3, 5))
+    fig, ax = plt.subplots(1, 3, figsize=(5 * 3, 5))
 
     ax[0].plot(intervals, intervals, color="darkgray", linewidth=1, linestyle="dashed")
     ax[1].plot(intervals, intervals, color="darkgray", linewidth=1, linestyle="dashed")
@@ -561,7 +597,7 @@ def plot_prop_flux_in_interval(prop_all_in_eti, prop_bright_in_eti, prop_dim_in_
             "markeredgecolor": "k",
             "markersize": 6,
             "linewidth": 1,
-            "label": plot_config["name"]
+            "label": plot_config["name"],
         }
         ax[0].plot(intervals, prop_all_in_eti[name], **kwargs)
         ax[1].plot(intervals, prop_bright_in_eti[name], **kwargs)
@@ -595,8 +631,8 @@ def compute_avg_prob_true_source_type(pred_dists, bins, cached_path):
         Dict: dictionary of results
     """
     n_bins = len(bins)
-    sum_probs = { name: torch.zeros(n_bins) for name in models }
-    bin_count = { name: torch.zeros(n_bins) for name in models }
+    sum_probs = {name: torch.zeros(n_bins) for name in models}
+    bin_count = {name: torch.zeros(n_bins) for name in models}
 
     for i, batch in enumerate(tqdm(calib_dataloader, desc="Computing prob of true class")):
         target_cat = TileCatalog(batch["tile_catalog"])
@@ -672,13 +708,13 @@ def compute_classification_probs_by_threshold(pred_dists, thresholds, cached_pat
     Returns:
         Dict: dictionary of results
     """
-    pred_all_gal = { name: torch.zeros(len(thresholds)) for name in models }
-    pred_bright_gal = { name: torch.zeros(len(thresholds)) for name in models }
-    pred_dim_gal = { name: torch.zeros(len(thresholds)) for name in models }
+    pred_all_gal = {name: torch.zeros(len(thresholds)) for name in models}
+    pred_bright_gal = {name: torch.zeros(len(thresholds)) for name in models}
+    pred_dim_gal = {name: torch.zeros(len(thresholds)) for name in models}
 
-    pred_all_star = { name: torch.zeros(len(thresholds)) for name in models }
-    pred_bright_star = { name: torch.zeros(len(thresholds)) for name in models }
-    pred_dim_star = { name: torch.zeros(len(thresholds)) for name in models }
+    pred_all_star = {name: torch.zeros(len(thresholds)) for name in models}
+    pred_bright_star = {name: torch.zeros(len(thresholds)) for name in models}
+    pred_dim_star = {name: torch.zeros(len(thresholds)) for name in models}
 
     true_all_gal = 0
     true_bright_gal = 0
@@ -705,7 +741,6 @@ def compute_classification_probs_by_threshold(pred_dists, thresholds, cached_pat
         true_dim_star += (target_cat.star_bools.squeeze() * dim_mask).sum()
 
         for name, model in models.items():
-
             gal_probs = pred_dists[name][i]["source_type"].probs[..., 1]
             star_probs = 1 - gal_probs
 
@@ -762,7 +797,7 @@ def plot_classification_by_threshold(prop_all, prop_bright, prop_dim, source_typ
         source_type (dict): from compute_classification_probs_by_threshold
         thresholds (list): List of classification thresholds
     """
-    fig, ax = plt.subplots(1, 3, figsize=(5*3, 5))
+    fig, ax = plt.subplots(1, 3, figsize=(5 * 3, 5))
 
     ax[0].hlines([1], 0, 1, color="darkgray", linewidth=1, linestyle="dashed")
     ax[1].hlines([1], 0, 1, color="darkgray", linewidth=1, linestyle="dashed")
@@ -776,7 +811,7 @@ def plot_classification_by_threshold(prop_all, prop_bright, prop_dim, source_typ
             "markeredgecolor": "k",
             "markersize": 6,
             "linewidth": 1,
-            "label": plot_config["name"]
+            "label": plot_config["name"],
         }
         ax[0].plot(thresholds, prop_all[name], **kwargs)
         ax[1].plot(thresholds, prop_bright[name], **kwargs)
@@ -821,7 +856,7 @@ def compute_source_type_roc_curve(pred_dists, cached_path):
         on_mask = target_cat.is_on_mask.squeeze()
 
         true_source_type = target_cat["source_type"].squeeze()
-        
+
         all_true.extend(true_source_type[on_mask * normal_mask].tolist())
         bright_true.extend(true_source_type[on_mask * bright_mask].tolist())
         dim_true.extend(true_source_type[on_mask * dim_mask].tolist())
@@ -832,7 +867,6 @@ def compute_source_type_roc_curve(pred_dists, cached_path):
             all_pred[name].extend(gal_probs[on_mask * normal_mask])
             bright_pred[name].extend(gal_probs[on_mask * bright_mask])
             dim_pred[name].extend(gal_probs[on_mask * dim_mask])
-
 
     all_roc = {}
     bright_roc = {}
@@ -866,7 +900,7 @@ def plot_source_type_roc_curve(all_roc, bright_roc, dim_roc):
         bright_roc (dict): from compute_source_type_roc_curve
         dim_roc (dict): from compute_source_type_roc_curve
     """
-    fig, ax = plt.subplots(1, 3, figsize=(5*3, 5))
+    fig, ax = plt.subplots(1, 3, figsize=(5 * 3, 5))
 
     ax[0].plot(np.linspace(0, 1, 2), color="darkgray", linewidth=1, linestyle="dashed")
     ax[1].plot(np.linspace(0, 1, 2), color="darkgray", linewidth=1, linestyle="dashed")
@@ -882,17 +916,20 @@ def plot_source_type_roc_curve(all_roc, bright_roc, dim_roc):
             all_roc[name]["fpr"],
             all_roc[name]["tpr"],
             label=f"{plot_config['name']} [{all_roc[name]['auc']:.3f}]",
-            **kwargs)
+            **kwargs,
+        )
         ax[1].plot(
             bright_roc[name]["fpr"],
             bright_roc[name]["tpr"],
             label=f"{plot_config['name']} [{bright_roc[name]['auc']:.3f}]",
-            **kwargs)
+            **kwargs,
+        )
         ax[2].plot(
             dim_roc[name]["fpr"],
             dim_roc[name]["tpr"],
             label=f"{plot_config['name']} [{dim_roc[name]['auc']:.3f}]",
-            **kwargs)
+            **kwargs,
+        )
 
     ax[0].legend(fontsize="x-large")
     ax[1].legend(fontsize="x-large")
@@ -926,9 +963,9 @@ def compute_ci_width(pred_dists, bins, cached_path):
     tail_prob = torch.tensor((1 - interval) / 2)
     n_bins = len(bins)
 
-    ci_width = { name: torch.zeros(n_bins) for name in models }
-    ci_width_prop = { name: torch.zeros(n_bins) for name in models }
-    flux_scale = { name: torch.zeros(n_bins) for name in models }
+    ci_width = {name: torch.zeros(n_bins) for name in models}
+    ci_width_prop = {name: torch.zeros(n_bins) for name in models}
+    flux_scale = {name: torch.zeros(n_bins) for name in models}
     bin_count = torch.zeros(n_bins)
 
     for i, batch in enumerate(tqdm(calib_dataloader, desc="CI width")):
@@ -949,7 +986,9 @@ def compute_ci_width(pred_dists, bins, cached_path):
             gal_intervals = q_gal_flux.icdf(1 - tail_prob) - q_gal_flux.icdf(tail_prob)
 
             # Compute CI width for true sources based on source type
-            width = torch.where(target_cat.star_bools, star_intervals.unsqueeze(-2), gal_intervals.unsqueeze(-2))
+            width = torch.where(
+                target_cat.star_bools, star_intervals.unsqueeze(-2), gal_intervals.unsqueeze(-2)
+            )
             width = width[target_cat.is_on_mask][:, 2]
             width[width == torch.inf] = 0  # temp hack to not get inf
 
@@ -957,10 +996,18 @@ def compute_ci_width(pred_dists, bins, cached_path):
             ci_width[name] += tmp.scatter_add(0, binned_target_on_mags, width)
 
             tmp = torch.zeros(n_bins, dtype=width.dtype)
-            ci_width_prop[name] += tmp.scatter_add(0, binned_target_on_mags, width / target_cat.on_fluxes("nmgy")[target_cat.is_on_mask][:, 2])
+            ci_width_prop[name] += tmp.scatter_add(
+                0,
+                binned_target_on_mags,
+                width / target_cat.on_fluxes("nmgy")[target_cat.is_on_mask][:, 2],
+            )
 
             # Get flux scale for true sources based on source type
-            scale = torch.where(target_cat.star_bools, q_star_flux.scale.unsqueeze(-2), q_gal_flux.scale.unsqueeze(-2))
+            scale = torch.where(
+                target_cat.star_bools,
+                q_star_flux.scale.unsqueeze(-2),
+                q_gal_flux.scale.unsqueeze(-2),
+            )
             scale = scale[target_cat.is_on_mask][:, 2]
 
             scales_per_bin = torch.zeros(n_bins, dtype=scale.dtype)
@@ -975,7 +1022,7 @@ def compute_ci_width(pred_dists, bins, cached_path):
     return data
 
 
-def plot_ci_width_data(data, plot_name, cfg_dict, bins):    
+def plot_ci_width_data(data, plot_name, cfg_dict, bins):
     """Plot credible interval width and average standard deviation.
 
     Args:
@@ -996,7 +1043,7 @@ def plot_ci_width_data(data, plot_name, cfg_dict, bins):
             "markeredgecolor": "k",
             "markersize": 6,
             "linewidth": 1,
-            "label": plot_config["name"]
+            "label": plot_config["name"],
         }
         ax.plot(binned_vals, **kwargs)
 
@@ -1028,25 +1075,83 @@ if args.plot_eval:
     print("Plotting eval results")
     # Load saved results
     cached_path = f"data/{dataset_name}/metrics.pt"
-    assert os.path.exists(cached_path), f"ERROR: could not find cached metrics at {cached_path}. Try running with the --run_eval flag."
+    assert os.path.exists(
+        cached_path
+    ), f"ERROR: could not find cached metrics at {cached_path}. Try running with the --run_eval flag."
     data = torch.load(f"data/{dataset_name}/metrics.pt")
 
     # Choose metrics to plot and specify labels, marker, and color for each model
     metrics_to_plot = {
-        "detection_precision": {"ylabel": "Precision", "metric_class": "detection_performance", "yaxis_in_percent": False},
-        "detection_recall": {"ylabel": "Recall", "metric_class": "detection_performance", "yaxis_in_percent": False},
-        "detection_f1": {"ylabel": "F1-Score", "metric_class": "detection_performance", "yaxis_in_percent": False},
-        "classification_acc": {"ylabel": "Classification Accuracy", "metric_class": "source_type_accuracy", "yaxis_in_percent": False},
-        "flux_err_r_mpe": {"ylabel": "r-band Flux Mean \% Error", "metric_class": "flux_error", "yaxis_in_percent": True},
-        "flux_err_r_mape": {"ylabel": "r-band Flux Mean Abosolute \% Error", "metric_class": "flux_error", "yaxis_in_percent": True},
-        "galaxy_disk_frac_mae": {"ylabel": "Disk fraction of flux MAE", "metric_class": "gal_shape_error", "yaxis_in_percent": False},
-        "galaxy_beta_radians_mae": {"ylabel": "Angle MAE", "metric_class": "gal_shape_error", "yaxis_in_percent": False},
-        "galaxy_disk_q_mae": {"ylabel": "Disk minor:major ratio MAE", "metric_class": "gal_shape_error", "yaxis_in_percent": False},
-        "galaxy_a_d_mae": {"ylabel": "Disk major axis MAE", "metric_class": "gal_shape_error", "yaxis_in_percent": False},
-        "galaxy_bulge_q_mae": {"ylabel": "Bulge minor:major ratio MAE", "metric_class": "gal_shape_error", "yaxis_in_percent": False},
-        "galaxy_a_b_mae": {"ylabel": "Bulge major axis MAE", "metric_class": "gal_shape_error", "yaxis_in_percent": False},
-        "galaxy_disk_hlr_mae": {"ylabel": "Disk HLR MAE", "metric_class": "gal_shape_error", "yaxis_in_percent": False},
-        "galaxy_bulge_hlr_mae": {"ylabel": "Bulge HLR MAE", "metric_class": "gal_shape_error", "yaxis_in_percent": False},
+        "detection_precision": {
+            "ylabel": "Precision",
+            "metric_class": "detection_performance",
+            "yaxis_in_percent": False,
+        },
+        "detection_recall": {
+            "ylabel": "Recall",
+            "metric_class": "detection_performance",
+            "yaxis_in_percent": False,
+        },
+        "detection_f1": {
+            "ylabel": "F1-Score",
+            "metric_class": "detection_performance",
+            "yaxis_in_percent": False,
+        },
+        "classification_acc": {
+            "ylabel": "Classification Accuracy",
+            "metric_class": "source_type_accuracy",
+            "yaxis_in_percent": False,
+        },
+        "flux_err_r_mpe": {
+            "ylabel": "r-band Flux Mean \% Error",
+            "metric_class": "flux_error",
+            "yaxis_in_percent": True,
+        },
+        "flux_err_r_mape": {
+            "ylabel": "r-band Flux Mean Abosolute \% Error",
+            "metric_class": "flux_error",
+            "yaxis_in_percent": True,
+        },
+        "galaxy_disk_frac_mae": {
+            "ylabel": "Disk fraction of flux MAE",
+            "metric_class": "gal_shape_error",
+            "yaxis_in_percent": False,
+        },
+        "galaxy_beta_radians_mae": {
+            "ylabel": "Angle MAE",
+            "metric_class": "gal_shape_error",
+            "yaxis_in_percent": False,
+        },
+        "galaxy_disk_q_mae": {
+            "ylabel": "Disk minor:major ratio MAE",
+            "metric_class": "gal_shape_error",
+            "yaxis_in_percent": False,
+        },
+        "galaxy_a_d_mae": {
+            "ylabel": "Disk major axis MAE",
+            "metric_class": "gal_shape_error",
+            "yaxis_in_percent": False,
+        },
+        "galaxy_bulge_q_mae": {
+            "ylabel": "Bulge minor:major ratio MAE",
+            "metric_class": "gal_shape_error",
+            "yaxis_in_percent": False,
+        },
+        "galaxy_a_b_mae": {
+            "ylabel": "Bulge major axis MAE",
+            "metric_class": "gal_shape_error",
+            "yaxis_in_percent": False,
+        },
+        "galaxy_disk_hlr_mae": {
+            "ylabel": "Disk HLR MAE",
+            "metric_class": "gal_shape_error",
+            "yaxis_in_percent": False,
+        },
+        "galaxy_bulge_hlr_mae": {
+            "ylabel": "Bulge HLR MAE",
+            "metric_class": "gal_shape_error",
+            "yaxis_in_percent": False,
+        },
     }
 
     # Plot!
@@ -1056,7 +1161,7 @@ if args.plot_eval:
 
 
 #################################################
-# Run calibration 
+# Run calibration
 #################################################
 if args.run_calibration:
     print("Computing calibration results")
@@ -1068,13 +1173,14 @@ if args.run_calibration:
 #################################################
 if args.plot_calibration:
     print("Plotting calibration results")
-    cached_path = f"/home/aakashdp/bliss/case_studies/psf_variation/data/{dataset_name}/posterior_dists.pt"
-    assert os.path.exists(cached_path), f"ERROR: could not find cached calibration data at {cached_path}. Try running with the --run_calibration flag."
+    cached_path = (
+        f"/home/aakashdp/bliss/case_studies/psf_variation/data/{dataset_name}/posterior_dists.pt"
+    )
+    assert os.path.exists(
+        cached_path
+    ), f"ERROR: could not find cached calibration data at {cached_path}. Try running with the --run_calibration flag."
     pred_dists = torch.load(cached_path)
     os.makedirs(f"plots/{dataset_name}/calibration", exist_ok=True)
-
-
-
 
     ### Expected number of sources
     bins = torch.arange(20)
@@ -1091,11 +1197,10 @@ if args.plot_calibration:
 
     plot_expected_vs_predicted_sources(mean_sources_per_bin, mean_bright_per_bin, mean_dim_per_bin)
 
-
-
-
     ### Probability predicted magnitude is within x of true magnitude
-    bins = torch.tensor([17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000])
+    bins = torch.tensor(
+        [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
+    )
     cached_path = f"data/{dataset_name}/prob_flux_within_one_mag.pt"
     if os.path.exists(cached_path):  # Load cached data if exists
         print(f"Loading cached data from {cached_path}")
@@ -1104,9 +1209,6 @@ if args.plot_calibration:
         binned_avg_flux_probs = compute_prob_flux_within_one_mag(pred_dists, bins, cached_path)
 
     plot_flux_within_one_mag(binned_avg_flux_probs, bins)
-
-
-
 
     ### Proportion of true fluxes in credible interval
     intervals = torch.linspace(0.5, 1, 11)
@@ -1123,11 +1225,10 @@ if args.plot_calibration:
 
     plot_prop_flux_in_interval(prop_all_in_eti, prop_bright_in_eti, prop_dim_in_eti, intervals)
 
-
-
-    
     ### Prob source type by magnitude
-    bins = torch.tensor([17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000])
+    bins = torch.tensor(
+        [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
+    )
     cached_path = f"data/{dataset_name}/true_source_type_probs.pt"
     if os.path.exists(cached_path):
         print(f"Loading cached data from {cached_path}")
@@ -1136,9 +1237,6 @@ if args.plot_calibration:
         binned_source_type_probs = compute_avg_prob_true_source_type(pred_dists, bins, cached_path)
 
     plot_prob_true_source_type(binned_source_type_probs, bins)
-
-    
-
 
     ### Prob correct galaxy / star by threshold
     thresholds = torch.linspace(0, 1, 11)
@@ -1158,16 +1256,19 @@ if args.plot_calibration:
     prop_dim_star = data["prop_dim_star"]
 
     # Plot gal
-    plot_classification_by_threshold(prop_all_gal, prop_bright_gal, prop_dim_gal, "galaxies", thresholds)
+    plot_classification_by_threshold(
+        prop_all_gal, prop_bright_gal, prop_dim_gal, "galaxies", thresholds
+    )
 
     # Plot star
-    plot_classification_by_threshold(prop_all_star, prop_bright_star, prop_dim_star, "stars", thresholds)
-
-    
-
+    plot_classification_by_threshold(
+        prop_all_star, prop_bright_star, prop_dim_star, "stars", thresholds
+    )
 
     ## Source type classification ROC curve
-    cached_path = f"/home/aakashdp/bliss/case_studies/psf_variation/data/{dataset_name}/source_type_roc.pt"
+    cached_path = (
+        f"/home/aakashdp/bliss/case_studies/psf_variation/data/{dataset_name}/source_type_roc.pt"
+    )
     if os.path.exists(cached_path):
         print(f"Loading cached data from {cached_path}")
         data = torch.load(cached_path)
@@ -1180,11 +1281,10 @@ if args.plot_calibration:
 
     plot_source_type_roc_curve(all_roc, bright_roc, dim_roc)
 
-
-
-
     ### CI width / standard deviation vs magnitude
-    bins = torch.tensor([17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000])
+    bins = torch.tensor(
+        [17.777, 19.101, 19.781, 20.258, 20.625, 20.940, 21.227, 21.495, 21.746, 22.000]
+    )
     cached_path = f"data/{dataset_name}/ci_width_and_flux_scale.pt"
     if os.path.exists(cached_path):
         print(f"Loading cached data from {cached_path}")
@@ -1198,8 +1298,11 @@ if args.plot_calibration:
 
     metrics_to_plot = {
         "ci_width": {"ylabel": "Average width of 95\% CI (nmgy)", "ylabel_size": "xx-large"},
-        "ci_width_prop": {"ylabel": "Average width of 95\% CI / true flux", "ylabel_size": "xx-large"},
-        "flux_scale": {"ylabel": "Average $\\sigma$ for predicted flux", "ylabel_size": "xx-large"}
+        "ci_width_prop": {
+            "ylabel": "Average width of 95\% CI / true flux",
+            "ylabel_size": "xx-large",
+        },
+        "flux_scale": {"ylabel": "Average $\\sigma$ for predicted flux", "ylabel_size": "xx-large"},
     }
 
     for metric, cfg_dict in metrics_to_plot.items():

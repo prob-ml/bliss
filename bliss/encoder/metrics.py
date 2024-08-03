@@ -343,14 +343,14 @@ class DetectionPerformance(FilterMetric):
         axes[0].step(
             range(len(xlabels)),
             n_true_sources.tolist(),
-            label=f"\# true sources {fig_tag}",
+            label=f"Number of true sources {fig_tag}",
             where="mid",
             color=c4,
         )
         axes[0].step(
             range(len(xlabels)),
             n_true_matches.tolist(),
-            label=f"\# BLISS matches {fig_tag}",
+            label=f"Number of BLISS matches {fig_tag}",
             ls="--",
             where="mid",
             color=c4,
@@ -502,13 +502,13 @@ class SourceTypeAccuracy(FilterMetric):
 
 class FluxError(Metric):
     def __init__(
-            self,
-            survey_bands,
-            ref_band: int = 2,
-            bin_cutoffs: list = [],
-            bin_type: str = "mag",
-            exclude_last_bin: bool = False,
-        ):
+        self,
+        survey_bands,
+        bin_cutoffs: list,
+        ref_band: int = 2,
+        bin_type: str = "mag",
+        exclude_last_bin: bool = False,
+    ):
         super().__init__()
         self.survey_bands = survey_bands  # list of band names (e.g. "r")
         self.ref_band = ref_band
@@ -520,12 +520,12 @@ class FluxError(Metric):
         self.add_state(
             "flux_pct_err",
             default=torch.zeros((len(self.survey_bands), self.n_bins)),  # n_bins per band
-            dist_reduce_fx="sum"
+            dist_reduce_fx="sum",
         )
         self.add_state(
             "flux_abs_pct_err",
             default=torch.zeros((len(self.survey_bands), self.n_bins)),  # n_bins per band
-            dist_reduce_fx="sum"
+            dist_reduce_fx="sum",
         )
         self.add_state("n_matches", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
 
@@ -536,8 +536,7 @@ class FluxError(Metric):
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
             n_true = true_cat["n_sources"][i].int().sum().item()
-            bin_measure = true_cat.on_fluxes(self.bin_type)
-            bin_measure = bin_measure[i, 0:n_true, self.ref_band][tcat_matches].contiguous()
+            bin_measure = true_bin_measures[i, 0:n_true][tcat_matches].contiguous()
             bins = torch.bucketize(bin_measure, cutoffs)
 
             true_flux = true_cat.on_fluxes("nmgy")[i, tcat_matches]
@@ -546,16 +545,15 @@ class FluxError(Metric):
             # Compute and update percent error per band
             pct_err = (true_flux - est_flux) / true_flux
             abs_pct_err = pct_err.abs()
-            for band in range(len(self.survey_bands)):
-                tmp = torch.zeros((self.n_bins,), dtype=torch.float, device=self.device)  
+            for band in range(len(self.survey_bands)):  # noqa: WPS518
+                tmp = torch.zeros((self.n_bins,), dtype=torch.float, device=self.device)
                 tmp = tmp.scatter_add(0, bins.reshape(-1), pct_err[..., band].reshape(-1))
                 self.flux_pct_err[band] += tmp
 
-                tmp = torch.zeros((self.n_bins,), dtype=torch.float, device=self.device)  
+                tmp = torch.zeros((self.n_bins,), dtype=torch.float, device=self.device)
                 tmp = tmp.scatter_add(0, bins.reshape(-1), abs_pct_err[..., band].reshape(-1))
                 self.flux_abs_pct_err[band] += tmp.abs()
             self.n_matches += bins.bincount(minlength=self.n_bins)
-
 
     def compute(self):
         final_idx = -1 if self.exclude_last_bin else None
@@ -637,13 +635,13 @@ class GalaxyShapeError(Metric):
                 true_param = true_gal_params[:, j]
                 est_param = est_cat[name][i, ecat_matches][is_gal, 0]
                 abs_res = (true_param - est_param).abs()
-                
+
                 # Wrap angle around pi
                 if name == "galaxy_beta_radians":
                     abs_res = abs_res % torch.pi
 
                 # Update bins
-                tmp = torch.zeros(self.n_bins, dtype=torch.float, device=self.device)  
+                tmp = torch.zeros(self.n_bins, dtype=torch.float, device=self.device)
                 self.galaxy_param_err[j] += tmp.scatter_add(0, mag_bins, abs_res)
 
             # Compute HLRs for disk and bulge
@@ -668,11 +666,11 @@ class GalaxyShapeError(Metric):
             est_bulge_hlr = torch.sqrt(est_a_b * est_b_b)
 
             abs_disk_hlr_res = (true_disk_hlr - est_disk_hlr).abs()
-            tmp = torch.zeros(self.n_bins, dtype=torch.float, device=self.device)  
+            tmp = torch.zeros(self.n_bins, dtype=torch.float, device=self.device)
             self.disk_hlr_err += tmp.scatter_add(0, mag_bins, abs_disk_hlr_res)
 
             abs_bulge_hlr_res = (true_bulge_hlr - est_bulge_hlr).abs()
-            tmp = torch.zeros(self.n_bins, dtype=torch.float, device=self.device)  
+            tmp = torch.zeros(self.n_bins, dtype=torch.float, device=self.device)
             self.bulge_hlr_err += tmp.scatter_add(0, mag_bins, abs_bulge_hlr_res)
 
     def compute(self):
