@@ -1,7 +1,3 @@
-import os
-import random
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 from astropy.io import fits
@@ -10,11 +6,8 @@ from scipy.stats import gennorm
 
 from bliss.catalog import convert_mag_to_nmgy
 
-DES_DIR = Path(
-    "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles/"
-)
-DES_SUBDIRS = os.listdir(DES_DIR)
 CLUSTER_CATALOG_PATH = "redmapper_sva1-expanded_public_v6.3_members.fits"
+SVA_PATH = "/data/scratch/des/sva1_gold_r1.0_catalog.fits"
 
 
 class Prior:
@@ -251,9 +244,7 @@ class BackgroundPrior(Prior):
 
         self.pixel_scale = 0.263
         self.mean_sources = 0.004
-        self.catalogs_sampled = 0
-        self.catalogs_per_tile = 40
-        self.sample_des_catalog()
+        self.source_df = Table(fits.getdata(SVA_PATH)).to_pandas()
 
     def sample_n_sources(self):
         """Sample number of background sources.
@@ -262,13 +253,6 @@ class BackgroundPrior(Prior):
             Poisson sample for number of background sources
         """
         return np.random.poisson(self.mean_sources * self.width * self.height / 49)
-
-    def sample_des_catalog(self):
-        """Sample a random DES dataframe."""
-        tile_choice = random.choice(DES_SUBDIRS)
-        catalog_path = DES_DIR / Path(tile_choice) / Path(f"{tile_choice}_dr2_main.fits")
-        catalog_data = fits.getdata(catalog_path)
-        self.source_df = pd.DataFrame(catalog_data)
 
     def sample_sources(self, n_sources):
         """Samples random sources from the current DES catalog.
@@ -320,23 +304,6 @@ class BackgroundPrior(Prior):
         hlr_samples = self.pixel_scale * np.array(sources["FLUX_RADIUS_R"])
         return 1e-4 + (hlr_samples * (hlr_samples > 0))
 
-    def sample_shapes(self, sources):
-        """Samples shapes for each source in the catalog.
-        Shapes are from DES Table in the form of (a, b)
-        Converted to (g1, g2)
-
-        Args:
-            sources: Dataframe of DES sources
-
-        Returns:
-            samples for g1, g2 for each source
-        """
-        a = np.array(sources["A_IMAGE"])
-        b = np.array(sources["B_IMAGE"])
-        g = (a - b) / (a + b)
-        angle = np.arctan(b / a)
-        return g * np.cos(angle), g * np.sin(angle)
-
     def sample_fluxes(self, sources):
         """Samples fluxes for all bands for each source.
 
@@ -367,17 +334,13 @@ class BackgroundPrior(Prior):
             background_catalog: a single background catalogs for one image
         """
         n_sources = self.sample_n_sources()
-        if self.catalogs_sampled == self.catalogs_per_tile:
-            self.catalogs_sampled = 0
-            self.sample_des_catalog()
-        des_sources = self.sample_sources(n_sources)
-        self.catalogs_sampled += 1
+        sva_sources = self.sample_sources(n_sources)
         cartesian_source_locs = self.sample_source_locs(n_sources)
         gal_source_locs = self.cartesian_to_gal(cartesian_source_locs)
-        source_types = self.sample_source_types(des_sources)
-        flux_samples = self.sample_fluxes(des_sources)
-        g1_size_samples, g2_size_samples = self.sample_shapes(des_sources)
-        hlr_samples = self.sample_hlr(des_sources)
+        source_types = self.sample_source_types(sva_sources)
+        flux_samples = self.sample_fluxes(sva_sources)
+        g1_size_samples, g2_size_samples = self.sample_shape(n_sources)
+        hlr_samples = self.sample_hlr(sva_sources)
         return self.make_catalog(
             flux_samples,
             hlr_samples,
