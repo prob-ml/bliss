@@ -292,14 +292,15 @@ class Encoder(pl.LightningModule):
             sample_matching = self.matcher.match_catalogs(target_cat, sample_cat)
             self.sample_metrics.update(target_cat, sample_cat, sample_matching)
 
-        self.sample_image_renders.update(
-            batch,
-            target_cat,
-            mode_tile_cat,
-            mode_cat,
-            self.current_epoch,
-            batch_idx,
-        )
+        if self.sample_image_renders is not None:
+            self.sample_image_renders.update(
+                batch,
+                target_cat,
+                mode_tile_cat,
+                mode_cat,
+                self.current_epoch,
+                batch_idx,
+            )
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning method."""

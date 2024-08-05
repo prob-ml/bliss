@@ -70,6 +70,7 @@ encoder:
         metrics:
             two_point:
                 _target_: case_studies.spatial_tiling.m2.metrics.TwoPointMetric
+    sample_image_renders: null
     optimizer_params:
         lr: 1e-3
     scheduler_params:
