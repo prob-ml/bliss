@@ -1701,38 +1701,33 @@ files = [
 
 [[package]]
 name = "galsim"
-version = "2.4.10"
+version = "2.5.3"
 description = "The modular galaxy image simulation toolkit"
 category = "main"
 optional = false
 python-versions = "*"
 files = [
-    {file = "GalSim-2.4.10-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:be17ecfd741be6b0fc47bcef722116bb0d10d35f7a517302593fe38b7edf03d1"},
-    {file = "GalSim-2.4.10-cp310-cp310-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:2dae72e2cf04080832213daabac06598855c6a37ec8709fc7a385c126ff7b7bf"},
-    {file = "GalSim-2.4.10-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8623fcb4d25eefb9590768618aa01b8810dbe524a40f5fbb9cd2d82f1b5bda1d"},
-    {file = "GalSim-2.4.10-cp310-cp310-musllinux_1_1_i686.whl", hash = "sha256:91dc5aca39b540e16b126d30de537f99013f2801b2f2c22be9b05fb93a550b22"},
-    {file = "GalSim-2.4.10-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:7681a6d475e5a055ed012a35db3974e08580e054973667d14386c0ca3aa7fe99"},
-    {file = "GalSim-2.4.10-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:3daf692839b336cd663061c51c1771dd60ed45fb5bbd921a6fd69ec25178d535"},
-    {file = "GalSim-2.4.10-cp311-cp311-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:5381148ebe7d4c10e9ba0404284f28e12213d5ca136d86e4e71079f22414c701"},
-    {file = "GalSim-2.4.10-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8ea88de770165ff958a3aa34dbaccadcca724d21b957bedeae5ef94d3be8ba10"},
-    {file = "GalSim-2.4.10-cp311-cp311-musllinux_1_1_i686.whl", hash = "sha256:05695873596fabbe50d9ce5308f6d38352fd0e72f782a34659f70e5b300a6463"},
-    {file = "GalSim-2.4.10-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:29a18f88346113efd05163a53e15754e4be4410fdacdfb1e276d10c3b1304954"},
-    {file = "GalSim-2.4.10-cp37-cp37m-macosx_10_9_x86_64.whl", hash = "sha256:f6d48d6fa140dfd762a5de88aa60cd855731d2579475ade5c8e7b13713dd2113"},
-    {file = "GalSim-2.4.10-cp37-cp37m-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:aaba719219f1ee28bf289bf083a21ccc2016c6da6dca3a260b7f599ce3249c77"},
-    {file = "GalSim-2.4.10-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ebb94dadeea9e95df140f07c9b42fcf6d7d168b909663a9a8b7c05bac5c2fd6d"},
-    {file = "GalSim-2.4.10-cp37-cp37m-musllinux_1_1_i686.whl", hash = "sha256:57d187386267977e799d9d41f056c6cbf2a22b8c2fdefc671390806c4ee41537"},
-    {file = "GalSim-2.4.10-cp37-cp37m-musllinux_1_1_x86_64.whl", hash = "sha256:678bd8796fa999d691c230ffeb7b27083e5903726b225b668325dfcedee6d06b"},
-    {file = "GalSim-2.4.10-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:cb2db1678b7363c0e56d16afa2018061c49a83c8113af74f372ceab3a7a42c86"},
-    {file = "GalSim-2.4.10-cp38-cp38-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:80691d9cd74eb2db0ca8a9e4fdcd63d4eccdfac54801fd3c681fba215af3eaa7"},
-    {file = "GalSim-2.4.10-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:4dae6da25db5960a030e18c00ace05a66e001f031c86f55494a229343a39b027"},
-    {file = "GalSim-2.4.10-cp38-cp38-musllinux_1_1_i686.whl", hash = "sha256:b100fdad5e8898a3bb90d5c1d45f5e79e75389d19f1e5fdb9b22bd33740050e3"},
-    {file = "GalSim-2.4.10-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:ca2ba821261d5a59a4dcd52fc9612bc07334ba633e86a502165fbebfa02bef52"},
-    {file = "GalSim-2.4.10-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:b0d613b73a6c1fb1ace9b4fce6663f308865adb946896c97023e3538ee7592c2"},
-    {file = "GalSim-2.4.10-cp39-cp39-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:1042a3966010ee2ddb9b4c0ff67e9def90b76f91948c999c0683cdd93700ea30"},
-    {file = "GalSim-2.4.10-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:8387504cb3b88fdff85969b4aae9840fbd30b56f7516a53130c230faf5d13dc3"},
-    {file = "GalSim-2.4.10-cp39-cp39-musllinux_1_1_i686.whl", hash = "sha256:1fdace7239e2586696574e566bcb5baee2e9df4477e528b20b5c27012cd7f5a4"},
-    {file = "GalSim-2.4.10-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:e1b6de2ec8369f5b2c8b8193b219b577e46dce64161813445a1dc3619c2bdccc"},
-    {file = "GalSim-2.4.10.tar.gz", hash = "sha256:246b9b4aa578a4dfa2c78477a5d2c1805c5eb397e1a79c157269c15306e655b7"},
+    {file = "GalSim-2.5.3-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:cc2e421450d051087e9ffe197ff95491401502f831895c600a8c104d4d938a5b"},
+    {file = "GalSim-2.5.3-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:5462e387a4ec1e1f9ebcc37a5ff58f48263fd88e94932ac1d4b2ad2bb0b5fa98"},
+    {file = "GalSim-2.5.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6fd6180ba9d0d6e3e8daef360fe7b659739b64e6fca134a7cb7ec5c8f3025cef"},
+    {file = "GalSim-2.5.3-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:70b0a11870868d483795b44e48c34994ede68aae3c5afa156bbc072586296067"},
+    {file = "GalSim-2.5.3-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:67ae74a0df9190b994a1a53bf4e6c62f12446e3a0e64144b17a768a86d286868"},
+    {file = "GalSim-2.5.3-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:8c71f218c4b6c7967e694f44bb983fdc6b3a90a6e7282cc086e585c239e4dc41"},
+    {file = "GalSim-2.5.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5ad68dab5ef8cdad20bdebf3f70dcd0c505d4dad9097284504af4842f93644d3"},
+    {file = "GalSim-2.5.3-cp311-cp311-musllinux_1_1_x86_64.whl", hash = "sha256:c4dbca573602cfba1cd7f7c9cf6c4cd9c4d6993c8f86b08fbfb1e3895782c49d"},
+    {file = "GalSim-2.5.3-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:3cbe88bff0ed812342911d45dd282e9bbc25f5ff9169361a046210309abf1583"},
+    {file = "GalSim-2.5.3-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:41f7410b2effd871982c043d4f55d15765f17cc4d369b80eb824293c033afe09"},
+    {file = "GalSim-2.5.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0e563303cc475f8580a3b99a7ff14ca3e0f038a56ed941efed552a69f05df070"},
+    {file = "GalSim-2.5.3-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:595b2d28d3f506cca6c501f75e4f762a3d3c5e36a2981a059635e8da9533e951"},
+    {file = "GalSim-2.5.3-cp38-cp38-macosx_10_9_x86_64.whl", hash = "sha256:198b13e6e859fee736e766c009bef2051e00d47287ef2ca604a73d3989197326"},
+    {file = "GalSim-2.5.3-cp38-cp38-macosx_11_0_arm64.whl", hash = "sha256:1270d0f3f75d07775539d4c320e0f56d1730cc9aaf1dbd79ddd832b16b35e902"},
+    {file = "GalSim-2.5.3-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:fa3c53ad0a87a3146a96aece542d6de4a182b4891e2f50879a64304a7bfc2748"},
+    {file = "GalSim-2.5.3-cp38-cp38-musllinux_1_1_x86_64.whl", hash = "sha256:694e16d102d5f9643ba0acf2adf447069963781d1032abdc1b537f5bba15678b"},
+    {file = "GalSim-2.5.3-cp39-cp39-macosx_10_9_x86_64.whl", hash = "sha256:bb8de3d73c50926bdfb7bc7eaf75706ac585fd2dca4b657b53cf73c6a891cea2"},
+    {file = "GalSim-2.5.3-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:1bfe96b773ef6cae4b0fd2c65893a74df87eff3befe553604e1a437f2ebd81ec"},
+    {file = "GalSim-2.5.3-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0360e94a7fac610fdef320f0a0779674c68bfe4efe9f04e1f4d3d1993b9986ef"},
+    {file = "GalSim-2.5.3-cp39-cp39-musllinux_1_1_x86_64.whl", hash = "sha256:0a1be1ddead863d13a41f034e3c36022362a2eb52311ec828fdcc7dba9aa7bd5"},
+    {file = "galsim-2.5.3.tar.gz", hash = "sha256:50a87fa8353228520fa23d4fe0bbd95017b4fe2b4fa38ebfa60bf5483041d88c"},
 ]
 
 [package.dependencies]

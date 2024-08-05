@@ -99,6 +99,5 @@ class TestPredict:
         bliss_cats = predict(cfg.predict)
         assert len(bliss_cats) == len(cfg.surveys.sdss.fields)
 
-        mode_cats = [c["mode_cat"] for c in bliss_cats.values()]
-        full_mode_cats = [c.to_full_catalog(cfg.encoder.tile_slen) for c in mode_cats]
+        full_mode_cats = [c.to_full_catalog(cfg.encoder.tile_slen) for c in bliss_cats.values()]
         assert len(full_mode_cats) == len(cfg.surveys.sdss.fields)

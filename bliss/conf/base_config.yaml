@@ -20,7 +20,7 @@ paths:
 # this prior is sdss-like; the flux parameters were fit using SDSS catalogs
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
-    survey_bands: ["u", "g", "r", "i", "z"]  # SDSS available band filters
+    survey_bands: [u, g, r, i, z]  # SDSS available band filters
     reference_band: 2  # SDSS r-band
     star_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
     gal_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
@@ -78,77 +78,77 @@ variational_factors:
       nll_gating: null
     - _target_: bliss.encoder.variational_dist.TDBNFactor
       name: locs
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      sample_rearrange: b ht wt d -> b ht wt 1 d
+      nll_rearrange: b ht wt 1 d -> b ht wt d
       nll_gating:
-        _target_: bliss.encoder.variational_dist.SourcesGating
+          _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
       name: source_type
-      sample_rearrange: "b ht wt -> b ht wt 1 1"
-      nll_rearrange: "b ht wt 1 1 -> b ht wt"
+      sample_rearrange: b ht wt -> b ht wt 1 1
+      nll_rearrange: b ht wt 1 1 -> b ht wt
       nll_gating:
-        _target_: bliss.encoder.variational_dist.SourcesGating
+          _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: star_fluxes
       dim: 5
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      sample_rearrange: b ht wt d -> b ht wt 1 d
+      nll_rearrange: b ht wt 1 d -> b ht wt d
       nll_gating:
-        _target_: bliss.encoder.variational_dist.StarGating
+          _target_: bliss.encoder.variational_dist.StarGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: galaxy_fluxes
       dim: 5
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      sample_rearrange: b ht wt d -> b ht wt 1 d
+      nll_rearrange: b ht wt 1 d -> b ht wt d
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_disk_frac
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      sample_rearrange: b ht wt d -> b ht wt 1 d
+      nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_beta_radians
       high: 3.1415926
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      sample_rearrange: b ht wt d -> b ht wt 1 d
+      nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_disk_q
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      sample_rearrange: b ht wt d -> b ht wt 1 d
+      nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: galaxy_a_d
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      sample_rearrange: b ht wt d -> b ht wt 1 d
+      nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_bulge_q
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      sample_rearrange: b ht wt d -> b ht wt 1 d
+      nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
       name: galaxy_a_b
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+      sample_rearrange: b ht wt d -> b ht wt 1 d
+      nll_rearrange: b ht wt 1 1 -> b ht wt 1
       nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.GalaxyGating
 
 metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
         bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-        bin_type: "njymag"
+        bin_type: njymag
     source_type_accuracy:
         _target_: bliss.encoder.metrics.SourceTypeAccuracy
         bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-        bin_type: "njymag"
+        bin_type: njymag
     flux_error:
         _target_: bliss.encoder.metrics.FluxError
         survey_bands: ${encoder.survey_bands}
@@ -168,7 +168,7 @@ image_normalizers:
 
 encoder:
     _target_: bliss.encoder.encoder.Encoder
-    survey_bands: ["u", "g", "r", "i", "z"]
+    survey_bands: [u, g, r, i, z]
     reference_band: 2  # SDSS r-band
     tile_slen: ${simulator.decoder.tile_slen}
     optimizer_params:
@@ -188,7 +188,7 @@ encoder:
         mag_band: 2  # SDSS r-band
     mode_metrics:
         _target_: torchmetrics.MetricCollection
-        _convert_: "partial"
+        _convert_: partial
         metrics: ${metrics}
     sample_metrics: null
     sample_image_renders:
@@ -201,6 +201,8 @@ encoder:
               tile_slen: ${simulator.decoder.tile_slen}
     use_double_detect: false
     use_checkerboard: false
+    n_sampler_colors: 4
+    predict_mode_not_samples: true
 
 surveys:
     sdss:
@@ -229,12 +231,12 @@ surveys:
             - sky_coord:
                   ra: 336.6643042496718
                   dec: -0.9316385797930247
-              decals_brickname: "3366m010"
-              ccdname: "S28"
-              g: "decam/CP/V4.8.2a/CP20171108/c4d_171109_002003_ooi_g_ls9"
-              r: "decam/CP/V4.8.2a/CP20170926/c4d_170927_025457_ooi_r_ls9"
+              decals_brickname: 3366m010
+              ccdname: S28
+              g: decam/CP/V4.8.2a/CP20171108/c4d_171109_002003_ooi_g_ls9
+              r: decam/CP/V4.8.2a/CP20170926/c4d_170927_025457_ooi_r_ls9
               i: ""
-              z: "decam/CP/V4.8.2a/CP20170926/c4d_170927_025655_ooi_z_ls9"
+              z: decam/CP/V4.8.2a/CP20170926/c4d_170927_025655_ooi_z_ls9
         psf_config:
             pixel_scale: 0.262
             psf_slen: 63
@@ -273,7 +275,7 @@ surveys:
 mode: train
 
 generate:
-    n_image_files: 128
+    n_image_files: 64
     n_batches_per_file: 16
     simulator: ${simulator}
     cached_data_path: ${paths.cached_data}
@@ -294,7 +296,7 @@ train:
         log_every_n_steps: 10  # corresponds to n_batches
         min_epochs: 1
         max_epochs: 50
-        accelerator: "gpu"
+        accelerator: gpu
         devices: 1
         precision: 32-true
     callbacks:
@@ -302,11 +304,11 @@ train:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
             filename: best_encoder
             save_top_k: 1
-            verbose: True
+            verbose: true
             monitor: val/_loss
             mode: min
-            save_on_train_epoch_end: False
-            auto_insert_metric_name: False
+            save_on_train_epoch_end: false
+            auto_insert_metric_name: false
         early_stopping:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
             monitor: val/_loss
@@ -323,8 +325,9 @@ predict:
     dataset: ${surveys.sdss}
     trainer:
         _target_: pytorch_lightning.Trainer
-        accelerator: "gpu"
+        accelerator: gpu
         precision: ${train.trainer.precision}
+        logger: null
     encoder: ${encoder}
     weight_save_path: null
-    device: "cuda:0"
+    device: cuda:0

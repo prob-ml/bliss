@@ -117,12 +117,35 @@ class SloanDigitalSkySurvey(Survey):
         return len(self.rcfgcs)
 
     def __getitem__(self, idx):
-        if not self.items[idx]:
-            item = self.get_from_disk(idx)
-            item["psf_params"] = self.psf.psf_params[self.image_id(idx)]
-            item["psf_galsim"] = self.psf.psf_galsim[self.image_id(idx)]
-            self.items[idx] = item
+        if self.items[idx] is None:
+            self.items[idx] = self.get_from_disk(idx)
         return self.items[idx]
+
+    def get_from_disk(self, idx):
+        run, camcol, field, gain = self.rcfgcs[idx]
+
+        camcol_dir = self.sdss_path.joinpath(str(run), str(camcol))
+        field_dir = camcol_dir.joinpath(str(field))
+        frame_list = []
+
+        item = {
+            "field": field,
+            "psf_params": self.psf.psf_params[self.image_id(idx)],
+            "psf_galsim": self.psf.psf_galsim[self.image_id(idx)],
+        }
+
+        for b, bl in enumerate(self.BANDS):
+            frame = self.read_frame_for_band(bl, field_dir, run, camcol, field, gain[b])
+            frame_list.append(frame)
+
+        for k in frame_list[0]:
+            band_data = [frame[k] for frame in frame_list]
+            item[k] = np.stack(band_data) if isinstance(band_data[0], np.ndarray) else band_data
+
+        # a hack to deal with underestimated backgrounds
+        item["background"] += self.background_offset
+
+        return item
 
     def image_id(self, idx) -> Tuple[int, int, int]:
         """Return the image_id for the given index."""
@@ -152,29 +175,6 @@ class SloanDigitalSkySurvey(Survey):
             for field in fields:
                 rcfs.append((run, camcol, field))
         return rcfs
-
-    def get_from_disk(self, idx):
-        if self.rcfgcs[idx] is None:
-            return None
-        run, camcol, field, gain = self.rcfgcs[idx]
-
-        camcol_dir = self.sdss_path.joinpath(str(run), str(camcol))
-        field_dir = camcol_dir.joinpath(str(field))
-        frame_list = []
-
-        for b, bl in enumerate(self.BANDS):
-            frame = self.read_frame_for_band(bl, field_dir, run, camcol, field, gain[b])
-            frame_list.append(frame)
-
-        ret = {}
-        for k in frame_list[0]:
-            data_per_band = [frame[k] for frame in frame_list]
-            if isinstance(data_per_band[0], np.ndarray):
-                ret[k] = np.stack(data_per_band)
-            else:
-                ret[k] = data_per_band
-        ret.update({"field": field})
-        return ret
 
     def read_frame_for_band(self, bl, field_dir, run, camcol, field, gain):
         frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"
@@ -213,8 +213,10 @@ class SloanDigitalSkySurvey(Survey):
             "flux_calibration": nelec_per_nmgy,
             "wcs": wcs,
         }
+
         if self.load_image_data:
-            d.update({"image": pixels_nelec})
+            d["image"] = pixels_nelec
+
         return d
 
 
