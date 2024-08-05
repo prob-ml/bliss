@@ -1,13 +1,14 @@
 import numpy as np
 import pandas as pd
-from astropy.io import fits
 from astropy.table import Table
 from scipy.stats import gennorm
 
 from bliss.catalog import convert_mag_to_nmgy
+from case_studies.galaxy_clustering.utils.cluster_utils import angular_diameter_distance
 
 CLUSTER_CATALOG_PATH = "redmapper_sva1-expanded_public_v6.3_members.fits"
 SVA_PATH = "/data/scratch/des/sva1_gold_r1.0_catalog.fits"
+PHOTO_Z_PATH = "/data/scratch/des/sva1_gold_r1.0_annz2_point.fits"
 
 
 class Prior:
@@ -129,12 +130,14 @@ class ClusterPrior(Prior):
 
         self.full_cluster_df = Table.read(CLUSTER_CATALOG_PATH).to_pandas()
         self.cluster_indices = pd.unique(self.full_cluster_df["ID"])
+        self.photo_z_catalog = Table.read(PHOTO_Z_PATH).to_pandas()
         self.sample_cluster_catalog()
 
     def sample_cluster_catalog(self):
         """Sample a random redMaPPer catalog."""
         cluster_idx = np.random.choice(self.cluster_indices)
         self.cluster_members = self.full_cluster_df[self.full_cluster_df["ID"] == cluster_idx]
+        self.cluster_members = pd.merge(self.cluster_members, self.photo_z_catalog, how="left")
 
     def sample_center(self):
         """Samples cluster center on image grid.
@@ -164,7 +167,12 @@ class ClusterPrior(Prior):
         galaxy_locs_cluster = []
         center_x, center_y = center
         # convert from h-1 Mpc to pixels (assuming h = 0.7)
-        radius_samples = self.pixels_per_mpc * (self.cluster_members["R"] / 0.7)
+        radius_astro_samples = self.cluster_members["R"] / 0.7
+        # redshift for most likely source that's part of the cluster
+        z_mean = self.cluster_members.loc[self.cluster_members["P"].idxmax()]["Z_MEAN"]
+        angular_distance = angular_diameter_distance(z_mean).value
+        radius_samples = radius_astro_samples / (0.263 * angular_distance)
+        radius_samples = radius_samples * (180 * 3600) / np.pi
         for radius in radius_samples:
             phi = np.random.uniform(0, 2 * np.pi, 1)
             sintheta = np.random.uniform(-1, 1, 1)
@@ -244,7 +252,7 @@ class BackgroundPrior(Prior):
 
         self.pixel_scale = 0.263
         self.mean_sources = 0.004
-        self.source_df = Table(fits.getdata(SVA_PATH)).to_pandas()
+        self.source_df = Table.read(SVA_PATH).to_pandas()
 
     def sample_n_sources(self):
         """Sample number of background sources.
