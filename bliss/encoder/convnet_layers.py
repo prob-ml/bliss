@@ -10,7 +10,8 @@ class ConvBlock(nn.Module):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False)
         # seems to work about as well as BatchNorm2d
-        self.norm = nn.GroupNorm(out_channels // 8, out_channels)
+        ng = out_channels // 8
+        self.norm = nn.GroupNorm(ng, out_channels) if out_channels >= 16 else nn.Identity()
         self.activation = nn.SiLU(inplace=True)
 
     def forward(self, x):

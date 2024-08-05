@@ -133,7 +133,7 @@ class Encoder(pl.LightningModule):
         return self.features_net(inputs)
 
     def sample_first_detection(self, x_features, use_mode=True):
-        batch_size, _n_features, ht, wt = x_features.shape[0:4]
+        batch_size, _n_features, ht, wt = x_features[0].shape[0:4]
 
         est_cat = None
         if not self.use_checkerboard:
@@ -195,7 +195,7 @@ class Encoder(pl.LightningModule):
 
         x_features = self.get_features(batch)
 
-        loss = torch.zeros_like(x_features[:, 0, :, :])
+        loss = torch.zeros_like(x_features[0][:, 0, :, :])
 
         for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns):
             history_mask = hmp.repeat([batch_size, ht // 2, wt // 2])

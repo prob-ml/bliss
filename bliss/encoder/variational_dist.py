@@ -214,7 +214,43 @@ class LogitNormalFactor(VariationalFactor):
         return RescaledLogitNormal(mu, sigma, low=self.low, high=self.high)
 
 
+class DiscretizedUnitBoxFactor(VariationalFactor):
+    def __init__(self, *args, **kwargs):
+        super().__init__(64, *args, **kwargs)
+
+    def _get_dist(self, params):
+        return DiscretizedUnitBox(params)
+
+
 #####################
+
+
+class DiscretizedUnitBox(Distribution):
+    """A continuous bivariate distribution over the 2d unit box, with a discretized density."""
+
+    def __init__(self, logits):
+        super().__init__(validate_args=False)
+        assert logits.shape[-1] == 64
+        self.pdf_offset = torch.tensor((64,), device=logits.device).log()
+        self.base_dist = Categorical(logits=logits)
+
+    def sample(self, sample_shape=()):
+        locbins = self.base_dist.sample(sample_shape)
+        locbins2d = torch.stack((locbins // 8, locbins % 8), dim=-1)
+        locbins2d_float = locbins2d.float()
+        return (locbins2d_float + torch.rand_like(locbins2d_float)) / 8
+
+    @property
+    def mode(self):
+        locbins = self.base_dist.probs.argmax(dim=-1)
+        locbins2d = torch.stack((locbins // 8, locbins % 8), dim=-1)
+        return (locbins2d.float() + 0.5) / 8
+
+    def log_prob(self, value):
+        locs = value.clamp(0, 1 - 1e-7)
+        locbins2d = (locs * 8).long()
+        locbins = locbins2d[:, :, :, 0] * 8 + locbins2d[:, :, :, 1]
+        return self.base_dist.log_prob(locbins) + self.pdf_offset
 
 
 class TruncatedDiagonalMVN(Distribution):
