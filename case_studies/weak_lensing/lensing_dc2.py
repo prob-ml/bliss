@@ -28,7 +28,7 @@ class LensingDC2DataModule(DC2DataModule):
             tile_slen=tile_slen,
             max_sources_per_tile=tile_slen
             ** 2,  # max of one source per pixel, TODO: calc max sources per tile
-            min_flux=-sys.maxsize - 1,  # smaller than any int
+            catalog_min_r_flux=-sys.maxsize - 1,  # smaller than any int
             prepare_data_processes_num=1,
             data_in_one_cached_file=100000,
             splits=splits,
@@ -43,8 +43,6 @@ class LensingDC2DataModule(DC2DataModule):
         self.image_slen = image_slen
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
-
-    # _load_image_and_bg_files_list can stay the same
 
     # override prepare_data
     def prepare_data(self):
@@ -78,7 +76,7 @@ class LensingDC2DataModule(DC2DataModule):
             generate_data_wrapper(i)
 
     def load_image_and_catalog(self, image_index, **kwargs):
-        image, bg, wcs_header_str = self.read_image_for_bands(image_index)
+        image, wcs_header_str = self.read_image_for_bands(image_index)
         wcs = wcs_from_wcs_header_str(wcs_header_str)
 
         plocs_lim = image[0].shape
@@ -103,7 +101,6 @@ class LensingDC2DataModule(DC2DataModule):
             "tile_dict": tile_dict,
             "inputs": {
                 "image": image,
-                "bg": bg,
                 "psf_params": psf_params,
             },
             "other_info": {
@@ -117,7 +114,6 @@ class LensingDC2DataModule(DC2DataModule):
         result_dict = self.load_image_and_catalog(image_index, **kwargs)
 
         image = result_dict["inputs"]["image"]
-        bg = result_dict["inputs"]["bg"]
         tile_dict = result_dict["tile_dict"]
         wcs_header_str = result_dict["other_info"]["wcs_header_str"]
         psf_params = result_dict["inputs"]["psf_params"]
@@ -140,7 +136,6 @@ class LensingDC2DataModule(DC2DataModule):
         data_to_cache = {
             "tile_catalog": tile_dict,
             "images": image,
-            "background": bg,
             "psf_params": psf_params,
             "wcs_header_str": wcs_header_str,
         }
