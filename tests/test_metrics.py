@@ -8,6 +8,7 @@ from bliss.encoder.metrics import (
     CatalogMatcher,
     DetectionPerformance,
     FluxError,
+    GalaxyShapeError,
     SourceTypeAccuracy,
 )
 from bliss.surveys.des import TractorFullCatalog
@@ -46,7 +47,12 @@ class TestMetrics:
             "source_type": est_source_type,
             "star_fluxes": torch.ones(2, 2, 5),
             "galaxy_fluxes": torch.ones(2, 2, 5),
-            "galaxy_params": torch.ones(2, 2, 6),
+            "galaxy_disk_frac": torch.ones(2, 2, 1),
+            "galaxy_beta_radians": torch.ones(2, 2, 1),
+            "galaxy_disk_q": torch.ones(2, 2, 1),
+            "galaxy_a_d": torch.ones(2, 2, 1),
+            "galaxy_bulge_q": torch.ones(2, 2, 1),
+            "galaxy_a_b": torch.ones(2, 2, 1),
         }
         est_params = FullCatalog(slen, slen, d_est)
 
@@ -58,9 +64,13 @@ class TestMetrics:
         assert np.isclose(dresults["detection_precision"], 2 / (2 + 2))
         assert np.isclose(dresults["detection_recall"], 2 / 3)
 
-        acc_metrics = SourceTypeAccuracy(flux_bin_cutoffs=[200, 400, 600, 800, 1000])
+        acc_metrics = SourceTypeAccuracy(bin_cutoffs=[200, 400, 600, 800, 1000])
         acc_results = acc_metrics(true_params, est_params, matching)
         assert np.isclose(acc_results["classification_acc"], 1 / 2)
+
+        gal_shape_metrics = GalaxyShapeError(bin_cutoffs=[200, 400, 600, 800, 1000])
+        gal_shape_results = gal_shape_metrics(true_params, est_params, matching)
+        assert gal_shape_results["galaxy_disk_hlr_mae"] == 0
 
     def test_no_sources(self):
         """Tests that metrics work when there are no true or estimated sources."""
@@ -113,11 +123,11 @@ class TestMetrics:
         dresults = detection_metrics(full_catalog, full_catalog, matching)
         assert dresults["detection_f1"] == 1
 
-        acc_metrics = SourceTypeAccuracy(flux_bin_cutoffs=[200, 400, 600, 800, 1000])
+        acc_metrics = SourceTypeAccuracy(bin_cutoffs=[200, 400, 600, 800, 1000])
         acc_results = acc_metrics(full_catalog, full_catalog, matching)
         assert acc_results["classification_acc"] == 1
 
-        flux_metrics = FluxError("ugriz")
+        flux_metrics = FluxError("ugriz", bin_cutoffs=[200, 400, 600, 800, 1000])
         flux_results = flux_metrics(full_catalog, full_catalog, matching)
         assert flux_results["flux_err_r_mae"] == 0
 
@@ -149,7 +159,7 @@ class TestMetrics:
         decals_cat = decals_cat.to(torch.device("cpu"))
 
         matcher = CatalogMatcher(dist_slack=1.0)
-        detection_metrics = DetectionPerformance(mag_band=None)
+        detection_metrics = DetectionPerformance(ref_band=None)
 
         pp_matching = matcher.match_catalogs(photo_cat, photo_cat)
         pp_results = detection_metrics(photo_cat, photo_cat, pp_matching)
