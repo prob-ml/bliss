@@ -18,7 +18,7 @@ class LensingMapMSE(Metric):
             "baseline_convergence_sum_squared_err", default=torch.zeros(1), dist_reduce_fx="sum"
         )
         # potentially throws a division by zero error if true_idx is empty and uncaught
-        self.total = None
+        self.total = 1
 
     def update(self, true_cat, est_cat, matching) -> None:
         # along dim 2
@@ -45,7 +45,7 @@ class LensingMapMSE(Metric):
         self.convergence_sum_squared_err += convergence_sq_err
         self.baseline_convergence_sum_squared_err += baseline_convergence_sq_err
 
-        self.total = torch.tensor(true_cat["shear"].shape[1])
+        self.total = torch.tensor(true_cat["convergence"].shape[1])
 
     def compute(self):
         shear1_mse = self.shear1_sum_squared_err / self.total

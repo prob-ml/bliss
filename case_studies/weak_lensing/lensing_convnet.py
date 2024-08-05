@@ -1,4 +1,3 @@
-import torch
 from torch import nn
 
 from bliss.encoder.convnet_layers import C3, ConvBlock, Detect
@@ -11,7 +10,9 @@ class WeakLensingFeaturesNet(nn.Module):
         nch_hidden = 64
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, nch_hidden, [ch_per_band, 5, 5], padding=[0, 2, 2]),
-            nn.GroupNorm(num_groups=32, num_channels=nch_hidden),
+            nn.GroupNorm(
+                num_groups=32, num_channels=nch_hidden
+            ),  # sqrt of num channels, get rid of it, even shallower
             nn.SiLU(),
         )
 
@@ -29,9 +30,9 @@ class WeakLensingFeaturesNet(nn.Module):
         module_list.extend(
             [
                 ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
-                nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
+                nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(1)]),
                 ConvBlock(64, 128, stride=2),
-                nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
+                nn.Sequential(*[ConvBlock(128, 128) for _ in range(1)]),
                 ConvBlock(128, num_features, stride=1),
             ]
         )  # 4
@@ -40,11 +41,8 @@ class WeakLensingFeaturesNet(nn.Module):
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
-        for i, m in enumerate(self.net):
+        for _i, m in enumerate(self.net):
             x = m(x)
-            if i == self.n_downsample:
-                # save image
-                pass
 
         return x
 
@@ -54,23 +52,20 @@ class WeakLensingCatalogNet(nn.Module):
         super().__init__()
 
         net_layers = [
-            C3(in_channels, 256, n=6),  # 0
+            C3(in_channels, 256, n=1, shortcut=True),  # 0
             ConvBlock(256, 512, stride=2),
-            C3(512, 512, n=3, shortcut=False),
-            ConvBlock(512, 256, kernel_size=1, padding=0),
-            nn.Upsample(scale_factor=2, mode="nearest"),  # 4
-            C3(768, 256, n=3, shortcut=False),
-            nn.AvgPool2d(kernel_size=64, stride=64),
+            C3(512, 256, n=1, shortcut=True),  # true shortcut for skip connection
+            ConvBlock(
+                in_channels=256, out_channels=256, kernel_size=3, stride=8, padding=1
+            ),  # (1, 256, 128, 128)
+            ConvBlock(
+                in_channels=256, out_channels=256, kernel_size=3, stride=4, padding=1
+            ),  # (1, 256, 8, 8)
             Detect(256, out_channels),
         ]
         self.net = nn.ModuleList(net_layers)
 
     def forward(self, x):
-        save_lst = [x]
-        for i, m in enumerate(self.net):
+        for _i, m in enumerate(self.net):
             x = m(x)
-            if i in {0, 4}:
-                save_lst.append(x)
-            if i == 4:
-                x = torch.cat(save_lst, dim=1)
         return x

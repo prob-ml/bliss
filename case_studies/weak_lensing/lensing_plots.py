@@ -16,6 +16,7 @@ class PlotWeakLensingShearConvergence(Metric):
         frequency: int = 1,
         restrict_batch: int = 0,
         tile_slen: int = 0,  # note must match encoder tile_slen
+        save_local: str = None,
     ):
         super().__init__()
 
@@ -30,6 +31,7 @@ class PlotWeakLensingShearConvergence(Metric):
         self.images = None
         self.current_epoch = 0
         self.target_cat_cropped = None
+        self.save_local = save_local
 
     def update(
         self,
@@ -60,11 +62,16 @@ class PlotWeakLensingShearConvergence(Metric):
         est_cat = self.sample_with_mode_tile
         true_tile_cat = BaseTileCatalog(self.batch["tile_catalog"])
         return plot_maps(
-            self.images, true_tile_cat, est_cat, figsize=None, current_epoch=self.current_epoch
+            self.images,
+            true_tile_cat,
+            est_cat,
+            figsize=None,
+            current_epoch=self.current_epoch,
+            save_local=self.save_local,
         )
 
 
-def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0):
+def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0, save_local=None):
     """Plots weak lensing shear and convergence maps."""
     batch_size = images.size(0)
 
@@ -140,7 +147,8 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
         )
 
     fig.tight_layout()
-    fig.savefig(f"current_run_plots/wl_shear_conv_{current_epoch}.png")
+    if save_local:
+        fig.savefig(f"{save_local}/wl_shear_conv_{current_epoch}_asinh.png")
     return fig, axes
 
 

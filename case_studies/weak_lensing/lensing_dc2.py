@@ -123,10 +123,10 @@ class LensingDC2DataModule(DC2DataModule):
         psf_params = result_dict["inputs"]["psf_params"]
 
         # TODO: interpolation
-        shear = tile_dict["shear"]
-        convergence = tile_dict["convergence"]
-        objid = tile_dict["objid"]
-        nonzero_shear_conv_mask = objid != 0
+        shear = tile_dict["shear"] * 100
+        convergence = tile_dict["convergence"] * 100
+        galid = tile_dict["galid"]
+        nonzero_shear_conv_mask = galid != 0
         nonzero_shear_mask = nonzero_shear_conv_mask.expand(-1, -1, -1, 2)
         shear[~nonzero_shear_mask] = float("nan")  # noqa: WPS456
         convergence[~nonzero_shear_conv_mask] = float("nan")  # noqa: WPS456
@@ -146,7 +146,7 @@ class LensingDC2DataModule(DC2DataModule):
         }
 
         # Create file name for cached data
-        cached_data_file_name = f"cached_data_{image_index:04d}_size_{len(data_to_cache):04d}.pt"
+        cached_data_file_name = f"cached_data_{image_index:04d}.pt"
 
         # Save all data to a single file (no splits)
         with open(kwargs["cached_data_path"] / cached_data_file_name, "wb") as cached_data_file:
@@ -158,15 +158,13 @@ class LensingDC2Catalog(DC2FullCatalog):
     def from_file(cls, cat_path, wcs, height, width, **kwargs):
         catalog = pd.read_pickle(cat_path)
 
-        objid = torch.from_numpy(catalog["id"].values)
+        galid = torch.from_numpy(catalog["galaxy_id"].values)
         ra = torch.from_numpy(catalog["ra"].values).squeeze()
         dec = torch.from_numpy(catalog["dec"].values).squeeze()
 
-        shear1 = torch.from_numpy(catalog["shear_1"].values).squeeze() * 10000
-        shear2 = torch.from_numpy(catalog["shear_2"].values).squeeze() * 10000
-        convergence = torch.from_numpy(catalog["convergence"].values) * 10000
-
-        # TODO: create shear and convergence masks here (keep vs nonexistant)
+        shear1 = torch.from_numpy(catalog["shear_1"].values).squeeze()
+        shear2 = torch.from_numpy(catalog["shear_2"].values).squeeze()
+        convergence = torch.from_numpy(catalog["convergence"].values)
 
         _, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
 
@@ -175,7 +173,7 @@ class LensingDC2Catalog(DC2FullCatalog):
         x1_mask = (plocs[:, 1] > 0) & (plocs[:, 1] < width)
         plocs_mask = x0_mask * x1_mask
 
-        objid = objid[plocs_mask]
+        galid = galid[plocs_mask]
         plocs = plocs[plocs_mask]
 
         shear1 = shear1[plocs_mask]
@@ -183,10 +181,10 @@ class LensingDC2Catalog(DC2FullCatalog):
         convergence = convergence[plocs_mask]
         shear = torch.stack((shear1, shear2), dim=1)
 
-        nobj = objid.shape[0]
+        nobj = galid.shape[0]
         # TODO: pass existant shear & convergence masks in d
         d = {
-            "objid": objid.reshape(1, nobj, 1),
+            "galid": galid.reshape(1, nobj, 1),
             "n_sources": torch.tensor((nobj,)),
             "plocs": plocs.reshape(1, nobj, 2),
             "shear": shear.reshape(1, nobj, 2),
