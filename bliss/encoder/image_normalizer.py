@@ -89,3 +89,11 @@ class AsinhQuantileNormalizer(torch.nn.Module):
         # asinh seems to saturate beyond 5 or so
         scaled_images = centered_images * (5.0 / quantiles5d.abs().clamp(1e-6))
         return torch.asinh(scaled_images)
+
+
+class NullNormalizer(torch.nn.Module):
+    def num_channels_per_band(self):
+        return 1
+
+    def get_input_tensor(self, batch):
+        return rearrange((batch["images"] + 0.5).clamp(1e-6) * 100, "b bands h w -> b bands 1 h w")
