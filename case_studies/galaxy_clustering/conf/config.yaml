@@ -6,7 +6,7 @@ defaults:
 
 data_gen:
     data_dir: /data/scratch/kapnadak/new_data
-    image_size: 1280
+    image_size: 2560
     tile_size: 128
     nfiles: 5000
     n_catalogs_per_file: 500
