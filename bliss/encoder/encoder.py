@@ -329,7 +329,8 @@ class Encoder(pl.LightningModule):
         if self.sample_metrics is not None:
             self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
             self.sample_metrics.reset()
-        self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
+        if self.sample_image_renders is not None:
+            self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""
