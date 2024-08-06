@@ -14,40 +14,40 @@ my_variational_factors:
     nll_gating: null
   - _target_: bliss.encoder.variational_dist.TDBNFactor
     name: locs
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    sample_rearrange: b ht wt d -> b ht wt 1 d
+    nll_rearrange: b ht wt 1 d -> b ht wt d
     nll_gating:
       _target_: bliss.encoder.variational_dist.SourcesGating
   - _target_: case_studies.dc2_cataloging.utils.variational_dist.MyBernoulliFactor
     name: source_type
-    sample_rearrange: "b ht wt -> b ht wt 1 1"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    sample_rearrange: b ht wt -> b ht wt 1 1
+    nll_rearrange: b ht wt 1 1 -> b ht wt
     nll_gating:
       _target_: bliss.encoder.variational_dist.SourcesGating
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: star_fluxes
     dim: 6
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    sample_rearrange: b ht wt d -> b ht wt 1 d
+    nll_rearrange: b ht wt 1 d -> b ht wt d
     nll_gating:
       _target_: bliss.encoder.variational_dist.StarGating
   - _target_: bliss.encoder.variational_dist.LogNormalFactor
     name: galaxy_fluxes
     dim: 6
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    sample_rearrange: b ht wt d -> b ht wt 1 d
+    nll_rearrange: b ht wt 1 d -> b ht wt d
     nll_gating:
       _target_: bliss.encoder.variational_dist.GalaxyGating
   # - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
   #   name: shear
-  #   sample_rearrange: "b ht wt d -> b ht wt 1 d"
-  #   nll_rearrange: "b ht wt 1 d -> b ht wt d"
+  #   sample_rearrange: b ht wt d -> b ht wt 1 d
+  #   nll_rearrange: b ht wt 1 d -> b ht wt d
   #   nll_gating:
   #     _target_: case_studies.dc2_cataloging.utils.variational_dist.Cosmodc2Gating
   - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
     name: ellipticity
-    sample_rearrange: "b ht wt d -> b ht wt 1 d"
-    nll_rearrange: "b ht wt 1 d -> b ht wt d"
+    sample_rearrange: b ht wt d -> b ht wt 1 d
+    nll_rearrange: b ht wt 1 d -> b ht wt d
     nll_gating:
       _target_: case_studies.dc2_cataloging.utils.variational_dist.Cosmodc2Gating
 
@@ -55,57 +55,57 @@ my_metrics:
   detection_performance:
     _target_: bliss.encoder.metrics.DetectionPerformance
     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: "njymag"
+    bin_type: njymag
   detection_performance_star:
     _target_: bliss.encoder.metrics.DetectionPerformance
     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: "njymag"
+    bin_type: njymag
     filter_list:
       - _target_: bliss.encoder.metrics.SourceTypeFilter
-        filter_type: "star"
+        filter_type: star
   detection_performance_galaxy:
     _target_: bliss.encoder.metrics.DetectionPerformance
     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: "njymag"
+    bin_type: njymag
     filter_list:
       - _target_: bliss.encoder.metrics.SourceTypeFilter
-        filter_type: "galaxy"
+        filter_type: galaxy
   detection_performance_one_source_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: "njymag"
+    bin_type: njymag
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-        filter_source_count: "1m"
+        filter_source_count: 1m
   detection_performance_two_sources_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: "njymag"
+    bin_type: njymag
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-        filter_source_count: "2m"
+        filter_source_count: 2m
   detection_performance_more_than_two_sources_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: "njymag"
+    bin_type: njymag
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-        filter_source_count: "2plus"
+        filter_source_count: 2plus
   source_type_accuracy:
     _target_: bliss.encoder.metrics.SourceTypeAccuracy
     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: "njymag"
+    bin_type: njymag
   flux_error:
     _target_: bliss.encoder.metrics.FluxError
     survey_bands: ${encoder.survey_bands}
   # shear_error:
   #   _target_: case_studies.dc2_cataloging.utils.metrics.ShearMSE
   #   bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-  #   bin_type: "njymag"
+  #   bin_type: njymag
   ellipticity_error:
     _target_: case_studies.dc2_cataloging.utils.metrics.EllipticityMSE
     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: "njymag"
+    bin_type: njymag
 
 my_image_normalizers:
   null_noramlize:
@@ -113,7 +113,7 @@ my_image_normalizers:
 
 encoder:
     _target_: case_studies.dc2_cataloging.utils.encoder.CalibrationEncoder
-    survey_bands: ["u", "g", "r", "i", "z", "y"]
+    survey_bands: [u, g, r, i, z, y]
     reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}
     optimizer_params:
@@ -126,6 +126,8 @@ encoder:
         _target_: case_studies.dc2_cataloging.utils.variational_dist.CalibrationVariationalDist
         tile_slen: ${surveys.dc2.tile_slen}
         factors: ${my_variational_factors}
+        ci_lower_q: 0.05
+        ci_upper_q: 0.95
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -133,12 +135,12 @@ encoder:
         mag_band: 2  # SDSS r-band
     mode_metrics:
         _target_: torchmetrics.MetricCollection
-        _convert_: "partial"
+        _convert_: partial
         compute_groups: false
         metrics: ${my_metrics}
     sample_metrics:
         _target_: torchmetrics.MetricCollection
-        _convert_: "partial"
+        _convert_: partial
         compute_groups: false
         metrics: ${my_metrics}
     sample_image_renders:
@@ -155,9 +157,9 @@ encoder:
 train:
     trainer:
         logger:
-            name: DC2_cataloging_exp_07
-            version: exp_07-29-3  # change it before running the code
-        devices: [1]  # change it before running the code
+            name: DC2_cataloging_exp
+            version: exp_08-02-1  # change it before running the code
+        devices: [2, 3]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
     data_source: ${surveys.dc2}

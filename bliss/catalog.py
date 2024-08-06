@@ -1,3 +1,4 @@
+import copy
 import math
 from collections import UserDict
 from enum import IntEnum
@@ -81,38 +82,6 @@ class BaseTileCatalog(UserDict):
             [tiles_to_crop, self.n_tiles_w - tiles_to_crop],
         )
 
-    def filter_base_tile_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
-        assert box_origin[0] + box_len < self.height, "invalid box"
-        assert box_origin[1] + box_len < self.width, "invalid box"
-
-        box_origin_tensor = box_origin.view(1, 1, 2).to(device=self.device)
-        box_end_tensor = (box_origin + box_len).view(1, 1, 2).to(device=self.device)
-
-        plocs_mask = torch.all(
-            (self["plocs"] < box_end_tensor) & (self["plocs"] > box_origin_tensor), dim=2
-        )
-
-        plocs_mask_indexes = plocs_mask.nonzero()
-        plocs_inverse_mask_indexes = (~plocs_mask).nonzero()
-        plocs_full_mask_indexes = torch.cat((plocs_mask_indexes, plocs_inverse_mask_indexes), dim=0)
-        _, index_order = plocs_full_mask_indexes[:, 0].sort(stable=True)
-        plocs_full_mask_sorted_indexes = plocs_full_mask_indexes[index_order.tolist(), :]
-
-        d = {}
-        new_max_sources = plocs_mask.sum(dim=1).max()
-        for k, v in self.items():
-            if k == "n_sources":
-                d[k] = plocs_mask.sum(dim=1)
-            else:
-                d[k] = v[
-                    plocs_full_mask_sorted_indexes[:, 0].tolist(),
-                    plocs_full_mask_sorted_indexes[:, 1].tolist(),
-                ].view(-1, self.max_sources, v.shape[-1])[:, :new_max_sources, :]
-
-        d["plocs"] -= box_origin_tensor
-
-        return FullCatalog(box_len, box_len, d)
-
 
 class TileCatalog(BaseTileCatalog):
     galaxy_params = [
@@ -127,6 +96,7 @@ class TileCatalog(BaseTileCatalog):
 
     def __init__(self, d: Dict[str, Tensor]):
         assert "locs" in d
+        assert len(d["locs"].shape) == 5
         super().__init__(d)
 
     def __getitem__(self, name: str):
@@ -339,12 +309,11 @@ class TileCatalog(BaseTileCatalog):
 
         return TileCatalog(d)
 
-    def filter_by_flux(self, min_flux=0, max_flux=torch.inf, band=2):
+    def filter_by_flux(self, min_flux=0, band=2):
         """Restricts TileCatalog to sources that have a flux between min_flux and max_flux.
 
         Args:
             min_flux (float): Minimum flux value to keep. Defaults to 0.
-            max_flux (float): Maximum flux value to keep. Defaults to infinity.
             band (int): The band to compare fluxes in. Defaults to 2 (r-band).
 
         Returns:
@@ -355,28 +324,10 @@ class TileCatalog(BaseTileCatalog):
 
         # get fluxes of "on" sources to mask by
         on_nmgy = sorted_self.on_nmgy[..., band]
-        flux_mask = (on_nmgy > min_flux) & (on_nmgy < max_flux)
+        flux_mask = on_nmgy > min_flux
 
-        d = {}
-        nan_ok_variables = {
-            "shear",
-            "convergence",
-            "ellipticity",
-            "blendedness",
-            "locs_vsbc",
-            "ellipticity_vsbc",
-            "star_fluxes_vsbc",
-            "galaxy_fluxes_vsbc",
-        }
-        for key, val in sorted_self.items():
-            if key in nan_ok_variables:
-                d[key] = val
-            elif key == "n_sources":
-                d[key] = flux_mask.sum(dim=3)  # number of sources within range in tile
-            else:
-                # TODO: we should consider the case where nan is in tensor; don't simply fill with 0
-                assert not val.isnan().any()
-                d[key] = torch.where(flux_mask.unsqueeze(-1), val, torch.zeros_like(val))
+        d = copy.copy(self.data)
+        d["n_sources"] = flux_mask.sum(dim=3)  # number of sources within range in tile
 
         return TileCatalog(d)
 
@@ -411,25 +362,6 @@ class TileCatalog(BaseTileCatalog):
                     d1 = torch.cat((v, other[k]), dim=-2)
                     d2 = torch.cat((other[k], v), dim=-2)
                 d[k] = torch.where(ns11 > 0, d1, d2)
-        return TileCatalog(d)
-
-    def stack(self, other):
-        assert self.batch_size == other.batch_size
-        assert self.n_tiles_h == other.n_tiles_h
-        assert self.n_tiles_w == other.n_tiles_w
-        assert other.max_sources == 1
-        assert other["n_sources"].max() <= 1
-
-        if "n_sources_mask" not in self:
-            self["n_sources_mask"] = rearrange(self["n_sources"], "b nth ntw -> b nth ntw 1 1") > 0
-        other["n_sources_mask"] = rearrange(other["n_sources"], "b nth ntw -> b nth ntw 1 1") > 0
-
-        d = {}
-        for k, v in self.items():
-            if k == "n_sources":
-                d[k] = v + other[k]
-            else:
-                d[k] = torch.cat((v, other[k]), dim=-2)
         return TileCatalog(d)
 
     def __repr__(self):

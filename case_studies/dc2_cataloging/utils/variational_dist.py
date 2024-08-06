@@ -41,6 +41,12 @@ class MyBasicVariationalDist(VariationalDist):
 
 
 class CalibrationVariationalDist(MyBasicVariationalDist):
+    def __init__(self, factors, tile_slen, ci_lower_q, ci_upper_q):
+        super().__init__(factors, tile_slen)
+        assert ci_lower_q < ci_upper_q
+        self.ci_lower_q = ci_lower_q
+        self.ci_upper_q = ci_upper_q
+
     @classmethod
     def _get_vsbc(cls, qk, params, true_tile_cat):
         dist = qk.get_dist(params)
@@ -61,23 +67,6 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
         nll_gating = rearrange(nll_gating, "b nth ntw -> b nth ntw 1 1")
         return torch.where(nll_gating, vsbc, torch.nan)
 
-    def sample_vsbc(self, x_cat: torch.Tensor, true_tile_cat: TileCatalog, use_mode=False):
-        assert true_tile_cat.max_sources == 1
-        sample_result = self.sample(x_cat, use_mode=use_mode)
-        assert sample_result.max_sources == 1
-        fp_pairs = self._factor_param_pairs(x_cat)
-        # for now, only test the vsbc for locs, ellipticity and flux
-        vsbc_variables = {
-            "locs",
-            "ellipticity",
-            "star_fluxes",
-            "galaxy_fluxes",
-        }
-        for qk, params in fp_pairs:
-            if qk.name in vsbc_variables:
-                sample_result[qk.name + "_vsbc"] = self._get_vsbc(qk, params, true_tile_cat)
-        return sample_result
-
     @classmethod
     def _get_credible_interval(cls, qk, params, lower_q, upper_q):
         dist = qk.get_dist(params)
@@ -97,21 +86,34 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
         upper_b = rearrange(upper_b, "b nth ntw d -> b nth ntw 1 d")
         return lower_b, upper_b
 
-    def sample_credible_interval(
-        self, x_cat: torch.Tensor, lower_q: float, upper_q: float, use_mode=False
-    ):
-        assert lower_q < upper_q
-        sample_result = self.sample(x_cat, use_mode=use_mode)
-        fp_pairs = self._factor_param_pairs(x_cat)
-        credible_interval_variables = {
-            "locs",
-            "ellipticity",
-            "star_fluxes",
-            "galaxy_fluxes",
-        }
-        for qk, params in fp_pairs:
-            if qk.name in credible_interval_variables:
-                lower_b, upper_b = self._get_credible_interval(qk, params, lower_q, upper_q)
-                sample_result[qk.name + "_ci_lower"] = lower_b
-                sample_result[qk.name + "_ci_upper"] = upper_b
+    def sample(self, x_cat: torch.Tensor, use_mode=False, true_tile_cat: TileCatalog = None):
+        sample_result = super().sample(x_cat, use_mode=use_mode)
+
+        if true_tile_cat is not None:
+            assert true_tile_cat.max_sources == 1
+            assert sample_result.max_sources == 1
+            fp_pairs = self._factor_param_pairs(x_cat)
+            # for now, only test the vsbc for locs, ellipticity and flux
+            vsbc_variables = {
+                "locs",
+                "ellipticity",
+                "star_fluxes",
+                "galaxy_fluxes",
+            }
+            credible_interval_variables = {
+                "locs",
+                "ellipticity",
+                "star_fluxes",
+                "galaxy_fluxes",
+            }
+            for qk, params in fp_pairs:
+                if qk.name in vsbc_variables:
+                    sample_result[qk.name + "_vsbc"] = self._get_vsbc(qk, params, true_tile_cat)
+                if qk.name in credible_interval_variables:
+                    lower_b, upper_b = self._get_credible_interval(
+                        qk, params, self.ci_lower_q, self.ci_upper_q
+                    )
+                    sample_result[qk.name + "_ci_lower"] = lower_b
+                    sample_result[qk.name + "_ci_upper"] = upper_b
+
         return sample_result

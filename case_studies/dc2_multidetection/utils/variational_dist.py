@@ -198,13 +198,37 @@ class MultiVariationalDist(torch.nn.Module):
         return torch.split(x_cat, chunk_size, 3)
 
     @classmethod
+    def stack_tile_cat(cls, left_tile_cat: TileCatalog, right_tile_cat: TileCatalog):
+        assert left_tile_cat.batch_size == right_tile_cat.batch_size
+        assert left_tile_cat.n_tiles_h == right_tile_cat.n_tiles_h
+        assert left_tile_cat.n_tiles_w == right_tile_cat.n_tiles_w
+        assert right_tile_cat.max_sources == 1
+        assert right_tile_cat["n_sources"].max() <= 1
+
+        if "n_sources_mask" not in left_tile_cat:
+            left_tile_cat["n_sources_mask"] = (
+                rearrange(left_tile_cat["n_sources"], "b nth ntw -> b nth ntw 1 1") > 0
+            )
+        right_tile_cat["n_sources_mask"] = (
+            rearrange(right_tile_cat["n_sources"], "b nth ntw -> b nth ntw 1 1") > 0
+        )
+
+        d = {}
+        for k, v in left_tile_cat.items():
+            if k == "n_sources":
+                d[k] = v + right_tile_cat[k]
+            else:
+                d[k] = torch.cat((v, right_tile_cat[k]), dim=-2)
+        return TileCatalog(d)
+
+    @classmethod
     def _stack_tile_cat(cls, tile_cat_list: List[TileCatalog]):
         output_tile_cat = None
         for tile_cat in tile_cat_list:
             if output_tile_cat is None:
                 output_tile_cat = tile_cat
             else:
-                output_tile_cat = output_tile_cat.stack(tile_cat)
+                output_tile_cat = cls.stack_tile_cat(output_tile_cat, tile_cat)
         return output_tile_cat
 
     @classmethod
