@@ -1,19 +1,14 @@
 import copy
-import warnings
 
 import torch
 from einops import rearrange
 
 from bliss.catalog import TileCatalog
-from bliss.encoder.convnets import FeaturesNet
 from bliss.encoder.encoder import Encoder
-from case_studies.dc2_cataloging.utils.multi_detect_convnet import (
-    CatalogNet as MultiDetectCatalogNet,
-)
-from case_studies.dc2_cataloging.utils.variational_dist import MultiVariationalDist
+from case_studies.dc2_cataloging.utils.variational_dist import CalibrationVariationalDist
 
 
-class EncoderAddingSourceMask(Encoder):
+class MyBasicEncoder(Encoder):
     @classmethod
     def _add_source_mask(cls, ori_tile_cat: TileCatalog):
         d = copy.copy(ori_tile_cat.data)
@@ -26,7 +21,6 @@ class EncoderAddingSourceMask(Encoder):
         d["more_than_two_sources_mask"] = (
             rearrange(on_mask_count > 2, "b nth ntw -> b nth ntw 1 1") & on_mask
         )
-
         return TileCatalog(d)
 
     def sample(self, batch, use_mode=True):
@@ -34,61 +28,81 @@ class EncoderAddingSourceMask(Encoder):
         return self._add_source_mask(tile_cat)
 
 
-class MultiDetectEncoder(EncoderAddingSourceMask):
-    def initialize_networks(self):
-        assert isinstance(
-            self.var_dist, MultiVariationalDist
-        ), "var_dist should be MultiVariationalDist"
-        assert self.tile_slen in {2, 4}, "tile_slen must be 2 or 4"
-        assert not self.use_double_detect, "we disable double detect"
-        assert not self.use_checkerboard, "we disable checkerboard"
+class CalibrationEncoder(MyBasicEncoder):
+    def sample_first_detection(self, x_features, use_mode=True, true_tile_cat=None):
+        batch_size, _n_features, ht, wt = x_features.shape[0:4]
 
-        num_features = 256
-        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
-        self.features_net = FeaturesNet(
-            n_bands=len(self.survey_bands),
-            ch_per_band=ch_per_band,
-            num_features=num_features,
-            double_downsample=(self.tile_slen == 4),
-        )
-        self.catalog_net = MultiDetectCatalogNet(
-            num_features=num_features,
-            out_channels=self.var_dist.n_params_per_source,
-        )
+        est_cat = None
+        if not self.use_checkerboard:
+            patterns_to_use = (0,)
+        elif self.n_sampler_colors == 4:
+            patterns_to_use = (0, 8, 12, 14)
+        elif self.n_sampler_colors == 2:
+            patterns_to_use = (0, 6)
+        else:
+            raise ValueError("n_colors must be 2 or 4")
 
-    def make_context(self, history_cat, history_mask, detection2=False):
-        raise NotImplementedError()
+        for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
+            mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
+            context1 = self.make_context(est_cat, mask)
+            x_cat1 = self.catalog_net(x_features, context1)
+            new_est_cat = self.var_dist.sample(
+                x_cat1, use_mode=use_mode, true_tile_cat=true_tile_cat
+            )
+            new_est_cat["n_sources"] *= 1 - mask
+            if est_cat is None:
+                est_cat = new_est_cat
+            else:
+                est_cat["n_sources"] *= mask
+                est_cat = est_cat.union(new_est_cat, disjoint=True)
+
+        return est_cat
+
+    def sample_second_detection(self, x_features, est_cat1, use_mode=True, true_tile_cat=None):
+        no_mask = torch.ones_like(est_cat1["n_sources"])
+        context2 = self.make_context(est_cat1, no_mask, detection2=True)
+        x_cat2 = self.catalog_net(x_features, context2)
+        est_cat2 = self.var_dist.sample(x_cat2, use_mode=use_mode, true_tile_cat=true_tile_cat)
+        # our loss function implies that the second detection is ignored for a tile
+        # if the first detection is empty for that tile
+        est_cat2["n_sources"] *= est_cat1["n_sources"]
+        return est_cat2
 
     def sample(self, batch, use_mode=True):
+        assert isinstance(self.var_dist, CalibrationVariationalDist)
+
         x_features = self.get_features(batch)
-        x_cat = self.catalog_net(x_features)
-        est_cat = self.var_dist.sample(x_cat, use_mode=use_mode)
-        return self._add_source_mask(est_cat)
-
-    def _compute_loss(self, batch, logging_name):
-        batch_size = batch["images"].shape[0]
-
-        # filter out undetectable sources and split catalog by flux
-        target_cat = TileCatalog(batch["tile_catalog"])
-
-        # TODO: don't order the light sources by brightness; softmax instead
-        target_cat = target_cat.get_brightest_sources_per_tile(
-            top_k=self.var_dist.repeat_times,
-            band=self.reference_band,
+        true_tile_dict = batch.get("tile_catalog", None)
+        if true_tile_dict is not None:
+            true_tile_cat = TileCatalog(true_tile_dict)
+            true_tile_cat1 = true_tile_cat.get_brightest_sources_per_tile(
+                top_k=1,
+                exclude_num=0,
+                band=2,
+            )
+        else:
+            true_tile_cat1 = None
+        est_cat = self.sample_first_detection(
+            x_features,
+            use_mode=use_mode,
+            true_tile_cat=true_tile_cat1,
         )
 
-        x_features = self.get_features(batch)
-        x_cat = self.catalog_net(x_features)
-        loss = self.var_dist.compute_nll(x_cat, target_cat)
+        if self.use_double_detect:
+            if true_tile_dict is not None:
+                true_tile_cat2 = true_tile_cat.get_brightest_sources_per_tile(
+                    top_k=1,
+                    exclude_num=1,
+                    band=2,
+                )
+            else:
+                true_tile_cat2 = None
+            est_cat2 = self.sample_second_detection(
+                x_features,
+                est_cat,
+                use_mode=use_mode,
+                true_tile_cat=true_tile_cat2,
+            )
+            est_cat = est_cat.union(est_cat2, disjoint=False)
 
-        nan_mask = torch.isnan(loss)
-        if nan_mask.any():
-            loss = loss[~nan_mask]
-            msg = f"NaN detected in loss. Ignored {nan_mask.sum().item()} NaN values."
-            warnings.warn(msg)
-
-        # could normalize by the number of tile predictions, rather than number of tiles
-        loss = loss.sum() / loss.numel()
-        self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
-
-        return loss
+        return self._add_source_mask(est_cat)

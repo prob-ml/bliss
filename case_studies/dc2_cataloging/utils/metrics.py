@@ -160,6 +160,12 @@ class DetectionRecallBlendedness(Metric):
             "detection_recall_blendedness": recall,
         }
 
+    def get_internal_states(self):
+        return {
+            "n_true_sources": self.n_true_sources,
+            "n_true_matches": self.n_true_matches,
+        }
+
 
 class Cosmodc2Filter(CatFilter):
     def get_cur_filter_bools(self, true_cat, est_cat):

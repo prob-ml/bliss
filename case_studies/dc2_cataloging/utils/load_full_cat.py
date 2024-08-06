@@ -6,6 +6,7 @@ from hydra.utils import instantiate
 from pytorch_lightning.utilities import move_data_to_device
 
 from bliss.catalog import FullCatalog, TileCatalog
+from bliss.encoder.encoder import Encoder
 from bliss.surveys.dc2 import DC2DataModule, split_tensor
 from case_studies.dc2_cataloging.utils.load_lsst import get_lsst_full_cat
 
@@ -36,9 +37,11 @@ def get_full_cat(
     dc2: DC2DataModule = instantiate(notebook_cfg.surveys.dc2)
     test_sample = dc2.get_plotting_sample(test_img_idx)
     cur_image_wcs = test_sample["wcs"]
-    cur_image_true_full_catalog = test_sample["full_catalog"]
     image_lim = test_sample["image"].shape[1]
     r_band_min_flux = notebook_cfg.notebook_var.r_band_min_flux
+    tile_slen = notebook_cfg.surveys.dc2.tile_slen
+    true_tile_dict = DC2DataModule.unsqueeze_tile_dict(test_sample["tile_catalog"])
+    true_tile_catalog = TileCatalog(true_tile_dict).filter_by_flux(min_flux=r_band_min_flux)
 
     lsst_full_cat = get_lsst_full_cat(
         lsst_root_dir=lsst_root_dir,
@@ -50,7 +53,7 @@ def get_full_cat(
     if predict_full_image:
         device = torch.device("cpu")
 
-    bliss_encoder = instantiate(notebook_cfg.encoder).to(device=device)
+    bliss_encoder: Encoder = instantiate(notebook_cfg.encoder).to(device=device)
     pretrained_weights = torch.load(model_path, device)["state_dict"]
     bliss_encoder.load_state_dict(pretrained_weights)
     bliss_encoder.eval()
@@ -60,10 +63,11 @@ def get_full_cat(
             "images": rearrange(test_sample["image"], "c h w -> 1 c h w"),
         }
         batch = move_data_to_device(batch, device=device)
-        bliss_out_dict = bliss_encoder.predict_step(batch, None)
-        bliss_full_cat: FullCatalog = (
-            bliss_out_dict["mode_cat"].filter_by_flux(min_flux=r_band_min_flux).to_full_catalog(4)
-        )
+        with torch.no_grad():
+            bliss_output = bliss_encoder.sample(batch, use_mode=True)
+            bliss_full_cat = bliss_output.filter_by_flux(min_flux=r_band_min_flux).to_full_catalog(
+                tile_slen
+            )
     else:
         split_size = notebook_cfg.surveys.dc2.image_lim[0] // notebook_cfg.surveys.dc2.n_image_split
         image_splits = split_tensor(test_sample["image"], split_size, 1, 2)
@@ -74,8 +78,9 @@ def get_full_cat(
             }
 
             batch = move_data_to_device(batch, device=device)
-            bliss_output = bliss_encoder.predict_step(batch, None)["mode_cat"]
-            bliss_output = bliss_output.filter_by_flux(min_flux=r_band_min_flux).data
+            with torch.no_grad():
+                bliss_output = bliss_encoder.sample(batch, use_mode=True)
+                bliss_output = bliss_output.filter_by_flux(min_flux=r_band_min_flux).data
             bliss_output = move_data_to_device(bliss_output, device="cpu")
             bliss_output_list.append(bliss_output)
 
@@ -87,6 +92,11 @@ def get_full_cat(
             else:
                 d[k] = rearrange(v, "(a b) nth ntw -> (a nth) (b ntw)", a=n_image_split)
         d = DC2DataModule.unsqueeze_tile_dict(d)
-        bliss_full_cat = TileCatalog(d).to_full_catalog(notebook_cfg.surveys.dc2.tile_slen)
+        bliss_full_cat = TileCatalog(d).to_full_catalog(tile_slen)
 
-    return test_sample["image"], cur_image_true_full_catalog, bliss_full_cat, lsst_full_cat
+    return (
+        test_sample["image"],
+        true_tile_catalog.to_full_catalog(tile_slen),
+        bliss_full_cat,
+        lsst_full_cat,
+    )
