@@ -33,7 +33,14 @@ class CalibrationEncoder(MyBasicEncoder):
         batch_size, _n_features, ht, wt = x_features.shape[0:4]
 
         est_cat = None
-        patterns_to_use = (0, 8, 12, 14) if self.use_checkerboard else (0,)
+        if not self.use_checkerboard:
+            patterns_to_use = (0,)
+        elif self.n_sampler_colors == 4:
+            patterns_to_use = (0, 8, 12, 14)
+        elif self.n_sampler_colors == 2:
+            patterns_to_use = (0, 6)
+        else:
+            raise ValueError("n_colors must be 2 or 4")
 
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])

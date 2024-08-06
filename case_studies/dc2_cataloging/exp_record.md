@@ -538,3 +538,7 @@ if "locs" in datum["tile_catalog"]:
 ### 07-29
 
 3. train with latest code
+
+### 08-06
+
+1. train with the latest code

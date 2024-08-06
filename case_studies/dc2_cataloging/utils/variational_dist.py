@@ -86,7 +86,13 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
         upper_b = rearrange(upper_b, "b nth ntw d -> b nth ntw 1 d")
         return lower_b, upper_b
 
-    def sample(self, x_cat: torch.Tensor, use_mode=False, true_tile_cat: TileCatalog = None):
+    def sample(
+        self,
+        x_cat: torch.Tensor,
+        use_mode=False,
+        return_base_cat=False,
+        true_tile_cat: TileCatalog = None,
+    ):
         sample_result = super().sample(x_cat, use_mode=use_mode)
 
         if true_tile_cat is not None:

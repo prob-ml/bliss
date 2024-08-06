@@ -98,6 +98,8 @@ my_metrics:
   flux_error:
     _target_: bliss.encoder.metrics.FluxError
     survey_bands: ${encoder.survey_bands}
+    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+    bin_type: njymag
   # shear_error:
   #   _target_: case_studies.dc2_cataloging.utils.metrics.ShearMSE
   #   bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
@@ -153,13 +155,15 @@ encoder:
             tile_slen: ${surveys.dc2.tile_slen}
     use_double_detect: true
     use_checkerboard: true
+    n_sampler_colors: 4
+    predict_mode_not_samples: true
 
 train:
     trainer:
         logger:
             name: DC2_cataloging_exp
-            version: exp_08-02-1  # change it before running the code
-        devices: [2, 3]  # change it before running the code
+            version: exp_08-06-1  # change it before running the code
+        devices: [5]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
     data_source: ${surveys.dc2}

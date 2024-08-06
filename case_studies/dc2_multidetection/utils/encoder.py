@@ -1,51 +1,21 @@
 import warnings
-from typing import Optional
 
 import torch
 from einops import rearrange, repeat
-from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
-from bliss.encoder.metrics import CatalogMatcher
 from case_studies.dc2_cataloging.utils.encoder import MyBasicEncoder
 from case_studies.dc2_multidetection.utils.convnet import SimpleCatalogNet, SimpleFeaturesNet
 from case_studies.dc2_multidetection.utils.variational_dist import MultiVariationalDist
 
 
 class MultiDetectEncoder(MyBasicEncoder):
-    def __init__(
-        self,
-        survey_bands: list,
-        tile_slen: int,
-        image_normalizers: dict,
-        var_dist: MultiVariationalDist,
-        matcher: CatalogMatcher,
-        sample_image_renders: MetricCollection,
-        mode_metrics: MetricCollection,
-        sample_metrics: Optional[MetricCollection] = None,
-        optimizer_params: Optional[dict] = None,
-        scheduler_params: Optional[dict] = None,
-        use_double_detect: bool = False,
-        use_checkerboard: bool = True,
-        reference_band: int = 2,
-        one_to_topk: int = 3,
-    ):
-        assert isinstance(var_dist, MultiVariationalDist), "var_dist should be MultiVariationalDist"
-        super().__init__(
-            survey_bands=survey_bands,
-            tile_slen=tile_slen,
-            image_normalizers=image_normalizers,
-            var_dist=var_dist,
-            matcher=matcher,
-            sample_image_renders=sample_image_renders,
-            mode_metrics=mode_metrics,
-            sample_metrics=sample_metrics,
-            optimizer_params=optimizer_params,
-            scheduler_params=scheduler_params,
-            use_double_detect=False,
-            use_checkerboard=False,
-            reference_band=reference_band,
-        )
+    def __init__(self, **kwargs):
+        assert isinstance(
+            kwargs["var_dist"], MultiVariationalDist
+        ), "var_dist should be MultiVariationalDist"
+        one_to_topk = kwargs.pop("one_to_topk")
+        super().__init__(**kwargs)
         assert one_to_topk > 1
         self.one_to_topk = one_to_topk
 
