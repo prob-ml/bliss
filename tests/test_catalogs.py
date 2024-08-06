@@ -97,11 +97,12 @@ class TestBasicTileAndFullCatalogs:
         assert cat.get_brightest_sources_per_tile(band=2).max_sources == 1
 
     def test_filter_tile_cat_by_flux(self, multi_source_tilecat):
-        cat = multi_source_tilecat.filter_by_flux(300, 2000)
+        cat = multi_source_tilecat.filter_by_flux(300)
         assert cat.max_sources == 2
-        assert cat["n_sources"].sum() == 3
-        assert cat["galaxy_fluxes"].sum() == 2100.0
-        assert cat["galaxy_fluxes"].max() == 1000.0
+        assert cat["n_sources"].sum() == 4
+        r_band_flux = cat["galaxy_fluxes"][..., 2:3]
+        r_band_flux = torch.where(cat.galaxy_bools, r_band_flux, torch.inf)
+        assert r_band_flux.min().item() == 500
 
     def test_bin_full_cat_by_flux(self):
         d = {
