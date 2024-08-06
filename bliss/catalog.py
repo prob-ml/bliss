@@ -326,7 +326,7 @@ class TileCatalog(BaseTileCatalog):
         on_nmgy = sorted_self.on_nmgy[..., band]
         flux_mask = on_nmgy > min_flux
 
-        d = copy.copy(self.data)
+        d = copy.copy(sorted_self.data)
         d["n_sources"] = flux_mask.sum(dim=3)  # number of sources within range in tile
 
         return TileCatalog(d)
