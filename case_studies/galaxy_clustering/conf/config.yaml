@@ -5,10 +5,10 @@ defaults:
     - override hydra/job_logging: stdout
 
 data_gen:
-    data_dir: /data/scratch/kapnadak/new_data
+    data_dir: /data/scratch/kapnadak/data-08-08/
     image_size: 2560
-    tile_size: 128
-    nfiles: 5000
+    tile_size: 256
+    nfiles: 2000
     n_catalogs_per_file: 500
     bands: ["g", "r", "i", "z"]
     min_flux_for_loss: 0
