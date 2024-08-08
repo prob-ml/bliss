@@ -12,7 +12,7 @@ PHOTO_Z_PATH = "/data/scratch/des/sva1_gold_r1.0_annz2_point.fits"
 
 
 class Prior:
-    def __init__(self, image_size=1280):
+    def __init__(self, image_size=2560):
         super().__init__()
         self.width = image_size
         self.height = image_size
@@ -125,7 +125,7 @@ class Prior:
 
 
 class ClusterPrior(Prior):
-    def __init__(self, image_size=1280):
+    def __init__(self, image_size=2560):
         super().__init__(image_size)
 
         self.full_cluster_df = Table.read(CLUSTER_CATALOG_PATH).to_pandas()
@@ -247,11 +247,11 @@ class ClusterPrior(Prior):
 
 
 class BackgroundPrior(Prior):
-    def __init__(self, image_size=1280):
+    def __init__(self, image_size=2560):
         super().__init__(image_size)
 
         self.pixel_scale = 0.263
-        self.mean_sources = 0.004
+        self.mean_sources = 0.00067
         self.source_df = Table.read(SVA_PATH).to_pandas()
 
     def sample_n_sources(self):
@@ -260,7 +260,7 @@ class BackgroundPrior(Prior):
         Returns:
             Poisson sample for number of background sources
         """
-        return np.random.poisson(self.mean_sources * self.width * self.height / 49)
+        return np.random.poisson(self.mean_sources * self.width * self.height)
 
     def sample_sources(self, n_sources):
         """Samples random sources from the current DES catalog.
