@@ -18,3 +18,10 @@ train:
 predict:
     dataset:
         load_image_data: true
+
+surveys:
+    sdss:
+        fields:
+            - run: 94
+              camcol: 1
+              fields: [12]
