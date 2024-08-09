@@ -5,10 +5,10 @@ defaults:
     - override hydra/job_logging: stdout
 
 data_gen:
-    data_dir: /nfs/turbo/lsa-regier/scratch/kapnadak/new_data
-    image_size: 1280
-    tile_size: 128
-    nfiles: 5000
+    data_dir: /data/scratch/kapnadak/data-08-08/
+    image_size: 2560
+    tile_size: 256
+    nfiles: 2000
     n_catalogs_per_file: 500
     bands: ["g", "r", "i", "z"]
     min_flux_for_loss: 0
@@ -37,7 +37,7 @@ cached_simulator:
     batch_size: 2
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
     num_workers: 8
-    cached_data_path: /nfs/turbo/lsa-regier/scratch/kapnadak/new_data/file_data
+    cached_data_path: /data/scratch/kapnadak/new_data/file_data
     train_transforms: []
 
 train:
@@ -81,7 +81,7 @@ encoder:
 
 predict:
     cached_dataset:
-        _target_: case_studies.galaxy_clustering.cached_dataset.CachedDESModule
+        _target_: case_studies.galaxy_clustering.inference.cached_dataset.CachedDESModule
         cached_data_path: /nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles
         tiles_per_img: 64
         batch_size: 2
@@ -100,6 +100,6 @@ predict:
                 output_dir: "/data/scratch/des/dr2_detection_output/run_1"
                 write_interval: "batch"
     encoder: ${encoder}
-    weight_save_path: /nfs/turbo/lsa-regier/scratch/gapatron/best_encoder.ckpt
+    weight_save_path: /data/scratch/des/best_encoder.ckpt
     device: "cuda:0"
     output_save_path: "/data/scratch/des/dr2_detection_output/run_0"

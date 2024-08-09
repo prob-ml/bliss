@@ -48,16 +48,14 @@ def catalog_gen(cfg):
     cluster_prior = ClusterPrior(image_size=image_size)
     background_prior = BackgroundPrior(image_size=image_size)
 
-    combined_catalogs = []
-    for _ in range(nfiles):
+    for i in range(nfiles):
         background_catalog = background_prior.sample_background()
         if np.random.uniform() < 0.5:
             cluster_catalog = cluster_prior.sample_cluster()
-            combined_catalogs.append(pd.concat([cluster_catalog, background_catalog]))
+            catalog = pd.concat([cluster_catalog, background_catalog])
         else:
-            combined_catalogs.append(background_catalog)
-
-    for i, catalog in enumerate(combined_catalogs):
+            catalog = background_catalog
+        print(f"Writing catalog {i} ...")
         file_name = f"{catalogs_path}/{file_prefix}_{i:03}.dat"
         catalog_table = Table.from_pandas(catalog)
         astro_ascii.write(catalog_table, file_name, format="no_header", overwrite=True)
