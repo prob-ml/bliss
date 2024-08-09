@@ -8,7 +8,6 @@ import torch
 from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from torch import Tensor
-from torch.nn.utils.rnn import pad_sequence
 
 
 def convert_mag_to_nmgy(mag):
@@ -519,15 +518,28 @@ class FullCatalog(UserDict):
         d_new["n_sources"] = keep.sum(dim=(-2, -1)).long()
         return type(self)(self.height, self.width, d_new)
 
-    def _get_tile_to_source_mapping(self, mapping_matrix: Tensor) -> Tensor:
-        return mapping_matrix.nonzero()
+    @classmethod
+    def _pad_along_max_sources(cls, v: torch.Tensor, target_m: int):
+        """Pad (b, nth, ntw, m, k) to be (b, nth, ntw, target_m, k)."""
+        m = v.shape[-2]
+        pad_len = target_m - m
 
+        if pad_len <= 0:
+            return v
+
+        pad = torch.zeros_like(v[..., 0:1, :]).repeat(1, 1, 1, pad_len, 1)
+        return torch.cat((v, pad), dim=-2)
+
+    # pylint: disable=R0912,R0915
     def to_tile_catalog(
         self,
         tile_slen: int,
         max_sources_per_tile: int,
+        *,
         ignore_extra_sources=False,
         filter_oob=False,
+        stable=True,
+        inter_int_type=torch.int32,
     ) -> TileCatalog:
         """Returns the TileCatalog corresponding to this FullCatalog.
 
@@ -537,18 +549,27 @@ class FullCatalog(UserDict):
             ignore_extra_sources: If False (default), raises an error if the number of sources
                 in one tile exceeds the `max_sources_per_tile`. If True, only adds the tile
                 parameters of the first `max_sources_per_tile` sources to the new TileCatalog.
-            filter_oob: If filter_oob is true, filter out the sources outside the image. (e.g. In
-                case of data augmentation, there is a chance of some sources located outside the
-                image)
+            filter_oob: If filter_oob is True (default is False),
+                filter out the sources outside the image.
+                (e.g. In case of data augmentation, there is a chance of some sources located
+                outside the image)
+            stable: It stable is True (default), on tiles with more than one sources,
+                the sources will be arranged in a stable order.
+                Some speedup can be gained if you disable this tag.
+            inter_int_type: The dtype for the tensors counting the sources per tile.
+                Default is torch.int32, and you can change it to torch.int8 to get speedup.
+                But the overflow may happen without any warning.
 
         Returns:
             TileCatalog correspond to the each source in the FullCatalog.
 
         Raises:
-            ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
-                `ignore_extra_sources` is False.
+            ValueError: If the number of sources in one tile exceeds `max_sources_per_tile`
+                and `ignore_extra_sources` is False.
             KeyError: If the tile_params contain `plocs` or `n_sources`.
         """
+        assert max_sources_per_tile <= torch.iinfo(inter_int_type).max
+
         # TODO: a FullCatalog only needs to "know" its height and width to convert itself to a
         # TileCatalog. So those parameters should be passed on conversion, not initialization.
         tile_coords = torch.div(self["plocs"], tile_slen, rounding_mode="trunc").to(torch.int)
@@ -557,7 +578,6 @@ class FullCatalog(UserDict):
 
         # prepare tiled tensors
         tile_cat_shape = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile)
-        tile_locs = torch.zeros((*tile_cat_shape, 2), device=self.device)
         tile_n_sources = torch.zeros(tile_cat_shape[:3], dtype=torch.int64, device=self.device)
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():
@@ -565,81 +585,136 @@ class FullCatalog(UserDict):
                 continue
             size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
             tile_params[k] = torch.zeros(size, dtype=v.dtype, device=self.device)
+        tile_params["locs"] = torch.zeros((*tile_cat_shape, 2), device=self.device)
 
-        tile_params["locs"] = tile_locs
-
-        for ii in range(self.batch_size):
-            n_sources = int(self["n_sources"][ii].item())
-            plocs_ii = self["plocs"][ii][:n_sources]
+        for batch_index in range(self.batch_size):
+            n_sources = int(self["n_sources"][batch_index].item())
+            plocs = self["plocs"][batch_index, :n_sources]  # (n_sources, 2)
             filter_sources = n_sources
-            source_tile_coords = tile_coords[ii][:n_sources]
+            source_tile_coords = tile_coords[batch_index, :n_sources]
+
+            plocs_start_point = torch.tensor([0, 0], dtype=plocs.dtype, device=plocs.device).view(
+                1, -1
+            )
+            plocs_end_point = torch.tensor(
+                [self.height, self.width], dtype=plocs.dtype, device=plocs.device
+            ).view(1, -1)
+            plocs_mask = ((plocs > plocs_start_point) & (plocs < plocs_end_point)).all(dim=-1)
             if filter_oob:
-                x0_mask = (plocs_ii[:, 0] > 0) & (plocs_ii[:, 0] < self.height)
-                x1_mask = (plocs_ii[:, 1] > 0) & (plocs_ii[:, 1] < self.width)
-                x_mask = x0_mask * x1_mask
-                filter_sources = x_mask.sum()
-                source_tile_coords = source_tile_coords[x_mask]
+                filter_sources = plocs_mask.sum()
+                source_tile_coords = source_tile_coords[plocs_mask]
+            else:
+                assert plocs_mask.all(), "find sources that are outside boundary"
 
             if filter_sources == 0:
                 continue
 
-            source_indices = source_tile_coords[:, 0] * n_tiles_w + source_tile_coords[
-                :, 1
-            ].unsqueeze(0)
-            tile_indices = torch.arange(n_tiles_h * n_tiles_w, device=self.device).unsqueeze(1)
-
-            tile_to_source_mapping = self._get_tile_to_source_mapping(
-                source_indices == tile_indices
+            source_to_tile_indices = (
+                source_tile_coords[:, 0] * n_tiles_w + source_tile_coords[:, 1]
+            ).to(
+                torch.int64
+            )  # (n_sources, )
+            num_sources_on_per_tile = torch.zeros(
+                n_tiles_h * n_tiles_w,
+                dtype=inter_int_type,
+                device=self.device,
+            )  # (h x w, )
+            num_sources_on_per_tile.scatter_add_(
+                dim=0,
+                index=source_to_tile_indices,
+                src=torch.ones_like(source_to_tile_indices, dtype=inter_int_type),
             )
-            tile_source_count: Tuple[Tensor, Tensor] = tile_to_source_mapping[:, 0].unique(
-                sorted=True, return_counts=True
-            )  # first element is tile index; second element is source count
-            if tile_source_count[1].max() > max_sources_per_tile:
+            num_shared_tiles_per_source = torch.gather(
+                num_sources_on_per_tile, dim=0, index=source_to_tile_indices
+            )  # (n_sources, )
+
+            # note that this doesn't test overflow
+            max_shared_tiles = num_shared_tiles_per_source.max().item()
+            if max_shared_tiles > max_sources_per_tile:
                 if not ignore_extra_sources:
                     raise ValueError(  # noqa: WPS220
                         "# of sources per tile exceeds `max_sources_per_tile`."
                     )
 
-            # get n_sources for each tile
-            tile_n_sources[ii].view(-1)[tile_source_count[0].flatten().tolist()] = torch.where(
-                tile_source_count[1] <= max_sources_per_tile,
-                tile_source_count[1],
-                max_sources_per_tile,
-            )
-
-            for k, v in tile_params.items():
-                if k == "plocs":
-                    raise KeyError("plocs should not be in tile_params")
-                if k == "locs":
-                    k = "plocs"
-                if k == "n_sources":
-                    raise KeyError("n_sources should not be in tile_params")
-                param_matrix = self[k][ii][:n_sources]
-                if filter_oob:
-                    param_matrix = param_matrix[x_mask]
-                params_on_tile = list(
-                    param_matrix[tile_to_source_mapping[:, 1]].split(
-                        tile_source_count[1].flatten().tolist()
+                for tile_k, tile_v in tile_params.items():
+                    tile_params[tile_k] = self._pad_along_max_sources(
+                        tile_v, target_m=max_shared_tiles
                     )
+
+            if max_shared_tiles > 1:
+                source_cum = torch.zeros(
+                    source_to_tile_indices.shape[0], dtype=inter_int_type, device=self.device
                 )
-                # pad first tensor to desired length
-                # the second argument of pad function is
-                # padding_left, padding_right, padding_top, padding_bottom
-                params_on_tile[0] = torch.nn.functional.pad(
-                    params_on_tile[0],
-                    (0, 0, 0, (max_sources_per_tile - params_on_tile[0].shape[0])),
+                for max_s in range(2, max_shared_tiles + 1):
+                    max_s_mask = num_shared_tiles_per_source == max_s
+                    max_s_sum = max_s_mask.sum().item()
+                    assert max_s_sum % max_s == 0
+                    masked_s_to_t_indices = torch.masked_select(
+                        source_to_tile_indices, mask=max_s_mask
+                    )
+                    pos_tensor = torch.arange(
+                        0, max_s, dtype=inter_int_type, device=self.device
+                    ).repeat(max_s_sum // max_s)
+                    pos_tensor = torch.scatter(
+                        torch.zeros_like(pos_tensor),
+                        dim=0,
+                        index=torch.argsort(masked_s_to_t_indices, dim=0, stable=stable),
+                        src=pos_tensor,
+                    )
+                    source_cum.masked_scatter_(mask=max_s_mask, source=pos_tensor)
+                source_to_tile_indices += (
+                    source_cum.to(dtype=source_to_tile_indices.dtype) * n_tiles_h * n_tiles_w
+                )  # (n_sources, )
+
+            # get n_sources for each tile
+            tile_n_sources[batch_index] = rearrange(
+                num_sources_on_per_tile, "(nth ntw) -> nth ntw", nth=n_tiles_h, ntw=n_tiles_w
+            ).to(dtype=tile_n_sources.dtype)
+
+            for tile_k, tile_v in tile_params.items():
+                if tile_k == "plocs":
+                    raise KeyError("plocs should not be in tile_params")
+                if tile_k == "n_sources":
+                    raise KeyError("n_sources should not be in tile_params")
+                if tile_k == "locs":
+                    k = "plocs"
+                else:
+                    k = tile_k
+                full_cat_v = self[k][batch_index, :n_sources]  # (n_sources, k)
+                if filter_oob:
+                    full_cat_v = full_cat_v[plocs_mask]
+
+                m = tile_v.shape[-2]
+                transposed_v = rearrange(tile_v[batch_index], "nth ntw m k -> (m nth ntw) k")
+                repeated_source_to_tile_indices = repeat(
+                    source_to_tile_indices, "n_sources -> n_sources k", k=transposed_v.shape[-1]
                 )
-                # pad all tensors
-                params_on_tile = pad_sequence(params_on_tile, batch_first=True)
-                max_fill = min(filter_sources, max_sources_per_tile)
-                v[ii].view(-1, *v[ii].shape[2:])[
-                    tile_to_source_mapping[:, 0].unique(sorted=True).tolist(), :max_fill
-                ] = params_on_tile[:, :max_fill].to(dtype=v.dtype)
+                transposed_v.scatter_(
+                    dim=0,
+                    index=repeated_source_to_tile_indices,
+                    src=full_cat_v.to(dtype=transposed_v.dtype),
+                )
+                target_v = rearrange(
+                    transposed_v, "(m nth ntw) k -> nth ntw m k", m=m, nth=n_tiles_h, ntw=n_tiles_w
+                )
+                if ignore_extra_sources:
+                    target_v = target_v.clone()
+                tile_v[batch_index] = target_v
 
             # modify tile location
-            tile_params["locs"][ii] = (tile_params["locs"][ii] % tile_slen) / tile_slen
-        tile_params.update({"n_sources": tile_n_sources})
+            tile_params["locs"][batch_index] = (
+                tile_params["locs"][batch_index] % tile_slen
+            ) / tile_slen
+
+        if ignore_extra_sources:
+            for tile_k, tile_v in tile_params.items():
+                tile_params[tile_k] = tile_v[..., :max_sources_per_tile, :]
+            tile_params["n_sources"] = tile_n_sources.clamp(max=max_sources_per_tile)
+        else:
+            tile_params["n_sources"] = tile_n_sources
         return TileCatalog(tile_params)
+
+    # pylint: enable=R0912,R0915
 
     def filter_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
         assert box_origin[0] + box_len <= self.height, "invalid box"

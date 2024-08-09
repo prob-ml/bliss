@@ -38,12 +38,6 @@ my_variational_factors:
     nll_rearrange: b ht wt 1 d -> b ht wt d
     nll_gating:
       _target_: bliss.encoder.variational_dist.GalaxyGating
-  # - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
-  #   name: shear
-  #   sample_rearrange: b ht wt d -> b ht wt 1 d
-  #   nll_rearrange: b ht wt 1 d -> b ht wt d
-  #   nll_gating:
-  #     _target_: case_studies.dc2_cataloging.utils.variational_dist.Cosmodc2Gating
   - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
     name: ellipticity
     sample_rearrange: b ht wt d -> b ht wt 1 d
@@ -54,60 +48,56 @@ my_variational_factors:
 my_metrics:
   detection_performance:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: njymag
+    base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
+    report_bin_unit: njymag
   detection_performance_star:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: njymag
+    base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
+    report_bin_unit: njymag
     filter_list:
       - _target_: bliss.encoder.metrics.SourceTypeFilter
         filter_type: star
   detection_performance_galaxy:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: njymag
+    base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
+    report_bin_unit: njymag
     filter_list:
       - _target_: bliss.encoder.metrics.SourceTypeFilter
         filter_type: galaxy
   detection_performance_one_source_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: njymag
+    base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
+    report_bin_unit: njymag
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
         filter_source_count: 1m
   detection_performance_two_sources_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: njymag
+    base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
+    report_bin_unit: njymag
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
         filter_source_count: 2m
   detection_performance_more_than_two_sources_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
-    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: njymag
+    base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
+    report_bin_unit: njymag
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
         filter_source_count: 2plus
   source_type_accuracy:
     _target_: bliss.encoder.metrics.SourceTypeAccuracy
-    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: njymag
+    base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
+    report_bin_unit: njymag
   flux_error:
     _target_: bliss.encoder.metrics.FluxError
     survey_bands: ${encoder.survey_bands}
-    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: njymag
-  # shear_error:
-  #   _target_: case_studies.dc2_cataloging.utils.metrics.ShearMSE
-  #   bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-  #   bin_type: njymag
+    base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
+    report_bin_unit: njymag
   ellipticity_error:
     _target_: case_studies.dc2_cataloging.utils.metrics.EllipticityMSE
-    bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    bin_type: njymag
+    base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
+    report_bin_unit: njymag
 
 my_image_normalizers:
   null_noramlize:
