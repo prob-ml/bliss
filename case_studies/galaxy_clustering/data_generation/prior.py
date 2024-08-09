@@ -168,9 +168,9 @@ class ClusterPrior(Prior):
         center_x, center_y = center
         # convert from h-1 Mpc to pixels (assuming h = 0.7)
         radius_astro_samples = self.cluster_members["R"] / 0.7
-        # redshift for most likely source that's part of the cluster
-        z_mean = self.cluster_members.loc[self.cluster_members["P"].idxmax()]["Z_MEAN"]
-        angular_distance = angular_diameter_distance(z_mean).value
+        # redshift for each source
+        z_estimates = self.cluster_members["Z_MEAN"]
+        angular_distance = angular_diameter_distance(z_estimates).value
         radius_samples = radius_astro_samples / (0.263 * angular_distance)
         radius_samples = radius_samples * (180 * 3600) / np.pi
         for radius in radius_samples:
