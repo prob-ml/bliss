@@ -9,7 +9,7 @@ from bliss.data_augmentation import RandomShiftTransform, RotateFlipTransform
 def test_rotate_flip_with_full_catalog(cfg):
     datum_lst = torch.load(cfg.paths.test_data + "/two_image_cached_dataset.pt")
 
-    fcttt = FullCatalogToTileTransform(2, 6)
+    fcttt = FullCatalogToTileTransform(2, 6, filter_oob=True)
     datum = fcttt(datum_lst[0])
 
     original_datum = deepcopy(datum)
@@ -90,7 +90,7 @@ def test_rotate_flip_with_toy_data(cfg):
 def test_random_shift_with_full_catalog(cfg):
     datum_lst = torch.load(cfg.paths.test_data + "/two_image_cached_dataset.pt")
 
-    fcttt = FullCatalogToTileTransform(2, 6)
+    fcttt = FullCatalogToTileTransform(2, 6, filter_oob=True)
     datum = fcttt(datum_lst[0])
 
     original_datum = deepcopy(datum)

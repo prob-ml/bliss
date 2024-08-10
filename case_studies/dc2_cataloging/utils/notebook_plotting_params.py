@@ -20,4 +20,8 @@ class NoteBookPlottingParams:
         "flux_error_plot": {
             "band_colors": ["violet", "green", "red", "peru", "teal", "darkorange"],
         },
+        "roc_plot": {
+            "faint": "cornflowerblue",
+            "bright": "blue",
+        },
     }
