@@ -12,6 +12,7 @@ data_gen:
     n_catalogs_per_file: 500
     bands: ["g", "r", "i", "z"]
     min_flux_for_loss: 0
+    overwrite: false
 
 prior:
     _target_: case_studies.galaxy_clustering.prior.GalaxyClusterPrior
