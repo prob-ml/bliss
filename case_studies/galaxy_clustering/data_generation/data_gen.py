@@ -49,6 +49,10 @@ def catalog_gen(cfg):
     background_prior = BackgroundPrior(image_size=image_size)
 
     for i in range(nfiles):
+        file_name = f"{catalogs_path}/{file_prefix}_{i:03}.dat"
+        if os.path.exists(file_name) and not cfg.overwrite:
+            print(f"File {file_name} already exists, moving on ...")
+            continue
         background_catalog = background_prior.sample_background()
         if np.random.uniform() < 0.5:
             cluster_catalog = cluster_prior.sample_cluster()
@@ -56,7 +60,6 @@ def catalog_gen(cfg):
         else:
             catalog = background_catalog
         print(f"Writing catalog {i} ...")
-        file_name = f"{catalogs_path}/{file_prefix}_{i:03}.dat"
         catalog_table = Table.from_pandas(catalog)
         astro_ascii.write(catalog_table, file_name, format="no_header", overwrite=True)
 
