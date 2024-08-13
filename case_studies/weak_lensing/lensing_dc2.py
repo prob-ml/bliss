@@ -119,19 +119,23 @@ class LensingDC2DataModule(DC2DataModule):
         psf_params = result_dict["inputs"]["psf_params"]
 
         # TODO: interpolation
-        shear = tile_dict["shear"] * 100
-        convergence = tile_dict["convergence"] * 100
+        shear = tile_dict["shear"]
+        convergence = tile_dict["convergence"]
+        ellip_lensed = tile_dict["ellip_lensed"]
         galid = tile_dict["galid"]
         nonzero_shear_conv_mask = galid != 0
         nonzero_shear_mask = nonzero_shear_conv_mask.expand(-1, -1, -1, 2)
         shear[~nonzero_shear_mask] = float("nan")  # noqa: WPS456
         convergence[~nonzero_shear_conv_mask] = float("nan")  # noqa: WPS456
+        ellip_lensed[~nonzero_shear_mask] = float("nan")  # noqa: WPS456
 
         avg_nonzero_shear = torch.nanmean(shear, dim=2)
         avg_nonzero_convergence = torch.nanmean(convergence, dim=2)
+        avg_nonzero_ellip_lensed = torch.nanmean(ellip_lensed, dim=2)
 
         tile_dict["shear"] = avg_nonzero_shear
         tile_dict["convergence"] = avg_nonzero_convergence
+        tile_dict["ellip_lensed"] = avg_nonzero_ellip_lensed
 
         data_to_cache = {
             "tile_catalog": tile_dict,
@@ -161,6 +165,19 @@ class LensingDC2Catalog(DC2FullCatalog):
         shear2 = torch.from_numpy(catalog["shear_2"].values).squeeze()
         convergence = torch.from_numpy(catalog["convergence"].values)
 
+        ellip1_intrinsic = torch.from_numpy(catalog["ellipticity_1_true"].values).squeeze()
+        ellip2_intrinsic = torch.from_numpy(catalog["ellipticity_2_true"].values).squeeze()
+
+        complex_shear = shear1 + shear2 * 1j
+        complex_ellip = ellip1_intrinsic + ellip2_intrinsic * 1j
+        reduced_shear = complex_shear / (1.0 - convergence)
+        complex_ellip_lensed = (complex_ellip + reduced_shear) / (
+            1.0 + reduced_shear.conj() * complex_ellip
+        )
+        ellip1_lensed = torch.view_as_real(complex_ellip_lensed)[..., 0]
+        ellip2_lensed = torch.view_as_real(complex_ellip_lensed)[..., 1]
+        ellip_lensed = torch.absolute(complex_ellip_lensed)
+
         _, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
 
         plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
@@ -175,6 +192,9 @@ class LensingDC2Catalog(DC2FullCatalog):
         shear2 = shear2[plocs_mask]
         convergence = convergence[plocs_mask]
         shear = torch.stack((shear1, shear2), dim=1)
+        ellip1_lensed = ellip1_lensed[plocs_mask]
+        ellip2_lensed = ellip2_lensed[plocs_mask]
+        ellip_lensed = torch.stack((ellip1_lensed, ellip2_lensed), dim=1)
 
         nobj = galid.shape[0]
         # TODO: pass existant shear & convergence masks in d
@@ -184,6 +204,7 @@ class LensingDC2Catalog(DC2FullCatalog):
             "plocs": plocs.reshape(1, nobj, 2),
             "shear": shear.reshape(1, nobj, 2),
             "convergence": convergence.reshape(1, nobj, 1),
+            "ellip_lensed": ellip_lensed.reshape(1, nobj, 2),
         }
 
         return cls(height, width, d), psf_params
