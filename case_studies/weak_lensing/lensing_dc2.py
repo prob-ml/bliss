@@ -2,9 +2,10 @@ import logging
 import sys
 
 import pandas as pd
-import torch
+import torch, math
 
 from bliss.surveys.dc2 import DC2DataModule, DC2FullCatalog, wcs_from_wcs_header_str
+from bliss.catalog import BaseTileCatalog
 
 
 class LensingDC2DataModule(DC2DataModule):
@@ -74,7 +75,33 @@ class LensingDC2DataModule(DC2DataModule):
 
         for i in range(n_image):
             generate_data_wrapper(i)
+    
+    def to_tile_catalog(self, full_catalog, height, width):
+        plocs = full_catalog["plocs"].reshape(1, -1, 2)
+        source_tile_coords = torch.div(plocs, self.tile_slen, rounding_mode="trunc").to(torch.int64)
+        n_tiles_h = math.ceil(height / self.tile_slen)
+        n_tiles_w = math.ceil(width / self.tile_slen)
+        source_to_tile_indices = (
+            source_tile_coords[:, :, 0] * n_tiles_w + source_tile_coords[:, :, 1]
+        ).unsqueeze(-1).to(dtype=torch.int64)
 
+        tile_cat = {}
+        
+        num_tiles = n_tiles_h * n_tiles_w
+
+        for k, v in full_catalog.items():
+            if k == "plocs":
+                continue
+            # should only be single measures (shear1, convergence, shear2, ellipticity1, ellipticity2, etc.)
+            v = v.reshape(self.batch_size, plocs.shape[1], 1)
+            v_sum = torch.zeros(self.batch_size, num_tiles, 1, dtype=v.dtype)
+            v_count = torch.zeros(self.batch_size, num_tiles, 1, dtype=v.dtype)
+            v_sum = v_sum.scatter_add(1, source_to_tile_indices, v)
+            v_count = v_count.scatter_add(1, source_to_tile_indices, torch.ones_like(v))
+            tile_cat[k+"_sum"] = v_sum.reshape(self.batch_size, n_tiles_w, n_tiles_h, 1)
+            tile_cat[k+"_count"] = v_count.reshape(self.batch_size, n_tiles_w, n_tiles_h, 1)
+        return BaseTileCatalog(tile_cat)
+    
     def load_image_and_catalog(self, image_index, **kwargs):
         image, wcs_header_str = self.read_image_for_bands(image_index)
         wcs = wcs_from_wcs_header_str(wcs_header_str)
@@ -90,10 +117,8 @@ class LensingDC2DataModule(DC2DataModule):
             bands=kwargs["bands"],
             n_bands=kwargs["n_bands"],
         )
-        tile_cat = full_cat.to_tile_catalog(
-            kwargs["tile_slen"],
-            kwargs["tile_slen"] ** 2,
-        )  # TODO: find the actual max sources with given tile size
+
+        tile_cat = self.to_tile_catalog(full_cat, height, width)
 
         tile_dict = self.squeeze_tile_dict(tile_cat.data)
 
@@ -119,23 +144,14 @@ class LensingDC2DataModule(DC2DataModule):
         psf_params = result_dict["inputs"]["psf_params"]
 
         # TODO: interpolation
-        shear = tile_dict["shear"]
-        convergence = tile_dict["convergence"]
-        ellip_lensed = tile_dict["ellip_lensed"]
-        galid = tile_dict["galid"]
-        nonzero_shear_conv_mask = galid != 0
-        nonzero_shear_mask = nonzero_shear_conv_mask.expand(-1, -1, -1, 2)
-        shear[~nonzero_shear_mask] = float("nan")  # noqa: WPS456
-        convergence[~nonzero_shear_conv_mask] = float("nan")  # noqa: WPS456
-        ellip_lensed[~nonzero_shear_mask] = float("nan")  # noqa: WPS456
+        shear1 = (tile_dict["shear1_sum"] / tile_dict["shear1_count"]) * 100
+        shear2 = (tile_dict["shear2_sum"] / tile_dict["shear2_count"]) * 100
+        shear = torch.stack((shear1, shear2), dim=-1)
+        convergence = (tile_dict["convergence_sum"] / tile_dict["convergence_count"]) * 100
 
-        avg_nonzero_shear = torch.nanmean(shear, dim=2)
-        avg_nonzero_convergence = torch.nanmean(convergence, dim=2)
-        avg_nonzero_ellip_lensed = torch.nanmean(ellip_lensed, dim=2)
-
-        tile_dict["shear"] = avg_nonzero_shear
-        tile_dict["convergence"] = avg_nonzero_convergence
-        tile_dict["ellip_lensed"] = avg_nonzero_ellip_lensed
+        tile_dict["shear"] = shear
+        tile_dict["convergence"] = convergence
+        tile_dict["tile_size"] = self.tile_slen
 
         data_to_cache = {
             "tile_catalog": tile_dict,
@@ -191,18 +207,14 @@ class LensingDC2Catalog(DC2FullCatalog):
         shear1 = shear1[plocs_mask]
         shear2 = shear2[plocs_mask]
         convergence = convergence[plocs_mask]
-        shear = torch.stack((shear1, shear2), dim=1)
-        ellip1_lensed = ellip1_lensed[plocs_mask]
-        ellip2_lensed = ellip2_lensed[plocs_mask]
-        ellip_lensed = torch.stack((ellip1_lensed, ellip2_lensed), dim=1)
+        # shear = torch.stack((shear1, shear2), dim=1)
 
         nobj = galid.shape[0]
         # TODO: pass existant shear & convergence masks in d
         d = {
-            "galid": galid.reshape(1, nobj, 1),
-            "n_sources": torch.tensor((nobj,)),
             "plocs": plocs.reshape(1, nobj, 2),
-            "shear": shear.reshape(1, nobj, 2),
+            "shear1": shear1.reshape(1, nobj, 1),
+            "shear2": shear2.reshape(1, nobj, 1),
             "convergence": convergence.reshape(1, nobj, 1),
             "ellip_lensed": ellip_lensed.reshape(1, nobj, 2),
         }

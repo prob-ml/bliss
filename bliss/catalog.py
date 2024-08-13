@@ -2,7 +2,7 @@ import copy
 import math
 from collections import UserDict
 from enum import IntEnum
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional, Callable
 
 import torch
 from astropy.wcs import WCS
@@ -412,8 +412,9 @@ class FullCatalog(UserDict):
         self.device = d["plocs"].device
         self.batch_size, self.max_sources, hw = d["plocs"].shape
         assert hw == 2
-        assert d["n_sources"].max().int().item() <= self.max_sources
-        assert d["n_sources"].shape == (self.batch_size,)
+        if "n_sources" in d:
+            assert d["n_sources"].max().int().item() <= self.max_sources
+            assert d["n_sources"].shape == (self.batch_size,)
 
         super().__init__(**d)
 
