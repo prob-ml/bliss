@@ -61,13 +61,14 @@ def process_cluster(cluster_idx, sva_write_flags):
     x_min, x_max, y_min, y_max = find_cluster_location(cluster_cat, containing_tile)
     output_file = f"{OUTPUT_DIR}/{containing_tile}_redmapper_groundtruth.npy"
     if not sva_write_flags[containing_tile]:
-        output_array = np.zeros((10000, 10000))
-        output_array[x_min:x_max, y_min:y_max] = 1
+        output_array = np.full((10000, 10000), False)
+        output_array[x_min:x_max, y_min:y_max] = True
         np.save(output_file, output_array)
     else:
         output_array = np.load(output_file)
-        output_array[x_min:x_max, y_min:y_max] = 1
+        output_array[x_min:x_max, y_min:y_max] = True
         np.save(output_file, output_array)
+        print(f"Rewriting {containing_tile} ...")
     return containing_tile
 
 
@@ -81,9 +82,9 @@ def main():
             print(f"Writing output for file {files_written_count} out of {len(DES_SVA_TILES)}")
             sva_write_flags[written_tile] = True
 
-    for k, v in sva_write_flags:
+    for k, v in sva_write_flags.items():
         if not v:
-            output_array = np.zeros((10000, 10000))
+            output_array = np.full((10000, 10000), False)
             output_file = f"{OUTPUT_DIR}/{k}_redmapper_groundtruth.npy"
             np.save(output_file, output_array)
             files_written_count += 1
