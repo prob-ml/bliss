@@ -52,17 +52,22 @@ def find_cluster_location(cluster_cat, containing_tile):
     return int(x_min), int(x_max) + 1, int(y_min), int(y_max) + 1
 
 
-def process_cluster(cluster_idx):
+def process_cluster(cluster_idx, sva_write_flags):
     cluster_cat = REDMAPPER_CATALOG[REDMAPPER_CATALOG["ID"] == cluster_idx]
     containing_tile = find_containing_tile(cluster_cat)
     if containing_tile is None:
         print(f"Could not find tile for cluster idx {cluster_idx}. Moving on ...")
         return None
     x_min, x_max, y_min, y_max = find_cluster_location(cluster_cat, containing_tile)
-    output_array = np.zeros((10000, 10000))
-    output_array[x_min:x_max, y_min:y_max] = 1
     output_file = f"{OUTPUT_DIR}/{containing_tile}_redmapper_groundtruth.npy"
-    np.save(output_file, output_array)
+    if not sva_write_flags[containing_tile]:
+        output_array = np.zeros((10000, 10000))
+        output_array[x_min:x_max, y_min:y_max] = 1
+        np.save(output_file, output_array)
+    else:
+        output_array = np.load(output_file)
+        output_array[x_min:x_max, y_min:y_max] = 1
+        np.save(output_file, output_array)
     return containing_tile
 
 
@@ -70,8 +75,8 @@ def main():
     sva_write_flags = dict.fromkeys(DES_SVA_TILES, False)
     files_written_count = 0
     for cluster_idx in CLUSTER_INDICES:
-        written_tile = process_cluster(cluster_idx)
-        if written_tile is not None:
+        written_tile = process_cluster(cluster_idx, sva_write_flags)
+        if written_tile is not None and not sva_write_flags[written_tile]:
             files_written_count += 1
             print(f"Writing output for file {files_written_count} out of {len(DES_SVA_TILES)}")
             sva_write_flags[written_tile] = True
