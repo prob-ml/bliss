@@ -7,8 +7,36 @@ defaults:
 mode: train
 
 paths:
-    dc2: /data/scratch/dc2local # change for gl
-    output: /data/scratch/twhit/bliss_output # change for gl
+    dc2: /data/scratch/dc2local  # change for gl
+    output: /data/scratch/twhit/bliss_output  # change for gl
+
+prior:
+    _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
+    star_color_model_path: /data/scratch/sdss/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: /data/scratch/sdss/color_models/gal_gmm_nmgy.pkl
+    n_tiles_h: 8
+    n_tiles_w: 8
+    batch_size: 1
+    prob_galaxy: 1.0
+    mean_sources: 162
+    arcsec_per_pixel: 0.055
+    sample_method: cosmology
+    shear_mean: 0
+    shear_std: 0.0175
+    convergence_mean: 0
+    convergence_std: 0.025
+    num_knots: 4
+
+decoder:
+    _target_: case_studies.weak_lensing.lensing_decoder.LensingDecoder
+    tile_slen: 128
+    survey: ${surveys.sdss}
+
+simulator:
+    n_batches: 128
+    num_workers: 32
+    valid_n_batches: 10
+    fix_validation_set: true
 
 variational_factors:
   - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
@@ -34,12 +62,11 @@ my_metrics:
 
 my_render:
     lensing_shear_conv:
-            _target_: case_studies.weak_lensing.lensing_plots.PlotWeakLensingShearConvergence
-            frequency: 1
-            restrict_batch: 0
-            tile_slen: 256
-            save_local: "lensing_maps"
-
+        _target_: case_studies.weak_lensing.lensing_plots.PlotWeakLensingShearConvergence
+        frequency: 1
+        restrict_batch: 0
+        tile_slen: 256
+        save_local: "lensing_maps"
 
 encoder:
     _target_: case_studies.weak_lensing.lensing_encoder.WeakLensingEncoder
