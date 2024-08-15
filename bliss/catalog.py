@@ -2,7 +2,7 @@ import copy
 import math
 from collections import UserDict
 from enum import IntEnum
-from typing import Dict, Tuple, Optional, Callable
+from typing import Dict, Tuple
 
 import torch
 from astropy.wcs import WCS

@@ -20,6 +20,7 @@ class LensingDC2DataModule(DC2DataModule):
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
+        mag_max_cut: float = None,
         **kwargs,
     ):
         super().__init__(
@@ -45,6 +46,7 @@ class LensingDC2DataModule(DC2DataModule):
         self.image_slen = image_slen
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
+        self.mag_max_cut = mag_max_cut
 
     # override prepare_data
     def prepare_data(self):
@@ -67,6 +69,7 @@ class LensingDC2DataModule(DC2DataModule):
             "n_bands": self.n_bands,
             "dc2_cat_path": self.dc2_cat_path,
             "cached_data_path": self.cached_data_path,
+            "mag_max_cut": self.mag_max_cut,
         }
 
         generate_data_wrapper = lambda image_index: self.generate_cached_data(
@@ -92,11 +95,22 @@ class LensingDC2DataModule(DC2DataModule):
         for k, v in full_catalog.items():
             if k == "plocs":
                 continue
+
             v = v.reshape(self.batch_size, plocs.shape[1], 1)
+            if k == "mag_mask":
+                continue
+
             v_sum = torch.zeros(self.batch_size, num_tiles, 1, dtype=v.dtype)
             v_count = torch.zeros(self.batch_size, num_tiles, 1, dtype=v.dtype)
+            add_pos = torch.ones_like(v)
+
+            if k in set("ellip1_lensed", "ellip2_lensed"):
+                mag_mask = full_catalog["magnitude_cut_mask"]
+                v = torch.where(mag_mask, v, torch.tensor(0.0))
+                add_pos = mag_mask.float().to(v.dtype)
+
             v_sum = v_sum.scatter_add(1, source_to_tile_indices, v)
-            v_count = v_count.scatter_add(1, source_to_tile_indices, torch.ones_like(v))
+            v_count = v_count.scatter_add(1, source_to_tile_indices, add_pos)
             tile_cat[k + "_sum"] = v_sum.reshape(self.batch_size, n_tiles_w, n_tiles_h, 1)
             tile_cat[k + "_count"] = v_count.reshape(self.batch_size, n_tiles_w, n_tiles_h, 1)
         return BaseTileCatalog(tile_cat)
@@ -113,16 +127,15 @@ class LensingDC2DataModule(DC2DataModule):
             wcs,
             height,
             width,
+            mag_max_cut=kwargs["mag_max_cut"],
             bands=kwargs["bands"],
             n_bands=kwargs["n_bands"],
         )
 
         tile_cat = self.to_tile_catalog(full_cat, height, width)
 
-        tile_dict = self.squeeze_tile_dict(tile_cat.data)
-
         return {
-            "tile_dict": tile_dict,
+            "tile_dict": tile_cat,
             "inputs": {
                 "image": image,
                 "psf_params": psf_params,
@@ -144,18 +157,18 @@ class LensingDC2DataModule(DC2DataModule):
 
         shear1 = (tile_dict["shear1_sum"] / tile_dict["shear1_count"]) * 100
         shear2 = (tile_dict["shear2_sum"] / tile_dict["shear2_count"]) * 100
-        shear = torch.stack((shear1, shear2), dim=-1)
+        shear = torch.stack((shear1.squeeze(-1), shear2.squeeze(-1)), dim=-1)
         convergence = (tile_dict["convergence_sum"] / tile_dict["convergence_count"]) * 100
         ellip1_lensed = (tile_dict["ellip1_lensed_sum"] / tile_dict["ellip1_lensed_count"]) * 100
         ellip2_lensed = (tile_dict["ellip2_lensed_sum"] / tile_dict["ellip2_lensed_count"]) * 100
-        ellip_lensed = torch.stack((ellip1_lensed, ellip2_lensed), dim=-1)
+        ellip_lensed = torch.stack((ellip1_lensed.squeeze(-1), ellip2_lensed.squeeze(-1)), dim=-1)
         redshift = tile_dict["redshift_sum"] / tile_dict["redshift_count"]
 
         tile_dict["shear"] = shear
         tile_dict["convergence"] = convergence
         tile_dict["ellip_lensed"] = ellip_lensed
         tile_dict["redshift"] = redshift
-        tile_dict["tile_size"] = self.tile_slen
+        tile_dict["tile_size"] = torch.ones_like(convergence) * self.tile_slen
 
         data_to_cache = {
             "tile_catalog": tile_dict,
@@ -174,7 +187,7 @@ class LensingDC2DataModule(DC2DataModule):
 
 class LensingDC2Catalog(DC2FullCatalog):
     @classmethod
-    def from_file(cls, cat_path, wcs, height, width, **kwargs):
+    def from_file(cls, cat_path, wcs, height, width, mag_max_cut=None, **kwargs):
         catalog = pd.read_pickle(cat_path)
 
         galid = torch.from_numpy(catalog["galaxy_id"].values)
@@ -198,6 +211,12 @@ class LensingDC2Catalog(DC2FullCatalog):
 
         redshift = torch.from_numpy(catalog["redshift"].values)
 
+        if mag_max_cut:
+            mag_true_r = torch.from_numpy(catalog["mag_true_r"].values)
+            mag_mask = mag_true_r < mag_max_cut
+        else:
+            mag_mask = torch.ones_like(mag_true_r).bool()
+
         _, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
 
         plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
@@ -213,7 +232,10 @@ class LensingDC2Catalog(DC2FullCatalog):
         convergence = convergence[plocs_mask]
         ellip1_lensed = ellip1_lensed[plocs_mask]
         ellip2_lensed = ellip2_lensed[plocs_mask]
+
         redshift = redshift[plocs_mask]
+
+        mag_mask = mag_mask[plocs_mask]
 
         nobj = galid.shape[0]
         # TODO: pass existant shear & convergence masks in d
@@ -224,6 +246,7 @@ class LensingDC2Catalog(DC2FullCatalog):
             "convergence": convergence.reshape(1, nobj, 1),
             "ellip1_lensed": ellip1_lensed.reshape(1, nobj, 1),
             "ellip2_lensed": ellip2_lensed.reshape(1, nobj, 1),
+            "magnitude_cut_mask": mag_mask.reshape(1, nobj, 1),
             "redshift": redshift.reshape(1, nobj, 1),
         }
 
