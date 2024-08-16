@@ -133,7 +133,7 @@ class Encoder(pl.LightningModule):
         return self.features_net(inputs)
 
     def sample_first_detection(self, x_features, use_mode=True):
-        batch_size, _n_features, ht, wt = x_features[0].shape[0:4]
+        batch_size, _n_features, ht, wt = x_features.shape[0:4]
 
         est_cat = None
         if not self.use_checkerboard:
@@ -195,7 +195,7 @@ class Encoder(pl.LightningModule):
 
         x_features = self.get_features(batch)
 
-        loss = torch.zeros_like(x_features[0][:, 0, :, :])
+        loss = torch.zeros_like(x_features[:, 0, :, :])
 
         for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns):
             history_mask = hmp.repeat([batch_size, ht // 2, wt // 2])
@@ -220,9 +220,9 @@ class Encoder(pl.LightningModule):
             # occasionally we input an estimated catalog rather than a target catalog, to regularize
             # and avoid out-of-distribution inputs when sampling
             history_cat = target_cat1
-            if torch.rand(1).item() < 0.9:
-                with torch.no_grad():
-                    history_cat = self.sample_first_detection(x_features, use_mode=False)
+            # if torch.rand(1).item() < 0.1:
+            #     with torch.no_grad():
+            #         history_cat = self.sample_first_detection(x_features, use_mode=False)
 
             no_mask = torch.ones_like(history_mask)
             context2 = self.make_context(history_cat, no_mask, detection2=True)

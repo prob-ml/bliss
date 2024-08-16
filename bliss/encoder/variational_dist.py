@@ -218,7 +218,7 @@ class DiscretizedUnitBoxFactor(VariationalFactor):
     def __init__(self, *args, **kwargs):
         super().__init__(64, *args, **kwargs)
 
-    def _get_dist(self, params):
+    def get_dist(self, params):
         return DiscretizedUnitBox(params)
 
 
