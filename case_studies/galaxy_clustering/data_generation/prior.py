@@ -135,9 +135,19 @@ class ClusterPrior(Prior):
 
     def sample_cluster_catalog(self):
         """Sample a random redMaPPer catalog."""
-        cluster_idx = np.random.choice(self.cluster_indices)
-        self.cluster_members = self.full_cluster_df[self.full_cluster_df["ID"] == cluster_idx]
-        self.cluster_members = pd.merge(self.cluster_members, self.photo_z_catalog, how="left")
+        while True:
+            cluster_idx = np.random.choice(self.cluster_indices)
+            self.cluster_members = self.full_cluster_df[self.full_cluster_df["ID"] == cluster_idx]
+            self.cluster_members = pd.merge(self.cluster_members, self.photo_z_catalog, how="left")
+            radius_astro_samples = self.cluster_members["R"] / 0.7
+            # redshift for each source
+            z_estimates = self.cluster_members["Z_MEAN"]
+            angular_distance = angular_diameter_distance(z_estimates).value
+            radius_samples = radius_astro_samples / (0.263 * angular_distance)
+            radius_samples = radius_samples * (180 * 3600) / np.pi
+            cluster_radius = 2 * radius_samples.max()
+            if cluster_radius <= 1300:
+                break
 
     def sample_center(self):
         """Samples cluster center on image grid.
@@ -146,8 +156,8 @@ class ClusterPrior(Prior):
         Returns:
             cluster center sample
         """
-        x_center = np.random.uniform(self.width * 0.2, self.width * 0.8)
-        y_center = np.random.uniform(self.height * 0.2, self.height * 0.8)
+        x_center = np.random.uniform(self.width * 0.3, self.width * 0.7)
+        y_center = np.random.uniform(self.height * 0.3, self.height * 0.7)
         return np.array([x_center, y_center])
 
     def sample_cluster_locs(self, center):
