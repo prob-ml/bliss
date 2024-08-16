@@ -60,6 +60,11 @@ def catalog_gen(cfg):
         else:
             catalog = background_catalog
         print(f"Writing catalog {i} ...")
+        source_spread_x = (catalog["X"].max(), catalog["X"].min())
+        source_spread_y = (catalog["Y"].max(), catalog["Y"].min())
+        print(f"Cluster spread (X): {source_spread_x}")
+        print(f"Cluster spread (Y): {source_spread_y}")
+        print("\n")
         catalog_table = Table.from_pandas(catalog)
         astro_ascii.write(catalog_table, file_name, format="no_header", overwrite=True)
 
