@@ -26,10 +26,11 @@ warnings.filterwarnings("ignore", ".*Total length of .* across ranks is zero.*",
 
 
 class FullCatalogToTileTransform(torch.nn.Module):
-    def __init__(self, tile_slen, max_sources):
+    def __init__(self, tile_slen, max_sources, filter_oob=False):
         super().__init__()
         self.tile_slen = tile_slen
         self.max_sources = max_sources
+        self.filter_oob = filter_oob
 
     def __call__(self, datum_in):
         datum_out = {k: v for k, v in datum_in.items() if k != "full_catalog"}
@@ -37,7 +38,9 @@ class FullCatalogToTileTransform(torch.nn.Module):
         h_pixels, w_pixels = datum_in["images"].shape[1:]
         d1 = {k: v.unsqueeze(0) for k, v in datum_in["full_catalog"].items()}
         full_cat = FullCatalog(h_pixels, w_pixels, d1)
-        tile_cat = full_cat.to_tile_catalog(self.tile_slen, self.max_sources).data
+        tile_cat = full_cat.to_tile_catalog(
+            self.tile_slen, self.max_sources, filter_oob=self.filter_oob
+        ).data
         d2 = {k: v.squeeze(0) for k, v in tile_cat.items()}
         datum_out["tile_catalog"] = d2
 
@@ -90,6 +93,11 @@ class FluxFilterTransform(torch.nn.Module):
 
 class ChunkingSampler(Sampler):
     def __init__(self, dataset: Dataset) -> None:
+        super().__init__()
+        # please don't pass dataset to the following __init__()
+        # according to https://pytorch.org/docs/stable/data.html#torch.utils.data.Sampler
+        # the parameter `data_source` has been deprecated
+        # make sure your pytorch version is greater than 2.2.0
         super().__init__()
         assert isinstance(dataset, ChunkingDataset), "dataset should be ChunkingDataset"
         self.dataset = dataset
