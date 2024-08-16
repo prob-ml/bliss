@@ -7,8 +7,49 @@ defaults:
 paths:
     cached_data: /data/scratch/regier/sdss_like
 
+cached_simulator:
+    train_transforms:
+        - _target_: bliss.cached_dataset.OneBandTransform
+          band_idx: 2
+        - _target_: bliss.cached_dataset.FluxFilterTransform
+          reference_band: 0  # formerly 2 before the OneBandTransform
+          min_flux: 0.9419
+        - _target_: bliss.data_augmentation.RotateFlipTransform
+    nontrain_transforms:
+        - _target_: bliss.cached_dataset.OneBandTransform
+          band_idx: 2
+        - _target_: bliss.cached_dataset.FluxFilterTransform
+          reference_band: 0  # formerly 2 before the OneBandTransform
+          min_flux: 0.9419
+
+nopsf_image_normalizers:
+    clahe:
+        _target_: bliss.encoder.image_normalizer.ClaheNormalizer
+        min_stdev: 200
+    asinh:
+        _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+        q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
+my_metrics:
+    detection_performance:
+        _target_: bliss.encoder.metrics.DetectionPerformance
+        bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
+        bin_type: "mag"
+        exclude_last_bin: true
+        ref_band: 0
+
 encoder:
     use_checkerboard: true
+    survey_bands: ['r']
+    reference_band: 0
+    matcher:
+        _target_: bliss.encoder.metrics.CatalogMatcher
+        dist_slack: 1
+        mag_band: 0  # SDSS r-band
+    mode_metrics:
+        _target_: torchmetrics.MetricCollection
+        metrics: ${my_metrics}
+    image_normalizers: ${nopsf_image_normalizers}
 
 train:
     trainer:

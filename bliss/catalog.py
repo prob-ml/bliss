@@ -81,7 +81,7 @@ class BaseTileCatalog(UserDict):
             [tiles_to_crop, self.n_tiles_w - tiles_to_crop],
         )
 
-    def filter_base_tile_catalog_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
+    def filter_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
         assert box_origin[0] + box_len < self.height, "invalid box"
         assert box_origin[1] + box_len < self.width, "invalid box"
 
@@ -665,7 +665,7 @@ class FullCatalog(UserDict):
         tile_params.update({"n_sources": tile_n_sources})
         return TileCatalog(tile_params)
 
-    def filter_by_ploc_box(self, box_origin: torch.Tensor, box_len: float):
+    def filter_by_ploc_box(self, box_origin: torch.Tensor, box_len: float, exclude_box=False):
         assert box_origin[0] + box_len <= self.height, "invalid box"
         assert box_origin[1] + box_len <= self.width, "invalid box"
 
@@ -675,6 +675,9 @@ class FullCatalog(UserDict):
         plocs_mask = torch.all(
             (self["plocs"] < box_end_tensor) & (self["plocs"] > box_origin_tensor), dim=2
         )
+
+        if exclude_box:
+            plocs_mask = ~plocs_mask
 
         plocs_mask_indexes = plocs_mask.nonzero()
         plocs_inverse_mask_indexes = (~plocs_mask).nonzero()
@@ -693,6 +696,8 @@ class FullCatalog(UserDict):
                     plocs_full_mask_sorted_indexes[:, 1].tolist(),
                 ].view(-1, self.max_sources, v.shape[-1])[:, :new_max_sources, :]
 
-        d["plocs"] -= box_origin_tensor
+        if exclude_box:
+            return FullCatalog(self.height, self.width, d)
 
+        d["plocs"] -= box_origin_tensor
         return FullCatalog(box_len, box_len, d)

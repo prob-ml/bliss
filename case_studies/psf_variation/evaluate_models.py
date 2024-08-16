@@ -2,23 +2,20 @@
 # pylint: skip-file
 # Ignoring flake8/pylint for this file since this is just a plotting script
 
-import os
 import argparse
-
-import torch
-from torch.utils.data import DataLoader
-import pandas as pd
-import numpy as np
-from sklearn.metrics import roc_curve, roc_auc_score
+import os
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
-
-from tqdm import tqdm
-
-from hydra import initialize, compose
+import torch
+from hydra import compose, initialize
 from hydra.utils import instantiate
+from sklearn.metrics import roc_auc_score, roc_curve
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from bliss.catalog import TileCatalog, convert_mag_to_nmgy
 
