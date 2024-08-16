@@ -17,6 +17,8 @@ class Decoder(nn.Module):
         survey: Survey,
         with_dither: bool = True,
         with_noise: bool = True,
+        faint_flux_threshold: float = None,
+        faint_folding_threshold: float = None,
     ) -> None:
         """Construct a decoder for a set of images.
 
@@ -25,6 +27,8 @@ class Decoder(nn.Module):
             survey: survey to mimic (psf, background, calibration, etc.)
             with_dither: if True, apply random pixel shifts to the images and align them
             with_noise: if True, add Poisson noise to the image pixels
+            faint_flux_threshold: threshold for flux to be considered dim
+            faint_folding_threshold: folding threshold for dim sources
         """
 
         super().__init__()
@@ -33,6 +37,8 @@ class Decoder(nn.Module):
         self.survey = survey
         self.with_dither = with_dither
         self.with_noise = with_noise
+        self.faint_flux_threshold = faint_flux_threshold
+        self.faint_folding_threshold = faint_folding_threshold
 
         survey.prepare_data()
 
@@ -182,11 +188,13 @@ class Decoder(nn.Module):
                 # essentially all the runtime of the simulator is incurred by this call
                 # to drawImage
 
-                dim_threshold = 700
-                galaxy_fluxes = source_params["galaxy_fluxes"]
-                avg_flux = galaxy_fluxes.sum().item() / len(galaxy_fluxes)
-                if avg_flux <= dim_threshold:
-                    galsim_obj.folding_threshold = 0.95
+                if source_type:
+                    source_flux = source_params["galaxy_fluxes"][band]
+                else:
+                    source_flux = source_params["star_fluxes"][band]
+
+                if self.faint_flux_threshold and source_flux.item() <= self.faint_flux_threshold:
+                    galsim_obj.folding_threshold = self.faint_folding_threshold
 
                 galsim_obj.drawImage(
                     offset=offset,
