@@ -215,7 +215,7 @@ class LensingDC2Catalog(DC2FullCatalog):
             mag_true_r = torch.from_numpy(catalog["mag_true_r"].values)
             mag_mask = mag_true_r < mag_max_cut
         else:
-            mag_mask = torch.ones_like(mag_true_r).bool()
+            mag_mask = torch.ones_like(galid).bool()
 
         _, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
 
