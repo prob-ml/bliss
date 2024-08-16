@@ -181,6 +181,13 @@ class Decoder(nn.Module):
 
                 # essentially all the runtime of the simulator is incurred by this call
                 # to drawImage
+
+                dim_threshold = 700
+                galaxy_fluxes = source_params["galaxy_fluxes"]
+                avg_flux = galaxy_fluxes.sum().item() / len(galaxy_fluxes)
+                if avg_flux <= dim_threshold:
+                    galsim_obj.folding_threshold = 0.95
+
                 galsim_obj.drawImage(
                     offset=offset,
                     method=getattr(self.survey.psf, "psf_draw_method", "auto"),
