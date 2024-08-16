@@ -104,7 +104,7 @@ class LensingDC2DataModule(DC2DataModule):
             v_count = torch.zeros(self.batch_size, num_tiles, 1, dtype=v.dtype)
             add_pos = torch.ones_like(v)
 
-            if k in set("ellip1_lensed", "ellip2_lensed"):
+            if k in {"ellip1_lensed", "ellip2_lensed"}:
                 mag_mask = full_catalog["magnitude_cut_mask"]
                 v = torch.where(mag_mask, v, torch.tensor(0.0))
                 add_pos = mag_mask.float().to(v.dtype)
@@ -133,9 +133,11 @@ class LensingDC2DataModule(DC2DataModule):
         )
 
         tile_cat = self.to_tile_catalog(full_cat, height, width)
+        # tile_dict = self.squeeze_tile_dict(tile_cat.data)
+        tile_dict = tile_cat
 
         return {
-            "tile_dict": tile_cat,
+            "tile_dict": tile_dict,
             "inputs": {
                 "image": image,
                 "psf_params": psf_params,
