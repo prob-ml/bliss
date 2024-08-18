@@ -132,9 +132,7 @@ class LensingDC2DataModule(DC2DataModule):
             n_bands=kwargs["n_bands"],
         )
 
-        tile_cat = self.to_tile_catalog(full_cat, height, width)
-        # tile_dict = self.squeeze_tile_dict(tile_cat.data)
-        tile_dict = tile_cat
+        tile_dict = self.to_tile_catalog(full_cat, height, width)
 
         return {
             "tile_dict": tile_dict,
@@ -214,8 +212,8 @@ class LensingDC2Catalog(DC2FullCatalog):
         redshift = torch.from_numpy(catalog["redshift"].values)
 
         if mag_max_cut:
-            mag_true_r = torch.from_numpy(catalog["mag_true_r"].values)
-            mag_mask = mag_true_r < mag_max_cut
+            mag_r = torch.from_numpy(catalog["mag_r"].values)
+            mag_mask = mag_r < mag_max_cut
         else:
             mag_mask = torch.ones_like(galid).bool()
 
