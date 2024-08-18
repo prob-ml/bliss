@@ -132,7 +132,8 @@ class LensingDC2DataModule(DC2DataModule):
             n_bands=kwargs["n_bands"],
         )
 
-        tile_dict = self.to_tile_catalog(full_cat, height, width)
+        tile_cat = self.to_tile_catalog(full_cat, height, width)
+        tile_dict = self.squeeze_tile_dict(tile_cat.data)
 
         return {
             "tile_dict": tile_dict,
