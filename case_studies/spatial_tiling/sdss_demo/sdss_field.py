@@ -23,7 +23,7 @@ from bliss.encoder.sample_image_renders import plot_plocs
 from bliss.surveys.des import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 
-environ["CUDA_VISIBLE_DEVICES"] = "0"
+environ["CUDA_VISIBLE_DEVICES"] = "7"
 
 torch.set_grad_enabled(False)
 
@@ -169,6 +169,12 @@ corner = torch.tensor([250, 1200])
 photo_cat_box = photo_cat_box.filter_by_ploc_box(corner, 200, exclude_box=True)
 decals_cat_box = decals_cat_box.filter_by_ploc_box(corner, 200, exclude_box=True)
 bliss_cat_box = bliss_cat_box.filter_by_ploc_box(corner, 200, exclude_box=True)
+
+corner = torch.tensor([400, 1100])
+photo_cat_box = photo_cat_box.filter_by_ploc_box(corner, 100, exclude_box=True)
+decals_cat_box = decals_cat_box.filter_by_ploc_box(corner, 100, exclude_box=True)
+bliss_cat_box = bliss_cat_box.filter_by_ploc_box(corner, 100, exclude_box=True)
+
 
 # Create a CatalogMatcher object
 matcher = CatalogMatcher(
