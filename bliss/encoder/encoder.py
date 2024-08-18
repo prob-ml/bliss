@@ -36,6 +36,7 @@ class Encoder(pl.LightningModule):
         scheduler_params: Optional[dict] = None,
         use_double_detect: bool = False,
         use_checkerboard: bool = True,
+        double_sample_prob: float = 0.1,
         n_sampler_colors: int = 4,
         reference_band: int = 2,
         predict_mode_not_samples: bool = True,
@@ -55,6 +56,7 @@ class Encoder(pl.LightningModule):
             scheduler_params: arguments passed to the learning rate scheduler
             use_double_detect: whether to make up to two detections per tile rather than one
             use_checkerboard: whether to use dependent tiling
+            double_sample_prob: probability of sampling a second detection for a tile
             n_sampler_colors: number of colors to use for checkerboard sampling
             reference_band: band to use for filtering sources
             predict_mode_not_samples: whether to predict mode catalogs rather than sample catalogs
@@ -73,6 +75,7 @@ class Encoder(pl.LightningModule):
         self.scheduler_params = scheduler_params if scheduler_params else {"milestones": []}
         self.use_double_detect = use_double_detect
         self.use_checkerboard = use_checkerboard
+        self.double_sample_prob = double_sample_prob
         self.n_sampler_colors = n_sampler_colors
         self.reference_band = reference_band
         self.predict_mode_not_samples = predict_mode_not_samples
@@ -220,9 +223,9 @@ class Encoder(pl.LightningModule):
             # occasionally we input an estimated catalog rather than a target catalog, to regularize
             # and avoid out-of-distribution inputs when sampling
             history_cat = target_cat1
-            # if torch.rand(1).item() < 0.1:
-            #     with torch.no_grad():
-            #         history_cat = self.sample_first_detection(x_features, use_mode=False)
+            if torch.rand(1).item() < self.double_sample_prob:
+                with torch.no_grad():
+                    history_cat = self.sample_first_detection(x_features, use_mode=False)
 
             no_mask = torch.ones_like(history_mask)
             context2 = self.make_context(history_cat, no_mask, detection2=True)
@@ -250,7 +253,12 @@ class Encoder(pl.LightningModule):
         history_mask_patterns = self.mask_patterns[history_pattern_ids, ...]
         loss_mask_patterns = self.mask_patterns[loss_pattern_ids, ...]
 
-        return self.compute_masked_nll(batch, history_mask_patterns, loss_mask_patterns)
+        old_dsp = self.double_sample_prob  # hack
+        self.double_sample_prob = 0.0
+        nll = self.compute_masked_nll(batch, history_mask_patterns, loss_mask_patterns)
+        self.double_sample_prob = old_dsp
+
+        return nll
 
     def _compute_loss(self, batch, logging_name):
         # could use all the mask patterns but memory is tight
