@@ -54,9 +54,11 @@ class NullGating(NllGating):
     def __call__(cls, true_tile_cat: TileCatalog):
         tc_keys = true_tile_cat.keys()
         if "n_sources" in tc_keys:
-            return torch.ones_like(true_tile_cat["n_sources"]).bool()
-
-        return torch.ones_like(true_tile_cat[list(tc_keys)[0]]).bool()
+            return rearrange(
+                torch.ones_like(true_tile_cat["n_sources"]).bool(), "b ht wt 1 1 -> b ht wt"
+            )
+        first = true_tile_cat[list(tc_keys)[0]]
+        return torch.ones(first.shape[:-1]).bool().to(first.device)
 
 
 class SourcesGating(NllGating):
