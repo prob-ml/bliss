@@ -383,9 +383,8 @@ class TileCatalog(BaseTileCatalog):
         ns11 = rearrange(self["n_sources"], "b ht wt -> b ht wt 1 1")
         for k, v in self.items():
             if k == "n_sources":
+                assert not disjoint or ((v == 0) | (other[k] == 0)).all()
                 d[k] = v + other[k]
-                if disjoint:
-                    assert d[k].max() <= 1
             else:
                 if disjoint:
                     d1 = v

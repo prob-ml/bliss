@@ -135,33 +135,6 @@ class Encoder(pl.LightningModule):
 
         return self.features_net(inputs)
 
-    def sample_first_detection(self, x_features, use_mode=True):
-        batch_size, _n_features, ht, wt = x_features.shape[0:4]
-
-        est_cat = None
-        if not self.use_checkerboard:
-            patterns_to_use = (0,)
-        elif self.n_sampler_colors == 4:
-            patterns_to_use = (0, 8, 12, 14)
-        elif self.n_sampler_colors == 2:
-            patterns_to_use = (0, 6)
-        else:
-            raise ValueError("n_colors must be 2 or 4")
-
-        for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
-            mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
-            context1 = self.make_context(est_cat, mask)
-            x_cat1 = self.catalog_net(x_features, context1)
-            new_est_cat = self.var_dist.sample(x_cat1, use_mode=use_mode)
-            new_est_cat["n_sources"] *= 1 - mask
-            if est_cat is None:
-                est_cat = new_est_cat
-            else:
-                est_cat["n_sources"] *= mask
-                est_cat = est_cat.union(new_est_cat, disjoint=True)
-
-        return est_cat
-
     def sample_second_detection(self, x_features, est_cat1, use_mode=True):
         no_mask = torch.ones_like(est_cat1["n_sources"])
         context2 = self.make_context(est_cat1, no_mask, detection2=True)
@@ -174,12 +147,37 @@ class Encoder(pl.LightningModule):
 
     def sample(self, batch, use_mode=True):
         x_features = self.get_features(batch)
+        batch_size, _n_features, ht, wt = x_features.shape[0:4]
 
-        est_cat = self.sample_first_detection(x_features, use_mode=use_mode)
+        if not self.use_checkerboard:
+            patterns_to_use = (0,)
+        elif self.n_sampler_colors == 4:
+            patterns_to_use = (0, 8, 12, 14)
+        elif self.n_sampler_colors == 2:
+            patterns_to_use = (0, 6)
+        else:
+            raise ValueError("n_colors must be 2 or 4")
 
-        if self.use_double_detect:
-            est_cat2 = self.sample_second_detection(x_features, est_cat, use_mode=use_mode)
-            est_cat = est_cat.union(est_cat2, disjoint=False)
+        est_cat = None
+        for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
+            history_mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
+
+            context_marginal = self.make_context(est_cat, history_mask, detection2=False)
+            x_cat_marginal = self.catalog_net(x_features, context_marginal)
+            new_est_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
+
+            if self.use_double_detect:
+                context_cond = self.make_context(new_est_cat, history_mask, detection2=True)
+                x_cat_cond = self.catalog_net(x_features, context_marginal, context_cond)
+                new_est_cat2 = self.var_dist.sample(x_cat_cond, use_mode=use_mode)
+                new_est_cat = new_est_cat.union(new_est_cat2, disjoint=False)
+
+            new_est_cat["n_sources"] *= 1 - history_mask
+            if est_cat is None:
+                est_cat = new_est_cat
+            else:
+                est_cat["n_sources"] *= history_mask
+                est_cat = est_cat.union(new_est_cat, disjoint=True)
 
         return est_cat
 
