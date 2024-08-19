@@ -54,24 +54,24 @@ class CatalogNet(nn.Module):
         context_channels_out = 64
         self.color_context_net = nn.Sequential(
             ConvBlock(context_channels_in, context_channels_out),
-            ConvBlock(context_channels_out, context_channels_out),
+            ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
             C3(context_channels_out, context_channels_out, n=4),
-            ConvBlock(context_channels_out, context_channels_out),
+            ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
         )
 
         self.local_context_net = nn.Sequential(
             ConvBlock(context_channels_in, context_channels_out, kernel_size=1, padding=0),
-            ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
             C3(context_channels_out, context_channels_out, n=4),
             ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
         )
 
         n_hidden_ch = 256
+        in_ch = num_features + 2 * context_channels_out
         self.detection_net = nn.Sequential(
-            ConvBlock(num_features + 2 * context_channels_out, n_hidden_ch),
-            ConvBlock(n_hidden_ch, n_hidden_ch),
+            ConvBlock(in_ch, n_hidden_ch, kernel_size=1, padding=0),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, padding=0),
             C3(n_hidden_ch, n_hidden_ch, n=4),
-            ConvBlock(n_hidden_ch, n_hidden_ch),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, padding=0),
             Detect(n_hidden_ch, out_channels),
         )
 
