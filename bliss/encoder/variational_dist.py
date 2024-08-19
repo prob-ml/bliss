@@ -52,7 +52,11 @@ class NllGating(ABC):
 class NullGating(NllGating):
     @classmethod
     def __call__(cls, true_tile_cat: TileCatalog):
-        return torch.ones_like(true_tile_cat["n_sources"]).bool()
+        tc_keys = true_tile_cat.keys()
+        if "n_sources" in tc_keys:
+            return torch.ones_like(true_tile_cat["n_sources"]).bool()
+        first = true_tile_cat[list(tc_keys)[0]]
+        return torch.ones(first.shape[:-1]).bool().to(first.device)
 
 
 class SourcesGating(NllGating):
@@ -151,8 +155,8 @@ class NormalFactor(VariationalFactor):
         self.high_clamp = high_clamp
 
     def get_dist(self, params):
-        mean = params[:, :, :, 0]
-        sd = params[:, :, :, 1].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        mean = params[:, :, :, 0:1]
+        sd = params[:, :, :, 1:2].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
         return Normal(mean, sd)
 
 
