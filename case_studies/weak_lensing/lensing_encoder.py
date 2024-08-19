@@ -77,10 +77,6 @@ class WeakLensingEncoder(Encoder):
         batch_size, _, _, _ = batch["images"].shape[0:4]
 
         target_cat = BaseTileCatalog(batch["tile_catalog"])
-        print("shear", target_cat["shear"].shape)
-        print("convergence", target_cat["convergence"].shape)
-        print("ellipticity", target_cat["ellip_lensed"].shape)
-        print("shear nans: ", torch.isnan(target_cat["shear"]).any())
 
         # multiple image normalizers
         input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
