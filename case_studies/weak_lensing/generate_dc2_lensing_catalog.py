@@ -6,7 +6,6 @@ import healpy as hp
 import numpy as np
 import pandas as pd
 from GCRCatalogs import GCRQuery
-from GCRCatalogs.helpers.tract_catalogs import tract_filter
 
 GCRCatalogs.set_root_dir("/data/scratch/dc2_nfs/")
 
@@ -72,7 +71,6 @@ object_truth_df = object_truth_cat.get_quantities(
         "psf_fwhm_z",
         "psf_fwhm_y",
     ],
-    native_filters=[tract_filter([3828, 3829])],
 )
 object_truth_df = pd.DataFrame(object_truth_df)
 
