@@ -50,25 +50,37 @@ class CatalogNet(nn.Module):
     def __init__(self, num_features, out_channels):
         super().__init__()
 
-        # initalization for detection head
         context_channels_in = 6
-        context_channels_out = 128
-        self.context_net = nn.Sequential(
+        context_channels_out = 64
+        self.color_context_net = nn.Sequential(
             ConvBlock(context_channels_in, context_channels_out),
             ConvBlock(context_channels_out, context_channels_out),
             C3(context_channels_out, context_channels_out, n=4),
             ConvBlock(context_channels_out, context_channels_out),
         )
+
+        self.local_context_net = nn.Sequential(
+            ConvBlock(context_channels_in, context_channels_out, kernel_size=1, padding=0),
+            ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
+            C3(context_channels_out, context_channels_out, n=4),
+            ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
+        )
+
         n_hidden_ch = 256
         self.detection_net = nn.Sequential(
-            ConvBlock(num_features + context_channels_out, n_hidden_ch),
+            ConvBlock(num_features + 2 * context_channels_out, n_hidden_ch),
             ConvBlock(n_hidden_ch, n_hidden_ch),
             C3(n_hidden_ch, n_hidden_ch, n=4),
             ConvBlock(n_hidden_ch, n_hidden_ch),
             Detect(n_hidden_ch, out_channels),
         )
 
-    def forward(self, x_features, context):
-        x_context = self.context_net(context)
-        x = torch.cat((x_features, x_context), dim=1)
+    def forward(self, x_features, color_context, local_context=None):
+        if local_context is None:
+            local_context = torch.zeros_like(color_context)
+
+        x_color_context = self.color_context_net(color_context)
+        x_local_context = self.local_context_net(local_context)
+
+        x = torch.cat((x_features, x_color_context, x_local_context), dim=1)
         return self.detection_net(x)

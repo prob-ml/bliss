@@ -55,7 +55,6 @@ encoder:
     reference_band: 0
     use_checkerboard: true
     use_double_detect: true
-    double_sample_prob: 1.0
     image_normalizers: ${nopsf_image_normalizers}
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
@@ -143,7 +142,7 @@ cached_simulator:
 
 train:
     trainer:
-        precision: 32-true
+        precision: 16-mixed
     seed: null
 
 predict:
