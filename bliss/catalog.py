@@ -23,7 +23,7 @@ def convert_nmgy_to_mag(nmgy):
 def convert_flux_to_magnitude(flux, zero_point):
     """Convert from flux to magnitude.
 
-    For DC2, please set c to 3631.
+    For DC2, please set c to 3631e9.
     The conversion is described in "2.10 AB magnitudes" at
     https://pstn-001.lsst.io/fluxunits.pdf
 

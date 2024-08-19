@@ -65,13 +65,13 @@ class TestMetrics:
         assert np.isclose(dresults["detection_recall"], 2 / 3)
 
         acc_metrics = SourceTypeAccuracy(
-            base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631
+            base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631e9
         )
         acc_results = acc_metrics(true_params, est_params, matching)
         assert np.isclose(acc_results["classification_acc"], 1 / 2)
 
         gal_shape_metrics = GalaxyShapeError(
-            base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631
+            base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631e9
         )
         gal_shape_results = gal_shape_metrics(true_params, est_params, matching)
         assert gal_shape_results["galaxy_disk_hlr_mae"] == 0
@@ -128,13 +128,13 @@ class TestMetrics:
         assert dresults["detection_f1"] == 1
 
         acc_metrics = SourceTypeAccuracy(
-            base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631
+            base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631e9
         )
         acc_results = acc_metrics(full_catalog, full_catalog, matching)
         assert acc_results["classification_acc"] == 1
 
         flux_metrics = FluxError(
-            "ugriz", base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631
+            "ugriz", base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631e9
         )
         flux_results = flux_metrics(full_catalog, full_catalog, matching)
         assert flux_results["flux_err_r_mae"] == 0

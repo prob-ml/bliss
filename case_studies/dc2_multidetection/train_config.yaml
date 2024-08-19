@@ -49,12 +49,12 @@ my_metrics:
   detection_performance:
     _target_: bliss.encoder.metrics.DetectionPerformance
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631  # for DC2
+    mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
   detection_performance_star:
     _target_: bliss.encoder.metrics.DetectionPerformance
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631  # for DC2
+    mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
     filter_list:
       - _target_: bliss.encoder.metrics.SourceTypeFilter
@@ -62,7 +62,7 @@ my_metrics:
   detection_performance_galaxy:
     _target_: bliss.encoder.metrics.DetectionPerformance
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631  # for DC2
+    mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
     filter_list:
       - _target_: bliss.encoder.metrics.SourceTypeFilter
@@ -70,7 +70,7 @@ my_metrics:
   detection_performance_one_source_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631  # for DC2
+    mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
@@ -78,7 +78,7 @@ my_metrics:
   detection_performance_two_sources_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631  # for DC2
+    mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
@@ -86,7 +86,7 @@ my_metrics:
   detection_performance_more_than_two_sources_mask:
     _target_: bliss.encoder.metrics.DetectionPerformance
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631  # for DC2
+    mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
     filter_list:
       - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
@@ -94,18 +94,18 @@ my_metrics:
   source_type_accuracy:
     _target_: bliss.encoder.metrics.SourceTypeAccuracy
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631  # for DC2
+    mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
   flux_error:
     _target_: bliss.encoder.metrics.FluxError
     survey_bands: ${encoder.survey_bands}
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631  # for DC2
+    mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
   ellipticity_error:
     _target_: case_studies.dc2_cataloging.utils.metrics.EllipticityMSE
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631  # for DC2
+    mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
 
 my_image_normalizers:
