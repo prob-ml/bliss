@@ -51,7 +51,7 @@ class CatalogNet(nn.Module):
         super().__init__()
 
         context_channels_in = 6
-        context_channels_out = 64
+        context_channels_out = 128
         self.color_context_net = nn.Sequential(
             ConvBlock(context_channels_in, context_channels_out),
             ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
@@ -61,6 +61,7 @@ class CatalogNet(nn.Module):
 
         self.local_context_net = nn.Sequential(
             ConvBlock(context_channels_in, context_channels_out, kernel_size=1, padding=0),
+            ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
             C3(context_channels_out, context_channels_out, n=4),
             ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
         )
