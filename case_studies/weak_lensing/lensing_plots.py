@@ -148,7 +148,7 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
 
     fig.tight_layout()
     if save_local:
-        fig.savefig(f"{save_local}/wl_shear_conv_{current_epoch}_asinh.png")
+        fig.savefig(f"{save_local}/lensing_maps_{current_epoch}.png")
     return fig, axes
 
 
