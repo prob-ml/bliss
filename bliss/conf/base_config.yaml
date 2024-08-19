@@ -143,17 +143,17 @@ variational_factors:
 metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
-        base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
-        report_bin_unit: njymag
+        base_njy_bin_cutoffs: [200, 400, 600, 800, 1000]
+        report_bin_unit: ab_mag
     source_type_accuracy:
         _target_: bliss.encoder.metrics.SourceTypeAccuracy
-        base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
-        report_bin_unit: njymag
+        base_njy_bin_cutoffs: [200, 400, 600, 800, 1000]
+        report_bin_unit: ab_mag
     flux_error:
         _target_: bliss.encoder.metrics.FluxError
         survey_bands: ${encoder.survey_bands}
-        base_nmgy_bin_cutoffs: [200, 400, 600, 800, 1000]
-        report_bin_unit: njymag
+        base_njy_bin_cutoffs: [200, 400, 600, 800, 1000]
+        report_bin_unit: ab_mag
 
 image_normalizers:
     psf:

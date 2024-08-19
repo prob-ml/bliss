@@ -10,32 +10,33 @@ from einops import rearrange, reduce, repeat
 from torch import Tensor
 
 
+# old function, to be deleted
 def convert_mag_to_nmgy(mag):
     return 10 ** ((22.5 - mag) / 2.5)
 
 
+# old function, to be deleted
 def convert_nmgy_to_mag(nmgy):
     return 22.5 - 2.5 * torch.log10(nmgy)
 
 
-def convert_nmgy_to_njymag(nmgy):
-    """Convert from flux (nano-maggie) to mag (nano-jansky), which is the format used by DC2.
+def convert_flux_to_magnitude(flux, c):
+    """Convert from flux to magnitude.
 
-    For the difference between mag (Pogson magnitude) and njymag (AB magnitude), please view
-    the "Flux units: maggies and nanomaggies" part of
-    https://www.sdss3.org/dr8/algorithms/magnitudes.php#nmgy
-    When we change the standard source to AB sources, we need to do the conversion
-    described in "2.10 AB magnitudes" at
+    For DC2, please set c to 3631.
+    The conversion is described in "2.10 AB magnitudes" at
     https://pstn-001.lsst.io/fluxunits.pdf
 
+
     Args:
-        nmgy: the fluxes in nanomaggies
+        flux: the flux in any linear unit
+        c: you may change this according to your survey dataset;
 
     Returns:
-        Tensor indicating fluxes in AB magnitude
+        Tensor indicating fluxes in magnitude
     """
 
-    return 22.5 - 2.5 * torch.log10(nmgy / 3631)
+    return 22.5 - 2.5 * torch.log10(flux / c)
 
 
 class SourceType(IntEnum):
@@ -136,19 +137,8 @@ class TileCatalog(BaseTileCatalog):
         is_galaxy = self["source_type"] == SourceType.GALAXY
         return is_galaxy * self.is_on_mask.unsqueeze(-1)
 
-    def on_fluxes(self, unit: str):
-        match unit:
-            case "nmgy":
-                return self.on_nmgy
-            case "mag":
-                return self.on_mag
-            case "njymag":
-                return self.on_njymag
-            case _:
-                raise NotImplementedError()
-
     @property
-    def on_nmgy(self):
+    def on_fluxes(self):
         # TODO: a tile catalog should store fluxes rather than star_fluxes and galaxy_fluxes
         # because that's all that's needed to render the source
         if "galaxy_fluxes" not in self:
@@ -157,13 +147,8 @@ class TileCatalog(BaseTileCatalog):
             fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
-    @property
-    def on_mag(self) -> Tensor:
-        return convert_nmgy_to_mag(self.on_nmgy)
-
-    @property
-    def on_njymag(self) -> Tensor:
-        return convert_nmgy_to_njymag(self.on_nmgy)
+    def on_magnitudes(self, c) -> Tensor:
+        return convert_flux_to_magnitude(self.on_fluxes, c)
 
     def to_full_catalog(self, tile_slen):
         """Converts image parameters in tiles to parameters of full image.
@@ -259,8 +244,8 @@ class TileCatalog(BaseTileCatalog):
 
     def _sort_sources_by_flux(self, band=2):
         # sort by fluxes of "on" sources to get brightest source per tile
-        on_nmgy = self.on_nmgy[..., band]  # shape n x nth x ntw x d
-        top_indexes = on_nmgy.argsort(dim=3, descending=True)
+        on_fluxes = self.on_fluxes[..., band]  # shape n x nth x ntw x d
+        top_indexes = on_fluxes.argsort(dim=3, descending=True)
 
         d = {"n_sources": self["n_sources"]}
         for key, val in self.items():
@@ -322,8 +307,8 @@ class TileCatalog(BaseTileCatalog):
         sorted_self = self._sort_sources_by_flux(band=band)
 
         # get fluxes of "on" sources to mask by
-        on_nmgy = sorted_self.on_nmgy[..., band]
-        flux_mask = on_nmgy > min_flux
+        on_fluxes = sorted_self.on_fluxes[..., band]
+        flux_mask = on_fluxes > min_flux
 
         d = copy.copy(sorted_self.data)
         d["n_sources"] = flux_mask.sum(dim=3)  # number of sources within range in tile
@@ -451,19 +436,8 @@ class FullCatalog(UserDict):
         assert is_galaxy.size(2) == 1
         return is_galaxy * self.is_on_mask.unsqueeze(2)
 
-    def on_fluxes(self, unit: str):
-        match unit:
-            case "nmgy":
-                return self.on_nmgy
-            case "mag":
-                return self.on_mag
-            case "njymag":
-                return self.on_njymag
-            case _:
-                raise NotImplementedError()
-
     @property
-    def on_nmgy(self) -> Tensor:
+    def on_fluxes(self) -> Tensor:
         # ideally we'd always store fluxes rather than star_fluxes and galaxy_fluxes
         if "galaxy_fluxes" not in self:
             fluxes = self["star_fluxes"]
@@ -471,13 +445,8 @@ class FullCatalog(UserDict):
             fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
-    @property
-    def on_mag(self) -> Tensor:
-        return convert_nmgy_to_mag(self.on_nmgy)
-
-    @property
-    def on_njymag(self) -> Tensor:
-        return convert_nmgy_to_njymag(self.on_nmgy)
+    def on_magnitudes(self, c) -> Tensor:
+        return convert_flux_to_magnitude(self.on_fluxes, c)
 
     def one_source(self, b: int, s: int):
         """Return a dict containing all parameter for one specified light source."""
@@ -604,7 +573,7 @@ class FullCatalog(UserDict):
             [self.height, self.width], dtype=plocs.dtype, device=plocs.device
         )
         plocs_end_point = plocs_end_point.view(1, 1, -1)  # (1, 1, 2)
-        plocs_mask = ((plocs >= plocs_start_point) & (plocs <= plocs_end_point)).all(dim=-1)
+        plocs_mask = ((plocs > plocs_start_point) & (plocs < plocs_end_point)).all(dim=-1)
         plocs_mask &= is_on_mask  # (b, bm)
         if filter_oob and plocs_mask.sum() == 0:
             tile_params["n_sources"] = tile_n_sources

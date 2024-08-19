@@ -178,16 +178,16 @@ class Cosmodc2Filter(CatFilter):
 class ShearMSE(FluxBinMetricWithFilter):
     def __init__(
         self,
-        base_nmgy_bin_cutoffs: list,
+        base_njy_bin_cutoffs: list,
         ref_band: int = 2,
-        report_bin_unit: str = "njymag",
+        report_bin_unit: str = "ab_mag",
         exclude_last_bin: bool = False,
     ):
         # shear is only for cosmodc2
         super().__init__(
-            base_nmgy_bin_cutoffs, report_bin_unit, exclude_last_bin, [Cosmodc2Filter()]
+            base_njy_bin_cutoffs, report_bin_unit, exclude_last_bin, [Cosmodc2Filter()]
         )
-        assert self.base_nmgy_bin_cutoffs, "cutoffs can't be None or empty"
+        assert self.base_njy_bin_cutoffs, "cutoffs can't be None or empty"
 
         self.ref_band = ref_band
 
@@ -197,7 +197,7 @@ class ShearMSE(FluxBinMetricWithFilter):
         self.add_bin_state("n_matches")
 
     def update(self, true_cat, est_cat, matching):
-        true_nmgy_fluxes = true_cat.on_fluxes("nmgy")[:, :, self.ref_band].contiguous()
+        true_njy_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
 
         true_filter_bools, _ = self.get_filter_bools(true_cat, est_cat)
 
@@ -215,8 +215,8 @@ class ShearMSE(FluxBinMetricWithFilter):
             tcat_matches = tcat_matches[tcat_matches_filter]
             ecat_matches = ecat_matches[tcat_matches_filter]
 
-            cur_batch_true_nmgy_fluxes = true_nmgy_fluxes[i][tcat_matches]
-            bin_indexes = self.bucketize(cur_batch_true_nmgy_fluxes)
+            cur_batch_true_njy_fluxes = true_njy_fluxes[i][tcat_matches]
+            bin_indexes = self.bucketize(cur_batch_true_njy_fluxes)
             self.n_matches += self.bincount(bin_indexes)
 
             shear1_se = (
@@ -259,16 +259,16 @@ class ShearMSE(FluxBinMetricWithFilter):
 class EllipticityMSE(FluxBinMetricWithFilter):
     def __init__(
         self,
-        base_nmgy_bin_cutoffs: list,
+        base_njy_bin_cutoffs: list,
         ref_band: int = 2,
-        report_bin_unit: str = "njymag",
+        report_bin_unit: str = "ab_mag",
         exclude_last_bin: bool = False,
     ):
         # shear is only for cosmodc2
         super().__init__(
-            base_nmgy_bin_cutoffs, report_bin_unit, exclude_last_bin, [Cosmodc2Filter()]
+            base_njy_bin_cutoffs, report_bin_unit, exclude_last_bin, [Cosmodc2Filter()]
         )
-        assert self.base_nmgy_bin_cutoffs, "cutoffs can't be None or empty"
+        assert self.base_njy_bin_cutoffs, "cutoffs can't be None or empty"
 
         self.ref_band = ref_band
 
@@ -278,7 +278,7 @@ class EllipticityMSE(FluxBinMetricWithFilter):
         self.add_bin_state("n_matches")
 
     def update(self, true_cat, est_cat, matching):
-        true_nmgy_fluxes = true_cat.on_fluxes("nmgy")[:, :, self.ref_band].contiguous()
+        true_njy_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
 
         true_filter_bools, _ = self.get_filter_bools(true_cat, est_cat)
 
@@ -296,8 +296,8 @@ class EllipticityMSE(FluxBinMetricWithFilter):
             tcat_matches = tcat_matches[tcat_matches_filter]
             ecat_matches = ecat_matches[tcat_matches_filter]
 
-            cur_batch_true_nmgy_fluxes = true_nmgy_fluxes[i][tcat_matches]
-            bin_indexes = self.bucketize(cur_batch_true_nmgy_fluxes)
+            cur_batch_true_njy_fluxes = true_njy_fluxes[i][tcat_matches]
+            bin_indexes = self.bucketize(cur_batch_true_njy_fluxes)
             self.n_matches += self.bincount(bin_indexes)
 
             g1_se = (
@@ -353,16 +353,16 @@ class EllipticityMSE(FluxBinMetricWithFilter):
 class EllipticityResidual(FluxBinMetricWithFilter):
     def __init__(
         self,
-        base_nmgy_bin_cutoffs: list,
+        base_njy_bin_cutoffs: list,
         ref_band: int = 2,
-        report_bin_unit: str = "njymag",
+        report_bin_unit: str = "ab_mag",
         exclude_last_bin: bool = False,
     ):
         # ellipticity is only for cosmodc2
         super().__init__(
-            base_nmgy_bin_cutoffs, report_bin_unit, exclude_last_bin, [Cosmodc2Filter()]
+            base_njy_bin_cutoffs, report_bin_unit, exclude_last_bin, [Cosmodc2Filter()]
         )
-        assert self.base_nmgy_bin_cutoffs, "cutoffs can't be None or empty"
+        assert self.base_njy_bin_cutoffs, "cutoffs can't be None or empty"
 
         self.ref_band = ref_band
 
@@ -370,7 +370,7 @@ class EllipticityResidual(FluxBinMetricWithFilter):
         self.add_bin_state("g2_residual")
 
     def update(self, true_cat, est_cat, matching):
-        true_nmgy_fluxes = true_cat.on_fluxes("nmgy")[:, :, self.ref_band].contiguous()
+        true_njy_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
 
         true_filter_bools, _ = self.get_filter_bools(true_cat, est_cat)
 
@@ -390,8 +390,8 @@ class EllipticityResidual(FluxBinMetricWithFilter):
             tcat_matches = tcat_matches[tcat_matches_filter]
             ecat_matches = ecat_matches[tcat_matches_filter]
 
-            cur_batch_true_nmgy_fluxes = true_nmgy_fluxes[i][tcat_matches]
-            bin_indexes = self.bucketize(cur_batch_true_nmgy_fluxes)
+            cur_batch_true_njy_fluxes = true_njy_fluxes[i][tcat_matches]
+            bin_indexes = self.bucketize(cur_batch_true_njy_fluxes)
 
             g1_residual = (
                 est_cat["ellipticity"][i, ecat_matches, 0]

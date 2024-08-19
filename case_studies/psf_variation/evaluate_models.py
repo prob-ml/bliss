@@ -2,23 +2,20 @@
 # pylint: skip-file
 # Ignoring flake8/pylint for this file since this is just a plotting script
 
-import os
 import argparse
-
-import torch
-from torch.utils.data import DataLoader
-import pandas as pd
-import numpy as np
-from sklearn.metrics import roc_curve, roc_auc_score
+import os
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
-
-from tqdm import tqdm
-
-from hydra import initialize, compose
+import torch
+from hydra import compose, initialize
 from hydra.utils import instantiate
+from sklearn.metrics import roc_auc_score, roc_curve
+from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from bliss.catalog import TileCatalog, convert_mag_to_nmgy
 
@@ -296,9 +293,9 @@ def compute_expected_sources(pred_dists, bins, cached_path):
         target_cat = TileCatalog(batch["tile_catalog"])
         target_cat = target_cat.filter_by_flux(min_flux=1.59, band=2)
 
-        normal_mask = (target_cat.on_fluxes("mag")[..., 2] < 22).squeeze()
-        bright_mask = (target_cat.on_fluxes("mag")[..., 2] < BRIGHT_THRESHOLD).squeeze()
-        dim_mask = (target_cat.on_fluxes("mag")[..., 2] > FAINT_THRESHOLD).squeeze() * normal_mask
+        normal_mask = (target_cat.on_magnitudes(c=1)[..., 2] < 22).squeeze()
+        bright_mask = (target_cat.on_magnitudes(c=1)[..., 2] < BRIGHT_THRESHOLD).squeeze()
+        dim_mask = (target_cat.on_magnitudes(c=1)[..., 2] > FAINT_THRESHOLD).squeeze() * normal_mask
 
         true_sources = (target_cat["n_sources"].bool() * normal_mask).sum(dim=(1, 2))
         true_bright = (target_cat["n_sources"].bool() * bright_mask).sum(dim=(1, 2))
@@ -432,7 +429,7 @@ def compute_prob_flux_within_one_mag(pred_dists, bins, cached_path):
         target_cat = TileCatalog(batch["tile_catalog"])
         target_cat = target_cat.filter_by_flux(min_flux=1.59, band=2)
 
-        target_mags = target_cat.on_fluxes("mag")
+        target_mags = target_cat.on_magnitudes(c=1)
         lb = convert_mag_to_nmgy(target_mags + 1).squeeze()
         ub = convert_mag_to_nmgy(target_mags - 1).squeeze()
 
@@ -523,11 +520,11 @@ def compute_prop_flux_in_interval(pred_dists, intervals, cached_path):
     for i, batch in enumerate(tqdm(calib_dataloader, desc="Computing prob in credible interval")):
         target_cat = TileCatalog(batch["tile_catalog"])
         target_cat = target_cat.filter_by_flux(min_flux=1.59, band=2)
-        true_fluxes = target_cat.on_fluxes("nmgy")[..., 0, 2]
+        true_fluxes = target_cat.on_fluxes[..., 0, 2]
 
-        normal_mask = (target_cat.on_fluxes("mag")[..., 2] < 22).squeeze()
-        bright_mask = (target_cat.on_fluxes("mag")[..., 2] < BRIGHT_THRESHOLD).squeeze()
-        dim_mask = (target_cat.on_fluxes("mag")[..., 2] > FAINT_THRESHOLD).squeeze() * normal_mask
+        normal_mask = (target_cat.on_magnitudes(c=1)[..., 2] < 22).squeeze()
+        bright_mask = (target_cat.on_magnitudes(c=1)[..., 2] < BRIGHT_THRESHOLD).squeeze()
+        dim_mask = (target_cat.on_magnitudes(c=1)[..., 2] > FAINT_THRESHOLD).squeeze() * normal_mask
 
         all_count += target_cat["n_sources"].sum()
         bright_count += bright_mask.sum()
@@ -638,7 +635,7 @@ def compute_avg_prob_true_source_type(pred_dists, bins, cached_path):
         target_cat = TileCatalog(batch["tile_catalog"])
         target_cat = target_cat.filter_by_flux(min_flux=1.59, band=2)
 
-        target_mags = target_cat.on_fluxes("mag")
+        target_mags = target_cat.on_magnitudes(c=1)
         target_on_mags = target_mags[target_cat.is_on_mask][:, 2].contiguous()
         binned_target_on_mags = torch.bucketize(target_on_mags, bins)
 
@@ -728,9 +725,9 @@ def compute_classification_probs_by_threshold(pred_dists, thresholds, cached_pat
         target_cat = TileCatalog(batch["tile_catalog"])
         target_cat = target_cat.filter_by_flux(min_flux=1.59, band=2)
 
-        normal_mask = (target_cat.on_fluxes("mag")[..., 2] < 22).squeeze()
-        bright_mask = (target_cat.on_fluxes("mag")[..., 2] < BRIGHT_THRESHOLD).squeeze()
-        dim_mask = (target_cat.on_fluxes("mag")[..., 2] > FAINT_THRESHOLD).squeeze() * normal_mask
+        normal_mask = (target_cat.on_magnitudes(c=1)[..., 2] < 22).squeeze()
+        bright_mask = (target_cat.on_magnitudes(c=1)[..., 2] < BRIGHT_THRESHOLD).squeeze()
+        dim_mask = (target_cat.on_magnitudes(c=1)[..., 2] > FAINT_THRESHOLD).squeeze() * normal_mask
 
         true_all_gal += target_cat.galaxy_bools.sum()
         true_bright_gal += (target_cat.galaxy_bools.squeeze() * bright_mask).sum()
@@ -850,9 +847,9 @@ def compute_source_type_roc_curve(pred_dists, cached_path):
         target_cat = TileCatalog(batch["tile_catalog"])
         target_cat = target_cat.filter_by_flux(min_flux=1.59, band=2)
 
-        normal_mask = (target_cat.on_fluxes("mag")[..., 2] < 22).squeeze()
-        bright_mask = (target_cat.on_fluxes("mag")[..., 2] < BRIGHT_THRESHOLD).squeeze()
-        dim_mask = (target_cat.on_fluxes("mag")[..., 2] > FAINT_THRESHOLD).squeeze() * normal_mask
+        normal_mask = (target_cat.on_magnitudes(c=1)[..., 2] < 22).squeeze()
+        bright_mask = (target_cat.on_magnitudes(c=1)[..., 2] < BRIGHT_THRESHOLD).squeeze()
+        dim_mask = (target_cat.on_magnitudes(c=1)[..., 2] > FAINT_THRESHOLD).squeeze() * normal_mask
         on_mask = target_cat.is_on_mask.squeeze()
 
         true_source_type = target_cat["source_type"].squeeze()
@@ -972,7 +969,7 @@ def compute_ci_width(pred_dists, bins, cached_path):
         target_cat = TileCatalog(batch["tile_catalog"])
         target_cat = target_cat.filter_by_flux(min_flux=1.59, band=2)
 
-        target_on_mags = target_cat.on_fluxes("mag")[target_cat.is_on_mask][:, 2].contiguous()
+        target_on_mags = target_cat.on_magnitudes(c=1)[target_cat.is_on_mask][:, 2].contiguous()
         binned_target_on_mags = torch.bucketize(target_on_mags, bins)
 
         bin_count += binned_target_on_mags.bincount(minlength=n_bins)
@@ -999,7 +996,7 @@ def compute_ci_width(pred_dists, bins, cached_path):
             ci_width_prop[name] += tmp.scatter_add(
                 0,
                 binned_target_on_mags,
-                width / target_cat.on_fluxes("nmgy")[target_cat.is_on_mask][:, 2],
+                width / target_cat.on_fluxes[target_cat.is_on_mask][:, 2],
             )
 
             # Get flux scale for true sources based on source type
