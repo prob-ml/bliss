@@ -80,9 +80,9 @@ class RedshiftMeanSquaredErrorBin(MetricBin):
                 true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_mag = true_cat.on_magnitudes(c=3631)[i][..., self.mag_band][tcat_matches].to(
-                self.device
-            )
+            true_mag = true_cat.on_magnitudes(zero_point=3631)[i][..., self.mag_band][
+                tcat_matches
+            ].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)
 
             red_err = (true_red - est_red).abs() ** 2
@@ -254,9 +254,9 @@ class RedshiftOutlierFractionBin(MetricBin):
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
             if self.bin_type == "ab_mag":
-                true_mag = true_cat.on_magnitudes(c=3631)[i][..., self.mag_band][tcat_matches].to(
-                    self.device
-                )
+                true_mag = true_cat.on_magnitudes(zero_point=3631)[i][..., self.mag_band][
+                    tcat_matches
+                ].to(self.device)
             elif self.bin_type == "njy":
                 true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)
@@ -343,9 +343,9 @@ class RedshiftOutlierFractionCataBin(MetricBin):
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
             if self.bin_type == "ab_mag":
-                true_mag = true_cat.on_magnitudes(c=3631)[i][..., self.mag_band][tcat_matches].to(
-                    self.device
-                )
+                true_mag = true_cat.on_magnitudes(zero_point=3631)[i][..., self.mag_band][
+                    tcat_matches
+                ].to(self.device)
             elif self.bin_type == "njy":
                 true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)
@@ -425,9 +425,9 @@ class RedshiftNormalizedMedianAbsDevBin(MetricBin):
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
             if self.bin_type == "ab_mag":
-                true_mag = true_cat.on_magnitudes(c=3631)[i][..., self.mag_band][tcat_matches].to(
-                    self.device
-                )
+                true_mag = true_cat.on_magnitudes(zero_point=3631)[i][..., self.mag_band][
+                    tcat_matches
+                ].to(self.device)
             elif self.bin_type == "njy":
                 true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)
@@ -523,9 +523,9 @@ class RedshiftBiasBin(MetricBin):
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
             if self.bin_type == "ab_mag":
-                true_mag = true_cat.on_magnitudes(c=3631)[i][..., self.mag_band][tcat_matches].to(
-                    self.device
-                )
+                true_mag = true_cat.on_magnitudes(zero_point=3631)[i][..., self.mag_band][
+                    tcat_matches
+                ].to(self.device)
             elif self.bin_type == "njy":
                 true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)
@@ -613,9 +613,9 @@ class RedshiftAbsBiasBin(MetricBin):
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
             if self.bin_type == "ab_mag":
-                true_mag = true_cat.on_magnitudes(c=3631)[i][..., self.mag_band][tcat_matches].to(
-                    self.device
-                )
+                true_mag = true_cat.on_magnitudes(zero_point=3631)[i][..., self.mag_band][
+                    tcat_matches
+                ].to(self.device)
             elif self.bin_type == "njy":
                 true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
             bin_indices = torch.bucketize(true_mag, cutoffs)

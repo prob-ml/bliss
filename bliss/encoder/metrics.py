@@ -25,8 +25,8 @@ class CatalogMatcher:
         assert true_cat.batch_size == est_cat.batch_size
 
         if self.mag_slack:
-            true_mags = true_cat.on_magnitudes(c=1)[:, :, self.mag_band]
-            est_mags = est_cat.on_magnitudes(c=1)[:, :, self.mag_band]
+            true_mags = true_cat.on_magnitudes(zero_point=1)[:, :, self.mag_band]
+            est_mags = est_cat.on_magnitudes(zero_point=1)[:, :, self.mag_band]
 
         matching = []
         for i in range(true_cat.batch_size):
@@ -138,31 +138,38 @@ class GeneralBinMetric(Metric):
 
 
 class FluxBinMetric(GeneralBinMetric):
-    def __init__(self, base_njy_bin_cutoffs: list, report_bin_unit: str, exclude_last_bin: bool):
-        super().__init__(bin_cutoffs=base_njy_bin_cutoffs, exclude_last_bin=exclude_last_bin)
+    def __init__(
+        self,
+        base_flux_bin_cutoffs: list,
+        mag_zero_point: int,
+        report_bin_unit: str,
+        exclude_last_bin: bool,
+    ):
+        super().__init__(bin_cutoffs=base_flux_bin_cutoffs, exclude_last_bin=exclude_last_bin)
 
-        self.base_njy_bin_cutoffs = self.bin_cutoffs
+        self.base_flux_bin_cutoffs = self.bin_cutoffs
+        self.mag_zero_point = mag_zero_point
         self.report_bin_unit = report_bin_unit
-        assert self.report_bin_unit in {"njy", "ab_mag"}, "invalid bin type"
+        assert self.report_bin_unit in {"flux", "mag"}, "invalid bin type"
 
     def get_state_for_report(self, state_name):
         state = getattr(self, state_name)
         match self.report_bin_unit:
-            case "njy":
+            case "flux":
                 pass
-            case "ab_mag":
+            case "mag":
                 state = torch.flip(state, dims=(-1,))
             case _:
                 raise NotImplementedError()
         return state[..., :-1] if self.exclude_last_bin else state
 
     def get_report_bins(self):
-        report_bins = torch.tensor(self.base_njy_bin_cutoffs)
+        report_bins = torch.tensor(self.base_flux_bin_cutoffs)
         match self.report_bin_unit:
-            case "njy":
+            case "flux":
                 pass
-            case "ab_mag":
-                report_bins = convert_flux_to_magnitude(report_bins, c=3631)
+            case "mag":
+                report_bins = convert_flux_to_magnitude(report_bins, zero_point=self.mag_zero_point)
                 report_bins = torch.flip(report_bins, dims=(-1,))
             case _:
                 raise NotImplementedError()
@@ -172,12 +179,13 @@ class FluxBinMetric(GeneralBinMetric):
 class FluxBinMetricWithFilter(FluxBinMetric):
     def __init__(
         self,
-        base_njy_bin_cutoffs: list,
+        base_flux_bin_cutoffs: list,
+        mag_zero_point: int,
         report_bin_unit: str,
         exclude_last_bin: bool,
         filter_list: List[CatFilter],
     ):
-        super().__init__(base_njy_bin_cutoffs, report_bin_unit, exclude_last_bin)
+        super().__init__(base_flux_bin_cutoffs, mag_zero_point, report_bin_unit, exclude_last_bin)
 
         self.filter_list = filter_list
         assert self.filter_list, "filter_list can't be empty"
@@ -215,14 +223,16 @@ class FluxBinMetricWithFilter(FluxBinMetric):
 class DetectionPerformance(FluxBinMetricWithFilter):
     def __init__(
         self,
-        base_njy_bin_cutoffs: list = None,
+        base_flux_bin_cutoffs: list = None,
+        mag_zero_point: int = None,
         ref_band: int = 2,
-        report_bin_unit: str = "njy",
+        report_bin_unit: str = "flux",
         exclude_last_bin: bool = False,
         filter_list: List[CatFilter] = None,
     ):
         super().__init__(
-            base_njy_bin_cutoffs if base_njy_bin_cutoffs else [],
+            base_flux_bin_cutoffs if base_flux_bin_cutoffs else [],
+            mag_zero_point,
             report_bin_unit,
             exclude_last_bin,
             filter_list if filter_list else [NullFilter()],
@@ -244,15 +254,15 @@ class DetectionPerformance(FluxBinMetricWithFilter):
         assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
 
         if self.ref_band is not None:
-            true_njy_fluxes = true_cat.on_fluxes
-            true_njy_fluxes = true_njy_fluxes[:, :, self.ref_band].contiguous()
-            est_njy_fluxes = est_cat.on_fluxes
-            est_njy_fluxes = est_njy_fluxes[:, :, self.ref_band].contiguous()
+            true_fluxes = true_cat.on_fluxes
+            true_fluxes = true_fluxes[:, :, self.ref_band].contiguous()
+            est_fluxes = est_cat.on_fluxes
+            est_fluxes = est_fluxes[:, :, self.ref_band].contiguous()
         else:
             # hack to match regardless of magnitude; intended for
             # catalogs from surveys with incompatible filter bands
-            true_njy_fluxes = torch.ones_like(true_cat["plocs"][:, :, 0])
-            est_njy_fluxes = torch.ones_like(est_cat["plocs"][:, :, 0])
+            true_fluxes = torch.ones_like(true_cat["plocs"][:, :, 0])
+            est_fluxes = torch.ones_like(est_cat["plocs"][:, :, 0])
 
         true_filter_bools, est_filter_bools = self.get_filter_bools(true_cat, est_cat)
 
@@ -266,20 +276,20 @@ class DetectionPerformance(FluxBinMetricWithFilter):
             n_true = true_cat["n_sources"][i].sum().item()
             n_est = est_cat["n_sources"][i].sum().item()
 
-            cur_batch_true_njy_fluxes = true_njy_fluxes[i, :n_true]
-            cur_batch_est_njy_fluxes = est_njy_fluxes[i, :n_est]
+            cur_batch_true_fluxes = true_fluxes[i, :n_true]
+            cur_batch_est_fluxes = est_fluxes[i, :n_est]
 
             cur_batch_true_filter_bools = true_filter_bools[i, :n_true]
             cur_batch_est_filter_bools = est_filter_bools[i, :n_est]
 
-            tmi = cur_batch_true_njy_fluxes[cur_batch_true_filter_bools]
-            emi = cur_batch_est_njy_fluxes[cur_batch_est_filter_bools]
+            tmi = cur_batch_true_fluxes[cur_batch_true_filter_bools]
+            emi = cur_batch_est_fluxes[cur_batch_est_filter_bools]
 
             tcat_matches = tcat_matches[cur_batch_true_filter_bools[tcat_matches]]
             ecat_matches = ecat_matches[cur_batch_est_filter_bools[ecat_matches]]
 
-            tmim = cur_batch_true_njy_fluxes[tcat_matches]
-            emim = cur_batch_est_njy_fluxes[ecat_matches]
+            tmim = cur_batch_true_fluxes[tcat_matches]
+            emim = cur_batch_est_fluxes[ecat_matches]
 
             self.n_true_sources += self.bincount(self.bucketize(tmi))
             self.n_est_sources += self.bincount(self.bucketize(emi))
@@ -356,19 +366,21 @@ class DetectionPerformance(FluxBinMetricWithFilter):
 class SourceTypeAccuracy(FluxBinMetricWithFilter):
     def __init__(
         self,
-        base_njy_bin_cutoffs: list,
+        base_flux_bin_cutoffs: list,
+        mag_zero_point: int,
         ref_band: int = 2,
-        report_bin_unit: str = "njy",
+        report_bin_unit: str = "flux",
         exclude_last_bin: bool = False,
         filter_list: List[CatFilter] = None,
     ):
         super().__init__(
-            base_njy_bin_cutoffs,
+            base_flux_bin_cutoffs,
+            mag_zero_point,
             report_bin_unit,
             exclude_last_bin,
             filter_list if filter_list else [NullFilter()],
         )
-        assert self.base_njy_bin_cutoffs, "cutoffs can't be None or empty"
+        assert self.base_flux_bin_cutoffs, "cutoffs can't be None or empty"
 
         self.ref_band = ref_band
 
@@ -379,7 +391,7 @@ class SourceTypeAccuracy(FluxBinMetricWithFilter):
         self.add_bin_state("n_matches")
 
     def update(self, true_cat, est_cat, matching):
-        true_njy_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
+        true_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
 
         true_filter_bools, _ = self.get_filter_bools(true_cat, est_cat)
 
@@ -397,8 +409,8 @@ class SourceTypeAccuracy(FluxBinMetricWithFilter):
             tcat_matches = tcat_matches[tcat_matches_filter]
             ecat_matches = ecat_matches[tcat_matches_filter]
 
-            cur_batch_true_njy_fluxes = true_njy_fluxes[i][tcat_matches]
-            bin_indexes = self.bucketize(cur_batch_true_njy_fluxes)
+            cur_batch_true_fluxes = true_fluxes[i][tcat_matches]
+            bin_indexes = self.bucketize(cur_batch_true_fluxes)
             self.n_matches += self.bincount(bin_indexes)
 
             true_gal = true_cat.galaxy_bools[i][tcat_matches, 0]
@@ -491,12 +503,13 @@ class FluxError(FluxBinMetric):
     def __init__(
         self,
         survey_bands,
-        base_njy_bin_cutoffs: list,
+        base_flux_bin_cutoffs: list,
+        mag_zero_point: int,
         ref_band: int = 2,
-        report_bin_unit: str = "ab_mag",
+        report_bin_unit: str = "mag",
         exclude_last_bin: bool = False,
     ):
-        super().__init__(base_njy_bin_cutoffs, report_bin_unit, exclude_last_bin)
+        super().__init__(base_flux_bin_cutoffs, mag_zero_point, report_bin_unit, exclude_last_bin)
         self.survey_bands = survey_bands  # list of band names (e.g. "r")
         self.ref_band = ref_band
 
@@ -507,13 +520,13 @@ class FluxError(FluxBinMetric):
         self.add_bin_state("n_matches")
 
     def update(self, true_cat, est_cat, matching):
-        true_njy_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
+        true_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
 
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
             n_true = true_cat["n_sources"][i].int().sum().item()
-            true_matched_njy_fluxes = true_njy_fluxes[i, 0:n_true][tcat_matches].contiguous()
-            bins = self.bucketize(true_matched_njy_fluxes)
+            true_matched_fluxes = true_fluxes[i, 0:n_true][tcat_matches].contiguous()
+            bins = self.bucketize(true_matched_fluxes)
 
             true_flux = true_cat.on_fluxes[i, tcat_matches]
             est_flux = est_cat.on_fluxes[i, ecat_matches]
@@ -576,12 +589,13 @@ class GalaxyShapeError(FluxBinMetric):
 
     def __init__(
         self,
-        base_njy_bin_cutoffs,
+        base_flux_bin_cutoffs,
+        mag_zero_point: int,
         ref_band=2,
-        report_bin_unit="ab_mag",
+        report_bin_unit="mag",
         exclude_last_bin=False,
     ):
-        super().__init__(base_njy_bin_cutoffs, report_bin_unit, exclude_last_bin)
+        super().__init__(base_flux_bin_cutoffs, mag_zero_point, report_bin_unit, exclude_last_bin)
 
         self.ref_band = ref_band
 
@@ -592,7 +606,7 @@ class GalaxyShapeError(FluxBinMetric):
         self.add_bin_state("n_true_galaxies")
 
     def update(self, true_cat, est_cat, matching):
-        true_njy_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
+        true_fluxes = true_cat.on_fluxes[:, :, self.ref_band].contiguous()
 
         for i in range(true_cat.batch_size):
             tcat_matches, ecat_matches = matching[i]
@@ -602,8 +616,8 @@ class GalaxyShapeError(FluxBinMetric):
             # Skip if no galaxies in this image
             if (~is_gal).all():
                 continue
-            true_matched_njy_fluxes = true_njy_fluxes[i, 0:n_true][tcat_matches]
-            true_gal_njy_fluxes = true_matched_njy_fluxes[is_gal]
+            true_matched_fluxes = true_fluxes[i, 0:n_true][tcat_matches]
+            true_gal_njy_fluxes = true_matched_fluxes[is_gal]
 
             # get magnitude bin for each matched galaxy
             njy_flux_bins = self.bucketize(true_gal_njy_fluxes)

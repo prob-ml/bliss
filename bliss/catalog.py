@@ -20,7 +20,7 @@ def convert_nmgy_to_mag(nmgy):
     return 22.5 - 2.5 * torch.log10(nmgy)
 
 
-def convert_flux_to_magnitude(flux, c):
+def convert_flux_to_magnitude(flux, zero_point):
     """Convert from flux to magnitude.
 
     For DC2, please set c to 3631.
@@ -30,13 +30,13 @@ def convert_flux_to_magnitude(flux, c):
 
     Args:
         flux: the flux in any linear unit
-        c: you may change this according to your survey dataset;
+        zero_point: you may change this according to your survey dataset;
 
     Returns:
         Tensor indicating fluxes in magnitude
     """
 
-    return 22.5 - 2.5 * torch.log10(flux / c)
+    return -2.5 * torch.log10(flux / zero_point)
 
 
 class SourceType(IntEnum):
@@ -147,8 +147,8 @@ class TileCatalog(BaseTileCatalog):
             fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
-    def on_magnitudes(self, c) -> Tensor:
-        return convert_flux_to_magnitude(self.on_fluxes, c)
+    def on_magnitudes(self, zero_point) -> Tensor:
+        return convert_flux_to_magnitude(self.on_fluxes, zero_point)
 
     def to_full_catalog(self, tile_slen):
         """Converts image parameters in tiles to parameters of full image.
@@ -445,8 +445,8 @@ class FullCatalog(UserDict):
             fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
         return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
 
-    def on_magnitudes(self, c) -> Tensor:
-        return convert_flux_to_magnitude(self.on_fluxes, c)
+    def on_magnitudes(self, zero_point) -> Tensor:
+        return convert_flux_to_magnitude(self.on_fluxes, zero_point)
 
     def one_source(self, b: int, s: int):
         """Return a dict containing all parameter for one specified light source."""
