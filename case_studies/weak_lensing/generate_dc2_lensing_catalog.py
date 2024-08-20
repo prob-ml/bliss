@@ -9,7 +9,7 @@ from GCRCatalogs import GCRQuery
 
 GCRCatalogs.set_root_dir("/data/scratch/dc2_nfs/")
 
-file_name = "dc2_lensing_catalog.pkl"
+file_name = "dc2_lensing_catalog_without_duplicates.pkl"
 file_path = os.path.join("/data", "scratch", "dc2local", file_name)
 file_already_populated = os.path.isfile(file_path)
 
@@ -89,6 +89,8 @@ ipix = hp.query_polygon(32, vertices, inclusive=True)
 healpix_filter = GCRQuery((lambda h: np.isin(h, ipix, assume_unique=True), "healpix_pixel"))
 
 object_truth_df = object_truth_df[object_truth_df["truth_type"] == 1]
+
+object_truth_df.drop_duplicates(subset=["cosmodc2_id_truth"], inplace=True)
 
 
 print("Loading CosmoDC2...\n")  # noqa: WPS421
