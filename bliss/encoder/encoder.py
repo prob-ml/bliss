@@ -101,7 +101,7 @@ class Encoder(pl.LightningModule):
 
         context_channels_out = 64
         self.color_context_net = nn.Sequential(
-            ConvBlock(2, context_channels_out),
+            ConvBlock(9, context_channels_out),
             ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
             C3(context_channels_out, context_channels_out, n=4),
             ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
@@ -133,7 +133,7 @@ class Encoder(pl.LightningModule):
             Detect(n_hidden_ch, 3),
         )
 
-    def detect_second(self, x_features_color, history_cat):
+    def detection_history(self, history_cat):
         centered_locs = history_cat["locs"][..., 0, :] - 0.5
         log_fluxes = (history_cat.on_nmgy.squeeze(3).sum(-1) + 1).log()
         history_encoding_lst = [
@@ -142,7 +142,10 @@ class Encoder(pl.LightningModule):
             centered_locs[..., 0] * history_cat["n_sources"],  # x history
             centered_locs[..., 1] * history_cat["n_sources"],  # y history
         ]
-        local_context = torch.stack(history_encoding_lst, dim=1)
+        return torch.stack(history_encoding_lst, dim=1)
+
+    def detect_second(self, x_features_color, history_cat):
+        local_context = self.detection_history(history_cat)
         x_local_context = self.local_context_net(local_context)
         x_feature_color_local = torch.cat((x_features_color, x_local_context), dim=1)
         return self.detection_net(x_feature_color_local)
@@ -158,14 +161,21 @@ class Encoder(pl.LightningModule):
         if history_cat is None:
             # detections (1), flux (1), and locs (2) are the properties we condition on
             masked_history = (
-                torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1).expand(-1, 1, -1, -1)
+                torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1).expand(-1, 8, -1, -1)
             )
         else:
-            history_encoding_lst = [
-                history_cat["n_sources"].float(),  # detection history
-            ]
-            masked_history_lst = [v * history_mask for v in history_encoding_lst]
-            masked_history = torch.stack(masked_history_lst, dim=1)
+            history_cat1 = history_cat.get_brightest_sources_per_tile(
+                band=self.reference_band, exclude_num=0
+            )
+            history_cat2 = history_cat.get_brightest_sources_per_tile(
+                band=self.reference_band, exclude_num=1
+            )
+
+            history_stack1 = self.detection_history(history_cat1)
+            history_stack2 = self.detection_history(history_cat2)
+            history_stack = torch.concat((history_stack1, history_stack2), dim=1)
+
+            masked_history = history_stack * history_mask.unsqueeze(1)
 
         color_context = torch.concat([history_mask.unsqueeze(1), masked_history], dim=1)
         return self.color_context_net(color_context)
