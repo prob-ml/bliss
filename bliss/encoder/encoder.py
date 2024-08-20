@@ -162,6 +162,7 @@ class Encoder(pl.LightningModule):
                 context_cond = self.make_context(new_est_cat, no_mask, detection2=True)
                 x_cat_cond = self.catalog_net(x_features, context_marginal, context_cond)
                 new_est_cat2 = self.var_dist.sample(x_cat_cond, use_mode=use_mode)
+                new_est_cat2["n_sources"] *= new_est_cat["n_sources"]
                 new_est_cat = new_est_cat.union(new_est_cat2, disjoint=False)
 
             new_est_cat["n_sources"] *= 1 - history_mask
