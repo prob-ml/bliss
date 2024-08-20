@@ -3,6 +3,7 @@ from typing import Optional
 
 import pytorch_lightning as pl
 import torch
+from torch.distributions import Categorical
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
@@ -152,18 +153,22 @@ class Encoder(pl.LightningModule):
 
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             history_mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
-
             context_marginal = self.make_color_context(est_cat, history_mask)
-            empty_cond_context = torch.zeros((batch_size, 4, ht, wt), device=self.device)
 
+            count_params = self.catalog_net.get_count_params(x_features, context_marginal)
+            count_rv = Categorical(logits=count_params)
+            n_sources = count_rv.mode if use_mode else count_rv.sample()
+
+            empty_cond_context = torch.zeros((batch_size, 4, ht, wt), device=self.device)
             x_cat_marginal = self.catalog_net(x_features, context_marginal, empty_cond_context)
             new_est_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
+            new_est_cat["n_sources"] = (n_sources >= 1).long()
 
             if self.use_double_detect:
                 context_cond = self.make_conditional_context(new_est_cat)
                 x_cat_cond = self.catalog_net(x_features, context_marginal, context_cond)
                 new_est_cat2 = self.var_dist.sample(x_cat_cond, use_mode=use_mode)
-                new_est_cat2["n_sources"] *= new_est_cat["n_sources"]
+                new_est_cat2["n_sources"] = (n_sources >= 2).long()
                 new_est_cat = new_est_cat.union(new_est_cat2, disjoint=False)
 
             new_est_cat["n_sources"] *= 1 - history_mask
@@ -195,14 +200,18 @@ class Encoder(pl.LightningModule):
 
         for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns):
             history_mask = hmp.repeat([batch_size, ht // 2, wt // 2])
-
             context_marginal = self.make_color_context(target_cat, history_mask)
+
+            count_params = self.catalog_net.get_count_params(x_features, context_marginal)
+            count_rv = Categorical(logits=count_params)
+            local_loss = -count_rv.log_prob(target_cat["n_sources"].clamp(0, 2))
+
             empty_cond_context = torch.zeros((batch_size, 4, ht, wt), device=self.device)
             x_cat_marginal = self.catalog_net(x_features, context_marginal, empty_cond_context)
             nll_marginal_z1 = self.var_dist.compute_nll(x_cat_marginal, target_cat1)
 
             if not self.use_double_detect:
-                local_loss = nll_marginal_z1
+                local_loss += nll_marginal_z1
             else:
                 nll_marginal_z2 = self.var_dist.compute_nll(x_cat_marginal, target_cat2)
 
@@ -214,11 +223,8 @@ class Encoder(pl.LightningModule):
                 x_cat_cond2 = self.catalog_net(x_features, context_marginal, context_cond2)
                 nll_cond_z1 = self.var_dist.compute_nll(x_cat_cond2, target_cat1)
 
-                none_mask = target_cat["n_sources"] == 0
-                loss0 = nll_marginal_z1 * none_mask
-
                 one_mask = target_cat["n_sources"] == 1
-                loss1 = (nll_marginal_z1 + nll_cond_z2) * one_mask
+                loss1 = nll_marginal_z1 * one_mask
 
                 two_mask = target_cat["n_sources"] >= 2
                 loss2a = nll_marginal_z1 + nll_cond_z2
@@ -227,7 +233,7 @@ class Encoder(pl.LightningModule):
                 loss2_unmasked = -torch.logsumexp(-lse_stack, dim=-1)
                 loss2 = loss2_unmasked * two_mask
 
-                local_loss = loss0 + loss1 + loss2
+                local_loss += loss1 + loss2
 
             loss_mask = lmp.repeat([batch_size, ht // 2, wt // 2])
             loss += local_loss * loss_mask

@@ -9,11 +9,6 @@ paths:
 
 variational_factors:
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
-      name: n_sources
-      sample_rearrange: null
-      nll_rearrange: null
-      nll_gating: null
-    - _target_: bliss.encoder.variational_dist.BernoulliFactor
       name: source_type
       sample_rearrange: "b ht wt -> b ht wt 1 1"
       nll_rearrange: "b ht wt 1 1 -> b ht wt"
@@ -118,7 +113,7 @@ generate:
 
 cached_simulator:
     cached_data_path: ${paths.cached_data}
-    batch_size: 4
+    batch_size: 3
     num_workers: 8
     train_transforms:
         - _target_: bliss.cached_dataset.OneBandTransform
