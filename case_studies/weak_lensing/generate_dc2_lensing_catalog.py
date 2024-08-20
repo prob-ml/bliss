@@ -9,7 +9,7 @@ from GCRCatalogs import GCRQuery
 
 GCRCatalogs.set_root_dir("/data/scratch/dc2_nfs/")
 
-file_name = "dc2_lensing_catalog_without_duplicates.pkl"
+file_name = "dc2_lensing_catalog.pkl"
 file_path = os.path.join("/data", "scratch", "dc2local", file_name)
 file_already_populated = os.path.isfile(file_path)
 
