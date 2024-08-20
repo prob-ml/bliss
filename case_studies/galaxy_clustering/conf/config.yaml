@@ -37,7 +37,7 @@ cached_simulator:
     _target_: bliss.cached_dataset.CachedSimulatedDataModule
     batch_size: 1
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
-    num_workers: 8
+    num_workers: 0
     cached_data_path: /data/scratch/kapnadak/data-08-16/file_data
     train_transforms: []
 
