@@ -100,31 +100,31 @@ class Encoder(pl.LightningModule):
             out_channels=self.var_dist.n_params_per_source,
         )
 
-    def make_context(self, history_cat, history_mask, detection2=False):
-        detection_id = (
-            torch.ones_like(history_mask) if detection2 else torch.zeros_like(history_mask)
-        ).unsqueeze(1)
+    def make_color_context(self, history_cat, history_mask):
         if history_cat is None:
             # detections (1), flux (1), and locs (2) are the properties we condition on
             masked_history = (
-                torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1).expand(-1, 4, -1, -1)
+                torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1).expand(-1, 1, -1, -1)
             )
         else:
-            history_cat1 = history_cat.get_brightest_sources_per_tile(
-                band=self.reference_band, exclude_num=0
-            )
-            centered_locs = history_cat1["locs"][..., 0, :] - 0.5
-            log_fluxes = (history_cat1.on_nmgy.squeeze(3).sum(-1) + 1).log()
             history_encoding_lst = [
                 history_cat["n_sources"].float(),  # detection history
-                log_fluxes * history_cat1["n_sources"],  # flux history
-                centered_locs[..., 0] * history_cat1["n_sources"],  # x history
-                centered_locs[..., 1] * history_cat1["n_sources"],  # y history
             ]
             masked_history_lst = [v * history_mask for v in history_encoding_lst]
             masked_history = torch.stack(masked_history_lst, dim=1)
 
-        return torch.concat([detection_id, history_mask.unsqueeze(1), masked_history], dim=1)
+        return torch.concat([history_mask.unsqueeze(1), masked_history], dim=1)
+
+    def make_conditional_context(self, history_cat):
+        centered_locs = history_cat["locs"][..., 0, :] - 0.5
+        log_fluxes = (history_cat.on_nmgy.squeeze(3).sum(-1) + 1).log()
+        history_encoding_lst = [
+            history_cat["n_sources"].float(),  # detection history
+            log_fluxes * history_cat["n_sources"],  # flux history
+            centered_locs[..., 0] * history_cat["n_sources"],  # x history
+            centered_locs[..., 1] * history_cat["n_sources"],  # y history
+        ]
+        return torch.stack(history_encoding_lst, dim=1)
 
     def get_features(self, batch):
         assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
@@ -149,17 +149,18 @@ class Encoder(pl.LightningModule):
             raise ValueError("n_colors must be 2 or 4")
 
         est_cat = None
-        no_mask = torch.ones((batch_size, ht, wt), device=self.device)
 
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
             history_mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
 
-            context_marginal = self.make_context(est_cat, history_mask, detection2=False)
-            x_cat_marginal = self.catalog_net(x_features, context_marginal)
+            context_marginal = self.make_color_context(est_cat, history_mask)
+            empty_cond_context = torch.zeros((batch_size, 4, ht, wt), device=self.device)
+
+            x_cat_marginal = self.catalog_net(x_features, context_marginal, empty_cond_context)
             new_est_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
 
             if self.use_double_detect:
-                context_cond = self.make_context(new_est_cat, no_mask, detection2=True)
+                context_cond = self.make_conditional_context(new_est_cat)
                 x_cat_cond = self.catalog_net(x_features, context_marginal, context_cond)
                 new_est_cat2 = self.var_dist.sample(x_cat_cond, use_mode=use_mode)
                 new_est_cat2["n_sources"] *= new_est_cat["n_sources"]
@@ -191,13 +192,13 @@ class Encoder(pl.LightningModule):
 
         x_features = self.get_features(batch)
         loss = torch.zeros_like(x_features[:, 0, :, :])
-        no_mask = torch.ones((batch_size, ht, wt), device=self.device)
 
         for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns):
             history_mask = hmp.repeat([batch_size, ht // 2, wt // 2])
 
-            context_marginal = self.make_context(target_cat, history_mask, detection2=False)
-            x_cat_marginal = self.catalog_net(x_features, context_marginal)
+            context_marginal = self.make_color_context(target_cat, history_mask)
+            empty_cond_context = torch.zeros((batch_size, 4, ht, wt), device=self.device)
+            x_cat_marginal = self.catalog_net(x_features, context_marginal, empty_cond_context)
             nll_marginal_z1 = self.var_dist.compute_nll(x_cat_marginal, target_cat1)
 
             if not self.use_double_detect:
@@ -205,11 +206,11 @@ class Encoder(pl.LightningModule):
             else:
                 nll_marginal_z2 = self.var_dist.compute_nll(x_cat_marginal, target_cat2)
 
-                context_cond1 = self.make_context(target_cat1, no_mask, detection2=True)
+                context_cond1 = self.make_conditional_context(target_cat1)
                 x_cat_cond1 = self.catalog_net(x_features, context_marginal, context_cond1)
                 nll_cond_z2 = self.var_dist.compute_nll(x_cat_cond1, target_cat2)
 
-                context_cond2 = self.make_context(target_cat2, no_mask, detection2=True)
+                context_cond2 = self.make_conditional_context(target_cat2)
                 x_cat_cond2 = self.catalog_net(x_features, context_marginal, context_cond2)
                 nll_cond_z1 = self.var_dist.compute_nll(x_cat_cond2, target_cat1)
 

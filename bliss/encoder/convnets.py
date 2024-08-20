@@ -50,17 +50,16 @@ class CatalogNet(nn.Module):
     def __init__(self, num_features, out_channels):
         super().__init__()
 
-        context_channels_in = 6
         context_channels_out = 128
         self.color_context_net = nn.Sequential(
-            ConvBlock(context_channels_in, context_channels_out),
+            ConvBlock(2, context_channels_out),
             ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
             C3(context_channels_out, context_channels_out, n=4),
             ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
         )
 
         self.local_context_net = nn.Sequential(
-            ConvBlock(context_channels_in, context_channels_out, kernel_size=1, padding=0),
+            ConvBlock(4, context_channels_out, kernel_size=1, padding=0),
             ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
             C3(context_channels_out, context_channels_out, n=4),
             ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
@@ -76,10 +75,7 @@ class CatalogNet(nn.Module):
             Detect(n_hidden_ch, out_channels),
         )
 
-    def forward(self, x_features, color_context, local_context=None):
-        if local_context is None:
-            local_context = torch.zeros_like(color_context)
-
+    def forward(self, x_features, color_context, local_context):
         x_color_context = self.color_context_net(color_context)
         x_local_context = self.local_context_net(local_context)
 
