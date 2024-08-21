@@ -99,7 +99,7 @@ class Encoder(pl.LightningModule):
             double_downsample=(self.tile_slen == 4),
         )
 
-        context_ch_out = 64
+        context_ch_out = 128
         self.color_context_net = nn.Sequential(
             ConvBlock(5, context_ch_out, gn=False),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, padding=0, gn=False),
