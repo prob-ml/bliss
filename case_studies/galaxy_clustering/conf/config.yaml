@@ -5,11 +5,11 @@ defaults:
     - override hydra/job_logging: stdout
 
 data_gen:
-    data_dir: /data/scratch/kapnadak/data-08-16/
+    data_dir: /data/scratch/des/piff_test_data/
     image_size: 2560
     tile_size: 256
-    nfiles: 2000
-    n_catalogs_per_file: 500
+    nfiles: 10
+    n_catalogs_per_file: 1
     bands: ["g", "r", "i", "z"]
     min_flux_for_loss: 0
     overwrite: true
@@ -102,6 +102,6 @@ predict:
                 output_dir: "/data/scratch/des/dr2_detection_output/run_1"
                 write_interval: "batch"
     encoder: ${encoder}
-    weight_save_path: /data/scratch/des/best_encoder.ckpt
+    weight_save_path: /home/kapnadak/bliss_output/version_92/checkpoints/best_encoder.ckpt
     device: "cuda:0"
     output_save_path: "/data/scratch/des/dr2_detection_output/run_0"
