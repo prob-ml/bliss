@@ -133,6 +133,8 @@ class VariationalFactor:
             target = torch.where(gating.unsqueeze(-1), target, 0)
         assert not torch.isnan(target).any()
         ungated_nll = -qk.log_prob(target)
+        if ungated_nll.dim() == target.dim():  # (b, w, h, 1) -> (b,w,h) silent error
+            ungated_nll = ungated_nll.squeeze(-1)
         return ungated_nll * gating
 
 
