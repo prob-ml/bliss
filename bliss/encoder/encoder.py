@@ -99,37 +99,37 @@ class Encoder(pl.LightningModule):
             double_downsample=(self.tile_slen == 4),
         )
 
-        context_channels_out = 64
+        context_ch_out = 64
         self.color_context_net = nn.Sequential(
-            ConvBlock(9, context_channels_out),
-            ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
-            C3(context_channels_out, context_channels_out, n=4),
-            ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
+            ConvBlock(9, context_ch_out, gn=False),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, padding=0, gn=False),
+            C3(context_ch_out, context_ch_out, n=4, gn=False),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, padding=0, gn=False),
         )
 
         self.local_context_net = nn.Sequential(
-            ConvBlock(4, context_channels_out, kernel_size=1, padding=0),
-            ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
-            C3(context_channels_out, context_channels_out, n=4),
-            ConvBlock(context_channels_out, context_channels_out, kernel_size=1, padding=0),
+            ConvBlock(4, context_ch_out, kernel_size=1, padding=0, gn=False),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, padding=0, gn=False),
+            C3(context_ch_out, context_ch_out, n=4, gn=False),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, padding=0, gn=False),
         )
 
         n_hidden_ch = 256
-        in_ch = num_features + 2 * context_channels_out
+        in_ch = num_features + 2 * context_ch_out
         self.detection_net = nn.Sequential(
-            ConvBlock(in_ch, n_hidden_ch, kernel_size=1, padding=0),
-            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, padding=0),
-            C3(n_hidden_ch, n_hidden_ch, n=4),
-            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, padding=0),
+            ConvBlock(in_ch, n_hidden_ch, kernel_size=1, padding=0, gn=False),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, padding=0, gn=False),
+            C3(n_hidden_ch, n_hidden_ch, n=4, gn=False),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, padding=0, gn=False),
             Detect(n_hidden_ch, self.var_dist.n_params_per_source),
         )
 
-        in_ch_count = num_features + context_channels_out
+        in_ch_count = num_features + context_ch_out
         self.count_net = nn.Sequential(
-            ConvBlock(in_ch_count, n_hidden_ch, kernel_size=1, padding=0),
-            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, padding=0),
-            C3(n_hidden_ch, n_hidden_ch, n=4),
-            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, padding=0),
+            ConvBlock(in_ch_count, n_hidden_ch, kernel_size=1, padding=0, gn=False),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, padding=0, gn=False),
+            C3(n_hidden_ch, n_hidden_ch, n=4, gn=False),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, padding=0, gn=False),
             Detect(n_hidden_ch, 3),
         )
 
