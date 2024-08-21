@@ -24,7 +24,6 @@ class LensingPrior(CatalogPrior):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        # validate that tiles height and width is the same, used as ngrid later
         self.arcsec_per_pixel = arcsec_per_pixel
 
         self.sample_method = sample_method
@@ -35,7 +34,7 @@ class LensingPrior(CatalogPrior):
         self.convergence_std = convergence_std
 
         if self.sample_method == "cosmology":
-            self.grid_size = (self.n_tiles_w * self.tile_slen * self.arcsec_per_pixel) / 3600
+            self.grid_size = 0.06
 
             if os.path.exists("angular_cl.npy"):
                 angular_cl = np.load("angular_cl.npy")
