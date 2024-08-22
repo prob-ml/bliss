@@ -45,8 +45,8 @@ variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
     name: convergence
     nll_gating: null
-    high_clamp: 0.
-    low_clamp: 0.
+    high_clamp: 20.0
+    low_clamp: -20.0
 
 my_normalizers:
     # asinh:
@@ -74,7 +74,7 @@ encoder:
     reference_band: 2  # r-band
     tile_slen: 256
     optimizer_params:
-        lr: 1e-2
+        lr: 1e-3
     scheduler_params:
         milestones: [32]
         gamma: 0.1
