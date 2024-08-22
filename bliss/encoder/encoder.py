@@ -117,6 +117,8 @@ class Encoder(pl.LightningModule):
             Detect(n_hidden_ch, 3),
         )
 
+        self.x_empty_context = nn.Embedding(1, context_ch_out)
+
         self.local_context_net = nn.Sequential(
             ConvBlock(2, context_ch_out, kernel_size=1, gn=False),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
@@ -133,26 +135,24 @@ class Encoder(pl.LightningModule):
             Detect(n_hidden_ch, self.var_dist.n_params_per_source),
         )
 
-    def detection_history(self, history_cat):
+    def make_local_context(self, history_cat):
         centered_locs = history_cat["locs"][..., 0, :] - 0.5
         history_encoding_lst = [
             centered_locs[..., 0] * history_cat["n_sources"],  # x history
             centered_locs[..., 1] * history_cat["n_sources"],  # y history
         ]
-        return torch.stack(history_encoding_lst, dim=1)
+        local_context = torch.stack(history_encoding_lst, dim=1)
+        return self.local_context_net(local_context)
 
     def detect_second(self, x_features_color, history_cat):
-        local_context = self.detection_history(history_cat)
-        x_local_context = self.local_context_net(local_context)
+        x_local_context = self.make_local_context(history_cat)
         x_feature_color_local = torch.cat((x_features_color, x_local_context), dim=1)
         return self.detection_net(x_feature_color_local)
 
     def detect_first(self, x_features_color):
         batch_size, _n_features, ht, wt = x_features_color.shape[0:4]
-        # TODO: use an nn.Embedding for x_empty_context instead
-        empty_cond_context = torch.zeros((batch_size, 2, ht, wt), device=self.device)
-        x_empty_context = self.local_context_net(empty_cond_context)
-        x_feature_color_empty = torch.cat((x_features_color, x_empty_context), dim=1)
+        xec = self.x_empty_context.weight.view(1, -1, 1, 1).expand(batch_size, -1, ht, wt)
+        x_feature_color_empty = torch.cat((x_features_color, xec), dim=1)
         return self.detection_net(x_feature_color_empty)
 
     def make_color_context(self, history_cat, history_mask):
