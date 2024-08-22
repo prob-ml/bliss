@@ -46,3 +46,7 @@ class RedshiftsEncoder(Encoder):
     def sample(self, batch, use_mode=True):
         _, x_cat_marginal = self.get_features_and_parameters(batch)
         return self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
+
+    def discrete_sample(self, batch, use_mode=True):
+        _, x_cat_marginal = self.get_features_and_parameters(batch)
+        return self.var_dist.sample(x_cat_marginal, use_mode=use_mode)

@@ -3,7 +3,7 @@
 # Download dataset from scratch
 echo "start downloading scratch!"
 export SAVE_NAME="desc_dc2_run2.2i_dr6_truth_nona"         # User define
-export OUT_DIR="$HOME/bliss/data/redshift/dc2/"       # User define
+export OUT_DIR="/data/scratch/qiaozhih/data/redshift/dc2/"       # User define
 export OUT_PATH="${OUT_DIR}${SAVE_NAME}.pkl"
 
 mkdir -p "$OUT_DIR"

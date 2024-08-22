@@ -39,14 +39,14 @@ encoder:
         asinh:
             _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
             q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
-    # matcher:
-    #     _target_: bliss.encoder.metrics.CatalogMatcher
-    #     dist_slack: 1.0
-    #     mag_slack: null
-    #     mag_band: 2  # SDSS r-band
     matcher:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftsCatalogMatcher
-        match_gating: is_galaxy
+        _target_: bliss.encoder.metrics.CatalogMatcher
+        dist_slack: 1.0
+        mag_slack: null
+        mag_band: 2  # SDSS r-band
+    # matcher:
+    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftsCatalogMatcher
+    #     match_gating: is_galaxy
     mode_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
@@ -62,48 +62,48 @@ encoder:
     use_checkerboard: false
 
 my_metrics_test:
-    # redshift_mearn_square_error:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredError
-    # redshift_mearn_square_error_bin:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
-    #     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    #     bin_type: "njymag"
-    # redshift_mean_square_error_blendedness:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBlendedness
-    #     bin_cutoffs: [0.0001, 0.02, 0.1, 0.2, 0.6]
+    redshift_mearn_square_error:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredError
+    redshift_mearn_square_error_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_mean_square_error_blendedness:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBlendedness
+        bin_cutoffs: [0.0001, 0.02, 0.1, 0.2, 0.6]
     redshift_mean_square_error_true_redshifts:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorTrueRedshift
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-    # redshift_outlier_fraction:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFraction
-    # redshift_outlier_fraction_bin:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
-    #     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    #     bin_type: "njymag"
-    # redshift_nmad:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDev
-    # redshift_nmad_bin:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDevBin
-    #     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    #     bin_type: "njymag"
-    # redshift_outlier_fraction_catastrophic:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCata
-    # redshift_outlier_fraction_catastrophic_bin:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
-    #     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    #     bin_type: "njymag"
-    # redshift_bias:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBias
-    # redshift_bias_bin:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
-    #     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    #     bin_type: "njymag"
-    # redshift_abs_bias:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBias
-    # redshift_abs_bias_bin:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
-    #     bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
-    #     bin_type: "njymag"
+    redshift_outlier_fraction:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFraction
+    redshift_outlier_fraction_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_nmad:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDev
+    redshift_nmad_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDevBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_catastrophic:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCata
+    redshift_outlier_fraction_catastrophic_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_bias:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBias
+    redshift_bias_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_abs_bias:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBias
+    redshift_abs_bias_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
 
 train:
     trainer:
@@ -144,6 +144,6 @@ train:
 surveys:
     dc2:
         dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl
-        cached_data_path: /data/scratch/dc2local/dc2_cached_data
+        cached_data_path: /data/scratch/dc2local/dc2_cached_data_withobj_final
         batch_size: 4
         max_sources_per_tile: 5

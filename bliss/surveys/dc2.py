@@ -228,6 +228,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         tile_dict = result_dict["tile_dict"]
         wcs_header_str = result_dict["other_info"]["wcs_header_str"]
         psf_params = result_dict["inputs"]["psf_params"]
+        match_id = result_dict["other_info"]["match_id"]
 
         # split image
         split_lim = self.image_lim[0] // self.n_image_split
@@ -257,6 +258,10 @@ class DC2DataModule(CachedSimulatedDataModule):
                 tile_dict[param_name], split_lim // self.tile_slen, 0, 1
             )
 
+        objid = split_tensor(
+            tile_dict["objid"], split_lim // self.tile_slen, 0, 1
+        )
+
         data_splits = {
             "tile_catalog": unpack_dict(tile_cat_splits),
             "images": image_splits,
@@ -267,6 +272,7 @@ class DC2DataModule(CachedSimulatedDataModule):
                 torch.arange(0, len(image_splits)) % split_image_num_on_width
             ).tolist(),
             "psf_params": [psf_params for _ in range(self.n_image_split**2)],
+            "objid": objid,
         }
         data_splits = split_list(
             unpack_dict(data_splits),
@@ -354,11 +360,12 @@ class DC2FullCatalog(FullCatalog):
             "ellipticity": ellipticity.view(1, ori_len, 2),
             "cosmodc2_mask": cosmodc2_mask.view(1, ori_len, 1),
         }
+        match_id = match_id.view(1, ori_len, 1)
 
         star_galaxy_filter = galaxy_bools | star_bools
         for k, v in d.items():
             d[k] = v[:, star_galaxy_filter, :]
-        match_id = match_id[star_galaxy_filter]
+        match_id = match_id[:, star_galaxy_filter, :]
 
         plocs_start_point = torch.tensor([0.0, 0.0]).view(1, 1, -1)
         plocs_end_point = torch.tensor([height, width]).view(1, 1, -1)
@@ -366,7 +373,7 @@ class DC2FullCatalog(FullCatalog):
         plocs_mask = plocs_mask.squeeze(0)
         for k, v in d.items():
             d[k] = v[:, plocs_mask, :]
-        match_id = match_id[plocs_mask]
+        match_id = match_id[:, plocs_mask, :]
 
         cosmodc2_mask = rearrange(d["cosmodc2_mask"], "1 nobj 1 -> nobj")
         shear = d["shear"]

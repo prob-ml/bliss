@@ -214,7 +214,81 @@ class LogitNormalFactor(VariationalFactor):
         return RescaledLogitNormal(mu, sigma, low=self.low, high=self.high)
 
 
+class DiscretizedFactor1D(VariationalFactor):
+    def __init__(self, n_params, low=0, high=3, *args, **kwargs):
+        super().__init__(n_params, *args, **kwargs)
+        self.low = low
+        self.high = high
+
+    def _get_dist(self, params):
+        return Discretized1D(params, self.low, self.high, self.n_params)
+
+
 #####################
+
+
+class Discretized1D(Distribution):
+    """A continuous bivariate distribution over the 2d unit box, with a discretized density."""
+
+    def __init__(self, logits, low=0, high=3, num_bins=30):
+        super().__init__(validate_args=False)
+        self.low = low
+        self.high = high
+        self.num_bins = num_bins
+        assert logits.shape[-1] == self.num_bins
+        self.pdf_offset = torch.tensor(
+            num_bins / (self.high - self.low), device=logits.device
+        ).log()
+        self.base_dist = Categorical(logits=logits)
+
+    def sample(self, sample_shape=()):
+        locbins = self.base_dist.sample(sample_shape)
+        locbins_float = locbins.float()
+        return (locbins_float + torch.rand_like(locbins_float)) / self.num_bins * (
+            self.high - self.low
+        ) + self.low
+
+    @property
+    def mode(self):
+        locbins = self.base_dist.probs.argmax(dim=-1)
+        return (locbins.float() + 0.5) / self.num_bins * (self.high - self.low) + self.low
+
+    def compute_catastrophic_risk(self, z_pred, bin_centers, bin_probs):
+        """
+        Compute the catastrophic risk for a predicted redshift (z_pred).
+        """
+        risk = 0.0
+        for i, z_i in enumerate(bin_centers):
+            if abs(z_pred - z_i) > 1:
+                risk += bin_probs[i]
+        return risk
+
+    def get_lowest_risk_bin(self):
+        """
+        Find the bin that minimizes the risk of producing a catastrophic outlier.
+        """
+        bin_centers = torch.linspace(
+            self.low, self.high, self.num_bins, device=self.base_dist.logits.device
+        )
+        bin_probs = self.base_dist.probs
+
+        min_risk = float("inf")
+        best_bin = None
+
+        # Grid search
+        for z_pred in bin_centers:
+            risk = self.compute_catastrophic_risk(z_pred, bin_centers, bin_probs)
+
+            if risk < min_risk:
+                min_risk = risk
+                best_bin = z_pred
+
+        return best_bin.item()
+
+    def log_prob(self, value):
+        locs = ((value - self.low) / (self.high - self.low)).clamp(0, 1 - 1e-7)
+        locbins = (locs * self.num_bins).long()
+        return self.base_dist.log_prob(locbins) + self.pdf_offset
 
 
 class TruncatedDiagonalMVN(Distribution):
