@@ -30,9 +30,9 @@ class WeakLensingFeaturesNet(nn.Module):
         module_list.extend(
             [
                 ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
-                nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(1)]),
+                nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(2)]),
                 ConvBlock(64, 128, stride=2),
-                nn.Sequential(*[ConvBlock(128, 128) for _ in range(1)]),
+                nn.Sequential(*[ConvBlock(128, 128) for _ in range(2)]),
                 ConvBlock(128, num_features, stride=1),
             ]
         )  # 4

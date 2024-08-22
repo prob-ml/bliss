@@ -85,8 +85,13 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
 
     true_shear = true_tile_cat["shear"]
     est_shear = est_tile_cat["shear"]
-    true_convergence = true_tile_cat["convergence"]
-    est_convergence = est_tile_cat["convergence"]
+    print(est_shear)
+    if "convergence" not in est_tile_cat:
+        true_convergence = torch.zeros(*true_tile_cat["shear"].shape[:-1], 1)
+        est_convergence = torch.zeros_like(true_convergence)
+    else:
+        true_convergence = true_tile_cat["convergence"]
+        est_convergence = est_tile_cat["convergence"]
 
     for img_id in img_ids:
         shear1_vmin = torch.min(true_shear[img_id].squeeze()[:, :, 0])

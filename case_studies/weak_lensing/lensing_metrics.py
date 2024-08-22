@@ -21,8 +21,12 @@ class LensingMapMSE(Metric):
         true_shear = true_cat["shear"].flatten(1, 2)
         pred_shear = est_cat["shear"].flatten(1, 2)
         baseline_pred_shear = true_cat["ellip_lensed"].flatten(1, 2)
-        true_convergence = true_cat["convergence"].flatten(1, 2)
-        pred_convergence = est_cat["convergence"].flatten(1, 2)
+        if "convergence" not in est_cat:
+            true_convergence = torch.zeros(*true_cat["shear"].shape[:-1], 1).flatten(1,2)
+            pred_convergence = torch.zeros_like(true_convergence).flatten(1,2)
+        else:
+            true_convergence = true_cat["convergence"].flatten(1, 2)
+            pred_convergence = est_cat["convergence"].flatten(1, 2)
 
         shear1_sq_err = ((true_shear[:, :, 0] - pred_shear[:, :, 0]) ** 2).sum()
         baseline_shear1_sq_err = ((true_shear[:, :, 0] - baseline_pred_shear[:, :, 0]) ** 2).sum()

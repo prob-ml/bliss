@@ -63,10 +63,11 @@ class ClaheNormalizer(torch.nn.Module):
 
 
 class AsinhQuantileNormalizer(torch.nn.Module):
-    def __init__(self, q):
+    def __init__(self, q, sample_every_n=None):
         super().__init__()
         self.register_buffer("q", torch.tensor(q))
         self.register_buffer("quantiles", torch.zeros(len(q)))
+        self.register_buffer("sample_every_n", sample_every_n)
         self.num_updates = 0
 
     def num_channels_per_band(self):
@@ -75,7 +76,8 @@ class AsinhQuantileNormalizer(torch.nn.Module):
 
     def get_input_tensor(self, batch):
         ss_images = batch["images"]  # assumes images are already sky subtracted
-
+        if self.sample_every_n:
+            ss_images = ss_images[:, :, ::self.sample_every_n, ::self.sample_every_n]
         if self.training and self.num_updates < 100:
             self.num_updates += 1
             cur_quantiles = torch.quantile(ss_images, q=self.q)

@@ -72,6 +72,10 @@ class WeakLensingEncoder(Encoder):
         x_cat_marginal = self.catalog_net(x_features)
         # est cat
         return self.var_dist.sample(x_cat_marginal, use_mode=use_mode, return_base_cat=True)
+    
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        with torch.no_grad():
+            return self.sample(batch, use_mode=True)
 
     def _compute_loss(self, batch, logging_name):
         batch_size, _, _, _ = batch["images"].shape[0:4]
@@ -104,21 +108,21 @@ class WeakLensingEncoder(Encoder):
             if param.grad is not None:
                 param_grad_norm = param.grad.data.norm(2).item()
                 total_grad_norm += param_grad_norm**2
-                if param_grad_norm < 1e-4 or param_grad_norm > 10:
+                if param_grad_norm < 1e-4 or param_grad_norm > 100:
                     print(f"grad_norm_{name}", param_grad_norm)  # noqa: WPS421
         total_grad_norm = total_grad_norm**0.5
-        if total_grad_norm > 100 or total_grad_norm < 0.01:
+        if total_grad_norm > 100 or total_grad_norm < 1e-4:
             print("total_grad_norm", total_grad_norm)  # noqa: WPS421
 
-    def configure_gradient_clipping(
-        self, optimizer, gradient_clip_val=None, gradient_clip_algorithm=None
-    ):
-        clip_min = 1e-4
-        clip_max = 10
-        for _name, param in self.named_parameters():
-            if param.grad is not None:
-                with torch.no_grad():
-                    param.grad.data.clamp_(min=clip_min, max=clip_max)
+    # def configure_gradient_clipping(
+    #     self, optimizer, gradient_clip_val=None, gradient_clip_algorithm=None
+    # ):
+    #     clip_min = 1e-4
+    #     clip_max = 10
+    #     for _name, param in self.named_parameters():
+    #         if param.grad is not None:
+    #             with torch.no_grad():
+    #                 param.grad.data.clamp_(min=clip_min, max=clip_max)
 
     def update_metrics(self, batch, batch_idx):
         target_cat = BaseTileCatalog(batch["tile_catalog"])
