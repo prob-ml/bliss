@@ -93,7 +93,6 @@ class WeakLensingEncoder(Encoder):
         loss = loss.sum() / loss.numel()
 
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
-        print("loss: ", loss)  # noqa: WPS421
 
         # Accumulate batch loss
         self.current_epoch_loss += loss.item()
@@ -104,7 +103,7 @@ class WeakLensingEncoder(Encoder):
     def on_after_backward(self):
         # Calculate and log the gradient norms
         total_grad_norm = 0.0
-        for name, param in self.named_parameters():
+        for _, param in self.named_parameters():
             if param.grad is not None:
                 param_grad_norm = param.grad.data.norm(2).item()
                 total_grad_norm += param_grad_norm**2
