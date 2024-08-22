@@ -101,10 +101,10 @@ class Encoder(pl.LightningModule):
 
         context_ch_out = 128
         self.color_context_net = nn.Sequential(
-            ConvBlock(2, context_ch_out, kernel_size=3, gn=False),
-            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
-            C3(context_ch_out, context_ch_out, n=4, spatial=False),
-            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
+            ConvBlock(2, context_ch_out, kernel_size=3, gn=True),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=True),
+            C3(context_ch_out, context_ch_out, n=4, spatial=True),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=True),
         )
 
         self.local_context_net = nn.Sequential(
