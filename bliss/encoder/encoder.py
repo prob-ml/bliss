@@ -101,7 +101,7 @@ class Encoder(pl.LightningModule):
 
         context_ch_out = 128
         self.color_context_net = nn.Sequential(
-            ConvBlock(5, context_ch_out, kernel_size=1, gn=False),
+            ConvBlock(5, context_ch_out, kernel_size=3, gn=False),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
             C3(context_ch_out, context_ch_out, n=4, spatial=False),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
@@ -169,14 +169,14 @@ class Encoder(pl.LightningModule):
                 band=self.reference_band, exclude_num=1
             )
 
-            in_border1 = (history_cat1["locs"][..., 0, :] - 0.95).abs().sign().relu()
-            in_border2 = (history_cat2["locs"][..., 0, :] - 0.95).abs().sign().relu()
+            centered_locs1 = history_cat1["locs"][..., 0, :] - 0.5
+            centered_locs2 = history_cat2["locs"][..., 0, :] - 0.5
 
             history_encoding_lst = [
-                in_border1[..., 0] * history_cat1["n_sources"],  # x history
-                in_border1[..., 1] * history_cat1["n_sources"],  # y history
-                in_border2[..., 0] * history_cat2["n_sources"],  # x history
-                in_border2[..., 1] * history_cat2["n_sources"],  # y history
+                centered_locs1[..., 0] * history_cat1["n_sources"],  # x history
+                centered_locs1[..., 1] * history_cat1["n_sources"],  # y history
+                centered_locs2[..., 0] * history_cat2["n_sources"],  # x history
+                centered_locs2[..., 1] * history_cat2["n_sources"],  # y history
             ]
             history_stack = torch.stack(history_encoding_lst, dim=1)
             masked_history = history_stack * history_mask.unsqueeze(1)
