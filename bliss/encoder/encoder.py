@@ -108,7 +108,7 @@ class Encoder(pl.LightningModule):
         )
 
         self.local_context_net = nn.Sequential(
-            ConvBlock(3, context_ch_out, kernel_size=1, gn=False),
+            ConvBlock(4, context_ch_out, kernel_size=1, gn=False),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
             C3(context_ch_out, context_ch_out, n=4, spatial=False),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
@@ -135,8 +135,10 @@ class Encoder(pl.LightningModule):
 
     def detection_history(self, history_cat):
         centered_locs = history_cat["locs"][..., 0, :] - 0.5
+        log_fluxes = (history_cat.on_nmgy.squeeze(3).sum(-1) + 1).log()
         history_encoding_lst = [
             history_cat["n_sources"].float(),  # detection history
+            log_fluxes * history_cat["n_sources"],  # flux history
             centered_locs[..., 0] * history_cat["n_sources"],  # x history
             centered_locs[..., 1] * history_cat["n_sources"],  # y history
         ]
@@ -150,7 +152,7 @@ class Encoder(pl.LightningModule):
 
     def detect_first(self, x_features_color):
         batch_size, _n_features, ht, wt = x_features_color.shape[0:4]
-        empty_cond_context = torch.zeros((batch_size, 3, ht, wt), device=self.device)
+        empty_cond_context = torch.zeros((batch_size, 4, ht, wt), device=self.device)
         x_empty_context = self.local_context_net(empty_cond_context)
         x_feature_color_empty = torch.cat((x_features_color, x_empty_context), dim=1)
         return self.detection_net(x_feature_color_empty)
