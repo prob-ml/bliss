@@ -101,7 +101,7 @@ class Encoder(pl.LightningModule):
 
         context_ch_out = 128
         self.color_context_net = nn.Sequential(
-            ConvBlock(5, context_ch_out, kernel_size=3, gn=False),
+            ConvBlock(6, context_ch_out, kernel_size=3, gn=False),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
             C3(context_ch_out, context_ch_out, n=4, spatial=False),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
@@ -161,7 +161,7 @@ class Encoder(pl.LightningModule):
         if history_cat is None:
             # detections (1), flux (1), and locs (2) are the properties we condition on
             masked_history = (
-                torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1).expand(-1, 4, -1, -1)
+                torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1).expand(-1, 5, -1, -1)
             )
         else:
             history_cat1 = history_cat.get_brightest_sources_per_tile(
@@ -175,6 +175,7 @@ class Encoder(pl.LightningModule):
             centered_locs2 = history_cat2["locs"][..., 0, :] - 0.5
 
             history_encoding_lst = [
+                history_cat["n_sources"].clamp(0, 2).float(),  # detection history
                 centered_locs1[..., 0] * history_cat1["n_sources"],  # x history
                 centered_locs1[..., 1] * history_cat1["n_sources"],  # y history
                 centered_locs2[..., 0] * history_cat2["n_sources"],  # x history
