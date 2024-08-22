@@ -126,10 +126,10 @@ class Encoder(pl.LightningModule):
 
         in_ch_count = num_features + context_ch_out
         self.count_net = nn.Sequential(
-            ConvBlock(in_ch_count, n_hidden_ch, kernel_size=1, gn=False),
-            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=False),
-            C3(n_hidden_ch, n_hidden_ch, n=4, spatial=False),
-            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=False),
+            ConvBlock(in_ch_count, n_hidden_ch, kernel_size=1, gn=True),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=True),
+            C3(n_hidden_ch, n_hidden_ch, n=4, spatial=True),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=True),
             Detect(n_hidden_ch, 3),
         )
 
