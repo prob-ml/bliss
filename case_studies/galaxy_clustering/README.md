@@ -24,3 +24,4 @@ The following parameters can be set within the configuration file `config.yaml`.
 5. `n_catalogs_per_file`: number of catalogs to be stored in each file datum object.
 6. `bands`: survey bands to be used (`["g", "r", "i", "z"]` for DES).
 7. `min_flux_for_loss`: minimum flux for filtering.
+8. `overwrite`: whether to overwrite existing files (only works for catalogs for now)
