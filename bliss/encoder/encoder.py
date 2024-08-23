@@ -103,7 +103,7 @@ class Encoder(pl.LightningModule):
         self.color_context_net = nn.Sequential(
             ConvBlock(2, context_ch_out, kernel_size=3, gn=True),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=True),
-            C3(context_ch_out, context_ch_out, n=4, spatial=True),
+            C3(context_ch_out, context_ch_out, n=4, spatial=False, gn=True),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=True),
         )
 
@@ -112,7 +112,7 @@ class Encoder(pl.LightningModule):
         self.count_net = nn.Sequential(
             ConvBlock(in_ch_count, n_hidden_ch, kernel_size=1, gn=True),
             ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=True),
-            C3(n_hidden_ch, n_hidden_ch, n=4, spatial=True),
+            C3(n_hidden_ch, n_hidden_ch, n=4, spatial=False, gn=True),
             ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=True),
             Detect(n_hidden_ch, 3),
         )
@@ -120,18 +120,18 @@ class Encoder(pl.LightningModule):
         self.x_empty_context = nn.Embedding(1, context_ch_out)
 
         self.local_context_net = nn.Sequential(
-            ConvBlock(4, context_ch_out, kernel_size=1, gn=False),
-            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
-            C3(context_ch_out, context_ch_out, n=4, spatial=False),
-            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
+            ConvBlock(4, context_ch_out, kernel_size=1, gn=True),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=True),
+            C3(context_ch_out, context_ch_out, n=4, spatial=False, gn=True),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=True),
         )
 
         in_ch = num_features + 2 * context_ch_out
         self.detection_net = nn.Sequential(
-            ConvBlock(in_ch, n_hidden_ch, kernel_size=1, gn=False),
-            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=False),
-            C3(n_hidden_ch, n_hidden_ch, n=4, spatial=False),
-            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=False),
+            ConvBlock(in_ch, n_hidden_ch, kernel_size=1, gn=True),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=True),
+            C3(n_hidden_ch, n_hidden_ch, n=4, spatial=False, gn=True),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=True),
             Detect(n_hidden_ch, self.var_dist.n_params_per_source),
         )
 

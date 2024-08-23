@@ -113,7 +113,7 @@ generate:
 
 cached_simulator:
     cached_data_path: ${paths.cached_data}
-    batch_size: 5
+    batch_size: 4
     num_workers: 8
     train_transforms:
         - _target_: bliss.cached_dataset.OneBandTransform

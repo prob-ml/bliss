@@ -31,12 +31,12 @@ class Detect(nn.Module):
 
 
 class Bottleneck(nn.Module):
-    def __init__(self, c1, c2, shortcut=True, e=0.5, spatial=True):
+    def __init__(self, c1, c2, shortcut=True, e=0.5, gn=True, spatial=True):
         super().__init__()
         ch = int(c2 * e)
-        self.cv1 = ConvBlock(c1, ch, kernel_size=1, gn=spatial)
+        self.cv1 = ConvBlock(c1, ch, kernel_size=1, gn=gn)
         ks = 3 if spatial else 1
-        self.cv2 = ConvBlock(ch, c2, kernel_size=ks, stride=1, gn=spatial)
+        self.cv2 = ConvBlock(ch, c2, kernel_size=ks, stride=1, gn=gn)
         self.add = shortcut and c1 == c2
 
     def forward(self, x):
@@ -45,12 +45,12 @@ class Bottleneck(nn.Module):
 
 
 class C3(nn.Module):
-    def __init__(self, c1, c2, n=1, shortcut=True, e=0.5, spatial=True):
+    def __init__(self, c1, c2, n=1, shortcut=True, e=0.5, gn=True, spatial=True):
         super().__init__()
         ch = int(c2 * e)
-        self.cv1 = ConvBlock(c1, ch, kernel_size=1, gn=spatial)
-        self.cv2 = ConvBlock(c1, ch, kernel_size=1, gn=spatial)
-        self.cv3 = ConvBlock(2 * ch, c2, kernel_size=1, gn=spatial)
+        self.cv1 = ConvBlock(c1, ch, kernel_size=1, gn=gn)
+        self.cv2 = ConvBlock(c1, ch, kernel_size=1, gn=gn)
+        self.cv3 = ConvBlock(2 * ch, c2, kernel_size=1, gn=gn)
         self.m = nn.Sequential(
             *(Bottleneck(ch, ch, shortcut, e=1.0, spatial=spatial) for _ in range(n)),
         )
