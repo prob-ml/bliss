@@ -118,15 +118,15 @@ class Encoder(pl.LightningModule):
         self.x_empty_context = nn.Embedding(1, context_ch_out)
 
         self.local_context_net = nn.Sequential(
-            ConvBlock(4, context_ch_out, kernel_size=1, gn=True),
-            C3(context_ch_out, context_ch_out, n=3, spatial=False, gn=True),
-            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=True),
+            ConvBlock(4, context_ch_out, kernel_size=1, gn=False),
+            C3(context_ch_out, context_ch_out, n=3, spatial=False, gn=False),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
         )
 
         in_ch = num_features + 2 * context_ch_out
         self.detection_net = nn.Sequential(
-            ConvBlock(in_ch, n_hidden_ch, kernel_size=1, gn=True),
-            C3(n_hidden_ch, n_hidden_ch, n=3, spatial=False, gn=True),
+            ConvBlock(in_ch, n_hidden_ch, kernel_size=1, gn=False),
+            C3(n_hidden_ch, n_hidden_ch, n=3, spatial=False, gn=False),
             Detect(n_hidden_ch, self.var_dist.n_params_per_source),
         )
 
