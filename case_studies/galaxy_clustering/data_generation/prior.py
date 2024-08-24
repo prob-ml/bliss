@@ -82,6 +82,8 @@ class Prior:
     def make_catalog(
         self,
         flux_samples,
+        gi_color_samples,
+        iz_color_samples,
         hlr_samples,
         g1_size_samples,
         g2_size_samples,
@@ -94,6 +96,8 @@ class Prior:
 
         Args:
             flux_samples: flux samples in all bands
+            gi_color_samples: samples for G-I color
+            iz_color_samples: samples for I-Z color
             hlr_samples: samples of HLR
             g1_size_samples: samples of G1
             g2_size_samples: samples of G2
@@ -121,6 +125,8 @@ class Prior:
         catalog["G2"] = g2_size_samples
         catalog["Z"] = -1.0
         catalog["SOURCE_TYPE"] = source_types.astype(int)
+        catalog["GI_COLOR"] = gi_color_samples
+        catalog["IZ_COLOR"] = iz_color_samples
         return catalog
 
 
@@ -135,9 +141,19 @@ class ClusterPrior(Prior):
 
     def sample_cluster_catalog(self):
         """Sample a random redMaPPer catalog."""
-        cluster_idx = np.random.choice(self.cluster_indices)
-        self.cluster_members = self.full_cluster_df[self.full_cluster_df["ID"] == cluster_idx]
-        self.cluster_members = pd.merge(self.cluster_members, self.photo_z_catalog, how="left")
+        while True:
+            cluster_idx = np.random.choice(self.cluster_indices)
+            self.cluster_members = self.full_cluster_df[self.full_cluster_df["ID"] == cluster_idx]
+            self.cluster_members = pd.merge(self.cluster_members, self.photo_z_catalog, how="left")
+            radius_astro_samples = self.cluster_members["R"] / 0.7
+            # redshift for each source
+            z_estimates = self.cluster_members["Z_MEAN"]
+            angular_distance = angular_diameter_distance(z_estimates).value
+            radius_samples = radius_astro_samples / (0.263 * angular_distance)
+            radius_samples = radius_samples * (180 * 3600) / np.pi
+            cluster_radius = 2 * radius_samples.max()
+            if cluster_radius <= 1300:
+                break
 
     def sample_center(self):
         """Samples cluster center on image grid.
@@ -146,8 +162,8 @@ class ClusterPrior(Prior):
         Returns:
             cluster center sample
         """
-        x_center = np.random.uniform(self.width * 0.2, self.width * 0.8)
-        y_center = np.random.uniform(self.height * 0.2, self.height * 0.8)
+        x_center = np.random.uniform(self.width * 0.3, self.width * 0.7)
+        y_center = np.random.uniform(self.height * 0.3, self.height * 0.7)
         return np.array([x_center, y_center])
 
     def sample_cluster_locs(self, center):
@@ -218,6 +234,21 @@ class ClusterPrior(Prior):
     def sample_source_types(self, richness):
         return np.ones(richness)
 
+    def sample_colors(self):
+        """Samples G-I and I-Z colors.
+
+        Returns:
+            gi_colors: mag_g - mag_i for all sources
+            iz_colors: mag_i - mag_z for all sources
+        """
+        mag_g = np.array(self.cluster_members["MAG_AUTO_G"])
+        mag_i = np.array(self.cluster_members["MAG_AUTO_I"])
+        mag_z = np.array(self.cluster_members["MAG_AUTO_Z"])
+
+        gi_colors = mag_g - mag_i
+        iz_colors = mag_i - mag_z
+        return gi_colors, iz_colors
+
     def sample_cluster(self):
         """Samples galaxy clusters.
 
@@ -231,11 +262,14 @@ class ClusterPrior(Prior):
         cartesian_locs = self.sample_cluster_locs(center_sample)
         gal_locs = self.cartesian_to_gal(cartesian_locs)
         flux_samples = self.sample_fluxes()
+        gi_color_samples, iz_color_samples = self.sample_colors()
         hlr_samples = self.sample_hlr(richness)
         source_types = self.sample_source_types(richness)
         g1_size_samples, g2_size_samples = self.sample_shape(richness)
         return self.make_catalog(
             flux_samples,
+            gi_color_samples,
+            iz_color_samples,
             hlr_samples,
             g1_size_samples,
             g2_size_samples,
@@ -335,6 +369,24 @@ class BackgroundPrior(Prior):
         fluxes = 1000 * convert_mag_to_nmgy(mags)
         return fluxes * (fluxes > 0)
 
+    def sample_colors(self, sources):
+        """Samples G-I and I-Z colors.
+
+        Args:
+            sources: Dataframe of DES sources
+
+        Returns:
+            gi_colors: mag_g - mag_i for all sources
+            iz_colors: mag_i - mag_z for all sources
+        """
+        mag_g = np.array(sources["MAG_AUTO_G"])
+        mag_i = np.array(sources["MAG_AUTO_I"])
+        mag_z = np.array(sources["MAG_AUTO_Z"])
+
+        gi_colors = mag_g - mag_i
+        iz_colors = mag_i - mag_z
+        return gi_colors, iz_colors
+
     def sample_background(self):
         """Samples backgrounds.
 
@@ -347,10 +399,13 @@ class BackgroundPrior(Prior):
         gal_source_locs = self.cartesian_to_gal(cartesian_source_locs)
         source_types = self.sample_source_types(sva_sources)
         flux_samples = self.sample_fluxes(sva_sources)
+        gi_color_samples, iz_color_samples = self.sample_colors(sva_sources)
         g1_size_samples, g2_size_samples = self.sample_shape(n_sources)
         hlr_samples = self.sample_hlr(sva_sources)
         return self.make_catalog(
             flux_samples,
+            gi_color_samples,
+            iz_color_samples,
             hlr_samples,
             g1_size_samples,
             g2_size_samples,

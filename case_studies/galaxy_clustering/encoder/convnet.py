@@ -53,7 +53,7 @@ class GalaxyClusterFeaturesNet(nn.Module):
         )
 
         log_tile_size = torch.log2(torch.tensor(tile_slen))
-        num_downsample = int(torch.round(log_tile_size)) - 1
+        num_downsample = int(torch.round(log_tile_size)) - 3
         self.backbone = nn.ModuleList()
 
         if downsample_at_front:
