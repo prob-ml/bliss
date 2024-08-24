@@ -35,7 +35,7 @@ The individual components and the overall network used is described in `convnets
 
 The `encoder.py` file defines the custom encoder. The encoder parameters are again set within the Hydra configuration, under the `encoder` key under `conf/config.yaml`. The cached data simulator draws its parameters from the `cached_simulator` key under the same file, where one can specify the data directory, any training transforms to be applied, train-validation-test split, and batch size.
 
-The encoder can be trained using the command (note that the path may need to be changed based on where you are running the command from -- I have used an absolute path for convenience). This command reads in our desired configuration file, and passes it on to BLISS. The outputs are logged in the `training_gc.out` file. GPU index can be specified beforehand by running the command `export CUDA_VISIBLE_DEVICES=${gpu_index}`.
+The encoder can be trained using the command (note that the path may need to be changed based on where you are running the command from -- we have used an absolute path for convenience). This command reads in our desired configuration file, and passes it on to BLISS. The outputs are logged in the `training_gc.out` file. GPU index can be specified beforehand by running the command `export CUDA_VISIBLE_DEVICES=${gpu_index}`.
 
 ```
 nohup bliss -cp /home/kapnadak/bliss/case_studies/galaxy_clustering/conf/ --config-name config.yaml mode=train &> training_gc.out
@@ -43,7 +43,7 @@ nohup bliss -cp /home/kapnadak/bliss/case_studies/galaxy_clustering/conf/ --conf
 
 The trained encoder and training logs are saved under `bliss_output` where one can find the TensorBoard event files (for plotting) as well as the best encoder under `checkpoints/best_encoder.ckpt`.
 
-## Encoder Inference
+## Encoder Inference and Evaluation
 
 After the encoder is appropriately trained, we can then test its performance against DES data by completing a full pass over the entirety of the survey. Configuration parameters can be specified in the config file located in `conf/config.yaml` under the `predict` section, and because they might vary from run to run, practitioners might find most useful modifying:
 
@@ -51,11 +51,12 @@ After the encoder is appropriately trained, we can then test its performance aga
 2. `batch_size`: size of the batches for each GPU.
 3. `num_workers`: number of workers for the DataLoader.
 4. `devices`: if input is of `int` type, number of GPU devices, and if input is a list of ints, then it specifies the GPU indices.
-5. `output_dir`: number of catalogs to be stored in each file datum object.
+5. `output_dir`: directory where inference outputs are stored.
 6. `weight_save_path`: encoder weights location.
 
-The **dr2 tiles** that make up DES data come as coadded bands of single-epoch exposures by band, totaling _20 GB_ of storage. Hence, to avoid unnecesary storage redundancy,
-`DES_inference.py` builds just-in-time images in parallel and discards them after they are processed by the encoder. This process is specified in the `cached_dataset.py` module, under the `inference` subdirectory.
+The **dr2 tiles** that make up DES data come as coadded bands of single-epoch exposures by band, totaling _20 TB_ of storage. Hence, to avoid unnecesary storage redundancy,
+`DES_inference.py` builds just-in-time images in parallel and discards them after they are processed by the encoder. This process is specified in the `cached_dataset.py` module, under the `inference` subdirectory. Since our encoder works on $2560 \times 2560$ images, we resort to unfold the DES images (which are $10,000 times 10,000$) into a $4 \times 4$ grid of $2560 \times 2560$ images using `torch`'s unfolding capabilities.
+
 With all configuration parameters worked out for inference on DES, you can run the following command under the `galaxy_clustering` case study directory,:
 
 ```
@@ -64,8 +65,6 @@ python ./inference/DES_inference.py
 
 The callback specification determines that the the outputs are saved at each batch end, so encoder outputs should be available as soon as the run begins processing images. For reference, a full run over DES typically takes 4-5 distributed on two 2080ti GPUs and 4 workers.
 
-## Evaluating the Encoder
-
-There are scripts under the `inference` subdirectory to run large-scale inference on the DES data. Since our encoder works on $2560 \times 2560$ images, we resort to unfold the DES images (which are $10,000 times 10,000$) into a $4 \times 4$ grid of $2560 \times 2560$ images using `torch`'s unfolding capabilities. The `inference_stats.py` script also counts the number of clusters we have predicted and computes metrics against redMaPPer (which we assume to be the ground truth). We only have redMaPPer predictions on the SVA1 footprint, so the metrics are restricted to this region. (`data_generation/SVA_map.py` and `data_generation/redmapper_groundtruth.py` are useful files for seeing how the ground truth results are logged.)
+The `inference_stats.py` script also counts the number of clusters we have predicted and computes metrics against redMaPPer (which we assume to be the ground truth). We only have redMaPPer predictions on the SVA1 footprint, so the metrics are restricted to this region. (`data_generation/SVA_map.py` and `data_generation/redmapper_groundtruth.py` are useful files for seeing how the ground truth results are logged.)
 
 We can also visualize how our encoder works on individual DES tiles. In particular, `notebooks.SingleTileEvaluation.ipynb` does a good job of visualizing BLISS v/s redMaPPer predictions on individual DES tiles.
