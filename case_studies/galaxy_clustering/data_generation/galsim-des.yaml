@@ -18,6 +18,8 @@
 #   12: G2
 #   13: Z
 #   14: SOURCE_TYPE
+#   15: GI_COLOR
+#   16: IZ_COLOR
 
 variables :
   nfiles : 100
