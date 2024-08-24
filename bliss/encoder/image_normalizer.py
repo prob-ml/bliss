@@ -76,6 +76,7 @@ class AsinhQuantileNormalizer(torch.nn.Module):
 
     def get_input_tensor(self, batch):
         ss_images = batch["images"]  # assumes images are already sky subtracted
+        # select every {pixel_shift}th pixel
         ss_images = ss_images[:, :, :: self.pixel_shift, :: self.pixel_shift]
 
         if self.training and self.num_updates < 100:
