@@ -24,4 +24,7 @@ class NoteBookPlottingParams:
             "faint": "red",
             "bright": "blue",
         },
+        "ellipticity_hist_plot": {
+            "bin_colors": ["violet", "green", "red", "peru", "teal", "darkorange"],
+        },
     }
