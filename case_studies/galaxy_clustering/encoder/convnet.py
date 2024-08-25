@@ -53,11 +53,17 @@ class GalaxyClusterFeaturesNet(nn.Module):
         )
 
         log_tile_size = torch.log2(torch.tensor(tile_slen))
-        num_downsample = int(torch.round(log_tile_size)) - 1
+        num_total_downsample = int(torch.round(log_tile_size)) - 1
+        num_downsample4, num_downsample2 = divmod(num_total_downsample, 2)
         self.backbone = nn.ModuleList()
 
         if downsample_at_front:
-            for _ in range(num_downsample):
+            for _ in range(num_downsample4):
+                self.backbone.append(
+                    ConvBlock(nch_hidden, 2 * nch_hidden, kernel_size=5, stride=4, padding=2)
+                )
+                nch_hidden *= 2
+            if num_downsample2:
                 self.backbone.append(
                     ConvBlock(nch_hidden, 2 * nch_hidden, kernel_size=5, stride=2, padding=2)
                 )
@@ -77,7 +83,12 @@ class GalaxyClusterFeaturesNet(nn.Module):
             self.backbone.append(ConvBlock(64, 128, stride=2))
             self.backbone.append(nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]))
             num_channels = 128
-            for _ in range(num_downsample):
+            for _ in range(num_downsample4):
+                self.backbone.append(
+                    ConvBlock(num_channels, 2 * num_channels, kernel_size=5, stride=4, padding=2)
+                )
+                num_channels *= 2
+            if num_downsample2:
                 self.backbone.append(
                     ConvBlock(num_channels, 2 * num_channels, kernel_size=5, stride=2, padding=2)
                 )
