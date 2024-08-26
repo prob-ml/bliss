@@ -10,7 +10,6 @@ from bliss.surveys.dc2 import (
     DC2DataModule,
     DC2FullCatalog,
     map_nested_dicts,
-    split_tensor,
     unpack_dict,
     wcs_from_wcs_header_str,
 )
@@ -173,31 +172,7 @@ class LensingDC2DataModule(DC2DataModule):
         )
         tile_dict["redshift"] = redshift
 
-        # split image
-        split_lim = self.image_lim[0] // self.n_image_split
-        image_splits = split_tensor(image, split_lim, 1, 2)
-        image_width_pixels = image.shape[2]
-        split_image_num_on_width = image_width_pixels // split_lim
-
-        # split tile cat
-        tile_cat_splits = {}
-        param_list = tile_dict.keys()
-        for param_name in param_list:
-            tile_cat_splits[param_name] = split_tensor(
-                tile_dict[param_name], split_lim // self.tile_slen, 0, 1
-            )
-
-        data_splits = {
-            "tile_catalog": unpack_dict(tile_cat_splits),
-            "images": image_splits,
-            "image_height_index": (
-                torch.arange(0, len(image_splits)) // split_image_num_on_width
-            ).tolist(),
-            "image_width_index": (
-                torch.arange(0, len(image_splits)) % split_image_num_on_width
-            ).tolist(),
-            "psf_params": [psf_params for _ in range(self.n_image_split**2)],
-        }
+        data_splits = self.split_image_and_tile_cat(image, tile_dict, tile_dict.keys(), psf_params)
 
         data_to_cache = unpack_dict(data_splits)
 
