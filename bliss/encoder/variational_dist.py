@@ -14,7 +14,7 @@ from torch.distributions import (
     TransformedDistribution,
 )
 
-from bliss.catalog import TileCatalog
+from bliss.catalog import BaseTileCatalog, TileCatalog
 
 
 class VariationalDist(torch.nn.Module):
@@ -36,6 +36,11 @@ class VariationalDist(torch.nn.Module):
         fp_pairs = self._factor_param_pairs(x_cat)
         d = {qk.name: qk.sample(params, use_mode) for qk, params in fp_pairs}
         return TileCatalog(d)
+
+    def discrete_sample(self, x_cat, use_mode=False):
+        fp_pairs = self._factor_param_pairs(x_cat)
+        d = {qk.name: qk.discrete_sample(params, use_mode) for qk, params in fp_pairs}
+        return BaseTileCatalog(d)
 
     def compute_nll(self, x_cat, true_tile_cat):
         fp_pairs = self._factor_param_pairs(x_cat)
@@ -111,6 +116,14 @@ class VariationalFactor:
     def sample(self, params, use_mode=False):
         qk = self._get_dist(params)
         sample_cat = qk.mode if use_mode else qk.sample()
+        if self.sample_rearrange is not None:
+            sample_cat = rearrange(sample_cat, self.sample_rearrange)
+            assert sample_cat.isfinite().all(), f"sample_cat has invalid values: {sample_cat}"
+        return sample_cat
+
+    def discrete_sample(self, params, use_mode=False):
+        qk = self._get_dist(params)
+        sample_cat = qk.get_lowest_risk_bin()
         if self.sample_rearrange is not None:
             sample_cat = rearrange(sample_cat, self.sample_rearrange)
             assert sample_cat.isfinite().all(), f"sample_cat has invalid values: {sample_cat}"
@@ -257,10 +270,15 @@ class Discretized1D(Distribution):
         """
         Compute the catastrophic risk for a predicted redshift (z_pred).
         """
-        risk = 0.0
-        for i, z_i in enumerate(bin_centers):
-            if abs(z_pred - z_i) > 1:
-                risk += bin_probs[i]
+        risk = torch.zeros_like(bin_probs[..., 0])
+        for i in range(self.num_bins):
+            z_i = bin_centers[i]
+
+            catastrophic_mask = torch.abs(z_pred - z_i) > 1
+
+            if catastrophic_mask:
+                risk += bin_probs[..., i]
+
         return risk
 
     def get_lowest_risk_bin(self):
@@ -272,18 +290,18 @@ class Discretized1D(Distribution):
         )
         bin_probs = self.base_dist.probs
 
-        min_risk = float("inf")
-        best_bin = None
+        min_risk = torch.full(bin_probs.shape[:-1], float('inf'), device=self.base_dist.logits.device)  # Shape [N, H, W]
+        best_bin = torch.zeros_like(min_risk)  # Shape [N, H, W]
 
         # Grid search
         for z_pred in bin_centers:
             risk = self.compute_catastrophic_risk(z_pred, bin_centers, bin_probs)
 
-            if risk < min_risk:
-                min_risk = risk
-                best_bin = z_pred
+            update_mask = risk < min_risk
+            min_risk = torch.where(update_mask, risk, min_risk)
+            best_bin = torch.where(update_mask, z_pred, best_bin)
 
-        return best_bin.item()
+        return best_bin
 
     def log_prob(self, value):
         locs = ((value - self.low) / (self.high - self.low)).clamp(0, 1 - 1e-7)

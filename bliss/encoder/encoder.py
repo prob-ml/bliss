@@ -31,6 +31,7 @@ class Encoder(pl.LightningModule):
         matcher: CatalogMatcher,
         sample_image_renders: MetricCollection,
         mode_metrics: MetricCollection,
+        discrete_metrics: MetricCollection,
         sample_metrics: Optional[MetricCollection] = None,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
@@ -63,6 +64,7 @@ class Encoder(pl.LightningModule):
         self.var_dist = var_dist
         self.mode_metrics = mode_metrics
         self.sample_metrics = sample_metrics
+        self.discrete_metrics = discrete_metrics
         self.sample_image_renders = sample_image_renders
         self.matcher = matcher
         self.optimizer_params = optimizer_params

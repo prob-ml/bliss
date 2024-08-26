@@ -13,12 +13,19 @@ paths:
     root: /home/qiaozhih/bliss
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.NormalFactor
+#   - _target_: bliss.encoder.variational_dist.NormalFactor
+#     name: redshifts
+#     sample_rearrange: "b ht wt -> b ht wt 1 1"
+#     nll_rearrange: "b ht wt 1 1 -> b ht wt"
+#     nll_gating: is_galaxy
+  - _target_: bliss.encoder.variational_dist.DiscretizedFactor1D
     name: redshifts
     sample_rearrange: "b ht wt -> b ht wt 1 1"
     nll_rearrange: "b ht wt 1 1 -> b ht wt"
     nll_gating: is_galaxy
-
+    low: 0
+    high: 3
+    n_params: 30  # num of bins
 encoder:
     _target_: case_studies.redshift.redshift_from_img.encoder.encoder.RedshiftsEncoder
     # _target_: bliss.encoder.encoder.Encoder
@@ -114,8 +121,8 @@ train:
         val_check_interval: 0.5
         # check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
-        devices: [4]
-        max_epochs: 50
+        devices: [1,2, 3,4]
+        max_epochs: 100
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
@@ -136,6 +143,6 @@ train:
 surveys:
     dc2:
         dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl
-        cached_data_path: /data/scratch/dc2local/dc2_cached_data
+        cached_data_path: /data/scratch/dc2local/dc2_cached_data_withobj_final
         batch_size: 64
         max_sources_per_tile: 5
