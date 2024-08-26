@@ -6,7 +6,14 @@ import pandas as pd
 import torch
 
 from bliss.catalog import BaseTileCatalog
-from bliss.surveys.dc2 import DC2DataModule, DC2FullCatalog, wcs_from_wcs_header_str
+from bliss.surveys.dc2 import (
+    DC2DataModule,
+    DC2FullCatalog,
+    map_nested_dicts,
+    unpack_dict,
+    wcs_from_wcs_header_str,
+)
+from case_studies.weak_lensing.utils.weighted_avg_ellip import compute_weighted_avg_ellip
 
 
 class LensingDC2DataModule(DC2DataModule):
@@ -15,8 +22,11 @@ class LensingDC2DataModule(DC2DataModule):
         dc2_image_dir: str,
         dc2_cat_path: str,
         image_slen: int,  # assume square images: image_slen x image_slen
+        n_image_split: int,
         tile_slen: int,
         splits: str,
+        avg_ellip_kernel_size: int,
+        avg_ellip_kernel_sigma: int,
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
@@ -27,7 +37,7 @@ class LensingDC2DataModule(DC2DataModule):
             dc2_image_dir=dc2_image_dir,
             dc2_cat_path=dc2_cat_path,
             image_lim=[image_slen, image_slen],
-            n_image_split=1,
+            n_image_split=n_image_split,
             tile_slen=tile_slen,
             max_sources_per_tile=tile_slen
             ** 2,  # max of one source per pixel, TODO: calc max sources per tile
@@ -47,6 +57,8 @@ class LensingDC2DataModule(DC2DataModule):
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
         self.mag_max_cut = mag_max_cut
+        self.avg_ellip_kernel_size = avg_ellip_kernel_size
+        self.avg_ellip_kernel_sigma = avg_ellip_kernel_sigma
 
     # override prepare_data
     def prepare_data(self):
@@ -63,22 +75,8 @@ class LensingDC2DataModule(DC2DataModule):
 
         n_image = self._load_image_and_bg_files_list()
 
-        generate_data_input = {
-            "tile_slen": self.tile_slen,
-            "bands": self.bands,
-            "n_bands": self.n_bands,
-            "dc2_cat_path": self.dc2_cat_path,
-            "cached_data_path": self.cached_data_path,
-            "mag_max_cut": self.mag_max_cut,
-        }
-
-        generate_data_wrapper = lambda image_index: self.generate_cached_data(
-            image_index,
-            **generate_data_input,
-        )
-
         for i in range(n_image):
-            generate_data_wrapper(i)
+            self.generate_cached_data(i)
 
     def to_tile_catalog(self, full_catalog, height, width):
         plocs = full_catalog["plocs"].reshape(1, -1, 2)
@@ -115,7 +113,8 @@ class LensingDC2DataModule(DC2DataModule):
             tile_cat[k + "_count"] = v_count.reshape(self.batch_size, n_tiles_w, n_tiles_h, 1)
         return BaseTileCatalog(tile_cat)
 
-    def load_image_and_catalog(self, image_index, **kwargs):
+    # override load_image_and_catalog
+    def load_image_and_catalog(self, image_index):
         image, wcs_header_str = self.read_image_for_bands(image_index)
         wcs = wcs_from_wcs_header_str(wcs_header_str)
 
@@ -123,13 +122,13 @@ class LensingDC2DataModule(DC2DataModule):
         height = plocs_lim[0]
         width = plocs_lim[1]
         full_cat, psf_params = LensingDC2Catalog.from_file(
-            kwargs["dc2_cat_path"],
+            self.dc2_cat_path,
             wcs,
             height,
             width,
-            mag_max_cut=kwargs["mag_max_cut"],
-            bands=kwargs["bands"],
-            n_bands=kwargs["n_bands"],
+            mag_max_cut=self.mag_max_cut,
+            bands=self.bands,
+            n_bands=self.n_bands,
         )
 
         tile_cat = self.to_tile_catalog(full_cat, height, width)
@@ -148,42 +147,43 @@ class LensingDC2DataModule(DC2DataModule):
             },
         }
 
-    def generate_cached_data(self, image_index, **kwargs):
-        result_dict = self.load_image_and_catalog(image_index, **kwargs)
+    # override generate_cached_data
+    def generate_cached_data(self, image_index):
+        result_dict = self.load_image_and_catalog(image_index)
 
         image = result_dict["inputs"]["image"]
         tile_dict = result_dict["tile_dict"]
-        wcs_header_str = result_dict["other_info"]["wcs_header_str"]
         psf_params = result_dict["inputs"]["psf_params"]
 
-        shear1 = (tile_dict["shear1_sum"] / tile_dict["shear1_count"]) * 100
-        shear2 = (tile_dict["shear2_sum"] / tile_dict["shear2_count"]) * 100
+        shear1 = tile_dict["shear1_sum"] / tile_dict["shear1_count"]
+        shear2 = tile_dict["shear2_sum"] / tile_dict["shear2_count"]
         shear = torch.stack((shear1.squeeze(-1), shear2.squeeze(-1)), dim=-1)
-        convergence = (tile_dict["convergence_sum"] / tile_dict["convergence_count"]) * 100
-        ellip1_lensed = (tile_dict["ellip1_lensed_sum"] / tile_dict["ellip1_lensed_count"]) * 100
-        ellip2_lensed = (tile_dict["ellip2_lensed_sum"] / tile_dict["ellip2_lensed_count"]) * 100
+        convergence = tile_dict["convergence_sum"] / tile_dict["convergence_count"]
+        ellip1_lensed = tile_dict["ellip1_lensed_sum"] / tile_dict["ellip1_lensed_count"]
+        ellip2_lensed = tile_dict["ellip2_lensed_sum"] / tile_dict["ellip2_lensed_count"]
         ellip_lensed = torch.stack((ellip1_lensed.squeeze(-1), ellip2_lensed.squeeze(-1)), dim=-1)
         redshift = tile_dict["redshift_sum"] / tile_dict["redshift_count"]
 
         tile_dict["shear"] = shear
         tile_dict["convergence"] = convergence
         tile_dict["ellip_lensed"] = ellip_lensed
+        tile_dict["ellip_lensed_wavg"] = compute_weighted_avg_ellip(
+            tile_dict, self.avg_ellip_kernel_size, self.avg_ellip_kernel_sigma
+        )
         tile_dict["redshift"] = redshift
-        tile_dict["tile_size"] = torch.ones_like(convergence) * self.tile_slen
 
-        data_to_cache = {
-            "tile_catalog": tile_dict,
-            "images": image,
-            "psf_params": psf_params,
-            "wcs_header_str": wcs_header_str,
-        }
+        data_splits = self.split_image_and_tile_cat(image, tile_dict, tile_dict.keys(), psf_params)
 
-        # Create file name for cached data
-        cached_data_file_name = f"cached_data_{image_index:04d}.pt"
+        data_to_cache = unpack_dict(data_splits)
 
-        # Save all data to a single file (no splits)
-        with open(kwargs["cached_data_path"] / cached_data_file_name, "wb") as cached_data_file:
-            torch.save(data_to_cache, cached_data_file)
+        for i in range(self.n_image_split**2):  # noqa: WPS426
+            cached_data_file_name = f"cached_data_{image_index:04d}_{i:04d}.pt"
+            tmp = data_to_cache[i]
+            tmp_clone = map_nested_dicts(
+                tmp, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
+            )
+            with open(self.cached_data_path / cached_data_file_name, "wb") as cached_data_file:
+                torch.save(tmp_clone, cached_data_file)
 
 
 class LensingDC2Catalog(DC2FullCatalog):
