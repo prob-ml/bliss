@@ -4,7 +4,6 @@ import sys
 
 import pandas as pd
 import torch
-from einops import rearrange
 
 from bliss.catalog import BaseTileCatalog
 from bliss.surveys.dc2 import (
@@ -15,6 +14,7 @@ from bliss.surveys.dc2 import (
     unpack_dict,
     wcs_from_wcs_header_str,
 )
+from case_studies.weak_lensing.utils.weighted_avg_ellip import compute_weighted_avg_ellip
 
 
 class LensingDC2DataModule(DC2DataModule):
@@ -58,19 +58,8 @@ class LensingDC2DataModule(DC2DataModule):
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
         self.mag_max_cut = mag_max_cut
-
         self.avg_ellip_kernel_size = avg_ellip_kernel_size
         self.avg_ellip_kernel_sigma = avg_ellip_kernel_sigma
-
-        # construct gaussian kernel (https://github.com/cubiq/ComfyUI_essentials/issues/41)
-        x = torch.arange(-self.avg_ellip_kernel_size // 2 + 1, self.avg_ellip_kernel_size // 2 + 1)
-        x = torch.exp(-(x**2) / (2 * self.avg_ellip_kernel_sigma**2))
-        kernel1d = x / x.sum()
-        self.avg_ellip_kernel = rearrange(
-            kernel1d.unsqueeze(-1) * kernel1d.unsqueeze(0),
-            "h w -> 1 1 h w",
-        )
-        self.avg_ellip_kernel_padding = self.avg_ellip_kernel_size // 2
 
     # override prepare_data
     def prepare_data(self):
@@ -171,40 +160,17 @@ class LensingDC2DataModule(DC2DataModule):
         shear2 = tile_dict["shear2_sum"] / tile_dict["shear2_count"]
         shear = torch.stack((shear1.squeeze(-1), shear2.squeeze(-1)), dim=-1)
         convergence = tile_dict["convergence_sum"] / tile_dict["convergence_count"]
-        e1_lensed_sum = rearrange(tile_dict["ellip1_lensed_sum"], "nth ntw 1 -> 1 1 nth ntw")
-        e1_lensed_count = rearrange(tile_dict["ellip1_lensed_count"], "nth ntw 1 -> 1 1 nth ntw")
-        e2_lensed_sum = rearrange(tile_dict["ellip2_lensed_sum"], "nth ntw 1 -> 1 1 nth ntw")
-        e2_lensed_count = rearrange(tile_dict["ellip2_lensed_count"], "nth ntw 1 -> 1 1 nth ntw")
-        ellip1_lensed = (
-            (
-                torch.nn.functional.conv2d(
-                    e1_lensed_sum, self.avg_ellip_kernel, padding=self.avg_ellip_kernel_padding
-                )
-            )
-            / (
-                torch.nn.functional.conv2d(
-                    e1_lensed_count, self.avg_ellip_kernel, padding=self.avg_ellip_kernel_padding
-                )
-            )
-        ).squeeze([0, 1])
-        ellip2_lensed = (
-            (
-                torch.nn.functional.conv2d(
-                    e2_lensed_sum, self.avg_ellip_kernel, padding=self.avg_ellip_kernel_padding
-                )
-            )
-            / (
-                torch.nn.functional.conv2d(
-                    e2_lensed_count, self.avg_ellip_kernel, padding=self.avg_ellip_kernel_padding
-                )
-            )
-        ).squeeze([0, 1])
-        ellip_lensed = torch.stack((ellip1_lensed, ellip2_lensed), dim=-1)
+        ellip1_lensed = tile_dict["ellip1_lensed_sum"] / tile_dict["ellip1_lensed_count"]
+        ellip2_lensed = tile_dict["ellip2_lensed_sum"] / tile_dict["ellip2_lensed_count"]
+        ellip_lensed = torch.stack((ellip1_lensed.squeeze(-1), ellip2_lensed.squeeze(-1)), dim=-1)
         redshift = tile_dict["redshift_sum"] / tile_dict["redshift_count"]
 
         tile_dict["shear"] = shear
         tile_dict["convergence"] = convergence
         tile_dict["ellip_lensed"] = ellip_lensed
+        tile_dict["ellip_lensed_wavg"] = compute_weighted_avg_ellip(
+            tile_dict, self.avg_ellip_kernel_size, self.avg_ellip_kernel_sigma
+        )
         tile_dict["redshift"] = redshift
 
         # split image
