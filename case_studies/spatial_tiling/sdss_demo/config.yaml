@@ -7,6 +7,22 @@ defaults:
 paths:
     cached_data: /data/scratch/regier/sdss_like
 
+prior:
+    _target_: bliss.simulator.prior.CatalogPrior
+    survey_bands: [u, g, r, i, z]  # SDSS available band filters
+    reference_band: 2  # SDSS r-band
+    star_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
+    n_tiles_h: 256
+    n_tiles_w: 256
+    batch_size: 4
+    max_sources: 1
+    mean_sources: 0.000625
+
+decoder:
+    _target_: bliss.simulator.decoder.Decoder
+    tile_slen: 2
+
 variational_factors:
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
       name: n_sources

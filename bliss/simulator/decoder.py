@@ -173,19 +173,29 @@ class Decoder(nn.Module):
                 source_params = full_cat.one_source(0, s)
                 source_type = source_params["source_type"].item()
                 renderer = self.source_renderers[source_type]
-                galsim_obj = renderer(frame["psf_galsim"], band, source_params)
+                gs_obj = renderer(frame["psf_galsim"], band, source_params)
                 plocs0, plocs1 = source_params["plocs"]
-                offset = np.array([plocs1 - (slen_w / 2), plocs0 - (slen_h / 2)])
+                plocs10 = np.array([plocs1, plocs0])
                 if self.with_dither:
-                    offset += pixel_shifts[band]
+                    plocs10 += pixel_shifts[band]
 
-                # essentially all the runtime of the simulator is incurred by this call
-                # to drawImage
-                galsim_obj.drawImage(
-                    offset=offset,
+                int_pixel_shift = np.floor(plocs10)
+                good_size = gs_obj.getGoodImageSize(self.survey.psf.pixel_scale)
+                origin = int_pixel_shift - (good_size // 2) + 1
+                top_right = origin + good_size
+
+                bounds = galsim.BoundsI(origin[0], top_right[0], origin[1], top_right[1])
+                bounds = bounds & band_img.bounds
+
+                offset = plocs10 - np.array([slen_w / 2, slen_h / 2])
+                offset2 = galsim.PositionD(offset)
+                offset2 += band_img.true_center - bounds.true_center
+
+                _stamp = gs_obj.drawImage(
+                    offset=offset2,
                     method=getattr(self.survey.psf, "psf_draw_method", "auto"),
                     add_to_image=True,
-                    image=band_img,
+                    image=band_img[bounds],
                 )
 
             if self.with_noise:

@@ -32,6 +32,8 @@ COL_NAMES = (
     "G2",
     "Z",
     "SOURCE_TYPE",
+    "GI_COLOR",
+    "IZ_COLOR",
 )
 
 # ============================== Generate Catalogs ==============================
@@ -49,6 +51,10 @@ def catalog_gen(cfg):
     background_prior = BackgroundPrior(image_size=image_size)
 
     for i in range(nfiles):
+        file_name = f"{catalogs_path}/{file_prefix}_{i:03}.dat"
+        if os.path.exists(file_name) and not cfg.overwrite:
+            print(f"File {file_name} already exists, moving on ...")
+            continue
         background_catalog = background_prior.sample_background()
         if np.random.uniform() < 0.5:
             cluster_catalog = cluster_prior.sample_cluster()
@@ -56,7 +62,11 @@ def catalog_gen(cfg):
         else:
             catalog = background_catalog
         print(f"Writing catalog {i} ...")
-        file_name = f"{catalogs_path}/{file_prefix}_{i:03}.dat"
+        source_spread_x = (catalog["X"].max(), catalog["X"].min())
+        source_spread_y = (catalog["Y"].max(), catalog["Y"].min())
+        print(f"Cluster spread (X): {source_spread_x}")
+        print(f"Cluster spread (Y): {source_spread_y}")
+        print("\n")
         catalog_table = Table.from_pandas(catalog)
         astro_ascii.write(catalog_table, file_name, format="no_header", overwrite=True)
 
@@ -168,8 +178,8 @@ def file_data_gen(cfg):
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg):
     catalog_gen(cfg.data_gen)
-    image_gen(cfg.data_gen)
-    file_data_gen(cfg.data_gen)
+    # image_gen(cfg.data_gen)
+    # file_data_gen(cfg.data_gen)
 
 
 if __name__ == "__main__":
