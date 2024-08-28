@@ -113,11 +113,11 @@ encoder:
         mag_band: 2  # SDSS r-band
     mode_metrics:
         _target_: torchmetrics.MetricCollection
-        _convert_: "partial"
+        _convert_: partial
         metrics: ${my_metrics}
     sample_metrics:
         _target_: torchmetrics.MetricCollection
-        _convert_: "partial"
+        _convert_: partial
         metrics: ${my_metrics}
 
 cached_simulator:

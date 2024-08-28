@@ -8,7 +8,6 @@ import torch
 from astropy.wcs import WCS
 from einops import rearrange, reduce, repeat
 from torch import Tensor
-from torch.nn.utils.rnn import pad_sequence
 
 
 # old function, to be deleted
@@ -520,15 +519,28 @@ class FullCatalog(UserDict):
         d_new["n_sources"] = keep.sum(dim=(-2, -1)).long()
         return type(self)(self.height, self.width, d_new)
 
-    def _get_tile_to_source_mapping(self, mapping_matrix: Tensor) -> Tensor:
-        return mapping_matrix.nonzero()
+    @classmethod
+    def _pad_along_max_sources(cls, v: torch.Tensor, target_m: int):
+        """Pad (b, nth, ntw, m, k) to be (b, nth, ntw, target_m, k)."""
+        m = v.shape[-2]
+        pad_len = target_m - m
 
+        if pad_len <= 0:
+            return v
+
+        pad = torch.zeros_like(v[..., 0:1, :]).repeat(1, 1, 1, pad_len, 1)
+        return torch.cat((v, pad), dim=-2)
+
+    # pylint: disable=R0912,R0915
     def to_tile_catalog(
         self,
         tile_slen: int,
         max_sources_per_tile: int,
+        *,
         ignore_extra_sources=False,
         filter_oob=False,
+        stable=True,
+        inter_int_type=torch.int32,
     ) -> TileCatalog:
         """Returns the TileCatalog corresponding to this FullCatalog.
 
@@ -538,18 +550,27 @@ class FullCatalog(UserDict):
             ignore_extra_sources: If False (default), raises an error if the number of sources
                 in one tile exceeds the `max_sources_per_tile`. If True, only adds the tile
                 parameters of the first `max_sources_per_tile` sources to the new TileCatalog.
-            filter_oob: If filter_oob is true, filter out the sources outside the image. (e.g. In
-                case of data augmentation, there is a chance of some sources located outside the
-                image)
+            filter_oob: If filter_oob is True (default is False),
+                filter out the sources outside the image.
+                (e.g. In case of data augmentation, there is a chance of some sources located
+                outside the image)
+            stable: It stable is True (default), on tiles with more than one sources,
+                the sources will be arranged in a stable order.
+                Some speedup can be gained if you disable this tag.
+            inter_int_type: The dtype for the tensors counting the sources per tile.
+                Default is torch.int32, and you can change it to torch.int8 to get speedup.
+                But the overflow may happen without any warning.
 
         Returns:
             TileCatalog correspond to the each source in the FullCatalog.
 
         Raises:
-            ValueError: If the number of sources in one tile exceeds `max_sources_per_tile` and
-                `ignore_extra_sources` is False.
+            ValueError: If the number of sources in one tile exceeds `max_sources_per_tile`
+                and `ignore_extra_sources` is False.
             KeyError: If the tile_params contain `plocs` or `n_sources`.
         """
+        assert max_sources_per_tile <= torch.iinfo(inter_int_type).max
+
         # TODO: a FullCatalog only needs to "know" its height and width to convert itself to a
         # TileCatalog. So those parameters should be passed on conversion, not initialization.
 
@@ -578,7 +599,6 @@ class FullCatalog(UserDict):
 
         # prepare tensors for output #
         tile_cat_shape = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile)
-        tile_locs = torch.zeros((*tile_cat_shape, 2), device=self.device)
         tile_n_sources = torch.zeros(tile_cat_shape[:3], dtype=torch.int64, device=self.device)
         tile_params: Dict[str, Tensor] = {}
         for k, v in self.items():

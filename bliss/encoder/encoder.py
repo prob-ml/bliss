@@ -132,7 +132,7 @@ class Encoder(pl.LightningModule):
 
     def make_local_context(self, history_cat):
         centered_locs = history_cat["locs"][..., 0, :] - 0.5
-        log_fluxes = (history_cat.on_nmgy.squeeze(3).sum(-1) + 1).log()
+        log_fluxes = (history_cat.on_fluxes.squeeze(3).sum(-1) + 1).log()
         history_encoding_lst = [
             history_cat["n_sources"].float(),  # detection history
             log_fluxes * history_cat["n_sources"],  # flux history
@@ -167,8 +167,8 @@ class Encoder(pl.LightningModule):
                 band=self.reference_band, exclude_num=1
             )
 
-            fluxes1 = history_cat1.on_nmgy.squeeze(3).sum(-1)
-            fluxes2 = history_cat2.on_nmgy.squeeze(3).sum(-1)
+            fluxes1 = history_cat1.on_fluxes.squeeze(3).sum(-1)
+            fluxes2 = history_cat2.on_fluxes.squeeze(3).sum(-1)
             log_fluxes = (fluxes1 + fluxes2 + 1).log()
 
             history_encoding_lst = [
