@@ -1,3 +1,5 @@
+import logging
+from multiprocessing import current_process, get_context
 from pathlib import Path
 
 import hydra
@@ -5,7 +7,6 @@ import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
-from tqdm import tqdm
 
 from bliss.catalog import TileCatalog
 from bliss.global_env import GlobalEnv
@@ -14,50 +15,55 @@ from bliss.global_env import GlobalEnv
 
 
 def generate(gen_cfg: DictConfig):
-    # it's more efficient to launch multiple independent processes than to use workers
-    simulated_dataset = instantiate(gen_cfg.simulator, num_workers=0)
-
     # create cached_data_path if it doesn't exist
     cached_data_path = Path(gen_cfg.cached_data_path)
     if not cached_data_path.exists():
         cached_data_path.mkdir(parents=True)
-    print("Data will be saved to {}".format(cached_data_path))  # noqa: WPS421
+    logger = logging.getLogger(__name__)
+    logger.info(f"Data will be saved to {cached_data_path}")
 
     # log the Hydra config used to generate data to cached_data_path
     with open(cached_data_path / "hparams.yaml", "w", encoding="utf-8") as f:
         OmegaConf.resolve(gen_cfg)
         OmegaConf.save(gen_cfg, f)
 
-    # n_image_files is technically "n_image_files for this process"
-    process_index = gen_cfg.get("process_index", 0)
-    files_start_idx = process_index * gen_cfg.n_image_files
+    ctx = get_context("fork")
+    args = ((gen_cfg, i) for i in range(gen_cfg.n_image_files))
+    with ctx.Pool(processes=gen_cfg.n_processes) as pool:
+        pool.starmap(generate_one_file, args)
 
-    # overwrites any existing cached image files
-    file_idxs = range(files_start_idx, files_start_idx + gen_cfg.n_image_files)
-    for file_idx in tqdm(file_idxs, desc="Generating and writing dataset files"):
-        file_data = []
 
-        for _ in tqdm(range(gen_cfg.n_batches_per_file), desc="Generating one dataset file"):
-            batch = simulated_dataset.get_batch()
+def generate_one_file(gen_cfg: DictConfig, file_idx: int):
+    # it's more efficient to launch multiple independent processes than to use workers
+    simulated_dataset = instantiate(gen_cfg.simulator, num_workers=0)
 
-            if gen_cfg.store_full_catalog:
-                tile_cat = TileCatalog(batch["tile_catalog"])
-                full_cat = tile_cat.to_full_catalog(gen_cfg.simulator.decoder.tile_slen)
+    file_data = []
+    filename = f"dataset_{file_idx}_size_{len(file_data)}.pt"
 
-            # flatten batches
-            for i in range(gen_cfg.simulator.prior.batch_size):
-                file_datum = {k: v[i] for k, v in batch.items() if k != "tile_catalog"}
+    logger = logging.getLogger(__name__)
 
-                if not gen_cfg.store_full_catalog:
-                    file_datum["tile_catalog"] = {k: v[i] for k, v in batch["tile_catalog"].items()}
-                else:
-                    file_datum["full_catalog"] = {k: v[i] for k, v in full_cat.items()}
+    for b in range(gen_cfg.n_batches_per_file):
+        logger.info(f"{current_process().name}: Generating batch {b} of {filename}")
 
-                file_data.append(file_datum)
+        batch = simulated_dataset.get_batch()
 
-        filename = f"{gen_cfg.file_prefix}_{file_idx}_size_{len(file_data)}.pt"
-        with open(cached_data_path / filename, "wb") as f:
-            torch.save(file_data, f)
+        if gen_cfg.store_full_catalog:
+            tile_cat = TileCatalog(batch["tile_catalog"])
+            full_cat = tile_cat.to_full_catalog(gen_cfg.simulator.decoder.tile_slen)
+
+        # flatten batches
+        for i in range(gen_cfg.simulator.prior.batch_size):
+            file_datum = {k: v[i] for k, v in batch.items() if k != "tile_catalog"}
+
+            if not gen_cfg.store_full_catalog:
+                file_datum["tile_catalog"] = {k: v[i] for k, v in batch["tile_catalog"].items()}
+            else:
+                file_datum["full_catalog"] = {k: v[i] for k, v in full_cat.items()}
+
+            file_data.append(file_datum)
+
+    with open(Path(gen_cfg.cached_data_path) / filename, "wb") as f:
+        torch.save(file_data, f)
 
 
 # ============================== Training mode ==============================

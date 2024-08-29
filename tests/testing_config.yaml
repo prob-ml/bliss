@@ -91,6 +91,7 @@ encoder:
 generate:
     n_image_files: 3
     n_batches_per_file: 1
+    n_processes: 1
     cached_data_path: null  # use pytest tmpdir
 
 train:

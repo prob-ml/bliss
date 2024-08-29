@@ -219,7 +219,7 @@ encoder:
         milestones: [32]
         gamma: 0.1
     image_normalizers: null  # TODO: override in other configs
-    var_dist: null  # TODO: override in other configs 
+    var_dist: null  # TODO: override in other configs
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -251,7 +251,6 @@ generate:
     n_batches_per_file: 16
     simulator: ${simulator}
     cached_data_path: ${paths.cached_data}
-    file_prefix: dataset
     store_full_catalog: false
 
 train:

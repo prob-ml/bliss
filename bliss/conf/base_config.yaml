@@ -278,11 +278,11 @@ surveys:
 mode: train
 
 generate:
-    n_image_files: 64
-    n_batches_per_file: 16
+    n_image_files: 1024
+    n_batches_per_file: 16  # multiply by simulator.batch_size to get total number of images
+    n_processes: 16  # using more isn't necessarily faster
     simulator: ${simulator}
     cached_data_path: ${paths.cached_data}
-    file_prefix: dataset
     store_full_catalog: false
 
 train:
