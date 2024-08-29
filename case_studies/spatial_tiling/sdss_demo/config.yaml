@@ -5,14 +5,14 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    cached_data: /data/scratch/regier/sdss_like
+    cached_data: /data/scratch/regier/sdsslike_aug29
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
     survey_bands: [u, g, r, i, z]  # SDSS available band filters
     reference_band: 2  # SDSS r-band
-    star_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
-    gal_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
+    star_color_model_path: ${paths.sdss.dir_path}/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: ${paths.sdss.dir_path}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 256
     n_tiles_w: 256
     batch_size: 4

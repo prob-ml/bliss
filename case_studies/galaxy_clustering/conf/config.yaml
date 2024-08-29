@@ -18,8 +18,8 @@ prior:
     _target_: case_studies.galaxy_clustering.prior.GalaxyClusterPrior
     survey_bands: ["g", "r", "i", "z"]  # SDSS available band filters
     reference_band: 1  # SDSS r-band
-    star_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
-    gal_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
+    star_color_model_path: ${decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: ${decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 56
     n_tiles_w: 56
     tile_slen: 256

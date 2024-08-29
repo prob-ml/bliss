@@ -165,10 +165,10 @@ class TestBasicTileAndFullCatalogs:
 
         # we'll do a "round trip" test: convert the catalog to a full catalog and back
         true_tile_cat0 = TileCatalog(test_datum["catalog"])
-        true_full_cat = true_tile_cat0.to_full_catalog(cfg.simulator.decoder.tile_slen)
+        true_full_cat = true_tile_cat0.to_full_catalog(cfg.decoder.tile_slen)
         true_tile_cat = true_full_cat.to_tile_catalog(
-            tile_slen=cfg.simulator.decoder.tile_slen,
-            max_sources_per_tile=cfg.simulator.prior.max_sources,
+            tile_slen=cfg.decoder.tile_slen,
+            max_sources_per_tile=cfg.prior.max_sources,
             ignore_extra_sources=True,
         )
 

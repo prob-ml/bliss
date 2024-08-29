@@ -22,8 +22,8 @@ prior:
     _target_: bliss.simulator.prior.CatalogPrior
     survey_bands: [u, g, r, i, z]  # SDSS available band filters
     reference_band: 2  # SDSS r-band
-    star_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
-    gal_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
+    star_color_model_path: ${decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: ${decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 20
     n_tiles_w: 20
     batch_size: 64
@@ -50,15 +50,6 @@ decoder:
     survey: ${surveys.sdss}
     with_dither: true
     with_noise: true
-
-simulator:
-    _target_: bliss.simulator.simulated_dataset.SimulatedDataset
-    prior: ${prior}
-    decoder: ${decoder}
-    n_batches: 128
-    num_workers: 32
-    valid_n_batches: 10  # 256
-    fix_validation_set: true
 
 cached_simulator:
     _target_: bliss.cached_dataset.CachedSimulatedDataModule
@@ -173,7 +164,7 @@ encoder:
     _target_: bliss.encoder.encoder.Encoder
     survey_bands: [u, g, r, i, z]
     reference_band: 2  # SDSS r-band
-    tile_slen: ${simulator.decoder.tile_slen}
+    tile_slen: ${decoder.tile_slen}
     optimizer_params:
         lr: 1e-3
     scheduler_params:
@@ -201,7 +192,7 @@ encoder:
               frequency: 1
               restrict_batch: 0
               tiles_to_crop: 0
-              tile_slen: ${simulator.decoder.tile_slen}
+              tile_slen: ${decoder.tile_slen}
     use_double_detect: false
     use_checkerboard: false
     n_sampler_colors: 4
@@ -278,10 +269,11 @@ surveys:
 mode: train
 
 generate:
+    prior: ${prior}
+    decoder: ${decoder}
     n_image_files: 1024
-    n_batches_per_file: 16  # multiply by simulator.batch_size to get total number of images
+    n_batches_per_file: 16  # multiply by prior.batch_size to get total number of images
     n_processes: 16  # using more isn't necessarily faster
-    simulator: ${simulator}
     cached_data_path: ${paths.cached_data}
     store_full_catalog: false
 

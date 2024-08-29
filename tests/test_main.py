@@ -39,7 +39,7 @@ class TestGenerate:
             assert isinstance(
                 cached_dataset[0]["images"], torch.Tensor
             ), "cached_dataset[0]['images'] must be a torch.Tensor"
-            correct_len = cfg.generate.n_batches_per_file * cfg.generate.simulator.prior.batch_size
+            correct_len = cfg.generate.n_batches_per_file * cfg.generate.prior.batch_size
             assert len(cached_dataset) == correct_len, (
                 f"cached_dataset has length {len(cached_dataset)}, "
                 f"but must be list of length {correct_len}"
@@ -48,8 +48,8 @@ class TestGenerate:
                 len(cached_dataset[0]["images"]) == 5
             ), "cached_dataset[0]['images'] must be a 5-D tensor"
             assert cached_dataset[0]["images"][0].shape == (
-                cfg.simulator.prior.n_tiles_h * cfg.simulator.decoder.tile_slen,
-                cfg.simulator.prior.n_tiles_w * cfg.simulator.decoder.tile_slen,
+                cfg.prior.n_tiles_h * cfg.decoder.tile_slen,
+                cfg.prior.n_tiles_w * cfg.decoder.tile_slen,
             )
 
 
@@ -59,10 +59,10 @@ class TestTrain:
 
     def test_train_des(self, cfg):
         cfg = cfg.copy()
-        cfg.simulator.decoder.survey = "${surveys.des}"
-        cfg.simulator.decoder.with_dither = False
-        cfg.simulator.prior.reference_band = DES.BANDS.index("r")
-        cfg.simulator.prior.survey_bands = DES.BANDS
+        cfg.decoder.survey = "${surveys.des}"
+        cfg.decoder.with_dither = False
+        cfg.prior.reference_band = DES.BANDS.index("r")
+        cfg.prior.survey_bands = DES.BANDS
 
         for f in cfg.variational_factors:
             if f.name in {"star_fluxes", "galaxy_fluxes"}:

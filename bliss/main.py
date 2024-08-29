@@ -29,30 +29,36 @@ def generate(gen_cfg: DictConfig):
 
     ctx = get_context("fork")
     args = ((gen_cfg, i) for i in range(gen_cfg.n_image_files))
+    generate_one_file(gen_cfg, 0)  # generate one file to check for errors
     with ctx.Pool(processes=gen_cfg.n_processes) as pool:
         pool.starmap(generate_one_file, args)
 
 
 def generate_one_file(gen_cfg: DictConfig, file_idx: int):
-    # it's more efficient to launch multiple independent processes than to use workers
-    simulated_dataset = instantiate(gen_cfg.simulator, num_workers=0)
+    prior = instantiate(gen_cfg.prior)
+    decoder = instantiate(gen_cfg.decoder)
 
     file_data = []
-    filename = f"dataset_{file_idx}_size_{len(file_data)}.pt"
 
     logger = logging.getLogger(__name__)
 
     for b in range(gen_cfg.n_batches_per_file):
-        logger.info(f"{current_process().name}: Generating batch {b} of {filename}")
+        logger.info(f"{current_process().name}: Generating batch {b} of file {file_idx}")
 
-        batch = simulated_dataset.get_batch()
+        tile_catalog = prior.sample()
+        images, psf_params = decoder.render_images(tile_catalog)
+        batch = {
+            "tile_catalog": tile_catalog,
+            "images": images,
+            "psf_params": psf_params,
+        }
 
         if gen_cfg.store_full_catalog:
             tile_cat = TileCatalog(batch["tile_catalog"])
-            full_cat = tile_cat.to_full_catalog(gen_cfg.simulator.decoder.tile_slen)
+            full_cat = tile_cat.to_full_catalog(gen_cfg.decoder.tile_slen)
 
         # flatten batches
-        for i in range(gen_cfg.simulator.prior.batch_size):
+        for i in range(gen_cfg.prior.batch_size):
             file_datum = {k: v[i] for k, v in batch.items() if k != "tile_catalog"}
 
             if not gen_cfg.store_full_catalog:
@@ -62,6 +68,7 @@ def generate_one_file(gen_cfg: DictConfig, file_idx: int):
 
             file_data.append(file_datum)
 
+    filename = f"dataset_{file_idx}_size_{len(file_data)}.pt"
     with open(Path(gen_cfg.cached_data_path) / filename, "wb") as f:
         torch.save(file_data, f)
 
