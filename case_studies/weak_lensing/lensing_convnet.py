@@ -22,15 +22,13 @@ class WeakLensingFeaturesNet(nn.Module):
         module_list = []
 
         for _ in range(self.n_downsample):
-            module_list.append(
-                ConvBlock(nch_hidden, 2 * nch_hidden, kernel_size=5, stride=2, padding=2)
-            )
+            module_list.append(ConvBlock(nch_hidden, 2 * nch_hidden, kernel_size=5, stride=2))
             nch_hidden *= 2
 
         module_list.extend(
             [
-                ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
-                nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(1)]),
+                ConvBlock(nch_hidden, 64, kernel_size=5),
+                nn.Sequential(*[ConvBlock(64, 64, kernel_size=5) for _ in range(1)]),
                 ConvBlock(64, 128, stride=2),
                 nn.Sequential(*[ConvBlock(128, 128) for _ in range(1)]),
                 ConvBlock(128, num_features, stride=1),
@@ -56,11 +54,9 @@ class WeakLensingCatalogNet(nn.Module):
             ConvBlock(256, 512, stride=2),
             C3(512, 256, n=1, shortcut=True),  # true shortcut for skip connection
             ConvBlock(
-                in_channels=256, out_channels=256, kernel_size=3, stride=8, padding=1
+                in_channels=256, out_channels=256, kernel_size=3, stride=8
             ),  # (1, 256, 128, 128)
-            ConvBlock(
-                in_channels=256, out_channels=256, kernel_size=3, stride=4, padding=1
-            ),  # (1, 256, 8, 8)
+            ConvBlock(in_channels=256, out_channels=256, kernel_size=3, stride=4),  # (1, 256, 8, 8)
             Detect(256, out_channels),
         ]
         self.net = nn.ModuleList(net_layers)
