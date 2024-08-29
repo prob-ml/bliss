@@ -191,7 +191,7 @@ class Decoder(nn.Module):
                 offset2 = galsim.PositionD(offset)
                 offset2 += band_img.true_center - bounds.true_center
 
-                _stamp = gs_obj.drawImage(
+                gs_obj.drawImage(
                     offset=offset2,
                     method=getattr(self.survey.psf, "psf_draw_method", "auto"),
                     add_to_image=True,
