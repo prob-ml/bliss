@@ -29,7 +29,6 @@ def generate(gen_cfg: DictConfig):
 
     ctx = get_context("fork")
     args = ((gen_cfg, i) for i in range(gen_cfg.n_image_files))
-    generate_one_file(gen_cfg, 0)  # generate one file to check for errors
     with ctx.Pool(processes=gen_cfg.n_processes) as pool:
         pool.starmap(generate_one_file, args)
 
