@@ -5,7 +5,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    cached_data: /data/scratch/regier/m2_aug29
+    cached_data: /data/scratch/regier/m2_aug30
 
 variational_factors:
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
@@ -95,10 +95,11 @@ prior:
     mean_sources: 0.8029160898574715
     min_sources: 0
     prob_galaxy: 0.0
-    star_flux_exponent: 0.9859821185389767
-    star_flux_truncation: 5685.588160703261
-    star_flux_loc: -1.162430157551662
-    star_flux_scale: 1.4137911256506595
+    star_flux:
+        exponent: 0.9859821185389767
+        truncation: 5685.588160703261
+        loc: -1.162430157551662
+        scale: 1.4137911256506595
 
 decoder:
     tile_slen: 2

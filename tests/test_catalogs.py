@@ -161,10 +161,10 @@ class TestBasicTileAndFullCatalogs:
 
     def test_tile_full_round_trip(self, cfg):
         with open(Path(cfg.paths.test_data) / "sdss_preds.pt", "rb") as f:
-            test_datum = torch.load(f)
+            test_cat = torch.load(f)
 
         # we'll do a "round trip" test: convert the catalog to a full catalog and back
-        true_tile_cat0 = TileCatalog(test_datum["catalog"])
+        true_tile_cat0 = TileCatalog(test_cat)
         true_full_cat = true_tile_cat0.to_full_catalog(cfg.decoder.tile_slen)
         true_tile_cat = true_full_cat.to_tile_catalog(
             tile_slen=cfg.decoder.tile_slen,

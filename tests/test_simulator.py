@@ -66,9 +66,9 @@ class TestSimulate:
 
     def test_render_images(self, cfg, decoder):
         with open(Path(cfg.paths.test_data) / "sdss_preds.pt", "rb") as f:
-            test_datum = torch.load(f)
+            test_cat = torch.load(f)
 
-        true_tile_cat = TileCatalog(test_datum["catalog"]).to("cpu")
+        true_tile_cat = TileCatalog(test_cat).to("cpu")
 
         # first we'll render the image from the catalog
         # these are sky subtracted images in physical units (nanomaggies)

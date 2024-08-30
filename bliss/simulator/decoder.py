@@ -62,28 +62,23 @@ class Decoder(nn.Module):
         Returns:
             GSObject: a galsim representation of the rendered galaxy convolved with the PSF
         """
-        galaxy_fluxes = source_params["galaxy_fluxes"]
-        galaxy_params = source_params["galaxy_params"]
-
-        total_flux = galaxy_fluxes[band]
-        disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
-
-        disk_flux = total_flux * disk_frac
-        bulge_frac = 1 - disk_frac
-        bulge_flux = total_flux * bulge_frac
+        disk_flux = source_params["galaxy_fluxes"][band] * source_params["galaxy_disk_frac"]
+        bulge_frac = 1 - source_params["galaxy_disk_frac"]
+        bulge_flux = source_params["galaxy_fluxes"][band] * bulge_frac
+        beta = source_params["galaxy_beta_radians"] * galsim.radians
 
         components = []
         if disk_flux > 0:
-            b_d = a_d * disk_q
-            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
+            b_d = source_params["galaxy_a_d"] * source_params["galaxy_disk_q"]
+            disk_hlr_arcsecs = np.sqrt(source_params["galaxy_a_d"] * b_d)
             disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs)
-            sheared_disk = disk.shear(q=disk_q, beta=beta_radians * galsim.radians)
+            sheared_disk = disk.shear(q=source_params["galaxy_disk_q"].item(), beta=beta)
             components.append(sheared_disk)
         if bulge_flux > 0:
-            b_b = bulge_q * a_b
-            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
+            b_b = source_params["galaxy_a_b"] * source_params["galaxy_bulge_q"]
+            bulge_hlr_arcsecs = np.sqrt(source_params["galaxy_a_b"] * b_b)
             bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs)
-            sheared_bulge = bulge.shear(q=bulge_q, beta=beta_radians * galsim.radians)
+            sheared_bulge = bulge.shear(q=source_params["galaxy_bulge_q"].item(), beta=beta)
             components.append(sheared_bulge)
         galaxy = galsim.Add(components)
         return galsim.Convolution(galaxy, psf[band])
