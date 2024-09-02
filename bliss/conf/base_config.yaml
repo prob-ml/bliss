@@ -22,13 +22,13 @@ prior:
     _target_: bliss.simulator.prior.CatalogPrior
     survey_bands: [u, g, r, i, z]  # SDSS available band filters
     reference_band: 2  # SDSS r-band
-    star_color_model_path: ${decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
-    gal_color_model_path: ${decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
-    n_tiles_h: 20
-    n_tiles_w: 20
-    batch_size: 64
+    star_color_model_path: ${paths.sdss}/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: ${paths.sdss}/color_models/gal_gmm_nmgy.pkl
+    n_tiles_h: 144  # cropping 8 tiles from each side
+    n_tiles_w: 144  # cropping 8 tiles from each side
+    batch_size: 2
     max_sources: 1
-    mean_sources: 0.01  # 0.0025 is more realistic for SDSS but training takes more iterations
+    mean_sources: 0.0025
     min_sources: 0
     prob_galaxy: 0.5144
     star_flux:
@@ -133,23 +133,42 @@ variational_factors:
       nll_gating:
           _target_: bliss.encoder.variational_dist.GalaxyGating
 
+# these are in nanomaggies
+sdss_mag_zero_point: 1e9
+sdss_flux_cutoffs:
+    - 1.4928
+    - 1.9055
+    - 2.7542
+    - 3.9811
+    - 5.7544
+    - 8.3176
+    - 12.0227
+    - 17.3780
+    - 25.1189
+
 metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
-        base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-        mag_zero_point: 3631e9  # for DC2
+        base_flux_bin_cutoffs: ${sdss_flux_cutoffs}
+        mag_zero_point: ${sdss_mag_zero_point}
         report_bin_unit: mag
+        exclude_last_bin: true
+        ref_band: 2
     source_type_accuracy:
         _target_: bliss.encoder.metrics.SourceTypeAccuracy
-        base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-        mag_zero_point: 3631e9  # for DC2
+        base_flux_bin_cutoffs: ${sdss_flux_cutoffs}
+        mag_zero_point: ${sdss_mag_zero_point}
         report_bin_unit: mag
+        exclude_last_bin: true
+        ref_band: 2
     flux_error:
         _target_: bliss.encoder.metrics.FluxError
         survey_bands: ${encoder.survey_bands}
-        base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-        mag_zero_point: 3631e9  # for DC2
+        base_flux_bin_cutoffs: ${sdss_flux_cutoffs}
+        mag_zero_point: ${sdss_mag_zero_point}
         report_bin_unit: mag
+        exclude_last_bin: true
+        ref_band: 2
 
 image_normalizers:
     psf:
@@ -273,8 +292,9 @@ mode: train
 generate:
     prior: ${prior}
     decoder: ${decoder}
-    n_image_files: 1024
-    n_batches_per_file: 16  # multiply by prior.batch_size to get total number of images
+    tiles_to_crop: 8
+    n_image_files: 512
+    n_batches_per_file: 32  # multiply by prior.batch_size to get total number of images
     n_processes: 16  # using more isn't necessarily faster
     cached_data_path: ${paths.cached_data}
     store_full_catalog: false

@@ -46,6 +46,13 @@ def generate_one_file(gen_cfg: DictConfig, file_idx: int):
 
         tile_catalog = prior.sample()
         images, psf_params = decoder.render_images(tile_catalog)
+
+        ttc = gen_cfg.tiles_to_crop
+        tile_catalog = tile_catalog.symmetric_crop(ttc)
+        ptc = ttc * decoder.tile_slen  # pixels to crop
+        if ptc > 0:
+            images = images[:, :, ptc:-ptc, ptc:-ptc]
+
         batch = {
             "tile_catalog": tile_catalog,
             "images": images,

@@ -31,17 +31,8 @@ variational_factors:
 star_metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
-        base_flux_bin_cutoffs:
-          - 1.4928
-          - 1.9055
-          - 2.7542
-          - 3.9811
-          - 5.7544
-          - 8.3176
-          - 12.0227
-          - 17.3780
-          - 25.1189
-        mag_zero_point: 1e9  # for nmgy
+        base_flux_bin_cutoffs: ${sdss_flux_cutoffs}
+        mag_zero_point: ${sdss_mag_zero_point}
         report_bin_unit: mag
         exclude_last_bin: true
         ref_band: 0

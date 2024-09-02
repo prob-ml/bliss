@@ -93,6 +93,7 @@ generate:
     n_image_files: 3
     n_batches_per_file: 1
     n_processes: 1
+    tiles_to_crop: 0
 
 train:
     seed: 42
