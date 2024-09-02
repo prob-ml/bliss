@@ -36,7 +36,7 @@ def convert_flux_to_magnitude(flux, zero_point):
         Tensor indicating fluxes in magnitude
     """
 
-    return -2.5 * (torch.log10(flux) - torch.log10(zero_point))
+    return -2.5 * torch.log10(flux / zero_point)
 
 
 class SourceType(IntEnum):
