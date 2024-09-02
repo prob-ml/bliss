@@ -21,7 +21,7 @@ class MockSDSS(pl.LightningDataModule):
 
 
 class TestSimulate:
-    def test_simulate_and_predict(self, cfg, encoder):
+    def test_simulate_and_predict(self, cfg):
         """Test simulating an image from a fixed catalog and making predictions on that catalog."""
         # load cached simulated catalog
         true_catalog = torch.load(cfg.paths.test_data + "/test_image/dataset_0.pt")
@@ -40,7 +40,12 @@ class TestSimulate:
         psf_params = psf_params.to(cfg.predict.device)
 
         sdss = MockSDSS(image, psf_params)
+
+        encoder = instantiate(cfg.encoder).to(cfg.predict.device)
+        enc_state_dict = torch.load(cfg.predict.weight_save_path, map_location=cfg.predict.device)
+        encoder.load_state_dict(enc_state_dict)
         encoder.eval()
+
         trainer = instantiate(cfg.predict.trainer)
         mode_cat = trainer.predict(encoder, datamodule=sdss)[0]
         mode_cat = mode_cat.to(cfg.predict.device)
@@ -64,7 +69,7 @@ class TestSimulate:
 
         assert (est_fluxes - true_fluxes_crop).abs().sum() / (true_fluxes_crop.abs().sum()) < 1.0
 
-    def test_render_images(self, cfg, decoder):
+    def test_render_images(self, cfg):
         with open(Path(cfg.paths.test_data) / "sdss_preds.pt", "rb") as f:
             test_cat = torch.load(f)
 
@@ -72,6 +77,7 @@ class TestSimulate:
 
         # first we'll render the image from the catalog
         # these are sky subtracted images in physical units (nanomaggies)
+        decoder = instantiate(cfg.decoder)
         rendered_image, _psf_params = decoder.render_images(true_tile_cat)
 
         # then we'll compare the reconstructed image to the true fluxes

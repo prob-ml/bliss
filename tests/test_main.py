@@ -54,11 +54,11 @@ class TestGenerate:
 
 
 class TestTrain:
-    def test_train_sdss(self, cfg):
+    def test_train_sdss(self, cfg, tmp_path):
+        generate(cfg.generate)
         train(cfg.train)
 
-    def test_train_des(self, cfg):
-        cfg = cfg.copy()
+    def test_train_des(self, cfg, tmp_path):
         cfg.decoder.survey = "${surveys.des}"
         cfg.decoder.with_dither = False
         cfg.prior.reference_band = DES.BANDS.index("r")
@@ -72,25 +72,14 @@ class TestTrain:
         cfg.encoder.image_normalizers.psf.num_psf_params = 10
         cfg.train.pretrained_weights = None
         cfg.train.testing = True
-        train(cfg.train)
 
-    def test_train_with_cached_data(self, cfg, tmp_path):
-        cfg = cfg.copy()
-        cfg.paths.output = tmp_path
-        cfg.generate.cached_data_path = tmp_path
         generate(cfg.generate)
-
-        cfg.train.data_source = "${cached_simulator}"
-        cfg.cached_simulator.cached_data_path = tmp_path
-        os.chdir(tmp_path)
-        cfg.train.weight_save_path = str(tmp_path / "encoder.pt")
         train(cfg.train)
 
 
 class TestPredict:
     def test_predict_sdss(self, cfg):
         # it's slow processing an entire image on the cpu, so we crop the image
-        cfg = cfg.copy()
         cfg.surveys.sdss.crop_to_hw = [100, 164, 100, 164]
         cfg.surveys.sdss.fields = [
             {"run": 94, "camcol": 1, "fields": [12]},

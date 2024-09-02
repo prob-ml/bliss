@@ -6,6 +6,7 @@ defaults:
 paths:
     output: null  # overridden in conftest.py
     test_data: null  # overridden in conftest.py
+    cached_data: null  # overridden in conftest.py
     sdss: ${paths.test_data}/sdss
     decals: ${paths.test_data}/decals
     des: ${paths.test_data}/des
@@ -92,7 +93,6 @@ generate:
     n_image_files: 3
     n_batches_per_file: 1
     n_processes: 1
-    cached_data_path: null  # use pytest tmpdir
 
 train:
     seed: 42
@@ -105,7 +105,7 @@ train:
         devices: 1
         max_epochs: 1
     testing: true
-    data_source: ${simulator}
+    data_source: ${cached_simulator}
 
 predict:
     decals_frame: ${paths.decals}/336/3366m010/tractor-3366m010.fits
