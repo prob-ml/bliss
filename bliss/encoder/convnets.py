@@ -12,9 +12,19 @@ class FeaturesNet(nn.Module):
             nn.BatchNorm3d(64),
             nn.SiLU(),
         )
+
+        # set double_downsample to True if tile_slen is 4 (rather than 2)
+        self.double_downsample = double_downsample
+        self.downsample_net = None
+        if double_downsample:
+            self.downsample_net = nn.Sequential(
+                ConvBlock(64, 64, stride=2),  # 2
+                C3(64, 64, n=3),
+            )
+
         u_net_layers = [
             ConvBlock(64, 64, kernel_size=5),
-            nn.Sequential(*[ConvBlock(64, 64, kernel_size=5) for _ in range(3)]),
+            nn.Sequential(*[ConvBlock(64, 64, kernel_size=5) for _ in range(3)]),  # 1
             ConvBlock(64, 128, stride=2),  # 2
             C3(128, 128, n=3),
             ConvBlock(128, 256, stride=2),  # 4
@@ -40,5 +50,7 @@ class FeaturesNet(nn.Module):
                 x = torch.cat((x, save_lst[1]), dim=1)
             if i == 10:
                 x = torch.cat((x, save_lst[0]), dim=1)
+            if i == 1 and self.double_downsample:
+                x = self.downsample_net(x)
 
         return x
