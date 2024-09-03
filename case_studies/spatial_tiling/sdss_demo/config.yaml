@@ -5,7 +5,7 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    cached_data: /data/scratch/regier/sdsslike_aug30
+    cached_data: /data/scratch/regier/sdss_like
 
 # we're override variational_factors in base_config here
 # just so that we can change the number of flux bands
@@ -80,6 +80,7 @@ variational_factors:
           _target_: bliss.encoder.variational_dist.GalaxyGating
 
 cached_simulator:
+    batch_size: 8
     train_transforms:
         - _target_: bliss.cached_dataset.OneBandTransform
           band_idx: 2
