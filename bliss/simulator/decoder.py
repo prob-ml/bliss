@@ -17,8 +17,6 @@ class Decoder(nn.Module):
         survey: Survey,
         with_dither: bool = True,
         with_noise: bool = True,
-        faint_flux_threshold: float = None,
-        faint_folding_threshold: float = None,
     ) -> None:
         """Construct a decoder for a set of images.
 
@@ -27,8 +25,6 @@ class Decoder(nn.Module):
             survey: survey to mimic (psf, background, calibration, etc.)
             with_dither: if True, apply random pixel shifts to the images and align them
             with_noise: if True, add Poisson noise to the image pixels
-            faint_flux_threshold: threshold for flux to be considered dim
-            faint_folding_threshold: folding threshold for dim sources
         """
 
         super().__init__()
@@ -37,8 +33,6 @@ class Decoder(nn.Module):
         self.survey = survey
         self.with_dither = with_dither
         self.with_noise = with_noise
-        self.faint_flux_threshold = faint_flux_threshold
-        self.faint_folding_threshold = faint_folding_threshold
 
         survey.prepare_data()
 
@@ -68,28 +62,23 @@ class Decoder(nn.Module):
         Returns:
             GSObject: a galsim representation of the rendered galaxy convolved with the PSF
         """
-        galaxy_fluxes = source_params["galaxy_fluxes"]
-        galaxy_params = source_params["galaxy_params"]
-
-        total_flux = galaxy_fluxes[band]
-        disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
-
-        disk_flux = total_flux * disk_frac
-        bulge_frac = 1 - disk_frac
-        bulge_flux = total_flux * bulge_frac
+        disk_flux = source_params["galaxy_fluxes"][band] * source_params["galaxy_disk_frac"]
+        bulge_frac = 1 - source_params["galaxy_disk_frac"]
+        bulge_flux = source_params["galaxy_fluxes"][band] * bulge_frac
+        beta = source_params["galaxy_beta_radians"] * galsim.radians
 
         components = []
         if disk_flux > 0:
-            b_d = a_d * disk_q
-            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
+            b_d = source_params["galaxy_a_d"] * source_params["galaxy_disk_q"]
+            disk_hlr_arcsecs = np.sqrt(source_params["galaxy_a_d"] * b_d)
             disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs)
-            sheared_disk = disk.shear(q=disk_q, beta=beta_radians * galsim.radians)
+            sheared_disk = disk.shear(q=source_params["galaxy_disk_q"].item(), beta=beta)
             components.append(sheared_disk)
         if bulge_flux > 0:
-            b_b = bulge_q * a_b
-            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
+            b_b = source_params["galaxy_a_b"] * source_params["galaxy_bulge_q"]
+            bulge_hlr_arcsecs = np.sqrt(source_params["galaxy_a_b"] * b_b)
             bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs)
-            sheared_bulge = bulge.shear(q=bulge_q, beta=beta_radians * galsim.radians)
+            sheared_bulge = bulge.shear(q=source_params["galaxy_bulge_q"].item(), beta=beta)
             components.append(sheared_bulge)
         galaxy = galsim.Add(components)
         return galsim.Convolution(galaxy, psf[band])
@@ -179,28 +168,29 @@ class Decoder(nn.Module):
                 source_params = full_cat.one_source(0, s)
                 source_type = source_params["source_type"].item()
                 renderer = self.source_renderers[source_type]
-                galsim_obj = renderer(frame["psf_galsim"], band, source_params)
+                gs_obj = renderer(frame["psf_galsim"], band, source_params)
                 plocs0, plocs1 = source_params["plocs"]
-                offset = np.array([plocs1 - (slen_w / 2), plocs0 - (slen_h / 2)])
+                plocs10 = np.array([plocs1, plocs0])
                 if self.with_dither:
-                    offset += pixel_shifts[band]
+                    plocs10 += pixel_shifts[band]
 
-                # essentially all the runtime of the simulator is incurred by this call
-                # to drawImage
+                int_pixel_shift = np.floor(plocs10)
+                good_size = gs_obj.getGoodImageSize(self.survey.psf.pixel_scale)
+                origin = int_pixel_shift - (good_size // 2) + 1
+                top_right = origin + good_size
 
-                if source_type:
-                    source_flux = source_params["galaxy_fluxes"][band]
-                else:
-                    source_flux = source_params["star_fluxes"][band]
+                bounds = galsim.BoundsI(origin[0], top_right[0], origin[1], top_right[1])
+                bounds = bounds & band_img.bounds
 
-                if self.faint_flux_threshold and source_flux.item() <= self.faint_flux_threshold:
-                    galsim_obj.folding_threshold = self.faint_folding_threshold
+                offset = plocs10 - np.array([slen_w / 2, slen_h / 2])
+                offset2 = galsim.PositionD(offset)
+                offset2 += band_img.true_center - bounds.true_center
 
-                galsim_obj.drawImage(
-                    offset=offset,
+                gs_obj.drawImage(
+                    offset=offset2,
                     method=getattr(self.survey.psf, "psf_draw_method", "auto"),
                     add_to_image=True,
-                    image=band_img,
+                    image=band_img[bounds],
                 )
 
             if self.with_noise:

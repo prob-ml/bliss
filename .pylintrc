@@ -51,7 +51,7 @@ disable=too-many-ancestors,
 	unused-argument,
 
 	# flake8 recommends against f-strings
-	consider-using-f-string,
+	logging-fstring-interpolation,
 
 	# flake8 already checks for lambda expressions, which are OK at times
 	unnecessary-lambda-assignment,

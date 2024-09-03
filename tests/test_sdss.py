@@ -14,7 +14,6 @@ def patch_align(monkeypatch):
 
 class TestSDSS:
     def test_sdss(self, cfg):
-        cfg = cfg.copy()
         cfg.surveys.sdss.fields = [{"run": 3900, "camcol": 6, "fields": [269]}]
         sdss_obj = instantiate(cfg.surveys.sdss)
         sdss_obj.prepare_data()
