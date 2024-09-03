@@ -27,10 +27,7 @@ environ["CUDA_VISIBLE_DEVICES"] = "7"
 
 torch.set_grad_enabled(False)
 
-ckpt = (
-    "/home/regier/bliss_output/aug11_sdsslike_oneband_22pt6mag/version_0/checkpoints/"
-    "best_encoder.ckpt"
-)
+ckpt = "/home/regier/bliss_output/sep3_sdss_demo/version_3/checkpoints/best_encoder.ckpt"
 with initialize(config_path=".", version_base=None):
     cfg0 = compose(
         "config",
@@ -116,7 +113,7 @@ torch.cuda.empty_cache()
 
 # %%
 # change the cfg here to try different checkerboard schemes
-encoder = instantiate(cfg_c4.train.encoder).cuda()
+encoder = instantiate(cfg_c1.train.encoder).cuda()
 enc_state_dict = torch.load(cfg0.train.pretrained_weights)
 if cfg0.train.pretrained_weights.endswith(".ckpt"):
     enc_state_dict = enc_state_dict["state_dict"]
@@ -153,7 +150,7 @@ for k, v in bliss_disjoint_cat.items():
         d[k] = rearrange(v, pattern, hp=patches.shape[1], wp=patches.shape[2])
 bliss_tile_cat = TileCatalog(d)
 
-bliss_flux_filter_cat = bliss_tile_cat.filter_by_flux(convert_mag_to_nmgy(22.7))
+bliss_flux_filter_cat = bliss_tile_cat.filter_by_flux(convert_mag_to_nmgy(22.7), band=0)
 bliss_cat = bliss_flux_filter_cat.to_full_catalog(4).to("cpu")
 
 # %% [markdown]
