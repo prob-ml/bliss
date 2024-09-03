@@ -18,7 +18,7 @@ name = "bliss-toolkit"
 packages = [{include = "bliss"}]
 readme = "README.md"
 repository = "https://github.com/prob-ml/bliss"
-version = "0.3"
+version = "0.4"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
