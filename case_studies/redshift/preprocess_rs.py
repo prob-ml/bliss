@@ -61,7 +61,7 @@ def load_quantities(dataset, quantities: list) -> pd.DataFrame:
         assert q in all_quantities
         this_field = dataset.get_quantities([q])
         all_truth_data[q] = this_field[q]
-        print("Finished {}".format(q))  # noqa: WPS421
+        print(f"Finished {q}")  # noqa: WPS421
     return pd.DataFrame(all_truth_data)
 
 

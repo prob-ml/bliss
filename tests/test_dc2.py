@@ -171,7 +171,6 @@ class TestDC2:
         GlobalEnv.current_encoder_epoch = None
 
     def test_train_on_dc2(self, cfg):
-        cfg = cfg.copy()
         cfg.encoder.survey_bands = ["u", "g", "r", "i", "z", "y"]
         cfg.train.data_source = cfg.surveys.dc2
         cfg.train.pretrained_weights = None

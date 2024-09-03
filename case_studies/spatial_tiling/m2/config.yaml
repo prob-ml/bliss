@@ -5,20 +5,9 @@ defaults:
     - override hydra/job_logging: stdout
 
 paths:
-    cached_data: /data/scratch/regier/m2_jul31
+    cached_data: /data/scratch/regier/m2_aug30
 
 variational_factors:
-    - _target_: bliss.encoder.variational_dist.BernoulliFactor
-      name: n_sources
-      sample_rearrange: null
-      nll_rearrange: null
-      nll_gating: null
-    - _target_: bliss.encoder.variational_dist.TDBNFactor
-      name: locs
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 d -> b ht wt d"
-      nll_gating:
-          _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
       name: source_type
       sample_rearrange: "b ht wt -> b ht wt 1 1"
@@ -32,12 +21,19 @@ variational_factors:
       nll_rearrange: "b ht wt 1 d -> b ht wt d"
       nll_gating:
           _target_: bliss.encoder.variational_dist.StarGating
+    - _target_: bliss.encoder.variational_dist.DiscretizedUnitBoxFactor
+      name: locs
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 d -> b ht wt d"
+      nll_gating:
+          _target_: bliss.encoder.variational_dist.SourcesGating
 
 star_metrics:
     detection_performance:
         _target_: bliss.encoder.metrics.DetectionPerformance
-        bin_cutoffs: [19, 19.4, 19.8, 20.2, 20.6, 21, 21.4, 21.8, 22.065]
-        bin_type: "mag"
+        base_flux_bin_cutoffs: ${sdss_flux_cutoffs}
+        mag_zero_point: ${sdss_mag_zero_point}
+        report_bin_unit: mag
         exclude_last_bin: true
         ref_band: 0
 
@@ -90,10 +86,11 @@ prior:
     mean_sources: 0.8029160898574715
     min_sources: 0
     prob_galaxy: 0.0
-    star_flux_exponent: 0.9859821185389767
-    star_flux_truncation: 5685.588160703261
-    star_flux_loc: -1.162430157551662
-    star_flux_scale: 1.4137911256506595
+    star_flux:
+        exponent: 0.9859821185389767
+        truncation: 5685.588160703261
+        loc: -1.162430157551662
+        scale: 1.4137911256506595
 
 decoder:
     tile_slen: 2
@@ -111,14 +108,14 @@ surveys:
         background_offset: 80
 
 generate:
-    n_image_files: 64
-    n_batches_per_file: 64
+    n_image_files: 1024
+    n_batches_per_file: 32
     cached_data_path: ${paths.cached_data}
     store_full_catalog: true
 
 cached_simulator:
     cached_data_path: ${paths.cached_data}
-    batch_size: 10
+    batch_size: 6
     num_workers: 8
     train_transforms:
         - _target_: bliss.cached_dataset.OneBandTransform

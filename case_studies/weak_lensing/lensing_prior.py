@@ -137,28 +137,15 @@ class LensingPrior(CatalogPrior):
             The remaining dimensions are variable-specific.
         """
 
+        catalog_params = super().sample()
+
         if self.sample_method == "interpolate":
             shear = self._sample_shear()
             convergence = self._sample_convergence()
         elif self.sample_method == "cosmology":
             shear, convergence = self._sample_shear_and_convergence()
 
-        locs = self._sample_locs()
-        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior()
-        star_fluxes = self._sample_star_fluxes()
-
-        n_sources = self._sample_n_sources()
-        source_type = self._sample_source_type()
-
-        catalog_params = {
-            "shear": shear,
-            "convergence": convergence,
-            "n_sources": n_sources,
-            "source_type": source_type,
-            "locs": locs,
-            "galaxy_fluxes": galaxy_fluxes,
-            "galaxy_params": galaxy_params,
-            "star_fluxes": star_fluxes,
-        }
+        catalog_params["shear"] = shear
+        catalog_params["convergence"] = convergence
 
         return TileCatalog(catalog_params)

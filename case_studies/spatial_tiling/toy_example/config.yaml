@@ -16,14 +16,16 @@ prior:
     # clipped at 1, but close
     mean_sources: 0.1  # expect 36 sources per 80x80 image
     # truncpareto support is [scale + loc, truncation * scale + loc]
-    star_flux_exponent: 0.1
-    star_flux_truncation: 100
-    star_flux_loc: 0
-    star_flux_scale: 1.3
-    galaxy_flux_exponent: 0.01
-    galaxy_flux_truncation: 100
-    galaxy_flux_loc: 0
-    galaxy_flux_scale: 1.3
+    star_flux:
+        exponent: 0.1
+        runcation: 100
+        loc: 0
+        scale: 1.3
+    galaxy_flux:
+        exponent: 0.01
+        truncation: 100
+        loc: 0
+        scale: 1.3
 
 variational_factors:
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
@@ -113,11 +115,11 @@ encoder:
         mag_band: 2  # SDSS r-band
     mode_metrics:
         _target_: torchmetrics.MetricCollection
-        _convert_: "partial"
+        _convert_: partial
         metrics: ${my_metrics}
     sample_metrics:
         _target_: torchmetrics.MetricCollection
-        _convert_: "partial"
+        _convert_: partial
         metrics: ${my_metrics}
 
 cached_simulator:

@@ -1,74 +1,56 @@
 import torch
 from torch import nn
 
-from bliss.encoder.convnet_layers import C3, ConvBlock, Detect
+from bliss.encoder.convnet_layers import C3, ConvBlock
 
 
 class FeaturesNet(nn.Module):
     def __init__(self, n_bands, ch_per_band, num_features, double_downsample=False):
         super().__init__()
-
-        nch_hidden = 64
         self.preprocess3d = nn.Sequential(
-            nn.Conv3d(n_bands, nch_hidden, [ch_per_band, 5, 5], padding=[0, 2, 2]),
-            nn.BatchNorm3d(nch_hidden),
+            nn.Conv3d(n_bands, 64, [ch_per_band, 5, 5], padding=[0, 2, 2]),
+            nn.BatchNorm3d(64),
             nn.SiLU(),
         )
-        self.backbone = nn.Sequential(
-            ConvBlock(nch_hidden, 64, kernel_size=5, padding=2),
-            nn.Sequential(*[ConvBlock(64, 64, kernel_size=5, padding=2) for _ in range(4)]),
-            ConvBlock(64, 128, stride=2),
-            nn.Sequential(*[ConvBlock(128, 128) for _ in range(5)]),
-            ConvBlock(128, 256, stride=(2 if double_downsample else 1)),  # 4
-        )
+
+        # set double_downsample to True if tile_slen is 4 (rather than 2)
+        self.double_downsample = double_downsample
+        self.downsample_net = None
+        if double_downsample:
+            self.downsample_net = nn.Sequential(
+                ConvBlock(64, 64, stride=2),  # 2
+                C3(64, 64, n=3),
+            )
+
         u_net_layers = [
-            C3(256, 256, n=6),  # 0
+            ConvBlock(64, 64, kernel_size=5),
+            nn.Sequential(*[ConvBlock(64, 64, kernel_size=5) for _ in range(3)]),  # 1
+            ConvBlock(64, 128, stride=2),  # 2
+            C3(128, 128, n=3),
+            ConvBlock(128, 256, stride=2),  # 4
+            C3(256, 256, n=3),
             ConvBlock(256, 512, stride=2),
-            C3(512, 512, n=3, shortcut=False),
-            ConvBlock(512, 256, kernel_size=1, padding=0),
-            nn.Upsample(scale_factor=2, mode="nearest"),  # 4
-            C3(768, num_features, n=3, shortcut=False),
+            C3(512, 256, n=3, shortcut=False),
+            nn.Upsample(scale_factor=2, mode="nearest"),  # 8
+            C3(512, 256, n=3, shortcut=False),
+            nn.Upsample(scale_factor=2, mode="nearest"),  # 10
+            C3(384, num_features, n=3, shortcut=False),
         ]
         self.u_net = nn.ModuleList(u_net_layers)
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
-        x = self.backbone(x)
 
-        save_lst = [x]
+        save_lst = []
         for i, m in enumerate(self.u_net):
             x = m(x)
-            if i in {0, 4}:
+            if i in {2, 5}:
                 save_lst.append(x)
-            if i == 4:
-                x = torch.cat(save_lst, dim=1)
+            if i == 8:
+                x = torch.cat((x, save_lst[1]), dim=1)
+            if i == 10:
+                x = torch.cat((x, save_lst[0]), dim=1)
+            if i == 1 and self.double_downsample:
+                x = self.downsample_net(x)
 
         return x
-
-
-class CatalogNet(nn.Module):
-    def __init__(self, num_features, out_channels):
-        super().__init__()
-
-        # initalization for detection head
-        context_channels_in = 6
-        context_channels_out = 128
-        self.context_net = nn.Sequential(
-            ConvBlock(context_channels_in, context_channels_out),
-            ConvBlock(context_channels_out, context_channels_out),
-            C3(context_channels_out, context_channels_out, n=4),
-            ConvBlock(context_channels_out, context_channels_out),
-        )
-        n_hidden_ch = 256
-        self.detection_net = nn.Sequential(
-            ConvBlock(num_features + context_channels_out, n_hidden_ch),
-            ConvBlock(n_hidden_ch, n_hidden_ch),
-            C3(n_hidden_ch, n_hidden_ch, n=4),
-            ConvBlock(n_hidden_ch, n_hidden_ch),
-            Detect(n_hidden_ch, out_channels),
-        )
-
-    def forward(self, x_features, context):
-        x_context = self.context_net(context)
-        x = torch.cat((x_features, x_context), dim=1)
-        return self.detection_net(x)

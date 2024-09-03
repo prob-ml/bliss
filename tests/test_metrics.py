@@ -1,7 +1,7 @@
 import numpy as np
-import pytest
 import torch
 from hydra.utils import instantiate
+from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.encoder.metrics import (
@@ -16,12 +16,6 @@ from bliss.surveys.sdss import PhotoFullCatalog
 
 
 class TestMetrics:
-    @pytest.fixture(scope="class")
-    def tile_catalog(self, cfg, multiband_dataloader):
-        """Generate a tile catalog for testing classification metrics."""
-        tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
-        return TileCatalog(tile_cat)
-
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
         slen = 50
@@ -116,8 +110,14 @@ class TestMetrics:
         assert dresults["detection_precision"] == 1 / 2
         assert dresults["detection_recall"] == 1 / 2
 
-    def test_self_agreement(self, tile_catalog):
+    def test_self_agreement(self, cfg):
         """Test galaxy classification metrics on full catalog."""
+        with open(cfg.paths.test_data + "/multiband_data/dataset_0.pt", "rb") as f:
+            data = torch.load(f)
+        multiband_dataloader = DataLoader(data, batch_size=8, shuffle=False)
+
+        tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
+        tile_catalog = TileCatalog(tile_cat)
         full_catalog = tile_catalog.to_full_catalog(4)
 
         matcher = CatalogMatcher(dist_slack=1.0, mag_band=2)

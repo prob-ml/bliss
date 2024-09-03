@@ -18,8 +18,8 @@ prior:
     _target_: case_studies.galaxy_clustering.prior.GalaxyClusterPrior
     survey_bands: ["g", "r", "i", "z"]  # SDSS available band filters
     reference_band: 1  # SDSS r-band
-    star_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
-    gal_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
+    star_color_model_path: ${decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: ${decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 56
     n_tiles_w: 56
     tile_slen: 256
@@ -28,10 +28,11 @@ prior:
     mean_sources: 0.48
     min_sources: 0
     prob_galaxy: 0.2
-    star_flux_exponent: 0.9859821185389767
-    star_flux_truncation: 5685.588160703261
-    star_flux_loc: -1.162430157551662
-    star_flux_scale: 1.4137911256506595
+    star_flux:
+        exponent: 0.9859821185389767
+        truncation: 5685.588160703261
+        loc: -1.162430157551662
+        scale: 1.4137911256506595
 
 cached_simulator:
     _target_: bliss.cached_dataset.CachedSimulatedDataModule
