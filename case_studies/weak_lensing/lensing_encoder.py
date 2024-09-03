@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 
 import torch
@@ -15,6 +16,8 @@ class WeakLensingEncoder(Encoder):
         self,
         survey_bands: list,
         tile_slen: int,
+        n_tiles: int,
+        nch_hidden: int,
         image_normalizers: list,
         var_dist: VariationalDist,
         sample_image_renders: MetricCollection,
@@ -25,6 +28,9 @@ class WeakLensingEncoder(Encoder):
         reference_band: int = 2,
         **kwargs,
     ):
+        self.n_tiles = n_tiles
+        self.nch_hidden = nch_hidden
+
         super().__init__(
             survey_bands=survey_bands,
             tile_slen=tile_slen,
@@ -50,18 +56,22 @@ class WeakLensingEncoder(Encoder):
 
     # override
     def initialize_networks(self):
-        num_features = 256
+        num_features = 512
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         self.features_net = WeakLensingFeaturesNet(
             n_bands=len(self.survey_bands),
             ch_per_band=ch_per_band,
             num_features=num_features,
             tile_slen=self.tile_slen,
+            nch_hidden=self.nch_hidden,
         )
+
         self.catalog_net = WeakLensingCatalogNet(
             in_channels=num_features,
             out_channels=self.var_dist.n_params_per_source,
+            n_tiles=self.n_tiles,
         )
+        # print("var dist params per source", self.var_dist.n_params_per_source)
 
     def sample(self, batch, use_mode=True):
         # multiple image normalizers
@@ -72,13 +82,14 @@ class WeakLensingEncoder(Encoder):
         x_cat_marginal = self.catalog_net(x_features)
         # est cat
         return self.var_dist.sample(x_cat_marginal, use_mode=use_mode, return_base_cat=True)
-    
+
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         with torch.no_grad():
             return self.sample(batch, use_mode=True)
 
     def _compute_loss(self, batch, logging_name):
         batch_size, _, _, _ = batch["images"].shape[0:4]
+        # print("image batch shape", batch["images"].shape)
 
         target_cat = BaseTileCatalog(batch["tile_catalog"])
 
@@ -87,7 +98,10 @@ class WeakLensingEncoder(Encoder):
         inputs = torch.cat(input_lst, dim=2)
         pred = {}
         x_features = self.features_net(inputs)
+        # print("features output", x_features.shape)
         pred["x_cat_marginal"] = self.catalog_net(x_features)
+        # print(pred["x_cat_marginal"].shape)
+        # print(target_cat["shear"].shape)
 
         loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat)
         loss = loss.sum() / loss.numel()
@@ -108,7 +122,7 @@ class WeakLensingEncoder(Encoder):
                 param_grad_norm = param.grad.data.norm(2).item()
                 total_grad_norm += param_grad_norm**2
                 if param_grad_norm < 1e-4 or param_grad_norm > 100:
-                    print(f"grad_norm_{name}", param_grad_norm)  # noqa: WPS421
+                    print(f"grad_norm_{param.name}", param_grad_norm)  # noqa: WPS421
         total_grad_norm = total_grad_norm**0.5
         if total_grad_norm > 100 or total_grad_norm < 1e-4:
             print("total_grad_norm", total_grad_norm)  # noqa: WPS421

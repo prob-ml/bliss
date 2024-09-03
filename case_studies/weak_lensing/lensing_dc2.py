@@ -28,7 +28,6 @@ class LensingDC2DataModule(DC2DataModule):
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
-        mag_max_cut: float = None,
         **kwargs,
     ):
         super().__init__(
@@ -54,7 +53,6 @@ class LensingDC2DataModule(DC2DataModule):
         self.image_slen = image_slen
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
-        self.mag_max_cut = mag_max_cut
 
     # override prepare_data
     def prepare_data(self):
@@ -80,7 +78,7 @@ class LensingDC2DataModule(DC2DataModule):
         n_tiles_h = math.ceil(height / self.tile_slen)
         n_tiles_w = math.ceil(width / self.tile_slen)
         stti = source_tile_coords[:, :, 0] * n_tiles_w + source_tile_coords[:, :, 1]
-        source_to_tile_indices = stti.unsqueeze(-1).to(dtype=torch.int64)
+        source_to_tile_indices_default = stti.unsqueeze(-1).to(dtype=torch.int64)
 
         tile_cat = {}
 
@@ -90,23 +88,27 @@ class LensingDC2DataModule(DC2DataModule):
             if k == "plocs":
                 continue
 
-            v = v.reshape(self.batch_size, plocs.shape[1], 1)
+            v = v.reshape(self.batch_size, plocs.shape[1], -1)
             if k == "mag_mask":
                 continue
 
-            v_sum = torch.zeros(self.batch_size, num_tiles, 1, dtype=v.dtype)
-            v_count = torch.zeros(self.batch_size, num_tiles, 1, dtype=v.dtype)
+            v_sum = torch.zeros(self.batch_size, num_tiles, v.shape[-1], dtype=v.dtype)
+            v_count = torch.zeros(self.batch_size, num_tiles, v.shape[-1], dtype=v.dtype)
             add_pos = torch.ones_like(v)
 
-            if k in {"ellip1_lensed", "ellip2_lensed"}:
-                mag_mask = full_catalog["magnitude_cut_mask"]
-                v = torch.where(mag_mask, v, torch.tensor(0.0))
-                add_pos = mag_mask.float().to(v.dtype)
-
+            if k == "psf":
+                psf_nanmask = ~torch.isnan(v).any(dim=-1, keepdim=True).expand(-1, -1, v.shape[-1])
+                v = torch.where(psf_nanmask, v, torch.tensor(0.0))
+                add_pos = psf_nanmask.float().to(v.dtype)
+                source_to_tile_indices = source_to_tile_indices_default.expand(-1, -1, v.shape[-1])
+            else:
+                source_to_tile_indices = source_to_tile_indices_default
             v_sum = v_sum.scatter_add(1, source_to_tile_indices, v)
             v_count = v_count.scatter_add(1, source_to_tile_indices, add_pos)
-            tile_cat[k + "_sum"] = v_sum.reshape(self.batch_size, n_tiles_w, n_tiles_h, 1)
-            tile_cat[k + "_count"] = v_count.reshape(self.batch_size, n_tiles_w, n_tiles_h, 1)
+            tile_cat[k + "_sum"] = v_sum.reshape(self.batch_size, n_tiles_w, n_tiles_h, v.shape[-1])
+            tile_cat[k + "_count"] = v_count.reshape(
+                self.batch_size, n_tiles_w, n_tiles_h, v.shape[-1]
+            )
         return BaseTileCatalog(tile_cat)
 
     # override load_image_and_catalog
@@ -117,7 +119,7 @@ class LensingDC2DataModule(DC2DataModule):
         plocs_lim = image[0].shape
         height = plocs_lim[0]
         width = plocs_lim[1]
-        full_cat, psf_params = LensingDC2Catalog.from_file(
+        full_cat = LensingDC2Catalog.from_file(
             self.dc2_cat_path,
             wcs,
             height,
@@ -128,6 +130,9 @@ class LensingDC2DataModule(DC2DataModule):
         )
 
         tile_cat = self.to_tile_catalog(full_cat, height, width)
+        psf_params = tile_cat["psf_sum"] / tile_cat["psf_count"]
+        del tile_cat["psf_sum"]
+        del tile_cat["psf_count"]
         tile_dict = self.squeeze_tile_dict(tile_cat.data)
 
         return {
@@ -165,6 +170,10 @@ class LensingDC2DataModule(DC2DataModule):
         tile_dict["ellip_lensed"] = ellip_lensed
         tile_dict["redshift"] = redshift
 
+        psf_params = psf_params.repeat_interleave(
+            self.image_lim[0] // psf_params.shape[1], dim=1
+        ).repeat_interleave(self.image_lim[1] // psf_params.shape[2], dim=2)
+
         # split image
         split_lim = self.image_lim[0] // self.n_image_split
         image_splits = split_tensor(image, split_lim, 1, 2)
@@ -188,7 +197,7 @@ class LensingDC2DataModule(DC2DataModule):
             "image_width_index": (
                 torch.arange(0, len(image_splits)) % split_image_num_on_width
             ).tolist(),
-            "psf_params": [psf_params for _ in range(self.n_image_split**2)],
+            "psf_params": [psf_params for _ in range(self.n_image_split**2)],  # TODO: psf splits
         }
 
         data_to_cache = unpack_dict(data_splits)
@@ -229,13 +238,8 @@ class LensingDC2Catalog(DC2FullCatalog):
 
         redshift = torch.from_numpy(catalog["redshift"].values)
 
-        if mag_max_cut:
-            mag_r = torch.from_numpy(catalog["mag_r"].values)
-            mag_mask = mag_r < mag_max_cut
-        else:
-            mag_mask = torch.ones_like(galid).bool()
-
-        _, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
+        _, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog, median=False)
+        # psf_params is n_bands x 4 (n_params) x n_measures
 
         plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
         x0_mask = (plocs[:, 0] > 0) & (plocs[:, 0] < height)
@@ -255,8 +259,11 @@ class LensingDC2Catalog(DC2FullCatalog):
 
         mag_mask = mag_mask[plocs_mask]
 
+        psf_params = psf_params[:, :, :, plocs_mask.squeeze() == 1]
+        psf_params = psf_params.permute(0, 3, 1, 2).flatten(2, -1)  # 1, n_obj, 24
+
         nobj = galid.shape[0]
-        # TODO: pass existant shear & convergence masks in d
+
         d = {
             "plocs": plocs.reshape(1, nobj, 2),
             "shear1": shear1.reshape(1, nobj, 1),
@@ -264,8 +271,8 @@ class LensingDC2Catalog(DC2FullCatalog):
             "convergence": convergence.reshape(1, nobj, 1),
             "ellip1_lensed": ellip1_lensed.reshape(1, nobj, 1),
             "ellip2_lensed": ellip2_lensed.reshape(1, nobj, 1),
-            "magnitude_cut_mask": mag_mask.reshape(1, nobj, 1),
             "redshift": redshift.reshape(1, nobj, 1),
+            "psf": psf_params.reshape(1, nobj, -1),
         }
 
-        return cls(height, width, d), psf_params
+        return cls(height, width, d)  # , psf_params
