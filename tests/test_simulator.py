@@ -3,11 +3,9 @@ from pathlib import Path
 import pytorch_lightning as pl
 import torch
 from hydra.utils import instantiate
-from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
 from bliss.catalog import TileCatalog
-from bliss.surveys.sdss import SloanDigitalSkySurvey as SDSS
 
 
 class MockSDSS(pl.LightningDataModule):
@@ -18,12 +16,12 @@ class MockSDSS(pl.LightningDataModule):
             "psf_params": psf_params.squeeze(0),
         }
 
-    def predict_dataloader(self) -> EVAL_DATALOADERS:
+    def predict_dataloader(self):
         return DataLoader([self.one_batch], batch_size=1)
 
 
 class TestSimulate:
-    def test_simulate_and_predict(self, cfg, encoder):
+    def test_simulate_and_predict(self, cfg):
         """Test simulating an image from a fixed catalog and making predictions on that catalog."""
         # load cached simulated catalog
         true_catalog = torch.load(cfg.paths.test_data + "/test_image/dataset_0.pt")
@@ -31,10 +29,10 @@ class TestSimulate:
         true_catalog = TileCatalog(true_catalog)
 
         # simulate image from catalog
-        image_simulator = instantiate(cfg.simulator)
+        decoder = instantiate(cfg.decoder)
         # don't add noise to simulated image; with noise we intermittently generate what looks like
         # extra sources in the image, which causes the test to fail
-        image, psf_params = image_simulator.decoder.render_images(true_catalog)
+        image, psf_params = decoder.render_images(true_catalog)
 
         # make predictions on simulated image
         true_catalog = true_catalog.to(cfg.predict.device)
@@ -42,7 +40,12 @@ class TestSimulate:
         psf_params = psf_params.to(cfg.predict.device)
 
         sdss = MockSDSS(image, psf_params)
+
+        encoder = instantiate(cfg.encoder).to(cfg.predict.device)
+        enc_state_dict = torch.load(cfg.predict.weight_save_path, map_location=cfg.predict.device)
+        encoder.load_state_dict(enc_state_dict)
         encoder.eval()
+
         trainer = instantiate(cfg.predict.trainer)
         mode_cat = trainer.predict(encoder, datamodule=sdss)[0]
         mode_cat = mode_cat.to(cfg.predict.device)
@@ -66,21 +69,15 @@ class TestSimulate:
 
         assert (est_fluxes - true_fluxes_crop).abs().sum() / (true_fluxes_crop.abs().sum()) < 1.0
 
-    def test_simulator_get_batch(self, cfg, monkeypatch):
-        """Test simulating data with multiple bands."""
-        monkeypatch.delattr("requests.get")  # make sure we don't download anything
-        simulator = instantiate(cfg.simulator)
-        batch = simulator.get_batch()
-        assert batch["images"].size(1) == len(SDSS.BANDS)
-
-    def test_render_images(self, cfg, decoder):
+    def test_render_images(self, cfg):
         with open(Path(cfg.paths.test_data) / "sdss_preds.pt", "rb") as f:
-            test_datum = torch.load(f)
+            test_cat = torch.load(f)
 
-        true_tile_cat = TileCatalog(test_datum["catalog"]).to("cpu")
+        true_tile_cat = TileCatalog(test_cat).to("cpu")
 
         # first we'll render the image from the catalog
         # these are sky subtracted images in physical units (nanomaggies)
+        decoder = instantiate(cfg.decoder)
         rendered_image, _psf_params = decoder.render_images(true_tile_cat)
 
         # then we'll compare the reconstructed image to the true fluxes

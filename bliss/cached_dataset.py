@@ -93,6 +93,7 @@ class FluxFilterTransform(torch.nn.Module):
 
 class ChunkingSampler(Sampler):
     def __init__(self, dataset: Dataset) -> None:
+        super().__init__()
         # please don't pass dataset to the following __init__()
         # according to https://pytorch.org/docs/stable/data.html#torch.utils.data.Sampler
         # the parameter `data_source` has been deprecated

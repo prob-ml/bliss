@@ -10,10 +10,10 @@ from bliss.surveys.dc2 import (
     DC2DataModule,
     DC2FullCatalog,
     map_nested_dicts,
-    split_tensor,
     unpack_dict,
     wcs_from_wcs_header_str,
 )
+from case_studies.weak_lensing.utils.weighted_avg_ellip import compute_weighted_avg_ellip
 
 
 class LensingDC2DataModule(DC2DataModule):
@@ -25,6 +25,8 @@ class LensingDC2DataModule(DC2DataModule):
         n_image_split: int,
         tile_slen: int,
         splits: str,
+        avg_ellip_kernel_size: int,
+        avg_ellip_kernel_sigma: int,
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
@@ -53,6 +55,9 @@ class LensingDC2DataModule(DC2DataModule):
         self.image_slen = image_slen
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
+        self.mag_max_cut = mag_max_cut
+        self.avg_ellip_kernel_size = avg_ellip_kernel_size
+        self.avg_ellip_kernel_sigma = avg_ellip_kernel_sigma
 
     # override prepare_data
     def prepare_data(self):
@@ -119,7 +124,7 @@ class LensingDC2DataModule(DC2DataModule):
         plocs_lim = image[0].shape
         height = plocs_lim[0]
         width = plocs_lim[1]
-        full_cat = LensingDC2Catalog.from_file(
+        full_cat, psf_params = LensingDC2Catalog.from_file(
             self.dc2_cat_path,
             wcs,
             height,
@@ -168,37 +173,12 @@ class LensingDC2DataModule(DC2DataModule):
         tile_dict["shear"] = shear
         tile_dict["convergence"] = convergence
         tile_dict["ellip_lensed"] = ellip_lensed
+        tile_dict["ellip_lensed_wavg"] = compute_weighted_avg_ellip(
+            tile_dict, self.avg_ellip_kernel_size, self.avg_ellip_kernel_sigma
+        )
         tile_dict["redshift"] = redshift
 
-        psf_params = psf_params.repeat_interleave(
-            self.image_lim[0] // psf_params.shape[1], dim=1
-        ).repeat_interleave(self.image_lim[1] // psf_params.shape[2], dim=2)
-
-        # split image
-        split_lim = self.image_lim[0] // self.n_image_split
-        image_splits = split_tensor(image, split_lim, 1, 2)
-        image_width_pixels = image.shape[2]
-        split_image_num_on_width = image_width_pixels // split_lim
-
-        # split tile cat
-        tile_cat_splits = {}
-        param_list = tile_dict.keys()
-        for param_name in param_list:
-            tile_cat_splits[param_name] = split_tensor(
-                tile_dict[param_name], split_lim // self.tile_slen, 0, 1
-            )
-
-        data_splits = {
-            "tile_catalog": unpack_dict(tile_cat_splits),
-            "images": image_splits,
-            "image_height_index": (
-                torch.arange(0, len(image_splits)) // split_image_num_on_width
-            ).tolist(),
-            "image_width_index": (
-                torch.arange(0, len(image_splits)) % split_image_num_on_width
-            ).tolist(),
-            "psf_params": [psf_params for _ in range(self.n_image_split**2)],  # TODO: psf splits
-        }
+        data_splits = self.split_image_and_tile_cat(image, tile_dict, tile_dict.keys(), psf_params)
 
         data_to_cache = unpack_dict(data_splits)
 
