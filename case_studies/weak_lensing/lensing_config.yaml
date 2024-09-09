@@ -13,10 +13,10 @@ paths:
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
-    n_tiles_h: 130
-    n_tiles_w: 130
-    constant_shear: 0.2
-    constant_convergence: 0.2
+    n_tiles_h: 514
+    n_tiles_w: 514
+    constant_shear: 0.25
+    constant_convergence: 0.25
     prob_galaxy: 1.0
     mean_sources: 0.02
 
