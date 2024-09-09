@@ -7,30 +7,23 @@ defaults:
 mode: train
 
 paths:
-    dc2: /data/scratch/dc2local  # change for gl
-    output: /data/scratch/twhit/bliss_output  # change for gl
+    dc2: /data/scratch/dc2local
+    cached_data: /data/scratch/weak_lensing
+    output: /data/scratch/twhit/bliss_output
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
-    star_color_model_path: /data/scratch/sdss/color_models/star_gmm_nmgy.pkl
-    gal_color_model_path: /data/scratch/sdss/color_models/gal_gmm_nmgy.pkl
-    n_tiles_h: 8
-    n_tiles_w: 8
-    batch_size: 1
+    n_tiles_h: 130
+    n_tiles_w: 130
+    constant_shear: 0.2
+    constant_convergence: 0.2
     prob_galaxy: 1.0
-    mean_sources: 162
-    arcsec_per_pixel: 0.055
-    sample_method: cosmology
-    shear_mean: 0
-    shear_std: 0.0175
-    convergence_mean: 0
-    convergence_std: 0.025
-    num_knots: 4
+    mean_sources: 0.02
 
 decoder:
     _target_: case_studies.weak_lensing.lensing_decoder.LensingDecoder
-    tile_slen: 128
-    survey: ${surveys.sdss}
+    with_dither: false
+    with_noise: false
 
 simulator:
     n_batches: 128
@@ -115,14 +108,5 @@ surveys:
         num_workers: 1
         cached_data_path: ${paths.dc2}/dc2_lensing_splits_img2048_tile256
 
-train:
-    trainer:
-        logger:
-            name: dc2_weak_lensing_exp
-            version: exp_08_12
-        devices: 1 # cuda:0 for gl
-        use_distributed_sampler: false
-        precision: 32-true
-    data_source: ${surveys.dc2}
-    pretrained_weights: null
-    seed: 123123
+generate:
+  n_batches_per_file: 4
