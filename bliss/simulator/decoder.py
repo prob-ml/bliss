@@ -15,6 +15,7 @@ class Decoder(nn.Module):
         self,
         tile_slen: int,
         survey: Survey,
+        use_survey_background: bool = True,
         with_dither: bool = True,
         with_noise: bool = True,
     ) -> None:
@@ -23,6 +24,7 @@ class Decoder(nn.Module):
         Args:
             tile_slen: side length in pixels of a tile
             survey: survey to mimic (psf, background, calibration, etc.)
+            use_survey_background: if True, add randomly sampled survey background to the images
             with_dither: if True, apply random pixel shifts to the images and align them
             with_noise: if True, add Poisson noise to the image pixels
         """
@@ -31,6 +33,7 @@ class Decoder(nn.Module):
 
         self.tile_slen = tile_slen
         self.survey = survey
+        self.use_survey_background = use_survey_background
         self.with_dither = with_dither
         self.with_noise = with_noise
 
@@ -125,6 +128,7 @@ class Decoder(nn.Module):
             coadded_images[b] = self.survey.coadd_images(images[b])
         return torch.from_numpy(coadded_images).float()
 
+    # pylint: disable=R0915
     def render_image(self, tile_cat):
         """Render a single image from a tile catalog."""
         batch_size, n_tiles_h, n_tiles_w = tile_cat["n_sources"].shape
@@ -138,12 +142,16 @@ class Decoder(nn.Module):
         image_idx = np.random.randint(len(self.survey), dtype=int)
         frame = self.survey[image_idx]
 
-        # sample background from a random position in the frame
-        height, width = frame["background"].shape[-2:]
-        h_diff, w_diff = height - slen_h, width - slen_w
-        h = 0 if h_diff == 0 else np.random.randint(h_diff)
-        w = 0 if w_diff == 0 else np.random.randint(w_diff)
-        background = frame["background"][:, h : (h + slen_h), w : (w + slen_w)]
+        if self.use_survey_background:
+            # sample background from a random position in the frame
+            height, width = frame["background"].shape[-2:]
+            h_diff, w_diff = height - slen_h, width - slen_w
+            h = 0 if h_diff == 0 else np.random.randint(h_diff)
+            w = 0 if w_diff == 0 else np.random.randint(w_diff)
+            background = frame["background"][:, h : (h + slen_h), w : (w + slen_w)]
+        else:
+            background = 0
+
         image += background
 
         full_cat = tile_cat.to_full_catalog(self.tile_slen)

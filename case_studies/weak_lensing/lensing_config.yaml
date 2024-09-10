@@ -22,6 +22,7 @@ prior:
 
 decoder:
     _target_: case_studies.weak_lensing.lensing_decoder.LensingDecoder
+    use_survey_background: false
     with_dither: false
     with_noise: false
 
