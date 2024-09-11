@@ -73,6 +73,7 @@ my_render:
         restrict_batch: 0
         tile_slen: 256
         save_local: "lensing_maps_shear_overfit"
+        save_local: "lensing_maps_shear_overfit"
 
 encoder:
     _target_: case_studies.weak_lensing.lensing_encoder.WeakLensingEncoder
@@ -107,6 +108,7 @@ encoder:
     use_double_detect: false
     use_checkerboard: false
     train_loss_location: "train_loss_plt_shear_overfit"
+    train_loss_location: "train_loss_plt_shear_overfit"
 
 surveys:
     dc2:
@@ -121,6 +123,7 @@ surveys:
         avg_ellip_kernel_sigma: 3
         batch_size: 1
         num_workers: 1
+        cached_data_path: ${paths.output}/dc2_overfit_test_data_shear
         cached_data_path: ${paths.output}/dc2_overfit_test_data_shear
 
 train:

@@ -104,7 +104,9 @@ class WeakLensingEncoder(Encoder):
         # print(target_cat["shear"].shape)
 
         loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat)
+        print("loss shape", loss.shape)
         loss = loss.sum() / loss.numel()
+        # ignore the shear_1 part of loss here to just train on shear 2
 
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
@@ -121,8 +123,8 @@ class WeakLensingEncoder(Encoder):
             if param.grad is not None:
                 param_grad_norm = param.grad.data.norm(2).item()
                 total_grad_norm += param_grad_norm**2
-                if param_grad_norm < 1e-4 or param_grad_norm > 100:
-                    print(f"grad_norm_{param.name}", param_grad_norm)  # noqa: WPS421
+                # if param_grad_norm < 1e-4 or param_grad_norm > 100:
+                #     print(f"grad_norm_{param.name}", param_grad_norm)  # noqa: WPS421
         total_grad_norm = total_grad_norm**0.5
         if total_grad_norm > 100 or total_grad_norm < 1e-4:
             print("total_grad_norm", total_grad_norm)  # noqa: WPS421

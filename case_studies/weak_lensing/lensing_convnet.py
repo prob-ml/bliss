@@ -23,10 +23,8 @@ class WeakLensingFeaturesNet(nn.Module):
         for i in range(n_blocks_2):
             in_dim = nch_hidden * (2**i)
             out_dim = in_dim * 2
-            if i < (n_blocks_2 // 2):
-                module_list.append(RN2Block(in_dim, out_dim, stride=2))
-            else:
-                module_list.append(RN2Block(in_dim, out_dim))
+            
+            module_list.append(RN2Block(in_dim, out_dim, stride=2))
             module_list.append(RN2Block(out_dim, out_dim))
 
         self.net = nn.ModuleList(module_list)
@@ -52,8 +50,11 @@ class WeakLensingCatalogNet(nn.Module):  # TODO: get the dimensions down to n_ti
         for i in range(n_blocks_2):
             in_dim = in_channels // (2**i)
             out_dim = in_dim // 2
-            net_layers.append(RN2Block(in_dim, in_dim))
-            net_layers.append(RN2Block(in_dim, out_dim, stride=2))
+            # net_layers.append(RN2Block(in_dim, in_dim))
+            if i < ((n_blocks_2+4) // 2):
+                net_layers.append(RN2Block(in_dim, out_dim, stride=2))
+            else:
+                net_layers.append(RN2Block(in_dim, out_dim))
             last_out_dim = out_dim
 
         # Final detection layer to reduce channels
