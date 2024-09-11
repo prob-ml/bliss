@@ -93,7 +93,6 @@ def get_lsst_full_cat(lsst_root_dir: str, cur_image_wcs, image_lim, r_band_min_f
             "plocs": lsst_plocs.unsqueeze(0),
             "n_sources": lsst_n_sources,
             "source_type": lsst_source_type.unsqueeze(0),
-            "galaxy_fluxes": lsst_flux.unsqueeze(0),
-            "star_fluxes": lsst_flux.unsqueeze(0).clone(),
+            "fluxes": lsst_flux.unsqueeze(0),
         },
     )

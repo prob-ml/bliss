@@ -61,8 +61,7 @@ class LSSTPredictor:
                 "plocs": lsst_plocs.unsqueeze(0),
                 "n_sources": lsst_n_sources,
                 "source_type": lsst_source_type.unsqueeze(0),
-                "galaxy_fluxes": lsst_flux.unsqueeze(0),
-                "star_fluxes": lsst_flux.unsqueeze(0).clone(),
+                "fluxes": lsst_flux.unsqueeze(0),
             },
         ).to_tile_catalog(self.tile_slen, self.max_sources_per_tile)
 

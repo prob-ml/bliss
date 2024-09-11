@@ -25,7 +25,7 @@ class TestSimulate:
         """Test simulating an image from a fixed catalog and making predictions on that catalog."""
         # load cached simulated catalog
         true_catalog = torch.load(cfg.paths.test_data + "/test_image/dataset_0.pt")
-        true_catalog["star_fluxes"][0, 10, 10] = 10.0
+        true_catalog["fluxes"][0, 10, 10] = 10.0
         true_catalog = TileCatalog(true_catalog)
 
         # simulate image from catalog
@@ -57,17 +57,10 @@ class TestSimulate:
         assert torch.equal(true_catalog.star_bools, mode_cat.star_bools)
 
         # Compare predicted and true fluxes
-        true_star_fluxes = true_catalog["star_fluxes"] * true_catalog.star_bools
-        true_galaxy_fluxes = true_catalog["galaxy_fluxes"] * true_catalog.galaxy_bools
-        true_fluxes = true_star_fluxes + true_galaxy_fluxes
-        true_fluxes_crop = true_fluxes[0, :, :, 0, 2]
+        true_fluxes = true_catalog.on_fluxes[0, :, :, 0, 2]
+        est_fluxes = mode_cat.on_fluxes[0, :, :, 0, 2]
 
-        est_star_fluxes = mode_cat["star_fluxes"] * mode_cat.star_bools
-        est_galaxy_fluxes = mode_cat["galaxy_fluxes"] * mode_cat.galaxy_bools
-        est_fluxes = est_star_fluxes + est_galaxy_fluxes
-        est_fluxes = est_fluxes[0, :, :, 0, 2]
-
-        assert (est_fluxes - true_fluxes_crop).abs().sum() / (true_fluxes_crop.abs().sum()) < 1.0
+        assert (est_fluxes - true_fluxes).abs().sum() / (true_fluxes.abs().sum()) < 1.0
 
     def test_render_images(self, cfg):
         with open(Path(cfg.paths.test_data) / "sdss_preds.pt", "rb") as f:

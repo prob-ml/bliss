@@ -48,7 +48,7 @@ class Decoder(nn.Module):
         Returns:
             GSObject: a galsim representation of the rendered star convolved with the PSF
         """
-        return psf[band].withFlux(source_params["star_fluxes"][band].item())
+        return psf[band].withFlux(source_params["fluxes"][band].item())
 
     def render_galaxy(self, psf, band, source_params):
         """Render a galaxy with given params and PSF.
@@ -62,9 +62,9 @@ class Decoder(nn.Module):
         Returns:
             GSObject: a galsim representation of the rendered galaxy convolved with the PSF
         """
-        disk_flux = source_params["galaxy_fluxes"][band] * source_params["galaxy_disk_frac"]
+        disk_flux = source_params["fluxes"][band] * source_params["galaxy_disk_frac"]
         bulge_frac = 1 - source_params["galaxy_disk_frac"]
-        bulge_flux = source_params["galaxy_fluxes"][band] * bulge_frac
+        bulge_flux = source_params["fluxes"][band] * bulge_frac
         beta = source_params["galaxy_beta_radians"] * galsim.radians
 
         components = []
@@ -153,9 +153,7 @@ class Decoder(nn.Module):
         # use the specified flux_calibration ratios indexed by image_id
         avg_nelec_conv = np.mean(frame["flux_calibration"], axis=-1)
         if n_sources > 0:
-            full_cat["star_fluxes"] *= rearrange(avg_nelec_conv, "bands -> 1 1 bands")
-            if "galaxy_fluxes" in tile_cat:
-                full_cat["galaxy_fluxes"] *= avg_nelec_conv
+            full_cat["fluxes"] *= rearrange(avg_nelec_conv, "bands -> 1 1 bands")
 
         # generate random WCS shifts as manual image dithering via unaligning WCS
         if self.with_dither:

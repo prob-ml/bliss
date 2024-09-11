@@ -76,8 +76,8 @@ class CatFilter(ABC):
 
 class NullFilter(CatFilter):
     def get_cur_filter_bools(self, true_cat, est_cat):
-        true_filter_bools = torch.ones_like(true_cat.star_bools.squeeze(2)).bool()
-        est_filter_bools = torch.ones_like(est_cat.star_bools.squeeze(2)).bool()
+        true_filter_bools = torch.ones_like(true_cat.is_on_mask)
+        est_filter_bools = torch.ones_like(est_cat.is_on_mask)
 
         return true_filter_bools, est_filter_bools
 

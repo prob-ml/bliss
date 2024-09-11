@@ -366,14 +366,11 @@ class PhotoFullCatalog(FullCatalog):
         decs = column_to_tensor(table, "dec")
         galaxy_bools = (objc_type == 3) & (thing_id != -1)
         star_bools = (objc_type == 6) & (thing_id != -1)
-        star_fluxes = column_to_tensor(table, "psfflux") * star_bools.reshape(-1, 1)
-        star_mags = column_to_tensor(table, "psfmag") * star_bools.reshape(-1, 1)
-        galaxy_fluxes = column_to_tensor(table, "cmodelflux") * galaxy_bools.reshape(-1, 1)
-        galaxy_mags = column_to_tensor(table, "cmodelmag") * galaxy_bools.reshape(-1, 1)
 
         # Combine light source parameters to one tensor
+        star_fluxes = column_to_tensor(table, "psfflux") * star_bools.reshape(-1, 1)
+        galaxy_fluxes = column_to_tensor(table, "cmodelflux") * galaxy_bools.reshape(-1, 1)
         fluxes = star_fluxes + galaxy_fluxes
-        mags = star_mags + galaxy_mags
 
         # true light source mask
         keep = galaxy_bools | star_bools
@@ -383,7 +380,6 @@ class PhotoFullCatalog(FullCatalog):
         ras = ras[keep]
         decs = decs[keep]
         fluxes = fluxes[keep]
-        mags = mags[keep]
         nobj = ras.shape[0]
 
         # We require all 5 bands for computing loss on predictions.
@@ -401,7 +397,6 @@ class PhotoFullCatalog(FullCatalog):
             "n_sources": torch.tensor((nobj,)),
             "source_type": source_type.reshape(1, nobj, 1),
             "fluxes": fluxes.reshape(1, nobj, n_bands),
-            "mags": mags.reshape(1, nobj, n_bands),
             "ra": ras.reshape(1, nobj, 1),
             "dec": decs.reshape(1, nobj, 1),
         }

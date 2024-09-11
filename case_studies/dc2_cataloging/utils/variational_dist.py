@@ -103,14 +103,12 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
             vsbc_variables = {
                 "locs",
                 "ellipticity",
-                "star_fluxes",
-                "galaxy_fluxes",
+                "fluxes",
             }
             credible_interval_variables = {
                 "locs",
                 "ellipticity",
-                "star_fluxes",
-                "galaxy_fluxes",
+                "fluxes",
             }
             for qk, params in fp_pairs:
                 if qk.name in vsbc_variables:
