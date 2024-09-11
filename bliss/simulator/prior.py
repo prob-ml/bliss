@@ -102,8 +102,10 @@ class CatalogPrior(pl.LightningModule):
         d["locs"] = self._sample_locs()
         d["n_sources"] = self._sample_n_sources()
         d["source_type"] = self._sample_source_type()
-        d["star_fluxes"] = self._sample_fluxes(self.gmm_star, self.star_flux)
-        d["galaxy_fluxes"] = self._sample_fluxes(self.gmm_gal, self.galaxy_flux)
+
+        star_fluxes = self._sample_fluxes(self.gmm_star, self.star_flux)
+        galaxy_fluxes = self._sample_fluxes(self.gmm_gal, self.galaxy_flux)
+        d["fluxes"] = torch.where(d["source_type"], galaxy_fluxes, star_fluxes)
 
         return TileCatalog(d)
 

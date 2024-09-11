@@ -29,8 +29,7 @@ class TestMetrics:
             "n_sources": torch.tensor([1, 2]),
             "plocs": true_locs * slen,
             "source_type": true_source_type,
-            "star_fluxes": torch.ones(2, 2, 5),
-            "galaxy_fluxes": torch.ones(2, 2, 5),
+            "fluxes": torch.ones(2, 2, 5),
             "galaxy_params": torch.ones(2, 2, 6),
         }
         true_params = FullCatalog(slen, slen, d_true)
@@ -39,8 +38,7 @@ class TestMetrics:
             "n_sources": torch.tensor([2, 2]),
             "plocs": est_locs * slen,
             "source_type": est_source_type,
-            "star_fluxes": torch.ones(2, 2, 5),
-            "galaxy_fluxes": torch.ones(2, 2, 5),
+            "fluxes": torch.ones(2, 2, 5),
             "galaxy_disk_frac": torch.ones(2, 2, 1),
             "galaxy_beta_radians": torch.ones(2, 2, 1),
             "galaxy_disk_q": torch.ones(2, 2, 1),
@@ -85,8 +83,7 @@ class TestMetrics:
             "n_sources": true_sources,
             "plocs": true_locs,
             "source_type": true_source_type,
-            "star_fluxes": torch.ones(4, 1, 5),
-            "galaxy_fluxes": torch.ones(4, 1, 5),
+            "fluxes": torch.ones(4, 1, 5),
             "galaxy_params": torch.ones(4, 1, 6),
         }
         true_params = FullCatalog(50, 50, d_true)
@@ -95,8 +92,7 @@ class TestMetrics:
             "n_sources": est_sources,
             "plocs": est_locs,
             "source_type": est_source_type,
-            "star_fluxes": torch.ones(4, 1, 5),
-            "galaxy_fluxes": torch.ones(4, 1, 5),
+            "fluxes": torch.ones(4, 1, 5),
             "galaxy_params": torch.ones(4, 1, 6),
         }
         est_params = FullCatalog(50, 50, d_est)

@@ -440,19 +440,13 @@ def compute_prob_flux_within_one_mag(pred_dists, bins, cached_path):
 
         for name, model in models.items():
             # Get probabilities of flux within 1 magnitude of true
-            q_star_flux = pred_dists[name][i]["star_fluxes"].base_dist
-            q_gal_flux = pred_dists[name][i]["galaxy_fluxes"].base_dist
+            q_flux = pred_dists[name][i]["fluxes"].base_dist
 
-            star_flux_probs = q_star_flux.cdf(ub) - q_star_flux.cdf(lb)
-            gal_flux_probs = q_gal_flux.cdf(ub) - q_gal_flux.cdf(lb)
+            flux_probs = q_flux.cdf(ub) - q_flux.cdf(lb)
+            flux_probs = flux_probs.unsqueeze(-2)[target_cat.is_on_mask][:, 2]
 
-            pred_probs = torch.where(
-                target_cat.star_bools, star_flux_probs.unsqueeze(-2), gal_flux_probs.unsqueeze(-2)
-            )
-            pred_probs = pred_probs[target_cat.is_on_mask][:, 2]
-
-            probs_per_bin = torch.zeros(n_bins, dtype=pred_probs.dtype)
-            sum_probs[name] += probs_per_bin.scatter_add(0, binned_target_on_mags, pred_probs)
+            probs_per_bin = torch.zeros(n_bins, dtype=flux_probs.dtype)
+            sum_probs[name] += probs_per_bin.scatter_add(0, binned_target_on_mags, flux_probs)
             bin_count[name] += binned_target_on_mags.bincount(minlength=n_bins)
 
     binned_avg_flux_probs = {}
@@ -535,27 +529,19 @@ def compute_prop_flux_in_interval(pred_dists, intervals, cached_path):
         dim_count += dim_mask.sum()
 
         for name, model in models.items():
-            q_star_flux = pred_dists[name][i]["star_fluxes"].base_dist
-            q_gal_flux = pred_dists[name][i]["galaxy_fluxes"].base_dist
+            q_flux = pred_dists[name][i]["fluxes"].base_dist
 
             for j, interval in enumerate(intervals):
                 # construct equal tail intervals and determine if true flux is within ETI
                 tail_prob = (1 - interval) / 2
-                star_lb = q_star_flux.icdf(tail_prob)[..., 2]
-                star_ub = q_star_flux.icdf(1 - tail_prob)[..., 2]
-                gal_lb = q_gal_flux.icdf(tail_prob)[..., 2]
-                gal_ub = q_gal_flux.icdf(1 - tail_prob)[..., 2]
+                lb = q_flux.icdf(tail_prob)[..., 2]
+                ub = q_flux.icdf(1 - tail_prob)[..., 2]
 
-                star_flux_in_eti = (true_fluxes >= star_lb) & (true_fluxes <= star_ub)
-                gal_flux_in_eti = (true_fluxes >= gal_lb) & (true_fluxes <= gal_ub)
+                flux_in_eti = (true_fluxes >= lb) & (true_fluxes <= ub)
 
-                source_in_eti = torch.where(
-                    target_cat.star_bools.squeeze(), star_flux_in_eti, gal_flux_in_eti
-                )
-
-                sum_all_in_eti[name][j] += (source_in_eti * target_cat.is_on_mask.squeeze()).sum()
-                sum_bright_in_eti[name][j] += (source_in_eti * bright_mask).sum()
-                sum_dim_in_eti[name][j] += (source_in_eti * dim_mask).sum()
+                sum_all_in_eti[name][j] += (flux_in_eti * target_cat.is_on_mask.squeeze()).sum()
+                sum_bright_in_eti[name][j] += (flux_in_eti * bright_mask).sum()
+                sum_dim_in_eti[name][j] += (flux_in_eti * dim_mask).sum()
 
     # Compute proportions and save data
     prop_all_in_eti = {}
@@ -985,17 +971,13 @@ def compute_ci_width(pred_dists, bins, cached_path):
         bin_count += binned_target_on_mags.bincount(minlength=n_bins)
 
         for name, model in models.items():
-            q_star_flux = pred_dists[name][i]["star_fluxes"].base_dist
-            q_gal_flux = pred_dists[name][i]["galaxy_fluxes"].base_dist
+            q_flux = pred_dists[name][i]["fluxes"].base_dist
 
             # construct equal tail intervals
-            star_intervals = q_star_flux.icdf(1 - tail_prob) - q_star_flux.icdf(tail_prob)
-            gal_intervals = q_gal_flux.icdf(1 - tail_prob) - q_gal_flux.icdf(tail_prob)
+            source_intervals = q_flux.icdf(1 - tail_prob) - q_flux.icdf(tail_prob)
 
             # Compute CI width for true sources based on source type
-            width = torch.where(
-                target_cat.star_bools, star_intervals.unsqueeze(-2), gal_intervals.unsqueeze(-2)
-            )
+            width = source_intervals.unsqueeze(-2)
             width = width[target_cat.is_on_mask][:, 2]
             width[width == torch.inf] = 0  # temp hack to not get inf
 
@@ -1009,14 +991,7 @@ def compute_ci_width(pred_dists, bins, cached_path):
                 width / target_cat.on_fluxes[target_cat.is_on_mask][:, 2],
             )
 
-            # Get flux scale for true sources based on source type
-            scale = torch.where(
-                target_cat.star_bools,
-                q_star_flux.scale.unsqueeze(-2),
-                q_gal_flux.scale.unsqueeze(-2),
-            )
-            scale = scale[target_cat.is_on_mask][:, 2]
-
+            scale = q_flux.scale.unsqueeze(-2)[target_cat.is_on_mask][:, 2]
             scales_per_bin = torch.zeros(n_bins, dtype=scale.dtype)
             flux_scale[name] += scales_per_bin.scatter_add(0, binned_target_on_mags, scale)
 

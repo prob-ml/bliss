@@ -171,13 +171,7 @@ class TileCatalog(BaseTileCatalog):
 
     @property
     def on_fluxes(self):
-        # TODO: a tile catalog should store fluxes rather than star_fluxes and galaxy_fluxes
-        # because that's all that's needed to render the source
-        if "galaxy_fluxes" not in self:
-            fluxes = self["star_fluxes"]
-        else:
-            fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
-        return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
+        return self.is_on_mask.unsqueeze(-1) * self["fluxes"]
 
     def on_magnitudes(self, zero_point) -> Tensor:
         return convert_flux_to_magnitude(self.on_fluxes, zero_point)
@@ -470,12 +464,7 @@ class FullCatalog(UserDict):
 
     @property
     def on_fluxes(self) -> Tensor:
-        # ideally we'd always store fluxes rather than star_fluxes and galaxy_fluxes
-        if "galaxy_fluxes" not in self:
-            fluxes = self["star_fluxes"]
-        else:
-            fluxes = torch.where(self.galaxy_bools, self["galaxy_fluxes"], self["star_fluxes"])
-        return torch.where(self.is_on_mask[..., None], fluxes, torch.zeros_like(fluxes))
+        return self.is_on_mask.unsqueeze(-1) * self["fluxes"]
 
     def on_magnitudes(self, zero_point) -> Tensor:
         return convert_flux_to_magnitude(self.on_fluxes, zero_point)
@@ -570,9 +559,6 @@ class FullCatalog(UserDict):
             KeyError: If the tile_params contain `plocs` or `n_sources`.
         """
         assert max_sources_per_tile <= torch.iinfo(inter_int_type).max
-
-        # TODO: a FullCatalog only needs to "know" its height and width to convert itself to a
-        # TileCatalog. So those parameters should be passed on conversion, not initialization.
 
         # initialization #
         n_tiles_h = math.ceil(self.height / tile_slen)
