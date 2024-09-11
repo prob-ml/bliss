@@ -71,6 +71,22 @@ encoder:
                 _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
                 bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
                 bin_type: "njymag"
+            redshift_mearn_square_error_bin:
+                _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+                bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+                bin_type: "njymag"
+            redshift_outlier_fraction_bin:
+                _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+                bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+                bin_type: "njymag"
+            redshift_nmad_bin:
+                _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDevBin
+                bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+                bin_type: "njymag"
+            redshift_abs_bias_bin:
+                _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+                bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+                bin_type: "njymag"
 
 my_metrics_test:
     redshift_mearn_square_error:

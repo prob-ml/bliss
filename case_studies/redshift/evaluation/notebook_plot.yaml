@@ -68,7 +68,6 @@ encoder:
                 _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
                 bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
                 bin_type: "njymag"
-    do_discrete: True
 
 my_metrics_test:
     redshift_mearn_square_error:
