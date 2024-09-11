@@ -55,7 +55,7 @@ class LensingDC2DataModule(DC2DataModule):
         self.image_slen = image_slen
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
-        self.mag_max_cut = mag_max_cut
+        self.mag_max_cut = None
         self.avg_ellip_kernel_size = avg_ellip_kernel_size
         self.avg_ellip_kernel_sigma = avg_ellip_kernel_sigma
 
@@ -74,7 +74,7 @@ class LensingDC2DataModule(DC2DataModule):
 
         n_image = self._load_image_and_bg_files_list()
 
-        for i in range(n_image):
+        for i in range(21, 25):
             self.generate_cached_data(i)
 
     def to_tile_catalog(self, full_catalog, height, width):
@@ -163,14 +163,17 @@ class LensingDC2DataModule(DC2DataModule):
 
         shear1 = tile_dict["shear1_sum"] / tile_dict["shear1_count"]
         shear2 = tile_dict["shear2_sum"] / tile_dict["shear2_count"]
-        shear = torch.stack((shear1.squeeze(-1), shear2.squeeze(-1)), dim=-1)
+        # shear = torch.stack((shear1.squeeze(-1), shear2.squeeze(-1)), dim=-1)
         convergence = tile_dict["convergence_sum"] / tile_dict["convergence_count"]
         ellip1_lensed = tile_dict["ellip1_lensed_sum"] / tile_dict["ellip1_lensed_count"]
         ellip2_lensed = tile_dict["ellip2_lensed_sum"] / tile_dict["ellip2_lensed_count"]
         ellip_lensed = torch.stack((ellip1_lensed.squeeze(-1), ellip2_lensed.squeeze(-1)), dim=-1)
         redshift = tile_dict["redshift_sum"] / tile_dict["redshift_count"]
+        print(image_index, "nan", torch.isnan(ellip1_lensed).sum())
+            
 
-        tile_dict["shear"] = shear
+        tile_dict["shear_1"] = shear1
+        tile_dict["shear_2"] = shear2
         tile_dict["convergence"] = convergence
         tile_dict["ellip_lensed"] = ellip_lensed
         tile_dict["ellip_lensed_wavg"] = compute_weighted_avg_ellip(
@@ -183,11 +186,12 @@ class LensingDC2DataModule(DC2DataModule):
         data_to_cache = unpack_dict(data_splits)
 
         for i in range(self.n_image_split**2):  # noqa: WPS426
-            cached_data_file_name = f"cached_data_{image_index:04d}_{i:04d}.pt"
+            cached_data_file_name = f"cached_data_{image_index:04d}_{i:04d}_size_1.pt"
             tmp = data_to_cache[i]
             tmp_clone = map_nested_dicts(
                 tmp, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
             )
+            print(len(tmp_clone))
             with open(self.cached_data_path / cached_data_file_name, "wb") as cached_data_file:
                 torch.save(tmp_clone, cached_data_file)
 
@@ -237,7 +241,6 @@ class LensingDC2Catalog(DC2FullCatalog):
 
         redshift = redshift[plocs_mask]
 
-        mag_mask = mag_mask[plocs_mask]
 
         psf_params = psf_params[:, :, :, plocs_mask.squeeze() == 1]
         psf_params = psf_params.permute(0, 3, 1, 2).flatten(2, -1)  # 1, n_obj, 24
@@ -255,4 +258,4 @@ class LensingDC2Catalog(DC2FullCatalog):
             "psf": psf_params.reshape(1, nobj, -1),
         }
 
-        return cls(height, width, d)  # , psf_params
+        return cls(height, width, d), psf_params

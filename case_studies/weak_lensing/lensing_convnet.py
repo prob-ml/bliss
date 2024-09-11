@@ -66,6 +66,6 @@ class WeakLensingCatalogNet(nn.Module):  # TODO: get the dimensions down to n_ti
             # print("after catalog layer", i, x.shape)
 
         # Final detection layer
-        x = self.detect(x)  # Output shape: [batch_size, 2, 4, 4]
+        x = self.detect(x) 
 
         return x

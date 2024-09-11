@@ -18,11 +18,18 @@ class LensingMapMSE(Metric):
         self.total = 1
 
     def update(self, true_cat, est_cat, matching) -> None:
-        true_shear = true_cat["shear"].flatten(1, 2)
-        pred_shear = est_cat["shear"].flatten(1, 2)
+        print(true_cat["shear_1"].shape)
+        true_shear_1 = true_cat["shear_1"]
+        true_shear_2 = true_cat["shear_2"]
+        pred_shear_1  = est_cat["shear_1"]
+        pred_shear_2 = est_cat["shear_2"]
+        true_shear = torch.cat((true_shear_1, true_shear_2), dim=-1)
+        pred_shear = torch.cat((pred_shear_1, pred_shear_2), dim=-1)
+        true_shear = true_shear.flatten(1, 2)
+        pred_shear = pred_shear.flatten(1, 2)
         baseline_pred_shear = true_cat["ellip_lensed"].flatten(1, 2)
         if "convergence" not in est_cat:
-            true_convergence = torch.zeros(*true_cat["shear"].shape[:-1], 1).flatten(1, 2)
+            true_convergence = torch.zeros_like(true_shear_1).flatten(1, 2)
             pred_convergence = torch.zeros_like(true_convergence).flatten(1, 2)
         else:
             true_convergence = true_cat["convergence"].flatten(1, 2)
