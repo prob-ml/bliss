@@ -259,8 +259,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             "locs",
             "n_sources",
             "source_type",
-            "galaxy_fluxes",
-            "star_fluxes",
+            "fluxes",
             "redshifts",
             "blendedness",
             "shear",
@@ -333,9 +332,7 @@ class DC2FullCatalog(FullCatalog):
         source_type = torch.from_numpy(catalog["truth_type"].values)
         # we ignore the supernova
         source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
-        flux, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
-        star_fluxes = flux
-        galaxy_fluxes = flux
+        fluxes, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
         blendedness = torch.from_numpy(catalog["blendedness"].values)
         shear1 = torch.from_numpy(catalog["shear_1"].values)
         shear2 = torch.from_numpy(catalog["shear_2"].values)
@@ -352,8 +349,7 @@ class DC2FullCatalog(FullCatalog):
             "source_type": source_type.view(1, ori_len, 1),
             "plocs": plocs.view(1, ori_len, 2),
             "redshifts": redshifts.view(1, ori_len, 1),
-            "galaxy_fluxes": galaxy_fluxes.view(1, ori_len, kwargs["n_bands"]),
-            "star_fluxes": star_fluxes.view(1, ori_len, kwargs["n_bands"]),
+            "fluxes": fluxes.view(1, ori_len, kwargs["n_bands"]),
             "blendedness": blendedness.view(1, ori_len, 1),
             "shear": shear.view(1, ori_len, 2),
             "ellipticity": ellipticity.view(1, ori_len, 2),

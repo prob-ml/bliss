@@ -82,19 +82,12 @@ variational_factors:
       nll_gating:
           _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
-      name: star_fluxes
+      name: fluxes
       dim: 5
       sample_rearrange: b ht wt d -> b ht wt 1 d
       nll_rearrange: b ht wt 1 d -> b ht wt d
       nll_gating:
-          _target_: bliss.encoder.variational_dist.StarGating
-    - _target_: bliss.encoder.variational_dist.LogNormalFactor
-      name: galaxy_fluxes
-      dim: 5
-      sample_rearrange: b ht wt d -> b ht wt 1 d
-      nll_rearrange: b ht wt 1 d -> b ht wt d
-      nll_gating:
-          _target_: bliss.encoder.variational_dist.GalaxyGating
+          _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_disk_frac
       sample_rearrange: b ht wt d -> b ht wt 1 d

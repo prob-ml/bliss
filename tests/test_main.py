@@ -65,7 +65,7 @@ class TestTrain:
         cfg.prior.survey_bands = DES.BANDS
 
         for f in cfg.variational_factors:
-            if f.name in {"star_fluxes", "galaxy_fluxes"}:
+            if f.name == "fluxes":
                 f.dim = 4
 
         cfg.encoder.survey_bands = DES.BANDS
