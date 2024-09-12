@@ -36,10 +36,10 @@ class LensingPrior(CatalogPrior):
             The remaining dimensions are variable-specific.
         """
 
-        catalog_params = super().sample()
+        d = super().sample()
 
         shear, convergence = self._sample_shear_and_convergence()
-        catalog_params["shear"] = shear
-        catalog_params["convergence"] = convergence
+        d["shear"] = shear
+        d["convergence"] = convergence
 
-        return TileCatalog(catalog_params)
+        return TileCatalog(d)
