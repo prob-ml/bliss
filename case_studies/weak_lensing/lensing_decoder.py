@@ -17,9 +17,9 @@ class LensingDecoder(Decoder):
         Returns:
             GSObject: a galsim representation of the rendered galaxy convolved with the PSF
         """
-        disk_flux = source_params["galaxy_fluxes"][band] * source_params["galaxy_disk_frac"]
+        disk_flux = source_params["fluxes"][band] * source_params["galaxy_disk_frac"]
         bulge_frac = 1 - source_params["galaxy_disk_frac"]
-        bulge_flux = source_params["galaxy_fluxes"][band] * bulge_frac
+        bulge_flux = source_params["fluxes"][band] * bulge_frac
         beta = source_params["galaxy_beta_radians"] * galsim.radians
 
         components = []
