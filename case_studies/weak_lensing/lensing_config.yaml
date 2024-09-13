@@ -15,22 +15,20 @@ prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
     n_tiles_h: 514
     n_tiles_w: 514
+    batch_size: 2
     constant_shear: 0.25
     constant_convergence: 0.25
     prob_galaxy: 1.0
     mean_sources: 0.02
 
 decoder:
-    _target_: case_studies.weak_lensing.lensing_decoder.LensingDecoder
     use_survey_background: false
     with_dither: false
     with_noise: false
 
-simulator:
-    n_batches: 128
-    num_workers: 32
-    valid_n_batches: 10
-    fix_validation_set: true
+cached_simulator:
+    batch_size: 2
+    train_transforms: []
 
 variational_factors:
   - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
@@ -110,4 +108,5 @@ surveys:
         cached_data_path: ${paths.dc2}/dc2_lensing_splits_img2048_tile256
 
 generate:
-  n_batches_per_file: 4
+    n_image_files: 50
+    n_batches_per_file: 4
