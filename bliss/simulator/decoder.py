@@ -53,17 +53,16 @@ class Decoder(nn.Module):
         """
         return psf[band].withFlux(source_params["fluxes"][band].item())
 
-    def render_galaxy(self, psf, band, source_params):
-        """Render a galaxy with given params and PSF.
+    def render_bulge_plus_disk(self, band, source_params):
+        """Render a galaxy with given params.
 
         Args:
-            psf (List): a list of PSFs for each band
             band (int): band
             source_params (Tensor): Tensor containing the parameters for a particular source
                 (see prior.py for details about these parameters)
 
         Returns:
-            GSObject: a galsim representation of the rendered galaxy convolved with the PSF
+            GSObject: a galsim representation of the rendered galaxy
         """
         disk_flux = source_params["fluxes"][band] * source_params["galaxy_disk_frac"]
         bulge_frac = 1 - source_params["galaxy_disk_frac"]
@@ -83,7 +82,21 @@ class Decoder(nn.Module):
             bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs)
             sheared_bulge = bulge.shear(q=source_params["galaxy_bulge_q"].item(), beta=beta)
             components.append(sheared_bulge)
-        galaxy = galsim.Add(components)
+        return galsim.Add(components)
+
+    def render_galaxy(self, psf, band, source_params):
+        """Render a galaxy with given params and PSF.
+
+        Args:
+            psf (List): a list of PSFs for each band
+            band (int): band
+            source_params (Tensor): Tensor containing the parameters for a particular source
+                (see prior.py for details about these parameters)
+
+        Returns:
+            GSObject: a galsim representation of the rendered galaxy convolved with the PSF
+        """
+        galaxy = self.render_bulge_plus_disk(band, source_params)
         return galsim.Convolution(galaxy, psf[band])
 
     @property
