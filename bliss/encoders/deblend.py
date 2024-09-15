@@ -98,7 +98,7 @@ class GalaxyEncoder(pl.LightningModule):
         recon_losses: Tensor = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
         assert not torch.any(torch.logical_or(torch.isnan(recon_losses), torch.isinf(recon_losses)))
 
-        return recon_losses.mean()
+        return recon_losses.sum()
 
     def variational_mode(self, images: Tensor, background: Tensor, tile_catalog: TileCatalog):
         _, nth, ntw, _ = tile_catalog.locs.shape
