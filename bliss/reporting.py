@@ -449,7 +449,7 @@ def get_single_galaxy_ellipticities(
     return ellips
 
 
-def get_snr(noiseless: Tensor, background: Tensor) -> float:
+def get_snr(noiseless: Tensor, background: Tensor) -> Tensor:
     """Compute SNR given noiseless, isolated iamges of galaxies and background."""
     image_with_background = noiseless + background
     snr2 = reduce(noiseless**2 / image_with_background, "b c h w -> b", "sum")

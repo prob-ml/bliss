@@ -19,17 +19,16 @@ class SavedGalsimBlends(Dataset):
     def __init__(
         self,
         dataset_file: str,
-        epoch_size: int,
         slen: int = 40,
         tile_slen: int = 4,
         keep_padding: bool = False,
     ) -> None:
         super().__init__()
         ds: dict[str, Tensor] = torch.load(dataset_file)
-        self.epoch_size = epoch_size
 
         self.images = ds.pop("images").float()  # needs to be a float for NN
         self.background = ds.pop("background").float()
+        self.epoch_size = len(self.images)
 
         # don't need for training
         ds.pop("centered_sources")
@@ -62,13 +61,14 @@ class SavedGalsimBlends(Dataset):
 
 
 class SavedIndividualGalaxies(Dataset):
-    def __init__(self, dataset_file: str, epoch_size: int) -> None:
+    def __init__(self, dataset_file: str) -> None:
         super().__init__()
         ds: dict[str, Tensor] = torch.load(dataset_file)
-        self.epoch_size = epoch_size
 
         self.images = ds.pop("images").float()  # needs to be a float for NN
         self.background = ds.pop("background").float()
+
+        self.epoch_size = len(self.images)
 
     def __len__(self) -> int:
         return self.epoch_size
@@ -78,6 +78,31 @@ class SavedIndividualGalaxies(Dataset):
             "images": self.images[index],
             "background": self.background[index],
         }
+
+
+def generate_individual_dataset(
+    n_samples: int, catsim_table: Table, psf: galsim.GSObject, slen: int = 53, replace: bool = True
+):
+    """Like the function below but it only generates individual galaxies, so much faster to run."""
+
+    background = get_constant_background(get_default_lsst_background(), (n_samples, 1, slen, slen))
+    params, ids = _sample_galaxy_params(catsim_table, n_samples, n_samples, replace=replace)
+    assert params.shape == (n_samples, 11)
+    gals = torch.zeros((n_samples, 1, slen, slen))
+    for ii in tqdm(range(n_samples)):
+        gal = _render_one_galaxy(params[ii], psf, slen, offset=None)
+        gals[ii] = gal
+
+    # add noise
+    noisy = add_noise_and_background(gals, background)
+
+    return {
+        "images": noisy,
+        "background": background,
+        "noiseless": gals,
+        "galaxy_params": params,
+        "indices": ids,
+    }
 
 
 def generate_dataset(
@@ -194,8 +219,8 @@ def _render_padded_image(
 
         is_galaxy = _bernoulli(galaxy_prob, 1).bool().item()
         if is_galaxy:
-            params = _sample_galaxy_params(catsim_table, 1, 1)
-            assert params.shape == (1, 10)
+            params, _ = _sample_galaxy_params(catsim_table, 1, 1)
+            assert params.shape == (1, 11)
             one_galaxy_params = params[0]
             galaxy = _render_one_galaxy(one_galaxy_params, psf, size, offset)
             image += galaxy
@@ -225,10 +250,10 @@ def sample_source_params(
     max_shift: float = 0.5,
     galaxy_prob: float = 0.9,
 ) -> dict[str, Tensor]:
-    """Returns a single batch of source parameters."""
+    """Returns source parameters corresponding to a single blend."""
     n_sources = _sample_poisson_n_sources(mean_sources, max_n_sources)
-    params = _sample_galaxy_params(catsim_table, n_sources, max_n_sources)
-    assert params.shape == (max_n_sources, 10)
+    params, _ = _sample_galaxy_params(catsim_table, n_sources, max_n_sources)
+    assert params.shape == (max_n_sources, 11)
 
     star_fluxes = _sample_star_fluxes(all_star_mags, n_sources, max_n_sources)
 
@@ -315,15 +340,18 @@ def render_full_catalog(full_cat: FullCatalog, psf: galsim.GSObject, slen: int, 
     return image, uncentered_noiseless, centered_noiseless
 
 
-def _sample_galaxy_params(catsim_table: Table, n_galaxies: int, max_n_sources: int) -> Tensor:
-    indices = np.random.choice(np.arange(len(catsim_table)), size=(n_galaxies,), replace=True)
+def _sample_galaxy_params(
+    catsim_table: Table, n_galaxies: int, max_n_sources: int, replace: bool = True
+) -> tuple[Tensor, Tensor]:
+    indices = np.random.choice(np.arange(len(catsim_table)), size=(n_galaxies,), replace=replace)
 
     rows = catsim_table[indices]
     mags = torch.from_numpy(rows["i_ab"].value.astype(float))  # byte order
     gal_flux = convert_mag_to_flux(mags)
-    rows["flux"] = gal_flux.numpy().astype(float)
+    rows["flux"] = gal_flux.numpy().astype(np.float32)
 
-    return catsim_row_to_galaxy_params(rows, max_n_sources)
+    ids = torch.from_numpy(rows["galtileid"].value.astype(int))
+    return catsim_row_to_galaxy_params(rows, max_n_sources), ids
 
 
 def _render_one_star(
@@ -340,27 +368,29 @@ def _render_one_galaxy(
     galaxy_params: Tensor, psf: galsim.GSObject, size: int, offset: Optional[Tensor] = None
 ) -> Tensor:
     assert offset is None or offset.shape == (2,)
-    assert galaxy_params.device == torch.device("cpu") and galaxy_params.shape == (10,)
-    fnb, fnd, fnagn, ab, ad, bb, bd, pa, _, total_flux = galaxy_params.numpy()  # noqa:WPS236
+    assert galaxy_params.device == torch.device("cpu") and galaxy_params.shape == (11,)
+    fnb, fnd, fnagn, ab, ad, bb, bd, pab, pad, _, total_flux = galaxy_params.numpy()  # noqa:WPS236
 
     disk_flux = total_flux * fnd / (fnd + fnb + fnagn)
     bulge_flux = total_flux * fnb / (fnd + fnb + fnagn)
 
     components = []
     if disk_flux > 0:
+        assert bd > 0 and ad > 0 and pad > 0
         disk_q = bd / ad
         disk_hlr_arcsecs = np.sqrt(ad * bd)
         disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs).shear(
             q=disk_q,
-            beta=pa * galsim.radians,
+            beta=pad * galsim.degrees,
         )
         components.append(disk)
     if bulge_flux > 0:
+        assert bb > 0 and ab > 0 and pab > 0
         bulge_q = bb / ab
         bulge_hlr_arcsecs = np.sqrt(ab * bb)
         bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs).shear(
             q=bulge_q,
-            beta=pa * galsim.radians,
+            beta=pab * galsim.degrees,
         )
         components.append(bulge)
     galaxy = galsim.Add(components)

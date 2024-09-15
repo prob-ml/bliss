@@ -13,7 +13,7 @@ from bliss.encoders.detection import DetectionEncoder
 
 
 def test_encoder_forward(home_dir, tmp_path):
-    ae_state_dict = home_dir / "case_studies" / "galsim_galaxies" / "models" / "autoencoder.pt"
+    ae_state_dict = home_dir / "experiment" / "models" / "autoencoder.pt"
 
     catsim_table = Table.read(home_dir / "data" / "OneDegSq.fits")
     all_star_mags = column_to_tensor(
@@ -24,8 +24,8 @@ def test_encoder_forward(home_dir, tmp_path):
 
     saved_ds_path = tmp_path / "train_ds.pt"
     torch.save(blends_ds, saved_ds_path)
-    saved_ds1 = SavedGalsimBlends(saved_ds_path, 32, keep_padding=False)
-    saved_ds2 = SavedGalsimBlends(saved_ds_path, 32, keep_padding=True)
+    saved_ds1 = SavedGalsimBlends(saved_ds_path, keep_padding=False)
+    saved_ds2 = SavedGalsimBlends(saved_ds_path, keep_padding=True)
 
     dl1 = DataLoader(saved_ds1, batch_size=32, num_workers=0)
     dl2 = DataLoader(saved_ds2, batch_size=32, num_workers=0)

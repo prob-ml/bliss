@@ -41,7 +41,7 @@ def shift_sources_in_ptiles(
     input (e.g. 53x53 or 52x52) and in the former case trim the size of the image and correctly
     interpolate.
 
-    An explicit demonstration of this function working correctly can be found in the `case_studies`
+    An explicit demonstration of this function working correctly can be found in the `experiment`
     notebook: `test-shift-ptiles-fnc.ipynb`.
     """
     npt, _, _, size = image_ptiles_flat.shape

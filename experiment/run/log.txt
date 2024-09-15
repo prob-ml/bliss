@@ -1,0 +1,635 @@
+./bin/run_detection_train_script.py -o -s 42 --star-density 0 -t 11_42
+
+Run training detection script...
+        With tag 11_42 and seed 42 at 2024-04-11 12:01:12.055897
+        Galaxy density 185.0, star_density 0.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.01, batch_size 32, n_epochs 25
+
+INFO: Will be saved as `version 17`
+INFO: Overwriting dataset...
+INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
+
+Run training detection script...
+        With tag 11_42 and seed 42 at 2024-04-11 12:29:52.988583
+        Galaxy density 185.0, star_density 0.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+
+./bin/run_detection_train_script.py -o -s 43 --star-density 0 -t 11_43
+
+Run training detection script...
+        With tag 11_43 and seed 43 at 2024-04-11 12:32:50.034828
+        Galaxy density 185.0, star_density 0.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+INFO: Will be saved as `version 18`
+INFO: Overwriting dataset...
+INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
+
+./bin/run_detection_train_script.py -o -s 44 --star-density 0 -t 11_44
+
+Run training detection script...
+        With tag 11_44 and seed 44 at 2024-04-11 16:17:31.538439
+        Galaxy density 185.0, star_density 0.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+INFO: Will be saved as `version 19`
+INFO: Overwriting dataset...
+INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
+
+INFO: Saving checkpoint 'run/out/detection/version_17/checkpoints/epoch=8-val_loss=0.020.ckpt' as weights models/detection_model.pt
+
+Run training autoencoder script...
+        With tag 1 and seed 42 at 2024-04-14 16:33:32.142696
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        val_check_interval 0.1, batch_size 128, n_epochs 50
+
+INFO: Overwriting dataset...
+INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
+INFO: Saving model as version 0
+ERROR: Wrong model specified
+
+Run training autoencoder script...
+        With tag 1 and seed 42 at 2024-04-14 16:44:17.409650
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        val_check_interval 0.1, batch_size 128, n_epochs 50
+
+INFO: Saving model as version 0
+
+Run training autoencoder script...
+        With tag 1 and seed 42 at 2024-04-14 16:45:07.584212
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        val_check_interval 0.1, batch_size 128, n_epochs 50
+
+INFO: Saving model as version 0
+
+
+./bin/run_autoencoder_train.py -s 42 -t 2
+
+./bin/run_autoencoder_train.py -s 42 -t 2
+
+
+./bin/run_autoencoder_train.py -s 42 -t 2
+
+Run training autoencoder script...
+        With tag 2 and seed 42 at 2024-04-14 16:55:38.127869
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 1001
+
+
+./bin/run_autoencoder_train.py -s 42 -t 1
+
+Run training autoencoder script...
+        With tag 1 and seed 42 at 2024-04-14 16:56:07.421368
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 1001
+
+INFO: Saving model as version 1
+
+./bin/run_autoencoder_train.py -s 42 -t 1
+
+Run training autoencoder script...
+        With tag 1 and seed 42 at 2024-04-14 17:12:08.652202
+        Only bright 'False',
+        n_samples 102800, split 77100, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 1001
+
+INFO: Saving model as version 2
+
+./bin/run_autoencoder_train.py -s 42 -t 2
+
+./bin/run_autoencoder_train.py -o -s 42 -t 2
+
+Run training autoencoder script...
+        With tag 2 and seed 42 at 2024-04-15 10:59:29.884042
+        Only bright 'False',
+        n_samples 204800, split 153600, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 3001
+
+INFO: Overwriting dataset...
+INFO: Complete catalog with only i < 27.3 magnitude of length: 666475
+INFO: Saving model as version 3
+INFO: Saved checkpoint 'run/out/autoencoder/version_2/checkpoints/epoch=984-val_loss=5386824.500.ckpt' as weights models/autoencoder.pt
+
+./bin/run_detection_train_script.py -o -s 43 -t 12_43
+
+Run training detection script...
+        With tag 12_43 and seed 43 at 2024-04-16 13:50:50.398530
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+INFO: Saving model as version 20
+
+./bin/run_binary_train_script.py -s 43 -t 12_43
+
+Run training binary script...
+        With tag 12_43 and seed 43 at 2024-04-16 14:43:50.783964
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.2, batch_size 32, n_epochs 10
+
+INFO: Saving model as version 2
+
+./bin/run_binary_train_script.py -s 44 -t 12_43
+
+Run training binary script...
+        With tag 12_43 and seed 44 at 2024-04-16 15:13:48.351046
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.1, batch_size 32, n_epochs 10
+
+INFO: Saving model as version 3
+
+./bin/run_detection_train_script.py -o -s 44 -t 12_44
+
+Run training detection script...
+        With tag 12_44 and seed 44 at 2024-04-16 17:44:16.259131
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 21
+
+./bin/run_detection_train_script.py -o -s 45 -t 12_45
+
+Run training detection script...
+        With tag 12_45 and seed 45 at 2024-04-16 22:43:01.788808
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.15, batch_size 32, n_epochs 25
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 22
+INFO: Saved checkpoint 'run/out/binary/version_3/checkpoints/epoch=2-val_loss=11.227.ckpt' as weights models/binary.pt
+
+./bin/run_deblender_train.py -o -s 42 -t 15_42
+
+Run training deblender script...
+        With tag 15_42 and seed 42 at 2024-04-22 10:48:18.696340
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.2, batch_size 32, n_epochs 25
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+
+./bin/run_deblender_train.py -o -s 42 -t 15_42
+
+Run training deblender script...
+        With tag 15_42 and seed 42 at 2024-04-22 10:54:28.281268
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 0.2, batch_size 32, n_epochs 25
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 6
+
+./bin/run_deblender_train.py -s 43 -t 15_42
+
+Run training deblender script...
+        With tag 15_42 and seed 43 at 2024-04-22 13:04:40.003700
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 'None', batch_size 32, n_epochs 25
+
+
+./bin/run_deblender_train.py -s 43 -t 15_42
+
+Run training deblender script...
+        With tag 15_42 and seed 43 at 2024-04-22 13:05:13.759150
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 'None', batch_size 32, n_epochs 2001
+
+INFO: Saving model as version 7
+INFO: Saved checkpoint 'run/out/deblender/version_7/checkpoints/epoch=1871-val_loss=1882905.750.ckpt' as weights models/deblend.pt
+
+./bin/run_deblender_train.py -o -s 44 -t 15_44
+
+Run training deblender script...
+        With tag 15_44 and seed 44 at 2024-05-02 16:29:51.033625
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 'None', batch_size 128, n_epochs 10001
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 8
+
+./bin/run_deblender_train.py -o -s 55 -t 16_45
+
+Run training deblender script...
+        With tag 16_45 and seed 55 at 2024-05-17 16:04:29.020579
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 1,
+        val_check_interval 'None', batch_size 128, n_epochs 10001
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 9
+INFO: Saved checkpoint 'run/out/deblender/version_9/checkpoints/epoch=5343-val_loss=7457482.000.ckpt' as weights models/deblend.pt
+
+./bin/run_deblender_train.py -o -s 42 -t 17_42
+
+Run training deblender script...
+        With tag 17_42 and seed 42 at 2024-06-05 16:49:25.063393
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 256, n_epochs 10001
+
+
+./bin/run_deblender_train.py -o -s 42 -t 17_42
+
+Run training deblender script...
+        With tag 17_42 and seed 42 at 2024-06-05 16:58:10.725579
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 20560, split 15420, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 256, n_epochs 10001
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 10
+
+######### loss was changed to .mean() ############
+
+./bin/run_deblender_train.py -o -s 42 -t 18_42
+
+
+Run training deblender script...
+        With tag 18_42 and seed 42 at 2024-06-11 09:34:01.504886
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 64, n_epochs 10001
+
+INFO: Saved checkpoint 'run/out/deblender/version_10/checkpoints/epoch=7579-val_loss=14900386.000.ckpt' as weights models/deblend.pt
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 11
+
+./bin/run_deblender_train.py -s 43 -t 18_42 -b 128
+
+Run training deblender script...
+        With tag 18_42 and seed 43 at 2024-06-11 10:32:53.245244
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 128, n_epochs 10001
+
+INFO: Saving model as version 12
+
+./bin/run_deblender_train.py -s 42 -t 18_42 -b 256
+
+Run training deblender script...
+        With tag 18_42 and seed 42 at 2024-06-14 13:13:56.450948
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 256, n_epochs 10001
+
+
+./bin/run_deblender_train.py -s 42 -t 18_42 -b 256
+
+Run training deblender script...
+        With tag 18_42 and seed 42 at 2024-06-14 13:16:39.019141
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 256, n_epochs 10001
+
+INFO: Saved checkpoint 'run/out/deblender/version_11/checkpoints/epoch=2319-val_loss=8.073.ckpt' as weights models/deblend.pt
+INFO: Saved checkpoint 'run/out/deblender/version_12/checkpoints/epoch=1799-val_loss=8.080.ckpt' as weights models/deblend.pt
+
+
+########### testing dataset now has 100k blends (instead of 10k) #####################
+
+./bin/run_deblender_train.py -s 42 -t 18_42 -b 128
+
+Run training deblender script...
+        With tag 18_42 and seed 42 at 2024-06-19 16:44:29.527223
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 128, n_epochs 10001
+
+INFO: Saving model as version 14
+
+./bin/run_deblender_train.py -s 42 -t 18_42 -b 256
+
+Run training deblender script...
+        With tag 18_42 and seed 42 at 2024-06-20 23:59:21.176916
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 25600, split 19200, validate_every_n_epoch 20,
+        val_check_interval 'None', batch_size 256, n_epochs 10001
+
+INFO: Saving model as version 15
+
+./bin/run_autoencoder_train.py -o -s 42 -t 3
+
+Run training autoencoder script...
+        With tag 3 and seed 42 at 2024-08-01 16:05:51.986546
+        Only bright 'False',
+        n_samples 12800, split 9600, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 3001
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+
+./bin/run_autoencoder_train.py -o -s 42 -t 3
+
+Run training autoencoder script...
+        With tag 3 and seed 42 at 2024-08-01 16:09:46.787120
+        Only bright 'False',
+        n_samples 12800, split 9600, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 3001
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 4
+
+./bin/run_autoencoder_train.py -o -s 43 -t 1_43_test -n 1280
+
+Run training autoencoder script...
+        With tag 1_43_test and seed 43 at 2024-08-12 20:04:59.280518
+        Only bright 'False',
+        n_samples 1280, split 192000, validate_every_n_epoch 1,
+        batch_size 256, n_epochs 10001
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+INFO: Saving model as version 5
+
+Run training autoencoder data generation script...
+        With tag 42_1 and seed 42 at 2024-08-12 20:40:50.233566
+        Only bright 'False', n_samples 128000, split 96000
+
+INFO: Overwriting dataset...
+INFO: Complete galaxy catalog with only i < 27.3 magnitude of length: 666475
+INFO: Removing bright stars with only i < 20 magnitude, final catalog length: 17434
+
+Run training autoencoder data generation script...
+        With tag 1_42_test and seed 42 at 2024-08-13 14:54:06.399115, n_samples 12800, split 96000
+
+
+Run training autoencoder data generation script...
+        With tag 2_42_test and seed 42 at 2024-08-13 14:55:12.681025, n_samples 128000, split 96000
+
+
+Run training autoencoder data generation script...
+        With tag 3_42_test and seed 42 at 2024-08-13 15:05:05.211638, n_samples 25600, split 25600
+
+
+Run training autoencoder data generation script...
+        With tag 4_42_test and seed 42 at 2024-08-13 15:07:21.644899, n_samples 64000, split 32000
+
+
+Run training autoencoder data generation script...
+        With tag 42_1 and seed 42 at 2024-08-13 15:17:34.877424, n_samples 64000, split 32000
+
+
+./bin/run_autoencoder_train.py -s 42 -t 42_1
+
+Run training autoencoder script...
+        With tag 42_1 and seed 42 at 2024-08-13 15:27:33.433818
+        validate_every_n_epoch 1,
+        batch_size 256, n_epochs 10001
+
+INFO: Saving model as version 5
+
+./bin/run_autoencoder_train.py -s 42 -t 42_1
+
+Run training autoencoder script...
+        With tag 42_1 and seed 42 at 2024-08-13 15:30:48.433252
+        validate_every_n_epoch 1,
+        batch_size 256, n_epochs 10001
+
+INFO: Saving model as version 6
+
+Run training autoencoder data generation script...
+        With tag 43_1 and seed 43 at 2024-08-13 16:26:56.769339, n_samples 128000, split 64000
+
+
+./bin/run_autoencoder_train.py -s 43 -b 1024 -t 43_1
+
+Run training autoencoder script...
+        With tag 43_1 and seed 43 at 2024-08-13 16:37:04.408399
+        validate_every_n_epoch 1,
+        batch_size 1024, n_epochs 10001
+
+INFO: Saving model as version 7
+
+./bin/run_autoencoder_train.py -s 44 -b 512 -t 43_1
+
+Run training autoencoder script...
+        With tag 43_1 and seed 44 at 2024-08-13 16:41:59.737275
+        validate_every_n_epoch 1,
+        batch_size 512, n_epochs 10001
+
+INFO: Saving model as version 8
+
+Run training blend data generation script...
+        With tag 42_1 and seed 42 at 2024-08-13 17:55:58.708304
+        Galaxy density 185.0, star_density 10.0, and
+        Only bright 'False', no padding galaxies 'False'.
+        n_samples 30840, split 20560
+
+
+./bin/run_autoencoder_train.py -s 45 -b 2048 -t 45_1
+
+Run training autoencoder script...
+        With tag 45_1 and seed 45 at 2024-08-14 11:18:24.442928
+        validate_every_n_epoch 1,
+        batch_size 2048, n_epochs 10001
+
+
+./bin/run_autoencoder_train.py -s 45 -b 2048 -t 43_1
+
+Run training autoencoder script...
+        With tag 43_1 and seed 45 at 2024-08-14 11:18:53.550500
+        validate_every_n_epoch 1,
+        batch_size 2048, n_epochs 10001
+
+INFO: Saving model as version 9
+
+./bin/run_autoencoder_train.py -s 45 -b 512 -t 43_1
+
+Run training autoencoder script...
+        With tag 43_1 and seed 45 at 2024-08-14 11:21:24.390594
+        validate_every_n_epoch 1,
+        batch_size 512, n_epochs 10001
+
+INFO: Saving model as version 10
+INFO: Saved checkpoint 'data/out/autoencoder/version_9/checkpoints/epoch=8492-val_loss=7.491.ckpt' as weights models/autoencoder.pt
+INFO: Saved checkpoint 'data/out/autoencoder/version_10/checkpoints/epoch=7294-val_loss=7.502.ckpt' as weights models/autoencoder.pt
+
+./bin/run_autoencoder_train.py -s 42 -t 43_1
+
+Run training autoencoder script...
+        With tag 43_1 and seed 42 at 2024-08-16 16:12:43.728228
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+
+INFO: Saving model as version 11
+
+./bin/run_autoencoder_train.py -s 43 -t 43_1
+
+Run training autoencoder script...
+        With tag 43_1 and seed 43 at 2024-08-16 16:35:10.140659
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+
+INFO: Saving model as version 12
+
+./bin/run_autoencoder_train.py -s 44 -lr 1e-4 -t 43_1
+
+./bin/run_autoencoder_train.py -s 44 --lr 1e-4 -t 43_1
+
+Run training autoencoder script...
+        With tag 43_1 and seed 44 at 2024-08-16 17:19:11.329207
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+        learning rate 0.0001
+
+INFO: Saving model as version 13
+INFO: Saved checkpoint 'data/out/autoencoder/version_13/checkpoints/epoch=9281-val_loss=2691874.000.ckpt' as weights models/autoencoder.pt
+
+./bin/run_autoencoder_train.py -s 42 --lr 1e-4 -t 44_1
+
+Run training autoencoder script...
+        With tag 44_1 and seed 42 at 2024-08-23 16:09:28.859708
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+        learning rate 0.0001
+
+INFO: Saving model as version 14
+
+./bin/run_autoencoder_train.py -s 42 --lr 1e-5 -t 44_1
+
+Run training autoencoder script...
+        With tag 44_1 and seed 42 at 2024-08-24 18:35:36.021365
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+        learning rate 1e-05
+
+INFO: Saving model as version 15
+
+./bin/run_autoencoder_train.py -s 42 --lr 5e-4 -t 44_1
+
+Run training autoencoder script...
+        With tag 44_1 and seed 42 at 2024-08-25 23:34:06.778415
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+        learning rate 0.0005
+
+INFO: Saving model as version 16
+
+./bin/run_autoencoder_train.py -s 42 --lr 1e-3 -t 44_1
+
+Run training autoencoder script...
+        With tag 44_1 and seed 42 at 2024-08-27 01:18:37.421417
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+        learning rate 0.001
+
+INFO: Saving model as version 17
+INFO: Saved checkpoint 'data/out/autoencoder/version_15/checkpoints/epoch=9977-val_loss=2692198.250.ckpt' as weights models/autoencoder.pt
+
+Run training autoencoder data generation script...
+        With tag 42_1 and seed 42 at 2024-08-29 17:06:08.539434, n_samples 245593.
+        Train, test, and val divided into 3 equal parts on full catalog after
+        SNR cut > 10 on catalog.
+
+./bin/run_autoencoder_train.py -s 42 --lr 1e-5 -t 42_1
+
+Run training autoencoder script...
+        With tag 42_1 and seed 42 at 2024-08-29 18:15:18.304090
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+        learning rate 1e-05
+
+INFO: Saving model as version 18
+
+Run training blend data generation script...
+        With tag 42_1 and seed 42 at 2024-08-29 19:48:04.175122
+        Galaxy density 185.0, star_density 0.0, and
+        Only bright 'True' (defined with snr > 10),
+        no padding galaxies 'False', n_samples 10000.
+        Samples will be divided into 3 datasets of blends with equal number.
+
+INFO: Smaller catalog with only bright sources of length: 245593
+INFO: Removing bright stars with i < 20 magnitude, final catalog length: 17434
+
+INFO: Saved checkpoint 'data/out/autoencoder/version_18/checkpoints/epoch=6595-val_loss=2703479.000.ckpt' as weights models/autoencoder.pt
+
+./bin/run_autoencoder_train.py -s 42 --lr 5e-5 -t 42_1
+
+Run training autoencoder script...
+        With tag 42_1 and seed 42 at 2024-08-30 20:24:02.937318
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+        learning rate 5e-05
+
+INFO: Saving model as version 19
+
+./bin/run_autoencoder_train.py -s 42 --lr 1e-6 -t 42_1
+
+Run training autoencoder script...
+        With tag 42_1 and seed 42 at 2024-08-31 22:10:39.534207
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+        learning rate 1e-06
+
+INFO: Saving model as version 20
+
+./bin/run_autoencoder_train.py -s 42 --lr 5e-6 -t 42_1
+
+Run training autoencoder script...
+        With tag 42_1 and seed 42 at 2024-09-01 22:47:27.520386
+        validate_every_n_epoch 1,
+        batch_size 128, n_epochs 10001
+        learning rate 5e-06
+
+INFO: Saving model as version 21

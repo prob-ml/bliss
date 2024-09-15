@@ -28,6 +28,7 @@ class GalaxyEncoder(pl.LightningModule):
         decoder_slen: int = 53,
         latent_dim: int = 8,
         hidden: int = 256,
+        lr: float = 1e-4,
     ):
         super().__init__()
 
@@ -37,6 +38,8 @@ class GalaxyEncoder(pl.LightningModule):
         self.ptile_slen = ptile_slen
         self.bp = validate_border_padding(tile_slen, ptile_slen)
         self.final_slen = self.ptile_slen - 2 * self.tile_slen  # will always crop 2 * tile_slen
+
+        self.lr = lr
 
         # encoder (to be trained)
         self._latent_dim = latent_dim
@@ -128,7 +131,7 @@ class GalaxyEncoder(pl.LightningModule):
 
     def configure_optimizers(self):
         """Set up optimizers."""
-        return Adam(self._enc.parameters(), 1e-3)
+        return Adam(self._enc.parameters(), self.lr)
 
     def _get_centered_padded_tiles(self, image_ptiles: Tensor, tile_locs_flat: Tensor) -> Tensor:
         """Remove background, center padded tiles at given locations, and crop."""

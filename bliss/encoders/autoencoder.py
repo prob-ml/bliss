@@ -15,12 +15,14 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         latent_dim: int = 8,
         hidden: int = 256,
         n_bands: int = 1,
+        lr: float = 1e-5,
     ):
         super().__init__()
 
         self.enc = self.make_encoder(slen, latent_dim, n_bands, hidden)
         self.dec = self.make_decoder(slen, latent_dim, n_bands, hidden)
         self.latent_dim = latent_dim
+        self.lr = lr
 
     def make_encoder(
         self, slen: int, latent_dim: int, n_bands: int, hidden: int
@@ -40,31 +42,36 @@ class OneCenteredGalaxyAE(pl.LightningModule):
 
     def get_loss(self, images: Tensor, background: Tensor) -> Tuple[Tensor, Tensor]:
         recon_mean: Tensor = self(images, background)
-        return -Normal(recon_mean, recon_mean.sqrt()).log_prob(images).sum(), recon_mean
+        log_prob_pp = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
+        loss = log_prob_pp.sum()
+        loss_avg = log_prob_pp.mean()  # might be useful to compare with different batch sizes.
+        return loss, loss_avg, recon_mean
 
     def training_step(self, batch: dict[str, Tensor], batch_idx: int):
         """Training step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
-        loss, _ = self.get_loss(images, background)
-        self.log("train/loss", loss)
+        loss, loss_avg, _ = self.get_loss(images, background)
+        self.log("train/loss", loss, on_step=False, on_epoch=True)
+        self.log("train/loss_avg", loss_avg, on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch: dict[str, Tensor], batch_idx: int):
         """Validation step (pytorch lightning)."""
         images, background = batch["images"], batch["background"]
-        loss, recon_mean = self.get_loss(images, background)
+        loss, loss_avg, recon_mean = self.get_loss(images, background)
 
         # max std. residual across all images
         res = (images - recon_mean) / recon_mean.sqrt()
-        mean_max_residual = reduce(res, "b c h w -> b", "max").mean()
+        mean_max_residual = reduce(res.abs(), "b c h w -> b", "max").mean()
 
         self.log("val/loss", loss)
+        self.log("val/loss_avg", loss_avg)
         self.log("val/mean_max_residual", mean_max_residual)
-        self.log("val/max_residual", res.max())
+        self.log("val/max_residual", res.abs().max())
         return loss
 
     def configure_optimizers(self):
-        return Adam(self.parameters(), lr=1e-3)
+        return Adam(self.parameters(), lr=self.lr)
 
 
 class CenteredGalaxyEncoder(nn.Module):

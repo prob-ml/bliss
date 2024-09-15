@@ -49,13 +49,11 @@ def test_galaxy_blend_catalogs(home_dir: Path):
     gbools = full_cat["galaxy_bools"]
     sbools = full_cat["star_bools"]
     assert images.shape == (100, 1, 88, 88)  # 40 + 24 * 2
-    assert params.shape == (100, max_n_sources, 10)  # 10 is new galaxy params from catsim
+    assert params.shape == (100, max_n_sources, 11)  # 10 is new galaxy params from catsim
     assert plocs.shape == (100, max_n_sources, 2)
     assert n_sources.shape == (100,)
     assert gbools.shape == (100, max_n_sources, 1)
     assert max_n_sources >= n_sources.max()
-
-    # TODO: checks on tiles parameters
 
     # plocs
     assert torch.all(plocs / slen >= 0) and torch.all(plocs / slen <= 1)

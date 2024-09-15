@@ -32,8 +32,6 @@ def convert_flux_to_mag(counts: Tensor) -> Tensor:
 def get_default_lsst_psf() -> galsim.GSObject:
     """Returns a synthetic LSST-like PSF in the i-band with an atmospheric and optical component.
 
-    Credit: WeakLensingDeblending (https://github.com/LSSTDESC/WeakLensingDeblending)
-
     Returns:
         Galsim PSF model as a galsim.GSObject.
     """
