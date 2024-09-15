@@ -346,7 +346,7 @@ def _sample_galaxy_params(
     indices = np.random.choice(np.arange(len(catsim_table)), size=(n_galaxies,), replace=replace)
 
     rows = catsim_table[indices]
-    mags = torch.from_numpy(rows["i_ab"].value.astype(float))  # byte order
+    mags = torch.from_numpy(rows["i_ab"].value.astype(np.float32))  # byte order
     gal_flux = convert_mag_to_flux(mags)
     rows["flux"] = gal_flux.numpy().astype(np.float32)
 
