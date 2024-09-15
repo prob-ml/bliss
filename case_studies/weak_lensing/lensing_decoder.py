@@ -16,7 +16,7 @@ class LensingDecoder(Decoder):
         Returns:
             GSObject: a galsim representation of the rendered galaxy convolved with the PSF
         """
-        galaxy = super().render_galaxy(psf, band, source_params)
+        galaxy = self.render_bulge_plus_disk(band, source_params)
 
         shear = source_params["shear"]
         shear1, shear2 = shear
