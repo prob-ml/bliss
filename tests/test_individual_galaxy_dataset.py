@@ -55,6 +55,15 @@ def test_galaxy_blend_catalogs(home_dir: Path):
     e1 = e1[mask]
     e2 = e2[mask]
 
+    # check angles that were used in dataset are in degrees
+    pab = ds["galaxy_params"][:, -4]
+    pad = ds["galaxy_params"][:, -3]
+    assert pab.max() > 350 and pab.max() <= 360
+    assert pab.min() < 10 and pab.min() >= 0
+
+    assert pad.max() > 350 and pad.max() <= 360
+    assert pad.min() < 10 and pad.min() >= 0
+
     # symmetric
     np.allclose(np.mean(e1), 0.0, rtol=0.0, atol=1e-2)
     np.allclose(np.mean(e2), 0.0, rtol=0.0, atol=1e-2)

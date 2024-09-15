@@ -54,6 +54,8 @@ def test_galaxy_blend_catalogs(home_dir: Path):
     assert n_sources.shape == (100,)
     assert gbools.shape == (100, max_n_sources, 1)
     assert max_n_sources >= n_sources.max()
+    assert params[:, :, -3].max() > 350 and params[:, :, -4].max() > 350  # angles in degrees
+    assert params[:, :, -3].max() <= 360 and params[:, :, -4].max() <= 360  # angles in degrees
 
     # plocs
     assert torch.all(plocs / slen >= 0) and torch.all(plocs / slen <= 1)
