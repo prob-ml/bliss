@@ -67,7 +67,6 @@ class AsinhQuantileNormalizer(torch.nn.Module):
         super().__init__()
         self.register_buffer("q", torch.tensor(q))
         self.register_buffer("quantiles", torch.zeros(len(q)))
-        self.register_buffer("sample_every_n", torch.tensor(sample_every_n))
         self.num_updates = 0
         self.pixel_shift = pixel_shift
 

@@ -320,11 +320,11 @@ train:
             mode: min
             save_on_train_epoch_end: false
             auto_insert_metric_name: false
-        # early_stopping:
-        #     _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
-        #     monitor: val/_loss
-        #     mode: min
-        #     patience: 10
+        early_stopping:
+            _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+            monitor: val/_loss
+            mode: min
+            patience: 10
     data_source: ${cached_simulator}
     encoder: ${encoder}
     seed: null

@@ -128,14 +128,11 @@ class VariationalFactor:
         gating = self.nll_gating(true_tile_cat)
 
         qk = self.get_dist(params)
-        print("qk dist", qk)
         if gating.shape != target.shape:
             assert gating.shape == target.shape[:-1]
             target = torch.where(gating.unsqueeze(-1), target, 0)
         assert not torch.isnan(target).any()
         ungated_nll = -qk.log_prob(target)
-        print("ungated_nll", ungated_nll.shape)
-        print("gating", gating.shape)
         if ungated_nll.dim() == target.dim():  # (b, w, h, 1) -> (b,w,h) silent error
             ungated_nll = ungated_nll.squeeze(-1)
         return ungated_nll * gating
@@ -174,7 +171,6 @@ class BivariateNormalFactor(VariationalFactor):
     def get_dist(self, params):
         mean = params[:, :, :, :2]
         sd = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
-        print("bvnf sd:", sd)
         return Independent(Normal(mean, sd), 1)
 
 

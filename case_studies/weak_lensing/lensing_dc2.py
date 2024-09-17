@@ -55,7 +55,6 @@ class LensingDC2DataModule(DC2DataModule):
         self.image_slen = image_slen
         self.bands = self.BANDS
         self.n_bands = len(self.BANDS)
-        self.mag_max_cut = None
         self.avg_ellip_kernel_size = avg_ellip_kernel_size
         self.avg_ellip_kernel_sigma = avg_ellip_kernel_sigma
 
@@ -74,7 +73,7 @@ class LensingDC2DataModule(DC2DataModule):
 
         n_image = self._load_image_and_bg_files_list()
 
-        for i in range(21, 25):
+        for i in range(n_image):
             self.generate_cached_data(i)
 
     def to_tile_catalog(self, full_catalog, height, width):
@@ -129,7 +128,6 @@ class LensingDC2DataModule(DC2DataModule):
             wcs,
             height,
             width,
-            mag_max_cut=self.mag_max_cut,
             bands=self.bands,
             n_bands=self.n_bands,
         )
@@ -169,7 +167,6 @@ class LensingDC2DataModule(DC2DataModule):
         ellip2_lensed = tile_dict["ellip2_lensed_sum"] / tile_dict["ellip2_lensed_count"]
         ellip_lensed = torch.stack((ellip1_lensed.squeeze(-1), ellip2_lensed.squeeze(-1)), dim=-1)
         redshift = tile_dict["redshift_sum"] / tile_dict["redshift_count"]
-        print(image_index, "nan", torch.isnan(ellip1_lensed).sum())
             
 
         tile_dict["shear_1"] = shear1
@@ -191,14 +188,13 @@ class LensingDC2DataModule(DC2DataModule):
             tmp_clone = map_nested_dicts(
                 tmp, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
             )
-            print(len(tmp_clone))
             with open(self.cached_data_path / cached_data_file_name, "wb") as cached_data_file:
                 torch.save(tmp_clone, cached_data_file)
 
 
 class LensingDC2Catalog(DC2FullCatalog):
     @classmethod
-    def from_file(cls, cat_path, wcs, height, width, mag_max_cut=None, **kwargs):
+    def from_file(cls, cat_path, wcs, height, width, **kwargs):
         catalog = pd.read_pickle(cat_path)
 
         galid = torch.from_numpy(catalog["galaxy_id"].values)

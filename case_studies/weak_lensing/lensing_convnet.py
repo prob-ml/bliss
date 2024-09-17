@@ -31,10 +31,8 @@ class WeakLensingFeaturesNet(nn.Module):
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
-        # print("after p3d", x.shape)
         for idx, layer in enumerate(self.net):
             x = layer(x)
-            # print("after net layer", idx, x.shape)
         return x
 
 
@@ -46,7 +44,6 @@ class WeakLensingCatalogNet(nn.Module):  # TODO: get the dimensions down to n_ti
 
         n_blocks_2 = int(math.log2(in_channels)) - int(math.ceil(math.log2(out_channels)))
         last_out_dim = -1
-        # print("n blocks 2", n_blocks_2)
         for i in range(n_blocks_2):
             in_dim = in_channels // (2**i)
             out_dim = in_dim // 2
@@ -64,7 +61,6 @@ class WeakLensingCatalogNet(nn.Module):  # TODO: get the dimensions down to n_ti
     def forward(self, x):
         for i, m in enumerate(self.net):
             x = m(x)
-            # print("after catalog layer", i, x.shape)
 
         # Final detection layer
         x = self.detect(x) 

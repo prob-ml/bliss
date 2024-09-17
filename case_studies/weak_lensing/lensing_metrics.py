@@ -18,7 +18,6 @@ class LensingMapMSE(Metric):
         self.total = 1
 
     def update(self, true_cat, est_cat, matching) -> None:
-        print(true_cat["shear_1"].shape)
         true_shear_1 = true_cat["shear_1"]
         true_shear_2 = true_cat["shear_2"]
         pred_shear_1  = est_cat["shear_1"]

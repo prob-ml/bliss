@@ -90,9 +90,7 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
     true_shear = torch.cat((true_shear_1, true_shear_2), dim=-1)
     est_shear = torch.cat((pred_shear_1, pred_shear_2), dim=-1)
 
-    # true_shear = true_tile_cat["shear"]
-    # est_shear = est_tile_cat["shear"]
-    # print(est_shear)
+
     if "convergence" not in est_tile_cat:
         true_convergence = torch.zeros_like(true_shear_1)
         est_convergence = torch.zeros_like(true_convergence)
