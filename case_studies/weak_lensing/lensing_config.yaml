@@ -9,34 +9,31 @@ mode: train
 paths:
     dc2: /scratch/regier_root/regier0/shreyasc/data/dc2local  # change for gl
     output: /scratch/regier_root/regier0/shreyasc/data/bliss_output  # change for gl
+    dc2: /data/scratch/dc2local
+    cached_data: /data/scratch/weak_lensing/weak_lensing_img2048_shear02
+    output: /data/scratch/twhit/bliss_output
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
-    star_color_model_path: /data/scratch/sdss/color_models/star_gmm_nmgy.pkl
-    gal_color_model_path: /data/scratch/sdss/color_models/gal_gmm_nmgy.pkl
-    n_tiles_h: 8
-    n_tiles_w: 8
-    batch_size: 1
+    n_tiles_h: 12  # cropping 2 tiles from each side (4 total)
+    n_tiles_w: 12  # cropping 2 tiles from each side (4 total)
+    batch_size: 2
+    max_sources: 200
+    constant_shear: 0.2
+    constant_convergence: 0.2
     prob_galaxy: 1.0
-    mean_sources: 162
-    arcsec_per_pixel: 0.055
-    sample_method: cosmology
-    shear_mean: 0
-    shear_std: 0.0175
-    convergence_mean: 0
-    convergence_std: 0.025
-    num_knots: 4
+    mean_sources: 82  # 0.02 * (256/4) * (256/4)
 
 decoder:
     _target_: case_studies.weak_lensing.lensing_decoder.LensingDecoder
-    tile_slen: 128
-    survey: ${surveys.sdss}
+    tile_slen: 256
+    use_survey_background: false
+    with_dither: false
+    with_noise: false
 
-simulator:
-    n_batches: 128
-    num_workers: 32
-    valid_n_batches: 10
-    fix_validation_set: true
+cached_simulator:
+    batch_size: 2
+    train_transforms: []
 
 variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
@@ -126,6 +123,9 @@ surveys:
         cached_data_path: ${paths.output}/dc2_overfit_test_data_shear
         cached_data_path: ${paths.output}/dc2_overfit_test_data_shear
 
+generate:
+    n_image_files: 50
+    n_batches_per_file: 4
 train:
     trainer:
         logger:
