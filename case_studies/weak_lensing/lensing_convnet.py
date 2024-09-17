@@ -2,7 +2,7 @@ import math
 
 from torch import nn
 
-from bliss.encoder.convnet_layers import C3, Bottleneck, ConvBlock, Detect
+from bliss.encoder.convnet_layers import Detect
 from case_studies.weak_lensing.lensing_convnet_layers import RN2Block
 
 
@@ -18,12 +18,12 @@ class WeakLensingFeaturesNet(nn.Module):
             nn.SiLU(),
         )
 
-        n_blocks_2 = int(math.log2(num_features)) - int(math.log2(nch_hidden))
+        n_blocks2 = int(math.log2(num_features)) - int(math.log2(nch_hidden))
         module_list = [RN2Block(nch_hidden, nch_hidden), RN2Block(nch_hidden, nch_hidden)]
-        for i in range(n_blocks_2):
+        for i in range(n_blocks2):
             in_dim = nch_hidden * (2**i)
             out_dim = in_dim * 2
-            
+
             module_list.append(RN2Block(in_dim, out_dim, stride=2))
             module_list.append(RN2Block(out_dim, out_dim))
 
@@ -31,7 +31,7 @@ class WeakLensingFeaturesNet(nn.Module):
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
-        for idx, layer in enumerate(self.net):
+        for _idx, layer in enumerate(self.net):
             x = layer(x)
         return x
 
@@ -42,13 +42,12 @@ class WeakLensingCatalogNet(nn.Module):  # TODO: get the dimensions down to n_ti
 
         net_layers = []
 
-        n_blocks_2 = int(math.log2(in_channels)) - int(math.ceil(math.log2(out_channels)))
+        n_blocks2 = int(math.log2(in_channels)) - int(math.ceil(math.log2(out_channels)))
         last_out_dim = -1
-        for i in range(n_blocks_2):
+        for i in range(n_blocks2):
             in_dim = in_channels // (2**i)
             out_dim = in_dim // 2
-            # net_layers.append(RN2Block(in_dim, in_dim))
-            if i < ((n_blocks_2+4) // 2):
+            if i < ((n_blocks2 + 4) // 2):
                 net_layers.append(RN2Block(in_dim, out_dim, stride=2))
             else:
                 net_layers.append(RN2Block(in_dim, out_dim))
@@ -59,10 +58,10 @@ class WeakLensingCatalogNet(nn.Module):  # TODO: get the dimensions down to n_ti
         self.net = nn.ModuleList(net_layers)
 
     def forward(self, x):
-        for i, m in enumerate(self.net):
+        for _i, m in enumerate(self.net):
             x = m(x)
 
         # Final detection layer
-        x = self.detect(x) 
+        x = self.detect(x)
 
-        return x
+        return x  # noqa: WPS331

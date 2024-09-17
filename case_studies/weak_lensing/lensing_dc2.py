@@ -161,13 +161,11 @@ class LensingDC2DataModule(DC2DataModule):
 
         shear1 = tile_dict["shear1_sum"] / tile_dict["shear1_count"]
         shear2 = tile_dict["shear2_sum"] / tile_dict["shear2_count"]
-        # shear = torch.stack((shear1.squeeze(-1), shear2.squeeze(-1)), dim=-1)
         convergence = tile_dict["convergence_sum"] / tile_dict["convergence_count"]
         ellip1_lensed = tile_dict["ellip1_lensed_sum"] / tile_dict["ellip1_lensed_count"]
         ellip2_lensed = tile_dict["ellip2_lensed_sum"] / tile_dict["ellip2_lensed_count"]
         ellip_lensed = torch.stack((ellip1_lensed.squeeze(-1), ellip2_lensed.squeeze(-1)), dim=-1)
         redshift = tile_dict["redshift_sum"] / tile_dict["redshift_count"]
-            
 
         tile_dict["shear_1"] = shear1
         tile_dict["shear_2"] = shear2
@@ -236,7 +234,6 @@ class LensingDC2Catalog(DC2FullCatalog):
         ellip2_lensed = ellip2_lensed[plocs_mask]
 
         redshift = redshift[plocs_mask]
-
 
         psf_params = psf_params[:, :, :, plocs_mask.squeeze() == 1]
         psf_params = psf_params.permute(0, 3, 1, 2).flatten(2, -1)  # 1, n_obj, 24
