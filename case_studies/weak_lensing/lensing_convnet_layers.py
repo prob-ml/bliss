@@ -1,13 +1,11 @@
 import math
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 
 
 class RN2Block(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
-        super(RN2Block, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(
             in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False
         )
@@ -45,12 +43,12 @@ class RN2Block(nn.Module):
         out += identity
         out = self.silu(out)
 
-        return out
+        return out  # noqa: WPS331
 
 
 class ResNeXtBlock(nn.Module):
     def __init__(self, in_channels, mid_channels, out_channels, stride=1, groups=32):
-        super(ResNeXtBlock, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(in_channels, mid_channels, kernel_size=1, stride=1, padding=0)
         mid_c_sqrt = math.sqrt(mid_channels)
         if mid_c_sqrt.is_integer():
@@ -97,4 +95,4 @@ class ResNeXtBlock(nn.Module):
             residual = self.shortcut(x)
         out += residual
         out = self.silu(out)
-        return out
+        return out  # noqa: WPS331
