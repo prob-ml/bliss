@@ -71,7 +71,6 @@ class WeakLensingEncoder(Encoder):
             out_channels=self.var_dist.n_params_per_source,
             n_tiles=self.n_tiles,
         )
-        # print("var dist params per source", self.var_dist.n_params_per_source)
 
     def sample(self, batch, use_mode=True):
         # multiple image normalizers
@@ -89,7 +88,6 @@ class WeakLensingEncoder(Encoder):
 
     def _compute_loss(self, batch, logging_name):
         batch_size, _, _, _ = batch["images"].shape[0:4]
-        # print("image batch shape", batch["images"].shape)
 
         target_cat = BaseTileCatalog(batch["tile_catalog"])
 
@@ -98,15 +96,10 @@ class WeakLensingEncoder(Encoder):
         inputs = torch.cat(input_lst, dim=2)
         pred = {}
         x_features = self.features_net(inputs)
-        # print("features output", x_features.shape)
         pred["x_cat_marginal"] = self.catalog_net(x_features)
-        # print(pred["x_cat_marginal"].shape)
-        # print(target_cat["shear"].shape)
 
         loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat)
-        print("loss shape", loss.shape)
         loss = loss.sum() / loss.numel()
-        # ignore the shear_1 part of loss here to just train on shear 2
 
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
@@ -123,21 +116,9 @@ class WeakLensingEncoder(Encoder):
             if param.grad is not None:
                 param_grad_norm = param.grad.data.norm(2).item()
                 total_grad_norm += param_grad_norm**2
-                # if param_grad_norm < 1e-4 or param_grad_norm > 100:
-                #     print(f"grad_norm_{param.name}", param_grad_norm)  # noqa: WPS421
         total_grad_norm = total_grad_norm**0.5
         if total_grad_norm > 100 or total_grad_norm < 1e-4:
             print("total_grad_norm", total_grad_norm)  # noqa: WPS421
-
-    # def configure_gradient_clipping(
-    #     self, optimizer, gradient_clip_val=None, gradient_clip_algorithm=None
-    # ):
-    #     clip_min = 1e-4
-    #     clip_max = 10
-    #     for _name, param in self.named_parameters():
-    #         if param.grad is not None:
-    #             with torch.no_grad():
-    #                 param.grad.data.clamp_(min=clip_min, max=clip_max)
 
     def update_metrics(self, batch, batch_idx):
         target_cat = BaseTileCatalog(batch["tile_catalog"])
