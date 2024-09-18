@@ -7,11 +7,9 @@ defaults:
 mode: train
 
 paths:
-    dc2: /scratch/regier_root/regier0/shreyasc/data/dc2local  # change for gl
-    output: /scratch/regier_root/regier0/shreyasc/data/bliss_output  # change for gl
+
     dc2: /data/scratch/dc2local
-    cached_data: /data/scratch/weak_lensing/weak_lensing_img2048_shear02
-    output: /data/scratch/twhit/bliss_output
+    output: /data/scratch/shreyasc/bliss_output
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
@@ -118,11 +116,11 @@ surveys:
         avg_ellip_kernel_sigma: 3
         batch_size: 1
         num_workers: 1
-        cached_data_path: ${paths.output}/dc2_corrected_shear_only
+        cached_data_path: ${paths.output}/dc2_corrected_shear_only_cd_fix
 
-generate:
-    n_image_files: 50
-    n_batches_per_file: 4
+# generate:
+#     n_image_files: 50
+#     n_batches_per_file: 4
 train:
     trainer:
         logger:
