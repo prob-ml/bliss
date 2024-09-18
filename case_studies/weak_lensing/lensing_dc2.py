@@ -187,7 +187,7 @@ class LensingDC2DataModule(DC2DataModule):
                 tmp, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
             )
             with open(self.cached_data_path / cached_data_file_name, "wb") as cached_data_file:
-                torch.save(tmp_clone, cached_data_file)
+                torch.save([tmp_clone], cached_data_file)
 
 
 class LensingDC2Catalog(DC2FullCatalog):
