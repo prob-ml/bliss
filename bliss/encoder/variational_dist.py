@@ -171,7 +171,6 @@ class BivariateNormalFactor(VariationalFactor):
     def get_dist(self, params):
         mean = params[:, :, :, :2]
         sd = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
-
         return Independent(Normal(mean, sd), 1)
 
 

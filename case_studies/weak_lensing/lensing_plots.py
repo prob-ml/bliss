@@ -83,10 +83,19 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
         figsize = (20, 20)
     fig, axes = plt.subplots(nrows=num_images, ncols=num_lensing_params, figsize=figsize)
 
-    true_shear = true_tile_cat["shear"]
-    est_shear = est_tile_cat["shear"]
-    true_convergence = true_tile_cat["convergence"]
-    est_convergence = est_tile_cat["convergence"]
+    true_shear1 = true_tile_cat["shear_1"]
+    true_shear2 = true_tile_cat["shear_2"]
+    pred_shear1 = est_tile_cat["shear_1"]
+    pred_shear2 = est_tile_cat["shear_2"]
+    true_shear = torch.cat((true_shear1, true_shear2), dim=-1)
+    est_shear = torch.cat((pred_shear1, pred_shear2), dim=-1)
+
+    if "convergence" not in est_tile_cat:
+        true_convergence = torch.zeros_like(true_shear1)
+        est_convergence = torch.zeros_like(true_convergence)
+    else:
+        true_convergence = true_tile_cat["convergence"]
+        est_convergence = est_tile_cat["convergence"]
 
     for img_id in img_ids:
         shear1_vmin = torch.min(true_shear[img_id].squeeze()[:, :, 0])
