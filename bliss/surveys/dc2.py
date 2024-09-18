@@ -387,7 +387,7 @@ class DC2FullCatalog(FullCatalog):
         return cls(height, width, d), psf_params, match_id
 
     @classmethod
-    def get_bands_flux_and_psf(cls, bands, catalog):
+    def get_bands_flux_and_psf(cls, bands, catalog, median=True):
         flux_list = []
         psf_params_list = []
         for b in bands:
@@ -395,8 +395,13 @@ class DC2FullCatalog(FullCatalog):
             psf_params_name = ["IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_"]
             psf_params_cur_band = []
             for i in psf_params_name:
-                median_psf = np.nanmedian((catalog[i + b]).values).astype(np.float32)
-                psf_params_cur_band.append(median_psf)
-            psf_params_list.append(torch.tensor(psf_params_cur_band))
+                if median:
+                    median_psf = np.nanmedian((catalog[i + b]).values).astype(np.float32)
+                    psf_params_cur_band.append(median_psf)
+                else:
+                    psf_params_cur_band.append(catalog[i + b].values.astype(np.float32))
+            psf_params_list.append(
+                torch.tensor(psf_params_cur_band)
+            )  # bands x 4 (params per band) x n_obj
 
-        return torch.stack(flux_list).t(), torch.stack(psf_params_list)
+        return torch.stack(flux_list).t(), torch.stack(psf_params_list).unsqueeze(0)

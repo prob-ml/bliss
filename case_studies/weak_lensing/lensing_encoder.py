@@ -15,6 +15,8 @@ class WeakLensingEncoder(Encoder):
         self,
         survey_bands: list,
         tile_slen: int,
+        n_tiles: int,
+        nch_hidden: int,
         image_normalizers: list,
         var_dist: VariationalDist,
         sample_image_renders: MetricCollection,
@@ -25,6 +27,9 @@ class WeakLensingEncoder(Encoder):
         reference_band: int = 2,
         **kwargs,
     ):
+        self.n_tiles = n_tiles
+        self.nch_hidden = nch_hidden
+
         super().__init__(
             survey_bands=survey_bands,
             tile_slen=tile_slen,
@@ -50,17 +55,20 @@ class WeakLensingEncoder(Encoder):
 
     # override
     def initialize_networks(self):
-        num_features = 256
+        num_features = 512
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         self.features_net = WeakLensingFeaturesNet(
             n_bands=len(self.survey_bands),
             ch_per_band=ch_per_band,
             num_features=num_features,
             tile_slen=self.tile_slen,
+            nch_hidden=self.nch_hidden,
         )
+
         self.catalog_net = WeakLensingCatalogNet(
             in_channels=num_features,
             out_channels=self.var_dist.n_params_per_source,
+            n_tiles=self.n_tiles,
         )
 
     def sample(self, batch, use_mode=True):
@@ -72,6 +80,10 @@ class WeakLensingEncoder(Encoder):
         x_cat_marginal = self.catalog_net(x_features)
         # est cat
         return self.var_dist.sample(x_cat_marginal, use_mode=use_mode, return_base_cat=True)
+
+    def predict_step(self, batch, batch_idx, dataloader_idx=0):
+        with torch.no_grad():
+            return self.sample(batch, use_mode=True)
 
     def _compute_loss(self, batch, logging_name):
         batch_size, _, _, _ = batch["images"].shape[0:4]
@@ -104,16 +116,8 @@ class WeakLensingEncoder(Encoder):
                 param_grad_norm = param.grad.data.norm(2).item()
                 total_grad_norm += param_grad_norm**2
         total_grad_norm = total_grad_norm**0.5
-
-    def configure_gradient_clipping(
-        self, optimizer, gradient_clip_val=None, gradient_clip_algorithm=None
-    ):
-        clip_min = 1e-4
-        clip_max = 10
-        for _name, param in self.named_parameters():
-            if param.grad is not None:
-                with torch.no_grad():
-                    param.grad.data.clamp_(min=clip_min, max=clip_max)
+        if total_grad_norm > 100 or total_grad_norm < 1e-4:
+            print("total_grad_norm", total_grad_norm)  # noqa: WPS421
 
     def update_metrics(self, batch, batch_idx):
         target_cat = BaseTileCatalog(batch["tile_catalog"])
