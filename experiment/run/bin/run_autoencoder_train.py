@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 import pytorch_lightning as L
 
-from bliss.datasets.galsim_blends import SavedIndividualGalaxies
+from bliss.datasets.generate_blends import SavedIndividualGalaxies
 from bliss.encoders.autoencoder import OneCenteredGalaxyAE
 from experiment.run.training_functions import setup_training_objects
 

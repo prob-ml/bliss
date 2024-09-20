@@ -4,15 +4,22 @@ import galcheat
 import galsim
 import torch
 from astropy import units as u  # noqa: WPS347
+from astropy.table import Table
 from btk.survey import get_surveys
 from einops import rearrange
 from galcheat.utilities import mag2counts, mean_sky_level
 from torch import Tensor
 
 PIXEL_SCALE = 0.2  # arcsecs / pixel
-MAX_MAG_GAL = 27.3
-MAX_MAG_STAR = 26.0  # see histogram of dc2 star catalog in i-band
-MIN_MAG = 0
+
+# for references on these cutoffs see notebooks:
+# - tests/individual_galaxies_dist.ipynb
+# - tests/star-snr.ipynb
+MAX_MAG = 27.0  # both galaxies and stars
+MIN_STAR_MAG = 20.0  # stars with lower magnitude have > 1000 SNR
+
+GALAXY_DENSITY = 160  # arcmin^{-2}, with mag cut above
+STAR_DENSITY = 10  # arcmin^{-2}, NOTE: placeholder, need to update
 
 
 def convert_mag_to_flux(mag: Tensor) -> Tensor:
@@ -49,3 +56,14 @@ def get_default_lsst_psf_tensor(slen: int) -> Tensor:
 
 def get_default_lsst_background() -> float:
     return mean_sky_level("LSST", "i").to_value("electron")
+
+
+def prepare_final_galaxy_catalog(cat: Table) -> Table:
+    """Function to globally apply cuts to CATSIM catalog for all datasets."""
+    mask = cat["i_ab"] < MAX_MAG
+    return cat[mask]
+
+
+def prepare_final_star_catalog(mags: Tensor) -> Tensor:
+    mask = torch.logical_and(mags > MIN_STAR_MAG, mags < MAX_MAG)
+    return mags[mask]

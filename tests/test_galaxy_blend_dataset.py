@@ -4,7 +4,7 @@ import torch
 from astropy.table import Table
 
 from bliss.catalog import FullCatalog
-from bliss.datasets.galsim_blends import generate_dataset
+from bliss.datasets.generate_blends import generate_dataset
 from bliss.datasets.lsst import get_default_lsst_psf
 from bliss.datasets.table_utils import column_to_tensor
 

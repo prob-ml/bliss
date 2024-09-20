@@ -8,14 +8,14 @@ import pytorch_lightning as L
 import torch
 from astropy.table import Table
 
-from bliss.datasets.galsim_blends import generate_individual_dataset
-from bliss.datasets.lsst import get_default_lsst_psf
+from bliss.datasets.generate_blends import generate_individual_dataset
+from bliss.datasets.lsst import get_default_lsst_psf, prepare_final_galaxy_catalog
 
 NUM_WORKERS = 0
 
 HOME_DIR = Path(__file__).parent.parent.parent
-cat = Table.read(HOME_DIR / "data" / "catsim_snr.fits")
-CATSIM_TABLE = cat[(cat["i_ab"] < 27.3) & (cat["snr"] > 10)]  # first likely redundant
+_cat = Table.read(HOME_DIR / "data" / "OneDegSq.fits")
+CATSIM_CAT = prepare_final_galaxy_catalog(_cat)
 PSF = get_default_lsst_psf()
 
 
@@ -37,16 +37,16 @@ def main(seed: int, tag: str):
         now = datetime.datetime.now()
         print("", file=f)
         log_msg = f"""Run training autoencoder data generation script...
-        With tag {tag} and seed {seed} at {now}, n_samples {len(CATSIM_TABLE)}.
+        With tag {tag} and seed {seed} at {now}, n_samples {len(CATSIM_CAT)}.
         Train, test, and val divided into 3 equal parts on full catalog after
-        SNR cut > 10 on catalog.
+        mag cut < 27.0 on catalog.
         """
         print(log_msg, file=f)
 
-    n_rows = len(CATSIM_TABLE)
+    n_rows = len(CATSIM_CAT)
 
     # shuffled because of indices in random.choice
-    dataset = generate_individual_dataset(n_rows, CATSIM_TABLE, PSF, slen=53, replace=False)
+    dataset = generate_individual_dataset(n_rows, CATSIM_CAT, PSF, slen=53, replace=False)
 
     # train, val, test split
     # no galaxies shared

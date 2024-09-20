@@ -7,7 +7,7 @@ from torch import Tensor
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.background import add_noise_and_background
-from bliss.datasets.galsim_blends import render_full_catalog
+from bliss.datasets.generate_blends import render_full_catalog
 from bliss.datasets.lsst import (
     convert_flux_to_mag,
     get_default_lsst_background,

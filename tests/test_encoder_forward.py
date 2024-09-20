@@ -4,8 +4,9 @@ import torch
 from astropy.table import Table
 from torch.utils.data import DataLoader
 
-from bliss.datasets.galsim_blends import SavedGalsimBlends, generate_dataset, parse_dataset
+from bliss.datasets.generate_blends import generate_dataset, parse_dataset
 from bliss.datasets.lsst import get_default_lsst_psf
+from bliss.datasets.saved_datasets import SavedGalsimBlends
 from bliss.datasets.table_utils import column_to_tensor
 from bliss.encoders.binary import BinaryEncoder
 from bliss.encoders.deblend import GalaxyEncoder
@@ -20,7 +21,7 @@ def test_encoder_forward(home_dir, tmp_path):
         Table.read(home_dir / "data" / "stars_med_june2018.fits"), "i_ab"
     )
     psf = get_default_lsst_psf()
-    blends_ds = generate_dataset(32, catsim_table, all_star_mags, psf, 10)
+    blends_ds = generate_dataset(10, catsim_table, all_star_mags, psf, 10)
 
     saved_ds_path = tmp_path / "train_ds.pt"
     torch.save(blends_ds, saved_ds_path)
@@ -41,5 +42,5 @@ def test_encoder_forward(home_dir, tmp_path):
             detection_encoder.get_loss(im, bg, tc)
 
         for b in dl2:
-            im, bg, tc, pd = parse_dataset(b)
-            galaxy_encoder.get_loss(im, pd, bg, tc)
+            im, bg, tc, sf = parse_dataset(b)
+            galaxy_encoder.get_loss(im, sf, bg, tc)

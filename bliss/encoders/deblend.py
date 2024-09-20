@@ -8,7 +8,7 @@ from torch.distributions import Normal
 from torch.optim import Adam
 
 from bliss.catalog import TileCatalog
-from bliss.datasets.galsim_blends import parse_dataset
+from bliss.datasets.generate_blends import parse_dataset
 from bliss.encoders.autoencoder import CenteredGalaxyEncoder, OneCenteredGalaxyAE
 from bliss.grid import shift_sources_in_ptiles, validate_border_padding
 from bliss.render_tiles import (

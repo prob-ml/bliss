@@ -7,7 +7,7 @@ from torch.nn import BCELoss
 from torch.optim import Adam
 
 from bliss.catalog import TileCatalog
-from bliss.datasets.galsim_blends import parse_dataset
+from bliss.datasets.generate_blends import parse_dataset
 from bliss.encoders.layers import EncoderCNN, make_enc_final
 from bliss.grid import validate_border_padding
 from bliss.render_tiles import get_images_in_tiles, get_n_padded_tiles_hw

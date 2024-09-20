@@ -11,7 +11,7 @@ from tqdm import tqdm
 from bliss.datasets.background import add_noise_and_background
 
 # dataset
-from bliss.datasets.galsim_blends import SavedGalsimBlends, generate_dataset, parse_dataset
+from bliss.datasets.generate_blends import SavedGalsimBlends, generate_dataset, parse_dataset
 from bliss.datasets.lsst import get_default_lsst_background, get_default_lsst_psf
 from bliss.datasets.table_utils import column_to_tensor
 from bliss.encoders.detection import DetectionEncoder
