@@ -39,7 +39,15 @@ class LensingPrior(CatalogPrior):
         d = super().sample()
 
         shear, convergence = self._sample_shear_and_convergence()
+
         d["shear"] = shear
+        d["shear_1"] = shear[..., 0].unsqueeze(-1)
+        d["shear_2"] = shear[..., 1].unsqueeze(-1)
+        d["shear_avg"] = shear.mean(-2).unsqueeze(-2)
+        d["shear_1_avg"] = d["shear_1"].mean(-2).unsqueeze(-2)
+        d["shear_2_avg"] = d["shear_2"].mean(-2).unsqueeze(-2)
+
         d["convergence"] = convergence
+        d["convergence_avg"] = convergence.mean(-2).unsqueeze(-2)
 
         return TileCatalog(d)

@@ -7,9 +7,9 @@ defaults:
 mode: train
 
 paths:
-
     dc2: /data/scratch/dc2local
-    output: /data/scratch/shreyasc/bliss_output
+    cached_data: /data/scratch/weak_lensing/weak_lensing_img2048_shear01
+    output: /data/scratch/twhit/bliss_output
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
@@ -17,8 +17,8 @@ prior:
     n_tiles_w: 12  # cropping 2 tiles from each side (4 total)
     batch_size: 2
     max_sources: 200
-    constant_shear: 0.2
-    constant_convergence: 0.2
+    constant_shear: 0.1
+    constant_convergence: 0.0
     prob_galaxy: 1.0
     mean_sources: 82  # 0.02 * (256/4) * (256/4)
 

@@ -200,6 +200,8 @@ class TileCatalog(BaseTileCatalog):
                 continue
             if param_name == "locs":  # full catalog uses plocs instead of locs
                 continue
+            if "avg" in param_name:
+                continue
             k = tile_param.shape[-1]
             param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
             indices_for_param = repeat(indices_to_retrieve, "b nth_ntw_s -> b nth_ntw_s k", k=k)
