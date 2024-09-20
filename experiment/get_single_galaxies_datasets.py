@@ -17,18 +17,18 @@ HOME_DIR = Path(__file__).parent.parent.parent
 _cat = Table.read(HOME_DIR / "data" / "OneDegSq.fits")
 CATSIM_CAT = prepare_final_galaxy_catalog(_cat)
 PSF = get_default_lsst_psf()
+TAG = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
 
 @click.command()
 @click.option("-s", "--seed", default=42, type=int)
-@click.option("-t", "--tag", required=True, type=str, help="Dataset tag")
-def main(seed: int, tag: str):
+def main(seed: int):
 
     L.seed_everything(seed)
 
-    train_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/train_ae_ds_{tag}.pt"
-    val_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/val_ae_ds_{tag}.pt"
-    test_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/test_ae_ds_{tag}.pt"
+    train_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/train_ae_ds_{TAG}.pt"
+    val_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/val_ae_ds_{TAG}.pt"
+    test_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/test_ae_ds_{TAG}.pt"
 
     if Path(train_ds_file).exists():
         raise IOError("Training file already exists")
@@ -37,9 +37,11 @@ def main(seed: int, tag: str):
         now = datetime.datetime.now()
         print("", file=f)
         log_msg = f"""Run training autoencoder data generation script...
-        With tag {tag} and seed {seed} at {now}, n_samples {len(CATSIM_CAT)}.
-        Train, test, and val divided into 3 equal parts on full catalog after
+        With seed {seed} at {now}, n_samples {len(CATSIM_CAT)}.
+        Train, test, and val divided into 3 equal parts (disjoint galaxies) on full catalog after
         mag cut < 27.0 on catalog.
+
+        With TAG: {TAG}
         """
         print(log_msg, file=f)
 
