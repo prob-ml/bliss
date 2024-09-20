@@ -25,19 +25,18 @@ _star_mags = column_to_tensor(Table.read(HOME_DIR / "data" / "stars_med_june2018
 CATSIM_CAT = prepare_final_galaxy_catalog(_cat)
 STAR_MAGS = prepare_final_star_catalog(_star_mags)
 
-
 PSF = get_default_lsst_psf()
+
+TAG = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
 
 @click.command()
-@click.option("-s", "--seed", default=42, type=int)
-@click.option("-t", "--tag", required=True, type=str, help="Dataset tag")
+@click.option("-s", "--seed", required=True, type=int)
 @click.option("-n", "--n-samples", default=1000, type=int)  # equally divided total blends
 @click.option("--galaxy-density", default=GALAXY_DENSITY, type=float)
 @click.option("--star-density", default=STAR_DENSITY, type=float)
 def main(
     seed: int,
-    tag: str,
     n_samples: int,
     galaxy_density: float,
     star_density: float,
@@ -46,9 +45,9 @@ def main(
     L.seed_everything(seed)
     rng = np.random.default_rng(seed)  # for catalog indices
 
-    train_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/train_ds_{tag}.pt"
-    val_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/val_ds_{tag}.pt"
-    test_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/test_ds_{tag}.pt"
+    train_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/train_ds_{seed}_{TAG}.pt"
+    val_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/val_ds_{seed}_{TAG}.pt"
+    test_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/test_ds_{seed}_{TAG}.pt"
 
     if Path(train_ds_file).exists():
         raise IOError("Training file already exists")
@@ -57,9 +56,11 @@ def main(
         now = datetime.datetime.now()
         print("", file=f)
         log_msg = f"""Run training blend data generation script...
-        With tag {tag} and seed {seed} at {now}
+        With seed {seed} at {now}
         Galaxy density {galaxy_density}, star_density {star_density}, and n_samples {n_samples}.
         Samples will be divided into 3 datasets of blends with equal number.
+
+        With TAG: {TAG}
         """
         print(log_msg, file=f)
 

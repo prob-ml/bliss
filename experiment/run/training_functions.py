@@ -58,7 +58,8 @@ def setup_training_objects(
 
 def run_encoder_training(
     seed: int,
-    tag: str,
+    train_file: str,
+    val_file: str,
     batch_size: int,
     n_epochs: int,
     model,
@@ -73,22 +74,21 @@ def run_encoder_training(
         now = datetime.datetime.now()
         print("", file=f)
         log_msg = f"""Run training {model_name} encoder script...
-        With tag {tag} and seed {seed} at {now} validate_every_n_epoch {validate_every_n_epoch},
+        With seed {seed} at {now} validate_every_n_epoch {validate_every_n_epoch},
         val_check_interval {val_check_interval}, batch_size {batch_size}, n_epochs {n_epochs}
+
+        Using datasets: {train_file}, {val_file}
         """
         print(log_msg, file=f)
 
     L.seed_everything(seed)
 
-    train_ds_file = f"/nfs/turbo/lsa-regier/data_nfs/ismael/datasets/train_ds_{tag}.pt"
-    val_ds_file = f"/nfs/turbo/lsa-regier/data_nfs/ismael/datasets/val_ds_{tag}.pt"
-
-    if not Path(train_ds_file).exists() and Path(val_ds_file).exists():
+    if not Path(train_file).exists() and Path(val_file).exists():
         raise IOError("Training datasets do not exists")
 
     with open("log.txt", "a") as g:
-        train_ds = SavedGalsimBlends(train_ds_file)
-        val_ds = SavedGalsimBlends(val_ds_file)
+        train_ds = SavedGalsimBlends(train_file)
+        val_ds = SavedGalsimBlends(val_file)
         train_dl, val_dl, trainer = setup_training_objects(
             train_ds=train_ds,
             val_ds=val_ds,

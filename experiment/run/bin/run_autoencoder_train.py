@@ -14,18 +14,20 @@ NUM_WORKERS = 0
 
 
 @click.command()
-@click.option("-s", "--seed", default=42, type=int)
+@click.option("-s", "--seed", required=True, type=int)
+@click.option("--train-file", required=True, type=str)
+@click.option("--val-file", required=True, type=str)
 @click.option("-b", "--batch-size", default=128)
 @click.option("-e", "--n-epochs", default=10001)
 @click.option("--validate-every-n-epoch", default=1, type=int)
-@click.option("-t", "--tag", required=True, type=str, help="Dataset tag")
-@click.option("--lr", default=1e-4, type=float)
+@click.option("--lr", default=1e-5, type=float)
 def main(
     seed: int,
+    train_file: str,
+    val_file: str,
     batch_size: int,
     n_epochs: int,
     validate_every_n_epoch: int,
-    tag: str,
     lr: float,
 ):
 
@@ -33,26 +35,26 @@ def main(
         now = datetime.datetime.now()
         print("", file=f)
         log_msg = f"""Run training autoencoder script...
-        With tag {tag} and seed {seed} at {now}
+        With seed {seed} at {now}
         validate_every_n_epoch {validate_every_n_epoch},
         batch_size {batch_size}, n_epochs {n_epochs}
         learning rate {lr}
+
+        Using datasets: {train_file}, {val_file}
         """
         print(log_msg, file=f)
 
     L.seed_everything(seed)
 
-    train_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/train_ae_ds_{tag}.pt"
-    val_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/val_ae_ds_{tag}.pt"
-
-    assert Path(train_ds_file).exists(), f"Training dataset with tag {tag} is not available"
+    assert Path(train_file).exists(), f"Training dataset {train_file} is not available"
+    assert Path(val_file).exists(), f"Training dataset {val_file} is not available"
 
     # setup model to train
     autoencoder = OneCenteredGalaxyAE(lr=lr)
 
     with open("log.txt", "a") as g:
-        train_ds = SavedIndividualGalaxies(train_ds_file)
-        val_ds = SavedIndividualGalaxies(val_ds_file)
+        train_ds = SavedIndividualGalaxies(train_file)
+        val_ds = SavedIndividualGalaxies(val_file)
         train_dl, val_dl, trainer = setup_training_objects(
             train_ds,
             val_ds,

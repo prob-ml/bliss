@@ -14,19 +14,21 @@ assert Path(AE_STATE_DICT).exists()
 
 
 @click.command()
-@click.option("-s", "--seed", default=42, type=int)
+@click.option("-s", "--seed", required=True, type=int)
+@click.option("--train-file", required=True, type=str)
+@click.option("--val-file", required=True, type=str)
 @click.option("-b", "--batch-size", default=128)
 @click.option("-e", "--n-epochs", default=10001)
 @click.option("--validate-every-n-epoch", default=20, type=int)
 @click.option("--log-every-n-steps", default=10, type=float, help="Fraction of training epoch")
-@click.option("-t", "--tag", required=True, type=str, help="Dataset tag")
 def main(
     seed: int,
+    train_file: str,
+    val_file: str,
     batch_size: int,
     n_epochs: int,
     validate_every_n_epoch: int,
     log_every_n_steps: int,
-    tag: str,
 ):
 
     # setup model to train
@@ -34,7 +36,8 @@ def main(
 
     run_encoder_training(
         seed=seed,
-        tag=tag,
+        train_file=train_file,
+        val_file=val_file,
         batch_size=batch_size,
         n_epochs=n_epochs,
         model=galaxy_encoder,

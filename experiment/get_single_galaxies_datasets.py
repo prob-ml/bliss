@@ -17,18 +17,19 @@ HOME_DIR = Path(__file__).parent.parent.parent
 _cat = Table.read(HOME_DIR / "data" / "OneDegSq.fits")
 CATSIM_CAT = prepare_final_galaxy_catalog(_cat)
 PSF = get_default_lsst_psf()
+
 TAG = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
 
 @click.command()
-@click.option("-s", "--seed", default=42, type=int)
+@click.option("-s", "--seed", required=True, type=int)
 def main(seed: int):
 
     L.seed_everything(seed)
 
-    train_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/train_ae_ds_{TAG}.pt"
-    val_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/val_ae_ds_{TAG}.pt"
-    test_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/test_ae_ds_{TAG}.pt"
+    train_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/train_ae_ds_{seed}_{TAG}.pt"
+    val_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/val_ae_ds_{seed}_{TAG}.pt"
+    test_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/test_ae_ds_{seed}_{TAG}.pt"
 
     if Path(train_ds_file).exists():
         raise IOError("Training file already exists")
