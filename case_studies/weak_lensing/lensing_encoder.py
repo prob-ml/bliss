@@ -47,11 +47,14 @@ class WeakLensingEncoder(Encoder):
         )
 
         self.initialize_networks()
-        self.epoch_losses = []  # List to store epoch losses
-        self.current_epoch_loss = 0.0  # Variable to accumulate batch losses
-        self.current_epoch_batches = 0  # Variable to count batches in the current epoch
+        self.epoch_train_losses = []  # List to store epoch losses
+        self.current_epoch_train_loss = 0.0  # Variable to accumulate batch losses
+        self.current_epoch_train_batches = 0  # Variable to count batches in the current epoch
         self.current_epochs = 0
         self.train_loss_location = kwargs["train_loss_location"]
+        self.epoch_val_losses = []
+        self.current_epoch_val_loss = 0.0
+        self.current_epoch_val_batches = 0
 
     # override
     def initialize_networks(self):
@@ -102,9 +105,13 @@ class WeakLensingEncoder(Encoder):
 
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
-        # Accumulate batch loss
-        self.current_epoch_loss += loss.item()
-        self.current_epoch_batches += 1
+        if logging_name == "train":
+            # Accumulate batch loss
+            self.current_epoch_train_loss += loss.item()
+            self.current_epoch_train_batches += 1
+        if logging_name == "val":
+            self.current_epoch_val_loss += loss.item()
+            self.current_epoch_val_batches += 1
 
         return loss
 
@@ -116,8 +123,6 @@ class WeakLensingEncoder(Encoder):
                 param_grad_norm = param.grad.data.norm(2).item()
                 total_grad_norm += param_grad_norm**2
         total_grad_norm = total_grad_norm**0.5
-        if total_grad_norm > 100 or total_grad_norm < 1e-4:
-            print("total_grad_norm", total_grad_norm)  # noqa: WPS421
 
     def update_metrics(self, batch, batch_idx):
         target_cat = BaseTileCatalog(batch["tile_catalog"])
@@ -139,19 +144,40 @@ class WeakLensingEncoder(Encoder):
 
     def on_train_epoch_end(self):
         # Compute the average loss for the epoch and reset counters
-        avg_epoch_loss = self.current_epoch_loss / self.current_epoch_batches
-        self.epoch_losses.append(avg_epoch_loss)
-        self.current_epoch_loss = 0.0
-        self.current_epoch_batches = 0
+        avg_epoch_train_loss = self.current_epoch_train_loss / self.current_epoch_train_batches
+        self.epoch_train_losses.append(avg_epoch_train_loss)
+        self.current_epoch_train_loss = 0.0
+        self.current_epoch_train_batches = 0
         self.current_epochs += 1
-        print(f"Average loss for epoch {self.current_epoch}: {avg_epoch_loss}")  # noqa: WPS421
+        print(  # noqa: WPS421
+            f"Average train loss for epoch {self.current_epoch}: {avg_epoch_train_loss}",
+        )
+
+    def on_validation_epoch_end(self):
+        avg_epoch_val_loss = self.current_epoch_val_loss / self.current_epoch_val_batches
+        self.epoch_val_losses.append(avg_epoch_val_loss)
+        self.current_epoch_val_loss = 0.0
+        self.current_epoch_val_batches = 0
+        print(  # noqa: WPS421
+            f"Average val loss for epoch {self.current_epoch}: {avg_epoch_val_loss}",
+        )
 
     def on_train_end(self):
         # Plot the training loss at the end of training
-        plt.plot(range(self.current_epochs), self.epoch_losses, label="Training Loss")
+        plt.plot(
+            range(len(self.epoch_train_losses)), self.epoch_train_losses, label="Training Loss"
+        )
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
         plt.title("Training Loss Over Epochs")
         plt.legend()
         plt.savefig(f"{self.train_loss_location}/training_loss.png")
+        plt.close()
+
+        plt.plot(range(len(self.epoch_val_losses)), self.epoch_val_losses, label="Validation Loss")
+        plt.xlabel("Epochs")
+        plt.ylabel("Loss")
+        plt.title("Validation Loss Over Epochs")
+        plt.legend()
+        plt.savefig(f"{self.train_loss_location}/validation_loss.png")
         plt.close()

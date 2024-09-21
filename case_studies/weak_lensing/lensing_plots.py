@@ -164,7 +164,7 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
 def plot_maps_helper(x_label: str, mp, ax, fig, vmin, vmax):
     ax.set_xlabel(x_label)
 
-    mp = mp.cpu().numpy()
+    mp = mp.cpu().float().numpy()
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
     im = ax.matshow(

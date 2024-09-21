@@ -7,9 +7,9 @@ defaults:
 mode: train
 
 paths:
-    dc2: /data/scratch/dc2local
-    cached_data: /data/scratch/weak_lensing/weak_lensing_img2048_shear01
-    output: /data/scratch/twhit/bliss_output
+
+    dc2: /scratch/regier_root/regier0/shreyasc/data/dc2local  # change for gl
+    output: /scratch/regier_root/regier0/shreyasc/data/bliss_output  # change for gl
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
@@ -125,8 +125,8 @@ train:
     trainer:
         logger:
             name: dc2_weak_lensing_exp
-            version: exp_09_16
-        devices: [0] # cuda:0 for gl
+            version: exp_09_17
+        devices: cuda:0 # cuda:0 for gl
         use_distributed_sampler: false
         precision: 32-true
     data_source: ${surveys.dc2}
