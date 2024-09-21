@@ -200,7 +200,7 @@ class TileCatalog(BaseTileCatalog):
                 continue
             if param_name == "locs":  # full catalog uses plocs instead of locs
                 continue
-            if "avg" in param_name:
+            if param_name in {"shear", "shear_1", "shear_2", "convergence"}:
                 continue
             k = tile_param.shape[-1]
             param = rearrange(tile_param, "b nth ntw s k -> b (nth ntw s) k", k=k)
