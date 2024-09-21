@@ -154,6 +154,15 @@ class WeakLensingEncoder(Encoder):
         )
 
     def on_validation_epoch_end(self):
+        self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
+        self.mode_metrics.reset()
+        if self.sample_metrics is not None:
+            self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
+            self.sample_metrics.reset()
+        if self.sample_image_renders is not None:
+            self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
+        
+        # new additions
         avg_epoch_val_loss = self.current_epoch_val_loss / self.current_epoch_val_batches
         self.epoch_val_losses.append(avg_epoch_val_loss)
         self.current_epoch_val_loss = 0.0
