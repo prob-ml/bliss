@@ -7,7 +7,7 @@ import click
 import numpy as np
 import torch
 
-MODELS_DIR = Path(__file__).joinpath("models")
+MODELS_DIR = Path(__file__).parent.joinpath("models")
 
 
 def _find_best_checkpoint(checkpoint_dir: str):

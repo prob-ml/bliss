@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from matplotlib.figure import Figure
 from torch import Tensor
+from tqdm import tqdm
 
 from bliss.encoders.autoencoder import OneCenteredGalaxyAE
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
@@ -50,7 +51,7 @@ class AutoEncoderFigures(BlissFigure):
         batch_size = 128
         n_iters = int(np.ceil(n_images // 128)) + 1
         with torch.no_grad():
-            for i in range(n_iters):  # in batches otherwise GPU error.
+            for i in tqdm(range(n_iters)):  # in batches otherwise GPU error.
                 bimages = images[batch_size * i : batch_size * (i + 1)].to(device)
                 recon_mean = autoencoder.forward(bimages, background)
                 recon_mean = recon_mean.detach().to("cpu")
@@ -71,11 +72,17 @@ class AutoEncoderFigures(BlissFigure):
 
         recon_no_background = recon_means - background.cpu()
         assert torch.all(recon_no_background.sum(axis=(1, 2, 3)) > 0)
-        tflux, _, tellips = get_single_galaxy_measurements(noiseless_images, backgrounds)
-        eflux, _, pellips = get_single_galaxy_measurements(recon_no_background, backgrounds)
+        tflux, _, tellips = get_single_galaxy_measurements(
+            noiseless_images, backgrounds, no_bar=False
+        )
+        eflux, _, pellips = get_single_galaxy_measurements(
+            recon_no_background, backgrounds, no_bar=False
+        )
         true_meas = {"true_fluxes": tflux, "true_ellips": tellips}
         recon_meas = {"recon_fluxes": eflux, "recon_ellips": pellips}
         measurements = {**true_meas, **recon_meas, "snr": snr}
+
+        print("Saving AE results...")
 
         return {
             "random": {
@@ -93,18 +100,19 @@ class AutoEncoderFigures(BlissFigure):
 
     def _get_binned_measurements_figure(self, data) -> Figure:
         meas = data["measurements"]
+        delta_snr = 0.1
 
         fig, axes = plt.subplots(1, 3, figsize=(18, 7))
         ax1, ax2, ax3 = axes.flatten()
         snr = meas["snr"]
-        xticks = [1.0, 1.5, 2.0, 2.5, 3.0]
-        xlims = (1.0, 3)
+        xticks = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]
+        xlims = (0.5, 3)
         xlabel = r"$\log_{10} \rm SNR$"
 
         # fluxes
         true_fluxes, recon_fluxes = meas["true_fluxes"], meas["recon_fluxes"]
         x, y = np.log10(snr), (recon_fluxes - true_fluxes) / true_fluxes
-        scatter_shade_plot(ax1, x, y, xlims, delta=0.2, use_boot=True)
+        scatter_shade_plot(ax1, x, y, xlims, delta=delta_snr, use_boot=True)
         ax1.set_xlim(xlims)
         ax1.set_xlabel(xlabel)
         ax1.set_ylabel(r"$(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
@@ -113,13 +121,13 @@ class AutoEncoderFigures(BlissFigure):
 
         # ellipticities
         true_ellip1, recon_ellip1 = meas["true_ellips"][:, 0], meas["recon_ellips"][:, 0]
-        mask1 = np.isnan(true_ellip1)
+        mask1 = np.isnan(true_ellip1)  # only need first componenet for masks by construction
         mask2 = np.isnan(recon_ellip1)
         mask = ~mask1 & ~mask2
         print(f"INFO: Total number of true ellipticity NaNs is: {sum(mask1)}")
         print(f"INFO: Total number of reconstructed ellipticity NaNs is: {sum(mask2)}")
         x, y = np.log10(snr[mask]), recon_ellip1[mask] - true_ellip1[mask]
-        scatter_shade_plot(ax2, x, y, xlims, delta=0.2, use_boot=True)
+        scatter_shade_plot(ax2, x, y, xlims, delta=delta_snr, use_boot=True)
         ax2.set_xlim(xlims)
         ax2.set_xlabel(xlabel)
         ax2.set_ylabel(r"$g_{1}^{\rm recon} - g_{1}^{\rm true}$")
@@ -128,8 +136,8 @@ class AutoEncoderFigures(BlissFigure):
         ax2.set_ylim(-0.1, 0.1)
 
         true_ellip2, recon_ellip2 = meas["true_ellips"][:, 1], meas["recon_ellips"][:, 1]
-        x, y = np.log10(snr), recon_ellip2 - true_ellip2
-        scatter_shade_plot(ax3, x, y, xlims, delta=0.2, use_boot=True)
+        x, y = np.log10(snr[mask]), recon_ellip2[mask] - true_ellip2[mask]
+        scatter_shade_plot(ax3, x, y, xlims, delta=delta_snr, use_boot=True)
         ax3.set_xlim(xlims)
         ax3.set_xlabel(xlabel)
         ax3.set_ylabel(r"$g_{2}^{\rm recon} - g_{2}^{\rm true}$")

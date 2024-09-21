@@ -8,7 +8,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader, Dataset
 
-from bliss.datasets.generate_blends import SavedGalsimBlends
+from bliss.datasets.saved_datasets import SavedGalsimBlends
 
 NUM_WORKERS = 0
 

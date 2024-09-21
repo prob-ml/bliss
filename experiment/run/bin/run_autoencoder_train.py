@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 import pytorch_lightning as L
 
-from bliss.datasets.generate_blends import SavedIndividualGalaxies
+from bliss.datasets.saved_datasets import SavedIndividualGalaxies
 from bliss.encoders.autoencoder import OneCenteredGalaxyAE
 from experiment.run.training_functions import setup_training_objects
 
@@ -18,8 +18,8 @@ NUM_WORKERS = 0
 @click.option("--train-file", required=True, type=str)
 @click.option("--val-file", required=True, type=str)
 @click.option("-b", "--batch-size", default=128)
-@click.option("-e", "--n-epochs", default=10001)
-@click.option("--validate-every-n-epoch", default=1, type=int)
+@click.option("-e", "--n-epochs", default=20000)
+@click.option("--validate-every-n-epoch", default=10, type=int)
 @click.option("--lr", default=1e-5, type=float)
 def main(
     seed: int,

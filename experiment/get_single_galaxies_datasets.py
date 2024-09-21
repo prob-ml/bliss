@@ -8,12 +8,12 @@ import pytorch_lightning as L
 import torch
 from astropy.table import Table
 
-from bliss.datasets.generate_blends import generate_individual_dataset
+from bliss.datasets.generate_individual import generate_individual_dataset
 from bliss.datasets.lsst import get_default_lsst_psf, prepare_final_galaxy_catalog
 
 NUM_WORKERS = 0
 
-HOME_DIR = Path(__file__).parent.parent.parent
+HOME_DIR = Path(__file__).parent.parent
 _cat = Table.read(HOME_DIR / "data" / "OneDegSq.fits")
 CATSIM_CAT = prepare_final_galaxy_catalog(_cat)
 PSF = get_default_lsst_psf()

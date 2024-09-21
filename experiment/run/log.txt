@@ -633,3 +633,24 @@ Run training autoencoder script...
         learning rate 5e-06
 
 INFO: Saving model as version 21
+
+Run training autoencoder data generation script...
+        With seed 42 at 2024-09-20 16:48:41.649063, n_samples 575903.
+        Train, test, and val divided into 3 equal parts (disjoint galaxies) on full catalog after
+        mag cut < 27.0 on catalog.
+
+        With TAG: 20240920164841
+
+
+./bin/run_autoencoder_train.py -s 42 --train-file ../data/datasets/train_ae_ds_42_20240920164841.pt --val-file ../data/datasets/val_ae_ds_42_20240920164841.pt
+
+Run training autoencoder script...
+        With seed 42 at 2024-09-20 17:16:40.758029
+        validate_every_n_epoch 10,
+        batch_size 128, n_epochs 20000
+        learning rate 1e-05
+
+        Using datasets: ../data/datasets/train_ae_ds_42_20240920164841.pt, ../data/datasets/val_ae_ds_42_20240920164841.pt
+
+INFO: Saving model as version 22
+INFO: Saved checkpoint 'data/out/autoencoder/version_22/checkpoints/epoch=4269-val_loss=2692834.250.ckpt' as weights /home/imendoza/bliss/experiment/models/autoencoder_42.pt at 2024-09-21 14:01:19.319910
