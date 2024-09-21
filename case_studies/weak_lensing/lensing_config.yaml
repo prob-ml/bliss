@@ -17,8 +17,10 @@ prior:
     n_tiles_w: 12  # cropping 2 tiles from each side (4 total)
     batch_size: 2
     max_sources: 200
-    constant_shear: 0.1
-    constant_convergence: 0.0
+    shear_min: -0.1
+    shear_max: 0.1
+    convergence_min: -0.0001
+    convergence_max: 0.0001
     prob_galaxy: 1.0
     mean_sources: 82  # 0.02 * (256/4) * (256/4)
 

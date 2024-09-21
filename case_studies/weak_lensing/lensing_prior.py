@@ -1,4 +1,6 @@
 import torch
+from einops import rearrange
+from torch.distributions import Uniform
 
 from bliss.catalog import TileCatalog
 from bliss.simulator.prior import CatalogPrior
@@ -8,21 +10,35 @@ class LensingPrior(CatalogPrior):
     def __init__(
         self,
         *args,
-        constant_shear,
-        constant_convergence,
+        shear_min,
+        shear_max,
+        convergence_min,
+        convergence_max,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.constant_shear = constant_shear
-        self.constant_convergence = constant_convergence
+        self.shear_min = shear_min
+        self.shear_max = shear_max
+        self.convergence_min = convergence_min
+        self.convergence_max = convergence_max
 
     def _sample_shear_and_convergence(self):
-        shear = self.constant_shear * torch.ones(
-            (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 2)
+        latent_dims_shear = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 2)
+        shear = rearrange(
+            Uniform(self.shear_min, self.shear_max).sample([self.batch_size, 2]), "b d -> b 1 1 1 d"
+        ) * torch.ones(latent_dims_shear)
+
+        latent_dims_convergence = (
+            self.batch_size,
+            self.n_tiles_h,
+            self.n_tiles_w,
+            self.max_sources,
+            1,
         )
-        convergence = self.constant_convergence * torch.ones(
-            (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        )
+        convergence = rearrange(
+            Uniform(self.convergence_min, self.convergence_max).sample([self.batch_size, 1]),
+            "b d -> b 1 1 1 d",
+        ) * torch.ones(latent_dims_convergence)
 
         return shear, convergence
 
