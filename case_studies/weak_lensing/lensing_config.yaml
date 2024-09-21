@@ -7,9 +7,9 @@ defaults:
 mode: train
 
 paths:
-
-    dc2: /scratch/regier_root/regier0/shreyasc/data/dc2local  # change for gl
-    output: /scratch/regier_root/regier0/shreyasc/data/bliss_output  # change for gl
+    dc2: /data/scratch/dc2local
+    cached_data: /data/scratch/weak_lensing/weak_lensing_img2048_shear01
+    output: /data/scratch/twhit/bliss_output
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
@@ -30,7 +30,7 @@ decoder:
     with_noise: false
 
 cached_simulator:
-    batch_size: 2
+    batch_size: 1
     train_transforms: []
 
 variational_factors:
@@ -40,20 +40,8 @@ variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
     name: shear_2
     nll_gating: null
-#   - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
-#     name: shear
-#     nll_gating: null
-#   - _target_: bliss.encoder.variational_dist.NormalFactor
-#     name: convergence
-#     nll_gating: null
-#     high_clamp: 20.0
-#     low_clamp: -20.0
 
 my_normalizers:
-    # asinh:
-    #     _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
-    #     q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
-    #     sample_every_n: 4
     nully:
         _target_: bliss.encoder.image_normalizer.NullNormalizer
 
@@ -71,7 +59,7 @@ my_render:
 
 encoder:
     _target_: case_studies.weak_lensing.lensing_encoder.WeakLensingEncoder
-    survey_bands: ["u", "g", "r", "i", "z", "y"]
+    survey_bands: [u, g, r, i, z]  # ["u", "g", "r", "i", "z", "y"] for DC2
     reference_band: 2  # r-band
     tile_slen: 256
     n_tiles: 8
@@ -82,7 +70,6 @@ encoder:
         milestones: [32]
         gamma: 0.1
     image_normalizers: ${my_normalizers}
-
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
         tile_slen: ${encoder.tile_slen}
@@ -118,17 +105,18 @@ surveys:
         num_workers: 1
         cached_data_path: ${paths.output}/dc2_corrected_shear_only_cd_fix
 
-# generate:
-#     n_image_files: 50
-#     n_batches_per_file: 4
+generate:
+    n_image_files: 50
+    n_batches_per_file: 4
+
 train:
     trainer:
         logger:
             name: dc2_weak_lensing_exp
-            version: exp_09_17
-        devices: cuda:0 # cuda:0 for gl
+            version: september21
+        devices: 1 # cuda:0 for gl
         use_distributed_sampler: false
         precision: 32-true
-    data_source: ${surveys.dc2}
+    data_source: ${cached_simulator}
     pretrained_weights: null
     seed: 123123
