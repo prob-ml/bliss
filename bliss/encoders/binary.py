@@ -1,6 +1,6 @@
 import pytorch_lightning as pl
 import torch
-from einops import pack, rearrange
+from einops import pack, rearrange, reduce
 from torch import Tensor
 from torch.nn import BCELoss
 from torch.optim import Adam
@@ -80,6 +80,7 @@ class BinaryEncoder(pl.LightningModule):
 
     def get_loss(self, images: Tensor, background: Tensor, tile_catalog: TileCatalog):
         """Return loss, accuracy, binary probabilities, and MAP classifications for given batch."""
+        b, nth, ntw, _ = tile_catalog.locs.shape
 
         n_sources = tile_catalog.n_sources
         locs = tile_catalog.locs
@@ -98,7 +99,14 @@ class BinaryEncoder(pl.LightningModule):
 
         # we need to calculate cross entropy loss, only for "on" sources
         raw_loss = BCELoss(reduction="none")(galaxy_probs_flat, galaxy_bools_flat.float())
-        return (raw_loss * n_sources_flat.float()).sum(), acc
+        loss_vec = raw_loss * n_sources_flat.float()
+
+        # as per paper, we sum over tiles and take mean over batches
+        loss_per_tile = rearrange(loss_vec, "(b nth ntw) -> b nth ntw", b=b, nth=nth, ntw=ntw)
+        loss_per_batch = reduce(loss_per_tile, "b nth ntw -> b", "sum")
+        loss = reduce(loss_per_batch, "b -> ", "mean")
+
+        return loss, acc
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning method."""

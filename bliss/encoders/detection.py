@@ -153,6 +153,7 @@ class DetectionEncoder(pl.LightningModule):
 
     def get_loss(self, images: Tensor, background: Tensor, true_catalog: TileCatalog):
         assert images.device == background.device == true_catalog.device
+        b, nth, ntw, _ = true_catalog.locs.shape
 
         # encode
         out: tuple[Tensor, Tensor, Tensor] = self(images, background)
@@ -167,10 +168,14 @@ class DetectionEncoder(pl.LightningModule):
         locs_log_prob = -reduce(  # negative log-probability is the loss!
             Normal(locs_mean, locs_sd).log_prob(flat_true_locs), "np xy -> np", "sum", xy=2
         )
-        locs_loss = locs_log_prob * n_true_sources_flat.float()
+        locs_loss = locs_log_prob * n_true_sources_flat.float()  # loc loss only on "on" sources.
 
         loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss  # noqa: WPS459
-        loss = loss_vec.mean()
+
+        # per the paper, we take the mean over batches and sum over tiles
+        loss_per_tile = rearrange(loss_vec, "(b nth ntw) -> b nth ntw", b=b, nth=nth, ntw=ntw)
+        loss_per_batch = reduce(loss_per_tile, "b nth ntw -> b", "sum")
+        loss = reduce(loss_per_batch, "b -> ", "mean")
 
         return {
             "loss": loss,
