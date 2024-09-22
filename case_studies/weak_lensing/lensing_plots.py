@@ -98,61 +98,41 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
         est_convergence = est_tile_cat["convergence"]
 
     for img_id in img_ids:
-        shear1_vmin = torch.min(true_shear[img_id].squeeze()[:, :, 0])
-        shear1_vmax = torch.max(true_shear[img_id].squeeze()[:, :, 0])
-        shear2_vmin = torch.min(true_shear[img_id].squeeze()[:, :, 1])
-        shear2_vmax = torch.max(true_shear[img_id].squeeze()[:, :, 1])
-
-        convergence_vmin = torch.min(true_convergence[img_id].squeeze())
-        convergence_vmax = torch.max(true_convergence[img_id].squeeze())
-
         plot_maps_helper(
             label="True shear 1",
             mp=true_shear[img_id].squeeze()[:, :, 0],
             ax=axes[0],
             fig=fig,
-            vmin=shear1_vmin,
-            vmax=shear1_vmax,
         )
         plot_maps_helper(
             label="Estimated shear 1",
             mp=est_shear[img_id].squeeze()[:, :, 0],
             ax=axes[1],
             fig=fig,
-            vmin=shear1_vmin,
-            vmax=shear1_vmax,
         )
         plot_maps_helper(
             label="True shear 2",
             mp=true_shear[img_id].squeeze()[:, :, 1],
             ax=axes[2],
             fig=fig,
-            vmin=shear2_vmin,
-            vmax=shear2_vmax,
         )
         plot_maps_helper(
             label="Estimated shear 2",
             mp=est_shear[img_id].squeeze()[:, :, 1],
             ax=axes[3],
             fig=fig,
-            vmin=shear2_vmin,
-            vmax=shear2_vmax,
         )
         plot_maps_helper(
             label="True convergence",
             mp=true_convergence[img_id].squeeze(),
             ax=axes[4],
             fig=fig,
-            vmin=convergence_vmin,
-            vmax=convergence_vmax,
         )
         plot_maps_helper(
             label="Estimated convergence",
             mp=est_convergence[img_id].squeeze(),
             ax=axes[5],
             fig=fig,
-            vmin=convergence_vmin,
-            vmax=convergence_vmax,
         )
 
     fig.tight_layout()
@@ -161,7 +141,7 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
     return fig, axes
 
 
-def plot_maps_helper(label: str, mp, ax, fig, vmin, vmax):
+def plot_maps_helper(label: str, mp, ax, fig):
     ax.set_title(label)
 
     mp = mp.cpu().float().numpy()
@@ -170,7 +150,5 @@ def plot_maps_helper(label: str, mp, ax, fig, vmin, vmax):
     im = ax.matshow(
         mp,
         cmap="viridis",
-        vmin=vmin,
-        vmax=vmax,
     )
     fig.colorbar(im, cax=cax, orientation="vertical")
