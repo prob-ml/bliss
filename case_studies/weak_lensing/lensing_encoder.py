@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 
 import torch
@@ -51,7 +52,7 @@ class WeakLensingEncoder(Encoder):
         self.current_epoch_train_loss = 0.0  # Variable to accumulate batch losses
         self.current_epoch_train_batches = 0  # Variable to count batches in the current epoch
         self.current_epochs = 0
-        self.train_loss_location = kwargs["train_loss_location"]
+        self.loss_plots_location = kwargs["loss_plots_location"]
         self.epoch_val_losses = []
         self.current_epoch_val_loss = 0.0
         self.current_epoch_val_batches = 0
@@ -161,7 +162,7 @@ class WeakLensingEncoder(Encoder):
             self.sample_metrics.reset()
         if self.sample_image_renders is not None:
             self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
-        
+
         # new additions
         avg_epoch_val_loss = self.current_epoch_val_loss / self.current_epoch_val_batches
         self.epoch_val_losses.append(avg_epoch_val_loss)
@@ -172,21 +173,23 @@ class WeakLensingEncoder(Encoder):
         )
 
     def on_train_end(self):
-        # Plot the training loss at the end of training
+        if not Path(self.loss_plots_location).exists():
+            Path(self.loss_plots_location).mkdir(parents=True)
+
         plt.plot(
-            range(len(self.epoch_train_losses)), self.epoch_train_losses, label="Training Loss"
+            range(len(self.epoch_train_losses)), self.epoch_train_losses, label="Training loss"
         )
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
-        plt.title("Training Loss Over Epochs")
+        plt.title("Training loss by epoch")
         plt.legend()
-        plt.savefig(f"{self.train_loss_location}/training_loss.png")
+        plt.savefig(f"{self.loss_plots_location}/training_loss.png")
         plt.close()
 
-        plt.plot(range(len(self.epoch_val_losses)), self.epoch_val_losses, label="Validation Loss")
+        plt.plot(range(len(self.epoch_val_losses)), self.epoch_val_losses, label="Validation loss")
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
-        plt.title("Validation Loss Over Epochs")
+        plt.title("Validation loss by epoch")
         plt.legend()
-        plt.savefig(f"{self.train_loss_location}/validation_loss.png")
+        plt.savefig(f"{self.loss_plots_location}/validation_loss.png")
         plt.close()

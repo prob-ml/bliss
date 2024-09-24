@@ -1,4 +1,5 @@
 import math
+from pathlib import Path
 
 import torch
 from matplotlib import pyplot as plt
@@ -137,6 +138,8 @@ def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0
 
     fig.tight_layout()
     if save_local:
+        if not Path(save_local).exists():
+            Path(save_local).mkdir(parents=True)
         fig.savefig(f"{save_local}/lensing_maps_{current_epoch}.png")
     return fig, axes
 
