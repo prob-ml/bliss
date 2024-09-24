@@ -9,6 +9,8 @@ from bliss.encoder.encoder import Encoder
 from bliss.encoder.variational_dist import VariationalDist
 from case_studies.weak_lensing.lensing_convnet import WeakLensingCatalogNet, WeakLensingFeaturesNet
 
+from datetime import datetime
+
 
 class WeakLensingEncoder(Encoder):
     def __init__(
@@ -174,12 +176,13 @@ class WeakLensingEncoder(Encoder):
 
     def on_train_end(self):
         # Plot the training loss at the end of training
+        current_time_hms = datetime.now().strftime("%H%M%S")
         plt.plot(range(len(self.epoch_train_losses)), self.epoch_train_losses, label="Training Loss")
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
         plt.title("Training Loss Over Epochs")
         plt.legend()
-        plt.savefig(f"{self.train_loss_location}/training_loss.png")
+        plt.savefig(f"{self.train_loss_location}/training_loss_{current_time_hms}.png")
         plt.close()
 
         plt.plot(range(len(self.epoch_val_losses)), self.epoch_val_losses, label="Validation Loss")
@@ -187,5 +190,5 @@ class WeakLensingEncoder(Encoder):
         plt.ylabel("Loss")
         plt.title("Validation Loss Over Epochs")
         plt.legend()
-        plt.savefig(f"{self.train_loss_location}/validation_loss.png")
+        plt.savefig(f"{self.train_loss_location}/validation_loss_{current_time_hms}.png")
         plt.close()
