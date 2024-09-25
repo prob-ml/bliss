@@ -28,7 +28,7 @@ my_metrics:
 
 my_render:
     lensing_shear_conv:
-        _target_: case_studies.weak_lensing.lensing_plots.PlotWeakLensingShearConvergence
+        _target_: case_studies.weak_lensing.lensing_plots.PlotLensingMaps
         frequency: 1
         restrict_batch: 0
         tile_slen: 256
