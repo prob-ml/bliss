@@ -8,7 +8,7 @@ mode: train
 
 paths:
     cached_data: /data/scratch/weak_lensing/weak_lensing_img2048_constantshear
-    output: /data/scratch/twhit/bliss_output
+    output: /home/twhit/bliss/
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
@@ -55,7 +55,6 @@ my_render:
         _target_: case_studies.weak_lensing.lensing_plots.PlotWeakLensingShearConvergence
         frequency: 1
         restrict_batch: 0
-        tile_slen: 256
         save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_maps
 
 encoder:
