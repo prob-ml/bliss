@@ -7,7 +7,6 @@ import click
 import numpy as np
 import pytorch_lightning as L
 import torch
-from astropy.table import Table
 
 from bliss.datasets.generate_blends import generate_dataset
 from bliss.datasets.lsst import (
@@ -17,13 +16,10 @@ from bliss.datasets.lsst import (
     prepare_final_galaxy_catalog,
     prepare_final_star_catalog,
 )
-from bliss.datasets.table_utils import column_to_tensor
 
 HOME_DIR = Path(__file__).parent.parent.parent
-_cat = Table.read(HOME_DIR / "data" / "OneDegSq.fits")
-_star_mags = column_to_tensor(Table.read(HOME_DIR / "data" / "stars_med_june2018.fits"), "i_ab")
-CATSIM_CAT = prepare_final_galaxy_catalog(_cat)
-STAR_MAGS = prepare_final_star_catalog(_star_mags)
+CATSIM_CAT = prepare_final_galaxy_catalog()
+STAR_MAGS = prepare_final_star_catalog()
 
 PSF = get_default_lsst_psf()
 

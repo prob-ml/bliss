@@ -16,7 +16,7 @@ from bliss.reporting import get_single_galaxy_ellipticities
 
 def test_galaxy_blend_catalogs(home_dir: Path):
     psf = get_default_lsst_psf()
-    final_table = prepare_final_galaxy_catalog(Table.read(home_dir / "data" / "OneDegSq.fits"))
+    final_table = prepare_final_galaxy_catalog()
 
     n_gals = 1000
     ds = generate_individual_dataset(n_gals, final_table, psf, slen=53, replace=False)

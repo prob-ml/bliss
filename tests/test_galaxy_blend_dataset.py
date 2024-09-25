@@ -5,16 +5,17 @@ from astropy.table import Table
 
 from bliss.catalog import FullCatalog
 from bliss.datasets.generate_blends import generate_dataset
-from bliss.datasets.lsst import get_default_lsst_psf
-from bliss.datasets.table_utils import column_to_tensor
+from bliss.datasets.lsst import (
+    get_default_lsst_psf,
+    prepare_final_galaxy_catalog,
+    prepare_final_star_catalog,
+)
 
 
-def test_galaxy_blend_catalogs(home_dir: Path):
+def test_galaxy_blend_catalogs():
     psf = get_default_lsst_psf()
-    catsim_table = Table.read(home_dir / "data" / "OneDegSq.fits")
-    all_star_mags = column_to_tensor(
-        Table.read(home_dir / "data" / "stars_med_june2018.fits"), "i_ab"
-    )
+    catsim_table = prepare_final_galaxy_catalog()
+    all_star_mags = prepare_final_star_catalog()
     blends_ds = generate_dataset(100, catsim_table, all_star_mags, psf, 10)
 
     tile_slen = 4

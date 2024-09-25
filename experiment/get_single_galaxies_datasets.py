@@ -14,8 +14,7 @@ from bliss.datasets.lsst import get_default_lsst_psf, prepare_final_galaxy_catal
 NUM_WORKERS = 0
 
 HOME_DIR = Path(__file__).parent.parent
-_cat = Table.read(HOME_DIR / "data" / "OneDegSq.fits")
-CATSIM_CAT = prepare_final_galaxy_catalog(_cat)
+CATSIM_CAT = prepare_final_galaxy_catalog()
 PSF = get_default_lsst_psf()
 
 TAG = datetime.datetime.now().strftime("%Y%m%d%H%M%S")

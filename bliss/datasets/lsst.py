@@ -1,5 +1,7 @@
 """Utilites for calculating LSST survey related quantities."""
 
+from pathlib import Path
+
 import galcheat
 import galsim
 import torch
@@ -9,6 +11,8 @@ from btk.survey import get_surveys
 from einops import rearrange
 from galcheat.utilities import mag2counts, mean_sky_level
 from torch import Tensor
+
+from bliss.datasets.table_utils import column_to_tensor
 
 PIXEL_SCALE = 0.2  # arcsecs / pixel
 
@@ -20,6 +24,9 @@ MIN_STAR_MAG = 20.0  # stars with lower magnitude have > 1000 SNR
 
 GALAXY_DENSITY = 160  # arcmin^{-2}, with mag cut above
 STAR_DENSITY = 10  # arcmin^{-2}, NOTE: placeholder, need to update
+
+
+DATA_DIR = Path(__file__).parent.parent.parent / "data"
 
 
 def convert_mag_to_flux(mag: Tensor) -> Tensor:
@@ -58,12 +65,15 @@ def get_default_lsst_background() -> float:
     return mean_sky_level("LSST", "i").to_value("electron")
 
 
-def prepare_final_galaxy_catalog(cat: Table) -> Table:
+def prepare_final_galaxy_catalog() -> Table:
     """Function to globally apply cuts to CATSIM catalog for all datasets."""
+    cat = Table.read(DATA_DIR / "OneDegSq.fits")
     mask = cat["i_ab"] < MAX_MAG
     return cat[mask]
 
 
-def prepare_final_star_catalog(mags: Tensor) -> Tensor:
+def prepare_final_star_catalog() -> Tensor:
+    table = Table.read(DATA_DIR / "stars_med_june2018.fits")
+    mags = column_to_tensor(table, "i_ab")
     mask = torch.logical_and(mags > MIN_STAR_MAG, mags < MAX_MAG)
     return mags[mask]
