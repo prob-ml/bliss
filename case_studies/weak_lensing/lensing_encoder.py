@@ -135,10 +135,8 @@ class WeakLensingEncoder(Encoder):
         self.sample_metrics.update(target_cat, sample_cat_no_mode, None)
 
         self.sample_image_renders.update(
-            batch,
             target_cat,
             mode_cat,
-            None,
             self.current_epoch,
             batch_idx,
         )
