@@ -30,8 +30,6 @@ my_render:
     lensing_shear_conv:
         _target_: case_studies.weak_lensing.lensing_plots.PlotLensingMaps
         frequency: 1
-        restrict_batch: 0
-        tile_slen: 256
         save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_maps
 
 encoder:
@@ -65,7 +63,7 @@ encoder:
         metrics: ${my_render}
     use_double_detect: false
     use_checkerboard: false
-    train_loss_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/train_loss
+    loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/train_loss
 
 surveys:
     dc2:
