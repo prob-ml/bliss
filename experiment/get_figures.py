@@ -37,7 +37,7 @@ def _load_models(seed: int, device):
     )
     binary.requires_grad_(False)
 
-    deblender = GalaxyEncoder("models/autoencoder.pt")
+    deblender = GalaxyEncoder(f"models/autoencoder_{seed}.pt")
     deblender.load_state_dict(
         torch.load(f"models/deblend_{seed}.pt", map_location=device, weights_only=True)
     )
