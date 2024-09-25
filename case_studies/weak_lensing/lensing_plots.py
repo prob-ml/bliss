@@ -59,13 +59,27 @@ class PlotLensingMaps(Metric):
     def plot(self):
         if self.current_epoch % self.frequency != 0:
             return None
+        true_shear1 = torch.stack(self.true_shear1, dim=0).squeeze()
+        true_shear2 = torch.stack(self.true_shear2, dim=0).squeeze()
+        true_convergence = torch.stack(self.true_convergence, dim=0).squeeze()
+        est_shear1 = torch.stack(self.est_shear1, dim=0).squeeze()
+        est_shear2 = torch.stack(self.est_shear2, dim=0).squeeze()
+        est_convergence = torch.stack(self.est_convergence, dim=0).squeeze()
+
+        self.true_shear1 = []
+        self.true_shear2 = []
+        self.true_convergence = []
+        self.est_shear1 = []
+        self.est_shear2 = []
+        self.est_convergence = []
+
         return plot_maps(
-            torch.stack(self.true_shear1, dim=0).squeeze(),
-            torch.stack(self.true_shear2, dim=0).squeeze(),
-            torch.stack(self.true_convergence, dim=0).squeeze(),
-            torch.stack(self.est_shear1, dim=0).squeeze(),
-            torch.stack(self.est_shear2, dim=0).squeeze(),
-            torch.stack(self.est_convergence, dim=0).squeeze(),
+            true_shear1,
+            true_shear2,
+            true_convergence,
+            est_shear1,
+            est_shear2,
+            est_convergence,
             current_epoch=self.current_epoch,
             save_local=self.save_local,
         )
@@ -93,6 +107,7 @@ def plot_maps(
     for img_id in img_ids:
         ts1 = axes[img_id, 0].imshow(true_shear1[img_id].squeeze().cpu())
         axes[img_id, 0].set_title("True shear 1")
+        axes[img_id, 0].set_ylabel(f"Image {img_id}")
         plt.colorbar(ts1, fraction=0.045)
 
         es1 = axes[img_id, 1].imshow(est_shear1[img_id].squeeze().cpu())
