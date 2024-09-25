@@ -24,11 +24,12 @@ def setup_training_objects(
     model_name: str,
     log_every_n_steps: int = 16,
     log_file: TextIO = sys.stdout,
+    early_stopping_cb=None,
 ):
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     val_dl = DataLoader(val_ds, batch_size=batch_size, num_workers=num_workers)
 
-    ccb = ModelCheckpoint(
+    mckp = ModelCheckpoint(
         filename="epoch={epoch}-val_loss={val/loss:.3f}",
         save_top_k=5,
         verbose=True,
@@ -41,11 +42,13 @@ def setup_training_objects(
     logger = TensorBoardLogger(save_dir="out", name=model_name, default_hp_metric=False)
     print(f"INFO: Saving model as version {logger.version}", file=log_file)
 
+    callbacks = [mckp, early_stopping_cb] if early_stopping_cb is not None else [mckp]
+
     trainer = L.Trainer(
         limit_train_batches=1.0,
         max_epochs=n_epochs,
         logger=logger,
-        callbacks=[ccb],
+        callbacks=callbacks,
         accelerator="gpu",
         devices=1,
         log_every_n_steps=log_every_n_steps,
@@ -67,6 +70,7 @@ def run_encoder_training(
     validate_every_n_epoch: int,
     val_check_interval: float,
     log_every_n_steps: int,
+    early_stopping_cb=None,
 ):
     assert model_name in {"detection", "binary", "deblender"}
 
@@ -100,6 +104,7 @@ def run_encoder_training(
             model_name=model_name,
             log_every_n_steps=log_every_n_steps,
             log_file=g,
+            early_stopping_cb=early_stopping_cb,
         )
 
     trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=val_dl)

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import click
+from pytorch_lightning.callbacks import EarlyStopping
 
 from bliss.encoders.binary import BinaryEncoder
 from experiment.run.training_functions import run_encoder_training
@@ -29,6 +30,17 @@ def main(
 ):
 
     binary_encoder = BinaryEncoder()
+
+    # early stoppin callback based on 'mean_max_residual'
+    early_stopping_cb = EarlyStopping(
+        "val/acc",
+        min_delta=0.01,
+        patience=10,
+        strict=True,
+        check_on_train_epoch_end=False,
+        mode="max",
+    )
+
     run_encoder_training(
         seed=seed,
         train_file=train_file,
@@ -40,6 +52,7 @@ def main(
         validate_every_n_epoch=validate_every_n_epoch,
         val_check_interval=val_check_interval,
         log_every_n_steps=log_every_n_steps,
+        early_stopping_cb=early_stopping_cb,
     )
 
 

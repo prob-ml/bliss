@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import pytorch_lightning as pl
 from einops import reduce
 from torch import Tensor, nn
@@ -40,7 +38,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         recon_mean = self.dec(z)
         return recon_mean + background
 
-    def get_loss(self, images: Tensor, background: Tensor) -> Tuple[Tensor, Tensor]:
+    def get_loss(self, images: Tensor, background: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         recon_mean: Tensor = self(images, background)
         log_prob_pp = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
         loss = log_prob_pp.sum()

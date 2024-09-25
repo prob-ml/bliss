@@ -5,6 +5,7 @@ from pathlib import Path
 
 import click
 import pytorch_lightning as L
+from pytorch_lightning.callbacks import EarlyStopping
 
 from bliss.datasets.saved_datasets import SavedIndividualGalaxies
 from bliss.encoders.autoencoder import OneCenteredGalaxyAE
@@ -18,7 +19,7 @@ NUM_WORKERS = 0
 @click.option("--train-file", required=True, type=str)
 @click.option("--val-file", required=True, type=str)
 @click.option("-b", "--batch-size", default=128)
-@click.option("-e", "--n-epochs", default=20000)
+@click.option("-e", "--n-epochs", default=4000)
 @click.option("--validate-every-n-epoch", default=10, type=int)
 @click.option("--lr", default=1e-5, type=float)
 def main(
@@ -49,6 +50,17 @@ def main(
     assert Path(train_file).exists(), f"Training dataset {train_file} is not available"
     assert Path(val_file).exists(), f"Training dataset {val_file} is not available"
 
+    # early stoppin callback based on 'mean_max_residual'
+    early_stopping_cb = EarlyStopping(
+        "val/mean_max_residual",
+        min_delta=0.1,
+        patience=10,
+        strict=True,
+        stopping_threshold=3.70,
+        check_on_train_epoch_end=False,
+        mode="min",
+    )
+
     # setup model to train
     autoencoder = OneCenteredGalaxyAE(lr=lr)
 
@@ -66,6 +78,7 @@ def main(
             model_name="autoencoder",
             log_every_n_steps=train_ds.epoch_size // batch_size,  # = number of batches in 1 epoch
             log_file=g,
+            early_stopping_cb=early_stopping_cb,
         )
 
     trainer.fit(model=autoencoder, train_dataloaders=train_dl, val_dataloaders=val_dl)

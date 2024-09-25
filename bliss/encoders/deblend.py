@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pytorch_lightning as pl
 import torch
-from einops import pack, rearrange, unpack
+from einops import pack, rearrange, reduce, unpack
 from torch import Tensor
 from torch.distributions import Normal
 from torch.optim import Adam
@@ -98,7 +98,7 @@ class GalaxyEncoder(pl.LightningModule):
         recon_losses: Tensor = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
         assert not torch.any(torch.logical_or(torch.isnan(recon_losses), torch.isinf(recon_losses)))
 
-        return recon_losses.sum()
+        return recon_losses.sum(), recon_losses.mean(), recon_mean
 
     def variational_mode(self, images: Tensor, background: Tensor, tile_catalog: TileCatalog):
         _, nth, ntw, _ = tile_catalog.locs.shape
@@ -118,15 +118,29 @@ class GalaxyEncoder(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
         images, background, tile_catalog, paddings = parse_dataset(batch, self.tile_slen)
-        loss = self.get_loss(images, paddings, background, tile_catalog)
+        loss, loss_avg, recon = self.get_loss(images, paddings, background, tile_catalog)
+
+        res = (images - recon) / recon.sqrt()
+        mean_max_residual = reduce(res.abs(), "b c h w -> b", "max").mean()
+
         self.log("train/loss", loss, batch_size=len(images))
+        self.log("train/loss_avg", loss_avg, batch_size=len(images))
+        self.log("train/mean_max_residual", mean_max_residual, batch_size=len(images))
+
         return loss
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning validation step."""
         images, background, tile_catalog, paddings = parse_dataset(batch, self.tile_slen)
-        loss = self.get_loss(images, paddings, background, tile_catalog)
+        loss, loss_avg, recon = self.get_loss(images, paddings, background, tile_catalog)
+
+        res = (images - recon) / recon.sqrt()
+        mean_max_residual = reduce(res.abs(), "b c h w -> b", "max").mean()
+
         self.log("val/loss", loss, batch_size=len(images))
+        self.log("val/loss_avg", loss_avg, batch_size=len(images))
+        self.log("val/mean_max_residual", mean_max_residual, batch_size=len(images))
+
         return loss
 
     def configure_optimizers(self):
