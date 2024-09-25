@@ -18,6 +18,7 @@ class RN2Block(nn.Module):
             )  # even powers of 2 guaranteed to be perfect squares
         self.gn1 = nn.GroupNorm(num_groups=n_groups, num_channels=out_channels)
         self.silu = nn.SiLU(inplace=True)
+        self.mid_drop = nn.Dropout2d(p=0.2)
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False)
         self.gn2 = nn.GroupNorm(num_groups=n_groups, num_channels=out_channels)
         self.downsample = None
@@ -26,6 +27,7 @@ class RN2Block(nn.Module):
                 nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
                 nn.GroupNorm(num_groups=n_groups, num_channels=out_channels),
             )
+        self.end_drop = nn.Dropout2d(p=0.2)
 
     def forward(self, x):
         identity = x
@@ -33,7 +35,7 @@ class RN2Block(nn.Module):
         out = self.conv1(x)
         out = self.gn1(out)
         out = self.silu(out)
-
+        out = self.mid_drop(out)
         out = self.conv2(out)
         out = self.gn2(out)
 
@@ -42,6 +44,7 @@ class RN2Block(nn.Module):
 
         out += identity
         out = self.silu(out)
+        out = self.end_drop(out)
 
         return out  # noqa: WPS331
 
