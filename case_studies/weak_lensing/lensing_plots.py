@@ -73,6 +73,17 @@ class PlotLensingMaps(Metric):
         self.est_shear2 = []
         self.est_convergence = []
 
+        plot_lensing_scatterplots(
+            true_shear1,
+            true_shear2,
+            true_convergence,
+            est_shear1,
+            est_shear2,
+            est_convergence,
+            current_epoch=self.current_epoch,
+            save_local=self.save_local,
+        )
+
         return plot_maps(
             true_shear1,
             true_shear2,
@@ -136,4 +147,40 @@ def plot_maps(
         if not Path(save_local).exists():
             Path(save_local).mkdir(parents=True)
         fig.savefig(f"{save_local}/lensing_maps_{current_epoch}.png")
+    return fig, axes
+
+
+def plot_lensing_scatterplots(
+    true_shear1,
+    true_shear2,
+    true_convergence,
+    est_shear1,
+    est_shear2,
+    est_convergence,
+    current_epoch=0,
+    save_local=None,
+):
+    """Creates scatterplots of true vs. estimated shear1, shear2, and convergence."""
+    num_lensing_params = 3  # shear1, shear2, and convergence
+
+    fig, axes = plt.subplots(nrows=1, ncols=num_lensing_params, figsize=(20, 6))
+
+    axes[0].scatter(true_shear1.flatten().cpu(), est_shear1.flatten().cpu(), alpha=0.2)
+    axes[0].set_xlabel("True shear 1")
+    axes[0].set_ylabel("Estimated shear 1")
+
+    axes[1].scatter(true_shear2.flatten().cpu(), est_shear2.flatten().cpu(), alpha=0.2)
+    axes[1].set_xlabel("True shear 2")
+    axes[1].set_ylabel("Estimated shear 2")
+
+    axes[2].scatter(true_convergence.flatten().cpu(), est_convergence.flatten().cpu(), alpha=0.2)
+    axes[2].set_xlabel("True convergence")
+    axes[2].set_ylabel("Estimated convergence")
+
+    fig.tight_layout()
+
+    if save_local:
+        if not Path(save_local).exists():
+            Path(save_local).mkdir(parents=True)
+        fig.savefig(f"{save_local}/lensing_scatterplots_{current_epoch}.png")
     return fig, axes
