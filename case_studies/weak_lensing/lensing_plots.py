@@ -168,14 +168,17 @@ def plot_lensing_scatterplots(
     axes[0].scatter(true_shear1.flatten().cpu(), est_shear1.flatten().cpu(), alpha=0.2)
     axes[0].set_xlabel("True shear 1")
     axes[0].set_ylabel("Estimated shear 1")
+    axes[0].axline((0, 0), slope=1, color="black", linestyle="dashed")
 
     axes[1].scatter(true_shear2.flatten().cpu(), est_shear2.flatten().cpu(), alpha=0.2)
     axes[1].set_xlabel("True shear 2")
     axes[1].set_ylabel("Estimated shear 2")
+    axes[1].axline((0, 0), slope=1, color="black", linestyle="dashed")
 
     axes[2].scatter(true_convergence.flatten().cpu(), est_convergence.flatten().cpu(), alpha=0.2)
     axes[2].set_xlabel("True convergence")
     axes[2].set_ylabel("Estimated convergence")
+    axes[2].axline((0, 0), slope=1, color="black", linestyle="dashed")
 
     fig.tight_layout()
 
