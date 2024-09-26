@@ -174,20 +174,21 @@ class WeakLensingEncoder(Encoder):
         if not Path(self.loss_plots_location).exists():
             Path(self.loss_plots_location).mkdir(parents=True)
 
-        plt.plot(
+        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(13, 6))
+
+        ax[0].plot(
             range(len(self.epoch_train_losses)), self.epoch_train_losses, label="Training loss"
         )
-        plt.xlabel("Epochs")
-        plt.ylabel("Loss")
-        plt.title("Training loss by epoch")
-        plt.legend()
-        plt.savefig(f"{self.loss_plots_location}/training_loss.png")
-        plt.close()
+        ax[0].set_xlabel("Epochs")
+        ax[0].set_ylabel("Loss")
+        ax[0].set_title("Training loss by epoch")
 
-        plt.plot(range(len(self.epoch_val_losses)), self.epoch_val_losses, label="Validation loss")
-        plt.xlabel("Epochs")
-        plt.ylabel("Loss")
-        plt.title("Validation loss by epoch")
-        plt.legend()
-        plt.savefig(f"{self.loss_plots_location}/validation_loss.png")
-        plt.close()
+        ax[1].plot(
+            range(len(self.epoch_val_losses)), self.epoch_val_losses, label="Validation loss"
+        )
+        ax[1].set_xlabel("Epochs")
+        ax[1].set_ylabel("Loss")
+        ax[1].set_title("Validation loss by epoch")
+
+        fig.tight_layout()
+        fig.savefig(f"{self.loss_plots_location}/train_and_val_loss.png")

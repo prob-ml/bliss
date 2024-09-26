@@ -63,7 +63,7 @@ encoder:
         metrics: ${my_render}
     use_double_detect: false
     use_checkerboard: false
-    loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/train_loss
+    loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
 
 surveys:
     dc2:
