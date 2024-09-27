@@ -22,8 +22,9 @@ PIXEL_SCALE = 0.2  # arcsecs / pixel
 MAX_MAG = 27.0  # both galaxies and stars
 MIN_STAR_MAG = 20.0  # stars with lower magnitude have > 1000 SNR
 
+# see notebook `tests/back-of-the-envelope.ipynb`
 GALAXY_DENSITY = 160  # arcmin^{-2}, with mag cut above
-STAR_DENSITY = 10  # arcmin^{-2}, NOTE: placeholder, need to update
+STAR_DENSITY = 15.5  # arcmin^{-2}
 
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"

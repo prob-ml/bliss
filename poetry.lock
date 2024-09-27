@@ -1106,6 +1106,19 @@ testing = ["covdefaults (>=2.3)", "coverage (>=7.6.1)", "diff-cover (>=9.1.1)", 
 typing = ["typing-extensions (>=4.12.2)"]
 
 [[package]]
+name = "fitsio"
+version = "1.2.4"
+description = "A full featured python library to read from and write to FITS files."
+optional = false
+python-versions = "*"
+files = [
+    {file = "fitsio-1.2.4.tar.gz", hash = "sha256:d57fe347c7657dc1f78c7969a55ecb4fddb717ae1c66d9d22046c171203ff678"},
+]
+
+[package.dependencies]
+numpy = "*"
+
+[[package]]
 name = "flake8"
 version = "7.1.1"
 description = "the modular source code checker: pep8 pyflakes and co"
@@ -5138,4 +5151,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10,<3.12"
-content-hash = "23642a107cbac8319a9fd69a9fe5e3480f640951a2fe91309cb4eb4b6fcb1825"
+content-hash = "8978e215ab33e2b0088eaf33d75f948325bd59fb7b82d26ba315f6b906c5a412"

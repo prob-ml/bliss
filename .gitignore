@@ -2,8 +2,8 @@
 *__pycache__
 fits/*
 *.pyc
-*.fit
 *.gz
+*.fit
 .coverage
 .DS_Store
 .eggs
@@ -31,3 +31,4 @@ venv
 **/run/ds
 **/out
 **/experiment/data
+!data/stellar_density_lsst.fits.gz
