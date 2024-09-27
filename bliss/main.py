@@ -34,6 +34,8 @@ def generate(gen_cfg: DictConfig):
 
 
 def generate_one_file(gen_cfg: DictConfig, file_idx: int):
+    pl.seed_everything(file_idx)
+
     prior = instantiate(gen_cfg.prior)
     decoder = instantiate(gen_cfg.decoder)
 
