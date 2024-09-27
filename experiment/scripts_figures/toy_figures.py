@@ -61,7 +61,7 @@ class ToySeparationFigure(BlissFigure):
         slen = 44
         bp = encoder.detection_encoder.bp
         tile_slen = encoder.detection_encoder.tile_slen
-        size = 44 + 2 * bp
+        size = slen + 2 * bp
         tile_slen = encoder.detection_encoder.tile_slen
         ptile_slen = encoder.detection_encoder.ptile_slen
         assert slen / tile_slen % 2 == 1, "Need odd number of tiles to center galaxy."

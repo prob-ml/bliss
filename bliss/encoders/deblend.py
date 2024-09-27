@@ -91,8 +91,8 @@ class GalaxyEncoder(pl.LightningModule):
         )
         assert recon_ptiles.shape[-1] == recon_ptiles.shape[-2] == self.ptile_slen
         recon_mean = reconstruct_image_from_ptiles(recon_ptiles, self.tile_slen)
-        recon_mean += background + paddings  # target only galaxies within tiles.
         assert recon_mean.ndim == 4 and recon_mean.shape[-1] == images.shape[-1]
+        recon_mean += background + paddings  # target only galaxies within tiles.
         assert not torch.any(torch.logical_or(torch.isnan(recon_mean), torch.isinf(recon_mean)))
 
         recon_losses: Tensor = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
@@ -123,9 +123,15 @@ class GalaxyEncoder(pl.LightningModule):
         res = (images - recon) / recon.sqrt()
         mean_max_residual = reduce(res.abs(), "b c h w -> b", "max").mean()
 
-        self.log("train/loss", loss, batch_size=len(images))
-        self.log("train/loss_avg", loss_avg, batch_size=len(images))
-        self.log("train/mean_max_residual", mean_max_residual, batch_size=len(images))
+        self.log("train/loss", loss, batch_size=len(images), on_step=False, on_epoch=True)
+        self.log("train/loss_avg", loss_avg, batch_size=len(images), on_step=False, on_epoch=True)
+        self.log(
+            "train/mean_max_residual",
+            mean_max_residual,
+            batch_size=len(images),
+            on_step=False,
+            on_epoch=True,
+        )
 
         return loss
 
@@ -140,6 +146,7 @@ class GalaxyEncoder(pl.LightningModule):
         self.log("val/loss", loss, batch_size=len(images))
         self.log("val/loss_avg", loss_avg, batch_size=len(images))
         self.log("val/mean_max_residual", mean_max_residual, batch_size=len(images))
+        self.log("val/max_residual", res.abs().max(), batch_size=len(images))
 
         return loss
 

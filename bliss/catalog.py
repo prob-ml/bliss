@@ -346,9 +346,11 @@ class FullCatalog(UserDict):
 
 def stack_full_catalogs(full_cats: List[FullCatalog]) -> FullCatalog:
     all_tds = []
+    h, w = full_cats[0].height, full_cats[0].width
     for full_cat in full_cats:
         all_tds.append(full_cat.to_tensor_dict())
-    return torch.cat(all_tds, 0)
+    d = torch.cat(all_tds, 0)
+    return FullCatalog(h, w, d)
 
 
 def index_full_catalog(

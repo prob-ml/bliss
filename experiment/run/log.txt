@@ -666,3 +666,87 @@ Run training autoencoder script...
         Using datasets: ../data/datasets/train_ae_ds_42_20240920164841.pt, ../data/datasets/val_ae_ds_42_20240920164841.pt
 
 INFO: Saving model as version 23
+
+
+Run training blend data generation script...
+        With seed 42 at 2024-09-25 14:46:02.909320
+        Galaxy density 160.0, star_density 10.0, and n_samples 30000.
+        Samples will be divided into 3 datasets of blends with equal number.
+
+        With TAG: 20240925144602
+
+
+./bin/run_deblender_train.py --seed 42 --train-file ../data/datasets/train_ds_42_20240925144602.pt --val-file ../data/datasets/val_ds_42_20240925144602.pt --lr 1e-4
+INFO: Saved checkpoint 'data/out/autoencoder/version_22/checkpoints/epoch=19389-val_loss=2692034.750.ckpt' as weights /home/imendoza/bliss/experiment/models/autoencoder_42.pt at 2024-09-25 16:54:43.058543
+INFO: Saved checkpoint 'data/out/autoencoder/version_23/checkpoints/epoch=4429-val_loss=2692784.250.ckpt' as weights /home/imendoza/bliss/experiment/models/autoencoder_43.pt at 2024-09-25 16:55:25.565179
+
+./bin/run_deblender_train.py --seed 42 --train-file ../data/datasets/train_ds_42_20240925144602.pt --val-file ../data/datasets/val_ds_42_20240925144602.pt --ae-model-path ../models/autoencoder_42.pt --lr 1e-4
+
+Run training deblender encoder script...
+        With seed 42 at 2024-09-25 17:34:30.124114 validate_every_n_epoch 20,
+        val_check_interval None, batch_size 128, n_epochs 8000
+
+        Using datasets: ../data/datasets/train_ds_42_20240925144602.pt, ../data/datasets/val_ds_42_20240925144602.pt
+
+INFO: Saving model as version 16
+
+./bin/run_deblender_train.py --seed 42 --train-file ../data/datasets/train_ds_42_20240925144602.pt --val-file ../data/datasets/val_ds_42_20240925144602.pt --ae-model-path ../models/autoencoder_42.pt --lr 1e-4
+
+Run training deblender encoder script...
+        With seed 42 at 2024-09-25 17:55:32.158965 validate_every_n_epoch 20,
+        val_check_interval None, batch_size 128, n_epochs 8000
+
+        Using datasets: ../data/datasets/train_ds_42_20240925144602.pt, ../data/datasets/val_ds_42_20240925144602.pt
+
+
+./bin/run_deblender_train.py --seed 42 --train-file ../data/datasets/train_ds_42_20240925144602.pt --ae-model-path ../models/autoencoder_42.pt --val-file ../data/datasets/val_ds_42_20240925144602.pt --lr 1e-3
+
+Run training deblender encoder script...
+        With seed 42 at 2024-09-25 18:02:40.484399 validate_every_n_epoch 20,
+        val_check_interval None, batch_size 128, n_epochs 8000
+
+        Using datasets: ../data/datasets/train_ds_42_20240925144602.pt, ../data/datasets/val_ds_42_20240925144602.pt
+
+INFO: Saving model as version 18
+
+./bin/run_deblender_train.py --seed 42 --train-file ../data/datasets/train_ds_42_20240925144602.pt --ae-model-path ../models/autoencoder_42.pt --val-file ../data/datasets/val_ds_42_20240925144602.pt --lr 1e-5
+
+Run training deblender encoder script...
+        With seed 42 at 2024-09-25 20:54:46.468337 validate_every_n_epoch 20,
+        val_check_interval None, batch_size 128, n_epochs 8000
+
+        Using datasets: ../data/datasets/train_ds_42_20240925144602.pt, ../data/datasets/val_ds_42_20240925144602.pt
+
+INFO: Saving model as version 19
+INFO: Saved checkpoint 'data/out/deblender/version_17/checkpoints/epoch=759-val_loss=7619825.000.ckpt' as weights /home/imendoza/bliss/experiment/models/deblend_42.pt at 2024-09-26 17:42:25.651548
+INFO: Saved checkpoint 'data/out/deblender/version_18/checkpoints/epoch=499-val_loss=7602702.500.ckpt' as weights /home/imendoza/bliss/experiment/models/deblend_43.pt at 2024-09-26 17:45:07.946837
+INFO: Saved checkpoint 'data/out/deblender/version_19/checkpoints/epoch=1419-val_loss=7737879.000.ckpt' as weights /home/imendoza/bliss/experiment/models/deblend_44.pt at 2024-09-26 17:45:45.566558
+
+./bin/run_deblender_train.py --seed 40 --train-file ../data/datasets/train_ds_42_20240925144602.pt --val-file ../data/datasets/val_ds_42_20240925144602.pt --ae-model-path ../models/autoencoder_42.pt --lr 1e-4
+
+Run training deblender encoder script...
+        With seed 40 at 2024-09-26 17:52:11.368496 validate_every_n_epoch 10,
+        val_check_interval None, batch_size 128, n_epochs 10000
+
+        Using datasets: ../data/datasets/train_ds_42_20240925144602.pt, ../data/datasets/val_ds_42_20240925144602.pt
+
+INFO: Saving model as version 20
+
+./bin/run_deblender_train.py --seed 41 --train-file ../data/datasets/train_ds_42_20240925144602.pt --ae-model-path ../models/autoencoder_42.pt --val-file ../data/datasets/val_ds_42_20240925144602.pt --lr 1e-5
+
+Run training deblender encoder script...
+        With seed 41 at 2024-09-26 20:27:11.648634 validate_every_n_epoch 10,
+        val_check_interval None, batch_size 128, n_epochs 10000
+
+        Using datasets: ../data/datasets/train_ds_42_20240925144602.pt, ../data/datasets/val_ds_42_20240925144602.pt
+
+INFO: Saving model as version 21
+
+Run training blend data generation script...
+        With seed 43 at 2024-09-27 09:40:38.534348
+        Galaxy density 160.0, star_density 10.0, and n_samples 50000.
+        Samples will be divided into 3 datasets of blends with equal number.
+
+        With TAG: 20240927094038
+
+INFO: Saved checkpoint 'data/out/deblender/version_20/checkpoints/epoch=2709-val_loss=7583265.000.ckpt' as weights /home/imendoza/bliss/experiment/models/deblend_42.pt at 2024-09-27 09:45:12.820852
