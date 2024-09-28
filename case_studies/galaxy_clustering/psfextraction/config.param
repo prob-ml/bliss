@@ -1,0 +1,14 @@
+NUMBER
+ID_PARENT
+EXT_NUMBER
+FLUX_ISO
+####################### Parameters for PSFEx https://psfex.readthedocs.io/en/latest/GettingStarted.html
+VIGNET(25,25)
+X_IMAGE
+Y_IMAGE
+FLUX_RADIUS
+SNR_WIN
+FLUX_APER(1)
+FLUXERR_APER(1)
+ELONGATION
+FLAGS
