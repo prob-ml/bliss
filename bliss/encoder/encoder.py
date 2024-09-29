@@ -42,6 +42,7 @@ class Encoder(pl.LightningModule):
         n_sampler_colors: int = 4,
         reference_band: int = 2,
         predict_mode_not_samples: bool = True,
+        minimalist_conditioning: bool = False,
     ):
         """Initializes Encoder.
 
@@ -61,6 +62,7 @@ class Encoder(pl.LightningModule):
             n_sampler_colors: number of colors to use for checkerboard sampling
             reference_band: band to use for filtering sources
             predict_mode_not_samples: whether to predict mode catalogs rather than sample catalogs
+            minimalist_conditioning: whether to condition on only detection history
         """
         super().__init__()
 
@@ -79,6 +81,7 @@ class Encoder(pl.LightningModule):
         self.n_sampler_colors = n_sampler_colors
         self.reference_band = reference_band
         self.predict_mode_not_samples = predict_mode_not_samples
+        self.minimalist_conditioning = minimalist_conditioning
 
         # Generate all binary combinations for n^2 elements
         n = 2
@@ -100,8 +103,9 @@ class Encoder(pl.LightningModule):
         )
 
         context_ch_out = 128
+        context_dim = 2 if self.minimalist_conditioning else 3
         self.color_context_net = nn.Sequential(
-            ConvBlock(3, context_ch_out, kernel_size=3, gn=True),
+            ConvBlock(context_dim, context_ch_out, kernel_size=3, gn=True),
             C3(context_ch_out, context_ch_out, n=3, spatial=True, gn=True),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=True),
         )
@@ -117,8 +121,9 @@ class Encoder(pl.LightningModule):
 
         self.x_empty_context = nn.Embedding(1, context_ch_out)
 
+        local_dim = 2 if self.minimalist_conditioning else 3
         self.local_context_net = nn.Sequential(
-            ConvBlock(4, context_ch_out, kernel_size=1, gn=False),
+            ConvBlock(local_dim, context_ch_out, kernel_size=1, gn=False),
             C3(context_ch_out, context_ch_out, n=3, spatial=False, gn=False),
             ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
         )
@@ -134,11 +139,12 @@ class Encoder(pl.LightningModule):
         centered_locs = history_cat["locs"][..., 0, :] - 0.5
         log_fluxes = (history_cat.on_fluxes.squeeze(3).sum(-1) + 1).log()
         history_encoding_lst = [
-            history_cat["n_sources"].float(),  # detection history
-            log_fluxes * history_cat["n_sources"],  # flux history
             centered_locs[..., 0] * history_cat["n_sources"],  # x history
             centered_locs[..., 1] * history_cat["n_sources"],  # y history
         ]
+        if not self.minimalist_conditioning:
+            history_encoding_lst.insert(0, log_fluxes * history_cat["n_sources"])
+
         local_context = torch.stack(history_encoding_lst, dim=1)
         return self.local_context_net(local_context)
 
@@ -156,9 +162,9 @@ class Encoder(pl.LightningModule):
     def make_color_context(self, history_cat, history_mask):
         if history_cat is None:
             # detections (1), flux (1), and locs (2) are the properties we condition on
-            masked_history = (
-                torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1).expand(-1, 2, -1, -1)
-            )
+            dim = 1 if self.minimalist_conditioning else 2
+            masked_history = torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1)
+            masked_history = masked_history.expand(-1, dim, -1, -1)
         else:
             history_cat1 = history_cat.get_brightest_sources_per_tile(
                 band=self.reference_band, exclude_num=0
@@ -173,8 +179,11 @@ class Encoder(pl.LightningModule):
 
             history_encoding_lst = [
                 history_cat["n_sources"].clamp(0, 2).float(),  # detection history
-                log_fluxes,  # flux history
             ]
+            if not self.minimalist_conditioning:
+                history_encoding_lst += [
+                    log_fluxes,  # flux history
+                ]
             history_stack = torch.stack(history_encoding_lst, dim=1)
             masked_history = history_stack * history_mask.unsqueeze(1)
 

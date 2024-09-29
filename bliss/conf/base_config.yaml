@@ -212,6 +212,7 @@ encoder:
     use_checkerboard: false
     n_sampler_colors: 4
     predict_mode_not_samples: true
+    minimalist_conditioning: false
 
 surveys:
     sdss:
@@ -292,6 +293,7 @@ generate:
     n_processes: 16  # using more isn't necessarily faster
     cached_data_path: ${paths.cached_data}
     store_full_catalog: false
+    seed: 42
 
 train:
     trainer:
@@ -313,7 +315,7 @@ train:
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
-            filename: best_encoder
+            filename: "encoder_{epoch}"
             save_top_k: 1
             verbose: true
             monitor: val/_loss
