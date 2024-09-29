@@ -50,6 +50,7 @@ decoder:
     _target_: bliss.simulator.decoder.Decoder
     tile_slen: 4
     survey: ${surveys.sdss}
+    use_survey_background: true
     with_dither: true
     with_noise: true
 
