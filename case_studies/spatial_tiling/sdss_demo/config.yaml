@@ -15,10 +15,10 @@ variational_factors:
       sample_rearrange: null
       nll_rearrange: null
       nll_gating: null
-    - _target_: bliss.encoder.variational_dist.TDBNFactor
+    - _target_: bliss.encoder.variational_dist.DiscretizedUnitBoxFactor
       name: locs
-      sample_rearrange: b ht wt d -> b ht wt 1 d
-      nll_rearrange: b ht wt 1 d -> b ht wt d
+      sample_rearrange: "b ht wt d -> b ht wt 1 d"
+      nll_rearrange: "b ht wt 1 d -> b ht wt d"
       nll_gating:
           _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
