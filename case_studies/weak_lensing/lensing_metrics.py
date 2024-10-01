@@ -46,7 +46,7 @@ class LensingMapMSE(Metric):
         self.baseline_shear2_sum_squared_err += baseline_shear2_sq_err
         self.convergence_sum_squared_err += convergence_sq_err
 
-        self.total += torch.tensor(true_convergence.shape[1])
+        self.total = torch.tensor(true_convergence.shape[1])
 
     def compute(self):
         shear1_mse = self.shear1_sum_squared_err / self.total

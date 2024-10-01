@@ -41,7 +41,6 @@ class WeakLensingCatalogNet(nn.Module):  # TODO: get the dimensions down to n_ti
         super().__init__()
 
         net_layers = []
-
         n_blocks2 = int(math.log2(in_channels)) - int(math.ceil(math.log2(out_channels)))
         last_out_dim = -1
         for i in range(n_blocks2):
