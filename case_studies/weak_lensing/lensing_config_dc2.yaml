@@ -17,6 +17,9 @@ variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
     name: shear_2
     nll_gating: null
+  - _target_: bliss.encoder.variational_dist.NormalFactor
+    name: convergence
+    nll_gating: null
 
 my_normalizers:
     nully:
@@ -84,10 +87,14 @@ train:
     trainer:
         logger:
             name: weak_lensing_experiments_dc2
-            version: september24
-        devices: 1 # cuda:0 for gl
+            version: october1
+        max_epochs: 250
+        devices: 1
         use_distributed_sampler: false
         precision: 32-true
+    callbacks:
+        early_stopping:
+            patience: 50
     data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: 123123
