@@ -48,9 +48,9 @@ class WeakLensingEncoder(Encoder):
         )
 
         self.initialize_networks()
-        self.epoch_train_losses = []  # List to store epoch losses
-        self.current_epoch_train_loss = 0.0  # Variable to accumulate batch losses
-        self.current_epoch_train_batches = 0  # Variable to count batches in the current epoch
+        self.epoch_train_losses = []
+        self.current_epoch_train_loss = 0.0
+        self.current_epoch_train_batches = 0
         self.current_epochs = 0
         self.loss_plots_location = kwargs["loss_plots_location"]
         self.epoch_val_losses = []
@@ -107,7 +107,6 @@ class WeakLensingEncoder(Encoder):
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
 
         if logging_name == "train":
-            # Accumulate batch loss
             self.current_epoch_train_loss += loss.item()
             self.current_epoch_train_batches += 1
         if logging_name == "val":
@@ -161,7 +160,6 @@ class WeakLensingEncoder(Encoder):
         if self.sample_image_renders is not None:
             self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
 
-        # new additions
         avg_epoch_val_loss = self.current_epoch_val_loss / self.current_epoch_val_batches
         self.epoch_val_losses.append(avg_epoch_val_loss)
         self.current_epoch_val_loss = 0.0
