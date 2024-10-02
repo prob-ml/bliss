@@ -18,9 +18,9 @@ class LensingDecoder(Decoder):
         """
         galaxy = self.render_bulge_plus_disk(band, source_params)
 
-        shear = source_params["shear"]
-        shear1, shear2 = shear
-        convergence = source_params["convergence"]
+        shear1 = source_params["shear_1_per_galaxy"]
+        shear2 = source_params["shear_2_per_galaxy"]
+        convergence = source_params["convergence_per_galaxy"]
 
         reduced_shear1 = shear1 / (1 - convergence)
         reduced_shear2 = shear2 / (1 - convergence)

@@ -33,7 +33,6 @@ class RN2Block(nn.Module):
         out = self.conv1(x)
         out = self.gn1(out)
         out = self.silu(out)
-
         out = self.conv2(out)
         out = self.gn2(out)
 
