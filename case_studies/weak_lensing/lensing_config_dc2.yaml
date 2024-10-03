@@ -81,7 +81,7 @@ surveys:
         avg_ellip_kernel_sigma: 4
         batch_size: 1
         num_workers: 1
-        cached_data_path: ${paths.dc2}/dc2_corrected_shear_only_cd_fix
+        cached_data_path: ${paths.dc2}/dc2_lensing_splits_img2048_tile256
 
 train:
     trainer:
