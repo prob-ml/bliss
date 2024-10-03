@@ -1,4 +1,4 @@
-### Neural posterior estimation of weak lensing shear and convergence for the LSST DESC DC2 simulated sky survey
+### Neural posterior estimation of weak lensing shear and convergence
 #### Shreyas Chandrashekaran, Tim White, Camille Avestruz, and Jeffrey Regier, with assistance from Steve Fan and Tahseen Younus
 
 This case study aims to estimate weak lensing shear and convergence for the DC2 simulated sky survey. See `notebooks/dc2/evaluate_encoder.ipynb` for our most recent results.
