@@ -92,7 +92,7 @@ class LensingDC2DataModule(DC2DataModule):
             if k == "plocs":
                 continue
 
-            v = v.reshape(self.batch_size, plocs.shape[1], -1)
+            v = v.reshape(self.batch_size, plocs.shape[1] // self.batch_size, -1)
             if k == "mag_mask":
                 continue
 

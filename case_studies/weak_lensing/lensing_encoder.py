@@ -108,10 +108,10 @@ class WeakLensingEncoder(Encoder):
 
         if logging_name == "train":
             self.current_epoch_train_loss += loss.item()
-            self.current_epoch_train_batches += 1
+            self.current_epoch_train_batches += batch_size
         if logging_name == "val":
             self.current_epoch_val_loss += loss.item()
-            self.current_epoch_val_batches += 1
+            self.current_epoch_val_batches += batch_size
 
         return loss
 

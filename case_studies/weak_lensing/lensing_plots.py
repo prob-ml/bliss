@@ -116,28 +116,28 @@ def plot_maps(
     )
 
     for img_id in img_ids:
-        ts1 = axes[img_id, 0].imshow(true_shear1[img_id].squeeze().cpu())
+        ts1 = axes[img_id, 0].imshow(true_shear1[img_id][0, :, :].squeeze().cpu())
         axes[img_id, 0].set_title("True shear 1")
         axes[img_id, 0].set_ylabel(f"Image {img_id}")
         plt.colorbar(ts1, fraction=0.045)
 
-        es1 = axes[img_id, 1].imshow(est_shear1[img_id].squeeze().cpu())
+        es1 = axes[img_id, 0].imshow(est_shear1[img_id][0, :, :].squeeze().cpu())
         axes[img_id, 1].set_title("Estimated shear 1")
         plt.colorbar(es1, fraction=0.045)
 
-        ts2 = axes[img_id, 2].imshow(true_shear2[img_id].squeeze().cpu())
+        ts2 = axes[img_id, 0].imshow(true_shear2[img_id][0, :, :].squeeze().cpu())
         axes[img_id, 2].set_title("True shear 2")
         plt.colorbar(ts2, fraction=0.045)
 
-        es2 = axes[img_id, 3].imshow(est_shear2[img_id].squeeze().cpu())
+        es2 = axes[img_id, 0].imshow(est_shear2[img_id][0, :, :].squeeze().cpu())
         axes[img_id, 3].set_title("Estimated shear 2")
         plt.colorbar(es2, fraction=0.045)
 
-        tc = axes[img_id, 4].imshow(true_convergence[img_id].squeeze().cpu())
+        tc = axes[img_id, 4].imshow(true_convergence[img_id][0, :, :].squeeze().cpu())
         axes[img_id, 4].set_title("True convergence")
         plt.colorbar(tc, fraction=0.045)
 
-        ec = axes[img_id, 5].imshow(est_convergence[img_id].squeeze().cpu())
+        ec = axes[img_id, 5].imshow(est_convergence[img_id][0, :, :].squeeze().cpu())
         axes[img_id, 5].set_title("Estimated convergence")
         plt.colorbar(ec, fraction=0.045)
 
