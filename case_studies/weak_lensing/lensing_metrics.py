@@ -38,7 +38,7 @@ class LensingMapMSE(Metric):
 
         if "convergence" not in est_cat:
             true_convergence = torch.zeros_like(true_shear1).flatten(1, 2)
-            pred_convergence = torch.zeros_like(true_convergence).flatten(1, 2)
+            pred_convergence = torch.zeros_like(true_convergence)
         else:
             true_convergence = true_cat["convergence"].flatten(1, 2)
             pred_convergence = est_cat["convergence"].flatten(1, 2)
