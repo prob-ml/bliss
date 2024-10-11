@@ -1,6 +1,7 @@
 import logging
 import math
 import sys
+from typing import List
 
 import pandas as pd
 import torch
@@ -30,6 +31,7 @@ class LensingDC2DataModule(DC2DataModule):
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
+        train_transforms: List,
         **kwargs,
     ):
         super().__init__(
@@ -47,7 +49,7 @@ class LensingDC2DataModule(DC2DataModule):
             batch_size=batch_size,
             num_workers=num_workers,
             cached_data_path=cached_data_path,
-            train_transforms=[],
+            train_transforms=train_transforms,
             nontrain_transforms=[],
             subset_fraction=None,
         )
