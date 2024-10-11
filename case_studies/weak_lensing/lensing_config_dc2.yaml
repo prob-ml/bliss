@@ -8,7 +8,7 @@ mode: train
 
 paths:
     dc2: /data/scratch/dc2local
-    output: /home/twhit/bliss/
+    output: /data/scratch/shreyasc/bliss_output
 
 variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
@@ -81,13 +81,17 @@ surveys:
         avg_ellip_kernel_sigma: 4
         batch_size: 1
         num_workers: 1
-        cached_data_path: ${paths.dc2}/dc2_lensing_splits_radec
+        cached_data_path: ${paths.output}/dc2_lensing_splits_radec
+        train_transforms:
+            - _target_: case_studies.weak_lensing.lensing_data_augmentation.Rotate90DegreesClockwiseTransform
+              num_rotates: 1
+            - _target_: case_studies.weak_lensing.lensing_data_augmentation.HorizontalFlipTransform
 
 train:
     trainer:
         logger:
             name: weak_lensing_experiments_dc2
-            version: october1
+            version: october10
         max_epochs: 250
         devices: 1
         use_distributed_sampler: false
