@@ -84,6 +84,15 @@ gal :
     g1 : { type: Catalog, col: 11 }
     g2 : { type: Catalog, col: 12 }
 
+input :
+  des_psfex:
+    dir : '/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/gband'
+    file_name:
+      type : FormattedStr
+      format : "galsim_des_%03d_g.psf"
+      items :
+        - {type : Sequence, nitems: '@variables.nfiles'}
+
 output :
   type : Fits
   dir : '@variables.output_dir'
@@ -107,6 +116,15 @@ gal :
     type : G1G2
     g1 : { type: Catalog, col: 11 }
     g2 : { type: Catalog, col: 12 }
+
+input :
+  des_psfex:
+    dir : '/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/rband'
+    file_name:
+      type : FormattedStr
+      format : "galsim_des_%03d_r.psf"
+      items :
+        - {type : Sequence, nitems: '@variables.nfiles'}
 
 output :
   type : Fits
@@ -132,6 +150,15 @@ gal :
     g1 : { type: Catalog, col: 11 }
     g2 : { type: Catalog, col: 12 }
 
+input :
+  des_psfex:
+    dir : '/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/iband'
+    file_name:
+      type : FormattedStr
+      format : "galsim_des_%03d_i.psf"
+      items :
+        - {type : Sequence, nitems: '@variables.nfiles'}
+
 output :
   type : Fits
   dir : '@variables.output_dir'
@@ -155,6 +182,15 @@ gal :
     type : G1G2
     g1 : { type: Catalog, col: 11 }
     g2 : { type: Catalog, col: 12 }
+
+input :
+  des_psfex:
+    dir : '/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/zband'
+    file_name:
+      type : FormattedStr
+      format : "galsim_des_%03d_z.psf"
+      items :
+        - {type : Sequence, nitems: '@variables.nfiles'}
 
 output :
   type : Fits
