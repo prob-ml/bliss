@@ -177,8 +177,8 @@ def file_data_gen(cfg):
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg):
     catalog_gen(cfg.data_gen)
-    # image_gen(cfg.data_gen)
-    # file_data_gen(cfg.data_gen)
+    image_gen(cfg.data_gen)
+    file_data_gen(cfg.data_gen)
 
 
 if __name__ == "__main__":
