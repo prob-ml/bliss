@@ -1,16 +1,19 @@
 import datetime
-import sys
 from pathlib import Path
-from typing import TextIO
 
 import pytorch_lightning as L
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader, Dataset
 
+from bliss import HOME_DIR
 from bliss.datasets.saved_datasets import SavedGalsimBlends
 
 NUM_WORKERS = 0
+
+MODELS_DIR = HOME_DIR / "experiment/models"
+LOG_FILE = HOME_DIR / "experiment/log.txt"
+LOG_FILE_LONG = HOME_DIR / "experiment/log_long.txt"
 
 
 def setup_training_objects(
@@ -23,8 +26,8 @@ def setup_training_objects(
     val_check_interval: float,
     model_name: str,
     log_every_n_steps: int = 16,
-    log_file: TextIO = sys.stdout,
-    early_stopping_cb=None,
+    extra_callbacks: list | None = None,  # list of additional callbacks to include
+    version: int | str | None = None,  # sometimes specifying version is useful
 ):
     train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
     val_dl = DataLoader(val_ds, batch_size=batch_size, num_workers=num_workers)
@@ -39,10 +42,11 @@ def setup_training_objects(
         auto_insert_metric_name=False,
     )
 
-    logger = TensorBoardLogger(save_dir="out", name=model_name, default_hp_metric=False)
-    print(f"INFO: Saving model as version {logger.version}", file=log_file)
+    logger = TensorBoardLogger(
+        save_dir="out", name=model_name, default_hp_metric=False, version=version
+    )
 
-    callbacks = [mckp, early_stopping_cb] if early_stopping_cb is not None else [mckp]
+    callbacks = [mckp] + extra_callbacks if extra_callbacks else [mckp]
 
     trainer = L.Trainer(
         limit_train_batches=1.0,
@@ -56,7 +60,7 @@ def setup_training_objects(
         val_check_interval=val_check_interval,
     )
 
-    return train_dl, val_dl, trainer
+    return train_dl, val_dl, trainer, logger.version
 
 
 def run_encoder_training(
@@ -70,42 +74,74 @@ def run_encoder_training(
     validate_every_n_epoch: int,
     val_check_interval: float,
     log_every_n_steps: int,
-    early_stopping_cb=None,
+    log_info_dict: dict,
     keep_padding=False,
+    extra_callbacks: list | None = None,  # list of additional callbacks to include
 ):
     assert model_name in {"detection", "binary", "deblender"}
 
-    with open("log.txt", "a") as f:
-        now = datetime.datetime.now()
-        print("", file=f)
-        log_msg = f"""Run training {model_name} encoder script...
-        With seed {seed} at {now} validate_every_n_epoch {validate_every_n_epoch},
-        val_check_interval {val_check_interval}, batch_size {batch_size}, n_epochs {n_epochs}
-
-        Using datasets: {train_file}, {val_file}
-        """
-        print(log_msg, file=f)
-
     L.seed_everything(seed)
 
-    if not Path(train_file).exists() and Path(val_file).exists():
+    ds_seed = log_info_dict["ds_seed"]
+    assert not (MODELS_DIR / f"{model_name}_{ds_seed}_{seed}.pt").exists(), "model exists."
+    if not Path(train_file).exists() or not Path(val_file).exists():
         raise IOError("Training datasets do not exists")
 
-    with open("log.txt", "a") as g:
-        train_ds = SavedGalsimBlends(train_file, keep_padding=keep_padding)
-        val_ds = SavedGalsimBlends(val_file, keep_padding=keep_padding)
-        train_dl, val_dl, trainer = setup_training_objects(
-            train_ds=train_ds,
-            val_ds=val_ds,
-            batch_size=batch_size,
-            num_workers=NUM_WORKERS,
-            n_epochs=n_epochs,
-            validate_every_n_epoch=validate_every_n_epoch,
-            val_check_interval=val_check_interval,
-            model_name=model_name,
-            log_every_n_steps=log_every_n_steps,
-            log_file=g,
-            early_stopping_cb=early_stopping_cb,
-        )
+    train_ds = SavedGalsimBlends(train_file, keep_padding=keep_padding)
+    val_ds = SavedGalsimBlends(val_file, keep_padding=keep_padding)
+    train_dl, val_dl, trainer, vnum = setup_training_objects(
+        train_ds=train_ds,
+        val_ds=val_ds,
+        batch_size=batch_size,
+        num_workers=NUM_WORKERS,
+        n_epochs=n_epochs,
+        validate_every_n_epoch=validate_every_n_epoch,
+        val_check_interval=val_check_interval,
+        model_name=model_name,
+        log_every_n_steps=log_every_n_steps,
+        extra_callbacks=extra_callbacks,
+    )
 
+    # logging
+    log_info_dict.update({"version": vnum})
+    _log_info(seed, model_name, log_info_dict)
+
+    # fit!
     trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=val_dl)
+
+
+def _log_info(seed: int, model: str, info: dict):
+    now = datetime.datetime.now()
+
+    ds_seed = info["ds_seed"]
+    validate_every_n_epoch = info["validate_every_n_epoch"]
+    val_check_interval = info["val_check_interval"]
+    batch_size = info["batch_size"]
+    n_epochs = info["n_epochs"]
+    lr = info["lr"]
+    train_file = info["train_file"]
+    val_file = info["val_file"]
+    vnum = info["version"]
+
+    log_msg_short = (
+        f"\nTraining {model} with seed {seed}, ds_seed {ds_seed}, version {vnum} at {now}."
+    )
+    log_msg_long = f"""{log_msg_short}
+    validate_every_n_epoch {validate_every_n_epoch},
+    val_check_interval {val_check_interval}, batch_size {batch_size}, n_epochs {n_epochs}.
+    lr: {lr}
+
+    Using datasets: {train_file}, {val_file}
+    """
+
+    ae_path_msg = f"\nAE path: {info['ae_path']}" if model == "deblender" else ""
+
+    log_msg_short += ae_path_msg
+    log_msg_long += ae_path_msg
+
+    with open(LOG_FILE, "a") as f:
+        print(log_msg_short, file=f)
+
+    with open(LOG_FILE_LONG, "a") as f:
+        print("", file=f)
+        print(log_msg_long, file=f)

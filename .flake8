@@ -5,6 +5,7 @@ exclude =
 max-line-length = 100
 inline-quotes = double
 docstring-convention=google
+per-file-ignores = bliss/__init__.py:WPS412
 ignore =
     # documentation not yet needed
     D100,D101,D102,D103,D104,D105,D106,D107,

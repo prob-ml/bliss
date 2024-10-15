@@ -1,9 +1,8 @@
 """Utilites for calculating LSST survey related quantities."""
 
-from pathlib import Path
-
 import galcheat
 import galsim
+import numpy as np
 import torch
 from astropy import units as u  # noqa: WPS347
 from astropy.table import Table
@@ -12,6 +11,7 @@ from einops import rearrange
 from galcheat.utilities import mag2counts, mean_sky_level
 from torch import Tensor
 
+from bliss import HOME_DIR
 from bliss.datasets.table_utils import column_to_tensor
 
 PIXEL_SCALE = 0.2  # arcsecs / pixel
@@ -27,12 +27,12 @@ GALAXY_DENSITY = 160  # arcmin^{-2}, with mag cut above
 STAR_DENSITY = 15.5  # arcmin^{-2}
 
 
-DATA_DIR = Path(__file__).parent.parent.parent / "data"
+DATA_DIR = HOME_DIR / "data"
 
 
 def convert_mag_to_flux(mag: Tensor) -> Tensor:
     """Assuming gain = 1 always."""
-    return torch.from_numpy(mag2counts(mag.numpy(), "LSST", "i").to_value("electron"))
+    return torch.from_numpy(mag2counts(mag.numpy(), "LSST", "i").to_value("electron")).float()
 
 
 def convert_flux_to_mag(counts: Tensor) -> Tensor:
@@ -63,7 +63,7 @@ def get_default_lsst_psf_tensor(slen: int) -> Tensor:
 
 
 def get_default_lsst_background() -> float:
-    return mean_sky_level("LSST", "i").to_value("electron")
+    return mean_sky_level("LSST", "i").to_value("electron").astype(np.float32).item()
 
 
 def prepare_final_galaxy_catalog() -> Table:

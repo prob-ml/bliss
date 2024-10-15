@@ -5,6 +5,7 @@ from torch import Tensor
 from torch.utils.data import Dataset
 
 from bliss.catalog import FullCatalog
+from bliss.datasets.io import load_dataset_npz
 
 
 class SavedGalsimBlends(Dataset):
@@ -16,10 +17,10 @@ class SavedGalsimBlends(Dataset):
         keep_padding: bool = False,
     ) -> None:
         super().__init__()
-        ds: dict[str, Tensor] = torch.load(dataset_file)
+        ds: dict[str, Tensor] = load_dataset_npz(dataset_file)
 
-        self.images = ds.pop("images").float()  # needs to be a float for NN
-        self.background = ds.pop("background").float()
+        self.images = ds.pop("images")
+        self.background = ds.pop("background")
         self.epoch_size = len(self.images)
 
         # don't need for training
@@ -32,7 +33,7 @@ class SavedGalsimBlends(Dataset):
             ds.pop("paddings")
             self.paddings = torch.tensor([0]).float()
         else:
-            self.paddings = ds.pop("paddings").float()
+            self.paddings = ds.pop("paddings")
         self.keep_padding = keep_padding
 
         full_catalog = FullCatalog(slen, slen, ds)
@@ -55,10 +56,10 @@ class SavedGalsimBlends(Dataset):
 class SavedIndividualGalaxies(Dataset):
     def __init__(self, dataset_file: str) -> None:
         super().__init__()
-        ds: dict[str, Tensor] = torch.load(dataset_file)
+        ds: dict[str, Tensor] = load_dataset_npz(dataset_file)
 
-        self.images = ds.pop("images").float()  # needs to be a float for NN
-        self.background = ds.pop("background").float()
+        self.images = ds.pop("images")
+        self.background = ds.pop("background")
 
         self.epoch_size = len(self.images)
 

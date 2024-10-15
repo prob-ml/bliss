@@ -1,23 +1,21 @@
 #!/usr/bin/env python3
 
 import datetime
-from pathlib import Path
 
 import click
 import pytorch_lightning as L
-import torch
-from astropy.table import Table
 
+from bliss import DATASETS_DIR, HOME_DIR
 from bliss.datasets.generate_individual import generate_individual_dataset
+from bliss.datasets.io import save_dataset_npz
 from bliss.datasets.lsst import get_default_lsst_psf, prepare_final_galaxy_catalog
 
 NUM_WORKERS = 0
 
-HOME_DIR = Path(__file__).parent.parent
+LOG_FILE = HOME_DIR / "experiment/log.txt"
+
 CATSIM_CAT = prepare_final_galaxy_catalog()
 PSF = get_default_lsst_psf()
-
-TAG = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
 
 @click.command()
@@ -26,24 +24,13 @@ def main(seed: int):
 
     L.seed_everything(seed)
 
-    train_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/train_ae_ds_{seed}_{TAG}.pt"
-    val_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/val_ae_ds_{seed}_{TAG}.pt"
-    test_ds_file = f"/nfs/turbo/lsa-regier/scratch/ismael/datasets/test_ae_ds_{seed}_{TAG}.pt"
+    train_ds_file = DATASETS_DIR / f"train_ae_ds_{seed}.npz"
+    val_ds_file = DATASETS_DIR / f"val_ae_ds_{seed}.npz"
+    test_ds_file = DATASETS_DIR / f"test_ae_ds_{seed}.npz"
 
-    if Path(train_ds_file).exists():
-        raise IOError("Training file already exists")
-
-    with open("run/log.txt", "a") as f:
-        now = datetime.datetime.now()
-        print("", file=f)
-        log_msg = f"""Run training autoencoder data generation script...
-        With seed {seed} at {now}, n_samples {len(CATSIM_CAT)}.
-        Train, test, and val divided into 3 equal parts (disjoint galaxies) on full catalog after
-        mag cut < 27.0 on catalog.
-
-        With TAG: {TAG}
-        """
-        print(log_msg, file=f)
+    assert not train_ds_file.exists(), "files exist"
+    assert not val_ds_file.exists(), "files exist"
+    assert not test_ds_file.exists(), "files exist"
 
     n_rows = len(CATSIM_CAT)
 
@@ -51,15 +38,21 @@ def main(seed: int):
     dataset = generate_individual_dataset(n_rows, CATSIM_CAT, PSF, slen=53, replace=False)
 
     # train, val, test split
-    # no galaxies shared
+    # no galaxies are shared
     train_ds = {p: q[: n_rows // 3] for p, q in dataset.items()}
     val_ds = {p: q[n_rows // 3 : 2 * n_rows // 3] for p, q in dataset.items()}
     test_ds = {p: q[2 * n_rows // 3 :] for p, q in dataset.items()}
 
     # now save data
-    torch.save(train_ds, train_ds_file)
-    torch.save(val_ds, val_ds_file)
-    torch.save(test_ds, test_ds_file)
+    save_dataset_npz(train_ds, train_ds_file)
+    save_dataset_npz(val_ds, val_ds_file)
+    save_dataset_npz(test_ds, test_ds_file)
+
+    # logging
+    with open(LOG_FILE, "a") as f:
+        now = datetime.datetime.now()
+        log_msg = f"\nRun training autoencoder data generation script with seed {seed} at {now}."
+        print(log_msg, file=f)
 
 
 if __name__ == "__main__":
