@@ -5,11 +5,11 @@ defaults:
     - override hydra/job_logging: stdout
 
 data_gen:
-    data_dir: /data/scratch/des/piff_test_data/
+    data_dir: /data/scratch/kapnadak/data-10-13
     image_size: 2560
     tile_size: 256
-    nfiles: 10
-    n_catalogs_per_file: 1
+    nfiles: 5000
+    n_catalogs_per_file: 100
     bands: ["g", "r", "i", "z"]
     min_flux_for_loss: 0
     overwrite: false
@@ -39,7 +39,7 @@ cached_simulator:
     batch_size: 1
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
     num_workers: 0
-    cached_data_path: /data/scratch/kapnadak/data-08-16/file_data
+    cached_data_path: /nfs/turbo/lsa-regier/scratch/kapnadak/data-08-30-24/file_data
     train_transforms: []
 
 train:
