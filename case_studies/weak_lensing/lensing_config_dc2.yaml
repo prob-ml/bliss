@@ -27,7 +27,7 @@ my_normalizers:
 
 my_metrics:
     lensing_map:
-            _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
+            _target_: case_studies.weak_lensing.lensing_metrics.LensingMSE
 
 my_render:
     lensing_shear_conv:
@@ -83,9 +83,7 @@ surveys:
         num_workers: 1
         cached_data_path: ${paths.dc2}/dc2_lensing_splits_radec
         train_transforms:
-            - _target_: case_studies.weak_lensing.lensing_data_augmentation.Rotate90DegreesClockwiseTransform
-              num_rotates: 1
-            - _target_: case_studies.weak_lensing.lensing_data_augmentation.HorizontalFlipTransform
+            - _target_: case_studies.weak_lensing.lensing_data_augmentation.LensingRotateFlipTransform
 
 train:
     trainer:
