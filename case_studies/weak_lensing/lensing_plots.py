@@ -147,7 +147,8 @@ def plot_maps(
         if not Path(save_local).exists():
             Path(save_local).mkdir(parents=True)
         fig.savefig(f"{save_local}/lensing_maps_{current_epoch}.png")
-    return fig, axes
+
+    plt.close(fig)
 
 
 def plot_lensing_scatterplots(
@@ -186,4 +187,5 @@ def plot_lensing_scatterplots(
         if not Path(save_local).exists():
             Path(save_local).mkdir(parents=True)
         fig.savefig(f"{save_local}/lensing_scatterplots_{current_epoch}.png")
-    return fig, axes
+
+    plt.close(fig)
