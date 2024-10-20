@@ -13,7 +13,6 @@ from hydra import compose, initialize
 from hydra.utils import instantiate
 from matplotlib import pyplot as plt
 from matplotlib.markers import MarkerStyle
-from omegaconf import OmegaConf
 
 from bliss.catalog import FullCatalog, TileCatalog, convert_mag_to_nmgy
 from bliss.encoder.metrics import CatalogMatcher
@@ -21,46 +20,33 @@ from bliss.encoder.sample_image_renders import plot_plocs
 from bliss.surveys.des import TractorFullCatalog
 from bliss.surveys.sdss import PhotoFullCatalog
 
-environ["CUDA_VISIBLE_DEVICES"] = "4"
+environ["CUDA_VISIBLE_DEVICES"] = "5"
 
 torch.set_grad_enabled(False)
 
-ckpt = "/home/regier/bliss_output/sep3_sdss_demo/version_3/checkpoints/best_encoder.ckpt"
+ckpt = (
+    "/home/regier/bliss_output/sep17_sdssdemo_notminimalistconditioning/"
+    "version_0/checkpoints/encoder_8_0.92.ckpt"
+)
 with initialize(config_path=".", version_base=None):
-    cfg0 = compose(
+    cfg = compose(
         "config",
         {
             f"train.pretrained_weights={ckpt}",
             f"predict.weight_save_path={ckpt}",
             "cached_simulator.splits=0:80/80:90/99:100",
             "cached_simulator.num_workers=0",
+            "encoder.minimalist_conditioning=False",
+            "encoder.use_checkerboard=False",
+            "encoder.n_sampler_colors=2",
         },
     )
-
-cfg_c4 = OmegaConf.merge(cfg0, {"encoder": {"use_checkerboard": True, "n_sampler_colors": 4}})
-cfg_c2 = OmegaConf.merge(
-    cfg0,
-    {
-        "encoder": {
-            "use_checkerboard": True,
-            "n_sampler_colors": 2,
-        }
-    },
-)
-cfg_c1 = OmegaConf.merge(
-    cfg0,
-    {
-        "encoder": {
-            "use_checkerboard": False,
-        }
-    },
-)
 
 # %% [markdown]
 # ## Load and view the SDSS field
 
 # %%
-sdss = instantiate(cfg0.surveys.sdss, load_image_data=True)
+sdss = instantiate(cfg.surveys.sdss, load_image_data=True)
 sdss.prepare_data()
 (sdss_frame,) = sdss.predict_dataloader()  # noqa: WPS460
 obs_image = sdss_frame["images"][0]
@@ -73,11 +59,11 @@ plt.imshow(rgb, origin="lower")
 # ## Load and view SDSS predictions
 
 # %%
-rcf = cfg0.surveys.sdss.fields[0]
+rcf = cfg.surveys.sdss.fields[0]
 
 run, camcol, field = rcf["run"], rcf["camcol"], rcf["fields"][0]
 po_fn = f"photoObj-{run:06d}-{camcol}-{field:04d}.fits"
-po_path = Path(cfg0.paths.sdss) / str(run) / str(camcol) / str(field) / po_fn
+po_path = Path(cfg.paths.sdss) / str(run) / str(camcol) / str(field) / po_fn
 
 sdss_wcs = sdss[0]["wcs"][2]
 photo_cat_base = PhotoFullCatalog.from_file(po_path, sdss_wcs, *obs_image[2].shape)
@@ -93,7 +79,7 @@ photo_cat = FullCatalog(photo_cat_base.height, photo_cat_base.width, d)
 
 # %%
 sdss_wcs = sdss[0]["wcs"][2]
-decals_path = Path(cfg0.paths.des) / "336" / "3366m010" / "tractor-3366m010.fits"
+decals_path = Path(cfg.paths.des) / "336" / "3366m010" / "tractor-3366m010.fits"
 decals_cat_base = TractorFullCatalog.from_file(decals_path, sdss_wcs, 1488, 2048)
 
 # a bit less than 22.5 magnitude, our target
@@ -111,14 +97,14 @@ torch.cuda.empty_cache()
 
 # %%
 # change the cfg here to try different checkerboard schemes
-encoder = instantiate(cfg_c4.train.encoder).cuda()
-enc_state_dict = torch.load(cfg0.train.pretrained_weights)
-if cfg0.train.pretrained_weights.endswith(".ckpt"):
+encoder = instantiate(cfg.train.encoder).cuda()
+enc_state_dict = torch.load(cfg.train.pretrained_weights)
+if cfg.train.pretrained_weights.endswith(".ckpt"):
     enc_state_dict = enc_state_dict["state_dict"]
 encoder.load_state_dict(enc_state_dict)
 encoder.eval()
 
-patches = obs_image[2:3, :1488, :1488].unfold(1, 80, 72).unfold(2, 80, 72)
+patches = obs_image[2:3, :1488, :1488].unfold(1, 256, 240).unfold(2, 256, 240)
 patches_batch = rearrange(patches, "bands ht wt hp wp -> (ht wt) bands hp wp")
 psf_batch = repeat(
     sdss_frame["psf_params"][:, 2:3], "b h w -> (repeat b) h w", repeat=patches_batch.size(0)
@@ -133,7 +119,7 @@ bliss_patch_cat = encoder.sample(batch, use_mode=True)
 
 # %%
 
-bliss_disjoint_cat = bliss_patch_cat.symmetric_crop(1)
+bliss_disjoint_cat = bliss_patch_cat.symmetric_crop(2)
 
 d = {}
 d["n_sources"] = rearrange(
@@ -155,10 +141,10 @@ bliss_cat = bliss_flux_filter_cat.to_full_catalog(4).to("cpu")
 # ## Three-way performance scoring and plotting
 
 # %%
-corner = torch.ones(2) * 4
-photo_cat_box = photo_cat.filter_by_ploc_box(corner, 1439)
-decals_cat_box = decals_cat.filter_by_ploc_box(corner, 1439)
-bliss_cat_box = bliss_cat.filter_by_ploc_box(torch.zeros(2), 1439)
+corner = torch.ones(2) * 8
+photo_cat_box = photo_cat.filter_by_ploc_box(corner, 1435)
+decals_cat_box = decals_cat.filter_by_ploc_box(corner, 1435)
+bliss_cat_box = bliss_cat.filter_by_ploc_box(torch.zeros(2), 1435)
 
 corner = torch.tensor([250, 1200])
 photo_cat_box = photo_cat_box.filter_by_ploc_box(corner, 200, exclude_box=True)
@@ -183,7 +169,7 @@ match_gt_photo = matcher.match_catalogs(decals_cat_box, photo_cat_box)
 
 fig, ax = plt.subplots(figsize=(14, 14))
 bw = np.array(rgb, dtype=np.float32).sum(2)
-ax.imshow(bw[4:1444, 4:1444], origin="lower", cmap="gray")
+ax.imshow(bw[8:1444, 8:1444], origin="lower", cmap="gray")
 
 plot_plocs(
     decals_cat_box,
@@ -302,7 +288,7 @@ for k, v in matches.items():
     print(k, len(v))
 # %%
 
-dp = instantiate(cfg0.my_metrics.detection_performance)
+dp = instantiate(cfg.my_metrics.detection_performance)
 dp.update(decals_cat_box, bliss_cat_box, match_gt_bliss)
 bliss_scores = dp.compute()
 dp.reset()
@@ -320,10 +306,3 @@ print(
     sdss_scores["detection_recall"],
     sdss_scores["detection_f1"],
 )
-# %%
-decoder = instantiate(cfg0.decoder)
-decals_tile_cat = decals_cat_box.to_tile_catalog(4, 2)
-decals_tile_cat["source_type"] = torch.zeros_like(decals_tile_cat["source_type"])
-semisynth, _ = decoder.render_image(decals_tile_cat)
-plt.imshow(semisynth[2].numpy(), origin="lower")
-# %%

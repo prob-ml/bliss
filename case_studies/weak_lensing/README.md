@@ -1,10 +1,24 @@
-### Mapping dark matter using astronomical images
-### Winter 2024
-#### Steve Fan and Tahseen Younus
-#### Supervised by Tim White and Jeffrey Regier
+### Neural posterior estimation of weak lensing shear and convergence
+#### Shreyas Chandrashekaran, Tim White, Camille Avestruz, and Jeffrey Regier, with assistance from Steve Fan and Tahseen Younus
 
+This case study aims to estimate weak lensing shear and convergence for the DC2 simulated sky survey. See `notebooks/dc2/evaluate_encoder.ipynb` for our most recent results.
 
-Gravitational lensing is an important probe of the large-scale structure of the universe, as it allows astronomers and physicists to create mass maps reflecting the distribution of dark matter across the sky. However, weak lensing, the most prevalent form of lensing, is difficult for the human eye to discern in astronomical images. We propose a novel method for simultaneously estimating shear and convergence, two weak lensing observables, from images using neural posterior estimation. After experimentation, we conclude that the current model architecture is suitable for learning complex spatial patterns of shear and convergence, but has trouble producing estimates on the correct scale.
+Some useful commands:
 
+- Train `lensing_encoder` on DC2 images
 
-*This project was completed through the Undergraduate Research Program in Statistics (URPS), a competitive program that pairs promising undergraduates with Statistics faculty on a research project for the winter semester. For future URPS opportunities, see [here](https://lsa.umich.edu/stats/undergraduate-students/undergraduate-research-opportunities-.html).*
+```
+nohup bliss -cp /home/twhit/bliss/case_studies/weak_lensing/ -cn lensing_config_dc2.yaml mode=train &> train_on_dc2.out &
+```
+
+- Generate synthetic images with shear and convergence, as specified in `lensing_prior`
+
+```
+nohup bliss -cp /home/twhit/bliss/case_studies/weak_lensing/ -cn lensing_config_simulator.yaml mode=generate &> generate_synthetic.out &
+```
+
+- Train `lensing_encoder` on synthetic images:
+
+```
+nohup bliss -cp /home/twhit/bliss/case_studies/weak_lensing/ -cn lensing_config_simulator.yaml mode=train &> train_on_synthetic.out &
+```

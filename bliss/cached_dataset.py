@@ -266,7 +266,10 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         raise RuntimeError(f"setup skips stage {stage}")
 
     def _load_file_paths_and_slices(self):
-        file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
+        file_names = [
+            f for f in sorted(os.listdir(str(self.cached_data_path))) if f.endswith(".pt")
+        ]
+        random.shuffle(file_names)
         if self.subset_fraction:
             file_names = file_names[: math.ceil(len(file_names) * self.subset_fraction)]
         self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
