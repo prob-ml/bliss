@@ -41,11 +41,30 @@ class MyBasicVariationalDist(VariationalDist):
 
 
 class CalibrationVariationalDist(MyBasicVariationalDist):
+    """Please make sure this var_dist is only used jointly with `encoder.sample`.
+
+    We assume the `var_dist.sample` is called in sequence:
+    `encoder.detect_first` -> `var_dist.sample` ->
+    `encoder.detect_second` -> `var_dist.sample` -> ... (two detections case) or
+    `encoder.detect_first` -> `var_dist.sample` -> ... (one detection case)
+    """
+
     def __init__(self, factors, tile_slen, ci_lower_q, ci_upper_q):
         super().__init__(factors, tile_slen)
         assert ci_lower_q < ci_upper_q
         self.ci_lower_q = ci_lower_q
         self.ci_upper_q = ci_upper_q
+
+        self.sample_context = None
+        self.cur_context_index = None
+
+    def init_sample_context(self, sample_context):
+        self.sample_context = sample_context
+        self.cur_context_index = 0
+
+    def clear_sample_context(self):
+        self.sample_context = None
+        self.cur_context_index = None
 
     @classmethod
     def _get_vsbc(cls, qk, params, true_tile_cat):
@@ -91,12 +110,12 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
         x_cat: torch.Tensor,
         use_mode=False,
         return_base_cat=False,
-        true_tile_cat: TileCatalog = None,
     ):
         sample_result = super().sample(x_cat, use_mode=use_mode)
 
-        if true_tile_cat is not None:
-            assert true_tile_cat.max_sources == 1
+        if self.sample_context is not None:
+            cur_true_tile_cat = self.sample_context[self.cur_context_index]
+            assert cur_true_tile_cat.max_sources == 1
             assert sample_result.max_sources == 1
             fp_pairs = self._factor_param_pairs(x_cat)
             # for now, only test the vsbc for locs, ellipticity and flux
@@ -112,12 +131,13 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
             }
             for qk, params in fp_pairs:
                 if qk.name in vsbc_variables:
-                    sample_result[qk.name + "_vsbc"] = self._get_vsbc(qk, params, true_tile_cat)
+                    sample_result[qk.name + "_vsbc"] = self._get_vsbc(qk, params, cur_true_tile_cat)
                 if qk.name in credible_interval_variables:
                     lower_b, upper_b = self._get_credible_interval(
                         qk, params, self.ci_lower_q, self.ci_upper_q
                     )
                     sample_result[qk.name + "_ci_lower"] = lower_b
                     sample_result[qk.name + "_ci_upper"] = upper_b
+            self.cur_context_index = (self.cur_context_index + 1) % len(self.sample_context)
 
         return sample_result
