@@ -18,10 +18,11 @@ class GalaxyClusterEncoder(Encoder):
         power_of_two = (self.tile_slen != 0) & (self.tile_slen & (self.tile_slen - 1) == 0)
         assert power_of_two, "tile_slen must be a power of two"
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+        num_features = 256
         self.net = GalaxyClusterFeaturesNet(
             len(self.survey_bands),
             ch_per_band,
-            self.var_dist.n_params_per_source,  # output dimension
+            num_features,  # output dimension
             tile_slen=self.tile_slen,
             downsample_at_front=self.downsample_at_front,
         )
