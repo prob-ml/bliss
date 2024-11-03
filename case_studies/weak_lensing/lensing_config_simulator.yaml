@@ -51,7 +51,7 @@ my_normalizers:
 
 my_metrics:
     lensing_map:
-            _target_: case_studies.weak_lensing.lensing_metrics.LensingMapMSE
+            _target_: case_studies.weak_lensing.lensing_metrics.LensingMSE
 
 my_render:
     lensing_shear_conv:
