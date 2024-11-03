@@ -1,6 +1,7 @@
 import logging
 import math
 import sys
+from typing import List
 
 import pandas as pd
 import torch
@@ -30,6 +31,7 @@ class LensingDC2DataModule(DC2DataModule):
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
+        train_transforms: List,
         **kwargs,
     ):
         super().__init__(
@@ -47,7 +49,7 @@ class LensingDC2DataModule(DC2DataModule):
             batch_size=batch_size,
             num_workers=num_workers,
             cached_data_path=cached_data_path,
-            train_transforms=[],
+            train_transforms=train_transforms,
             nontrain_transforms=[],
             subset_fraction=None,
         )
@@ -166,6 +168,8 @@ class LensingDC2DataModule(DC2DataModule):
         ellip2_lensed = tile_dict["ellip2_lensed_sum"] / tile_dict["ellip2_lensed_count"]
         ellip_lensed = torch.stack((ellip1_lensed.squeeze(-1), ellip2_lensed.squeeze(-1)), dim=-1)
         redshift = tile_dict["redshift_sum"] / tile_dict["redshift_count"]
+        ra = tile_dict["ra_sum"] / tile_dict["ra_count"]
+        dec = tile_dict["dec_sum"] / tile_dict["dec_count"]
 
         tile_dict["shear_1"] = shear1
         tile_dict["shear_2"] = shear2
@@ -175,6 +179,8 @@ class LensingDC2DataModule(DC2DataModule):
             tile_dict, self.avg_ellip_kernel_size, self.avg_ellip_kernel_sigma
         )
         tile_dict["redshift"] = redshift
+        tile_dict["ra"] = ra
+        tile_dict["dec"] = dec
 
         data_splits = self.split_image_and_tile_cat(image, tile_dict, tile_dict.keys(), psf_params)
 
@@ -225,6 +231,8 @@ class LensingDC2Catalog(DC2FullCatalog):
         plocs_mask = x0_mask * x1_mask
 
         galid = galid[plocs_mask]
+        ra = ra[plocs_mask]
+        dec = dec[plocs_mask]
         plocs = plocs[plocs_mask]
 
         shear1 = shear1[plocs_mask]
@@ -241,6 +249,8 @@ class LensingDC2Catalog(DC2FullCatalog):
         nobj = galid.shape[0]
 
         d = {
+            "ra": ra.reshape(1, nobj, 1),
+            "dec": dec.reshape(1, nobj, 1),
             "plocs": plocs.reshape(1, nobj, 2),
             "shear1": shear1.reshape(1, nobj, 1),
             "shear2": shear2.reshape(1, nobj, 1),
