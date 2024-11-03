@@ -17,29 +17,31 @@ class ConvBlock(nn.Module):
 
 
 class GalaxyClusterCatalogNet(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, num_features, out_channels):
         super().__init__()
 
-        net_layers = [
-            C3(in_channels, 256, n=6),  # 0
-            ConvBlock(256, 512, stride=2),
-            C3(512, 512, n=3, shortcut=False),
-            ConvBlock(512, 256, kernel_size=1, padding=0),
-            nn.Upsample(scale_factor=2, mode="nearest"),  # 4
-            C3(768, 256, n=3, shortcut=False),
-            Detect(256, out_channels),
-        ]
-        self.net_ml = nn.ModuleList(net_layers)
+        # initalization for detection head
+        context_channels_in = 6
+        context_channels_out = 128
+        self.context_net = nn.Sequential(
+            ConvBlock(context_channels_in, context_channels_out),
+            ConvBlock(context_channels_out, context_channels_out),
+            C3(context_channels_out, context_channels_out, n=4),
+            ConvBlock(context_channels_out, context_channels_out),
+        )
+        n_hidden_ch = 256
+        self.detection_net = nn.Sequential(
+            ConvBlock(num_features + context_channels_out, n_hidden_ch),
+            ConvBlock(n_hidden_ch, n_hidden_ch),
+            C3(n_hidden_ch, n_hidden_ch, n=4),
+            ConvBlock(n_hidden_ch, n_hidden_ch),
+            Detect(n_hidden_ch, out_channels),
+        )
 
-    def forward(self, x):
-        save_lst = [x]
-        for i, m in enumerate(self.net_ml):
-            x = m(x)
-            if i in {0, 4}:
-                save_lst.append(x)
-            if i == 4:
-                x = torch.cat(save_lst, dim=1)
-        return x
+    def forward(self, x_features, context):
+        x_context = self.context_net(context)
+        x = torch.cat((x_features, x_context), dim=1)
+        return self.detection_net(x)
 
 
 class GalaxyClusterFeaturesNet(nn.Module):
