@@ -14,7 +14,7 @@ from experiment.run.training_functions import run_encoder_training
 @click.option("-e", "--n-epochs", default=50)
 @click.option("--validate-every-n-epoch", default=1, type=int)
 @click.option("--log-every-n-steps", default=50, type=int)
-@click.option("--val-check-interval", default=1.0, type=float)
+@click.option("--val-check-interval", default=0.25, type=float)
 def main(
     seed: int,
     ds_seed: int,

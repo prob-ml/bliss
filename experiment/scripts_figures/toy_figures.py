@@ -6,7 +6,6 @@ from matplotlib.figure import Figure
 from torch import Tensor
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.datasets.background import add_noise_and_background
 from bliss.datasets.generate_blends import render_full_catalog
 from bliss.datasets.lsst import (
     convert_flux_to_mag,
@@ -86,13 +85,13 @@ class ToySeparationFigure(BlissFigure):
         )
         assert len(colnames) == 10
         n_sources = 2
-        flux1, flux2 = 5e6, 2.5e6
+        flux1, flux2 = 1e6, 5e5
         mag1, mag2 = convert_flux_to_mag(torch.tensor([flux1, flux2]))
         mag1, mag2 = mag1.item(), mag2.item()
-        gparam1 = [0, 1.0, 0, 0, 1.5, 0, 0.7, np.pi / 4, mag1, flux1]
-        gparam2 = [0, 1.0, 0, 0, 1.0, 0, 0.7, 3 * np.pi / 4, mag2, flux2]
+        gparam1 = [0, 1.0, 0, 0, 1.5, 0, 0.7, 45, 45, mag1, flux1]
+        gparam2 = [0, 1.0, 0, 0, 1.0, 0, 0.7, 135, 135, mag2, flux2]
         gparams = torch.tensor([gparam1, gparam2])
-        gparams = gparams.reshape(1, 2, 10).expand(batch_size, 2, 10)
+        gparams = gparams.reshape(1, 2, 11).expand(batch_size, 2, 11)
         print(f"INFO: Fluxes correspond to magnitudes ({mag1},{mag2})")
 
         # need plocs for later
@@ -105,6 +104,8 @@ class ToySeparationFigure(BlissFigure):
         # create full catalogs (need separately since `render_blend`` only accepts 1 batch)
         images = torch.zeros(batch_size, 1, size, size)
         background = torch.full((batch_size, 1, size, size), bg)
+        noise = torch.randn_like(images[0]).reshape(1, 1, size, size) * np.sqrt(bg)
+
         for ii in range(batch_size):
             plocs_ii = plocs[ii].reshape(1, 2, 2)
             d = {
@@ -119,7 +120,7 @@ class ToySeparationFigure(BlissFigure):
             full_cat = FullCatalog(slen, slen, d)
             image, _, _ = render_full_catalog(full_cat, psf, slen, bp)
 
-            images[ii] = add_noise_and_background(image, background[ii])
+            images[ii] = image + noise + background[ii]
 
         # predictions from encoder
         tile_est = encoder.variational_mode(images, background)
@@ -259,7 +260,7 @@ class ToySeparationFigure(BlissFigure):
         seps = data["seps"]
         tplocs: np.ndarray = data["truth"]["plocs"]
         images_all, recon_all, res_all = data["images"], data["recon"], data["resid"]
-        trim = 20
+        trim = 10
         indices = np.array([list(seps).index(psep) for psep in seps_to_plot]).astype(int)
 
         images = images_all[indices, 0, trim + 10 : -trim - 10, trim + 15 : -trim - 5]

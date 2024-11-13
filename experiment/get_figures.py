@@ -18,7 +18,8 @@ from experiment.scripts_figures.toy_figures import ToySeparationFigure
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-ALL_FIGS = {"single", "blend", "toy"}
+ALL_FIGS = ("single", "blend", "toy")
+CACHEDIR = "/nfs/turbo/lsa-regier/scratch/ismael/cache/"
 
 
 def _load_models(seed: int, ds_seed: int, device):
@@ -65,10 +66,9 @@ def _load_models(seed: int, ds_seed: int, device):
 
 def _make_autoencoder_figures(seed: int, ds_seed: int, device, test_file: str, overwrite: bool):
     print("INFO: Creating autoencoder figures...")
+    suffix = f"{ds_seed}_{seed}"
     autoencoder = OneCenteredGalaxyAE()
-    autoencoder.load_state_dict(
-        torch.load(f"models/autoencoder_{ds_seed}_{seed}.pt", weights_only=True)
-    )
+    autoencoder.load_state_dict(torch.load(f"models/autoencoder_{suffix}.pt", weights_only=True))
     autoencoder = autoencoder.to(device).eval()
     autoencoder.requires_grad_(False)
 
@@ -76,22 +76,24 @@ def _make_autoencoder_figures(seed: int, ds_seed: int, device, test_file: str, o
     args = (autoencoder, test_file)
 
     # create figure classes and plot.
-    cachedir = "/nfs/turbo/lsa-regier/scratch/ismael/cache/"
-    AutoEncoderFigures(n_examples=5, overwrite=overwrite, figdir="figures", cachedir=cachedir)(
-        *args
-    )
+    AutoEncoderFigures(
+        n_examples=5,
+        overwrite=overwrite,
+        figdir="figures",
+        cachedir=CACHEDIR,
+        suffix=suffix,
+    )(*args)
 
 
-def _make_blend_figures(encoder, decoder, test_file: str, overwrite: bool):
+def _make_blend_figures(encoder, decoder, test_file: str, suffix: str, overwrite: bool):
     print("INFO: Creating figures for metrics on simulated blended galaxies.")
-    cachedir = "/nfs/turbo/lsa-regier/scratch/ismael/cache/"
-    BlendSimulationFigure(overwrite=overwrite, figdir="figures", cachedir=cachedir)(
+    BlendSimulationFigure(overwrite=overwrite, figdir="figures", suffix=suffix, cachedir=CACHEDIR)(
         test_file, encoder, decoder
     )
 
 
 @click.command()
-@click.option("-m", "--mode", required=True, type=str, help="Which figure to make")
+@click.option("-m", "--mode", required=True, type=click.Choice(ALL_FIGS, case_sensitive=False))
 @click.option("-s", "--seed", required=True, type=int, help="Consistent seed used to train models.")
 @click.option("--ds-seed", required=True, type=int, help="Seed of training/testing set.")
 @click.option("--test-file-single", default="", type=str, help="Dataset file for testing AE.")
@@ -106,6 +108,7 @@ def main(
     overwrite: bool,
 ):
     assert mode in ALL_FIGS
+    suffix = f"{ds_seed}_{seed}"
 
     device = torch.device("cuda:0")
     pl.seed_everything(seed)
@@ -120,14 +123,14 @@ def main(
 
     if mode == "blend":
         assert test_file_blends != "" and Path(test_file_blends).exists()
-        _make_blend_figures(encoder, decoder, test_file_blends, overwrite)
+        _make_blend_figures(encoder, decoder, test_file_blends, suffix=suffix, overwrite=overwrite)
 
     if mode == "toy":
         print("INFO: Creating figures for testing BLISS on pair galaxy toy example.")
         cachedir = "/nfs/turbo/lsa-regier/scratch/ismael/cache/"
-        ToySeparationFigure(overwrite=overwrite, figdir="figures", cachedir=cachedir)(
-            encoder, decoder
-        )
+        ToySeparationFigure(
+            overwrite=overwrite, figdir="figures", cachedir=cachedir, suffix=suffix
+        )(encoder, decoder)
 
 
 if __name__ == "__main__":

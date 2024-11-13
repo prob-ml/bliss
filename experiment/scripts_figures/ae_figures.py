@@ -1,6 +1,6 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from torch import Tensor
 from tqdm import tqdm

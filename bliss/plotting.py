@@ -101,15 +101,19 @@ class BlissFigure:
 
     def __init__(
         self,
-        figdir: str,
+        *,
+        figdir: str | Path,  # parent figure directory
         cachedir: str,
+        suffix: str,
         overwrite: bool = False,
         img_format: str = "png",
     ) -> None:
-        self.figdir = Path(figdir)
-        self.cachefile = Path(cachedir) / f"{self.cache_name}.pt"
+        self.figdir = Path(figdir) / suffix
+        self.cachefile = Path(cachedir) / f"{self.cache_name}_{suffix}.pt"
         self.overwrite = overwrite
         self.img_format = img_format
+
+        self.figdir.mkdir(parents=False, exist_ok=True)
 
     def __call__(self, *args, **kwargs):
         """Create figures and save to output directory with names from `self.fignames`."""
