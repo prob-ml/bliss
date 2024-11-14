@@ -20,7 +20,6 @@ class SavedGalsimBlends(Dataset):
         ds: dict[str, Tensor] = load_dataset_npz(dataset_file)
 
         self.images = ds.pop("images")
-        self.background = ds.pop("background")
         self.epoch_size = len(self.images)
 
         # don't need for training
@@ -47,7 +46,6 @@ class SavedGalsimBlends(Dataset):
         tile_params_ii = {p: q[index] for p, q in self.tile_params.items()}
         return {
             "images": self.images[index],
-            "background": self.background[index],
             "paddings": self.paddings[index] if self.keep_padding else self.paddings,
             **tile_params_ii,
         }
@@ -59,15 +57,10 @@ class SavedIndividualGalaxies(Dataset):
         ds: dict[str, Tensor] = load_dataset_npz(dataset_file)
 
         self.images = ds.pop("images")
-        self.background = ds.pop("background")
-
         self.epoch_size = len(self.images)
 
     def __len__(self) -> int:
         return self.epoch_size
 
     def __getitem__(self, index) -> dict[str, Tensor]:
-        return {
-            "images": self.images[index],
-            "background": self.background[index],
-        }
+        return {"images": self.images[index]}

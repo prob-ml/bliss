@@ -98,4 +98,13 @@ ignore =
     WPS202,
 
     # hard to avoid having too many methods with pytorch lightning
-    WPS214
+    WPS214,
+
+    # too many decorators
+    WPS216,
+
+    # I like underscore numbers
+    WPS303,
+
+    # print is useful
+    WPS421

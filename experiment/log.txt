@@ -60,3 +60,23 @@ AE path: ../models/autoencoder_42_44.pt
  Saved checkpoint 'data/out/detection/version_27/checkpoints/epoch=11-val_loss=1.086.ckpt' as weights /home/imendoza/bliss/experiment/models/detection_42_44.pt at 2024-10-15 13:33:06.006949
 
  Saved checkpoint 'data/out/binary/version_6/checkpoints/epoch=3-val_loss=0.404.ckpt' as weights /home/imendoza/bliss/experiment/models/binary_42_44.pt at 2024-10-15 13:34:51.816331
+
+Run training autoencoder data generation script with seed 42, fraction 0.2 at 2024-11-13 14:19:53.555417.
+
+Training AE with seed 42, ds_seed 42, version 32 at 2024-11-13 14:32:00.449292.
+
+Blend data generation with seed 42 at 2024-11-13 14:55:47.792177.
+        Galaxy density 160.0, star_density 15.5, and n_samples 10000.
+
+
+Training AE with seed 42, ds_seed 42, version 33 at 2024-11-13 21:45:24.889972.
+
+Training detection with seed 42, ds_seed 42, version 29 at 2024-11-13 21:51:17.381512.
+
+Training binary with seed 42, ds_seed 42, version 7 at 2024-11-13 21:58:20.079213.
+
+ Saved checkpoint 'data/out/autoencoder/version_32/checkpoints/epoch=9439-val_loss=2876267.250.ckpt' as weights /home/imendoza/bliss/experiment/models/autoencoder_42_42.pt at 2024-11-14 10:54:21.032503
+
+ Saved checkpoint 'data/out/detection/version_29/checkpoints/epoch=18-val_loss=4.403.ckpt' as weights /home/imendoza/bliss/experiment/models/detection_42_42.pt at 2024-11-14 10:55:02.346600
+
+ Saved checkpoint 'data/out/binary/version_7/checkpoints/epoch=2-val_loss=0.504.ckpt' as weights /home/imendoza/bliss/experiment/models/binary_42_42.pt at 2024-11-14 10:55:19.291673

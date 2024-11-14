@@ -66,6 +66,9 @@ def get_default_lsst_background() -> float:
     return mean_sky_level("LSST", "i").to_value("electron").astype(np.float32).item()
 
 
+BACKGROUND = torch.tensor(get_default_lsst_background())
+
+
 def prepare_final_galaxy_catalog() -> Table:
     """Function to globally apply cuts to CATSIM catalog for all datasets."""
     cat = Table.read(DATA_DIR / "OneDegSq.fits")

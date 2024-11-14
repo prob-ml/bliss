@@ -38,10 +38,10 @@ def test_encoder_forward(home_dir, tmp_path):
 
     with torch.no_grad():
         for b in dl1:
-            im, bg, tc, _ = parse_dataset(b)
-            binary_encoder.get_loss(im, bg, tc)
-            detection_encoder.get_loss(im, bg, tc)
+            im, tc, _ = parse_dataset(b)
+            binary_encoder.get_loss(im, tc)
+            detection_encoder.get_loss(im, tc)
 
         for b in dl2:
-            im, bg, tc, sf = parse_dataset(b)
-            galaxy_encoder.get_loss(im, sf, bg, tc)
+            im, tc, pds = parse_dataset(b)
+            galaxy_encoder.get_loss(im, pds, tc)

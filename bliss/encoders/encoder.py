@@ -3,7 +3,7 @@
 import math
 
 import torch
-from einops import pack, rearrange
+from einops import rearrange
 from torch import Tensor, nn
 from tqdm import tqdm
 
@@ -70,7 +70,7 @@ class Encoder(nn.Module):
     def forward(self, x):
         raise NotImplementedError("Unavailable. Use .variational_mode() or .sample() instead.")
 
-    def variational_mode(self, image: Tensor, background: Tensor) -> TileCatalog:
+    def variational_mode(self, image: Tensor) -> TileCatalog:
         """Get maximum a posteriori of catalog from image padded tiles.
 
         Note that, strictly speaking, this is not the true MAP of the variational
@@ -84,8 +84,6 @@ class Encoder(nn.Module):
         Args:
             image: An astronomical image,
                 with shape `n * n_bands * h * w`.
-            background: Background associated with image,
-                with shape `n * n_bands * h * w`.
 
         Returns:
             A dictionary of the maximum a posteriori
@@ -95,7 +93,7 @@ class Encoder(nn.Module):
                 - 'galaxy_params' from GalaxyEncoder.
         """
         n_tiles_h = (image.shape[2] - 2 * self.bp) // self.detection_encoder.tile_slen
-        ptile_loader = self.make_ptile_loader(image, background, n_tiles_h)
+        ptile_loader = self.make_ptile_loader(image, n_tiles_h)
         tile_map_list: list[dict[str, Tensor]] = []
 
         n_tiles_h = (image.shape[2] - 2 * self.bp) // self.detection_encoder.tile_slen
@@ -118,16 +116,15 @@ class Encoder(nn.Module):
             {k: v.squeeze(0) for k, v in tile_map.items()},
         )
 
-    def make_ptile_loader(self, image: Tensor, background: Tensor, n_tiles_h: int):
+    def make_ptile_loader(self, image: Tensor, n_tiles_h: int):
         n_images = image.shape[0]
-        img_bg, _ = pack([image, background], "b * h w")  # by default concatenate channels
         for start_b in range(0, n_images, self.n_images_per_batch):
             for row in range(0, n_tiles_h, self.n_rows_per_batch):
                 end_b = start_b + self.n_images_per_batch
                 end_row = row + self.n_rows_per_batch
                 start_h = row * self.detection_encoder.tile_slen
                 end_h = end_row * self.detection_encoder.tile_slen + 2 * self.bp
-                img_bg_cropped = img_bg[start_b:end_b, :, start_h:end_h, :]
+                img_bg_cropped = image[start_b:end_b, :, start_h:end_h, :]
                 image_ptiles = self._get_images_in_ptiles(img_bg_cropped)
                 image_ptiles_flat = rearrange(image_ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
                 yield image_ptiles_flat.to(self.device)

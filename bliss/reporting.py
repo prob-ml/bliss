@@ -13,7 +13,7 @@ from torchmetrics import Metric
 from tqdm import tqdm
 
 from bliss.catalog import FullCatalog
-from bliss.datasets.lsst import PIXEL_SCALE
+from bliss.datasets.lsst import BACKGROUND, PIXEL_SCALE
 
 
 class DetectionMetrics(Metric):
@@ -449,9 +449,9 @@ def get_single_galaxy_ellipticities(
     return ellips
 
 
-def get_snr(noiseless: Tensor, background: Tensor) -> Tensor:
+def get_snr(noiseless: Tensor) -> Tensor:
     """Compute SNR given noiseless, isolated iamges of galaxies and background."""
-    image_with_background = noiseless + background
+    image_with_background = noiseless + BACKGROUND
     snr2 = reduce(noiseless**2 / image_with_background, "b c h w -> b", "sum")
     return torch.sqrt(snr2)
 
@@ -473,7 +473,6 @@ def get_blendedness(iso_image: Tensor):
 
 def get_single_galaxy_measurements(
     images: Tensor,
-    background: Tensor,
     pixel_scale: float = PIXEL_SCALE,
     no_bar: bool = True,
 ) -> tuple[Tensor, Tensor, Tensor]:
@@ -489,14 +488,13 @@ def get_single_galaxy_measurements(
     """
     _, c, h, w = images.shape
     assert h == w and c == 1
-    assert images.shape == background.shape
-    assert images.device == background.device == torch.device("cpu")
+    assert images.device == torch.device("cpu")
 
     # flux
     fluxes = reduce(images, "b c h w -> b", "sum")
 
     # snr
-    snrs = get_snr(images, background)
+    snrs = get_snr(images)
 
     # ellipticity
     # correctly handles 0s

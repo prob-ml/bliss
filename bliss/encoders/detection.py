@@ -1,6 +1,6 @@
 import pytorch_lightning as pl
 import torch
-from einops import pack, rearrange, reduce, unpack
+from einops import rearrange, reduce, unpack
 from torch import Tensor
 from torch.distributions import Categorical, Normal
 from torch.nn import BCELoss
@@ -60,8 +60,7 @@ class DetectionEncoder(pl.LightningModule):
         dim_enc_conv_out = ((self.ptile_slen + 1) // 2 + 1) // 2
 
         # networks to be trained
-        n_bands_in = 2 * n_bands
-        self._enc_conv = EncoderCNN(n_bands_in, channel, spatial_dropout)
+        self._enc_conv = EncoderCNN(n_bands, channel, spatial_dropout)
         self._enc_final = make_enc_final(
             channel * 4 * dim_enc_conv_out**2,
             hidden,
@@ -72,17 +71,9 @@ class DetectionEncoder(pl.LightningModule):
         # metrics
         self.val_detection_metrics = DetectionMetrics(slack=1.0)
 
-    def forward(self, images: Tensor, background: Tensor):
-
-        # prepare padded tiles with background
-        images_with_background, _ = pack([images, background], "b * h w")
-        image_ptiles = get_images_in_tiles(
-            images_with_background,
-            self.tile_slen,
-            self.ptile_slen,
-        )
+    def forward(self, images: Tensor):
+        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
         flat_image_ptiles = rearrange(image_ptiles, "n nth ntw c h w -> (n nth ntw) c h w")
-
         return self.encode_tiled(flat_image_ptiles)
 
     def encode_tiled(self, flat_image_ptiles: Tensor):
@@ -101,11 +92,11 @@ class DetectionEncoder(pl.LightningModule):
         locs_sd = _locs_sd_func(locs_logvar_raw)
         return n_source_probs, locs_mean, locs_sd
 
-    def variational_mode(self, images: Tensor, background: Tensor) -> TileCatalog:
+    def variational_mode(self, images: Tensor) -> TileCatalog:
         """Compute the variational mode."""
         _, _, h, w = images.shape
         nth, ntw = get_n_padded_tiles_hw(h, w, self.ptile_slen, self.tile_slen)
-        n_source_probs, locs_mean, _ = self.forward(images, background)
+        n_source_probs, locs_mean, _ = self.forward(images)
         flat_tile_n_sources = n_source_probs.ge(0.5).long()
         flat_tile_locs = locs_mean * rearrange(flat_tile_n_sources, "np -> np 1")
 
@@ -119,15 +110,12 @@ class DetectionEncoder(pl.LightningModule):
         flat_tile_locs = locs_mean * rearrange(flat_tile_n_sources, "np -> np 1")
         return {"n_sources": flat_tile_n_sources, "locs": flat_tile_locs}
 
-    def sample(self, images: Tensor, background: Tensor, n_samples: int = 1) -> dict[str, Tensor]:
+    def sample(self, images: Tensor, n_samples: int = 1) -> dict[str, Tensor]:
         """Sample from the encoded variational distribution.
 
         Args:
             images:
                 Tensor of images to encode.
-
-            background:
-                Tensor consisting of images background
 
             n_samples:
                 The number of samples to draw.
@@ -136,7 +124,7 @@ class DetectionEncoder(pl.LightningModule):
             A dictionary of tensors with shape `n_samples * n_ptiles * ...`.
             Consists of "n_sources" and "locs".
         """
-        n_source_probs, locs_mean, locs_sd = self.forward(images, background)
+        n_source_probs, locs_mean, locs_sd = self.forward(images)
 
         # sample counts per tile
         tile_n_sources = Categorical(probs=n_source_probs).sample((n_samples,))
@@ -151,12 +139,12 @@ class DetectionEncoder(pl.LightningModule):
 
         return {"n_sources": tile_n_sources, "locs": tile_locs}
 
-    def get_loss(self, images: Tensor, background: Tensor, true_catalog: TileCatalog):
-        assert images.device == background.device == true_catalog.device
+    def get_loss(self, images: Tensor, true_catalog: TileCatalog):
+        assert images.device == true_catalog.device
         b, nth, ntw, _ = true_catalog.locs.shape
 
         # encode
-        out: tuple[Tensor, Tensor, Tensor] = self(images, background)
+        out: tuple[Tensor, Tensor, Tensor] = self(images)
         n_source_probs, locs_mean, locs_sd = out
 
         # loss from detection count encoding
@@ -186,8 +174,8 @@ class DetectionEncoder(pl.LightningModule):
     # pytorch lightning
     def training_step(self, batch, batch_idx):
         """Training step (pytorch lightning)."""
-        images, background, truth_cat, _ = parse_dataset(batch, self.tile_slen)
-        out = self.get_loss(images, background, truth_cat)
+        images, truth_cat, _ = parse_dataset(batch, self.tile_slen)
+        out = self.get_loss(images, truth_cat)
 
         # logging
         self.log("train/loss", out["loss"], batch_size=truth_cat.batch_size)
@@ -198,10 +186,10 @@ class DetectionEncoder(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         """Validation step (pytorch lightning)."""
-        images, background, truth_cat, _ = parse_dataset(batch, self.tile_slen)
+        images, truth_cat, _ = parse_dataset(batch, self.tile_slen)
         batch_size = truth_cat.batch_size
-        out = self.get_loss(images, background, truth_cat)
-        pred_cat = self.variational_mode(images, background)
+        out = self.get_loss(images, truth_cat)
+        pred_cat = self.variational_mode(images)
 
         # compute tiled metrics
         tiled_metrics = _compute_tiled_metrics(truth_cat, pred_cat, tile_slen=self.tile_slen)

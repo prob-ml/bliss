@@ -5,6 +5,8 @@ from torch.distributions import Normal
 from torch.nn.functional import relu
 from torch.optim import Adam
 
+from bliss.datasets.lsst import BACKGROUND
+
 
 class OneCenteredGalaxyAE(pl.LightningModule):
     def __init__(
@@ -21,6 +23,7 @@ class OneCenteredGalaxyAE(pl.LightningModule):
         self.dec = self.make_decoder(slen, latent_dim, n_bands, hidden)
         self.latent_dim = latent_dim
         self.lr = lr
+        self.register_buffer("background_sqrt", BACKGROUND.sqrt())
 
     def make_encoder(
         self, slen: int, latent_dim: int, n_bands: int, hidden: int
@@ -32,34 +35,33 @@ class OneCenteredGalaxyAE(pl.LightningModule):
     ) -> "CenteredGalaxyDecoder":
         return CenteredGalaxyDecoder(slen, latent_dim, n_bands, hidden)
 
-    def forward(self, images, background) -> Tensor:
+    def forward(self, images) -> Tensor:
         """Gets reconstructed images from running through encoder and decoder."""
-        z = self.enc(images - background)
-        recon_mean = self.dec(z)
-        return recon_mean + background
+        z = self.enc(images)
+        return self.dec(z)
 
-    def get_loss(self, images: Tensor, background: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-        recon_mean: Tensor = self(images, background)
-        log_prob_pp = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
+    def get_loss(self, images: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        recon_mean: Tensor = self(images)
+        log_prob_pp = -Normal(recon_mean, self.background_sqrt).log_prob(images)
         loss = log_prob_pp.sum()
         loss_avg = log_prob_pp.mean()  # might be useful to compare with different batch sizes.
         return loss, loss_avg, recon_mean
 
     def training_step(self, batch: dict[str, Tensor], batch_idx: int):
         """Training step (pytorch lightning)."""
-        images, background = batch["images"], batch["background"]
-        loss, loss_avg, _ = self.get_loss(images, background)
+        images = batch["images"]
+        loss, loss_avg, _ = self.get_loss(images)
         self.log("train/loss", loss, on_step=False, on_epoch=True)
         self.log("train/loss_avg", loss_avg, on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch: dict[str, Tensor], batch_idx: int):
         """Validation step (pytorch lightning)."""
-        images, background = batch["images"], batch["background"]
-        loss, loss_avg, recon_mean = self.get_loss(images, background)
+        images = batch["images"]
+        loss, loss_avg, recon_mean = self.get_loss(images)
 
         # max std. residual across all images
-        res = (images - recon_mean) / recon_mean.sqrt()
+        res = (images - recon_mean) / self.background_sqrt
         mean_max_residual = reduce(res.abs(), "b c h w -> b", "max").mean()
 
         self.log("val/loss", loss)

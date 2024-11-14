@@ -2,13 +2,14 @@ from copy import deepcopy
 
 import pytorch_lightning as pl
 import torch
-from einops import pack, rearrange, reduce, unpack
+from einops import rearrange, reduce
 from torch import Tensor
 from torch.distributions import Normal
 from torch.optim import Adam
 
 from bliss.catalog import TileCatalog
 from bliss.datasets.generate_blends import parse_dataset
+from bliss.datasets.lsst import BACKGROUND
 from bliss.encoders.autoencoder import CenteredGalaxyEncoder, OneCenteredGalaxyAE
 from bliss.grid import shift_sources_in_ptiles, validate_border_padding
 from bliss.render_tiles import (
@@ -54,22 +55,17 @@ class GalaxyEncoder(pl.LightningModule):
         self._dec.eval()
         del ae
 
+        self.register_buffer("background_sqrt", BACKGROUND.sqrt())
+
     def forward(self, image_ptiles_flat: Tensor, tile_locs_flat: Tensor) -> Tensor:
-        """Runs galaxy encoder on input image ptiles (with bg substracted)."""
+        """Runs galaxy encoder on input image ptiles."""
         centered_ptiles = self._get_centered_padded_tiles(image_ptiles_flat, tile_locs_flat)
         return self._enc(centered_ptiles)
 
-    def get_loss(
-        self, images: Tensor, paddings: Tensor, background: Tensor, tile_catalog: TileCatalog
-    ):
+    def get_loss(self, images: Tensor, paddings: Tensor, tile_catalog: TileCatalog):
         _, nth, ntw, _ = tile_catalog.locs.shape
 
-        images_with_background, _ = pack([images, background], "b * h w")
-        image_ptiles = get_images_in_tiles(
-            images_with_background,
-            self.tile_slen,
-            self.ptile_slen,
-        )
+        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
         image_ptiles_flat = rearrange(image_ptiles, "n nth ntw c h w -> (n nth ntw) c h w")
         tile_locs_flat = rearrange(tile_catalog.locs, "n nth ntw xy -> (n nth ntw) xy")
         galaxy_params_flat: Tensor = self(image_ptiles_flat, tile_locs_flat)
@@ -92,23 +88,18 @@ class GalaxyEncoder(pl.LightningModule):
         assert recon_ptiles.shape[-1] == recon_ptiles.shape[-2] == self.ptile_slen
         recon_mean = reconstruct_image_from_ptiles(recon_ptiles, self.tile_slen)
         assert recon_mean.ndim == 4 and recon_mean.shape[-1] == images.shape[-1]
-        recon_mean += background + paddings  # target only galaxies within tiles.
+        recon_mean += paddings  # target only galaxies within tiles.
         assert not torch.any(torch.logical_or(torch.isnan(recon_mean), torch.isinf(recon_mean)))
 
-        recon_losses: Tensor = -Normal(recon_mean, recon_mean.sqrt()).log_prob(images)
+        recon_losses: Tensor = -Normal(recon_mean, self.background_sqrt).log_prob(images)
         assert not torch.any(torch.logical_or(torch.isnan(recon_losses), torch.isinf(recon_losses)))
 
         return recon_losses.sum(), recon_losses.mean(), recon_mean
 
-    def variational_mode(self, images: Tensor, background: Tensor, tile_catalog: TileCatalog):
+    def variational_mode(self, images: Tensor, tile_catalog: TileCatalog):
         _, nth, ntw, _ = tile_catalog.locs.shape
 
-        images_with_background, _ = pack([images, background], "b * h w")
-        image_ptiles = get_images_in_tiles(
-            images_with_background,
-            self.tile_slen,
-            self.ptile_slen,
-        )
+        image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
         image_ptiles_flat = rearrange(image_ptiles, "n nth ntw c h w -> (n nth ntw) c h w")
         tile_locs_flat = rearrange(tile_catalog.locs, "n nth ntw xy -> (n nth ntw) xy")
         galaxy_params_flat: Tensor = self(image_ptiles_flat, tile_locs_flat)
@@ -117,8 +108,8 @@ class GalaxyEncoder(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         """Pytorch lightning training step."""
-        images, background, tile_catalog, paddings = parse_dataset(batch, self.tile_slen)
-        loss, loss_avg, recon = self.get_loss(images, paddings, background, tile_catalog)
+        images, tile_catalog, paddings = parse_dataset(batch, self.tile_slen)
+        loss, loss_avg, recon = self.get_loss(images, paddings, tile_catalog)
 
         res = (images - recon) / recon.sqrt()
         mean_max_residual = reduce(res.abs(), "b c h w -> b", "max").mean()
@@ -137,8 +128,8 @@ class GalaxyEncoder(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         """Pytorch lightning validation step."""
-        images, background, tile_catalog, paddings = parse_dataset(batch, self.tile_slen)
-        loss, loss_avg, recon = self.get_loss(images, paddings, background, tile_catalog)
+        images, tile_catalog, paddings = parse_dataset(batch, self.tile_slen)
+        loss, loss_avg, recon = self.get_loss(images, paddings, tile_catalog)
 
         res = (images - recon) / recon.sqrt()
         mean_max_residual = reduce(res.abs(), "b c h w -> b", "max").mean()
@@ -155,10 +146,9 @@ class GalaxyEncoder(pl.LightningModule):
         return Adam(self._enc.parameters(), self.lr)
 
     def _get_centered_padded_tiles(self, image_ptiles: Tensor, tile_locs_flat: Tensor) -> Tensor:
-        """Remove background, center padded tiles at given locations, and crop."""
-        img, bg = unpack(image_ptiles, [(1,), (1,)], "npt * h w")
+        """Center padded tiles at given locations, and crop."""
         shifted_ptiles = shift_sources_in_ptiles(
-            img - bg, tile_locs_flat, self.tile_slen, self.ptile_slen, center=True
+            image_ptiles, tile_locs_flat, self.tile_slen, self.ptile_slen, center=True
         )
         assert shifted_ptiles.shape[-1] == shifted_ptiles.shape[-2] == self.ptile_slen
         cropped_ptiles = shifted_ptiles[

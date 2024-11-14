@@ -6,6 +6,7 @@ from torch import Tensor
 from tqdm import tqdm
 
 from bliss.datasets.io import load_dataset_npz
+from bliss.datasets.lsst import BACKGROUND
 from bliss.encoders.autoencoder import OneCenteredGalaxyAE
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
 from bliss.reporting import get_single_galaxy_measurements, get_snr
@@ -40,11 +41,9 @@ class AutoEncoderFigures(BlissFigure):
         device = autoencoder.device  # GPU is better otherwise slow.
         image_data = load_dataset_npz(images_file)
         images: Tensor = image_data["images"]
-        backgrounds = image_data["background"]
-        background: Tensor = backgrounds[0].reshape(1, 1, 53, 53).to(device)
         noiseless_images: Tensor = image_data["noiseless"]
 
-        snr: Tensor = get_snr(noiseless_images, backgrounds)
+        snr: Tensor = get_snr(noiseless_images)
         recon_means = torch.tensor([])
 
         print("INFO: Computing reconstructions from saved autoencoder model...")
@@ -54,10 +53,10 @@ class AutoEncoderFigures(BlissFigure):
         with torch.no_grad():
             for i in tqdm(range(n_iters)):  # in batches otherwise GPU error.
                 bimages = images[batch_size * i : batch_size * (i + 1)].to(device)
-                recon_mean = autoencoder.forward(bimages, background)
+                recon_mean = autoencoder.forward(bimages)
                 recon_mean = recon_mean.detach().to("cpu")
                 recon_means = torch.cat((recon_means, recon_mean))
-        residuals = (recon_means - images) / recon_means.sqrt()
+        residuals = (recon_means - images) / BACKGROUND.sqrt()
         assert recon_means.shape[0] == noiseless_images.shape[0]
 
         # random
@@ -71,14 +70,9 @@ class AutoEncoderFigures(BlissFigure):
         absolute_residual = residuals.abs().sum(axis=(1, 2, 3))
         worst_indices = absolute_residual.argsort()[-self.n_examples - q : -q]
 
-        recon_no_background = recon_means - background.cpu()
-        assert torch.all(recon_no_background.sum(axis=(1, 2, 3)) > 0)
-        tflux, _, tellips = get_single_galaxy_measurements(
-            noiseless_images, backgrounds, no_bar=False
-        )
-        eflux, _, pellips = get_single_galaxy_measurements(
-            recon_no_background, backgrounds, no_bar=False
-        )
+        assert torch.all(recon_means.sum(axis=(1, 2, 3)) > 0)
+        tflux, _, tellips = get_single_galaxy_measurements(noiseless_images, no_bar=False)
+        eflux, _, pellips = get_single_galaxy_measurements(recon_means, no_bar=False)
         true_meas = {"true_fluxes": tflux, "true_ellips": tellips}
         recon_meas = {"recon_fluxes": eflux, "recon_ellips": pellips}
         measurements = {**true_meas, **recon_meas, "snr": snr}

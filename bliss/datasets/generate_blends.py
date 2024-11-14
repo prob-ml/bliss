@@ -7,13 +7,8 @@ from torch import Tensor
 from tqdm import tqdm
 
 from bliss.catalog import FullCatalog, TileCatalog
-from bliss.datasets.background import add_noise_and_background, get_constant_background
-from bliss.datasets.lsst import (
-    GALAXY_DENSITY,
-    PIXEL_SCALE,
-    STAR_DENSITY,
-    get_default_lsst_background,
-)
+from bliss.datasets.lsst import GALAXY_DENSITY, PIXEL_SCALE, STAR_DENSITY
+from bliss.datasets.noise import add_noise
 from bliss.datasets.padded_tiles import render_padded_image
 from bliss.datasets.render_utils import (
     render_one_galaxy,
@@ -49,8 +44,6 @@ def generate_dataset(
 
     size = slen + 2 * bp
 
-    background = get_constant_background(get_default_lsst_background(), (n_samples, 1, size, size))
-
     # internal region
     mean_sources_in = (galaxy_density + star_density) * (slen * PIXEL_SCALE / 60) ** 2
     mean_sources_out = (
@@ -58,7 +51,7 @@ def generate_dataset(
     )
     galaxy_prob = galaxy_density / (galaxy_density + star_density)
 
-    for ii in tqdm(range(n_samples)):
+    for _ in tqdm(range(n_samples)):
         full_cat = sample_full_catalog(
             catsim_table,
             all_star_mags,
@@ -80,7 +73,7 @@ def generate_dataset(
             padding_noiseless = torch.zeros_like(center_noiseless)
 
         noiseless = center_noiseless + padding_noiseless
-        noisy = add_noise_and_background(noiseless, background[ii, None])
+        noisy = add_noise(noiseless)
 
         images_list.append(noisy)
         noiseless_images_list.append(noiseless)
@@ -107,7 +100,6 @@ def generate_dataset(
 
     return {
         "images": images,
-        "background": background,
         "noiseless": noiseless,
         "uncentered_sources": uncentered_sources,
         "centered_sources": centered_sources,
@@ -117,12 +109,11 @@ def generate_dataset(
 
 
 def parse_dataset(dataset: dict[str, Tensor], tile_slen: int = 4):
-    """Parse dataset into a tuple of (images, background, TileCatalog)."""
+    """Parse dataset into a tuple of (images, TileCatalog)."""
     params = dataset.copy()  # make a copy to not change argument.
     images = params.pop("images")
-    background = params.pop("background")
     paddings = params.pop("paddings")
-    return images, background, TileCatalog(tile_slen, params), paddings
+    return images, TileCatalog(tile_slen, params), paddings
 
 
 def render_full_catalog(full_cat: FullCatalog, psf: galsim.GSObject, slen: int, bp: int):

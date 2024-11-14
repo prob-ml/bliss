@@ -39,12 +39,12 @@ def _log_info(seed, info: dict):
 
     Using datasets: {train_file}, {val_file}
     """
-    with open(LOG_FILE, "a") as f:
-        print(log_msg_short, file=f)
+    with open(LOG_FILE, "a") as f1:
+        print(log_msg_short, file=f1)
 
-    with open(LOG_FILE_LONG, "a") as f:
-        print("", file=f)
-        print(log_msg_long, file=f)
+    with open(LOG_FILE_LONG, "a") as f2:
+        print("", file=f2)
+        print(log_msg_long, file=f2)
 
 
 @click.command()
@@ -75,7 +75,7 @@ def main(
     else:
         try:
             version = int(version)
-        except:
+        except ValueError:
             raise ValueError("Version must be a number if passed in.")
 
     L.seed_everything(seed)

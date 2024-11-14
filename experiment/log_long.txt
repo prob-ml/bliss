@@ -149,3 +149,40 @@ Training detection with seed 44, ds_seed 42, version 28 at 2024-10-15 15:43:36.0
     lr: 0.0001
 
     Using datasets: ../data/datasets/train_ds_42.npz, ../data/datasets/val_ds_42.npz
+
+
+Training AE with seed 42, ds_seed 42, version 32 at 2024-11-13 14:32:00.449292.
+
+    validate_every_n_epoch 10,
+    batch_size 128, n_epochs 10000
+    learning rate 1e-05
+
+    Using datasets: ../data/datasets/train_ae_ds_42.npz, ../data/datasets/val_ae_ds_42.npz
+
+
+
+Training AE with seed 42, ds_seed 42, version 33 at 2024-11-13 21:45:24.889972.
+
+    validate_every_n_epoch 10,
+    batch_size 128, n_epochs 10000
+    learning rate 0.0003
+
+    Using datasets: ../data/datasets/train_ae_ds_42.npz, ../data/datasets/val_ae_ds_42.npz
+
+
+
+Training detection with seed 42, ds_seed 42, version 29 at 2024-11-13 21:51:17.381512.
+    validate_every_n_epoch 1,
+    val_check_interval 0.1, batch_size 32, n_epochs 50.
+    lr: 0.0001
+
+    Using datasets: ../data/datasets/train_ds_42.npz, ../data/datasets/val_ds_42.npz
+
+
+
+Training binary with seed 42, ds_seed 42, version 7 at 2024-11-13 21:58:20.079213.
+    validate_every_n_epoch 1,
+    val_check_interval 0.1, batch_size 32, n_epochs 30.
+    lr: 0.0001
+
+    Using datasets: ../data/datasets/train_ds_42.npz, ../data/datasets/val_ds_42.npz

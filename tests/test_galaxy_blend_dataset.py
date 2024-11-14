@@ -27,7 +27,6 @@ def test_galaxy_blend_catalogs():
     assert not torch.all(blends_ds["plocs"][0] == blends_ds["plocs"][1])
 
     images = blends_ds.pop("images")
-    background = blends_ds.pop("background")
     noiseless = blends_ds.pop("noiseless")
     blends_ds.pop("paddings")
     blends_ds.pop("centered_sources")
@@ -35,7 +34,7 @@ def test_galaxy_blend_catalogs():
     full_cat = FullCatalog(slen, slen, blends_ds)
     tile_cat = full_cat.to_tile_params(tile_slen, ignore_extra_sources=True)
     full_cat_from_tiles = tile_cat.to_full_params()
-    assert images.shape == background.shape == noiseless.shape
+    assert images.shape == noiseless.shape
 
     # check tile_catalog is internally consistent
     assert tile_cat.n_sources.shape == (100, n_tiles, n_tiles)
