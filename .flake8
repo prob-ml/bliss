@@ -108,3 +108,6 @@ ignore =
 
     # print is useful
     WPS421
+
+    # still use torch.load for cache files
+    S614

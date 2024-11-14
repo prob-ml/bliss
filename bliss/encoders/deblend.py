@@ -49,7 +49,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # decoder
         ae = OneCenteredGalaxyAE(decoder_slen, latent_dim, hidden, n_bands)
-        ae.load_state_dict(torch.load(ae_state_dict_path, weights_only=True))
+        ae.load_state_dict(torch.load(ae_state_dict_path, weights_only=True))  # noqa: S614
         self._dec = deepcopy(ae.dec)
         self._dec.requires_grad_(False)
         self._dec.eval()

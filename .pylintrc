@@ -30,6 +30,7 @@ disable=too-many-ancestors,
 	too-many-arguments,
 	too-many-locals,
 	too-many-instance-attributes,
+	too-many-positional-arguments,
 
 	# problems in the tests directory
 	redefined-outer-name,
