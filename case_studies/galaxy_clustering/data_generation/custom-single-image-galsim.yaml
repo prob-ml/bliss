@@ -23,13 +23,14 @@
 
 variables :
   nfiles : 1
-  image_size: 10000
-  input_dir : "/home/kapnadak/bliss/case_studies/galaxy_clustering/test_des_data/catalogs"
-  output_dir : "/home/kapnadak/bliss/case_studies/galaxy_clustering/test_des_data/images"
-  input_file : test_des_000.dat
-  output_file : test_des_000_g.fits
-  psf_dir : /nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/gband
-  psf_file : galsim_des_000_g.psf
+  image_size: 2560
+  input_dir : "/data/scratch/kapnadak/data-10-13/catalogs"
+  output_dir : "/data/scratch/kapnadak/data-10-13/images"
+  input_file : galsim_des_2495.dat
+  output_file : galsim_des_2495_z.fits
+  psf_dir : /nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/zband
+  psf_file : galsim_des_2495_z.psf
+  flux_col : 5 #5 for g, 6 for r, 7 for i, 8 for z
 
 modules :
   - galsim.des
@@ -78,7 +79,7 @@ gal :
 
   type : Gaussian
   half_light_radius : { type: Catalog, col: 9 }
-  flux : { type: Catalog, col: 5 } #using G band
+  flux : { type: Catalog, col: '@variables.flux_col' } #using G band
 
   shear :
     type : G1G2
