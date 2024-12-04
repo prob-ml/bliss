@@ -211,8 +211,8 @@ class LensingDC2Catalog(DC2FullCatalog):
         convergence = torch.from_numpy(catalog["convergence"].values)
         reduced_shear = complex_shear / (1.0 - convergence)
 
-        ellip1_intrinsic = torch.from_numpy(catalog["ellipticity_1_true"].values)
-        ellip2_intrinsic = torch.from_numpy(catalog["ellipticity_2_true"].values)
+        ellip1_intrinsic = torch.from_numpy(catalog["ellipticity_1_true_dc2"].values)
+        ellip2_intrinsic = torch.from_numpy(catalog["ellipticity_2_true_dc2"].values)
         complex_ellip_intrinsic = ellip1_intrinsic + ellip2_intrinsic * 1j
         complex_ellip_lensed = (complex_ellip_intrinsic + reduced_shear) / (
             1.0 + reduced_shear.conj() * complex_ellip_intrinsic
