@@ -7,6 +7,7 @@ import healpy as hp
 import numpy as np
 import pandas as pd
 from GCRCatalogs import GCRQuery
+from GCRCatalogs.helpers.tract_catalogs import tract_filter
 
 GCRCatalogs.set_root_dir("/data/scratch/dc2_nfs/")
 
@@ -43,7 +44,8 @@ truth_df = truth_cat.get_quantities(
         "mag_i",
         "mag_z",
         "mag_y",
-    ]
+    ],
+    native_filters=[tract_filter([3634, 3635, 3636, 3827, 3828, 3829, 3830, 4025, 4026, 4027])],
 )
 truth_df = pd.DataFrame(truth_df)
 
@@ -100,7 +102,9 @@ object_truth_df = object_truth_cat.get_quantities(
         "psf_fwhm_i",
         "psf_fwhm_z",
         "psf_fwhm_y",
-    ]
+    ],
+    filters=ra_dec_filters,
+    native_filters=[tract_filter([3634, 3635, 3636, 3827, 3828, 3829, 3830, 4025, 4026, 4027])],
 )
 object_truth_df = pd.DataFrame(object_truth_df)
 
