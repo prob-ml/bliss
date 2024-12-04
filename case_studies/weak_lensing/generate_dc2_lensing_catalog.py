@@ -107,7 +107,7 @@ object_truth_df = pd.DataFrame(object_truth_df)
 
 print("Loading CosmoDC2...\n")  # noqa: WPS421
 
-config_overwrite = {"catalog_root_dir": "/data/scratch/dc2_nfs/cosmoDC2"}
+config_overwrite = {"catalog_root_dir": "/data/scratch/dc2_nfs/cosmoDC2_v1.1.4"}
 
 cosmo_cat = GCRCatalogs.load_catalog("desc_cosmodc2", config_overwrite)
 
@@ -118,6 +118,8 @@ cosmo_df = cosmo_cat.get_quantities(
         "dec",
         "ellipticity_1_true",
         "ellipticity_2_true",
+        "ellipticity_1_true_dc2",
+        "ellipticity_2_true_dc2",
         "shear_1",
         "shear_2",
         "convergence",
