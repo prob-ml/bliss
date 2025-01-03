@@ -132,11 +132,12 @@ class DistributedChunkingSampler(DistributedSampler):
 
 
 class ChunkingDataset(Dataset):
-    def __init__(self, file_paths, shuffle=False, transform=None) -> None:
+    def __init__(self, file_paths, shuffle=False, transform=None, sparse_storage=False) -> None:
         super().__init__()
         self.file_paths = file_paths
         self.shuffle = shuffle
         self.transform = transform
+        self.sparse_storage = sparse_storage
 
         self.accumulated_file_sizes = torch.zeros(len(self.file_paths), dtype=torch.int64)
         for i, file_path in enumerate(self.file_paths):
@@ -179,6 +180,11 @@ class ChunkingDataset(Dataset):
             with open(self.file_paths[converted_index], "rb") as f:
                 self.buffered_data = torch.load(f)
         output_data = self.buffered_data[converted_sub_index]
+        if self.sparse_storage:
+            output_data["tile_catalog"] = {
+                k: v.to_dense() 
+                for k, v in output_data["tile_catalog"].items()
+            }
         return self.transform(output_data)
 
     def get_chunked_indices(self):
@@ -214,6 +220,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         train_transforms: List,
         nontrain_transforms: List,
         subset_fraction: float = None,
+        sparse_storage = False,
     ):
         super().__init__()
 
@@ -224,6 +231,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.train_transforms = train_transforms
         self.nontrain_transforms = nontrain_transforms
         self.subset_fraction = subset_fraction
+        self.sparse_storage = sparse_storage
 
         self.file_paths = None
         self.slices = None
@@ -291,7 +299,10 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
     def _get_dataset(self, sub_file_paths, defined_transforms, shuffle: bool = False):
         assert sub_file_paths, "No cached data found"
         transform = transforms.Compose(defined_transforms)
-        return ChunkingDataset(sub_file_paths, shuffle=shuffle, transform=transform)
+        return ChunkingDataset(sub_file_paths, 
+                               shuffle=shuffle, 
+                               transform=transform, 
+                               sparse_storage=self.sparse_storage)
 
     def _get_dataloader(self, my_dataset):
         distributed_is_used = dist.is_available() and dist.is_initialized()

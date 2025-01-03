@@ -229,8 +229,14 @@ class TileCatalog(BaseTileCatalog):
         slen = self.n_tiles_h * tile_slen
         wlen = self.n_tiles_w * tile_slen
         # coordinates on tiles.
-        x_coords = torch.arange(0, slen, tile_slen, device=self["locs"].device).long()
-        y_coords = torch.arange(0, wlen, tile_slen, device=self["locs"].device).long()
+        if isinstance(tile_slen, int):
+            x_coords = torch.arange(0, slen, tile_slen, device=self["locs"].device).long()
+            y_coords = torch.arange(0, wlen, tile_slen, device=self["locs"].device).long()
+        else:
+            # for float tile_slen e.g. tile_slen=0.5
+            x_coords = torch.arange(0, slen, tile_slen, device=self["locs"].device)
+            y_coords = torch.arange(0, wlen, tile_slen, device=self["locs"].device)
+            
         tile_coords = torch.cartesian_prod(x_coords, y_coords)
 
         # recenter and renormalize locations.
@@ -545,7 +551,7 @@ class FullCatalog(UserDict):
                 filter out the sources outside the image.
                 (e.g. In case of data augmentation, there is a chance of some sources located
                 outside the image)
-            stable: It stable is True (default), on tiles with more than one sources,
+            stable: If stable is True (default), on tiles with more than one sources,
                 the sources will be arranged in a stable order.
                 Some speedup can be gained if you disable this tag.
             inter_int_type: The dtype for the tensors counting the sources per tile.
@@ -737,6 +743,9 @@ class FullCatalog(UserDict):
                 nth=n_tiles_h,
                 ntw=n_tiles_w,
             )
+            assert torch.allclose((rearrange(~(tile_n_sources > 0), 
+                                            "b nth ntw -> b nth ntw 1 1") * target_v).nan_to_num(),
+                                  torch.zeros_like(target_v))
             tile_params[tile_k] = target_v
         # modify tile location
         tile_params["locs"] = (tile_params["locs"] % tile_slen) / tile_slen

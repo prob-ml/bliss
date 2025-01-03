@@ -120,8 +120,6 @@ encoder:
         _target_: case_studies.dc2_cataloging.utils.variational_dist.CalibrationVariationalDist
         tile_slen: ${surveys.dc2.tile_slen}
         factors: ${my_variational_factors}
-        ci_lower_q: 0.05
-        ci_upper_q: 0.95
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -138,7 +136,7 @@ encoder:
         compute_groups: false
         metrics: ${my_metrics}
     sample_image_renders: null
-    use_double_detect: true
+    use_double_detect: false
     use_checkerboard: true
     n_sampler_colors: 4
     predict_mode_not_samples: true
@@ -147,8 +145,8 @@ train:
     trainer:
         logger:
             name: DC2_cataloging_exp
-            version: exp_10-16-3  # change it before running the code
-        devices: [7]  # change it before running the code
+            version: exp_12-05-3  # change it before running the code
+        devices: [3]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
     data_source: ${surveys.dc2}

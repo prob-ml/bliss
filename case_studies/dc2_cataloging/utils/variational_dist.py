@@ -49,12 +49,10 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
     `encoder.detect_first` -> `var_dist.sample` -> ... (one detection case)
     """
 
-    def __init__(self, factors, tile_slen, ci_lower_q, ci_upper_q):
-        super().__init__(factors, tile_slen)
-        assert ci_lower_q < ci_upper_q
-        self.ci_lower_q = ci_lower_q
-        self.ci_upper_q = ci_upper_q
+    ci_cover_list = [0.95, 0.9, 0.8, 0.7, 0.6, 0.5, 0.25]
 
+    def __init__(self, factors, tile_slen):
+        super().__init__(factors, tile_slen)
         self.sample_context = None
         self.cur_context_index = None
 
@@ -112,32 +110,36 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
         return_base_cat=False,
     ):
         sample_result = super().sample(x_cat, use_mode=use_mode)
+        if self.sample_context is None:
+            return sample_result
 
-        if self.sample_context is not None:
-            cur_true_tile_cat = self.sample_context[self.cur_context_index]
-            assert cur_true_tile_cat.max_sources == 1
-            assert sample_result.max_sources == 1
-            fp_pairs = self._factor_param_pairs(x_cat)
-            # for now, only test the vsbc for locs, ellipticity and flux
-            vsbc_variables = {
-                "locs",
-                "ellipticity",
-                "fluxes",
-            }
-            credible_interval_variables = {
-                "locs",
-                "ellipticity",
-                "fluxes",
-            }
-            for qk, params in fp_pairs:
-                if qk.name in vsbc_variables:
-                    sample_result[qk.name + "_vsbc"] = self._get_vsbc(qk, params, cur_true_tile_cat)
-                if qk.name in credible_interval_variables:
+        cur_true_tile_cat = self.sample_context[self.cur_context_index]
+        assert cur_true_tile_cat.max_sources == 1
+        assert sample_result.max_sources == 1
+        fp_pairs = self._factor_param_pairs(x_cat)
+        # for now, only test the vsbc for locs, ellipticity and flux
+        vsbc_variables = {
+            "locs",
+            "ellipticity",
+            "fluxes",
+        }
+        credible_interval_variables = {
+            "locs",
+            "ellipticity",
+            "fluxes",
+        }
+        for qk, params in fp_pairs:
+            if qk.name in vsbc_variables:
+                sample_result[qk.name + "_vsbc"] = self._get_vsbc(qk, params, cur_true_tile_cat)
+            if qk.name in credible_interval_variables:
+                for ci_cover in self.ci_cover_list:
+                    ci_lower_q = (1 - ci_cover) / 2
+                    ci_upper_q = 1 - ci_lower_q
                     lower_b, upper_b = self._get_credible_interval(
-                        qk, params, self.ci_lower_q, self.ci_upper_q
+                        qk, params, ci_lower_q, ci_upper_q
                     )
-                    sample_result[qk.name + "_ci_lower"] = lower_b
-                    sample_result[qk.name + "_ci_upper"] = upper_b
-            self.cur_context_index = (self.cur_context_index + 1) % len(self.sample_context)
+                    sample_result[qk.name + f"_{ci_cover:.2f}_ci_lower"] = lower_b
+                    sample_result[qk.name + f"_{ci_cover:.2f}_ci_upper"] = upper_b
+        self.cur_context_index = (self.cur_context_index + 1) % len(self.sample_context)
 
         return sample_result
