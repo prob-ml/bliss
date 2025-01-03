@@ -186,3 +186,23 @@ Training binary with seed 42, ds_seed 42, version 7 at 2024-11-13 21:58:20.07921
     lr: 0.0001
 
     Using datasets: ../data/datasets/train_ds_42.npz, ../data/datasets/val_ds_42.npz
+
+
+Training deblender with seed 42, ds_seed 42, version 26 at 2024-11-14 14:49:51.368658.
+    validate_every_n_epoch 10,
+    val_check_interval None, batch_size 128, n_epochs 10000.
+    lr: 0.0001
+
+    Using datasets: ../data/datasets/train_ds_42.npz, ../data/datasets/val_ds_42.npz
+
+AE path: ../models/autoencoder_42_42.pt
+
+
+Training deblender with seed 42, ds_seed 42, version 27 at 2024-11-14 14:53:26.147663.
+    validate_every_n_epoch 10,
+    val_check_interval None, batch_size 128, n_epochs 10000.
+    lr: 0.0001
+
+    Using datasets: ../data/datasets/train_ds_42.npz, ../data/datasets/val_ds_42.npz
+
+AE path: ../models/autoencoder_42_42.pt

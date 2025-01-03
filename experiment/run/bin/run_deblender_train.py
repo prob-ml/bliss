@@ -21,7 +21,7 @@ NUM_WORKERS = 0
 @click.option("--lr", default=1e-4, type=float)
 @click.option("-e", "--n-epochs", type=int, default=10_000)
 @click.option("--validate-every-n-epoch", default=10, type=int)
-@click.option("--log-every-n-steps", default=100, type=int)
+@click.option("--log-every-n-steps", default=25, type=int)
 def main(
     seed: int,
     ds_seed: int,

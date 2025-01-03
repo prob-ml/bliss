@@ -11,7 +11,6 @@ from bliss.datasets.generate_blends import parse_dataset
 from bliss.encoders.layers import EncoderCNN, make_enc_final
 from bliss.grid import validate_border_padding
 from bliss.render_tiles import get_images_in_tiles, get_n_padded_tiles_hw
-from bliss.reporting import DetectionMetrics
 
 
 class DetectionEncoder(pl.LightningModule):
@@ -67,9 +66,6 @@ class DetectionEncoder(pl.LightningModule):
             self._dim_out_all,
             dropout,
         )
-
-        # metrics
-        self.val_detection_metrics = DetectionMetrics(slack=1.0)
 
     def forward(self, images: Tensor):
         image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
@@ -194,9 +190,6 @@ class DetectionEncoder(pl.LightningModule):
         # compute tiled metrics
         tiled_metrics = _compute_tiled_metrics(truth_cat, pred_cat, tile_slen=self.tile_slen)
 
-        # compute full metrics with matching
-        self.val_detection_metrics.update(truth_cat.to_full_params(), pred_cat.to_full_params())
-
         # logging
         self.log("val/loss", out["loss"], batch_size=batch_size)
         self.log("val/counter_loss", out["counter_loss"], batch_size=batch_size)
@@ -206,12 +199,6 @@ class DetectionEncoder(pl.LightningModule):
         )
 
         return out["loss"]
-
-    def on_validation_epoch_end(self) -> None:
-        out = self.val_detection_metrics.compute()
-        out_log = {f"val/full/{p}": q for p, q in out.items()}
-        self.log_dict(out_log, reduce_fx="mean")
-        self.val_detection_metrics.reset()
 
     def configure_optimizers(self):
         return Adam(self.parameters(), lr=1e-4)

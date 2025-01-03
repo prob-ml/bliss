@@ -5,6 +5,8 @@
 # expressions are accepted.
 generated-members=numpy.*,torch.*
 
+extension-pkg-allow-list=sep_pjw
+
 # We get too-many-ancestors warnings whenever we inherit LightningModule:
 # it's not really a problem and there isn't really anything we could do
 # about it anyway

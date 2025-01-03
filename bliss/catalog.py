@@ -14,6 +14,8 @@ class TileCatalog(UserDict):
         "galaxy_params",
         "galaxy_bools",
         "fluxes",
+        "fluxes_sep",
+        "fluxerrs",
         "mags",
         "locs_sd",
         "ellips",
@@ -216,6 +218,7 @@ class FullCatalog(UserDict):
         assert self.plocs.shape[-1] == 2
         assert self.n_sources.max().int() <= self.max_n_sources
         assert self.n_sources.shape == (self.batch_size,)
+        assert self.n_sources.dtype == torch.int64
         super().__init__(**d)
 
     def __setitem__(self, key: str, item: Tensor) -> None:
@@ -314,7 +317,7 @@ class FullCatalog(UserDict):
             for idx, coords in enumerate(tile_coords[ii][:n_sources]):
                 n_sources_in_tile = tile_n_sources[ii, coords[0], coords[1]]
                 assert n_sources_in_tile.ndim == 0
-                assert n_sources_in_tile.le(1) or n_sources_in_tile.ge(0)
+                assert n_sources_in_tile.le(1) and n_sources_in_tile.ge(0)
                 assert n_sources_in_tile.dtype is torch.int64
                 if n_sources_in_tile > 0:
                     if not ignore_extra_sources:
@@ -392,3 +395,13 @@ def get_is_on_from_n_sources(n_sources: Tensor, max_n_sources: int) -> Tensor:
         is_on_array[..., i] = n_sources > i
 
     return is_on_array
+
+
+def collate(tile_map_list: list[dict[str, Tensor]]) -> dict[str, Tensor]:
+    """Combine multiple Tensors across dictionaries into a single dictionary."""
+    assert tile_map_list  # not empty
+
+    out: dict[str, Tensor] = {}
+    for k in tile_map_list[0]:
+        out[k] = torch.cat([d[k] for d in tile_map_list], dim=0)
+    return out

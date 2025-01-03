@@ -2,6 +2,7 @@
 exclude =
     .git,
     tests/**
+    experiment/**
 max-line-length = 100
 inline-quotes = double
 docstring-convention=google
@@ -107,7 +108,14 @@ ignore =
     WPS303,
 
     # print is useful
-    WPS421
+    WPS421,
 
     # still use torch.load for cache files
-    S614
+    S614,
+
+    # I like underscore variables
+    WPS121,
+    WPS122,
+
+    # trailing commas ok
+    C816

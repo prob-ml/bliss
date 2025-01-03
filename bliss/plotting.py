@@ -245,8 +245,9 @@ def scatter_shade_plot(
     color: str = "#377eb8",
     alpha: float = 0.5,
     qs: Tuple[float, float] = (0.025, 0.975),  # 95% confidence interval
-    use_boot=False,
-    use_mean=False,
+    label: str = "",
+    use_boot: bool = False,
+    use_mean: bool = False,
 ):
     assert x.ndim == y.ndim == 1
     xbins = np.arange(xlims[0], xlims[1], delta)
@@ -274,5 +275,5 @@ def scatter_shade_plot(
         else:
             yqs[i, :] = np.quantile(y_bin, qs[0]), np.quantile(y_bin, qs[1])
 
-    ax.plot(xs, ys, marker="o", c=color, linestyle="-")
+    ax.plot(xs, ys, marker="o", c=color, linestyle="-", label=label)
     ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=alpha)

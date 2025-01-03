@@ -1,15 +1,46 @@
 import numpy as np
 import torch
+from einops import reduce
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from torch import Tensor
 from tqdm import tqdm
 
 from bliss.datasets.io import load_dataset_npz
-from bliss.datasets.lsst import BACKGROUND
+from bliss.datasets.lsst import BACKGROUND, PIXEL_SCALE
 from bliss.encoders.autoencoder import OneCenteredGalaxyAE
 from bliss.plotting import BlissFigure, plot_image, scatter_shade_plot
-from bliss.reporting import get_single_galaxy_measurements, get_snr
+from bliss.reporting import get_single_galaxy_ellipticities, get_snr
+
+
+def _get_single_galaxy_measurements(
+    images: Tensor,
+    pixel_scale: float = PIXEL_SCALE,
+    no_bar: bool = True,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Compute individual galaxy measurements from noiseless isolated images of galaxies.
+    Args:
+        pixel_scale: Conversion from arcseconds to pixel.
+        images: Array of shape (n_samples, n_bands, slen, slen) containing images of
+            single-centered galaxies without noise or background.
+    Returns:
+        Dictionary containing fluxes, magnitudes, and ellipticities of `images`.
+    """
+    _, c, h, w = images.shape
+    assert h == w and c == 1
+    assert images.device == torch.device("cpu")
+
+    # flux
+    fluxes = reduce(images, "b c h w -> b", "sum")
+
+    # snr
+    snrs = get_snr(images)
+
+    # ellipticity
+    # correctly handles 0s
+    ellips = get_single_galaxy_ellipticities(images[:, 0], pixel_scale, no_bar=no_bar)
+
+    return fluxes, snrs, ellips
 
 
 class AutoEncoderFigures(BlissFigure):
@@ -71,8 +102,8 @@ class AutoEncoderFigures(BlissFigure):
         worst_indices = absolute_residual.argsort()[-self.n_examples - q : -q]
 
         assert torch.all(recon_means.sum(axis=(1, 2, 3)) > 0)
-        tflux, _, tellips = get_single_galaxy_measurements(noiseless_images, no_bar=False)
-        eflux, _, pellips = get_single_galaxy_measurements(recon_means, no_bar=False)
+        tflux, _, tellips = _get_single_galaxy_measurements(noiseless_images, no_bar=False)
+        eflux, _, pellips = _get_single_galaxy_measurements(recon_means, no_bar=False)
         true_meas = {"true_fluxes": tflux, "true_ellips": tellips}
         recon_meas = {"recon_fluxes": eflux, "recon_ellips": pellips}
         measurements = {**true_meas, **recon_meas, "snr": snr}

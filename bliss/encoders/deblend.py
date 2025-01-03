@@ -69,10 +69,7 @@ class GalaxyEncoder(pl.LightningModule):
         image_ptiles_flat = rearrange(image_ptiles, "n nth ntw c h w -> (n nth ntw) c h w")
         tile_locs_flat = rearrange(tile_catalog.locs, "n nth ntw xy -> (n nth ntw) xy")
         galaxy_params_flat: Tensor = self(image_ptiles_flat, tile_locs_flat)
-        assert galaxy_params_flat.ndim == 2
 
-        # draw fully reconstructed image.
-        # NOTE: Assume recon_mean = recon_var per poisson approximation.
         galaxy_params_pred = rearrange(
             galaxy_params_flat, "(b nth ntw) d -> b nth ntw d", nth=nth, ntw=ntw
         )
@@ -85,23 +82,21 @@ class GalaxyEncoder(pl.LightningModule):
             self.tile_slen,
             self.n_bands,
         )
-        assert recon_ptiles.shape[-1] == recon_ptiles.shape[-2] == self.ptile_slen
         recon_mean = reconstruct_image_from_ptiles(recon_ptiles, self.tile_slen)
         assert recon_mean.ndim == 4 and recon_mean.shape[-1] == images.shape[-1]
         recon_mean += paddings  # target only galaxies within tiles.
         assert not torch.any(torch.logical_or(torch.isnan(recon_mean), torch.isinf(recon_mean)))
 
         recon_losses: Tensor = -Normal(recon_mean, self.background_sqrt).log_prob(images)
-        assert not torch.any(torch.logical_or(torch.isnan(recon_losses), torch.isinf(recon_losses)))
 
         return recon_losses.sum(), recon_losses.mean(), recon_mean
 
-    def variational_mode(self, images: Tensor, tile_catalog: TileCatalog):
-        _, nth, ntw, _ = tile_catalog.locs.shape
+    def variational_mode(self, images: Tensor, tile_locs: Tensor):
+        _, nth, ntw, _ = tile_locs.shape
 
         image_ptiles = get_images_in_tiles(images, self.tile_slen, self.ptile_slen)
         image_ptiles_flat = rearrange(image_ptiles, "n nth ntw c h w -> (n nth ntw) c h w")
-        tile_locs_flat = rearrange(tile_catalog.locs, "n nth ntw xy -> (n nth ntw) xy")
+        tile_locs_flat = rearrange(tile_locs, "n nth ntw xy -> (n nth ntw) xy")
         galaxy_params_flat: Tensor = self(image_ptiles_flat, tile_locs_flat)
 
         return rearrange(galaxy_params_flat, "(b nth ntw) d -> b nth ntw d", nth=nth, ntw=ntw)
@@ -111,7 +106,7 @@ class GalaxyEncoder(pl.LightningModule):
         images, tile_catalog, paddings = parse_dataset(batch, self.tile_slen)
         loss, loss_avg, recon = self.get_loss(images, paddings, tile_catalog)
 
-        res = (images - recon) / recon.sqrt()
+        res = (images - recon) / self.background_sqrt
         mean_max_residual = reduce(res.abs(), "b c h w -> b", "max").mean()
 
         self.log("train/loss", loss, batch_size=len(images), on_step=False, on_epoch=True)
@@ -131,7 +126,7 @@ class GalaxyEncoder(pl.LightningModule):
         images, tile_catalog, paddings = parse_dataset(batch, self.tile_slen)
         loss, loss_avg, recon = self.get_loss(images, paddings, tile_catalog)
 
-        res = (images - recon) / recon.sqrt()
+        res = (images - recon) / self.background_sqrt
         mean_max_residual = reduce(res.abs(), "b c h w -> b", "max").mean()
 
         self.log("val/loss", loss, batch_size=len(images))
