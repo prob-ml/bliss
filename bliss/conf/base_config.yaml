@@ -269,7 +269,7 @@ surveys:
             - _target_: bliss.data_augmentation.RotateFlipTransform
             - _target_: bliss.data_augmentation.RandomShiftTransform
               tile_slen: ${surveys.dc2.tile_slen}
-              max_sources_per_tile: ${surveys.dc2.tile_slen}
+              max_sources_per_tile: ${surveys.dc2.max_sources_per_tile}
             - _target_: bliss.cached_dataset.FluxFilterTransform
               reference_band: 2  # r-band
               min_flux: 100

@@ -2,3 +2,4 @@
 *_output/
 *.out
 !merged_catalog/merged_catalog_with_flux_over_50.pkl
+ori_file/

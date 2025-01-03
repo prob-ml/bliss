@@ -3,7 +3,7 @@ import copy
 import logging
 import multiprocessing
 import pathlib
-from typing import List
+from typing import List, Dict
 
 import numpy as np
 import pandas as pd
@@ -38,9 +38,21 @@ def unpack_dict(ori_dict):
 def split_tensor(
     ori_tensor: torch.Tensor, split_size: int, split_first_dim: int, split_second_dim: int
 ):
+    split_size = int(split_size)
     tensor_splits = torch.stack(ori_tensor.split(split_size, dim=split_first_dim))
     tensor_splits = torch.stack(tensor_splits.split(split_size, dim=split_second_dim + 1), dim=1)
     return [sub_tensor.squeeze(0) for sub_tensor in tensor_splits.flatten(0, 1).split(1, dim=0)]
+
+def convert_tile_dict_to_sparse(ori_tile_dict: Dict[str, torch.Tensor]):
+    sparse_tile_dict = {}
+    for ori_k, ori_v in ori_tile_dict.items():
+        if ori_k == "n_sources":
+            assert len(ori_v.shape) == 2
+            sparse_tile_dict[ori_k] = ori_v.to_sparse()
+            continue
+        assert len(ori_v.shape) == 4
+        sparse_tile_dict[ori_k] = ori_v.to_sparse(3)  # the last dim will be dense
+    return sparse_tile_dict
 
 
 class DC2DataModule(CachedSimulatedDataModule):
@@ -64,6 +76,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         train_transforms: List,
         nontrain_transforms: List,
         subset_fraction: float = None,
+        store_sparse_tensor = False,
     ):
         super().__init__(
             splits,
@@ -73,6 +86,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             train_transforms,
             nontrain_transforms,
             subset_fraction,
+            store_sparse_tensor
         )
 
         self.dc2_image_dir = dc2_image_dir
@@ -85,6 +99,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         self.catalog_min_r_flux = catalog_min_r_flux
         self.prepare_data_processes_num = prepare_data_processes_num
         self.data_in_one_cached_file = data_in_one_cached_file
+        self.store_sparse_tensor = store_sparse_tensor
 
         assert (
             self.image_lim[0] == self.image_lim[1]
@@ -285,6 +300,10 @@ class DC2DataModule(CachedSimulatedDataModule):
                     split, lambda x: x.clone() if isinstance(x, torch.Tensor) else x
                 )
                 split_clone.update(wcs_header_str=wcs_header_str)
+                if self.store_sparse_tensor:
+                    split_clone["tile_catalog"] = convert_tile_dict_to_sparse(
+                        split_clone["tile_catalog"]
+                    )
                 tmp_data_cached.append(split_clone)
             assert data_count < 1e5 and image_index < 1e5, "too many cached data files"
             assert len(tmp_data_cached) < 1e5, "too many cached data in one file"

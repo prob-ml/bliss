@@ -1,19 +1,19 @@
 ---
 defaults:
-    - train_config
+    - ynet_diffusion_train_config
     - _self_
     - override hydra/job_logging: stdout
 
 train:
     trainer:
         logger:
-            name: DC2_debug
-            version: DC2_debug
-        devices: [5]
+            name: DC2_ynet_diffusion_debug
+            version: DC2_ynet_diffusion_debug
+        devices: [2]
 
 surveys:
     dc2:
         # dc2_cat_path: /home/pduan/bliss/case_studies/dc2_cataloging/generate_new_catalog_output/merged_catalog_with_flux_over_50.pkl
-        cached_data_path: /data/scratch/dc2local/tmp_data/dc2_cached_data
+        # cached_data_path: /data/scratch/dc2local/tmp_data/dc2_cached_data
         prepare_data_processes_num: 4
-        subset_fraction: 0.1
+        # subset_fraction: 0.1
