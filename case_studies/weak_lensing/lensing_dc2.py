@@ -3,6 +3,7 @@ import math
 import sys
 from typing import List
 
+import numpy as np
 import pandas as pd
 import torch
 
@@ -102,10 +103,10 @@ class LensingDC2DataModule(DC2DataModule):
             v_count = torch.zeros(self.batch_size, num_tiles, v.shape[-1], dtype=v.dtype)
             add_pos = torch.ones_like(v)
 
-            if k == "psf":
-                psf_nanmask = ~torch.isnan(v).any(dim=-1, keepdim=True).expand(-1, -1, v.shape[-1])
-                v = torch.where(psf_nanmask, v, torch.tensor(0.0))
-                add_pos = psf_nanmask.float().to(v.dtype)
+            if k in {"psf", "ellip1_lsst", "ellip2_lsst"}:
+                nanmask = ~torch.isnan(v).any(dim=-1, keepdim=True).expand(-1, -1, v.shape[-1])
+                v = torch.where(nanmask, v, torch.tensor(0.0))
+                add_pos = nanmask.float().to(v.dtype)
                 source_to_tile_indices = source_to_tile_indices_default.expand(-1, -1, v.shape[-1])
             else:
                 source_to_tile_indices = source_to_tile_indices_default
@@ -167,6 +168,9 @@ class LensingDC2DataModule(DC2DataModule):
         ellip1_lensed = tile_dict["ellip1_lensed_sum"] / tile_dict["ellip1_lensed_count"]
         ellip2_lensed = tile_dict["ellip2_lensed_sum"] / tile_dict["ellip2_lensed_count"]
         ellip_lensed = torch.stack((ellip1_lensed.squeeze(-1), ellip2_lensed.squeeze(-1)), dim=-1)
+        ellip1_lsst = tile_dict["ellip1_lsst_sum"] / tile_dict["ellip1_lsst_count"]
+        ellip2_lsst = tile_dict["ellip2_lsst_sum"] / tile_dict["ellip2_lsst_count"]
+        ellip_lsst = torch.stack((ellip1_lsst.squeeze(-1), ellip2_lsst.squeeze(-1)), dim=-1)
         redshift = tile_dict["redshift_sum"] / tile_dict["redshift_count"]
         ra = tile_dict["ra_sum"] / tile_dict["ra_count"]
         dec = tile_dict["dec_sum"] / tile_dict["dec_count"]
@@ -175,7 +179,8 @@ class LensingDC2DataModule(DC2DataModule):
         tile_dict["shear_2"] = shear2
         tile_dict["convergence"] = convergence
         tile_dict["ellip_lensed"] = ellip_lensed
-        tile_dict["ellip_lensed_wavg"] = compute_weighted_avg_ellip(
+        tile_dict["ellip_lsst"] = ellip_lsst
+        tile_dict["ellip_lsst_wavg"] = compute_weighted_avg_ellip(
             tile_dict, self.avg_ellip_kernel_size, self.avg_ellip_kernel_sigma
         )
         tile_dict["redshift"] = redshift
@@ -220,6 +225,13 @@ class LensingDC2Catalog(DC2FullCatalog):
         ellip1_lensed = torch.view_as_real(complex_ellip_lensed)[..., 0]
         ellip2_lensed = torch.view_as_real(complex_ellip_lensed)[..., 1]
 
+        ixx = torch.from_numpy(catalog["Ixx_pixel"].values)
+        iyy = torch.from_numpy(catalog["Iyy_pixel"].values)
+        ixy = torch.from_numpy(catalog["Ixy_pixel"].values)
+        ellip_lsst = (ixx - iyy + 2j * ixy) / (ixx + iyy + 2 * np.sqrt(ixx * iyy - (ixy**2)))
+        ellip1_lsst = torch.view_as_real(ellip_lsst)[..., 0]
+        ellip2_lsst = torch.view_as_real(ellip_lsst)[..., 1]
+
         redshift = torch.from_numpy(catalog["redshift"].values)
 
         _, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog, median=False)
@@ -240,6 +252,8 @@ class LensingDC2Catalog(DC2FullCatalog):
         convergence = convergence[plocs_mask]
         ellip1_lensed = ellip1_lensed[plocs_mask]
         ellip2_lensed = ellip2_lensed[plocs_mask]
+        ellip1_lsst = ellip1_lsst[plocs_mask]
+        ellip2_lsst = ellip2_lsst[plocs_mask]
 
         redshift = redshift[plocs_mask]
 
@@ -257,6 +271,8 @@ class LensingDC2Catalog(DC2FullCatalog):
             "convergence": convergence.reshape(1, nobj, 1),
             "ellip1_lensed": ellip1_lensed.reshape(1, nobj, 1),
             "ellip2_lensed": ellip2_lensed.reshape(1, nobj, 1),
+            "ellip1_lsst": ellip1_lsst.reshape(1, nobj, 1),
+            "ellip2_lsst": ellip2_lsst.reshape(1, nobj, 1),
             "redshift": redshift.reshape(1, nobj, 1),
             "psf": psf_params.reshape(1, nobj, -1),
         }
