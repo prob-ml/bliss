@@ -225,8 +225,8 @@ class LensingDC2Catalog(DC2FullCatalog):
         ellip1_lensed = torch.view_as_real(complex_ellip_lensed)[..., 0]
         ellip2_lensed = torch.view_as_real(complex_ellip_lensed)[..., 1]
 
-        ixx = torch.from_numpy(catalog["Ixx_pixel"].values)
-        iyy = torch.from_numpy(catalog["Iyy_pixel"].values)
+        ixx = torch.from_numpy(catalog["Iyy_pixel"].values)  # align coordinate system
+        iyy = torch.from_numpy(catalog["Ixx_pixel"].values)  # align coordinate system
         ixy = torch.from_numpy(catalog["Ixy_pixel"].values)
         ellip_lsst = (ixx - iyy + 2j * ixy) / (ixx + iyy + 2 * np.sqrt(ixx * iyy - (ixy**2)))
         ellip1_lsst = torch.view_as_real(ellip_lsst)[..., 0]
