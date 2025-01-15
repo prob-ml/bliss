@@ -8,9 +8,9 @@ from tqdm import tqdm
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.lsst import GALAXY_DENSITY, PIXEL_SCALE, STAR_DENSITY
-from bliss.datasets.noise import add_noise
 from bliss.datasets.padded_tiles import render_padded_image
 from bliss.datasets.render_utils import (
+    add_noise,
     render_one_galaxy,
     render_one_star,
     sample_bernoulli,

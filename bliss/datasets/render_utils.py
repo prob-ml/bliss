@@ -7,8 +7,12 @@ from astropy.table import Table
 from einops import rearrange
 from torch import Tensor
 
-from bliss.datasets.lsst import PIXEL_SCALE, convert_mag_to_flux
+from bliss.datasets.lsst import BACKGROUND, PIXEL_SCALE, convert_mag_to_flux
 from bliss.datasets.table_utils import catsim_row_to_galaxy_params
+
+
+def add_noise(image: Tensor) -> Tensor:
+    return image + BACKGROUND.sqrt() * torch.randn_like(image)
 
 
 def render_one_star(

@@ -3,8 +3,7 @@ import torch
 from astropy.table import Table
 from tqdm import tqdm
 
-from bliss.datasets.noise import add_noise
-from bliss.datasets.render_utils import render_one_galaxy, sample_galaxy_params
+from bliss.datasets.render_utils import add_noise, render_one_galaxy, sample_galaxy_params
 
 
 def generate_individual_dataset(
