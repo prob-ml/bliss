@@ -12,6 +12,7 @@ from astropy.io import fits
 from astropy.io.fits import Header
 from astropy.wcs import WCS
 from einops import rearrange
+from pathlib import Path
 
 from bliss.cached_dataset import CachedSimulatedDataModule
 from bliss.catalog import FullCatalog, SourceType
@@ -50,6 +51,8 @@ class DC2DataModule(CachedSimulatedDataModule):
         self,
         dc2_image_dir: str,
         dc2_cat_path: str,
+        tracts: List[int],
+        n_test_patches: int,
         image_lim: List[int],
         n_image_split: int,
         tile_slen: int,
@@ -75,8 +78,10 @@ class DC2DataModule(CachedSimulatedDataModule):
             subset_fraction,
         )
 
-        self.dc2_image_dir = dc2_image_dir
-        self.dc2_cat_path = dc2_cat_path
+        self.dc2_image_dir = Path(dc2_image_dir)
+        self.dc2_cat_path = Path(dc2_cat_path)
+        self.tracts = tracts
+        self.n_test_patches = n_test_patches
 
         self.image_lim = image_lim
         self.n_image_split = n_image_split
@@ -99,6 +104,10 @@ class DC2DataModule(CachedSimulatedDataModule):
 
         self._image_files = None
         self._bg_files = None
+        self._image_files_test = None
+        self._bg_files_test = None
+        self._patches_train = None
+        self._patches_test = None
 
     def _load_image_and_bg_files_list(self):
         img_pattern = "**/*/calexp*.fits"
@@ -107,43 +116,52 @@ class DC2DataModule(CachedSimulatedDataModule):
         bg_files = []
 
         for band in self.bands:
-            band_path = self.dc2_image_dir + str(band)
-            img_file_list = list(pathlib.Path(band_path).glob(img_pattern))
-            bg_file_list = list(pathlib.Path(band_path).glob(bg_pattern))
+            for tract in self.tracts:
+                band_tract_path = Path(self.dc2_image_dir) / str(band) /  str(tract)
+                img_file_list = list(pathlib.Path(band_tract_path).glob(img_pattern))
+                bg_file_list = list(pathlib.Path(band_tract_path).glob(bg_pattern))
 
             image_files.append(sorted(img_file_list))
             bg_files.append(sorted(bg_file_list))
         n_image = len(bg_files[0])
 
         # assign state only in main process
-        self._image_files = image_files
-        self._bg_files = bg_files
+        self._image_files = [image_files_one_band[:-self.n_test_patches] for image_files_one_band in image_files]
+        self._image_files_test = [image_files_one_band[-self.n_test_patches:] for image_files_one_band in image_files]
+        self._bg_files = [bg_files_one_band[:-self.n_test_patches] for bg_files_one_band in bg_files]
+        self._bg_files_test = [bg_files_one_band[-self.n_test_patches:] for bg_files_one_band in bg_files]
 
-        return n_image
+        # record which patches are train and test
+        self._patches_train = [str(file_name).split('-')[-1][:3] for file_name in self._image_files[0]] # TODO: hack
+        self._patches_test = [str(file_name).split('-')[-1][:3] for file_name in self._image_files_test[0]] # TODO: hack
+
+        return n_image-self.n_test_patches, self.n_test_patches # (num_train, num_test)
 
     def prepare_data(self):  # noqa: WPS324
-        if self.cached_data_path.exists():
-            logger = logging.getLogger("DC2DataModule")
-            warning_msg = "WARNING: cached data already exists at [%s], we directly use it\n"
-            logger.warning(warning_msg, str(self.cached_data_path))
-            return None
+        # if self.cached_data_path.exists():
+        #     logger = logging.getLogger("DC2DataModule")
+        #     warning_msg = "WARNING: cached data already exists at [%s], we directly use it\n"
+        #     logger.warning(warning_msg, str(self.cached_data_path))
+        #     return None
 
         logger = logging.getLogger("DC2DataModule")
         warning_msg = "WARNING: can't find cached data, we generate it at [%s]\n"
         logger.warning(warning_msg, str(self.cached_data_path))
-        self.cached_data_path.mkdir(parents=True)
+        if not self.cached_data_path.exists():
+            self.cached_data_path.mkdir(parents=True)
 
-        n_image = self._load_image_and_bg_files_list()
+        n_image_train, n_image_test = self._load_image_and_bg_files_list()
 
+        # Train
         if self.prepare_data_processes_num > 1:
             with multiprocessing.Pool(processes=self.prepare_data_processes_num) as process_pool:
                 process_pool.map(
                     self.generate_cached_data,
-                    list(range(n_image)),
+                    zip(list(range(n_image_train)), self._patches_train),
                     chunksize=4,
                 )
         else:
-            for i in range(n_image):
+            for i in range(n_image_train):
                 self.generate_cached_data(i)
 
         return None
@@ -221,7 +239,8 @@ class DC2DataModule(CachedSimulatedDataModule):
             },
         }
 
-    def generate_cached_data(self, image_index):
+    def generate_cached_data(self, naming_info: tuple):
+        image_index, patch_name = naming_info
         result_dict = self.load_image_and_catalog(image_index)
 
         image = result_dict["inputs"]["image"]
@@ -291,7 +310,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             assert data_count < 1e5 and image_index < 1e5, "too many cached data files"
             assert len(tmp_data_cached) < 1e5, "too many cached data in one file"
             cached_data_file_name = (
-                f"cached_data_{image_index:04d}_{data_count:04d}_size_{len(tmp_data_cached):04d}.pt"
+                f"cached_data_{patch_name}_{data_count:04d}_size_{len(tmp_data_cached):04d}.pt"
             )
             cached_data_file_path = self.cached_data_path / cached_data_file_name
             with open(cached_data_file_path, "wb") as cached_data_file:
