@@ -4,7 +4,6 @@ defaults:
     - _self_
     # - override hydra/job_logging: stdout
 
-mode: train
 
 global_setting:
     min_flux_for_loss: 50  # you need to regenerate split_results after changing this number
@@ -49,25 +48,41 @@ encoder:
     mode_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
-        metrics: ${my_cts_metrics}
+        metrics: {}
     sample_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
-        metrics: ${my_cts_metrics}
-    discrete_metrics:
-        _target_: torchmetrics.MetricCollection
-        _convert_: "partial"
-        metrics: ${my_discrete_metrics}
+        metrics: {}
     var_dist:
         _target_: case_studies.redshift.redshift_from_img.encoder.variational_dist.RedshiftVariationalDist
         tile_slen: ${encoder.tile_slen}
         factors: ${variational_factors}
     use_checkerboard: false
+    discrete_metrics: ${discrete_metrics}
+
+# Unused b/c this is discrete parameterization
+cts_metrics:
+    redshift_mearn_square_error:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredError
+    redshift_mean_square_error_blendedness:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBlendedness
+        bin_cutoffs: [0.0001, 0.02, 0.1, 0.2, 0.6]
+    redshift_mean_square_error_true_redshifts:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorTrueRedshift
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+    redshift_outlier_fraction:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFraction
+    redshift_nmad:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDev
+    redshift_outlier_fraction_catastrophic:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCata
+    redshift_bias:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBias
+    redshift_abs_bias:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBias
 
 
-my_cts_metrics: []
-
-my_discrete_metrics:
+discrete_metrics:
     redshift_mearn_square_error_bin:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
         bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
@@ -89,11 +104,12 @@ my_discrete_metrics:
         bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
         bin_type: "njymag"
 
+
 train:
     trainer:
         logger:
             name: DC2_redshift_training
-            version: DC2_redshift_only_bin_allmetrics
+            version: DC2_redshift_only_large_split_blend
             save_dir: ${paths.root}/case_studies/redshift/redshift_from_img/
         precision: 32
         strategy:
@@ -106,8 +122,8 @@ train:
         val_check_interval: 0.5
         # check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
-        devices: [6] #[1,2, 3,4]
-        max_epochs: 3
+        devices: [1]
+        max_epochs: 50
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
@@ -128,6 +144,7 @@ train:
 surveys:
     dc2:
         dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl
-        cached_data_path: /data/scratch/dc2local/dc2_cached_data_withobj_final
+        # cached_data_path: /data/scratch/dc2local/dc2_cached_data_withobj_final
+        cached_data_path: /data/scratch/declan/redshift/processed_dc2
         batch_size: 64
         max_sources_per_tile: 5
