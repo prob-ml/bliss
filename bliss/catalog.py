@@ -381,7 +381,6 @@ def get_is_on_from_n_sources(n_sources: Tensor, max_n_sources: int) -> Tensor:
         Tensor indicating how many sources are present for each batch.
     """
     assert not torch.any(torch.isnan(n_sources))
-    assert torch.all(n_sources >= 0) and torch.all(n_sources <= 1)
     assert torch.all(n_sources.le(max_n_sources))
 
     is_on_array = torch.zeros(

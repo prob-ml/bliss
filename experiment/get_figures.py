@@ -12,10 +12,11 @@ from bliss.encoders.detection import DetectionEncoder
 from experiment.scripts_figures.binary_figures import BinaryFigures
 from experiment.scripts_figures.deblend_figures import DeblendingFigures
 from experiment.scripts_figures.detection_figures import BlendDetectionFigures
+from experiment.scripts_figures.toy_figures import ToySeparationFigure
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-ALL_FIGS = ("detection", "binary", "deblend")
+ALL_FIGS = ("detection", "binary", "deblend", "toy")
 CACHEDIR = "/nfs/turbo/lsa-regier/scratch/ismael/cache/"
 
 
@@ -42,7 +43,7 @@ def _load_models(fpaths: dict[str, str], model: str, device):
         deblend_fpath = fpaths["deblend"]
         ae_fpath = fpaths["ae"]
 
-        deblender = GalaxyEncoder(ae_fpath)
+        deblender = GalaxyEncoder(ae_fpath).to(device).eval()
         deblender.load_state_dict(torch.load(deblend_fpath, map_location=device, weights_only=True))
         deblender.requires_grad_(False)
         return deblender
@@ -57,7 +58,7 @@ def _make_detection_figure(
     aperture: float,
     suffix: str,
     overwrite: bool,
-    device,
+    device: torch.device,
 ):
     print("INFO: Creating figures for detection encoder performance simulated blended galaxies.")
     _init_kwargs = {
@@ -78,7 +79,7 @@ def _make_deblend_figures(
     aperture: float,
     suffix: str,
     overwrite: bool,
-    device,
+    device: torch.device,
 ):
     print("INFO: Creating figures for detection encoder performance simulated blended galaxies.")
     _init_kwargs = {
@@ -99,7 +100,7 @@ def _make_binary_figures(
     aperture: float,
     suffix: str,
     overwrite: bool,
-    device,
+    device: torch.device,
 ):
     print("INFO: Creating figures for detection encoder performance simulated blended galaxies.")
     _init_kwargs = {
@@ -111,6 +112,27 @@ def _make_binary_figures(
     }
     binary = _load_models(fpaths, "binary", device)
     BinaryFigures(**_init_kwargs)(ds_path=test_file, binary=binary)
+
+
+def _make_toy_figures(
+    fpaths: dict[str, str],
+    *,
+    aperture: float,
+    suffix: str,
+    overwrite: bool,
+    device: torch.device,
+):
+    print("INFO: Creating figures for detection encoder performance simulated blended galaxies.")
+    _init_kwargs = {
+        "overwrite": overwrite,
+        "figdir": "figures",
+        "suffix": suffix,
+        "cachedir": CACHEDIR,
+        "aperture": aperture,
+    }
+    detection = _load_models(fpaths, "detection", device)
+    deblender = _load_models(fpaths, "deblend", device)
+    ToySeparationFigure(**_init_kwargs)(detection=detection, deblender=deblender)
 
 
 def main(
@@ -150,9 +172,10 @@ def main(
             device=device,
         )
 
-    if mode == "deblend":
+    elif mode == "deblend":
         assert test_file_blends != "" and Path(test_file_blends).exists()
-        assert deblend_fpath != "" and Path(detection_fpath).exists()
+        assert deblend_fpath != "" and Path(deblend_fpath).exists()
+        assert ae_fpath != "" and Path(ae_fpath).exists(), "Need to provide AE when deblending."
         _make_deblend_figures(
             fpaths,
             test_file_blends,
@@ -162,7 +185,7 @@ def main(
             device=device,
         )
 
-    if mode == "binary":
+    elif mode == "binary":
         assert test_file_blends != "" and Path(test_file_blends).exists()
         assert binary_fpath != "" and Path(binary_fpath).exists()
         _make_binary_figures(
@@ -174,14 +197,16 @@ def main(
             device=device,
         )
 
+    if mode == "toy":
+        assert detection_fpath != "" and Path(detection_fpath).exists()
+        assert deblend_fpath != "" and Path(deblend_fpath).exists()
+        assert ae_fpath != "" and Path(ae_fpath).exists(), "Need to provide AE when deblending."
+        _make_toy_figures(
+            fpaths, aperture=aperture, suffix=suffix, overwrite=overwrite, device=device
+        )
+
     else:
         raise NotImplementedError("The requred figure has not been implemented.")
-    # if mode == "toy":
-    #     print("INFO: Creating figures for testing BLISS on pair galaxy toy example.")
-    #     cachedir = "/nfs/turbo/lsa-regier/scratch/ismael/cache/"
-    #     ToySeparationFigure(
-    #         overwrite=overwrite, figdir="figures", cachedir=cachedir, suffix=suffix
-    #     )(encoder, decoder)
 
 
 if __name__ == "__main__":

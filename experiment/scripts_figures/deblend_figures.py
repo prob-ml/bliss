@@ -13,11 +13,11 @@ from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.io import load_dataset_npz
 from bliss.encoders.deblend import GalaxyEncoder
 from bliss.plotting import BlissFigure
-from bliss.render_tiles import reconstruct_image_from_ptiles, render_galaxy_ptiles
-from bliss.reporting import get_blendedness, get_fluxes_sep
+from bliss.reporting import get_blendedness, get_deblended_reconstructions, get_fluxes_sep
 
 
-def _calculate_statistics(residuals, x, x_bins, qs=(0.25, 0.75)):
+# defaults correspond to 1 sigma in Gaussian distribution
+def _calculate_statistics(residuals, x, x_bins, qs=(0.159, 0.841)):
     medians, q1s, q3s = [], [], []
     for ii in range(len(x_bins) - 1):
         _mask = (x > x_bins[ii]) * (x < x_bins[ii + 1])
@@ -85,8 +85,9 @@ class DeblendingFigures(BlissFigure):
         _truth = FullCatalog(slen, slen, true_cat_dict)
 
         # get fluxes through sep (only galaxies)
+        # paddings includes stars, so their fluxes are removed
         fluxes, _, snr = get_fluxes_sep(
-            _truth, images, paddings, galaxy_uncentered, bp, r=self.aperture
+            _truth, images, paddings=paddings, sources=galaxy_uncentered, bp=bp, r=self.aperture
         )
 
         # get blendedness
@@ -118,63 +119,41 @@ class DeblendingFigures(BlissFigure):
 
         tile_gparams = torch.concatenate(tiled_gparams, axis=0) * truth_tile_cat["galaxy_bools"]
 
-        # create new catalog with these gparams
+        # create new catalog with these gparams, and otherwise true parameters
         est_tiled = deepcopy(truth_tile_cat.to_dict())
         est_tiled["galaxy_params"] = tile_gparams
 
         est_tiled_cat = TileCatalog(tile_slen, est_tiled)
         est = est_tiled_cat.to_full_params()
 
+        assert est.batch_size == truth.batch_size == images.shape[0]
+
         # now we need to get full sized images with each individual galaxy, in the correct location.
         # we can actually cleverly zero out galaxy_bools to achieve this
-        n_images = images.shape[0]
-        n_batches = math.ceil(n_images / _batch_size)
-        recon_uncentered = torch.zeros(
-            (n_images, est.max_n_sources, 1, images.shape[-2], images.shape[-1])
+        recon_uncentered = get_deblended_reconstructions(
+            est,
+            deblend._dec,
+            slen=slen,
+            ptile_slen=ptile_slen,
+            tile_slen=tile_slen,
+            device=deblend.device,
+            bp=bp,
+            no_bar=False,
         )
 
-        for jj in tqdm(range(est.max_n_sources), desc="Obtaining reconstructions"):
-            # get mask
-            mask = torch.arange(est.max_n_sources)
-            mask = mask[mask != jj]
-
-            # make a copy with all except one galaxy zeroed out
-            est_jj = FullCatalog(slen, slen, deepcopy(est.to_dict()))
-            est_jj["galaxy_bools"][:, mask, :] = 0
-            est_jj["galaxy_bools"] = est_jj["galaxy_bools"].contiguous()
-            est_tiled_jj = est_jj.to_tile_params(tile_slen, ignore_extra_sources=True)
-
-            images_jj = []
-            for kk in range(n_batches):
-                start, end = kk * 50, (kk + 1) * 50
-                blocs = est_tiled_jj.locs[start:end].to(deblend.device)
-                bgparams = est_tiled_jj["galaxy_params"][start:end].to(deblend.device)
-                bgbools = est_tiled_jj["galaxy_bools"][start:end].to(deblend.device)
-
-                galaxy_tiles = render_galaxy_ptiles(
-                    deblend._dec, blocs, bgparams, bgbools, ptile_slen, tile_slen
-                ).to("cpu")
-
-                galaxy_images = reconstruct_image_from_ptiles(galaxy_tiles, tile_slen)
-                images_jj.append(galaxy_images)
-
-            images_jj = torch.concatenate(images_jj, axis=0)
-            recon_uncentered[:, jj, :, :, :] = images_jj
-
         # now get aperture fluxes for no deblending case (on true locs)
-        n_images = images.shape[0]
         fluxes_sep_bld, _, _ = get_fluxes_sep(
             truth,
             images,
-            paddings,
-            torch.zeros_like(uncentered_sources),
-            bp,
+            paddings=paddings,
+            sources=torch.zeros_like(uncentered_sources),
+            bp=bp,
             r=self.aperture,
         )
 
         # now for deblending case (on true locs)
         fluxes_sep_debld, _, _ = get_fluxes_sep(
-            truth, images, paddings, recon_uncentered, bp, r=self.aperture
+            truth, images, paddings=paddings, sources=recon_uncentered, bp=bp, r=self.aperture
         )
 
         # now we organize the data to only keep snr > 0 sources that are galaxies
@@ -259,10 +238,11 @@ class DeblendingFigures(BlissFigure):
         ax1.fill_between(10**snr_middle, qs21, qs22, color="b", alpha=0.5)
 
         ax1.set_xscale("log")
-        ax1.set_ylim(-0.025, 0.05)
+        ax1.set_ylim(-0.15, 0.2)
         ax1.set_xticks([3, 10, 100, 200])
         ax1.set_xlabel(r"\rm SNR")
-        ax1.set_ylabel(r"$ \Delta F / F$")
+        ax1.set_ylabel(r"$ (f_{\rm pred} - f_{\rm true}) / f_{\rm true}$")
+        ax1.axhline(0.0, linestyle="--", color="k")
 
         # blendedness
         bld_mask = (bld > 1e-2) * (bld <= 1)
@@ -282,8 +262,9 @@ class DeblendingFigures(BlissFigure):
         ax2.legend()
         ax2.set_xscale("log")
         ax2.set_xticks([1e-2, 1e-1, 1])
-        ax2.set_ylim(-0.25, 1.5)
+        ax2.set_ylim(-0.75, 2.2)
         ax2.set_xlabel(r"\rm Blendedness")
+        ax2.axhline(0.0, linestyle="--", color="k")
 
         plt.tight_layout()
 

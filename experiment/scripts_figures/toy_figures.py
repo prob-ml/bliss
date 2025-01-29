@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from einops import pack, rearrange, reduce
+from einops import rearrange
 from matplotlib.figure import Figure
 from torch import Tensor
 
@@ -12,10 +12,8 @@ from bliss.datasets.lsst import (
     get_default_lsst_background,
     get_default_lsst_psf,
 )
-from bliss.encoders.autoencoder import CenteredGalaxyDecoder
 from bliss.encoders.deblend import GalaxyEncoder
 from bliss.encoders.detection import DetectionEncoder
-from bliss.encoders.encoder import Encoder
 from bliss.plotting import BlissFigure, plot_image
 from bliss.render_tiles import (
     get_images_in_tiles,
@@ -26,6 +24,19 @@ from bliss.render_tiles import (
 
 class ToySeparationFigure(BlissFigure):
     """Create figures related to assessingn probabilistic performance on toy blend."""
+
+    def __init__(
+        self, *, figdir, cachedir, suffix, overwrite=False, img_format="png", aperture=5.0
+    ):
+        super().__init__(
+            figdir=figdir,
+            cachedir=cachedir,
+            suffix=suffix,
+            overwrite=overwrite,
+            img_format=img_format,
+        )
+
+        self.aperture = aperture
 
     @property
     def all_rcs(self):
@@ -55,15 +66,17 @@ class ToySeparationFigure(BlissFigure):
     def separations_to_plot(self) -> list[int]:
         return [4, 8, 12]
 
-    def compute_data(self, encoder: Encoder, decoder: CenteredGalaxyDecoder):
+    def compute_data(self, detection: DetectionEncoder, deblender: GalaxyEncoder):
         # first, decide image size
         slen = 44
-        bp = encoder.detection_encoder.bp
-        tile_slen = encoder.detection_encoder.tile_slen
+        bp = detection.bp
+        tile_slen = detection.tile_slen
         size = slen + 2 * bp
-        tile_slen = encoder.detection_encoder.tile_slen
-        ptile_slen = encoder.detection_encoder.ptile_slen
+        tile_slen = detection.tile_slen
+        ptile_slen = detection.ptile_slen
         assert slen / tile_slen % 2 == 1, "Need odd number of tiles to center galaxy."
+        device = detection.device
+        assert deblender.device == detection.device
 
         # now separations between galaxies to be considered (in pixels)
         # for efficiency, we set the batch_size equal to the number of separations
@@ -96,18 +109,18 @@ class ToySeparationFigure(BlissFigure):
 
         # need plocs for later
         x0, y0 = 22, 22  # center plocs
-        plocs = torch.tensor([[[x0, y0], [x0, y0 + sep]] for sep in seps]).reshape(batch_size, 2, 2)
+        _true_plocs = torch.tensor([[[x0, y0], [x0, y0 + sep]] for sep in seps])
+        true_plocs = _true_plocs.reshape(batch_size, 2, 2)
 
         psf = get_default_lsst_psf()
         bg = get_default_lsst_background()
 
         # create full catalogs (need separately since `render_blend`` only accepts 1 batch)
         images = torch.zeros(batch_size, 1, size, size)
-        background = torch.full((batch_size, 1, size, size), bg)
         noise = torch.randn_like(images[0]).reshape(1, 1, size, size) * np.sqrt(bg)
 
         for ii in range(batch_size):
-            plocs_ii = plocs[ii].reshape(1, 2, 2)
+            plocs_ii = true_plocs[ii].reshape(1, 2, 2)
             d = {
                 "n_sources": torch.full((1,), n_sources),
                 "plocs": plocs_ii,
@@ -120,30 +133,30 @@ class ToySeparationFigure(BlissFigure):
             full_cat = FullCatalog(slen, slen, d)
             image, _, _ = render_full_catalog(full_cat, psf, slen, bp)
 
-            images[ii] = image + noise + background[ii]
+            images[ii] = image + noise
 
-        # predictions from encoder
-        tile_est = encoder.variational_mode(images, background)
+        # predictions from encoders
+        tile_est = detection.variational_mode(images.to(device)).cpu()
+        tile_est["galaxy_bools"] = rearrange(tile_est.n_sources, "b x y -> b x y 1")
+        _tile_gparams = deblender.variational_mode(images.to(device), tile_est.locs.to(device))
+        _tile_gparams = _tile_gparams.cpu() * tile_est["galaxy_bools"]
+        tile_est["galaxy_params"] = _tile_gparams
 
-        # create reconstruction images and compute galaxy fluxes
+        # create reconstruction images
         recon_ptiles = render_galaxy_ptiles(
-            decoder,
-            tile_est.locs,
-            tile_est["galaxy_params"],
-            tile_est["galaxy_bools"],
+            deblender._dec,
+            tile_est.locs.to(device),
+            tile_est["galaxy_params"].to(device),
+            tile_est["galaxy_bools"].to(device),
             ptile_slen,
             tile_slen,
-            1,
         ).cpu()
         assert recon_ptiles.shape[-1] == recon_ptiles.shape[-2] == ptile_slen
         recon = reconstruct_image_from_ptiles(recon_ptiles, tile_slen)
-        recon = recon.detach().cpu() + background
+        recon = recon.detach().cpu()
+        residuals = (recon - images) / (recon + bg).sqrt()
 
-        # finally add flux
-        # tile_est["fluxes"] = reduce(recon_ptiles, "b nth ntw c h w -> b nth ntw 1", "sum")
-        residuals = (recon - images) / recon.sqrt()
-
-        # now we need to obtain flux, pred. plocs, prob. of detection in tile and std. of plocs
+        # now we need to obtain pred. plocs, prob. of detection in tile and std. of plocs
         # for each source
         params = {
             "images": images,
@@ -152,11 +165,10 @@ class ToySeparationFigure(BlissFigure):
             "seps": seps,
             "truth": {
                 "flux": torch.tensor([flux1, flux2]).reshape(1, 2, 1).expand(batch_size, 2, 1),
-                "plocs": plocs,
+                "plocs": true_plocs,
             },
             "est": {
                 "prob_n_source": torch.zeros(batch_size, 2, 1),
-                "flux": torch.zeros(batch_size, 2, 1),
                 "plocs": torch.zeros(batch_size, 2, 2),
                 "plocs_sd": torch.zeros(batch_size, 2, 2),
             },
@@ -165,12 +177,8 @@ class ToySeparationFigure(BlissFigure):
 
         # NOTE: in this case we don't want to zero out tiles with no source prediction!
         # manually extract source paramas as `encoder` automatically zeroes out sources
-        tile_est = _get_source_params_not_zeroed(
-            encoder.detection_encoder,
-            encoder.galaxy_encoder,
-            decoder,
-            images.to(encoder.device),
-            background.to(encoder.device),
+        tile_est = _get_source_params_not_zeroed(detection, deblender, images.to(device)).to(
+            torch.device("cpu")
         )
 
         for jj, sep in enumerate(seps):
@@ -179,29 +187,24 @@ class ToySeparationFigure(BlissFigure):
             d = {k: v[jj, None] for k, v in d.items()}
             tile_est_ii = TileCatalog(tile_slen, d)
 
-            plocs_ii = plocs[jj]
+            plocs_ii = true_plocs[jj]
             params_at_coord = tile_est_ii.get_tile_params_at_coord(plocs_ii)
             prob_n_source = params_at_coord["n_source_probs"]
-            flux = params_at_coord["fluxes"]
             plocs_sd = params_at_coord["locs_sd"] * tile_slen
             locs = params_at_coord["locs"]
-            assert prob_n_source.shape == flux.shape == (2, 1)
             assert plocs_sd.shape == locs.shape == (2, 2)
 
             if sep < 2:
                 params["est"]["prob_n_source"][jj][0] = prob_n_source[0]
-                params["est"]["flux"][jj][0] = flux[0]
                 params["est"]["plocs"][jj][0] = locs[0] * tile_slen + 5 * tile_slen
                 params["est"]["plocs_sd"][jj][0] = plocs_sd[0]
 
                 params["est"]["prob_n_source"][jj][1] = torch.nan
-                params["est"]["flux"][jj][1] = torch.nan
                 params["est"]["plocs"][jj][1] = torch.tensor([torch.nan, torch.nan])
                 params["est"]["plocs_sd"][jj][1] = torch.tensor([torch.nan, torch.nan])
             else:
                 bias = 5 + np.ceil((sep - 2) / 4)
                 params["est"]["prob_n_source"][jj] = prob_n_source
-                params["est"]["flux"][jj] = flux
                 params["est"]["plocs"][jj][0] = locs[0] * tile_slen + 5 * tile_slen
                 params["est"]["plocs"][jj, 1, 0] = locs[1][0] * tile_slen + 5 * tile_slen
                 params["est"]["plocs"][jj, 1, 1] = locs[1][1] * tile_slen + bias * tile_slen
@@ -257,8 +260,13 @@ class ToySeparationFigure(BlissFigure):
         n_examples = 3
         bp = 24
         seps_to_plot = [4, 8, 12]
-        seps = data["seps"]
+        seps: np.ndarray = data["seps"]
         tplocs: np.ndarray = data["truth"]["plocs"]
+        eplocs: np.ndarray = data["est"]["plocs"]
+
+        c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]  # true
+        c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]  # predicted
+
         images_all, recon_all, res_all = data["images"], data["recon"], data["resid"]
         trim = 10
         indices = np.array([list(seps).index(psep) for psep in seps_to_plot]).astype(int)
@@ -266,8 +274,11 @@ class ToySeparationFigure(BlissFigure):
         images = images_all[indices, 0, trim + 10 : -trim - 10, trim + 15 : -trim - 5]
         recons = recon_all[indices, 0, trim + 10 : -trim - 10, trim + 15 : -trim - 5]
         residuals = res_all[indices, 0, trim + 10 : -trim - 10, trim + 15 : -trim - 5]
+
         x1 = tplocs[indices, :, 1] + bp - 0.5 - trim - 15
         y1 = tplocs[indices, :, 0] + bp - 0.5 - trim - 10
+        x2 = eplocs[indices, :, 1] + bp - 0.5 - trim - 15
+        y2 = eplocs[indices, :, 0] + bp - 0.5 - trim - 10
 
         pad = 6.0
         fig, axes = plt.subplots(nrows=n_examples, ncols=3, figsize=(11, 18))
@@ -282,12 +293,21 @@ class ToySeparationFigure(BlissFigure):
                 ax_true.set_title(r"\rm Images $x$", pad=pad)
                 ax_recon.set_title(r"\rm Reconstruction $\tilde{x}$", pad=pad)
                 ax_res.set_title(
-                    r"Residual $\left(\tilde{x} - x\right) / \sqrt{\tilde{x}}$", pad=pad
+                    r"\rm Residual $\left(\tilde{x} - x\right) / \sqrt{\tilde{x}}$", pad=pad
                 )
 
-            ax_true.scatter(x1[i], y1[i], color="r", alpha=0.5, s=40, marker="x", label="Truth")
+            ax_true.scatter(
+                x1[i], y1[i], color="r", alpha=0.5, s=40, marker="x", label=r"\rm Truth"
+            )
             ax_recon.scatter(x1[i], y1[i], color="r", alpha=0.5, s=40, marker="x")
-            ax_res.scatter(x1[i], y1[i], color="r", alpha=0.5, s=40, marker="x")
+
+            ax_true.scatter(
+                x2[i], y2[i], color="b", alpha=0.5, s=55, marker="+", label=r"\rm Predicted"
+            )
+            ax_recon.scatter(x2[i], y2[i], color="b", alpha=0.5, s=55, marker="+")
+
+            ax_true.text(x1[i, 0].item(), y1[i, 0].item() + 14, "1", color=c1, fontsize=15)
+            ax_true.text(x1[i, 1].item(), y1[i, 1].item() + 14, "2", color=c2, fontsize=15)
 
             # standarize ranges of true and reconstruction
             image = images[i]
@@ -305,22 +325,23 @@ class ToySeparationFigure(BlissFigure):
             plot_image(fig, ax_recon, recon, vrange=(vmin, vmax))
             plot_image(fig, ax_res, res, vrange=(-vres, vres), cmap="bwr")
 
-            ax_true.set_xticks([0, 10, 20, 30])
-            ax_true.set_yticks([0, 10, 20, 30])
-            ax_recon.set_xticks([0, 10, 20, 30])
-            ax_recon.set_yticks([0, 10, 20, 30])
-            ax_res.set_xticks([0, 10, 20, 30])
-            ax_res.set_yticks([0, 10, 20, 30])
+            _ticks = [0, 10, 20, 30, 40, 50]
+            ax_true.set_xticks(_ticks)
+            ax_true.set_yticks(_ticks)
+            ax_recon.set_xticks(_ticks)
+            ax_recon.set_yticks(_ticks)
+            ax_res.set_xticks(_ticks)
+            ax_res.set_yticks(_ticks)
 
             if i == 0:
-                ax_true.legend(loc="best", prop={"size": 14}, markerscale=2)
+                ax_true.legend(loc="best", prop={"size": 12}, markerscale=2)
 
         plt.subplots_adjust(hspace=-0.9)
         plt.tight_layout()
         return fig
 
     def _get_measurement_figure(self, data: dict) -> Figure:
-        fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+        fig, axes = plt.subplots(1, 3, figsize=(30, 10))
         axs = axes.flatten()
         seps = data["seps"]
         xticks = [sep for sep in seps if sep % 2 == 0]
@@ -332,8 +353,8 @@ class ToySeparationFigure(BlissFigure):
         prob_n1 = data["est"]["prob_n_source"][:, 0]
         prob_n2 = data["est"]["prob_n_source"][:, 1]
 
-        axs[0].plot(seps, prob_n1, "-", label="Galaxy 1", color=c1)
-        axs[0].plot(seps, prob_n2, "-", label="Galaxy 2", color=c2)
+        axs[0].plot(seps, prob_n1, "-", label=r"\rm Galaxy 1", color=c1)
+        axs[0].plot(seps, prob_n2, "-", label=r"\rm Galaxy 2", color=c2)
         axs[0].axvline(2, color="k", ls="--", label=r"\rm Tile boundary", alpha=0.5)
         axs[0].axvline(6, ls="--", color="k", alpha=0.5)
         axs[0].axvline(10, ls="--", color="k", alpha=0.5)
@@ -367,29 +388,8 @@ class ToySeparationFigure(BlissFigure):
         # location error (squared sum) estimate
         eploc_sd1 = (data["est"]["plocs_sd"][:, 0] ** 2).sum(1) ** (1 / 2)
         eploc_sd2 = (data["est"]["plocs_sd"][:, 1] ** 2).sum(1) ** (1 / 2)
-        axs[3].plot(seps, eploc_sd1, "-", color=c1)
-        axs[3].plot(seps, eploc_sd2, "-", color=c2)
-        axs[3].axhline(0, color="k", ls="-", alpha=1.0)
-        axs[3].axvline(2, ls="--", color="k", label=r"\rm Tile boundary", alpha=0.5)
-        axs[3].axvline(6, ls="--", color="k", alpha=0.5)
-        axs[3].axvline(10, ls="--", color="k", alpha=0.5)
-        axs[3].axvline(14, ls="--", color="k", alpha=0.5)
-        axs[3].set_xticks(xticks)
-        axs[3].set_xlim(0, 16)
-        axs[3].set_ylim(axs[1].get_ylim())
-        axs[3].set_xlabel(r"\rm Separation (pixels)")
-        axs[3].set_ylabel(r"\rm Predicted centroid std. (pixels)")
-
-        # flux normalized residuals
-        tflux1 = data["truth"]["flux"][:, 0]
-        tflux2 = data["truth"]["flux"][:, 1]
-        eflux1 = data["est"]["flux"][:, 0]
-        eflux2 = data["est"]["flux"][:, 1]
-        rflux1 = (eflux1 - tflux1) / tflux1
-        rflux2 = (eflux2 - tflux2) / tflux2
-
-        axs[2].plot(seps, rflux1, "-", color=c1)
-        axs[2].plot(seps, rflux2, "-", color=c2)
+        axs[2].plot(seps, eploc_sd1, "-", color=c1)
+        axs[2].plot(seps, eploc_sd2, "-", color=c2)
         axs[2].axhline(0, color="k", ls="-", alpha=1.0)
         axs[2].axvline(2, ls="--", color="k", label=r"\rm Tile boundary", alpha=0.5)
         axs[2].axvline(6, ls="--", color="k", alpha=0.5)
@@ -397,8 +397,9 @@ class ToySeparationFigure(BlissFigure):
         axs[2].axvline(14, ls="--", color="k", alpha=0.5)
         axs[2].set_xticks(xticks)
         axs[2].set_xlim(0, 16)
+        axs[2].set_ylim(axs[1].get_ylim())
         axs[2].set_xlabel(r"\rm Separation (pixels)")
-        axs[2].set_ylabel(r"\rm $(f^{\rm recon} - f^{\rm true}) / f^{\rm true}$")
+        axs[2].set_ylabel(r"\rm Predicted centroid std. (pixels)")
 
         return fig
 
@@ -413,49 +414,34 @@ class ToySeparationFigure(BlissFigure):
 
 
 def _get_source_params_not_zeroed(
-    detection_encoder: DetectionEncoder,
-    galaxy_encoder: GalaxyEncoder,
-    decoder: CenteredGalaxyDecoder,
+    detection: DetectionEncoder,
+    deblender: GalaxyEncoder,
     images: Tensor,
-    background: Tensor,
 ) -> TileCatalog:
+
     tiled_params: dict[str, Tensor] = {}
 
     # should all fit in GPU at once
-    img_bg, _ = pack([images, background], "b * h w")  # by default concatenate channels
-    ptiles = get_images_in_tiles(img_bg, detection_encoder.tile_slen, detection_encoder.ptile_slen)
+    ptiles = get_images_in_tiles(images, detection.tile_slen, detection.ptile_slen)
     ptiles_flat = rearrange(ptiles, "b nth ntw c h w -> (b nth ntw) c h w")
 
-    n_source_probs, locs_mean, locs_sd_raw = detection_encoder.encode_tiled(ptiles_flat)
+    n_source_probs, locs_mean, locs_sd_raw = detection.encode_tiled(ptiles_flat)
     n_sources = n_source_probs.ge(0.5).long()
     n_source_probs_inflated = rearrange(n_source_probs, "n -> n 1")  # for `TileCatalog`
 
     tiled_params.update({"n_sources": n_sources, "n_source_probs": n_source_probs_inflated})
     tiled_params.update({"locs": locs_mean, "locs_sd": locs_sd_raw})
 
-    galaxy_params = galaxy_encoder.forward(ptiles_flat, locs_mean)
+    galaxy_params = deblender.forward(ptiles_flat, locs_mean)
     tiled_params.update({"galaxy_params": galaxy_params})
 
     # get tile catalog
-    n_tiles_h = (images.shape[2] - 2 * detection_encoder.bp) // detection_encoder.tile_slen
-    n_tiles_w = (images.shape[3] - 2 * detection_encoder.bp) // detection_encoder.tile_slen
+    n_tiles_h = (images.shape[2] - 2 * detection.bp) // detection.tile_slen
+    n_tiles_w = (images.shape[3] - 2 * detection.bp) // detection.tile_slen
     tiled_est = TileCatalog.from_flat_dict(
-        detection_encoder.tile_slen,
+        detection.tile_slen,
         n_tiles_h,
         n_tiles_w,
         {k: v.squeeze(0) for k, v in tiled_params.items()},
     )
-
-    # now get flux
-    recon_ptiles = render_galaxy_ptiles(
-        decoder,
-        tiled_est.locs,
-        tiled_est["galaxy_params"],
-        torch.ones_like(tiled_est["n_source_probs"]),
-        detection_encoder.ptile_slen,
-        detection_encoder.tile_slen,
-        1,
-    )
-    fluxes = reduce(recon_ptiles, "b nth ntw c h w -> b nth ntw 1", "sum")
-    tiled_est["fluxes"] = fluxes
     return tiled_est.to(torch.device("cpu"))

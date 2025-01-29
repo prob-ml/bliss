@@ -145,7 +145,9 @@ class BlendDetectionFigures(BlissFigure):
         for ii in range(images.shape[0]):
             im = images[ii, 0].numpy()
             bkg = sep.Background(im)
-            catalog = sep.extract(im, 1.5, err=bkg.globalrms, minarea=5)
+            catalog = sep.extract(
+                im, err=bkg.globalrms, thresh=1.5, minarea=5, deblend_nthresh=32, deblend_cont=0.005
+            )
 
             x1 = catalog["x"]
             y1 = catalog["y"]

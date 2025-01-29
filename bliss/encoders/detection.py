@@ -2,7 +2,7 @@ import pytorch_lightning as pl
 import torch
 from einops import rearrange, reduce, unpack
 from torch import Tensor
-from torch.distributions import Categorical, Normal
+from torch.distributions import Bernoulli, Normal
 from torch.nn import BCELoss
 from torch.optim import Adam
 
@@ -123,7 +123,7 @@ class DetectionEncoder(pl.LightningModule):
         n_source_probs, locs_mean, locs_sd = self.forward(images)
 
         # sample counts per tile
-        tile_n_sources = Categorical(probs=n_source_probs).sample((n_samples,))
+        tile_n_sources = Bernoulli(n_source_probs).sample((n_samples,))
         assert tile_n_sources.ndim == 2
 
         # sample locations and zero out out empty sources

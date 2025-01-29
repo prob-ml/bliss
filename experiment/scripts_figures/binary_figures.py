@@ -78,16 +78,17 @@ class BinaryFigures(BlissFigure):
     @property
     def all_rcs(self) -> dict:
         return {
-            "binary_figure": {"fontsize": 32},
+            "binary_scatter": {"fontsize": 32},
+            "binary_curves": {"fontsize": 32},
         }
 
     @property
     def cache_name(self) -> str:
-        return "deblend"
+        return "binary"
 
     @property
     def fignames(self) -> tuple[str, ...]:
-        return ("binary_figure",)
+        return ("binary_scatter", "binary_curves")
 
     def compute_data(self, ds_path: str, binary: BinaryEncoder):
 
@@ -116,7 +117,12 @@ class BinaryFigures(BlissFigure):
 
         # get snrs through sep
         _, _, snr = get_fluxes_sep(
-            _truth, images, new_paddings, uncentered_sources, bp, r=self.aperture
+            _truth,
+            images,
+            paddings=new_paddings,
+            sources=uncentered_sources,
+            bp=bp,
+            r=self.aperture,
         )
 
         # add parameters to truth
@@ -188,25 +194,22 @@ class BinaryFigures(BlissFigure):
 
         return out
 
-    def _get_binary_figure(self, data: dict):
+    def _get_binary_scatter_figure(self, data: dict):
         # first we make two scatter plot figures
         # useful for sanity checking
 
-        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(30, 10))
+        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
         snr = data["snr"]
         probs = data["probs"]
-
         tgbools = data["tgbools"]
         tsbools = data["tsbools"]
-        egbools = data[0.5]["egbools"]
-        esbools = data[0.5]["esbools"]
 
         galaxy_mask = tgbools.astype(bool)
         star_mask = tsbools.astype(bool)
 
         # scatter plot of probabilities
-        ax1.scatter(
+        ax.scatter(
             snr[galaxy_mask],
             probs[galaxy_mask],
             marker="o",
@@ -215,7 +218,7 @@ class BinaryFigures(BlissFigure):
             color="r",
             label=r"\rm Galaxy",
         )
-        ax1.scatter(
+        ax.scatter(
             snr[star_mask],
             probs[star_mask],
             marker="o",
@@ -224,37 +227,55 @@ class BinaryFigures(BlissFigure):
             color="b",
             label=r"\rm Star",
         )
-        ax1.legend(markerscale=6, fontsize=28)
-        ax1.set_xscale("log")
+        ax.legend(markerscale=6, fontsize=28)
+        ax.set_ylabel(r"\rm Galaxy Classification Probability")
+        ax.set_xscale("log")
+
+        return fig
+
+    def _get_binary_curves(self, data: dict):
+
+        snr = data["snr"]
+
+        tgbools = data["tgbools"]
+        tsbools = data["tsbools"]
+        egbools = data[0.5]["egbools"]
+        esbools = data[0.5]["esbools"]
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
 
         # precision and recall for galaxies
         snr_bins, snr_middle = _get_equally_spaced_bins(egbools, snr, n_bins=10)
         prec, rec, f1 = _get_metrics_per_bin(tgbools, egbools, snr, snr_bins)
 
-        ax2.plot(snr_middle, prec, "-bo", label=r"\rm precision")
-        ax2.plot(snr_middle, rec, "-ro", label=r"\rm recall")
-        ax2.plot(snr_middle, f1, "-ko", label="$F_{1}$")
-        ax2.set_xscale("log")
-        ax2.set_title(r"\rm Galaxies")
-        ax2.set_xlim(10, 1000)
-        ax2.legend()
+        ax1.plot(snr_middle, prec, "-bo", label=r"\rm precision")
+        ax1.plot(snr_middle, rec, "-ro", label=r"\rm recall")
+        ax1.plot(snr_middle, f1, "-ko", label="$F_{1}$")
+        ax1.set_xscale("log")
+        ax1.set_title(r"\rm Galaxies")
+        ax1.set_ylabel(r"\rm Metric", fontsize=36)
+        ax1.set_xlim(10, 1000)
+        ax1.legend()
 
         # precision and recall for stars
         snr_bins, snr_middle = _get_equally_spaced_bins(esbools, snr, n_bins=10)
         prec, rec, f1 = _get_metrics_per_bin(tsbools, esbools, snr, snr_bins)
 
-        ax3.plot(snr_middle, prec, "-bo")
-        ax3.plot(snr_middle, rec, "-ro")
-        ax3.plot(snr_middle, f1, "-ko")
-        ax3.set_xscale("log")
-        ax3.set_title(r"\rm Stars")
-        ax3.set_xlim(10, 1000)
+        ax2.plot(snr_middle, prec, "-bo")
+        ax2.plot(snr_middle, rec, "-ro")
+        ax2.plot(snr_middle, f1, "-ko")
+        ax2.set_xscale("log")
+        ax2.set_title(r"\rm Stars")
+
+        ax2.set_xlim(10, 1000)
 
         plt.tight_layout()
 
         return fig
 
     def create_figure(self, fname: str, data):
-        if fname == "binary_figure":
-            return self._get_binary_figure(data)
+        if fname == "binary_scatter":
+            return self._get_binary_scatter_figure(data)
+        if fname == "binary_curves":
+            return self._get_binary_curves(data)
         raise ValueError(f"Unknown figure name: {fname}")
