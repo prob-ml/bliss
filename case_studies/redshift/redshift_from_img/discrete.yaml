@@ -1,6 +1,6 @@
 ---
 defaults:
-    - ../data_processing@_here_: data
+    - ../../../bliss/conf@_here_: base_config
     - _self_
     # - override hydra/job_logging: stdout
 
@@ -13,12 +13,16 @@ paths:
     root: /home/declan/bliss
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.NormalFactor
+  - _target_: bliss.encoder.variational_dist.DiscretizedFactor1D
     name: redshifts
     sample_rearrange: "b ht wt -> b ht wt 1 1"
     nll_rearrange: "b ht wt 1 1 -> b ht wt"
     nll_gating: is_galaxy
-  
+    low: 0
+    high: 3
+    n_params: 30  # num of bins
+
+
 encoder:
     _target_: case_studies.redshift.redshift_from_img.encoder.encoder.RedshiftsEncoder
     # _target_: bliss.encoder.encoder.Encoder
@@ -61,25 +65,29 @@ encoder:
     use_checkerboard: false
 
 
-my_cts_metrics:
-    redshift_mearn_square_error:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredError
-    redshift_mean_square_error_blendedness:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBlendedness
-        bin_cutoffs: [0.0001, 0.02, 0.1, 0.2, 0.6]
-    redshift_outlier_fraction:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFraction
-    redshift_nmad:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDev
-    redshift_outlier_fraction_catastrophic:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCata
-    redshift_bias:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBias
-    redshift_abs_bias:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBias
+my_cts_metrics: []
 
-
-my_discrete_metrics: []
+my_discrete_metrics:
+    redshift_mearn_square_error_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_nmad_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDevBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_catastrophic_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_abs_bias_bin:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
 
 train:
     trainer:
