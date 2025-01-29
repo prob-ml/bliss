@@ -2,24 +2,23 @@ defaults:
     - ../../../bliss/conf@_here_: base_config
     - _self_
 
-bliss:
-  paths:
-    output_dir: /data/scratch/declan/redshift/dc2
-    processed_data_dir: ${bliss.paths.output_dir}/processed_dc2
-    dc2: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
-    dc2_suffix: run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results
+# Inherits defaults from `base_config`. We add some user-defined
+# paths to store artifacts.
+paths:
+  data_dir: /data/scratch/declan/redshift/dc2
+  processed_data_dir_bliss: ${paths.data_dir}/processed_dc2
+  processed_data_dir_rail: ${paths.data_dir}/processed_dc2_rail
+  dc2: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
 
-  surveys:
-      dc2:
-          _target_: bliss.surveys.dc2.DC2DataModule
-          dc2_image_dir: ${paths.dc2}/${paths.dc2_suffix}
-          dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl # we should have a script that makes this on our own
-          cached_data_path: ${paths.processed_data_dir}
+# Inherits defaults from `base_config`. We modify cached path
+surveys:
+  dc2:
+      _target_: bliss.surveys.dc2.DC2DataModule
+      cached_data_path: ${paths.processed_data_dir_bliss}
+      dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl # we should have a script that makes this on our own
 
 rail:
-  paths:
-    output_dir: ${bliss.paths.output_dir}
-    processed_data_dir: ${rail.paths.output_dir}/processed_dc2_rail
+  processed_data_dir: ${paths.processed_data_dir_rail}
   pipeline:
     force_reprocess: false
     lsst_root_dir: /data/scratch/dc2_nfs/
@@ -45,7 +44,7 @@ rail:
     train_size: 200000
     val_size: 100000
 
-    # Currently unused, using truth_match instead of truth.
-    truth:
-      lsst_root_dir: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
-      truth_catalog: desc_dc2_run2.2i_dr6_truth
+  # Currently unused, using truth_match instead of truth.
+  truth:
+    lsst_root_dir: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
+    truth_catalog: desc_dc2_run2.2i_dr6_truth

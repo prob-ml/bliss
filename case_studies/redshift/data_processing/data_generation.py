@@ -24,8 +24,8 @@ logging.basicConfig(level=logging.INFO)
 def create_rail_artifacts(rail_cfg: DictConfig):
     """Create DataFrames of ugrizy magnitudes and errors for RAIL training.
     """
-    logging.info("Creating RAIL artifacts at %s", rail_cfg.paths.processed_data_dir)
-    log_dir = Path(rail_cfg.paths.processed_data_dir)
+    logging.info("Creating RAIL artifacts at %s", rail_cfg.processed_data_dir)
+    log_dir = Path(rail_cfg.processed_data_dir)
 
     # Create output directory if it does not exist, or skip if artifacts already exist
     if not log_dir.exists():
@@ -77,7 +77,7 @@ def create_rail_artifacts(rail_cfg: DictConfig):
 def create_bliss_artifacts(bliss_cfg: DictConfig):
     """CONSTRUCT BATCHES (.pt files) FOR DATA LOADING
     """
-    logging.info("Creating BLISS artifacts at %s", bliss_cfg.paths.processed_data_dir)
+    logging.info("Creating BLISS artifacts at %s", bliss_cfg.paths.processed_data_dir_bliss)
     dc2: DC2DataModule = instantiate(bliss_cfg.surveys.dc2)
     dc2.prepare_data()
     return
@@ -98,7 +98,7 @@ def main(cfg: DictConfig) -> None:
     create_rail_artifacts(cfg.rail)
 
     # Create BLISS artifacts
-    create_bliss_artifacts(cfg.bliss)
+    create_bliss_artifacts(cfg)
 
     logging.info("Data generation complete")
 
