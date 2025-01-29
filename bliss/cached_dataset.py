@@ -261,7 +261,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         file_names = [f for f in os.listdir(str(self.cached_data_path)) if f.endswith(".pt")]
         if self.subset_fraction:
             file_names = file_names[: math.ceil(len(file_names) * self.subset_fraction)]
-        self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]
+        self.file_paths = sorted([os.path.join(str(self.cached_data_path), f) for f in file_names])
 
         # parse slices from percentages to indices
         self.slices = self.parse_slices(self.splits, len(self.file_paths))
