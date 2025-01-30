@@ -165,14 +165,11 @@ def get_boostrap_precision_and_recall(
     return {"precision": precision_boot, "recall": recall_boot}
 
 
-def get_single_galaxy_ellipticities(
-    images: Tensor, pixel_scale: float = PIXEL_SCALE, no_bar: bool = True
-) -> Tensor:
+def get_single_galaxy_ellipticities(images: Tensor, no_bar: bool = True) -> Tensor:
     """Returns ellipticities of (noiseless, single-band) individual galaxy images.
 
     Args:
         images: Array of shape (n, slen, slen) containing single galaxies with no noise/background.
-        pixel_scale: Conversion from arcseconds to pixel.
         no_bar: Whether to use a progress bar.
 
     Returns:
@@ -188,7 +185,7 @@ def get_single_galaxy_ellipticities(
     for ii in tqdm(range(n_samples), desc="Measuring galaxies", disable=no_bar):
         image = images_np[ii]
         if image.sum() > 0:  # skip empty images
-            galsim_image = galsim.Image(image, scale=pixel_scale)
+            galsim_image = galsim.Image(image, scale=PIXEL_SCALE)
             # sigma ~ size of psf (in pixels)
             out = galsim.hsm.FindAdaptiveMom(galsim_image, guess_sig=3, strict=False)
             if out.error_message == "":
@@ -272,8 +269,8 @@ def get_deblended_reconstructions(
                 tile_slen=tile_slen,
             )
 
-            galaxy_images = reconstruct_image_from_ptiles(galaxy_tiles.to("cpu"), tile_slen)
-            images_jj.append(galaxy_images)
+            galaxy_images = reconstruct_image_from_ptiles(galaxy_tiles, tile_slen)
+            images_jj.append(galaxy_images.cpu())
 
         images_jj = torch.concatenate(images_jj, axis=0)
         recon_uncentered[:, jj, :, :, :] = images_jj
@@ -281,7 +278,7 @@ def get_deblended_reconstructions(
     return recon_uncentered
 
 
-def get_fluxes_sep(
+def get_residual_measurements(
     cat: FullCatalog,
     images: Tensor,
     *,
@@ -289,6 +286,7 @@ def get_fluxes_sep(
     sources: Tensor,
     bp: int = 24,
     r: float = 5.0,
+    no_bar: bool = True,
 ) -> Tuple[Tensor, Tensor, Tensor]:
     """Obtain aperture photometry fluxes for each source in the catalog."""
     n_batches = cat.n_sources.shape[0]
@@ -297,7 +295,10 @@ def get_fluxes_sep(
     fluxerrs = torch.zeros(n_batches, cat.max_n_sources, 1)
     snrs = torch.zeros(n_batches, cat.max_n_sources, 1)
 
-    for ii in range(n_batches):
+    ellips = torch.zeros(n_batches, cat.max_n_sources, 2)
+    sigmas = torch.zeros(n_batches, cat.max_n_sources, 1)
+
+    for ii in tqdm(range(n_batches), desc="Measuring galaxies", disable=no_bar):
         n_sources = cat.n_sources[ii].item()
         y = cat.plocs[ii, :, 0].numpy() + bp - 0.5
         x = cat.plocs[ii, :, 1].numpy() + bp - 0.5
@@ -311,15 +312,45 @@ def get_fluxes_sep(
 
         _fluxes = []
         _fluxerrs = []
+        _e1s = []
+        _e2s = []
+        _sigmas = []
+
         for jj in range(n_sources):
+            target_img = residual_images[jj].numpy()
+
+            # measure fluxes with sep
             f, ferr, _ = sep.sum_circle(
-                residual_images[jj].numpy(), [x[jj]], [y[jj]], r=r, err=BACKGROUND.sqrt().item()
+                target_img, [x[jj]], [y[jj]], r=r, err=BACKGROUND.sqrt().item()
             )
             _fluxes.append(f.item())
             _fluxerrs.append(ferr.item())
+
+            # measure ellipticities and size with adaptive moments
+            _galsim_img = galsim.Image(target_img, scale=PIXEL_SCALE)
+            _centroid = galsim.PositionD(x=x[jj] + 1, y=y[jj] + 1)
+            out = galsim.hsm.FindAdaptiveMom(
+                _galsim_img, guess_centroid=_centroid, guess_sig=3, strict=False
+            )
+            if out.error_message == "":
+                e1 = float(out.observed_e1)
+                e2 = float(out.observed_e2)
+                sigma = float(out.moments_sigma)
+            else:
+                e1 = float("nan")  # noqa: WPS456
+                e2 = float("nan")  # noqa: WPS456
+                sigma = float("nan")  # noqa: WPS456
+
+            _e1s.append(e1)
+            _e2s.append(e2)
+            _sigmas.append(sigma)
 
         fluxes[ii, :n_sources, 0] = torch.tensor(_fluxes)
         fluxerrs[ii, :n_sources, 0] = torch.tensor(_fluxerrs)
         snrs[ii, :n_sources, 0] = fluxes[ii, :n_sources, 0] / fluxerrs[ii, :n_sources, 0]
 
-    return fluxes, fluxerrs, snrs
+        ellips[ii, :n_sources, 0] = torch.tensor(_e1s)
+        ellips[ii, :n_sources, 1] = torch.tensor(_e2s)
+        sigmas[ii, :n_sources, 0] = torch.tensor(_sigmas)
+
+    return {"flux": fluxes, "fluxerr": fluxerrs, "snr": snrs, "ellips": ellips, "sigma": sigmas}

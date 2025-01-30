@@ -60,7 +60,7 @@ def _make_detection_figure(
     overwrite: bool,
     device: torch.device,
 ):
-    print("INFO: Creating figures for detection encoder performance simulated blended galaxies.")
+    print("INFO: Creating figures for detection encoder performance on simulated blended galaxies.")
     _init_kwargs = {
         "overwrite": overwrite,
         "figdir": "figures",
@@ -81,7 +81,7 @@ def _make_deblend_figures(
     overwrite: bool,
     device: torch.device,
 ):
-    print("INFO: Creating figures for detection encoder performance simulated blended galaxies.")
+    print("INFO: Creating figures for deblender performance on simulated blended galaxies.")
     _init_kwargs = {
         "overwrite": overwrite,
         "figdir": "figures",
@@ -102,7 +102,7 @@ def _make_binary_figures(
     overwrite: bool,
     device: torch.device,
 ):
-    print("INFO: Creating figures for detection encoder performance simulated blended galaxies.")
+    print("INFO: Creating figures for binary encoder performance on simulated blended galaxies.")
     _init_kwargs = {
         "overwrite": overwrite,
         "figdir": "figures",
@@ -122,7 +122,7 @@ def _make_toy_figures(
     overwrite: bool,
     device: torch.device,
 ):
-    print("INFO: Creating figures for detection encoder performance simulated blended galaxies.")
+    print("INFO: Creating figures for toy experiment.")
     _init_kwargs = {
         "overwrite": overwrite,
         "figdir": "figures",
@@ -197,7 +197,7 @@ def main(
             device=device,
         )
 
-    if mode == "toy":
+    elif mode == "toy":
         assert detection_fpath != "" and Path(detection_fpath).exists()
         assert deblend_fpath != "" and Path(deblend_fpath).exists()
         assert ae_fpath != "" and Path(ae_fpath).exists(), "Need to provide AE when deblending."

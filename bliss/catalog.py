@@ -19,6 +19,7 @@ class TileCatalog(UserDict):
         "mags",
         "locs_sd",
         "ellips",
+        "sigma",
         "snr",
         "blendedness",
         "galaxy_fluxes",

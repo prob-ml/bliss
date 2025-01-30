@@ -13,7 +13,7 @@ from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.io import load_dataset_npz
 from bliss.encoders.binary import BinaryEncoder
 from bliss.plotting import BlissFigure
-from bliss.reporting import get_fluxes_sep
+from bliss.reporting import get_residual_measurements
 
 
 def _get_metrics_per_bin(tbools, ebools, snrs, snr_bins):
@@ -116,7 +116,7 @@ class BinaryFigures(BlissFigure):
         _truth = FullCatalog(slen, slen, true_cat_dict)
 
         # get snrs through sep
-        _, _, snr = get_fluxes_sep(
+        meas_dict = get_residual_measurements(
             _truth,
             images,
             paddings=new_paddings,
@@ -124,6 +124,7 @@ class BinaryFigures(BlissFigure):
             bp=bp,
             r=self.aperture,
         )
+        snr = meas_dict["snr"]
 
         # add parameters to truth
         _truth["snr"] = snr

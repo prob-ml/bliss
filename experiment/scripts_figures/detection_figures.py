@@ -11,7 +11,7 @@ from bliss.catalog import FullCatalog, TileCatalog, collate
 from bliss.datasets.io import load_dataset_npz
 from bliss.encoders.detection import DetectionEncoder
 from bliss.plotting import BlissFigure
-from bliss.reporting import compute_tp_fp_per_bin, get_fluxes_sep
+from bliss.reporting import compute_tp_fp_per_bin, get_residual_measurements
 
 
 class BlendDetectionFigures(BlissFigure):
@@ -72,10 +72,10 @@ class BlendDetectionFigures(BlissFigure):
         truth = FullCatalog(slen, slen, true_cat_dict)
 
         # add true snr to truth catalog using sep
-        _, _, snr_sep_truth = get_fluxes_sep(
+        meas_truth = get_residual_measurements(
             truth, images, new_paddings, uncentered_sources, bp=bp, r=self.aperture
         )
-        truth["snr"] = snr_sep_truth.clip(0)
+        truth["snr"] = meas_truth["snr"].clip(0)
 
         # encoder images using the detection encoder
         # images don't fit in memory, so we need to encode them in batches
@@ -128,7 +128,7 @@ class BlendDetectionFigures(BlissFigure):
             _dummy_images = torch.zeros(
                 images.shape[0], cat.max_n_sources, 1, images.shape[-2], images.shape[-1]
             )
-            _, _, _snr = get_fluxes_sep(
+            _meas = get_residual_measurements(
                 cat,
                 images,
                 torch.zeros_like(images),
@@ -136,7 +136,7 @@ class BlendDetectionFigures(BlissFigure):
                 bp=bp,
                 r=self.aperture,
             )
-            cat["snr"] = _snr.clip(0)
+            cat["snr"] = _meas["snr"].clip(0)
 
         # now we obtain the full catalog using SEP for comparison
         max_n_sources = 0
@@ -176,7 +176,7 @@ class BlendDetectionFigures(BlissFigure):
         sep_cat = FullCatalog(slen, slen, {"n_sources": n_sources, "plocs": plocs})
 
         # get snr for SEP catalog
-        _, _, _snr = get_fluxes_sep(
+        _meas_sep = get_residual_measurements(
             sep_cat,
             images,
             torch.zeros_like(images),
@@ -184,7 +184,7 @@ class BlendDetectionFigures(BlissFigure):
             bp=bp,
             r=self.aperture,
         )
-        sep_cat["snr"] = _snr.clip(0)
+        sep_cat["snr"] = _meas_sep["snr"].clip(0)
 
         # define snr bins
         snr_bins1 = 10 ** torch.arange(0, 3.0, 0.2)

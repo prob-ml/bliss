@@ -42,13 +42,18 @@ class ToySeparationFigure(BlissFigure):
     def all_rcs(self):
         return {
             "three_separations": {
-                "fontsize": 22,
+                "fontsize": 24,
                 "tick_label_size": "small",
                 "legend_fontsize": "small",
             },
-            "toy_residuals": {"fontsize": 22},
-            "toy_measurements": {
-                "fontsize": 22,
+            "toy_residuals": {"fontsize": 24},
+            "detection_prob": {
+                "fontsize": 26,
+                "tick_label_size": "small",
+                "legend_fontsize": "small",
+            },
+            "centroid_residual": {
+                "fontsize": 28,
                 "tick_label_size": "small",
                 "legend_fontsize": "small",
             },
@@ -60,7 +65,7 @@ class ToySeparationFigure(BlissFigure):
 
     @property
     def fignames(self) -> tuple[str, ...]:
-        return ("three_separations", "toy_residuals", "toy_measurements")
+        return ("three_separations", "toy_residuals", "detection_prob", "centroid_residual")
 
     @property
     def separations_to_plot(self) -> list[int]:
@@ -340,9 +345,8 @@ class ToySeparationFigure(BlissFigure):
         plt.tight_layout()
         return fig
 
-    def _get_measurement_figure(self, data: dict) -> Figure:
-        fig, axes = plt.subplots(1, 3, figsize=(30, 10))
-        axs = axes.flatten()
+    def _get_detection_prob_figure(self, data: dict) -> Figure:
+        fig, ax = plt.subplots(1, 1, figsize=(10, 10))
         seps = data["seps"]
         xticks = [sep for sep in seps if sep % 2 == 0]
 
@@ -353,53 +357,99 @@ class ToySeparationFigure(BlissFigure):
         prob_n1 = data["est"]["prob_n_source"][:, 0]
         prob_n2 = data["est"]["prob_n_source"][:, 1]
 
-        axs[0].plot(seps, prob_n1, "-", label=r"\rm Galaxy 1", color=c1)
-        axs[0].plot(seps, prob_n2, "-", label=r"\rm Galaxy 2", color=c2)
-        axs[0].axvline(2, color="k", ls="--", label=r"\rm Tile boundary", alpha=0.5)
-        axs[0].axvline(6, ls="--", color="k", alpha=0.5)
-        axs[0].axvline(10, ls="--", color="k", alpha=0.5)
-        axs[0].axvline(14, ls="--", color="k", alpha=0.5)
-        axs[0].legend(loc="best")
-        axs[0].set_xticks(xticks)
-        axs[0].set_xlim(0, 16)
-        axs[0].set_xlabel(r"\rm Separation (pixels)")
-        axs[0].set_ylabel(r"\rm Detection Probability")
+        ax.plot(seps, prob_n1, "-", label=r"\rm Galaxy 1", color=c1)
+        ax.plot(seps, prob_n2, "-", label=r"\rm Galaxy 2", color=c2)
+        ax.axvline(2, color="k", ls="--", label=r"\rm Tile boundary", alpha=0.5)
+        ax.axvline(6, ls="--", color="k", alpha=0.5)
+        ax.axvline(10, ls="--", color="k", alpha=0.5)
+        ax.axvline(14, ls="--", color="k", alpha=0.5)
+        ax.legend(loc="best")
+        ax.set_xticks(xticks)
+        ax.set_xlim(0, 16)
+        ax.set_xlabel(r"\rm Separation (pixels)")
+        ax.set_ylabel(r"\rm Detection Probability")
+
+        return fig
+
+    def _get_dist_residual_figure(self, data: dict) -> Figure:
+        fig, axes = plt.subplots(2, 2, figsize=(20, 20), sharex=True)
+        seps = data["seps"]
+        xticks = [sep for sep in seps if sep % 2 == 0]
+
+        c1 = plt.rcParams["axes.prop_cycle"].by_key()["color"][1]
+        c2 = plt.rcParams["axes.prop_cycle"].by_key()["color"][3]
 
         # distance residual
         tploc1 = data["truth"]["plocs"][:, 0]
         tploc2 = data["truth"]["plocs"][:, 1]
         eploc1 = data["est"]["plocs"][:, 0]
         eploc2 = data["est"]["plocs"][:, 1]
-        dist1 = ((tploc1 - eploc1) ** 2).sum(1) ** (1 / 2)
-        dist2 = ((tploc2 - eploc2) ** 2).sum(1) ** (1 / 2)
+        dist1_x = (tploc1 - eploc1)[:, 1]
+        dist1_y = (tploc1 - eploc1)[:, 0]
+        dist2_x = (tploc2 - eploc2)[:, 1]
+        dist2_y = (tploc2 - eploc2)[:, 0]
 
-        axs[1].plot(seps, dist1, "-", color=c1)
-        axs[1].plot(seps, dist2, "-", color=c2)
-        axs[1].axhline(0, color="k", ls="-", alpha=1.0)
-        axs[1].axvline(2, ls="--", color="k", label=r"\rm Tile boundary", alpha=0.5)
-        axs[1].axvline(6, ls="--", color="k", alpha=0.5)
-        axs[1].axvline(10, ls="--", color="k", alpha=0.5)
-        axs[1].axvline(14, ls="--", color="k", alpha=0.5)
-        axs[1].set_xticks(xticks)
-        axs[1].set_xlim(0, 16)
-        axs[1].set_xlabel(r"\rm Separation (pixels)")
-        axs[1].set_ylabel(r"\rm Centroid location residual (pixels)")
+        # centroid error
+        sd1_x = data["est"]["plocs_sd"][:, 0, 1]
+        sd1_y = data["est"]["plocs_sd"][:, 0, 0]
+        sd2_x = data["est"]["plocs_sd"][:, 1, 1]
+        sd2_y = data["est"]["plocs_sd"][:, 1, 0]
 
-        # location error (squared sum) estimate
-        eploc_sd1 = (data["est"]["plocs_sd"][:, 0] ** 2).sum(1) ** (1 / 2)
-        eploc_sd2 = (data["est"]["plocs_sd"][:, 1] ** 2).sum(1) ** (1 / 2)
-        axs[2].plot(seps, eploc_sd1, "-", color=c1)
-        axs[2].plot(seps, eploc_sd2, "-", color=c2)
-        axs[2].axhline(0, color="k", ls="-", alpha=1.0)
-        axs[2].axvline(2, ls="--", color="k", label=r"\rm Tile boundary", alpha=0.5)
-        axs[2].axvline(6, ls="--", color="k", alpha=0.5)
-        axs[2].axvline(10, ls="--", color="k", alpha=0.5)
-        axs[2].axvline(14, ls="--", color="k", alpha=0.5)
-        axs[2].set_xticks(xticks)
-        axs[2].set_xlim(0, 16)
-        axs[2].set_ylim(axs[1].get_ylim())
-        axs[2].set_xlabel(r"\rm Separation (pixels)")
-        axs[2].set_ylabel(r"\rm Predicted centroid std. (pixels)")
+        ax1 = axes[0][0]
+        ax1.plot(seps, dist1_x, "-", color=c1, label=r"\rm Galaxy $1$")
+        ax1.plot(seps, dist2_x, "-", color=c2, label=r"\rm Galaxy $2$")
+        ax1.axhline(0, color="k", ls="-", alpha=1.0)
+        ax1.axvline(2, ls="--", color="k", label=r"\rm Tile boundary", alpha=0.5)
+        ax1.axvline(6, ls="--", color="k", alpha=0.5)
+        ax1.axvline(10, ls="--", color="k", alpha=0.5)
+        ax1.axvline(14, ls="--", color="k", alpha=0.5)
+        ax1.set_xticks(xticks)
+        ax1.set_xlim(0, 16)
+        # ax1.set_xlabel(r"\rm Separation (pixels)")
+        ax1.set_ylabel(r"\rm Centroid residual $x$ (pixels)")
+        ax1.legend(loc="best")
+
+        ax2 = axes[0][1]
+        ax2.plot(seps, dist1_y, "-", color=c1)
+        ax2.plot(seps, dist2_y, "-", color=c2)
+        ax2.axhline(0, color="k", ls="-", alpha=1.0)
+        ax2.axvline(2, ls="--", color="k", alpha=0.5)
+        ax2.axvline(6, ls="--", color="k", alpha=0.5)
+        ax2.axvline(10, ls="--", color="k", alpha=0.5)
+        ax2.axvline(14, ls="--", color="k", alpha=0.5)
+        ax2.set_xticks(xticks)
+        ax2.set_xlim(0, 16)
+        ax2.set_ylim(ax1.get_ylim())
+        # ax2.set_xlabel(r"\rm Separation (pixels)")
+        ax2.set_ylabel(r"\rm Centroid residual $y$ (pixels)")
+
+        ax3 = axes[1][0]
+        ax3.plot(seps, sd1_x, "-", color=c1)
+        ax3.plot(seps, sd2_x, "-", color=c2)
+        ax3.axhline(0, color="k", ls="-", alpha=1.0)
+        ax3.axvline(2, ls="--", color="k", alpha=0.5)
+        ax3.axvline(6, ls="--", color="k", alpha=0.5)
+        ax3.axvline(10, ls="--", color="k", alpha=0.5)
+        ax3.axvline(14, ls="--", color="k", alpha=0.5)
+        ax3.set_xticks(xticks)
+        ax3.set_xlim(0, 16)
+        # ax3.set_ylim(ax1.get_ylim())
+        ax3.set_xlabel(r"\rm Separation (pixels)")
+        ax3.set_ylabel(r"\rm Predicted centroid std. $x$ (pixels)")
+
+        ax4 = axes[1][1]
+        ax4.plot(seps, sd1_y, "-", color=c1)
+        ax4.plot(seps, sd2_y, "-", color=c2)
+        ax4.axhline(0, color="k", ls="-", alpha=1.0)
+        ax4.axvline(2, ls="--", color="k", alpha=0.5)
+        ax4.axvline(6, ls="--", color="k", alpha=0.5)
+        ax4.axvline(10, ls="--", color="k", alpha=0.5)
+        ax4.axvline(14, ls="--", color="k", alpha=0.5)
+        ax4.set_xticks(xticks)
+        ax4.set_xlim(0, 16)
+        ax4.set_ylim(ax3.get_ylim())
+        ax4.set_xlabel(r"\rm Separation (pixels)")
+        ax4.set_ylabel(r"\rm Predicted centroid std. $y$ (pixels)")
 
         return fig
 
@@ -408,8 +458,10 @@ class ToySeparationFigure(BlissFigure):
             return self._get_three_separations_plot(data)
         if fname == "toy_residuals":
             return self._get_residuals_figure(data)
-        if fname == "toy_measurements":
-            return self._get_measurement_figure(data)
+        if fname == "detection_prob":
+            return self._get_detection_prob_figure(data)
+        if fname == "centroid_residual":
+            return self._get_dist_residual_figure(data)
         raise NotImplementedError("Figure {fname} not implemented.")
 
 
