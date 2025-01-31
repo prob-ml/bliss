@@ -1,6 +1,6 @@
 ---
 defaults:
-    - ../data_processing@_here_: data
+    - ..@_here_: redshift
     - _self_
     # - override hydra/job_logging: stdout
 
@@ -135,9 +135,9 @@ mode_sample_metrics:
 train:
     trainer:
         logger:
-            name: DC2_redshift_training
-            version: DC2_redshift_only_large_split_blend
-            save_dir: ${paths.root}/case_studies/redshift/redshift_from_img/
+            name: checkpoints
+            version: discrete
+            save_dir: ${paths.data_dir}
         precision: 32
         strategy:
           _target_: pytorch_lightning.strategies.DDPStrategy

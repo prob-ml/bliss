@@ -84,15 +84,10 @@ def create_bliss_artifacts(bliss_cfg: DictConfig):
 
 
 
-@hydra.main(config_path=".", config_name="data")
+@hydra.main(config_path="../", config_name="redshift")
 def main(cfg: DictConfig) -> None:
     logging.info("Starting data generation")
     logging.info(OmegaConf.to_yaml(cfg))
-
-    # print(cfg.rail.pipeline.quantities)
-    # print(type(cfg.rail.pipeline.quantities))
-    # print(type(cfg.rail.pipeline.quantities[0]))
-    # return
 
     # Create RAIL artifacts
     create_rail_artifacts(cfg.rail)
