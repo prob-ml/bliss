@@ -5,7 +5,7 @@ export OMP_NUM_THREADS="16"
 export MKL_NUM_THREADS="16"
 export NUMEXPR_NUM_THREADS="16"
 
-# Produce data artifacts 
+# Produce data artifacts
 echo "producing data artifacts for BLISS and RAIL from DC2"
 python data_preprocessing/data_generation.py
 

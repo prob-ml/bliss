@@ -284,7 +284,7 @@ class Discretized1D(Distribution):
                 risk += bin_probs[..., i]
 
         return risk
-    
+
     def compute_outlier_fraction_risk(self, z_pred, bin_centers, bin_probs):
         """
         Compute the outlier fraction risk for a predicted redshift (z_pred), |z_true - z_pred| / (1 + z_true) > 0.15 as outlier.
@@ -299,7 +299,7 @@ class Discretized1D(Distribution):
                 risk += bin_probs[..., i]
 
         return risk
-    
+
     def compute_NMAD_risk(self, z_pred, bin_centers, bin_probs):
         """
         Compute the NMAD risk for a predicted redshift (z_pred). NMAD = 1.4826 * Median(|(z_true - z_pred) / (1 + z_true)|
@@ -329,7 +329,7 @@ class Discretized1D(Distribution):
             risk += bin_probs[..., i] * (z_pred - z_i)**2
 
         return risk
-    
+
     def compute_abs_bias_risk(self, z_pred, bin_centers, bin_probs):
         """
         Compute the absolute bias risk for a predicted redshift (z_pred).

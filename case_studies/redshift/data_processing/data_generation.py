@@ -1,12 +1,11 @@
-import logging
 import os
-import pickle
 
+# pylint: disable=C0413
 os.environ["OMP_NUM_THREADS"] = "8"
 os.environ["MKL_NUM_THREADS"] = "8"
 os.environ["NUMEXPR_NUM_THREADS"] = "8"
 
-
+import logging
 from pathlib import Path
 
 import GCRCatalogs
@@ -69,8 +68,6 @@ def create_rail_artifacts(rail_cfg: DictConfig):
     val_nrow = rail_cfg.pipeline.val_size
     lsst_catalog_df_nona_newname[:train_nrow].to_pickle(log_dir / "lsst_train_nona_200k.pkl")
     lsst_catalog_df_nona_newname[-1-val_nrow -1:].to_pickle(log_dir / "lsst_val_nona_100k.pkl")
-    return
-
 
 
 #### ------------- BLISS ----------- ####
@@ -80,8 +77,6 @@ def create_bliss_artifacts(bliss_cfg: DictConfig):
     logging.info("Creating BLISS artifacts at %s", bliss_cfg.paths.processed_data_dir_bliss)
     dc2: DC2DataModule = instantiate(bliss_cfg.surveys.dc2)
     dc2.prepare_data()
-    return
-
 
 
 @hydra.main(config_path="../", config_name="redshift")
