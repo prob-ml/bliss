@@ -1,9 +1,3 @@
-import os
-
-# pylint: disable=C0413
-os.environ["OMP_NUM_THREADS"] = "8"
-os.environ["MKL_NUM_THREADS"] = "8"
-os.environ["NUMEXPR_NUM_THREADS"] = "8"
 
 import logging
 from pathlib import Path
@@ -19,20 +13,19 @@ from bliss.surveys.dc2 import DC2DataModule
 
 logging.basicConfig(level=logging.INFO)
 
-#### ------------- RAIL ------------ ####
+
+# ------------- RAIL ------------ #
 def create_rail_artifacts(rail_cfg: DictConfig):
-    """Create DataFrames of ugrizy magnitudes and errors for RAIL training.
-    """
+    """Create DataFrames of ugrizy magnitudes and errors for RAIL training."""
     logging.info("Creating RAIL artifacts at %s", rail_cfg.processed_data_dir)
     log_dir = Path(rail_cfg.processed_data_dir)
 
     # Create output directory if it does not exist, or skip if artifacts already exist
     if not log_dir.exists():
         log_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        if not rail_cfg.pipeline.force_reprocess:
-            logging.info("RAIL artifacts already exist. Skipping creation.")
-            return
+    elif not rail_cfg.pipeline.force_reprocess:
+        logging.info("RAIL artifacts already exist. Skipping creation.")
+        return
 
     lsst_root_dir = rail_cfg.pipeline.lsst_root_dir
     GCRCatalogs.set_root_dir(lsst_root_dir)
@@ -67,13 +60,12 @@ def create_rail_artifacts(rail_cfg: DictConfig):
     train_nrow = rail_cfg.pipeline.train_size
     val_nrow = rail_cfg.pipeline.val_size
     lsst_catalog_df_nona_newname[:train_nrow].to_pickle(log_dir / "lsst_train_nona_200k.pkl")
-    lsst_catalog_df_nona_newname[-1-val_nrow -1:].to_pickle(log_dir / "lsst_val_nona_100k.pkl")
+    lsst_catalog_df_nona_newname[-1 - val_nrow - 1:].to_pickle(log_dir / "lsst_val_nona_100k.pkl")
 
 
-#### ------------- BLISS ----------- ####
+# ------------- BLISS ----------- #
 def create_bliss_artifacts(bliss_cfg: DictConfig):
-    """CONSTRUCT BATCHES (.pt files) FOR DATA LOADING
-    """
+    """CONSTRUCT BATCHES (.pt files) FOR DATA LOADING."""
     logging.info("Creating BLISS artifacts at %s", bliss_cfg.paths.processed_data_dir_bliss)
     dc2: DC2DataModule = instantiate(bliss_cfg.surveys.dc2)
     dc2.prepare_data()
@@ -91,6 +83,7 @@ def main(cfg: DictConfig) -> None:
     create_bliss_artifacts(cfg)
 
     logging.info("Data generation complete")
+
 
 if __name__ == "__main__":
     main()

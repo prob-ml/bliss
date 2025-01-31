@@ -1,10 +1,4 @@
 
-import os
-
-# pylint: disable=C0413
-os.environ["OMP_NUM_THREADS"] = "16"
-os.environ["MKL_NUM_THREADS"] = "16"
-os.environ["NUMEXPR_NUM_THREADS"] = "16"
 import pickle
 from pathlib import Path
 
@@ -24,10 +18,10 @@ def get_best_ckpt(ckpt_dir: str):
 
     raise FileExistsError("No ckpt files found in the directory")
 
+
 @hydra.main(config_path=".", config_name="continuous_eval")
 def main(cfg: DictConfig):
-    # with initialize(config_path=".", job_name="continuous_eval"):
-    #     cfg = compose(config_name="continuous_eval")
+
     output_dir = cfg.paths.plot_dir
     ckpt_dir = cfg.paths.ckpt_dir
 

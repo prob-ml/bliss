@@ -1,10 +1,4 @@
 
-import os
-
-# pylint: disable=C0413
-os.environ["OMP_NUM_THREADS"] = "16"
-os.environ["MKL_NUM_THREADS"] = "16"
-os.environ["NUMEXPR_NUM_THREADS"] = "16"
 import pickle
 from pathlib import Path
 
