@@ -79,7 +79,7 @@ class RedshiftDC2DataModule(DC2DataModule):
 
         return None
 
-    def generate_cached_data(self, naming_info: tuple): # pylint: disable=W0237,R0801
+    def generate_cached_data(self, naming_info: tuple):  # pylint: disable=W0237,R0801
         image_index, patch_name = naming_info
         result_dict = self.load_image_and_catalog(image_index)
 
