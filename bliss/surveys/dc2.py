@@ -155,7 +155,7 @@ class DC2DataModule(CachedSimulatedDataModule):
                 )
         else:
             for i in range(n_image):
-                self.generate_cached_data(i)
+                self.generate_cached_data((i, self._tract_patches[i]))
 
         return None
 
