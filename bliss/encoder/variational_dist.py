@@ -120,16 +120,6 @@ class VariationalFactor:
             assert sample_cat.isfinite().all(), f"sample_cat has invalid values: {sample_cat}"
         return sample_cat
 
-    def discrete_sample(
-        self, params, use_mode=False, risk_type="redshift_outlier_fraction_catastrophic_bin"
-    ):
-        qk = self._get_dist(params)
-        sample_cat = qk.get_lowest_risk_bin(risk_type=risk_type)
-        if self.sample_rearrange is not None:
-            sample_cat = rearrange(sample_cat, self.sample_rearrange)
-            assert sample_cat.isfinite().all(), f"sample_cat has invalid values: {sample_cat}"
-        return sample_cat
-
     def compute_nll(self, params, true_tile_cat):
         target = true_tile_cat[self.name]
         if self.nll_rearrange is not None:
