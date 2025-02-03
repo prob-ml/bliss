@@ -34,7 +34,6 @@ class Encoder(pl.LightningModule):
         matcher: CatalogMatcher,
         sample_image_renders: MetricCollection,
         mode_metrics: MetricCollection,
-        discrete_metrics: MetricCollection,
         sample_metrics: Optional[MetricCollection] = None,
         optimizer_params: Optional[dict] = None,
         scheduler_params: Optional[dict] = None,
@@ -55,7 +54,6 @@ class Encoder(pl.LightningModule):
             matcher: for matching predicted catalogs to ground truth catalogs
             sample_image_renders: for plotting relevant images (overlays, shear maps)
             mode_metrics: for scoring predicted mode catalogs during training
-            discrete_metrics: for scoring risk-adjusted bin sampling for redshift TODO: move
             sample_metrics: for scoring predicted sampled catalogs during training
             optimizer_params: arguments passed to the Adam optimizer
             scheduler_params: arguments passed to the learning rate scheduler
@@ -74,7 +72,6 @@ class Encoder(pl.LightningModule):
         self.var_dist = var_dist
         self.mode_metrics = mode_metrics
         self.sample_metrics = sample_metrics
-        self.discrete_metrics = discrete_metrics
         self.sample_image_renders = sample_image_renders
         self.matcher = matcher
         self.optimizer_params = optimizer_params
