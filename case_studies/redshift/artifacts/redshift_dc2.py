@@ -1,14 +1,11 @@
-
 import logging
 import multiprocessing
 import pathlib
 from pathlib import Path
 
-
-
 import torch
 
-from bliss.surveys.dc2 import DC2DataModule, map_nested_dicts, split_list, unpack_dict, split_tensor
+from bliss.surveys.dc2 import DC2DataModule, map_nested_dicts, split_list, split_tensor, unpack_dict
 
 
 class RedshiftDC2DataModule(DC2DataModule):
@@ -19,10 +16,7 @@ class RedshiftDC2DataModule(DC2DataModule):
         *args,
         **kwargs,
     ):
-        super().__init__(
-            *args,
-            **kwargs
-        )
+        super().__init__(*args, **kwargs)
 
         self.dc2_image_dir = Path(self.dc2_image_dir)
         self.dc2_cat_path = Path(self.dc2_cat_path)
@@ -159,5 +153,3 @@ class RedshiftDC2DataModule(DC2DataModule):
             with open(cached_data_file_path, "wb") as cached_data_file:
                 torch.save(tmp_data_cached, cached_data_file)
             data_count += 1
-
-    
