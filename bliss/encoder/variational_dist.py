@@ -125,7 +125,9 @@ class VariationalFactor:
             assert sample_cat.isfinite().all(), f"sample_cat has invalid values: {sample_cat}"
         return sample_cat
 
-    def discrete_sample(self, params, use_mode=False, risk_type="redshift_outlier_fraction_catastrophic_bin"):
+    def discrete_sample(
+        self, params, use_mode=False, risk_type="redshift_outlier_fraction_catastrophic_bin"
+    ):
         qk = self._get_dist(params)
         sample_cat = qk.get_lowest_risk_bin(risk_type=risk_type)
         if self.sample_rearrange is not None:
@@ -272,8 +274,7 @@ class Discretized1D(Distribution):
         return (locbins.float() + 0.5) / self.num_bins * (self.high - self.low) + self.low
 
     def compute_catastrophic_risk(self, z_pred, bin_centers, bin_probs):
-        """
-        Compute the catastrophic risk for a predicted redshift (z_pred).
+        """Compute the catastrophic risk for a predicted redshift (z_pred).
         z_pred: Shape [N, H, W]
         bin_centers: Shape [num_bins]
         bin_probs: Shape [N, H, W, num_bins]
@@ -291,8 +292,8 @@ class Discretized1D(Distribution):
         return risk
 
     def compute_outlier_fraction_risk(self, z_pred, bin_centers, bin_probs):
-        """
-        Compute the outlier fraction risk for a predicted redshift (z_pred), |z_true - z_pred| / (1 + z_true) > 0.15 as outlier.
+        """Compute the outlier fraction risk for a predicted redshift (z_pred).
+        Defined via `|z_true - z_pred| / (1 + z_true) > 0.15` as outlier.
         """
         risk = torch.zeros_like(bin_probs[..., 0])
         for i in range(self.num_bins):
@@ -305,10 +306,11 @@ class Discretized1D(Distribution):
 
         return risk
 
-    def compute_NMAD_risk(self, z_pred, bin_centers, bin_probs):
-        """
-        Compute the NMAD risk for a predicted redshift (z_pred). NMAD = 1.4826 * Median(|(z_true - z_pred) / (1 + z_true)|
-        - Median((z_true - z_pred) / (1 + z_true))).
+    def compute_nmad_risk(self, z_pred, bin_centers, bin_probs):
+        """Compute the NMAD risk for a predicted redshift (z_pred).
+        NMAD = `1.4826 * Median(|(z_true - z_pred) / (1 + z_true)| -`
+            `Median((z_true - z_pred) / (1 + z_true)))`.
+
         z_pred: Shape [N, H, W]
         bin_centers: Shape [num_bins]
         bin_probs: Shape [N, H, W, num_bins]
@@ -323,22 +325,18 @@ class Discretized1D(Distribution):
 
         return risk
 
-    def compute_MSE_risk(self, z_pred, bin_centers, bin_probs):
-        """
-        Compute the MSE risk for a predicted redshift (z_pred).
-        """
+    def compute_mse_risk(self, z_pred, bin_centers, bin_probs):
+        """Compute the MSE risk for a predicted redshift (z_pred)."""
         risk = torch.zeros_like(bin_probs[..., 0])
         for i in range(self.num_bins):
             z_i = bin_centers[i]
 
-            risk += bin_probs[..., i] * (z_pred - z_i)**2
+            risk += bin_probs[..., i] * (z_pred - z_i) ** 2
 
         return risk
 
     def compute_abs_bias_risk(self, z_pred, bin_centers, bin_probs):
-        """
-        Compute the absolute bias risk for a predicted redshift (z_pred).
-        """
+        """Compute the absolute bias risk for a predicted redshift (z_pred)."""
         risk = torch.zeros_like(bin_probs[..., 0])
         for i in range(self.num_bins):
             z_i = bin_centers[i]
@@ -348,28 +346,28 @@ class Discretized1D(Distribution):
         return risk
 
     def get_lowest_risk_bin(self, risk_type="redshift_outlier_fraction_catastrophic_bin"):
-        """
-        Find the bin that minimizes the risk of producing a catastrophic outlier.
-        """
+        """Find the bin that minimizes the risk of producing a catastrophic outlier."""
         bin_centers = torch.linspace(
             self.low, self.high, self.num_bins, device=self.base_dist.logits.device
         )
         bin_probs = self.base_dist.probs
 
-        min_risk = torch.full(bin_probs.shape[:-1], float('inf'), device=self.base_dist.logits.device)  # Shape [N, H, W]
+        min_risk = torch.full(
+            bin_probs.shape[:-1], float("inf"), device=self.base_dist.logits.device
+        )  # Shape [N, H, W]
         best_bin = torch.zeros_like(min_risk)  # Shape [N, H, W]
 
         # Grid search
         for z_pred in bin_centers:
             if risk_type == "redshift_outlier_fraction_catastrophic_bin":
                 risk = self.compute_catastrophic_risk(z_pred, bin_centers, bin_probs)
-            elif risk_type == "redshift_outlier_fraction_bin":
+            if risk_type == "redshift_outlier_fraction_bin":
                 risk = self.compute_outlier_fraction_risk(z_pred, bin_centers, bin_probs)
-            elif risk_type == "redshift_nmad_bin":
-                risk = self.compute_NMAD_risk(z_pred, bin_centers, bin_probs)
-            elif risk_type == "redshift_mearn_square_error_bin":
-                risk = self.compute_MSE_risk(z_pred, bin_centers, bin_probs)
-            elif risk_type == "redshift_abs_bias_bin":
+            if risk_type == "redshift_nmad_bin":
+                risk = self.compute_nmad_risk(z_pred, bin_centers, bin_probs)
+            if risk_type == "redshift_mearn_square_error_bin":
+                risk = self.compute_mse_risk(z_pred, bin_centers, bin_probs)
+            if risk_type == "redshift_abs_bias_bin":
                 risk = self.compute_abs_bias_risk(z_pred, bin_centers, bin_probs)
             else:
                 raise ValueError(f"Invalid risk type: {risk_type}")

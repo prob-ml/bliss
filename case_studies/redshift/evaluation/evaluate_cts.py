@@ -1,4 +1,3 @@
-
 import pickle
 from pathlib import Path
 
@@ -21,7 +20,6 @@ def get_best_ckpt(ckpt_dir: str):
 
 @hydra.main(config_path=".", config_name="continuous_eval")
 def main(cfg: DictConfig):
-
     output_dir = cfg.paths.plot_dir
     ckpt_dir = cfg.paths.ckpt_dir
 

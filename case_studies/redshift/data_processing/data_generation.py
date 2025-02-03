@@ -1,4 +1,3 @@
-
 import logging
 from pathlib import Path
 
@@ -60,7 +59,7 @@ def create_rail_artifacts(rail_cfg: DictConfig):
     train_nrow = rail_cfg.pipeline.train_size
     val_nrow = rail_cfg.pipeline.val_size
     lsst_catalog_df_nona_newname[:train_nrow].to_pickle(log_dir / "lsst_train_nona_200k.pkl")
-    lsst_catalog_df_nona_newname[-1 - val_nrow - 1:].to_pickle(log_dir / "lsst_val_nona_100k.pkl")
+    lsst_catalog_df_nona_newname[-1 - val_nrow - 1 :].to_pickle(log_dir / "lsst_val_nona_100k.pkl")
 
 
 # ------------- BLISS ----------- #

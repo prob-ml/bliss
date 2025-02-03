@@ -5,7 +5,6 @@ from bliss.encoder.encoder import Encoder
 
 
 class RedshiftsEncoder(Encoder):
-
     def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
 

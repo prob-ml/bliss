@@ -122,9 +122,9 @@ class DC2DataModule(CachedSimulatedDataModule):
         self._bg_files = bg_files
 
         # record which tracts and patches
-        tracts = [str(file_name).split('/')[-3] for file_name in self._image_files[0]]
-        patches = [str(file_name).split('-')[-1][:3] for file_name in self._image_files[0]]
-        self._tract_patches = [x[0] + '_' + x[1] for x in zip(tracts, patches)] # TODO: hack
+        tracts = [str(file_name).split("/")[-3] for file_name in self._image_files[0]]
+        patches = [str(file_name).split("-")[-1][:3] for file_name in self._image_files[0]]
+        self._tract_patches = [x[0] + "_" + x[1] for x in zip(tracts, patches)]  # TODO: hack
 
         return n_image
 
@@ -238,7 +238,6 @@ class DC2DataModule(CachedSimulatedDataModule):
         tile_dict = result_dict["tile_dict"]
         wcs_header_str = result_dict["other_info"]["wcs_header_str"]
         psf_params = result_dict["inputs"]["psf_params"]
-        match_id = result_dict["other_info"]["match_id"]
 
         # split image
         split_lim = self.image_lim[0] // self.n_image_split
@@ -268,9 +267,7 @@ class DC2DataModule(CachedSimulatedDataModule):
                 tile_dict[param_name], split_lim // self.tile_slen, 0, 1
             )
 
-        objid = split_tensor(
-            tile_dict["objid"], split_lim // self.tile_slen, 0, 1
-        )
+        objid = split_tensor(tile_dict["objid"], split_lim // self.tile_slen, 0, 1)
 
         data_splits = {
             "tile_catalog": unpack_dict(tile_cat_splits),
