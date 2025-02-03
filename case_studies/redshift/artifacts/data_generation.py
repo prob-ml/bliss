@@ -8,7 +8,7 @@ import pandas as pd
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
-from bliss.surveys.dc2 import DC2DataModule
+from case_studies.redshift.artifacts.redshift_dc2 import DC2DataModule
 
 logging.basicConfig(level=logging.INFO)
 

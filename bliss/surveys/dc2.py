@@ -3,7 +3,6 @@ import copy
 import logging
 import multiprocessing
 import pathlib
-from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -76,8 +75,8 @@ class DC2DataModule(CachedSimulatedDataModule):
             subset_fraction,
         )
 
-        self.dc2_image_dir = Path(dc2_image_dir)
-        self.dc2_cat_path = Path(dc2_cat_path)
+        self.dc2_image_dir = dc2_image_dir
+        self.dc2_cat_path = dc2_cat_path
 
         self.image_lim = image_lim
         self.n_image_split = n_image_split
@@ -100,7 +99,6 @@ class DC2DataModule(CachedSimulatedDataModule):
 
         self._image_files = None
         self._bg_files = None
-        self._tract_patches = None
 
     def _load_image_and_bg_files_list(self):
         img_pattern = "**/*/calexp*.fits"
@@ -109,7 +107,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         bg_files = []
 
         for band in self.bands:
-            band_path = self.dc2_image_dir / str(band)
+            band_path = self.dc2_image_dir + str(band)
             img_file_list = list(pathlib.Path(band_path).glob(img_pattern))
             bg_file_list = list(pathlib.Path(band_path).glob(bg_pattern))
 
@@ -120,13 +118,6 @@ class DC2DataModule(CachedSimulatedDataModule):
         # assign state only in main process
         self._image_files = image_files
         self._bg_files = bg_files
-
-        # record which tracts and patches
-        tracts = [str(file_name).split("/")[-3] for file_name in self._image_files[0]]
-        patches = [
-            str(file_name).rsplit("-", maxsplit=1)[-1][:3] for file_name in self._image_files[0]
-        ]  # TODO: check
-        self._tract_patches = [x[0] + "_" + x[1] for x in zip(tracts, patches)]  # TODO: hack
 
         return n_image
 
@@ -140,22 +131,20 @@ class DC2DataModule(CachedSimulatedDataModule):
         logger = logging.getLogger("DC2DataModule")
         warning_msg = "WARNING: can't find cached data, we generate it at [%s]\n"
         logger.warning(warning_msg, str(self.cached_data_path))
-        if not self.cached_data_path.exists():
-            self.cached_data_path.mkdir(parents=True)
+        self.cached_data_path.mkdir(parents=True)
 
         n_image = self._load_image_and_bg_files_list()
 
-        # Train
         if self.prepare_data_processes_num > 1:
             with multiprocessing.Pool(processes=self.prepare_data_processes_num) as process_pool:
                 process_pool.map(
                     self.generate_cached_data,
-                    zip(list(range(n_image)), self._tract_patches),
+                    list(range(n_image)),
                     chunksize=4,
                 )
         else:
             for i in range(n_image):
-                self.generate_cached_data((i, self._tract_patches[i]))
+                self.generate_cached_data(i)
 
         return None
 
@@ -232,15 +221,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             },
         }
 
-    def generate_cached_data(self, naming_info: tuple):
-        image_index, patch_name = naming_info
-        result_dict = self.load_image_and_catalog(image_index)
-
-        image = result_dict["inputs"]["image"]
-        tile_dict = result_dict["tile_dict"]
-        wcs_header_str = result_dict["other_info"]["wcs_header_str"]
-        psf_params = result_dict["inputs"]["psf_params"]
-
+    def split_image_and_tile_cat(self, image, tile_cat, tile_cat_keys_to_split, psf_params):
         # split image
         split_lim = self.image_lim[0] // self.n_image_split
         image_splits = split_tensor(image, split_lim, 1, 2)
@@ -249,29 +230,12 @@ class DC2DataModule(CachedSimulatedDataModule):
 
         # split tile cat
         tile_cat_splits = {}
-        param_list = [
-            "locs",
-            "n_sources",
-            "source_type",
-            "galaxy_fluxes",
-            "star_fluxes",
-            "redshifts",
-            "blendedness",
-            "shear",
-            "ellipticity",
-            "cosmodc2_mask",
-            "one_source_mask",
-            "two_sources_mask",
-            "more_than_two_sources_mask",
-        ]
-        for param_name in param_list:
+        for param_name in tile_cat_keys_to_split:
             tile_cat_splits[param_name] = split_tensor(
-                tile_dict[param_name], split_lim // self.tile_slen, 0, 1
+                tile_cat[param_name], split_lim // self.tile_slen, 0, 1
             )
 
-        objid = split_tensor(tile_dict["objid"], split_lim // self.tile_slen, 0, 1)
-
-        data_splits = {
+        return {
             "tile_catalog": unpack_dict(tile_cat_splits),
             "images": image_splits,
             "image_height_index": (
@@ -281,10 +245,35 @@ class DC2DataModule(CachedSimulatedDataModule):
                 torch.arange(0, len(image_splits)) % split_image_num_on_width
             ).tolist(),
             "psf_params": [psf_params for _ in range(self.n_image_split**2)],
-            "objid": objid,
         }
+
+    def generate_cached_data(self, image_index):
+        result_dict = self.load_image_and_catalog(image_index)
+
+        image = result_dict["inputs"]["image"]
+        tile_dict = result_dict["tile_dict"]
+        wcs_header_str = result_dict["other_info"]["wcs_header_str"]
+        psf_params = result_dict["inputs"]["psf_params"]
+
+        param_list = [
+            "locs",
+            "n_sources",
+            "source_type",
+            "fluxes",
+            "redshifts",
+            "blendedness",
+            "shear",
+            "ellipticity",
+            "cosmodc2_mask",
+            "one_source_mask",
+            "two_sources_mask",
+            "more_than_two_sources_mask",
+        ]
+
+        splits = self.split_image_and_tile_cat(image, tile_dict, param_list, psf_params)
+
         data_splits = split_list(
-            unpack_dict(data_splits),
+            unpack_dict(splits),
             sub_list_len=self.data_in_one_cached_file,
         )
 
@@ -300,7 +289,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             assert data_count < 1e5 and image_index < 1e5, "too many cached data files"
             assert len(tmp_data_cached) < 1e5, "too many cached data in one file"
             cached_data_file_name = (
-                f"cached_data_{patch_name}_{data_count:04d}_size_{len(tmp_data_cached):04d}.pt"
+                f"cached_data_{image_index:04d}_{data_count:04d}_size_{len(tmp_data_cached):04d}.pt"
             )
             cached_data_file_path = self.cached_data_path / cached_data_file_name
             with open(cached_data_file_path, "wb") as cached_data_file:
@@ -343,9 +332,7 @@ class DC2FullCatalog(FullCatalog):
         source_type = torch.from_numpy(catalog["truth_type"].values)
         # we ignore the supernova
         source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
-        flux, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
-        star_fluxes = flux
-        galaxy_fluxes = flux
+        fluxes, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
         blendedness = torch.from_numpy(catalog["blendedness"].values)
         shear1 = torch.from_numpy(catalog["shear_1"].values)
         shear2 = torch.from_numpy(catalog["shear_2"].values)
@@ -362,19 +349,17 @@ class DC2FullCatalog(FullCatalog):
             "source_type": source_type.view(1, ori_len, 1),
             "plocs": plocs.view(1, ori_len, 2),
             "redshifts": redshifts.view(1, ori_len, 1),
-            "galaxy_fluxes": galaxy_fluxes.view(1, ori_len, kwargs["n_bands"]),
-            "star_fluxes": star_fluxes.view(1, ori_len, kwargs["n_bands"]),
+            "fluxes": fluxes.view(1, ori_len, kwargs["n_bands"]),
             "blendedness": blendedness.view(1, ori_len, 1),
             "shear": shear.view(1, ori_len, 2),
             "ellipticity": ellipticity.view(1, ori_len, 2),
             "cosmodc2_mask": cosmodc2_mask.view(1, ori_len, 1),
         }
-        match_id = match_id.view(1, ori_len, 1)
 
         star_galaxy_filter = galaxy_bools | star_bools
         for k, v in d.items():
             d[k] = v[:, star_galaxy_filter, :]
-        match_id = match_id[:, star_galaxy_filter, :]
+        match_id = match_id[star_galaxy_filter]
 
         plocs_start_point = torch.tensor([0.0, 0.0]).view(1, 1, -1)
         plocs_end_point = torch.tensor([height, width]).view(1, 1, -1)
@@ -382,7 +367,7 @@ class DC2FullCatalog(FullCatalog):
         plocs_mask = plocs_mask.squeeze(0)
         for k, v in d.items():
             d[k] = v[:, plocs_mask, :]
-        match_id = match_id[:, plocs_mask, :]
+        match_id = match_id[plocs_mask]
 
         cosmodc2_mask = rearrange(d["cosmodc2_mask"], "1 nobj 1 -> nobj")
         shear = d["shear"]
