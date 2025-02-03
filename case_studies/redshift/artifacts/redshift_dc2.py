@@ -1,3 +1,4 @@
+# pylint: disable=R0801
 import logging
 import multiprocessing
 import pathlib
