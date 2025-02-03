@@ -155,7 +155,8 @@ class LensingDC2DataModule(DC2DataModule):
         }
 
     # override generate_cached_data
-    def generate_cached_data(self, image_index):
+    def generate_cached_data(self, naming_info):
+        image_index, patch_name = naming_info
         result_dict = self.load_image_and_catalog(image_index)
 
         image = result_dict["inputs"]["image"]
