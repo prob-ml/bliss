@@ -13,7 +13,7 @@ class RedshiftsEncoder(Encoder):
     ):
         super().__init__(*args, **kwargs)
         self.discrete_metrics = discrete_metrics
-        
+
     def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
 
