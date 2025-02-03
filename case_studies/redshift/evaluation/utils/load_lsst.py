@@ -1,3 +1,4 @@
+# pylint: disable=R0801
 import GCRCatalogs
 import pandas as pd
 import torch

@@ -1,3 +1,4 @@
+# pylint: disable=R0801
 import pickle
 from pathlib import Path
 

@@ -1,3 +1,4 @@
+# pylint: disable=R0801
 import torch
 
 from bliss.catalog import FullCatalog, SourceType, TileCatalog
