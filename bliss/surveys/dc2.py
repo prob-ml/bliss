@@ -123,7 +123,9 @@ class DC2DataModule(CachedSimulatedDataModule):
 
         # record which tracts and patches
         tracts = [str(file_name).split("/")[-3] for file_name in self._image_files[0]]
-        patches = [str(file_name).rsplit('-', maxsplit=1)[-1][:3] for file_name in self._image_files[0]] # TODO: check
+        patches = [
+            str(file_name).rsplit("-", maxsplit=1)[-1][:3] for file_name in self._image_files[0]
+        ]  # TODO: check
         self._tract_patches = [x[0] + "_" + x[1] for x in zip(tracts, patches)]  # TODO: hack
 
         return n_image
