@@ -37,6 +37,11 @@ class VariationalDist(torch.nn.Module):
         d = {qk.name: qk.sample(params, use_mode) for qk, params in fp_pairs}
         return BaseTileCatalog(d) if return_base_cat else TileCatalog(d)
 
+    def discrete_sample(self, x_cat, use_mode=False, risk_type=None):
+        fp_pairs = self._factor_param_pairs(x_cat)
+        d = {qk.name: qk.discrete_sample(params, use_mode, risk_type) for qk, params in fp_pairs}
+        return BaseTileCatalog(d)
+
     def compute_nll(self, x_cat, true_tile_cat):
         fp_pairs = self._factor_param_pairs(x_cat)
         return sum(qk.compute_nll(params, true_tile_cat) for qk, params in fp_pairs)
@@ -115,6 +120,14 @@ class VariationalFactor:
     def sample(self, params, use_mode=False):
         qk = self.get_dist(params)
         sample_cat = qk.mode if use_mode else qk.sample()
+        if self.sample_rearrange is not None:
+            sample_cat = rearrange(sample_cat, self.sample_rearrange)
+            assert sample_cat.isfinite().all(), f"sample_cat has invalid values: {sample_cat}"
+        return sample_cat
+
+    def discrete_sample(self, params, use_mode=False, risk_type="redshift_outlier_fraction_catastrophic_bin"):
+        qk = self._get_dist(params)
+        sample_cat = qk.get_lowest_risk_bin(risk_type=risk_type)
         if self.sample_rearrange is not None:
             sample_cat = rearrange(sample_cat, self.sample_rearrange)
             assert sample_cat.isfinite().all(), f"sample_cat has invalid values: {sample_cat}"
@@ -219,42 +232,157 @@ class LogitNormalFactor(VariationalFactor):
         return RescaledLogitNormal(mu, sigma, low=self.low, high=self.high)
 
 
-class DiscretizedUnitBoxFactor(VariationalFactor):
-    def __init__(self, *args, **kwargs):
-        super().__init__(64, *args, **kwargs)
+class DiscretizedFactor1D(VariationalFactor):
+    def __init__(self, n_params, low=0, high=3, *args, **kwargs):
+        super().__init__(n_params, *args, **kwargs)
+        self.low = low
+        self.high = high
 
-    def get_dist(self, params):
-        return DiscretizedUnitBox(params)
+    def _get_dist(self, params):
+        return Discretized1D(params, self.low, self.high, self.n_params)
 
 
 #####################
 
 
-class DiscretizedUnitBox(Distribution):
+class Discretized1D(Distribution):
     """A continuous bivariate distribution over the 2d unit box, with a discretized density."""
 
-    def __init__(self, logits):
+    def __init__(self, logits, low=0, high=3, num_bins=30):
         super().__init__(validate_args=False)
-        assert logits.shape[-1] == 64
-        self.pdf_offset = torch.tensor((64,), device=logits.device).log()
+        self.low = low
+        self.high = high
+        self.num_bins = num_bins
+        assert logits.shape[-1] == self.num_bins
+        self.pdf_offset = torch.tensor(
+            num_bins / (self.high - self.low), device=logits.device
+        ).log()
         self.base_dist = Categorical(logits=logits)
 
     def sample(self, sample_shape=()):
         locbins = self.base_dist.sample(sample_shape)
-        locbins2d = torch.stack((locbins // 8, locbins % 8), dim=-1)
-        locbins2d_float = locbins2d.float()
-        return (locbins2d_float + torch.rand_like(locbins2d_float)) / 8
+        locbins_float = locbins.float()
+        return (locbins_float + torch.rand_like(locbins_float)) / self.num_bins * (
+            self.high - self.low
+        ) + self.low
 
     @property
     def mode(self):
         locbins = self.base_dist.probs.argmax(dim=-1)
-        locbins2d = torch.stack((locbins // 8, locbins % 8), dim=-1)
-        return (locbins2d.float() + 0.5) / 8
+        return (locbins.float() + 0.5) / self.num_bins * (self.high - self.low) + self.low
+
+    def compute_catastrophic_risk(self, z_pred, bin_centers, bin_probs):
+        """
+        Compute the catastrophic risk for a predicted redshift (z_pred).
+        z_pred: Shape [N, H, W]
+        bin_centers: Shape [num_bins]
+        bin_probs: Shape [N, H, W, num_bins]
+        risk: Shape [N, H, W]
+        """
+        risk = torch.zeros_like(bin_probs[..., 0])
+        for i in range(self.num_bins):
+            z_i = bin_centers[i]
+
+            catastrophic_mask = torch.abs(z_pred - z_i) > 1
+
+            if catastrophic_mask:
+                risk += bin_probs[..., i]
+
+        return risk
+
+    def compute_outlier_fraction_risk(self, z_pred, bin_centers, bin_probs):
+        """
+        Compute the outlier fraction risk for a predicted redshift (z_pred), |z_true - z_pred| / (1 + z_true) > 0.15 as outlier.
+        """
+        risk = torch.zeros_like(bin_probs[..., 0])
+        for i in range(self.num_bins):
+            z_i = bin_centers[i]
+
+            outlier_mask = torch.abs(z_pred - z_i) / (1 + z_i) > 0.15
+
+            if outlier_mask:
+                risk += bin_probs[..., i]
+
+        return risk
+
+    def compute_NMAD_risk(self, z_pred, bin_centers, bin_probs):
+        """
+        Compute the NMAD risk for a predicted redshift (z_pred). NMAD = 1.4826 * Median(|(z_true - z_pred) / (1 + z_true)|
+        - Median((z_true - z_pred) / (1 + z_true))).
+        z_pred: Shape [N, H, W]
+        bin_centers: Shape [num_bins]
+        bin_probs: Shape [N, H, W, num_bins]
+        """
+        risk = torch.zeros_like(bin_probs[..., 0])
+        for i in range(self.num_bins):
+            z_i = bin_centers[i]
+
+            abs_diff = torch.abs(z_pred - z_i) / (1 + z_i)
+            median_abs_diff = torch.median(abs_diff)
+            risk += bin_probs[..., i] * median_abs_diff
+
+        return risk
+
+    def compute_MSE_risk(self, z_pred, bin_centers, bin_probs):
+        """
+        Compute the MSE risk for a predicted redshift (z_pred).
+        """
+        risk = torch.zeros_like(bin_probs[..., 0])
+        for i in range(self.num_bins):
+            z_i = bin_centers[i]
+
+            risk += bin_probs[..., i] * (z_pred - z_i)**2
+
+        return risk
+
+    def compute_abs_bias_risk(self, z_pred, bin_centers, bin_probs):
+        """
+        Compute the absolute bias risk for a predicted redshift (z_pred).
+        """
+        risk = torch.zeros_like(bin_probs[..., 0])
+        for i in range(self.num_bins):
+            z_i = bin_centers[i]
+
+            risk += bin_probs[..., i] * torch.abs(z_pred - z_i)
+
+        return risk
+
+    def get_lowest_risk_bin(self, risk_type="redshift_outlier_fraction_catastrophic_bin"):
+        """
+        Find the bin that minimizes the risk of producing a catastrophic outlier.
+        """
+        bin_centers = torch.linspace(
+            self.low, self.high, self.num_bins, device=self.base_dist.logits.device
+        )
+        bin_probs = self.base_dist.probs
+
+        min_risk = torch.full(bin_probs.shape[:-1], float('inf'), device=self.base_dist.logits.device)  # Shape [N, H, W]
+        best_bin = torch.zeros_like(min_risk)  # Shape [N, H, W]
+
+        # Grid search
+        for z_pred in bin_centers:
+            if risk_type == "redshift_outlier_fraction_catastrophic_bin":
+                risk = self.compute_catastrophic_risk(z_pred, bin_centers, bin_probs)
+            elif risk_type == "redshift_outlier_fraction_bin":
+                risk = self.compute_outlier_fraction_risk(z_pred, bin_centers, bin_probs)
+            elif risk_type == "redshift_nmad_bin":
+                risk = self.compute_NMAD_risk(z_pred, bin_centers, bin_probs)
+            elif risk_type == "redshift_mearn_square_error_bin":
+                risk = self.compute_MSE_risk(z_pred, bin_centers, bin_probs)
+            elif risk_type == "redshift_abs_bias_bin":
+                risk = self.compute_abs_bias_risk(z_pred, bin_centers, bin_probs)
+            else:
+                raise ValueError(f"Invalid risk type: {risk_type}")
+
+            update_mask = risk < min_risk
+            min_risk = torch.where(update_mask, risk, min_risk)
+            best_bin = torch.where(update_mask, z_pred, best_bin)
+
+        return best_bin
 
     def log_prob(self, value):
-        locs = value.clamp(0, 1 - 1e-7)
-        locbins2d = (locs * 8).long()
-        locbins = locbins2d[:, :, :, 0] * 8 + locbins2d[:, :, :, 1]
+        locs = ((value - self.low) / (self.high - self.low)).clamp(0, 1 - 1e-7)
+        locbins = (locs * self.num_bins).long()
         return self.base_dist.log_prob(locbins) + self.pdf_offset
 
 

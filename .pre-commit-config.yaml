@@ -36,6 +36,7 @@ repos:
         entry: flake8
         language: system
         types: [python]
+        args: ['--ignore=E402']
       - id: darglint
         name: darglint
         entry: darglint
