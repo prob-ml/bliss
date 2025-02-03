@@ -74,7 +74,6 @@ def create_bliss_artifacts(bliss_cfg: DictConfig):
 def main(cfg: DictConfig) -> None:
     logging.info("Starting data generation")
     logging.info(OmegaConf.to_yaml(cfg))
-
     # Create RAIL artifacts
     create_rail_artifacts(cfg.rail)
 

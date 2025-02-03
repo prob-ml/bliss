@@ -2,8 +2,8 @@ import pickle
 from pathlib import Path
 
 import hydra
-import matplotlib.pyplot as plt
 import seaborn as sns
+from matplotlib import pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 from omegaconf import DictConfig
 
