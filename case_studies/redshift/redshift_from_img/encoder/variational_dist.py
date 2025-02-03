@@ -7,7 +7,7 @@ from bliss.encoder.variational_dist import VariationalDist, VariationalFactor
 
 
 class DiscretizedFactor1D(VariationalFactor):
-    def __init__(self, n_params, low=0, high=3, *args, **kwargs):
+    def __init__(self, n_params, *args, low=0, high=3, **kwargs):
         super().__init__(n_params, *args, **kwargs)
         self.low = low
         self.high = high
