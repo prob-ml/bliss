@@ -274,12 +274,7 @@ class Discretized1D(Distribution):
         return (locbins.float() + 0.5) / self.num_bins * (self.high - self.low) + self.low
 
     def compute_catastrophic_risk(self, z_pred, bin_centers, bin_probs):
-        """Compute the catastrophic risk for a predicted redshift (z_pred).
-        z_pred: Shape [N, H, W]
-        bin_centers: Shape [num_bins]
-        bin_probs: Shape [N, H, W, num_bins]
-        risk: Shape [N, H, W]
-        """
+        """Compute the catastrophic risk for a predicted redshift (z_pred)."""
         risk = torch.zeros_like(bin_probs[..., 0])
         for i in range(self.num_bins):
             z_i = bin_centers[i]
@@ -294,6 +289,14 @@ class Discretized1D(Distribution):
     def compute_outlier_fraction_risk(self, z_pred, bin_centers, bin_probs):
         """Compute the outlier fraction risk for a predicted redshift (z_pred).
         Defined via `|z_true - z_pred| / (1 + z_true) > 0.15` as outlier.
+
+        Args:
+            z_pred: Predicted redshifts
+            bin_centers: Centers of the redshift bins
+            bin_probs: Probability of each bin
+
+        Returns:
+            risk: catastrophic outlier frac
         """
         risk = torch.zeros_like(bin_probs[..., 0])
         for i in range(self.num_bins):
@@ -311,9 +314,13 @@ class Discretized1D(Distribution):
         NMAD = `1.4826 * Median(|(z_true - z_pred) / (1 + z_true)| -`
             `Median((z_true - z_pred) / (1 + z_true)))`.
 
-        z_pred: Shape [N, H, W]
-        bin_centers: Shape [num_bins]
-        bin_probs: Shape [N, H, W, num_bins]
+        Args:
+            z_pred: Predicted redshifts
+            bin_centers: Centers of the redshift bins
+            bin_probs: Probability of each bin
+
+        Returns:
+            risk: nmad computation from docstring above
         """
         risk = torch.zeros_like(bin_probs[..., 0])
         for i in range(self.num_bins):
