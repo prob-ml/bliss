@@ -1,0 +1,16 @@
+---
+defaults:
+    - full_train_config_redshift
+    - _self_
+    - override hydra/job_logging: stdout
+
+encoder:
+    tiles_to_crop: 0
+
+surveys:
+    dc2:
+        dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl
+        cached_data_path: /data/scratch/dc2local/dc2_cached_data_withobj_final
+        prepare_data_processes_num: 1
+        num_workers: 0
+        max_sources_per_tile: 5
