@@ -13,7 +13,7 @@ paths:
 # Defaults from `base_config`. We modify cached path and use own class
 surveys:
   dc2:
-      _target_: bliss.case_studies.redshift.artifacts.redshift_dc2.RedshiftDC2DataModule
+      _target_: case_studies.redshift.artifacts.redshift_dc2.RedshiftDC2DataModule
       cached_data_path: ${paths.processed_data_dir_bliss}
       dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl # we should have a script that makes this on our own
 
