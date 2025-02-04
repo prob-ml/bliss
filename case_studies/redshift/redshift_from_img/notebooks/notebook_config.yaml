@@ -9,8 +9,8 @@ encoder:
 
 surveys:
     dc2:
-        dc2_cat_path: /home/qiaozhih/bliss/case_studies/redshift/redshift_from_img/DC2_generate_catalog_output/merged_catalog_with_flux_over_50.pkl
-        cached_data_path: /data/scratch/qiaozhih/dc2_cached_data_blendedness
+        dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl
+        cached_data_path: /data/scratch/dc2local/dc2_cached_data_withobj_final
         prepare_data_processes_num: 1
         num_workers: 0
         max_sources_per_tile: 5

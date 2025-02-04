@@ -5,8 +5,22 @@ from bliss.encoder.encoder import Encoder
 
 
 class RedshiftsEncoder(Encoder):
+    def __init__(
+        self,
+        discrete_metrics,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.discrete_metrics = discrete_metrics
+
     def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
+
+        for risk_type in self.discrete_metrics.keys():
+            mode_cat = self.discrete_sample(batch, use_mode=True, risk_type=risk_type)
+            matching = self.matcher.match_catalogs(target_cat, mode_cat)
+            self.discrete_metrics[risk_type].update(target_cat, mode_cat, matching)
 
         mode_cat = self.sample(batch, use_mode=True)
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
@@ -46,3 +60,7 @@ class RedshiftsEncoder(Encoder):
     def sample(self, batch, use_mode=True):
         _, x_cat_marginal = self.get_features_and_parameters(batch)
         return self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
+
+    def discrete_sample(self, batch, use_mode=True, risk_type=None):
+        _, x_cat_marginal = self.get_features_and_parameters(batch)
+        return self.var_dist.discrete_sample(x_cat_marginal, use_mode=use_mode, risk_type=risk_type)

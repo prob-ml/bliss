@@ -13,7 +13,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader, TensorDataset
 
-from case_studies.redshift.network_rs import PhotoZFromMag
+from case_studies.redshift.old.network_rs import PhotoZFromMag
 
 
 @click.command()

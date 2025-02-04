@@ -1,0 +1,15 @@
+---
+defaults:
+    - ../redshift_from_img@_here_: discrete
+    - _self_
+    # - override hydra/job_logging: stdout
+
+paths:
+    ckpt_dir: /data/scratch/declan/redshift/dc2/BLISS_DC2_redshift_discrete_results/checkpoints
+    plot_dir: ${paths.data_dir}/plots
+
+# To reduce memory usage
+surveys:
+    dc2:
+        batch_size: 4
+        max_sources_per_tile: 5
