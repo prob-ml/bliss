@@ -89,20 +89,11 @@ class RedshiftDC2DataModule(DC2DataModule):
         wcs_header_str = result_dict["other_info"]["wcs_header_str"]
         psf_params = result_dict["inputs"]["psf_params"]
 
-        # split image
-        split_lim = self.image_lim[0] // self.n_image_split
-        image_splits = split_tensor(image, split_lim, 1, 2)
-        image_width_pixels = image.shape[2]
-        split_image_num_on_width = image_width_pixels // split_lim
-
-        # split tile cat
-        tile_cat_splits = {}
         param_list = [
             "locs",
             "n_sources",
             "source_type",
-            "galaxy_fluxes",
-            "star_fluxes",
+            "fluxes",
             "redshifts",
             "blendedness",
             "shear",
@@ -112,27 +103,11 @@ class RedshiftDC2DataModule(DC2DataModule):
             "two_sources_mask",
             "more_than_two_sources_mask",
         ]
-        for param_name in param_list:
-            tile_cat_splits[param_name] = split_tensor(
-                tile_dict[param_name], split_lim // self.tile_slen, 0, 1
-            )
 
-        objid = split_tensor(tile_dict["objid"], split_lim // self.tile_slen, 0, 1)
+        splits = self.split_image_and_tile_cat(image, tile_dict, param_list, psf_params)
 
-        data_splits = {
-            "tile_catalog": unpack_dict(tile_cat_splits),
-            "images": image_splits,
-            "image_height_index": (
-                torch.arange(0, len(image_splits)) // split_image_num_on_width
-            ).tolist(),
-            "image_width_index": (
-                torch.arange(0, len(image_splits)) % split_image_num_on_width
-            ).tolist(),
-            "psf_params": [psf_params for _ in range(self.n_image_split**2)],
-            "objid": objid,
-        }
         data_splits = split_list(
-            unpack_dict(data_splits),
+            unpack_dict(splits),
             sub_list_len=self.data_in_one_cached_file,
         )
 

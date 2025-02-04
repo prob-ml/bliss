@@ -12,7 +12,7 @@ paths:
     root: /home/declan/bliss
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.DiscretizedFactor1D
+  - _target_: case_studies.redshift.redshift_from_img.encoder.variational_dist.DiscretizedFactor1D
     name: redshifts
     sample_rearrange: "b ht wt -> b ht wt 1 1"
     nll_rearrange: "b ht wt 1 1 -> b ht wt"

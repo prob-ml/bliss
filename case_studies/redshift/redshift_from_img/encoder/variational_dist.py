@@ -12,7 +12,7 @@ class DiscretizedFactor1D(VariationalFactor):
         self.low = low
         self.high = high
 
-    def _get_dist(self, params):
+    def get_dist(self, params):
         return Discretized1D(params, self.low, self.high, self.n_params)
 
     def discrete_sample(
