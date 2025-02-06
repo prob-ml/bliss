@@ -6,7 +6,7 @@ from pathlib import Path
 
 import torch
 
-from bliss.surveys.dc2 import DC2DataModule, map_nested_dicts, split_list, split_tensor, unpack_dict
+from bliss.surveys.dc2 import DC2DataModule, map_nested_dicts, split_list, unpack_dict
 
 
 class RedshiftDC2DataModule(DC2DataModule):

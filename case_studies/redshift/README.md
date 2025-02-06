@@ -5,7 +5,7 @@
 Modify the config file `redshift.yaml` as follows:
 1. Change `paths.data_dir` to a directory where you're happy to have all data artifacts and checkpoints stored.
 2. Make the `OUT_DIR` variable in `runner.sh` this same location.
-3. Modify `paths.dc2` to the location of `dc2` on your system. 
+3. Modify `paths.dc2` to the location of `dc2` on your system.
 
 To produce the results from `BLISS-PZ`, run `runner.sh` (you made need to make this an executable, `chmod +x runner.sh` from within this directory).
 

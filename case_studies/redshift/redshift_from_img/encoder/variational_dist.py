@@ -148,7 +148,7 @@ class Discretized1D(Distribution):
 
         # Grid search
         for z_pred in bin_centers:
-            if risk_type == "redshift_outlier_fraction_catastrophic_bin":
+            if risk_type == "redshift_outlier_fraction_catastrophic_bin":  # noqa: WPS223
                 risk = self.compute_catastrophic_risk(z_pred, bin_centers, bin_probs)
             elif risk_type == "redshift_outlier_fraction_bin":
                 risk = self.compute_outlier_fraction_risk(z_pred, bin_centers, bin_probs)

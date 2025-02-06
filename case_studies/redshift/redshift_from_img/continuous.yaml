@@ -13,8 +13,8 @@ global_setting:
 variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
     name: redshifts
-    sample_rearrange: "b ht wt -> b ht wt 1 1"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    sample_rearrange: "b ht wt 1 -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
     nll_gating: is_galaxy
 
 encoder:
