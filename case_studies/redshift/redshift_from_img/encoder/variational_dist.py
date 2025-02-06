@@ -18,7 +18,7 @@ class DiscretizedFactor1D(VariationalFactor):
     def discrete_sample(
         self, params, use_mode=False, risk_type="redshift_outlier_fraction_catastrophic_bin"
     ):
-        qk = self._get_dist(params)
+        qk = self.get_dist(params)
         sample_cat = qk.get_lowest_risk_bin(risk_type=risk_type)
         if self.sample_rearrange is not None:
             sample_cat = rearrange(sample_cat, self.sample_rearrange)
