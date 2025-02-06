@@ -80,7 +80,7 @@ class RedshiftMeanSquaredErrorBin(MetricBin):
                 true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_mag = true_cat.on_fluxes("njymag")[i][..., self.mag_band][tcat_matches].to(
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(
                 self.device
             )
             bin_indices = torch.bucketize(true_mag, cutoffs)
@@ -253,7 +253,7 @@ class RedshiftOutlierFractionBin(MetricBin):
                 true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_mag = true_cat.on_fluxes(self.bin_type)[i][..., self.mag_band][tcat_matches].to(
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(
                 self.device
             )
             bin_indices = torch.bucketize(true_mag, cutoffs)
@@ -339,7 +339,7 @@ class RedshiftOutlierFractionCataBin(MetricBin):
                 true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_mag = true_cat.on_fluxes(self.bin_type)[i][..., self.mag_band][tcat_matches].to(
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(
                 self.device
             )
             bin_indices = torch.bucketize(true_mag, cutoffs)
@@ -418,7 +418,7 @@ class RedshiftNormalizedMedianAbsDevBin(MetricBin):
                 true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_mag = true_cat.on_fluxes(self.bin_type)[i][..., self.mag_band][tcat_matches].to(
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(
                 self.device
             )
             bin_indices = torch.bucketize(true_mag, cutoffs)
@@ -513,7 +513,7 @@ class RedshiftBiasBin(MetricBin):
                 true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_mag = true_cat.on_fluxes(self.bin_type)[i][..., self.mag_band][tcat_matches].to(
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(
                 self.device
             )
             bin_indices = torch.bucketize(true_mag, cutoffs)
@@ -600,7 +600,7 @@ class RedshiftAbsBiasBin(MetricBin):
                 true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
                 est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
 
-            true_mag = true_cat.on_fluxes(self.bin_type)[i][..., self.mag_band][tcat_matches].to(
+            true_mag = true_cat.on_fluxes[i][..., self.mag_band][tcat_matches].to(
                 self.device
             )
             bin_indices = torch.bucketize(true_mag, cutoffs)

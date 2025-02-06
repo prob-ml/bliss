@@ -150,13 +150,13 @@ class Discretized1D(Distribution):
         for z_pred in bin_centers:
             if risk_type == "redshift_outlier_fraction_catastrophic_bin":
                 risk = self.compute_catastrophic_risk(z_pred, bin_centers, bin_probs)
-            if risk_type == "redshift_outlier_fraction_bin":
+            elif risk_type == "redshift_outlier_fraction_bin":
                 risk = self.compute_outlier_fraction_risk(z_pred, bin_centers, bin_probs)
-            if risk_type == "redshift_nmad_bin":
+            elif risk_type == "redshift_nmad_bin":
                 risk = self.compute_nmad_risk(z_pred, bin_centers, bin_probs)
-            if risk_type == "redshift_mearn_square_error_bin":
+            elif risk_type == "redshift_mean_square_error_bin":
                 risk = self.compute_mse_risk(z_pred, bin_centers, bin_probs)
-            if risk_type == "redshift_abs_bias_bin":
+            elif risk_type == "redshift_abs_bias_bin":
                 risk = self.compute_abs_bias_risk(z_pred, bin_centers, bin_probs)
             else:
                 raise ValueError(f"Invalid risk type: {risk_type}")
