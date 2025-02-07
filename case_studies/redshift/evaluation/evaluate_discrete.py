@@ -27,7 +27,7 @@ def main(cfg: DictConfig):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     ckpt_path = get_best_ckpt(ckpt_dir)
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu") # torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # set up testing dataset
     dataset = instantiate(cfg.train.data_source)

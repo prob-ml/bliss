@@ -6,10 +6,12 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 from omegaconf import DictConfig
-
+from hydra import compose, initialize
 
 @hydra.main(config_path=".", config_name="discrete_eval")
 def main(cfg: DictConfig):
+    with initialize(config_path=".", job_name="discrete_eval"):
+        cfg = compose(config_name="discrete_eval")
     output_dir = Path(cfg.paths.plot_dir)
 
     # Load metric results
