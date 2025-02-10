@@ -77,6 +77,9 @@ pyclean = "^3.0.0"
 pathos = "^0.3.2"
 pytest = "^8.2.2"
 
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
+
 [build-system]
 build-backend = "poetry.core.masonry.api"
 requires = ["poetry-core>=1.0.0"]

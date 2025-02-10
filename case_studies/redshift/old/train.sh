@@ -7,8 +7,8 @@ export NICK=""                          # Name for memorize
 export OUT_DIR="${HOME}/bliss/case_studies/redshift/training_runs/"
 # export TRAIN_PATH="${HOME}/bliss/data/redshift/dc2/desc_dc2_run2.2i_dr6_truth_nona_train_set_small.pkl"
 # export VAL_PATH="${HOME}/bliss/data/redshift/dc2/desc_dc2_run2.2i_dr6_truth_nona_val_set_small.pkl"
-export TRAIN_PATH="${HOME}/bliss/data/redshift/dc2/desc_dc2_run2.2i_dr6_truth_nona_train.pkl"
-export VAL_PATH="${HOME}/bliss/data/redshift/dc2/desc_dc2_run2.2i_dr6_truth_nona_val.pkl"
+export TRAIN_PATH="/data/scratch/qiaozhih/data/redshift/dc2/desc_dc2_run2.2i_dr6_truth_nona_train.pkl"
+export VAL_PATH="/data/scratch/qiaozhih/data/redshift/dc2/desc_dc2_run2.2i_dr6_truth_nona_val.pkl"
 echo "start training!"
 
 if [ -z "$RESUME_PATH" ]; then
