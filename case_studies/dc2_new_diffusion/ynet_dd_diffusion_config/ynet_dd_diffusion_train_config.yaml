@@ -49,7 +49,7 @@ my_image_normalizers:
     q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
 
 encoder:
-    _target_: case_studies.dc2_new_diffusion.utils.encoder.YNetDiffusionEncoder
+    _target_: case_studies.dc2_new_diffusion.utils.encoder.YNetDoubleDetectDiffusionEncoder
     survey_bands: [u, g, r, i, z, y]
     reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}
@@ -82,9 +82,9 @@ encoder:
 train:
     trainer:
         logger:
-            name: DC2_ynet_diffusion_exp
+            name: DC2_ynet_dd_diffusion_exp
             version: exp_02-05-1  # change it before running the code
-        devices: [7]  # change it before running the code
+        devices: [6]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
         max_epochs: 50

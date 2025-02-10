@@ -1,0 +1,13 @@
+---
+defaults:
+    - ynet_dd_diffusion_train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+notebook_var:
+    r_band_min_flux: 100
+
+surveys:
+    dc2:
+        prepare_data_processes_num: 1
+        num_workers: 8

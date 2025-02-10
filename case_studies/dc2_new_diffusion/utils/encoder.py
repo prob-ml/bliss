@@ -1,3 +1,4 @@
+import random
 from typing import Optional
 
 import pytorch_lightning as pl
@@ -7,13 +8,19 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 
+from einops import rearrange
+
 from bliss.catalog import TileCatalog
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.global_env import GlobalEnv
 
 from case_studies.dc2_new_diffusion.utils.convnet_layers import C3, ConvBlock
 from case_studies.dc2_diffusion.utils.catalog_parser import CatalogParser
-from case_studies.dc2_new_diffusion.utils.diffusion import DiffusionModel, UpsampleDiffusionModel, LatentDiffusionModel, YNetDiffusionModel
+from case_studies.dc2_new_diffusion.utils.diffusion import (DiffusionModel, 
+                                                            UpsampleDiffusionModel, 
+                                                            LatentDiffusionModel, 
+                                                            YNetDiffusionModel, 
+                                                            YNetDoubleDetectDiffusionModel)
 from case_studies.dc2_new_diffusion.utils.unet import UNet, YNet
 from case_studies.dc2_new_diffusion.utils.autoencoder import CatalogEncoder, CatalogDecoder
 
@@ -390,3 +397,83 @@ class YNetDiffusionEncoder(DiffusionEncoder):
         ynet_optimizer = Adam(self.ynet.parameters(), **self.optimizer_params)
         ynet_scheduler = MultiStepLR(ynet_optimizer, **self.scheduler_params)
         return [ynet_optimizer], [ynet_scheduler]
+
+
+class YNetDoubleDetectDiffusionEncoder(YNetDiffusionEncoder):
+    def initialize_networks(self):
+        assert self.tile_slen == 4
+        target_ch = self.catalog_parser.n_params_per_source
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+
+        self.ynet = YNet(n_bands=len(self.survey_bands),
+                         ch_per_band=ch_per_band,
+                         in_ch=target_ch,
+                         out_ch=target_ch,
+                         dim=64,
+                         attn_heads=4,
+                         attn_head_dim=32)
+
+        self.detection_diffusion = YNetDoubleDetectDiffusionModel(
+            model=self.ynet,
+            target_size=(
+                target_ch,
+                self.image_size[0] // 4,
+                self.image_size[1] // 4,
+            ),
+            catalog_parser=self.catalog_parser,
+            ddim_steps=self.ddim_steps,
+            objective=self.ddim_objective,
+            beta_schedule=self.ddim_beta_schedule,
+            self_condition=self.ddim_self_cond,
+        )
+    
+    @classmethod
+    def _tile_cat_disjoint_union(cls, left_cat: TileCatalog, right_cat: TileCatalog):
+        assert left_cat.batch_size == right_cat.batch_size
+        assert left_cat.n_tiles_h == right_cat.n_tiles_h
+        assert left_cat.n_tiles_w == right_cat.n_tiles_w
+        assert left_cat.max_sources == 1
+        assert right_cat.max_sources == 1
+
+        d = {}
+        ns11 = rearrange(left_cat["n_sources"], "b ht wt -> b ht wt 1 1")
+        for k, v in left_cat.items():
+            if k == "n_sources":
+                d[k] = (v.bool() | right_cat[k].bool()).to(dtype=v.dtype)
+            else:
+                d1 = v
+                d2 = right_cat[k]
+                d[k] = torch.where(ns11 > 0, d1, d2)
+        return TileCatalog(d)
+    
+    def _compute_cur_batch_loss(self, batch):
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        target_cat2 = self._tile_cat_disjoint_union(
+            left_cat=target_cat.get_brightest_sources_per_tile(band=self.reference_band, exclude_num=1, top_k=1), 
+            right_cat=target_cat1)
+        x_features = self.get_features(batch)  # (b, c, H, W)
+        encoded_target1 = self.catalog_parser.encode(target_cat1)  # (b, h, w, k)
+        encoded_target2 = self.catalog_parser.encode(target_cat2)  # (b, h, w, k)
+        if random.random() > 0.5:
+            pred_dict = self.detection_diffusion(
+                target1=encoded_target1, target2=encoded_target2, input_image=x_features
+            )
+        else:
+            pred_dict = self.detection_diffusion(
+                target1=encoded_target2, target2=encoded_target1, input_image=x_features
+            )
+        
+        return (
+            pred_dict["inter_loss"], 
+            self.catalog_parser.gating_loss(pred_dict["final_pred_loss"], target_cat1),
+            self.catalog_parser.get_gating_for_loss(target_cat1),
+        )
+    
+    @torch.inference_mode()
+    def sample(self, batch, return_inter_output, locs_slack, init_time):
+        x_features = self.get_features(batch)
+        sample_dict = self.detection_diffusion.sample(x_features, return_inter_output, locs_slack, init_time)
+        return sample_dict["double_detect"], sample_dict["inter_output"]

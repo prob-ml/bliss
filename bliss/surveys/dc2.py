@@ -279,6 +279,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             "blendedness",
             "shear",
             "ellipticity",
+            "bbox_hw",
             "cosmodc2_mask",
             "one_source_mask",
             "two_sources_mask",
@@ -335,6 +336,8 @@ class DC2DataModule(CachedSimulatedDataModule):
 
 
 class DC2FullCatalog(FullCatalog):
+    ARCSEC_PER_PIXEL = 0.2
+
     @classmethod
     def from_file(cls, cat_path, wcs, height, width, **kwargs):
         catalog = pd.read_pickle(cat_path)
@@ -359,6 +362,8 @@ class DC2FullCatalog(FullCatalog):
         ellipticity1 = torch.from_numpy(catalog["ellipticity_1_true"].values)
         ellipticity2 = torch.from_numpy(catalog["ellipticity_2_true"].values)
         ellipticity = torch.stack((ellipticity1, ellipticity2), dim=-1)
+        bbox_size = torch.from_numpy(catalog["size_true"].values) * 2 / cls.ARCSEC_PER_PIXEL
+        bbox_hw = bbox_size.view(-1, 1).repeat(1, 2)
         cosmodc2_mask = torch.from_numpy(catalog["cosmodc2_mask"].values)
         redshifts = torch.from_numpy(catalog["redshifts"].values)
 
@@ -372,6 +377,7 @@ class DC2FullCatalog(FullCatalog):
             "blendedness": blendedness.view(1, ori_len, 1),
             "shear": shear.view(1, ori_len, 2),
             "ellipticity": ellipticity.view(1, ori_len, 2),
+            "bbox_hw": bbox_hw.view(1, ori_len, 2),
             "cosmodc2_mask": cosmodc2_mask.view(1, ori_len, 1),
         }
 
@@ -399,6 +405,9 @@ class DC2FullCatalog(FullCatalog):
             torch.isnan(shear[:, ~cosmodc2_mask, :]).all()
             and torch.isnan(ellipticity[:, ~cosmodc2_mask, :]).all()
         )
+        bbox_hw = d["bbox_hw"]
+        assert not torch.isnan(bbox_hw[:, cosmodc2_mask, :]).any()
+        assert torch.isnan(bbox_hw[:, ~cosmodc2_mask, :]).all()
 
         nobj = d["source_type"].shape[1]
         d["n_sources"] = torch.tensor((nobj,))
