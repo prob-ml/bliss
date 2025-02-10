@@ -10,8 +10,8 @@ surveys:
   dc2:
     batch_size: 128
 
-my_diffusion_factors:
-  - _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.OneBitFactor
+my_factors:
+  - _target_: case_studies.dc2_diffdet.utils.catalog_parser.OneBitFactor
     n_params: 1
     name: n_sources
     bit_value: 1.0
@@ -19,7 +19,16 @@ my_diffusion_factors:
     fake_data_on_prop: 1.0
     sample_rearrange: b ht wt 1 -> b ht wt
     loss_gating: null
-  - _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.NormalizedFactor
+  - _target_: case_studies.dc2_diffdet.utils.catalog_parser.OneBitFactor
+    n_params: 1
+    name: source_type
+    bit_value: 1.0
+    threshold: 0.0
+    fake_data_on_prop: 1.0
+    sample_rearrange: b ht wt 1 -> b ht wt 1 1
+    loss_gating:
+      _target_: case_studies.dc2_diffdet.utils.catalog_parser.SourcesGating
+  - _target_: case_studies.dc2_diffdet.utils.catalog_parser.NormalizedFactor
     n_params: 2
     name: locs
     data_min: 0.0
@@ -28,45 +37,46 @@ my_diffusion_factors:
     fake_data_dist: uniform
     sample_rearrange: b ht wt d -> b ht wt 1 d
     loss_gating:
-      _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.SourcesGating
-  # - _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.MultiBitsLocsFactor
-  #   n_params: 4
-  #   name: locs
-  #   bit_value: 1.0
-  #   one_side_parts: 4
-  #   individual_hw: true
-  #   sample_rearrange: b ht wt d -> b ht wt 1 d
-  #   loss_gating:
-  #     _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.SourcesGating
+      _target_: case_studies.dc2_diffdet.utils.catalog_parser.SourcesGating
 
 my_metrics:
   detection_performance:
-    _target_: case_studies.dc2_new_diffusion.utils.metrics.DetectionPerformance
+    _target_: case_studies.dc2_diffdet.utils.metrics.DetectionPerformance
+  detection_performance_star:
+    _target_: case_studies.dc2_diffdet.utils.metrics.DetectionPerformance
+    filter_list:
+      - _target_: bliss.encoder.metrics.SourceTypeFilter
+        filter_type: star
+  detection_performance_galaxy:
+    _target_: case_studies.dc2_diffdet.utils.metrics.DetectionPerformance
+    filter_list:
+      - _target_: bliss.encoder.metrics.SourceTypeFilter
+        filter_type: galaxy
+  source_type_accuracy:
+    _target_: bliss.encoder.metrics.SourceTypeAccuracy
+    base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+    mag_zero_point: 3631e9  # for DC2
+    report_bin_unit: mag
 
 my_image_normalizers:
-  asinh:
-    _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
-    q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+  null_noramlize:
+      _target_: bliss.encoder.image_normalizer.NullNormalizer
 
 encoder:
-    _target_: case_studies.dc2_new_diffusion.utils.encoder.YNetDiffusionEncoder
+    _target_: case_studies.dc2_diffdet.utils.pretrain_encoder.PretrainEncoder
     survey_bands: [u, g, r, i, z, y]
     reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}
-    ddim_steps: 5
-    ddim_objective: pred_x0
-    ddim_beta_schedule: linear
-    ddim_self_cond: false
     optimizer_params:
         lr: 1e-3
-        amsgrad: true  # to make adam more stable
+        amsgrad: true
     scheduler_params:
         milestones: [30]
         gamma: 0.1
     image_normalizers: ${my_image_normalizers}
     catalog_parser:
-        _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.CatalogParser
-        factors: ${my_diffusion_factors}
+        _target_: case_studies.dc2_diffdet.utils.catalog_parser.CatalogParser
+        factors: ${my_factors}
     image_size: [80, 80]
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
@@ -82,14 +92,12 @@ encoder:
 train:
     trainer:
         logger:
-            name: DC2_ynet_diffusion_exp
-            version: exp_02-05-1  # change it before running the code
+            name: DC2_diffdet_pretrain_exp
+            version: exp_backbone  # change it before running the code
         devices: [7]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
         max_epochs: 50
-        # detect_anomaly: false
-        # gradient_clip_val: 0.0
     data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: 7272

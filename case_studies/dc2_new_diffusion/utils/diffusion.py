@@ -2,11 +2,13 @@
 
 import math
 from random import random
+from einops import rearrange
 
 import torch
 from torch import nn
 import torch.nn.functional as F
 
+from bliss.catalog import TileCatalog
 from case_studies.dc2_diffusion.utils.catalog_parser import CatalogParser
 
 
@@ -391,3 +393,104 @@ class YNetDiffusionModel(DiffusionModel):
         sample_dict = super().sample(input_image, return_inter_output)
         sample_dict["final_pred"] = self.catalog_parser.clip_tensor(sample_dict["inter_x_start"].permute([0, 2, 3, 1]))
         return sample_dict
+
+class DoubleDetectDiffusionModel(DiffusionModel):
+    def forward(self, target1, target2, input_image):
+        b = target1.shape[0]
+        assert target1.shape[1:] == self.target_size
+        t = torch.randint(0, self.num_timesteps, (b,), device=target1.device).long()
+        
+        noise = torch.randn_like(target1)
+
+        # noise sample
+        noised_target1 = self.q_sample(x_start=target1, t=t, noise=noise)
+
+        x_self_cond = None
+        if self.self_condition and random() < 0.5:
+            with torch.no_grad():
+                _, x_self_cond = self.model_predictions(noised_target1, t, input_image)
+                x_self_cond.detach_()
+
+        # predict
+        pred_noise, x_start, model_output = self.model_predictions(
+            noised_target1, t, input_image, x_self_cond,
+            clip_x_start=True, rederive_pred_noise=True)
+        
+        if self.objective == "pred_x0":
+            cur_target = target2
+        else:
+            raise ValueError(f"unknown objective {self.objective}")
+
+        assert model_output.shape == cur_target.shape
+        loss = (model_output - cur_target) ** 2
+        return {
+            "inter_loss": loss.permute([0, 2, 3, 1]),
+            "inter_target": target2,
+            "inter_objective": cur_target,
+            "inter_pred_noise": pred_noise,
+            "inter_x_start": x_start,
+            "inter_model_output": model_output,
+            "final_pred": None,
+            "final_target": None,
+            "final_pred_loss": None,
+        }
+
+
+class YNetDoubleDetectDiffusionModel(DoubleDetectDiffusionModel):
+    def _clip_func(self, x):
+        return self.catalog_parser.clip_tensor(x.permute([0, 2, 3, 1])).permute([0, 3, 1, 2])
+    
+    def forward(self, target1, target2, input_image):
+        rearranged_target1 = target1.permute([0, 3, 1, 2])  # (b, k, h, w)
+        rearranged_target2 = target2.permute([0, 3, 1, 2])  # (b, k, h, w)
+        pred_dict = super().forward(rearranged_target1, rearranged_target2, input_image)
+        x_start = pred_dict["inter_x_start"]
+        assert x_start.shape == rearranged_target2.shape
+        final_pred_loss = (x_start - rearranged_target2) ** 2
+        pred_dict["final_pred"] = x_start
+        pred_dict["final_target"] = rearranged_target2
+        pred_dict["final_pred_loss"] = final_pred_loss.permute([0, 2, 3, 1])
+        return pred_dict
+
+    def _merge_tile_cat(self, 
+                        tile_cat1: TileCatalog, 
+                        tile_cat2: TileCatalog, 
+                        locs_slack: float):
+        assert tile_cat1.max_sources == 1
+        assert tile_cat2.max_sources == 1
+
+        locs1 = tile_cat1["locs"].squeeze(-2)  # (b, h, w, 2)
+        locs2 = tile_cat2["locs"].squeeze(-2)
+
+        locs_dist = ((locs1 - locs2) ** 2).sum(dim=-1).sqrt()  # (b, h, w)
+        locs_dist_mask = locs_dist > locs_slack
+        two_sources_mask = tile_cat1["n_sources"].bool() & locs_dist_mask  # (b, h, w)
+        two_sources_mask11 = rearrange(two_sources_mask, "b h w -> b h w 1 1")
+
+        d = {}
+        for k, v in tile_cat1.items():
+            if k == "n_sources":
+                d[k] = v + two_sources_mask.to(dtype=v.dtype)
+            else:
+                d1 = torch.cat((v, torch.zeros_like(v)), dim=-2)
+                d2 = torch.cat((v, tile_cat2[k]), dim=-2)
+                d[k] = torch.where(two_sources_mask11, d2, d1)
+        return TileCatalog(d)
+
+    def sample(self, input_image, return_inter_output, locs_slack, init_time):
+        sample_dict = super().sample(input_image, return_inter_output)
+        sample_dict["final_pred"] = sample_dict["inter_x_start"].permute([0, 2, 3, 1])
+        sample1 = self.catalog_parser.decode(sample_dict["final_pred"])
+        sample1_tensor = self.catalog_parser.encode(sample1).permute([0, 3, 1, 2])  # (b, k, h, w)
+        time_cond = torch.ones((sample1_tensor.shape[0],), 
+                                device=self.device, 
+                                dtype=torch.long) * init_time
+        _, sample2_tensor, _ = self.model_predictions(sample1_tensor, time_cond, input_image,
+                                                     x_self_cond=None, 
+                                                     clip_x_start=True, 
+                                                     rederive_pred_noise=True)
+        sample2 = self.catalog_parser.decode(sample2_tensor.permute([0, 2, 3, 1]))
+        sample_dict["double_detect"] = self._merge_tile_cat(sample1, sample2,
+                                                            locs_slack=locs_slack)
+        return sample_dict
+    
