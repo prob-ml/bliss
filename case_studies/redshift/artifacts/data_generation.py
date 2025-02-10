@@ -8,7 +8,7 @@ import pandas as pd
 from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
-from case_studies.redshift.artifacts.redshift_dc2 import DC2DataModule
+from case_studies.redshift.artifacts.redshift_dc2 import RedshiftDC2DataModule
 
 logging.basicConfig(level=logging.INFO)
 
@@ -66,7 +66,7 @@ def create_rail_artifacts(rail_cfg: DictConfig):
 def create_bliss_artifacts(bliss_cfg: DictConfig):
     """CONSTRUCT BATCHES (.pt files) FOR DATA LOADING."""
     logging.info("Creating BLISS artifacts at %s", bliss_cfg.paths.processed_data_dir_bliss)
-    dc2: DC2DataModule = instantiate(bliss_cfg.surveys.dc2)
+    dc2: RedshiftDC2DataModule = instantiate(bliss_cfg.surveys.dc2)
     dc2.prepare_data()
 
 

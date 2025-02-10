@@ -1,4 +1,24 @@
-This redshift estimation project is consist of 4 parts:
+# BLISS-PZ - BLISS For Photo-z Prediction
+
+#### Running BLISS-PZ on DC2
+
+Modify the config file `redshift.yaml` as follows:
+1. Change `paths.data_dir` to a directory where you're happy to have all data artifacts and checkpoints stored.
+2. Make the `OUT_DIR` variable in `runner.sh` this same location.
+3. Modify `paths.dc2` to the location of `dc2` on your system.
+
+To produce the results from `BLISS-PZ`, run `runner.sh` (you made need to make this an executable, `chmod +x runner.sh` from within this directory).
+
+```
+./runner.sh
+```
+
+The runner bash script launches programs sequentially: first data prep, then two different runs of BLISS, followed by RAIL. Thereafter, plots are produced. For your use case it may be better to run different parts of the runner script on their own. Take a look at the script and comment out the relevant parts if you need.
+
+
+
+
+<!-- This redshift estimation project is consist of 4 parts:
 1. Estimate photo-z using neural network (training data is GT mag and redshift)
 2. Estimate photo-z using bliss directly from image.
 3. Estimate photo-z using lsst + rail pipeline (model from LSST)
@@ -21,4 +41,4 @@ You can modify config at /home/qiaozhih/bliss/case_studies/redshift/redshift_fro
 All training code can be found at /home/qiaozhih/bliss/case_studies/redshift/evaluation/rail/RAIL_estimation_demo.ipynb. Make sure you install rail from and you must make sure you are using the corresponding env from rail instead of the bliss.
 
 4. Evaluate & make plot
-Run all the code at /home/qiaozhih/bliss/case_studies/redshift/evaluation/dc2_plot.ipynb
+Run all the code at /home/qiaozhih/bliss/case_studies/redshift/evaluation/dc2_plot.ipynb -->

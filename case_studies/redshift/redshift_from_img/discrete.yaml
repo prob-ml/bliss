@@ -12,7 +12,7 @@ paths:
     root: /home/declan/bliss
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.DiscretizedFactor1D
+  - _target_: case_studies.redshift.redshift_from_img.encoder.variational_dist.DiscretizedFactor1D
     name: redshifts
     sample_rearrange: "b ht wt -> b ht wt 1 1"
     nll_rearrange: "b ht wt 1 1 -> b ht wt"
@@ -65,7 +65,7 @@ encoder:
 
 # Can optimize to these metrics by choosing bin carefully
 discrete_metrics:
-    redshift_mearn_square_error_bin:
+    redshift_mean_square_error_bin:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
         bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
         bin_type: "njymag"
@@ -88,9 +88,9 @@ discrete_metrics:
 
 # Standard metric computation
 mode_sample_metrics:
-    redshift_mearn_square_error:
+    redshift_mean_square_error:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredError
-    redshift_mearn_square_error_bin:
+    redshift_mean_square_error_bin:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
         bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
         bin_type: "njymag"
