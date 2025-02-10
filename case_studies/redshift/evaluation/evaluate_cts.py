@@ -7,8 +7,6 @@ import torch
 from hydra.utils import instantiate
 from omegaconf import DictConfig
 from tqdm import tqdm
-from hydra import compose, initialize
-from case_studies.redshift.redshift_from_img.encoder.encoder import RedshiftsEncoder
 
 
 def get_best_ckpt(ckpt_dir: str):
@@ -21,11 +19,8 @@ def get_best_ckpt(ckpt_dir: str):
     raise FileExistsError("No ckpt files found in the directory")
 
 
-# @hydra.main(config_path=".", config_name="continuous_eval")
+@hydra.main(config_path=".", config_name="continuous_eval")
 def main(cfg: DictConfig):
-    with initialize(config_path=".", job_name="continuous_eval"):
-        cfg = compose(config_name="continuous_eval")
-
     output_dir = cfg.paths.plot_dir
     ckpt_dir = cfg.paths.ckpt_dir
 
@@ -33,14 +28,14 @@ def main(cfg: DictConfig):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     ckpt_path = get_best_ckpt(ckpt_dir)
-    device = torch.device('cpu')
+    device = torch.device("cpu")
 
     # set up testing dataset
     dataset = instantiate(cfg.train.data_source)
     dataset.setup("test")
 
     # load bliss trained model - continuous version
-    bliss_encoder: RedshiftsEncoder = instantiate(cfg.encoder).to(device=device)
+    bliss_encoder = instantiate(cfg.encoder).to(device=device)
     pretrained_weights = torch.load(ckpt_path, device)["state_dict"]
     bliss_encoder.load_state_dict(pretrained_weights)
     bliss_encoder.eval()
@@ -52,7 +47,6 @@ def main(cfg: DictConfig):
     if not bliss_output_path.exists():
         test_loader = dataset.test_dataloader()
         for batch_idx, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
-            batch["images"] = batch["images"].to(device)
             bliss_encoder.update_metrics(batch, batch_idx)
         bliss_out_dict = bliss_encoder.mode_metrics.compute()
 
