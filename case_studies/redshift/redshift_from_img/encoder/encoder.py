@@ -43,19 +43,17 @@ class RedshiftsEncoder(Encoder):
             if isinstance(batch, dict)
             else {"images": batch, "background": torch.zeros_like(batch)}
         )
-        batch_size, _n_bands, h, w = batch["images"].shape[0:4]
-        ht, wt = h // self.tile_slen, w // self.tile_slen
+        x_features = self.get_features(batch)
+        batch_size, _n_features, ht, wt = x_features.shape[0:4]
+        pattern_to_use = (0,)  # no checkerboard
+        mask_pattern = self.mask_patterns[pattern_to_use, ...]
+        est_cat = None
+        history_mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
+        x_color_context = self.make_color_context(est_cat, history_mask)
+        x_features_color = torch.cat((x_features, x_color_context), dim=1)
+        x_cat_marginal = self.detect_first(x_features_color)
 
-        input_lst = [
-            inorm.get_input_tensor(batch).to(batch["images"].device)
-            for inorm in self.image_normalizers
-        ]
-        x = torch.cat(input_lst, dim=2)
-        x_features = self.features_net(x)
-        mask = torch.zeros([batch_size, ht, wt])
-        context = self.make_context(None, mask).to("cuda")
-        x_cat_marginal = self.catalog_net(x_features, context)
-        return x_features, x_cat_marginal
+        return x_features_color, x_cat_marginal
 
     def sample(self, batch, use_mode=True):
         _, x_cat_marginal = self.get_features_and_parameters(batch)
