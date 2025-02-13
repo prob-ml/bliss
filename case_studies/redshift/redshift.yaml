@@ -1,0 +1,50 @@
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+
+# Inherits defaults from `base_config`. We add some user-defined
+# paths to store artifacts.
+paths:
+  data_dir: /data/scratch/declan/redshift/dc2
+  processed_data_dir_bliss: ${paths.data_dir}/processed_dc2
+  processed_data_dir_rail: ${paths.data_dir}/processed_dc2_rail
+  dc2: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
+
+# Defaults from `base_config`. We modify cached path and use own class
+surveys:
+  dc2:
+      _target_: case_studies.redshift.artifacts.redshift_dc2.RedshiftDC2DataModule
+      cached_data_path: ${paths.processed_data_dir_bliss}
+      dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl # we should have a script that makes this on our own
+
+rail:
+  processed_data_dir: ${paths.processed_data_dir_rail}
+  pipeline:
+    force_reprocess: false
+    lsst_root_dir: /data/scratch/dc2_nfs/
+    truth_match_catalog: desc_dc2_run2.2i_dr6_object_with_truth_match
+    quantities:
+      - "id_truth"
+      - 'tract'
+      - 'tract_truth'
+      - 'truth_type'
+      - 'redshift_truth'
+      - 'mag_g_cModel'
+      - 'mag_i_cModel'
+      - 'mag_r_cModel'
+      - 'mag_u_cModel'
+      - 'mag_y_cModel'
+      - 'mag_z_cModel'
+      - 'magerr_g_cModel'
+      - 'magerr_i_cModel'
+      - 'magerr_r_cModel'
+      - 'magerr_u_cModel'
+      - 'magerr_y_cModel'
+      - 'magerr_z_cModel'
+    train_size: 200000
+    val_size: 100000
+
+  # Currently unused, using truth_match instead of truth.
+  truth:
+    lsst_root_dir: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
+    truth_catalog: desc_dc2_run2.2i_dr6_truth

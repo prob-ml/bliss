@@ -1,0 +1,10 @@
+training_runs/
+runs/
+rail
+plot
+format
+DC2_redshift/
+DC2_redshift_predict_output/
+DC2_redshift_training/
+DC2_split_result_test/
+DC2output
