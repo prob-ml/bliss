@@ -34,7 +34,6 @@ def main(
     validate_every_n_epoch: int,
     log_every_n_steps: int,
 ):
-
     ae_path = Path(ae_model_path)
     assert ae_path.exists()
 

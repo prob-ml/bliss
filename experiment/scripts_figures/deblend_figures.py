@@ -21,14 +21,14 @@ from bliss.reporting import (
 
 
 # defaults correspond to 1 sigma in Gaussian distribution
-def _calculate_statistics(residuals, x, x_bins, qs=(0.159, 0.841)):
+def _calculate_statistics(y, x, x_bins, qs=(0.159, 0.841)):
     medians, q1s, q3s = [], [], []
     for ii in range(len(x_bins) - 1):
         _mask = (x > x_bins[ii]) * (x < x_bins[ii + 1])
-        masked_residuals = residuals[_mask]
-        medians.append(np.median(masked_residuals))
-        q1s.append(np.quantile(masked_residuals, qs[0]))
-        q3s.append(np.quantile(masked_residuals, qs[1]))
+        masked_y = y[_mask]
+        medians.append(np.median(masked_y))
+        q1s.append(np.quantile(masked_y, qs[0]))
+        q3s.append(np.quantile(masked_y, qs[1]))
     return np.array(medians), np.array(q1s), np.array(q3s)
 
 

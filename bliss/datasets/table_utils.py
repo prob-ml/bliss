@@ -52,7 +52,7 @@ def catsim_row_to_galaxy_params(table: Table, max_n_sources: int):
     for jj, n in enumerate(names):
         dtype = table[n].dtype
         # everything should be a float32 or float64
-        assert dtype == np.dtype(">f8") or dtype == np.float32  # noqa:WPS514
+        assert dtype == np.dtype(">f8") or dtype == np.float32
         params[:n_rows, jj] = column_to_tensor(table, n)
 
     return params

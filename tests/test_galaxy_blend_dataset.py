@@ -1,7 +1,4 @@
-from pathlib import Path
-
 import torch
-from astropy.table import Table
 
 from bliss.catalog import FullCatalog
 from bliss.datasets.generate_blends import generate_dataset

@@ -30,7 +30,7 @@ def render_one_galaxy(
 ) -> Tensor:
     assert offset is None or offset.shape == (2,)
     assert galaxy_params.device == torch.device("cpu") and galaxy_params.shape == (11,)
-    fnb, fnd, fnagn, ab, ad, bb, bd, pab, pad, _, total_flux = galaxy_params.numpy()  # noqa:WPS236
+    fnb, fnd, fnagn, ab, ad, bb, bd, pab, pad, _, total_flux = galaxy_params.numpy()
 
     disk_flux = total_flux * fnd / (fnd + fnb + fnagn)
     bulge_flux = total_flux * fnb / (fnd + fnb + fnagn)

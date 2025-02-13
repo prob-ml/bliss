@@ -12,11 +12,12 @@ from bliss.encoders.detection import DetectionEncoder
 from experiment.scripts_figures.binary_figures import BinaryFigures
 from experiment.scripts_figures.deblend_figures import DeblendingFigures
 from experiment.scripts_figures.detection_figures import BlendDetectionFigures
+from experiment.scripts_figures.sampling_figure import SamplingFigure
 from experiment.scripts_figures.toy_figures import ToySeparationFigure
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-ALL_FIGS = ("detection", "binary", "deblend", "toy")
+ALL_FIGS = ("detection", "binary", "deblend", "toy", "samples")
 CACHEDIR = "/nfs/turbo/lsa-regier/scratch/ismael/cache/"
 
 
@@ -135,6 +136,29 @@ def _make_toy_figures(
     ToySeparationFigure(**_init_kwargs)(detection=detection, deblender=deblender)
 
 
+def _make_sample_figure(
+    fpaths: dict[str, str],
+    test_file: str,
+    *,
+    aperture: float,
+    suffix: str,
+    overwrite: bool,
+    device: torch.device,
+):
+    print("INFO: Creating figures for toy experiment.")
+    _init_kwargs = {
+        "overwrite": overwrite,
+        "figdir": "figures",
+        "suffix": suffix,
+        "cachedir": CACHEDIR,
+        "aperture": aperture,
+        "n_samples": 10,
+    }
+    detection = _load_models(fpaths, "detection", device)
+    deblender = _load_models(fpaths, "deblend", device)
+    SamplingFigure(**_init_kwargs)(test_file, detection=detection, deblender=deblender)
+
+
 def main(
     mode: str,
     suffix: str,
@@ -203,6 +227,20 @@ def main(
         assert ae_fpath != "" and Path(ae_fpath).exists(), "Need to provide AE when deblending."
         _make_toy_figures(
             fpaths, aperture=aperture, suffix=suffix, overwrite=overwrite, device=device
+        )
+
+    elif mode == "samples":
+        assert detection_fpath != "" and Path(detection_fpath).exists()
+        assert deblend_fpath != "" and Path(deblend_fpath).exists()
+        assert ae_fpath != "" and Path(ae_fpath).exists(), "Need to provide AE when deblending."
+        assert test_file_blends != "" and Path(test_file_blends).exists()
+        _make_sample_figure(
+            fpaths,
+            test_file=test_file_blends,
+            aperture=aperture,
+            suffix=suffix,
+            overwrite=overwrite,
+            device=device,
         )
 
     else:

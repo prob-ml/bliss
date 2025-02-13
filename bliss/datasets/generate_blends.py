@@ -6,7 +6,7 @@ from einops import pack, rearrange, reduce
 from torch import Tensor
 from tqdm import tqdm
 
-from bliss.catalog import FullCatalog, TileCatalog
+from bliss.catalog import FullCatalog, TileCatalog, collate
 from bliss.datasets.lsst import GALAXY_DENSITY, PIXEL_SCALE, STAR_DENSITY
 from bliss.datasets.padded_tiles import render_padded_image
 from bliss.datasets.render_utils import (
@@ -34,7 +34,6 @@ def generate_dataset(
     max_shift: float = 0.5,  # within tile, 0.5 -> maximum
     add_galaxies_in_padding: bool = True,
 ) -> dict[str, Tensor]:
-
     images_list = []
     noiseless_images_list = []
     uncentered_sources_list = []
@@ -79,7 +78,7 @@ def generate_dataset(
         noiseless_images_list.append(noiseless)
         uncentered_sources_list.append(uncentered_sources)
         centered_sources_list.append(centered_sources)
-        params_list.append(full_cat.to_tensor_dict())
+        params_list.append(full_cat.to_dict())
 
         # separately keep padding since it's needed in the deblender loss function
         # for that same purpose we also add central stars
@@ -93,7 +92,7 @@ def generate_dataset(
     centered_sources, _ = pack(centered_sources_list, "* n c h w")
     uncentered_sources, _ = pack(uncentered_sources_list, "* n c h w")
     paddings, _ = pack(paddings_list, "* c h w")
-    paramss = torch.cat(params_list, dim=0)
+    paramss = collate(params_list)
 
     assert centered_sources.shape[:3] == (n_samples, max_n_sources, 1)
     assert uncentered_sources.shape[:3] == (n_samples, max_n_sources, 1)

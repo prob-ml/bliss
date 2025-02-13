@@ -1,7 +1,7 @@
 """Script to create detection encoder related figures."""
 
 import numpy as np
-import sep_pjw as sep
+import sep
 import torch
 from einops import rearrange, reduce
 from matplotlib import pyplot as plt

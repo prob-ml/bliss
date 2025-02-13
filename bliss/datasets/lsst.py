@@ -4,7 +4,7 @@ import galcheat
 import galsim
 import numpy as np
 import torch
-from astropy import units as u  # noqa: WPS347
+from astropy import units as u
 from astropy.table import Table
 from btk.survey import get_surveys
 from einops import rearrange

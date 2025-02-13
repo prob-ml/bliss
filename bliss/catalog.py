@@ -1,16 +1,15 @@
 import math
 from collections import UserDict
 from copy import copy
-from typing import Dict, List, Tuple
+from typing import Dict, Tuple
 
 import torch
 from einops import rearrange, reduce, repeat
-from tensordict import TensorDict
 from torch import Tensor
 
 
 class TileCatalog(UserDict):
-    allowed_params = {
+    allowed_params = (
         "galaxy_params",
         "galaxy_bools",
         "fluxes",
@@ -28,7 +27,7 @@ class TileCatalog(UserDict):
         "star_log_fluxes",
         "star_bools",
         "n_source_probs",
-    }
+    )
 
     def __init__(self, tile_slen: int, d: Dict[str, Tensor]):
         self.tile_slen = tile_slen
@@ -243,9 +242,6 @@ class FullCatalog(UserDict):
             out[k] = v
         return out
 
-    def to_tensor_dict(self) -> TensorDict:
-        return TensorDict(self.to_dict(), batch_size=[self.batch_size])
-
     def apply_param_bin(self, pname: str, p_min: float, p_max: float):
         """Apply magnitude bin to given parameters."""
         assert pname in self, f"Parameter '{pname}' required to apply mag cut."
@@ -276,7 +272,7 @@ class FullCatalog(UserDict):
     def device(self):
         return self.plocs.device
 
-    def to_tile_params(  # noqa: WPS231
+    def to_tile_params(
         self, tile_slen: int, ignore_extra_sources=False
     ) -> TileCatalog:
         """Returns the TileCatalog (with at most 1 source per tile) for this FullCatalog.
@@ -322,14 +318,14 @@ class FullCatalog(UserDict):
                 assert n_sources_in_tile.dtype is torch.int64
                 if n_sources_in_tile > 0:
                     if not ignore_extra_sources:
-                        raise ValueError(  # noqa: WPS220
+                        raise ValueError(
                             "# of sources in at least one tile is larger than 1."
                         )
                     # pylint: disable-next=possibly-used-before-assignment
                     flux1 = rearrange(tile_fluxes[ii, coords[0], coords[1]], "->")
                     flux2 = rearrange(self["fluxes"][ii, idx], "1 ->")
                     if flux1 > flux2:  # keep current source in tile
-                        continue  # noqa: WPS220
+                        continue
                 tile_loc = (self.plocs[ii, idx] - coords * tile_slen) / tile_slen
                 tile_locs[ii, coords[0], coords[1]] = tile_loc
                 for p, q in tile_params.items():
@@ -346,22 +342,6 @@ class FullCatalog(UserDict):
         assert x.ndim == 3
         assert x.shape[:-1] == (self.batch_size, self.max_n_sources)
         assert x.device == self.device
-
-
-def stack_full_catalogs(full_cats: List[FullCatalog]) -> FullCatalog:
-    all_tds = []
-    h, w = full_cats[0].height, full_cats[0].width
-    for full_cat in full_cats:
-        all_tds.append(full_cat.to_tensor_dict())
-    d = torch.cat(all_tds, 0)
-    return FullCatalog(h, w, d)
-
-
-def index_full_catalog(
-    full_cat: FullCatalog, idx1: int | None = None, idx2: int | None = None
-) -> FullCatalog:
-    new_td = full_cat.to_tensor_dict()[idx1:idx2]
-    return FullCatalog(full_cat.height, full_cat.width, {**new_td})
 
 
 def get_n_tiles_hw(height: int, width: int, tile_slen: int) -> tuple[int, int]:
@@ -397,11 +377,11 @@ def get_is_on_from_n_sources(n_sources: Tensor, max_n_sources: int) -> Tensor:
     return is_on_array
 
 
-def collate(tile_map_list: list[dict[str, Tensor]]) -> dict[str, Tensor]:
+def collate(tensor_dicts: list[dict[str, Tensor]], axis=0) -> dict[str, Tensor]:
     """Combine multiple Tensors across dictionaries into a single dictionary."""
-    assert tile_map_list  # not empty
+    assert tensor_dicts  # not empty
 
     out: dict[str, Tensor] = {}
-    for k in tile_map_list[0]:
-        out[k] = torch.cat([d[k] for d in tile_map_list], dim=0)
+    for k in tensor_dicts[0]:
+        out[k] = torch.cat([d[k] for d in tensor_dicts], dim=axis)
     return out

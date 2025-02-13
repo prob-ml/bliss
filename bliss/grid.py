@@ -1,9 +1,30 @@
 """Functions for working with `torch.nn.functional.grid_sample`."""
 
+from typing import Callable
+
 import torch
-from einops import pack, rearrange, unpack
+from einops import pack, rearrange, reduce, unpack
 from torch import Tensor
 from torch.nn.functional import grid_sample
+
+
+def validate_border_padding(tile_slen: int, ptile_slen: int, bp: float | None = None) -> int:
+    # Border Padding
+    # Images are first rendered on *padded* tiles (aka ptiles).
+    # The padded tile consists of the tile and neighboring tiles
+    # The width of the padding is given by ptile_slen.
+    # border_padding is the amount of padding we leave in the final image. Useful for
+    # avoiding sources getting too close to the edges.
+    if bp is None:
+        # default value matches encoder default.
+        bp = (ptile_slen - tile_slen) / 2
+
+    n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
+    ptile_padding = n_tiles_of_padding * tile_slen
+    assert float(bp).is_integer(), "amount of border padding must be an integer"
+    assert n_tiles_of_padding.is_integer(), "n_tiles_of_padding must be an integer"
+    assert bp <= ptile_padding, "Too much border, increase ptile_slen"
+    return int(bp)
 
 
 def get_mgrid(slen: int, device: torch.device):
@@ -24,8 +45,8 @@ def swap_locs_columns(locs: Tensor) -> Tensor:
     return pack([y, x], "b *")[0]
 
 
-def shift_sources_in_ptiles(
-    image_ptiles_flat: Tensor, tile_locs_flat: Tensor, tile_slen: int, ptile_slen: int, center=False
+def shift_sources_bilinear(
+    image_ptiles_flat: Tensor, tile_locs_flat: Tensor, tile_slen: int, slen: int, center=False
 ) -> Tensor:
     """Shift sources at given padded tiles to given locations.
 
@@ -46,37 +67,44 @@ def shift_sources_in_ptiles(
     """
     npt, _, _, size = image_ptiles_flat.shape
     assert tile_locs_flat.shape[0] == npt
-    assert size in {ptile_slen, ptile_slen + 1}
-    bp = validate_border_padding(tile_slen, ptile_slen)
+    assert size in {slen, slen + 1}
+    bp = validate_border_padding(tile_slen, slen)
 
-    grid = get_mgrid(ptile_slen, image_ptiles_flat.device)
-    ptile_locs = (tile_locs_flat * tile_slen + bp) / ptile_slen
+    grid = get_mgrid(slen, image_ptiles_flat.device)
+    ptile_locs = (tile_locs_flat * tile_slen + bp) / slen
     sgn = 1 if center else -1
     offsets_hw = sgn * (torch.tensor(1.0) - 2 * ptile_locs)
     offsets_xy = swap_locs_columns(offsets_hw)
-    grid_inflated = rearrange(grid, "h w xy -> 1 h w xy", xy=2, h=ptile_slen)
+    grid_inflated = rearrange(grid, "h w xy -> 1 h w xy", xy=2, h=slen)
     offsets_xy_inflated = rearrange(offsets_xy, "npt xy -> npt 1 1 xy", xy=2)
     grid_locs = grid_inflated - offsets_xy_inflated
 
-    sampled_images = grid_sample(image_ptiles_flat, grid_locs, align_corners=True)
-    assert sampled_images.shape[-1] == sampled_images.shape[-2] == ptile_slen
+    sampled_images = grid_sample(image_ptiles_flat, grid_locs, align_corners=True, mode="bilinear")
+    assert sampled_images.shape[-1] == sampled_images.shape[-2] == slen
     return sampled_images
 
 
-def validate_border_padding(tile_slen: int, ptile_slen: int, bp: float = None) -> int:
-    # Border Padding
-    # Images are first rendered on *padded* tiles (aka ptiles).
-    # The padded tile consists of the tile and neighboring tiles
-    # The width of the padding is given by ptile_slen.
-    # border_padding is the amount of padding we leave in the final image. Useful for
-    # avoiding sources getting too close to the edges.
-    if bp is None:
-        # default value matches encoder default.
-        bp = (ptile_slen - tile_slen) / 2
+def shift_sources(
+    images: Tensor,
+    locs: Tensor,
+    *,
+    shift_fnc: Callable,
+    tile_slen: int,
+    slen: int,
+    center: bool = False,
+):
+    flux = reduce(images, "n 1 h w -> n", "sum")
+    mask1 = torch.logical_and(locs[:, 0] > 0, locs[:, 1] > 0)
+    mask = torch.logical_and(flux > 0, mask1)
 
-    n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
-    ptile_padding = n_tiles_of_padding * tile_slen
-    assert float(bp).is_integer(), "amount of border padding must be an integer"
-    assert n_tiles_of_padding.is_integer(), "n_tiles_of_padding must be an integer"
-    assert bp <= ptile_padding, "Too much border, increase ptile_slen"
-    return int(bp)
+    _images = images[mask]
+    _locs_trans = swap_locs_columns(locs[mask])
+
+    sgn = -1 if center else 1
+    images_flat = rearrange(_images, "n 1 h w -> n h w")
+    offsets = (_locs_trans * tile_slen - tile_slen / 2) * sgn
+    shifted_images = shift_fnc(images_flat, offsets)
+
+    final_images = torch.zeros(images.shape[0], 1, slen, slen, device=images.device)
+    final_images[mask, 0] = shifted_images
+    return final_images

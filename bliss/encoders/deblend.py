@@ -11,7 +11,7 @@ from bliss.catalog import TileCatalog
 from bliss.datasets.generate_blends import parse_dataset
 from bliss.datasets.lsst import BACKGROUND
 from bliss.encoders.autoencoder import CenteredGalaxyEncoder, OneCenteredGalaxyAE
-from bliss.grid import shift_sources_in_ptiles, validate_border_padding
+from bliss.grid import shift_sources_bilinear, validate_border_padding
 from bliss.render_tiles import (
     get_images_in_tiles,
     reconstruct_image_from_ptiles,
@@ -49,7 +49,7 @@ class GalaxyEncoder(pl.LightningModule):
 
         # decoder
         ae = OneCenteredGalaxyAE(decoder_slen, latent_dim, hidden, n_bands)
-        ae.load_state_dict(torch.load(ae_state_dict_path, weights_only=True))  # noqa: S614
+        ae.load_state_dict(torch.load(ae_state_dict_path, weights_only=True))
         self._dec = deepcopy(ae.dec)
         self._dec.requires_grad_(False)
         self._dec.eval()
@@ -80,7 +80,7 @@ class GalaxyEncoder(pl.LightningModule):
             tile_catalog["galaxy_bools"],
             self.ptile_slen,
             self.tile_slen,
-            self.n_bands,
+            n_bands=self.n_bands,
         )
         recon_mean = reconstruct_image_from_ptiles(recon_ptiles, self.tile_slen)
         assert recon_mean.ndim == 4 and recon_mean.shape[-1] == images.shape[-1]
@@ -142,8 +142,12 @@ class GalaxyEncoder(pl.LightningModule):
 
     def _get_centered_padded_tiles(self, image_ptiles: Tensor, tile_locs_flat: Tensor) -> Tensor:
         """Center padded tiles at given locations, and crop."""
-        shifted_ptiles = shift_sources_in_ptiles(
-            image_ptiles, tile_locs_flat, self.tile_slen, self.ptile_slen, center=True
+        shifted_ptiles = shift_sources_bilinear(
+            image_ptiles,
+            tile_locs_flat,
+            tile_slen=self.tile_slen,
+            slen=self.ptile_slen,
+            center=True,
         )
         assert shifted_ptiles.shape[-1] == shifted_ptiles.shape[-2] == self.ptile_slen
         cropped_ptiles = shifted_ptiles[

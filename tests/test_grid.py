@@ -4,7 +4,11 @@ from einops import rearrange
 from torch import Tensor
 from torch.nn.functional import grid_sample
 
-from bliss.grid import get_mgrid, shift_sources_in_ptiles, swap_locs_columns
+from bliss.grid import (
+    get_mgrid,
+    shift_sources_bilinear,
+    swap_locs_columns,
+)
 
 
 def _old_get_mgrid(slen: int):
@@ -95,8 +99,8 @@ def test_old_and_new_centering():
     centered_ptiles1 = _old_centering_tiles(ptiles, tile_locs, 52, 4, 24)
     centered_ptiles2 = _shift_sources_in_ptiles(tile_locs[0, :, 0, :], ptiles, 52, 4)
 
-    centered_ptiles3 = shift_sources_in_ptiles(ptiles, tile_locs[0, :, 0, :], 4, 52, center=True)
-    centered_ptiles4 = shift_sources_in_ptiles(ptiles, tile_locs[0, :, 0, :], 4, 52, center=False)
+    centered_ptiles3 = shift_sources_bilinear(ptiles, tile_locs[0, :, 0, :], 4, 52, center=True)
+    centered_ptiles4 = shift_sources_bilinear(ptiles, tile_locs[0, :, 0, :], 4, 52, center=False)
 
     assert centered_ptiles1.ndim == 5
     assert centered_ptiles2.ndim == centered_ptiles3.ndim == 4
@@ -113,9 +117,9 @@ def test_shifting_and_trimming():
     tile_locs = torch.rand((10, 2))
 
     # applying it once on centerd sources and shifting them returns new ptiles of size 52 x 52.
-    shifted_ptiles = shift_sources_in_ptiles(ptiles, tile_locs, 4, 52, center=False)
+    shifted_ptiles = shift_sources_bilinear(ptiles, tile_locs, 4, 52, center=False)
     assert shifted_ptiles.shape == (10, 1, 52, 52)
 
     # applying again centers them and keeps the same size.
-    centered_ptiles = shift_sources_in_ptiles(shifted_ptiles, tile_locs, 4, 52, center=True)
+    centered_ptiles = shift_sources_bilinear(shifted_ptiles, tile_locs, 4, 52, center=True)
     assert centered_ptiles.shape == (10, 1, 52, 52)

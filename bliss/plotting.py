@@ -11,7 +11,6 @@ from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.pyplot import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from tensordict import TensorDict
 
 CB_color_cycle = [
     "#377eb8",
@@ -26,17 +25,17 @@ CB_color_cycle = [
 ]
 
 
-def _to_numpy(d: dict):  # noqa:WPS231
+def _to_numpy(d: dict):
     for k, v in d.items():
         if isinstance(v, torch.Tensor):
             d[k] = v.numpy()
         elif isinstance(v, (float, int, np.ndarray)):
             d[k] = v
-        elif isinstance(v, (dict, TensorDict)):
-            v = _to_numpy(v)
-            d[k] = v
+        elif isinstance(v, dict):
+            v1 = _to_numpy(v)
+            d[k] = v1
         else:
-            msg = f"""Data returned can only be dict, tensor, array, tensordict, or
+            msg = f"""Data returned can only be dict, tensor, array, or
                     float but got {type(v)}"""
             raise TypeError(msg)
     return d
@@ -202,7 +201,7 @@ def plot_plocs(
 
     x = plocs[:, 1] - 0.5 + bp
     y = plocs[:, 0] - 0.5 + bp
-    for i, (xi, yi) in enumerate(zip(x, y)):
+    for i, (xi, yi) in enumerate(zip(x, y, strict=False)):
         prob = galaxy_probs[i]
         cmp = mpl.colormaps[cmap]
         color = cmp(prob)
@@ -218,7 +217,7 @@ def add_loc_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s
     colors = (cmp1(1.0), cmp1(0), cmp2(1.0), cmp2(0))
     markers = ("+", "+", "x", "x")
     sizes = (s * 2, s * 2, s + 5, s + 5)
-    for label, c, m, size in zip(labels, colors, markers, sizes):
+    for label, c, m, size in zip(labels, colors, markers, sizes, strict=False):
         ax.scatter([], [], color=c, marker=m, label=label, s=size)
     ax.legend(
         bbox_to_anchor=(0, 1.2, 1.0, 0.102),
@@ -244,7 +243,7 @@ def scatter_shade_plot(
     delta: float,
     color: str = "#377eb8",
     alpha: float = 0.5,
-    qs: Tuple[float, float] = (0.025, 0.975),  # 95% confidence interval
+    qs: Tuple[float, float] = (0.159, 0.841),  # 1-sigma Gaussian quantiles
     label: str = "",
     use_boot: bool = False,
     use_mean: bool = False,

@@ -3,17 +3,17 @@
 import math
 from collections import defaultdict
 from copy import deepcopy
-from typing import DefaultDict, Dict, Tuple
+from typing import Callable, DefaultDict, Dict, Tuple
 
 import galsim
-import sep_pjw as sep
+import sep
 import torch
 from einops import rearrange, reduce
 from scipy import optimize as sp_optim
 from torch import Tensor
 from tqdm import tqdm
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import FullCatalog, collate
 from bliss.datasets.lsst import BACKGROUND, PIXEL_SCALE
 from bliss.encoders.autoencoder import CenteredGalaxyDecoder
 from bliss.render_tiles import reconstruct_image_from_ptiles, render_galaxy_ptiles
@@ -188,11 +188,11 @@ def get_single_galaxy_ellipticities(images: Tensor, no_bar: bool = True) -> Tens
             galsim_image = galsim.Image(image, scale=PIXEL_SCALE)
             # sigma ~ size of psf (in pixels)
             out = galsim.hsm.FindAdaptiveMom(galsim_image, guess_sig=3, strict=False)
-            if out.error_message == "":
+            if not out.error_message:
                 e1 = float(out.observed_e1)
                 e2 = float(out.observed_e2)
             else:
-                e1, e2 = float("nan"), float("nan")  # noqa: WPS456
+                e1, e2 = float("nan"), float("nan")
             ellips[ii, :] = torch.tensor([e1, e2])
     return ellips
 
@@ -332,14 +332,14 @@ def get_residual_measurements(
             out = galsim.hsm.FindAdaptiveMom(
                 _galsim_img, guess_centroid=_centroid, guess_sig=3, strict=False
             )
-            if out.error_message == "":
+            if not out.error_message:
                 e1 = float(out.observed_e1)
                 e2 = float(out.observed_e2)
                 sigma = float(out.moments_sigma)
             else:
-                e1 = float("nan")  # noqa: WPS456
-                e2 = float("nan")  # noqa: WPS456
-                sigma = float("nan")  # noqa: WPS456
+                e1 = float("nan")
+                e2 = float("nan")
+                sigma = float("nan")
 
             _e1s.append(e1)
             _e2s.append(e2)
@@ -354,3 +354,29 @@ def get_residual_measurements(
         sigmas[ii, :n_sources, 0] = torch.tensor(_sigmas)
 
     return {"flux": fluxes, "fluxerr": fluxerrs, "snr": snrs, "ellips": ellips, "sigma": sigmas}
+
+
+def pred_in_batches(
+    pred_fnc: Callable,
+    images: Tensor,
+    *args,
+    device: torch.device,
+    batch_size: int = 200,
+    desc: str = "",
+    no_bar: bool = True,
+    axis=0,
+):
+    # gotta ensure model.forward outputs a dict of Tensors
+    n_images = images.shape[0]
+    n_batches = math.ceil(n_images / batch_size)
+    tiled_params_list = []
+    with torch.no_grad():
+        for ii in tqdm(range(n_batches), desc=desc, disable=no_bar):
+            start, end = ii * batch_size, (ii + 1) * batch_size
+            image_batch = images[start:end].to(device)
+            args_batch = (x[start:end] for x in args)
+            d = pred_fnc(image_batch, *args_batch)
+            d_cpu = {k: v.cpu() for k, v in d.items()}
+            tiled_params_list.append(d_cpu)
+
+    return collate(tiled_params_list, axis=axis)

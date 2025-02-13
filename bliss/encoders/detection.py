@@ -154,7 +154,7 @@ class DetectionEncoder(pl.LightningModule):
         )
         locs_loss = locs_log_prob * n_true_sources_flat.float()  # loc loss only on "on" sources.
 
-        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss  # noqa: WPS459
+        loss_vec = locs_loss * (locs_loss.detach() < 1e6).float() + counter_loss
 
         # per the paper, we take the mean over batches and sum over tiles
         loss_per_tile = rearrange(loss_vec, "(b nth ntw) -> b nth ntw", b=b, nth=nth, ntw=ntw)
