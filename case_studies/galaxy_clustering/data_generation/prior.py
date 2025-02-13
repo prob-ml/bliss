@@ -134,6 +134,7 @@ class ClusterPrior(Prior):
     def __init__(self, image_size=2560):
         super().__init__(image_size)
 
+        self.pixel_scale = 0.263
         self.full_cluster_df = Table.read(CLUSTER_CATALOG_PATH).to_pandas()
         self.cluster_indices = pd.unique(self.full_cluster_df["ID"])
         self.photo_z_catalog = Table.read(PHOTO_Z_PATH).to_pandas()
@@ -199,17 +200,15 @@ class ClusterPrior(Prior):
             galaxy_locs_cluster.append([sampled_x, sampled_y])
         return galaxy_locs_cluster
 
-    def sample_hlr(self, num_elements):
+    def sample_hlr(self):
         """Samples half light radius for each galaxy in the catalog.
         Currently assumes uniform half light radius
-
-        Args:
-            num_elements: number of elements to sample
 
         Returns:
             samples for half light radius for each galaxy in each catalog
         """
-        return np.random.uniform(0.5, 1.0, num_elements)
+        hlrs = self.pixel_scale * np.array(self.cluster_members["FLUX_RADIUS_R"])
+        return 1e-4 + hlrs * (hlrs > 0)
 
     def sample_fluxes(self):
         """Sample fluxes from redMaPPer catalog.
@@ -263,7 +262,7 @@ class ClusterPrior(Prior):
         gal_locs = self.cartesian_to_gal(cartesian_locs)
         flux_samples = self.sample_fluxes()
         gi_color_samples, iz_color_samples = self.sample_colors()
-        hlr_samples = self.sample_hlr(richness)
+        hlr_samples = self.sample_hlr()
         source_types = self.sample_source_types(richness)
         g1_size_samples, g2_size_samples = self.sample_shape(richness)
         return self.make_catalog(
