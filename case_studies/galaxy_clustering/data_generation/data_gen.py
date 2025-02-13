@@ -176,9 +176,11 @@ def file_data_gen(cfg):
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg):
-    catalog_gen(cfg.data_gen)
-    image_gen(cfg.data_gen)
+    # catalog_gen(cfg.data_gen)
+    # image_gen(cfg.data_gen)
+    print("Starting file datum generation process ...")
     file_data_gen(cfg.data_gen)
+    print(" ... Done!")
 
 
 if __name__ == "__main__":
