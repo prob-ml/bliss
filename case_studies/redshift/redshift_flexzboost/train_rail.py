@@ -8,7 +8,7 @@ from rail.estimation.algos.flexzboost import FlexZBoostInformer  # pylint: disab
 
 RailStage.data_store.__class__.allow_overwrite = True
 
-# configs
+# %% configs
 with initialize(config_path="../../", version_base=None):
     notebook_cfg = compose("redshift")
 rail_dir = Path(notebook_cfg.paths["processed_data_dir_rail"])
@@ -33,11 +33,11 @@ fz_dict = {
     "regression_params": {"max_depth": 8, "objective": "reg:squarederror"},
 }
 
-# load training data
+# %% load training data
 training_data = RailStage.data_store.read_file(
     "training_data", rail.core.data.Hdf5Handle, rail_dir / "train_df.hdf5"
 )
 
-# do the training
+# %% do the training
 inform_pzflex = FlexZBoostInformer.make_stage(name="inform_fzboost", model=out_model_fn, **fz_dict)
 inform_pzflex.inform(training_data)
