@@ -12,7 +12,12 @@ def compute_gridded_pdfs(predictions: qp.ensemble.Ensemble, n_gridpoints=1800):
 
     Returns:
         xs: np.array of shape (n_gridpoints,)
-        gridded_pdfs: np.array of shape (n_points,n_gridpoints
+        gridded_pdfs: np.array of shape (n_points,n_gridpoints)
+
+    For each i, the points (xs[0],gridded_pdfs[i,0]),...,(xs[-1],gridded_pdfs[i,-1])
+    represent the pdf for the ith sample.
+
+    xs will be evenly spaced between the min and max.
     """
 
     dist = predictions.dist
@@ -81,7 +86,7 @@ def estimate_loss_minimizers(xs, gridded_pdfs, loss_func):
     """For each point, identify a prediction that minimizes the expected loss.
 
     Args:
-        xs: np.array of shape (n_gridpoints,)
+        xs: np.array of shape (n_gridpoints,), assumed evenly spaced
         gridded_pdfs: np.array of shape (n_points,n_gridpoints)
         loss_func: ufunc of the form loss_func(y,yhat) -> float
 
