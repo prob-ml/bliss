@@ -32,3 +32,4 @@ venv
 **/out
 **/experiment/data
 !data/stellar_density_lsst.fits.gz
+bliss.egg-info

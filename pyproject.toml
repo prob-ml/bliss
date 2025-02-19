@@ -2,7 +2,6 @@
 authors = [{ name = "Ismael Mendoza", email = "imendoza@umich.edu" }]
 description = "Bayesian Light Source Separator"
 keywords = ["cosmology", "blending", "weak lensing", "bayesian", "ml", "pytorch"]
-license = "MIT"
 name = "bliss"
 readme = "README.md"
 version = "0.1.1"
@@ -41,9 +40,8 @@ dependencies = [
 packages = ["bliss", "bliss.datasets", "bliss.encoders"]
 
 [build-system]
-build-backend = "poetry.core.masonry.api"
-requires      = ["poetry-core>=1.0.0"]
-
+requires      = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 fix = true
