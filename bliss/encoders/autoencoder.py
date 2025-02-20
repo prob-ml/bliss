@@ -11,7 +11,7 @@ from bliss.datasets.lsst import BACKGROUND
 class OneCenteredGalaxyAE(pl.LightningModule):
     def __init__(
         self,
-        slen: int = 53,
+        slen: int = 53,  # only 53, 66, 71, 89, 98... are available
         latent_dim: int = 8,
         hidden: int = 256,
         n_bands: int = 1,

@@ -93,33 +93,17 @@ def test_old_and_new_grid():
 
 
 def test_old_and_new_centering():
-    ptiles = torch.randn((10, 1, 52, 52)) * 10 + 100
+    ps = 53
+    ts = 5
+    ptiles = torch.randn((10, 1, ps, ps)) * 10 + 100
     tile_locs = torch.rand((1, 10, 1, 2))
 
-    centered_ptiles1 = _old_centering_tiles(ptiles, tile_locs, 52, 4, 24)
-    centered_ptiles2 = _shift_sources_in_ptiles(tile_locs[0, :, 0, :], ptiles, 52, 4)
+    centered_ptiles2 = _shift_sources_in_ptiles(tile_locs[0, :, 0, :], ptiles, ps, ts)
 
-    centered_ptiles3 = shift_sources_bilinear(ptiles, tile_locs[0, :, 0, :], 4, 52, center=True)
-    centered_ptiles4 = shift_sources_bilinear(ptiles, tile_locs[0, :, 0, :], 4, 52, center=False)
+    centered_ptiles3 = shift_sources_bilinear(ptiles, tile_locs[0, :, 0, :], ts, ps, center=True)
+    centered_ptiles4 = shift_sources_bilinear(ptiles, tile_locs[0, :, 0, :], ts, ps, center=False)
 
-    assert centered_ptiles1.ndim == 5
     assert centered_ptiles2.ndim == centered_ptiles3.ndim == 4
-
-    cropped_centered_ptiles3 = centered_ptiles3[..., 4:48, 4:48]
-
-    assert torch.all(torch.eq(centered_ptiles1[0], cropped_centered_ptiles3))
+    assert centered_ptiles3.shape[-1] == ps
+    assert centered_ptiles4.shape[-1] == ps
     assert torch.all(torch.eq(centered_ptiles2, centered_ptiles4))
-
-
-def test_shifting_and_trimming():
-    """See notebook `test-shift-ptiles-fnc.ipynb` for more extensive visual demonstration."""
-    ptiles = torch.randn((10, 1, 53, 53)) * 10 + 100
-    tile_locs = torch.rand((10, 2))
-
-    # applying it once on centerd sources and shifting them returns new ptiles of size 52 x 52.
-    shifted_ptiles = shift_sources_bilinear(ptiles, tile_locs, 4, 52, center=False)
-    assert shifted_ptiles.shape == (10, 1, 52, 52)
-
-    # applying again centers them and keeps the same size.
-    centered_ptiles = shift_sources_bilinear(shifted_ptiles, tile_locs, 4, 52, center=True)
-    assert centered_ptiles.shape == (10, 1, 52, 52)

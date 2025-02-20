@@ -7,11 +7,11 @@ from bliss.render_tiles import reconstruct_image_from_ptiles
 
 
 def test_reconstruct_image_from_ptiles():
-    ptiles = torch.randn((32, 10, 10, 1, 52, 52)) * 10 + 100
+    ptiles = torch.randn((32, 10, 10, 1, 55, 55)) * 10 + 100
 
-    images = reconstruct_image_from_ptiles(ptiles, tile_slen=4)
+    images = reconstruct_image_from_ptiles(ptiles, tile_slen=5)
 
-    assert images.shape == (32, 1, 88, 88)
+    assert images.shape == (32, 1, 100, 100)
 
 
 def test_trim_source():

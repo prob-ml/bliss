@@ -9,7 +9,7 @@ import pytorch_lightning as L
 from bliss import HOME_DIR
 from bliss.datasets.saved_datasets import SavedIndividualGalaxies
 from bliss.encoders.autoencoder import OneCenteredGalaxyAE
-from experiment.run.training_functions import setup_training_objects
+from bliss.training_functions import setup_training_objects
 
 NUM_WORKERS = 0
 
@@ -39,10 +39,10 @@ def _log_info(seed, info: dict):
 
     Using datasets: {train_file}, {val_file}
     """
-    with open(LOG_FILE, "a") as f1:
+    with open(LOG_FILE, "a", encoding="utf-8") as f1:
         print(log_msg_short, file=f1)
 
-    with open(LOG_FILE_LONG, "a") as f2:
+    with open(LOG_FILE_LONG, "a", encoding="utf-8") as f2:
         print("", file=f2)
         print(log_msg_long, file=f2)
 
@@ -68,9 +68,8 @@ def main(
     lr: float,
     version: str,
 ):
-
     # setup version
-    if version == "":
+    if not version:
         version = None
     else:
         try:

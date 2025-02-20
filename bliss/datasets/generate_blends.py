@@ -29,7 +29,7 @@ def generate_dataset(
     max_n_sources: int,
     galaxy_density: float = GALAXY_DENSITY,  # counts / sq. arcmin
     star_density: float = STAR_DENSITY,  # counts / sq. arcmin
-    slen: int = 40,
+    slen: int = 50,
     bp: int = 24,
     max_shift: float = 0.5,  # within tile, 0.5 -> maximum
     add_galaxies_in_padding: bool = True,
@@ -107,7 +107,7 @@ def generate_dataset(
     }
 
 
-def parse_dataset(dataset: dict[str, Tensor], tile_slen: int = 4):
+def parse_dataset(dataset: dict[str, Tensor], tile_slen: int = 5):
     """Parse dataset into a tuple of (images, TileCatalog)."""
     params = dataset.copy()  # make a copy to not change argument.
     images = params.pop("images")
@@ -156,7 +156,7 @@ def sample_full_catalog(
     mean_sources: float,
     max_n_sources: int,
     galaxy_prob: float,
-    slen: int = 40,
+    slen: int = 50,
     max_shift: float = 0.5,
 ):
     params = sample_source_params(
@@ -211,3 +211,12 @@ def sample_source_params(
         "star_fluxes": star_fluxes * star_bools,
         "fluxes": params[:, -1, None] * galaxy_bools + star_fluxes * star_bools,
     }
+
+
+def get_full_catalog_from_dataset(ds: dict, slen: int):
+    out = {}
+    _params = (*FullCatalog.allowed_params, "plocs", "n_sources")
+    for k in _params:
+        if k in ds:
+            out[k] = ds[k]
+    return FullCatalog(slen, slen, out)

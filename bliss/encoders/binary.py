@@ -16,8 +16,8 @@ class BinaryEncoder(pl.LightningModule):
     def __init__(
         self,
         n_bands: int = 1,
-        tile_slen: int = 4,
-        ptile_slen: int = 52,
+        tile_slen: int = 5,
+        ptile_slen: int = 53,
         channel: int = 8,
         hidden: int = 128,
         spatial_dropout: float = 0,

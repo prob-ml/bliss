@@ -93,3 +93,11 @@ Run single galaxy data generation script with seed 23, fraction0.1 at 2024-12-11
 
 Blend data generation with seed 23 at 2024-12-11 15:33:05.232274.
         Galaxy density 160.0, star_density 15.5, and n_samples 2000.
+
+Blend data generation with seed 23 at 2025-02-19 15:58:07.367599.
+        Galaxy density 160.0, star_density 15.5, and n_samples 10000.
+
+
+Training detection with seed 19, ds_seed 19, version 30 at 2025-02-19 18:35:10.995616.
+
+ Saved checkpoint 'data/out/detection/version_30/checkpoints/epoch=8-val_loss=0.544.ckpt' as weights /home/imendoza/bliss/experiment/models/detection_19_19.pt at 2025-02-20 08:37:59.977436

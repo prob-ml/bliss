@@ -46,7 +46,7 @@ def setup_training_objects(
         save_dir="out", name=model_name, default_hp_metric=False, version=version
     )
 
-    callbacks = [mckp] + extra_callbacks if extra_callbacks else [mckp]
+    callbacks = [mckp, *extra_callbacks] if extra_callbacks else [mckp]
 
     trainer = L.Trainer(
         limit_train_batches=1.0,
@@ -139,9 +139,9 @@ def _log_info(seed: int, model: str, info: dict):
     log_msg_short += ae_path_msg
     log_msg_long += ae_path_msg
 
-    with open(LOG_FILE, "a") as f:
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         print(log_msg_short, file=f)
 
-    with open(LOG_FILE_LONG, "a") as f:
+    with open(LOG_FILE_LONG, "a", encoding="utf-8") as f:
         print("", file=f)
         print(log_msg_long, file=f)

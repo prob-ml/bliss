@@ -24,14 +24,15 @@ class GalaxyEncoder(pl.LightningModule):
         self,
         ae_state_dict_path: str,
         n_bands: int = 1,
-        tile_slen: int = 4,
-        ptile_slen: int = 52,
+        tile_slen: int = 5,
+        ptile_slen: int = 53,
         decoder_slen: int = 53,
         latent_dim: int = 8,
         hidden: int = 256,
         lr: float = 1e-4,
     ):
         super().__init__()
+        assert ptile_slen % 2 == decoder_slen % 2
 
         # dimensions
         self.n_bands = n_bands

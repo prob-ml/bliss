@@ -3,7 +3,7 @@
 import click
 
 from bliss.encoders.binary import BinaryEncoder
-from experiment.run.training_functions import run_encoder_training
+from bliss.training_functions import run_encoder_training
 
 NUM_WORKERS = 0
 
@@ -29,7 +29,6 @@ def main(
     log_every_n_steps: int,
     val_check_interval: float,
 ):
-
     # for logging
     info = {
         "ds_seed": ds_seed,

@@ -12,8 +12,8 @@ class SavedGalsimBlends(Dataset):
     def __init__(
         self,
         dataset_file: str,
-        slen: int = 40,
-        tile_slen: int = 4,
+        slen: int = 50,
+        tile_slen: int = 5,
         keep_padding: bool = False,
     ) -> None:
         super().__init__()

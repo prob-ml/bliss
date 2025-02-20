@@ -8,22 +8,18 @@ from torch import Tensor
 from torch.nn.functional import grid_sample
 
 
-def validate_border_padding(tile_slen: int, ptile_slen: int, bp: float | None = None) -> int:
+def validate_border_padding(tile_slen: int, ptile_slen: int, bp: int | None = None) -> int:
     # Border Padding
     # Images are first rendered on *padded* tiles (aka ptiles).
     # The padded tile consists of the tile and neighboring tiles
     # The width of the padding is given by ptile_slen.
     # border_padding is the amount of padding we leave in the final image. Useful for
     # avoiding sources getting too close to the edges.
-    if bp is None:
-        # default value matches encoder default.
+    if bp is not None:
+        assert bp == (ptile_slen - tile_slen) / 2
+    else:
         bp = (ptile_slen - tile_slen) / 2
-
-    n_tiles_of_padding = (ptile_slen / tile_slen - 1) / 2
-    ptile_padding = n_tiles_of_padding * tile_slen
     assert float(bp).is_integer(), "amount of border padding must be an integer"
-    assert n_tiles_of_padding.is_integer(), "n_tiles_of_padding must be an integer"
-    assert bp <= ptile_padding, "Too much border, increase ptile_slen"
     return int(bp)
 
 

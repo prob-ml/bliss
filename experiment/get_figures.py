@@ -185,8 +185,8 @@ def main(
     }
 
     if mode == "detection":
-        assert test_file_blends != "" and Path(test_file_blends).exists()
-        assert detection_fpath != "" and Path(detection_fpath).exists()
+        assert test_file_blends and Path(test_file_blends).exists()
+        assert detection_fpath and Path(detection_fpath).exists()
         _make_detection_figure(
             fpaths,
             test_file_blends,
@@ -197,9 +197,9 @@ def main(
         )
 
     elif mode == "deblend":
-        assert test_file_blends != "" and Path(test_file_blends).exists()
-        assert deblend_fpath != "" and Path(deblend_fpath).exists()
-        assert ae_fpath != "" and Path(ae_fpath).exists(), "Need to provide AE when deblending."
+        assert test_file_blends and Path(test_file_blends).exists()
+        assert deblend_fpath and Path(deblend_fpath).exists()
+        assert ae_fpath and Path(ae_fpath).exists(), "Need to provide AE when deblending."
         _make_deblend_figures(
             fpaths,
             test_file_blends,
@@ -210,8 +210,8 @@ def main(
         )
 
     elif mode == "binary":
-        assert test_file_blends != "" and Path(test_file_blends).exists()
-        assert binary_fpath != "" and Path(binary_fpath).exists()
+        assert test_file_blends and Path(test_file_blends).exists()
+        assert binary_fpath and Path(binary_fpath).exists()
         _make_binary_figures(
             fpaths,
             test_file_blends,
@@ -222,18 +222,18 @@ def main(
         )
 
     elif mode == "toy":
-        assert detection_fpath != "" and Path(detection_fpath).exists()
-        assert deblend_fpath != "" and Path(deblend_fpath).exists()
-        assert ae_fpath != "" and Path(ae_fpath).exists(), "Need to provide AE when deblending."
+        assert detection_fpath and Path(detection_fpath).exists()
+        assert deblend_fpath and Path(deblend_fpath).exists()
+        assert ae_fpath and Path(ae_fpath).exists(), "Need to provide AE when deblending."
         _make_toy_figures(
             fpaths, aperture=aperture, suffix=suffix, overwrite=overwrite, device=device
         )
 
     elif mode == "samples":
-        assert detection_fpath != "" and Path(detection_fpath).exists()
-        assert deblend_fpath != "" and Path(deblend_fpath).exists()
-        assert ae_fpath != "" and Path(ae_fpath).exists(), "Need to provide AE when deblending."
-        assert test_file_blends != "" and Path(test_file_blends).exists()
+        assert detection_fpath and Path(detection_fpath).exists()
+        assert deblend_fpath and Path(deblend_fpath).exists()
+        assert ae_fpath and Path(ae_fpath).exists(), "Need to provide AE when deblending."
+        assert test_file_blends and Path(test_file_blends).exists()
         _make_sample_figure(
             fpaths,
             test_file=test_file_blends,

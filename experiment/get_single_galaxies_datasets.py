@@ -23,7 +23,6 @@ PSF = get_default_lsst_psf()
 @click.option("-s", "--seed", required=True, type=int)
 @click.option("--fraction", type=float, default=1.0)
 def main(seed: int, fraction: float):
-
     L.seed_everything(seed)
     rng = np.random.default_rng(seed)  # for catalog indices
 
@@ -51,14 +50,14 @@ def main(seed: int, fraction: float):
 
     all_files = (train_ds_file, val_ds_file, test_ds_file)
     all_indices = (train_indices, val_indices, test_indices)
-    for fpath, idxs in zip(all_files, all_indices):
+    for fpath, idxs in zip(all_files, all_indices, strict=True):
         cat = CATSIM_CAT[idxs]
         n_samples = int(len(cat) * fraction)
-        ds = generate_individual_dataset(n_samples, cat, PSF, slen=53, replace=False)
+        ds = generate_individual_dataset(n_samples, cat, PSF, replace=False)
         save_dataset_npz(ds, fpath)
 
     # logging
-    with open(LOG_FILE, "a") as f:
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         now = datetime.datetime.now()
         log_msg = (
             f"\nRun single galaxy data generation script with seed {seed}, "

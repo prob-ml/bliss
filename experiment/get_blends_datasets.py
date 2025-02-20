@@ -34,7 +34,6 @@ assert LOG_FILE.exists()
 @click.option("--galaxy-density", default=GALAXY_DENSITY, type=float)
 @click.option("--star-density", default=STAR_DENSITY, type=float)
 def main(seed: int, n_samples: int, galaxy_density: float, star_density: float):
-
     L.seed_everything(seed)
 
     train_ds_file = DATASETS_DIR / f"train_ds_{seed}.npz"
@@ -59,7 +58,7 @@ def main(seed: int, n_samples: int, galaxy_density: float, star_density: float):
 
     files = (train_ds_file, val_ds_file, test_ds_file)
     tables = (table1, table2, table3)
-    for fpath, t in zip(files, tables):
+    for fpath, t in zip(files, tables, strict=True):
         ds = generate_dataset(
             n_samples,
             t,
@@ -68,14 +67,12 @@ def main(seed: int, n_samples: int, galaxy_density: float, star_density: float):
             max_n_sources=10,
             galaxy_density=galaxy_density,
             star_density=star_density,
-            slen=40,
-            bp=24,
             max_shift=0.5,
         )
         save_dataset_npz(ds, fpath)
 
     # logging
-    with open(LOG_FILE, "a") as f:
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
         now = datetime.datetime.now()
         log_msg = f"""\nBlend data generation with seed {seed} at {now}.
         Galaxy density {galaxy_density}, star_density {star_density}, and n_samples {n_samples}.

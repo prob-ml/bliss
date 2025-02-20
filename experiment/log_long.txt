@@ -206,3 +206,11 @@ Training deblender with seed 42, ds_seed 42, version 27 at 2024-11-14 14:53:26.1
     Using datasets: ../data/datasets/train_ds_42.npz, ../data/datasets/val_ds_42.npz
 
 AE path: ../models/autoencoder_42_42.pt
+
+
+Training detection with seed 19, ds_seed 19, version 30 at 2025-02-19 18:35:10.995616.
+    validate_every_n_epoch 1,
+    val_check_interval 0.2, batch_size 32, n_epochs 50.
+    lr: 0.0001
+
+    Using datasets: ../data/datasets/train_ds_23.npz, ../data/datasets/val_ds_23.npz

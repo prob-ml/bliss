@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 
 from bliss.encoders.deblend import GalaxyEncoder
-from experiment.run.training_functions import run_encoder_training
+from bliss.training_functions import run_encoder_training
 
 NUM_WORKERS = 0
 
