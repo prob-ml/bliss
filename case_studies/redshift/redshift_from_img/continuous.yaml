@@ -23,7 +23,7 @@ encoder:
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
     optimizer_params:
-        lr: 1e-3
+        lr: 1e-2
     scheduler_params:
         milestones: [32]
         gamma: 0.1
