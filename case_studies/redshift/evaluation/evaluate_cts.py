@@ -28,7 +28,7 @@ def main(cfg: DictConfig):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     ckpt_path = get_best_ckpt(ckpt_dir)
-    device = torch.device("cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # set up testing dataset
     dataset = instantiate(cfg.train.data_source)
@@ -47,6 +47,9 @@ def main(cfg: DictConfig):
     if not bliss_output_path.exists():
         test_loader = dataset.test_dataloader()
         for batch_idx, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
+            batch["images"] = batch["images"].to(device)
+            batch["tile_catalog"] = {key: value.to(device) for key, value in batch["tile_catalog"].items()}
+            batch["psf_params"] = batch["psf_params"].to(device)
             bliss_encoder.update_metrics(batch, batch_idx)
         bliss_out_dict = bliss_encoder.mode_metrics.compute()
 
