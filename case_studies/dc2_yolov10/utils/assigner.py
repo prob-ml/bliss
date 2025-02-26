@@ -1,7 +1,240 @@
 import torch
 from torch import nn
+import math
+
+from einops import rearrange, repeat
 
 from case_studies.dc2_yolov10.utils.other import bbox_iou
+
+
+class DistanceAssigner(nn.Module):
+    def __init__(self, 
+                 select_radius,
+                 topk=10, 
+                 num_classes=1, 
+                 alpha=0.5, 
+                 beta=8.0,
+                ):
+        super().__init__()
+
+        self.image_size = 80
+        self.select_radius = select_radius
+        self.topk = topk
+        self.num_classes = num_classes
+        self.bg_idx = num_classes
+        self.alpha = alpha
+        self.beta = beta
+
+    @torch.no_grad()
+    def forward(self, 
+                pred_scores: torch.Tensor, 
+                pred_locs: torch.Tensor, 
+                anchor_points: torch.Tensor, 
+                gt_locs: torch.Tensor, 
+                mask_gt: torch.Tensor,
+                ):
+        """
+        Compute the task-aligned assignment.
+
+        Args:
+            pred_scores (Tensor): shape(bs, num_total_anchors, num_classes)
+            pred_locs (Tensor): shape(bs, num_total_anchors, 2)
+            anchor_points (Tensor): shape(num_total_anchors, 2)
+            gt_locs (Tensor): shape(bs, n_max_sources, 2)
+            mask_gt (Tensor): shape(bs, n_max_sources, 1)
+
+        Returns:
+            target_locs (Tensor): shape(bs, num_total_anchors, 2)
+            target_scores (Tensor): shape(bs, num_total_anchors, num_classes)
+            fg_mask (Tensor): shape(bs, num_total_anchors)
+        """
+        self.bs = pred_scores.shape[0]
+        self.n_max_sources = gt_locs.shape[1]
+        assert pred_scores.max() <= 1.0 and pred_scores.min() >= 0.0
+        assert mask_gt.dtype == torch.bool
+        assert mask_gt.shape[-1] == 1
+        assert mask_gt.shape[:-1] == gt_locs.shape[:-1]
+        assert pred_scores.shape[-1] == 1
+        assert pred_scores.shape[:-1] == pred_locs.shape[:-1]
+        assert anchor_points.shape == pred_locs.shape[1:]
+
+        if self.n_max_sources == 0:
+            return (
+                torch.zeros_like(pred_locs),
+                torch.zeros_like(pred_scores),
+                torch.zeros_like(pred_scores[..., 0], dtype=torch.bool),
+            )
+
+        mask_pos, align_metric, rev_dist = self.get_pos_mask(pred_scores, pred_locs, 
+                                                             gt_locs, anchor_points, mask_gt)
+        target_gt_idx, fg_mask, mask_pos = self.select_lowest_distance(mask_pos, rev_dist)
+        target_locs, target_scores = self.get_targets(gt_locs, target_gt_idx, fg_mask)
+
+        # normalize
+        align_metric *= mask_pos
+        rev_dist = rev_dist ** 6
+        pos_align_metrics = align_metric.amax(dim=-1, keepdim=True)  # (b, n_max_sources, 1)
+        pos_rev_dist = (rev_dist * mask_pos).amax(dim=-1, keepdim=True)  # (b, n_max_sources, 1)
+        norm_align_metric = (align_metric * pos_rev_dist / (pos_align_metrics + 1e-5)).amax(dim=-2).unsqueeze(-1)  # (b, anchor_points, 1)
+        target_scores *= norm_align_metric
+
+        return target_locs, target_scores, fg_mask
+
+    def get_pos_mask(self, pred_scores, pred_locs, gt_locs, anchor_points, mask_gt):
+        """Get in_gts mask, (b, max_num_obj, h*w)."""
+        mask_in_gts = self.select_candidates_in_gts(anchor_points, gt_locs)
+        align_metric, rev_dist = self.get_metrics(pred_scores, pred_locs, gt_locs, 
+                                                  mask_gt=mask_in_gts & mask_gt)
+        mask_topk = self.select_topk_candidates(align_metric, 
+                                                topk_mask=mask_gt.expand(-1, -1, self.topk))
+        assert mask_in_gts.dtype == torch.bool
+        assert mask_topk.dtype == torch.bool
+        assert mask_gt.dtype == torch.bool
+        mask_pos = mask_topk & mask_in_gts & mask_gt  # (b, n_max_sources, anchor_points)
+
+        return mask_pos, align_metric, rev_dist
+
+    def get_metrics(self, 
+                    pred_scores,  # (b, anchor_points, 1)
+                    pred_locs,  # (b, anchor_points, 2)
+                    gt_locs,  # (b, n_max_sources, 2)
+                    mask_gt  # (b, n_max_sources, anchor_points)
+                    ):
+        """Compute alignment metric given predicted and ground truth locs."""
+        num_anchors = pred_locs.shape[-2]
+        distance = torch.zeros([self.bs, self.n_max_sources, num_anchors], 
+                               dtype=pred_locs.dtype, 
+                               device=pred_locs.device)
+        cls_scores = torch.zeros([self.bs, self.n_max_sources, num_anchors], 
+                                  dtype=pred_scores.dtype, 
+                                  device=pred_scores.device)
+
+        cls_scores[mask_gt] = repeat(pred_scores, 
+                                     "b a 1 -> b m a", 
+                                     m=self.n_max_sources)[mask_gt]
+
+        selected_pred_locs = repeat(pred_locs, "b a k -> b m a k", m=self.n_max_sources)[mask_gt]
+        selected_gt_locs = repeat(gt_locs, "b m k -> b m a k", a=num_anchors)[mask_gt]
+        distance[mask_gt] = self.distance_calculation(selected_gt_locs, selected_pred_locs)
+        normalized_dist = (distance / (self.image_size * math.sqrt(2))).clamp(max=1.0)
+        assert (normalized_dist >= 0.0).all()
+        rev_dist = torch.where(mask_gt, 1.0 - normalized_dist, 0.0)
+        align_metric = cls_scores.pow(self.alpha) * rev_dist.pow(self.beta)
+        
+        return align_metric, rev_dist
+
+    def distance_calculation(self, gt_locs, pred_locs):
+        return ((gt_locs - pred_locs) ** 2).sum(dim=-1).sqrt()
+
+    def select_topk_candidates(self, metrics, topk_mask):
+        """
+        Select the top-k candidates based on the given metrics.
+
+        Args:
+            metrics (Tensor): A tensor of shape (b, max_num_obj, h*w), where b is the batch size,
+                              max_num_obj is the maximum number of objects, and h*w represents the
+                              total number of anchor points.
+            topk_mask (Tensor): An optional boolean tensor of shape (b, max_num_obj, topk), where
+                                topk is the number of top candidates to consider.
+
+        Returns:
+            (Tensor): A tensor of shape (b, max_num_obj, h*w) containing the selected top-k candidates.
+        """
+        
+        _, topk_idxs = torch.topk(metrics, self.topk, dim=-1, largest=True)  # (b, n_max_sources, topk)
+        topk_idxs.masked_fill_(~topk_mask, metrics.shape[-1])
+
+        count_tensor = torch.zeros([*metrics.shape[:-1], metrics.shape[-1] + 1], 
+                                   dtype=torch.int8, 
+                                   device=topk_idxs.device)
+        ones = torch.ones_like(topk_idxs[:, :, :1], 
+                               dtype=torch.int8, 
+                               device=topk_idxs.device)
+        for k in range(self.topk):
+            count_tensor.scatter_add_(-1, topk_idxs[:, :, k : k + 1], ones)
+        count_tensor = count_tensor[..., :-1]
+        assert count_tensor.min() == 0 and count_tensor.max() == 1
+
+        return count_tensor.bool()
+
+    def get_targets(self, gt_locs, target_gt_idx, fg_mask):
+        """
+        Compute target locs, and target scores for the positive anchor points.
+
+        Args:
+            gt_locs (Tensor): Ground truth locs of shape (b, max_num_obj, 2).
+            target_gt_idx (Tensor): Indices of the assigned ground truth objects for positive
+                                    anchor points, with shape (b, h*w), where h*w is the total
+                                    number of anchor points.
+            fg_mask (Tensor): A boolean tensor of shape (b, h*w) indicating the positive
+                              (foreground) anchor points.
+
+        Returns:
+            (Tuple[Tensor, Tensor]): A tuple containing the following tensors:
+                - target_locs (Tensor): Shape (b, h*w, 2), containing the target locs
+                                        for positive anchor points.
+                - target_scores (Tensor): Shape (b, h*w, num_classes), containing the target scores
+                                          for positive anchor points, where num_classes is the number
+                                          of object classes.
+        """
+
+        batch_ind = torch.arange(end=self.bs, 
+                                 dtype=torch.int64, 
+                                 device=gt_locs.device).unsqueeze(-1)
+        target_gt_idx = target_gt_idx + batch_ind * self.n_max_sources  # (b, anchor_points)
+        target_locs = rearrange(gt_locs, "b m k -> (b m) k")[target_gt_idx]
+        target_scores = fg_mask.unsqueeze(-1).float()
+        return target_locs, target_scores
+
+    def select_candidates_in_gts(self, anchor_locs, gt_locs):
+        """
+        Select the positive anchor center in gt.
+
+        Args:
+            anchor_locs (Tensor): shape(h*w, 2)
+            gt_locs (Tensor): shape(b, n_max_sources, 2)
+            radius (int)
+
+        Returns:
+            (Tensor): shape(b, n_max_sources, h*w)
+        """
+
+        gt_locs = rearrange(gt_locs, "b m k -> b m 1 k")
+        gt_locs_min, gt_locs_max = gt_locs - self.select_radius, gt_locs + self.select_radius
+        anchor_locs = rearrange(anchor_locs, "anchors k -> 1 1 anchors k")
+        return ((anchor_locs >= gt_locs_min) & \
+                (anchor_locs <= gt_locs_max)).all(dim=-1)
+        
+    def select_lowest_distance(self, mask_pos, rev_dist):
+        """
+        If an anchor box is assigned to multiple gts, the one with the lowest distance will be selected.
+
+        Args:
+            mask_pos (Tensor): shape(b, n_max_boxes, h*w)
+            rev_dist (Tensor): shape(b, n_max_boxes, h*w)
+
+        Returns:
+            target_gt_idx (Tensor): shape(b, h*w)
+            fg_mask (Tensor): shape(b, h*w)
+            mask_pos (Tensor): shape(b, n_max_boxes, h*w)
+        """
+
+        fg_mask = mask_pos.sum(dim=1)  # (b, anchor_points)
+        if fg_mask.max() > 1:  # if one anchor is assigned to multiple gt locs
+            mask_multi_gts = repeat(fg_mask > 1,
+                                    "b a -> b m a", 
+                                    m=self.n_max_sources)  # (b, n_max_sources, anchor_points)
+            min_distance_idx = rev_dist.argmax(dim=1)  # (b, anchor_points)
+            is_min_distance = torch.zeros_like(mask_pos)
+            is_min_distance.scatter_(dim=1, 
+                                     index=min_distance_idx.unsqueeze(1), 
+                                     value=True)
+            mask_pos = torch.where(mask_multi_gts, is_min_distance, mask_pos)
+            fg_mask = mask_pos.sum(dim=1)
+            assert fg_mask.max() <= 1
+        # find each grid serve which gt(index)
+        target_gt_idx = mask_pos.int().argmax(dim=1)  # (b, anchor_points)
+        return target_gt_idx, fg_mask.bool(), mask_pos
 
 
 class TaskAlignedAssigner(nn.Module):
@@ -19,7 +252,7 @@ class TaskAlignedAssigner(nn.Module):
         eps (float): A small value to prevent division by zero.
     """
 
-    def __init__(self, topk=10, num_classes=1, alpha=1.0, beta=6.0, eps=1e-9):
+    def __init__(self, topk=10, num_classes=1, alpha=0.5, beta=6.0, eps=1e-9):
         """Initialize a TaskAlignedAssigner object with customizable hyperparameters."""
         super().__init__()
         self.topk = topk
@@ -49,15 +282,13 @@ class TaskAlignedAssigner(nn.Module):
         """
         self.bs = pd_scores.shape[0]
         self.n_max_boxes = gt_bboxes.shape[1]
+        assert pd_scores.max() <= 1.0 and pd_scores.min() >= 0.0
 
         if self.n_max_boxes == 0:
-            device = gt_bboxes.device
             return (
-                torch.full_like(pd_scores[..., 0], self.bg_idx).to(device),
-                torch.zeros_like(pd_bboxes).to(device),
-                torch.zeros_like(pd_scores).to(device),
-                torch.zeros_like(pd_scores[..., 0]).to(device),
-                torch.zeros_like(pd_scores[..., 0]).to(device),
+                torch.zeros_like(pd_bboxes),
+                torch.zeros_like(pd_scores),
+                torch.zeros_like(pd_scores[..., 0], dtype=torch.bool),
             )
 
         mask_pos, align_metric, overlaps = self.get_pos_mask(

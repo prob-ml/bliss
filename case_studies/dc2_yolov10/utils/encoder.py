@@ -11,7 +11,8 @@ from bliss.catalog import TileCatalog, FullCatalog
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.global_env import GlobalEnv
 
-from case_studies.dc2_yolov10.utils.model import v10Model
+from case_studies.dc2_yolov10.utils.model import v10Model, v10LocsModel
+from case_studies.dc2_yolov10.utils.other import box_xyxy_to_cxcywh
 
 
 class PlainEncoder(pl.LightningModule):
@@ -61,7 +62,8 @@ class PlainEncoder(pl.LightningModule):
     @torch.inference_mode()
     def sample(self, batch, score_threshold):
         normalized_images = self.get_features(batch)
-        sample_cxcywh, sample_scores = self.detection_model.sample(normalized_images)
+        sample_xyxy, sample_scores = self.detection_model.sample(normalized_images)
+        sample_cxcywh = box_xyxy_to_cxcywh(sample_xyxy)
 
         plocs = sample_cxcywh[:, :, :2].flip(dims=[2]).clamp(min=0, max=self.image_size[0])  # (b, m, 2)
         mask = sample_scores > score_threshold  # (b, m, 1)
@@ -99,9 +101,9 @@ class PlainEncoder(pl.LightningModule):
         gt_cxcywh[..., 2:].clamp_(min=5.0)
         gt_cxcywh *= sources_mask
 
-        max_sources = sources_mask.sum(dim=-1).max()
+        max_sources = sources_mask.sum(dim=(-1, -2)).max()
         gt_cxcywh = gt_cxcywh[:, :max_sources, :]
-        sources_mask = sources_mask[:, :max_sources]
+        sources_mask = sources_mask[:, :max_sources, :]
 
         normalized_images = self.get_features(batch)
         return self.detection_model(
@@ -196,6 +198,73 @@ class v10Encoder(PlainEncoder):
         self.detection_model = v10Model(
             n_bands=len(self.survey_bands),
             ch_per_band=sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+        )
+
+    def training_step(self, batch, batch_idx):
+        optimizer = self.optimizers()
+        loss = self._compute_loss(batch, "train")
+
+        optimizer.zero_grad()
+        self.manual_backward(loss)
+        optimizer.step()
+
+        # step every epoch
+        if self.trainer.is_last_batch:
+            scheduler = self.lr_schedulers()
+            scheduler.step()
+
+    def configure_optimizers(self):
+        optimizer = Adam(self.detection_model.parameters(), 
+                         **self.optimizer_params)
+        scheduler = MultiStepLR(optimizer, **self.scheduler_params)
+        return [optimizer], [scheduler]
+
+
+class v10LocsEncoder(PlainEncoder):
+    def initialize_networks(self):
+        self.detection_model = v10LocsModel(
+            n_bands=len(self.survey_bands),
+            ch_per_band=sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+        )
+
+    @torch.inference_mode()
+    def sample(self, batch, score_threshold):
+        normalized_images = self.get_features(batch)
+        sample_locs, sample_scores = self.detection_model.sample(normalized_images)
+
+        plocs = sample_locs.clamp(min=0, max=self.image_size[0])  # (b, m, 2)
+        mask = sample_scores > score_threshold  # (b, m, 1)
+        plocs = plocs[mask.squeeze(-1)]  # (total_sources, 2)
+        plocs_list = plocs.split(mask.sum(dim=(-2, -1)).tolist(), dim=0)
+
+        plocs_tensor = pad_sequence(plocs_list, batch_first=True)  # (b, m, 2)
+        n_sources = torch.tensor([p.shape[0] for p in plocs_list], 
+                                 dtype=torch.int64, 
+                                 device=plocs_tensor.device)
+        assert n_sources.max() == plocs_tensor.shape[1]
+        return FullCatalog(height=self.image_size[0],
+                           width=self.image_size[1],
+                           d={
+                               "n_sources": n_sources,
+                               "plocs": plocs_tensor,
+                           })
+
+    def _compute_cur_batch_loss(self, batch):
+        target_cat = TileCatalog(batch["tile_catalog"]).to_full_catalog(tile_slen=self.tile_slen)
+        sources_mask = target_cat.is_on_mask.unsqueeze(-1)  # (b, m, 1)
+
+        gt_locs = target_cat["plocs"]  # (b, m, 2)
+        gt_locs *= sources_mask
+
+        max_sources = sources_mask.sum(dim=(-1, -2)).max()
+        gt_locs = gt_locs[:, :max_sources, :]
+        sources_mask = sources_mask[:, :max_sources, :]
+
+        normalized_images = self.get_features(batch)
+        return self.detection_model(
+            images=normalized_images, 
+            gt_locs=gt_locs,
+            gt_mask=sources_mask,
         )
 
     def training_step(self, batch, batch_idx):
