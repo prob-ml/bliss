@@ -1,14 +1,17 @@
 import copy
+import math
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.nn.modules.upsampling import Upsample
 
-from einops import rearrange
+from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
+from typing import List
 
 from case_studies.dc2_yolov10.utils.conv_layers import (Conv, C2f, C2fCIB, SPPF, PSA, Concat)
-from case_studies.dc2_yolov10.utils.loss import v10DetectLoss
-from case_studies.dc2_yolov10.utils.other import box_cxcywh_to_xyxy, make_anchors, dist2bbox
+from case_studies.dc2_yolov10.utils.loss import v10DetectLoss, v10LocsDetectLoss
+from case_studies.dc2_yolov10.utils.other import box_cxcywh_to_xyxy, make_anchors, dist2bbox, bbox2dist, locs2dist
 
 
 class v10Backbone(nn.Module):
@@ -97,47 +100,108 @@ class v10Head(nn.Module):
         return output_list
         
 
-class Detect(nn.Module):
-    """YOLOv8 Detect head for detection models."""
-
+class v10Detect(nn.Module):
     def __init__(self, ch):
-        """Initializes the YOLOv8 detection layer with specified number of channels."""
         super().__init__()
+
         self.nc = 1  # number of classes
+        self.image_size = 80
         self.nl = len(ch)  # number of detection layers
-        self.reg_max = 16  # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
-        c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # channels
+        c2, c3 = 64, 64  # channels
+
+        self.dfl_init()
+        
         self.cv2 = nn.ModuleList(
-            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch
+            nn.Sequential(
+                Conv(x, c2, 3), 
+                Conv(c2, c2, 3), 
+                nn.Conv2d(c2, self.cv2_output_ch, 1)
+            ) 
+            for x in ch
         )
-        self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
+        self.cv3 = nn.ModuleList(
+            nn.Sequential(
+                nn.Sequential(Conv(x, x, 3, g=x), Conv(x, c3, 1)),
+                nn.Sequential(Conv(c3, c3, 3, g=c3), Conv(c3, c3, 1)),
+                nn.Conv2d(c3, self.nc, 1)
+            ) 
+            for x in ch
+        )
+
+        self.bias_init()
+
+        self.one2one_cv2 = copy.deepcopy(self.cv2)
+        self.one2one_cv3 = copy.deepcopy(self.cv3)
+
+    def dfl_init(self):
+        self.register_buffer("stride", torch.tensor([2, 4, 8]))
+        self.reg_max = 16
+        self.register_buffer("proj", torch.arange(self.reg_max, dtype=torch.float))
+        self.cv2_output_ch = 4 * self.reg_max
+
+    def get_dfl(self, anchor_points, target, pred_distri, fg_mask):
+        target_ltrb = bbox2dist(anchor_points, target, self.reg_max - 1)[fg_mask]
+        target_left = target_ltrb.long()
+        target_right = target_left + 1
+        weight_left = target_right - target_ltrb
+        weight_right = 1 - weight_left
+        pred_distri = pred_distri[fg_mask].view(-1, self.reg_max)
+        return (
+            F.cross_entropy(pred_distri, target_left.view(-1), reduction="none").view(target_left.shape) * weight_left
+            + F.cross_entropy(pred_distri, target_right.view(-1), reduction="none").view(target_right.shape) * weight_right
+        ).mean(-1, keepdim=True)
+
+    def bias_init(self):
+        for a, b, s in zip(self.cv2, self.cv3, self.stride):
+            a[-1].bias.data[:] = 1.0
+            b[-1].bias.data[:self.nc] = math.log(5 / self.nc / (self.image_size / s) ** 2)
 
     def forward_feat(self, x, cv2, cv3):
         y = []
         for i in range(self.nl):
-            y.append(torch.cat((cv2[i](x[i]), cv3[i](x[i])), 1))
+            y.append(torch.cat((cv2[i](x[i]), cv3[i](x[i])), 
+                               dim=1))
         return y
+    
+    def decode_pred_distri(self, 
+                           anchor_points: torch.Tensor, 
+                           anchor_strides: torch.Tensor, 
+                           pred_distri: torch.Tensor):
+        b, a, c = pred_distri.shape
+        pred_prob = pred_distri.view(b, a, 4, c // 4).softmax(dim=-1)
+        pred_dist = pred_prob.matmul(self.proj.type(pred_distri.dtype))
+        pred_xyxy = dist2bbox(pred_dist, anchor_points, xywh=False) * anchor_strides
+        return {
+            "pred_xyxy": pred_xyxy
+        }
+    
+    def postprocess(self, preds: List[torch.Tensor]):
+        pred_tensor = torch.cat([rearrange(xi, "b c h w -> b c (h w)")
+                                for xi in preds], 
+                                dim=-1)
+        pred_distri, pred_logits = pred_tensor.split((preds[0].shape[1] - self.nc, self.nc), dim=1)
+
+        pred_logits = pred_logits.permute(0, 2, 1).contiguous()  # (b, 2100, 1)
+        pred_distri = pred_distri.permute(0, 2, 1).contiguous()  # (b, 2100, c - 1)
+
+        anchor_points, anchor_strides = make_anchors(preds, self.stride, 0.5)
+        pred_output = self.decode_pred_distri(anchor_points, anchor_strides, pred_distri)
+        return {
+            "pred_logits": pred_logits,
+            "pred_distri": pred_distri,
+            "anchor_points": anchor_points,
+            "anchor_strides": anchor_strides,
+            **pred_output,
+        }
 
     def forward(self, x):
         """Concatenates and returns predicted bounding boxes and class probabilities."""
-        return self.forward_feat(x, self.cv2, self.cv3)
-    
-
-class v10Detect(Detect):
-    def __init__(self, ch):
-        super().__init__(ch)
-        c3 = max(ch[0], min(self.nc, 100))  # channels
-        self.cv3 = nn.ModuleList(nn.Sequential(nn.Sequential(Conv(x, x, 3, g=x), Conv(x, c3, 1)), \
-                                               nn.Sequential(Conv(c3, c3, 3, g=c3), Conv(c3, c3, 1)), \
-                                                nn.Conv2d(c3, self.nc, 1)) for x in ch)
-
-        self.one2one_cv2 = copy.deepcopy(self.cv2)
-        self.one2one_cv3 = copy.deepcopy(self.cv3)
-    
-    def forward(self, x):
-        one2one = self.forward_feat([xi.detach() for xi in x], self.one2one_cv2, self.one2one_cv3)
-        one2many = super().forward(x)
-        return {"one2many": one2many, "one2one": one2one}
+        one2many_feats = self.forward_feat(x, self.cv2, self.cv3)
+        one2one_feats = self.forward_feat([xi.detach() for xi in x], self.one2one_cv2, self.one2one_cv3)
+        return {
+            "one2many": self.postprocess(one2many_feats), 
+            "one2one": self.postprocess(one2one_feats),
+        }
 
 
 class v10Model(nn.Module):
@@ -148,13 +212,12 @@ class v10Model(nn.Module):
                                     ch_per_band=ch_per_band)
         self.head = v10Head()
         self.detect = v10Detect(ch=(64, 128, 256))
-        self.criterion = v10DetectLoss()
-
-        self.reg_max = 16
-        self.register_buffer("stride", torch.tensor([2, 4, 8]))
-        self.register_buffer("proj", torch.arange(self.reg_max, dtype=torch.float))
-        self.anchors = None
-        self.strides = None
+        self.criterion = v10DetectLoss(dfl_func=self.detect.get_dfl, 
+                                       loss_gain_dict={
+                                           "iou": 7.5,
+                                           "cls": 0.5,
+                                           "dfl": 1.5,
+                                       })
 
     def _infer_images(self, images):
         backbone_feats = self.backbone(images)
@@ -162,21 +225,81 @@ class v10Model(nn.Module):
         return self.detect(head_output_list)
 
     def forward(self, images, gt_cxcywh, gt_mask):
-        nn_output = self._infer_images(images)
+        preds = self._infer_images(images)
         gt_xyxy = box_cxcywh_to_xyxy(gt_cxcywh)
-        return self.criterion(nn_output, gt_xyxy, gt_mask)
+        return self.criterion(preds, gt_xyxy, gt_mask)
 
     @torch.inference_mode()
     def sample(self, images):
-        nn_output = self._infer_images(images)["one2one"]
+        preds = self._infer_images(images)["one2one"]
+        return preds["pred_xyxy"], preds["pred_logits"].sigmoid()
 
-        x_cat = torch.cat([rearrange(xi, "b c h w -> b (h w) c") for xi in nn_output], dim=1)
-        pred_distri, pred_cls = x_cat.split([16 * 4, 1], dim=-1)
 
-        if self.anchors is None or self.strides is None:
-            self.anchors, self.strides = make_anchors(nn_output, self.stride, 0.5)
-        
-        b, a, c = pred_distri.shape  # batch, anchors, channels
-        pred_dist = pred_distri.view(b, a, 4, c // 4).softmax(3).matmul(self.proj.type(pred_distri.dtype))
-        dbox = dist2bbox(pred_dist, self.anchors.unsqueeze(0), xywh=True, dim=-1) * self.strides
-        return dbox, pred_cls.sigmoid()
+class v10LocsDetect(v10Detect):
+    def dfl_init(self):
+        self.register_buffer("stride", torch.tensor([2, 4, 8]))
+        self.reg_max = 4
+        self.register_buffer("proj", 
+                             torch.arange(self.reg_max * 2, 
+                                          dtype=torch.float) - self.reg_max + 0.5)
+        self.cv2_output_ch = 4 * self.reg_max
+
+    def get_dfl(self, anchor_points, target, pred_distri, fg_mask):
+        target_dist = locs2dist(anchor_points, target, self.reg_max - 0.5)[fg_mask]  # (in_mask_sources, 2)
+        target_left = (rearrange(target_dist, "m k -> m k 1") >= rearrange(self.proj[1:], "p -> 1 1 p")).sum(dim=-1).long()  # (in_mask_sources, 2)
+        assert ((target_left >= 0) & (target_left < self.reg_max * 2 - 1)).all()
+        target_right = target_left + 1
+        weight_left = torch.gather(repeat(self.proj, 
+                                          "p -> m p", 
+                                          m=target_right.shape[0]),
+                                   dim=-1,
+                                   index=target_right) - target_dist
+        assert ((weight_left <= 1.0) & (weight_left > 0.0)).all()
+        weight_right = 1 - weight_left
+        pred_distri = pred_distri[fg_mask].view(-1, self.reg_max * 2)  # (in_mask_sources * 2, reg_max * 2)
+        return (
+            F.cross_entropy(pred_distri, target_left.view(-1), reduction="none").view(target_left.shape) * weight_left
+            + F.cross_entropy(pred_distri, target_right.view(-1), reduction="none").view(target_right.shape) * weight_right
+        ).mean(-1, keepdim=True)  # (in_mask_sources, 1)
+
+    def decode_pred_distri(self, 
+                           anchor_points: torch.Tensor, 
+                           anchor_strides: torch.Tensor, 
+                           pred_distri: torch.Tensor):
+        b, a, c = pred_distri.shape
+        pred_prob = pred_distri.view(b, a, 2, c // 2).softmax(dim=-1)
+        pred_dist = pred_prob.matmul(self.proj.type(pred_distri.dtype))
+        pred_locs = (pred_dist + anchor_points) * anchor_strides
+        return {
+            "pred_locs": pred_locs
+        }
+    
+
+class v10LocsModel(nn.Module):
+    def __init__(self, n_bands, ch_per_band):
+        super().__init__()
+
+        self.backbone = v10Backbone(n_bands=n_bands,
+                                    ch_per_band=ch_per_band)
+        self.head = v10Head()
+        self.detect = v10LocsDetect(ch=(64, 128, 256))
+        self.criterion = v10LocsDetectLoss(dfl_func=self.detect.get_dfl,
+                                           loss_gain_dict={
+                                               "dist": 7.5,
+                                               "cls": 0.5,
+                                               "dfl": 1.5,
+                                           })
+
+    def _infer_images(self, images):
+        backbone_feats = self.backbone(images)
+        head_output_list = self.head(backbone_feats)
+        return self.detect(head_output_list)
+
+    def forward(self, images, gt_locs, gt_mask):
+        preds = self._infer_images(images)
+        return self.criterion(preds, gt_locs, gt_mask)
+
+    @torch.inference_mode()
+    def sample(self, images):
+        preds = self._infer_images(images)["one2one"]
+        return preds["pred_locs"], preds["pred_logits"].sigmoid()

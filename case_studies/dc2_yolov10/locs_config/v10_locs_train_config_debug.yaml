@@ -1,14 +1,14 @@
 ---
 defaults:
-    - v10_train_config
+    - v10_locs_train_config
     - _self_
     - override hydra/job_logging: stdout
 
 train:
     trainer:
         logger:
-            name: DC2_v10_debug
-            version: DC2_v10_debug
+            name: DC2_v10_locs_debug
+            version: DC2_v10_locs_debug
         devices: [0]
 
 surveys:
