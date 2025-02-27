@@ -12,7 +12,7 @@ surveys:
 
 my_metrics:
   detection_performance:
-    _target_: case_studies.dc2_new_diffusion.utils.metrics.DetectionPerformance
+    _target_: case_studies.dc2_yolov10.utils.metrics.DetectionPerformance
 
 my_image_normalizers:
   asinh:

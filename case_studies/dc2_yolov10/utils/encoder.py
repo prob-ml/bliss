@@ -6,6 +6,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torch.nn.utils.rnn import pad_sequence
 from torchmetrics import MetricCollection
+from einops import rearrange
 
 from bliss.catalog import TileCatalog, FullCatalog
 from bliss.encoder.metrics import CatalogMatcher
@@ -233,27 +234,40 @@ class v10LocsEncoder(PlainEncoder):
         sample_locs, sample_scores = self.detection_model.sample(normalized_images)
 
         plocs = sample_locs.clamp(min=0, max=self.image_size[0])  # (b, m, 2)
-        mask = sample_scores > score_threshold  # (b, m, 1)
-        plocs = plocs[mask.squeeze(-1)]  # (total_sources, 2)
-        plocs_list = plocs.split(mask.sum(dim=(-2, -1)).tolist(), dim=0)
+        score_mask = sample_scores > score_threshold  # (b, m, 1)
+        plocs = plocs[score_mask.squeeze(-1)].flip(dims=[1])  # (total_sources, 2)
+        plocs_list = plocs.split(score_mask.sum(dim=(-2, -1)).tolist(), dim=0)
 
         plocs_tensor = pad_sequence(plocs_list, batch_first=True)  # (b, m, 2)
         n_sources = torch.tensor([p.shape[0] for p in plocs_list], 
                                  dtype=torch.int64, 
                                  device=plocs_tensor.device)
         assert n_sources.max() == plocs_tensor.shape[1]
-        return FullCatalog(height=self.image_size[0],
-                           width=self.image_size[1],
-                           d={
-                               "n_sources": n_sources,
-                               "plocs": plocs_tensor,
-                           })
+        sample_full_cat = FullCatalog(height=self.image_size[0],
+                                      width=self.image_size[1],
+                                      d={
+                                        "n_sources": n_sources,
+                                        "plocs": plocs_tensor,
+                                      })
+        sample_tile_cat = sample_full_cat.to_tile_catalog(tile_slen=self.tile_slen, max_sources_per_tile=5)
+        on_mask = rearrange(sample_tile_cat.is_on_mask, "b nth ntw s -> b nth ntw s 1")
+        on_mask_count = on_mask.sum(dim=(-2, -1))
+        sample_tile_cat["one_source_mask"] = (
+            rearrange(on_mask_count == 1, "b nth ntw -> b nth ntw 1 1") & on_mask
+        )
+        sample_tile_cat["two_sources_mask"] = (
+            rearrange(on_mask_count == 2, "b nth ntw -> b nth ntw 1 1") & on_mask
+        )
+        sample_tile_cat["more_than_two_sources_mask"] = (
+            rearrange(on_mask_count > 2, "b nth ntw -> b nth ntw 1 1") & on_mask
+        )
+        return sample_tile_cat.to_full_catalog(tile_slen=self.tile_slen)
 
     def _compute_cur_batch_loss(self, batch):
         target_cat = TileCatalog(batch["tile_catalog"]).to_full_catalog(tile_slen=self.tile_slen)
         sources_mask = target_cat.is_on_mask.unsqueeze(-1)  # (b, m, 1)
 
-        gt_locs = target_cat["plocs"]  # (b, m, 2)
+        gt_locs = target_cat["plocs"].flip(dims=[2])  # (b, m, 2)
         gt_locs *= sources_mask
 
         max_sources = sources_mask.sum(dim=(-1, -2)).max()

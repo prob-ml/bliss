@@ -1,0 +1,210 @@
+import torch
+
+from typing import List
+from torchmetrics import Metric
+
+from bliss.catalog import FullCatalog
+from bliss.encoder.metrics import CatFilter, NullFilter
+
+def _plocs_are_out_boundary(plocs: torch.Tensor, tile_slen: int, boundary_width: float):
+    plocs_in_tile = plocs % tile_slen
+    return torch.all(
+        (plocs_in_tile >= boundary_width) & (plocs_in_tile <= (tile_slen - boundary_width)), dim=-1
+    )
+
+
+def _is_in_boundary(
+    plocs: torch.Tensor, is_on_mask: torch.Tensor, tile_slen: int, boundary_width: float
+):
+    plocs_out_boundary = _plocs_are_out_boundary(
+        plocs, tile_slen=tile_slen, boundary_width=boundary_width
+    )
+    plocs_in_boundary = ~plocs_out_boundary
+    plocs_in_boundary &= is_on_mask
+
+    return plocs_in_boundary
+
+
+def _is_not_in_boundary(
+    plocs: torch.Tensor, is_on_mask: torch.Tensor, tile_slen: int, boundary_width: float
+):
+    plocs_out_boundary = _plocs_are_out_boundary(
+        plocs, tile_slen=tile_slen, boundary_width=boundary_width
+    )
+    plocs_out_boundary &= is_on_mask
+
+    return plocs_out_boundary
+
+
+class InBoundaryFilter(CatFilter):
+    def __init__(self, tile_slen: int, boundary_width: float) -> None:
+        super().__init__()
+        self.tile_slen = tile_slen
+        self.boundary_width = boundary_width
+
+    def get_cur_filter_bools(self, true_cat, est_cat):
+        true_filter_bools = _is_in_boundary(
+            true_cat["plocs"], true_cat.is_on_mask, self.tile_slen, self.boundary_width
+        )
+        est_filter_bools = _is_in_boundary(
+            est_cat["plocs"], est_cat.is_on_mask, self.tile_slen, self.boundary_width
+        )
+
+        return true_filter_bools, est_filter_bools
+
+    def get_cur_postfix(self):
+        return "in_boundary"
+
+
+class OutBoundaryFilter(CatFilter):
+    def __init__(self, tile_slen: int, boundary_width: float) -> None:
+        super().__init__()
+        self.tile_slen = tile_slen
+        self.boundary_width = boundary_width
+
+    def get_cur_filter_bools(self, true_cat, est_cat):
+        true_filter_bools = _is_not_in_boundary(
+            true_cat["plocs"], true_cat.is_on_mask, self.tile_slen, self.boundary_width
+        )
+        est_filter_bools = _is_not_in_boundary(
+            est_cat["plocs"], est_cat.is_on_mask, self.tile_slen, self.boundary_width
+        )
+
+        return true_filter_bools, est_filter_bools
+
+    def get_cur_postfix(self):
+        return "out_boundary"
+    
+
+class SourceCountFilter(CatFilter):
+    def __init__(self, filter_source_count: str) -> None:
+        super().__init__()
+        self.filter_source_count = filter_source_count
+        assert filter_source_count in {
+            "1m",
+            "2m",
+            "2plus",
+        }, "invalid filter_source_count"
+
+    def get_cur_filter_bools(self, true_cat, est_cat):
+        if self.filter_source_count == "1m":
+            true_filter_bools = true_cat["one_source_mask"].squeeze(2)
+            est_filter_bools = est_cat["one_source_mask"].squeeze(2)
+        elif self.filter_source_count == "2m":
+            true_filter_bools = true_cat["two_sources_mask"].squeeze(2)
+            est_filter_bools = est_cat["two_sources_mask"].squeeze(2)
+        elif self.filter_source_count == "2plus":
+            true_filter_bools = true_cat["more_than_two_sources_mask"].squeeze(2)
+            est_filter_bools = est_cat["more_than_two_sources_mask"].squeeze(2)
+        else:
+            raise NotImplementedError()
+
+        return true_filter_bools, est_filter_bools
+
+    def get_cur_postfix(self):
+        return self.filter_source_count
+
+
+class FilterMetric(Metric):
+    def __init__(
+        self,
+        filter_list: List[CatFilter],
+    ):
+        super().__init__()
+
+        self.filter_list = filter_list
+        assert self.filter_list, "filter_list can't be empty"
+        self.postfix_str = self._get_postfix()
+
+    def get_filter_bools(self, true_cat, est_cat):
+        true_filter_bools, est_filter_bools = None, None
+        for cur_filter in self.filter_list:
+            if true_filter_bools is None or est_filter_bools is None:
+                true_filter_bools, est_filter_bools = cur_filter.get_cur_filter_bools(
+                    true_cat, est_cat
+                )
+            else:
+                cur_true_filter_bools, cur_est_filter_bools = cur_filter.get_cur_filter_bools(
+                    true_cat, est_cat
+                )
+                true_filter_bools &= cur_true_filter_bools
+                est_filter_bools &= cur_est_filter_bools
+
+        return true_filter_bools, est_filter_bools
+
+    def _get_postfix(self):
+        postfix_list = []
+        for cur_filter in self.filter_list:
+            cur_postfix = cur_filter.get_cur_postfix()
+            if cur_postfix:
+                postfix_list.append(cur_postfix)
+
+        if postfix_list:
+            return "_" + "_".join(postfix_list)
+
+        return ""
+
+
+class DetectionPerformance(FilterMetric):
+    def __init__(
+        self,
+        filter_list: List[CatFilter] = None,
+    ):
+        super().__init__(
+            filter_list if filter_list else [NullFilter()],
+        )
+
+        detection_metrics = [
+            "n_true_sources",
+            "n_est_sources",
+            "n_true_matches",
+            "n_est_matches",
+        ]
+        for metric in detection_metrics:
+            self.add_state(metric, default=torch.zeros(1), dist_reduce_fx="sum")
+
+    def update(self, true_cat, est_cat, matching):
+        assert isinstance(true_cat, FullCatalog), "true_cat should be FullCatalog"
+        assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
+
+        true_filter_bools, est_filter_bools = self.get_filter_bools(true_cat, est_cat)
+
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            error_msg = "tcat_matches and ecat_matches should be of the same size"
+            assert len(tcat_matches) == len(ecat_matches), error_msg
+            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
+                device=self.device
+            )
+            n_true = true_cat["n_sources"][i].sum().item()
+            n_est = est_cat["n_sources"][i].sum().item()
+
+            cur_batch_true_filter_bools = true_filter_bools[i, :n_true]
+            cur_batch_est_filter_bools = est_filter_bools[i, :n_est]
+
+            tmi = cur_batch_true_filter_bools.sum()
+            emi = cur_batch_est_filter_bools.sum()
+
+            tcat_matches = tcat_matches[cur_batch_true_filter_bools[tcat_matches]]
+            ecat_matches = ecat_matches[cur_batch_est_filter_bools[ecat_matches]]
+
+            tmim = tcat_matches.numel()
+            emim = ecat_matches.numel()
+
+            self.n_true_sources += tmi
+            self.n_est_sources += emi
+            self.n_true_matches += tmim
+            self.n_est_matches += emim
+
+    def compute(self):
+        precision = (self.n_est_matches / self.n_est_sources).nan_to_num(0)
+        recall = (self.n_true_matches / self.n_true_sources).nan_to_num(0)
+        f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
+
+        return {
+            f"detection_precision{self.postfix_str}": precision,
+            f"detection_recall{self.postfix_str}": recall,
+            f"detection_f1{self.postfix_str}": f1,
+            f"n_true_sources{self.postfix_str}": self.n_true_sources,
+            f"n_est_sources{self.postfix_str}": self.n_est_sources,
+        }

@@ -12,7 +12,34 @@ surveys:
 
 my_metrics:
   detection_performance:
-    _target_: case_studies.dc2_new_diffusion.utils.metrics.DetectionPerformance
+    _target_: case_studies.dc2_yolov10.utils.metrics.DetectionPerformance
+  detection_performance_one_source_mask:
+    _target_: case_studies.dc2_yolov10.utils.metrics.DetectionPerformance
+    filter_list:
+        - _target_: case_studies.dc2_yolov10.utils.metrics.SourceCountFilter
+          filter_source_count: 1m
+  detection_performance_two_sources_mask:
+    _target_: case_studies.dc2_yolov10.utils.metrics.DetectionPerformance
+    filter_list:
+        - _target_: case_studies.dc2_yolov10.utils.metrics.SourceCountFilter
+          filter_source_count: 2m
+  detection_performance_more_than_two_sources_mask:
+    _target_: case_studies.dc2_yolov10.utils.metrics.DetectionPerformance
+    filter_list:
+        - _target_: case_studies.dc2_yolov10.utils.metrics.SourceCountFilter
+          filter_source_count: 2plus
+  detection_performance_in_boundary:
+    _target_: case_studies.dc2_yolov10.utils.metrics.DetectionPerformance
+    filter_list:
+        - _target_: case_studies.dc2_yolov10.utils.metrics.InBoundaryFilter
+          tile_slen: ${surveys.dc2.tile_slen}
+          boundary_width: 0.2
+  detection_performance_out_boundary:
+    _target_: case_studies.dc2_yolov10.utils.metrics.DetectionPerformance
+    filter_list:
+        - _target_: case_studies.dc2_yolov10.utils.metrics.OutBoundaryFilter
+          tile_slen: ${surveys.dc2.tile_slen}
+          boundary_width: 0.2
 
 my_image_normalizers:
   asinh:
@@ -47,8 +74,8 @@ train:
     trainer:
         logger:
             name: DC2_v10_locs_exp
-            version: exp_02-26-1  # change it before running the code
-        devices: [3]  # change it before running the code
+            version: exp_02-26-2  # change it before running the code
+        devices: [4]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
         max_epochs: 50
