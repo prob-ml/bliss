@@ -10,19 +10,7 @@ export NUMEXPR_NUM_THREADS="16"
 # python artifacts/data_generation.py
 
 # Run BLISS (discrete variational distribution)
-DIRNAME="$OUT_DIR/discrete"
-
-if [ ! -d "$DIRNAME" ]; then
-  mkdir -p "$DIRNAME"
-  echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
-else
-  echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
-fi
-
-nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_discrete > "$DIRNAME/output.out" 2>&1 &
-
-# Run BLISS (continuous variational distribution)
-# DIRNAME="$OUT_DIR/continuous"
+# DIRNAME="$OUT_DIR/discrete"
 
 # if [ ! -d "$DIRNAME" ]; then
 #   mkdir -p "$DIRNAME"
@@ -31,7 +19,19 @@ nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_discre
 #   echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
 # fi
 
-# nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_continuous > "$DIRNAME/output.out" 2>&1 &
+# nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_discrete > "$DIRNAME/output.out" 2>&1 &
+
+# Run BLISS (continuous variational distribution)
+DIRNAME="$OUT_DIR/continuous"
+
+if [ ! -d "$DIRNAME" ]; then
+  mkdir -p "$DIRNAME"
+  echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
+else
+  echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
+fi
+
+nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_continuous > "$DIRNAME/output.out" 2>&1 &
 
 # # # Run RAIL
 # # # TODO
