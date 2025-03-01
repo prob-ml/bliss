@@ -84,18 +84,17 @@ def create_des_catalog(des_subdir, data_path, file_suffix):
     astro_ascii.write(catalog_table, filename, format="no_header", overwrite=True)
 
 
-def galsim_render(des_subdir, data_path, file_suffix, band="g"):
+def galsim_render(des_subdir, data_path, band="g"):
     """Render Galsim image for specific band.
 
     Args:
         des_subdir: DES Tile to process
         data_path: save directory
-        file_suffix: suffix for filename
         band: band to process, one of [g,r,i,z]
     """
     input_dir = f"{data_path}/catalogs"
     output_dir = f"{data_path}/images"
-    output_ext = f"galsim_des_000_{band}.fits"
+    output_ext = f"{des_subdir}/{des_subdir}_{band}.fits"
     psf_dir_subdir = PSF_DIR / Path(des_subdir)
     psf_file = [f for f in os.listdir(psf_dir_subdir) if f.endswith(f"{band}_nobkg.psf")][0]
     flux_col = BAND_TO_COL[band]
@@ -105,7 +104,7 @@ def galsim_render(des_subdir, data_path, file_suffix, band="g"):
     args.append(f"variables.image_size={IMAGE_SIZE}")
     args.append(f"variables.nfiles={NFILES}")
     args.append(f"variables.input_dir={input_dir}")
-    args.append(f"variables.input_file=catalog_{file_suffix}.dat")
+    args.append(f"variables.input_file=catalog_{des_subdir}.dat")
     args.append(f"variables.output_dir={output_dir}")
     args.append(f"variables.output_file={output_ext}")
     args.append(f"variables.psf_dir={psf_dir_subdir}")
