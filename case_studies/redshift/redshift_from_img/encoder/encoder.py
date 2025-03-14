@@ -1,7 +1,18 @@
+from pathlib import Path
+
 import torch
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.encoder import Encoder
+
+
+def get_best_ckpt(ckpt_dir: str):
+    ckpt_dir = Path(ckpt_dir)
+    ckpt_files = list(ckpt_dir.glob("*.ckpt"))
+    sorted_files = sorted(ckpt_files, key=lambda f: float(f.stem.split("_")[1]))
+    if sorted_files:
+        return sorted_files[0]
+    return None
 
 
 class RedshiftsEncoder(Encoder):
@@ -36,6 +47,13 @@ class RedshiftsEncoder(Encoder):
         self.sample_metrics = self.sample_metrics.to(self.device)
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
         self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
+
+        # Explicitly reset metrics trial
+        self.mode_metrics.reset()
+        if self.sample_metrics is not None:
+            self.sample_metrics.reset()
+        if self.discrete_metrics:  # TODO: should be same as above, not empty dict
+            self.discrete_metrics.reset()
 
     def get_features_and_parameters(self, batch):
         batch = (

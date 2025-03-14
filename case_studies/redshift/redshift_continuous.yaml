@@ -1,11 +1,17 @@
----
 defaults:
-    - ..@_here_: redshift
+    - ../../bliss/conf@_here_: base_config
     - _self_
-    # - override hydra/job_logging: stdout
 
+# Inherits defaults from `base_config`. We add some user-defined
+# paths to store artifacts.
 paths:
-    root: /home/declan/bliss
+  root: /home/declan/bliss
+  data_dir: /data/scratch/declan/redshift/dc2
+  processed_data_dir_bliss: ${paths.data_dir}/processed_dc2
+  processed_data_dir_rail: ${paths.data_dir}/processed_dc2_rail
+  dc2: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
+  ckpt_dir: ${paths.data_dir}/checkpoints/continuous/checkpoints
+  plot_dir: ${paths.data_dir}/plots
 
 global_setting:
     min_flux_for_loss: 50  # you need to regenerate split_results after changing this number
@@ -123,7 +129,6 @@ mode_sample_metrics:
         bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
         bin_type: "njymag"
 
-
 train:
     trainer:
         logger:
@@ -138,7 +143,7 @@ train:
           timeout:
             _target_: datetime.timedelta
             seconds: 180000
-        val_check_interval: 0.5
+        val_check_interval: 1.0
         # check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
         devices: [7]
@@ -159,8 +164,45 @@ train:
             patience: 500
     data_source: ${surveys.dc2}
     pretrained_weights: null
+    seed: 123
 
+# Defaults from `base_config`. We modify cached path and use own class
 surveys:
-    dc2:
-        batch_size: 64
-        max_sources_per_tile: 5
+  dc2:
+      _target_: case_studies.redshift.artifacts.redshift_dc2.RedshiftDC2DataModule
+      cached_data_path: ${paths.processed_data_dir_bliss}
+      dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl # we should have a script that makes this on our own
+      batch_size: 64
+      max_sources_per_tile: 5
+
+rail:
+  processed_data_dir: ${paths.processed_data_dir_rail}
+  pipeline:
+    force_reprocess: false
+    lsst_root_dir: /data/scratch/dc2_nfs/
+    truth_match_catalog: desc_dc2_run2.2i_dr6_object_with_truth_match
+    quantities:
+      - "id_truth"
+      - 'tract'
+      - 'tract_truth'
+      - 'truth_type'
+      - 'redshift_truth'
+      - 'mag_g_cModel'
+      - 'mag_i_cModel'
+      - 'mag_r_cModel'
+      - 'mag_u_cModel'
+      - 'mag_y_cModel'
+      - 'mag_z_cModel'
+      - 'magerr_g_cModel'
+      - 'magerr_i_cModel'
+      - 'magerr_r_cModel'
+      - 'magerr_u_cModel'
+      - 'magerr_y_cModel'
+      - 'magerr_z_cModel'
+    train_size: 200000
+    val_size: 100000
+
+  # Currently unused, using truth_match instead of truth.
+  truth:
+    lsst_root_dir: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
+    truth_catalog: desc_dc2_run2.2i_dr6_truth

@@ -5,7 +5,7 @@ export OMP_NUM_THREADS="16"
 export MKL_NUM_THREADS="16"
 export NUMEXPR_NUM_THREADS="16"
 
-# Produce data artifacts
+# # Produce data artifacts
 echo "producing data artifacts for BLISS and RAIL from DC2"
 python artifacts/data_generation.py
 
@@ -19,7 +19,7 @@ else
   echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
 fi
 
-nohup python bliss/main.py -cp ~/bliss/case_studies/redshift/redshift_from_img -cn discrete > "$DIRNAME/output.out" 2>&1 &
+nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_discrete > "$DIRNAME/output.out" 2>&1 &
 
 # Run BLISS (continuous variational distribution)
 DIRNAME="$OUT_DIR/continuous"
@@ -31,12 +31,12 @@ else
   echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
 fi
 
-nohup python bliss/main.py -cp ~/bliss/case_studies/redshift/redshift_from_img -cn continuous > "$DIRNAME/output.out" 2>&1 &
+nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_continuous > "$DIRNAME/output.out" 2>&1 &
 
-# # Run RAIL
-# # TODO
+# # # Run RAIL
+# # # TODO
 
-# # Create plots
+# # # Create plots
 echo "creating plots for BLISS and RAIL from DC2"
 python evaluation/evaluate_cts.py
 python evaluation/evaluate_discrete.py
