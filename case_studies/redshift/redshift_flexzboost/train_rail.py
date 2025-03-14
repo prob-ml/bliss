@@ -9,7 +9,7 @@ from rail.estimation.algos.flexzboost import FlexZBoostInformer  # pylint: disab
 RailStage.data_store.__class__.allow_overwrite = True
 
 # %% configs
-with initialize(config_path="../../", version_base=None):
+with initialize(config_path="../", version_base=None):
     notebook_cfg = compose("redshift")
 rail_dir = Path(notebook_cfg.paths["processed_data_dir_rail"])
 out_model_fn = rail_dir / "flexzboost_model_results.pkl"

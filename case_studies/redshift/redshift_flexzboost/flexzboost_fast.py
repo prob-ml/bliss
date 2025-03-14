@@ -43,7 +43,8 @@ def compute_gridded_pdfs(predictions: qp.ensemble.Ensemble, n_gridpoints=1800):
 
 def compute_means(xs, gridded_pdfs):
     """Computes the mean of the gridded pdfs."""
-    return np.sum(xs * gridded_pdfs, axis=1)
+    gridded_pdfs_normalized = gridded_pdfs / np.sum(gridded_pdfs, axis=1, keepdims=True)
+    return np.sum(xs * gridded_pdfs_normalized, axis=1)
 
 
 class CatastrophicOutlierLoss:
@@ -75,7 +76,7 @@ class MeanSquaredLoss:
         return (y - yhat) ** 2
 
 
-class MeanAbsolusteLoss:
+class MeanAbsoluteLoss:
     """Mean absolute loss function."""
 
     def __call__(self, y, yhat):

@@ -3,7 +3,7 @@ import logging
 import pickle
 from pathlib import Path
 
-import flexzboost_fast
+import flexzboost_fast  # pylint: disable=import-error
 import numpy as np
 import pandas as pd
 import rail  # pylint: disable=import-error
