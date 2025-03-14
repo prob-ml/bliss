@@ -48,7 +48,9 @@ def main(cfg: DictConfig):
         test_loader = dataset.test_dataloader()
         for batch_idx, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
             batch["images"] = batch["images"].to(device)
-            batch["tile_catalog"] = {key: value.to(device) for key, value in batch["tile_catalog"].items()}
+            batch["tile_catalog"] = {
+                key: value.to(device) for key, value in batch["tile_catalog"].items()
+            }
             batch["psf_params"] = batch["psf_params"].to(device)
             bliss_encoder.update_metrics(batch, batch_idx)
         bliss_out_dict = bliss_encoder.mode_metrics.compute()
