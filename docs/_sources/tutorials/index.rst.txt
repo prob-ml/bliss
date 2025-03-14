@@ -1,0 +1,5 @@
+Tutorials
+=========
+
+.. toctree::
+    notebooks/tutorial
