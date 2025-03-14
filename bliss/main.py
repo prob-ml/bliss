@@ -87,7 +87,7 @@ def train(train_cfg: DictConfig):
     # setup seed
     seed = pl.seed_everything(train_cfg.seed)
     GlobalEnv.seed_in_this_program = seed
-
+    torch.use_deterministic_algorithms(True)
     if train_cfg.matmul_precision:
         torch.set_float32_matmul_precision(train_cfg.matmul_precision)
 
