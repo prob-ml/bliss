@@ -164,6 +164,7 @@ train:
             patience: 500
     data_source: ${surveys.dc2}
     pretrained_weights: null
+    seed: 123
 
 # Defaults from `base_config`. We modify cached path and use own class
 surveys:
