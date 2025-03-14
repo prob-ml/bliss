@@ -48,3 +48,8 @@ rail:
   truth:
     lsst_root_dir: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
     truth_catalog: desc_dc2_run2.2i_dr6_truth
+
+# used for visualization
+visualization:
+  mag_bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+  redshift_bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
