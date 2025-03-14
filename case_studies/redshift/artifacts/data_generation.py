@@ -21,10 +21,7 @@ def create_bliss_artifacts(bliss_cfg: DictConfig):
 def main(cfg: DictConfig) -> None:
     logging.info("Starting data generation")
     logging.info(OmegaConf.to_yaml(cfg))
-
-    # Create BLISS artifacts
-    create_bliss_artifacts(cfg)
-
+    create_bliss_artifacts(cfg)  # BLISS
     logging.info("Data generation complete")
 
 
