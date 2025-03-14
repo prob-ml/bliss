@@ -11,7 +11,6 @@ from omegaconf import DictConfig
 @hydra.main(config_path=".", config_name="discrete_eval")
 def main(cfg: DictConfig):
     output_dir = Path(cfg.paths.plot_dir)
-
     # Load metric results
     bliss_output_path = output_dir / "cts_mode_metrics.pkl"
     bliss_discrete_output_path = output_dir / "discrete_mode_metrics.pkl"
