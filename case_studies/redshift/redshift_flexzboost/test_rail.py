@@ -17,7 +17,7 @@ RailStage.data_store.__class__.allow_overwrite = True
 
 # %% configs
 with initialize(config_path="../", version_base=None):
-    cfg = compose("redshift")
+    cfg = compose("redshift_flexzboost")
 rail_dir = Path(cfg.paths["processed_data_dir_rail"])
 out_model_fn = rail_dir / "flexzboost_model_results.pkl"
 

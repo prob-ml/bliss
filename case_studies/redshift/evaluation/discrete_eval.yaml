@@ -1,6 +1,6 @@
 ---
 defaults:
-    - ../redshift_from_img@_here_: discrete
+    - ..@_here_: redshift_discrete
     - _self_
     # - override hydra/job_logging: stdout
 

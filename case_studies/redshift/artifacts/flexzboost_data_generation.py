@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 #################################
 # %% configs
 with initialize(config_path="../", version_base=None):
-    notebook_cfg = compose("redshift")
+    notebook_cfg = compose("redshift_flexzboost")
 rail_dir = Path(notebook_cfg.paths["processed_data_dir_rail"])
 bliss_dir = Path(notebook_cfg.paths["processed_data_dir_bliss"])
 out_model_fn = rail_dir / "flexzboost_model_results.pkl"
