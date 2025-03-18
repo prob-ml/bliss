@@ -1,15 +1,15 @@
 ---
 defaults:
-    - latent_diffusion_train_config
+    - ynet_full_diffusion_train_config
     - _self_
     - override hydra/job_logging: stdout
 
 train:
     trainer:
         logger:
-            name: DC2_latent_diffusion_debug
-            version: DC2_latent_diffusion_debug
-        devices: [3]
+            name: DC2_ynet_full_diffusion_debug
+            version: DC2_ynet_full_diffusion_debug
+        devices: [6]
 
 surveys:
     dc2:

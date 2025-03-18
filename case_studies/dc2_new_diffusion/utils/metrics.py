@@ -1,7 +1,9 @@
 import torch
+import copy
 
 from typing import List
 from torchmetrics import Metric
+from einops import rearrange
 
 from bliss.catalog import FullCatalog
 from bliss.encoder.metrics import CatFilter, NullFilter
@@ -44,6 +46,62 @@ class FilterMetric(Metric):
             return "_" + "_".join(postfix_list)
 
         return ""
+    
+
+class NSourcesAccuracy(Metric):
+    def __init__(
+        self,
+        max_n_sources,
+        tile_slen,
+    ):
+        super().__init__()
+
+        self.max_n_sources = max_n_sources
+        self.tile_slen = tile_slen
+
+        n_sources_metrics = [
+            "n_true_s",
+            "n_est_s",
+            "n_s_match",
+        ]
+        for metrics in n_sources_metrics:
+            self.add_state(metrics, 
+                           default=torch.zeros(self.max_n_sources + 1, dtype=torch.long), 
+                           dist_reduce_fx="sum")
+
+    def update(self, true_cat, est_cat, matching):
+        assert isinstance(true_cat, FullCatalog), "true_cat should be FullCatalog"
+        assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
+        assert hasattr(true_cat, "ori_tile_cat")
+        assert hasattr(est_cat, "ori_tile_cat")
+
+        true_tile_cat = true_cat.ori_tile_cat
+        est_tile_cat = est_cat.ori_tile_cat
+
+        true_n_sources = true_tile_cat["n_sources"]  # (b, h, w)
+        est_n_sources = rearrange(est_tile_cat["n_sources_multi"],
+                                  "b h w 1 1 -> b h w")
+
+        for i in range(self.max_n_sources + 1):
+            true_i = true_n_sources == i
+            est_i = est_n_sources == i
+            self.n_true_s[i] += true_i.sum()
+            self.n_est_s[i] += est_i.sum()
+            self.n_s_match[i] += (true_i & est_i).sum()
+
+    def compute(self):
+        precision = (self.n_s_match / self.n_est_s).nan_to_num(0)
+        recall = (self.n_s_match / self.n_true_s).nan_to_num(0)
+        f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
+
+        out_dict = {}
+        for i in range(self.max_n_sources + 1):
+            out_dict[f"n_sources:s{i}_precision"] = precision[i]
+            out_dict[f"n_sources:s{i}_recall"] = recall[i]
+            out_dict[f"n_sources:s{i}_f1"] = f1[i]
+            out_dict[f"n_sources:n_est_s{i}"] = self.n_est_s[i].float()
+            out_dict[f"n_sources:n_true_s{i}"] = self.n_true_s[i].float()
+        return out_dict
 
 
 class DetectionPerformance(FilterMetric):

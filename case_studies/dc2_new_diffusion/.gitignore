@@ -1,3 +1,5 @@
 full_image_*
 encoder.pt
 decoder.pt
+ci_*.pt
+sierpinski_hard.jpg
