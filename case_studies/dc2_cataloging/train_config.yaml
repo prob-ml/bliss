@@ -137,7 +137,8 @@ encoder:
         compute_groups: false
         metrics: ${my_metrics}
     sample_image_renders: null
-    use_double_detect: false
+    use_double_detect: true
+    minimalist_conditioning: true
     use_checkerboard: true
     n_sampler_colors: 4
     predict_mode_not_samples: true
@@ -146,8 +147,8 @@ train:
     trainer:
         logger:
             name: DC2_cataloging_exp
-            version: exp_02-21-1  # change it before running the code
-        devices: [3]  # change it before running the code
+            version: exp_03-17-1  # change it before running the code
+        devices: [7]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
     data_source: ${surveys.dc2}

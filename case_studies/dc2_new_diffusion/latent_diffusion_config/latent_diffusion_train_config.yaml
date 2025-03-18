@@ -9,6 +9,18 @@ mode: train
 surveys:
   dc2:
     batch_size: 64
+    train_transforms:
+      - _target_: bliss.data_augmentation.RotateFlipTransform
+      - _target_: bliss.data_augmentation.RandomShiftTransform
+        tile_slen: ${surveys.dc2.tile_slen}
+        max_sources_per_tile: ${surveys.dc2.max_sources_per_tile}
+      - _target_: bliss.cached_dataset.FluxFilterTransform
+        reference_band: 2  # r-band
+        min_flux: 100
+    nontrain_transforms:
+      - _target_: bliss.cached_dataset.FluxFilterTransform
+        reference_band: 2  # r-band
+        min_flux: 100
 
 my_diffusion_factors:
   - _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.OneBitFactor
@@ -58,7 +70,7 @@ encoder:
     encoder_hidden_dim: 32
     decoder_hidden_dim: 8
     encoder_output_min: 0.0
-    encoder_output_max: 9.0
+    encoder_output_max: 6.0
     latent_scale: 1.0
     ddim_steps: 5
     ddim_objective: pred_x0
@@ -90,8 +102,8 @@ train:
     trainer:
         logger:
             name: DC2_latent_diffusion_exp
-            version: exp_01-25-2  # change it before running the code
-        devices: [7]  # change it before running the code
+            version: exp_02-26-2  # change it before running the code
+        devices: [3]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
         max_epochs: 50

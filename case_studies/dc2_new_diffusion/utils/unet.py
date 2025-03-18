@@ -348,7 +348,8 @@ class YNet(nn.Module):
                  in_ch, out_ch, dim, 
                  dim_multiply=(1, 2, 4), 
                  attn_heads=4, attn_head_dim=32,
-                 full_attn=(False, False, False)):
+                 full_attn=(False, False, False),
+                 use_self_cond=False):
         super().__init__()
         assert len(dim_multiply) == len(full_attn), "Length of dim_multiply and Length of full_attn must be same"
 
@@ -360,6 +361,7 @@ class YNet(nn.Module):
         self.time_emb_dim = 4 * self.dim
         self.full_attn = full_attn
         self.depth = len(dim_multiply)
+        self.use_self_cond = use_self_cond
 
         self.image_process_net = ImageProcessNet(n_bands=n_bands,
                                                  ch_per_band=ch_per_band,
@@ -374,7 +376,13 @@ class YNet(nn.Module):
         )
 
         # Layer definition
-        self.init_conv = nn.Conv2d(self.in_ch, self.dim, kernel_size=(5, 5), padding=2)
+        if self.use_self_cond:
+            self.init_conv = nn.Conv2d(self.in_ch + self.out_ch, 
+                                       self.dim, kernel_size=(5, 5), padding=2)
+        else:
+            self.init_conv = nn.Conv2d(self.in_ch, 
+                                       self.dim, kernel_size=(5, 5), padding=2)
+        
         self.down_path = nn.ModuleList([])
         self.up_path = nn.ModuleList([])
 
@@ -417,6 +425,10 @@ class YNet(nn.Module):
         )
 
     def forward(self, x, time, input_image, x_self_cond=None):
+        if self.use_self_cond:
+            if x_self_cond is None:
+                x_self_cond = torch.zeros_like(x)
+            x = torch.cat([x, x_self_cond], dim=1)
         x = self.init_conv(x)
         r = x.clone()
         t = self.time_mlp(time)

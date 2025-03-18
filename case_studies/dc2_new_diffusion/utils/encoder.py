@@ -15,7 +15,7 @@ from bliss.encoder.metrics import CatalogMatcher
 from bliss.global_env import GlobalEnv
 
 from case_studies.dc2_new_diffusion.utils.convnet_layers import C3, ConvBlock
-from case_studies.dc2_diffusion.utils.catalog_parser import CatalogParser
+from case_studies.dc2_new_diffusion.utils.catalog_parser import CatalogParser
 from case_studies.dc2_new_diffusion.utils.diffusion import (DiffusionModel, 
                                                             UpsampleDiffusionModel, 
                                                             LatentDiffusionModel, 
@@ -112,17 +112,23 @@ class DiffusionEncoder(pl.LightningModule):
             self.catalog_parser.gating_loss(pred_dict["final_pred_loss"], target_cat1),
             self.catalog_parser.get_gating_for_loss(target_cat1),
         )
+    
+    def _reweight_loss(self, loss, loss_gating):
+        factored_loss = self.catalog_parser.factor_tensor(loss)
+        factored_loss_gating = self.catalog_parser.factor_tensor(loss_gating)
+
+        sub_loss = []
+        for l, lg in zip(factored_loss, factored_loss_gating, strict=True):
+            sub_loss.append(l.sum() / lg.sum() if lg.sum() > 0 else l.sum())
+        mean_sub_loss = torch.cat([sl.unsqueeze(0) for sl in sub_loss]).mean()
+
+        return sub_loss, mean_sub_loss
 
     def _compute_loss(self, batch, logging_name):
-        inter_loss, final_pred_loss, final_pred_loss_gating = self._compute_cur_batch_loss(batch)
+        inter_loss, final_pred_loss, loss_gating = self._compute_cur_batch_loss(batch)
         mean_inter_loss = inter_loss.mean()
-        factored_final_loss = self.catalog_parser.factor_tensor(final_pred_loss)
-        factored_final_loss_gating = self.catalog_parser.factor_tensor(final_pred_loss_gating)
 
-        sub_final_loss = []
-        for l, lg in zip(factored_final_loss, factored_final_loss_gating, strict=True):
-            sub_final_loss.append(l.sum() / lg.sum() if lg.sum() > 0 else l.sum())
-        mean_final_loss = torch.cat([sl.unsqueeze(0) for sl in sub_final_loss]).mean()
+        sub_final_loss, mean_final_loss = self._reweight_loss(final_pred_loss, loss_gating)
 
         batch_size = batch["images"].size(0)
         self.log(f"{logging_name}/_final_loss", mean_final_loss, batch_size=batch_size, sync_dist=True)
@@ -131,10 +137,6 @@ class DiffusionEncoder(pl.LightningModule):
             self.log(f"{logging_name}/_final_loss_{f.name}", sl, batch_size=batch_size, sync_dist=True)
         total_loss = mean_final_loss + mean_inter_loss
         self.log(f"{logging_name}/_loss", total_loss, batch_size=batch_size, sync_dist=True)
-
-        # if self.trainer.current_epoch > 0:
-        #     assert mean_inter_loss < 0.01
-        #     assert mean_final_loss < 0.1
 
         return mean_inter_loss, mean_final_loss
 
@@ -151,9 +153,14 @@ class DiffusionEncoder(pl.LightningModule):
     def update_metrics(self, batch, batch_idx):
         target_tile_cat = TileCatalog(batch["tile_catalog"])
         target_cat = target_tile_cat.to_full_catalog(self.tile_slen)
+        target_cat.ori_tile_cat = target_tile_cat
 
         mode_tile_cat, _ = self.sample(batch, return_inter_output=False)
         mode_cat = mode_tile_cat.to_full_catalog(self.tile_slen)
+        # in cases where model predicts locs at the boundary, to_tile_cat can't recover the original tile cat
+        # this is not a bug and will not influence the metrics calculated using full cat
+        # the following code is an ugly way to bypass this
+        mode_cat.ori_tile_cat = mode_tile_cat
         mode_matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, mode_matching)
 
@@ -353,6 +360,11 @@ class LatentDiffusionEncoder(DiffusionEncoder):
     
 
 class YNetDiffusionEncoder(DiffusionEncoder):
+    def __init__(self, acc_grad_batches, **kwargs):
+        super().__init__(**kwargs)
+        self.acc_grad_batches = acc_grad_batches
+        assert self.acc_grad_batches >= 1
+
     def initialize_networks(self):
         assert self.tile_slen == 4
         target_ch = self.catalog_parser.n_params_per_source
@@ -364,7 +376,8 @@ class YNetDiffusionEncoder(DiffusionEncoder):
                          out_ch=target_ch,
                          dim=64,
                          attn_heads=4,
-                         attn_head_dim=32)
+                         attn_head_dim=32,
+                         use_self_cond=self.ddim_self_cond)
 
         self.detection_diffusion = YNetDiffusionModel(
             model=self.ynet,
@@ -384,9 +397,11 @@ class YNetDiffusionEncoder(DiffusionEncoder):
         ynet_optimizer = self.optimizers()
         mean_inter_loss, _mean_final_loss = self._compute_loss(batch, "train")
 
-        ynet_optimizer.zero_grad()
+        mean_inter_loss = mean_inter_loss / self.acc_grad_batches
         self.manual_backward(mean_inter_loss)
-        ynet_optimizer.step()
+        if (batch_idx + 1) % self.acc_grad_batches == 0:
+            ynet_optimizer.step()
+            ynet_optimizer.zero_grad()
 
         # step every epoch
         if self.trainer.is_last_batch:
@@ -397,6 +412,65 @@ class YNetDiffusionEncoder(DiffusionEncoder):
         ynet_optimizer = Adam(self.ynet.parameters(), **self.optimizer_params)
         ynet_scheduler = MultiStepLR(ynet_optimizer, **self.scheduler_params)
         return [ynet_optimizer], [ynet_scheduler]
+
+
+class YNetFullDiffusionEncoder(YNetDiffusionEncoder):
+    # MAX_FLUXES = 22025.0
+    MAX_FLUXES = torch.inf
+
+    def update_metrics(self, batch, batch_idx):
+        target_tile_cat = TileCatalog(batch["tile_catalog"])
+        target_tile_cat["fluxes"] = target_tile_cat["fluxes"].clamp(max=self.MAX_FLUXES)
+        target_cat = target_tile_cat.to_full_catalog(self.tile_slen)
+        target_cat.ori_tile_cat = target_tile_cat
+
+        mode_tile_cat, _ = self.sample(batch, return_inter_output=False)
+        mode_cat = mode_tile_cat.to_full_catalog(self.tile_slen)
+        # in cases where model predicts locs at the boundary, to_tile_cat can't recover the original tile cat
+        # this is not a bug and will not influence the metrics calculated using full cat
+        # the following code is an ugly way to bypass this
+        mode_cat.ori_tile_cat = mode_tile_cat
+        mode_matching = self.matcher.match_catalogs(target_cat, mode_cat)
+        self.mode_metrics.update(target_cat, mode_cat, mode_matching)
+
+    def _compute_cur_batch_loss(self, batch):
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        assert self.catalog_parser.factors[0].name == "n_sources_multi"
+        max_n_sources = (2 ** self.catalog_parser.factors[0].n_params) - 1
+        target_cat1["n_sources_multi"] = rearrange(target_cat["n_sources"], 
+                                                   "b h w -> b h w 1 1").clamp(max=max_n_sources)
+        target_cat1["fluxes"] = target_cat1["fluxes"].clamp(max=self.MAX_FLUXES)
+        x_features = self.get_features(batch)  # (b, c, H, W)
+        encoded_catalog_tensor = self.catalog_parser.encode(target_cat1)  # (b, h, w, k)
+        pred_dict = self.detection_diffusion(
+            target=encoded_catalog_tensor, input_image=x_features
+        )
+        return (
+            pred_dict["inter_loss"], 
+            self.catalog_parser.gating_loss(pred_dict["final_pred_loss"], target_cat1),
+            self.catalog_parser.get_gating_for_loss(target_cat1),
+        )
+    
+    def _compute_loss(self, batch, logging_name):
+        inter_loss, final_pred_loss, loss_gating = self._compute_cur_batch_loss(batch)
+
+        sub_inter_loss, mean_inter_loss = self._reweight_loss(inter_loss, loss_gating)
+        sub_final_loss, mean_final_loss = self._reweight_loss(final_pred_loss, loss_gating)
+
+        batch_size = batch["images"].size(0)
+        self.log(f"{logging_name}/_final_loss", mean_final_loss, batch_size=batch_size, sync_dist=True)
+        self.log(f"{logging_name}/_inter_loss", mean_inter_loss, batch_size=batch_size, sync_dist=True)
+        for sl, f in zip(sub_final_loss, self.catalog_parser.factors, strict=True):
+            self.log(f"{logging_name}/_final_loss_{f.name}", sl, batch_size=batch_size, sync_dist=True)
+        for sl, f in zip(sub_inter_loss, self.catalog_parser.factors, strict=True):
+            self.log(f"{logging_name}/_inter_loss_{f.name}", sl, batch_size=batch_size, sync_dist=True)
+        total_loss = mean_final_loss + mean_inter_loss
+        self.log(f"{logging_name}/_loss", total_loss, batch_size=batch_size, sync_dist=True)
+
+        return mean_inter_loss, mean_final_loss
 
 
 class YNetDoubleDetectDiffusionEncoder(YNetDiffusionEncoder):

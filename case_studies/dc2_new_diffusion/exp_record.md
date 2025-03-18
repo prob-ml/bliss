@@ -96,3 +96,22 @@ self.final_conv = nn.Sequential(
 ```
 
 
+### 03-16 (ynet_full_diffusion)
+
+1. assertion error because n_sources exceeds 3
+2. assertion error because n_sources exceeds 3
+3. clamp n_sources
+4. clamp flux max to be 22025
+
+
+### 03-17 (ynet_full_diffusion)
+
+1. clamp flux max to be 22025; use reweighted mean internal loss
+2. don't predict flux
+
+
+### 03-18 (ynet_full_diffusion)
+
+1. use reweighted mean internal loss; set acc_gradient_batches to 10
+2. use reweighted mean internal loss; set acc_gradient_batches to 10; let n_sources to be either 0 or 1
+3. use reweighted mean internal loss; set acc_gradient_batches to 10; let n_sources to be either 0 or 1; set lr to 1e-2

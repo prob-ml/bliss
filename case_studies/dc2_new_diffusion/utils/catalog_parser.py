@@ -105,7 +105,7 @@ class CatalogParser(torch.nn.Module):
         # ensure the first factor is n_sources
         # this is designed for the "empty_tile_random_noise" in diffusion model
         # "craft_fake_data" also needs this feature
-        assert self.factors[0].name == "n_sources"
+        assert self.factors[0].name == "n_sources" or self.factors[0].name == "n_sources_multi"
 
     @property
     def n_params_per_source(self):
@@ -131,6 +131,10 @@ class CatalogParser(torch.nn.Module):
             d[qk.name] = qk.decode(params)
             if isinstance(qk, OneBitNSourcesLocsFactor):
                 d["locs"] = repeat(d[qk.name] * 0.5, "b h w -> b h w 1 k", k=2)
+            if isinstance(qk, MultiBitsNSourcesFactor):
+                d["n_sources"] = rearrange((d[qk.name] > 0).to(dtype=d[qk.name].dtype),
+                                           "b h w 1 1 -> b h w")
+                d["n_sources_multi"] = d[qk.name]  # (b, h, w, 1, 1)
         return TileCatalog(d)
 
     def gating_loss(self, loss: torch.Tensor, true_tile_cat: TileCatalog):
@@ -229,7 +233,7 @@ class LogNormalizedFactor(DiffusionFactor):
         assert true_tile_cat[self.name].shape[-2] == 1
         assert true_tile_cat[self.name].shape[-1] == self.n_params
         target = true_tile_cat[self.name][..., 0, :]  # (b, h, w, k)
-        log_target = torch.log(target - self.data_min + 1)
+        log_target = torch.log1p(target - self.data_min)
         log_target_minus_1_to_1 = (log_target - self.log_data_min) / (self.log_data_max - self.log_data_min) * 2 - 1
         masked_log_target_minus_1_to_1 = torch.where(torch.isnan(target), 
                                                      torch.zeros_like(log_target_minus_1_to_1), 
@@ -241,7 +245,7 @@ class LogNormalizedFactor(DiffusionFactor):
         assert ((params >= -self.scale) & (params <= self.scale)).all()
         log_params_minus_1_to_1 = params / self.scale
         log_params = (log_params_minus_1_to_1 + 1) / 2 * (self.log_data_max - self.log_data_min) + self.log_data_min
-        return torch.exp(log_params) - 1 + self.data_min
+        return torch.expm1(log_params) + self.data_min
     
     def clip_tensor(self, input_tensor):
         return torch.clamp(input_tensor, min=-self.scale, max=self.scale)
@@ -342,6 +346,35 @@ def bits_to_ints(bits_tensor: torch.Tensor):
                                                                              keepdim=True)
     return rearrange(flat_ints, "(b h w) 1 -> b h w 1",
                      b=b, h=h, w=w)
+
+
+class MultiBitsNSourcesFactor(DiffusionFactor):
+    def __init__(self, *args, bit_value, threshold, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert self.name == "n_sources_multi"
+
+        self.bit_value = bit_value
+        self.threshold = threshold
+        assert self.threshold > -self.bit_value and self.threshold < self.bit_value
+
+    def encode_tile_cat(self, true_tile_cat):
+        target = true_tile_cat[self.name]  # (b, h, w, 1, 1)
+        assert len(target.shape) == 5
+        assert target.shape[-1] == 1
+        assert target.shape[-2] == 1
+        target = target.squeeze(-2)  # (b, h, w, 1)
+        ns_bits = ints_to_bits(target, num_bits=self.n_params)  # (b, h, w, k)
+        return torch.where(ns_bits > 0, self.bit_value, -self.bit_value)
+    
+    def decode_params(self, params):
+        assert ((params >= -self.bit_value) & (params <= self.bit_value)).all()
+        assert params.shape[-1] == self.n_params
+        bits_tensor = (params > self.threshold).int()  # (b, h, w, k)
+        return bits_to_ints(bits_tensor)  # (b, h, w, 1)
+    
+    def clip_tensor(self, input_tensor):
+        return torch.clamp(input_tensor, min=-self.bit_value, max=self.bit_value)
+
     
 class MultiBitsLocsFactor(DiffusionFactor):
     def __init__(self, *args, bit_value, one_side_parts, individual_hw, threshold, **kwargs):

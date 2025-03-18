@@ -80,7 +80,6 @@ class DiffusionModel(nn.Module):
         ddim_sampling_eta = 0.0,
     ):
         super().__init__()
-        assert not hasattr(model, "random_or_learned_sinusoidal_cond") or not model.random_or_learned_sinusoidal_cond
 
         self.model = model
         self.target_size = target_size  # (k, h, w)
@@ -110,7 +109,7 @@ class DiffusionModel(nn.Module):
 
         # sampling related parameters
         self.sampling_timesteps = ddim_steps
-        assert self.sampling_timesteps < timesteps
+        assert self.sampling_timesteps <= timesteps
         self.ddim_sampling_eta = ddim_sampling_eta
 
         register_buffer = lambda name, val: self.register_buffer(name, val.to(torch.float32))
@@ -173,12 +172,13 @@ class DiffusionModel(nn.Module):
         xt = torch.randn([input_image.shape[0], *self.target_size], 
                          device=self.device)
         x_start = None
+        model_output = None
         inter_output = []
         for time, time_next in time_pairs:
             time_cond = torch.full((xt.shape[0],), time, 
                                    device=self.device, 
                                    dtype=torch.long)
-            self_cond = x_start if self.self_condition else None
+            self_cond = model_output if self.self_condition else None
             pred_noise, x_start, model_output = self.model_predictions(xt, time_cond, input_image, self_cond, 
                                                                         clip_x_start=True, rederive_pred_noise=True)
 
@@ -245,7 +245,7 @@ class DiffusionModel(nn.Module):
         x_self_cond = None
         if self.self_condition and random() < 0.5:
             with torch.no_grad():
-                _, x_self_cond = self.model_predictions(noised_target, t, input_image)
+                _, _, x_self_cond = self.model_predictions(noised_target, t, input_image)
                 x_self_cond.detach_()
 
         # predict
@@ -393,6 +393,7 @@ class YNetDiffusionModel(DiffusionModel):
         sample_dict = super().sample(input_image, return_inter_output)
         sample_dict["final_pred"] = self.catalog_parser.clip_tensor(sample_dict["inter_x_start"].permute([0, 2, 3, 1]))
         return sample_dict
+
 
 class DoubleDetectDiffusionModel(DiffusionModel):
     def forward(self, target1, target2, input_image):

@@ -54,14 +54,15 @@ encoder:
     reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}
     ddim_steps: 5
-    ddim_objective: pred_x0
-    ddim_beta_schedule: linear
+    ddim_objective: pred_noise
+    ddim_beta_schedule: cosine
     ddim_self_cond: false
+    acc_grad_batches: 10
     optimizer_params:
         lr: 1e-3
         amsgrad: true  # to make adam more stable
     scheduler_params:
-        milestones: [30]
+        milestones: [100]
         gamma: 0.1
     image_normalizers: ${my_image_normalizers}
     catalog_parser:
@@ -83,19 +84,19 @@ train:
     trainer:
         logger:
             name: DC2_ynet_diffusion_exp
-            version: exp_02-05-1  # change it before running the code
-        devices: [7]  # change it before running the code
+            version: exp_03-04-4  # change it before running the code
+        devices: [4]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
-        max_epochs: 50
+        max_epochs: 150
         # detect_anomaly: false
         # gradient_clip_val: 0.0
     data_source: ${surveys.dc2}
     pretrained_weights: null
-    seed: 7272
+    seed: 8282
     callbacks:
         early_stopping:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
             monitor: val/_loss
             mode: min
-            patience: 25
+            patience: 100
