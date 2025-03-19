@@ -667,6 +667,9 @@ class RedshiftsCatalogMatcher(CatalogMatcher):
 
         Returns:
             matched index based on self.match_gating
+
+        Raises:
+            ValueError: if match_gating is not in ["n_sources", "is_star", "is_galaxy"]
         """
         assert isinstance(true_cat, BaseTileCatalog) and isinstance(est_cat, BaseTileCatalog)
         assert true_cat.batch_size == est_cat.batch_size
@@ -679,6 +682,8 @@ class RedshiftsCatalogMatcher(CatalogMatcher):
                 gating = true_cat.star_bools[i]
             elif self.match_gating == "is_galaxy":
                 gating = true_cat.galaxy_bools[i]
+            else:
+                raise ValueError(f"Unknown gating: {self.match_gating}")
             matching.append((gating, gating))
 
         return matching

@@ -38,6 +38,7 @@ disable=too-many-ancestors,
 
 	# not sure it's advisable to "fix" these
 	too-many-arguments,
+	too-many-positional-arguments,
 	too-many-locals,
 	too-many-instance-attributes,
 

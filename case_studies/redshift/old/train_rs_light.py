@@ -70,9 +70,9 @@ def main(epoch, train_path, val_path, nick, resume, outdir):  # noqa: WPS216
         "n_epochs": epoch,
         "outdir": outdir,
         "snap": 1,  # how many epoches to save one model once
-        "loss_fcn": torch.nn.MSELoss()
-        if dataset_options["num_bins"] == 1
-        else torch.nn.CrossEntropyLoss(),  # loss func
+        "loss_fcn": (
+            torch.nn.MSELoss() if dataset_options["num_bins"] == 1 else torch.nn.CrossEntropyLoss()
+        ),  # loss func
         "dropout_rate": 0.5,
         "learning_rate": 1e-3,
         "group_size": dataset_options["group_size"],
