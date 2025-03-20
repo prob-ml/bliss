@@ -1,30 +1,20 @@
 #!/usr/bin/env python3
-import click
+import typer
 
 from bliss.encoders.detection import DetectionEncoder
 from bliss.training_functions import run_encoder_training
 
 
-@click.command()
-@click.option("-s", "--seed", required=True, type=int)
-@click.option("--ds-seed", required=True, type=int, help="Random seed used for dataset")
-@click.option("--train-file", required=True, type=str)
-@click.option("--val-file", required=True, type=str)
-@click.option("-b", "--batch-size", default=32)
-@click.option("-e", "--n-epochs", default=50)
-@click.option("--validate-every-n-epoch", default=1, type=int)
-@click.option("--log-every-n-steps", default=50, type=int)
-@click.option("--val-check-interval", default=0.2, type=float)
 def main(
-    seed: int,
-    ds_seed: int,
-    train_file: str,
-    val_file: str,
-    batch_size: int,
-    n_epochs: int,
-    validate_every_n_epoch: int,
-    log_every_n_steps: int,
-    val_check_interval: float,
+    seed: int = typer.Option(),
+    ds_seed: int = typer.Option(),
+    train_file: str = typer.Option(),
+    val_file: str = typer.Option(),
+    batch_size: int = 32,
+    n_epochs: int = 50,
+    validate_every_n_epoch: int = 1,
+    log_every_n_steps: int = 50,
+    val_check_interval: float = 0.2,
 ):
     # for logging
     info = {
@@ -55,4 +45,4 @@ def main(
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)

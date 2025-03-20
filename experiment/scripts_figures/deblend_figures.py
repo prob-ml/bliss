@@ -91,7 +91,6 @@ class DeblendingFigures(BlissFigure):
         )
 
     def compute_data(self, ds_path: str, deblend: GalaxyEncoder):
-
         # metadata
         bp = deblend.bp
         tile_slen = deblend.tile_slen
@@ -116,6 +115,8 @@ class DeblendingFigures(BlissFigure):
 
         # get fluxes through sep (only galaxies)
         # paddings includes stars, so their fluxes are removed
+        # NOTE: Star fluxes are consistently remove from residual measurements as deblender
+        # does not attempt to model stars and remove their contribution
         meas_truth = get_residual_measurements(
             _truth,
             images,
@@ -127,6 +128,7 @@ class DeblendingFigures(BlissFigure):
         )
 
         # get blendedness
+        # NOTE: Here blendedness includes overlap with stars
         bld = get_blendedness(galaxy_uncentered, noiseless)
 
         # add parameters to truth
@@ -147,7 +149,6 @@ class DeblendingFigures(BlissFigure):
         n_batches = math.ceil(n_images / _batch_size)
 
         tiled_gparams = []
-
         for ii in tqdm(range(n_batches), desc="Encoding galaxy parameters"):
             start, end = ii * 50, (ii + 1) * 50
             bimages = images[start:end].to(deblend.device)
@@ -160,7 +161,6 @@ class DeblendingFigures(BlissFigure):
         # create new catalog with these gparams, and otherwise true parameters
         est_tiled = deepcopy(truth_tile_cat.to_dict())
         est_tiled["galaxy_params"] = tile_gparams
-
         est_tiled_cat = TileCatalog(tile_slen, est_tiled)
         est = est_tiled_cat.to_full_params()
 
@@ -421,7 +421,6 @@ class DeblendingFigures(BlissFigure):
         return fig
 
     def _get_deblending_size_bins(self, data):
-
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10), sharey=True)
         _data = _get_masked_data(data)
 
@@ -485,7 +484,6 @@ class DeblendingFigures(BlissFigure):
         return fig
 
     def _get_deblending_ellips_bins(self, data):
-
         fig, axes = plt.subplots(2, 2, figsize=(20, 20))
         ax1, ax2, ax3, ax4 = axes.flatten()
 

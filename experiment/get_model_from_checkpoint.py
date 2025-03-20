@@ -3,9 +3,9 @@
 import datetime
 from pathlib import Path
 
-import click
 import numpy as np
 import torch
+import typer
 
 from bliss import HOME_DIR
 
@@ -37,12 +37,12 @@ def _save_weights(weight_save_path: str, model_checkpoint_path: str):
     torch.save(model_state_dict, weight_save_path)
 
 
-@click.command()
-@click.option("-m", "--model", type=str, required=True)
-@click.option("--seed", type=int, required=True)  # used to train model
-@click.option("--ds-seed", type=int, required=True)  # used to produce dataset
-@click.option("-c", "--checkpoint-dir", type=str, required=True)
-def main(model: str, seed: int, ds_seed: int, checkpoint_dir: str):
+def main(
+    model: str = typer.Option(),
+    seed: int = typer.Option(),
+    ds_seed: int = typer.Option(),
+    checkpoint_dir: str = typer.Option(),
+):
     """Save weights from model checkpoint."""
     weight_path = MODELS_DIR / f"{model}_{ds_seed}_{seed}.pt"
 
@@ -58,4 +58,4 @@ def main(model: str, seed: int, ds_seed: int, checkpoint_dir: str):
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)

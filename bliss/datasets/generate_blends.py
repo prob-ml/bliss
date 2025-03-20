@@ -6,7 +6,7 @@ from einops import pack, rearrange, reduce
 from torch import Tensor
 from tqdm import tqdm
 
-from bliss.catalog import FullCatalog, TileCatalog, collate
+from bliss.catalog import FullCatalog, collate
 from bliss.datasets.lsst import GALAXY_DENSITY, PIXEL_SCALE, STAR_DENSITY
 from bliss.datasets.padded_tiles import render_padded_image
 from bliss.datasets.render_utils import (
@@ -105,14 +105,6 @@ def generate_dataset(
         "paddings": paddings,
         **paramss,
     }
-
-
-def parse_dataset(dataset: dict[str, Tensor], tile_slen: int = 5):
-    """Parse dataset into a tuple of (images, TileCatalog)."""
-    params = dataset.copy()  # make a copy to not change argument.
-    images = params.pop("images")
-    paddings = params.pop("paddings")
-    return images, TileCatalog(tile_slen, params), paddings
 
 
 def render_full_catalog(full_cat: FullCatalog, psf: galsim.GSObject, slen: int, bp: int):

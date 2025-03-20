@@ -3,7 +3,7 @@
 
 from pathlib import Path
 
-import click
+import typer
 
 from bliss.encoders.deblend import GalaxyEncoder
 from bliss.training_functions import run_encoder_training
@@ -11,28 +11,17 @@ from bliss.training_functions import run_encoder_training
 NUM_WORKERS = 0
 
 
-@click.command()
-@click.option("-s", "--seed", required=True, type=int)
-@click.option("--ds-seed", required=True, type=int)
-@click.option("--ae-model-path", required=True, type=str)
-@click.option("--train-file", required=True, type=str)
-@click.option("--val-file", required=True, type=str)
-@click.option("-b", "--batch-size", default=128)
-@click.option("--lr", default=1e-4, type=float)
-@click.option("-e", "--n-epochs", type=int, default=10_000)
-@click.option("--validate-every-n-epoch", default=10, type=int)
-@click.option("--log-every-n-steps", default=25, type=int)
 def main(
-    seed: int,
-    ds_seed: int,
-    ae_model_path: str,
-    train_file: str,
-    val_file: str,
-    batch_size: int,
-    lr: float,
-    n_epochs: int,
-    validate_every_n_epoch: int,
-    log_every_n_steps: int,
+    seed: int = typer.Option(),
+    ds_seed: int = typer.Option(),
+    ae_model_path: str = typer.Option(),
+    train_file: str = typer.Option(),
+    val_file: str = typer.Option(),
+    batch_size: int = 128,
+    lr: float = 1e-4,
+    n_epochs: int = 10_000,
+    validate_every_n_epoch: int = 10,
+    log_every_n_steps: int = 25,
 ):
     ae_path = Path(ae_model_path)
     assert ae_path.exists()
@@ -64,10 +53,10 @@ def main(
         validate_every_n_epoch=validate_every_n_epoch,
         val_check_interval=None,
         log_every_n_steps=log_every_n_steps,
-        keep_padding=True,
+        is_deblender=True,
         log_info_dict=info,
     )
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)

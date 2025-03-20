@@ -2,8 +2,7 @@ from functools import partial
 
 import matplotlib.pyplot as plt
 import torch
-from einops import rearrange, reduce
-from matplotlib import pyplot as plt
+from einops import rearrange
 from tqdm import tqdm
 
 from bliss.catalog import FullCatalog, TileCatalog
@@ -68,22 +67,15 @@ class SamplingFigure(BlissFigure):
 
         # read dataset
         dataset = load_dataset_npz(ds_path)
-        _images = dataset["images"]
-        _paddings = dataset["paddings"]
-        _noiseless = dataset["noiseless"]
+        images = dataset["images"]
+        paddings = dataset["paddings"]
+        noiseless = dataset["noiseless"]
 
-        uncentered_sources = dataset["uncentered_sources"]
+        # only galaxies allowed in dataset (for now)
+        galaxy_uncentered = dataset["uncentered_sources"]
+        n_sources = dataset["n_sources"]
         galaxy_bools = dataset["galaxy_bools"]
-        _tgbools = rearrange(galaxy_bools, "n ms 1 -> n ms 1 1 1 ")
-        galaxy_uncentered = uncentered_sources * _tgbools
-
-        # we want to exclude stars only but keep the padding for starters
-        star_bools = dataset["star_bools"]
-        only_stars = uncentered_sources * rearrange(star_bools, "b n 1 -> b n 1 1 1").float()
-        all_stars = reduce(only_stars, "b n c h w -> b c h w", "sum")
-        images = _images - all_stars
-        paddings = _paddings - all_stars
-        noiseless = _noiseless - all_stars
+        assert torch.all(n_sources.flatten() == galaxy_bools.sum(axis=1).flatten().long())
 
         # more metadata
         slen = images.shape[-1] - 2 * bp
@@ -159,8 +151,7 @@ class SamplingFigure(BlissFigure):
 
         # NOTE: slow!
         for cat in tqdm(cats, total=len(cats), desc="Creating reconstructions for each sample"):
-
-            # stars are excluded from all images for now
+            # for now, images and dataset contains no stars
             # impose that all detections are galaxies
             tile_cat = cat.to_tile_params(tile_slen)
             tile_cat["galaxy_bools"] = rearrange(tile_cat.n_sources, "b x y -> b x y 1")
@@ -176,10 +167,7 @@ class SamplingFigure(BlissFigure):
                 new_cat, deblender._dec, slen=slen, device=deblender.device, batch_size=500
             )
             meas = get_residual_measurements(
-                new_cat,
-                images,
-                paddings=torch.zeros_like(images),
-                sources=recon_uncentered,
+                new_cat, images, paddings=paddings, sources=recon_uncentered, bp=bp, r=self.aperture
             )
 
             all_fluxes.append(meas["flux"])
@@ -197,7 +185,6 @@ class SamplingFigure(BlissFigure):
             s = torch.zeros((images.shape[0], truth.max_n_sources, 1))
 
             for jj in range(images.shape[0]):
-
                 tns = truth.n_sources[jj].item()
                 _tplocs = truth.plocs[jj]
                 _eplocs = cats[ii].plocs[jj]

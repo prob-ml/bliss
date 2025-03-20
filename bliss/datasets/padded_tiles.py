@@ -25,49 +25,13 @@ from bliss.datasets.render_utils import (
 )
 
 
-def render_padded_image(
-    catsim_table: Table,
-    all_star_mags: np.ndarray,
-    mean_sources: float,
-    galaxy_prob: float,
-    psf: galsim.GSObject,
-    slen: int,
-    bp: int,
-):
-    """Return noiseless image of galaxies only in padding (centroid outside `slen`)."""
-    size = slen + 2 * bp
-    n_sources = sample_poisson_n_sources(mean_sources, torch.inf)
-    image = torch.zeros((1, size, size))
-
-    # we don't need to record or keep track, just produce the image in padding
-    # we will construct the image galaxy by galaxy
-    for _ in range(n_sources):
-        # offset always needs to be out of the central square
-        x, y = uniform_out_of_square(slen, size)
-        offset = torch.tensor([x, y])
-
-        is_galaxy = sample_bernoulli(galaxy_prob, 1).bool().item()
-        if is_galaxy:
-            params, _ = sample_galaxy_params(catsim_table, 1, 1)
-            assert params.shape == (1, 11)
-            one_galaxy_params = params[0]
-            galaxy = render_one_galaxy(one_galaxy_params, psf, size, offset)
-            image += galaxy
-        else:
-            star_flux = sample_star_fluxes(all_star_mags, 1, 1).item()
-            star = render_one_star(psf, star_flux, size, offset)
-            image += star
-
-    return image
-
-
 def generate_padded_tiles(
     n_samples: int,
     catsim_table: Table,
     all_star_mags: np.ndarray,
     psf: galsim.GSObject,
     slen: int = 5,
-    bp: int = 25,
+    bp: int = 24,
     max_shift: float = 0.5,
     p_source_in: float | None = None,
     galaxy_prob: float | None = None,
@@ -96,7 +60,7 @@ def generate_padded_tiles(
     for _ in tqdm(range(n_samples)):
         if p_source_in is None:
             mean_sources_in = density * (slen * PIXEL_SCALE / 60) ** 2
-            n_sources = sample_poisson_n_sources(mean_sources_in, 1)
+            n_sources = sample_poisson_n_sources(mean_sources_in, max_n_sources=1)
         else:
             n_sources = int(torch.distributions.Bernoulli(p_source_in).sample([1]).item())
 
@@ -132,7 +96,7 @@ def generate_padded_tiles(
             centered_noiseless = torch.zeros((1, size, size)).float()
 
         padding = render_padded_image(
-            catsim_table, all_star_mags, mean_sources_out, galaxy_prob, psf, slen, bp
+            catsim_table, all_star_mags, mean_sources_out, galaxy_prob, psf, slen=slen, bp=bp
         )
         noiseless = uncentered_noiseless + padding
         final_image = add_noise(noiseless)
@@ -164,11 +128,45 @@ def generate_padded_tiles(
         "paddings": paddings,
         "uncentered_sources": uncentered_sources,
         "centered_sources": centered_sources,
-        "tile_params": {
-            "n_sources": n_sources,
-            "locs": locs,
-            "galaxy_params": galaxy_params,
-            "galaxy_bools": galaxy_bools,
-            "star_fluxes": star_fluxes,
-        },
+        "n_sources": n_sources,
+        "locs": locs,
+        "galaxy_params": galaxy_params,
+        "galaxy_bools": galaxy_bools,
+        "star_fluxes": star_fluxes,
     }
+
+
+def render_padded_image(
+    catsim_table: Table,
+    all_star_mags: np.ndarray,
+    mean_sources: float,
+    galaxy_prob: float,
+    psf: galsim.GSObject,
+    slen: int,
+    bp: int,
+):
+    """Return noiseless image of galaxies only in padding (centroid outside `slen`)."""
+    size = slen + 2 * bp
+    n_sources = sample_poisson_n_sources(mean_sources, torch.inf)
+    image = torch.zeros((1, size, size))
+
+    # we don't need to record or keep track, just produce the image in padding
+    # we will construct the image galaxy by galaxy
+    for _ in range(n_sources):
+        # offset always needs to be out of the central square
+        x, y = uniform_out_of_square(slen, size)
+        offset = torch.tensor([x, y])
+
+        is_galaxy = sample_bernoulli(galaxy_prob, 1).bool().item()
+        if is_galaxy:
+            params, _ = sample_galaxy_params(catsim_table, 1, 1)
+            assert params.shape == (1, 11)
+            one_galaxy_params = params[0]
+            galaxy = render_one_galaxy(one_galaxy_params, psf, size, offset)
+            image += galaxy
+        else:
+            star_flux = sample_star_fluxes(all_star_mags, 1, 1).item()
+            star = render_one_star(psf, star_flux, size, offset)
+            image += star
+
+    return image

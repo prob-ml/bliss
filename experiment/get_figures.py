@@ -5,15 +5,15 @@ from pathlib import Path
 import pytorch_lightning as pl
 import torch
 import typer
+from scripts_figures.binary_figures import BinaryFigures
+from scripts_figures.deblend_figures import DeblendingFigures
+from scripts_figures.detection_figures import BlendDetectionFigures
+from scripts_figures.sampling_figure import SamplingFigure
+from scripts_figures.toy_figures import ToySeparationFigure
 
 from bliss.encoders.binary import BinaryEncoder
 from bliss.encoders.deblend import GalaxyEncoder
 from bliss.encoders.detection import DetectionEncoder
-from experiment.scripts_figures.binary_figures import BinaryFigures
-from experiment.scripts_figures.deblend_figures import DeblendingFigures
-from experiment.scripts_figures.detection_figures import BlendDetectionFigures
-from experiment.scripts_figures.sampling_figure import SamplingFigure
-from experiment.scripts_figures.toy_figures import ToySeparationFigure
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -145,14 +145,13 @@ def _make_sample_figure(
     overwrite: bool,
     device: torch.device,
 ):
-    print("INFO: Creating figures for toy experiment.")
+    print("INFO: Creating figures for sampling experiment.")
     _init_kwargs = {
         "overwrite": overwrite,
         "figdir": "figures",
         "suffix": suffix,
         "cachedir": CACHEDIR,
         "aperture": aperture,
-        "n_samples": 10,
     }
     detection = _load_models(fpaths, "detection", device)
     deblender = _load_models(fpaths, "deblend", device)

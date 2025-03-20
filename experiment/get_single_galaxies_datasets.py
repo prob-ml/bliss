@@ -2,9 +2,9 @@
 
 import datetime
 
-import click
 import numpy as np
 import pytorch_lightning as L
+import typer
 
 from bliss import DATASETS_DIR, HOME_DIR
 from bliss.datasets.generate_individual import generate_individual_dataset
@@ -19,10 +19,7 @@ CATSIM_CAT = prepare_final_galaxy_catalog()
 PSF = get_default_lsst_psf()
 
 
-@click.command()
-@click.option("-s", "--seed", required=True, type=int)
-@click.option("--fraction", type=float, default=1.0)
-def main(seed: int, fraction: float):
+def main(seed: int = typer.Option(), fraction: float = 1.0):
     L.seed_everything(seed)
     rng = np.random.default_rng(seed)  # for catalog indices
 
@@ -67,4 +64,4 @@ def main(seed: int, fraction: float):
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)
