@@ -1,7 +1,12 @@
 from pathlib import Path
 
 import torch
-
+from omegaconf import OmegaConf
+import hydra
+from hydra import compose, initialize
+from hydra.utils import instantiate
+from tqdm import tqdm
+import pickle
 from bliss.catalog import TileCatalog
 from bliss.encoder.encoder import Encoder
 
@@ -28,10 +33,10 @@ class RedshiftsEncoder(Encoder):
     def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
 
-        for risk_type in self.discrete_metrics.keys():
-            mode_cat = self.discrete_sample(batch, use_mode=True, risk_type=risk_type)
-            matching = self.matcher.match_catalogs(target_cat, mode_cat)
-            self.discrete_metrics[risk_type].update(target_cat, mode_cat, matching)
+        # for risk_type in self.discrete_metrics.keys():
+        #     mode_cat = self.discrete_sample(batch, use_mode=True, risk_type=risk_type)
+        #     matching = self.matcher.match_catalogs(target_cat, mode_cat)
+        #     self.discrete_metrics[risk_type].update(target_cat, mode_cat, matching)
 
         mode_cat = self.sample(batch, use_mode=True)
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
@@ -54,6 +59,96 @@ class RedshiftsEncoder(Encoder):
             self.sample_metrics.reset()
         if self.discrete_metrics:  # TODO: should be same as above, not empty dict
             self.discrete_metrics.reset()
+
+        if self.current_epoch % 5 == 0:
+            if self.logger.version == 'continuous':
+                # Compute continuous metrics
+                cfg = compose("redshift_continuous.yaml")
+                OmegaConf.resolve(cfg)
+                cfg.surveys.dc2.batch_size = 4
+                cfg.train.data_source.batch_size = 4
+                output_dir = cfg.paths.plot_dir
+                ckpt_dir = cfg.paths.ckpt_dir
+
+                output_dir = Path(output_dir)
+                output_dir.mkdir(parents=True, exist_ok=True)
+
+                ckpt_path = get_best_ckpt(ckpt_dir)
+                if not ckpt_path:
+                    return
+                device = self.device
+
+                # set up testing dataset
+                dataset = instantiate(cfg.train.data_source)
+                dataset.setup("test")
+
+                # load bliss trained model - continuous version
+                bliss_encoder = instantiate(cfg.encoder).to(device=device)
+                pretrained_weights = torch.load(ckpt_path, device)["state_dict"]
+                bliss_encoder.load_state_dict(pretrained_weights)
+                bliss_encoder.eval()
+
+                # load bliss trained model - continuous version
+                bliss_output_path = output_dir / "cts_mode_metrics_{}.pkl".format(self.current_epoch)
+                test_loader = dataset.test_dataloader()
+                for batch_idx, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
+                    batch["images"] = batch["images"].to(device)
+                    batch["tile_catalog"] = {key: value.to(device) for key, value in batch["tile_catalog"].items()}
+                    batch["psf_params"] = batch["psf_params"].to(device)
+                    bliss_encoder.update_metrics(batch, batch_idx)
+                bliss_out_dict = bliss_encoder.mode_metrics.compute()
+                del test_loader
+                del bliss_encoder
+                del dataset
+                del pretrained_weights
+
+                with open(bliss_output_path, "wb") as outp:  # Overwrites any existing file.
+                    pickle.dump(bliss_out_dict, outp, pickle.HIGHEST_PROTOCOL)
+
+            if self.logger.version == 'discrete':
+                cfg = compose("redshift_discrete.yaml")
+                OmegaConf.resolve(cfg)
+                cfg.surveys.dc2.batch_size = 4
+                cfg.train.data_source.batch_size = 4
+                output_dir = cfg.paths.plot_dir
+                ckpt_dir = cfg.paths.ckpt_dir
+
+                output_dir = Path(output_dir)
+                output_dir.mkdir(parents=True, exist_ok=True)
+
+                ckpt_path = get_best_ckpt(ckpt_dir)
+                if not ckpt_path:
+                    return
+                device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+                # set up testing dataset
+                dataset = instantiate(cfg.train.data_source)
+                dataset.setup("test")
+
+                # load bliss trained model - discrete version
+                bliss_encoder = instantiate(cfg.encoder).to(device=device)
+                pretrained_weights = torch.load(ckpt_path, device)["state_dict"]
+                bliss_encoder.load_state_dict(pretrained_weights)
+                bliss_encoder.eval()
+
+                bliss_discrete_output_path = output_dir / "discrete_mode_metrics_{}.pkl".format(self.current_epoch)
+                bliss_discrete_grid_output_path = output_dir / "discrete_grid_metrics_{}.pkl".format(self.current_epoch)
+
+                # compute metrics -- discrete version
+                
+                test_loader = dataset.test_dataloader()
+                for batch_idx, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
+                    batch["images"] = batch["images"].to(device)
+                    batch["tile_catalog"] = {key: value.to(device) for key, value in batch["tile_catalog"].items()}
+                    batch["psf_params"] = batch["psf_params"].to(device)
+                    bliss_encoder.update_metrics(batch, batch_idx)
+                bliss_mode_out_dict = bliss_encoder.mode_metrics.compute()
+                bliss_discrete_out_dict = bliss_encoder.discrete_metrics.compute()
+
+                with open(bliss_discrete_output_path, "wb") as outp:  # Overwrites any existing file.
+                    pickle.dump(bliss_mode_out_dict, outp, pickle.HIGHEST_PROTOCOL)
+                with open(bliss_discrete_grid_output_path, "wb") as outp:  # Overwrites any existing file.
+                    pickle.dump(bliss_discrete_out_dict, outp, pickle.HIGHEST_PROTOCOL)
 
     def get_features_and_parameters(self, batch):
         batch = (

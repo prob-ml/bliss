@@ -9,26 +9,27 @@ from omegaconf import DictConfig
 from tqdm import tqdm
 
 
-def get_best_ckpt(ckpt_dir: str):
+def get_kth_best_ckpt(ckpt_dir: str, k: int = 0):
     ckpt_dir = Path(ckpt_dir)
     ckpt_files = list(ckpt_dir.glob("*.ckpt"))
     sorted_files = sorted(ckpt_files, key=lambda f: float(f.stem.split("_")[1]))
     if sorted_files:
-        return sorted_files[0]
+        return sorted_files[k]
 
     raise FileExistsError("No ckpt files found in the directory")
 
 
 @hydra.main(config_path=".", config_name="continuous_eval")
 def main(cfg: DictConfig):
+    k = 2
     output_dir = cfg.paths.plot_dir
     ckpt_dir = cfg.paths.ckpt_dir
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    ckpt_path = get_best_ckpt(ckpt_dir)
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    ckpt_path = get_kth_best_ckpt(ckpt_dir, k)
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
     # set up testing dataset
     dataset = instantiate(cfg.train.data_source)
@@ -41,7 +42,7 @@ def main(cfg: DictConfig):
     bliss_encoder.eval()
 
     # load bliss trained model - continuous version
-    bliss_output_path = output_dir / "cts_mode_metrics.pkl"
+    bliss_output_path = output_dir / "cts_mode_metrics_{}thbest.pkl".format(k)
 
     # compute metrics -- continuous version
     if not bliss_output_path.exists():
