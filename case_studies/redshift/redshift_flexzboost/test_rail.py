@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import rail  # pylint: disable=import-error
 from hydra import compose, initialize
-from matplotlib import pyplot as plt
 from rail.core.stage import RailStage  # pylint: disable=import-error
 from rail.estimation.algos.flexzboost import FlexZBoostEstimator  # pylint: disable=import-error
 
@@ -35,7 +34,7 @@ pzflex_qp_flexzboost = FlexZBoostEstimator.make_stage(
     qp_representation="flexzboost",
 )
 
-# %% load tiny testing data
+# %% load testing data
 test_data = RailStage.data_store.read_file(
     "training_data", rail.core.data.Hdf5Handle, rail_dir / "test_df.hdf5"
 )
@@ -117,30 +116,3 @@ results_by_redshift = compute_loss_by_bin(
 # %% save the results
 results_by_mag.to_csv(rail_dir / "results_by_mag.csv")
 results_by_redshift.to_csv(rail_dir / "results_by_redshift.csv")
-
-# %% focusing on the "diagonal" entries of the loss table
-results_by_mag_diagonal = results_by_mag[
-    results_by_mag["loss_type"] == results_by_mag["prediction_type"]
-]
-results_by_redshift_diagonal = results_by_redshift[
-    results_by_redshift["loss_type"] == results_by_redshift["prediction_type"]
-]
-
-# %%
-# %% plot redshift_bin against loss for each loss type in a 2x2 grid
-fig, axs = plt.subplots(2, 2, figsize=(14, 10))
-axs = axs.flatten()
-
-for i, loss_name in enumerate(loss_types.keys()):
-    subset = results_by_redshift_diagonal[results_by_redshift_diagonal["loss_type"] == loss_name]
-    axs[i].plot(subset["bin"], subset["loss"], label=loss_name)
-    axs[i].set_xlabel("Redshift Bin")
-    axs[i].set_ylabel("Loss")
-    axs[i].set_title(f"Loss vs Redshift Bin for {loss_name}")
-    axs[i].tick_params(axis="x", rotation=45)
-    axs[i].set_ylim(0, None)
-    axs[i].grid(True)
-
-plt.tight_layout()
-plt.savefig(rail_dir / "loss_vs_redshift_bin.png")
-# %%
