@@ -63,71 +63,81 @@ encoder:
 
 # Can optimize to these metrics by choosing bin carefully
 discrete_metrics:
-    redshift_mean_square_error_bin:
+    redshift_mean_square_error_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_catastrophic_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_abs_bias_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_mean_square_error_bin_rs:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
-    redshift_outlier_fraction_bin:
+        bin_type: "redshift"
+    redshift_outlier_fraction_bin_rs:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
-    redshift_nmad_bin:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDevBin
-        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
-    redshift_outlier_fraction_catastrophic_bin:
+        bin_type: "redshift"
+    redshift_outlier_fraction_catastrophic_bin_rs:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
-    redshift_abs_bias_bin:
+        bin_type: "redshift"
+    redshift_abs_bias_bin_rs:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
+        bin_type: "redshift"
 
 # Standard metric computation
 mode_sample_metrics:
-    redshift_mean_square_error:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredError
-    redshift_mean_square_error_bin:
+    redshift_mean_square_error_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_catastrophic_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_bias_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_abs_bias_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_mean_square_error_bin_rs:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
-    redshift_mean_square_error_blendedness:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBlendedness
-        bin_cutoffs: [0.0001, 0.02, 0.1, 0.2, 0.6]
-    redshift_mean_square_error_true_redshifts:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorTrueRedshift
-        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-    redshift_outlier_fraction:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFraction
-    redshift_outlier_fraction_bin:
+        bin_type: "redshift"
+    redshift_outlier_fraction_bin_rs:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
-    redshift_nmad:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDev
-    redshift_nmad_bin:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftNormalizedMedianAbsDevBin
-        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
-    redshift_outlier_fraction_catastrophic:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCata
-    redshift_outlier_fraction_catastrophic_bin:
+        bin_type: "redshift"
+    redshift_outlier_fraction_catastrophic_bin_rs:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
-    redshift_bias:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBias
-    redshift_bias_bin:
+        bin_type: "redshift"
+    redshift_bias_bin_rs:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
-    redshift_abs_bias:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBias
-    redshift_abs_bias_bin:
+        bin_type: "redshift"
+    redshift_abs_bias_bin_rs:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
-        bin_type: "njymag"
+        bin_type: "redshift"
 
 train:
     trainer:
