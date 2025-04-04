@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 import torch
-
+from typing import List
 from bliss.surveys.dc2 import DC2DataModule, map_nested_dicts, split_list, unpack_dict
 
 
@@ -16,45 +16,64 @@ class RedshiftDC2DataModule(DC2DataModule):
 
     def __init__(
         self,
+        train_splits: List[List] = None,
+        val_splits: List[List] = None,
+        test_splits: List[List] = None,
+        split_to_use: int = 0,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-
+        self.train_splits = train_splits
+        self.val_splits = val_splits
+        self.test_splits = test_splits
+        self.split_to_use = split_to_use
         self.dc2_image_dir = Path(self.dc2_image_dir)
         self.dc2_cat_path = Path(self.dc2_cat_path)
         self._tract_patches = None
 
     def setup(self, stage: str) -> None:  # noqa: WPS324
         """Setup following super(), but we save train/val/test splits to text files for ease."""
-        super().setup(stage)
+        if self.file_paths is None or self.slices is None:
+            self._load_file_paths_and_slices()
 
-        # Log tracts and patches used
-        train_files = self.file_paths[self.slices[0]]
-        val_files = self.file_paths[self.slices[1]]
-        test_files = self.file_paths[self.slices[2]]
+        train_split_used = set(["_".join(x) for x in self.train_splits[self.split_to_use]])
+        val_split_used = set(["_".join(x) for x in self.val_splits[self.split_to_use]])
+        test_split_used = set(["_".join(x) for x in self.test_splits[self.split_to_use]])
 
-        train_matches = [
-            re.search(r"cached_data_(\d+)_(\d+,\d+)", file_path) for file_path in train_files
-        ]
-        val_matches = [
-            re.search(r"cached_data_(\d+)_(\d+,\d+)", file_path) for file_path in val_files
-        ]
-        test_matches = [
-            re.search(r"cached_data_(\d+)_(\d+,\d+)", file_path) for file_path in test_files
-        ]
-        train_tract_patches = [(match.group(1), match.group(2)) for match in train_matches]
-        val_tract_patches = [(match.group(1), match.group(2)) for match in val_matches]
-        test_tract_patches = [(match.group(1), match.group(2)) for match in test_matches]
+        # Separate self.file_paths into train/val/test
+        train_files = [file_name for file_name in self.file_paths if any(substring in file_name for substring in train_split_used)]
+        val_files = [file_name for file_name in self.file_paths if any(substring in file_name for substring in val_split_used)]
+        test_files = [file_name for file_name in self.file_paths if any(substring in file_name for substring in test_split_used)]
 
-        with open(self.cached_data_path / "train_splits.pkl", "wb") as f:
-            pickle.dump(train_tract_patches, f)
+        if stage == "fit":
+            self.train_dataset = self._get_dataset(
+                train_files, self.train_transforms, shuffle=True
+            )
 
-        with open(self.cached_data_path / "val_splits.pkl", "wb") as f:
-            pickle.dump(val_tract_patches, f)
+            self.val_dataset = self._get_dataset(
+                val_files, self.nontrain_transforms
+            )
+            return None
 
-        with open(self.cached_data_path / "test_splits.pkl", "wb") as f:
-            pickle.dump(test_tract_patches, f)
+        if stage == "validate":
+            if self.val_dataset is None:
+                self.val_dataset = self._get_dataset(
+                    val_files, self.nontrain_transforms
+                )
+            return None
+
+        if stage == "test":
+            self.test_dataset = self._get_dataset(
+                test_files, self.nontrain_transforms
+            )
+            return None
+
+        if stage == "predict":
+            self.predict_dataset = self._get_dataset(self.file_paths, self.nontrain_transforms)
+            return None
+
+        raise RuntimeError(f"setup skips stage {stage}")
 
     def _load_image_and_bg_files_list(self):
         img_pattern = "**/*/calexp*.fits"
