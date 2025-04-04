@@ -21,7 +21,7 @@ def get_kth_best_ckpt(ckpt_dir: str, k: int = 0):
 
 @hydra.main(config_path=".", config_name="continuous_eval")
 def main(cfg: DictConfig):
-    k = 2
+    k = 0
     output_dir = cfg.paths.plot_dir
     ckpt_dir = cfg.paths.ckpt_dir
 
@@ -29,7 +29,7 @@ def main(cfg: DictConfig):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     ckpt_path = get_kth_best_ckpt(ckpt_dir, k)
-    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
 
     # set up testing dataset
     dataset = instantiate(cfg.train.data_source)
@@ -42,7 +42,7 @@ def main(cfg: DictConfig):
     bliss_encoder.eval()
 
     # load bliss trained model - continuous version
-    bliss_output_path = output_dir / "cts_mode_metrics_{}thbest.pkl".format(k)
+    bliss_output_path = output_dir / "cts_mode_metrics_{}thbest_new_bins.pkl".format(k)
 
     # compute metrics -- continuous version
     if not bliss_output_path.exists():

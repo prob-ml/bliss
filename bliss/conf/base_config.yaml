@@ -344,3 +344,4 @@ predict:
     encoder: ${encoder}
     weight_save_path: null
     device: cuda:0
+

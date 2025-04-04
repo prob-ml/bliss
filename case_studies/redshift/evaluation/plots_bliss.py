@@ -13,14 +13,14 @@ def main(cfg: DictConfig):
     epoch = 45
     output_dir = Path(cfg.paths.plot_dir)
     # Load metric results
-    bliss_output_path = output_dir / "cts_mode_metrics_{}.pkl".format(epoch)
-    bliss_discrete_output_path = output_dir / "discrete_mode_metrics_{}.pkl".format(epoch)
-    bliss_discrete_grid_output_path = output_dir / "discrete_grid_metrics_{}.pkl".format(epoch)
+    bliss_output_path = output_dir / "cts_mode_metrics_0thbest_new_bins.pkl"
+    # bliss_discrete_output_path = output_dir / "discrete_mode_metrics_{}.pkl".format(epoch)
+    # bliss_discrete_grid_output_path = output_dir / "discrete_grid_metrics_{}.pkl".format(epoch)
 
-    with open(bliss_discrete_output_path, "rb") as inputp:
-        bliss_mode_out_dict = pickle.load(inputp)
-    with open(bliss_discrete_grid_output_path, "rb") as inputp:
-        bliss_discrete_out_dict = pickle.load(inputp)
+    # with open(bliss_discrete_output_path, "rb") as inputp:
+    #     bliss_mode_out_dict = pickle.load(inputp)
+    # with open(bliss_discrete_grid_output_path, "rb") as inputp:
+    #     bliss_discrete_out_dict = pickle.load(inputp)
     with open(bliss_output_path, "rb") as inputp:
         bliss_out_dict = pickle.load(inputp)
 
@@ -34,26 +34,27 @@ def main(cfg: DictConfig):
     ]
     sns.set_theme()
     for i, metric in enumerate(metrics):
-        save_name = output_dir / f"{metric}_{epoch}.pdf"
+        save_name = output_dir / f"{metric}_new_bins.pdf"
 
-        mag_ranges = ["<23.9", "23.9-24.1", "24.1-24.5", "24.5-24.9", "24.9-25.6", ">25.6"]
+        # mag_ranges = ["<23.9", "23.9-24.1", "24.1-24.5", "24.5-24.9", "24.9-25.6", ">25.6"]
+        mag_ranges = ["0.5", "1", "1.5", "2", "2.5", "3"]
         bliss_values = [bliss_out_dict[f"redshifts/{metric}_bin_{i}"] for i in range(6)]
-        bliss_discrete = [bliss_mode_out_dict[f"redshifts/{metric}_bin_{i}"] for i in range(6)]
-        bliss_discrete_grid = [
-            bliss_discrete_out_dict[f"redshifts/{metric}_bin_{i}"] for i in range(6)
-        ]
+        # bliss_discrete = [bliss_mode_out_dict[f"redshifts/{metric}_bin_{i}"] for i in range(6)]
+        # bliss_discrete_grid = [
+        #     bliss_discrete_out_dict[f"redshifts/{metric}_bin_{i}"] for i in range(6)
+        # ]
 
         plt.figure(figsize=(6, 6))
         plt.plot(mag_ranges, bliss_values, label="BLISS+Normal", marker="o", c="blue")
-        plt.plot(mag_ranges, bliss_discrete, label="BLISS+Discrete Bin", marker="o", c="green")
-        plt.plot(
-            mag_ranges,
-            bliss_discrete_grid,
-            label="BLISS+Discrete Bin w/ Grid Search",
-            marker="o",
-            c="orange",
-        )
-        plt.xlabel("Magnitude")
+        # plt.plot(mag_ranges, bliss_discrete, label="BLISS+Discrete Bin", marker="o", c="green")
+        # plt.plot(
+        #     mag_ranges,
+        #     bliss_discrete_grid,
+        #     label="BLISS+Discrete Bin w/ Grid Search",
+        #     marker="o",
+        #     c="orange",
+        # )
+        plt.xlabel("Redshift Bin")
         plt.xticks(rotation=45)
         plt.ylabel(metric_labels[i])
         plt.ylim([0, None])
