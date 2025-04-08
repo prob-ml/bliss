@@ -148,15 +148,15 @@ class Discretized1D(Distribution):
 
         # Grid search
         for z_pred in bin_centers:
-            if risk_type == "redshift_outlier_fraction_catastrophic_bin":  # noqa: WPS223
+            if risk_type == "redshift_outlier_fraction_catastrophic_bin_mag" or risk_type == "redshift_outlier_fraction_catastrophic_bin_rs":  # noqa: WPS223
                 risk = self.compute_catastrophic_risk(z_pred, bin_centers, bin_probs)
-            elif risk_type == "redshift_outlier_fraction_bin":
+            elif risk_type == "redshift_outlier_fraction_bin_mag" or risk_type == "redshift_outlier_fraction_bin_rs":
                 risk = self.compute_outlier_fraction_risk(z_pred, bin_centers, bin_probs)
-            elif risk_type == "redshift_nmad_bin":
+            elif risk_type == "redshift_nmad_bin_mag" or risk_type == "redshift_nmad_bin_rs":
                 risk = self.compute_nmad_risk(z_pred, bin_centers, bin_probs)
-            elif risk_type == "redshift_mean_square_error_bin":
+            elif risk_type == "redshift_mean_square_error_bin_mag" or risk_type == "redshift_mean_square_error_bin_rs":
                 risk = self.compute_mse_risk(z_pred, bin_centers, bin_probs)
-            elif risk_type == "redshift_abs_bias_bin":
+            elif risk_type == "redshift_abs_bias_bin_mag" or risk_type == "redshift_abs_bias_bin_rs":
                 risk = self.compute_abs_bias_risk(z_pred, bin_centers, bin_probs)
             else:
                 raise ValueError(f"Invalid risk type: {risk_type}")

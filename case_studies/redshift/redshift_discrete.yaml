@@ -145,11 +145,13 @@ mode_sample_metrics:
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
         bin_type: "redshift"
 
+timestamp: ${now:%Y-%m-%d-%H-%M-%S}
+
 train:
     trainer:
         logger:
             name: checkpoints
-            version: discrete
+            version: discrete_split_${surveys.dc2.split_to_use}_${timestamp}
             save_dir: ${paths.data_dir}
         precision: 32
         strategy:
@@ -162,7 +164,7 @@ train:
         val_check_interval: 1.0
         # check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
-        devices: [6]
+        devices: [2]
         max_epochs: 50
     callbacks:
         checkpointing:
