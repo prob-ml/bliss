@@ -158,7 +158,7 @@ train:
         val_check_interval: 1.0
         # check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
-        devices: [1]
+        devices: [0]
         max_epochs: 50
     callbacks:
         checkpointing:
