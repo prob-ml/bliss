@@ -1,0 +1,1611 @@
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+
+# Inherits defaults from `base_config`. We add some user-defined
+# paths to store artifacts.
+paths:
+  root: /home/declan/bliss
+  data_dir: /data/scratch/declan/redshift/dc2
+  processed_data_dir_bliss: ${paths.data_dir}/processed_dc2
+  processed_data_dir_rail: ${paths.data_dir}/processed_dc2_rail
+  dc2: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
+  ckpt_dir: ${paths.data_dir}/checkpoints/discrete/checkpoints
+  plot_dir: ${paths.data_dir}/plots
+
+global_setting:
+    min_flux_for_loss: 50  # you need to regenerate split_results after changing this number
+
+variational_factors:
+  - _target_: case_studies.redshift.redshift_from_img.encoder.variational_dist.BSplineFactor1D
+    name: redshifts
+    sample_rearrange: "b ht wt -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt"
+    nll_gating: is_galaxy
+
+
+encoder:
+    _target_: case_studies.redshift.redshift_from_img.encoder.encoder.RedshiftsEncoder
+    # _target_: bliss.encoder.encoder.Encoder
+    survey_bands: ["g", "i", "r", "u", "y", "z"]
+    tile_slen: 4
+    optimizer_params:
+        lr: 1e-3
+    scheduler_params:
+        milestones: [32]
+        gamma: 0.1
+    image_normalizers:
+        psf:
+            _target_: bliss.encoder.image_normalizer.PsfAsImage
+            num_psf_params: 4  # 6 for SDSS, 4 for DC2, 10 for DES
+        clahe:
+            _target_: bliss.encoder.image_normalizer.ClaheNormalizer
+            min_stdev: 200
+        asinh:
+            _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+            q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+    matcher:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftsCatalogMatcher
+        match_gating: is_galaxy
+    mode_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        metrics: ${mode_sample_metrics}
+    sample_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        metrics: ${mode_sample_metrics}
+    var_dist:
+        _target_: case_studies.redshift.redshift_from_img.encoder.variational_dist.RedshiftVariationalDist
+        tile_slen: ${encoder.tile_slen}
+        factors: ${variational_factors}
+    use_checkerboard: false
+    discrete_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        metrics: ${discrete_metrics}
+
+discrete_metrics:
+    redshift_mean_square_error_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_catastrophic_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_abs_bias_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_mean_square_error_bin_rs:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+        bin_type: "redshift"
+    redshift_outlier_fraction_bin_rs:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+        bin_type: "redshift"
+    redshift_outlier_fraction_catastrophic_bin_rs:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+        bin_type: "redshift"
+    redshift_abs_bias_bin_rs:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+        bin_type: "redshift"
+
+# Standard metric computation
+mode_sample_metrics:
+    redshift_mean_square_error_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_outlier_fraction_catastrophic_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_bias_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_abs_bias_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_mean_square_error_bin_rs:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+        bin_type: "redshift"
+    redshift_outlier_fraction_bin_rs:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+        bin_type: "redshift"
+    redshift_outlier_fraction_catastrophic_bin_rs:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+        bin_type: "redshift"
+    redshift_bias_bin_rs:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+        bin_type: "redshift"
+    redshift_abs_bias_bin_rs:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+        bin_type: "redshift"
+
+timestamp: ${now:%Y-%m-%d-%H-%M-%S}
+
+train:
+    trainer:
+        logger:
+            name: checkpoints
+            version: bspline_split_${surveys.dc2.split_to_use}_${timestamp}
+            save_dir: ${paths.data_dir}
+        precision: 32
+        strategy:
+          _target_: pytorch_lightning.strategies.DDPStrategy
+          find_unused_parameters: true
+          process_group_backend: nccl
+          timeout:
+            _target_: datetime.timedelta
+            seconds: 180000
+        val_check_interval: 1.0
+        # check_val_every_n_epoch: 1
+        # devices: [0, 2, 3, 4]
+        devices: [0]
+        max_epochs: 50
+    callbacks:
+        checkpointing:
+            _target_: pytorch_lightning.callbacks.ModelCheckpoint
+            filename: encoder_{val/mode/redshifts/mse:.6f}
+            save_top_k: 5
+            verbose: True
+            #  monitor: val/_loss
+            monitor: val/mode/redshifts/mse
+            mode: min
+        early_stopping:
+            _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+            monitor: val/_loss
+            mode: min
+            patience: 500
+    data_source: ${surveys.dc2}
+    pretrained_weights: null
+    seed: 123
+
+
+# Defaults from `base_config`. We modify cached path and use own class
+surveys:
+  dc2:
+      _target_: case_studies.redshift.artifacts.redshift_dc2.RedshiftDC2DataModule
+      cached_data_path: ${paths.processed_data_dir_bliss}
+      dc2_cat_path: /data/scratch/dc2local/merged_catalog_with_flux_over_50.pkl # we should have a script that makes this on our own
+      batch_size: 64
+      max_sources_per_tile: 5
+      train_splits: ${train_splits}
+      val_splits: ${val_splits}
+      test_splits: ${test_splits}
+      split_to_use: 0
+
+rail:
+  processed_data_dir: ${paths.processed_data_dir_rail}
+  pipeline:
+    force_reprocess: false
+    lsst_root_dir: /data/scratch/dc2_nfs/
+    truth_match_catalog: desc_dc2_run2.2i_dr6_object_with_truth_match
+    quantities:
+      - "id_truth"
+      - 'tract'
+      - 'tract_truth'
+      - 'truth_type'
+      - 'redshift_truth'
+      - 'mag_g_cModel'
+      - 'mag_i_cModel'
+      - 'mag_r_cModel'
+      - 'mag_u_cModel'
+      - 'mag_y_cModel'
+      - 'mag_z_cModel'
+      - 'magerr_g_cModel'
+      - 'magerr_i_cModel'
+      - 'magerr_r_cModel'
+      - 'magerr_u_cModel'
+      - 'magerr_y_cModel'
+      - 'magerr_z_cModel'
+    train_size: 200000
+    val_size: 100000
+
+  # Currently unused, using truth_match instead of truth.
+  truth:
+    lsst_root_dir: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
+    truth_catalog: desc_dc2_run2.2i_dr6_truth
+
+
+num_tract_patches: 98
+n_per_test: 14
+n_per_val: 14
+n_per_train: 70
+train_splits:
+- - - '3828'
+    - 0,0
+  - - '3828'
+    - 0,1
+  - - '3828'
+    - 0,2
+  - - '3828'
+    - 0,3
+  - - '3828'
+    - 0,4
+  - - '3828'
+    - 0,5
+  - - '3828'
+    - 0,6
+  - - '3828'
+    - 1,0
+  - - '3828'
+    - 1,1
+  - - '3828'
+    - 1,2
+  - - '3828'
+    - 1,3
+  - - '3828'
+    - 1,4
+  - - '3828'
+    - 1,5
+  - - '3828'
+    - 1,6
+  - - '3828'
+    - 2,0
+  - - '3828'
+    - 2,1
+  - - '3828'
+    - 2,2
+  - - '3828'
+    - 2,3
+  - - '3828'
+    - 2,4
+  - - '3828'
+    - 2,5
+  - - '3828'
+    - 2,6
+  - - '3828'
+    - 3,0
+  - - '3828'
+    - 3,1
+  - - '3828'
+    - 3,2
+  - - '3828'
+    - 3,3
+  - - '3828'
+    - 3,4
+  - - '3828'
+    - 3,5
+  - - '3828'
+    - 3,6
+  - - '3828'
+    - 4,0
+  - - '3828'
+    - 4,1
+  - - '3828'
+    - 4,2
+  - - '3828'
+    - 4,3
+  - - '3828'
+    - 4,4
+  - - '3828'
+    - 4,5
+  - - '3828'
+    - 4,6
+  - - '3828'
+    - 5,0
+  - - '3828'
+    - 5,1
+  - - '3828'
+    - 5,2
+  - - '3828'
+    - 5,3
+  - - '3828'
+    - 5,4
+  - - '3828'
+    - 5,5
+  - - '3828'
+    - 5,6
+  - - '3828'
+    - 6,0
+  - - '3828'
+    - 6,1
+  - - '3828'
+    - 6,2
+  - - '3828'
+    - 6,3
+  - - '3828'
+    - 6,4
+  - - '3828'
+    - 6,5
+  - - '3828'
+    - 6,6
+  - - '3829'
+    - 0,0
+  - - '3829'
+    - 0,1
+  - - '3829'
+    - 0,2
+  - - '3829'
+    - 0,3
+  - - '3829'
+    - 0,4
+  - - '3829'
+    - 0,5
+  - - '3829'
+    - 0,6
+  - - '3829'
+    - 1,0
+  - - '3829'
+    - 1,1
+  - - '3829'
+    - 1,2
+  - - '3829'
+    - 1,3
+  - - '3829'
+    - 1,4
+  - - '3829'
+    - 1,5
+  - - '3829'
+    - 1,6
+  - - '3829'
+    - 2,0
+  - - '3829'
+    - 2,1
+  - - '3829'
+    - 2,2
+  - - '3829'
+    - 2,3
+  - - '3829'
+    - 2,4
+  - - '3829'
+    - 2,5
+  - - '3829'
+    - 2,6
+- - - '3829'
+    - 5,0
+  - - '3829'
+    - 5,1
+  - - '3829'
+    - 5,2
+  - - '3829'
+    - 5,3
+  - - '3829'
+    - 5,4
+  - - '3829'
+    - 5,5
+  - - '3829'
+    - 5,6
+  - - '3829'
+    - 6,0
+  - - '3829'
+    - 6,1
+  - - '3829'
+    - 6,2
+  - - '3829'
+    - 6,3
+  - - '3829'
+    - 6,4
+  - - '3829'
+    - 6,5
+  - - '3829'
+    - 6,6
+  - - '3828'
+    - 0,0
+  - - '3828'
+    - 0,1
+  - - '3828'
+    - 0,2
+  - - '3828'
+    - 0,3
+  - - '3828'
+    - 0,4
+  - - '3828'
+    - 0,5
+  - - '3828'
+    - 0,6
+  - - '3828'
+    - 1,0
+  - - '3828'
+    - 1,1
+  - - '3828'
+    - 1,2
+  - - '3828'
+    - 1,3
+  - - '3828'
+    - 1,4
+  - - '3828'
+    - 1,5
+  - - '3828'
+    - 1,6
+  - - '3828'
+    - 2,0
+  - - '3828'
+    - 2,1
+  - - '3828'
+    - 2,2
+  - - '3828'
+    - 2,3
+  - - '3828'
+    - 2,4
+  - - '3828'
+    - 2,5
+  - - '3828'
+    - 2,6
+  - - '3828'
+    - 3,0
+  - - '3828'
+    - 3,1
+  - - '3828'
+    - 3,2
+  - - '3828'
+    - 3,3
+  - - '3828'
+    - 3,4
+  - - '3828'
+    - 3,5
+  - - '3828'
+    - 3,6
+  - - '3828'
+    - 4,0
+  - - '3828'
+    - 4,1
+  - - '3828'
+    - 4,2
+  - - '3828'
+    - 4,3
+  - - '3828'
+    - 4,4
+  - - '3828'
+    - 4,5
+  - - '3828'
+    - 4,6
+  - - '3828'
+    - 5,0
+  - - '3828'
+    - 5,1
+  - - '3828'
+    - 5,2
+  - - '3828'
+    - 5,3
+  - - '3828'
+    - 5,4
+  - - '3828'
+    - 5,5
+  - - '3828'
+    - 5,6
+  - - '3828'
+    - 6,0
+  - - '3828'
+    - 6,1
+  - - '3828'
+    - 6,2
+  - - '3828'
+    - 6,3
+  - - '3828'
+    - 6,4
+  - - '3828'
+    - 6,5
+  - - '3828'
+    - 6,6
+  - - '3829'
+    - 0,0
+  - - '3829'
+    - 0,1
+  - - '3829'
+    - 0,2
+  - - '3829'
+    - 0,3
+  - - '3829'
+    - 0,4
+  - - '3829'
+    - 0,5
+  - - '3829'
+    - 0,6
+- - - '3829'
+    - 3,0
+  - - '3829'
+    - 3,1
+  - - '3829'
+    - 3,2
+  - - '3829'
+    - 3,3
+  - - '3829'
+    - 3,4
+  - - '3829'
+    - 3,5
+  - - '3829'
+    - 3,6
+  - - '3829'
+    - 4,0
+  - - '3829'
+    - 4,1
+  - - '3829'
+    - 4,2
+  - - '3829'
+    - 4,3
+  - - '3829'
+    - 4,4
+  - - '3829'
+    - 4,5
+  - - '3829'
+    - 4,6
+  - - '3829'
+    - 5,0
+  - - '3829'
+    - 5,1
+  - - '3829'
+    - 5,2
+  - - '3829'
+    - 5,3
+  - - '3829'
+    - 5,4
+  - - '3829'
+    - 5,5
+  - - '3829'
+    - 5,6
+  - - '3829'
+    - 6,0
+  - - '3829'
+    - 6,1
+  - - '3829'
+    - 6,2
+  - - '3829'
+    - 6,3
+  - - '3829'
+    - 6,4
+  - - '3829'
+    - 6,5
+  - - '3829'
+    - 6,6
+  - - '3828'
+    - 0,0
+  - - '3828'
+    - 0,1
+  - - '3828'
+    - 0,2
+  - - '3828'
+    - 0,3
+  - - '3828'
+    - 0,4
+  - - '3828'
+    - 0,5
+  - - '3828'
+    - 0,6
+  - - '3828'
+    - 1,0
+  - - '3828'
+    - 1,1
+  - - '3828'
+    - 1,2
+  - - '3828'
+    - 1,3
+  - - '3828'
+    - 1,4
+  - - '3828'
+    - 1,5
+  - - '3828'
+    - 1,6
+  - - '3828'
+    - 2,0
+  - - '3828'
+    - 2,1
+  - - '3828'
+    - 2,2
+  - - '3828'
+    - 2,3
+  - - '3828'
+    - 2,4
+  - - '3828'
+    - 2,5
+  - - '3828'
+    - 2,6
+  - - '3828'
+    - 3,0
+  - - '3828'
+    - 3,1
+  - - '3828'
+    - 3,2
+  - - '3828'
+    - 3,3
+  - - '3828'
+    - 3,4
+  - - '3828'
+    - 3,5
+  - - '3828'
+    - 3,6
+  - - '3828'
+    - 4,0
+  - - '3828'
+    - 4,1
+  - - '3828'
+    - 4,2
+  - - '3828'
+    - 4,3
+  - - '3828'
+    - 4,4
+  - - '3828'
+    - 4,5
+  - - '3828'
+    - 4,6
+  - - '3828'
+    - 5,0
+  - - '3828'
+    - 5,1
+  - - '3828'
+    - 5,2
+  - - '3828'
+    - 5,3
+  - - '3828'
+    - 5,4
+  - - '3828'
+    - 5,5
+  - - '3828'
+    - 5,6
+- - - '3829'
+    - 1,0
+  - - '3829'
+    - 1,1
+  - - '3829'
+    - 1,2
+  - - '3829'
+    - 1,3
+  - - '3829'
+    - 1,4
+  - - '3829'
+    - 1,5
+  - - '3829'
+    - 1,6
+  - - '3829'
+    - 2,0
+  - - '3829'
+    - 2,1
+  - - '3829'
+    - 2,2
+  - - '3829'
+    - 2,3
+  - - '3829'
+    - 2,4
+  - - '3829'
+    - 2,5
+  - - '3829'
+    - 2,6
+  - - '3829'
+    - 3,0
+  - - '3829'
+    - 3,1
+  - - '3829'
+    - 3,2
+  - - '3829'
+    - 3,3
+  - - '3829'
+    - 3,4
+  - - '3829'
+    - 3,5
+  - - '3829'
+    - 3,6
+  - - '3829'
+    - 4,0
+  - - '3829'
+    - 4,1
+  - - '3829'
+    - 4,2
+  - - '3829'
+    - 4,3
+  - - '3829'
+    - 4,4
+  - - '3829'
+    - 4,5
+  - - '3829'
+    - 4,6
+  - - '3829'
+    - 5,0
+  - - '3829'
+    - 5,1
+  - - '3829'
+    - 5,2
+  - - '3829'
+    - 5,3
+  - - '3829'
+    - 5,4
+  - - '3829'
+    - 5,5
+  - - '3829'
+    - 5,6
+  - - '3829'
+    - 6,0
+  - - '3829'
+    - 6,1
+  - - '3829'
+    - 6,2
+  - - '3829'
+    - 6,3
+  - - '3829'
+    - 6,4
+  - - '3829'
+    - 6,5
+  - - '3829'
+    - 6,6
+  - - '3828'
+    - 0,0
+  - - '3828'
+    - 0,1
+  - - '3828'
+    - 0,2
+  - - '3828'
+    - 0,3
+  - - '3828'
+    - 0,4
+  - - '3828'
+    - 0,5
+  - - '3828'
+    - 0,6
+  - - '3828'
+    - 1,0
+  - - '3828'
+    - 1,1
+  - - '3828'
+    - 1,2
+  - - '3828'
+    - 1,3
+  - - '3828'
+    - 1,4
+  - - '3828'
+    - 1,5
+  - - '3828'
+    - 1,6
+  - - '3828'
+    - 2,0
+  - - '3828'
+    - 2,1
+  - - '3828'
+    - 2,2
+  - - '3828'
+    - 2,3
+  - - '3828'
+    - 2,4
+  - - '3828'
+    - 2,5
+  - - '3828'
+    - 2,6
+  - - '3828'
+    - 3,0
+  - - '3828'
+    - 3,1
+  - - '3828'
+    - 3,2
+  - - '3828'
+    - 3,3
+  - - '3828'
+    - 3,4
+  - - '3828'
+    - 3,5
+  - - '3828'
+    - 3,6
+- - - '3828'
+    - 6,0
+  - - '3828'
+    - 6,1
+  - - '3828'
+    - 6,2
+  - - '3828'
+    - 6,3
+  - - '3828'
+    - 6,4
+  - - '3828'
+    - 6,5
+  - - '3828'
+    - 6,6
+  - - '3829'
+    - 0,0
+  - - '3829'
+    - 0,1
+  - - '3829'
+    - 0,2
+  - - '3829'
+    - 0,3
+  - - '3829'
+    - 0,4
+  - - '3829'
+    - 0,5
+  - - '3829'
+    - 0,6
+  - - '3829'
+    - 1,0
+  - - '3829'
+    - 1,1
+  - - '3829'
+    - 1,2
+  - - '3829'
+    - 1,3
+  - - '3829'
+    - 1,4
+  - - '3829'
+    - 1,5
+  - - '3829'
+    - 1,6
+  - - '3829'
+    - 2,0
+  - - '3829'
+    - 2,1
+  - - '3829'
+    - 2,2
+  - - '3829'
+    - 2,3
+  - - '3829'
+    - 2,4
+  - - '3829'
+    - 2,5
+  - - '3829'
+    - 2,6
+  - - '3829'
+    - 3,0
+  - - '3829'
+    - 3,1
+  - - '3829'
+    - 3,2
+  - - '3829'
+    - 3,3
+  - - '3829'
+    - 3,4
+  - - '3829'
+    - 3,5
+  - - '3829'
+    - 3,6
+  - - '3829'
+    - 4,0
+  - - '3829'
+    - 4,1
+  - - '3829'
+    - 4,2
+  - - '3829'
+    - 4,3
+  - - '3829'
+    - 4,4
+  - - '3829'
+    - 4,5
+  - - '3829'
+    - 4,6
+  - - '3829'
+    - 5,0
+  - - '3829'
+    - 5,1
+  - - '3829'
+    - 5,2
+  - - '3829'
+    - 5,3
+  - - '3829'
+    - 5,4
+  - - '3829'
+    - 5,5
+  - - '3829'
+    - 5,6
+  - - '3829'
+    - 6,0
+  - - '3829'
+    - 6,1
+  - - '3829'
+    - 6,2
+  - - '3829'
+    - 6,3
+  - - '3829'
+    - 6,4
+  - - '3829'
+    - 6,5
+  - - '3829'
+    - 6,6
+  - - '3828'
+    - 0,0
+  - - '3828'
+    - 0,1
+  - - '3828'
+    - 0,2
+  - - '3828'
+    - 0,3
+  - - '3828'
+    - 0,4
+  - - '3828'
+    - 0,5
+  - - '3828'
+    - 0,6
+  - - '3828'
+    - 1,0
+  - - '3828'
+    - 1,1
+  - - '3828'
+    - 1,2
+  - - '3828'
+    - 1,3
+  - - '3828'
+    - 1,4
+  - - '3828'
+    - 1,5
+  - - '3828'
+    - 1,6
+- - - '3828'
+    - 4,0
+  - - '3828'
+    - 4,1
+  - - '3828'
+    - 4,2
+  - - '3828'
+    - 4,3
+  - - '3828'
+    - 4,4
+  - - '3828'
+    - 4,5
+  - - '3828'
+    - 4,6
+  - - '3828'
+    - 5,0
+  - - '3828'
+    - 5,1
+  - - '3828'
+    - 5,2
+  - - '3828'
+    - 5,3
+  - - '3828'
+    - 5,4
+  - - '3828'
+    - 5,5
+  - - '3828'
+    - 5,6
+  - - '3828'
+    - 6,0
+  - - '3828'
+    - 6,1
+  - - '3828'
+    - 6,2
+  - - '3828'
+    - 6,3
+  - - '3828'
+    - 6,4
+  - - '3828'
+    - 6,5
+  - - '3828'
+    - 6,6
+  - - '3829'
+    - 0,0
+  - - '3829'
+    - 0,1
+  - - '3829'
+    - 0,2
+  - - '3829'
+    - 0,3
+  - - '3829'
+    - 0,4
+  - - '3829'
+    - 0,5
+  - - '3829'
+    - 0,6
+  - - '3829'
+    - 1,0
+  - - '3829'
+    - 1,1
+  - - '3829'
+    - 1,2
+  - - '3829'
+    - 1,3
+  - - '3829'
+    - 1,4
+  - - '3829'
+    - 1,5
+  - - '3829'
+    - 1,6
+  - - '3829'
+    - 2,0
+  - - '3829'
+    - 2,1
+  - - '3829'
+    - 2,2
+  - - '3829'
+    - 2,3
+  - - '3829'
+    - 2,4
+  - - '3829'
+    - 2,5
+  - - '3829'
+    - 2,6
+  - - '3829'
+    - 3,0
+  - - '3829'
+    - 3,1
+  - - '3829'
+    - 3,2
+  - - '3829'
+    - 3,3
+  - - '3829'
+    - 3,4
+  - - '3829'
+    - 3,5
+  - - '3829'
+    - 3,6
+  - - '3829'
+    - 4,0
+  - - '3829'
+    - 4,1
+  - - '3829'
+    - 4,2
+  - - '3829'
+    - 4,3
+  - - '3829'
+    - 4,4
+  - - '3829'
+    - 4,5
+  - - '3829'
+    - 4,6
+  - - '3829'
+    - 5,0
+  - - '3829'
+    - 5,1
+  - - '3829'
+    - 5,2
+  - - '3829'
+    - 5,3
+  - - '3829'
+    - 5,4
+  - - '3829'
+    - 5,5
+  - - '3829'
+    - 5,6
+  - - '3829'
+    - 6,0
+  - - '3829'
+    - 6,1
+  - - '3829'
+    - 6,2
+  - - '3829'
+    - 6,3
+  - - '3829'
+    - 6,4
+  - - '3829'
+    - 6,5
+  - - '3829'
+    - 6,6
+- - - '3828'
+    - 2,0
+  - - '3828'
+    - 2,1
+  - - '3828'
+    - 2,2
+  - - '3828'
+    - 2,3
+  - - '3828'
+    - 2,4
+  - - '3828'
+    - 2,5
+  - - '3828'
+    - 2,6
+  - - '3828'
+    - 3,0
+  - - '3828'
+    - 3,1
+  - - '3828'
+    - 3,2
+  - - '3828'
+    - 3,3
+  - - '3828'
+    - 3,4
+  - - '3828'
+    - 3,5
+  - - '3828'
+    - 3,6
+  - - '3828'
+    - 4,0
+  - - '3828'
+    - 4,1
+  - - '3828'
+    - 4,2
+  - - '3828'
+    - 4,3
+  - - '3828'
+    - 4,4
+  - - '3828'
+    - 4,5
+  - - '3828'
+    - 4,6
+  - - '3828'
+    - 5,0
+  - - '3828'
+    - 5,1
+  - - '3828'
+    - 5,2
+  - - '3828'
+    - 5,3
+  - - '3828'
+    - 5,4
+  - - '3828'
+    - 5,5
+  - - '3828'
+    - 5,6
+  - - '3828'
+    - 6,0
+  - - '3828'
+    - 6,1
+  - - '3828'
+    - 6,2
+  - - '3828'
+    - 6,3
+  - - '3828'
+    - 6,4
+  - - '3828'
+    - 6,5
+  - - '3828'
+    - 6,6
+  - - '3829'
+    - 0,0
+  - - '3829'
+    - 0,1
+  - - '3829'
+    - 0,2
+  - - '3829'
+    - 0,3
+  - - '3829'
+    - 0,4
+  - - '3829'
+    - 0,5
+  - - '3829'
+    - 0,6
+  - - '3829'
+    - 1,0
+  - - '3829'
+    - 1,1
+  - - '3829'
+    - 1,2
+  - - '3829'
+    - 1,3
+  - - '3829'
+    - 1,4
+  - - '3829'
+    - 1,5
+  - - '3829'
+    - 1,6
+  - - '3829'
+    - 2,0
+  - - '3829'
+    - 2,1
+  - - '3829'
+    - 2,2
+  - - '3829'
+    - 2,3
+  - - '3829'
+    - 2,4
+  - - '3829'
+    - 2,5
+  - - '3829'
+    - 2,6
+  - - '3829'
+    - 3,0
+  - - '3829'
+    - 3,1
+  - - '3829'
+    - 3,2
+  - - '3829'
+    - 3,3
+  - - '3829'
+    - 3,4
+  - - '3829'
+    - 3,5
+  - - '3829'
+    - 3,6
+  - - '3829'
+    - 4,0
+  - - '3829'
+    - 4,1
+  - - '3829'
+    - 4,2
+  - - '3829'
+    - 4,3
+  - - '3829'
+    - 4,4
+  - - '3829'
+    - 4,5
+  - - '3829'
+    - 4,6
+val_splits:
+- - - '3829'
+    - 3,0
+  - - '3829'
+    - 3,1
+  - - '3829'
+    - 3,2
+  - - '3829'
+    - 3,3
+  - - '3829'
+    - 3,4
+  - - '3829'
+    - 3,5
+  - - '3829'
+    - 3,6
+  - - '3829'
+    - 4,0
+  - - '3829'
+    - 4,1
+  - - '3829'
+    - 4,2
+  - - '3829'
+    - 4,3
+  - - '3829'
+    - 4,4
+  - - '3829'
+    - 4,5
+  - - '3829'
+    - 4,6
+- - - '3829'
+    - 1,0
+  - - '3829'
+    - 1,1
+  - - '3829'
+    - 1,2
+  - - '3829'
+    - 1,3
+  - - '3829'
+    - 1,4
+  - - '3829'
+    - 1,5
+  - - '3829'
+    - 1,6
+  - - '3829'
+    - 2,0
+  - - '3829'
+    - 2,1
+  - - '3829'
+    - 2,2
+  - - '3829'
+    - 2,3
+  - - '3829'
+    - 2,4
+  - - '3829'
+    - 2,5
+  - - '3829'
+    - 2,6
+- - - '3828'
+    - 6,0
+  - - '3828'
+    - 6,1
+  - - '3828'
+    - 6,2
+  - - '3828'
+    - 6,3
+  - - '3828'
+    - 6,4
+  - - '3828'
+    - 6,5
+  - - '3828'
+    - 6,6
+  - - '3829'
+    - 0,0
+  - - '3829'
+    - 0,1
+  - - '3829'
+    - 0,2
+  - - '3829'
+    - 0,3
+  - - '3829'
+    - 0,4
+  - - '3829'
+    - 0,5
+  - - '3829'
+    - 0,6
+- - - '3828'
+    - 4,0
+  - - '3828'
+    - 4,1
+  - - '3828'
+    - 4,2
+  - - '3828'
+    - 4,3
+  - - '3828'
+    - 4,4
+  - - '3828'
+    - 4,5
+  - - '3828'
+    - 4,6
+  - - '3828'
+    - 5,0
+  - - '3828'
+    - 5,1
+  - - '3828'
+    - 5,2
+  - - '3828'
+    - 5,3
+  - - '3828'
+    - 5,4
+  - - '3828'
+    - 5,5
+  - - '3828'
+    - 5,6
+- - - '3828'
+    - 2,0
+  - - '3828'
+    - 2,1
+  - - '3828'
+    - 2,2
+  - - '3828'
+    - 2,3
+  - - '3828'
+    - 2,4
+  - - '3828'
+    - 2,5
+  - - '3828'
+    - 2,6
+  - - '3828'
+    - 3,0
+  - - '3828'
+    - 3,1
+  - - '3828'
+    - 3,2
+  - - '3828'
+    - 3,3
+  - - '3828'
+    - 3,4
+  - - '3828'
+    - 3,5
+  - - '3828'
+    - 3,6
+- - - '3828'
+    - 0,0
+  - - '3828'
+    - 0,1
+  - - '3828'
+    - 0,2
+  - - '3828'
+    - 0,3
+  - - '3828'
+    - 0,4
+  - - '3828'
+    - 0,5
+  - - '3828'
+    - 0,6
+  - - '3828'
+    - 1,0
+  - - '3828'
+    - 1,1
+  - - '3828'
+    - 1,2
+  - - '3828'
+    - 1,3
+  - - '3828'
+    - 1,4
+  - - '3828'
+    - 1,5
+  - - '3828'
+    - 1,6
+- - - '3829'
+    - 5,0
+  - - '3829'
+    - 5,1
+  - - '3829'
+    - 5,2
+  - - '3829'
+    - 5,3
+  - - '3829'
+    - 5,4
+  - - '3829'
+    - 5,5
+  - - '3829'
+    - 5,6
+  - - '3829'
+    - 6,0
+  - - '3829'
+    - 6,1
+  - - '3829'
+    - 6,2
+  - - '3829'
+    - 6,3
+  - - '3829'
+    - 6,4
+  - - '3829'
+    - 6,5
+  - - '3829'
+    - 6,6
+test_splits:
+- - - '3829'
+    - 5,0
+  - - '3829'
+    - 5,1
+  - - '3829'
+    - 5,2
+  - - '3829'
+    - 5,3
+  - - '3829'
+    - 5,4
+  - - '3829'
+    - 5,5
+  - - '3829'
+    - 5,6
+  - - '3829'
+    - 6,0
+  - - '3829'
+    - 6,1
+  - - '3829'
+    - 6,2
+  - - '3829'
+    - 6,3
+  - - '3829'
+    - 6,4
+  - - '3829'
+    - 6,5
+  - - '3829'
+    - 6,6
+- - - '3829'
+    - 3,0
+  - - '3829'
+    - 3,1
+  - - '3829'
+    - 3,2
+  - - '3829'
+    - 3,3
+  - - '3829'
+    - 3,4
+  - - '3829'
+    - 3,5
+  - - '3829'
+    - 3,6
+  - - '3829'
+    - 4,0
+  - - '3829'
+    - 4,1
+  - - '3829'
+    - 4,2
+  - - '3829'
+    - 4,3
+  - - '3829'
+    - 4,4
+  - - '3829'
+    - 4,5
+  - - '3829'
+    - 4,6
+- - - '3829'
+    - 1,0
+  - - '3829'
+    - 1,1
+  - - '3829'
+    - 1,2
+  - - '3829'
+    - 1,3
+  - - '3829'
+    - 1,4
+  - - '3829'
+    - 1,5
+  - - '3829'
+    - 1,6
+  - - '3829'
+    - 2,0
+  - - '3829'
+    - 2,1
+  - - '3829'
+    - 2,2
+  - - '3829'
+    - 2,3
+  - - '3829'
+    - 2,4
+  - - '3829'
+    - 2,5
+  - - '3829'
+    - 2,6
+- - - '3828'
+    - 6,0
+  - - '3828'
+    - 6,1
+  - - '3828'
+    - 6,2
+  - - '3828'
+    - 6,3
+  - - '3828'
+    - 6,4
+  - - '3828'
+    - 6,5
+  - - '3828'
+    - 6,6
+  - - '3829'
+    - 0,0
+  - - '3829'
+    - 0,1
+  - - '3829'
+    - 0,2
+  - - '3829'
+    - 0,3
+  - - '3829'
+    - 0,4
+  - - '3829'
+    - 0,5
+  - - '3829'
+    - 0,6
+- - - '3828'
+    - 4,0
+  - - '3828'
+    - 4,1
+  - - '3828'
+    - 4,2
+  - - '3828'
+    - 4,3
+  - - '3828'
+    - 4,4
+  - - '3828'
+    - 4,5
+  - - '3828'
+    - 4,6
+  - - '3828'
+    - 5,0
+  - - '3828'
+    - 5,1
+  - - '3828'
+    - 5,2
+  - - '3828'
+    - 5,3
+  - - '3828'
+    - 5,4
+  - - '3828'
+    - 5,5
+  - - '3828'
+    - 5,6
+- - - '3828'
+    - 2,0
+  - - '3828'
+    - 2,1
+  - - '3828'
+    - 2,2
+  - - '3828'
+    - 2,3
+  - - '3828'
+    - 2,4
+  - - '3828'
+    - 2,5
+  - - '3828'
+    - 2,6
+  - - '3828'
+    - 3,0
+  - - '3828'
+    - 3,1
+  - - '3828'
+    - 3,2
+  - - '3828'
+    - 3,3
+  - - '3828'
+    - 3,4
+  - - '3828'
+    - 3,5
+  - - '3828'
+    - 3,6
+- - - '3828'
+    - 0,0
+  - - '3828'
+    - 0,1
+  - - '3828'
+    - 0,2
+  - - '3828'
+    - 0,3
+  - - '3828'
+    - 0,4
+  - - '3828'
+    - 0,5
+  - - '3828'
+    - 0,6
+  - - '3828'
+    - 1,0
+  - - '3828'
+    - 1,1
+  - - '3828'
+    - 1,2
+  - - '3828'
+    - 1,3
+  - - '3828'
+    - 1,4
+  - - '3828'
+    - 1,5
+  - - '3828'
+    - 1,6
+
+

@@ -4,7 +4,7 @@ from torch.distributions import Categorical, Distribution
 
 from bliss.catalog import BaseTileCatalog
 from bliss.encoder.variational_dist import VariationalDist, VariationalFactor
-
+import einops
 
 class DiscretizedFactor1D(VariationalFactor):
     def __init__(self, n_params, *args, low=0, high=3, **kwargs):
@@ -185,3 +185,108 @@ class RedshiftVariationalDist(VariationalDist):
 
         # BaseTileCatalog b/c no other quantities (e.g. locs)
         return BaseTileCatalog(d)
+    
+
+"""BSPLINE BASIS VARIATIONAL DIST"""
+
+from case_studies.redshift.splinex.bspline import DeclanBSpline
+
+
+class AbstractSplineClass:
+    _cache = {}
+
+    def __init__(self, min_val, max_val, num_knots, n_grid_points, degree, device):
+        self.min_val = min_val
+        self.max_val = max_val
+        self.num_knots = num_knots
+        self.n_grid_points = n_grid_points
+        self.degree = degree
+        self.device = device
+    
+    def _create_spline(self):
+        if "spline" in self._cache:
+            return self._cache["spline"]
+        else:
+            spline = DeclanBSpline(
+                min_val=self.min_val,
+                max_val=self.max_val,
+                nknots=self.num_knots,
+                n_grid_points=self.n_grid_points,
+                degree=self.degree,
+                device=self.device,
+            )
+            self._cache["spline"] = spline
+            return self._cache["spline"]
+
+class BSpline1D(Distribution):
+    """A continuous bivariate distribution over the 2d unit box, with a discretized density."""
+
+    def __init__(self, coeffs, min_val=0, max_val=3, num_knots=40, n_grid_points=250, degree=3):
+        super().__init__(validate_args=False)
+        self.min_val = min_val
+        self.max_val = max_val
+        self.num_knots = num_knots
+        self.n_grid_points = n_grid_points
+        self.degree = degree
+        device = coeffs.device
+        self.abstract_spline = AbstractSplineClass(
+            min_val=min_val,
+            max_val=max_val,
+            num_knots=num_knots,
+            n_grid_points=n_grid_points,
+            degree=degree,
+            device=device,
+        )
+        self.spline = self.abstract_spline._create_spline()
+        self.coeffs = coeffs
+        
+    def sample(self, sample_shape=()):
+        raise NotImplementedError("Sampling from B-spline is not implemented yet.")
+
+    @property
+    def mode(self):
+        r = einops.rearrange(self.coeffs, 'b l w coeff -> coeff (b l w)')
+        spline_curve_vals, _, _ = self.spline(r)
+        max_index = torch.argmax(spline_curve_vals, dim=0)
+        t_values = self.spline.t_values.to(self.coeffs.device)
+        modes = t_values[max_index]
+        modes = einops.rearrange(modes, '(b l w) -> b l w', b=self.coeffs.shape[0], l=self.coeffs.shape[1], w=self.coeffs.shape[2])
+        return modes
+
+    def one_hot_nearest_index(self, grid: torch.Tensor, values: torch.Tensor) -> torch.Tensor:
+        diff = torch.abs(grid[:, None] - values[None, :])  # (len(grid), len(values))
+        closest_indices = torch.argmin(diff, dim=0)  # Shape: (len(values),)
+        one_hot = torch.nn.functional.one_hot(closest_indices, num_classes=grid.shape[0])  # Shape: (len(values), len(grid))
+        return one_hot
+
+
+    def log_prob(self, value):
+        r = einops.rearrange(self.coeffs, 'b l w coeff -> coeff (b l w)')
+        t_values = self.spline.t_values.to(self.coeffs.device)
+        theta = einops.rearrange(value, 'b l w -> (b l w)')
+        spline_curve_vals, _, _ = self.spline(r)
+        exped = torch.exp(spline_curve_vals)
+
+        integrals = torch.trapezoid(y=exped, x=t_values, axis=0)
+
+        one_hotted = self.one_hot_nearest_index(t_values, theta)
+        nums = torch.mul(one_hotted, exped.T).sum(-1)
+        return (nums - torch.log(integrals)).mean()
+    
+
+class BSplineFactor1D(VariationalFactor):
+    def __init__(self, *args, min_val=0, max_val=3, num_knots=40, n_grid_points=250, degree=3, **kwargs):
+        super().__init__(num_knots, *args, **kwargs) # num_knots is the number of params
+        self.min_val = min_val
+        self.max_val = max_val
+        self.num_knots = num_knots
+        self.n_grid_points = n_grid_points
+        self.degree = degree
+        
+    def get_dist(self, params):
+        return BSpline1D(params, self.min_val, self.max_val, self.num_knots, self.n_grid_points, self.degree)
+
+    def discrete_sample(self):
+        raise NotImplementedError("Sampling from B-spline is not implemented yet.")
+        
+

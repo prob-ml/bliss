@@ -1,3 +1,5 @@
+import os
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"  # for reproducibility
 import logging
 from multiprocessing import current_process, get_context
 from pathlib import Path
