@@ -84,6 +84,7 @@ surveys:
         cached_data_path: ${paths.dc2}/dc2_lensing_splits
         train_transforms:
             - _target_: case_studies.weak_lensing.lensing_data_augmentation.LensingRotateFlipTransform
+        shuffle_file_order: false  # partition train/val/test by ra/dec so that we can compute 2PCFs on spatially contiguous test set
 
 train:
     trainer:

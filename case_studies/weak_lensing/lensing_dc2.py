@@ -33,6 +33,7 @@ class LensingDC2DataModule(DC2DataModule):
         num_workers: int,
         cached_data_path: str,
         train_transforms: List,
+        shuffle_file_order: bool,
         **kwargs,
     ):
         super().__init__(
@@ -53,6 +54,7 @@ class LensingDC2DataModule(DC2DataModule):
             train_transforms=train_transforms,
             nontrain_transforms=[],
             subset_fraction=None,
+            shuffle_file_order=shuffle_file_order,
         )
 
         self.image_slen = image_slen
