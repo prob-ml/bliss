@@ -262,6 +262,8 @@ class BSpline1D(Distribution):
 
     def log_prob(self, value):
         r = einops.rearrange(self.coeffs, 'b l w coeff -> coeff (b l w)')
+        # mask = (value != 0).float()
+        # mask = einops.rearrange(mask, 'b l w -> (b l w)')
         t_values = self.spline.t_values.to(self.coeffs.device)
         theta = einops.rearrange(value, 'b l w -> (b l w)')
         spline_curve_vals, _, _ = self.spline(r)
@@ -272,7 +274,11 @@ class BSpline1D(Distribution):
 
         one_hotted = self.one_hot_nearest_index(t_values, theta)
         nums = torch.mul(one_hotted, exped.T).sum(-1)
-        return (nums - torch.log(integrals)).mean()
+        lps = (nums - torch.log(integrals))
+        lps = einops.rearrange(lps, '(b l w) -> b l w', b=value.shape[0], l=value.shape[1], w=value.shape[2])
+        return lps
+        # masked_lps = lps[mask != 0]
+        # return masked_lps.mean()
     
 
 class BSplineFactor1D(VariationalFactor):
