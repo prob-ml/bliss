@@ -4,7 +4,7 @@ export OUT_DIR="/data/scratch/declan/redshift/dc2"
 export OMP_NUM_THREADS="16"
 export MKL_NUM_THREADS="16"
 export NUMEXPR_NUM_THREADS="16"
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 
 timestamp=$(date "+%Y-%m-%d-%H-%M-%S")
 

@@ -265,7 +265,7 @@ class BSpline1D(Distribution):
         t_values = self.spline.t_values.to(self.coeffs.device)
         theta = einops.rearrange(value, 'b l w -> (b l w)')
         spline_curve_vals, _, _ = self.spline(r)
-        spline_curve_vals = spline_curve_vals.clamp(min=-5.0, max=5.0)
+        spline_curve_vals = spline_curve_vals.clamp(min=-10.0, max=10.0)
         exped = torch.exp(spline_curve_vals)
 
         integrals = torch.trapezoid(y=exped, x=t_values, axis=0)
