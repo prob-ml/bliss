@@ -1,6 +1,6 @@
 ---
 defaults:
-    - mdt_train_config
+    - simple_ar_net_train_config
     - _self_
     - override hydra/job_logging: stdout
 

@@ -19,8 +19,8 @@ from case_studies.dc2_mdt.utils.gaussian_diffusion import (GaussianDiffusion,
                                                            LossType)
 from case_studies.dc2_mdt.utils.respace import space_timesteps, SpacedDiffusion
 from case_studies.dc2_mdt.utils.mdt_models import MDTv2_S_2
-from case_studies.dc2_mdt.utils.resample import create_named_schedule_sampler, ScheduleSampler
-from case_studies.dc2_mdt.utils.simple_net import SimpleNet
+from case_studies.dc2_mdt.utils.resample import create_named_schedule_sampler, ScheduleSampler, SpeedSampler
+from case_studies.dc2_mdt.utils.simple_net import SimpleNet, SimpleARNet, SimpleCondTrueNet
 
 
 class DiffusionEncoder(pl.LightningModule):
@@ -75,6 +75,7 @@ class DiffusionEncoder(pl.LightningModule):
         self.max_fluxes = float(max_fluxes) if max_fluxes != "inf" else torch.inf
 
         self.my_net = None
+        self.diffusion_config: dict = None
         self.training_diffusion: GaussianDiffusion = None
         self.sampling_diffusion: SpacedDiffusion = None
         self.schedule_sampler: ScheduleSampler = None
@@ -106,7 +107,7 @@ class DiffusionEncoder(pl.LightningModule):
             case _:
                 raise NotImplementedError()
         assert self.d_beta_schedule == "linear"
-        diffusion_config = {
+        self.diffusion_config = {
             "betas": get_named_beta_schedule("linear", 
                                              self.d_training_timesteps),
             "model_mean_type": model_mean_type,
@@ -115,14 +116,25 @@ class DiffusionEncoder(pl.LightningModule):
                               else ModelVarType.FIXED_LARGE,
             "loss_type": LossType.MSE
         }
-        self.training_diffusion = GaussianDiffusion(**diffusion_config)
+        self.training_diffusion = GaussianDiffusion(**self.diffusion_config)
         self.sampling_diffusion = SpacedDiffusion(use_timesteps=space_timesteps(self.d_training_timesteps, 
                                                                                 "ddim" + str(self.d_sampling_timesteps)
                                                                                 if self.d_sampling_method == "ddim"
                                                                                 else str(self.d_sampling_timesteps)),
-                                                  **diffusion_config)
+                                                  **self.diffusion_config)
         assert np.allclose(self.training_diffusion.betas, 
                            self.sampling_diffusion.ori_betas)
+    
+    # make inference script's life easier
+    def reconfig_sampling(self, new_sampling_time_steps, new_ddim_eta):
+        self.sampling_diffusion = SpacedDiffusion(use_timesteps=space_timesteps(self.d_training_timesteps, 
+                                                                                "ddim" + str(new_sampling_time_steps)
+                                                                                if self.d_sampling_method == "ddim"
+                                                                                else str(new_sampling_time_steps)),
+                                                  **self.diffusion_config)
+        self.ddim_eta = new_ddim_eta
+        if self.ddim_eta != new_ddim_eta and self.d_sampling_method != "ddim":
+            print("WARNING: you set ddim_eta to a new value, but your sampling method is not ddim")
         
     def initialize_schedule_sampler(self):
         self.schedule_sampler = create_named_schedule_sampler("uniform", self.training_diffusion)
@@ -130,7 +142,7 @@ class DiffusionEncoder(pl.LightningModule):
     def initialize_networks(self):
         raise NotImplementedError()
 
-    def get_features(self, batch):
+    def get_image(self, batch):
         assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
         assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
         input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
@@ -138,14 +150,14 @@ class DiffusionEncoder(pl.LightningModule):
 
     @torch.inference_mode()
     def sample(self, batch):
-        x_features = self.get_features(batch)
+        image = self.get_image(batch)
         diffusion_sampling_config = {
             "model": self.my_net,
-            "shape": (x_features.shape[0], 
+            "shape": (image.shape[0], 
                       self.catalog_parser.n_params_per_source, 
                       20, 20),
             "clip_denoised": True,
-            "model_kwargs": {"image": x_features}
+            "model_kwargs": {"image": image}
         }
         if self.d_sampling_method == "ddim":
             sample = self.sampling_diffusion.ddim_sample_loop(**diffusion_sampling_config, 
@@ -262,58 +274,118 @@ class MDTEncoder(DiffusionEncoder):
             band=self.reference_band, exclude_num=0
         )
         target_cat1["fluxes"] = target_cat1["fluxes"].clamp(max=self.max_fluxes)
-        x_features = self.get_features(batch)  # (b, c, H, W)
+        image = self.get_image(batch)  # (b, c, H, W)
         encoded_catalog_tensor = self.catalog_parser.encode(target_cat1).permute(0, 3, 1, 2)  # (b, k, h, w)
         
-        t, weights = self.schedule_sampler.sample(x_features.shape[0], device=self.device)
+        t, batch_sample_weights, batch_loss_weights = \
+            self.schedule_sampler.sample(image.shape[0], device=self.device)
         train_loss_args = {
             "model": self.my_net,
             "x_start": encoded_catalog_tensor,
             "t": t,
+            "loss_weights": batch_loss_weights
         }
         no_mask_loss = self.training_diffusion.training_losses(**train_loss_args, 
-                                                               model_kwargs={"image": x_features})
+                                                               model_kwargs={"image": image})
         masked_loss = self.training_diffusion.training_losses(**train_loss_args, 
-                                                              model_kwargs={"image": x_features, 
+                                                              model_kwargs={"image": image, 
                                                                             "enable_mask": True})
-        return no_mask_loss, masked_loss, weights
+        return no_mask_loss, masked_loss, batch_sample_weights
 
     def _compute_loss(self, batch, logging_name):
-        no_mask_loss, masked_loss, loss_weights = self._compute_cur_batch_loss(batch)
+        no_mask_loss, masked_loss, batch_sample_weights = self._compute_cur_batch_loss(batch)
 
         batch_size = batch["images"].size(0)
         with torch.inference_mode():
             for k, v in no_mask_loss.items():
                 self.log(f"{logging_name}/_no_mask_{k}", 
-                         (v * loss_weights).mean(), 
+                         (v * batch_sample_weights).mean(), 
                          batch_size=batch_size, 
                          sync_dist=True)
             for k, v in masked_loss.items():
                 self.log(f"{logging_name}/_masked_{k}", 
-                         (v * loss_weights).mean(), 
+                         (v * batch_sample_weights).mean(), 
                          batch_size=batch_size, 
                          sync_dist=True)
         
-        loss = (no_mask_loss["loss"] * loss_weights).mean() + (masked_loss["loss"] * loss_weights).mean()
+        loss = (no_mask_loss["loss"] * batch_sample_weights).mean() + \
+               (masked_loss["loss"] * batch_sample_weights).mean()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
         return loss
 
 
 class SimpleNetEncoder(DiffusionEncoder):
+    def __init__(self,
+                 *, 
+                 simple_net_type: str, 
+                 use_speed_sampler: bool, 
+                 **kwargs):
+        self.simple_net_type = simple_net_type
+        assert self.simple_net_type in ["simple_net", "simple_ar_net", "simple_cond_true_net"]
+        self.use_speed_sampler = use_speed_sampler
+
+        super().__init__(**kwargs)
+
+    def initialize_schedule_sampler(self):
+        if self.use_speed_sampler:
+            self.schedule_sampler = SpeedSampler(diffusion=self.training_diffusion,
+                                             lam=0.6, 
+                                             k=5, 
+                                             tau=700)
+        else:
+            super().initialize_schedule_sampler()
+
     def initialize_networks(self):
         assert self.tile_slen == 4
         assert self.image_size[0] == self.image_size[1]
         assert self.image_size[0] == 80
         target_ch = self.catalog_parser.n_params_per_source
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
-        self.my_net = SimpleNet(n_bands=len(self.survey_bands),
-                                ch_per_band=ch_per_band,
-                                in_ch=target_ch,
-                                out_ch=target_ch,
-                                dim=64,
-                                num_cond_layers=8,
-                                spatial_cond_layers=False,
-                                learn_sigma=self.d_learn_sigma)
+        simple_net = None
+        match self.simple_net_type:
+            case "simple_net":
+                simple_net = SimpleNet
+            case "simple_ar_net":
+                simple_net = SimpleARNet
+            case "simple_cond_true_net":
+                simple_net = SimpleCondTrueNet
+            case _:
+                raise NotImplementedError()
+        self.my_net = simple_net(n_bands=len(self.survey_bands),
+                                    ch_per_band=ch_per_band,
+                                    in_ch=target_ch,
+                                    out_ch=target_ch,
+                                    dim=64,
+                                    num_cond_layers=8,
+                                    spatial_cond_layers=False,
+                                    learn_sigma=self.d_learn_sigma)
+        
+    @torch.inference_mode()
+    def sample(self, batch):
+        image = self.get_image(batch)
+        model_kwargs = {"image": image}
+        if self.simple_net_type == "simple_cond_true_net":
+            target_cat = TileCatalog(batch["tile_catalog"])
+            target_cat1 = target_cat.get_brightest_sources_per_tile(
+                band=self.reference_band, exclude_num=0
+            )
+            model_kwargs["true_n_sources"] = target_cat1["n_sources"]
+        diffusion_sampling_config = {
+            "model": self.my_net,
+            "shape": (image.shape[0], 
+                      self.catalog_parser.n_params_per_source, 
+                      20, 20),
+            "clip_denoised": True,
+            "model_kwargs": model_kwargs
+        }
+        if self.d_sampling_method == "ddim":
+            sample = self.sampling_diffusion.ddim_sample_loop(**diffusion_sampling_config, 
+                                                              eta=self.ddim_eta)
+        elif self.d_sampling_method == "ddpm":
+            sample = self.sampling_diffusion.p_sample_loop(**diffusion_sampling_config)
+        else:
+            raise NotImplementedError()
+        return self.catalog_parser.decode(sample.permute([0, 2, 3, 1]))
         
     def _compute_cur_batch_loss(self, batch):
         target_cat = TileCatalog(batch["tile_catalog"])
@@ -321,30 +393,34 @@ class SimpleNetEncoder(DiffusionEncoder):
             band=self.reference_band, exclude_num=0
         )
         target_cat1["fluxes"] = target_cat1["fluxes"].clamp(max=self.max_fluxes)
-        x_features = self.get_features(batch)  # (b, c, H, W)
+        image = self.get_image(batch)  # (b, c, H, W)
         encoded_catalog_tensor = self.catalog_parser.encode(target_cat1).permute(0, 3, 1, 2)  # (b, k, h, w)
         
-        t, weights = self.schedule_sampler.sample(x_features.shape[0], device=self.device)
+        t, batch_sample_weights, batch_loss_weights = \
+            self.schedule_sampler.sample(image.shape[0], device=self.device)
         train_loss_args = {
             "model": self.my_net,
             "x_start": encoded_catalog_tensor,
             "t": t,
+            "loss_weights": batch_loss_weights,
         }
-        loss_dict = self.training_diffusion.training_losses(**train_loss_args, 
-                                                            model_kwargs={"image": x_features})
-        return loss_dict, weights
+        model_kwargs = {"image": image}
+        if self.simple_net_type == "simple_cond_true_net":
+            model_kwargs["true_n_sources"] = target_cat1["n_sources"]
+        loss_dict = self.training_diffusion.training_losses(**train_loss_args, model_kwargs=model_kwargs)
+        return loss_dict, batch_sample_weights
 
     def _compute_loss(self, batch, logging_name):
-        loss_dict, loss_weights = self._compute_cur_batch_loss(batch)
+        loss_dict, batch_sample_weights = self._compute_cur_batch_loss(batch)
 
         batch_size = batch["images"].size(0)
         with torch.inference_mode():
             for k, v in loss_dict.items():
                 self.log(f"{logging_name}/_no_mask_{k}", 
-                         (v * loss_weights).mean(), 
+                         (v * batch_sample_weights).mean(), 
                          batch_size=batch_size, 
                          sync_dist=True)
         
-        loss = (loss_dict["loss"] * loss_weights).mean()
+        loss = (loss_dict["loss"] * batch_sample_weights).mean()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
         return loss

@@ -3,6 +3,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 import torch as th
 import torch.distributed as dist
+import torch.nn.functional as F
+
+from case_studies.dc2_mdt.utils.gaussian_diffusion import GaussianDiffusion
 
 
 def create_named_schedule_sampler(name, diffusion):
@@ -32,7 +35,7 @@ class ScheduleSampler(ABC):
     """
 
     @abstractmethod
-    def weights(self):
+    def sample_weights(self):
         """
         Get a numpy array of weights, one per diffusion step.
 
@@ -47,24 +50,66 @@ class ScheduleSampler(ABC):
         :param device: the torch device to save to.
         :return: a tuple (timesteps, weights):
                  - timesteps: a tensor of timestep indices.
-                 - weights: a tensor of weights to scale the resulting losses.
+                 - batch_sample_weights: a tensor of weights to scale the final losses.
+                 - batch_loss_weights: a tensor of weights to scale the MSE losses.
         """
-        w = self.weights()
+        w = self.sample_weights()
         p = w / np.sum(w)
         indices_np = np.random.choice(len(p), size=(batch_size,), p=p)
         indices = th.from_numpy(indices_np).long().to(device)
         weights_np = 1 / (len(p) * p[indices_np])
-        weights = th.from_numpy(weights_np).float().to(device)
-        return indices, weights
+        batch_sample_weights = th.from_numpy(weights_np).float().to(device)
+        return indices, batch_sample_weights, None
 
 
 class UniformSampler(ScheduleSampler):
     def __init__(self, diffusion):
         self.diffusion = diffusion
-        self._weights = np.ones([diffusion.num_timesteps])
+        self._sample_weights = np.ones([diffusion.num_timesteps])
 
-    def weights(self):
-        return self._weights
+    def sample_weights(self):
+        return self._sample_weights
+    
+
+class SpeedSampler(ScheduleSampler):
+    def __init__(self, 
+                 diffusion: GaussianDiffusion,
+                 lam,
+                 k,
+                 tau):
+        self.diffusion = diffusion
+        assert isinstance(self.diffusion, GaussianDiffusion)
+
+        grad = np.gradient(self.diffusion.sqrt_one_minus_alphas_cumprod)
+        self.meaningful_steps = np.argmax(grad < 1e-4) + 1
+
+        self.lam = lam
+        self.k = k
+        self.tau = tau
+
+        higher = self.k
+        lower = 1
+        p = [higher] * self.tau + \
+            [lower] * (self.diffusion.num_timesteps - self.tau)
+        self.p = F.normalize(th.tensor(p, dtype=th.float32), p=1, dim=0)
+
+        w = np.gradient(1 - self.diffusion.alphas_cumprod)
+        one_minus_lam = 1 - self.lam
+        w = one_minus_lam + (1 - 2 * one_minus_lam) * (w - w.min()) / (w.max() - w.min())
+        w = w[: self.tau].tolist() + \
+            [1] * (self.diffusion.num_timesteps - self.tau)
+        self.loss_weights = th.tensor(w)
+
+    def sample_weights(self):
+        raise NotImplementedError()
+    
+    def sample(self, batch_size, device):
+        t = th.multinomial(self.p, batch_size // 2 + 1, replacement=True)
+        dual_t = th.where(t < self.meaningful_steps, 
+                          self.meaningful_steps - t, 
+                          t - self.meaningful_steps)
+        t = th.cat([t, dual_t], dim=0)[:batch_size].long().to(device=device)
+        return t, th.ones_like(t).float(), self.loss_weights.to(device=device)[t]
 
 
 class LossAwareSampler(ScheduleSampler):
@@ -131,7 +176,7 @@ class LossSecondMomentResampler(LossAwareSampler):
         )
         self._loss_counts = np.zeros([diffusion.num_timesteps], dtype=np.int)
 
-    def weights(self):
+    def sample_weights(self):
         if not self._warmed_up():
             return np.ones([self.diffusion.num_timesteps], dtype=np.float64)
         weights = np.sqrt(np.mean(self._loss_history ** 2, axis=-1))

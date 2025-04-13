@@ -251,6 +251,10 @@ class MDTv2(nn.Module):
         self.decode_layers = int(decode_layers)
 
         self.image_features_net = FeaturesNet(image_n_bands, image_ch_per_band, image_feats_ch)
+        
+        self.fast_inference_mode = False
+        self.buffer_image = None
+        self.buffer_image_feats = None
 
         assert hidden_size % 8 == 0
         self.x_embedder = PatchEmbed(input_size, 
@@ -422,6 +426,18 @@ class MDTv2(nn.Module):
         x = x * mask + (1 - mask) * x_before
 
         return x
+    
+    def get_image_feats(self, image):
+        if self.fast_inference_mode:
+            if self.buffer_image is None or (not torch.allclose(self.buffer_image, image)):
+                self.buffer_image = image
+                image_feats = self.image_features_net(image)
+                self.buffer_image_feats = self.image_embedder(image_feats)
+            image_feats = self.buffer_image_feats
+        else:
+            image_feats = self.image_features_net(image)
+            image_feats = self.image_embedder(image_feats)
+        return image_feats
 
     def forward(self, x, t, image, enable_mask=False):
         """
@@ -431,8 +447,7 @@ class MDTv2(nn.Module):
         image: astronomical image
         enable_mask: Use mask latent modeling
         """
-        image_feats = self.image_features_net(image)
-        image_feats = self.image_embedder(image_feats)
+        image_feats = self.get_image_feats(image)
         x = self.x_embedder(x)
         x = torch.cat([x, image_feats], dim=-1)
         x = x + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2

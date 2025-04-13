@@ -713,7 +713,13 @@ class GaussianDiffusion:
         output = th.where((t == 0), decoder_nll, kl)
         return {"output": output, "pred_xstart": out["pred_xstart"]}
 
-    def training_losses(self, model, x_start, t, model_kwargs=None, noise=None):
+    def training_losses(self, 
+                        model, 
+                        x_start, 
+                        t, 
+                        model_kwargs=None, 
+                        noise=None, 
+                        loss_weights=None):
         """
         Compute training losses for a single timestep.
         :param model: the model to evaluate loss on.
@@ -722,6 +728,7 @@ class GaussianDiffusion:
         :param model_kwargs: if not None, a dict of extra keyword arguments to
             pass to the model. This can be used for conditioning.
         :param noise: if specified, the specific Gaussian noise to try to remove.
+        :param loss_weights: if not specified, we calculate the loss weights based on snr.
         :return: a dict with the key "loss" containing a tensor of shape [N].
                  Some mean or variance settings may also have other keys.
         """
@@ -733,7 +740,6 @@ class GaussianDiffusion:
 
         terms = {}
 
-        mse_loss_weight = None
         alpha = _extract_into_tensor(self.sqrt_alphas_cumprod, t, t.shape)
         sigma = _extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, t.shape)
         snr = (alpha / sigma) ** 2
@@ -741,14 +747,18 @@ class GaussianDiffusion:
         velocity = (alpha[:, None, None, None] * x_t - x_start) / sigma[:, None, None, None]
 
         # get loss weight
-        if self.model_mean_type is not ModelMeanType.START_X:
-            k = 5.0
-            # min{snr, k}
-            mse_loss_weight = th.stack([snr, k * th.ones_like(t)], dim=1).min(dim=1)[0] / snr
+        mse_loss_weight = None
+        if loss_weights is None:
+            if self.model_mean_type is not ModelMeanType.START_X:
+                k = 5.0
+                # min{snr, k}
+                mse_loss_weight = th.stack([snr, k * th.ones_like(t)], dim=1).min(dim=1)[0] / snr
+            else:
+                k = 5.0
+                # min{snr, k}
+                mse_loss_weight = th.stack([snr, k * th.ones_like(t)], dim=1).min(dim=1)[0]
         else:
-            k = 5.0
-            # min{snr, k}
-            mse_loss_weight = th.stack([snr, k * th.ones_like(t)], dim=1).min(dim=1)[0]
+            mse_loss_weight = loss_weights
             
         if self.loss_type == LossType.KL or self.loss_type == LossType.RESCALED_KL:
             terms["loss"] = self._vb_terms_bpd(

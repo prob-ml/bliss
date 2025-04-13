@@ -1,0 +1,10 @@
+---
+defaults:
+    - simple_net_train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+encoder:
+    simple_net_type: simple_ar_net
+    use_speed_sampler: false
+    

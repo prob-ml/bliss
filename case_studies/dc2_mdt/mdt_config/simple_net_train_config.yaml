@@ -67,6 +67,8 @@ encoder:
     survey_bands: [u, g, r, i, z, y]
     reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}
+    simple_net_type: simple_net
+    use_speed_sampler: false
     d_objective: velocity
     d_beta_schedule: linear
     d_learn_sigma: true
