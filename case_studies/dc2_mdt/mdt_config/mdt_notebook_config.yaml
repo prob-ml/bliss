@@ -1,6 +1,6 @@
 ---
 defaults:
-    - ynet_full_diffusion_train_config
+    - mdt_train_config
     - _self_
     - override hydra/job_logging: stdout
 

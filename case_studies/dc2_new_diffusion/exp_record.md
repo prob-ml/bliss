@@ -115,3 +115,50 @@ self.final_conv = nn.Sequential(
 1. use reweighted mean internal loss; set acc_gradient_batches to 10
 2. use reweighted mean internal loss; set acc_gradient_batches to 10; let n_sources to be either 0 or 1
 3. use reweighted mean internal loss; set acc_gradient_batches to 10; let n_sources to be either 0 or 1; set lr to 1e-2
+4. use reweighted mean internal loss; set acc_gradient_batches to 10; let n_sources to be either 0 or 1
+
+
+### 03-28 (ynet_full_diffusion)
+
+1. clamp flux max to be 22025; use reweighted mean internal loss; set acc_gradient_batches to 10; let n_sources to be either 0 or 1; let null flux to be 1
+2. clamp flux max to be 22025; use reweighted mean internal loss; set acc_gradient_batches to 10; let n_sources to be either 0 or 1; let null flux to be -1
+3. clamp flux max to be 22025; use reweighted mean internal loss; let n_sources to be either 0 or 1; let null flux to be -1
+4. clamp flux max to be 22025; use reweighted mean internal loss; let n_sources to be either 0 or 1; let null flux to be 0
+
+(find that I'm using the old log normalized factor, null flux doesn't take effect)
+
+
+### 03-30 (simple_net_diffusion)
+
+1. num_pre_cond_layers = 1; num_post_cond_layers = 1;
+2. num_pre_cond_layers = 2; num_post_cond_layers = 2;
+3. num_pre_cond_layers = 4; num_post_cond_layers = 4;
+
+
+### 03-31 (ynet_full_diffusion)
+
+1. clamp flux max to be 22025; use reweighted mean internal loss; let n_sources to be either 0 or 1; let null flux to be -1
+
+
+### 04-04 (simple_net_diffusion)
+
+1. v2 model; 8 layers; w/ spatial
+2. v2 model; 8 layers; w/o spatial
+
+
+### 04-04 (ynet_full_diffusion)
+
+1. v2 model; dim=32
+2. v2 model; dim=64
+
+(find that the `encode` function in DiffusionFactor will re-encode null flux to 0)
+
+
+### 04-07 (ynet_full_diffusion)
+
+1. v2 model; dim=64
+
+
+### 04-07 (simple_net_diffusion)
+
+1. v2 model; 8 layers; w/o spatial

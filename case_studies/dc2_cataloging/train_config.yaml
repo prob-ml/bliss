@@ -6,6 +6,10 @@ defaults:
 
 mode: train
 
+surveys:
+  dc2:
+    batch_size: 32
+
 my_variational_factors:
   - _target_: case_studies.dc2_cataloging.utils.variational_dist.MyBernoulliFactor
     name: n_sources
@@ -138,8 +142,8 @@ encoder:
         metrics: ${my_metrics}
     sample_image_renders: null
     use_double_detect: true
-    minimalist_conditioning: true
-    use_checkerboard: true
+    minimalist_conditioning: false
+    use_checkerboard: false
     n_sampler_colors: 4
     predict_mode_not_samples: true
 
@@ -147,8 +151,8 @@ train:
     trainer:
         logger:
             name: DC2_cataloging_exp
-            version: exp_03-17-1  # change it before running the code
-        devices: [7]  # change it before running the code
+            version: exp_03-30-2  # change it before running the code
+        devices: [6]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
     data_source: ${surveys.dc2}

@@ -67,13 +67,7 @@ class DiffusionFactor:
 
     def encode(self, true_tile_cat: TileCatalog):
         target = self.encode_tile_cat(true_tile_cat)
-        if self.name != "fluxes":  # for fluxes, the null flux has special encoding
-            gating = self._loss_gating(true_tile_cat)
-            if gating.shape != target.shape:
-                assert gating.shape == target.shape[:-1]
-                target = torch.where(gating.unsqueeze(-1) > 0, target, 0)
-            else:  # for n_sources gating
-                target = torch.where(gating > 0, target, 0)
+        assert torch.isfinite(target).all()
         assert not torch.isnan(target).any()
         return target
 
@@ -98,6 +92,11 @@ class DiffusionFactor:
 
     def craft_fake_data(self, on_mask: torch.Tensor, dtype=None):
         raise NotImplementedError()
+    
+    def invalid_points_warning(self):
+        logger = logging.getLogger("DiffusionFactor")
+        warning_msg = f"WARNING: find invalid values in input catalog for factor [{self.name}]"
+        logger.warning(warning_msg)
 
 
 class CatalogParser(torch.nn.Module):
@@ -168,39 +167,30 @@ class CatalogParser(torch.nn.Module):
         return torch.cat([
             f.clip_tensor(ft) for f, ft in zip(self.factors, factored_input_tensor)
         ], dim=3)
-    
-    def craft_fake_data(self, true_params: torch.Tensor):
-        fake_on_mask = None
-        fake_data = []
-        for i, (f, ft) in enumerate(zip(self.factors, self.factor_tensor(true_params))):
-            # ft: (b, h, w, k)
-            if i == 0:  # n_sources
-                assert f.name == "n_sources"
-                fake_n_sources = f.craft_fake_data(on_mask=ft < 0.0)
-                fake_on_mask = fake_n_sources > 0.0  # note that fake_n_sources contains 0.0
-                assert not (fake_on_mask & (ft > 0.0)).any()
-                fake_data.append(fake_n_sources)
-                continue
-            fake_data.append(f.craft_fake_data(on_mask=fake_on_mask, dtype=ft.dtype))
-        return fake_on_mask, torch.cat(fake_data, dim=-1)
 
 
 class NormalizedFactor(DiffusionFactor):
-    def __init__(self, *args, data_min, data_max, scale, fake_data_dist, **kwargs):
+    def __init__(self, *args, data_min, data_max, scale, latent_zero_point, **kwargs):
         super().__init__(*args, **kwargs)
         self.data_min = data_min
         self.data_max = data_max
         self.scale = scale
-        self.fake_data_dist = fake_data_dist
+        self.latent_zero_point = latent_zero_point
+        self.invalid_point_flag = False
 
     def encode_tile_cat(self, true_tile_cat):
         assert len(true_tile_cat[self.name].shape) == 5  # (b, h, w, 1, k)
         assert true_tile_cat[self.name].shape[-2] == 1
         assert true_tile_cat[self.name].shape[-1] == self.n_params
+        target_n_sources = true_tile_cat["n_sources"]  # (b, h, w)
         target = true_tile_cat[self.name][..., 0, :]  # (b, h, w, k)
+        invalid_points = torch.isnan(target) | torch.isinf(target)
+        if (not self.invalid_point_flag) and invalid_points.any():
+            self.invalid_point_flag = True
+            self.invalid_points_warning()
         target_minus_1_to_1 = (target - self.data_min) / (self.data_max - self.data_min) * 2 - 1
-        masked_target_minus_1_to_1 = torch.where(torch.isnan(target), 
-                                                 torch.zeros_like(target_minus_1_to_1), 
+        masked_target_minus_1_to_1 = torch.where(invalid_points | (target_n_sources == 0).unsqueeze(-1), 
+                                                 torch.ones_like(target_minus_1_to_1) * self.latent_zero_point, 
                                                  target_minus_1_to_1)
         assert ((masked_target_minus_1_to_1 >= -1.0) & (masked_target_minus_1_to_1 <= 1.0)).all()
         return target_minus_1_to_1 * self.scale
@@ -212,30 +202,17 @@ class NormalizedFactor(DiffusionFactor):
     
     def clip_tensor(self, input_tensor):
         return torch.clamp(input_tensor, min=-self.scale, max=self.scale)
-    
-    def craft_fake_data(self, on_mask, dtype=None):
-        repeat_on_mask = repeat(on_mask, "b h w 1 -> b h w k", k=self.n_params)
-        if self.fake_data_dist == "uniform":
-            fake_data = torch.where(repeat_on_mask,
-                                    (torch.rand(*repeat_on_mask.shape, 
-                                                dtype=dtype, 
-                                                device=on_mask.device) * 2 - 1) * self.scale,
-                                    torch.zeros(*repeat_on_mask.shape, 
-                                                dtype=dtype, 
-                                                device=on_mask.device))
-        else:
-            raise NotImplementedError()
-        return fake_data
 
 
 class LogNormalizedFactor(DiffusionFactor):
-    def __init__(self, *args, data_min, log_data_min, log_data_max, scale, fake_data_dist, **kwargs):
+    def __init__(self, *args, data_min, log_data_min, log_data_max, scale, latent_zero_point, **kwargs):
         super().__init__(*args, **kwargs)
         self.data_min = data_min
         self.log_data_min = log_data_min
         self.log_data_max = log_data_max
         self.scale = scale
-        self.fake_data_dist = fake_data_dist
+        self.latent_zero_point = latent_zero_point
+        self.invalid_point_flag = False
 
     def encode_tile_cat(self, true_tile_cat):
         assert len(true_tile_cat[self.name].shape) == 5  # (b, h, w, 1, k)
@@ -243,15 +220,15 @@ class LogNormalizedFactor(DiffusionFactor):
         assert true_tile_cat[self.name].shape[-1] == self.n_params
         target = true_tile_cat[self.name][..., 0, :]  # (b, h, w, k)
         target_n_sources = true_tile_cat["n_sources"]  # (b, h, w)
+        invalid_points = torch.isnan(target) | torch.isinf(target)
+        if (not self.invalid_point_flag) and invalid_points.any():
+            self.invalid_point_flag = True
+            self.invalid_points_warning()
         log_target = torch.log1p(target - self.data_min)
         log_target_minus_1_to_1 = (log_target - self.log_data_min) / (self.log_data_max - self.log_data_min) * 2 - 1
-        # masked_log_target_minus_1_to_1 = torch.where(torch.isnan(target), 
-        #                                              torch.zeros_like(log_target_minus_1_to_1), 
-        #                                              log_target_minus_1_to_1)
-        assert not torch.isnan(target).any()
-        masked_log_target_minus_1_to_1 = torch.where((target_n_sources > 0).unsqueeze(-1),
-                                                     log_target_minus_1_to_1,
-                                                     -1 * torch.ones_like(log_target_minus_1_to_1))
+        masked_log_target_minus_1_to_1 = torch.where(invalid_points | (target_n_sources == 0).unsqueeze(-1),
+                                                     torch.ones_like(log_target_minus_1_to_1) * self.latent_zero_point,
+                                                     log_target_minus_1_to_1)
         assert ((masked_log_target_minus_1_to_1 >= -1.0) & (masked_log_target_minus_1_to_1 <= 1.0)).all()
         return log_target_minus_1_to_1 * self.scale
 
@@ -263,31 +240,15 @@ class LogNormalizedFactor(DiffusionFactor):
     
     def clip_tensor(self, input_tensor):
         return torch.clamp(input_tensor, min=-self.scale, max=self.scale)
-    
-    def craft_fake_data(self, on_mask, dtype=None):
-        repeat_on_mask = repeat(on_mask, "b h w 1 -> b h w k", k=self.n_params)
-        if self.fake_data_dist == "uniform":
-            fake_data = torch.where(repeat_on_mask,
-                                    (torch.rand(*repeat_on_mask.shape, 
-                                                dtype=dtype, 
-                                                device=on_mask.device) * 2 - 1) * self.scale,
-                                    torch.zeros(*repeat_on_mask.shape, 
-                                                dtype=dtype,
-                                                device=on_mask.device))
-        else:
-            raise NotImplementedError()
-        return fake_data
 
 
 class OneBitFactor(DiffusionFactor):
-    def __init__(self, *args, bit_value, threshold, fake_data_on_prop, **kwargs):
+    def __init__(self, *args, bit_value, threshold, **kwargs):
         super().__init__(*args, **kwargs)
         assert self.n_params == 1
         self.bit_value = bit_value
         self.threshold = threshold
         assert self.threshold > -self.bit_value and self.threshold < self.bit_value
-        self.fake_data_on_prop = fake_data_on_prop
-        assert self.fake_data_on_prop >= 0.0 and self.fake_data_on_prop <= 1.0
 
     def encode_tile_cat(self, true_tile_cat):
         if self.name == "n_sources":
@@ -307,33 +268,11 @@ class OneBitFactor(DiffusionFactor):
     def clip_tensor(self, input_tensor):
         return torch.clamp(input_tensor, min=-self.bit_value, max=self.bit_value)
     
-    def craft_fake_data(self, on_mask, dtype=None):
-        assert len(on_mask.shape) == 4  # (b, h, w, 1)
-        assert on_mask.shape[-1] == 1
-        fake_data_on = torch.rand(*on_mask.shape, device=on_mask.device) < self.fake_data_on_prop
-        return torch.where(fake_data_on, self.bit_value, -self.bit_value) * on_mask
     
-    
-class OneBitNSourcesLocsFactor(DiffusionFactor):
-    def __init__(self, *args, bit_value, threshold, **kwargs):
+class OneBitNSourcesLocsFactor(OneBitFactor):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert self.name == "n_sources"
-        assert self.n_params == 1
-        self.bit_value = bit_value
-        self.threshold = threshold
-        assert self.threshold > -self.bit_value and self.threshold < self.bit_value
-
-    def encode_tile_cat(self, true_tile_cat):
-        assert len(true_tile_cat[self.name].shape) == 3
-        target = true_tile_cat[self.name]  # (b, h, w)
-        return torch.where(target.unsqueeze(-1) > 0, self.bit_value, -self.bit_value)
-    
-    def decode_params(self, params):
-        assert ((params >= -self.bit_value) & (params <= self.bit_value)).all()
-        return (params > self.threshold).int()
-    
-    def clip_tensor(self, input_tensor):
-        return torch.clamp(input_tensor, min=-self.bit_value, max=self.bit_value)
     
 def ints_to_bits(ints_tensor: torch.Tensor, num_bits: int):
     assert len(ints_tensor.shape) == 4  # (b, h, w, 1)
@@ -366,7 +305,6 @@ class MultiBitsNSourcesFactor(DiffusionFactor):
     def __init__(self, *args, bit_value, threshold, **kwargs):
         super().__init__(*args, **kwargs)
         assert self.name == "n_sources_multi"
-
         self.bit_value = bit_value
         self.threshold = threshold
         assert self.threshold > -self.bit_value and self.threshold < self.bit_value

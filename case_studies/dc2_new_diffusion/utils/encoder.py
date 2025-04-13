@@ -20,8 +20,9 @@ from case_studies.dc2_new_diffusion.utils.diffusion import (DiffusionModel,
                                                             UpsampleDiffusionModel, 
                                                             LatentDiffusionModel, 
                                                             YNetDiffusionModel, 
-                                                            YNetDoubleDetectDiffusionModel)
-from case_studies.dc2_new_diffusion.utils.unet import UNet, YNet
+                                                            YNetDoubleDetectDiffusionModel,
+                                                            SimpleNetDiffusionModel)
+from case_studies.dc2_new_diffusion.utils.unet import UNet, YNet, YNetV2, SimpleNetV1, SimpleNetV2
 from case_studies.dc2_new_diffusion.utils.autoencoder import CatalogEncoder, CatalogDecoder
 
 
@@ -357,30 +358,70 @@ class LatentDiffusionEncoder(DiffusionEncoder):
         unet_optimizer = Adam(self.unet.parameters(), **self.optimizer_params)
         unet_scheduler = MultiStepLR(unet_optimizer, **self.scheduler_params)
         return [unet_optimizer], [unet_scheduler]
-    
 
-class YNetDiffusionEncoder(DiffusionEncoder):
+
+class NoLatentDiffusionEncoder(DiffusionEncoder):
     def __init__(self, acc_grad_batches, **kwargs):
         super().__init__(**kwargs)
         self.acc_grad_batches = acc_grad_batches
         assert self.acc_grad_batches >= 1
 
+    def training_step(self, batch, batch_idx):
+        my_optimizer = self.optimizers()
+        mean_inter_loss, _mean_final_loss = self._compute_loss(batch, "train")
+
+        mean_inter_loss = mean_inter_loss / self.acc_grad_batches
+        self.manual_backward(mean_inter_loss)
+        if (batch_idx + 1) % self.acc_grad_batches == 0:
+            my_optimizer.step()
+            my_optimizer.zero_grad()
+
+        # step every epoch
+        if self.trainer.is_last_batch:
+            my_scheduler = self.lr_schedulers()
+            my_scheduler.step()
+
+    def configure_optimizers(self):
+        my_optimizer = Adam(self.my_net.parameters(), **self.optimizer_params)
+        my_scheduler = MultiStepLR(my_optimizer, **self.scheduler_params)
+        return [my_optimizer], [my_scheduler]
+    
+
+class YNetDiffusionEncoder(NoLatentDiffusionEncoder):
+    def __init__(self, ynet_version, ynet_dim, **kwargs):
+        self.ynet_version = ynet_version
+        assert self.ynet_version in ["v1", "v2"]
+        self.ynet_dim = ynet_dim
+        super().__init__(**kwargs)
+        
     def initialize_networks(self):
         assert self.tile_slen == 4
         target_ch = self.catalog_parser.n_params_per_source
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
 
-        self.ynet = YNet(n_bands=len(self.survey_bands),
-                         ch_per_band=ch_per_band,
-                         in_ch=target_ch,
-                         out_ch=target_ch,
-                         dim=64,
-                         attn_heads=4,
-                         attn_head_dim=32,
-                         use_self_cond=self.ddim_self_cond)
+        match self.ynet_version:
+            case "v1":
+                self.my_net = YNet(n_bands=len(self.survey_bands),
+                                    ch_per_band=ch_per_band,
+                                    in_ch=target_ch,
+                                    out_ch=target_ch,
+                                    dim=self.ynet_dim,
+                                    attn_heads=4,
+                                    attn_head_dim=32,
+                                    use_self_cond=self.ddim_self_cond)
+            case "v2":
+                self.my_net = YNetV2(n_bands=len(self.survey_bands),
+                                     ch_per_band=ch_per_band,
+                                     in_ch=target_ch,
+                                     out_ch=target_ch,
+                                     dim=self.ynet_dim,
+                                     attn_heads=4,
+                                     attn_head_dim=32)
+            case _:
+                raise NotImplementedError()
 
         self.detection_diffusion = YNetDiffusionModel(
-            model=self.ynet,
+            model=self.my_net,
             target_size=(
                 target_ch,
                 self.image_size[0] // 4,
@@ -393,30 +434,10 @@ class YNetDiffusionEncoder(DiffusionEncoder):
             self_condition=self.ddim_self_cond,
         )
 
-    def training_step(self, batch, batch_idx):
-        ynet_optimizer = self.optimizers()
-        mean_inter_loss, _mean_final_loss = self._compute_loss(batch, "train")
-
-        mean_inter_loss = mean_inter_loss / self.acc_grad_batches
-        self.manual_backward(mean_inter_loss)
-        if (batch_idx + 1) % self.acc_grad_batches == 0:
-            ynet_optimizer.step()
-            ynet_optimizer.zero_grad()
-
-        # step every epoch
-        if self.trainer.is_last_batch:
-            ynet_scheduler = self.lr_schedulers()
-            ynet_scheduler.step()
-
-    def configure_optimizers(self):
-        ynet_optimizer = Adam(self.ynet.parameters(), **self.optimizer_params)
-        ynet_scheduler = MultiStepLR(ynet_optimizer, **self.scheduler_params)
-        return [ynet_optimizer], [ynet_scheduler]
-
 
 class YNetFullDiffusionEncoder(YNetDiffusionEncoder):
-    # MAX_FLUXES = 22025.0
-    MAX_FLUXES = torch.inf
+    MAX_FLUXES = 22025.0
+    # MAX_FLUXES = torch.inf
 
     def update_metrics(self, batch, batch_idx):
         target_tile_cat = TileCatalog(batch["tile_catalog"])
@@ -551,3 +572,119 @@ class YNetDoubleDetectDiffusionEncoder(YNetDiffusionEncoder):
         x_features = self.get_features(batch)
         sample_dict = self.detection_diffusion.sample(x_features, return_inter_output, locs_slack, init_time)
         return sample_dict["double_detect"], sample_dict["inter_output"]
+
+
+class SimpleNetDiffusionEncoder(NoLatentDiffusionEncoder):
+    MAX_FLUXES = 22025.0
+    # MAX_FLUXES = torch.inf
+
+    def __init__(self, model_version, model_kwargs, **kwargs):
+        self.model_version = model_version
+        self.model_kwargs = model_kwargs
+        assert self.model_version in ["v1", "v2"]
+        super().__init__(**kwargs)
+
+    def initialize_networks(self):
+        assert self.tile_slen == 4
+        target_ch = self.catalog_parser.n_params_per_source
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+
+        match self.model_version:
+            case "v1":
+                self.my_net = SimpleNetV1(n_bands=len(self.survey_bands),
+                                          ch_per_band=ch_per_band,
+                                          in_ch=target_ch,
+                                          out_ch=target_ch,
+                                          dim=32,
+                                          **self.model_kwargs)
+            case "v2":
+                self.my_net = SimpleNetV2(n_bands=len(self.survey_bands),
+                                          ch_per_band=ch_per_band,
+                                          in_ch=target_ch,
+                                          out_ch=target_ch,
+                                          dim=64,
+                                          **self.model_kwargs)
+            case _:
+                raise NotImplementedError()
+
+        self.detection_diffusion = SimpleNetDiffusionModel(
+            model=self.my_net,
+            target_size=(
+                target_ch,
+                self.image_size[0] // 4,
+                self.image_size[1] // 4,
+            ),
+            catalog_parser=self.catalog_parser,
+            ddim_steps=self.ddim_steps,
+            objective=self.ddim_objective,
+            beta_schedule=self.ddim_beta_schedule,
+            self_condition=self.ddim_self_cond,
+        )
+
+    @torch.inference_mode()
+    def sample(self, batch, return_inter_output):
+        x_features = self.get_features(batch)
+        sample_dict = self.detection_diffusion.sample(x_features, return_inter_output)
+        
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+
+        sample_tile_dict = self.catalog_parser.decode(sample_dict["final_pred"])
+        assert "n_sources" not in sample_tile_dict
+        assert "locs" not in sample_tile_dict
+        # sample_tile_dict["n_sources"] = target_cat1["n_sources"]
+        sample_n_sources = sample_tile_dict["fluxes"][..., 0, 2] > 100
+        target_n_sources = target_cat1["n_sources"] > 0
+        sample_tile_dict["n_sources"] = (sample_n_sources & target_n_sources).to(dtype=target_cat1["n_sources"].dtype)
+        # sample_tile_dict["locs"] = target_cat1["locs"]
+        sample_tile_dict["locs"] = rearrange(sample_tile_dict["n_sources"] > 0, "b h w -> b h w 1 1") * target_cat1["locs"]
+
+        return TileCatalog(sample_tile_dict), sample_dict["inter_output"]
+
+    def update_metrics(self, batch, batch_idx):
+        target_tile_cat = TileCatalog(batch["tile_catalog"])
+        target_tile_cat["fluxes"] = target_tile_cat["fluxes"].clamp(max=self.MAX_FLUXES)
+        target_cat = target_tile_cat.to_full_catalog(self.tile_slen)
+
+        mode_tile_cat, _ = self.sample(batch, return_inter_output=False)
+        mode_cat = mode_tile_cat.to_full_catalog(self.tile_slen)
+        mode_matching = self.matcher.match_catalogs(target_cat, mode_cat)
+
+        self.mode_metrics.update(target_cat, mode_cat, mode_matching)
+
+    def _compute_cur_batch_loss(self, batch):
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        target_cat1["fluxes"] = target_cat1["fluxes"].clamp(max=self.MAX_FLUXES)
+        x_features = self.get_features(batch)  # (b, c, H, W)
+        encoded_catalog_tensor = self.catalog_parser.encode(target_cat1)  # (b, h, w, k)
+        pred_dict = self.detection_diffusion(
+            target=encoded_catalog_tensor, input_image=x_features
+        )
+        return (
+            pred_dict["inter_loss"], 
+            self.catalog_parser.gating_loss(pred_dict["final_pred_loss"], target_cat1),
+            self.catalog_parser.get_gating_for_loss(target_cat1),
+        )
+    
+    def _compute_loss(self, batch, logging_name):
+        inter_loss, final_pred_loss, loss_gating = self._compute_cur_batch_loss(batch)
+
+        sub_inter_loss, mean_inter_loss = self._reweight_loss(inter_loss, loss_gating)
+        sub_final_loss, mean_final_loss = self._reweight_loss(final_pred_loss, loss_gating)
+
+        batch_size = batch["images"].size(0)
+        self.log(f"{logging_name}/_final_loss", mean_final_loss, batch_size=batch_size, sync_dist=True)
+        self.log(f"{logging_name}/_inter_loss", mean_inter_loss, batch_size=batch_size, sync_dist=True)
+        for sl, f in zip(sub_final_loss, self.catalog_parser.factors, strict=True):
+            self.log(f"{logging_name}/_final_loss_{f.name}", sl, batch_size=batch_size, sync_dist=True)
+        for sl, f in zip(sub_inter_loss, self.catalog_parser.factors, strict=True):
+            self.log(f"{logging_name}/_inter_loss_{f.name}", sl, batch_size=batch_size, sync_dist=True)
+        total_loss = mean_final_loss + mean_inter_loss
+        self.log(f"{logging_name}/_loss", total_loss, batch_size=batch_size, sync_dist=True)
+
+        return mean_inter_loss, mean_final_loss

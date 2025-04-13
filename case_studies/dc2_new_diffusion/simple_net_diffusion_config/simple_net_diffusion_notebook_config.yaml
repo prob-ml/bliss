@@ -1,6 +1,6 @@
 ---
 defaults:
-    - ynet_full_diffusion_train_config
+    - simple_net_diffusion_train_config
     - _self_
     - override hydra/job_logging: stdout
 
@@ -10,4 +10,4 @@ notebook_var:
 surveys:
     dc2:
         prepare_data_processes_num: 1
-        num_workers: 0
+        num_workers: 16
