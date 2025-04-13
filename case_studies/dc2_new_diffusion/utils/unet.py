@@ -36,7 +36,7 @@ class PositionalEncoding(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, dim, dim_out):
+    def __init__(self, dim, dim_out, spatial=True):
         """
         Input shape=(B, dim, H, W)
         Output shape=(B, dim_out, H, W)
@@ -46,7 +46,10 @@ class Block(nn.Module):
         :param groups: number of groups for Group normalization.
         """
         super().__init__()
-        self.proj = nn.Conv2d(dim, dim_out, kernel_size=(3, 3), padding=1)
+        if spatial:
+            self.proj = nn.Conv2d(dim, dim_out, kernel_size=(3, 3), padding=1)
+        else:
+            self.proj = nn.Conv2d(dim, dim_out, kernel_size=(1, 1), padding=0)
         assert dim_out % 8 == 0
         self.norm = nn.GroupNorm(num_groups=dim_out // 8, num_channels=dim_out)
         self.activation = nn.SiLU()
@@ -61,7 +64,7 @@ class Block(nn.Module):
 
 
 class ResnetBlock(nn.Module):
-    def __init__(self, dim, dim_out, time_emb_dim=None):
+    def __init__(self, dim, dim_out, time_emb_dim=None, spatial=True):
         """
         In abstract, it is composed of two Convolutional layer with residual connection,
         with information of time encoding is passed to first Convolutional layer.
@@ -76,8 +79,8 @@ class ResnetBlock(nn.Module):
         """
         super().__init__()
         self.mlp = nn.Sequential(nn.SiLU(), nn.Linear(time_emb_dim, dim_out * 2)) if time_emb_dim is not None else None
-        self.block1 = Block(dim, dim_out)
-        self.block2 = Block(dim_out, dim_out)
+        self.block1 = Block(dim, dim_out, spatial=spatial)
+        self.block2 = Block(dim_out, dim_out, spatial=spatial)
         self.residual_conv = nn.Conv2d(dim, dim_out, kernel_size=(1, 1)) if dim != dim_out else nn.Identity()
 
     def forward(self, x, time_emb=None):
@@ -343,6 +346,53 @@ class ImageProcessNet(nn.Module):
         return x
     
 
+class ImageProcessNetV2(nn.Module):
+    def __init__(self, 
+                 n_bands, 
+                 ch_per_band, 
+                 dim):
+        super().__init__()
+
+        self.n_bands = n_bands
+        self.ch_per_band = ch_per_band
+        self.dim = dim
+        self.out_chs = [self.dim * i for i in [2, 4, 8]]
+
+        self.preprocess3d = nn.Sequential(
+            nn.Conv3d(self.n_bands, self.dim, [self.ch_per_band, 5, 5], padding=[0, 2, 2]),
+            nn.BatchNorm3d(self.dim),
+            nn.SiLU(),
+            Rearrange("b c 1 h w -> b c h w")
+        )
+
+        self.direct_down_sample = nn.Sequential(
+            *[ConvBlock(self.dim, self.dim, kernel_size=5) for _ in range(4)],
+            ConvBlock(self.dim, self.dim, stride=2),
+            C3(self.dim, self.dim, n=3),
+            ConvBlock(self.dim, self.dim * 2, stride=2),
+            C3(self.dim * 2, self.dim * 2, n=3),
+        )
+
+        inter_dim = self.dim * 2
+        self.conditional_down_sample = nn.ModuleList([])
+        for _ in range(2):
+            self.conditional_down_sample.append(nn.Sequential(
+                    ConvBlock(inter_dim, inter_dim * 2, stride=2),
+                    C3(inter_dim * 2, inter_dim * 2, n=3)
+                )
+            )
+            inter_dim *= 2
+
+    def forward(self, x):
+        x = self.preprocess3d(x)
+        x = self.direct_down_sample(x)
+        output_list = [x]
+        for layer in self.conditional_down_sample:
+            x = layer(x)
+            output_list.append(x)
+        return output_list
+    
+
 class YNet(nn.Module):
     def __init__(self, n_bands, ch_per_band, 
                  in_ch, out_ch, dim, 
@@ -464,4 +514,329 @@ class YNet(nn.Module):
 
         x = torch.cat((x, r), dim=1)
         x = self.final_block(x, t)
+        return self.final_conv(x)
+    
+
+class YNetV2(nn.Module):
+    def __init__(self, 
+                 n_bands, 
+                 ch_per_band, 
+                 in_ch, 
+                 out_ch, 
+                 dim, 
+                 attn_heads=4, 
+                 attn_head_dim=32):
+        super().__init__()
+
+        self.in_ch = in_ch
+        self.out_ch = out_ch
+        self.dim = dim
+        self.dim_multiply = (1, 2, 4)
+        self.depth = len(self.dim_multiply)
+        self.full_attn = (False, False, False)
+        self.hidden_dims = [self.dim, *map(lambda x: x * self.dim, self.dim_multiply)]
+        self.dim_in_out = list(zip(self.hidden_dims[:-1], self.hidden_dims[1:]))
+        self.time_emb_dim = 4 * self.dim
+
+        self.image_process_net = ImageProcessNetV2(n_bands=n_bands,
+                                                    ch_per_band=ch_per_band,
+                                                    dim=dim)
+        
+        self.time_mlp = nn.Sequential(
+            PositionalEncoding(self.dim), 
+            nn.Linear(self.dim, self.time_emb_dim),
+            nn.GELU(), 
+            nn.Linear(self.time_emb_dim, self.time_emb_dim)
+        )
+
+        self.init_conv = nn.Conv2d(self.in_ch, self.dim, 
+                                   kernel_size=(5, 5), padding=2)
+        
+        self.down_path = nn.ModuleList([])
+        self.up_path = nn.ModuleList([])
+
+        resnet_block = partial(ResnetBlock, time_emb_dim=self.time_emb_dim)
+        for idx, ((dim_in, dim_out), image_feat_ch, full_attn_flag) in enumerate(zip(self.dim_in_out, 
+                                                                                     self.image_process_net.out_chs, 
+                                                                                     self.full_attn)):
+            isLast = idx == (self.depth - 1)
+            attention = LinearAttention if not full_attn_flag else Attention
+            self.down_path.append(nn.ModuleList([
+                resnet_block(dim_in + image_feat_ch, dim_in),
+                resnet_block(dim_in, dim_in),
+                attention(dim_in, head=attn_heads, dim_head=attn_head_dim),
+                down_sample(dim_in, dim_out) if not isLast else nn.Conv2d(dim_in, dim_out, kernel_size=(3, 3), padding=1)
+            ]))
+
+        # Middle layer definition
+        mid_dim = self.hidden_dims[-1]
+        self.mid_resnet_block1 = resnet_block(mid_dim, mid_dim)
+        self.mid_attention = Attention(mid_dim, head=attn_heads, dim_head=attn_head_dim)
+        self.mid_resnet_block2 = resnet_block(mid_dim, mid_dim)
+
+        # Upward Path layer definition
+        for idx, ((dim_in, dim_out), full_attn_flag) in enumerate(
+                zip(reversed(self.dim_in_out), reversed(self.full_attn))):
+            isLast = idx == (self.depth - 1)
+            attention = LinearAttention if not full_attn_flag else Attention
+            self.up_path.append(nn.ModuleList([
+                resnet_block(dim_in + dim_out, dim_out),
+                resnet_block(dim_in + dim_out, dim_out),
+                attention(dim_out, head=attn_heads, dim_head=attn_head_dim),
+                up_sample(dim_out, dim_in) if not isLast else nn.Conv2d(dim_out, dim_in, kernel_size=(3, 3), padding=1)
+            ]))
+
+        self.final_block = resnet_block(2 * self.dim, self.dim)
+        self.final_conv = nn.Sequential(
+            ConvBlock(self.dim, self.dim, kernel_size=1),
+            C3(self.dim, self.dim, n=3, spatial=False),
+            ConvBlock(self.dim, self.dim, kernel_size=1),
+            nn.Conv2d(self.dim, self.out_ch, kernel_size=(1, 1))
+        )
+
+        self.fast_inference_mode = False
+        self.buffer_image = None
+        self.buffer_image_feats = None
+
+    def forward(self, x, time, input_image, x_self_cond=None):
+        assert x_self_cond is None
+
+        x = self.init_conv(x)
+        r = x.clone()
+        t = self.time_mlp(time)
+
+        if self.fast_inference_mode:
+            if self.buffer_image is None:
+                self.buffer_image = input_image
+                self.buffer_image_feats = self.image_process_net(input_image)
+            if not torch.allclose(self.buffer_image, input_image):
+                self.buffer_image = input_image
+                self.buffer_image_feats = self.image_process_net(input_image)
+            image_feats = self.buffer_image_feats
+        else:
+            image_feats = self.image_process_net(input_image)
+
+        concat = []
+        for image_f, (block1, block2, attn, downsample) in zip(image_feats, self.down_path):
+            x = torch.cat([x, image_f], dim=1)
+            x = block1(x, t)
+            concat.append(x)
+
+            x = block2(x, t)
+            x = attn(x) + x
+            concat.append(x)
+
+            x = downsample(x)
+
+        x = self.mid_resnet_block1(x, t)
+        x = self.mid_attention(x) + x
+        x = self.mid_resnet_block2(x, t)
+
+        for block1, block2, attn, upsample in self.up_path:
+            x = torch.cat([x, concat.pop()], dim=1)
+            x = block1(x, t)
+
+            x = torch.cat([x, concat.pop()], dim=1)
+            x = block2(x, t)
+            x = attn(x) + x
+            x = upsample(x)
+
+        x = torch.cat((x, r), dim=1)
+        x = self.final_block(x, t)
+        return self.final_conv(x)
+    
+
+class FeaturesNet(nn.Module):
+    def __init__(self, n_bands, ch_per_band, num_features):
+        super().__init__()
+        self.preprocess3d = nn.Sequential(
+            nn.Conv3d(n_bands, 64, [ch_per_band, 5, 5], padding=[0, 2, 2]),
+            nn.BatchNorm3d(64),
+            nn.SiLU(),
+        )
+
+        # tile_slen is 4 (rather than 2)
+        self.downsample_net = nn.Sequential(
+            ConvBlock(64, 64, stride=2),  # 2
+            C3(64, 64, n=3),
+        )
+
+        u_net_layers = [
+            ConvBlock(64, 64, kernel_size=5),
+            nn.Sequential(*[ConvBlock(64, 64, kernel_size=5) for _ in range(3)]),  # 1
+            ConvBlock(64, 128, stride=2),  # 2
+            C3(128, 128, n=3),
+            ConvBlock(128, 256, stride=2),  # 4
+            C3(256, 256, n=3),
+            ConvBlock(256, 512, stride=2),
+            C3(512, 256, n=3, shortcut=False),
+            nn.Upsample(scale_factor=2, mode="nearest"),  # 8
+            C3(512, 256, n=3, shortcut=False),
+            nn.Upsample(scale_factor=2, mode="nearest"),  # 10
+            C3(384, num_features, n=3, shortcut=False),
+        ]
+        self.u_net = nn.ModuleList(u_net_layers)
+
+    def forward(self, x):
+        x = self.preprocess3d(x).squeeze(2)
+
+        save_lst = []
+        for i, m in enumerate(self.u_net):
+            x = m(x)
+            if i in {2, 5}:
+                save_lst.append(x)
+            if i == 8:
+                x = torch.cat((x, save_lst[1]), dim=1)
+            if i == 10:
+                x = torch.cat((x, save_lst[0]), dim=1)
+            if i == 1:
+                x = self.downsample_net(x)
+
+        return x
+
+
+class SimpleNetV1(nn.Module):
+    def __init__(self, 
+                 n_bands, 
+                 ch_per_band, 
+                 in_ch, 
+                 out_ch, 
+                 dim,
+                 num_pre_cond_layers,
+                 num_post_cond_layers):
+        super().__init__()
+
+        self.num_features = 256
+        self.features_net = FeaturesNet(n_bands, ch_per_band, self.num_features)
+
+        self.in_ch = in_ch
+        self.out_ch = out_ch
+        self.dim = dim
+        self.time_emb_dim = 4 * self.dim
+
+        positional_encoding = PositionalEncoding(self.dim)
+        self.time_mlp = nn.Sequential(
+            positional_encoding, 
+            nn.Linear(self.dim, self.time_emb_dim),
+            nn.GELU(), 
+            nn.Linear(self.time_emb_dim, self.time_emb_dim),
+        )
+
+        self.init_conv = ConvBlock(self.in_ch, self.dim, kernel_size=1)
+
+        self.pre_cond_layers = nn.ModuleList([ResnetBlock(self.dim, self.dim, 
+                                                          time_emb_dim=self.time_emb_dim, 
+                                                          spatial=False)
+                                              for _ in range(num_pre_cond_layers)])
+
+        self.mid_resnet_block1 = ResnetBlock(self.dim + self.num_features, self.dim, 
+                                             time_emb_dim=self.time_emb_dim, spatial=True)
+        self.mid_attention = Attention(self.dim, head=4, dim_head=16)
+        self.mid_resnet_block2 = ResnetBlock(self.dim, self.dim,
+                                             time_emb_dim=self.time_emb_dim, spatial=True)
+
+        self.post_cond_layers = nn.ModuleList([ResnetBlock(self.dim, self.dim, 
+                                                           time_emb_dim=self.time_emb_dim, 
+                                                           spatial=False)
+                                               for _ in range(num_post_cond_layers)])
+     
+        self.final_block1 = ResnetBlock(2 * self.dim, self.dim, self.time_emb_dim, spatial=True)
+        self.final_block2 = ResnetBlock(self.dim, self.dim, self.time_emb_dim, spatial=True)
+        self.final_conv = nn.Sequential(
+            ConvBlock(self.dim, self.dim, kernel_size=1),
+            C3(self.dim, self.dim, n=3, spatial=False),
+            ConvBlock(self.dim, self.dim, kernel_size=1),
+            nn.Conv2d(self.dim, self.out_ch, kernel_size=(1, 1))
+        )
+
+    def forward(self, x, time, input_image, x_self_cond=None):
+        assert x_self_cond is None
+
+        x = self.init_conv(x)
+        r = x.clone()
+        t = self.time_mlp(time)
+
+        for resnet_block in self.pre_cond_layers:
+            x = resnet_block(x, t)
+
+        image_feats = self.features_net(input_image)
+        x = torch.cat([x, image_feats], dim=1)
+        x = self.mid_resnet_block1(x, t)
+        x = self.mid_attention(x) + x
+        x = self.mid_resnet_block2(x, t)
+
+        for resnet_block in self.post_cond_layers:
+            x = resnet_block(x, t)
+
+        x = torch.cat((x, r), dim=1)
+        x = self.final_block1(x, t)
+        x = self.final_block2(x, t)
+        return self.final_conv(x)
+    
+
+class SimpleNetV2(nn.Module):
+    def __init__(self, 
+                 n_bands, 
+                 ch_per_band, 
+                 in_ch, 
+                 out_ch, 
+                 dim,
+                 num_cond_layers,
+                 spatial_cond_layers):
+        super().__init__()
+
+        self.num_features = 256
+        self.features_net = FeaturesNet(n_bands, ch_per_band, self.num_features)
+
+        self.in_ch = in_ch
+        self.out_ch = out_ch
+        self.dim = dim
+        self.time_emb_dim = 4 * self.dim
+
+        positional_encoding = PositionalEncoding(self.dim)
+        self.time_mlp = nn.Sequential(
+            positional_encoding, 
+            nn.Linear(self.dim, self.time_emb_dim),
+            nn.GELU(), 
+            nn.Linear(self.time_emb_dim, self.time_emb_dim),
+        )
+
+        self.cond_layers = nn.ModuleList([ResnetBlock(self.in_ch + self.num_features 
+                                                      if i == 0 else self.dim, 
+                                                      self.dim, 
+                                                      time_emb_dim=self.time_emb_dim, 
+                                                      spatial=spatial_cond_layers)
+                                          for i in range(num_cond_layers)])
+     
+        self.final_conv = nn.Sequential(
+            ConvBlock(self.dim, self.dim, kernel_size=1),
+            C3(self.dim, self.dim, n=3, spatial=False),
+            ConvBlock(self.dim, self.dim, kernel_size=1),
+            nn.Conv2d(self.dim, self.out_ch, kernel_size=(1, 1))
+        )
+
+        self.fast_inference_mode = False
+        self.buffer_image = None
+        self.buffer_image_feats = None
+
+    def forward(self, x, time, input_image, x_self_cond=None):
+        assert x_self_cond is None
+
+        if self.fast_inference_mode:
+            if self.buffer_image is None:
+                self.buffer_image = input_image
+                self.buffer_image_feats = self.features_net(input_image)
+            if not torch.allclose(self.buffer_image, input_image):
+                self.buffer_image = input_image
+                self.buffer_image_feats = self.features_net(input_image)
+            image_feats = self.buffer_image_feats
+        else:
+            image_feats = self.features_net(input_image)
+        
+        x = torch.cat([x, image_feats], dim=1)
+
+        t = self.time_mlp(time)
+        for resnet_block in self.cond_layers:
+            x = resnet_block(x, t)
+
         return self.final_conv(x)

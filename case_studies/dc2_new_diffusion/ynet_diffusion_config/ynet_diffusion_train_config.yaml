@@ -58,6 +58,7 @@ encoder:
     ddim_beta_schedule: cosine
     ddim_self_cond: false
     acc_grad_batches: 10
+    ynet_version: v1
     optimizer_params:
         lr: 1e-3
         amsgrad: true  # to make adam more stable

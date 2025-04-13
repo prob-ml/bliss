@@ -14,6 +14,6 @@ train:
 surveys:
     dc2:
         # dc2_cat_path: /home/pduan/bliss/case_studies/dc2_cataloging/generate_new_catalog_output/merged_catalog_with_flux_over_50.pkl
-        cached_data_path: /data/scratch/dc2local/tmp_data/dc2_cached_data
+        # cached_data_path: /data/scratch/dc2local/tmp_data/dc2_cached_data
         prepare_data_processes_num: 4
         subset_fraction: 0.1

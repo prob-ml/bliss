@@ -542,3 +542,13 @@ if "locs" in datum["tile_catalog"]:
 ### 08-06
 
 1. train with the latest code
+
+
+### 03-17
+
+1. w/ minimal; w/ double detect; w/ checkerboard
+
+### 03-30
+
+1. w/o minimal; w/ double detect; w/o checkerboard
+2. w/o minimal; w/ double detect; w/ checkerboard

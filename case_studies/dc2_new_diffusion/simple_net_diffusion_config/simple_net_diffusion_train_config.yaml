@@ -1,0 +1,103 @@
+---
+defaults:
+    - ../../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+mode: train
+
+dc2_min_flux: 0.0
+dc2_min_log_flux: 0.0
+# dc2_max_log_flux: 23.43
+dc2_max_log_flux: 10.0
+
+surveys:
+  dc2:
+    batch_size: 128
+
+my_diffusion_factors:
+  - _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.LogNormalizedFactor
+    n_params: 6
+    name: fluxes
+    data_min: ${dc2_min_flux}
+    log_data_min: ${dc2_min_log_flux}
+    log_data_max: ${dc2_max_log_flux}
+    scale: 1.0
+    fake_data_dist: uniform
+    sample_rearrange: b ht wt d -> b ht wt 1 d
+    loss_gating:
+      _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.SourcesGating
+
+my_metrics:
+  flux_error:
+    _target_: bliss.encoder.metrics.FluxError
+    survey_bands: ${encoder.survey_bands}
+    base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+    mag_zero_point: 3631e9  # for DC2
+    report_bin_unit: mag
+
+my_image_normalizers:
+  asinh:
+    _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+    q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
+encoder:
+    _target_: case_studies.dc2_new_diffusion.utils.encoder.SimpleNetDiffusionEncoder
+    survey_bands: [u, g, r, i, z, y]
+    reference_band: 2
+    tile_slen: ${surveys.dc2.tile_slen}
+    ddim_steps: 5
+    ddim_objective: pred_noise
+    ddim_beta_schedule: cosine
+    ddim_self_cond: false
+    acc_grad_batches: 1
+    # model_version: v1
+    # model_kwargs:
+    #     num_pre_cond_layers: 4
+    #     num_post_cond_layers: 4
+    model_version: v2
+    model_kwargs:
+        num_cond_layers: 8
+        spatial_cond_layers: false
+    optimizer_params:
+        lr: 1e-3
+        amsgrad: true  # to make adam more stable
+    scheduler_params:
+        milestones: [70]
+        gamma: 0.1
+    image_normalizers: ${my_image_normalizers}
+    catalog_parser:
+        _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.CatalogParser
+        factors: ${my_diffusion_factors}
+    image_size: [80, 80]
+    matcher:
+        _target_: bliss.encoder.metrics.CatalogMatcher
+        dist_slack: 1.0
+        mag_slack: null
+        mag_band: 2  # SDSS r-band
+    mode_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: partial
+        compute_groups: false
+        metrics: ${my_metrics}
+
+train:
+    trainer:
+        logger:
+            name: DC2_simple_net_diffusion_exp
+            version: exp_04-07-1  # change it before running the code
+        devices: [5]  # change it before running the code
+        use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
+        precision: 32-true
+        max_epochs: 100
+        # detect_anomaly: false
+        # gradient_clip_val: 0.0
+    data_source: ${surveys.dc2}
+    pretrained_weights: null
+    seed: 7272
+    callbacks:
+        early_stopping:
+            _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+            monitor: val/_loss
+            mode: min
+            patience: 100

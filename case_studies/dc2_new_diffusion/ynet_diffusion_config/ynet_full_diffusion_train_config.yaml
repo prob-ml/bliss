@@ -8,7 +8,8 @@ mode: train
 
 dc2_min_flux: 0.0
 dc2_min_log_flux: 0.0
-dc2_max_log_flux: 23.43
+# dc2_max_log_flux: 23.43
+dc2_max_log_flux: 10.0
 
 surveys:
   dc2:
@@ -32,7 +33,7 @@ my_diffusion_factors:
     sample_rearrange: b ht wt d -> b ht wt 1 d
     loss_gating:
       _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.SourcesGating
-  - _target_: case_studies.dc2_diffusion.utils.catalog_parser.LogNormalizedFactor
+  - _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.LogNormalizedFactor
     n_params: 6
     name: fluxes
     data_min: ${dc2_min_flux}
@@ -42,7 +43,7 @@ my_diffusion_factors:
     fake_data_dist: uniform
     sample_rearrange: b ht wt d -> b ht wt 1 d
     loss_gating:
-      _target_: case_studies.dc2_diffusion.utils.catalog_parser.SourcesGating
+      _target_: case_studies.dc2_new_diffusion.utils.catalog_parser.SourcesGating
 
 my_metrics:
   detection_performance:
@@ -72,12 +73,14 @@ encoder:
     ddim_objective: pred_noise
     ddim_beta_schedule: cosine
     ddim_self_cond: false
-    acc_grad_batches: 10
+    acc_grad_batches: 1
+    ynet_version: v2
+    ynet_dim: 64
     optimizer_params:
-        lr: 1e-2
+        lr: 1e-3
         amsgrad: true  # to make adam more stable
     scheduler_params:
-        milestones: [100]
+        milestones: [150]
         gamma: 0.1
     image_normalizers: ${my_image_normalizers}
     catalog_parser:
@@ -99,11 +102,11 @@ train:
     trainer:
         logger:
             name: DC2_ynet_full_diffusion_exp
-            version: exp_03-18-3  # change it before running the code
-        devices: [4]  # change it before running the code
+            version: exp_04-07-1  # change it before running the code
+        devices: [6]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
-        max_epochs: 150
+        max_epochs: 200
         # detect_anomaly: false
         # gradient_clip_val: 0.0
     data_source: ${surveys.dc2}
@@ -114,4 +117,4 @@ train:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
             monitor: val/_loss
             mode: min
-            patience: 100
+            patience: 200

@@ -372,9 +372,9 @@ class LatentDiffusionModel(DiffusionModel):
         sample_dict = super().sample(input_image, return_inter_output)
         sample_dict["final_pred"] = self._decode_target(sample_dict["inter_x_start"])
         return sample_dict
+    
 
-
-class YNetDiffusionModel(DiffusionModel):
+class NoLatentDiffusionModel(DiffusionModel):
     def _clip_func(self, x):
         return self.catalog_parser.clip_tensor(x.permute([0, 2, 3, 1])).permute([0, 3, 1, 2])
     
@@ -393,6 +393,12 @@ class YNetDiffusionModel(DiffusionModel):
         sample_dict = super().sample(input_image, return_inter_output)
         sample_dict["final_pred"] = self.catalog_parser.clip_tensor(sample_dict["inter_x_start"].permute([0, 2, 3, 1]))
         return sample_dict
+
+class YNetDiffusionModel(NoLatentDiffusionModel):
+    pass
+
+class SimpleNetDiffusionModel(NoLatentDiffusionModel):
+    pass
 
 
 class DoubleDetectDiffusionModel(DiffusionModel):
@@ -494,4 +500,3 @@ class YNetDoubleDetectDiffusionModel(DoubleDetectDiffusionModel):
         sample_dict["double_detect"] = self._merge_tile_cat(sample1, sample2,
                                                             locs_slack=locs_slack)
         return sample_dict
-    

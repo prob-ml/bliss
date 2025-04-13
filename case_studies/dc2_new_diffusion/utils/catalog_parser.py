@@ -3,6 +3,7 @@ from typing import List
 
 import torch
 import math
+import logging
 from einops import rearrange, repeat
 
 from bliss.catalog import TileCatalog
@@ -66,12 +67,13 @@ class DiffusionFactor:
 
     def encode(self, true_tile_cat: TileCatalog):
         target = self.encode_tile_cat(true_tile_cat)
-        gating = self._loss_gating(true_tile_cat)
-        if gating.shape != target.shape:
-            assert gating.shape == target.shape[:-1]
-            target = torch.where(gating.unsqueeze(-1) > 0, target, 0)
-        else:  # for n_sources gating
-            target = torch.where(gating > 0, target, 0)
+        if self.name != "fluxes":  # for fluxes, the null flux has special encoding
+            gating = self._loss_gating(true_tile_cat)
+            if gating.shape != target.shape:
+                assert gating.shape == target.shape[:-1]
+                target = torch.where(gating.unsqueeze(-1) > 0, target, 0)
+            else:  # for n_sources gating
+                target = torch.where(gating > 0, target, 0)
         assert not torch.isnan(target).any()
         return target
 
@@ -105,7 +107,10 @@ class CatalogParser(torch.nn.Module):
         # ensure the first factor is n_sources
         # this is designed for the "empty_tile_random_noise" in diffusion model
         # "craft_fake_data" also needs this feature
-        assert self.factors[0].name == "n_sources" or self.factors[0].name == "n_sources_multi"
+        if self.factors[0].name != "n_sources" and self.factors[0].name != "n_sources_multi":
+            logger = logging.getLogger("CatalogParser")
+            warning_msg = "WARNING: the first factor is neither 'n_sources' nor 'n_sources_multi'; please make sure this is intended"
+            logger.warning(warning_msg)
 
     @property
     def n_params_per_source(self):
@@ -135,7 +140,11 @@ class CatalogParser(torch.nn.Module):
                 d["n_sources"] = rearrange((d[qk.name] > 0).to(dtype=d[qk.name].dtype),
                                            "b h w 1 1 -> b h w")
                 d["n_sources_multi"] = d[qk.name]  # (b, h, w, 1, 1)
-        return TileCatalog(d)
+        if "locs" in d:
+            return TileCatalog(d)
+        else:
+            # for cases where we don't predict locs
+            return d
 
     def gating_loss(self, loss: torch.Tensor, true_tile_cat: TileCatalog):
         loss_gating = torch.cat(
@@ -233,11 +242,16 @@ class LogNormalizedFactor(DiffusionFactor):
         assert true_tile_cat[self.name].shape[-2] == 1
         assert true_tile_cat[self.name].shape[-1] == self.n_params
         target = true_tile_cat[self.name][..., 0, :]  # (b, h, w, k)
+        target_n_sources = true_tile_cat["n_sources"]  # (b, h, w)
         log_target = torch.log1p(target - self.data_min)
         log_target_minus_1_to_1 = (log_target - self.log_data_min) / (self.log_data_max - self.log_data_min) * 2 - 1
-        masked_log_target_minus_1_to_1 = torch.where(torch.isnan(target), 
-                                                     torch.zeros_like(log_target_minus_1_to_1), 
-                                                     log_target_minus_1_to_1)
+        # masked_log_target_minus_1_to_1 = torch.where(torch.isnan(target), 
+        #                                              torch.zeros_like(log_target_minus_1_to_1), 
+        #                                              log_target_minus_1_to_1)
+        assert not torch.isnan(target).any()
+        masked_log_target_minus_1_to_1 = torch.where((target_n_sources > 0).unsqueeze(-1),
+                                                     log_target_minus_1_to_1,
+                                                     -1 * torch.ones_like(log_target_minus_1_to_1))
         assert ((masked_log_target_minus_1_to_1 >= -1.0) & (masked_log_target_minus_1_to_1 <= 1.0)).all()
         return log_target_minus_1_to_1 * self.scale
 
