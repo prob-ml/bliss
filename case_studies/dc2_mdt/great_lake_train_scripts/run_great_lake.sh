@@ -1,0 +1,2 @@
+sbatch case_studies/dc2_mdt/great_lake_train_scripts/run_great_lake.sbatch
+sbatch case_studies/dc2_mdt/great_lake_train_scripts/run_great_lake_debug.sbatch
