@@ -25,7 +25,7 @@ mkdir -p /scratch/regier_root/regier0/pduan/posterior_cached_files
 mkdir -p logs
 
 echo "prepare data"
-rsync -av --info=progress2 \
+rsync -a \
    /scratch/regier_root/regier0/pduan/dc2local/dc2_cached_data \
    /tmpssd/pduan/dc2local/
 
@@ -48,7 +48,9 @@ function run_exp() {
             train.trainer.logger.version=${exp_name} \
             train.trainer.devices=${cuda_device_tag}
 
-        best_ck_point=$(find ~/bliss_output/DC2_mdt_exp/${exp_name}/checkpoints/ -name '*.ckpt' | sort | head -n1 | xargs -- basename)
+        best_ck_point_path=$(find ~/bliss_output/DC2_mdt_exp/${exp_name}/checkpoints/ -name '*.ckpt' | sort | head -n1)
+        best_ck_point=$(basename "${best_ck_point_path}")
+        echo "best checkpoint is [${best_ck_point}] at [${best_ck_point_path}]"
 
         poetry run python case_studies/dc2_mdt/inference.py \
             --model-tag-name=${task_name} \
