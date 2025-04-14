@@ -15,7 +15,7 @@ dc2_max_flux: 22025.0
 
 surveys:
   dc2:
-    batch_size: 64
+    batch_size: 128
 
 my_diffusion_factors:
   - _target_: case_studies.dc2_mdt.utils.catalog_parser.OneBitFactor
@@ -69,7 +69,7 @@ encoder:
     tile_slen: ${surveys.dc2.tile_slen}
     simple_net_type: simple_net
     use_speed_sampler: false
-    d_objective: velocity
+    d_objective: noise
     d_beta_schedule: linear
     d_learn_sigma: true
     d_training_timesteps: 1000
@@ -104,8 +104,8 @@ train:
     trainer:
         logger:
             name: DC2_mdt_exp
-            version: exp_04-12-3  # change it before running the code
-        devices: [3]  # change it before running the code
+            version: exp_04-14-3  # change it before running the code
+        devices: [6]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
         max_epochs: 100
