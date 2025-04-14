@@ -18,18 +18,30 @@
 module load python/3.10.4 poetry/1.6.1 cuda/12.6.3 cudnn/12.6-v9.6.0
 module list
 
-echo "running on: $SLURM_JOB_NODELIST"
+function print_info() {
+  echo -e "\033[1;34m[INFO]\033[0m $1"
+}
+
+function print_warn() {
+  echo -e "\033[1;33m[WARNING]\033[0m $1"
+}
+
+function print_error() {
+  echo -e "\033[1;31m[ERROR]\033[0m $1"
+}
+
+print_info "running on: $SLURM_JOB_NODELIST"
 
 mkdir -p /tmpssd/pduan/dc2local
 mkdir -p /scratch/regier_root/regier0/pduan/posterior_cached_files
 mkdir -p logs
 
-echo "prepare data"
+print_info "prepare data"
 rsync -a \
    /scratch/regier_root/regier0/pduan/dc2local/dc2_cached_data \
    /tmpssd/pduan/dc2local/
 
-echo "go to bliss"
+print_info "go to bliss"
 cd ~/bliss/
 
 function run_exp() {
@@ -41,18 +53,21 @@ function run_exp() {
 
     {
         set -e
-
+        print_info "training starts"
         poetry run bliss \
             -cp ~/bliss/case_studies/dc2_mdt/mdt_config \
             -cn ${cfg_name} \
             train.trainer.logger.version=${exp_name} \
             train.trainer.devices=${cuda_device_tag}
+        print_info "training ends"
 
         best_ck_point_path=$(find ~/bliss_output/DC2_mdt_exp/${exp_name}/checkpoints/ -name '*.ckpt' | sort | head -n1)
         best_ck_point=$(basename "${best_ck_point_path}")
-        echo "best checkpoint is [${best_ck_point}] at [${best_ck_point_path}]"
+        print_info "best checkpoint is [${best_ck_point}] at [${best_ck_point_path}]"
 
-        poetry run python case_studies/dc2_mdt/inference.py \
+        print_info "inference starts"
+        cd ~/bliss/case_studies/dc2_mdt/
+        poetry run python inference.py \
             --model-tag-name=${task_name} \
             --exp-name=${exp_name} \
             --exp-check-point-name=${best_ck_point} \
@@ -61,19 +76,20 @@ function run_exp() {
             --cuda-idx=${cuda_device} \
             --infer-batch-size=800 \
             --infer-total-iters=500
+        print_info "inference ends"
     } > logs/task_${task_name}.log 2>&1 &
 }
 
 tasks=("mdt" "simple_net" "simple_net_speed" "simple_ar_net" "simple_cond_true_net")
 for i in "${!tasks[@]}"; do
     task_name="${tasks[i]}"
-    echo "run ${task_name}"
+    print_info "run ${task_name}"
     exp_name="great_lake_exp_$(date +"%m-%d")-$((i+1))"
     cuda_device=$i
     run_exp "${task_name}" "${exp_name}" "${cuda_device}"
 done
 
-echo "wait to complete"
+print_info "wait to complete"
 wait
 
-echo "done"
+print_info "done"
