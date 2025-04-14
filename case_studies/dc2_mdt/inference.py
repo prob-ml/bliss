@@ -2,6 +2,7 @@ import torch
 import tqdm
 import os
 import click
+import getpass
 
 from einops import rearrange
 from pathlib import Path
@@ -34,7 +35,8 @@ def main(model_tag_name,
          infer_batch_size, 
          infer_total_iters):
     assert model_tag_name in ["mdt", "simple_net", "simple_net_speed", "simple_ar_net", "simple_cond_true_net"]
-    model_path = f"../../../bliss_output/DC2_mdt_exp/{exp_name}/checkpoints/{exp_check_point_name}"
+    # the relative path fails in a strange way; use absolute path instead
+    model_path = f"/home/{getpass.getuser()}/bliss_output/DC2_mdt_exp/{exp_name}/checkpoints/{exp_check_point_name}"
     cached_data_path = Path(cached_data_path)
     device = torch.device(f"cuda:{cuda_idx}" if torch.cuda.is_available() else "cpu")
     with initialize(config_path="./mdt_config", version_base=None):
