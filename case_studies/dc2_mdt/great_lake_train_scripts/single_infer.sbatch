@@ -8,12 +8,12 @@
 
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gpus-per-node=a40:5
+#SBATCH --gpus-per-node=a40:1
 #SBATCH --cpus-per-gpu=4
 #SBATCH --mem-per-gpu=32GB
 
 ## wall time hours:minutes:seconds
-#SBATCH --time=96:00:00
+#SBATCH --time=48:00:00
 
 module load python/3.10.4 poetry/1.6.1 cuda/12.6.3 cudnn/12.6-v9.6.0
 module list
@@ -29,6 +29,16 @@ function print_warn() {
 function print_error() {
   echo -e "\033[1;31m[ERROR]\033[0m $1"
 }
+
+task_name=$1
+print_info "task_name: ${task_name}"
+exp_name=$2
+print_info "exp_name: ${exp_name}"
+infer_batch_size=$3
+print_info "infer_batch_size: ${infer_batch_size}"
+infer_total_iters=$4
+print_info "infer_total_iters: ${infer_total_iters}"
+
 
 print_info "running on: $SLURM_JOB_NODELIST"
 
@@ -48,19 +58,10 @@ function run_exp() {
     task_name=$1
     exp_name=$2
     cuda_device=$3
-    cuda_device_tag="[${cuda_device}]"
     cfg_name="${task_name}_train_config_gl"
 
     {
         set -e
-        print_info "training starts"
-        poetry run bliss \
-            -cp ~/bliss/case_studies/dc2_mdt/mdt_config \
-            -cn ${cfg_name} \
-            train.trainer.logger.version=${exp_name} \
-            train.trainer.devices=${cuda_device_tag}
-        print_info "training ends"
-
         best_ck_point_path=$(find ~/bliss_output/DC2_mdt_exp/${exp_name}/checkpoints/ -name '*.ckpt' | sort | head -n1)
         best_ck_point=$(basename "${best_ck_point_path}")
         print_info "best checkpoint is [${best_ck_point}] at [${best_ck_point_path}]"
@@ -74,20 +75,14 @@ function run_exp() {
             --cfg-name=${cfg_name} \
             --cached-data-path=/scratch/regier_root/regier0/pduan/posterior_cached_files \
             --cuda-idx=${cuda_device} \
-            --infer-batch-size=800 \
-            --infer-total-iters=500
+            --infer-batch-size=${infer_batch_size} \
+            --infer-total-iters=${infer_total_iters}
         print_info "inference ends"
-    } > logs/task_${task_name}_${exp_name}.log 2>&1 &
+    } > logs/infer_task_${task_name}_${exp_name}.log 2>&1 &
 }
 
-tasks=("mdt" "simple_net" "simple_net_speed" "simple_ar_net" "simple_cond_true_net")
-for i in "${!tasks[@]}"; do
-    task_name="${tasks[i]}"
-    print_info "run ${task_name}"
-    exp_name="great_lake_exp_$(date +"%m-%d")-$((i+1))"
-    cuda_device=$i
-    run_exp "${task_name}" "${exp_name}" "${cuda_device}"
-done
+cuda_device=0
+run_exp "${task_name}" "${exp_name}" "${cuda_device}"
 
 print_info "wait to complete"
 wait

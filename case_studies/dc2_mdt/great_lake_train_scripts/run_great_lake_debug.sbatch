@@ -78,7 +78,7 @@ function run_exp() {
             --infer-batch-size=32 \
             --infer-total-iters=10
         print_info "inference ends"
-    } > logs/task_${task_name}.log 2>&1 &
+    } > logs/debug_task_${task_name}_${exp_name}.log 2>&1 &
 }
 
 tasks=("simple_net" "simple_net_speed")
