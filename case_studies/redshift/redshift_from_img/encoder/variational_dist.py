@@ -273,7 +273,7 @@ class BSpline1D(Distribution):
         integrals = torch.trapezoid(y=exped, x=t_values, axis=0)
 
         one_hotted = self.one_hot_nearest_index(t_values, theta)
-        nums = torch.mul(one_hotted, exped.T).sum(-1)
+        nums = torch.mul(one_hotted, spline_curve_vals.T).sum(-1)
         lps = (nums - torch.log(integrals))
         lps = einops.rearrange(lps, '(b l w) -> b l w', b=value.shape[0], l=value.shape[1], w=value.shape[2])
         return lps
