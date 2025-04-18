@@ -1,6 +1,6 @@
 import torch
 from einops import rearrange
-from torch.distributions import Categorical, Distribution
+from torch.distributions import Categorical, Distribution, Normal, MixtureSameFamily
 
 from bliss.catalog import BaseTileCatalog
 from bliss.encoder.variational_dist import VariationalDist, VariationalFactor
@@ -295,5 +295,48 @@ class BSplineFactor1D(VariationalFactor):
 
     def discrete_sample(self):
         raise NotImplementedError("Sampling from B-spline is not implemented yet.")
+
+
+class MixtureOfGaussians1D(Distribution):
+    """A mixture of Gaussians distribution in 1D."""
+
+    def __init__(self, params, n_comp=5, min_val=0, max_val=3):
+        assert n_comp == params.shape[-1] // 3
+        super().__init__(validate_args=False)
+        self.n_comp = n_comp
+        self.means = params[..., :n_comp]
+        self.log_stds = params[..., n_comp:2 * n_comp].clamp(-20., 20.)
+        self.weights = params[..., 2 * n_comp:]
+        self.weights = torch.nn.functional.softmax(self.weights, dim=-1)
+        self.stds = torch.exp(self.log_stds)
+        mix = Categorical(probs=self.weights)
+        comp = Normal(self.means, self.stds)
+        self.mixture = MixtureSameFamily(mix, comp)
+        self.grid = torch.linspace(min_val, max_val, 1000, device=params.device)
+        self.rgrid = einops.repeat(self.grid, 'g -> g b l w', b=params.shape[0], l=params.shape[1], w=params.shape[2])
+        self.pdf = self.mixture.log_prob(self.rgrid).exp()
+        
+    def sample(self, sample_shape=()):
+        raise NotImplementedError("Sampling from MDN is not implemented yet.")
+
+    @property
+    def mode(self):
+        to_select = self.pdf.argmax(dim=0)
+        selected = self.grid[to_select]
+        return selected
+
+    def log_prob(self, value):
+        return self.mixture.log_prob(value)
+        
+
+class MixtureOfGaussiansFactor1D(VariationalFactor):
+    def __init__(self, n_comp, *args, **kwargs):
+        super().__init__(n_comp*3, *args, **kwargs) # num_knots is the number of params
+        
+    def get_dist(self, params):
+        return MixtureOfGaussians1D(params)
+
+    def discrete_sample(self):
+        raise NotImplementedError("Sampling from MDN is not implemented yet.")
         
 
