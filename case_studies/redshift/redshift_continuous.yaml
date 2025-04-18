@@ -7,7 +7,7 @@ defaults:
 paths:
   root: /home/declan/bliss
   data_dir: /data/scratch/declan/redshift/dc2
-  processed_data_dir_bliss: ${paths.data_dir}/processed_dc2
+  processed_data_dir_bliss: ${paths.data_dir}/cached_dc2
   processed_data_dir_rail: ${paths.data_dir}/processed_dc2_rail
   dc2: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
   ckpt_dir: ${paths.data_dir}/checkpoints/continuous/checkpoints
