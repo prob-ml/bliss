@@ -33,18 +33,18 @@ class RedshiftsEncoder(Encoder):
     def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
 
-        # for risk_type in self.discrete_metrics.keys():
-        #     mode_cat = self.discrete_sample(batch, use_mode=True, risk_type=risk_type)
-        #     matching = self.matcher.match_catalogs(target_cat, mode_cat)
-        #     self.discrete_metrics[risk_type].update(target_cat, mode_cat, matching)
+        for risk_type in self.discrete_metrics.keys():
+            mode_cat = self.discrete_sample(batch, use_mode=True, risk_type=risk_type)
+            matching = self.matcher.match_catalogs(target_cat, mode_cat)
+            self.discrete_metrics[risk_type].update(target_cat, mode_cat, matching)
 
         mode_cat = self.sample(batch, use_mode=True)
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
         self.mode_metrics.update(target_cat, mode_cat, matching)
 
-        # sample_cat = self.sample(batch, use_mode=False)
-        # matching = self.matcher.match_catalogs(target_cat, sample_cat)
-        # self.sample_metrics.update(target_cat, sample_cat, matching)
+        sample_cat = self.sample(batch, use_mode=False)
+        matching = self.matcher.match_catalogs(target_cat, sample_cat)
+        self.sample_metrics.update(target_cat, sample_cat, matching)
 
     def on_validation_epoch_end(self):
         # https://github.com/Lightning-AI/pytorch-lightning/discussions/2529
