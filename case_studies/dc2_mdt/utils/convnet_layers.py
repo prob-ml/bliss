@@ -52,7 +52,7 @@ class C3(nn.Module):
 
 
 class FeaturesNet(nn.Module):
-    def __init__(self, n_bands, ch_per_band, num_features):
+    def __init__(self, n_bands, ch_per_band, num_features, double_downsample=True):
         super().__init__()
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, 64, [ch_per_band, 5, 5], padding=[0, 2, 2]),
@@ -63,7 +63,7 @@ class FeaturesNet(nn.Module):
         self.downsample_net = nn.Sequential(
             ConvBlock(64, 64, kernel_size=5),
             nn.Sequential(*[ConvBlock(64, 64, kernel_size=5) for _ in range(3)]),
-            ConvBlock(64, 64, stride=2),  # 40x40
+            ConvBlock(64, 64, stride=2 if double_downsample else 1),  # 40x40
             C3(64, 64, n=3),
             ConvBlock(64, 128, stride=2),  # 20x20
             C3(128, num_features, n=3),
@@ -75,7 +75,7 @@ class FeaturesNet(nn.Module):
 
 
 class UShapeFeaturesNet(nn.Module):
-    def __init__(self, n_bands, ch_per_band, num_features):
+    def __init__(self, n_bands, ch_per_band, num_features, double_downsample=True):
         super().__init__()
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, 64, [ch_per_band, 5, 5], padding=[0, 2, 2]),
@@ -84,6 +84,7 @@ class UShapeFeaturesNet(nn.Module):
         )
 
         # tile_slen is 4 (rather than 2)
+        self.double_downsample = double_downsample
         self.downsample_net = nn.Sequential(
             ConvBlock(64, 64, stride=2),  # 2
             C3(64, 64, n=3),
@@ -116,6 +117,6 @@ class UShapeFeaturesNet(nn.Module):
                 x = torch.cat((x, save_lst[1]), dim=1)
             if i == 10:
                 x = torch.cat((x, save_lst[0]), dim=1)
-            if i == 1:
+            if i == 1 and self.double_downsample:
                 x = self.downsample_net(x)
         return x

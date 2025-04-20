@@ -191,8 +191,8 @@ class Encoder(pl.LightningModule):
         return self.color_context_net(color_context)
 
     def get_features(self, batch):
-        assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
-        assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
+        assert batch["images"].size(2) % 8 == 0, "image dims must be multiples of 8"
+        assert batch["images"].size(3) % 8 == 0, "image dims must be multiples of 8"
 
         input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
         inputs = torch.cat(input_lst, dim=2)

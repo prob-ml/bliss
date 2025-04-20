@@ -6,41 +6,22 @@ defaults:
 
 mode: train
 
-dc2_min_flux: 0.0
-dc2_min_log_flux: 0.0
-# dc2_max_log_flux: 23.43
-dc2_max_log_flux: 10.0
-# dc2_max_flux: inf
-dc2_max_flux: 22025.0
+paths:
+    cached_data: /data/scratch/regier/m2_aug30
 
-surveys:
-  dc2:
-    batch_size: 64
+m2_flux_cutoffs:
+  - 1.579929
+  - 4.371297
+  - 12.804317
+  - 139.696472
 
 my_diffusion_factors:
-  - _target_: case_studies.dc2_mdt.utils.catalog_parser.OneBitFactor
-    n_params: 1
-    name: n_sources
-    bit_value: 1.0
-    threshold: 0.0
-    sample_rearrange: b ht wt 1 -> b ht wt
-    loss_gating: null
-  - _target_: case_studies.dc2_mdt.utils.catalog_parser.NormalizedFactor
-    n_params: 2
-    name: locs
-    data_min: 0.0
-    data_max: 1.0
-    scale: 1.0
-    latent_zero_point: 0.0
-    sample_rearrange: b ht wt d -> b ht wt 1 d
-    loss_gating:
-      _target_: case_studies.dc2_mdt.utils.catalog_parser.SourcesGating
   - _target_: case_studies.dc2_mdt.utils.catalog_parser.LogNormalizedFactor
-    n_params: 6
+    n_params: 1
     name: fluxes
-    data_min: ${dc2_min_flux}
-    log_data_min: ${dc2_min_log_flux}
-    log_data_max: ${dc2_max_log_flux}
+    data_min: 0.0
+    log_data_min: 0.0
+    log_data_max: 10.0
     scale: 1.0
     latent_zero_point: -1.0
     sample_rearrange: b ht wt d -> b ht wt 1 d
@@ -48,27 +29,27 @@ my_diffusion_factors:
       _target_: case_studies.dc2_mdt.utils.catalog_parser.SourcesGating
 
 my_metrics:
-  detection_performance:
-    _target_: case_studies.dc2_mdt.utils.metrics.DetectionPerformance
   flux_error:
     _target_: bliss.encoder.metrics.FluxError
     survey_bands: ${encoder.survey_bands}
-    base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631e9  # for DC2
-    report_bin_unit: mag
+    base_flux_bin_cutoffs: ${m2_flux_cutoffs}
+    mag_zero_point: 1e9
+    report_bin_unit: flux
+    ref_band: 0
 
 my_image_normalizers:
+  clahe:
+    _target_: bliss.encoder.image_normalizer.ClaheNormalizer
+    min_stdev: 200
   asinh:
     _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
     q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
 
 encoder:
-    _target_: case_studies.dc2_mdt.utils.encoder.SimpleNetEncoder
-    survey_bands: [u, g, r, i, z, y]
-    reference_band: 2
-    tile_slen: ${surveys.dc2.tile_slen}
-    simple_net_type: simple_net
-    use_speed_sampler: false
+    _target_: case_studies.dc2_mdt.utils.encoder.M2SimpleNetEncoder
+    survey_bands: ['r']
+    reference_band: 0
+    tile_slen: 2
     d_objective: noise
     d_beta_schedule: linear
     d_learn_sigma: true
@@ -77,7 +58,7 @@ encoder:
     d_sampling_timesteps: 5
     ddim_eta: 0.0
     acc_grad_batches: 1
-    max_fluxes: ${dc2_max_flux}
+    max_fluxes: "inf"
     optimizer_params:
         lr: 1e-3
         amsgrad: true  # to make adam more stable
@@ -88,30 +69,59 @@ encoder:
     catalog_parser:
         _target_: case_studies.dc2_mdt.utils.catalog_parser.CatalogParser
         factors: ${my_diffusion_factors}
-    image_size: [80, 80]
+    image_size: [40, 40]
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
-        dist_slack: 1.0
-        mag_slack: null
-        mag_band: 2  # SDSS r-band
+        dist_slack: 0.5
+        mag_slack: 0.5
+        mag_band: 0
     mode_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
         compute_groups: false
         metrics: ${my_metrics}
 
+cached_simulator:
+    cached_data_path: ${paths.cached_data}
+    batch_size: 256
+    num_workers: 16
+    train_transforms:
+        - _target_: bliss.cached_dataset.OneBandTransform
+          band_idx: 2
+        - _target_: case_studies.dc2_mdt.utils.transform.RandomCropTransform
+          box_slen: 40
+          boundary_pad: 10
+        - _target_: bliss.cached_dataset.FullCatalogToTileTransform
+          tile_slen: 2
+          max_sources: 12
+        - _target_: bliss.cached_dataset.FluxFilterTransform
+          reference_band: 0  # formerly 2 before the OneBandTransform
+          min_flux: 0.9419
+        - _target_: bliss.data_augmentation.RotateFlipTransform
+    nontrain_transforms:
+        - _target_: bliss.cached_dataset.OneBandTransform
+          band_idx: 2
+        - _target_: case_studies.dc2_mdt.utils.transform.RandomCropTransform
+          box_slen: 40
+          boundary_pad: 10
+        - _target_: bliss.cached_dataset.FullCatalogToTileTransform
+          tile_slen: 2
+          max_sources: 12
+        - _target_: bliss.cached_dataset.FluxFilterTransform
+          reference_band: 0
+          min_flux: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
+
 train:
     trainer:
         logger:
-            name: DC2_mdt_exp
-            version: exp_04-15-1  # change it before running the code
+            name: M2_mdt_exp
+            version: exp_04-20-1  # change it before running the code
         devices: [6]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
         max_epochs: 100
         # detect_anomaly: false
         # gradient_clip_val: 0.0
-    data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: 7272
     callbacks:
