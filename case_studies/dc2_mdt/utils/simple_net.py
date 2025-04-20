@@ -98,7 +98,8 @@ class SimpleNet(nn.Module):
         super().__init__()
 
         self.num_features = 256
-        self.features_net = UShapeFeaturesNet(n_bands, ch_per_band, self.num_features)
+        self.n_bands = n_bands
+        self.ch_per_band = ch_per_band
 
         self.in_ch = in_ch
         self.out_ch = out_ch
@@ -108,6 +109,16 @@ class SimpleNet(nn.Module):
         self.spatial_cond_layers = spatial_cond_layers
         self.learn_sigma = learn_sigma
 
+        self.fast_inference_mode = False
+        self.buffer_image = None
+        self.buffer_image_feats = None
+
+        self.initialize_networks()
+
+    def initialize_features_net(self):
+        self.features_net = UShapeFeaturesNet(self.n_bands, self.ch_per_band, self.num_features)
+
+    def initialize_time_mlp(self):
         self.time_mlp = nn.Sequential(
             PositionalEncoding(self.dim), 
             nn.Linear(self.dim, self.time_emb_dim),
@@ -115,13 +126,7 @@ class SimpleNet(nn.Module):
             nn.Linear(self.time_emb_dim, self.time_emb_dim),
         )
 
-        self.fast_inference_mode = False
-        self.buffer_image = None
-        self.buffer_image_feats = None
-
-        self.initialize_networks()
-
-    def initialize_networks(self):
+    def initialize_diffusion_layers(self):
         self.cond_layers = nn.ModuleList([ResnetBlock(self.in_ch + self.num_features 
                                                       if i == 0 else self.dim, 
                                                       self.dim, 
@@ -137,6 +142,11 @@ class SimpleNet(nn.Module):
                       self.out_ch if not self.learn_sigma else 2 * self.out_ch, 
                       kernel_size=(1, 1))
         )
+
+    def initialize_networks(self):
+        self.initialize_features_net()
+        self.initialize_time_mlp()
+        self.initialize_diffusion_layers()
 
     def get_image_feats(self, image):
         if self.fast_inference_mode:
@@ -158,7 +168,7 @@ class SimpleNet(nn.Module):
 
 
 class SimpleARNet(SimpleNet):
-    def initialize_networks(self):
+    def initialize_diffusion_layers(self):
         n_sources_out_ch = 1 if not self.learn_sigma else 2
         n_sources_dim = self.dim // 2
         other_out_ch = self.out_ch - 1 if not self.learn_sigma else 2 * self.out_ch - 2
@@ -217,7 +227,7 @@ class SimpleARNet(SimpleNet):
 
 
 class SimpleCondTrueNet(SimpleNet):
-    def initialize_networks(self):
+    def initialize_diffusion_layers(self):
         self.cond_layers = nn.ModuleList([ResnetBlock(self.in_ch + self.num_features + 1 
                                                       if i == 0 else self.dim, 
                                                       self.dim, 
@@ -245,3 +255,34 @@ class SimpleCondTrueNet(SimpleNet):
         for resnet_block in self.cond_layers:
             x = resnet_block(x, t)
         return self.final_conv(x)
+
+
+class M2SimpleNet(SimpleNet):
+    def initialize_features_net(self):
+        self.features_net = UShapeFeaturesNet(self.n_bands, self.ch_per_band, self.num_features, double_downsample=False)
+
+    def initialize_diffusion_layers(self):
+        self.cond_layers = nn.ModuleList([ResnetBlock(self.in_ch + self.num_features + 6 
+                                                      if i == 0 else self.dim, 
+                                                      self.dim, 
+                                                      time_emb_dim=self.time_emb_dim, 
+                                                      spatial=self.spatial_cond_layers)
+                                          for i in range(self.num_cond_layers)])
+     
+        self.final_conv = nn.Sequential(
+            ConvBlock(self.dim, self.dim, kernel_size=1),
+            C3(self.dim, self.dim, n=3, spatial=False),
+            ConvBlock(self.dim, self.dim, kernel_size=1),
+            nn.Conv2d(self.dim, 
+                      self.out_ch if not self.learn_sigma else 2 * self.out_ch, 
+                      kernel_size=(1, 1))
+        )
+
+    def forward(self, x, t, image, true_n_sources_and_locs):
+        image_feats = self.get_image_feats(image)
+        x = torch.cat([x, image_feats, true_n_sources_and_locs], dim=1)
+        t = self.time_mlp(t)
+        for resnet_block in self.cond_layers:
+            x = resnet_block(x, t)
+        return self.final_conv(x)
+        

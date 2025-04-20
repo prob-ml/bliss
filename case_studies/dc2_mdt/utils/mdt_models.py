@@ -243,79 +243,96 @@ class MDTv2(nn.Module):
         mask_ratio,
     ):
         super().__init__()
+        self.image_n_bands = image_n_bands
+        self.image_ch_per_band = image_ch_per_band
+        self.image_feats_ch = image_feats_ch
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.depth = depth
+        self.mlp_ratio = mlp_ratio
+        self.mask_ratio = mask_ratio
+
         self.learn_sigma = learn_sigma
         self.in_channels = in_channels
         self.out_channels = in_channels * 2 if learn_sigma else in_channels
         self.patch_size = patch_size
         self.num_heads = num_heads
         self.decode_layers = int(decode_layers)
-
-        self.image_features_net = FeaturesNet(image_n_bands, image_ch_per_band, image_feats_ch)
         
         self.fast_inference_mode = False
         self.buffer_image = None
         self.buffer_image_feats = None
+       
+        self.initialize_networks() 
+        self.initialize_weights()
 
-        assert hidden_size % 8 == 0
-        self.x_embedder = PatchEmbed(input_size, 
-                                     patch_size, 
-                                     in_channels, 
-                                     (hidden_size // 8) * 1, 
+    def initialize_image_feats_net(self):
+        self.image_features_net = FeaturesNet(self.image_n_bands, 
+                                              self.image_ch_per_band, 
+                                              self.image_feats_ch, 
+                                              double_downsample=True)
+    
+    def initialize_embedding(self):
+        assert self.hidden_size % 8 == 0
+        self.x_embedder = PatchEmbed(self.input_size, 
+                                     self.patch_size, 
+                                     self.in_channels, 
+                                     (self.hidden_size // 8) * 1, 
                                      bias=True)
-        self.image_embedder = PatchEmbed(input_size,
-                                         patch_size,
-                                         image_feats_ch,
-                                         (hidden_size // 8) * 7,
+        self.image_embedder = PatchEmbed(self.input_size,
+                                         self.patch_size,
+                                         self.image_feats_ch,
+                                         (self.hidden_size // 8) * 7,
                                          bias=True)
-        self.t_embedder = TimestepEmbedder(hidden_size)
+        self.t_embedder = TimestepEmbedder(self.hidden_size)
         num_patches = self.x_embedder.num_patches
         # Will use learnbale sin-cos embedding:
-        self.pos_embed = nn.Parameter(torch.zeros(
-            1, num_patches, hidden_size), requires_grad=True)
-        
-        assert (depth - self.decode_layers) % 2 == 0
-        half_depth = (depth - self.decode_layers) // 2
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches, self.hidden_size), 
+            requires_grad=True
+        )
+        self.decoder_pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches, self.hidden_size), 
+            requires_grad=True
+        )
+
+    def initialize_networks(self):
+        self.initialize_image_feats_net()
+        self.initialize_embedding()
+
+        num_patches = self.x_embedder.num_patches
+
+        assert (self.depth - self.decode_layers) % 2 == 0
+        half_depth = (self.depth - self.decode_layers) // 2
         self.half_depth = half_depth
         
         self.en_inblocks = nn.ModuleList([
-            MDTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio, num_patches=num_patches) 
+            MDTBlock(self.hidden_size, self.num_heads, mlp_ratio=self.mlp_ratio, num_patches=num_patches) 
             for _ in range(half_depth)
         ])
         self.en_outblocks = nn.ModuleList([
-            MDTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio, num_patches=num_patches, skip=True) 
+            MDTBlock(self.hidden_size, self.num_heads, mlp_ratio=self.mlp_ratio, num_patches=num_patches, skip=True) 
             for _ in range(half_depth)
         ])
         self.de_blocks = nn.ModuleList([
-            MDTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio, num_patches=num_patches, skip=True) 
+            MDTBlock(self.hidden_size, self.num_heads, mlp_ratio=self.mlp_ratio, num_patches=num_patches, skip=True) 
             for _ in range(self.decode_layers)
         ])
         self.sideblocks = nn.ModuleList([
-            MDTBlock(hidden_size, num_heads, mlp_ratio=mlp_ratio, num_patches=num_patches) 
+            MDTBlock(self.hidden_size, self.num_heads, mlp_ratio=self.mlp_ratio, num_patches=num_patches) 
             for _ in range(1)
         ])
-        self.final_layer = FinalLayer(hidden_size, patch_size, self.out_channels)
+        self.final_layer = FinalLayer(self.hidden_size, self.patch_size, self.out_channels)
 
-        self.decoder_pos_embed = nn.Parameter(torch.zeros(
-            1, num_patches, hidden_size), requires_grad=True)
-        if mask_ratio is not None:
-            self.mask_token = nn.Parameter(torch.zeros(1, 1, hidden_size))
-            self.mask_ratio = float(mask_ratio)
+        if self.mask_ratio is not None:
+            self.mask_token = nn.Parameter(torch.zeros(1, 1, self.hidden_size))
+            self.mask_ratio = float(self.mask_ratio)
         else:
-            self.mask_token = nn.Parameter(torch.zeros(1, 1, hidden_size), 
+            self.mask_token = nn.Parameter(torch.zeros(1, 1, self.hidden_size), 
                                            requires_grad=False)
             self.mask_ratio = None
-        
-        self.initialize_weights()
 
-    def initialize_weights(self):
-        # Initialize transformer layers:
-        def _basic_init(module):
-            if isinstance(module, nn.Linear):
-                torch.nn.init.xavier_uniform_(module.weight)
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0)
-        self.apply(_basic_init)
-
+    def initialize_embedding_weights(self):
         # Initialize pos_embed by sin-cos embedding:
         pos_embed = get_2d_sincos_pos_embed(
             self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5))
@@ -331,6 +348,21 @@ class MDTv2(nn.Module):
         w = self.x_embedder.proj.weight.data
         nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
         nn.init.constant_(self.x_embedder.proj.bias, 0)
+
+        iw = self.image_embedder.proj.weight.data
+        nn.init.xavier_uniform_(iw.view([iw.shape[0], -1]))
+        nn.init.constant_(self.image_embedder.proj.bias, 0)
+
+    def initialize_weights(self):
+        # Initialize transformer layers:
+        def _basic_init(module):
+            if isinstance(module, nn.Linear):
+                torch.nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+        self.apply(_basic_init)
+
+        self.initialize_embedding_weights()
 
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
@@ -496,6 +528,93 @@ class MDTv2(nn.Module):
         return x
 
 
+class IntegratedInputPatchEmbed(nn.Module):
+    def __init__(self, input_size, patch_size, in_channels, hidden_size, bias):
+        super().__init__()
+        self.in_channels = in_channels
+        assert hidden_size % 4 == 0
+        assert (hidden_size // 4) * 1 >= in_channels * (patch_size ** 2)
+        self.noised_x_embedder = PatchEmbed(input_size, 
+                                            patch_size, 
+                                            in_channels,
+                                            (hidden_size // 4) * 1, 
+                                            bias=bias)
+        self.num_patches = self.noised_x_embedder.num_patches
+        self.patch_size = self.noised_x_embedder.patch_size
+        assert (hidden_size // 4) * 3 >= 6 * (patch_size ** 2)
+        self.truth_embedder = PatchEmbed(input_size, 
+                                         patch_size, 
+                                         6,  # 6 for true n_sources and locs 
+                                         (hidden_size // 4) * 3, 
+                                         bias=bias)
+    def forward(self, x):
+        assert x.shape[1] == self.in_channels + 6
+        x, true_n_sources_and_locs = x.split([self.in_channels, 6], dim=1)
+        x = self.noised_x_embedder(x)
+        true_n_sources_and_locs = self.truth_embedder(true_n_sources_and_locs)
+        return torch.cat([x, true_n_sources_and_locs], dim=-1)
+
+
+class M2MDTv2CondTrue(MDTv2):
+    def initialize_image_feats_net(self):
+        self.image_features_net = FeaturesNet(self.image_n_bands, 
+                                              self.image_ch_per_band, 
+                                              self.image_feats_ch, 
+                                              double_downsample=False)
+    def initialize_embedding(self):
+        assert self.hidden_size % 8 == 0
+        self.x_embedder = IntegratedInputPatchEmbed(self.input_size, 
+                                                    self.patch_size, 
+                                                    self.in_channels,
+                                                    (self.hidden_size // 8) * 1, 
+                                                    bias=True)
+        self.image_embedder = PatchEmbed(self.input_size,
+                                         self.patch_size,
+                                         self.image_feats_ch,
+                                         (self.hidden_size // 8) * 7,
+                                         bias=True)
+        self.t_embedder = TimestepEmbedder(self.hidden_size)
+        num_patches = self.x_embedder.num_patches
+        # Will use learnbale sin-cos embedding:
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches, self.hidden_size), 
+            requires_grad=True
+        )
+        self.decoder_pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches, self.hidden_size), 
+            requires_grad=True
+        )
+
+    def initialize_embedding_weights(self):
+        # Initialize pos_embed by sin-cos embedding:
+        pos_embed = get_2d_sincos_pos_embed(
+            self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5))
+        self.pos_embed.data.copy_(
+            torch.from_numpy(pos_embed).float().unsqueeze(0))
+
+        decoder_pos_embed = get_2d_sincos_pos_embed(
+            self.decoder_pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5))
+        self.decoder_pos_embed.data.copy_(
+            torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
+
+        # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
+        xw = self.x_embedder.noised_x_embedder.proj.weight.data
+        nn.init.xavier_uniform_(xw.view([xw.shape[0], -1]))
+        nn.init.constant_(self.x_embedder.noised_x_embedder.proj.bias, 0)
+
+        tw = self.x_embedder.truth_embedder.proj.weight.data
+        nn.init.xavier_uniform_(tw.view([tw.shape[0], -1]))
+        nn.init.constant_(self.x_embedder.truth_embedder.proj.bias, 0)
+
+        iw = self.image_embedder.proj.weight.data
+        nn.init.xavier_uniform_(iw.view([iw.shape[0], -1]))
+        nn.init.constant_(self.image_embedder.proj.bias, 0)
+
+    def forward(self, x, t, image, true_n_sources_and_locs, enable_mask=False):
+        x = torch.cat([x, true_n_sources_and_locs], dim=1)
+        return super().forward(x, t, image, enable_mask)
+
+
 #################################################################################
 #                   Sine/Cosine Positional Embedding Functions                  #
 #################################################################################
@@ -570,4 +689,7 @@ def MDTv2_B_2(**kwargs):
 
 def MDTv2_S_2(**kwargs):
     return MDTv2(depth=10, hidden_size=384, patch_size=2, num_heads=6, **kwargs)
+
+def M2_MDTv2_S_2(**kwargs):
+    return M2MDTv2CondTrue(depth=12, hidden_size=384, patch_size=2, num_heads=6, **kwargs)
 

@@ -1,0 +1,12 @@
+---
+defaults:
+    - m2_ori_bliss_train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+train:
+    trainer:
+        logger:
+            name: M2_ori_bliss_debug
+            version: M2_ori_bliss_debug
+        devices: [6]

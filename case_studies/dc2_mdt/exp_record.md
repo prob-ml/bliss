@@ -26,4 +26,21 @@
 1. train a basic simple net (batch_size: 128)
 2. train a basic simple net (batch_size: 64)
 
-3. traina basic sample net (batch_size: 128) pred noise
+3. train a basic simple net (batch_size: 128) pred noise
+
+
+### 04-15 (simple_net)
+
+1. train a basic simple net (batch_size: 64) pred noise
+
+### 04-19 (m2 mdt)
+
+1. run mdt on m2
+
+### 04-20 (m2 simple_net)
+
+1. run simple net on m2
+
+### 04-20 (m2 ori_bliss)
+
+2. run ori bliss on m2

@@ -1,0 +1,12 @@
+---
+defaults:
+    - m2_simple_net_train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+train:
+    trainer:
+        logger:
+            name: M2_mdt_debug
+            version: M2_mdt_debug
+        devices: [3]

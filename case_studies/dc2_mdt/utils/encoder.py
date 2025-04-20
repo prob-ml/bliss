@@ -3,9 +3,11 @@ from typing import Optional
 import pytorch_lightning as pl
 import numpy as np
 import torch
+import copy
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
+from einops import rearrange
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.metrics import CatalogMatcher
@@ -18,9 +20,9 @@ from case_studies.dc2_mdt.utils.gaussian_diffusion import (GaussianDiffusion,
                                                            ModelVarType,
                                                            LossType)
 from case_studies.dc2_mdt.utils.respace import space_timesteps, SpacedDiffusion
-from case_studies.dc2_mdt.utils.mdt_models import MDTv2_S_2
+from case_studies.dc2_mdt.utils.mdt_models import MDTv2_S_2, M2_MDTv2_S_2
 from case_studies.dc2_mdt.utils.resample import create_named_schedule_sampler, ScheduleSampler, SpeedSampler
-from case_studies.dc2_mdt.utils.simple_net import SimpleNet, SimpleARNet, SimpleCondTrueNet
+from case_studies.dc2_mdt.utils.simple_net import SimpleNet, SimpleARNet, SimpleCondTrueNet, M2SimpleNet
 
 
 class DiffusionEncoder(pl.LightningModule):
@@ -143,8 +145,8 @@ class DiffusionEncoder(pl.LightningModule):
         raise NotImplementedError()
 
     def get_image(self, batch):
-        assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
-        assert batch["images"].size(3) % 16 == 0, "image dims must be multiples of 16"
+        assert batch["images"].size(2) % 8 == 0, "image dims must be multiples of 8"
+        assert batch["images"].size(3) % 8 == 0, "image dims must be multiples of 8"
         input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
         return torch.cat(input_lst, dim=2)
 
@@ -155,7 +157,7 @@ class DiffusionEncoder(pl.LightningModule):
             "model": self.my_net,
             "shape": (image.shape[0], 
                       self.catalog_parser.n_params_per_source, 
-                      20, 20),
+                      self.image_size[0] // self.tile_slen, self.image_size[1] // self.tile_slen),
             "clip_denoised": True,
             "model_kwargs": {"image": image}
         }
@@ -424,3 +426,167 @@ class SimpleNetEncoder(DiffusionEncoder):
         loss = (loss_dict["loss"] * batch_sample_weights).mean()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
         return loss
+
+
+class M2DiffusionEncoder(DiffusionEncoder):
+    @torch.inference_mode()
+    def sample(self, batch):
+        image = self.get_image(batch)
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        target_cat2 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=1
+        )
+
+        target_cat1_n_sources = target_cat1["n_sources"].unsqueeze(1)  # (b, 1, h, w)
+        target_cat1_locs = target_cat1["locs"].squeeze(-2).permute(0, 3, 1, 2)  # (b, 2, h, w)
+        target_cat2_n_sources = target_cat2["n_sources"].unsqueeze(1)
+        target_cat2_locs = target_cat2["locs"].squeeze(-2).permute(0, 3, 1, 2)
+
+        true_n_sources_and_locs = torch.cat([target_cat1_n_sources, target_cat1_locs,
+                                             target_cat2_n_sources, target_cat2_locs],
+                                             dim=1)  # (b, 6, h, w)
+        
+        diffusion_sampling_config = {
+            "model": self.my_net,
+            "shape": (image.shape[0], 
+                      self.catalog_parser.n_params_per_source * 2,  # x2 for double detect 
+                      self.image_size[0] // self.tile_slen, self.image_size[1] // self.tile_slen),
+            "clip_denoised": True,
+            "model_kwargs": {"image": image,
+                             "true_n_sources_and_locs": true_n_sources_and_locs}
+        }
+        if self.d_sampling_method == "ddim":
+            sample = self.sampling_diffusion.ddim_sample_loop(**diffusion_sampling_config, 
+                                                              eta=self.ddim_eta)
+        elif self.d_sampling_method == "ddpm":
+            sample = self.sampling_diffusion.p_sample_loop(**diffusion_sampling_config)
+        else:
+            raise NotImplementedError()
+        sample1, sample2 = sample.permute([0, 2, 3, 1]).chunk(2, dim=-1)  # (b, h, w, k)
+        first_cat = self.catalog_parser.decode(sample1)
+        first_cat = self._interpolate_n_sources_and_locs(first_cat, target_cat1)
+        second_cat = self.catalog_parser.decode(sample2)
+        second_cat = self._interpolate_n_sources_and_locs(second_cat, target_cat2)
+        return first_cat.union(second_cat, disjoint=False)
+    
+    def _interpolate_n_sources_and_locs(self, sample_cat_dict, true_tile_cat):
+        sample_cat_dict = copy.copy(sample_cat_dict)
+        sample_n_sources = sample_cat_dict["fluxes"][..., 0, 0] > 0.1  # (b, h, w)
+        t_n_sources = true_tile_cat["n_sources"] > 0  # (b, h, w)
+        sample_cat_dict["n_sources"] = (sample_n_sources & t_n_sources).to(dtype=true_tile_cat["n_sources"].dtype)
+        sample_cat_dict["locs"] = rearrange(sample_cat_dict["n_sources"] > 0, "b h w -> b h w 1 1") * true_tile_cat["locs"]
+        return TileCatalog(sample_cat_dict)
+    
+    def _compute_diffusion_loss(self, loss_args, model_kwargs):
+        raise NotImplementedError()
+    
+    def _compute_cur_batch_loss(self, batch):
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        target_cat2 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=1
+        )
+        target_cat1["fluxes"] = target_cat1["fluxes"].clamp(max=self.max_fluxes)
+        target_cat2["fluxes"] = target_cat2["fluxes"].clamp(max=self.max_fluxes)
+        image = self.get_image(batch)  # (b, c, H, W)
+        encoded_cat1 = self.catalog_parser.encode(target_cat1).permute(0, 3, 1, 2)  # (b, k, h, w)
+        encoded_cat2 = self.catalog_parser.encode(target_cat2).permute(0, 3, 1, 2)  # (b, k, h, w)
+
+        target_cat1_n_sources = target_cat1["n_sources"].unsqueeze(1)  # (b, 1, h, w)
+        target_cat1_locs = target_cat1["locs"].squeeze(-2).permute(0, 3, 1, 2)  # (b, 2, h, w)
+        target_cat2_n_sources = target_cat2["n_sources"].unsqueeze(1)
+        target_cat2_locs = target_cat2["locs"].squeeze(-2).permute(0, 3, 1, 2)
+        
+        t, batch_sample_weights, batch_loss_weights = \
+            self.schedule_sampler.sample(image.shape[0], device=self.device)
+        train_loss_args = {
+            "model": self.my_net,
+            "x_start": torch.cat([encoded_cat1, encoded_cat2], dim=1),
+            "t": t,
+            "loss_weights": batch_loss_weights
+        }
+        true_n_sources_and_locs = torch.cat([target_cat1_n_sources, target_cat1_locs,
+                                             target_cat2_n_sources, target_cat2_locs],
+                                             dim=1)  # (b, 6, h, w)
+        loss_dict = self._compute_diffusion_loss(train_loss_args, model_kwargs={"image": image,
+                                                                                "true_n_sources_and_locs": true_n_sources_and_locs})
+        return loss_dict, batch_sample_weights
+
+    def _compute_loss(self, batch, logging_name):
+        loss_dict, batch_sample_weights = self._compute_cur_batch_loss(batch)
+
+        batch_size = batch["images"].size(0)
+        assert "no_mask_loss" in loss_dict
+        with torch.inference_mode():
+            for k, v in loss_dict["no_mask_loss"].items():
+                self.log(f"{logging_name}/_no_mask_{k}", 
+                         (v * batch_sample_weights).mean(), 
+                         batch_size=batch_size, 
+                         sync_dist=True)
+            if "masked_loss" in loss_dict:
+                for k, v in loss_dict["masked_loss"].items():
+                    self.log(f"{logging_name}/_masked_{k}", 
+                            (v * batch_sample_weights).mean(), 
+                            batch_size=batch_size, 
+                            sync_dist=True)
+        if "masked_loss" in loss_dict:
+            loss = (loss_dict["no_mask_loss"]["loss"] * batch_sample_weights).mean() + \
+                   (loss_dict["masked_loss"]["loss"] * batch_sample_weights).mean()
+        else:
+            loss = (loss_dict["no_mask_loss"]["loss"] * batch_sample_weights).mean()
+        self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
+        return loss
+
+
+class M2MDTEncoder(M2DiffusionEncoder):
+    def initialize_networks(self):
+        assert self.tile_slen == 2
+        assert self.image_size[0] == self.image_size[1]
+        # assert self.image_size[0] == 112
+        target_ch = self.catalog_parser.n_params_per_source * 2  # x2 for double detect
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+        self.my_net = M2_MDTv2_S_2(image_n_bands=len(self.survey_bands), 
+                                    image_ch_per_band=ch_per_band, 
+                                    image_feats_ch=128, 
+                                    input_size=self.image_size[0] // self.tile_slen, 
+                                    in_channels=target_ch, 
+                                    decode_layers=6,
+                                    mask_ratio=0.3,
+                                    mlp_ratio=4.0,
+                                    learn_sigma=self.d_learn_sigma)
+        
+    def _compute_diffusion_loss(self, loss_args, model_kwargs):
+        no_mask_loss = self.training_diffusion.training_losses(**loss_args, model_kwargs=model_kwargs)
+        masked_loss = self.training_diffusion.training_losses(**loss_args, model_kwargs={**model_kwargs, "enable_mask": True})
+        return {
+            "no_mask_loss": no_mask_loss,
+            "masked_loss": masked_loss,
+        }
+        
+
+class M2SimpleNetEncoder(M2DiffusionEncoder):
+    def initialize_networks(self):
+        assert self.tile_slen == 2
+        assert self.image_size[0] == self.image_size[1]
+        # assert self.image_size[0] == 112
+        target_ch = self.catalog_parser.n_params_per_source * 2  # x2 for double detect
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+        self.my_net = M2SimpleNet(n_bands=len(self.survey_bands),
+                                    ch_per_band=ch_per_band,
+                                    in_ch=target_ch,
+                                    out_ch=target_ch,
+                                    dim=64,
+                                    num_cond_layers=8,
+                                    spatial_cond_layers=False,
+                                    learn_sigma=self.d_learn_sigma)
+        
+    def _compute_diffusion_loss(self, loss_args, model_kwargs):
+        no_mask_loss = self.training_diffusion.training_losses(**loss_args, model_kwargs=model_kwargs)
+        return {
+            "no_mask_loss": no_mask_loss,
+        }
