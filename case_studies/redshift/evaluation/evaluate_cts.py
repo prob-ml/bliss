@@ -46,7 +46,7 @@ def main(cfg: DictConfig):
     bliss_output_path = output_dir / "cts_mode_metrics_{}thbest_new_bins.pkl".format(k)
 
     # compute metrics -- continuous version
-    if not bliss_output_path.exists():
+    if not bliss_output_path.exists() or True:
         test_loader = dataset.test_dataloader()
         for batch_idx, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
             batch["images"] = batch["images"].to(device)

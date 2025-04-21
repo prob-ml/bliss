@@ -24,31 +24,45 @@ def main(cfg: DictConfig):
     #     bliss_mode_out_dict = pickle.load(inputp)
     # with open(bliss_discrete_grid_output_path, "rb") as inputp:
     #     bliss_discrete_out_dict = pickle.load(inputp)
+
+    # Do continuous metrics
     with open(bliss_output_path, "rb") as inputp:
         bliss_out_dict = pickle.load(inputp)
 
-    metrics = ["outlier_fraction_cata", "outlier_fraction", "nmad", "bias_abs", "mse"]
+    metrics = ["outlier_fraction_cata", "outlier_fraction", "bias", "bias_abs", "mse"]
     metric_labels = [
         "Catastrophic Outlier Fraction",
         "Outlier Fraction",
-        "NMAD",
+        "Bias",
         "Absolute Bias",
         "MSE",
     ]
     sns.set_theme()
-    for i, metric in enumerate(metrics):
-        save_name = output_dir / f"{metric}_new_bins.pdf"
 
-        # mag_ranges = ["<23.9", "23.9-24.1", "24.1-24.5", "24.5-24.9", "24.9-25.6", ">25.6"]
-        mag_ranges = ["0.5", "1", "1.5", "2", "2.5", "3"]
-        bliss_values = [bliss_out_dict[f"redshifts/{metric}_bin_{i}"] for i in range(6)]
+    # Get all binned metrics to compute
+    metric_names = set(["_".join(x.split("_")[:-1]) for x in bliss_out_dict.keys() if "bin" in x])
+
+
+    for this_metric in metric_names:
+        save_as = this_metric.split("/")[0]
+        save_name = output_dir / run_name/ f"{save_as}_{run_name}.pdf"
+        
+        if "rs" in this_metric.split("_"):
+            bin_labels = ["<0.5", "0.5-1", "1-1.5", "1.5-2", "2-2.5", "2.5-3", ">3"]
+        elif "mag" in this_metric.split("_"):
+            bin_labels = ["<23.9", "23.9-24.1", "24.1-24.5", "24.5-24.9", "24.9-25.6", ">25.6"]
+        else:
+            raise ValueError(f"Unknown metric: {this_metric}")
+
+        num_values = len(bin_labels)
+        bliss_values = [bliss_out_dict[f"{this_metric}_{i}"] for i in range(num_values)]
         # bliss_discrete = [bliss_mode_out_dict[f"redshifts/{metric}_bin_{i}"] for i in range(6)]
         # bliss_discrete_grid = [
         #     bliss_discrete_out_dict[f"redshifts/{metric}_bin_{i}"] for i in range(6)
         # ]
 
         plt.figure(figsize=(6, 6))
-        plt.plot(mag_ranges, bliss_values, label="BLISS+Normal", marker="o", c="blue")
+        plt.plot(bin_labels, bliss_values, label="BLISS+Normal", marker="o", c="blue")
         # plt.plot(mag_ranges, bliss_discrete, label="BLISS+Discrete Bin", marker="o", c="green")
         # plt.plot(
         #     mag_ranges,
@@ -57,9 +71,15 @@ def main(cfg: DictConfig):
         #     marker="o",
         #     c="orange",
         # )
-        plt.xlabel("Redshift Bin")
+        xlabel = "Redshift Bin" if "rs" in this_metric else "Magnitude Bin"
+        ylabel = None
+        for i, metric in enumerate(metrics):
+            if metric in this_metric:
+                ylabel = metric_labels[i]
+                break
+        plt.xlabel(xlabel)
         plt.xticks(rotation=45)
-        plt.ylabel(metric_labels[i])
+        plt.ylabel(ylabel)
         plt.ylim([0, None])
         ax = plt.gca()
         ax.yaxis.set_major_formatter(FormatStrFormatter("%.3f"))
