@@ -24,12 +24,13 @@ def main(cfg: DictConfig):
     k = 0
     output_dir = cfg.paths.plot_dir
     ckpt_dir = cfg.paths.ckpt_dir
+    run_name = ckpt_dir.split("/")[-2]
 
-    output_dir = Path(output_dir)
+    output_dir = Path(output_dir) / run_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
     ckpt_path = get_kth_best_ckpt(ckpt_dir, k)
-    device = torch.device("cuda:7" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:6" if torch.cuda.is_available() else "cpu")
 
     # set up testing dataset
     dataset = instantiate(cfg.train.data_source)

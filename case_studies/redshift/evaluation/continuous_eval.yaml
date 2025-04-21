@@ -5,7 +5,7 @@ defaults:
     # - override hydra/job_logging: stdout
 
 paths:
-    ckpt_dir: ${paths.data_dir}/checkpoints/continuous/checkpoints
+    ckpt_dir: ${paths.data_dir}/checkpoints/continuous_split_0_2025-04-18-14-39-44/checkpoints
     plot_dir: ${paths.data_dir}/plots
 
 # To reduce memory usage
