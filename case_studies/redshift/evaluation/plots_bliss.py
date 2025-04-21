@@ -6,14 +6,17 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 from omegaconf import DictConfig
+from hydra import compose, initialize
 
 
-@hydra.main(config_path=".", config_name="discrete_eval")
+@hydra.main(config_path=".", config_name="continuous_eval")
 def main(cfg: DictConfig):
-    epoch = 45
+    with initialize(config_path="."):
+        cfg = compose(config_name="continuous_eval")
     output_dir = Path(cfg.paths.plot_dir)
+    run_name = cfg.paths.ckpt_dir.split("/")[-2]
     # Load metric results
-    bliss_output_path = output_dir / "cts_mode_metrics_0thbest_new_bins.pkl"
+    bliss_output_path = output_dir / run_name / "cts_mode_metrics_0thbest_new_bins.pkl"
     # bliss_discrete_output_path = output_dir / "discrete_mode_metrics_{}.pkl".format(epoch)
     # bliss_discrete_grid_output_path = output_dir / "discrete_grid_metrics_{}.pkl".format(epoch)
 
