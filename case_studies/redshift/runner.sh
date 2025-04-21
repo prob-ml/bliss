@@ -4,7 +4,7 @@ export OUT_DIR="/data/scratch/declan/redshift/dc2/training_logs"
 export OMP_NUM_THREADS="16"
 export MKL_NUM_THREADS="16"
 export NUMEXPR_NUM_THREADS="16"
-export CUDA_VISIBLE_DEVICES=7
+export CUDA_VISIBLE_DEVICES=6
 
 timestamp=$(date "+%Y-%m-%d-%H-%M-%S")
 

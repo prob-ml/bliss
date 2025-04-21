@@ -7,7 +7,7 @@ defaults:
 paths:
   root: /home/declan/bliss
   data_dir: /data/scratch/declan/redshift/dc2
-  processed_data_dir_bliss: ${paths.data_dir}/processed_dc2
+  processed_data_dir_bliss: ${paths.data_dir}/cached_dc2
   processed_data_dir_rail: ${paths.data_dir}/processed_dc2_rail
   dc2: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
   ckpt_dir: ${paths.data_dir}/checkpoints/discrete/checkpoints
@@ -175,7 +175,7 @@ train:
             save_top_k: 5
             verbose: True
             #  monitor: val/_loss
-            monitor: val/mode/redshifts/mse
+            monitor: val/mode/redshift_mean_square_error_redshifts/mse
             mode: min
         early_stopping:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
