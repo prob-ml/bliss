@@ -11,5 +11,5 @@ paths:
 # To reduce memory usage
 surveys:
     dc2:
-        batch_size: 4
+        batch_size: 32
         max_sources_per_tile: 5

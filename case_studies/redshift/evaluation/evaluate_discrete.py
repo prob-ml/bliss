@@ -48,7 +48,7 @@ def main(cfg: DictConfig):
     bliss_discrete_grid_output_path = output_dir / "discrete_grid_metrics_{}thbest.pkl".format(k)
 
     # compute metrics -- discrete version
-    if not bliss_discrete_output_path.exists():
+    if not bliss_discrete_output_path.exists() or True:
         test_loader = dataset.test_dataloader()
         for batch_idx, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
             batch["images"] = batch["images"].to(device)
@@ -58,12 +58,12 @@ def main(cfg: DictConfig):
             batch["psf_params"] = batch["psf_params"].to(device)
             bliss_encoder.update_metrics(batch, batch_idx)
         bliss_mode_out_dict = bliss_encoder.mode_metrics.compute()
-        # bliss_discrete_out_dict = bliss_encoder.discrete_metrics.compute()
+        bliss_discrete_out_dict = bliss_encoder.discrete_metrics.compute()
 
         with open(bliss_discrete_output_path, "wb") as outp:  # Overwrites any existing file.
             pickle.dump(bliss_mode_out_dict, outp, pickle.HIGHEST_PROTOCOL)
-        # with open(bliss_discrete_grid_output_path, "wb") as outp:  # Overwrites any existing file.
-        #     pickle.dump(bliss_discrete_out_dict, outp, pickle.HIGHEST_PROTOCOL)
+        with open(bliss_discrete_grid_output_path, "wb") as outp:  # Overwrites any existing file.
+            pickle.dump(bliss_discrete_out_dict, outp, pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == "__main__":

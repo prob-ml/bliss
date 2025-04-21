@@ -17,13 +17,15 @@ def main(cfg: DictConfig):
     run_name = cfg.paths.ckpt_dir.split("/")[-2]
     # Load metric results
     bliss_output_path = output_dir / run_name / "cts_mode_metrics_0thbest_new_bins.pkl"
-    # bliss_discrete_output_path = output_dir / "discrete_mode_metrics_{}.pkl".format(epoch)
-    # bliss_discrete_grid_output_path = output_dir / "discrete_grid_metrics_{}.pkl".format(epoch)
+    disc_run_name = "discrete_split_0_2025-04-18-15-30-55"
+    bliss_discrete_output_path = output_dir / disc_run_name / "discrete_mode_metrics_0thbest.pkl"
+    bliss_discrete_grid_output_path = output_dir / disc_run_name / "discrete_grid_metrics_0thbest.pkl"
 
-    # with open(bliss_discrete_output_path, "rb") as inputp:
-    #     bliss_mode_out_dict = pickle.load(inputp)
-    # with open(bliss_discrete_grid_output_path, "rb") as inputp:
-    #     bliss_discrete_out_dict = pickle.load(inputp)
+    # Get discrete metrics
+    with open(bliss_discrete_output_path, "rb") as inputp:
+        bliss_mode_out_dict = pickle.load(inputp)
+    with open(bliss_discrete_grid_output_path, "rb") as inputp:
+        bliss_discrete_out_dict = pickle.load(inputp)
 
     # Do continuous metrics
     with open(bliss_output_path, "rb") as inputp:
@@ -56,21 +58,21 @@ def main(cfg: DictConfig):
 
         num_values = len(bin_labels)
         bliss_values = [bliss_out_dict[f"{this_metric}_{i}"] for i in range(num_values)]
-        # bliss_discrete = [bliss_mode_out_dict[f"redshifts/{metric}_bin_{i}"] for i in range(6)]
-        # bliss_discrete_grid = [
-        #     bliss_discrete_out_dict[f"redshifts/{metric}_bin_{i}"] for i in range(6)
-        # ]
+        bliss_discrete = [bliss_mode_out_dict[f"{this_metric}_{i}"] for i in range(num_values)]
+        bliss_discrete_grid = [
+            bliss_discrete_out_dict[f"{this_metric}_{i}"] for i in range(num_values)
+        ]
 
         plt.figure(figsize=(6, 6))
         plt.plot(bin_labels, bliss_values, label="BLISS+Normal", marker="o", c="blue")
-        # plt.plot(mag_ranges, bliss_discrete, label="BLISS+Discrete Bin", marker="o", c="green")
-        # plt.plot(
-        #     mag_ranges,
-        #     bliss_discrete_grid,
-        #     label="BLISS+Discrete Bin w/ Grid Search",
-        #     marker="o",
-        #     c="orange",
-        # )
+        plt.plot(bin_labels, bliss_discrete, label="BLISS+Discrete Bin", marker="o", c="green")
+        plt.plot(
+            bin_labels,
+            bliss_discrete_grid,
+            label="BLISS+Discrete Bin w/ Grid Search",
+            marker="o",
+            c="orange",
+        )
         xlabel = "Redshift Bin" if "rs" in this_metric else "Magnitude Bin"
         ylabel = None
         for i, metric in enumerate(metrics):
