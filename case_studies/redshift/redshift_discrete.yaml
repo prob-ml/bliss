@@ -179,7 +179,7 @@ train:
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
-            filename: encoder_{val/mode/redshifts/mse:.6f}
+            filename: encoder_{val/mode/redshift_mean_square_error_redshifts/mse:.6f}
             save_top_k: 5
             verbose: True
             #  monitor: val/_loss
