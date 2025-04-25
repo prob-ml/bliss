@@ -4,6 +4,8 @@ import numpy as np
 import math
 from timm.models.vision_transformer import PatchEmbed, Mlp
 from timm.layers import trunc_normal_
+from typing import List
+from einops import repeat
 
 from case_studies.dc2_mdt.utils.convnet_layers import FeaturesNet
 
@@ -462,6 +464,8 @@ class MDTv2(nn.Module):
     def get_image_feats(self, image):
         if self.fast_inference_mode:
             if self.buffer_image is None or (not torch.allclose(self.buffer_image, image)):
+                if self.buffer_image is not None:
+                    print("WARNING: in fast inference mode, we update the buffered image")
                 self.buffer_image = image
                 image_feats = self.image_features_net(image)
                 self.buffer_image_feats = self.image_embedder(image_feats)
@@ -613,6 +617,132 @@ class M2MDTv2CondTrue(MDTv2):
     def forward(self, x, t, image, true_n_sources_and_locs, enable_mask=False):
         x = torch.cat([x, true_n_sources_and_locs], dim=1)
         return super().forward(x, t, image, enable_mask)
+    
+
+class DynamicPatchEmbed(nn.Module):
+    def __init__(self, 
+                 input_size, 
+                 patch_size, 
+                 in_channels: List[int], 
+                 hidden_size, 
+                 hidden_partitions: List[int], 
+                 bias):
+        super().__init__()
+        self.in_channels = in_channels
+        total_p = sum(hidden_partitions)
+        assert hidden_size % total_p == 0
+
+        self.embedders = nn.ModuleList()
+        for in_ch, hidden_p in zip(in_channels, hidden_partitions):
+            assert (hidden_size // total_p) * hidden_p >= in_ch * (patch_size ** 2)
+            self.embedders.append(PatchEmbed(input_size, 
+                                             patch_size, 
+                                             in_ch,
+                                             (hidden_size // total_p) * hidden_p, 
+                                             bias=bias)
+                                  )
+        self.num_patches = self.embedders[0].num_patches
+        self.patch_size = self.embedders[0].patch_size
+    
+    def forward(self, x):
+        assert x.shape[1] == sum(self.in_channels)
+        in_feats = x.split(self.in_channels, dim=1)
+        embedded_feats = []
+        for in_f, embedder in zip(in_feats, self.embedders):
+            embedded_feats.append(embedder(in_f))
+        return torch.cat(embedded_feats, dim=-1)
+    
+
+class M2MDTv2CondTrueRML(MDTv2):
+    def initialize_image_feats_net(self):
+        self.image_features_net = FeaturesNet(self.image_n_bands, 
+                                              self.image_ch_per_band, 
+                                              self.image_feats_ch, 
+                                              double_downsample=False)
+    def initialize_embedding(self):
+        assert self.hidden_size % 8 == 0
+        self.x_embedder = DynamicPatchEmbed(self.input_size, 
+                                            self.patch_size, 
+                                            [self.in_channels, 6, self.in_channels],
+                                            (self.hidden_size // 8) * 1, 
+                                            hidden_partitions=[1, 4, 1],
+                                            bias=True)
+        self.image_embedder = PatchEmbed(self.input_size,
+                                         self.patch_size,
+                                         self.image_feats_ch,
+                                         (self.hidden_size // 8) * 7,
+                                         bias=True)
+        self.t_embedder = TimestepEmbedder(self.hidden_size)
+        num_patches = self.x_embedder.num_patches
+        # Will use learnbale sin-cos embedding:
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches, self.hidden_size), 
+            requires_grad=True
+        )
+        self.decoder_pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches, self.hidden_size), 
+            requires_grad=True
+        )
+
+    def initialize_embedding_weights(self):
+        # Initialize pos_embed by sin-cos embedding:
+        pos_embed = get_2d_sincos_pos_embed(
+            self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5))
+        self.pos_embed.data.copy_(
+            torch.from_numpy(pos_embed).float().unsqueeze(0))
+
+        decoder_pos_embed = get_2d_sincos_pos_embed(
+            self.decoder_pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5))
+        self.decoder_pos_embed.data.copy_(
+            torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
+
+        # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
+        for embedder in self.x_embedder.embedders:
+            w = embedder.proj.weight.data
+            nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+            nn.init.constant_(embedder.proj.bias, 0)
+
+    def enter_fast_inference(self):
+        self.fast_inference_mode = True
+        assert self.buffer_image is None
+        assert self.buffer_image_feats is None
+
+    def exit_fast_inference(self):
+        self.fast_inference_mode = False
+        assert self.buffer_image is not None
+        self.buffer_image = None
+        assert self.buffer_image_feats is not None
+        self.buffer_image_feats = None
+
+    def forward(self, x, t, image, true_n_sources_and_locs, epsilon, is_training, enable_mask=False):
+        if is_training:
+            assert x.ndim == 5  # (n, m, c, h, w)
+            assert t.ndim == 2  # (n, m)
+            assert x.shape[:2] == t.shape
+            assert x.shape == epsilon.shape
+            assert true_n_sources_and_locs.ndim == 4  # (n, c, h, w)
+            true_n_sources_and_locs = repeat(true_n_sources_and_locs, "n c h w -> n m c h w", m=x.shape[1])
+            x = torch.cat([x, true_n_sources_and_locs, epsilon], dim=2)  # (n, m, c + 6 + c, h, w)
+            xs = [sub_x.squeeze(1) for sub_x in x.chunk(x.shape[1], dim=1)]  # (n, c + 6 + c, h, w)
+            ts = [sub_t.squeeze(1) for sub_t in t.chunk(t.shape[1], dim=1)]  # (n, )
+            outputs = []
+            self.enter_fast_inference()
+            for cur_x, cur_t in zip(xs, ts):
+                output = super().forward(cur_x, cur_t, image, enable_mask)
+                assert not torch.isnan(output).any()
+                outputs.append(output)
+            self.exit_fast_inference()
+            return torch.stack(outputs, dim=1)  # (n, m, c, h, w)
+        
+        assert x.ndim == 4  # (n, c, h, w)
+        assert t.ndim == 1  # (n, )
+        assert x.shape[0] == t.shape[0]
+        assert x.shape == epsilon.shape
+        assert true_n_sources_and_locs.ndim == 4  # (n, c, h, w)
+        x = torch.cat([x, true_n_sources_and_locs, epsilon], dim=1)  # (n, c + 6 + c, h, w)
+        output = super().forward(x, t, image, enable_mask)  # (n, c, h, w)
+        assert not torch.isnan(output).any()
+        return output
 
 
 #################################################################################
@@ -692,4 +822,7 @@ def MDTv2_S_2(**kwargs):
 
 def M2_MDTv2_S_2(**kwargs):
     return M2MDTv2CondTrue(depth=12, hidden_size=384, patch_size=2, num_heads=6, **kwargs)
+
+def M2_MDTv2_RML_S_2(**kwargs):
+    return M2MDTv2CondTrueRML(depth=12, hidden_size=384, patch_size=2, num_heads=6, **kwargs)
 

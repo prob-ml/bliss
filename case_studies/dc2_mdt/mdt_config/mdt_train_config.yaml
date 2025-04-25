@@ -71,6 +71,7 @@ encoder:
     d_beta_schedule: linear
     d_learn_sigma: true
     d_training_timesteps: 1000
+    d_use_speed_sampler: false
     d_sampling_method: ddim
     d_sampling_timesteps: 5
     ddim_eta: 0.0

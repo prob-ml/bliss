@@ -151,6 +151,8 @@ class SimpleNet(nn.Module):
     def get_image_feats(self, image):
         if self.fast_inference_mode:
             if self.buffer_image is None or (not torch.allclose(self.buffer_image, image)):
+                if self.buffer_image is not None:
+                    print("WARNING: in fast inference mode, we update the buffered image")
                 self.buffer_image = image
                 self.buffer_image_feats = self.features_net(image)
             image_feats = self.buffer_image_feats

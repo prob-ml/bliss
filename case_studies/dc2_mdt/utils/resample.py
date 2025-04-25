@@ -6,6 +6,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 
 from case_studies.dc2_mdt.utils.gaussian_diffusion import GaussianDiffusion
+from case_studies.dc2_mdt.utils.reverse_markov_learning import RMLDiffusion
 
 
 def create_named_schedule_sampler(name, diffusion):
@@ -109,6 +110,25 @@ class SpeedSampler(ScheduleSampler):
                           self.meaningful_steps - t, 
                           t - self.meaningful_steps)
         t = th.cat([t, dual_t], dim=0)[:batch_size].long().to(device=device)
+        return t, th.ones_like(t).float(), self.loss_weights.to(device=device)[t]
+    
+
+class SigmoidSampler(ScheduleSampler):
+    def __init__(self, 
+                 diffusion: RMLDiffusion,
+                 b):
+        assert isinstance(diffusion, RMLDiffusion)
+        alpha_2 = diffusion.alpha ** 2 + 1e-3
+        sigma_2 = diffusion.sigma ** 2 + 1e-3
+        self.num_timesteps = diffusion.num_timesteps
+        self.loss_weights = 1 / (1 + th.exp(b - th.log(alpha_2 / sigma_2)))
+
+    def sample_weights(self):
+        raise NotImplementedError()
+    
+    def sample(self, batch_size, device):
+        t_np = np.random.choice(self.num_timesteps, size=(batch_size,))
+        t = th.from_numpy(t_np).long().to(device)
         return t, th.ones_like(t).float(), self.loss_weights.to(device=device)[t]
 
 

@@ -44,3 +44,12 @@
 ### 04-20 (m2 ori_bliss)
 
 2. run ori bliss on m2
+
+### 04-20 (m2 cond_true_bliss)
+
+3. run on m2
+
+### 04-21
+
+1. (m2 mdt) train without learning sigma
+2. (m2 mdt) train without learning sigma; use speed sampler
