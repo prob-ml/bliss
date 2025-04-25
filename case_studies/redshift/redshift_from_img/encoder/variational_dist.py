@@ -158,6 +158,8 @@ class Discretized1D(Distribution):
                 risk = self.compute_mse_risk(z_pred, bin_centers, bin_probs)
             elif risk_type == "redshift_abs_bias_bin_mag" or risk_type == "redshift_abs_bias_bin_rs":
                 risk = self.compute_abs_bias_risk(z_pred, bin_centers, bin_probs)
+            elif risk_type == "redshift_L1_bin_mag" or risk_type == "redshift_L1_bin_rs":
+                risk = self.compute_abs_bias_risk(z_pred, bin_centers, bin_probs)
             else:
                 raise ValueError(f"Invalid risk type: {risk_type}")
 

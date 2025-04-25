@@ -1,6 +1,6 @@
 import pickle
 from pathlib import Path
-
+import pandas as pd
 import hydra
 import seaborn as sns
 from matplotlib import pyplot as plt
@@ -17,7 +17,7 @@ def main(cfg: DictConfig):
     run_name = cfg.paths.ckpt_dir.split("/")[-2]
     # Load metric results
     bliss_output_path = output_dir / run_name / "cts_mode_metrics_0thbest_new_bins.pkl"
-    disc_run_name = "discrete_split_0_2025-04-18-15-30-55"
+    disc_run_name = "discrete_split_0_2025-04-22-09-50-08"
     bliss_discrete_output_path = output_dir / disc_run_name / "discrete_mode_metrics_0thbest.pkl"
     bliss_discrete_grid_output_path = output_dir / disc_run_name / "discrete_grid_metrics_0thbest.pkl"
 
@@ -31,28 +31,47 @@ def main(cfg: DictConfig):
     with open(bliss_output_path, "rb") as inputp:
         bliss_out_dict = pickle.load(inputp)
 
-    metrics = ["outlier_fraction_cata", "outlier_fraction", "bias", "bias_abs", "mse"]
+    metrics = ["outlier_fraction_cata", "outlier_fraction", "l1", "mse"]
     metric_labels = [
         "Catastrophic Outlier Fraction",
         "Outlier Fraction",
-        "Bias",
-        "Absolute Bias",
-        "MSE",
+        "Absolute Bias (L1)",
+        "Mean Squared Error (L2)",
     ]
     sns.set_theme()
 
     # Get all binned metrics to compute
     metric_names = set(["_".join(x.split("_")[:-1]) for x in bliss_out_dict.keys() if "bin" in x])
+    metric_names.remove('redshift_bias_bin_mag_redshifts/bias_bin')
+    metric_names.remove('redshift_bias_bin_rs_redshifts/bias_bin')
+    metric_names.remove('redshift_abs_bias_bin_mag_redshifts/bias_abs_bin')
+    metric_names.remove('redshift_abs_bias_bin_rs_redshifts/bias_abs_bin')
+
+    rail_results = pd.read_csv("/data/scratch/declan/redshift/dc2/checkpoints/rail/results.csv")
 
 
     for this_metric in metric_names:
         save_as = this_metric.split("/")[0]
-        save_name = output_dir / run_name/ f"{save_as}_{run_name}.pdf"
+        save_name = output_dir / run_name/ f"{save_as}_{run_name}_log.pdf"
+
+        # Get loss type mapping to rail
+        if "L1" in this_metric:
+            rail_metric = "L1"
+        elif "mean" in this_metric:
+            rail_metric = "L2"
+        elif "catastrophic" in this_metric:
+            rail_metric = "catastrophic"
+        elif "outlier_fraction_bin" in this_metric:
+            rail_metric = "one_plus"
+        else:
+            raise ValueError(f"Unknown metric: {this_metric}")
         
         if "rs" in this_metric.split("_"):
             bin_labels = ["<0.5", "0.5-1", "1-1.5", "1.5-2", "2-2.5", "2.5-3", ">3"]
+            rail_nums = rail_results[(rail_results["loss_type"] == rail_metric) & (rail_results["binning_name"] == 'redshift') & (rail_results["split"] == 0)]
         elif "mag" in this_metric.split("_"):
             bin_labels = ["<23.9", "23.9-24.1", "24.1-24.5", "24.5-24.9", "24.9-25.6", ">25.6"]
+            rail_nums = rail_results[(rail_results["loss_type"] == rail_metric) & (rail_results["binning_name"] == 'mag') & (rail_results["split"] == 0)]
         else:
             raise ValueError(f"Unknown metric: {this_metric}")
 
@@ -73,6 +92,7 @@ def main(cfg: DictConfig):
             marker="o",
             c="orange",
         )
+        plt.plot(bin_labels, rail_nums["loss"].values, label="FlexZBoost", marker="o", c="red")
         xlabel = "Redshift Bin" if "rs" in this_metric else "Magnitude Bin"
         ylabel = None
         for i, metric in enumerate(metrics):
@@ -82,12 +102,13 @@ def main(cfg: DictConfig):
         plt.xlabel(xlabel)
         plt.xticks(rotation=45)
         plt.ylabel(ylabel)
-        plt.ylim([0, None])
+        # plt.ylim([0, None])
         ax = plt.gca()
         ax.yaxis.set_major_formatter(FormatStrFormatter("%.3f"))
         plt.legend(loc="upper left")
         plt.tight_layout()
         plt.grid(True)
+        plt.yscale("log")
         plt.savefig(save_name)
 
 
