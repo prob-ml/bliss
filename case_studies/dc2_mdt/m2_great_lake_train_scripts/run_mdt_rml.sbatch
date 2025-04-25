@@ -7,7 +7,7 @@
 #SBATCH --partition=spgpu
 
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks-per-node=4
 #SBATCH --gpus-per-node=a40:4
 #SBATCH --cpus-per-gpu=4
 #SBATCH --mem-per-gpu=32GB
@@ -55,7 +55,7 @@ function run_exp() {
     {
         set -e
         print_info "training starts"
-        poetry run bliss \
+        srun poetry run bliss \
             -cp ~/bliss/case_studies/dc2_mdt/m2_mdt_config \
             -cn ${cfg_name} \
             train.trainer.logger.version=${exp_name} \

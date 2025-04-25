@@ -10,7 +10,7 @@ paths:
 
 cached_simulator:
     batch_size: 64
-    num_workers: 8
+    num_workers: 4
 
 train:
     trainer:
