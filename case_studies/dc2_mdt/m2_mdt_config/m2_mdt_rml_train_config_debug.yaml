@@ -9,4 +9,4 @@ train:
         logger:
             name: M2_mdt_debug
             version: M2_mdt_debug
-        devices: [3]
+        devices: [6, 7]

@@ -54,7 +54,7 @@ encoder:
     d_sampling_timesteps: 10
     d_schedule_sampler: sigmoid
     d_sigmoid_schedule_bias: 0
-    d_rml_m: 5
+    d_rml_m: 4
     d_rml_lambda: 1.0
     d_rml_beta: 0.5
     ddim_eta: 1.0
@@ -85,7 +85,7 @@ encoder:
 cached_simulator:
     cached_data_path: ${paths.cached_data}
     batch_size: 16
-    num_workers: 8
+    num_workers: 4
     train_transforms:
         - _target_: bliss.cached_dataset.OneBandTransform
           band_idx: 2
