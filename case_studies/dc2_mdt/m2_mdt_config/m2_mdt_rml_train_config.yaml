@@ -46,25 +46,25 @@ my_image_normalizers:
     q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
 
 encoder:
-    _target_: case_studies.dc2_mdt.utils.encoder.M2SimpleNetEncoder
+    _target_: case_studies.dc2_mdt.utils.rml_encoder.M2MDTRMLEncoder
     survey_bands: ['r']
     reference_band: 0
     tile_slen: 2
-    d_objective: noise
-    d_beta_schedule: linear
-    d_learn_sigma: true
     d_training_timesteps: 1000
-    d_use_speed_sampler: false
-    d_sampling_method: ddim
-    d_sampling_timesteps: 5
-    ddim_eta: 0.0
+    d_sampling_timesteps: 10
+    d_schedule_sampler: sigmoid
+    d_sigmoid_schedule_bias: 0
+    d_rml_m: 5
+    d_rml_lambda: 1.0
+    d_rml_beta: 0.5
+    ddim_eta: 1.0
     acc_grad_batches: 1
     max_fluxes: "inf"
     optimizer_params:
-        lr: 1e-3
+        lr: 3e-4
         amsgrad: true  # to make adam more stable
     scheduler_params:
-        milestones: [70]
+        milestones: [150]
         gamma: 0.1
     image_normalizers: ${my_image_normalizers}
     catalog_parser:
@@ -84,8 +84,8 @@ encoder:
 
 cached_simulator:
     cached_data_path: ${paths.cached_data}
-    batch_size: 256
-    num_workers: 16
+    batch_size: 16
+    num_workers: 8
     train_transforms:
         - _target_: bliss.cached_dataset.OneBandTransform
           band_idx: 2
@@ -116,12 +116,12 @@ train:
     trainer:
         logger:
             name: M2_mdt_exp
-            version: exp_04-20-1  # change it before running the code
+            version: exp_04-24-3  # change it before running the code
         devices: [6]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
-        max_epochs: 100
-        # detect_anomaly: false
+        max_epochs: 200
+        detect_anomaly: false
         # gradient_clip_val: 0.0
     pretrained_weights: null
     seed: 7272
@@ -130,4 +130,4 @@ train:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
             monitor: val/_loss
             mode: min
-            patience: 100
+            patience: 200

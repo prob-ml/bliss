@@ -3,6 +3,7 @@ from typing import Optional
 import pytorch_lightning as pl
 import numpy as np
 import torch
+from torch import nn
 import copy
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
@@ -12,6 +13,11 @@ from einops import rearrange
 from bliss.catalog import TileCatalog
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.global_env import GlobalEnv
+from bliss.encoder.encoder import Encoder as BlissEncoder
+from bliss.encoder.convnets import FeaturesNet as BlissFeaturesNet
+from bliss.encoder.convnet_layers import ConvBlock as BlissConvBlock
+from bliss.encoder.convnet_layers import Detect as BlissDetect
+from bliss.encoder.convnet_layers import C3 as BlissC3
 
 from case_studies.dc2_mdt.utils.catalog_parser import CatalogParser
 from case_studies.dc2_mdt.utils.gaussian_diffusion import (GaussianDiffusion,
@@ -40,6 +46,7 @@ class DiffusionEncoder(pl.LightningModule):
         d_beta_schedule: str,
         d_learn_sigma: bool,
         d_training_timesteps: int,
+        d_use_speed_sampler: bool,
         d_sampling_method: str,
         d_sampling_timesteps: int,
         ddim_eta: float,
@@ -67,6 +74,7 @@ class DiffusionEncoder(pl.LightningModule):
         self.d_beta_schedule = d_beta_schedule
         self.d_learn_sigma = d_learn_sigma
         self.d_training_timesteps = d_training_timesteps
+        self.d_use_speed_sampler = d_use_speed_sampler
         self.d_sampling_method = d_sampling_method
         assert self.d_sampling_method in ["ddim", "ddpm"]
         self.d_sampling_timesteps = d_sampling_timesteps
@@ -137,9 +145,15 @@ class DiffusionEncoder(pl.LightningModule):
         self.ddim_eta = new_ddim_eta
         if self.ddim_eta != new_ddim_eta and self.d_sampling_method != "ddim":
             print("WARNING: you set ddim_eta to a new value, but your sampling method is not ddim")
-        
+
     def initialize_schedule_sampler(self):
-        self.schedule_sampler = create_named_schedule_sampler("uniform", self.training_diffusion)
+        if self.d_use_speed_sampler:
+            self.schedule_sampler = SpeedSampler(diffusion=self.training_diffusion,
+                                             lam=0.6, 
+                                             k=5, 
+                                             tau=700)
+        else:
+            self.schedule_sampler = create_named_schedule_sampler("uniform", self.training_diffusion)
 
     def initialize_networks(self):
         raise NotImplementedError()
@@ -320,22 +334,11 @@ class SimpleNetEncoder(DiffusionEncoder):
     def __init__(self,
                  *, 
                  simple_net_type: str, 
-                 use_speed_sampler: bool, 
                  **kwargs):
         self.simple_net_type = simple_net_type
         assert self.simple_net_type in ["simple_net", "simple_ar_net", "simple_cond_true_net"]
-        self.use_speed_sampler = use_speed_sampler
 
         super().__init__(**kwargs)
-
-    def initialize_schedule_sampler(self):
-        if self.use_speed_sampler:
-            self.schedule_sampler = SpeedSampler(diffusion=self.training_diffusion,
-                                             lam=0.6, 
-                                             k=5, 
-                                             tau=700)
-        else:
-            super().initialize_schedule_sampler()
 
     def initialize_networks(self):
         assert self.tile_slen == 4
@@ -590,3 +593,102 @@ class M2SimpleNetEncoder(M2DiffusionEncoder):
         return {
             "no_mask_loss": no_mask_loss,
         }
+
+
+class M2BlissEncoder(BlissEncoder):
+    def initialize_networks(self):
+        assert self.tile_slen == 2
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+        num_features = 256
+        self.features_net = BlissFeaturesNet(
+            n_bands=len(self.survey_bands),
+            ch_per_band=ch_per_band,
+            num_features=num_features,
+            double_downsample=(self.tile_slen == 4),
+        )
+
+        n_hidden_ch = 256
+        self.detection_net = nn.Sequential(
+            BlissConvBlock(num_features + 6, n_hidden_ch, kernel_size=1, gn=False),  # +6 for true n_sources and locs
+            BlissC3(n_hidden_ch, n_hidden_ch, n=3, spatial=False, gn=False),
+            BlissDetect(n_hidden_ch, self.var_dist.n_params_per_source * 2),  # x2 for double detect
+        )
+
+    def make_local_context(self, history_cat):
+        raise NotImplementedError()
+    
+    def detect_second(self, x_features_color, history_cat):
+        raise NotImplementedError()
+    
+    def make_color_context(self, history_cat, history_mask):
+        raise NotImplementedError()
+    
+    def sample(self, batch, use_mode=True):
+        x_features = self.get_features(batch)
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        target_cat2 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=1
+        )
+
+        target_cat1_n_sources = target_cat1["n_sources"].unsqueeze(1)  # (b, 1, h, w)
+        target_cat1_locs = target_cat1["locs"].squeeze(-2).permute(0, 3, 1, 2)  # (b, 2, h, w)
+        target_cat2_n_sources = target_cat2["n_sources"].unsqueeze(1)
+        target_cat2_locs = target_cat2["locs"].squeeze(-2).permute(0, 3, 1, 2)
+
+        true_n_sources_and_locs = torch.cat([target_cat1_n_sources, target_cat1_locs,
+                                             target_cat2_n_sources, target_cat2_locs],
+                                             dim=1)  # (b, 6, h, w)
+        x = torch.cat([x_features, true_n_sources_and_locs], dim=1)
+        sample1, sample2 = self.detection_net(x).chunk(2, dim=-1)  # (b, h, w, k)
+        first_cat = self.var_dist.sample(sample1, use_mode=use_mode, return_base_cat=True).data
+        first_cat = self._interpolate_n_sources_and_locs(first_cat, target_cat1)
+        second_cat = self.var_dist.sample(sample2, use_mode=use_mode, return_base_cat=True).data
+        second_cat = self._interpolate_n_sources_and_locs(second_cat, target_cat2)
+        return first_cat.union(second_cat, disjoint=False)
+
+    def _interpolate_n_sources_and_locs(self, sample_cat_dict, true_tile_cat):
+        sample_cat_dict = copy.copy(sample_cat_dict)
+        sample_n_sources = sample_cat_dict["fluxes"][..., 0, 0] > 0.1  # (b, h, w)
+        t_n_sources = true_tile_cat["n_sources"] > 0  # (b, h, w)
+        sample_cat_dict["n_sources"] = (sample_n_sources & t_n_sources).to(dtype=true_tile_cat["n_sources"].dtype)
+        sample_cat_dict["locs"] = rearrange(sample_cat_dict["n_sources"] > 0, "b h w -> b h w 1 1") * true_tile_cat["locs"]
+        return TileCatalog(sample_cat_dict)
+    
+    def compute_masked_nll(self, batch, history_mask_patterns, loss_mask_patterns):
+        raise NotImplementedError()
+    
+    def compute_sampler_nll(self, batch):
+        raise NotImplementedError()
+    
+    def _compute_loss(self, batch, logging_name):
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        target_cat2 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=1
+        )
+        target_cat1_n_sources = target_cat1["n_sources"].unsqueeze(1)  # (b, 1, h, w)
+        target_cat1_locs = target_cat1["locs"].squeeze(-2).permute(0, 3, 1, 2)  # (b, 2, h, w)
+        target_cat2_n_sources = target_cat2["n_sources"].unsqueeze(1)
+        target_cat2_locs = target_cat2["locs"].squeeze(-2).permute(0, 3, 1, 2)
+
+        true_n_sources_and_locs = torch.cat([target_cat1_n_sources, target_cat1_locs,
+                                             target_cat2_n_sources, target_cat2_locs],
+                                             dim=1)  # (b, 6, h, w)
+
+        x_features = self.get_features(batch)
+        x = torch.cat([x_features, true_n_sources_and_locs], dim=1)
+        pred_cat_param1, pred_cat_param2 = self.detection_net(x).chunk(2, dim=-1)
+        nll_1 = self.var_dist.compute_nll(pred_cat_param1, target_cat1)
+        nll_2 = self.var_dist.compute_nll(pred_cat_param2, target_cat2)
+
+        loss = (nll_1 + nll_2).sum()
+
+        batch_size = batch["images"].size(0)
+        self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
+
+        return loss

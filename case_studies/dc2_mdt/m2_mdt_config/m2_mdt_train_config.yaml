@@ -52,8 +52,9 @@ encoder:
     tile_slen: 2
     d_objective: noise
     d_beta_schedule: linear
-    d_learn_sigma: true
+    d_learn_sigma: false
     d_training_timesteps: 1000
+    d_use_speed_sampler: true
     d_sampling_method: ddim
     d_sampling_timesteps: 5
     ddim_eta: 0.0
@@ -84,7 +85,7 @@ encoder:
 cached_simulator:
     cached_data_path: ${paths.cached_data}
     batch_size: 64
-    num_workers: 16
+    num_workers: 8
     train_transforms:
         - _target_: bliss.cached_dataset.OneBandTransform
           band_idx: 2
@@ -115,8 +116,8 @@ train:
     trainer:
         logger:
             name: M2_mdt_exp
-            version: exp_04-19-1  # change it before running the code
-        devices: [5]  # change it before running the code
+            version: exp_04-21-2  # change it before running the code
+        devices: [7]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
         max_epochs: 200

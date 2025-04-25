@@ -68,11 +68,11 @@ encoder:
     reference_band: 2
     tile_slen: ${surveys.dc2.tile_slen}
     simple_net_type: simple_net
-    use_speed_sampler: false
     d_objective: noise
     d_beta_schedule: linear
     d_learn_sigma: true
     d_training_timesteps: 1000
+    d_use_speed_sampler: false
     d_sampling_method: ddim
     d_sampling_timesteps: 5
     ddim_eta: 0.0

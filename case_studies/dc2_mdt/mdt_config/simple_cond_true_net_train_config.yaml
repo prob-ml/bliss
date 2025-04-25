@@ -6,5 +6,5 @@ defaults:
 
 encoder:
     simple_net_type: simple_cond_true_net
-    use_speed_sampler: false
+    d_use_speed_sampler: false
     

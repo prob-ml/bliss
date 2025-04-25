@@ -7,6 +7,8 @@ bliss -cp ~/bliss/case_studies/dc2_mdt/mdt_config -cn simple_cond_true_net_train
 bliss -cp ~/bliss/case_studies/dc2_mdt/m2_mdt_config -cn m2_mdt_train_config
 bliss -cp ~/bliss/case_studies/dc2_mdt/m2_mdt_config -cn m2_simple_net_train_config
 bliss -cp ~/bliss/case_studies/dc2_mdt/m2_mdt_config -cn m2_ori_bliss_train_config
+bliss -cp ~/bliss/case_studies/dc2_mdt/m2_mdt_config -cn m2_cond_true_bliss_train_config
+bliss -cp ~/bliss/case_studies/dc2_mdt/m2_mdt_config -cn m2_mdt_rml_train_config
 # run inference
 nohup jupyter nbconvert --execute --to html case_studies/dc2_mdt/inference.ipynb > infer_notebook.out 2>&1 &
 

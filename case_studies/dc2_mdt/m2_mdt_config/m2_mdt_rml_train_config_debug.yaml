@@ -1,6 +1,6 @@
 ---
 defaults:
-    - m2_mdt_train_config
+    - m2_mdt_rml_train_config
     - _self_
     - override hydra/job_logging: stdout
 
@@ -9,4 +9,4 @@ train:
         logger:
             name: M2_mdt_debug
             version: M2_mdt_debug
-        devices: [6]
+        devices: [3]
