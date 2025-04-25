@@ -148,6 +148,14 @@ mode_sample_metrics:
         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
         bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
         bin_type: "redshift"
+    redshift_L1_bin_mag:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftL1Bin
+        bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+        bin_type: "njymag"
+    redshift_L1_bin_rs:
+        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftL1Bin
+        bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
+        bin_type: "redshift"
 
 
 timestamp: ${now:%Y-%m-%d-%H-%M-%S}

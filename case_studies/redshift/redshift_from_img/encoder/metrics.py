@@ -663,6 +663,53 @@ class RedshiftAbsBiasBin(MetricBin):
         for _ in range(self.n_bins):
             self.bias.append(torch.tensor([]))
 
+class RedshiftL1Bin(MetricBin):
+    """abs(z_true - z_pred)"""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_state("sum_abs_error", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.zeros(self.n_bins), dist_reduce_fx="sum")
+
+    def update(self, true_cat, est_cat, matching):
+        cutoffs = torch.tensor(self.bin_cutoffs, device=self.device)
+        on_fluxes = convert_nmgy_to_njymag(true_cat.on_fluxes)
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                true_red = true_cat["redshifts"][i][tcat_matches].to(self.device)
+                est_red = est_cat["redshifts"][i][ecat_matches].to(self.device)
+                tcat_matches = rearrange(tcat_matches, "h w 1 1 -> h w 1")
+            # For CatalogMatcher
+            else:
+                true_red = true_cat["redshifts"][i, tcat_matches, :].to(self.device)
+                est_red = est_cat["redshifts"][i, ecat_matches, :].to(self.device)
+
+            true_mag = on_fluxes[i][..., self.mag_band][tcat_matches].to(self.device)
+            if self.bin_type == "njymag":
+                bin_indices = torch.bucketize(true_mag, cutoffs)
+            elif self.bin_type == 'redshift':
+                bin_indices = torch.bucketize(true_red, cutoffs)
+
+            red_err = (true_red - est_red).abs()
+            if len(red_err.shape) > 1:
+                red_err = red_err.squeeze(-1)
+
+            self.total += bin_indices.bincount(minlength=self.n_bins)
+            for bin_idx, err in zip(bin_indices, red_err):
+                self.sum_abs_error[bin_idx] += err
+
+    def compute(self):
+        print(f"total num of pts: {self.total}")  # noqa: WPS421
+        l1_per_bin = self.sum_abs_error / self.total
+        l1_per_bin_results = {
+            f"redshifts/l1_bin_{i}": l1_per_bin[i].item() for i in range(len(l1_per_bin))
+        }
+        return {**l1_per_bin_results}
+
+
 
 class RedshiftsCatalogMatcher(CatalogMatcher):
     def __init__(
