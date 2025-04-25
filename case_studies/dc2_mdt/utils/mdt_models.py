@@ -475,7 +475,7 @@ class MDTv2(nn.Module):
             image_feats = self.image_embedder(image_feats)
         return image_feats
 
-    def forward(self, x, t, image, enable_mask=False):
+    def forward(self, x, t, image, enable_mask=False, *, directly_use_image_buffer=False):
         """
         Forward pass of MDT.
         x: (N, C, H, W) tensor of spatial inputs (catalog)
@@ -483,7 +483,10 @@ class MDTv2(nn.Module):
         image: astronomical image
         enable_mask: Use mask latent modeling
         """
-        image_feats = self.get_image_feats(image)
+        if not directly_use_image_buffer:
+            image_feats = self.get_image_feats(image)
+        else:
+            image_feats = self.buffer_image_feats
         x = self.x_embedder(x)
         x = torch.cat([x, image_feats], dim=-1)
         x = x + self.pos_embed  # (N, T, D), where T = H * W / patch_size ** 2
@@ -654,6 +657,12 @@ class DynamicPatchEmbed(nn.Module):
     
 
 class M2MDTv2CondTrueRML(MDTv2):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        self.v_masked_forward = torch.vmap(super().forward, in_dims=(1, 1, None), out_dims=1, randomness="same")
+        self.v_no_mask_forward = torch.vmap(super().forward, in_dims=(1, 1, None), out_dims=1, randomness="same")
+
     def initialize_image_feats_net(self):
         self.image_features_net = FeaturesNet(self.image_n_bands, 
                                               self.image_ch_per_band, 
@@ -723,16 +732,15 @@ class M2MDTv2CondTrueRML(MDTv2):
             assert true_n_sources_and_locs.ndim == 4  # (n, c, h, w)
             true_n_sources_and_locs = repeat(true_n_sources_and_locs, "n c h w -> n m c h w", m=x.shape[1])
             x = torch.cat([x, true_n_sources_and_locs, epsilon], dim=2)  # (n, m, c + 6 + c, h, w)
-            xs = [sub_x.squeeze(1) for sub_x in x.chunk(x.shape[1], dim=1)]  # (n, c + 6 + c, h, w)
-            ts = [sub_t.squeeze(1) for sub_t in t.chunk(t.shape[1], dim=1)]  # (n, )
-            outputs = []
             self.enter_fast_inference()
-            for cur_x, cur_t in zip(xs, ts):
-                output = super().forward(cur_x, cur_t, image, enable_mask)
-                assert not torch.isnan(output).any()
-                outputs.append(output)
+            self.get_image_feats(image)
+            if enable_mask:
+                output = self.v_masked_forward(x, t, image, enable_mask=True, directly_use_image_buffer=True)
+            else:
+                output = self.v_no_mask_forward(x, t, image, enable_mask=False, directly_use_image_buffer=True)
             self.exit_fast_inference()
-            return torch.stack(outputs, dim=1)  # (n, m, c, h, w)
+            assert not torch.isnan(output).any()
+            return output  # (n, m, c, h, w)
         
         assert x.ndim == 4  # (n, c, h, w)
         assert t.ndim == 1  # (n, )

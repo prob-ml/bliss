@@ -116,8 +116,8 @@ train:
     trainer:
         logger:
             name: M2_mdt_exp
-            version: exp_04-24-3  # change it before running the code
-        devices: [6]  # change it before running the code
+            version: exp_04-24-4  # change it before running the code
+        devices: [7]  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
         max_epochs: 200
