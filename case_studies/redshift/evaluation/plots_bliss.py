@@ -16,18 +16,18 @@ def main(cfg: DictConfig):
     output_dir = Path(cfg.paths.plot_dir)
     run_name = cfg.paths.ckpt_dir.split("/")[-2]
     # Load metric results
-    bliss_output_path = output_dir / run_name / "cts_mode_metrics_0thbest_new_bins.pkl"
+    bliss_output_path = "/data/scratch/declan/redshift/dc2/plots/continuous_split_0_2025-04-18-14-39-44/cts_mode_metrics_0thbest_01.pkl"
     disc_run_name = "discrete_split_0_2025-04-22-09-50-08"
     bliss_discrete_output_path = output_dir / disc_run_name / "discrete_mode_metrics_0thbest.pkl"
     bliss_discrete_grid_output_path = output_dir / disc_run_name / "discrete_grid_metrics_0thbest.pkl"
 
     # Get bspline 
     bspline_run_name = "bspline_split_0_2025-04-22-23-17-28"
-    bliss_bspline_output_path = output_dir / bspline_run_name / "bspline_mode_metrics_0thbest_new_bins.pkl"
+    bliss_bspline_output_path = output_dir / bspline_run_name / "bspline_mode_metrics_0thbest_01.pkl"
 
     # Get mdn
     mdn_run_name = "mdn_split_0_2025-04-22-23-17-15"
-    bliss_mdn_output_path = output_dir / mdn_run_name / "mdn_mode_metrics_0thbest_new_bins.pkl"
+    bliss_mdn_output_path = output_dir / mdn_run_name / "mdn_mode_metrics_0thbest_01.pkl"
 
     # Get discrete metrics
     with open(bliss_discrete_output_path, "rb") as inputp:
@@ -64,45 +64,53 @@ def main(cfg: DictConfig):
     metric_names.remove('redshift_abs_bias_bin_rs_redshifts/bias_abs_bin')
 
     rail_results = pd.read_csv("/data/scratch/declan/redshift/dc2/checkpoints/rail/results.csv")
+    metric_names.remove("redshifts/bias_abs_bin")
+    metric_names.remove("redshifts/bias_bin")
 
-    save_dir = output_dir / run_name / "mdnb"
+    save_dir = output_dir / run_name / "mdnb_01_normal"
     save_dir.mkdir(parents=True, exist_ok=True)
     for this_metric in metric_names:
+        if "rs" in this_metric:
+            continue
         save_as = this_metric.split("/")[0]
         save_name = save_dir / f"{save_as}_{run_name}_log.pdf"
 
         # Get loss type mapping to rail
-        if "L1" in this_metric:
+        if "l1" in this_metric:
             rail_metric = "L1"
-        elif "mean" in this_metric:
+        elif "mse" in this_metric:
             rail_metric = "L2"
-        elif "catastrophic" in this_metric:
+        elif "cata" in this_metric:
             rail_metric = "catastrophic"
         elif "outlier_fraction_bin" in this_metric:
             rail_metric = "one_plus"
         else:
             raise ValueError(f"Unknown metric: {this_metric}")
         
-        if "rs" in this_metric.split("_"):
-            bin_labels = ["<0.5", "0.5-1", "1-1.5", "1.5-2", "2-2.5", "2.5-3", ">3"]
-            rail_nums = rail_results[(rail_results["loss_type"] == rail_metric) & (rail_results["binning_name"] == 'redshift') & (rail_results["split"] == 0)]
-        elif "mag" in this_metric.split("_"):
-            bin_labels = ["<23.9", "23.9-24.1", "24.1-24.5", "24.5-24.9", "24.9-25.6", ">25.6"]
-            rail_nums = rail_results[(rail_results["loss_type"] == rail_metric) & (rail_results["binning_name"] == 'mag') & (rail_results["split"] == 0)]
-        else:
-            raise ValueError(f"Unknown metric: {this_metric}")
+        bin_labels = ["<23.5", "23.5-23.6", "23.6-23.7", "23.7-23.8", "23.8-23.9", "23.9-24.0", "24.0-24.1", "24.1-24.2", "24.2-24.3", "24.3-24.4", "24.4-24.5", "24.5-24.6", "24.6-24.7", "24.7-24.8", "24.8-24.9", ">24.9"]
+        # if "rs" in this_metric.split("_"):
+        #     bin_labels = ["<0.1", "0.1-0.2", "0.2-0.3", "0.3-0.4", "0.4-0.5", "0.5-0.6", "0.6-0.7", "0.7-0.8", "0.8-0.9", "0.9-1", ">1"]
+        #     rail_nums = rail_results[(rail_results["loss_type"] == rail_metric) & (rail_results["binning_name"] == 'redshift') & (rail_results["split"] == 0)]
+        # elif "mag" in this_metric.split("_"):
+        #     bin_labels = ["<23.5", "23.5-23.6", "23.6-23.7", "23.7-23.8", "23.8-23.9", "23.9-24.0", "24.0-24.1", "24.1-24.2", "24.2-24.3", "24.3-24.4", "24.4-24.5", "24.5-24.6", "24.6-24.7", "24.7-24.8", "24.8-24.9", ">24.9"]
+
+        #     rail_nums = rail_results[(rail_results["loss_type"] == rail_metric) & (rail_results["binning_name"] == 'mag') & (rail_results["split"] == 0)]
+        # else:
+        #     raise ValueError(f"Unknown metric: {this_metric}")
 
         num_values = len(bin_labels)
+        start_name = "redshifts/" + this_metric.split('/')[-1]
         bliss_values = [bliss_out_dict[f"{this_metric}_{i}"] for i in range(num_values)]
-        bliss_discrete = [bliss_mode_out_dict[f"{this_metric}_{i}"] for i in range(num_values)]
-        bliss_discrete_grid = [
-            bliss_discrete_out_dict[f"{this_metric}_{i}"] for i in range(num_values)
-        ]
-        bliss_bspline = [bliss_bspline_out_dict[f"{this_metric}_{i}"] for i in range(num_values)]
-        bliss_mdn = [bliss_mdn_out_dict[f"{this_metric}_{i}"] for i in range(num_values)]
+        # bliss_discrete = [bliss_mode_out_dict[f"{this_metric}_{i}"] for i in range(num_values)]
+        # bliss_discrete_grid = [
+        #     bliss_discrete_out_dict[f"{this_metric}_{i}"] for i in range(num_values)
+        # ]
+        
+        bliss_bspline = [bliss_bspline_out_dict[f"{start_name}_{i}"] for i in range(num_values)]
+        bliss_mdn = [bliss_mdn_out_dict[f"{start_name}_{i}"] for i in range(num_values)]
 
         plt.figure(figsize=(6, 6))
-        # plt.plot(bin_labels, bliss_values, label="BLISS+Normal", marker="o", c="blue")
+        plt.plot(bin_labels, bliss_values, label="BLISS+Normal", marker="o", c="blue")
         # plt.plot(bin_labels, bliss_discrete, label="BLISS+Discrete Bin", marker="o", c="green")
         # plt.plot(
         #     bin_labels,

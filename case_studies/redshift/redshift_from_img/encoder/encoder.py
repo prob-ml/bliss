@@ -30,6 +30,20 @@ class RedshiftsEncoder(Encoder):
         super().__init__(*args, **kwargs)
         self.discrete_metrics = discrete_metrics
 
+    def save_preds(self, batch, batch_idx, use_mode=True, save_file=None):
+        if save_file is None:
+            raise ValueError("save_file must be provided")
+        if not use_mode:
+            raise NotImplementedError("Only mode predictions are supported")
+        
+        target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
+        mode_cat = self.sample(batch, use_mode=True)
+        matching = self.matcher.match_catalogs(target_cat, mode_cat)
+        self.mode_metrics.update(target_cat, mode_cat, matching)
+        
+
+        
+
     def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
 

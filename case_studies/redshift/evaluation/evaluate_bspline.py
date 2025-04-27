@@ -46,7 +46,7 @@ def main(cfg: DictConfig):
     bliss_encoder.eval()
 
     # load bliss trained model - continuous version
-    bliss_output_path = output_dir / "bspline_mode_metrics_{}thbest_new_bins.pkl".format(k)
+    bliss_output_path = output_dir / "bspline_mode_metrics_{}thbest_01.pkl".format(k)
 
     # compute metrics -- continuous version
     if not bliss_output_path.exists() or True:
