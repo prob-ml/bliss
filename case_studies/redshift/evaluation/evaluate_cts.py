@@ -8,6 +8,10 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig
 from tqdm import tqdm
 
+import pyarrow as pa
+import pandas as pd
+import pyarrow.parquet as pq
+
 
 def get_kth_best_ckpt(ckpt_dir: str, k: int = 0):
     ckpt_dir = Path(ckpt_dir)
@@ -43,22 +47,52 @@ def main(cfg: DictConfig):
     bliss_encoder.eval()
 
     # load bliss trained model - continuous version
-    bliss_output_path = output_dir / "cts_mode_metrics_{}thbest_01.pkl".format(k)
+    bliss_output_path = output_dir / "cts_mode_predictions.parquet"
+    file_path = Path(bliss_output_path)
+    if not file_path.exists():
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # create empty parquet file
+    columns = [
+        "z_true",
+        "z_pred",
+        "u_mag",
+        "g_mag",
+        "r_mag",
+        "i_mag",
+        "z_mag",
+        "y_mag",
+    ]
+    dtypes = [
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+        "float64",
+    ]
+    empty_df = pd.DataFrame(columns=columns, dtype='float32')
+    # empty_df = empty_df.astype({col: dtype for col, dtype in zip(columns, dtypes)})
+    dummy_table = pa.Table.from_pandas(empty_df, preserve_index=False)
 
     # compute metrics -- continuous version
     if not bliss_output_path.exists() or True:
         test_loader = dataset.test_dataloader()
-        for batch_idx, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
-            batch["images"] = batch["images"].to(device)
-            batch["tile_catalog"] = {
-                key: value.to(device) for key, value in batch["tile_catalog"].items()
-            }
-            batch["psf_params"] = batch["psf_params"].to(device)
-            bliss_encoder.update_metrics(batch, batch_idx)
-        bliss_out_dict = bliss_encoder.mode_metrics.compute()
+        with pq.ParquetWriter(bliss_output_path, dummy_table.schema, use_dictionary=True) as writer:
+            # writer.write_table(batch_table)
+            for batch_idx, batch in tqdm(enumerate(test_loader), total=len(test_loader)):
+                batch["images"] = batch["images"].to(device)
+                batch["tile_catalog"] = {
+                    key: value.to(device) for key, value in batch["tile_catalog"].items()
+                }
+                batch["psf_params"] = batch["psf_params"].to(device)
+                bliss_encoder.save_preds(batch, batch_idx, use_mode=True, writer=writer)
+        # bliss_out_dict = bliss_encoder.mode_metrics.compute()
 
-        with open(bliss_output_path, "wb") as outp:  # Overwrites any existing file.
-            pickle.dump(bliss_out_dict, outp, pickle.HIGHEST_PROTOCOL)
+        # with open(bliss_output_path, "wb") as outp:  # Overwrites any existing file.
+        #     pickle.dump(bliss_out_dict, outp, pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == "__main__":

@@ -9,6 +9,9 @@ from tqdm import tqdm
 import pickle
 from bliss.catalog import TileCatalog
 from bliss.encoder.encoder import Encoder
+import pyarrow as pa
+import pandas as pd
+import pyarrow.parquet as pq
 
 
 def get_best_ckpt(ckpt_dir: str):
@@ -30,17 +33,60 @@ class RedshiftsEncoder(Encoder):
         super().__init__(*args, **kwargs)
         self.discrete_metrics = discrete_metrics
 
-    def save_preds(self, batch, batch_idx, use_mode=True, save_file=None):
-        if save_file is None:
-            raise ValueError("save_file must be provided")
+    def save_preds(self, batch, batch_idx, use_mode=True, writer=None):
+        if writer is None:
+            raise ValueError("Provide a writer to save predictions")
         if not use_mode:
             raise NotImplementedError("Only mode predictions are supported")
+        
+        # # Create file
+        # file_path = Path(save_file)
+        # if not file_path.exists():
+        #     file_path.parent.mkdir(parents=True, exist_ok=True)
+        #     # columns = ['z_true', 'z_pred', 'u_mag', 'g_mag', 'r_mag', 'i_mag', 'z_mag', 'y_mag']
+        #     # dtypes = ['float64', 'float64', 'float64', 'float64', 'float64', 'float64', 'float64', 'float64']
+        #     # empty_df = pd.DataFrame(columns=columns)
+        #     # table = pa.Table.from_pandas(empty_df)
+        #     # pq.write_table(table, file_path, compression='gzip')
+        
         
         target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
         mode_cat = self.sample(batch, use_mode=True)
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
-        self.mode_metrics.update(target_cat, mode_cat, matching)
+
+        for i in range(target_cat.batch_size): # for each observation in batch
+            tcat_matches, ecat_matches = matching[i]
         
+            true_red = target_cat["redshifts"][i][tcat_matches].cpu().detach()
+            est_red = mode_cat["redshifts"][i][ecat_matches].cpu().detach()
+            mags = target_cat["fluxes"][i].unsqueeze(-2)[tcat_matches].cpu().detach()
+
+            if len(true_red) == 0 or len(est_red) == 0:
+                continue
+
+            batch_data = {
+                'z_true': true_red, 
+                'z_pred': est_red,  
+                'u_mag': mags[:, 0],
+                'g_mag': mags[:, 1],
+                'r_mag': mags[:, 2],
+                'i_mag': mags[:, 3],
+                'z_mag': mags[:, 4],
+                'y_mag': mags[:, 5],
+            }
+            batch_df = pd.DataFrame(batch_data, dtype='float32')
+            batch_df = batch_df.reset_index(drop=True)
+            batch_table = pa.Table.from_pandas(batch_df, preserve_index=False)
+            writer.write_table(batch_table)
+
+            # with pq.ParquetWriter(file_path, batch_table.schema, use_dictionary=True) as writer:
+            #     writer.write_table(batch_table)
+
+            # existing_table = pq.read_table(save_file)
+            
+            # combined_table = pa.concat_tables([existing_table, batch_table])
+            # pq.write_table(combined_table, save_file)
+
 
         
 
