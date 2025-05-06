@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import rail  # pylint: disable=import-error
-import redshift_losses
+import redshift_losses  # pylint: disable=import-error
 from hydra import compose, initialize
 from rail.core.stage import RailStage  # pylint: disable=import-error
 from rail.estimation.algos.flexzboost import FlexZBoostEstimator  # pylint: disable=import-error
