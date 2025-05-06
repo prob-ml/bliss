@@ -5,21 +5,21 @@ defaults:
     - override hydra/job_logging: stdout
 
 data_gen:
-    data_dir: /data/scratch/des/piff_test_data/
+    data_dir: /data/scratch/kapnadak/data-10-13
     image_size: 2560
     tile_size: 256
-    nfiles: 10
-    n_catalogs_per_file: 1
+    nfiles: 5000
+    n_catalogs_per_file: 100
     bands: ["g", "r", "i", "z"]
     min_flux_for_loss: 0
-    overwrite: true
+    overwrite: false
 
 prior:
     _target_: case_studies.galaxy_clustering.prior.GalaxyClusterPrior
     survey_bands: ["g", "r", "i", "z"]  # SDSS available band filters
     reference_band: 1  # SDSS r-band
-    star_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
-    gal_color_model_path: ${simulator.decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
+    star_color_model_path: ${decoder.survey.dir_path}/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: ${decoder.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 56
     n_tiles_w: 56
     tile_slen: 256
@@ -28,17 +28,18 @@ prior:
     mean_sources: 0.48
     min_sources: 0
     prob_galaxy: 0.2
-    star_flux_exponent: 0.9859821185389767
-    star_flux_truncation: 5685.588160703261
-    star_flux_loc: -1.162430157551662
-    star_flux_scale: 1.4137911256506595
+    star_flux:
+        exponent: 0.9859821185389767
+        truncation: 5685.588160703261
+        loc: -1.162430157551662
+        scale: 1.4137911256506595
 
 cached_simulator:
     _target_: bliss.cached_dataset.CachedSimulatedDataModule
     batch_size: 1
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
     num_workers: 0
-    cached_data_path: /data/scratch/kapnadak/data-08-16/file_data
+    cached_data_path: /data/scratch/kapnadak/data-10-13/file_data
     train_transforms: []
 
 train:
@@ -61,6 +62,7 @@ my_image_normalizers:
     asinh:
         _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
         q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+        pixel_shift: 4
 
 encoder:
     _target_: case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder
@@ -102,6 +104,6 @@ predict:
                 output_dir: "/data/scratch/des/dr2_detection_output/run_1"
                 write_interval: "batch"
     encoder: ${encoder}
-    weight_save_path: /home/kapnadak/bliss_output/version_92/checkpoints/best_encoder.ckpt
+    weight_save_path: /home/kapnadak/bliss_output/version_105/checkpoints/encoder_15.ckpt
     device: "cuda:0"
     output_save_path: "/data/scratch/des/dr2_detection_output/run_0"

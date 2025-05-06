@@ -1,7 +1,7 @@
 import numpy as np
-import pytest
 import torch
 from hydra.utils import instantiate
+from torch.utils.data import DataLoader
 
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.encoder.metrics import (
@@ -16,12 +16,6 @@ from bliss.surveys.sdss import PhotoFullCatalog
 
 
 class TestMetrics:
-    @pytest.fixture(scope="class")
-    def tile_catalog(self, cfg, multiband_dataloader):
-        """Generate a tile catalog for testing classification metrics."""
-        tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
-        return TileCatalog(tile_cat)
-
     def test_metrics(self):
         """Tests basic computations using simple toy data."""
         slen = 50
@@ -35,8 +29,7 @@ class TestMetrics:
             "n_sources": torch.tensor([1, 2]),
             "plocs": true_locs * slen,
             "source_type": true_source_type,
-            "star_fluxes": torch.ones(2, 2, 5),
-            "galaxy_fluxes": torch.ones(2, 2, 5),
+            "fluxes": torch.ones(2, 2, 5),
             "galaxy_params": torch.ones(2, 2, 6),
         }
         true_params = FullCatalog(slen, slen, d_true)
@@ -45,8 +38,7 @@ class TestMetrics:
             "n_sources": torch.tensor([2, 2]),
             "plocs": est_locs * slen,
             "source_type": est_source_type,
-            "star_fluxes": torch.ones(2, 2, 5),
-            "galaxy_fluxes": torch.ones(2, 2, 5),
+            "fluxes": torch.ones(2, 2, 5),
             "galaxy_disk_frac": torch.ones(2, 2, 1),
             "galaxy_beta_radians": torch.ones(2, 2, 1),
             "galaxy_disk_q": torch.ones(2, 2, 1),
@@ -64,11 +56,15 @@ class TestMetrics:
         assert np.isclose(dresults["detection_precision"], 2 / (2 + 2))
         assert np.isclose(dresults["detection_recall"], 2 / 3)
 
-        acc_metrics = SourceTypeAccuracy(base_nmgy_bin_cutoffs=[200, 400, 600, 800, 1000])
+        acc_metrics = SourceTypeAccuracy(
+            base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631e9
+        )
         acc_results = acc_metrics(true_params, est_params, matching)
         assert np.isclose(acc_results["classification_acc"], 1 / 2)
 
-        gal_shape_metrics = GalaxyShapeError(base_nmgy_bin_cutoffs=[200, 400, 600, 800, 1000])
+        gal_shape_metrics = GalaxyShapeError(
+            base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631e9
+        )
         gal_shape_results = gal_shape_metrics(true_params, est_params, matching)
         assert gal_shape_results["galaxy_disk_hlr_mae"] == 0
 
@@ -87,8 +83,7 @@ class TestMetrics:
             "n_sources": true_sources,
             "plocs": true_locs,
             "source_type": true_source_type,
-            "star_fluxes": torch.ones(4, 1, 5),
-            "galaxy_fluxes": torch.ones(4, 1, 5),
+            "fluxes": torch.ones(4, 1, 5),
             "galaxy_params": torch.ones(4, 1, 6),
         }
         true_params = FullCatalog(50, 50, d_true)
@@ -97,8 +92,7 @@ class TestMetrics:
             "n_sources": est_sources,
             "plocs": est_locs,
             "source_type": est_source_type,
-            "star_fluxes": torch.ones(4, 1, 5),
-            "galaxy_fluxes": torch.ones(4, 1, 5),
+            "fluxes": torch.ones(4, 1, 5),
             "galaxy_params": torch.ones(4, 1, 6),
         }
         est_params = FullCatalog(50, 50, d_est)
@@ -112,8 +106,14 @@ class TestMetrics:
         assert dresults["detection_precision"] == 1 / 2
         assert dresults["detection_recall"] == 1 / 2
 
-    def test_self_agreement(self, tile_catalog):
+    def test_self_agreement(self, cfg):
         """Test galaxy classification metrics on full catalog."""
+        with open(cfg.paths.test_data + "/multiband_data/dataset_0.pt", "rb") as f:
+            data = torch.load(f)
+        multiband_dataloader = DataLoader(data, batch_size=8, shuffle=False)
+
+        tile_cat = next(iter(multiband_dataloader))["tile_catalog"]
+        tile_catalog = TileCatalog(tile_cat)
         full_catalog = tile_catalog.to_full_catalog(4)
 
         matcher = CatalogMatcher(dist_slack=1.0, mag_band=2)
@@ -123,11 +123,15 @@ class TestMetrics:
         dresults = detection_metrics(full_catalog, full_catalog, matching)
         assert dresults["detection_f1"] == 1
 
-        acc_metrics = SourceTypeAccuracy(base_nmgy_bin_cutoffs=[200, 400, 600, 800, 1000])
+        acc_metrics = SourceTypeAccuracy(
+            base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631e9
+        )
         acc_results = acc_metrics(full_catalog, full_catalog, matching)
         assert acc_results["classification_acc"] == 1
 
-        flux_metrics = FluxError("ugriz", base_nmgy_bin_cutoffs=[200, 400, 600, 800, 1000])
+        flux_metrics = FluxError(
+            "ugriz", base_flux_bin_cutoffs=[200, 400, 600, 800, 1000], mag_zero_point=3631e9
+        )
         flux_results = flux_metrics(full_catalog, full_catalog, matching)
         assert flux_results["flux_err_r_mae"] == 0
 

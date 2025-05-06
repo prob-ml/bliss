@@ -15,30 +15,27 @@ class Decoder(nn.Module):
         self,
         tile_slen: int,
         survey: Survey,
+        use_survey_background: bool = True,
         with_dither: bool = True,
         with_noise: bool = True,
-        faint_flux_threshold: float = None,
-        faint_folding_threshold: float = None,
     ) -> None:
         """Construct a decoder for a set of images.
 
         Args:
             tile_slen: side length in pixels of a tile
             survey: survey to mimic (psf, background, calibration, etc.)
+            use_survey_background: if True, add randomly sampled survey background to the images
             with_dither: if True, apply random pixel shifts to the images and align them
             with_noise: if True, add Poisson noise to the image pixels
-            faint_flux_threshold: threshold for flux to be considered dim
-            faint_folding_threshold: folding threshold for dim sources
         """
 
         super().__init__()
 
         self.tile_slen = tile_slen
         self.survey = survey
+        self.use_survey_background = use_survey_background
         self.with_dither = with_dither
         self.with_noise = with_noise
-        self.faint_flux_threshold = faint_flux_threshold
-        self.faint_folding_threshold = faint_folding_threshold
 
         survey.prepare_data()
 
@@ -54,7 +51,38 @@ class Decoder(nn.Module):
         Returns:
             GSObject: a galsim representation of the rendered star convolved with the PSF
         """
-        return psf[band].withFlux(source_params["star_fluxes"][band].item())
+        return psf[band].withFlux(source_params["fluxes"][band].item())
+
+    def render_bulge_plus_disk(self, band, source_params):
+        """Render a galaxy with given params.
+
+        Args:
+            band (int): band
+            source_params (Tensor): Tensor containing the parameters for a particular source
+                (see prior.py for details about these parameters)
+
+        Returns:
+            GSObject: a galsim representation of the rendered galaxy
+        """
+        disk_flux = source_params["fluxes"][band] * source_params["galaxy_disk_frac"]
+        bulge_frac = 1 - source_params["galaxy_disk_frac"]
+        bulge_flux = source_params["fluxes"][band] * bulge_frac
+        beta = source_params["galaxy_beta_radians"] * galsim.radians
+
+        components = []
+        if disk_flux > 0:
+            b_d = source_params["galaxy_a_d"] * source_params["galaxy_disk_q"]
+            disk_hlr_arcsecs = np.sqrt(source_params["galaxy_a_d"] * b_d)
+            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs)
+            sheared_disk = disk.shear(q=source_params["galaxy_disk_q"].item(), beta=beta)
+            components.append(sheared_disk)
+        if bulge_flux > 0:
+            b_b = source_params["galaxy_a_b"] * source_params["galaxy_bulge_q"]
+            bulge_hlr_arcsecs = np.sqrt(source_params["galaxy_a_b"] * b_b)
+            bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs)
+            sheared_bulge = bulge.shear(q=source_params["galaxy_bulge_q"].item(), beta=beta)
+            components.append(sheared_bulge)
+        return galsim.Add(components)
 
     def render_galaxy(self, psf, band, source_params):
         """Render a galaxy with given params and PSF.
@@ -68,30 +96,7 @@ class Decoder(nn.Module):
         Returns:
             GSObject: a galsim representation of the rendered galaxy convolved with the PSF
         """
-        galaxy_fluxes = source_params["galaxy_fluxes"]
-        galaxy_params = source_params["galaxy_params"]
-
-        total_flux = galaxy_fluxes[band]
-        disk_frac, beta_radians, disk_q, a_d, bulge_q, a_b = galaxy_params
-
-        disk_flux = total_flux * disk_frac
-        bulge_frac = 1 - disk_frac
-        bulge_flux = total_flux * bulge_frac
-
-        components = []
-        if disk_flux > 0:
-            b_d = a_d * disk_q
-            disk_hlr_arcsecs = np.sqrt(a_d * b_d)
-            disk = galsim.Exponential(flux=disk_flux, half_light_radius=disk_hlr_arcsecs)
-            sheared_disk = disk.shear(q=disk_q, beta=beta_radians * galsim.radians)
-            components.append(sheared_disk)
-        if bulge_flux > 0:
-            b_b = bulge_q * a_b
-            bulge_hlr_arcsecs = np.sqrt(a_b * b_b)
-            bulge = galsim.DeVaucouleurs(flux=bulge_flux, half_light_radius=bulge_hlr_arcsecs)
-            sheared_bulge = bulge.shear(q=bulge_q, beta=beta_radians * galsim.radians)
-            components.append(sheared_bulge)
-        galaxy = galsim.Add(components)
+        galaxy = self.render_bulge_plus_disk(band, source_params)
         return galsim.Convolution(galaxy, psf[band])
 
     @property
@@ -136,6 +141,7 @@ class Decoder(nn.Module):
             coadded_images[b] = self.survey.coadd_images(images[b])
         return torch.from_numpy(coadded_images).float()
 
+    # pylint: disable=R0915
     def render_image(self, tile_cat):
         """Render a single image from a tile catalog."""
         batch_size, n_tiles_h, n_tiles_w = tile_cat["n_sources"].shape
@@ -149,12 +155,16 @@ class Decoder(nn.Module):
         image_idx = np.random.randint(len(self.survey), dtype=int)
         frame = self.survey[image_idx]
 
-        # sample background from a random position in the frame
-        height, width = frame["background"].shape[-2:]
-        h_diff, w_diff = height - slen_h, width - slen_w
-        h = 0 if h_diff == 0 else np.random.randint(h_diff)
-        w = 0 if w_diff == 0 else np.random.randint(w_diff)
-        background = frame["background"][:, h : (h + slen_h), w : (w + slen_w)]
+        if self.use_survey_background:
+            # sample background from a random position in the frame
+            height, width = frame["background"].shape[-2:]
+            h_diff, w_diff = height - slen_h, width - slen_w
+            h = 0 if h_diff == 0 else np.random.randint(h_diff)
+            w = 0 if w_diff == 0 else np.random.randint(w_diff)
+            background = frame["background"][:, h : (h + slen_h), w : (w + slen_w)]
+        else:
+            background = 0
+
         image += background
 
         full_cat = tile_cat.to_full_catalog(self.tile_slen)
@@ -164,9 +174,7 @@ class Decoder(nn.Module):
         # use the specified flux_calibration ratios indexed by image_id
         avg_nelec_conv = np.mean(frame["flux_calibration"], axis=-1)
         if n_sources > 0:
-            full_cat["star_fluxes"] *= rearrange(avg_nelec_conv, "bands -> 1 1 bands")
-            if "galaxy_fluxes" in tile_cat:
-                full_cat["galaxy_fluxes"] *= avg_nelec_conv
+            full_cat["fluxes"] *= rearrange(avg_nelec_conv, "bands -> 1 1 bands")
 
         # generate random WCS shifts as manual image dithering via unaligning WCS
         if self.with_dither:
@@ -179,28 +187,29 @@ class Decoder(nn.Module):
                 source_params = full_cat.one_source(0, s)
                 source_type = source_params["source_type"].item()
                 renderer = self.source_renderers[source_type]
-                galsim_obj = renderer(frame["psf_galsim"], band, source_params)
+                gs_obj = renderer(frame["psf_galsim"], band, source_params)
                 plocs0, plocs1 = source_params["plocs"]
-                offset = np.array([plocs1 - (slen_w / 2), plocs0 - (slen_h / 2)])
+                plocs10 = np.array([plocs1, plocs0])
                 if self.with_dither:
-                    offset += pixel_shifts[band]
+                    plocs10 += pixel_shifts[band]
 
-                # essentially all the runtime of the simulator is incurred by this call
-                # to drawImage
+                int_pixel_shift = np.floor(plocs10)
+                good_size = gs_obj.getGoodImageSize(self.survey.psf.pixel_scale)
+                origin = int_pixel_shift - (good_size // 2) + 1
+                top_right = origin + good_size
 
-                if source_type:
-                    source_flux = source_params["galaxy_fluxes"][band]
-                else:
-                    source_flux = source_params["star_fluxes"][band]
+                bounds = galsim.BoundsI(origin[0], top_right[0], origin[1], top_right[1])
+                bounds = bounds & band_img.bounds
 
-                if self.faint_flux_threshold and source_flux.item() <= self.faint_flux_threshold:
-                    galsim_obj.folding_threshold = self.faint_folding_threshold
+                offset = plocs10 - np.array([slen_w / 2, slen_h / 2])
+                offset2 = galsim.PositionD(offset)
+                offset2 += band_img.true_center - bounds.true_center
 
-                galsim_obj.drawImage(
-                    offset=offset,
+                gs_obj.drawImage(
+                    offset=offset2,
                     method=getattr(self.survey.psf, "psf_draw_method", "auto"),
                     add_to_image=True,
-                    image=band_img,
+                    image=band_img[bounds],
                 )
 
             if self.with_noise:

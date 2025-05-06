@@ -3,12 +3,15 @@ from typing import Optional
 
 import pytorch_lightning as pl
 import torch
+from torch import nn
+from torch.distributions import Categorical
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 
 from bliss.catalog import TileCatalog
-from bliss.encoder.convnets import CatalogNet, FeaturesNet
+from bliss.encoder.convnet_layers import C3, ConvBlock, Detect
+from bliss.encoder.convnets import FeaturesNet
 from bliss.encoder.metrics import CatalogMatcher
 from bliss.encoder.variational_dist import VariationalDist
 from bliss.global_env import GlobalEnv
@@ -39,6 +42,7 @@ class Encoder(pl.LightningModule):
         n_sampler_colors: int = 4,
         reference_band: int = 2,
         predict_mode_not_samples: bool = True,
+        minimalist_conditioning: bool = False,
     ):
         """Initializes Encoder.
 
@@ -58,6 +62,7 @@ class Encoder(pl.LightningModule):
             n_sampler_colors: number of colors to use for checkerboard sampling
             reference_band: band to use for filtering sources
             predict_mode_not_samples: whether to predict mode catalogs rather than sample catalogs
+            minimalist_conditioning: whether to condition on only detection history
         """
         super().__init__()
 
@@ -76,6 +81,7 @@ class Encoder(pl.LightningModule):
         self.n_sampler_colors = n_sampler_colors
         self.reference_band = reference_band
         self.predict_mode_not_samples = predict_mode_not_samples
+        self.minimalist_conditioning = minimalist_conditioning
 
         # Generate all binary combinations for n^2 elements
         n = 2
@@ -95,33 +101,94 @@ class Encoder(pl.LightningModule):
             num_features=num_features,
             double_downsample=(self.tile_slen == 4),
         )
-        self.catalog_net = CatalogNet(
-            num_features=num_features,
-            out_channels=self.var_dist.n_params_per_source,
+
+        context_ch_out = 128
+        context_dim = 2 if self.minimalist_conditioning else 3
+        self.color_context_net = nn.Sequential(
+            ConvBlock(context_dim, context_ch_out, kernel_size=3, gn=True),
+            C3(context_ch_out, context_ch_out, n=3, spatial=True, gn=True),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=True),
         )
 
-    def make_context(self, history_cat, history_mask, detection2=False):
-        detection_id = (
-            torch.ones_like(history_mask) if detection2 else torch.zeros_like(history_mask)
-        ).unsqueeze(1)
+        in_ch_count = num_features + context_ch_out
+        n_hidden_ch = 256
+        self.count_net = nn.Sequential(
+            ConvBlock(in_ch_count, n_hidden_ch, kernel_size=3, gn=True),
+            C3(n_hidden_ch, n_hidden_ch, n=3, spatial=True, gn=True),
+            ConvBlock(n_hidden_ch, n_hidden_ch, kernel_size=1, gn=True),
+            Detect(n_hidden_ch, 3),
+        )
+
+        self.x_empty_context = nn.Embedding(1, context_ch_out)
+
+        local_dim = 2 if self.minimalist_conditioning else 3
+        self.local_context_net = nn.Sequential(
+            ConvBlock(local_dim, context_ch_out, kernel_size=1, gn=False),
+            C3(context_ch_out, context_ch_out, n=3, spatial=False, gn=False),
+            ConvBlock(context_ch_out, context_ch_out, kernel_size=1, gn=False),
+        )
+
+        in_ch = num_features + 2 * context_ch_out
+        self.detection_net = nn.Sequential(
+            ConvBlock(in_ch, n_hidden_ch, kernel_size=1, gn=False),
+            C3(n_hidden_ch, n_hidden_ch, n=3, spatial=False, gn=False),
+            Detect(n_hidden_ch, self.var_dist.n_params_per_source),
+        )
+
+    def make_local_context(self, history_cat):
+        centered_locs = history_cat["locs"][..., 0, :] - 0.5
+        log_fluxes = (history_cat.on_fluxes.squeeze(3).sum(-1) + 1).log()
+        history_encoding_lst = [
+            centered_locs[..., 0] * history_cat["n_sources"],  # x history
+            centered_locs[..., 1] * history_cat["n_sources"],  # y history
+        ]
+        if not self.minimalist_conditioning:
+            history_encoding_lst.insert(0, log_fluxes * history_cat["n_sources"])
+
+        local_context = torch.stack(history_encoding_lst, dim=1)
+        return self.local_context_net(local_context)
+
+    def detect_second(self, x_features_color, history_cat):
+        x_local_context = self.make_local_context(history_cat)
+        x_feature_color_local = torch.cat((x_features_color, x_local_context), dim=1)
+        return self.detection_net(x_feature_color_local)
+
+    def detect_first(self, x_features_color):
+        batch_size, _n_features, ht, wt = x_features_color.shape[0:4]
+        xec = self.x_empty_context.weight.view(1, -1, 1, 1).expand(batch_size, -1, ht, wt)
+        x_feature_color_empty = torch.cat((x_features_color, xec), dim=1)
+        return self.detection_net(x_feature_color_empty)
+
+    def make_color_context(self, history_cat, history_mask):
         if history_cat is None:
             # detections (1), flux (1), and locs (2) are the properties we condition on
-            masked_history = (
-                torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1).expand(-1, 4, -1, -1)
-            )
+            dim = 1 if self.minimalist_conditioning else 2
+            masked_history = torch.zeros_like(history_mask, dtype=torch.float).unsqueeze(1)
+            masked_history = masked_history.expand(-1, dim, -1, -1)
         else:
-            centered_locs = history_cat["locs"][..., 0, :] - 0.5
-            log_fluxes = (history_cat.on_nmgy.squeeze(3).sum(-1) + 1).log()
-            history_encoding_lst = [
-                history_cat["n_sources"].float(),  # detection history
-                log_fluxes * history_cat["n_sources"],  # flux history
-                centered_locs[..., 0] * history_cat["n_sources"],  # x history
-                centered_locs[..., 1] * history_cat["n_sources"],  # y history
-            ]
-            masked_history_lst = [v * history_mask for v in history_encoding_lst]
-            masked_history = torch.stack(masked_history_lst, dim=1)
+            history_cat1 = history_cat.get_brightest_sources_per_tile(
+                band=self.reference_band, exclude_num=0
+            )
+            history_cat2 = history_cat.get_brightest_sources_per_tile(
+                band=self.reference_band, exclude_num=1
+            )
 
-        return torch.concat([detection_id, history_mask.unsqueeze(1), masked_history], dim=1)
+            fluxes1 = history_cat1.on_fluxes.squeeze(3).sum(-1)
+            fluxes2 = history_cat2.on_fluxes.squeeze(3).sum(-1)
+            log_fluxes = (fluxes1 + fluxes2 + 1).log()
+
+            history_encoding_lst = [
+                history_cat["n_sources"].clamp(0, 2).float(),  # detection history
+            ]
+            if not self.minimalist_conditioning:
+                history_encoding_lst += [
+                    log_fluxes,  # flux history
+                ]
+            history_stack = torch.stack(history_encoding_lst, dim=1)
+            masked_history = history_stack * history_mask.unsqueeze(1)
+
+        color_context = torch.concat([history_mask.unsqueeze(1), masked_history], dim=1)
+        return self.color_context_net(color_context)
 
     def get_features(self, batch):
         assert batch["images"].size(2) % 16 == 0, "image dims must be multiples of 16"
@@ -132,10 +199,10 @@ class Encoder(pl.LightningModule):
 
         return self.features_net(inputs)
 
-    def sample_first_detection(self, x_features, use_mode=True):
+    def sample(self, batch, use_mode=True):
+        x_features = self.get_features(batch)
         batch_size, _n_features, ht, wt = x_features.shape[0:4]
 
-        est_cat = None
         if not self.use_checkerboard:
             patterns_to_use = (0,)
         elif self.n_sampler_colors == 4:
@@ -145,38 +212,34 @@ class Encoder(pl.LightningModule):
         else:
             raise ValueError("n_colors must be 2 or 4")
 
+        est_cat = None
+
         for mask_pattern in self.mask_patterns[patterns_to_use, ...]:
-            mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
-            context1 = self.make_context(est_cat, mask)
-            x_cat1 = self.catalog_net(x_features, context1)
-            new_est_cat = self.var_dist.sample(x_cat1, use_mode=use_mode)
-            new_est_cat["n_sources"] *= 1 - mask
+            history_mask = mask_pattern.repeat([batch_size, ht // 2, wt // 2])
+            x_color_context = self.make_color_context(est_cat, history_mask)
+
+            x_features_color = torch.cat((x_features, x_color_context), dim=1)
+            count_params = self.count_net(x_features_color)
+            count_rv = Categorical(logits=count_params)
+            n_sources = count_rv.mode if use_mode else count_rv.sample()
+
+            x_cat_marginal = self.detect_first(x_features_color)
+            new_est_cat = self.var_dist.sample(x_cat_marginal, use_mode=use_mode)
+            new_est_cat["n_sources"] = (n_sources >= 1).long()
+
+            if self.use_double_detect:
+                x_cat_cond = self.detect_second(x_features_color, new_est_cat)
+
+                new_est_cat2 = self.var_dist.sample(x_cat_cond, use_mode=use_mode)
+                new_est_cat2["n_sources"] = (n_sources >= 2).long()
+                new_est_cat = new_est_cat.union(new_est_cat2, disjoint=False)
+
+            new_est_cat["n_sources"] *= 1 - history_mask
             if est_cat is None:
                 est_cat = new_est_cat
             else:
-                est_cat["n_sources"] *= mask
+                est_cat["n_sources"] *= history_mask
                 est_cat = est_cat.union(new_est_cat, disjoint=True)
-
-        return est_cat
-
-    def sample_second_detection(self, x_features, est_cat1, use_mode=True):
-        no_mask = torch.ones_like(est_cat1["n_sources"])
-        context2 = self.make_context(est_cat1, no_mask, detection2=True)
-        x_cat2 = self.catalog_net(x_features, context2)
-        est_cat2 = self.var_dist.sample(x_cat2, use_mode=use_mode)
-        # our loss function implies that the second detection is ignored for a tile
-        # if the first detection is empty for that tile
-        est_cat2["n_sources"] *= est_cat1["n_sources"]
-        return est_cat2
-
-    def sample(self, batch, use_mode=True):
-        x_features = self.get_features(batch)
-
-        est_cat = self.sample_first_detection(x_features, use_mode=use_mode)
-
-        if self.use_double_detect:
-            est_cat2 = self.sample_second_detection(x_features, est_cat, use_mode=use_mode)
-            est_cat = est_cat.union(est_cat2, disjoint=False)
 
         return est_cat
 
@@ -187,50 +250,59 @@ class Encoder(pl.LightningModule):
         ht, wt = h // self.tile_slen, w // self.tile_slen
 
         target_cat = TileCatalog(batch["tile_catalog"])
-
-        # TODO: don't order the light sources by brightness; softmax instead
         target_cat1 = target_cat.get_brightest_sources_per_tile(
             band=self.reference_band, exclude_num=0
         )
-
-        x_features = self.get_features(batch)
-
-        loss = torch.zeros_like(x_features[:, 0, :, :])
-
-        for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns):
-            history_mask = hmp.repeat([batch_size, ht // 2, wt // 2])
-
-            context1 = self.make_context(target_cat1, history_mask)
-            x_cat1 = self.catalog_net(x_features, context1)
-            loss11 = self.var_dist.compute_nll(x_cat1, target_cat1)
-
-            loss_mask = lmp.repeat([batch_size, ht // 2, wt // 2])
-            loss += loss11 * loss_mask
-
-        # equals 1 if loss is unmasked for as many tiles as there are tiles;
-        # balances loss between layer1 and layer2, and reduces variation for random patterns
-        loss1_normalizer = loss_mask_patterns.sum() / 4
-        loss /= loss1_normalizer
-
         if self.use_double_detect:
             target_cat2 = target_cat.get_brightest_sources_per_tile(
                 band=self.reference_band, exclude_num=1
             )
 
-            # occasionally we input an estimated catalog rather than a target catalog, to regularize
-            # and avoid out-of-distribution inputs when sampling
-            history_cat = target_cat1
-            if torch.rand(1).item() < 0.9:
-                with torch.no_grad():
-                    history_cat = self.sample_first_detection(x_features, use_mode=False)
+        x_features = self.get_features(batch)
+        loss = torch.zeros_like(x_features[:, 0, :, :])
 
-            no_mask = torch.ones_like(history_mask)
-            context2 = self.make_context(history_cat, no_mask, detection2=True)
-            x_cat2 = self.catalog_net(x_features, context2)
+        for hmp, lmp in zip(history_mask_patterns, loss_mask_patterns):
+            history_mask = hmp.repeat([batch_size, ht // 2, wt // 2])
+            x_color_context = self.make_color_context(target_cat, history_mask)
+            x_features_color = torch.cat((x_features, x_color_context), dim=1)
 
-            loss22 = self.var_dist.compute_nll(x_cat2, target_cat2)
-            loss22 *= target_cat1["n_sources"]
-            loss += loss22
+            count_params = self.count_net(x_features_color)
+            count_rv = Categorical(logits=count_params)
+            local_loss = -count_rv.log_prob(target_cat["n_sources"].clamp(0, 2))
+
+            x_cat_marginal = self.detect_first(x_features_color)
+            nll_marginal_z1 = self.var_dist.compute_nll(x_cat_marginal, target_cat1)
+
+            if not self.use_double_detect:
+                local_loss += nll_marginal_z1
+            else:
+                nll_marginal_z2 = self.var_dist.compute_nll(x_cat_marginal, target_cat2)
+
+                x_cat_cond1 = self.detect_second(x_features_color, target_cat1)
+                nll_cond_z2 = self.var_dist.compute_nll(x_cat_cond1, target_cat2)
+
+                x_cat_cond2 = self.detect_second(x_features_color, target_cat2)
+                nll_cond_z1 = self.var_dist.compute_nll(x_cat_cond2, target_cat1)
+
+                one_mask = target_cat["n_sources"] == 1
+                loss1 = nll_marginal_z1 * one_mask
+
+                two_mask = target_cat["n_sources"] >= 2
+                loss2a = nll_marginal_z1 + nll_cond_z2
+                loss2b = nll_marginal_z2 + nll_cond_z1
+                lse_stack = torch.stack([loss2a, loss2b], dim=-1)
+                loss2_unmasked = -torch.logsumexp(-lse_stack, dim=-1)
+                loss2 = loss2_unmasked * two_mask
+
+                local_loss += loss1 + loss2
+
+            loss_mask = lmp.repeat([batch_size, ht // 2, wt // 2])
+            loss += local_loss * loss_mask
+
+        # equals 1 if loss is unmasked for as many tiles as there are tiles;
+        # reduces variation for random patterns
+        loss1_normalizer = loss_mask_patterns.sum() / 4
+        loss /= loss1_normalizer
 
         return loss
 
@@ -249,7 +321,6 @@ class Encoder(pl.LightningModule):
 
         history_mask_patterns = self.mask_patterns[history_pattern_ids, ...]
         loss_mask_patterns = self.mask_patterns[loss_pattern_ids, ...]
-
         return self.compute_masked_nll(batch, history_mask_patterns, loss_mask_patterns)
 
     def _compute_loss(self, batch, logging_name):
@@ -329,7 +400,8 @@ class Encoder(pl.LightningModule):
         if self.sample_metrics is not None:
             self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
             self.sample_metrics.reset()
-        self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
+        if self.sample_image_renders is not None:
+            self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
 
     def test_step(self, batch, batch_idx):
         """Pytorch lightning method."""

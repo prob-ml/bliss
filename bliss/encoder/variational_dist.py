@@ -52,7 +52,11 @@ class NllGating(ABC):
 class NullGating(NllGating):
     @classmethod
     def __call__(cls, true_tile_cat: TileCatalog):
-        return torch.ones_like(true_tile_cat["n_sources"]).bool()
+        tc_keys = true_tile_cat.keys()
+        if "n_sources" in tc_keys:
+            return torch.ones_like(true_tile_cat["n_sources"]).bool()
+        first = true_tile_cat[list(tc_keys)[0]]
+        return torch.ones(first.shape[:-1]).bool().to(first.device)
 
 
 class SourcesGating(NllGating):
@@ -129,6 +133,8 @@ class VariationalFactor:
             target = torch.where(gating.unsqueeze(-1), target, 0)
         assert not torch.isnan(target).any()
         ungated_nll = -qk.log_prob(target)
+        if ungated_nll.dim() == target.dim():  # (b, w, h, 1) -> (b,w,h) silent error
+            ungated_nll = ungated_nll.squeeze(-1)
         return ungated_nll * gating
 
 
@@ -151,8 +157,8 @@ class NormalFactor(VariationalFactor):
         self.high_clamp = high_clamp
 
     def get_dist(self, params):
-        mean = params[:, :, :, 0]
-        sd = params[:, :, :, 1].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        mean = params[:, :, :, 0:1]
+        sd = params[:, :, :, 1:2].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
         return Normal(mean, sd)
 
 
@@ -165,7 +171,6 @@ class BivariateNormalFactor(VariationalFactor):
     def get_dist(self, params):
         mean = params[:, :, :, :2]
         sd = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
-
         return Independent(Normal(mean, sd), 1)
 
 
@@ -214,7 +219,43 @@ class LogitNormalFactor(VariationalFactor):
         return RescaledLogitNormal(mu, sigma, low=self.low, high=self.high)
 
 
+class DiscretizedUnitBoxFactor(VariationalFactor):
+    def __init__(self, *args, **kwargs):
+        super().__init__(64, *args, **kwargs)
+
+    def get_dist(self, params):
+        return DiscretizedUnitBox(params)
+
+
 #####################
+
+
+class DiscretizedUnitBox(Distribution):
+    """A continuous bivariate distribution over the 2d unit box, with a discretized density."""
+
+    def __init__(self, logits):
+        super().__init__(validate_args=False)
+        assert logits.shape[-1] == 64
+        self.pdf_offset = torch.tensor((64,), device=logits.device).log()
+        self.base_dist = Categorical(logits=logits)
+
+    def sample(self, sample_shape=()):
+        locbins = self.base_dist.sample(sample_shape)
+        locbins2d = torch.stack((locbins // 8, locbins % 8), dim=-1)
+        locbins2d_float = locbins2d.float()
+        return (locbins2d_float + torch.rand_like(locbins2d_float)) / 8
+
+    @property
+    def mode(self):
+        locbins = self.base_dist.probs.argmax(dim=-1)
+        locbins2d = torch.stack((locbins // 8, locbins % 8), dim=-1)
+        return (locbins2d.float() + 0.5) / 8
+
+    def log_prob(self, value):
+        locs = value.clamp(0, 1 - 1e-7)
+        locbins2d = (locs * 8).long()
+        locbins = locbins2d[:, :, :, 0] * 8 + locbins2d[:, :, :, 1]
+        return self.base_dist.log_prob(locbins) + self.pdf_offset
 
 
 class TruncatedDiagonalMVN(Distribution):

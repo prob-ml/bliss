@@ -1,0 +1,92 @@
+# This file uses GalSim to generate image data from catalogs of galaxy clusters
+# Can be called directly from the command line using galsim galsim-des.yaml
+# Inputs are catalogs (stored as .dat files) in the /catalogs/ directory
+# Outputs are corresponding .fits files stored in the /galsim_des_data/ directory
+# Catalog Columns:
+#   0: RA
+#   1: DEC
+#   2: X
+#   3: Y
+#   4: MEM
+#   5: FLUX_G
+#   6: FLUX_R
+#   7: FLUX_I
+#   8: FLUX_Z
+#   9: HLR
+#   10: FRACDEV
+#   11: G1
+#   12: G2
+#   13: Z
+#   14: SOURCE_TYPE
+#   15: GI_COLOR
+#   16: IZ_COLOR
+
+variables :
+  nfiles : 1
+  image_size: 2560
+  input_dir : "/data/scratch/kapnadak/data-10-13/catalogs"
+  output_dir : "/data/scratch/kapnadak/data-10-13/images"
+  input_file : galsim_des_2495.dat
+  output_file : galsim_des_2495_z.fits
+  psf_dir : /nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/zband
+  psf_file : galsim_des_2495_z.psf
+  flux_col : 5 #5 for g, 6 for r, 7 for i, 8 for z
+
+modules :
+  - galsim.des
+
+psf :
+  type : DES_PSFEx
+
+image :
+
+  nproc : 32
+  type : Scattered
+  pixel_scale : 0.263
+  xsize : '@variables.image_size'
+  ysize : '@variables.image_size'
+
+  random_seed : 8241573
+
+  gsparams :
+    maximum_fft_size : 50000
+
+  noise:
+    type: Gaussian
+    variance:
+      type: Random
+      min: 0.002
+      max: 0.006
+
+stamp :
+
+  draw_method : fft
+
+  image_pos :
+    type : XY
+    x : { type: Catalog, col: 2 }
+    y : { type: Catalog, col: 3 }
+
+input :
+  catalog :
+    dir : '@variables.input_dir'
+    file_name : '@variables.input_file'
+  des_psfex:
+    dir : '@variables.psf_dir'
+    file_name: '@variables.psf_file'
+
+gal :
+
+  type : Gaussian
+  half_light_radius : { type: Catalog, col: 9 }
+  flux : { type: Catalog, col: '@variables.flux_col' } #using G band
+
+  shear :
+    type : G1G2
+    g1 : { type: Catalog, col: 11 }
+    g2 : { type: Catalog, col: 12 }
+
+output :
+  type : Fits
+  dir : '@variables.output_dir'
+  file_name : '@variables.output_file'

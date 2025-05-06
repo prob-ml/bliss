@@ -18,7 +18,7 @@ name = "bliss-toolkit"
 packages = [{include = "bliss"}]
 readme = "README.md"
 repository = "https://github.com/prob-ml/bliss"
-version = "0.3"
+version = "0.4"
 
 [tool.poetry.scripts]
 bliss = "bliss.main:main"
@@ -76,6 +76,9 @@ h5py = "^3.11.0"
 pyclean = "^3.0.0"
 pathos = "^0.3.2"
 pytest = "^8.2.2"
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"

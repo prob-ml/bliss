@@ -27,74 +27,11 @@ variables :
   input_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data_2/catalogs
   output_dir : /nfs/turbo/lsa-regier/scratch/kapnadak/new_data_2/images
 
-psf:
-    type: Convolve
+modules :
+  - galsim.des
 
-    # This means the psf should change per output file, not per object as would be the default.
-    index_key : file_num
-
-    items:
-    # The atmospheric component
-    -   type: Kolmogorov
-        # To avoid PSFs that were "too round", the ellipticity was drawn from a uniform
-        # distribution from sqrt(1.e-4) to sqrt(9.e-4), based on an estimate of the
-        # typical variance of e in ground-based imaging.
-        ellip:
-            type: EBeta
-            e:
-                type: Random
-                min: 0.01
-                max: 0.03
-            beta:
-                type: Random
-
-        # The seeing is taken from a plausible distribution of seeing values
-        # ranging from 0.6 to 1.1.
-        fwhm:
-            type: RandomDistribution
-            x: [ 0.6, 0.7, 0.8, 0.9, 1.0, 1.1 ]
-            f: [  0., 10., 20., 40., 30.,  0. ]
-
-    # The optical component
-    -   type: OpticalPSF
-        # Take lambda = 800 nm.  D = 4 m.  lam/D = 0.04 arcsec
-        lam_over_diam: "$800 * 1.e-9 / 4 * 206265"
-
-        # I don't know what the right value of this is.  This is a guess.
-        obscuration: 0.3
-
-        # DECam has 4 struts.  Not sure what strut_thick or strut_angle is appropriate here.
-        # So these are just guesses.
-        nstruts: 4
-        strut_thick: 0.05  # In units of pupil diameter.
-        strut_angle: 10 degrees
-
-        # According to Aaron Roodman, for DES the appropriate rms values are
-        # [ 0.13, 0.13, 0.14, 0.06, 0.06, 0.05, 0.06, 0.03 ]
-        defocus: { type: RandomGaussian, sigma: 0.13 }
-        astig1: { type: RandomGaussian, sigma: 0.13 }
-        astig2: { type: RandomGaussian, sigma: 0.14 }
-        coma1: { type: RandomGaussian, sigma: 0.06 }
-        coma2: { type: RandomGaussian, sigma: 0.06 }
-        trefoil1: { type: RandomGaussian, sigma: 0.05 }
-        trefoil2: { type: RandomGaussian, sigma: 0.06 }
-        spher: { type: RandomGaussian, sigma: 0.03 }
-
-        # The original GREAT3 runs used a keyword max_size to improve the efficiency of OpticalPSF.
-        # However, we now believe that this keyword introduces additional aliasing and have
-        # deprecated its use in GalSim v1.4.  We have retained the original description in the
-        # doubly commented block below.
-
-        # # Sometimes the OpticalPSF wants to make a very large image of the PSF.  But if the
-        # # PSF image is larger than the postage stamp onto which we will draw the object,
-        # # the larger area is mostly wasted.  Setting max_size to the size of the postage stamp
-        # # we will eventually draw onto helps avoid wasted calculations.
-        # # This is in arcsec, so max_size = stamp_size * pixel_scale
-        # # We're using a non-square wcs, so there isn't a well-defined pixel scale.  Use
-        # # the maxLinearScale to get the maximum "pixel scale" for the parallelogram.
-        # max_size: "$@image.size * wcs.maxLinearScale()"
-
-        suppress_warning: true
+psf :
+  type : DES_PSFEx
 
 image :
 
@@ -147,6 +84,15 @@ gal :
     g1 : { type: Catalog, col: 11 }
     g2 : { type: Catalog, col: 12 }
 
+input :
+  des_psfex:
+    dir : '/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/gband'
+    file_name:
+      type : FormattedStr
+      format : "galsim_des_%03d_g.psf"
+      items :
+        - {type : Sequence, nitems: '@variables.nfiles'}
+
 output :
   type : Fits
   dir : '@variables.output_dir'
@@ -170,6 +116,15 @@ gal :
     type : G1G2
     g1 : { type: Catalog, col: 11 }
     g2 : { type: Catalog, col: 12 }
+
+input :
+  des_psfex:
+    dir : '/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/rband'
+    file_name:
+      type : FormattedStr
+      format : "galsim_des_%03d_r.psf"
+      items :
+        - {type : Sequence, nitems: '@variables.nfiles'}
 
 output :
   type : Fits
@@ -195,6 +150,15 @@ gal :
     g1 : { type: Catalog, col: 11 }
     g2 : { type: Catalog, col: 12 }
 
+input :
+  des_psfex:
+    dir : '/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/iband'
+    file_name:
+      type : FormattedStr
+      format : "galsim_des_%03d_i.psf"
+      items :
+        - {type : Sequence, nitems: '@variables.nfiles'}
+
 output :
   type : Fits
   dir : '@variables.output_dir'
@@ -218,6 +182,15 @@ gal :
     type : G1G2
     g1 : { type: Catalog, col: 11 }
     g2 : { type: Catalog, col: 12 }
+
+input :
+  des_psfex:
+    dir : '/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles_reformatted/zband'
+    file_name:
+      type : FormattedStr
+      format : "galsim_des_%03d_z.psf"
+      items :
+        - {type : Sequence, nitems: '@variables.nfiles'}
 
 output :
   type : Fits

@@ -15,8 +15,7 @@ def basic_tilecat():
         "locs": torch.zeros(1, 2, 2, 1, 2),
         "source_type": torch.ones((1, 2, 2, 1, 1)).bool(),
         "galaxy_params": torch.zeros((1, 2, 2, 1, 6)),
-        "star_fluxes": torch.zeros((1, 2, 2, 1, 5)),
-        "galaxy_fluxes": torch.zeros(1, 2, 2, 1, 5),
+        "fluxes": torch.zeros((1, 2, 2, 1, 5)),
     }
     d["locs"][0, 0, 0, 0] = torch.tensor([0.5, 0.5])
     d["locs"][0, 0, 1, 0] = torch.tensor([0.5, 0.5])
@@ -32,13 +31,12 @@ def multi_source_tilecat():
         "locs": torch.zeros(1, 2, 2, 2, 2),
         "source_type": torch.ones((1, 2, 2, 2, 1)).bool(),
         "galaxy_params": torch.zeros((1, 2, 2, 2, 6)),
-        "star_fluxes": torch.zeros((1, 2, 2, 2, 5)),
-        "galaxy_fluxes": torch.zeros(1, 2, 2, 2, 5),
+        "fluxes": torch.zeros(1, 2, 2, 2, 5),
     }
-    d["galaxy_fluxes"][0, 0, 0, :, 2] = torch.tensor([1000, 500])
-    d["galaxy_fluxes"][0, 0, 1, :, 2] = torch.tensor([10000, 200])
-    d["galaxy_fluxes"][0, 1, 0, :, 2] = torch.tensor([0, 800])
-    d["galaxy_fluxes"][0, 1, 1, :, 2] = torch.tensor([300, 600])
+    d["fluxes"][0, 0, 0, :, 2] = torch.tensor([1000, 500])
+    d["fluxes"][0, 0, 1, :, 2] = torch.tensor([10000, 200])
+    d["fluxes"][0, 1, 0, :, 2] = torch.tensor([0, 800])
+    d["fluxes"][0, 1, 1, :, 2] = torch.tensor([300, 600])
 
     return TileCatalog(d)
 
@@ -49,8 +47,7 @@ def multi_source_fullcat():
         "n_sources": torch.tensor([2, 3, 1]),
         "plocs": torch.zeros((3, 3, 2)),
         "source_type": torch.ones((3, 3, 1)).bool(),
-        "star_fluxes": torch.zeros((3, 3, 6)),
-        "galaxy_fluxes": torch.zeros(3, 3, 6),
+        "fluxes": torch.zeros(3, 3, 6),
     }
 
     d["plocs"][0, 0, :] = torch.tensor([300, 600])
@@ -60,9 +57,9 @@ def multi_source_fullcat():
     d["plocs"][1, 2, :] = torch.tensor([999, 998])
     d["plocs"][2, 0, :] = torch.tensor([1999, 1977])
 
-    d["galaxy_fluxes"][0, :, 2] = torch.tensor([1000, 500, 0])
-    d["galaxy_fluxes"][1, :, 2] = torch.tensor([10000, 545, 123])
-    d["galaxy_fluxes"][2, :, 2] = torch.tensor([124, 0, 0])
+    d["fluxes"][0, :, 2] = torch.tensor([1000, 500, 0])
+    d["fluxes"][1, :, 2] = torch.tensor([10000, 545, 123])
+    d["fluxes"][2, :, 2] = torch.tensor([124, 0, 0])
 
     return FullCatalog(2000, 2000, d)
 
@@ -90,8 +87,8 @@ class TestBasicTileAndFullCatalogs:
         assert cat.max_sources == 1
         assert cat["n_sources"].max() == 1
         assert cat["n_sources"].sum() == 3
-        assert cat["galaxy_fluxes"].sum() == 11600.0
-        assert cat["galaxy_fluxes"].max() == 10000.0
+        assert cat["fluxes"].sum() == 11600.0
+        assert cat["fluxes"].max() == 10000.0
 
         # do it again to make sure nothing changes
         assert cat.get_brightest_sources_per_tile(band=2).max_sources == 1
@@ -100,7 +97,7 @@ class TestBasicTileAndFullCatalogs:
         cat = multi_source_tilecat.filter_by_flux(300)
         assert cat.max_sources == 2
         assert cat["n_sources"].sum() == 4
-        r_band_flux = cat["galaxy_fluxes"][..., 2:3]
+        r_band_flux = cat["fluxes"][..., 2:3]
         r_band_flux = torch.where(cat.galaxy_bools, r_band_flux, torch.inf)
         assert r_band_flux.min().item() == 500
 
@@ -154,21 +151,21 @@ class TestBasicTileAndFullCatalogs:
         assert torch.allclose(cat["plocs"][0, 0, :], torch.tensor([300.0, 600.0]))
         assert torch.allclose(cat["plocs"][1, 0, :], torch.tensor([730.0, 73.0]))
         assert torch.allclose(cat["plocs"][1, 1, :], torch.tensor([999.0, 998.0]))
-        assert cat["galaxy_fluxes"].shape[1] == 2
-        assert torch.allclose(cat["galaxy_fluxes"][0, :, 2], torch.tensor([1000.0, 500.0]))
-        assert torch.allclose(cat["galaxy_fluxes"][1, :, 2], torch.tensor([10000.0, 123.0]))
-        assert torch.allclose(cat["galaxy_fluxes"][2, :, 2], torch.tensor([124.0, 0.0]))
+        assert cat["fluxes"].shape[1] == 2
+        assert torch.allclose(cat["fluxes"][0, :, 2], torch.tensor([1000.0, 500.0]))
+        assert torch.allclose(cat["fluxes"][1, :, 2], torch.tensor([10000.0, 123.0]))
+        assert torch.allclose(cat["fluxes"][2, :, 2], torch.tensor([124.0, 0.0]))
 
     def test_tile_full_round_trip(self, cfg):
         with open(Path(cfg.paths.test_data) / "sdss_preds.pt", "rb") as f:
-            test_datum = torch.load(f)
+            test_cat = torch.load(f)
 
         # we'll do a "round trip" test: convert the catalog to a full catalog and back
-        true_tile_cat0 = TileCatalog(test_datum["catalog"])
-        true_full_cat = true_tile_cat0.to_full_catalog(cfg.simulator.decoder.tile_slen)
+        true_tile_cat0 = TileCatalog(test_cat)
+        true_full_cat = true_tile_cat0.to_full_catalog(cfg.decoder.tile_slen)
         true_tile_cat = true_full_cat.to_tile_catalog(
-            tile_slen=cfg.simulator.decoder.tile_slen,
-            max_sources_per_tile=cfg.simulator.prior.max_sources,
+            tile_slen=cfg.decoder.tile_slen,
+            max_sources_per_tile=cfg.prior.max_sources,
             ignore_extra_sources=True,
         )
 

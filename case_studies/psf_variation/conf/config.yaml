@@ -23,8 +23,8 @@ prior:
     _target_: bliss.simulator.prior.CatalogPrior
     survey_bands: ["u", "g", "r", "i", "z"]  # SDSS available band filters
     reference_band: 2  # SDSS r-band
-    star_color_model_path: ${simulator.survey.dir_path}/color_models/star_gmm_nmgy.pkl
-    gal_color_model_path: ${simulator.survey.dir_path}/color_models/gal_gmm_nmgy.pkl
+    star_color_model_path: ${paths.sdss}/color_models/star_gmm_nmgy.pkl
+    gal_color_model_path: ${paths.sdss}/color_models/gal_gmm_nmgy.pkl
     n_tiles_h: 20
     n_tiles_w: 20
     tile_slen: 4
@@ -33,16 +33,17 @@ prior:
     mean_sources: 0.01  # 0.0025 is more realistic for SDSS but training takes more iterations
     min_sources: 0
     prob_galaxy: 0.5144
-    star_flux_exponent: 0.4689157382430609
-    # star_flux_truncation: 613313.768995269
-    star_flux_truncation: 1000
-    star_flux_loc: -0.5534648001193676
-    star_flux_scale: 1.1846035501201129
-    galaxy_flux_exponent: 1.5609458661807678
-    # galaxy_flux_truncation: 28790.449063519092
-    galaxy_flux_truncation: 1000
-    galaxy_flux_loc: -3.29383532288203
-    galaxy_flux_scale: 3.924799999613338
+    star_flux:
+        exponent: 0.4689157382430609
+        # truncation: 613313.768995269
+        truncation: 1000
+        loc: -0.5534648001193676
+        scale: 1.1846035501201129
+    galaxy_flux: 1.5609458661807678
+        # truncation: 28790.449063519092
+        truncation: 1000
+        loc: -3.29383532288203
+        scale: 3.924799999613338
     galaxy_a_concentration: 0.39330758068481686
     galaxy_a_loc: 0.8371888967872619
     galaxy_a_scale: 4.432725319432478
@@ -110,19 +111,12 @@ variational_factors:
       nll_gating:
         _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.LogNormalFactor
-      name: star_fluxes
+      name: fluxes
       dim: 5
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
       nll_rearrange: "b ht wt 1 d -> b ht wt d"
       nll_gating:
-        _target_: bliss.encoder.variational_dist.StarGating
-    - _target_: bliss.encoder.variational_dist.LogNormalFactor
-      name: galaxy_fluxes
-      dim: 5
-      sample_rearrange: "b ht wt d -> b ht wt 1 d"
-      nll_rearrange: "b ht wt 1 d -> b ht wt d"
-      nll_gating:
-        _target_: bliss.encoder.variational_dist.GalaxyGating
+        _target_: bliss.encoder.variational_dist.SourcesGating
     - _target_: bliss.encoder.variational_dist.LogitNormalFactor
       name: galaxy_disk_frac
       sample_rearrange: "b ht wt d -> b ht wt 1 d"
@@ -212,14 +206,14 @@ encoder:
     _target_: bliss.encoder.encoder.Encoder
     survey_bands: ["u", "g", "r", "i", "z"]
     reference_band: 2  # SDSS r-band
-    tile_slen: ${simulator.prior.tile_slen}
+    tile_slen: ${prior.tile_slen}
     optimizer_params:
         lr: 1e-3
     scheduler_params:
         milestones: [32]
         gamma: 0.1
     image_normalizers: null  # TODO: override in other configs
-    var_dist: null  # TODO: override in other configs 
+    var_dist: null  # TODO: override in other configs
     matcher:
         _target_: bliss.encoder.metrics.CatalogMatcher
         dist_slack: 1.0
@@ -237,7 +231,7 @@ encoder:
               frequency: 1
               restrict_batch: 0
               tiles_to_crop: 0
-              tile_slen: ${simulator.prior.tile_slen}
+              tile_slen: ${prior.tile_slen}
     use_double_detect: false
     use_checkerboard: false
 
@@ -245,14 +239,6 @@ encoder:
 # things above matter only if they are referenced below
 
 mode: train
-
-generate:
-    n_image_files: 8
-    n_batches_per_file: 16
-    simulator: ${simulator}
-    cached_data_path: ${paths.cached_data}
-    file_prefix: dataset
-    store_full_catalog: false
 
 train:
     trainer:

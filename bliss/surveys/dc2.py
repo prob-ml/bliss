@@ -221,14 +221,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             },
         }
 
-    def generate_cached_data(self, image_index):
-        result_dict = self.load_image_and_catalog(image_index)
-
-        image = result_dict["inputs"]["image"]
-        tile_dict = result_dict["tile_dict"]
-        wcs_header_str = result_dict["other_info"]["wcs_header_str"]
-        psf_params = result_dict["inputs"]["psf_params"]
-
+    def split_image_and_tile_cat(self, image, tile_cat, tile_cat_keys_to_split, psf_params):
         # split image
         split_lim = self.image_lim[0] // self.n_image_split
         image_splits = split_tensor(image, split_lim, 1, 2)
@@ -237,27 +230,12 @@ class DC2DataModule(CachedSimulatedDataModule):
 
         # split tile cat
         tile_cat_splits = {}
-        param_list = [
-            "locs",
-            "n_sources",
-            "source_type",
-            "galaxy_fluxes",
-            "star_fluxes",
-            "redshifts",
-            "blendedness",
-            "shear",
-            "ellipticity",
-            "cosmodc2_mask",
-            "one_source_mask",
-            "two_sources_mask",
-            "more_than_two_sources_mask",
-        ]
-        for param_name in param_list:
+        for param_name in tile_cat_keys_to_split:
             tile_cat_splits[param_name] = split_tensor(
-                tile_dict[param_name], split_lim // self.tile_slen, 0, 1
+                tile_cat[param_name], split_lim // self.tile_slen, 0, 1
             )
 
-        data_splits = {
+        return {
             "tile_catalog": unpack_dict(tile_cat_splits),
             "images": image_splits,
             "image_height_index": (
@@ -268,8 +246,34 @@ class DC2DataModule(CachedSimulatedDataModule):
             ).tolist(),
             "psf_params": [psf_params for _ in range(self.n_image_split**2)],
         }
+
+    def generate_cached_data(self, image_index):
+        result_dict = self.load_image_and_catalog(image_index)
+
+        image = result_dict["inputs"]["image"]
+        tile_dict = result_dict["tile_dict"]
+        wcs_header_str = result_dict["other_info"]["wcs_header_str"]
+        psf_params = result_dict["inputs"]["psf_params"]
+
+        param_list = [
+            "locs",
+            "n_sources",
+            "source_type",
+            "fluxes",
+            "redshifts",
+            "blendedness",
+            "shear",
+            "ellipticity",
+            "cosmodc2_mask",
+            "one_source_mask",
+            "two_sources_mask",
+            "more_than_two_sources_mask",
+        ]
+
+        splits = self.split_image_and_tile_cat(image, tile_dict, param_list, psf_params)
+
         data_splits = split_list(
-            unpack_dict(data_splits),
+            unpack_dict(splits),
             sub_list_len=self.data_in_one_cached_file,
         )
 
@@ -328,9 +332,7 @@ class DC2FullCatalog(FullCatalog):
         source_type = torch.from_numpy(catalog["truth_type"].values)
         # we ignore the supernova
         source_type = torch.where(source_type == 2, SourceType.STAR, SourceType.GALAXY)
-        flux, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
-        star_fluxes = flux
-        galaxy_fluxes = flux
+        fluxes, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog)
         blendedness = torch.from_numpy(catalog["blendedness"].values)
         shear1 = torch.from_numpy(catalog["shear_1"].values)
         shear2 = torch.from_numpy(catalog["shear_2"].values)
@@ -347,8 +349,7 @@ class DC2FullCatalog(FullCatalog):
             "source_type": source_type.view(1, ori_len, 1),
             "plocs": plocs.view(1, ori_len, 2),
             "redshifts": redshifts.view(1, ori_len, 1),
-            "galaxy_fluxes": galaxy_fluxes.view(1, ori_len, kwargs["n_bands"]),
-            "star_fluxes": star_fluxes.view(1, ori_len, kwargs["n_bands"]),
+            "fluxes": fluxes.view(1, ori_len, kwargs["n_bands"]),
             "blendedness": blendedness.view(1, ori_len, 1),
             "shear": shear.view(1, ori_len, 2),
             "ellipticity": ellipticity.view(1, ori_len, 2),
@@ -386,7 +387,7 @@ class DC2FullCatalog(FullCatalog):
         return cls(height, width, d), psf_params, match_id
 
     @classmethod
-    def get_bands_flux_and_psf(cls, bands, catalog):
+    def get_bands_flux_and_psf(cls, bands, catalog, median=True):
         flux_list = []
         psf_params_list = []
         for b in bands:
@@ -394,8 +395,13 @@ class DC2FullCatalog(FullCatalog):
             psf_params_name = ["IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_"]
             psf_params_cur_band = []
             for i in psf_params_name:
-                median_psf = np.nanmedian((catalog[i + b]).values).astype(np.float32)
-                psf_params_cur_band.append(median_psf)
-            psf_params_list.append(torch.tensor(psf_params_cur_band))
+                if median:
+                    median_psf = np.nanmedian((catalog[i + b]).values).astype(np.float32)
+                    psf_params_cur_band.append(median_psf)
+                else:
+                    psf_params_cur_band.append(catalog[i + b].values.astype(np.float32))
+            psf_params_list.append(
+                torch.tensor(psf_params_cur_band)
+            )  # bands x 4 (params per band) x n_obj
 
-        return torch.stack(flux_list).t(), torch.stack(psf_params_list)
+        return torch.stack(flux_list).t(), torch.stack(psf_params_list).unsqueeze(0)

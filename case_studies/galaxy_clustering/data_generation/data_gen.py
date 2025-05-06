@@ -116,10 +116,9 @@ def file_data_gen(cfg):
         catalog_dict = {}
         catalog_dict["plocs"] = torch.tensor([catalog[["X", "Y"]].to_numpy()])
         catalog_dict["n_sources"] = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
-        catalog_dict["galaxy_fluxes"] = torch.tensor(
+        catalog_dict["fluxes"] = torch.tensor(
             [catalog[["FLUX_G", "FLUX_R", "FLUX_I", "FLUX_Z"]].to_numpy()]
         )
-        catalog_dict["star_fluxes"] = torch.zeros_like(catalog_dict["galaxy_fluxes"])
         catalog_dict["membership"] = torch.tensor([catalog[["MEM"]].to_numpy()])
         catalog_dict["redshift"] = torch.tensor([catalog[["Z"]].to_numpy()])
         catalog_dict["galaxy_params"] = torch.tensor(
@@ -177,9 +176,11 @@ def file_data_gen(cfg):
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg):
-    catalog_gen(cfg.data_gen)
+    # catalog_gen(cfg.data_gen)
     # image_gen(cfg.data_gen)
-    # file_data_gen(cfg.data_gen)
+    print("Starting file datum generation process ...")
+    file_data_gen(cfg.data_gen)
+    print(" ... Done!")
 
 
 if __name__ == "__main__":

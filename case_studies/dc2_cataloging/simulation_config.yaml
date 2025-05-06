@@ -1,0 +1,28 @@
+---
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+mode: generate
+
+paths:
+    cached_data: /data/scratch/pduan/simulated_dataset
+
+prior:
+    n_tiles_h: 516  # 516 - 4 = 512
+    n_tiles_w: 516
+    prob_galaxy: 1.0
+    batch_size: 8
+    mean_sources: 0.00025  # 0.0025 * 512 * 512 = 65.536 sources on one image
+
+decoder:
+    _target_: bliss.simulator.decoder.Decoder
+    tile_slen: 4
+    use_survey_background: false
+    with_dither: false
+    with_noise: false
+
+generate:
+    n_image_files: 10
+    n_batches_per_file: 4

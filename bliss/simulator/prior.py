@@ -9,7 +9,7 @@ from scipy.stats import truncpareto
 from torch import Tensor
 from torch.distributions import Gamma, Poisson, Uniform
 
-from bliss.catalog import SourceType, TileCatalog
+from bliss.catalog import TileCatalog
 
 
 class CatalogPrior(pl.LightningModule):
@@ -30,14 +30,8 @@ class CatalogPrior(pl.LightningModule):
         max_sources: int,
         mean_sources: float,
         prob_galaxy: float,
-        star_flux_exponent: float,
-        star_flux_truncation: float,
-        star_flux_loc: float,
-        star_flux_scale: float,
-        galaxy_flux_exponent: float,
-        galaxy_flux_truncation: float,
-        galaxy_flux_loc: float,
-        galaxy_flux_scale: float,
+        star_flux: dict,
+        galaxy_flux: dict,
         galaxy_a_concentration: float,
         galaxy_a_loc: float,
         galaxy_a_scale: float,
@@ -57,14 +51,8 @@ class CatalogPrior(pl.LightningModule):
             max_sources: Maximum number of sources in a tile
             mean_sources: Mean rate of sources appearing in a tile
             prob_galaxy: Prior probability a source is a galaxy
-            star_flux_exponent: Exponent (alpha) parameter of a truncated Pareto
-            star_flux_truncation: Truncation parameter of a truncated Pareto
-            star_flux_loc: Location parameter of a truncated Pareto
-            star_flux_scale: Scale parameter of a truncated Pareto
-            galaxy_flux_exponent: Exponent (alpha) parameter of a truncated Pareto
-            galaxy_flux_truncation: Truncation parameter of a truncated Pareto
-            galaxy_flux_loc: Location parameter of a truncated Pareto
-            galaxy_flux_scale: Scale parameter of a truncated Pareto
+            star_flux: parameters of a truncated Pareto
+            galaxy_flux: parameters of a truncated Pareto
             galaxy_a_concentration: ?
             galaxy_a_loc: ?
             galaxy_a_scale: galaxy scale
@@ -85,18 +73,10 @@ class CatalogPrior(pl.LightningModule):
         self.max_sources = max_sources
         self.mean_sources = mean_sources
 
-        # TODO: refactor prior to take hydra-initialized distributions as arguments
         self.prob_galaxy = prob_galaxy
 
-        self.star_flux_truncation = star_flux_truncation
-        self.star_flux_exponent = star_flux_exponent
-        self.star_flux_loc = star_flux_loc
-        self.star_flux_scale = star_flux_scale
-
-        self.galaxy_flux_exponent = galaxy_flux_exponent
-        self.galaxy_flux_truncation = galaxy_flux_truncation
-        self.galaxy_flux_loc = galaxy_flux_loc
-        self.galaxy_flux_scale = galaxy_flux_scale
+        self.star_flux = star_flux
+        self.galaxy_flux = galaxy_flux
 
         self.galaxy_a_concentration = galaxy_a_concentration
         self.galaxy_a_loc = galaxy_a_loc
@@ -117,23 +97,17 @@ class CatalogPrior(pl.LightningModule):
             `(batch_size, self.n_tiles_h, self.n_tiles_w)`.
             The remaining dimensions are variable-specific.
         """
-        locs = self._sample_locs()
-        galaxy_fluxes, galaxy_params = self._sample_galaxy_prior()
-        star_fluxes = self._sample_star_fluxes()
+        d = self._sample_galaxy_shape()
 
-        n_sources = self._sample_n_sources()
-        source_type = self._sample_source_type()
+        d["locs"] = self._sample_locs()
+        d["n_sources"] = self._sample_n_sources()
+        d["source_type"] = self._sample_source_type()
 
-        catalog_params = {
-            "n_sources": n_sources,
-            "source_type": source_type,
-            "locs": locs,
-            "galaxy_fluxes": galaxy_fluxes,
-            "galaxy_params": galaxy_params,
-            "star_fluxes": star_fluxes,
-        }
+        star_fluxes = self._sample_fluxes(self.gmm_star, self.star_flux)
+        galaxy_fluxes = self._sample_fluxes(self.gmm_gal, self.galaxy_flux)
+        d["fluxes"] = torch.where(d["source_type"], galaxy_fluxes, star_fluxes)
 
-        return TileCatalog(catalog_params)
+        return TileCatalog(d)
 
     def _sample_n_sources(self):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w)
@@ -149,26 +123,23 @@ class CatalogPrior(pl.LightningModule):
     def _sample_source_type(self):
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
         uniform_aux_var = torch.rand(*latent_dims)
-        galaxy_bool = uniform_aux_var < self.prob_galaxy
-        star_bool = galaxy_bool.bitwise_not()
-        return SourceType.STAR * star_bool + SourceType.GALAXY * galaxy_bool
+        return uniform_aux_var < self.prob_galaxy
 
-    def _draw_truncated_pareto(self, exponent, truncation, loc, scale, n_samples) -> Tensor:
+    def _draw_truncated_pareto(self, params, n_samples) -> Tensor:
         # could use PyTorch's Pareto instead, but would have to transform to truncate
-        samples = truncpareto.rvs(exponent, truncation, loc=loc, scale=scale, size=n_samples)
+        samples = truncpareto.rvs(
+            params["exponent"],
+            params["truncation"],
+            loc=params["loc"],
+            scale=params["scale"],
+            size=n_samples,
+        )
         return torch.from_numpy(samples)
 
-    def _sample_star_fluxes(self):
-        flux_prop = self._sample_flux_ratios(self.gmm_star)
-
+    def _sample_fluxes(self, gmm, flux_params):
+        flux_prop = self._sample_flux_ratios(gmm)
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-        ref_band_flux = self._draw_truncated_pareto(
-            self.star_flux_exponent,
-            self.star_flux_truncation,
-            self.star_flux_loc,
-            self.star_flux_scale,
-            latent_dims,
-        )
+        ref_band_flux = self._draw_truncated_pareto(flux_params, latent_dims)
         total_flux = ref_band_flux * flux_prop
 
         # select specified bands
@@ -204,7 +175,6 @@ class CatalogPrior(pl.LightningModule):
             gals_fluxes (Tensor): (b x th x tw x ms x nbands) Tensor containing all gal fluxes
                 ratios for current batch
         """
-
         sample_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources)
         flux_logdiff, _ = gmm.sample(np.prod(sample_dims))
 
@@ -225,7 +195,7 @@ class CatalogPrior(pl.LightningModule):
         sample_dims = sample_dims + (self.n_bands,)
         return flux_prop.view(sample_dims)
 
-    def _sample_galaxy_prior(self) -> Tuple[Tensor, Tensor]:
+    def _sample_galaxy_shape(self) -> Tuple[Tensor, Tensor]:
         """Sample the latent galaxy params.
 
         Returns:
@@ -237,25 +207,7 @@ class CatalogPrior(pl.LightningModule):
                 - bulge_q: minor-to-major axis ratio of the bulge
                 - a_b: semi-major axis of bulge
         """
-        flux_prop = self._sample_flux_ratios(self.gmm_gal)
-
         latent_dims = (self.batch_size, self.n_tiles_h, self.n_tiles_w, self.max_sources, 1)
-
-        ref_band_flux = self._draw_truncated_pareto(
-            self.galaxy_flux_exponent,
-            self.galaxy_flux_truncation,
-            self.galaxy_flux_loc,
-            self.galaxy_flux_scale,
-            latent_dims,
-        )
-
-        total_flux = flux_prop * ref_band_flux
-
-        # select fluxes from specified bands
-        bands = np.array(self.bands)
-        select_flux = total_flux[..., bands]
-
-        latent_dims = latent_dims[:-1]
 
         disk_frac = Uniform(0, 1).sample(latent_dims)
         beta_radians = Uniform(0, np.pi).sample(latent_dims)
@@ -269,13 +221,11 @@ class CatalogPrior(pl.LightningModule):
         bulge_scale = self.galaxy_a_scale / self.galaxy_a_bd_ratio
         bulge_a = base_dist.sample(latent_dims) * bulge_scale + bulge_loc
 
-        disk_frac = torch.unsqueeze(disk_frac, 4)
-        beta_radians = torch.unsqueeze(beta_radians, 4)
-        disk_q = torch.unsqueeze(disk_q, 4)
-        disk_a = torch.unsqueeze(disk_a, 4)
-        bulge_q = torch.unsqueeze(bulge_q, 4)
-        bulge_a = torch.unsqueeze(bulge_a, 4)
-
-        param_lst = [disk_frac, beta_radians, disk_q, disk_a, bulge_q, bulge_a]
-
-        return select_flux, torch.cat(param_lst, dim=4)
+        return {
+            "galaxy_disk_frac": disk_frac,
+            "galaxy_beta_radians": beta_radians,
+            "galaxy_disk_q": disk_q,
+            "galaxy_a_d": disk_a,
+            "galaxy_bulge_q": bulge_q,
+            "galaxy_a_b": bulge_a,
+        }

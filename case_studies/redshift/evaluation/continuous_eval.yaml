@@ -1,0 +1,15 @@
+---
+defaults:
+    - ../redshift_from_img@_here_: continuous
+    - _self_
+    # - override hydra/job_logging: stdout
+
+paths:
+    ckpt_dir: ${paths.data_dir}/checkpoints/continuous/checkpoints
+    plot_dir: ${paths.data_dir}/plots
+
+# To reduce memory usage
+surveys:
+    dc2:
+        batch_size: 4
+        max_sources_per_tile: 5

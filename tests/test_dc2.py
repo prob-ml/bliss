@@ -156,8 +156,7 @@ class TestDC2:
             "locs",
             "n_sources",
             "source_type",
-            "galaxy_fluxes",
-            "star_fluxes",
+            "fluxes",
         )
 
         for k in params:
@@ -171,7 +170,6 @@ class TestDC2:
         GlobalEnv.current_encoder_epoch = None
 
     def test_train_on_dc2(self, cfg):
-        cfg = cfg.copy()
         cfg.encoder.survey_bands = ["u", "g", "r", "i", "z", "y"]
         cfg.train.data_source = cfg.surveys.dc2
         cfg.train.pretrained_weights = None
@@ -201,24 +199,16 @@ class TestDC2:
             },
             {
                 "_target_": "bliss.encoder.variational_dist.LogNormalFactor",
-                "name": "star_fluxes",
+                "name": "fluxes",
                 "dim": 6,
                 "sample_rearrange": "b ht wt d -> b ht wt 1 d",
                 "nll_rearrange": "b ht wt 1 d -> b ht wt d",
-                "nll_gating": "is_star",
-            },
-            {
-                "_target_": "bliss.encoder.variational_dist.LogNormalFactor",
-                "name": "galaxy_fluxes",
-                "dim": 6,
-                "sample_rearrange": "b ht wt d -> b ht wt 1 d",
-                "nll_rearrange": "b ht wt 1 d -> b ht wt d",
-                "nll_gating": "is_galaxy",
+                "nll_gating": "n_sources",
             },
         ]
 
         for f in cfg.variational_factors:
-            if f.name in {"star_fluxes", "galaxy_fluxes"}:
+            if f.name == "fluxes":
                 f.dim = 6
 
         train(cfg.train)

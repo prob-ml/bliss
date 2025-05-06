@@ -1,0 +1,78 @@
+# Default configuration file for PSFEx 3.24.2
+# EB 2024-09-07
+#
+ 
+#-------------------------------- PSF model ----------------------------------
+ 
+BASIS_TYPE      PIXEL_AUTO      # NONE, PIXEL, GAUSS-LAGUERRE or FILE
+BASIS_NUMBER    20              # Basis number or parameter
+BASIS_SCALE     1.0
+NEWBASIS_TYPE   NONE
+NEWBASIS_NUMBER 8
+PSF_SAMPLING    0.0             # Sampling step in pixel units (0.0 = auto)
+PSF_ACCURACY    0.01            # Accuracy to expect from PSF "pixel" values
+PSF_SIZE        25,25           # Image size of the PSF model
+ 
+#------------------------- Point source measurements -------------------------
+ 
+CENTER_KEYS     X_IMAGE,Y_IMAGE # Catalogue parameters for source pre-centering
+PSF_RECENTER    N
+PHOTFLUX_KEY    FLUX_APER(7)    # Catalogue parameter for photometric norm.
+PHOTFLUXERR_KEY FLUXERR_APER(7) # Catalogue parameter for photometric error
+MEF_TYPE        INDEPENDENT 
+#----------------------------- PSF variability -------------------------------
+ 
+PSFVAR_KEYS     X_IMAGE,Y_IMAGE # Catalogue or FITS (preceded by :) params
+PSFVAR_GROUPS   1,1             # Group tag for each context key
+PSFVAR_DEGREES  2               # Polynom degree for each group
+PSFVAR_NSNAP    9
+
+HIDDENMEF_TYPE  COMMON
+#STABILITY_TYPE PRE-DISTORTED
+STABILITY_TYPE  EXPOSURE
+#----------------------------- Sample selection ------------------------------
+ 
+SAMPLE_AUTOSELECT  Y            # Automatically select the FWHM (Y/N) ?
+SAMPLEVAR_TYPE     SEEING       # File-to-file PSF variability: NONE or SEEING
+SAMPLE_FWHMRANGE   2.0,30.0     # Allowed FWHM range
+SAMPLE_VARIABILITY 0.2          # Allowed FWHM variability (1.0 = 100%)
+SAMPLE_MINSN       20           # Minimum S/N for a source to be used
+SAMPLE_MAXELLIP    0.3          # Maximum (A-B)/(A+B) for a source to be used
+
+SAMPLE_FLAGMASK    0x00fe
+### Morganson et al (https://arxiv.org/pdf/1801.03177) mention they add SAMPLE_WFLAGMASK= 0x0000 and SAMPLE_IMAFLAGMASK= 0x0000, otherwise identical to Table 13. 
+SAMPLE_WFLAGMASK   0x0000
+SAMPLE_IMAFLAGMASK 0x000
+BADPIXEL_FILTER    N
+BADPIXEL_NMAX      0
+HOMOBASIS_TYPE     None
+HOMOBASIS_NUMBER   10
+HOMOBASIS_SCALE    1.O
+HOMOPSF_PARAMS     2.0,3.0
+
+#------------------------------- Check-plots ----------------------------------
+ 
+CHECKPLOT_DEV       NULL         # NULL, XWIN, TK, PS, PSC, XFIG, PNG,
+                                # JPEG, AQT, PDF or SVG
+CHECKPLOT_RES         0
+CHECKPLOT_ANTIALIAS Y
+CHECKPLOT_TYPE        NONE
+CHECKPLOT_NAME      selfwhm,fwhm,ellipticity,counts,countfrac,chi2,resi
+ 
+#------------------------------ Check-Images ---------------------------------
+ 
+CHECKIMAGE_TYPE CHI,PROTOTYPES,SAMPLES,RESIDUALS,SNAPSHOTS
+                                # or MOFFAT,-MOFFAT,-SYMMETRICAL
+CHECKIMAGE_NAME chi.fits,proto.fits,samp.fits,resi.fits,snap.fits
+                                # Check-image filenames
+ 
+#----------------------------- Miscellaneous ---------------------------------
+ 
+PSF_DIR                         # Where to write PSFs (empty=same as input)
+VERBOSE_TYPE    NORMAL          # can be QUIET,NORMAL,LOG or FULL
+WRITE_XML       Y               # Write XML file (Y/N)?
+XML_NAME        psfex.xml       # Filename for XML output
+NTHREADS        0               # Number of simultaneous threads for
+                                # the SMP version of PSFEx
+                                # 0 = automatic
+ 

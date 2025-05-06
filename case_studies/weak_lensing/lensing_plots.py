@@ -1,57 +1,57 @@
-import math
+from pathlib import Path
 
 import torch
 from matplotlib import pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from torchmetrics import Metric
 
-from bliss.catalog import BaseTileCatalog
 
-
-class PlotWeakLensingShearConvergence(Metric):
+class PlotLensingMaps(Metric):
     """Metric wrapper for plotting sample images."""
 
     def __init__(
         self,
         frequency: int = 1,
-        restrict_batch: int = 0,
-        tile_slen: int = 0,  # note must match encoder tile_slen
         save_local: str = None,
     ):
         super().__init__()
 
         self.frequency = frequency
-        self.restrict_batch = restrict_batch
-        self.tile_slen = tile_slen
 
         self.should_plot = False
-        self.batch = {}
         self.batch_idx = -1
-        self.sample_with_mode_tile = None
-        self.images = None
+        self.true_shear1 = []
+        self.true_shear2 = []
+        self.true_convergence = []
+        self.est_shear1 = []
+        self.est_shear2 = []
+        self.est_convergence = []
         self.current_epoch = 0
-        self.target_cat_cropped = None
         self.save_local = save_local
 
     def update(
         self,
-        batch,
         target_cat_cropped,
         sample_with_mode_tile,
-        sample_with_mode,
         current_epoch,
         batch_idx,
     ):
         self.batch_idx = batch_idx
-        if self.restrict_batch != batch_idx:
-            self.should_plot = False
-            return
         self.current_epoch = current_epoch
         self.should_plot = True
-        self.batch = batch
-        self.sample_with_mode_tile = sample_with_mode_tile
-        self.images = batch["images"]
-        self.target_cat_cropped = target_cat_cropped
+        self.true_shear1.append(target_cat_cropped["shear_1"])
+        self.true_shear2.append(target_cat_cropped["shear_2"])
+        self.true_convergence.append(target_cat_cropped["convergence"])
+        self.est_shear1.append(
+            sample_with_mode_tile.get("shear_1", torch.zeros_like(target_cat_cropped["shear_1"]))
+        )
+        self.est_shear2.append(
+            sample_with_mode_tile.get("shear_2", torch.zeros_like(target_cat_cropped["shear_2"]))
+        )
+        self.est_convergence.append(
+            sample_with_mode_tile.get(
+                "convergence", torch.zeros_like(target_cat_cropped["convergence"])
+            )
+        )
 
     def compute(self):
         return {}
@@ -59,109 +59,133 @@ class PlotWeakLensingShearConvergence(Metric):
     def plot(self):
         if self.current_epoch % self.frequency != 0:
             return None
-        est_cat = self.sample_with_mode_tile
-        true_tile_cat = BaseTileCatalog(self.batch["tile_catalog"])
+        true_shear1 = torch.stack(self.true_shear1, dim=0).squeeze()
+        true_shear2 = torch.stack(self.true_shear2, dim=0).squeeze()
+        true_convergence = torch.stack(self.true_convergence, dim=0).squeeze()
+        est_shear1 = torch.stack(self.est_shear1, dim=0).squeeze()
+        est_shear2 = torch.stack(self.est_shear2, dim=0).squeeze()
+        est_convergence = torch.stack(self.est_convergence, dim=0).squeeze()
+
+        self.true_shear1 = []
+        self.true_shear2 = []
+        self.true_convergence = []
+        self.est_shear1 = []
+        self.est_shear2 = []
+        self.est_convergence = []
+
+        plot_lensing_scatterplots(
+            true_shear1,
+            true_shear2,
+            true_convergence,
+            est_shear1,
+            est_shear2,
+            est_convergence,
+            current_epoch=self.current_epoch,
+            save_local=self.save_local,
+        )
+
         return plot_maps(
-            self.images,
-            true_tile_cat,
-            est_cat,
-            figsize=None,
+            true_shear1,
+            true_shear2,
+            true_convergence,
+            est_shear1,
+            est_shear2,
+            est_convergence,
             current_epoch=self.current_epoch,
             save_local=self.save_local,
         )
 
 
-def plot_maps(images, true_tile_cat, est_tile_cat, figsize=None, current_epoch=0, save_local=None):
+def plot_maps(
+    true_shear1,
+    true_shear2,
+    true_convergence,
+    est_shear1,
+    est_shear2,
+    est_convergence,
+    current_epoch=0,
+    save_local=None,
+):
     """Plots weak lensing shear and convergence maps."""
-    batch_size = images.size(0)
-
-    num_images = min(int(math.sqrt(batch_size)) ** 2, 5)
+    num_images = min(4, true_shear1.shape[0])
     num_lensing_params = 6  # true and estimated shear1, shear2, and convergence
-    img_ids = torch.arange(num_images, device=images.device)
+    img_ids = torch.arange(num_images)
 
-    if figsize is None:
-        figsize = (20, 20)
-    fig, axes = plt.subplots(nrows=num_images, ncols=num_lensing_params, figsize=figsize)
-
-    true_shear = true_tile_cat["shear"]
-    est_shear = est_tile_cat["shear"]
-    true_convergence = true_tile_cat["convergence"]
-    est_convergence = est_tile_cat["convergence"]
+    fig, axes = plt.subplots(
+        nrows=num_images, ncols=num_lensing_params, figsize=(20, 3 * num_images)
+    )
 
     for img_id in img_ids:
-        shear1_vmin = torch.min(true_shear[img_id].squeeze()[:, :, 0])
-        shear1_vmax = torch.max(true_shear[img_id].squeeze()[:, :, 0])
-        shear2_vmin = torch.min(true_shear[img_id].squeeze()[:, :, 1])
-        shear2_vmax = torch.max(true_shear[img_id].squeeze()[:, :, 1])
+        ts1 = axes[img_id, 0].imshow(true_shear1[img_id].squeeze().cpu())
+        axes[img_id, 0].set_title("True shear 1")
+        axes[img_id, 0].set_ylabel(f"Image {img_id}")
+        plt.colorbar(ts1, fraction=0.045)
 
-        convergence_vmin = torch.min(true_convergence[img_id].squeeze())
-        convergence_vmax = torch.max(true_convergence[img_id].squeeze())
+        es1 = axes[img_id, 1].imshow(est_shear1[img_id].squeeze().cpu())
+        axes[img_id, 1].set_title("Estimated shear 1")
+        plt.colorbar(es1, fraction=0.045)
 
-        plot_maps_helper(
-            x_label="True horizontal shear",
-            mp=true_shear[img_id].squeeze()[:, :, 0],
-            ax=axes[0],
-            fig=fig,
-            vmin=shear1_vmin,
-            vmax=shear1_vmax,
-        )
-        plot_maps_helper(
-            x_label="Estimated horizontal shear",
-            mp=est_shear[img_id].squeeze()[:, :, 0],
-            ax=axes[1],
-            fig=fig,
-            vmin=shear1_vmin,
-            vmax=shear1_vmax,
-        )
-        plot_maps_helper(
-            x_label="True diagonal shear",
-            mp=true_shear[img_id].squeeze()[:, :, 1],
-            ax=axes[2],
-            fig=fig,
-            vmin=shear2_vmin,
-            vmax=shear2_vmax,
-        )
-        plot_maps_helper(
-            x_label="Estimated diagonal shear",
-            mp=est_shear[img_id].squeeze()[:, :, 1],
-            ax=axes[3],
-            fig=fig,
-            vmin=shear2_vmin,
-            vmax=shear2_vmax,
-        )
-        plot_maps_helper(
-            x_label="True convergence",
-            mp=true_convergence[img_id].squeeze(),
-            ax=axes[4],
-            fig=fig,
-            vmin=convergence_vmin,
-            vmax=convergence_vmax,
-        )
-        plot_maps_helper(
-            x_label="Estimated convergence",
-            mp=est_convergence[img_id].squeeze(),
-            ax=axes[5],
-            fig=fig,
-            vmin=convergence_vmin,
-            vmax=convergence_vmax,
-        )
+        ts2 = axes[img_id, 2].imshow(true_shear2[img_id].squeeze().cpu())
+        axes[img_id, 2].set_title("True shear 2")
+        plt.colorbar(ts2, fraction=0.045)
+
+        es2 = axes[img_id, 3].imshow(est_shear2[img_id].squeeze().cpu())
+        axes[img_id, 3].set_title("Estimated shear 2")
+        plt.colorbar(es2, fraction=0.045)
+
+        tc = axes[img_id, 4].imshow(true_convergence[img_id].squeeze().cpu())
+        axes[img_id, 4].set_title("True convergence")
+        plt.colorbar(tc, fraction=0.045)
+
+        ec = axes[img_id, 5].imshow(est_convergence[img_id].squeeze().cpu())
+        axes[img_id, 5].set_title("Estimated convergence")
+        plt.colorbar(ec, fraction=0.045)
 
     fig.tight_layout()
+
     if save_local:
-        fig.savefig(f"{save_local}/wl_shear_conv_{current_epoch}_asinh.png")
-    return fig, axes
+        if not Path(save_local).exists():
+            Path(save_local).mkdir(parents=True)
+        fig.savefig(f"{save_local}/lensing_maps_{current_epoch}.png")
+
+    plt.close(fig)
 
 
-def plot_maps_helper(x_label: str, mp, ax, fig, vmin, vmax):
-    ax.set_xlabel(x_label)
+def plot_lensing_scatterplots(
+    true_shear1,
+    true_shear2,
+    true_convergence,
+    est_shear1,
+    est_shear2,
+    est_convergence,
+    current_epoch=0,
+    save_local=None,
+):
+    """Creates scatterplots of true vs. estimated shear1, shear2, and convergence."""
+    num_lensing_params = 3  # shear1, shear2, and convergence
 
-    mp = mp.cpu().numpy()
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="5%", pad=0.05)
-    im = ax.matshow(
-        mp,
-        cmap="viridis",
-        vmin=vmin,
-        vmax=vmax,
-    )
-    fig.colorbar(im, cax=cax, orientation="vertical")
+    fig, axes = plt.subplots(nrows=1, ncols=num_lensing_params, figsize=(20, 6))
+
+    axes[0].scatter(true_shear1.flatten().cpu(), est_shear1.flatten().cpu(), alpha=0.2)
+    axes[0].set_xlabel("True shear 1")
+    axes[0].set_ylabel("Estimated shear 1")
+    axes[0].axline((0, 0), slope=1, color="black", linestyle="dashed")
+
+    axes[1].scatter(true_shear2.flatten().cpu(), est_shear2.flatten().cpu(), alpha=0.2)
+    axes[1].set_xlabel("True shear 2")
+    axes[1].set_ylabel("Estimated shear 2")
+    axes[1].axline((0, 0), slope=1, color="black", linestyle="dashed")
+
+    axes[2].scatter(true_convergence.flatten().cpu(), est_convergence.flatten().cpu(), alpha=0.2)
+    axes[2].set_xlabel("True convergence")
+    axes[2].set_ylabel("Estimated convergence")
+    axes[2].axline((0, 0), slope=1, color="black", linestyle="dashed")
+
+    fig.tight_layout()
+
+    if save_local:
+        if not Path(save_local).exists():
+            Path(save_local).mkdir(parents=True)
+        fig.savefig(f"{save_local}/lensing_scatterplots_{current_epoch}.png")
+
+    plt.close(fig)
