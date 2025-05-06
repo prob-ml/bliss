@@ -61,7 +61,7 @@ CHECKPLOT_NAME      selfwhm,fwhm,ellipticity,counts,countfrac,chi2,resi
  
 #------------------------------ Check-Images ---------------------------------
  
-CHECKIMAGE_TYPE CHI,PROTOTYPES,SAMPLES,RESIDUALS,SNAPSHOTS
+CHECKIMAGE_TYPE    NONE             #CHI,PROTOTYPES,SAMPLES,RESIDUALS,SNAPSHOTS
                                 # or MOFFAT,-MOFFAT,-SYMMETRICAL
 CHECKIMAGE_NAME chi.fits,proto.fits,samp.fits,resi.fits,snap.fits
                                 # Check-image filenames

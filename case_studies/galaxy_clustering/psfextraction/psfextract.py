@@ -3,6 +3,7 @@ from astropy.io import fits
 import numpy as np
 import os
 import subprocess
+from tqdm import tqdm
 
 TILE_PATHS = '/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles'
 DES_BANDS = ("g", "r", "i", "z")
@@ -33,12 +34,12 @@ def decompress_hdu(filepath, savepath):
 
 
 
-def sample_tiles(path_to_tiles, n_samples_per_band=100, seed=42):
+def sample_tiles(path_to_tiles, n_samples_per_band=100, replace=False, seed=42):
     """
     Sample n_samples_per_band tiles to model with SExtractor.
     """
     np.random.seed(seed)
-    samples = np.random.choice(os.listdir(path_to_tiles), size=n_samples_per_band)
+    samples = np.random.choice(os.listdir(path_to_tiles), size=n_samples_per_band, replace=replace)
     return samples
 
 
@@ -52,19 +53,25 @@ if __name__=="__main__":
     if not args.seed:
         args.seed = SEED
 
+    if args.n_samples_per_band==0:
+        n_samples_per_band = len(os.listdir(TILE_PATHS))
+
     tile_paths = sample_tiles(
                         TILE_PATHS,
-                        n_samples_per_band=args.n_samples_per_band,
-                        seed=args.seed
+                        n_samples_per_band=n_samples_per_band,
+                        seed=args.seed,
                         )
     
-    print(f"The following tiles will be modeled: {tile_paths}")
-
-    for tile in tile_paths:
+    print(f"The following {len(tile_paths)} tiles will be modeled: {tile_paths}")
+    for tile in tqdm(tile_paths, desc="Processing tiles"):
+        print(f"Tile: {tile}")
         ## Define directories where data will be stored
         save_dir = f"{SAVE_PATH}/{tile}"
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
+        # For now, skip the ones that have been created already
+        if len(os.listdir(save_dir))!=0:
+            continue
 
         dir_files = {
                 band: [
@@ -85,6 +92,8 @@ if __name__=="__main__":
 
             savecatpath = savepath.replace(".fits", ".cat")
 
-            subprocess.run(["sed", "-i", f"s|^CATALOG_NAME\s*.*|CATALOG_NAME     {savecatpath}|", f"{CONFIG_PATH}/config.sex"])
+            subprocess.run(["sed", "-i", f"s|^CATALOG_NAME[[:space:]]*.*|CATALOG_NAME     {savecatpath}|", f"{CONFIG_PATH}/config.sex"])
             subprocess.run(["source-extractor", savepath, "-c", f"{CONFIG_PATH}/config.sex"])
             subprocess.run(["psfex", f"{savecatpath}", "-c", f"{CONFIG_PATH}/config.psfex"])
+            # Delete the .fits file to avoid redundancy
+            subprocess.run(["rm", f"{savepath}"])
