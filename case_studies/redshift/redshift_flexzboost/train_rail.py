@@ -13,8 +13,9 @@ RailStage.data_store.__class__.allow_overwrite = True
 
 # %% configs
 with initialize(config_path="../", version_base=None):
-    notebook_cfg = compose("redshift_flexzboost")
-rail_dir = Path(notebook_cfg.paths["processed_data_dir_rail"])
+    notebook_cfg = compose("artifact_creation")
+rail_dir = Path(notebook_cfg.paths["rail_checkpoints"])
+cached_dc2 = Path(notebook_cfg.paths["dc2_cached"])
 
 # parameters for optimization
 fz_dict = {
@@ -37,13 +38,13 @@ fz_dict = {
 
 # %% get all filenames like rail_dir / train_df_{i}
 # listing all files in the directory
-train_df_files = list(rail_dir.glob("train_df_*.hdf5"))
+train_df_files = list(cached_dc2.glob("rail_train_split_*.hdf5"))
 # sorting the files by their index
 train_df_files.sort(key=lambda x: int(x.stem.split("_")[-1]))
 
 # %% load training data
 for i, train_df_file in enumerate(train_df_files):
-    out_model_fn = rail_dir / f"flexzboost_model_results_{i}.pkl"
+    out_model_fn = rail_dir / f"flexzboost_model_results_split_{i}.pkl"
 
     logging.info(f"Trainset {i} from file {train_df_file} --> {out_model_fn}")
 

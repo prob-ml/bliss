@@ -1,92 +1,104 @@
-# %% imports
+import logging
 from pathlib import Path
 
+import h5py
 import numpy as np
 import pandas as pd
-import tables_io  # pylint: disable=import-error
 from hydra import compose, initialize
+from scipy.stats import norm
 from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.model_selection import train_test_split
+
+logging.basicConfig(level=logging.INFO)
+
 
 # %% configs
 with initialize(config_path="../", version_base=None):
-    notebook_cfg = compose("redshift_flexzboost")
-rail_dir = Path(notebook_cfg.paths["processed_data_dir_rail"])
-out_model_fn = rail_dir / "flexzboost_model_results.pkl"
+    notebook_cfg = compose("artifact_creation")
+rail_dir = Path(notebook_cfg.paths["rail_checkpoints"])
+cached_dc2 = Path(notebook_cfg.paths["dc2_cached"])
 
-# %% load training data
-train_df = pd.DataFrame(tables_io.read(rail_dir / "train_df.hdf5"))
-test_df = pd.DataFrame(tables_io.read(rail_dir / "test_df.hdf5"))
+train_df_file = cached_dc2 / "rail_train_split_0.hdf5"
+test_df_file = cached_dc2 / "rail_test_split_0.hdf5"
 
-# get bands of interest
-bands = ["u", "g", "r", "i", "z"]
-bands_model = [f"mag_{band}_lsst" for band in bands]
+# %% load train_df_file
 
-# %% train sklearn gradienthistogramregressor
-# to predict redshift rom mag_{band}_lsst
+columns_to_include = [f"mag_{x}_lsst" for x in "ugrizy"]
 
+with h5py.File(train_df_file, "r") as f:
+    X = np.array([f[col][:] for col in columns_to_include]).T
+    Y = f["redshift"][:]
+
+################################################################
+# %% use some of the data to estimate E[Y|X] with histgradientboosting
+# Split the data into training and validation sets
+X_train, X_val, Y_train, Y_val = train_test_split(X, Y, test_size=0.1, random_state=42)
+
+# Initialize and train the model
 model = HistGradientBoostingRegressor()
-model.fit(train_df[bands_model], train_df["redshift"])
+model.fit(X_train, Y_train)
 
-# %% make predictions on test
-preds = model.predict(test_df[bands_model])
+# Evaluate the model on the validation set
+score = model.score(X_val, Y_val)
+logging.info(f"Validation R^2 score: {score}")
 
+####################################################################
+# %% use remaining data to estimate var[Y|f(X)=s] where f(x)=E[Y|X]
+# Get the predictions for the validation set
+Y_pred = model.predict(X_val)
+# Get the residuals
+residuals = Y_val - Y_pred
+# Model residuals as a function of Y_pred
+# Train a new model to estimate the variance of the residuals
+model_var = HistGradientBoostingRegressor()
+# model_var.fit(X_val, residuals**2)
+model_var.fit(Y_pred.reshape(-1, 1), residuals**2)
 
-# %% divide ground truth into bins by mag and redshift
-def process_cutoff_names(cutoffs):
-    cutoff_names = ["<" + str(cutoffs[0])]
-    for lower, upper in zip(cutoffs[:-1], cutoffs[1:]):
-        cutoff_names.append(f"{lower}-{upper}")
-    cutoff_names.append(">" + str(cutoffs[-1]))
-    return cutoff_names
+####################################################################
+# %% load test data
+with h5py.File(test_df_file, "r") as f:
+    X_te = np.array([f[col][:] for col in columns_to_include]).T
+    Y_te = f["redshift"][:]
+    mag_te = f["mag_r_truth"][:]
 
+####################################################################
+# %% predict the mean and variance of the test set
+Y_te_pred = model.predict(X_te)
+# Y_te_var = model_var.predict(X_te)
+Y_te_var = model_var.predict(Y_te_pred.reshape(-1, 1))
 
-y_test = test_df["redshift"]
-y_mags = test_df["mag_i_lsst"]  # maybe should use ground truth instead?
+####################################################################
+# %% compute PIT values
 
-mag_bin_cutoffs = notebook_cfg.visualization.mag_bin_cutoffs
-y_test_mag_index = np.digitize(y_mags, mag_bin_cutoffs)
-mag_bin_cutoff_names = process_cutoff_names(mag_bin_cutoffs)
+# Compute standard deviations, avoiding negative variance
+sigma = np.sqrt(np.clip(Y_te_var, 1e-5, None))
 
-redshift_bin_cutoffs = notebook_cfg.visualization.redshift_bin_cutoffs
-y_test_redshift_index = np.digitize(y_test, redshift_bin_cutoffs)
-redshift_bin_cutoff_names = process_cutoff_names(redshift_bin_cutoffs)
+# PIT = CDF of the true value under the predictive normal distribution
+pit = norm.cdf((Y_te - Y_te_pred) / sigma)
 
-# %%
-# collate mean l2 loss for each mag bin
-mag_bin_loss = np.zeros(len(mag_bin_cutoffs) + 1)
-for i in range(len(mag_bin_cutoffs) + 1):
-    mask = y_test_mag_index == i
-    mag_bin_loss[i] = np.mean((y_test[mask] - preds[mask]) ** 2)
+####################################################################
+# %% draw a sample and store in rail_dir / normalboost_predictions_split_0.parquet
 
-# and redhisft bin
-redshift_bin_loss = np.zeros(len(redshift_bin_cutoffs) + 1)
-for i in range(len(redshift_bin_cutoffs) + 1):
-    mask = y_test_redshift_index == i
-    redshift_bin_loss[i] = np.mean((y_test[mask] - preds[mask]) ** 2)
+# draw one normal sample per test point
+samples1 = np.random.normal(loc=Y_te_pred, scale=np.sqrt(np.clip(Y_te_var, 0, None)))
+samples2 = np.random.normal(loc=Y_te_pred, scale=np.sqrt(np.clip(Y_te_var, 0, None)))
 
-# %% save results
-
-mag_results = pd.DataFrame(
+# assemble dataframe
+df = pd.DataFrame(
     {
-        "loss_type": ["L2" for _ in mag_bin_loss],
-        "loss": mag_bin_loss,
-        "bin": mag_bin_cutoff_names,
-        "bin_index": list(range(len(mag_bin_loss))),
-        "binning_name": ["mag" for _ in mag_bin_loss],
+        "z_pred_L2": Y_te_pred,
+        "z_pred_var": Y_te_var,
+        "z_pred_sample1": samples1,
+        "z_pred_sample2": samples2,
+        "z_true": Y_te,
+        "mag_r_true": mag_te,
+        "pit_values": pit,
     }
 )
 
-mag_results.to_csv(rail_dir / "sklearn_results_by_mag.csv")
+# write to parquet
+output_file = rail_dir / "normalboost_predictions_split_0.parquet"
+df.to_parquet(output_file, index=False)
+logging.info(f"Saved predictions to {output_file}")
 
-redshift_results = pd.DataFrame(
-    {
-        "loss_type": ["L2" for _ in redshift_bin_loss],
-        "loss": redshift_bin_loss,
-        "bin": redshift_bin_cutoff_names,
-        "bin_index": list(range(len(redshift_bin_loss))),
-        "binning_name": ["redshift" for _ in redshift_bin_loss],
-    }
-)
-
-redshift_results.to_csv(rail_dir / "sklearn_results_by_redshift.csv")
 # %%

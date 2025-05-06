@@ -9,7 +9,6 @@ from case_studies.redshift.artifacts.redshift_dc2 import RedshiftDC2DataModule
 logging.basicConfig(level=logging.INFO)
 
 
-# ------------- BLISS ----------- #
 def create_bliss_artifacts(bliss_cfg: DictConfig):
     """CONSTRUCT BATCHES (.pt files) FOR DATA LOADING."""
     logging.info("Creating BLISS artifacts at %s", bliss_cfg.paths.processed_data_dir_bliss)
@@ -17,7 +16,7 @@ def create_bliss_artifacts(bliss_cfg: DictConfig):
     dc2.prepare_data()
 
 
-@hydra.main(config_path="../", config_name="redshift")
+@hydra.main(config_path="../", config_name="artifact_creation", version_base=None)
 def main(cfg: DictConfig) -> None:
     logging.info("Starting data generation")
     logging.info(OmegaConf.to_yaml(cfg))
