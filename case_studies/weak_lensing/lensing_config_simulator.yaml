@@ -12,8 +12,8 @@ paths:
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
-    n_tiles_h: 12  # cropping 2 tiles from each side (4 total)
-    n_tiles_w: 12  # cropping 2 tiles from each side (4 total)
+    n_tiles_h: 8
+    n_tiles_w: 8
     batch_size: 1
     max_sources: 200
     shear_min: -0.1
