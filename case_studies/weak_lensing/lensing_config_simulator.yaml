@@ -14,7 +14,7 @@ prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
     n_tiles_h: 12  # cropping 2 tiles from each side (4 total)
     n_tiles_w: 12  # cropping 2 tiles from each side (4 total)
-    batch_size: 2
+    batch_size: 1
     max_sources: 200
     shear_min: -0.1
     shear_max: 0.1
@@ -95,6 +95,7 @@ encoder:
 generate:
     n_image_files: 50
     n_batches_per_file: 4
+    tiles_to_crops: 0
 
 train:
     trainer:
