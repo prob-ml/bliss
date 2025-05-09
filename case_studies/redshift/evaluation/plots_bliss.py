@@ -144,3 +144,125 @@ def main(cfg: DictConfig):
 
 if __name__ == "__main__":
     main()
+
+
+
+import matplotlib.pyplot as plt
+
+
+
+
+import numpy as np
+import pandas as pd
+
+bspline = pd.read_parquet("/data/scratch/declan/redshift/dc2/plots/bspline_split_0_2025-04-22-23-17-28/bspline_mode_predictions.parquet")
+mdn = pd.read_parquet("/data/scratch/declan/redshift/dc2/plots/mdn_split_0_2025-04-22-23-17-15/mdn_mode_predictions.parquet")
+
+bspline["l2"] = (bspline['z_pred'] - bspline['z_true'])**2
+bspline["l1"] = np.abs(bspline['z_pred'] - bspline['z_true'])
+mdn["l2"] = (mdn['z_pred'] - mdn['z_true'])**2
+mdn["l1"] = np.abs(mdn['z_pred'] - mdn['z_true'])
+
+bins = np.arange(0, 3.1, 0.5)  # Create bin edges from 0 to 3 with width 0.5
+labels = [f'{x}-{x+0.5}' for x in bins[:-1]]  # Labels for each bin (e.g., '0.0-0.5', '0.5-1.0', etc.)
+
+bspline['z_true_binned'] = pd.cut(bspline['z_true'], bins=bins, labels=labels, right=False)
+mdn['z_true_binned'] = pd.cut(mdn['z_true'], bins=bins, labels=labels, right=False)
+bspline['z_pred_binned'] = pd.cut(bspline['z_pred'], bins=bins, labels=labels, right=False)
+mdn['z_pred_binned'] = pd.cut(mdn['z_pred'], bins=bins, labels=labels, right=False)
+
+# Group by the binned intervals and compute various statistics
+bin_stats_bspline_by_true = bspline.groupby('z_true_binned')['l2'].agg(
+    mean='mean',
+    median='median',
+    p10=lambda x: np.percentile(x, 10),
+    p25=lambda x: np.percentile(x, 25),
+    p75=lambda x: np.percentile(x, 75),
+    p90=lambda x: np.percentile(x, 90),
+    count='count'
+)
+
+bin_stats_bspline_by_pred = bspline.groupby('z_pred_binned')['l2'].agg(
+    mean='mean',
+    median='median',
+    p10=lambda x: np.percentile(x, 10),
+    p25=lambda x: np.percentile(x, 25),
+    p75=lambda x: np.percentile(x, 75),
+    p90=lambda x: np.percentile(x, 90),
+    count='count'
+)
+
+bin_stats_mdn_by_true = mdn.groupby('z_true_binned')['l2'].agg(
+    mean='mean',
+    median='median',
+    p10=lambda x: np.percentile(x, 10),
+    p25=lambda x: np.percentile(x, 25),
+    p75=lambda x: np.percentile(x, 75),
+    p90=lambda x: np.percentile(x, 90),
+    count='count'
+)
+
+bin_stats_mdn_by_pred = mdn.groupby('z_pred_binned')['l2'].agg(
+    mean='mean',
+    median='median',
+    p10=lambda x: np.percentile(x, 10),
+    p25=lambda x: np.percentile(x, 25),
+    p75=lambda x: np.percentile(x, 75),
+    p90=lambda x: np.percentile(x, 90),
+    count='count'
+)
+
+b_spline_median = bin_stats_bspline_by_true['median'].values
+mdn_median = bin_stats_mdn_by_true['median'].values
+
+b_spline_median = bin_stats_bspline_by_pred['median'].values
+mdn_median = bin_stats_mdn_by_pred['median'].values
+
+# Create DataFrame for plotting
+df = pd.DataFrame({
+    'Redshift Bin': labels,
+    'B-Spline Median': b_spline_median,
+    'MDN Median': mdn_median,
+    # 'B-Spline 10th Percentile': b_spline_p10,
+    # 'B-Spline 90th Percentile': b_spline_p90,
+    # 'MDN 10th Percentile': mdn_p10,
+    # 'MDN 90th Percentile': mdn_p90
+})
+
+# Plot the lineplot with thicker lines and larger labels
+plt.figure(figsize=(10, 6))
+
+plt.plot(df['Redshift Bin'], df['B-Spline Median'], label='B-Spline Median', linestyle='-', color='b', linewidth=2)
+# plt.fill_between(df['Redshift Bin'], df['B-Spline 10th Percentile'], df['B-Spline 90th Percentile'], color='b', alpha=0.3, label='B-Spline Percentile Range')
+
+# MDN: Plot the median line without markers and fill between 10th and 90th percentiles
+plt.plot(df['Redshift Bin'], df['MDN Median'], label='MDN Median', linestyle='-', color='g', linewidth=2)
+# plt.fill_between(df['Redshift Bin'], df['MDN 10th Percentile'], df['MDN 90th Percentile'], color='g', alpha=0.3, label='MDN Percentile Range')
+
+# Plot the points with sizes proportional to counts
+plt.scatter(df['Redshift Bin'], df['B-Spline Median'], color='b', edgecolor='black', alpha=0.7, label='B-Spline Counts')
+plt.scatter(df['Redshift Bin'], df['MDN Median'],  color='g', edgecolor='black', alpha=0.7, label='MDN Counts')
+
+# Set the y-axis to log scale
+plt.yscale('log')
+
+# Adding labels and title with larger font size
+plt.xlabel('Redshift Bin', fontsize=14)
+plt.ylabel('Median L2 Error (Log Scale)', fontsize=14)
+plt.title('Median L2 Error by Redshift Bin for B-Spline and MDN (Log Scale)', fontsize=16)
+
+# Display legend with larger font size
+plt.legend(fontsize=12)
+
+# Rotate x-axis labels for better readability
+plt.xticks(rotation=45, fontsize=12)
+
+# Increase font size for y-axis ticks
+plt.yticks(fontsize=12)
+
+# Show the plot with tight layout
+plt.tight_layout()
+plt.savefig('l2.png')
+
+
+plt.show()
