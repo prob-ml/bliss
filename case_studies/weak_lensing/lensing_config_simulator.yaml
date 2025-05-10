@@ -100,14 +100,14 @@ train:
     trainer:
         logger:
             name: weak_lensing_experiments_simulator
-            version: october1
+            version: april11
         max_epochs: 250
         devices: 1
         use_distributed_sampler: false
         precision: 32-true
     callbacks:
         early_stopping:
-            patience: 50
+            patience: 200
     data_source: ${cached_simulator}
     pretrained_weights: null
     seed: 123123
