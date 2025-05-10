@@ -65,6 +65,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         train_transforms: List,
         nontrain_transforms: List,
         subset_fraction: float = None,
+        shuffle_file_order: bool = True,
     ):
         super().__init__(
             splits,
@@ -74,6 +75,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             train_transforms,
             nontrain_transforms,
             subset_fraction,
+            shuffle_file_order,
         )
 
         self.dc2_image_dir = dc2_image_dir
