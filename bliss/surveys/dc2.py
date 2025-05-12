@@ -3,6 +3,7 @@ import copy
 import logging
 import multiprocessing
 import pathlib
+from pathlib import Path
 from typing import List
 
 import numpy as np
@@ -320,7 +321,18 @@ class DC2DataModule(CachedSimulatedDataModule):
 class DC2FullCatalog(FullCatalog):
     @classmethod
     def from_file(cls, cat_path, wcs, height, width, **kwargs):
-        catalog = pd.read_pickle(cat_path)
+        # load catalog from either a string path or a Path
+
+        cat_path = Path(cat_path)
+        suffix = cat_path.suffix.lower()
+
+        if suffix == ".parquet":
+            catalog = pd.read_parquet(cat_path)
+        elif suffix in (".pkl", ".pickle"):
+            catalog = pd.read_pickle(cat_path)
+        else:
+            raise ValueError(f"Unsupported catalog file format: {suffix}")
+
         flux_r_band = catalog["flux_r"].values
         catalog = catalog.loc[flux_r_band > kwargs["catalog_min_r_flux"]]
 
