@@ -158,6 +158,60 @@ import pandas as pd
 bspline = pd.read_parquet("/data/scratch/declan/redshift/dc2/plots/bspline_split_0_2025-04-22-23-17-28/bspline_mode_predictions.parquet")
 mdn = pd.read_parquet("/data/scratch/declan/redshift/dc2/plots/mdn_split_0_2025-04-22-23-17-15/mdn_mode_predictions.parquet")
 
+data1 = bspline["nll_true"].values
+data2 = mdn["nll_true"].values
+
+# Calculate statistics for each array
+stats_data1 = {
+    'Mean': np.mean(data1),
+    'Min': np.min(data1),
+    '10th Percentile': np.percentile(data1, 10),
+    '25th Percentile': np.percentile(data1, 25),
+    'Median': np.median(data1),
+    '75th Percentile': np.percentile(data1, 75),
+    '90th Percentile': np.percentile(data1, 90),
+    'Max': np.max(data1),
+}
+
+stats_data2 = {
+    'Mean': np.mean(data2),
+    'Min': np.min(data2),
+    '10th Percentile': np.percentile(data2, 10),
+    '25th Percentile': np.percentile(data2, 25),
+    'Median': np.median(data2),
+    '75th Percentile': np.percentile(data2, 75),
+    '90th Percentile': np.percentile(data2, 90),
+    'Max': np.max(data2),
+}
+
+# Create a DataFrame to hold the statistics
+df = pd.DataFrame({
+    'Statistic': list(stats_data1.keys()),
+    'B-Spline': list(stats_data1.values()),
+    'MDN': list(stats_data2.values())
+})
+
+df = df.set_index('Statistic').T
+df = df.round(3)
+
+# Save the DataFrame to LaTeX
+latex_table = df.to_latex(index=True)
+
+# Print the LaTeX table
+print(latex_table)
+
+# Save the DataFrame to LaTeX
+latex_table = df.to_latex(index=False)
+
+# Print the LaTeX table
+print(latex_table)
+
+
+
+
+
+
+
 bspline["l2"] = (bspline['z_pred'] - bspline['z_true'])**2
 bspline["l1"] = np.abs(bspline['z_pred'] - bspline['z_true'])
 mdn["l2"] = (mdn['z_pred'] - mdn['z_true'])**2

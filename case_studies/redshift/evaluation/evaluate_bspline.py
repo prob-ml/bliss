@@ -58,6 +58,7 @@ def main(cfg: DictConfig):
     columns = [
         "z_true",
         "z_pred",
+        "nll_true",
         "u_mag",
         "g_mag",
         "r_mag",

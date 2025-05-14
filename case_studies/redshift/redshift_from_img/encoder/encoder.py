@@ -12,6 +12,7 @@ from bliss.encoder.encoder import Encoder
 import pyarrow as pa
 import pandas as pd
 import pyarrow.parquet as pq
+import einops
 
 
 def get_best_ckpt(ckpt_dir: str):
@@ -54,19 +55,30 @@ class RedshiftsEncoder(Encoder):
         mode_cat = self.sample(batch, use_mode=True)
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
 
+        # Get NLL
+        patterns_to_use = torch.randperm(15)[:4] if self.use_checkerboard else (0,)
+        history_mask_patterns = self.mask_patterns[patterns_to_use, ...]
+
+        loss_mask_patterns = 1 - history_mask_patterns
+
+        loss = self.compute_masked_nll(batch, history_mask_patterns, loss_mask_patterns) # b x n_tile x n_tile
+        loss = einops.rearrange(loss, "b l w -> b l w 1 1") 
+
         for i in range(target_cat.batch_size): # for each observation in batch
             tcat_matches, ecat_matches = matching[i]
         
             true_red = target_cat["redshifts"][i][tcat_matches].cpu().detach()
             est_red = mode_cat["redshifts"][i][ecat_matches].cpu().detach()
             mags = target_cat["fluxes"][i].unsqueeze(-2)[tcat_matches].cpu().detach()
+            nll_true = loss[i][tcat_matches].cpu().detach()
 
             if len(true_red) == 0 or len(est_red) == 0:
                 continue
 
             batch_data = {
                 'z_true': true_red, 
-                'z_pred': est_red,  
+                'z_pred': est_red,
+                'nll_true': nll_true, 
                 'u_mag': mags[:, 0],
                 'g_mag': mags[:, 1],
                 'r_mag': mags[:, 2],
