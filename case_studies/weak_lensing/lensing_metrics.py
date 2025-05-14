@@ -29,8 +29,17 @@ class LensingMSE(Metric):
         pred_shear2 = est_cat["shear_2"].flatten(1, 2)
         zero_baseline_pred_shear1 = torch.zeros_like(true_shear1)
         zero_baseline_pred_shear2 = torch.zeros_like(true_shear2)
-        ellip_baseline_pred_shear1 = true_cat["ellip_lsst_wavg"][..., 0].unsqueeze(-1).flatten(1, 2)
-        ellip_baseline_pred_shear2 = true_cat["ellip_lsst_wavg"][..., 1].unsqueeze(-1).flatten(1, 2)
+
+        if "ellip_lsst_wavg" not in est_cat:
+            ellip_baseline_pred_shear1 = torch.zeros_like(est_cat["shear_1"]).flatten(1, 2)
+            ellip_baseline_pred_shear2 = torch.zeros_like(est_cat["shear_2"]).flatten(1, 2)
+        else:
+            ellip_baseline_pred_shear1 = (
+                true_cat["ellip_lsst_wavg"][..., 0].unsqueeze(-1).flatten(1, 2)
+            )
+            ellip_baseline_pred_shear2 = (
+                true_cat["ellip_lsst_wavg"][..., 1].unsqueeze(-1).flatten(1, 2)
+            )
 
         if "convergence" not in est_cat:
             true_convergence = torch.zeros_like(true_shear1).flatten(1, 2)
