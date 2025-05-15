@@ -185,11 +185,12 @@ train:
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
-            filename: encoder_{val/mode/redshift_mean_square_error_redshifts/mse:.6f}
+            filename: encoder_{val/_loss:.6f}
+            # filename: encoder_{val/mode/redshift_mean_square_error_redshifts/mse:.6f}
             save_top_k: 5
             verbose: True
-            #  monitor: val/_loss
-            monitor: val/mode/redshift_mean_square_error_redshifts/mse
+            monitor: val/_loss
+            # monitor: val/mode/redshift_mean_square_error_redshifts/mse
             mode: min
         early_stopping:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
