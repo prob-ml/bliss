@@ -12,16 +12,16 @@ paths:
 
 prior:
     _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
-    n_tiles_h: 8
-    n_tiles_w: 8
+    n_tiles_h: 10  # 1 + 8 + 1
+    n_tiles_w: 10  # 1 + 8 + 1
     batch_size: 1
-    max_sources: 200
-    shear_min: -0.1
-    shear_max: 0.1
-    convergence_min: -0.0001
-    convergence_max: 0.0001
+    max_sources: 100
+    shear_min: -0.05
+    shear_max: 0.05
+    convergence_min: -0.05
+    convergence_max: 0.05
     prob_galaxy: 1.0
-    mean_sources: 82  # 0.02 * (256/4) * (256/4)
+    mean_sources: 40  # similar to DC2
 
 decoder:
     _target_: case_studies.weak_lensing.lensing_decoder.LensingDecoder
@@ -93,9 +93,9 @@ encoder:
     loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
 
 generate:
-    n_image_files: 50
-    n_batches_per_file: 4
-    tiles_to_crops: 0
+    n_image_files: 400
+    n_batches_per_file: 1
+    tiles_to_crop: 1
 
 train:
     trainer:
