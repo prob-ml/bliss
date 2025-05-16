@@ -75,6 +75,29 @@ class RedshiftMeanSquaredError(Metric):
         mse = self.sum_squared_error / self.total
         return {"redshifts/mse": mse.item()}
 
+class RedshiftMeanNLL(Metric):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_state("sum_nll", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.zeros(1), dist_reduce_fx="sum")
+
+    def update(self, true_cat, est_cat, matching, loss):
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+
+            # For RedshiftsCatalogMatcher
+            if isinstance(est_cat, BaseTileCatalog):
+                self.total += tcat_matches.sum()
+                nll_true = loss[i][tcat_matches].cpu().detach()
+            
+            this_nll_sum = nll_true.sum()
+            self.sum_nll += this_nll_sum
+
+    def compute(self):
+        print(f"total num of pts: {self.total}")  # noqa: WPS421
+        avg_nll = self.sum_nll / self.total
+        return {"redshifts/nll_avg": avg_nll.item()}
+
 
 class RedshiftMeanSquaredErrorBin(MetricBin):
     def __init__(

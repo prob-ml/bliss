@@ -36,18 +36,7 @@ timestamp=$(date "+%Y-%m-%d-%H-%M-%S")
 
 # nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_continuous timestamp=$timestamp > "$DIRNAME/output.out" 2>&1 &
 
-# DIRNAME="$OUT_DIR/bspline_$timestamp"
-
-# if [ ! -d "$DIRNAME" ]; then
-#   mkdir -p "$DIRNAME"
-#   echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
-# else
-#   echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
-# fi
-
-# nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_bspline > "$DIRNAME/output.out" 2>&1 &
-
-DIRNAME="$OUT_DIR/mdn_$timestamp"
+DIRNAME="$OUT_DIR/bspline_$timestamp"
 
 if [ ! -d "$DIRNAME" ]; then
   mkdir -p "$DIRNAME"
@@ -56,7 +45,18 @@ else
   echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
 fi
 
-nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_mdn > "$DIRNAME/output.out" 2>&1 &
+nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_bspline > "$DIRNAME/output.out" 2>&1 &
+
+# DIRNAME="$OUT_DIR/mdn_$timestamp"
+
+# if [ ! -d "$DIRNAME" ]; then
+#   mkdir -p "$DIRNAME"
+#   echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
+# else
+#   echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
+# fi
+
+# nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_mdn > "$DIRNAME/output.out" 2>&1 &
 
 # # # Run RAIL
 # # # TODO

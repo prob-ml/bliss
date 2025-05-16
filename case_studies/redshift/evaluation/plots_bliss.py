@@ -158,8 +158,8 @@ import pandas as pd
 # bspline = pd.read_parquet("/data/scratch/declan/redshift/dc2/plots/bspline_split_0_2025-04-22-23-17-28/bspline_mode_predictions.parquet")
 # mdn = pd.read_parquet("/data/scratch/declan/redshift/dc2/plots/mdn_split_0_2025-04-22-23-17-15/mdn_mode_predictions.parquet")
 
-bspline = pd.read_parquet("/data/scratch/declan/redshift/dc2/plots/bspline_split_0_2025-05-14-13-23-17/bspline_mode_predictions.parquet")
-mdn = pd.read_parquet("/data/scratch/declan/redshift/dc2/plots/mdn_split_0_2025-05-14-13-23-37/mdn_mode_predictions.parquet")
+bspline = pd.read_parquet("/data/scratch/declan/redshift/dc2/plots/bspline_split_0_2025-05-15-09-05-36/bspline_mode_predictions.parquet")
+mdn = pd.read_parquet("/data/scratch/declan/redshift/dc2/plots/mdn_split_0_2025-05-15-09-05-17/mdn_mode_predictions.parquet")
 
 data1 = bspline["nll_true"].values
 data2 = mdn["nll_true"].values

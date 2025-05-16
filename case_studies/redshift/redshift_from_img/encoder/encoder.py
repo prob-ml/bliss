@@ -112,7 +112,14 @@ class RedshiftsEncoder(Encoder):
 
         mode_cat = self.sample(batch, use_mode=True)
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
-        self.mode_metrics.update(target_cat, mode_cat, matching)
+        patterns_to_use = torch.randperm(15)[:4] if self.use_checkerboard else (0,)
+        history_mask_patterns = self.mask_patterns[patterns_to_use, ...]
+
+        loss_mask_patterns = 1 - history_mask_patterns
+
+        loss = self.compute_masked_nll(batch, history_mask_patterns, loss_mask_patterns) # b x n_tile x n_tile
+        loss = einops.rearrange(loss, "b l w -> b l w 1 1") 
+        self.mode_metrics.update(target_cat, mode_cat, matching, loss)
 
         # sample_cat = self.sample(batch, use_mode=False)
         # matching = self.matcher.match_catalogs(target_cat, sample_cat)
