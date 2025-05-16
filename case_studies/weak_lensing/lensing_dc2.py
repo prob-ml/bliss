@@ -12,6 +12,7 @@ from bliss.surveys.dc2 import (
     DC2DataModule,
     DC2FullCatalog,
     map_nested_dicts,
+    split_tensor,
     unpack_dict,
     wcs_from_wcs_header_str,
 )
@@ -128,7 +129,7 @@ class LensingDC2DataModule(DC2DataModule):
         plocs_lim = image[0].shape
         height = plocs_lim[0]
         width = plocs_lim[1]
-        full_cat, psf_params = LensingDC2Catalog.from_file(
+        full_cat = LensingDC2Catalog.from_file(
             self.dc2_cat_path,
             wcs,
             height,
@@ -138,7 +139,10 @@ class LensingDC2DataModule(DC2DataModule):
         )
 
         tile_cat = self.to_tile_catalog(full_cat, height, width)
-        psf_params = tile_cat["psf_sum"] / tile_cat["psf_count"]
+        n_psf_params = full_cat["psf"].shape[-1]
+        psf_params = (tile_cat["psf_sum"] / tile_cat["psf_count"]).view(
+            *tile_cat["psf_sum"].shape[:-1], self.n_bands, n_psf_params
+        )
         del tile_cat["psf_sum"]
         del tile_cat["psf_count"]
         tile_dict = self.squeeze_tile_dict(tile_cat.data)
@@ -147,13 +151,42 @@ class LensingDC2DataModule(DC2DataModule):
             "tile_dict": tile_dict,
             "inputs": {
                 "image": image,
-                "psf_params": psf_params,
+                "psf_params": psf_params.squeeze(0),
             },
             "other_info": {
                 "full_cat": full_cat,
                 "wcs": wcs,
                 "wcs_header_str": wcs_header_str,
             },
+        }
+
+    def split_image_and_tile_cat(self, image, tile_cat, tile_cat_keys_to_split, psf_params):
+        # split image
+        split_lim = self.image_lim[0] // self.n_image_split
+        image_splits = split_tensor(image, split_lim, 1, 2)
+        image_width_pixels = image.shape[2]
+        split_image_num_on_width = image_width_pixels // split_lim
+
+        # split tile cat
+        tile_cat_splits = {}
+        for param_name in tile_cat_keys_to_split:
+            tile_cat_splits[param_name] = split_tensor(
+                tile_cat[param_name], split_lim // self.tile_slen, 0, 1
+            )
+
+        # split PSF params
+        psf_splits = split_tensor(psf_params, split_lim // self.tile_slen, 0, 1)
+
+        return {
+            "tile_catalog": unpack_dict(tile_cat_splits),
+            "images": image_splits,
+            "image_height_index": (
+                torch.arange(0, len(image_splits)) // split_image_num_on_width
+            ).tolist(),
+            "image_width_index": (
+                torch.arange(0, len(image_splits)) % split_image_num_on_width
+            ).tolist(),
+            "psf_params": [p.flatten(0, 1).mean(0) for p in psf_splits],
         }
 
     # override generate_cached_data
@@ -237,7 +270,6 @@ class LensingDC2Catalog(DC2FullCatalog):
         redshift = torch.from_numpy(catalog["redshift"].values)
 
         _, psf_params = cls.get_bands_flux_and_psf(kwargs["bands"], catalog, median=False)
-        # psf_params is n_bands x 4 (n_params) x n_measures
 
         plocs = cls.plocs_from_ra_dec(ra, dec, wcs).squeeze(0)
         x0_mask = (plocs[:, 0] > 0) & (plocs[:, 0] < height)
@@ -259,8 +291,7 @@ class LensingDC2Catalog(DC2FullCatalog):
 
         redshift = redshift[plocs_mask]
 
-        psf_params = psf_params[:, :, :, plocs_mask.squeeze() == 1]
-        psf_params = psf_params.permute(0, 3, 1, 2).flatten(2, -1)  # 1, n_obj, 24
+        psf_params = psf_params[:, :, :, plocs_mask].permute(0, 3, 1, 2)  # 1, n_obj, 6, 4
 
         nobj = galid.shape[0]
 
@@ -276,7 +307,7 @@ class LensingDC2Catalog(DC2FullCatalog):
             "ellip1_lsst": ellip1_lsst.reshape(1, nobj, 1),
             "ellip2_lsst": ellip2_lsst.reshape(1, nobj, 1),
             "redshift": redshift.reshape(1, nobj, 1),
-            "psf": psf_params.reshape(1, nobj, -1),
+            "psf": psf_params,
         }
 
-        return cls(height, width, d), psf_params
+        return cls(height, width, d)
