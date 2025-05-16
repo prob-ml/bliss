@@ -277,6 +277,7 @@ surveys:
             - _target_: bliss.cached_dataset.FluxFilterTransform
               reference_band: 2  # r-band
               min_flux: 100
+        shuffle_file_order: true
 
 
 #######################################################################
