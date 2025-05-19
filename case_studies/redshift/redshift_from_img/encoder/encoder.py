@@ -40,17 +40,6 @@ class RedshiftsEncoder(Encoder):
         if not use_mode:
             raise NotImplementedError("Only mode predictions are supported")
         
-        # # Create file
-        # file_path = Path(save_file)
-        # if not file_path.exists():
-        #     file_path.parent.mkdir(parents=True, exist_ok=True)
-        #     # columns = ['z_true', 'z_pred', 'u_mag', 'g_mag', 'r_mag', 'i_mag', 'z_mag', 'y_mag']
-        #     # dtypes = ['float64', 'float64', 'float64', 'float64', 'float64', 'float64', 'float64', 'float64']
-        #     # empty_df = pd.DataFrame(columns=columns)
-        #     # table = pa.Table.from_pandas(empty_df)
-        #     # pq.write_table(table, file_path, compression='gzip')
-        
-        
         target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
         mode_cat = self.sample(batch, use_mode=True)
         matching = self.matcher.match_catalogs(target_cat, mode_cat)
@@ -91,16 +80,6 @@ class RedshiftsEncoder(Encoder):
             batch_table = pa.Table.from_pandas(batch_df, preserve_index=False)
             writer.write_table(batch_table)
 
-            # with pq.ParquetWriter(file_path, batch_table.schema, use_dictionary=True) as writer:
-            #     writer.write_table(batch_table)
-
-            # existing_table = pq.read_table(save_file)
-            
-            # combined_table = pa.concat_tables([existing_table, batch_table])
-            # pq.write_table(combined_table, save_file)
-
-
-        
 
     def update_metrics(self, batch, batch_idx):
         target_cat = TileCatalog(batch["tile_catalog"]).get_brightest_sources_per_tile()
