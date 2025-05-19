@@ -22,7 +22,7 @@ variational_factors:
     nll_gating: null
 
 my_normalizers:
-    nully:
+    nullnorm:
         _target_: bliss.encoder.image_normalizer.NullNormalizer
 
 my_metrics:
@@ -90,14 +90,14 @@ train:
     trainer:
         logger:
             name: weak_lensing_experiments_dc2
-            version: april12
+            version: may16
         max_epochs: 250
         devices: 1
         use_distributed_sampler: false
         precision: 32-true
     callbacks:
         early_stopping:
-            patience: 200
+            patience: 100
     data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: 123123
