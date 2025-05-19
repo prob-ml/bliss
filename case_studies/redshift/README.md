@@ -2,9 +2,9 @@
 
 #### Running BLISS-PZ on DC2
 
-Modify the config file `redshift.yaml` as follows:
-1. Change `paths.data_dir` to a directory where you're happy to have all data artifacts and checkpoints stored.
-2. Make the `OUT_DIR` variable in `runner.sh` this same location.
+Modify the config file `redshift_xxxxxx.yaml` as follows:
+1. Change `paths.root` to your `bliss` folder and `paths.data_dir` to a directory where you're happy to have all data artifacts and checkpoints stored.
+2. Make the `OUT_DIR` variable in `runner.sh` to the location `{paths.data_dir}/training_logs` for logging.
 3. Modify `paths.dc2` to the location of `dc2` on your system.
 
 To produce the results from `BLISS-PZ`, run `runner.sh` (you made need to make this an executable, `chmod +x runner.sh` from within this directory).
@@ -13,7 +13,21 @@ To produce the results from `BLISS-PZ`, run `runner.sh` (you made need to make t
 ./runner.sh
 ```
 
-The runner bash script launches programs sequentially: first data prep, then two different runs of BLISS, followed by RAIL. Thereafter, plots are produced. For your use case it may be better to run different parts of the runner script on their own. Take a look at the script and comment out the relevant parts if you need.
+Comment out portions of `runner.sh` that you don't want to run. The current script has options to run BLISS-PZ with i) a discretized variational distribution, ii) a single univariate Gaussian (continuous), iii) a mixture density network (MDN), iv) a B-spline variational distribution. 
+
+The current workflow is as follows:
+
+1) Run data preparation (UNDER CONSTRUCTION...use batches currently located in `/data/scratch/declan/redshift/dc2/cached_dc2`)
+2) Launch timestamped run by executing `./runner.sh`. Choose device and MDN/B-Spline version by modifying `CUDA_VISIBLE_DEVICES` and commenting out relevant commands.
+3) At completion of training, checkpointed weights are located in `{paths.data_dir}/checkpoints`. 
+4) In `case_studies/redshift/evaluation`, modify `xxxx_eval.yaml` with the correct `ckpt_dir` that you just generated (TODO: make accessing latest timestamp more automatic)
+5) Run `case_studies/redshift/evaluation/evaluate_xxxx.py`, which loads the checkpoint from your supplied `ckpt_dir`and creates `.parquet` files of predictions on the test set. At present, the parquet files contain, for each matched object, the true redshift, true magnitudes, predicted redshift (which is the mode of the variational distribution) and NLL (of the true redshift under the predicted variational posterior). The `.parquet` files are stored in `{paths.data_dir}/plots`.
+6) Use the resulting parquet files to compute test metrics of your choice (e.g., L2, L1 or NLL for now).
+7) Currently, `case_studies/redshift/evaluation/plots_bliss.py` contains some example code used to produce plots. Most of this is outdated and needs to be replaced, but it can be used as a template. 
+
+
+
+<!-- The runner bash script launches programs sequentially: first data prep, then two different runs of BLISS, followed by RAIL. Thereafter, plots are produced. For your use case it may be better to run different parts of the runner script on their own. Take a look at the script and comment out the relevant parts if you need. -->
 
 
 

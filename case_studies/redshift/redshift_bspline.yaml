@@ -183,7 +183,7 @@ train:
         # check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
         devices: [0]
-        max_epochs: 50
+        max_epochs: 30
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
