@@ -54,7 +54,7 @@
 1. (m2 mdt) train without learning sigma
 2. (m2 mdt) train without learning sigma; use speed sampler
 
-### 04-34
+### 04-24
 
 1. (m2 mdt rml) beta: 0.01; lr: 3e-4
 2. (m2 mdt rml) beta: 0.5; lr: 1e-3

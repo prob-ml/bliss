@@ -660,8 +660,8 @@ class M2MDTv2CondTrueRML(MDTv2):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.v_masked_forward = torch.vmap(super().forward, in_dims=(1, 1, None), out_dims=1, randomness="same")
-        self.v_no_mask_forward = torch.vmap(super().forward, in_dims=(1, 1, None), out_dims=1, randomness="same")
+        self.v_masked_forward = torch.vmap(super().__call__, in_dims=(1, 1, None), out_dims=1, randomness="same")
+        self.v_no_mask_forward = torch.vmap(super().__call__, in_dims=(1, 1, None), out_dims=1, randomness="same")
 
     def initialize_image_feats_net(self):
         self.image_features_net = FeaturesNet(self.image_n_bands, 
