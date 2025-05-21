@@ -39,19 +39,25 @@ class PlotLensingMaps(Metric):
         self.current_epoch = current_epoch
         self.should_plot = True
         self.true_shear1.append(target_cat_cropped["shear_1"])
-        self.true_shear2.append(target_cat_cropped["shear_2"])
-        self.true_convergence.append(target_cat_cropped["convergence"])
         self.est_shear1.append(
             sample_with_mode_tile.get("shear_1", torch.zeros_like(target_cat_cropped["shear_1"]))
         )
+
+        self.true_shear2.append(target_cat_cropped["shear_2"])
         self.est_shear2.append(
             sample_with_mode_tile.get("shear_2", torch.zeros_like(target_cat_cropped["shear_2"]))
         )
-        self.est_convergence.append(
-            sample_with_mode_tile.get(
-                "convergence", torch.zeros_like(target_cat_cropped["convergence"])
+
+        if "convergence" not in target_cat_cropped:
+            self.true_convergence.append(torch.zeros_like(target_cat_cropped["shear_1"]))
+            self.est_convergence.append(torch.zeros_like(target_cat_cropped["shear_1"]))
+        else:
+            self.true_convergence.append(target_cat_cropped["convergence"])
+            self.est_convergence.append(
+                sample_with_mode_tile.get(
+                    "convergence", torch.zeros_like(target_cat_cropped["convergence"])
+                )
             )
-        )
 
     def compute(self):
         return {}
