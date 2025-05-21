@@ -1,0 +1,29 @@
+defaults:
+    - ../../bliss/conf@_here_: base_config
+    - _self_
+
+# Inherits defaults from `base_config`. We add some user-defined
+# paths to store artifacts.
+paths:
+  root: /home/declan/bliss
+  data_dir: /data/scratch/declan/redshift/dc2
+  dc2_cached: ${paths.data_dir}/cached_dc2
+  processed_data_dir_rail: ${paths.data_dir}/processed_dc2_rail
+  plots: ${paths.data_dir}/plots
+  rail_checkpoints: ${paths.data_dir}/checkpoints/rail
+  dc2: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
+  plot_dir: ${paths.data_dir}/plots
+  cosmodc2: /data/scratch/dc2_nfs/cosmoDC2_v1.1.4/
+
+surveys:
+  dc2:
+      _target_: case_studies.redshift.artifacts.redshift_dc2.RedshiftDC2DataModule
+      cached_data_path: ${paths.dc2_cached}
+      dc2_cat_path: ${paths.processed_data_dir_bliss}/merged_catalog.parquet
+      batch_size: 64
+      max_sources_per_tile: 5
+
+# used for visualization
+visualization:
+  mag_bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
+  redshift_bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]

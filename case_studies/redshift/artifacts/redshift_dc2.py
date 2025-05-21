@@ -5,7 +5,7 @@ import pathlib
 import pickle
 import re
 from pathlib import Path
-
+import yaml
 import torch
 from typing import List
 from bliss.surveys.dc2 import DC2DataModule, map_nested_dicts, split_list, unpack_dict
@@ -16,56 +16,86 @@ class RedshiftDC2DataModule(DC2DataModule):
 
     def __init__(
         self,
-        train_splits: List[List] = None,
-        val_splits: List[List] = None,
-        test_splits: List[List] = None,
         split_to_use: int = 0,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.train_splits = train_splits
-        self.val_splits = val_splits
-        self.test_splits = test_splits
         self.split_to_use = split_to_use
         self.dc2_image_dir = Path(self.dc2_image_dir)
         self.dc2_cat_path = Path(self.dc2_cat_path)
         self._tract_patches = None
+        self._train_files = None
+        self._val_files = None
+        self._test_files = None
+
+    def _get_split(self) -> List[str]:
+        split_yaml = self.cached_data_path / "splits.yaml"
+        if not split_yaml.exists():
+            raise FileNotFoundError(f"Split file {split_yaml} does not exist.")
+        
+        with open(split_yaml, "r") as f:  # pylint: disable=unspecified-encoding
+            splits = yaml.safe_load(f)
+
+        if self.split_to_use < 0 or self.split_to_use >= len(splits["train"]):
+            raise ValueError(
+                f"split_to_use {self.split_to_use} is out of range. "
+            )
+
+        train_tract_patches = ["_".join(x) for x in splits["train"][self.split_to_use]]
+        val_tract_patches = ["_".join(x) for x in splits["val"][self.split_to_use]]
+        test_tract_patches = ["_".join(x) for x in splits["test"][self.split_to_use]]
+
+        set_train_tract_patches = set(train_tract_patches)
+        set_val_tract_patches = set(val_tract_patches)
+        set_test_tract_patches = set(test_tract_patches)
+
+        # Ensure no overlap between train, val, and test splits
+        if len(set_train_tract_patches) != len(train_tract_patches) or \
+           len(set_val_tract_patches) != len(val_tract_patches) or \
+           len(set_test_tract_patches) != len(test_tract_patches):
+            raise ValueError("Train, val, or test split contains duplicates.")
+        
+        if set_train_tract_patches & set_val_tract_patches or \
+           set_train_tract_patches & set_test_tract_patches or \
+           set_val_tract_patches & set_test_tract_patches:
+            raise ValueError("Train, val, or test splits overlap.")
+        
+
+        # Separate self.file_paths into train/val/test
+        self._train_files = [file_name for file_name in self.file_paths if any(substring in file_name for substring in train_tract_patches)]
+        self._val_files = [file_name for file_name in self.file_paths if any(substring in file_name for substring in val_tract_patches)]
+        self._test_files = [file_name for file_name in self.file_paths if any(substring in file_name for substring in test_tract_patches)]
+        
 
     def setup(self, stage: str) -> None:  # noqa: WPS324
         """Setup following super(), but we save train/val/test splits to text files for ease."""
         if self.file_paths is None or self.slices is None:
             self._load_file_paths_and_slices()
+        if self._train_files is None or self._val_files is None or self._test_files is None:
+            self._get_split()
 
-        train_split_used = set(["_".join(x) for x in self.train_splits[self.split_to_use]])
-        val_split_used = set(["_".join(x) for x in self.val_splits[self.split_to_use]])
-        test_split_used = set(["_".join(x) for x in self.test_splits[self.split_to_use]])
-
-        # Separate self.file_paths into train/val/test
-        train_files = [file_name for file_name in self.file_paths if any(substring in file_name for substring in train_split_used)]
-        val_files = [file_name for file_name in self.file_paths if any(substring in file_name for substring in val_split_used)]
-        test_files = [file_name for file_name in self.file_paths if any(substring in file_name for substring in test_split_used)]
 
         if stage == "fit":
             self.train_dataset = self._get_dataset(
-                train_files, self.train_transforms, shuffle=True
+                self._train_files, self.train_transforms, shuffle=True
             )
 
             self.val_dataset = self._get_dataset(
-                val_files, self.nontrain_transforms
+                self._val_files, self.nontrain_transforms
             )
             return None
 
         if stage == "validate":
             if self.val_dataset is None:
                 self.val_dataset = self._get_dataset(
-                    val_files, self.nontrain_transforms
+                    self._val_files, self.nontrain_transforms
                 )
             return None
 
         if stage == "test":
             self.test_dataset = self._get_dataset(
-                test_files, self.nontrain_transforms
+                self._test_files, self.nontrain_transforms
             )
             return None
 
