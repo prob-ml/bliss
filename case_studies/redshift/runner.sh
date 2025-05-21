@@ -4,7 +4,7 @@ export OUT_DIR="/data/scratch/declan/redshift/dc2/training_logs"
 export OMP_NUM_THREADS="16"
 export MKL_NUM_THREADS="16"
 export NUMEXPR_NUM_THREADS="16"
-export CUDA_VISIBLE_DEVICES=6
+export CUDA_VISIBLE_DEVICES=3
 
 timestamp=$(date "+%Y-%m-%d-%H-%M-%S")
 
@@ -36,16 +36,16 @@ timestamp=$(date "+%Y-%m-%d-%H-%M-%S")
 
 # nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_continuous timestamp=$timestamp > "$DIRNAME/output.out" 2>&1 &
 
-DIRNAME="$OUT_DIR/bspline_$timestamp"
+# DIRNAME="$OUT_DIR/bspline_$timestamp"
 
-if [ ! -d "$DIRNAME" ]; then
-  mkdir -p "$DIRNAME"
-  echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
-else
-  echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
-fi
+# if [ ! -d "$DIRNAME" ]; then
+#   mkdir -p "$DIRNAME"
+#   echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
+# else
+#   echo "BLISS training logs/checkpoints will be saved to $DIRNAME"
+# fi
 
-nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_bspline timestamp=$timestamp > "$DIRNAME/output.out" 2>&1 &
+# nohup python bliss/main.py -cp ~/bliss/case_studies/redshift -cn redshift_bspline timestamp=$timestamp > "$DIRNAME/output.out" 2>&1 &
 
 DIRNAME="$OUT_DIR/mdn_$timestamp"
 
