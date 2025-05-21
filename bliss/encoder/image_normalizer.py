@@ -99,4 +99,7 @@ class NullNormalizer(torch.nn.Module):
         return 1
 
     def get_input_tensor(self, batch):
-        return rearrange(batch["images"], "b bands h w -> b bands 1 h w")
+        return rearrange(
+            torch.nan_to_num(batch["images"], nan=batch["images"].nanmedian()),
+            "b bands h w -> b bands 1 h w",
+        )
