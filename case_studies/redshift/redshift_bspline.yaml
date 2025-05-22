@@ -66,7 +66,7 @@ encoder:
     discrete_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: "partial"
-        metrics: ${discrete_metrics}
+        metrics: {} #${discrete_metrics}
 
 # TODO: move to base_config
 visualization:
@@ -192,7 +192,7 @@ train:
         # check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
         devices: [0]
-        max_epochs: 30
+        max_epochs: 1
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
@@ -210,7 +210,7 @@ train:
             monitor: val/_loss
             mode: min
             patience: 500
-    ckpt_dir: ${paths.data_dir}/${train.trainer.logger.version}/${train.trainer.logger.name}
+    ckpt_dir: ${paths.data_dir}/checkpoints/${train.trainer.logger.version}/${train.trainer.logger.name}
     data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: 123

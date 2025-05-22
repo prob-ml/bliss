@@ -20,15 +20,6 @@ import pyarrow.parquet as pq
 logging.basicConfig(level=logging.INFO)
 
 
-def get_best_ckpt(ckpt_dir: str):
-    ckpt_dir = Path(ckpt_dir)
-    ckpt_files = list(ckpt_dir.glob("*.ckpt"))
-    sorted_files = sorted(ckpt_files, key=lambda f: float(f.stem.split("_")[1]))
-    if sorted_files:
-        return sorted_files[0]
-    return None
-
-
 class RedshiftsEncoder(Encoder):
     def __init__(
         self,
@@ -113,6 +104,9 @@ class RedshiftsEncoder(Encoder):
 
         # Update metrics
         self.mode_metrics.update(target_cat, mode_cat, matching, loss)
+
+    def training_step(self, batch, batch_idx):
+        return None
 
 
     def on_validation_epoch_end(self):

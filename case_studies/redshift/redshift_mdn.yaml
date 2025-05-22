@@ -28,6 +28,9 @@ variational_factors:
 encoder:
     _target_: case_studies.redshift.redshift_from_img.encoder.encoder.RedshiftsEncoder
     # _target_: bliss.encoder.encoder.Encoder
+    checkpoint_dir: ${train.ckpt_dir}
+    plot_dir: ${paths.plot_dir}
+    eval_from_checkpoint: true
     survey_bands: ["g", "i", "r", "u", "y", "z"]
     tile_slen: 4
     optimizer_params:
@@ -207,6 +210,7 @@ train:
             monitor: val/_loss
             mode: min
             patience: 500
+    ckpt_dir: ${paths.data_dir}/checkpoints/${train.trainer.logger.version}/${train.trainer.logger.name}
     data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: 123
