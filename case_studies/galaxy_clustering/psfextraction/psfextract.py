@@ -68,7 +68,7 @@ if __name__=="__main__":
 
         dir_files = {
                 band: [
-                    f for f in os.listdir(f"{TILE_PATHS}/{tile}") if f.endswith(f"{band}_nobkg.fits.fz")
+                    f for f in os.listdir(f"{TILE_PATHS}/{tile}") if f.endswith(f"_{band}_nobkg.fits.fz")
                 ][0]
                 for band in DES_BANDS
             }
@@ -88,3 +88,4 @@ if __name__=="__main__":
             subprocess.run(["sed", "-i", f"s|^CATALOG_NAME\s*.*|CATALOG_NAME     {savecatpath}|", f"{CONFIG_PATH}/config.sex"])
             subprocess.run(["source-extractor", savepath, "-c", f"{CONFIG_PATH}/config.sex"])
             subprocess.run(["psfex", f"{savecatpath}", "-c", f"{CONFIG_PATH}/config.psfex"])
+            subprocess.run(["rm", f"{savepath}"])
