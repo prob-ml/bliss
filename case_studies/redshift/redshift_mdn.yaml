@@ -17,7 +17,7 @@ global_setting:
     min_flux_for_loss: 50  # you need to regenerate split_results after changing this number
 
 variational_factors:
-  - _target_: case_studies.redshift.redshift_from_img.encoder.variational_dist.MixtureOfGaussiansFactor1D
+  - _target_: case_studies.redshift.redshift_bliss.encoder.variational_dist.MixtureOfGaussiansFactor1D
     n_comp: 5
     name: redshifts
     sample_rearrange: "b ht wt -> b ht wt 1 1"
@@ -26,7 +26,7 @@ variational_factors:
 
 
 encoder:
-    _target_: case_studies.redshift.redshift_from_img.encoder.encoder.RedshiftsEncoder
+    _target_: case_studies.redshift.redshift_bliss.encoder.encoder.RedshiftsEncoder
     # _target_: bliss.encoder.encoder.Encoder
     checkpoint_dir: ${train.ckpt_dir}
     plot_dir: ${paths.plot_dir}
@@ -49,7 +49,7 @@ encoder:
             _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
             q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
     matcher:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftsCatalogMatcher
+        _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftsCatalogMatcher
         match_gating: is_galaxy
     mode_metrics:
         _target_: torchmetrics.MetricCollection
@@ -60,7 +60,7 @@ encoder:
         _convert_: "partial"
         metrics: ${mode_sample_metrics}
     var_dist:
-        _target_: case_studies.redshift.redshift_from_img.encoder.variational_dist.RedshiftVariationalDist
+        _target_: case_studies.redshift.redshift_bliss.encoder.variational_dist.RedshiftVariationalDist
         tile_slen: ${encoder.tile_slen}
         factors: ${variational_factors}
     use_checkerboard: false
@@ -76,98 +76,98 @@ visualization:
 
 # discrete_metrics:
 #     redshift_mean_square_error_bin_mag:
-#         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+#         _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftMeanSquaredErrorBin
 #         bin_cutoffs: ${visualization.mag_bin_cutoffs}
 #         bin_type: "njymag"
 #     redshift_outlier_fraction_bin_mag:
-#         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+#         _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftOutlierFractionBin
 #         bin_cutoffs: ${visualization.mag_bin_cutoffs}
 #         bin_type: "njymag"
 #     redshift_outlier_fraction_catastrophic_bin_mag:
-#         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+#         _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftOutlierFractionCataBin
 #         bin_cutoffs: ${visualization.mag_bin_cutoffs}
 #         bin_type: "njymag"
 #     redshift_abs_bias_bin_mag:
-#         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+#         _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftAbsBiasBin
 #         bin_cutoffs: ${visualization.mag_bin_cutoffs}
 #         bin_type: "njymag"
 #     redshift_mean_square_error_bin_rs:
-#         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+#         _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftMeanSquaredErrorBin
 #         bin_cutoffs: ${visualization.redshift_bin_cutoffs}
 #         bin_type: "redshift"
 #     redshift_outlier_fraction_bin_rs:
-#         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+#         _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftOutlierFractionBin
 #         bin_cutoffs: ${visualization.redshift_bin_cutoffs}
 #         bin_type: "redshift"
 #     redshift_outlier_fraction_catastrophic_bin_rs:
-#         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+#         _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftOutlierFractionCataBin
 #         bin_cutoffs: ${visualization.redshift_bin_cutoffs}
 #         bin_type: "redshift"
 #     redshift_abs_bias_bin_rs:
-#         _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+#         _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftAbsBiasBin
 #         bin_cutoffs: ${visualization.redshift_bin_cutoffs}
 #         bin_type: "redshift"
 
 # Standard metric computation
 mode_sample_metrics:
     redshift_mean_square_error:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredError
+        _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftMeanSquaredError
     redshift_nll:
-        _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanNLL
+        _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftMeanNLL
     # redshift_mean_square_error_bin_mag:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftMeanSquaredErrorBin
     #     bin_cutoffs: ${visualization.mag_bin_cutoffs}
     #     bin_type: "njymag"
     # redshift_mean_square_error_bin_rs:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftMeanSquaredErrorBin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftMeanSquaredErrorBin
     #     bin_cutoffs: ${visualization.redshift_bin_cutoffs}
     #     bin_type: "redshift"
     # redshift_outlier_fraction:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFraction
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftOutlierFraction
     # redshift_outlier_fraction_bin_mag:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftOutlierFractionBin
     #     bin_cutoffs: ${visualization.mag_bin_cutoffs}
     #     bin_type: "njymag"
     # redshift_outlier_fraction_bin_rs:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionBin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftOutlierFractionBin
     #     bin_cutoffs: ${visualization.redshift_bin_cutoffs}
     #     bin_type: "redshift"
     # redshift_outlier_fraction_catastrophic:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCata
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftOutlierFractionCata
     # redshift_outlier_fraction_catastrophic_bin_mag:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftOutlierFractionCataBin
     #     bin_cutoffs: ${visualization.mag_bin_cutoffs}
     #     bin_type: "njymag"
     # redshift_outlier_fraction_catastrophic_bin_rs:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftOutlierFractionCataBin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftOutlierFractionCataBin
     #     bin_cutoffs: ${visualization.redshift_bin_cutoffs}
     #     bin_type: "redshift"
     # redshift_bias:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBias
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftBias
     # redshift_bias_bin_mag:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftBiasBin
     #     bin_cutoffs: ${visualization.mag_bin_cutoffs}
     #     bin_type: "njymag"
     # redshift_bias_bin_rs:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftBiasBin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftBiasBin
     #     bin_cutoffs: ${visualization.redshift_bin_cutoffs}
     #     bin_type: "redshift"
     # redshift_abs_bias:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBias
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftAbsBias
     # redshift_abs_bias_bin_mag:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftAbsBiasBin
     #     bin_cutoffs: ${visualization.mag_bin_cutoffs}
     #     bin_type: "njymag"
     # redshift_abs_bias_bin_rs:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftAbsBiasBin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftAbsBiasBin
     #     bin_cutoffs: ${visualization.redshift_bin_cutoffs}
     #     bin_type: "redshift"
     # redshift_L1_bin_mag:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftL1Bin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftL1Bin
     #     bin_cutoffs: ${visualization.mag_bin_cutoffs}
     #     bin_type: "njymag"
     # redshift_L1_bin_rs:
-    #     _target_: case_studies.redshift.redshift_from_img.encoder.metrics.RedshiftL1Bin
+    #     _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftL1Bin
     #     bin_cutoffs: ${visualization.redshift_bin_cutoffs}
     #     bin_type: "redshift"
 
