@@ -10,18 +10,20 @@ paths:
   processed_data_dir_bliss: ${paths.data_dir}/cached_dc2
   processed_data_dir_rail: ${paths.data_dir}/processed_dc2_rail
   dc2: /nfs/turbo/lsa-regier/lsstdesc-public/dc2
-  ckpt_dir: ${paths.data_dir}/checkpoints/continuous/checkpoints
+  ckpt_dir: ${paths.data_dir}/checkpoints/discrete/checkpoints
   plot_dir: ${paths.data_dir}/plots
 
 global_setting:
     min_flux_for_loss: 50  # you need to regenerate split_results after changing this number
 
 variational_factors:
-  - _target_: case_studies.redshift.redshift_bliss.encoder.variational_dist.NormalFactor
+  - _target_: case_studies.redshift.redshift_bliss.encoder.variational_dist.MixtureOfGaussiansFactor1D
+    n_comp: 5
     name: redshifts
-    sample_rearrange: "b ht wt 1 -> b ht wt 1 1"
-    nll_rearrange: "b ht wt 1 1 -> b ht wt 1"
+    sample_rearrange: "b ht wt -> b ht wt 1 1"
+    nll_rearrange: "b ht wt 1 1 -> b ht wt"
     nll_gating: is_galaxy
+
 
 encoder:
     _target_: case_studies.redshift.redshift_bliss.encoder.encoder.RedshiftsEncoder
@@ -62,14 +64,16 @@ encoder:
         tile_slen: ${encoder.tile_slen}
         factors: ${variational_factors}
     use_checkerboard: false
-    discrete_metrics: {}
+    discrete_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: "partial"
+        metrics: {} #${discrete_metrics}
 
 # TODO: move to base_config
 visualization:
   mag_bin_cutoffs: [23.9, 24.1, 24.5, 24.9, 25.6]
   redshift_bin_cutoffs: [0.5, 1, 1.5, 2, 2.5, 3]
 
-# Can optimize to these metrics by choosing bin carefully
 # discrete_metrics:
 #     redshift_mean_square_error_bin_mag:
 #         _target_: case_studies.redshift.redshift_bliss.encoder.metrics.RedshiftMeanSquaredErrorBin
@@ -174,7 +178,7 @@ train:
     trainer:
         logger:
             name: checkpoints
-            version: continuous_split_${surveys.dc2.split_to_use}_${timestamp}
+            version: mdn_split_${surveys.dc2.split_to_use}_${timestamp}
             save_dir: ${paths.data_dir}
         precision: 32
         strategy:
@@ -188,15 +192,18 @@ train:
         # check_val_every_n_epoch: 1
         # devices: [0, 2, 3, 4]
         devices: [0]
-        max_epochs: 1
+        max_epochs: 30
     callbacks:
         checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
-            filename: encoder_{val/mode/redshifts/mse:.6f}
+            filename: encoder_{val/mode/redshifts/nll_avg:.6f}
+            # filename: encoder_{val/_loss:.6f}
+            # filename: encoder_{val/mode/redshift_mean_square_error_redshifts/mse:.6f}
             save_top_k: 5
             verbose: True
-            #  monitor: val/_loss
-            monitor: val/mode/redshifts/mse
+            monitor: val/mode/redshifts/nll_avg
+            # monitor: val/_loss
+            # monitor: val/mode/redshift_mean_square_error_redshifts/mse
             mode: min
         early_stopping:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
@@ -207,6 +214,7 @@ train:
     data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: 123
+
 
 # Defaults from `base_config`. We modify cached path and use own class
 surveys:

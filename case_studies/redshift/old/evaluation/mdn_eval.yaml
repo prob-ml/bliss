@@ -1,11 +1,12 @@
 ---
 defaults:
-    - ..@_here_: redshift_discrete
+    - ..@_here_: redshift_mdn
     - _self_
     # - override hydra/job_logging: stdout
 
 paths:
-    ckpt_dir: ${paths.data_dir}/checkpoints/discrete/checkpoints
+    ckpt_dir: ${paths.data_dir}/checkpoints/mdn_split_0_2025-05-15-09-05-17/checkpoints
+    # ckpt_dir: ${paths.data_dir}/checkpoints/mdn_split_0_2025-04-22-23-17-15/checkpoints
     plot_dir: ${paths.data_dir}/plots
 
 # To reduce memory usage
