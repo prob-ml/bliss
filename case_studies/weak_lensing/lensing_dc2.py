@@ -30,6 +30,7 @@ class LensingDC2DataModule(DC2DataModule):
         splits: str,
         avg_ellip_kernel_size: int,
         avg_ellip_kernel_sigma: int,
+        redshift_quantiles: List[float],
         batch_size: int,
         num_workers: int,
         cached_data_path: str,
@@ -63,6 +64,7 @@ class LensingDC2DataModule(DC2DataModule):
         self.n_bands = len(self.BANDS)
         self.avg_ellip_kernel_size = avg_ellip_kernel_size
         self.avg_ellip_kernel_sigma = avg_ellip_kernel_sigma
+        self.redshift_quantiles = redshift_quantiles
 
     # override prepare_data
     def prepare_data(self):
@@ -88,33 +90,54 @@ class LensingDC2DataModule(DC2DataModule):
         n_tiles_h = math.ceil(height / self.tile_slen)
         n_tiles_w = math.ceil(width / self.tile_slen)
         stti = source_tile_coords[:, :, 0] * n_tiles_w + source_tile_coords[:, :, 1]
-        source_to_tile_indices_default = stti.unsqueeze(-1).to(dtype=torch.int64)
+        source_to_tile_indices = stti.unsqueeze(-1).to(dtype=torch.int64)
 
         tile_cat = {}
 
         num_tiles = n_tiles_h * n_tiles_w
 
+        redshift_bin = torch.zeros(full_catalog["redshift_nobin"].shape[1])
+
+        for b, q in enumerate(self.redshift_quantiles):
+            redshift_bin[full_catalog["redshift_nobin"][0, :, 0] > q] = b
+
         for k, v in full_catalog.items():
-            if k == "plocs":
+            if k in {"plocs", "redshift_nobin", "mag_mask"}:
                 continue
 
             v = v.reshape(self.batch_size, plocs.shape[1], -1)
-            if k == "mag_mask":
-                continue
 
             v_sum = torch.zeros(self.batch_size, num_tiles, v.shape[-1], dtype=v.dtype)
             v_count = torch.zeros(self.batch_size, num_tiles, v.shape[-1], dtype=v.dtype)
             add_pos = torch.ones_like(v)
 
-            if k in {"psf", "ellip1_lsst", "ellip2_lsst"}:
-                nanmask = ~torch.isnan(v).any(dim=-1, keepdim=True).expand(-1, -1, v.shape[-1])
-                v = torch.where(nanmask, v, torch.tensor(0.0))
-                add_pos = nanmask.float().to(v.dtype)
-                source_to_tile_indices = source_to_tile_indices_default.expand(-1, -1, v.shape[-1])
+            nanmask = ~torch.isnan(v).any(dim=-1, keepdim=True).expand(-1, -1, v.shape[-1])
+            v = torch.where(nanmask, v, torch.tensor(0.0))
+            add_pos = nanmask.float().to(v.dtype)
+
+            if k == "psf":
+                v_sum = v_sum.scatter_add(1, source_to_tile_indices.expand(-1, -1, v.shape[-1]), v)
+                v_count = v_count.scatter_add(
+                    1, source_to_tile_indices.expand(-1, -1, v.shape[-1]), add_pos
+                )
             else:
-                source_to_tile_indices = source_to_tile_indices_default
-            v_sum = v_sum.scatter_add(1, source_to_tile_indices, v)
-            v_count = v_count.scatter_add(1, source_to_tile_indices, add_pos)
+                for b, q in enumerate(self.redshift_quantiles):
+                    mask = redshift_bin == b
+                    v_sum_bin = (
+                        v_sum[..., b]
+                        .unsqueeze(-1)
+                        .scatter_add(1, source_to_tile_indices[:, mask, :], v[..., b].unsqueeze(-1))
+                    )
+                    v_sum[..., b] = v_sum_bin[..., 0]
+                    v_count_bin = (
+                        v_count[..., b]
+                        .unsqueeze(-1)
+                        .scatter_add(
+                            1, source_to_tile_indices[:, mask, :], add_pos[..., b].unsqueeze(-1)
+                        )
+                    )
+                    v_count[..., b] = v_count_bin[..., 0]
+
             tile_cat[k + "_sum"] = v_sum.reshape(self.batch_size, n_tiles_w, n_tiles_h, v.shape[-1])
             tile_cat[k + "_count"] = v_count.reshape(
                 self.batch_size, n_tiles_w, n_tiles_h, v.shape[-1]
@@ -129,13 +152,21 @@ class LensingDC2DataModule(DC2DataModule):
         plocs_lim = image[0].shape
         height = plocs_lim[0]
         width = plocs_lim[1]
-        full_cat = LensingDC2Catalog.from_file(
+
+        catalog_dict = LensingDC2Catalog.read_catalog(
             self.dc2_cat_path,
             wcs,
             height,
             width,
             bands=self.bands,
             n_bands=self.n_bands,
+        )
+
+        full_cat = LensingDC2Catalog.bin_catalog_by_redshift(
+            catalog_dict,
+            height,
+            width,
+            redshift_quantiles=self.redshift_quantiles,
         )
 
         tile_cat = self.to_tile_catalog(full_cat, height, width)
@@ -197,18 +228,53 @@ class LensingDC2DataModule(DC2DataModule):
         tile_dict = result_dict["tile_dict"]
         psf_params = result_dict["inputs"]["psf_params"]
 
-        shear1 = tile_dict["shear1_sum"] / tile_dict["shear1_count"]
-        shear2 = tile_dict["shear2_sum"] / tile_dict["shear2_count"]
-        convergence = tile_dict["convergence_sum"] / tile_dict["convergence_count"]
-        ellip1_lensed = tile_dict["ellip1_lensed_sum"] / tile_dict["ellip1_lensed_count"]
-        ellip2_lensed = tile_dict["ellip2_lensed_sum"] / tile_dict["ellip2_lensed_count"]
+        shear1 = tile_dict["shear1_sum"] / (
+            tile_dict["shear1_count"]
+            + (tile_dict["shear1_count"] == 0) * torch.ones_like(tile_dict["shear1_count"])
+        )
+        shear2 = tile_dict["shear2_sum"] / (
+            tile_dict["shear2_count"]
+            + (tile_dict["shear2_count"] == 0) * torch.ones_like(tile_dict["shear2_count"])
+        )
+        convergence = tile_dict["convergence_sum"] / (
+            tile_dict["convergence_count"]
+            + (tile_dict["convergence_count"] == 0)
+            * torch.ones_like(tile_dict["convergence_count"])
+        )
+        ellip1_lensed = tile_dict["ellip1_lensed_sum"] / (
+            tile_dict["ellip1_lensed_count"]
+            + (tile_dict["ellip1_lensed_count"] == 0)
+            * torch.ones_like(tile_dict["ellip1_lensed_count"])
+        )
+        ellip2_lensed = tile_dict["ellip2_lensed_sum"] / (
+            tile_dict["ellip2_lensed_count"]
+            + (tile_dict["ellip2_lensed_count"] == 0)
+            * torch.ones_like(tile_dict["ellip2_lensed_count"])
+        )
         ellip_lensed = torch.stack((ellip1_lensed.squeeze(-1), ellip2_lensed.squeeze(-1)), dim=-1)
-        ellip1_lsst = tile_dict["ellip1_lsst_sum"] / tile_dict["ellip1_lsst_count"]
-        ellip2_lsst = tile_dict["ellip2_lsst_sum"] / tile_dict["ellip2_lsst_count"]
+        ellip1_lsst = tile_dict["ellip1_lsst_sum"] / (
+            tile_dict["ellip1_lsst_count"]
+            + (tile_dict["ellip1_lsst_count"] == 0)
+            * torch.ones_like(tile_dict["ellip1_lsst_count"])
+        )
+        ellip2_lsst = tile_dict["ellip2_lsst_sum"] / (
+            tile_dict["ellip2_lsst_count"]
+            + (tile_dict["ellip2_lsst_count"] == 0)
+            * torch.ones_like(tile_dict["ellip2_lsst_count"])
+        )
         ellip_lsst = torch.stack((ellip1_lsst.squeeze(-1), ellip2_lsst.squeeze(-1)), dim=-1)
-        redshift = tile_dict["redshift_sum"] / tile_dict["redshift_count"]
-        ra = tile_dict["ra_sum"] / tile_dict["ra_count"]
-        dec = tile_dict["dec_sum"] / tile_dict["dec_count"]
+        redshift = tile_dict["redshift_sum"] / (
+            tile_dict["redshift_count"]
+            + (tile_dict["redshift_count"] == 0) * torch.ones_like(tile_dict["redshift_count"])
+        )
+        ra = tile_dict["ra_sum"] / (
+            tile_dict["ra_count"]
+            + (tile_dict["ra_count"] == 0) * torch.ones_like(tile_dict["ra_count"])
+        )
+        dec = tile_dict["dec_sum"] / (
+            tile_dict["dec_count"]
+            + (tile_dict["dec_count"] == 0) * torch.ones_like(tile_dict["dec_count"])
+        )
 
         tile_dict["shear_1"] = shear1
         tile_dict["shear_2"] = shear2
@@ -238,7 +304,7 @@ class LensingDC2DataModule(DC2DataModule):
 
 class LensingDC2Catalog(DC2FullCatalog):
     @classmethod
-    def from_file(cls, cat_path, wcs, height, width, **kwargs):
+    def read_catalog(cls, cat_path, wcs, height, width, **kwargs):
         catalog = pd.read_pickle(cat_path)
 
         galid = torch.from_numpy(catalog["galaxy_id"].values)
@@ -293,21 +359,76 @@ class LensingDC2Catalog(DC2FullCatalog):
 
         psf_params = psf_params[:, :, :, plocs_mask].permute(0, 3, 1, 2)  # 1, n_obj, 6, 4
 
-        nobj = galid.shape[0]
+        catalog_dict = {
+            "galid": galid,
+            "ra": ra,
+            "dec": dec,
+            "plocs": plocs,
+            "shear1": shear1,
+            "shear2": shear2,
+            "convergence": convergence,
+            "ellip1_lensed": ellip1_lensed,
+            "ellip2_lensed": ellip2_lensed,
+            "ellip1_lsst": ellip1_lsst,
+            "ellip2_lsst": ellip2_lsst,
+            "redshift": redshift,
+            "psf_params": psf_params,
+        }
+
+        return catalog_dict
+
+    @classmethod
+    def bin_catalog_by_redshift(cls, catalog_dict, height, width, **kwargs):
+        nobj = catalog_dict["galid"].shape[0]
+
+        redshift_bin = torch.zeros_like(catalog_dict["redshift"])
+        num_redshift_bins = len(kwargs["redshift_quantiles"])
+
+        for i in range(num_redshift_bins):
+            redshift_bin[catalog_dict["redshift"] > kwargs["redshift_quantiles"][i]] = i
+
+        shear1_redbin = torch.zeros(catalog_dict["shear1"].shape[0], num_redshift_bins)
+        shear2_redbin = torch.zeros(catalog_dict["shear2"].shape[0], num_redshift_bins)
+        convergence_redbin = torch.zeros(catalog_dict["convergence"].shape[0], num_redshift_bins)
+        ra_redbin = torch.zeros(catalog_dict["ra"].shape[0], num_redshift_bins)
+        dec_redbin = torch.zeros(catalog_dict["dec"].shape[0], num_redshift_bins)
+        ellip1_lensed_redbin = torch.zeros(
+            catalog_dict["ellip1_lensed"].shape[0], num_redshift_bins
+        )
+        ellip2_lensed_redbin = torch.zeros(
+            catalog_dict["ellip2_lensed"].shape[0], num_redshift_bins
+        )
+        ellip1_lsst_redbin = torch.zeros(catalog_dict["ellip1_lsst"].shape[0], num_redshift_bins)
+        ellip2_lsst_redbin = torch.zeros(catalog_dict["ellip2_lsst"].shape[0], num_redshift_bins)
+        redshift_redbin = torch.zeros(catalog_dict["redshift"].shape[0], num_redshift_bins)
+
+        for i in range(num_redshift_bins):
+            num = torch.sum(redshift_bin == i)
+            shear1_redbin[:num, i] = catalog_dict["shear1"][redshift_bin == i]
+            shear2_redbin[:num, i] = catalog_dict["shear2"][redshift_bin == i]
+            convergence_redbin[:num, i] = catalog_dict["convergence"][redshift_bin == i]
+            ra_redbin[:num, i] = catalog_dict["ra"][redshift_bin == i]
+            dec_redbin[:num, i] = catalog_dict["dec"][redshift_bin == i]
+            ellip1_lensed_redbin[:num, i] = catalog_dict["ellip1_lensed"][redshift_bin == i]
+            ellip2_lensed_redbin[:num, i] = catalog_dict["ellip2_lensed"][redshift_bin == i]
+            ellip1_lsst_redbin[:num, i] = catalog_dict["ellip1_lsst"][redshift_bin == i]
+            ellip2_lsst_redbin[:num, i] = catalog_dict["ellip2_lsst"][redshift_bin == i]
+            redshift_redbin[:num, i] = catalog_dict["redshift"][redshift_bin == i]
 
         d = {
-            "ra": ra.reshape(1, nobj, 1),
-            "dec": dec.reshape(1, nobj, 1),
-            "plocs": plocs.reshape(1, nobj, 2),
-            "shear1": shear1.reshape(1, nobj, 1),
-            "shear2": shear2.reshape(1, nobj, 1),
-            "convergence": convergence.reshape(1, nobj, 1),
-            "ellip1_lensed": ellip1_lensed.reshape(1, nobj, 1),
-            "ellip2_lensed": ellip2_lensed.reshape(1, nobj, 1),
-            "ellip1_lsst": ellip1_lsst.reshape(1, nobj, 1),
-            "ellip2_lsst": ellip2_lsst.reshape(1, nobj, 1),
-            "redshift": redshift.reshape(1, nobj, 1),
-            "psf": psf_params,
+            "ra": ra_redbin.reshape(1, nobj, num_redshift_bins),
+            "dec": dec_redbin.reshape(1, nobj, num_redshift_bins),
+            "plocs": catalog_dict["plocs"].reshape(1, nobj, 2),
+            "shear1": shear1_redbin.reshape(1, nobj, num_redshift_bins),
+            "shear2": shear2_redbin.reshape(1, nobj, num_redshift_bins),
+            "convergence": convergence_redbin.reshape(1, nobj, num_redshift_bins),
+            "ellip1_lensed": ellip1_lensed_redbin.reshape(1, nobj, num_redshift_bins),
+            "ellip2_lensed": ellip2_lensed_redbin.reshape(1, nobj, num_redshift_bins),
+            "ellip1_lsst": ellip1_lsst_redbin.reshape(1, nobj, num_redshift_bins),
+            "ellip2_lsst": ellip2_lsst_redbin.reshape(1, nobj, num_redshift_bins),
+            "redshift": redshift_redbin.reshape(1, nobj, num_redshift_bins),
+            "redshift_nobin": catalog_dict["redshift"].reshape(1, nobj, 1),
+            "psf": catalog_dict["psf_params"],
         }
 
         return cls(height, width, d)
