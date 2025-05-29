@@ -2,9 +2,10 @@ import einops
 import torch
 from einops import rearrange
 from torch.distributions import Categorical, Distribution, MixtureSameFamily, Normal
-from case_studies.redshift.splinex.bspline import DeclanBSpline
+
 from bliss.catalog import BaseTileCatalog
 from bliss.encoder.variational_dist import VariationalDist, VariationalFactor
+from case_studies.redshift.splinex.bspline import DeclanBSpline
 
 
 class NormalFactor(VariationalFactor):
@@ -110,7 +111,7 @@ class Discretized1D(Distribution):
     def median(self):
         """Compute the median of the distribution.
 
-        Median is defined as the midpoint of the first bin 
+        Median is defined as the midpoint of the first bin
         where the cumulative distribution function (CDF) is >= 0.5.
         """
         cum_probs = self.base_dist.probs.cumsum(dim=-1)
@@ -121,7 +122,7 @@ class Discretized1D(Distribution):
     @property
     def mean(self):
         """Compute the mean of the distribution.
-        Mean is computed as the weighted average of the bin centers, 
+        Mean is computed as the weighted average of the bin centers,
         where the weights are the probabilities of each bin.
         """
         bin_centers = torch.arange(
@@ -296,8 +297,6 @@ class RedshiftVariationalDist(VariationalDist):
 
 
 """BSPLINE BASIS VARIATIONAL DIST"""
-
-
 
 
 class AbstractSplineClass:
