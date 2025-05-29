@@ -124,31 +124,29 @@ class DeclanBSpline:
         """
         if k == 0:
             return 1.0 if self.knots[i] <= t < self.knots[i + 1] else 0.0
-        else:
-            left_term = 0.0
-            if self.knots[i + k] != self.knots[i]:
-                left_term = (
-                    (t - self.knots[i])
-                    / (self.knots[i + k] - self.knots[i])
-                    * self.basis_function(t, k - 1, i)
-                )
 
-            right_term = 0.0
-            if self.knots[i + k + 1] != self.knots[i + 1]:
-                right_term = (
-                    (self.knots[i + k + 1] - t)
-                    / (self.knots[i + k + 1] - self.knots[i + 1])
-                    * self.basis_function(t, k - 1, i + 1)
-                )
-
-            special_case = (
-                1.0
-                if not (
-                    (i == 0 and t == self.knots[0]) or (i == self.n - 1 and t == self.knots[-1])
-                )
-                else 0.0
+        left_term = 0.0
+        if self.knots[i + k] != self.knots[i]:
+            left_term = (
+                (t - self.knots[i])
+                / (self.knots[i + k] - self.knots[i])
+                * self.basis_function(t, k - 1, i)
             )
-            return (left_term + right_term) * special_case + 1.0 - special_case
+
+        right_term = 0.0
+        if self.knots[i + k + 1] != self.knots[i + 1]:
+            right_term = (
+                (self.knots[i + k + 1] - t)
+                / (self.knots[i + k + 1] - self.knots[i + 1])
+                * self.basis_function(t, k - 1, i + 1)
+            )
+
+        special_case = (
+            1.0
+            if not ((i == 0 and t == self.knots[0]) or (i == self.n - 1 and t == self.knots[-1]))
+            else 0.0
+        )
+        return (left_term + right_term) * special_case + 1.0 - special_case
 
     def derivative_basis_function(self, t: float, k: int, i: int, order: int = 1) -> float:
         """Compute the derivative of the B-spline basis function.
