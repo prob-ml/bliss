@@ -177,8 +177,8 @@ class RedshiftsEncoder(Encoder):
         if self.writer is None:
             logging.warning("Writer not initialized, cannot save predictions")
             return
-        else:
-            self.save_preds(batch, batch_idx, use_mode=True, writer=self.writer)
+
+        self.save_preds(batch, batch_idx, use_mode=True, writer=self.writer)
 
     def on_test_epoch_end(self):
         # note: metrics are not reset here, to give notebooks access to them

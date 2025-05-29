@@ -84,12 +84,16 @@ class RedshiftMeanNLL(Metric):
 
     def update(self, true_cat, est_cat, matching, loss):
         for i in range(true_cat.batch_size):
-            tcat_matches, ecat_matches = matching[i]
+            tcat_matches, _ = matching[i]
 
             # For RedshiftsCatalogMatcher
             if isinstance(est_cat, BaseTileCatalog):
                 self.total += tcat_matches.sum()
                 nll_true = loss[i][tcat_matches].cpu().detach()
+            else:
+                raise ValueError(
+                    "RedshiftMeanNLL metric only supports BaseTileCatalog for est_cat."
+                )
 
             this_nll_sum = nll_true.sum()
             self.sum_nll += this_nll_sum
@@ -130,6 +134,8 @@ class RedshiftsCatalogMatcher(CatalogMatcher):
                 gating = true_cat.star_bools[i]
             elif self.match_gating == "is_galaxy":
                 gating = true_cat.galaxy_bools[i]
+            else:
+                raise ValueError(f"Unknown match gating: {self.match_gating}")
             matching.append((gating, gating))
 
         return matching

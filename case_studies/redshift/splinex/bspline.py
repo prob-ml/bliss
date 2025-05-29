@@ -165,26 +165,26 @@ class DeclanBSpline:
         """
         if order == 0:
             return self.basis_function(t, k, i)
-        elif k == 0:
+        if k == 0:
             return 0.0
-        else:
-            left_term = 0.0
-            if self.knots[i + k] != self.knots[i]:
-                left_term = (
-                    k
-                    / (self.knots[i + k] - self.knots[i])
-                    * self.derivative_basis_function(t, k - 1, i, order - 1)
-                )
 
-            right_term = 0.0
-            if self.knots[i + k + 1] != self.knots[i + 1]:
-                right_term = (
-                    k
-                    / (self.knots[i + k + 1] - self.knots[i + 1])
-                    * self.derivative_basis_function(t, k - 1, i + 1, order - 1)
-                )
+        left_term = 0.0
+        if self.knots[i + k] != self.knots[i]:
+            left_term = (
+                k
+                / (self.knots[i + k] - self.knots[i])
+                * self.derivative_basis_function(t, k - 1, i, order - 1)
+            )
 
-            return left_term - right_term
+        right_term = 0.0
+        if self.knots[i + k + 1] != self.knots[i + 1]:
+            right_term = (
+                k
+                / (self.knots[i + k + 1] - self.knots[i + 1])
+                * self.derivative_basis_function(t, k - 1, i + 1, order - 1)
+            )
+
+        return left_term - right_term
 
     def clamp_ctrls(self, x: torch.Tensor, degree: int = 2) -> torch.Tensor:
         """Clamp a vector of controls for inference.

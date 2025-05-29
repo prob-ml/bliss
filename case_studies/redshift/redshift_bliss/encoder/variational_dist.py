@@ -237,7 +237,6 @@ class Discretized1D(Distribution):
             "redshift_L1_bin_rs": self.compute_abs_bias_risk,
         }
 
-        """Find the bin that minimizes the risk of producing a catastrophic outlier."""
         bin_centers = torch.linspace(
             self.low, self.high, self.num_bins, device=self.base_dist.logits.device
         )
@@ -252,8 +251,8 @@ class Discretized1D(Distribution):
         for z_pred in bin_centers:
             try:
                 risk_fn = RISK_FUNCTIONS[risk_type]
-            except KeyError:
-                raise ValueError(f"Invalid risk type: {risk_type}")
+            except KeyError as exc:
+                raise ValueError(f"Invalid risk type: {risk_type}") from exc
 
             risk = risk_fn(z_pred, bin_centers, bin_probs)
 
@@ -291,9 +290,6 @@ class RedshiftVariationalDist(VariationalDist):
         fp_pairs = self._factor_param_pairs(x_cat)
         d = {qk.name: qk.get_median(params) for qk, params in fp_pairs}
         return BaseTileCatalog(d)
-
-
-"""BSPLINE BASIS VARIATIONAL DIST"""
 
 
 class AbstractSplineClass:
@@ -445,7 +441,7 @@ class BSpline1D(Distribution):
         cdf_values = self._cdf()
         grid_points = self.grid
 
-        for i, p in enumerate(prob_values):
+        for _, p in enumerate(prob_values):
             idx = (cdf_values - p >= 0).float().argmax(-1)
             idx = idx.clamp(1, len(self.grid) - 1).long()
 
@@ -585,7 +581,7 @@ class MixtureOfGaussians1D(Distribution):
         cdf_values = self._cdf()
         grid_points = self.grid
 
-        for i, p in enumerate(prob_values):
+        for _, p in enumerate(prob_values):
             idx = (cdf_values - p >= 0).float().argmax(0)
             idx = idx.clamp(1, len(cdf_values) - 1).long()
 
