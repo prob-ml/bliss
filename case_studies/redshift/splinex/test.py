@@ -5,7 +5,8 @@ import torch
 from case_studies.redshift.splinex.bspline import DeclanBSpline
 
 """
-The port seems successful based on this test case at least. Let's give it a whirl within redshift family.
+The port seems successful based on this test case at least. 
+Let's give it a whirl within redshift family.
 """
 
 min_val = 0.0

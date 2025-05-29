@@ -220,6 +220,7 @@ class Discretized1D(Distribution):
 
         return risk
 
+    # noqa: WPS223
     def get_lowest_risk_bin(self, risk_type="redshift_outlier_fraction_catastrophic_bin"):
         """Find the bin that minimizes the risk of producing a catastrophic outlier."""
         bin_centers = torch.linspace(
@@ -237,7 +238,7 @@ class Discretized1D(Distribution):
             if (
                 risk_type == "redshift_outlier_fraction_catastrophic_bin_mag"
                 or risk_type == "redshift_outlier_fraction_catastrophic_bin_rs"
-            ):  # noqa: WPS223
+            ):
                 risk = self.compute_catastrophic_risk(z_pred, bin_centers, bin_probs)
             elif (
                 risk_type == "redshift_outlier_fraction_bin_mag"
@@ -311,9 +312,8 @@ class AbstractSplineClass:
         self.device = device
 
     def _create_spline(self):
-        if "spline" in self._cache:
-            return self._cache["spline"]
-        else:
+        spline = self._cache.get("spline")
+        if spline is None:
             spline = DeclanBSpline(
                 min_val=self.min_val,
                 max_val=self.max_val,
@@ -323,7 +323,8 @@ class AbstractSplineClass:
                 device=self.device,
             )
             self._cache["spline"] = spline
-            return self._cache["spline"]
+
+        return spline
 
 
 class BSpline1D(Distribution):
@@ -570,8 +571,8 @@ class MixtureOfGaussians1D(Distribution):
         return trunc_cdf_values
 
     def cdf(self, value):
-        if not isinstance(prob_values, torch.Tensor):
-            prob_values = torch.tensor([prob_values])
+        if not isinstance(value, torch.Tensor):
+            value = torch.tensor([value])
         min_val = self.grid[0]
         max_val = self.grid[-1]
         value = torch.clamp(value, min=min_val, max=max_val)

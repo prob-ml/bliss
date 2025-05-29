@@ -4,8 +4,8 @@ from pathlib import Path
 import einops
 import pandas as pd
 import pyarrow as pa
-import pyarrow.parquet as pq
 import torch
+from pyarrow import parquet as pq
 
 from bliss.catalog import TileCatalog
 from bliss.encoder.encoder import Encoder
@@ -106,9 +106,6 @@ class RedshiftsEncoder(Encoder):
 
         # Update metrics
         self.mode_metrics.update(target_cat, mode_cat, matching, loss)
-
-    def training_step(self, batch, batch_idx):
-        return None
 
     def on_validation_epoch_end(self):
         # https://github.com/Lightning-AI/pytorch-lightning/discussions/2529

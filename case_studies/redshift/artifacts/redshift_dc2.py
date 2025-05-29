@@ -16,8 +16,8 @@ class RedshiftDC2DataModule(DC2DataModule):
 
     def __init__(
         self,
-        split_to_use: int = 0,
         *args,
+        split_to_use: int = 0,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -50,10 +50,7 @@ class RedshiftDC2DataModule(DC2DataModule):
 
         # Ensure no overlap between train, val, and test splits
         if (
-            len(set_train_tract_patches) != len(train_tract_patches)
-            or len(set_val_tract_patches) != len(val_tract_patches)
-            or len(set_test_tract_patches) != len(test_tract_patches)
-            or set_train_tract_patches & set_val_tract_patches
+            set_train_tract_patches & set_val_tract_patches
             or set_train_tract_patches & set_test_tract_patches
             or set_val_tract_patches & set_test_tract_patches
         ):
