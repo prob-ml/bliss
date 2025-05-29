@@ -222,6 +222,21 @@ class Discretized1D(Distribution):
 
     # noqa: WPS223
     def get_lowest_risk_bin(self, risk_type="redshift_outlier_fraction_catastrophic_bin"):
+        RISK_FUNCTIONS = {
+            "redshift_outlier_fraction_catastrophic_bin_mag": self.compute_catastrophic_risk,
+            "redshift_outlier_fraction_catastrophic_bin_rs": self.compute_catastrophic_risk,
+            "redshift_outlier_fraction_bin_mag": self.compute_outlier_fraction_risk,
+            "redshift_outlier_fraction_bin_rs": self.compute_outlier_fraction_risk,
+            "redshift_nmad_bin_mag": self.compute_nmad_risk,
+            "redshift_nmad_bin_rs": self.compute_nmad_risk,
+            "redshift_mean_square_error_bin_mag": self.compute_mse_risk,
+            "redshift_mean_square_error_bin_rs": self.compute_mse_risk,
+            "redshift_abs_bias_bin_mag": self.compute_abs_bias_risk,
+            "redshift_abs_bias_bin_rs": self.compute_abs_bias_risk,
+            "redshift_L1_bin_mag": self.compute_abs_bias_risk,
+            "redshift_L1_bin_rs": self.compute_abs_bias_risk,
+        }
+
         """Find the bin that minimizes the risk of producing a catastrophic outlier."""
         bin_centers = torch.linspace(
             self.low, self.high, self.num_bins, device=self.base_dist.logits.device
@@ -235,31 +250,12 @@ class Discretized1D(Distribution):
 
         # Grid search
         for z_pred in bin_centers:
-            if (
-                risk_type == "redshift_outlier_fraction_catastrophic_bin_mag"
-                or risk_type == "redshift_outlier_fraction_catastrophic_bin_rs"
-            ):
-                risk = self.compute_catastrophic_risk(z_pred, bin_centers, bin_probs)
-            elif (
-                risk_type == "redshift_outlier_fraction_bin_mag"
-                or risk_type == "redshift_outlier_fraction_bin_rs"
-            ):
-                risk = self.compute_outlier_fraction_risk(z_pred, bin_centers, bin_probs)
-            elif risk_type == "redshift_nmad_bin_mag" or risk_type == "redshift_nmad_bin_rs":
-                risk = self.compute_nmad_risk(z_pred, bin_centers, bin_probs)
-            elif (
-                risk_type == "redshift_mean_square_error_bin_mag"
-                or risk_type == "redshift_mean_square_error_bin_rs"
-            ):
-                risk = self.compute_mse_risk(z_pred, bin_centers, bin_probs)
-            elif (
-                risk_type == "redshift_abs_bias_bin_mag" or risk_type == "redshift_abs_bias_bin_rs"
-            ):
-                risk = self.compute_abs_bias_risk(z_pred, bin_centers, bin_probs)
-            elif risk_type == "redshift_L1_bin_mag" or risk_type == "redshift_L1_bin_rs":
-                risk = self.compute_abs_bias_risk(z_pred, bin_centers, bin_probs)
-            else:
+            try:
+                risk_fn = RISK_FUNCTIONS[risk_type]
+            except KeyError:
                 raise ValueError(f"Invalid risk type: {risk_type}")
+
+            risk = risk_fn(z_pred, bin_centers, bin_probs)
 
             update_mask = risk < min_risk
             min_risk = torch.where(update_mask, risk, min_risk)
