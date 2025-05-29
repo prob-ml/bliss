@@ -26,8 +26,9 @@ my_normalizers:
         _target_: bliss.encoder.image_normalizer.NullNormalizer
 
 my_metrics:
-    lensing_map:
+    lensingmse:
             _target_: case_studies.weak_lensing.lensing_metrics.LensingMSE
+            num_redshift_bins: ${surveys.dc2.num_redshift_bins}
 
 my_render:
     lensing_shear_conv:

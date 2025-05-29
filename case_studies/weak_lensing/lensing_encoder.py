@@ -140,6 +140,17 @@ class WeakLensingEncoder(Encoder):
             batch_idx,
         )
 
+    def report_metrics(self, metrics, logging_name):
+        computed = metrics.compute()
+        for k, v in computed.items():
+            if torch.is_tensor(v) and v.numel() > 1:
+                for i in range(v.numel()):
+                    self.log(f"{logging_name}/{k}/bin_{i}", v[i].item(), sync_dist=True)
+            else:
+                self.log(
+                    f"{logging_name}/{k}", v.item() if torch.is_tensor(v) else v, sync_dist=True
+                )
+
     def on_train_epoch_end(self):
         # Compute the average loss for the epoch and reset counters
         avg_epoch_train_loss = self.current_epoch_train_loss / self.current_epoch_train_batches
@@ -152,13 +163,13 @@ class WeakLensingEncoder(Encoder):
         )
 
     def on_validation_epoch_end(self):
-        self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
+        self.report_metrics(self.mode_metrics, "val/mode")
         self.mode_metrics.reset()
         if self.sample_metrics is not None:
-            self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
+            self.report_metrics(self.sample_metrics, "val/sample")
             self.sample_metrics.reset()
         if self.sample_image_renders is not None:
-            self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
+            self.report_metrics(self.sample_image_renders, "val/image_renders")
 
         avg_epoch_val_loss = self.current_epoch_val_loss / self.current_epoch_val_batches
         self.epoch_val_losses.append(avg_epoch_val_loss)
@@ -167,6 +178,11 @@ class WeakLensingEncoder(Encoder):
         print(  # noqa: WPS421
             f"Average val loss for epoch {self.current_epoch}: {avg_epoch_val_loss}",
         )
+
+    def on_test_epoch_end(self):
+        self.report_metrics(self.mode_metrics, "test/mode")
+        if self.sample_metrics is not None:
+            self.report_metrics(self.sample_metrics, "test/sample")
 
     def on_train_end(self):
         if not Path(self.loss_plots_location).exists():

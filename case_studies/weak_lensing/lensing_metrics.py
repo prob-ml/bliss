@@ -3,24 +3,40 @@ from torchmetrics import Metric
 
 
 class LensingMSE(Metric):
-    def __init__(self, **kwargs):
+    def __init__(self, num_redshift_bins, **kwargs):
         super().__init__(**kwargs)
-        self.add_state("shear1_sum_squared_err", default=torch.zeros(1), dist_reduce_fx="sum")
         self.add_state(
-            "zero_baseline_shear1_sum_squared_err", default=torch.zeros(1), dist_reduce_fx="sum"
+            "shear1_sum_squared_err", default=torch.zeros(num_redshift_bins), dist_reduce_fx="sum"
         )
         self.add_state(
-            "ellip_baseline_shear1_sum_squared_err", default=torch.zeros(1), dist_reduce_fx="sum"
-        )
-        self.add_state("shear2_sum_squared_err", default=torch.zeros(1), dist_reduce_fx="sum")
-        self.add_state(
-            "zero_baseline_shear2_sum_squared_err", default=torch.zeros(1), dist_reduce_fx="sum"
+            "zero_baseline_shear1_sum_squared_err",
+            default=torch.zeros(num_redshift_bins),
+            dist_reduce_fx="sum",
         )
         self.add_state(
-            "ellip_baseline_shear2_sum_squared_err", default=torch.zeros(1), dist_reduce_fx="sum"
+            "ellip_baseline_shear1_sum_squared_err",
+            default=torch.zeros(num_redshift_bins),
+            dist_reduce_fx="sum",
         )
-        self.add_state("convergence_sum_squared_err", default=torch.zeros(1), dist_reduce_fx="sum")
-        self.add_state("total", default=torch.zeros(1), dist_reduce_fx="sum")
+        self.add_state(
+            "shear2_sum_squared_err", default=torch.zeros(num_redshift_bins), dist_reduce_fx="sum"
+        )
+        self.add_state(
+            "zero_baseline_shear2_sum_squared_err",
+            default=torch.zeros(num_redshift_bins),
+            dist_reduce_fx="sum",
+        )
+        self.add_state(
+            "ellip_baseline_shear2_sum_squared_err",
+            default=torch.zeros(num_redshift_bins),
+            dist_reduce_fx="sum",
+        )
+        self.add_state(
+            "convergence_sum_squared_err",
+            default=torch.zeros(num_redshift_bins),
+            dist_reduce_fx="sum",
+        )
+        self.add_state("total", default=torch.zeros(num_redshift_bins), dist_reduce_fx="sum")
 
     def update(self, true_cat, est_cat, matching) -> None:
         true_shear1 = true_cat["shear_1"].flatten(1, 2)
