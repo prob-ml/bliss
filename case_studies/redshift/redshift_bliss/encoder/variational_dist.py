@@ -441,7 +441,7 @@ class BSpline1D(Distribution):
         cdf_values = self._cdf()
         grid_points = self.grid
 
-        for _, p in enumerate(prob_values):
+        for p in prob_values:
             idx = (cdf_values - p >= 0).float().argmax(-1)
             idx = idx.clamp(1, len(self.grid) - 1).long()
 
@@ -581,7 +581,7 @@ class MixtureOfGaussians1D(Distribution):
         cdf_values = self._cdf()
         grid_points = self.grid
 
-        for _, p in enumerate(prob_values):
+        for p in prob_values:
             idx = (cdf_values - p >= 0).float().argmax(0)
             idx = idx.clamp(1, len(cdf_values) - 1).long()
 
