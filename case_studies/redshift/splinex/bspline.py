@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 
 
 class DeclanBSpline:
@@ -15,15 +14,7 @@ class DeclanBSpline:
         order: int = 2,
         device: str = "cpu",
     ):
-        """Initialize the B-spline.
-
-        Args:
-            n_in: Number of input points.
-            n_out: Number of output points.
-            degree: Degree of the B-spline.
-            order: Order of derivatives to compute.
-
-        """
+        """Initialize the B-spline."""
         self.min_val = min_val
         self.max_val = max_val
         self.knots = torch.linspace(min_val, max_val, nknots)

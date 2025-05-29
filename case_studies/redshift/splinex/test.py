@@ -1,10 +1,8 @@
 import math
 
 import torch
-from scipy.interpolate import BSpline as ScipyBSpline
 
 from case_studies.redshift.splinex.bspline import DeclanBSpline
-from case_studies.redshift.splinex.utils import clamp_ctrls, compute_knots
 
 """
 The port seems successful based on this test case at least. Let's give it a whirl within redshift family.

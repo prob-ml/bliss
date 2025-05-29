@@ -2,8 +2,6 @@
 import logging
 import multiprocessing
 import pathlib
-import pickle
-import re
 from pathlib import Path
 from typing import List
 
@@ -55,15 +53,11 @@ class RedshiftDC2DataModule(DC2DataModule):
             len(set_train_tract_patches) != len(train_tract_patches)
             or len(set_val_tract_patches) != len(val_tract_patches)
             or len(set_test_tract_patches) != len(test_tract_patches)
-        ):
-            raise ValueError("Train, val, or test split contains duplicates.")
-
-        if (
-            set_train_tract_patches & set_val_tract_patches
+            or set_train_tract_patches & set_val_tract_patches
             or set_train_tract_patches & set_test_tract_patches
             or set_val_tract_patches & set_test_tract_patches
         ):
-            raise ValueError("Train, val, or test splits overlap.")
+            raise ValueError("Train, val, or test split contains duplicates.")
 
         # Separate self.file_paths into train/val/test
         self._train_files = [
@@ -111,37 +105,6 @@ class RedshiftDC2DataModule(DC2DataModule):
             return None
 
         raise RuntimeError(f"setup skips stage {stage}")
-
-    def setup(self, stage: str) -> None:  # noqa: WPS324
-        """Setup following super(), but we save train/val/test splits to text files for ease."""
-        super().setup(stage)
-
-        # Log tracts and patches used
-        train_files = self.file_paths[self.slices[0]]
-        val_files = self.file_paths[self.slices[1]]
-        test_files = self.file_paths[self.slices[2]]
-
-        train_matches = [
-            re.search(r"cached_data_(\d+)_(\d+,\d+)", file_path) for file_path in train_files
-        ]
-        val_matches = [
-            re.search(r"cached_data_(\d+)_(\d+,\d+)", file_path) for file_path in val_files
-        ]
-        test_matches = [
-            re.search(r"cached_data_(\d+)_(\d+,\d+)", file_path) for file_path in test_files
-        ]
-        train_tract_patches = [(match.group(1), match.group(2)) for match in train_matches]
-        val_tract_patches = [(match.group(1), match.group(2)) for match in val_matches]
-        test_tract_patches = [(match.group(1), match.group(2)) for match in test_matches]
-
-        with open(self.cached_data_path / "train_splits.pkl", "wb") as f:
-            pickle.dump(train_tract_patches, f)
-
-        with open(self.cached_data_path / "val_splits.pkl", "wb") as f:
-            pickle.dump(val_tract_patches, f)
-
-        with open(self.cached_data_path / "test_splits.pkl", "wb") as f:
-            pickle.dump(test_tract_patches, f)
 
     def _load_image_and_bg_files_list(self):
         img_pattern = "**/*/calexp*.fits"
