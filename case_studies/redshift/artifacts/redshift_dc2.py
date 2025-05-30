@@ -2,11 +2,11 @@
 import logging
 import multiprocessing
 import pathlib
-import pickle
-import re
 from pathlib import Path
+from typing import List
 
 import torch
+import yaml
 
 from bliss.surveys.dc2 import DC2DataModule, map_nested_dicts, split_list, unpack_dict
 
@@ -17,44 +17,91 @@ class RedshiftDC2DataModule(DC2DataModule):
     def __init__(
         self,
         *args,
+        split_to_use: int = 0,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-
+        self.split_to_use = split_to_use
         self.dc2_image_dir = Path(self.dc2_image_dir)
         self.dc2_cat_path = Path(self.dc2_cat_path)
         self._tract_patches = None
+        self._train_files = None
+        self._val_files = None
+        self._test_files = None
+
+    def _get_split(self) -> List[str]:
+        split_yaml = self.cached_data_path / "splits.yaml"
+        if not split_yaml.exists():
+            raise FileNotFoundError(f"Split file {split_yaml} does not exist.")
+
+        with open(split_yaml, "r") as f:  # pylint: disable=unspecified-encoding
+            splits = yaml.safe_load(f)
+
+        if self.split_to_use < 0 or self.split_to_use >= len(splits["train"]):
+            raise ValueError(f"split_to_use {self.split_to_use} is out of range. ")
+
+        train_tract_patches = ["_".join(x) for x in splits["train"][self.split_to_use]]
+        val_tract_patches = ["_".join(x) for x in splits["val"][self.split_to_use]]
+        test_tract_patches = ["_".join(x) for x in splits["test"][self.split_to_use]]
+
+        set_train_tract_patches = set(train_tract_patches)
+        set_val_tract_patches = set(val_tract_patches)
+        set_test_tract_patches = set(test_tract_patches)
+
+        # Ensure no overlap between train, val, and test splits
+        if (
+            set_train_tract_patches & set_val_tract_patches
+            or set_train_tract_patches & set_test_tract_patches
+            or set_val_tract_patches & set_test_tract_patches
+        ):
+            raise ValueError("Train, val, or test split contains duplicates.")
+
+        # Separate self.file_paths into train/val/test
+        self._train_files = [
+            file_name
+            for file_name in self.file_paths
+            if any(substring in file_name for substring in train_tract_patches)
+        ]
+        self._val_files = [
+            file_name
+            for file_name in self.file_paths
+            if any(substring in file_name for substring in val_tract_patches)
+        ]
+        self._test_files = [
+            file_name
+            for file_name in self.file_paths
+            if any(substring in file_name for substring in test_tract_patches)
+        ]
 
     def setup(self, stage: str) -> None:  # noqa: WPS324
         """Setup following super(), but we save train/val/test splits to text files for ease."""
-        super().setup(stage)
+        if self.file_paths is None or self.slices is None:
+            self._load_file_paths_and_slices()
+        if self._train_files is None or self._val_files is None or self._test_files is None:
+            self._get_split()
 
-        # Log tracts and patches used
-        train_files = self.file_paths[self.slices[0]]
-        val_files = self.file_paths[self.slices[1]]
-        test_files = self.file_paths[self.slices[2]]
+        if stage == "fit":
+            self.train_dataset = self._get_dataset(
+                self._train_files, self.train_transforms, shuffle=True
+            )
 
-        train_matches = [
-            re.search(r"cached_data_(\d+)_(\d+,\d+)", file_path) for file_path in train_files
-        ]
-        val_matches = [
-            re.search(r"cached_data_(\d+)_(\d+,\d+)", file_path) for file_path in val_files
-        ]
-        test_matches = [
-            re.search(r"cached_data_(\d+)_(\d+,\d+)", file_path) for file_path in test_files
-        ]
-        train_tract_patches = [(match.group(1), match.group(2)) for match in train_matches]
-        val_tract_patches = [(match.group(1), match.group(2)) for match in val_matches]
-        test_tract_patches = [(match.group(1), match.group(2)) for match in test_matches]
+            self.val_dataset = self._get_dataset(self._val_files, self.nontrain_transforms)
+            return None
 
-        with open(self.cached_data_path / "train_splits.pkl", "wb") as f:
-            pickle.dump(train_tract_patches, f)
+        if stage == "validate":
+            if self.val_dataset is None:
+                self.val_dataset = self._get_dataset(self._val_files, self.nontrain_transforms)
+            return None
 
-        with open(self.cached_data_path / "val_splits.pkl", "wb") as f:
-            pickle.dump(val_tract_patches, f)
+        if stage == "test":
+            self.test_dataset = self._get_dataset(self._test_files, self.nontrain_transforms)
+            return None
 
-        with open(self.cached_data_path / "test_splits.pkl", "wb") as f:
-            pickle.dump(test_tract_patches, f)
+        if stage == "predict":
+            self.predict_dataset = self._get_dataset(self.file_paths, self.nontrain_transforms)
+            return None
+
+        raise RuntimeError(f"setup skips stage {stage}")
 
     def _load_image_and_bg_files_list(self):
         img_pattern = "**/*/calexp*.fits"
