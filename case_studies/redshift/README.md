@@ -2,18 +2,17 @@
 
 #### Running BLISS-PZ on DC2
 
-Modify the config file `redshift.yaml` as follows:
-1. Change `paths.data_dir` to a directory where you're happy to have all data artifacts and checkpoints stored.
-2. Make the `OUT_DIR` variable in `runner.sh` this same location.
-3. Modify `paths.dc2` to the location of `dc2` on your system.
+To run your experiment of choice, perform the following steps.
+1. Set the environment variable `BLISS_HOME` to be the location of `bliss` on your system.
+2. Set the environment variable `BLISS_DATA_DIR` to be the location where you want to store artifacts.
+3. Run `./case_studies/redshift/runner.sh [--discrete] [--continuous] [--bspline] [--mdn] [--all]` depending on your desired experiment.
 
-To produce the results from `BLISS-PZ`, run `runner.sh` (you made need to make this an executable, `chmod +x runner.sh` from within this directory).
+You may need to make this an executable, `chmod +x case_studies/redshift/runner.sh` should suffice.
 
-```
-./runner.sh
-```
+TODO: run full artifact creation for `bliss` and `rail` and store into `BLISS_DATA_DIR`.
 
-The runner bash script launches programs sequentially: first data prep, then two different runs of BLISS, followed by RAIL. Thereafter, plots are produced. For your use case it may be better to run different parts of the runner script on their own. Take a look at the script and comment out the relevant parts if you need.
+
+<!-- The runner bash script launches programs sequentially: first data prep, then two different runs of BLISS, followed by RAIL. Thereafter, plots are produced. For your use case it may be better to run different parts of the runner script on their own. Take a look at the script and comment out the relevant parts if you need. -->
 
 
 
