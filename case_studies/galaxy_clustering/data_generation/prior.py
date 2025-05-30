@@ -150,8 +150,8 @@ class Prior:
         catalog["GI_COLOR"] = gi_color_samples
         catalog["IZ_COLOR"] = iz_color_samples
         return catalog
-        
-    def make_des_catalog(self, 
+
+    def make_des_catalog(self,
                          des_subdir,
                          class_star_thr=0.5,
                          #des_redshift_path=PHOTO_Z_PATH,
@@ -175,14 +175,14 @@ class Prior:
                 .drop_duplicates(subset='id', keep='first')  # keep only first
         )
         members_df_best = members_df_best.rename(columns={'id': 'COADD_OBJECT_ID'})
-        
+
         main_df = main_df.merge(
         members_df_best[['COADD_OBJECT_ID', 'pmem', 'mem_match_id', 'zspec']],
         on='COADD_OBJECT_ID',
-        how='left'  
+        how='left'
         )
-        
-        
+
+
         fluxes = np.array(
             main_df[
                 [
@@ -219,12 +219,12 @@ class Prior:
         mock_catalog["G2"] = g2
         # What redshift to use?
         mock_catalog["PMEM"] = main_df["pmem"].fillna(0.0)
-        mock_catalog["Z"] = main_df["zspec"].fillna(0.0)
+        mock_catalog["Z"] = main_df["zred2"].fillna(0.0)
         mock_catalog["SOURCE_TYPE"] = (
                     (main_df["CLASS_STAR_G"] > class_star_thr) |
                     (main_df["CLASS_STAR_R"] > class_star_thr) |
                     (main_df["CLASS_STAR_I"] > class_star_thr)
-        ).astype(int)    
+        ).astype(int)
 
         return mock_catalog
 
