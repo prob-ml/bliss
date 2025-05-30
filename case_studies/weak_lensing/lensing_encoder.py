@@ -151,6 +151,18 @@ class WeakLensingEncoder(Encoder):
                     f"{logging_name}/{k}", v.item() if torch.is_tensor(v) else v, sync_dist=True
                 )
 
+        for metric_name, metric in metrics.items():
+            if hasattr(metric, "plot"):  # noqa: WPS421
+                try:
+                    plot_or_none = metric.plot()
+                except NotImplementedError:
+                    continue
+                name = f"Epoch:{self.current_epoch}"
+                name += f"/{logging_name} {metric_name}"
+                if self.logger and plot_or_none:
+                    fig, _axes = plot_or_none
+                    self.logger.experiment.add_figure(name, fig)
+
     def on_train_epoch_end(self):
         # Compute the average loss for the epoch and reset counters
         avg_epoch_train_loss = self.current_epoch_train_loss / self.current_epoch_train_batches
