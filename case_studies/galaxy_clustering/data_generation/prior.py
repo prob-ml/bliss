@@ -1,18 +1,35 @@
 import numpy as np
 import pandas as pd
+from pathlib import Path
 from astropy.table import Table
 from scipy.stats import gennorm
-
+import h5py
+import os
+from astropy.io import fits
 from bliss.catalog import convert_mag_to_nmgy
 from case_studies.galaxy_clustering.utils.cluster_utils import angular_diameter_distance
+from case_studies.galaxy_clustering.data_generation.gen_utils import read_cluster_catalog
 
-CLUSTER_CATALOG_PATH = "redmapper_sva1-expanded_public_v6.3_members.fits"
-SVA_PATH = "/data/scratch/des/sva1_gold_r1.0_catalog.fits"
-PHOTO_Z_PATH = "/data/scratch/des/sva1_gold_r1.0_annz2_point.fits"
+CLUSTER_CATALOG_PATH = Path(
+    "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/y3a2_files/y3kp_clusters/data/y3_redmapper_v6.4.22+2_release.h5"
+)
+
+DES_DIR = Path(
+    "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles/"
+)
+PSF_DIR = Path("/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr1_tiles")
+DES_PIXEL_SCALE = 0.263
+BAND_TO_COL = {"g": 5, "r": 6, "i": 7, "z": 8}
+IMAGE_SIZE = 10000
+NFILES = 1
+GALSIM_PATH = (
+    "/home/kapnadak/bliss/case_studies/galaxy_clustering"
+    "/data_generation/custom-single-image-galsim.yaml"
+)
 
 
 class Prior:
-    def __init__(self, image_size=2560):
+    def __init__(self, image_size=2560, load_cluster_catalog=False):
         super().__init__()
         self.width = image_size
         self.height = image_size
@@ -29,6 +46,11 @@ class Prior:
         self.G2_beta = 0.6
         self.G2_loc = 0
         self.G2_scale = 0.032
+
+        if load_cluster_catalog:
+            self.members_df, self.cl_catalog, self.mem_match_id = read_cluster_catalog(
+                cl_catalog_path=CLUSTER_CATALOG_PATH,
+            )
 
     def cartesian_to_gal(self, coordinates, pixel_scale=0.263):
         """Converts cartesian coordinates on the image to (Ra, Dec).
@@ -128,6 +150,83 @@ class Prior:
         catalog["GI_COLOR"] = gi_color_samples
         catalog["IZ_COLOR"] = iz_color_samples
         return catalog
+        
+    def make_des_catalog(self, 
+                         des_subdir,
+                         class_star_thr=0.5,
+                         #des_redshift_path=PHOTO_Z_PATH,
+                         ):
+        """Create Catalog from DES Data for a particular subdirectory.
+
+        Args:
+            des_subdir: DES Tile to process
+            data_path: save directory
+            file_suffix: suffix to add to filename
+        """
+        main_path = DES_DIR / Path(des_subdir) / Path(f"{des_subdir}_dr1_main.fits")
+        print(main_path)
+        main_df = pd.DataFrame(fits.getdata(main_path))
+
+
+        # There are some duplicate rows in the members_df, we need to keep only the one with highest pmem
+        members_df_best = (
+        self.members_df
+                .sort_values('pmem', ascending=False)    # highest pmem at top
+                .drop_duplicates(subset='id', keep='first')  # keep only first
+        )
+        members_df_best = members_df_best.rename(columns={'id': 'COADD_OBJECT_ID'})
+        
+        main_df = main_df.merge(
+        members_df_best[['COADD_OBJECT_ID', 'pmem', 'mem_match_id', 'zspec']],
+        on='COADD_OBJECT_ID',
+        how='left'  
+        )
+        
+        
+        fluxes = np.array(
+            main_df[
+                [
+                    "FLUX_AUTO_G",
+                    "FLUX_AUTO_R",
+                    "FLUX_AUTO_I",
+                    "FLUX_AUTO_Z",
+                ]
+            ]
+        )
+        fluxes *= fluxes > 0
+        hlrs = DES_PIXEL_SCALE * np.array(main_df["FLUX_RADIUS_R"])
+        hlrs = 1e-4 + hlrs * (hlrs > 0)
+        a = np.array(main_df["A_IMAGE"])
+        b = np.array(main_df["B_IMAGE"])
+        g = (a - b) / (a + b)
+        g1 = g * np.cos(np.arctan(b / a))
+        g2 = g * np.sin(np.arctan(b / a))
+
+        mock_catalog = pd.DataFrame()
+        mock_catalog["RA"] = np.array(main_df["ALPHAWIN_J2000"])
+        mock_catalog["DEC"] = np.array(main_df["DELTAWIN_J2000"])
+        mock_catalog["X"] = np.array(main_df["XWIN_IMAGE_R"])
+        mock_catalog["Y"] = np.array(main_df["YWIN_IMAGE_R"])
+        members_in_tile =  main_df["COADD_OBJECT_ID"].isin(self.members_df["id"].values)
+        mock_catalog["MEM"] = members_in_tile
+        mock_catalog["FLUX_G"] = fluxes[:, 0]
+        mock_catalog["FLUX_R"] = fluxes[:, 1]
+        mock_catalog["FLUX_I"] = fluxes[:, 2]
+        mock_catalog["FLUX_Z"] = fluxes[:, 3]
+        mock_catalog["HLR"] = hlrs
+        mock_catalog["FRACDEV"] = 0
+        mock_catalog["G1"] = g1
+        mock_catalog["G2"] = g2
+        # What redshift to use?
+        mock_catalog["PMEM"] = main_df["pmem"].fillna(0.0)
+        mock_catalog["Z"] = main_df["zspec"].fillna(0.0)
+        mock_catalog["SOURCE_TYPE"] = (
+                    (main_df["CLASS_STAR_G"] > class_star_thr) |
+                    (main_df["CLASS_STAR_R"] > class_star_thr) |
+                    (main_df["CLASS_STAR_I"] > class_star_thr)
+        ).astype(int)    
+
+        return mock_catalog
 
 
 class ClusterPrior(Prior):
