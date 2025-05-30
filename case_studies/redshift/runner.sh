@@ -9,7 +9,7 @@ if [ -z "$BLISS_HOME" ]; then
 fi
 
 if [ -z "$BLISS_DATA_DIR" ]; then
-  echo "Error: BLISS_DATA_DIR environment variable is not set. Please export BLISS_HOME before running this script."
+  echo "Error: BLISS_DATA_DIR environment variable is not set. Please export BLISS_DATA_DIR before running this script."
   exit 1
 fi
 
