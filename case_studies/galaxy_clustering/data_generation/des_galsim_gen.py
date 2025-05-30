@@ -81,20 +81,26 @@ def image_gen(cfg):
     if not os.path.exists(data_path):
         os.makedirs(data_path)
 
-    des_subdirs = os.listdir(DES_DIR)
-
-    for i, des_subdir in enumerate(DES_SUBDIRS):
+    des_subdirs = sorted(os.listdir(DES_DIR))
+    for i, des_subdir in enumerate(des_subdirs):
         for band in BANDS:
             # DEFINE THINGS HERE
-            galsim_render_band(des_subdir=des_subdir, data_path=data_path, band=band)
-        print(f"Finished processing tile {i + 1}/{len(DES_SUBDIRS)}")
+            os.makedirs(f"{data_path}/images/{des_subdir}", exist_ok=True)
+            print(f"Processing tile {des_subdir} for band {band}...")
+            galsim_render_band(band=band,
+                               des_subdir=des_subdir,
+                               data_path=cfg.data_dir,
+                               galsim_confpath=cfg.galsim_confpath,
+                               psf_filepath=cfg.psf_model_path
+                               )
+        print(f"Finished processing tile {i + 1}/{len(des_subdirs)}")
 
 
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg):
-    catalog_gen(cfg.data_gen)
-    # image_gen(cfg.data_gen)
+    #catalog_gen(cfg.data_gen)
+    image_gen(cfg.data_gen)
     #print("Starting file datum generation process ...")
     #file_data_gen(cfg.data_gen)
     #print(" ... Done!")

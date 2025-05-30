@@ -6,6 +6,8 @@ defaults:
 
 data_gen:
     data_dir: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim
+    galsim_confpath: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim/config/galsim_config.yaml
+    psf_model_path: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim/psf_models/dr1_tiles
     desdr_subdirs: /nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles/
     image_size: 10000
     tile_size: 256
