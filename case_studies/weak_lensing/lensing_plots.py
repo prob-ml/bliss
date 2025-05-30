@@ -113,7 +113,7 @@ def plot_maps(
     save_local=None,
 ):
     """Plots weak lensing shear and convergence maps."""
-    num_lensing_params = 6  # true and estimated shear1, shear2, and convergence
+    num_lensing_params = 3  # shear1, shear2, and convergence
     num_redshift_bins = true_shear1.shape[-1]
 
     # randomly select two images to plot
@@ -121,12 +121,12 @@ def plot_maps(
     img_idx = torch.randint(0, true_shear1.shape[0], size=[num_images])
 
     fig, ax = plt.subplots(
-        nrows=num_images * num_redshift_bins, ncols=num_lensing_params, figsize=(20, 20)
+        nrows=num_images * num_redshift_bins, ncols=2 * num_lensing_params, figsize=(20, 20)
     )
 
     for i, idx in enumerate(img_idx):
         for b in range(num_redshift_bins):
-            for col in range(num_lensing_params):
+            for col in range(2 * num_lensing_params):
                 ax[i * num_redshift_bins + b, col].set_xticks([])
                 ax[i * num_redshift_bins + b, col].set_yticks([])
             ts1 = ax[i * num_redshift_bins + b, 0].imshow(
