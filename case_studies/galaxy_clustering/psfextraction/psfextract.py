@@ -4,10 +4,10 @@ import numpy as np
 import os
 import subprocess
 
-TILE_PATHS = '/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles'
+TILE_PATHS = '/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles'
 DES_BANDS = ("g", "r", "i", "z")
-SAVE_PATH = '/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr2_tiles'
-CONFIG_PATH = '/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/config'
+SAVE_PATH = '/data/scratch/gapatron/galaxy_clustering/desdr1_galsim/psf_models/dr1_tiles'
+CONFIG_PATH = '/data/scratch/gapatron/galaxy_clustering/desdr1_galsim/config'
 SEED = 42
 
 
@@ -33,45 +33,35 @@ def decompress_hdu(filepath, savepath):
 
 
 
-def sample_tiles(path_to_tiles, n_samples_per_band=100, seed=42):
-    """
-    Sample n_samples_per_band tiles to model with SExtractor.
-    """
-    np.random.seed(seed)
-    samples = np.random.choice(os.listdir(path_to_tiles), size=n_samples_per_band)
-    return samples
-
-
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--n_samples_per_band',type=int, required=True)
+    parser.add_argument('--tile_paths',type=str, nargs='+', required=False)
     parser.add_argument('--seed',type=int, required=False)
     args = parser.parse_args()
 
-    if not args.seed:
-        args.seed = SEED
-
-    tile_paths = sample_tiles(
-                        TILE_PATHS,
-                        n_samples_per_band=args.n_samples_per_band,
-                        seed=args.seed
-                        )
+    tile_paths = args.tile_paths if not args.tile_paths is None else os.listdir(TILE_PATHS)
     
     print(f"The following tiles will be modeled: {tile_paths}")
 
-    for tile in tile_paths:
+    for tile in sorted(tile_paths):
         ## Define directories where data will be stored
         save_dir = f"{SAVE_PATH}/{tile}"
         if not os.path.exists(save_dir):
-            os.mkdir(save_dir)
-
-        dir_files = {
-                band: [
-                    f for f in os.listdir(f"{TILE_PATHS}/{tile}") if f.endswith(f"_{band}_nobkg.fits.fz")
-                ][0]
-                for band in DES_BANDS
-            }
+            os.makedirs(save_dir, exist_ok=True)
+        print(f"Processing tile: {tile}")
+        print("########################################")
+        print(tile)
+        print("########################################")
+        try:
+            dir_files = {
+                    band: [
+                        f for f in os.listdir(f"{TILE_PATHS}/{tile}") if f.endswith(f"_{band}.fits.fz")
+                    ][0]
+                    for band in DES_BANDS
+                }
+        except:
+            continue
         
         for band, filename in dir_files.items():
             # Where you read it from, in gapatron desdr dir
@@ -84,8 +74,10 @@ if __name__=="__main__":
             print(f"Success! Saved at: {savepath}")
 
             savecatpath = savepath.replace(".fits", ".cat")
-
+            print(f"Creating catalog: {savecatpath}")
             subprocess.run(["sed", "-i", f"s|^CATALOG_NAME\s*.*|CATALOG_NAME     {savecatpath}|", f"{CONFIG_PATH}/config.sex"])
+            print(f"Running SExtractor on {savepath} ...")
             subprocess.run(["source-extractor", savepath, "-c", f"{CONFIG_PATH}/config.sex"])
+            print(f"Running PSFEx on {savecatpath} ...")
             subprocess.run(["psfex", f"{savecatpath}", "-c", f"{CONFIG_PATH}/config.psfex"])
             subprocess.run(["rm", f"{savepath}"])
