@@ -198,9 +198,11 @@ class Prior:
         hlrs = 1e-4 + hlrs * (hlrs > 0)
         a = np.array(main_df["A_IMAGE"])
         b = np.array(main_df["B_IMAGE"])
+        theta_deg = np.array(main_df["THETAWIN_IMAGE_R"])
         g = (a - b) / (a + b)
-        g1 = g * np.cos(np.arctan(b / a))
-        g2 = g * np.sin(np.arctan(b / a))
+        theta_rad = np.deg2rad(theta_deg)
+        g1 = g * np.cos(2 * theta_rad)
+        g2 = g * np.sin(2 * theta_rad)
 
         mock_catalog = pd.DataFrame()
         mock_catalog["RA"] = np.array(main_df["ALPHAWIN_J2000"])
