@@ -27,11 +27,11 @@ my_normalizers:
 
 my_metrics:
     lensingmse:
-            _target_: case_studies.weak_lensing.lensing_metrics.LensingMSE
-            num_redshift_bins: ${surveys.dc2.num_redshift_bins}
+        _target_: case_studies.weak_lensing.lensing_metrics.LensingMSE
+        num_redshift_bins: ${surveys.dc2.num_redshift_bins}
 
 my_render:
-    lensing_shear_conv:
+    lensingplots:
         _target_: case_studies.weak_lensing.lensing_plots.PlotLensingMaps
         frequency: 1
         save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_maps
@@ -93,7 +93,7 @@ train:
     trainer:
         logger:
             name: weak_lensing_experiments_dc2
-            version: may16
+            version: may30
         max_epochs: 250
         devices: 1
         use_distributed_sampler: false
