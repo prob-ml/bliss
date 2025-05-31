@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from torchmetrics import Metric
@@ -65,12 +66,12 @@ class PlotLensingMaps(Metric):
     def plot(self):
         if self.current_epoch % self.frequency != 0:
             return None
-        true_shear1 = torch.stack(self.true_shear1, dim=0).squeeze()
-        true_shear2 = torch.stack(self.true_shear2, dim=0).squeeze()
-        true_convergence = torch.stack(self.true_convergence, dim=0).squeeze()
-        est_shear1 = torch.stack(self.est_shear1, dim=0).squeeze()
-        est_shear2 = torch.stack(self.est_shear2, dim=0).squeeze()
-        est_convergence = torch.stack(self.est_convergence, dim=0).squeeze()
+        true_shear1 = torch.stack(self.true_shear1, dim=0).squeeze(1)
+        true_shear2 = torch.stack(self.true_shear2, dim=0).squeeze(1)
+        true_convergence = torch.stack(self.true_convergence, dim=0).squeeze(1)
+        est_shear1 = torch.stack(self.est_shear1, dim=0).squeeze(1)
+        est_shear2 = torch.stack(self.est_shear2, dim=0).squeeze(1)
+        est_convergence = torch.stack(self.est_convergence, dim=0).squeeze(1)
 
         self.true_shear1 = []
         self.true_shear2 = []
@@ -121,7 +122,12 @@ def plot_maps(
     img_idx = torch.randint(0, true_shear1.shape[0], size=[num_images])
 
     fig, ax = plt.subplots(
-        nrows=num_images * num_redshift_bins, ncols=2 * num_lensing_params, figsize=(20, 20)
+        nrows=num_images * num_redshift_bins,
+        ncols=2 * num_lensing_params,
+        figsize=(
+            6 * num_lensing_params + (num_lensing_params - 1),
+            6 * num_redshift_bins + (num_redshift_bins - 1),
+        ),
     )
 
     for i, idx in enumerate(img_idx):
@@ -190,7 +196,16 @@ def plot_lensing_scatterplots(
     num_lensing_params = 3  # shear1, shear2, and convergence
     num_redshift_bins = true_shear1.shape[-1]
 
-    fig, ax = plt.subplots(nrows=num_redshift_bins, ncols=num_lensing_params, figsize=(20, 20))
+    fig, ax = plt.subplots(
+        nrows=num_redshift_bins,
+        ncols=num_lensing_params,
+        figsize=(
+            6 * num_lensing_params + (num_lensing_params - 1),
+            6 * num_redshift_bins + (num_redshift_bins - 1),
+        ),
+    )
+    if num_redshift_bins == 1:
+        ax = ax[np.newaxis, :]
 
     for b in range(num_redshift_bins):
         ax[b, 0].axline((0, 0), slope=1, color="black", linestyle="dashed")
