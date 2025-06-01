@@ -1,6 +1,6 @@
 ---
 defaults:
-    - ../../bliss/conf@_here_: base_config
+    - ../../../bliss/conf@_here_: base_config
     - _self_
     - override hydra/job_logging: stdout
 
@@ -11,14 +11,17 @@ paths:
     output: /home/twhit/bliss/
 
 variational_factors:
-  - _target_: bliss.encoder.variational_dist.NormalFactor
+  - _target_: bliss.encoder.variational_dist.IndependentMVNFactor
     name: shear_1
+    dim: ${surveys.dc2.num_redshift_bins}
     nll_gating: null
-  - _target_: bliss.encoder.variational_dist.NormalFactor
+  - _target_: bliss.encoder.variational_dist.IndependentMVNFactor
     name: shear_2
+    dim: ${surveys.dc2.num_redshift_bins}
     nll_gating: null
-  - _target_: bliss.encoder.variational_dist.NormalFactor
+  - _target_: bliss.encoder.variational_dist.IndependentMVNFactor
     name: convergence
+    dim: ${surveys.dc2.num_redshift_bins}
     nll_gating: null
 
 my_normalizers:
@@ -27,17 +30,17 @@ my_normalizers:
 
 my_metrics:
     lensingmse:
-        _target_: case_studies.weak_lensing.lensing_metrics.LensingMSE
+        _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
         num_redshift_bins: ${surveys.dc2.num_redshift_bins}
 
 my_render:
     lensingplots:
-        _target_: case_studies.weak_lensing.lensing_plots.PlotLensingMaps
+        _target_: case_studies.weak_lensing.plots.WeakLensingPlots
         frequency: 1
-        save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_maps
+        save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
 
 encoder:
-    _target_: case_studies.weak_lensing.lensing_encoder.WeakLensingEncoder
+    _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
     survey_bands: ["u", "g", "r", "i", "z", "y"]
     reference_band: 2  # r-band
     tile_slen: 256
@@ -71,7 +74,7 @@ encoder:
 
 surveys:
     dc2:
-        _target_: case_studies.weak_lensing.lensing_dc2.LensingDC2DataModule
+        _target_: case_studies.weak_lensing.dc2.dc2.LensingDC2DataModule
         dc2_image_dir: /data/scratch/dc2_nfs/run2.2i-dr6-v4/coadd-t3828-t3829/deepCoadd-results/
         dc2_cat_path: ${paths.dc2}/dc2_lensing_catalog.pkl
         image_slen: 4096
@@ -86,14 +89,14 @@ surveys:
         num_workers: 1
         cached_data_path: ${paths.dc2}/dc2_lensing_splits
         train_transforms:
-            - _target_: case_studies.weak_lensing.lensing_data_augmentation.LensingRotateFlipTransform
+            - _target_: case_studies.weak_lensing.data_augmentation.LensingRotateFlipTransform
         shuffle_file_order: false  # partition train/val/test by ra/dec so that we can compute 2PCFs on spatially contiguous test set
 
 train:
     trainer:
         logger:
-            name: weak_lensing_experiments_dc2
-            version: may30
+            name: WeakLensingResultsDC2
+            version: ${now:%Y-%m-%d_%H-%M}
         max_epochs: 250
         devices: 1
         use_distributed_sampler: false

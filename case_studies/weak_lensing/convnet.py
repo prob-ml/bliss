@@ -3,7 +3,7 @@ import math
 from torch import nn
 
 from bliss.encoder.convnet_layers import Detect
-from case_studies.weak_lensing.lensing_convnet_layers import RN2Block
+from case_studies.weak_lensing.convnet_layers import RN2Block
 
 
 class WeakLensingFeaturesNet(nn.Module):

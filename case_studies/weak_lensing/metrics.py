@@ -2,7 +2,7 @@ import torch
 from torchmetrics import Metric
 
 
-class LensingMSE(Metric):
+class WeakLensingMetrics(Metric):
     def __init__(self, num_redshift_bins, **kwargs):
         super().__init__(**kwargs)
         self.add_state(

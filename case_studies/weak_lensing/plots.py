@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from torchmetrics import Metric
 
 
-class PlotLensingMaps(Metric):
+class WeakLensingPlots(Metric):
     """Metric wrapper for plotting sample images."""
 
     def __init__(

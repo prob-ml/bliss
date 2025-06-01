@@ -8,7 +8,7 @@ from torchmetrics import MetricCollection
 from bliss.catalog import BaseTileCatalog
 from bliss.encoder.encoder import Encoder
 from bliss.encoder.variational_dist import VariationalDist
-from case_studies.weak_lensing.lensing_convnet import WeakLensingCatalogNet, WeakLensingFeaturesNet
+from case_studies.weak_lensing.convnet import WeakLensingCatalogNet, WeakLensingFeaturesNet
 
 
 class WeakLensingEncoder(Encoder):
