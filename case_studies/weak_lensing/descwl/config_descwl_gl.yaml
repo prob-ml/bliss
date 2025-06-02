@@ -27,11 +27,12 @@ my_normalizers:
         _target_: bliss.encoder.image_normalizer.NullNormalizer
 
 my_metrics:
-    lensing_map:
-            _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
+    lensingmetrics:
+        _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
+        num_redshift_bins: 1
 
 my_render:
-    lensing_shear_conv:
+    lensingplots:
         _target_: case_studies.weak_lensing.plots.WeakLensingPlots
         frequency: 1
         save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
