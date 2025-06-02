@@ -69,7 +69,7 @@ if __name__=="__main__":
             # Where you save it in gapatron psf-models/dir
             savepath = f"{SAVE_PATH}/{tile}/{filename}".replace(".fits.fz", ".fits")
 
-            if os.path.exists(savepath.replace(".fits.fz", ".psf")):
+            if os.path.exists(savepath.replace(".fits", ".psf")):
                 print(f"PSF already exists for {savepath}. Skipping...")
                 continue
 
