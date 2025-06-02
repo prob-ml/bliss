@@ -9,14 +9,18 @@ data_gen:
     galsim_confpath: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim/config/galsim_config.yaml
     psf_model_path: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim/psf_models/dr1_tiles
     desdr_subdirs: /nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles/
+    catalog_gen: false
+    image_gen: false
+    file_data_gen: true
     image_size: 10000
     tile_size: 256
     nfiles: 5000
-    n_catalogs_per_file: 100
+    n_catalogs_per_file: 10
     bands: ["g", "r", "i", "z"]
     min_flux_for_loss: 0
     overwrite: false
     class_star_thr: 0.5
+    
 
 prior:
     _target_: case_studies.galaxy_clustering.prior.GalaxyClusterPrior
