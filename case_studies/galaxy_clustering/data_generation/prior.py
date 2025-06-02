@@ -177,7 +177,7 @@ class Prior:
         members_df_best = members_df_best.rename(columns={'id': 'COADD_OBJECT_ID'})
 
         main_df = main_df.merge(
-        members_df_best[['COADD_OBJECT_ID', 'pmem', 'mem_match_id', 'zspec']],
+        members_df_best[['COADD_OBJECT_ID', 'pmem', 'mem_match_id', 'zred2']],
         on='COADD_OBJECT_ID',
         how='left'
         )
