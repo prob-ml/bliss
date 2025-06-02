@@ -18,17 +18,7 @@ import hydra
 DES_DIR = Path(
     "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles/"
 )
-DES_SUBDIRS = [d for d in os.listdir(DES_DIR) if d.startswith("DES")]
-OUTPUT_DIR = "/nfs/turbo/lsa-regier/scratch/gapatron/des_synthetic"
-PSF_DIR = Path("/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr1_tiles")
 DES_PIXEL_SCALE = 0.263
-
-IMAGE_SIZE = 10000
-NFILES = 1
-GALSIM_PATH = (
-    "/home/kapnadak/bliss/case_studies/galaxy_clustering"
-    "/data_generation/custom-single-image-galsim.yaml"
-)
 BANDS = ("g", "r", "i", "z")
 
 
@@ -86,6 +76,9 @@ def image_gen(cfg):
         for band in BANDS:
             # DEFINE THINGS HERE
             os.makedirs(f"{data_path}/images/{des_subdir}", exist_ok=True)
+            if os.path.exists(f"{data_path}/images/{des_subdir}/{des_subdir}_{band}.fits"):
+                print(f"Image for tile {des_subdir} and band {band} already exists, skipping...")
+                continue
             print(f"Processing tile {des_subdir} for band {band}...")
             galsim_render_band(band=band,
                                des_subdir=des_subdir,
