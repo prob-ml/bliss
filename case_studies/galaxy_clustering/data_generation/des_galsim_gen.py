@@ -12,6 +12,7 @@ from case_studies.galaxy_clustering.data_generation.gen_utils import galsim_rend
 from data_gen import file_data_gen
 # Configuration management
 import hydra
+import multiprocessing
 
 
 
@@ -41,13 +42,13 @@ def catalog_gen(cfg):
     Args:
         cfg: configuration object containing parameters for catalog generation
 
-    
+
     """
     data_path = cfg.data_dir
     des_subdirs = cfg.desdr_subdirs
     if not os.path.exists(data_path):
         os.makedirs(data_path)
-    
+
     prior = Prior(
             image_size=cfg.image_size,
             load_cluster_catalog=True # Catalog is hardcoded in the Prior class for now.
@@ -80,27 +81,31 @@ def image_gen(cfg):
     data_path = cfg.data_dir
     if not os.path.exists(data_path):
         os.makedirs(data_path)
-
     des_subdirs = sorted(os.listdir(DES_DIR))
-    for i, des_subdir in enumerate(des_subdirs):
+
+    args_list = []
+
+    for des_subdir in des_subdirs:
         for band in BANDS:
-            # DEFINE THINGS HERE
-            os.makedirs(f"{data_path}/images/{des_subdir}", exist_ok=True)
-            print(f"Processing tile {des_subdir} for band {band}...")
-            galsim_render_band(band=band,
-                               des_subdir=des_subdir,
-                               data_path=cfg.data_dir,
-                               galsim_confpath=cfg.galsim_confpath,
-                               psf_filepath=cfg.psf_model_path
-                               )
-        print(f"Finished processing tile {i + 1}/{len(des_subdirs)}")
+            args_list.append((
+                band,
+                des_subdir,
+                cfg.data_dir,
+                1,  # nfiles
+                10000,  # image_size
+                cfg.psf_model_path,
+                cfg.galsim_confpath
+            ))
+
+    with multiprocessing.Pool(processes=4) as pool:
+        pool.starmap(galsim_render_band, args_list)
 
 
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
 def main(cfg):
-    #catalog_gen(cfg.data_gen)
-    image_gen(cfg.data_gen)
+    catalog_gen(cfg.data_gen)
+    #image_gen(cfg.data_gen)
     #print("Starting file datum generation process ...")
     #file_data_gen(cfg.data_gen)
     #print(" ... Done!")
