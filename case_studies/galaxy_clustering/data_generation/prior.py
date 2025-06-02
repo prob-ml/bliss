@@ -221,13 +221,13 @@ class Prior:
         mock_catalog["G1"] = g1
         mock_catalog["G2"] = g2
         # What redshift to use?
-        mock_catalog["PMEM"] = main_df["pmem"].fillna(0.0)
         mock_catalog["Z"] = main_df["zred2"].fillna(0.0)
         mock_catalog["SOURCE_TYPE"] = (
                     (main_df["CLASS_STAR_G"] > class_star_thr) |
                     (main_df["CLASS_STAR_R"] > class_star_thr) |
                     (main_df["CLASS_STAR_I"] > class_star_thr)
         ).astype(int)
+        mock_catalog["PMEM"] = main_df["pmem"].fillna(0.0)
 
         return mock_catalog
 
