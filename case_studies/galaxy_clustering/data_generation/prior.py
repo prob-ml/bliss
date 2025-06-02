@@ -216,6 +216,7 @@ class Prior:
         mock_catalog["FLUX_I"] = fluxes[:, 2]
         mock_catalog["FLUX_Z"] = fluxes[:, 3]
         mock_catalog["HLR"] = hlrs
+        mock_catalog.loc[mock_catalog["HLR"] > 55, "HLR"] = 55
         mock_catalog["FRACDEV"] = 0
         mock_catalog["G1"] = g1
         mock_catalog["G2"] = g2
