@@ -64,13 +64,13 @@ class WeakLensingMetrics(Metric):
             true_convergence = true_cat["convergence"].flatten(1, 2)
             pred_convergence = est_cat["convergence"].flatten(1, 2)
 
-        shear1_sq_err = ((true_shear1 - pred_shear1) ** 2).sum()
-        zero_baseline_shear1_sq_err = ((true_shear1 - zero_baseline_pred_shear1) ** 2).sum()
-        ellip_baseline_shear1_sq_err = ((true_shear1 - ellip_baseline_pred_shear1) ** 2).sum()
-        shear2_sq_err = ((true_shear2 - pred_shear2) ** 2).sum()
-        zero_baseline_shear2_sq_err = ((true_shear2 - zero_baseline_pred_shear2) ** 2).sum()
-        ellip_baseline_shear2_sq_err = ((true_shear2 - ellip_baseline_pred_shear2) ** 2).sum()
-        convergence_sq_err = ((true_convergence - pred_convergence) ** 2).sum()
+        shear1_sq_err = ((true_shear1 - pred_shear1) ** 2).sum([0, 1])
+        zero_baseline_shear1_sq_err = ((true_shear1 - zero_baseline_pred_shear1) ** 2).sum([0, 1])
+        ellip_baseline_shear1_sq_err = ((true_shear1 - ellip_baseline_pred_shear1) ** 2).sum([0, 1])
+        shear2_sq_err = ((true_shear2 - pred_shear2) ** 2).sum([0, 1])
+        zero_baseline_shear2_sq_err = ((true_shear2 - zero_baseline_pred_shear2) ** 2).sum([0, 1])
+        ellip_baseline_shear2_sq_err = ((true_shear2 - ellip_baseline_pred_shear2) ** 2).sum([0, 1])
+        convergence_sq_err = ((true_convergence - pred_convergence) ** 2).sum([0, 1])
 
         self.shear1_sum_squared_err += shear1_sq_err
         self.zero_baseline_shear1_sum_squared_err += zero_baseline_shear1_sq_err
