@@ -8,7 +8,7 @@ mode: train
 
 paths:
     cached_data: /scratch/regier_root/regier0/twhit/data/weak_lensing/weak_lensing_img2048_meta_varying_shear
-    output: /scratch/regier_root/regier0/twhit/bliss
+    output: /scratch/regier_root/regier0/twhit/bliss/output
 
 cached_simulator:
     batch_size: 1
