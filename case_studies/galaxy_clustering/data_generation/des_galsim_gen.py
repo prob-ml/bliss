@@ -101,8 +101,7 @@ def image_gen(cfg):
     args_list = []
 
     for des_subdir in des_subdirs:
-        for band in BANDS:
-            args_list.append((
+        args_list = [(
                 band,
                 des_subdir,
                 cfg.data_dir,
@@ -110,10 +109,12 @@ def image_gen(cfg):
                 10000,  # image_size
                 cfg.psf_model_path,
                 cfg.galsim_confpath
-            ))
-
-    with multiprocessing.Pool(processes=4) as pool:
-        pool.starmap(galsim_render_band, args_list)
+            ) for band in BANDS]
+        
+        with multiprocessing.Pool(processes=4) as pool:
+            pool.starmap(galsim_render_band, args_list)
+        
+    print("Image generation completed.")
 
 
 
@@ -205,6 +206,8 @@ def main(cfg):
     # 1. Generate DES DR1 catalogs for galaxy clustering.
     # 2. Render Galsim images for galaxy clustering.
     # 3. Generate file data (with tile catalogs and images) for galaxy clustering.
+    import multiprocessing
+    multiprocessing.set_start_method("spawn", force=True)
     print("Starting data generation process ...")
     if cfg.data_gen.catalog_gen:
         print("Starting catalog generation process ...")
