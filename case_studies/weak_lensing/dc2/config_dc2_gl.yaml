@@ -8,7 +8,7 @@ mode: train
 
 paths:
     dc2: /scratch/regier_root/regier0/twhit/data/dc2
-    output: /scratch/regier_root/regier0/twhit/bliss/output
+    output: /scratch/regier_root/regier0/twhit/bliss
 
 variational_factors:
   - _target_: bliss.encoder.variational_dist.IndependentMVNFactor
