@@ -10,8 +10,8 @@ data_gen:
     psf_model_path: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim/psf_models/dr1_tiles
     desdr_subdirs: /nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles/
     catalog_gen: false
-    image_gen: false
-    file_data_gen: true
+    image_gen: true
+    file_data_gen: false
     image_size: 10000
     tile_size: 256
     nfiles: 5000
