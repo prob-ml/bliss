@@ -44,8 +44,9 @@ encoder:
     survey_bands: ["u", "g", "r", "i", "z", "y"]
     reference_band: 2  # r-band
     tile_slen: 256
-    n_tiles: 8
-    nch_hidden: 64
+    n_pixels_per_side: 2048
+    n_tiles_per_side: 8
+    ch_init: 64
     optimizer_params:
         lr: 1e-3
     scheduler_params:
