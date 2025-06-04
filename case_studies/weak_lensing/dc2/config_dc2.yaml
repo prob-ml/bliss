@@ -47,6 +47,7 @@ encoder:
     n_pixels_per_side: 2048
     n_tiles_per_side: 8
     ch_init: 64
+    ch_max: 512
     optimizer_params:
         lr: 1e-3
     scheduler_params:
