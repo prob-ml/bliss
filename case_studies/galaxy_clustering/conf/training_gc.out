@@ -1,9 +1,0 @@
-nohup: ignoring input
-/home/kapnadak/bliss/.venv/lib/python3.10/site-packages/lightning_fabric/utilities/seed.py:40: No seed found, seed set to 0
-Seed set to 0
-Error executing job with overrides: ['mode=train']
-Error in call to target 'case_studies.galaxy_clustering.encoder.encoder.GalaxyClusterEncoder':
-AttributeError("'NoneType' object has no attribute 'values'")
-full_key: encoder
-
-Set the environment variable HYDRA_FULL_ERROR=1 for a complete stack trace.
