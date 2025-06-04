@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import math
 from typing import Dict, List
+from tqdm import tqdm
 # Generate DES DR1 catalogs for galaxy clustering
 from astropy.io import ascii as astro_ascii
 from astropy.io import fits
@@ -70,7 +71,7 @@ def catalog_gen(cfg):
         )
     print(f"Generating catalogs for {len(os.listdir(des_subdirs))} DES tiles...")
     # How to lexicographically sort the subdirs?
-    for i, des_subdir in enumerate(sorted(os.listdir(des_subdirs))):
+    for i, des_subdir in tqdm(enumerate(sorted(os.listdir(des_subdirs)))):
         print(f"Processing tile {des_subdir}...")
         des_catalog = prior.make_des_catalog(
             des_subdir=des_subdir,
@@ -100,7 +101,7 @@ def image_gen(cfg):
 
     args_list = []
 
-    for des_subdir in des_subdirs:
+    for des_subdir in tqdm(des_subdirs):
         args_list = [(
                 band,
                 des_subdir,
@@ -135,7 +136,7 @@ def file_data_gen(cfg):
     catalog_counter = 0
     file_counter = 0
 
-    for catalog_path in sorted(catalogs_path.glob("*.cat")):
+    for catalog_path in tqdm(sorted(catalogs_path.glob("*.cat"))):
         catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=COL_NAMES)
 
         catalog_dict = {}
