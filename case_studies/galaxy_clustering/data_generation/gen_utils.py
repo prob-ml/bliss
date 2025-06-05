@@ -33,13 +33,12 @@ def load_tile_stack(catalog_path: Path, images_path: Path, bands=("g","r","i"), 
     band_tensors = []
     for band in bands:
         img_file = (
-            images_path /
-            catalog_path.stem /                  
+            images_path /               
             f"{catalog_path.stem}_{band}{suffix}"
         )
 
         with fits.open(img_file, memmap=not compressed) as hdul:  
-            data = hdul[0].data.astype(np.float32, copy=False)   
+            data = hdul[1].data.astype(np.float32, copy=False)   
             band_tensors.append(torch.from_numpy(data))
 
     return torch.stack(band_tensors, dim=0) 
