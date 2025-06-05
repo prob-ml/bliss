@@ -11,13 +11,13 @@ from case_studies.galaxy_clustering.utils.cluster_utils import angular_diameter_
 from case_studies.galaxy_clustering.data_generation.gen_utils import read_cluster_catalog
 
 CLUSTER_CATALOG_PATH = Path(
-    "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/y3a2_files/y3kp_clusters/data/y3_redmapper_v6.4.22+2_release.h5"
+    "/nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/desdr-server.ncsa.illinois.edu/despublic/y3a2_files/y3kp_clusters/data/y3_redmapper_v6.4.22+2_release.h5"
 )
 
 DES_DIR = Path(
-    "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles/"
+    "/nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles/"
 )
-PSF_DIR = Path("/nfs/turbo/lsa-regier/scratch/gapatron/psf-models/dr1_tiles")
+PSF_DIR = Path("/nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/psf-models/dr1_tiles")
 DES_PIXEL_SCALE = 0.263
 BAND_TO_COL = {"g": 5, "r": 6, "i": 7, "z": 8}
 IMAGE_SIZE = 10000
