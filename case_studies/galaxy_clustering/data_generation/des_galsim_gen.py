@@ -12,9 +12,8 @@ from astropy.table import Table
 from case_studies.galaxy_clustering.data_generation.prior import Prior
 # Render Galsim images for galaxy clustering
 from bliss.catalog import FullCatalog
-from case_studies.galaxy_clustering.data_generation.gen_utils import galsim_render_band
+from case_studies.galaxy_clustering.data_generation.gen_utils import galsim_render_band, load_tile_stack
 # Generate file data (with tile catalogs and images) for galaxy clustering
-from data_gen import file_data_gen
 import numpy as np
 import pandas as pd
 import torch
@@ -22,10 +21,7 @@ import torch
 import hydra
 import multiprocessing
 
-# Constants
-DES_DIR = Path(
-    "/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles/"
-)
+
 DES_PIXEL_SCALE = 0.263
 BANDS = ("g", "r", "i", "z")
 
@@ -97,7 +93,7 @@ def image_gen(cfg):
     data_path = cfg.data_dir
     if not os.path.exists(data_path):
         os.makedirs(data_path)
-    des_subdirs = sorted(os.listdir(DES_DIR))
+    des_subdirs = sorted(os.listdir(cfg.desdr_subdirs))
 
     args_list = []
 
@@ -175,13 +171,13 @@ def file_data_gen(cfg):
         for key, value in tile_catalog.items():
             tile_catalog_dict[key] = torch.squeeze(value, 0)
 
-        image_bands = []
-        for band in bands:
-            fits_filepath = images_path / Path(f"{catalog_path.stem}") / Path(f"{catalog_path.stem}_{band}.fits")
-            with fits.open(fits_filepath) as hdul:
-                image_data = hdul[0].data.astype(np.float32)
-                image_bands.append(torch.from_numpy(image_data))
-        stacked_image = torch.stack(image_bands, dim=0)
+        
+        stacked_image = load_tile_stack(
+            catalog_path=Path(catalog_path.stem + ".cat"),
+            images_path=Path(images_path) / Path(catalog_path.stem),
+            bands=bands,
+            compressed=cfg.compressed_images
+        )
 
         data.append(
             {
