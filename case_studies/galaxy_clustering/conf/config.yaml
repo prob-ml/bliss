@@ -5,16 +5,17 @@ defaults:
     - override hydra/job_logging: stdout
 
 data_gen:
-    data_dir: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim
-    galsim_confpath: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim/config/galsim_config.yaml
-    psf_model_path: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim/psf_models/dr1_tiles
-    desdr_subdirs: /nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles/
+    data_dir: /nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/desdr1_galsim
+    galsim_confpath: /nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/desdr1_galsim/config/galsim_config.yaml
+    psf_model_path: /nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/desdr1_galsim/psf_models/dr1_tiles
+    desdr_subdirs: /nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles/
     catalog_gen: false
-    image_gen: true
+    image_gen: false
     file_data_gen: false
     image_size: 10000
     tile_size: 256
     nfiles: 5000
+    compressed_images: true
     n_catalogs_per_file: 10
     bands: ["g", "r", "i", "z"]
     min_flux_for_loss: 0
@@ -47,13 +48,14 @@ cached_simulator:
     batch_size: 1
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
     num_workers: 0
-    cached_data_path: /data/scratch/kapnadak/data-10-13/file_data
+    cached_data_path: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim/file_data/
     train_transforms: []
 
 train:
     trainer:
         precision: 32-true
         accumulate_grad_batches: 10
+    cached_data_path: ${cached_simulator.cached_data_path}
 
 variational_factors:
     - _target_: bliss.encoder.variational_dist.BernoulliFactor
@@ -93,7 +95,7 @@ encoder:
 
 predict:
     cached_dataset:
-        _target_: case_studies.galaxy_clustering.inference.cached_dataset.CachedDESModule
+        _target_: case_studies.galaxy_clustering.cached_datasets.inference.CachedDESModule
         cached_data_path: /nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr2_tiles
         tiles_per_img: 64
         batch_size: 2
