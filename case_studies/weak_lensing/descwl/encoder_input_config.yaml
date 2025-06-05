@@ -1,0 +1,4 @@
+image_path: /data/scratch/taodingr/weak_lensing/descwl/meta_2560_cosmic_badcol_irz_bands_density_240/images_meta_2560_cosmic_badcol_irz_bands_density_240.pt
+catalog_path: /data/scratch/taodingr/weak_lensing/descwl/meta_2560_cosmic_badcol_irz_bands_density_240/catalog_meta_2560_cosmic_badcol_irz_bands_density_240.pt
+setting: meta_2560_cosmic_badcol_irz_bands_density_240
+shear_setting: varying
