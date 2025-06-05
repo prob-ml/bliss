@@ -69,34 +69,3 @@ class WeakLensingNet(nn.Module):
         x = self.detect(x)
 
         return x
-
-
-class WeakLensingCatalogNet(nn.Module):  # TODO: get the dimensions down to n_tiles
-    def __init__(self, in_channels, out_channels, n_tiles):
-        super().__init__()
-
-        net_layers = []
-
-        n_blocks2 = int(math.log2(in_channels)) - int(math.ceil(math.log2(out_channels)))
-        last_out_dim = -1
-        for i in range(n_blocks2):
-            in_dim = in_channels // (2**i)
-            out_dim = in_dim // 2
-            if i < ((n_blocks2 + 4) // 2):
-                net_layers.append(RN2Block(in_dim, out_dim, stride=2))
-            else:
-                net_layers.append(RN2Block(in_dim, out_dim))
-            last_out_dim = out_dim
-
-        # Final detection layer to reduce channels
-        self.detect = Detect(last_out_dim, out_channels)
-        self.net = nn.ModuleList(net_layers)
-
-    def forward(self, x):
-        for _i, m in enumerate(self.net):
-            x = m(x)
-
-        # Final detection layer
-        x = self.detect(x)
-
-        return x  # noqa: WPS331
