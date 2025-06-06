@@ -1,34 +1,14 @@
 ---
 defaults:
-    - ../../bliss/conf@_here_: base_config
+    - ../../../bliss/conf@_here_: base_config
     - _self_
     - override hydra/job_logging: stdout
 
 mode: train
 
 paths:
-    cached_data: /data/scratch/weak_lensing/weak_lensing_img2048_constantshear
-    output: /home/twhit/bliss/
-
-prior:
-    _target_: case_studies.weak_lensing.lensing_prior.LensingPrior
-    n_tiles_h: 12  # cropping 2 tiles from each side (4 total)
-    n_tiles_w: 12  # cropping 2 tiles from each side (4 total)
-    batch_size: 2
-    max_sources: 200
-    shear_min: -0.1
-    shear_max: 0.1
-    convergence_min: -0.0001
-    convergence_max: 0.0001
-    prob_galaxy: 1.0
-    mean_sources: 82  # 0.02 * (256/4) * (256/4)
-
-decoder:
-    _target_: case_studies.weak_lensing.lensing_decoder.LensingDecoder
-    tile_slen: 256
-    use_survey_background: false
-    with_dither: false
-    with_noise: false
+    cached_data: /scratch/regier_root/regier0/twhit/data/weak_lensing/weak_lensing_img2048_meta_varying_shear
+    output: /scratch/regier_root/regier0/twhit/bliss
 
 cached_simulator:
     batch_size: 1
@@ -41,31 +21,31 @@ variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
     name: shear_2
     nll_gating: null
-  - _target_: bliss.encoder.variational_dist.NormalFactor
-    name: convergence
-    nll_gating: null
 
 my_normalizers:
-    nully:
-        _target_: bliss.encoder.image_normalizer.NullNormalizer
+    nannorm:
+        _target_: case_studies.weak_lensing.image_normalizer.NanNormalizer
 
 my_metrics:
-    lensing_map:
-            _target_: case_studies.weak_lensing.lensing_metrics.LensingMSE
+    lensingmetrics:
+        _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
+        num_redshift_bins: 1
 
 my_render:
-    lensing_shear_conv:
-        _target_: case_studies.weak_lensing.lensing_plots.PlotLensingMaps
+    lensingplots:
+        _target_: case_studies.weak_lensing.plots.WeakLensingPlots
         frequency: 1
-        save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_maps
+        save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
 
 encoder:
-    _target_: case_studies.weak_lensing.lensing_encoder.WeakLensingEncoder
-    survey_bands: [u, g, r, i, z]
-    reference_band: 2  # r-band
+    _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
+    survey_bands: [i]
+    reference_band: 0
     tile_slen: 256
-    n_tiles: 8
-    nch_hidden: 64
+    n_pixels_per_side: 2048
+    n_tiles_per_side: 8
+    ch_init: 64
+    ch_max: 512
     optimizer_params:
         lr: 1e-3
     scheduler_params:
@@ -92,22 +72,18 @@ encoder:
     use_checkerboard: false
     loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
 
-generate:
-    n_image_files: 50
-    n_batches_per_file: 4
-
 train:
     trainer:
         logger:
-            name: weak_lensing_experiments_simulator
-            version: april11
+            name: WeakLensingResultsDescwl
+            version: ${now:%Y-%m-%d_%H-%M}
         max_epochs: 250
         devices: 1
         use_distributed_sampler: false
         precision: 32-true
     callbacks:
         early_stopping:
-            patience: 200
+            patience: 100
     data_source: ${cached_simulator}
     pretrained_weights: null
     seed: 123123

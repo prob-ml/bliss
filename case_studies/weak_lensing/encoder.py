@@ -8,7 +8,7 @@ from torchmetrics import MetricCollection
 from bliss.catalog import BaseTileCatalog
 from bliss.encoder.encoder import Encoder
 from bliss.encoder.variational_dist import VariationalDist
-from case_studies.weak_lensing.lensing_convnet import WeakLensingCatalogNet, WeakLensingFeaturesNet
+from case_studies.weak_lensing.convnet import WeakLensingNet
 
 
 class WeakLensingEncoder(Encoder):
@@ -16,8 +16,10 @@ class WeakLensingEncoder(Encoder):
         self,
         survey_bands: list,
         tile_slen: int,
-        n_tiles: int,
-        nch_hidden: int,
+        n_pixels_per_side: int,
+        n_tiles_per_side: int,
+        ch_init: int,
+        ch_max: int,
         image_normalizers: list,
         var_dist: VariationalDist,
         sample_image_renders: MetricCollection,
@@ -28,8 +30,10 @@ class WeakLensingEncoder(Encoder):
         reference_band: int = 2,
         **kwargs,
     ):
-        self.n_tiles = n_tiles
-        self.nch_hidden = nch_hidden
+        self.n_pixels_per_side = n_pixels_per_side
+        self.n_tiles_per_side = n_tiles_per_side
+        self.ch_init = ch_init
+        self.ch_max = ch_max
 
         super().__init__(
             survey_bands=survey_bands,
@@ -59,30 +63,22 @@ class WeakLensingEncoder(Encoder):
 
     # override
     def initialize_networks(self):
-        num_features = 512
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
-        self.features_net = WeakLensingFeaturesNet(
+        self.net = WeakLensingNet(
             n_bands=len(self.survey_bands),
+            n_pixels_per_side=self.n_pixels_per_side,
+            n_tiles_per_side=self.n_tiles_per_side,
             ch_per_band=ch_per_band,
-            num_features=num_features,
-            tile_slen=self.tile_slen,
-            nch_hidden=self.nch_hidden,
-        )
-
-        self.catalog_net = WeakLensingCatalogNet(
-            in_channels=num_features,
-            out_channels=self.var_dist.n_params_per_source,
-            n_tiles=self.n_tiles,
+            ch_init=self.ch_init,
+            ch_max=self.ch_max,
+            n_var_params=self.var_dist.n_params_per_source,
         )
 
     def sample(self, batch, use_mode=True):
-        # multiple image normalizers
         input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
         inputs = torch.cat(input_lst, dim=2)
 
-        x_features = self.features_net(inputs)
-        x_cat_marginal = self.catalog_net(x_features)
-        # est cat
+        x_cat_marginal = self.net(inputs)
         return self.var_dist.sample(x_cat_marginal, use_mode=use_mode, return_base_cat=True)
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
@@ -98,8 +94,7 @@ class WeakLensingEncoder(Encoder):
         input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
         inputs = torch.cat(input_lst, dim=2)
         pred = {}
-        x_features = self.features_net(inputs)
-        pred["x_cat_marginal"] = self.catalog_net(x_features)
+        pred["x_cat_marginal"] = self.net(inputs)
 
         loss = self.var_dist.compute_nll(pred["x_cat_marginal"], target_cat)
         loss = loss.sum() / loss.numel()
@@ -116,7 +111,6 @@ class WeakLensingEncoder(Encoder):
         return loss
 
     def on_after_backward(self):
-        # Calculate and log the gradient norms
         total_grad_norm = 0.0
         for _, param in self.named_parameters():
             if param.grad is not None:
@@ -140,6 +134,29 @@ class WeakLensingEncoder(Encoder):
             batch_idx,
         )
 
+    def report_metrics(self, metrics, logging_name):
+        computed = metrics.compute()
+        for k, v in computed.items():
+            if torch.is_tensor(v) and v.numel() > 1:
+                for i in range(v.numel()):
+                    self.log(f"{logging_name}/{k}/bin_{i}", v[i].item(), sync_dist=True)
+            else:
+                self.log(
+                    f"{logging_name}/{k}", v.item() if torch.is_tensor(v) else v, sync_dist=True
+                )
+
+        for metric_name, metric in metrics.items():
+            if hasattr(metric, "plot"):  # noqa: WPS421
+                try:
+                    plot_or_none = metric.plot()
+                except NotImplementedError:
+                    continue
+                name = f"Epoch:{self.current_epoch}"
+                name += f"/{logging_name} {metric_name}"
+                if self.logger and plot_or_none:
+                    fig, _axes = plot_or_none
+                    self.logger.experiment.add_figure(name, fig)
+
     def on_train_epoch_end(self):
         # Compute the average loss for the epoch and reset counters
         avg_epoch_train_loss = self.current_epoch_train_loss / self.current_epoch_train_batches
@@ -152,13 +169,13 @@ class WeakLensingEncoder(Encoder):
         )
 
     def on_validation_epoch_end(self):
-        self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
+        self.report_metrics(self.mode_metrics, "val/mode")
         self.mode_metrics.reset()
         if self.sample_metrics is not None:
-            self.report_metrics(self.sample_metrics, "val/sample", show_epoch=True)
+            self.report_metrics(self.sample_metrics, "val/sample")
             self.sample_metrics.reset()
         if self.sample_image_renders is not None:
-            self.report_metrics(self.sample_image_renders, "val/image_renders", show_epoch=True)
+            self.report_metrics(self.sample_image_renders, "val/image_renders")
 
         avg_epoch_val_loss = self.current_epoch_val_loss / self.current_epoch_val_batches
         self.epoch_val_losses.append(avg_epoch_val_loss)
@@ -167,6 +184,11 @@ class WeakLensingEncoder(Encoder):
         print(  # noqa: WPS421
             f"Average val loss for epoch {self.current_epoch}: {avg_epoch_val_loss}",
         )
+
+    def on_test_epoch_end(self):
+        self.report_metrics(self.mode_metrics, "test/mode")
+        if self.sample_metrics is not None:
+            self.report_metrics(self.sample_metrics, "test/sample")
 
     def on_train_end(self):
         if not Path(self.loss_plots_location).exists():
