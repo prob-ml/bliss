@@ -133,8 +133,14 @@ ignore =
     # "too many" members, methods, or expressions is situation specific
     WPS202,WPS213,WPS214,
 
-    # we should consider fixing some of these issues
-    W503,WPS231,WPS602,
+    # moving the binary operator to the end of the line creates other problems
+    W503,
+
+    # how bad are staticmethods?
+    WPS602,
+
+    # functions can be lengthy without being cognitively complex
+    WPS231,
 
     # `%` format is useful when composing logging message
     WPS323,
