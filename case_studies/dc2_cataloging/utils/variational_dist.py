@@ -131,13 +131,13 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
             }
             for qk, params in fp_pairs:
                 if qk.name in vsbc_variables:
-                    sample_result[qk.name + "_vsbc"] = self._get_vsbc(qk, params, cur_true_tile_cat)
+                    sample_result[f"{qk.name}_vsbc"] = self._get_vsbc(qk, params, cur_true_tile_cat)
                 if qk.name in credible_interval_variables:
                     lower_b, upper_b = self._get_credible_interval(
                         qk, params, self.ci_lower_q, self.ci_upper_q
                     )
-                    sample_result[qk.name + "_ci_lower"] = lower_b
-                    sample_result[qk.name + "_ci_upper"] = upper_b
+                    sample_result[f"{qk.name}_ci_lower"] = lower_b
+                    sample_result[f"{qk.name}_ci_upper"] = upper_b
             self.cur_context_index = (self.cur_context_index + 1) % len(self.sample_context)
 
         return sample_result

@@ -7,7 +7,7 @@ from astropy.io import fits
 def stack_fits():
     """Stacks all galsim .fits files into one file."""
 
-    input_fits_files = glob.glob(sys.argv[1] + "/galsim_iter*.fits")
+    input_fits_files = glob.glob(f"{sys.argv[1]}/galsim_iter*.fits")
 
     # Create a list to hold the HDUs
     hdulist = []

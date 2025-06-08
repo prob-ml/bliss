@@ -122,6 +122,9 @@ class RedshiftsCatalogMatcher(CatalogMatcher):
 
         Returns:
             matched index based on self.match_gating
+
+        Raises:
+            ValueError: If match_gating is not one of "n_sources", "is_star", or "is_galaxy"
         """
         assert isinstance(true_cat, BaseTileCatalog) and isinstance(est_cat, BaseTileCatalog)
         assert true_cat.batch_size == est_cat.batch_size

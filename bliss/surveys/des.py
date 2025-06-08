@@ -259,8 +259,8 @@ class DarkEnergySurvey(Survey):
         for im_id in im_ids:
             for b in self.BANDS:
                 im_id[b] = im_id.get(b, "")
-        # convert to hashable DictConfig
-        return [self.to_dictconfig(im_id) for im_id in im_ids]
+
+        return [self.to_dictconfig(im_id2) for im_id2 in im_ids]
 
 
 DES = DarkEnergySurvey
@@ -275,7 +275,7 @@ class DESDownloader(SurveyDownloader):
 
     @staticmethod
     def image_basename_from_filename(image_filename, bl):
-        return image_filename.split("/")[-1].split(f"_{bl}")[0] + f"_{bl}"
+        return f"{image_filename.split('/')[-1].split(f'_{bl}')[0]}_{bl}"
 
     @staticmethod
     def save_filename_from_image_filename(image_filename):

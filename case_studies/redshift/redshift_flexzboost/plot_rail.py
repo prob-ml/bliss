@@ -99,7 +99,7 @@ plt.figure(figsize=(4, 2))
 
 pit_values = results[0]["pit_values"]
 sorted_pit_values = sorted(pit_values)
-uniform_cdf = [i / len(pit_values) for i in range(len(pit_values))]
+uniform_cdf = np.linspace(0, 1, len(pit_values), endpoint=False)
 
 # Plot the difference between PIT and Uniform
 difference = [u - p for p, u in zip(sorted_pit_values, uniform_cdf)]
@@ -121,7 +121,7 @@ plt.figure(figsize=(4, 2))
 
 pit_values = result_normal_boost["pit_values"]
 sorted_pit_values = sorted(pit_values)
-uniform_cdf = [i / len(pit_values) for i in range(len(pit_values))]
+uniform_cdf = np.linspace(0, 1, len(pit_values), endpoint=False)
 
 # Plot the difference between PIT and Uniform
 difference = [u - p for p, u in zip(sorted_pit_values, uniform_cdf)]
@@ -153,7 +153,12 @@ for split_idx in range(7):
     samp2 = results[split_idx]["z_pred_sample2"]
     pit = results[split_idx]["pit_values"]
 
-    counts, l1_err, bias, crps, max_pit_dev = [], [], [], [], []
+    # Initialize metrics lists
+    counts = []
+    l1_err = []
+    bias = []
+    crps = []
+    max_pit_dev = []
     for j in range(len(redshift_bins) - 1):
         lo, hi = redshift_bins[j], redshift_bins[j + 1]
         mask = (yhat >= lo) & (yhat < hi)
@@ -202,7 +207,12 @@ samp1 = result_normal_boost["z_pred_sample1"]
 samp2 = result_normal_boost["z_pred_sample2"]
 pit = result_normal_boost["pit_values"]
 
-counts_b, l1_b, bias_b, crps_b, max_pit_b = [], [], [], [], []
+# Initialize metrics lists for boost results
+counts_b = []
+l1_b = []
+bias_b = []
+crps_b = []
+max_pit_b = []
 for j in range(len(redshift_bins) - 1):
     lo, hi = redshift_bins[j], redshift_bins[j + 1]
     mask = (yhat >= lo) & (yhat < hi)
@@ -250,9 +260,7 @@ axs[4].set_ylabel("KS(PIT,Uniform)")
 axs[4].set_xlabel("Posterior Mean Redshift Bin")
 
 # x‐axis ticks
-tick_labels = [
-    f"{redshift_bins[i]:.1f}-{redshift_bins[i+1]:.1f}" for i in range(len(redshift_bins) - 1)
-]
+tick_labels = [f"{lo:.1f}-{hi:.1f}" for lo, hi in zip(redshift_bins[:-1], redshift_bins[1:])]
 axs[4].set_xticks(centers)
 axs[4].set_xticklabels(tick_labels, rotation=45, ha="right")
 

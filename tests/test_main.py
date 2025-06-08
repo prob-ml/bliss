@@ -23,7 +23,7 @@ class TestGenerate:
 
         generate(cfg.generate)
 
-        file_path = cfg.generate.cached_data_path + "/dataset_0_size_2.pt"
+        file_path = f"{cfg.generate.cached_data_path}/dataset_0_size_2.pt"
         assert os.path.exists(file_path), f"{file_path} not found"
 
         # cursory check of contents of cached dataset

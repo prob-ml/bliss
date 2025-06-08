@@ -138,8 +138,8 @@ class LensingDC2DataModule(DC2DataModule):
                     )
                     v_count[..., b] = v_count_bin[..., 0]
 
-            tile_cat[k + "_sum"] = v_sum.reshape(self.batch_size, n_tiles_w, n_tiles_h, v.shape[-1])
-            tile_cat[k + "_count"] = v_count.reshape(
+            tile_cat[f"{k}_sum"] = v_sum.reshape(self.batch_size, n_tiles_w, n_tiles_h, v.shape[-1])
+            tile_cat[f"{k}_count"] = v_count.reshape(
                 self.batch_size, n_tiles_w, n_tiles_h, v.shape[-1]
             )
         return BaseTileCatalog(tile_cat)
