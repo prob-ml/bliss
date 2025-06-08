@@ -133,7 +133,7 @@ ignore =
     # "too many" members, methods, or expressions is situation specific
     WPS202,WPS213,WPS214,
 
-    # moving the binary operator to the end of the line creates other problems
+    # moving the binary operator to the end of the line creates W504 problems
     W503,
 
     # how bad are staticmethods?
