@@ -12,11 +12,12 @@ data_gen:
     catalog_gen: false
     image_gen: false
     file_data_gen: false
-    image_size: 10000
+    des_image_size: 10000
+    image_size: 9984
     tile_size: 256
     nfiles: 5000
     compressed_images: true
-    n_catalogs_per_file: 10
+    n_catalogs_per_file: 1
     bands: ["g", "r", "i", "z"]
     min_flux_for_loss: 0
     overwrite: false
@@ -48,7 +49,7 @@ cached_simulator:
     batch_size: 1
     splits: 0:60/60:90/90:100  # train/val/test splits as percent ranges
     num_workers: 0
-    cached_data_path: /data/scratch/gapatron/galaxy_clustering/desdr1_galsim/file_data/
+    cached_data_path: /nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/desdr1_galsim/file_data/
     train_transforms: []
 
 train:
