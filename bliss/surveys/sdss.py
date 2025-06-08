@@ -105,8 +105,7 @@ class SloanDigitalSkySurvey(Survey):
                     self.rcfgcs.append((run, camcol, field, gain))
 
         self.downloader.download_images()
-        for rcfgc in self.rcfgcs:
-            run, camcol, field, _ = rcfgc
+        for run, camcol, field, _ in self.rcfgcs:
             field_path = self.sdss_path / f"{run}/{camcol}/{field}"
             for bl in SloanDigitalSkySurvey.BANDS:
                 frame_name = f"frame-{bl}-{run:06d}-{camcol:d}-{field:04d}.fits"

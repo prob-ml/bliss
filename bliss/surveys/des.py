@@ -258,9 +258,9 @@ class DarkEnergySurvey(Survey):
         im_ids = list(image_ids)
         for im_id in im_ids:
             for b in self.BANDS:
-                im_id[b] = im_id.get(b, "")
+                im_id[b] = self.to_dictconfig(im_id.get(b, ""))
         # convert to hashable DictConfig
-        return [self.to_dictconfig(im_id) for im_id in im_ids]
+        return im_ids
 
 
 DES = DarkEnergySurvey

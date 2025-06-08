@@ -125,8 +125,8 @@ df["ellipticity_2_true"] = np.nan
 df["cosmodc2_mask"] = False
 
 # rename mag_{} to mag_{}_truth
-for band in "ugrizy":
-    df.rename(columns={f"mag_{band}": f"mag_{band}_truth"}, inplace=True)
+rename_dict = {f"mag_{b}": f"mag_{b}_truth" for b in "ugrizy" if f"mag_{b}" in df.columns}
+df.rename(columns=rename_dict, inplace=True)
 
 # %% Make sure there are no "object" dtypes
 
