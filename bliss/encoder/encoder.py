@@ -253,6 +253,7 @@ class Encoder(pl.LightningModule):
         target_cat1 = target_cat.get_brightest_sources_per_tile(
             band=self.reference_band, exclude_num=0
         )
+        target_cat2 = None  # Will be set if use_double_detect is True
         if self.use_double_detect:
             target_cat2 = target_cat.get_brightest_sources_per_tile(
                 band=self.reference_band, exclude_num=1

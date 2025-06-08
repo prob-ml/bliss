@@ -58,18 +58,18 @@ def bilinear_interpolate_numpy(i_m, x_coord, y_coord):
     """Perform bilinear interpolation on a 2D numpy array.
 
     Args:
-    i_m (numpy.ndarray): Input 2D array (image) to interpolate.
-    x_coord (float): X-coordinate for interpolation.
-    y_coord (float): Y-coordinate for interpolation.
+        i_m (numpy.ndarray): Input 2D array (image) to interpolate.
+        x_coord (float): X-coordinate for interpolation.
+        y_coord (float): Y-coordinate for interpolation.
 
     Returns:
-    numpy.ndarray: Interpolated value at (x_coord, y_coord) using bilinear interpolation.
+        numpy.ndarray: Interpolated value at (x_coord, y_coord) using bilinear interpolation.
 
     Notes:
-    - Uses numpy's floor, clip, and array indexing operations for efficient interpolation.
-    - Assumes x_coord and y_coord are within the bounds of i_m.shape.
-    - Bilinear interpolation computes a weighted average of the four nearest
-    pixels around (x_coord, y_coord).
+        - Uses numpy's floor, clip, and array indexing operations for efficient interpolation.
+        - Assumes x_coord and y_coord are within the bounds of i_m.shape.
+        - Bilinear interpolation computes a weighted average of the four nearest
+          pixels around (x_coord, y_coord).
     """
     x_0 = np.floor(x_coord).astype(int)
     x_1 = x_0 + 1
@@ -98,9 +98,9 @@ def lens_galsim(unlensed_image, lens_params):
     """Apply gravitational lensing to input image using Singular Isothermal Ellipsoid (SIE) model.
 
     Args:
-    unlensed_image (numpy.ndarray): Input 2D array representing the unlensed image.
-    lens_params (numpy.ndarray): Parameters for the SIE lens model.
-        lens_params should contain:
+        unlensed_image (numpy.ndarray): Input 2D array representing the unlensed image.
+        lens_params (numpy.ndarray): Parameters for the SIE lens model.
+            lens_params should contain:
             - lens strength (Einstein radius)
             - x-center (optional)
             - y-center (optional)
@@ -108,14 +108,14 @@ def lens_galsim(unlensed_image, lens_params):
             - e2 ellipticity (optional)
 
     Returns:
-    numpy.ndarray: Lensed image after applying gravitational lensing.
-        Has the same dtype as the input `unlensed_image`.
+        numpy.ndarray: Lensed image after applying gravitational lensing.
+            Has the same dtype as the input `unlensed_image`.
 
     Notes:
-    - Uses numpy operations to generate coordinates and perform deflection.
-    - Calls `sie_deflection` to compute deflection angles for gravitational lensing.
-    - Uses `bilinear_interpolate_numpy` for bilinear interpolation of pixel values.
-    - Assumes the input image `unlensed_image` is centered at the origin.
+        - Uses numpy operations to generate coordinates and perform deflection.
+        - Calls `sie_deflection` to compute deflection angles for gravitational lensing.
+        - Uses `bilinear_interpolate_numpy` for bilinear interpolation of pixel values.
+        - Assumes the input image `unlensed_image` is centered at the origin.
     """
     n_x, n_y = unlensed_image.shape
     x_range = [-n_x // 2, n_x // 2]
