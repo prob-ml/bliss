@@ -49,9 +49,6 @@ ignore =
     # too many extra lines
     WPS414,
 
-    # seems to work fine
-    WPS465,
-
     # already enforced by pylint
     WPS211,
 
@@ -127,7 +124,7 @@ ignore =
     # lambda expressions are more concise and very readable
     E731,
 
-    # the strict parameter is so verbose
+    # the use_strict parameter is sort of verbose
     WPS338,
 
     # "too many" members, methods, or expressions is situation specific
@@ -141,9 +138,3 @@ ignore =
 
     # functions can be lengthy without being cognitively complex
     WPS231,
-
-    # `%` format is useful when composing logging message
-    WPS323,
-
-    # pandas Series concatenation is not the same as string concatenation
-    WPS336
