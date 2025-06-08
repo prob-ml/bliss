@@ -3,138 +3,178 @@ exclude = .git
 max-line-length = 100
 inline-quotes = double
 docstring-convention=google
+
 ignore =
-    # documentation not yet needed
+    # ===== Documentation and Docstring Rules =====
+    # Basic docstring requirements (D100-D107) are temporarily disabled
+    # as we're still developing the codebase and documentation standards
     D100,D101,D102,D103,D104,D105,D106,D107,
 
-    # high Jones complexity isn't always so bad
-    WPS221,
-
-    # removing all magic numbers seems like overkill
-    WPS432,
-
-    # assertions are useful for development code
-    S101,
-
-    # requiring trailing commas seems too picky
-    C812,
-
-    # nested imports can be fine
-    WPS433,
-
-    # number of local variables is already checked by pylint
-    WPS210,
-
-    # a redundant subscript can be more readible that defining a temp value
-    WPS349,
-
-    # not sure what is wrong with comparing an array to a float
-    WPS459,
-
-    # only makes sense once we're using proper docstrings
+    # Advanced docstring rules (D205, D400, DAR201, DAR101) will be
+    # enforced once we have consistent docstring usage across the codebase
     D205, D400, DAR201, DAR101,
 
-    # useless else has its moments
-    WPS503,
+    # RST-style docstring validation is handled by darglint instead of flake8
+    # to avoid duplicate checks and maintain consistency
+    RST201,RST301,D202,RST203,RST210,
 
-    # no need to explicitly inherit from object
-    WPS306,
+    # ===== Security and Safety Rules =====
+    # Assertions (S101) are useful for development and testing
+    # We'll handle production safety through proper error handling
+    S101,
 
-    # for list comprehensions one-character variable names are useful
-    WPS111,
-
-    # some of these bad variable names are set by other packages
-    WPS110,
-
-    # too many extra lines
-    WPS414,
-
-    # already enforced by pylint
-    WPS211,
-
-    # not too many assert statements
-    WPS218,
-
-    # reusing string constants is less verbose that defining a variable
-    WPS226,
-
-    # positional arguments to formatting strings are redundant
-    P101,
-
-    # I am not worried about security issues associate with pickle
+    # Pickle security warnings (S301, S403) are ignored as we don't
+    # handle untrusted data in our pickle operations
     S301, S403,
 
-    # black disagrees, actually inserting space before some colons
-    E203,
-
-    # f-strings are OK, though perhaps using .format is better
-    WPS305,
-
-    # some of these "overused" expressions are quite short
-    WPS204,
-
-    # these distinction btw public and private class attrs isn't that meaningful here
-    WPS230,
-
-    # false positive; this cannot be done with "yield from"
-    WPS526,
-
-    # not helpful
-    WPS201,
-
-    # not that complex really
-    WPS237,
-
-    # unfortunately pytorch convention is to import "functional" as F
-    N812,
-
-    # so we can import survey objects with acronyms
-    N817,
-
-    # it has to be empty
-    WPS411,
-
-    # code is too verbose if you don't import submodules
-    WPS458,
-
-    # negated condition can be more clear
-    WPS504,
-
-    # implicit string concatenation seems pretty clear
-    WPS326,
-
-    # the keyword "del" is useful to us
-    WPS420,
-
-    # darglint validates our doc strings
-    RST201,RST301,D202,RST203,RST210
-
-    # we don't care about security/cryptography
+    # Cryptographic security (S311) is not relevant for our use case
+    # as we don't perform cryptographic operations
     S311,
 
-    # upper-case constants are fine in Enums
-    WPS115
+    # ===== Code Style and Formatting Rules =====
+    # Black formatter compatibility (E203) - Black's formatting
+    # for colons in slices takes precedence over flake8's rules
+    E203,
 
-    # there are a number of places where a float zero value makes sense
-    WPS358
-
-    # what's wrong a multiline try block?
-    WPS229,
-
-    # lambda expressions are more concise and very readable
+    # Lambda expressions (E731) are allowed as they can be more
+    # concise and readable for simple operations
     E731,
 
-    # the use_strict parameter is sort of verbose
-    WPS338,
+    # F-strings (WPS305) are preferred over .format() for better
+    # readability, though we acknowledge .format() might be more flexible
+    WPS305,
 
-    # "too many" members, methods, or expressions is situation specific
-    WPS202,WPS213,WPS214,
-
-    # moving the binary operator to the end of the line creates W504 problems
+    # Binary operator placement (W503) - We prefer operators at the
+    # start of lines for better readability in complex expressions
     W503,
 
-    # how bad are staticmethods?
+    # ===== Complexity and Code Structure Rules =====
+    # Jones complexity (WPS221) - Some complex logic is necessary
+    # and breaking it down further would reduce readability
+    WPS221,
+
+    # Magic numbers (WPS432) - Some constants are self-explanatory
+    # and don't need to be extracted to named constants
+    WPS432,
+
+    # Nested imports (WPS433) are sometimes necessary for
+    # better code organization and to avoid circular imports
+    WPS433,
+
+    # Local variables (WPS210) - Pylint already enforces this rule,
+    # no need for duplicate checks
+    WPS210,
+
+    # Redundant subscripts (WPS349) can be more readable than
+    # creating temporary variables for simple operations
+    WPS349,
+
+    # Array-float comparisons (WPS459) are valid in our use case
+    # for numerical computations
+    WPS459,
+
+    # Useless else (WPS503) can improve code readability by
+    # making the control flow more explicit
+    WPS503,
+
+    # Object inheritance (WPS306) - Explicit inheritance from object
+    # is not needed in Python 3
+    WPS306,
+
+    # One-character variables (WPS111) are acceptable in list
+    # comprehensions and mathematical expressions
+    WPS111,
+
+    # Bad variable names (WPS110) - Some names are set by
+    # external packages and we need to maintain compatibility
+    WPS110,
+
+    # What is an incorrect unpacking target?
+    WPS414,
+
+    # Local variables (WPS211) - Already enforced by pylint
+    WPS211,
+
+    # Assert statements (WPS218) - We use a reasonable number
+    # of assertions for development and testing
+    WPS218,
+
+    # String constants (WPS226) - Reusing string literals can be
+    # more maintainable than creating variables for simple strings
+    WPS226,
+
+    # Overused expressions (WPS204) - Some short expressions
+    # are clear and don't need to be extracted
+    WPS204,
+
+    # Public/private attributes (WPS230) - The distinction is
+    # less meaningful in our codebase
+    WPS230,
+
+    # Yield from (WPS526) - False positive, some operations
+    # cannot be done with "yield from"
+    WPS526,
+
+    # Complexity metrics (WPS201) - Not helpful for our use case
+    WPS201,
+
+    # Cognitive complexity (WPS237) - Some complex logic is
+    # necessary and breaking it down would reduce clarity
+    WPS237,
+
+    # Empty blocks (WPS411) - Some empty blocks are necessary
+    # for proper control flow
+    WPS411,
+
+    # Submodule imports (WPS458) - Direct submodule imports
+    # can make the code more concise and clear
+    WPS458,
+
+    # Negated conditions (WPS504) - Sometimes negated conditions
+    # are more readable than their positive counterparts
+    WPS504,
+
+    # String concatenation (WPS326) - Implicit concatenation
+    # is clear and readable in our use cases
+    WPS326,
+
+    # Del keyword (WPS420) - The 'del' keyword is useful
+    # for memory management and cleanup
+    WPS420,
+
+    # Enum constants (WPS115) - Upper-case constants are
+    # appropriate in Enums
+    WPS115,
+
+    # Float zero values (WPS358) - Zero values are valid
+    # in numerical computations
+    WPS358,
+
+    # Multiline try blocks (WPS229) - Sometimes necessary
+    # for proper error handling
+    WPS229,
+
+    # Strict parameter (WPS338) - The strict parameter
+    # is verbose but necessary for some operations
+    WPS338,
+
+    # Code size metrics (WPS202, WPS213, WPS214) - These
+    # limits are too restrictive for our use case
+    WPS202,WPS213,WPS214,
+
+    # Static methods (WPS602) - Static methods are valid
+    # when they don't need instance state
     WPS602,
 
-    # functions can be lengthy without being cognitively complex
+    # Function length (WPS231) - Some functions need to be
+    # longer to maintain readability
     WPS231,
+
+    # ===== Naming Convention Rules =====
+    # PyTorch functional import (N812) - Following PyTorch
+    # convention of importing 'functional' as 'F'
+    N812,
+
+    # Survey object acronyms (N817) - Using acronyms for
+    # survey objects is a project convention
+    N817,
