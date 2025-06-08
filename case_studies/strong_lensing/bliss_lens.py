@@ -23,7 +23,13 @@ def sie_deflection(x_coord, y_coord, lens_params):
 
     Adopted from: Adam S. Bolton, U of Utah, 2009.
     """
-    b_rad, center_x, center_y, e_1, e_2 = lens_params.cpu().numpy()
+    # Extract lens parameters
+    params_np = lens_params.cpu().numpy()
+    b_rad = params_np[0]
+    center_x = params_np[1]
+    center_y = params_np[2]
+    e_1 = params_np[3]
+    e_2 = params_np[4]
     q_val = (1 - (np.sqrt(e_1**2 + e_2**2))) / (1 + (np.sqrt(e_1**2 + e_2**2)))
 
     # Go into shifted coordinats of the potential:

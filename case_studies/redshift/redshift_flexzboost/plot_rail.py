@@ -153,7 +153,12 @@ for split_idx in range(7):
     samp2 = results[split_idx]["z_pred_sample2"]
     pit = results[split_idx]["pit_values"]
 
-    counts, l1_err, bias, crps, max_pit_dev = [], [], [], [], []
+    # Initialize metrics lists
+    counts = []
+    l1_err = []
+    bias = []
+    crps = []
+    max_pit_dev = []
     for j in range(len(redshift_bins) - 1):
         lo, hi = redshift_bins[j], redshift_bins[j + 1]
         mask = (yhat >= lo) & (yhat < hi)
@@ -202,7 +207,12 @@ samp1 = result_normal_boost["z_pred_sample1"]
 samp2 = result_normal_boost["z_pred_sample2"]
 pit = result_normal_boost["pit_values"]
 
-counts_b, l1_b, bias_b, crps_b, max_pit_b = [], [], [], [], []
+# Initialize metrics lists for boost results
+counts_b = []
+l1_b = []
+bias_b = []
+crps_b = []
+max_pit_b = []
 for j in range(len(redshift_bins) - 1):
     lo, hi = redshift_bins[j], redshift_bins[j + 1]
     mask = (yhat >= lo) & (yhat < hi)
