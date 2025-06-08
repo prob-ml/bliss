@@ -4,10 +4,10 @@ import numpy as np
 import os
 import subprocess
 
-TILE_PATHS = '/nfs/turbo/lsa-regier/scratch/gapatron/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles'
+TILE_PATHS = '/nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/desdr-server.ncsa.illinois.edu/despublic/dr1_tiles'
 DES_BANDS = ("g", "r", "i", "z")
-SAVE_PATH = '/data/scratch/gapatron/galaxy_clustering/desdr1_galsim/psf_models/dr1_tiles'
-CONFIG_PATH = '/data/scratch/gapatron/galaxy_clustering/desdr1_galsim/config'
+SAVE_PATH = '/nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/desdr1_galsim/psf_models/dr1_tiles'
+CONFIG_PATH = '/nfs/turbo/lsa-regier/scratch/gapatron/galaxy_clustering/desdr1_galsim/config'
 SEED = 42
 
 
@@ -61,7 +61,8 @@ if __name__=="__main__":
                     for band in DES_BANDS
                 }
         except:
-            continue
+            raise RuntimeError(f"Tile {tile} does not have all required bands: {DES_BANDS}. Skipping...")
+        
         
         for band, filename in dir_files.items():
             # Where you read it from, in gapatron desdr dir
