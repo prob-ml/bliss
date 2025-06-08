@@ -99,7 +99,7 @@ truth_id_counts = truth_df["id"].value_counts()
 if not all(truth_id_counts == 1):
     raise ValueError(
         "Some truth IDs appear multiple times in truth_df. IDs appearing multiple times: "
-        + str(truth_id_counts[truth_id_counts > 1])
+        f"{str(truth_id_counts[truth_id_counts > 1])}"
     )
 
 # Also verify all match_df truth IDs exist in truth_df

@@ -288,7 +288,7 @@ class SDSSDownloader:
         run, camcol, field = rcf
         cat_path = (
             f"{self.download_dir}/{self.subdir3(run, camcol, field)}/"
-            + f"photoObj-{self.run6(run)}-{camcol}-{self.field4(field)}.fits"
+            f"photoObj-{self.run6(run)}-{camcol}-{self.field4(field)}.fits"
         )
         download_file_to_dst(
             f"{SDSSDownloader.URLBASE}/photoObj/301/{self.stripped(run)}/{camcol}/"
@@ -335,7 +335,6 @@ class SDSSDownloader:
 
     def download_all(self):
         if not Path(self.download_dir).exists():
-            # create download directory
             Path(self.download_dir).mkdir(parents=True, exist_ok=True)
 
         self.download_pfs()
@@ -441,7 +440,7 @@ class SDSS_PSF(ImagePSF):  # noqa: N801
         """
         msg = (
             f"{psf_fit_file} does not exist. "
-            + "Make sure data files are available for fields specified in config."
+            f"Make sure data files are available for fields specified in config."
         )
         assert Path(psf_fit_file).exists(), msg
         # HDU 6 contains the PSF header (after primary and eigenimages)
