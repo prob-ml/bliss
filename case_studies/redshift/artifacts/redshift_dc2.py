@@ -127,7 +127,7 @@ class RedshiftDC2DataModule(DC2DataModule):
         patches = [
             str(file_name).rsplit("-", maxsplit=1)[-1][:3] for file_name in self._image_files[0]
         ]  # TODO: check
-        self._tract_patches = [x[0] + "_" + x[1] for x in zip(tracts, patches)]  # TODO: hack
+        self._tract_patches = [f"{x[0]}_{x[1]}" for x in zip(tracts, patches)]  # TODO: hack
 
         return n_image
 

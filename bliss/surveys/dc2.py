@@ -405,15 +405,15 @@ class DC2FullCatalog(FullCatalog):
         flux_list = []
         psf_params_list = []
         for b in bands:
-            flux_list.append(torch.from_numpy((catalog["flux_" + b]).values))
+            flux_list.append(torch.from_numpy((catalog[f"flux_{b}"]).values))
             psf_params_name = ["IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_"]
             psf_params_cur_band = []
             for i in psf_params_name:
                 if median:
-                    median_psf = np.nanmedian((catalog[i + b]).values).astype(np.float32)
+                    median_psf = np.nanmedian((catalog[f"{i}{b}"]).values).astype(np.float32)
                     psf_params_cur_band.append(median_psf)
                 else:
-                    psf_params_cur_band.append(catalog[i + b].values.astype(np.float32))
+                    psf_params_cur_band.append(catalog[f"{i}{b}"].values.astype(np.float32))
             psf_params_list.append(
                 torch.tensor(psf_params_cur_band)
             )  # bands x 4 (params per band) x n_obj

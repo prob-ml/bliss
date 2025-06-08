@@ -275,7 +275,7 @@ class DESDownloader(SurveyDownloader):
 
     @staticmethod
     def image_basename_from_filename(image_filename, bl):
-        return image_filename.split("/")[-1].split(f"_{bl}")[0] + f"_{bl}"
+        return f"{image_filename.split('/')[-1].split(f'_{bl}')[0]}_{bl}"
 
     @staticmethod
     def save_filename_from_image_filename(image_filename):

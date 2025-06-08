@@ -158,7 +158,7 @@ lensed_img = lens_galsim(image, params)
 
 OUTPUT_DIR = sys.argv[2]
 lensed_img = galsim.ImageF(lensed_img)
-lensed_img.write(OUTPUT_DIR + "/galsim.fits")
+lensed_img.write(f"{OUTPUT_DIR}/galsim.fits")
 
 params = [theta_e, x_center, y_center, e1, e2]
 print(" ".join(map(str, params)))  # noqa: WPS421

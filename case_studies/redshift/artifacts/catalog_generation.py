@@ -98,7 +98,7 @@ logging.info(f"After filtering {len(match_df)} matched objects from tracts {trac
 truth_id_counts = truth_df["id"].value_counts()
 if not all(truth_id_counts == 1):
     raise ValueError(
-        "Some truth IDs appear multiple times in truth_df. IDs appearing multiple times: "
+        f"Some truth IDs appear multiple times in truth_df. IDs appearing multiple times: "
         f"{str(truth_id_counts[truth_id_counts > 1])}"
     )
 
@@ -151,19 +151,13 @@ df.to_parquet(dc2_cached_dir / "merged_catalog.parquet")
 # %% get a little image data a la LSST Science Pipelines (DM Stack) v19.0.0
 # (this is just for sanity checking)
 
-relevant_tract = 3828
-relevant_patch = "2,3"
+tract = 3828
+patch = "2,3"
 
 band = "r"
 deepcoadd_base = dc2_raw_dir / "run2.2i-dr6-v4" / "coadd-t3828-t3829" / "deepCoadd-results"
 
-rawfn = (
-    deepcoadd_base
-    / band
-    / str(relevant_tract)
-    / relevant_patch
-    / f"calexp-{band}-{relevant_tract}-{relevant_patch}.fits"
-)
+rawfn = deepcoadd_base / band / str(tract) / patch / f"calexp-{band}-{tract}-{patch}.fits"
 with fits.open(rawfn) as hdul:
     # Extract the image data
     # image is stored in HDU 1
@@ -203,10 +197,7 @@ logging.info(f"Found {len(roi_df)} objects in the region of interest")
 # plot image
 plt.pcolormesh(image_data[:100, :100], norm=LogNorm())
 plt.plot(pix_x, pix_y, "ro", alpha=0.5)
-fn = (
-    f"catalog_generation_sanity_check_image_{band}_"
-    f"{relevant_tract}_{relevant_patch}_sanity_check.png"
-)
+fn = f"catalog_generation_sanity_check_image_{band}_{tract}_{patch}_sanity_check.png"
 plt.savefig(plot_dir / fn)
 # %%
 
@@ -258,7 +249,9 @@ df_for_rail = df_for_rail[galaxies]
 # %% read ttsplits for the purposes of making rail-friendly train/test splits
 
 # create tract_patch series
-tract_patch = df_for_rail["tract"].astype(str) + "_" + df_for_rail["patch"].astype(str)
+tract_str = df_for_rail["tract"].astype(str)
+patch_str = df_for_rail["patch"].astype(str)
+tract_patch = f"{tract_str}_{patch_str}"
 
 for i, (train, test) in enumerate(zip(trainsets, testsets)):
     train_df = df_for_rail[tract_patch.isin(train)]

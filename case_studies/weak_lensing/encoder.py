@@ -152,7 +152,7 @@ class WeakLensingEncoder(Encoder):
                 except NotImplementedError:
                     continue
                 name = f"Epoch:{self.current_epoch}"
-                name += f"/{logging_name} {metric_name}"
+                name = f"{name}/{logging_name} {metric_name}"
                 if self.logger and plot_or_none:
                     fig, _axes = plot_or_none
                     self.logger.experiment.add_figure(name, fig)
