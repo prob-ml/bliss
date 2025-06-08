@@ -12,7 +12,7 @@ from astropy.table import Table
 from case_studies.galaxy_clustering.data_generation.prior import Prior
 # Render Galsim images for galaxy clustering
 from bliss.catalog import FullCatalog
-from case_studies.galaxy_clustering.data_generation.gen_utils import galsim_render_band, load_tile_stack
+from case_studies.galaxy_clustering.data_generation.gen_utils import galsim_render_band
 # Generate file data (with tile catalogs and images) for galaxy clustering
 import numpy as np
 import pandas as pd
@@ -84,38 +84,33 @@ def catalog_gen(cfg):
     print("Catalog generation completed.")
 
 
-def image_gen(cfg):
-    """Generate Galsim images for galaxy clustering.
-
+def image_gen(cfg, des_subdir, catalog_path):
+    """Generate Galsim images for a specific DES subdirectory.
     Args:
         cfg: configuration object containing parameters for image generation
+        des_subdir: specific DES subdirectory to process
     """
-    data_path = cfg.data_dir
-    if not os.path.exists(data_path):
-        os.makedirs(data_path)
-    des_subdirs = sorted(os.listdir(cfg.desdr_subdirs))
-
-    args_list = []
-
-    for des_subdir in tqdm(des_subdirs):
-        args_list = [(
+    args_list = [(
                 band,
                 des_subdir,
                 cfg.data_dir,
+                catalog_path,
                 1,  # nfiles
-                10000,  # image_size
+                cfg.image_size,  # image_size
                 cfg.psf_model_path,
                 cfg.galsim_confpath
             ) for band in BANDS]
-        
-        with multiprocessing.Pool(processes=4) as pool:
-            pool.starmap(galsim_render_band, args_list)
-        
-    print("Image generation completed.")
+    
+    with multiprocessing.Pool(processes=4) as pool:
+        band_paths = pool.starmap(galsim_render_band, args_list)
+    print(f"Finished processing tile: {des_subdir}")
+    images = [fits.getdata(p).astype(np.float32) for p in band_paths]
+    return torch.stack([torch.from_numpy(im) for im in images])
 
 
 
 def file_data_gen(cfg):
+    des_image_size = int(cfg.des_image_size)
     image_size = int(cfg.image_size)
     tile_size = int(cfg.tile_size)
     data_dir = cfg.data_dir
@@ -132,9 +127,25 @@ def file_data_gen(cfg):
     catalog_counter = 0
     file_counter = 0
 
-    for catalog_path in tqdm(sorted(catalogs_path.glob("*.cat"))):
+    for des_subdir in tqdm(sorted(os.listdir(cfg.desdr_subdirs))):
+        # Loading catalog
+        catalog_path = catalogs_path / f"{des_subdir}.cat"
+        if not catalog_path.exists():
+            print(f"Catalog for {des_subdir} does not exist, skipping.")
+            continue
         catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=COL_NAMES)
-
+        # Cropping the catalog to the desired image size
+        if des_image_size != image_size:
+            print(f"Resizing catalog for {des_subdir} from {des_image_size} to {image_size}.")
+            #catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=COL_NAMES)
+            offset = (des_image_size - image_size) // 2
+            catalog['X'] = catalog['X'] - offset
+            catalog['Y'] = catalog['Y'] - offset
+            catalog = catalog[(catalog['X'] >= 0) & (catalog['Y'] >= 0) & (catalog['X'] < image_size) & (catalog['Y'] < image_size)]
+            cropped_cat = catalogs_path / f"{des_subdir}_cropped_{image_size}.cat"
+            catalog.to_csv(cropped_cat, sep=" ", index=False, header=False)
+        stacked_image = image_gen(cfg, des_subdir, cropped_cat if des_image_size != image_size else catalog_path)
+        # Prepare tile catalog generation
         catalog_dict = {}
         catalog_dict["plocs"] = torch.from_numpy(catalog[["X", "Y"]].to_numpy()).unsqueeze(0)
         catalog_dict["n_sources"] = torch.sum(catalog_dict["plocs"][:, :, 0] != 0, axis=1)
@@ -171,14 +182,6 @@ def file_data_gen(cfg):
         for key, value in tile_catalog.items():
             tile_catalog_dict[key] = torch.squeeze(value, 0)
 
-        
-        stacked_image = load_tile_stack(
-            catalog_path=Path(catalog_path.stem + ".cat"),
-            images_path=Path(images_path) / Path(catalog_path.stem),
-            bands=bands,
-            compressed=cfg.compressed_images
-        )
-
         data.append(
             {
                 "tile_catalog": tile_catalog_dict,
@@ -187,7 +190,7 @@ def file_data_gen(cfg):
         )
         catalog_counter += 1
         if catalog_counter == n_catalogs_per_file:
-            stackname = f"{file_path}/file_data_{file_counter}_size_{n_catalogs_per_file}.pt"
+            stackname = f"{file_path}/file_data_{file_counter}_imagesize_{image_size}_size_{n_catalogs_per_file}.pt"
             torch.save(data, stackname)
             file_counter += 1
             data, catalog_counter = [], 0

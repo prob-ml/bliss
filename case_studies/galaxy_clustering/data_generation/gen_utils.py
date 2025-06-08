@@ -24,24 +24,7 @@ def load_data_native_endian(h5_group, include_keys_2d=None):
     return data
 
 
-def load_tile_stack(catalog_path: Path, images_path: Path, bands=("g","r","i"), compressed=True):
-    """
-    Return torch tensor with shape (n_bands, H, W) as float32.
-    """
-    suffix = ".fits.fz" if compressed else ".fits"
 
-    band_tensors = []
-    for band in bands:
-        img_file = (
-            images_path /               
-            f"{catalog_path.stem}_{band}{suffix}"
-        )
-
-        with fits.open(img_file, memmap=not compressed) as hdul:  
-            data = hdul[1].data.astype(np.float32, copy=False)   
-            band_tensors.append(torch.from_numpy(data))
-
-    return torch.stack(band_tensors, dim=0) 
 
 def read_cluster_catalog(
             cl_catalog_path: str = 'y3_redmapper_v6.4.22+2_release.h5',
@@ -71,6 +54,7 @@ def galsim_render_band(
         band,
         des_subdir,
         data_path,
+        cat_path,
         nfiles=1,
         image_size=10000,
         psf_filepath=PSF_DIR,
@@ -83,23 +67,25 @@ def galsim_render_band(
         des_subdir: DES Tile to process
         data_path: save directory. Must be at the root of catalogs, config and images.
     """
-    input_catpath = f"{data_path}/catalogs/{des_subdir}.cat"
-    output_ext = f"{data_path}/images/{des_subdir}/{des_subdir}_{band}.fits.fz"
-    
+    output_filename = f"{des_subdir}_{band}.fits.fz"
+    output_ext = f"{data_path}/images/{des_subdir}/{output_filename}"
+
     psf_subdir = f"{psf_filepath}/{des_subdir}"
     psf_file = [f for f in os.listdir(psf_subdir) if f.endswith(f"_{band}.psf")][0]
 
     os.makedirs(os.path.dirname(output_ext), exist_ok=True)
     print(f"[{des_subdir}-{band}] Using PSF file: {psf_file}")
-    if output_ext in os.listdir(os.path.dirname(output_ext)):
-        print(f"[{des_subdir}-{band}] Image already exists, skipping.")
-        return
+    print(f"{output_ext} will be saved to {os.path.dirname(output_ext)}")
+    print(os.listdir(os.path.dirname(output_ext)))
+    if output_filename in os.listdir(os.path.dirname(output_ext)):
+        print(f"[{des_subdir}-{band}] Image already exists, return path instead.")
+        return output_ext  # Return the path to the rendered image
 
     args = [
         "galsim", galsim_confpath,
         f"eval_variables.image_size={image_size}",
         f"eval_variables.nfiles={nfiles}",
-        f"eval_variables.input_file={input_catpath}",
+        f"eval_variables.input_file={cat_path}",
         f"eval_variables.output_file={output_ext}",
         f"eval_variables.psf_dir={psf_subdir}",
         f"eval_variables.psf_file={psf_file}",
@@ -108,4 +94,4 @@ def galsim_render_band(
 
     subprocess.run(args, shell=False, check=True)
 
-
+    return output_ext  # Return the path to the rendered image
