@@ -113,6 +113,9 @@ class Discretized1D(Distribution):
 
         Median is defined as the midpoint of the first bin
         where the cumulative distribution function (CDF) is >= 0.5.
+
+        Returns:
+            torch.Tensor: The median value of the distribution.
         """
         cum_probs = self.base_dist.probs.cumsum(dim=-1)
         median_index = (cum_probs >= 0.5).float().argmax(dim=-1)
@@ -124,6 +127,9 @@ class Discretized1D(Distribution):
         """Compute the mean of the distribution.
         Mean is computed as the weighted average of the bin centers,
         where the weights are the probabilities of each bin.
+
+        Returns:
+            torch.Tensor: The mean value of the distribution.
         """
         bin_centers = torch.arange(
             self.low + 0.5 * (self.high - self.low) / self.num_bins,
