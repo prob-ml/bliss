@@ -99,7 +99,7 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
 
         self._buf_data    = {
             'images': img_buffer.unfold(2, 2816, 1024).unfold(3, 2816, 1024).reshape(img_buffer.size(0), -1,  img_buffer.size(1), 2816, 2816),
-            'tile_catalog': mem_cat_buffer.unfold(1, 11, 4).unfold(2, 11, 4).permute(0, 1, 3, 2, 4, 5, 6).reshape(mem_cat_buffer.size(0), -1, 11, 11, 1, 1),
+            'tile_catalog': mem_cat_buffer.unfold(1, 11, 4).unfold(2, 11, 4).permute(0, 1, 3, 2, 4, 5, 6).reshape(mem_cat_buffer.size(0), -1, 11, 11, 1),
                 
         }
         self._cur_buf_idx = buf_idx
