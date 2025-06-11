@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 from torchvision import transforms
 from typing import List
 from torch.utils.data import Dataset, Sampler
+import random
 
 
 class GalaxyClusterCachedSimulatedDataset(Dataset):
@@ -17,10 +18,10 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
         self.buffer_size      = buffer_size
         self._make_random_buffers()
         self._cur_buf_idx = -1
-        self._buf_data   = None 
+        self._buf_data   = None
         # When unfolding a tile with subtile size of 2560 and
         # step size of 1024, we can sample 64 times per tile.
-        self.num_samples_per_tile = 64 
+        self.num_samples_per_tile = 64
 
 
     def _make_random_buffers(self, epoch_seed=None):
@@ -28,7 +29,7 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
         Shuffle tiles > slice into random buffers.
         Saves
             self.buffer_groups: list of lists, each containing tile indices
-            self.tile2buf: dict mapping tile_id to buffer_id     
+            self.tile2buf: dict mapping tile_id to buffer_id
         """
         g = torch.Generator()
         if epoch_seed is None:            # different order every time
@@ -52,7 +53,7 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
             for buf_id, group in enumerate(self.buffer_groups)
             for local, tile_id in enumerate(group)
         }
-        
+
 
     def _load_tile(self, path):
         with open(path, "rb") as f:
@@ -78,17 +79,17 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
 
         first = self._load_tile(paths[0])[0] # load first tile to get image shape
         img_buffer = torch.empty(
-                (B, *first['images'].shape),  
+                (B, *first['images'].shape),
                 dtype=first['images'].dtype,
-                device=first['images'].device            
+                device=first['images'].device
             )
-        
+
         mem_cat_buffer = torch.empty(
-                (B, *first['tile_catalog']['membership'].shape),  
+                (B, *first['tile_catalog']['membership'].shape),
                 dtype=first['tile_catalog']['membership'].dtype,
-                device=first['tile_catalog']['membership'].device            
+                device=first['tile_catalog']['membership'].device
             )
-        
+
         img_buffer[0].copy_(first['images'])
         mem_cat_buffer[0].copy_(first['tile_catalog']['membership'])
 
@@ -99,8 +100,8 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
 
         self._buf_data    = {
             'images': img_buffer.unfold(2, 2816, 1024).unfold(3, 2816, 1024).reshape(img_buffer.size(0), -1,  img_buffer.size(1), 2816, 2816),
-            'tile_catalog': mem_cat_buffer.unfold(1, 11, 4).unfold(2, 11, 4).permute(0, 1, 3, 2, 4, 5, 6).reshape(mem_cat_buffer.size(0), -1, 11, 11, 1),
-                
+            'tile_catalog': mem_cat_buffer.unfold(1, 11, 4).unfold(2, 11, 4).permute(0, 1, 3, 2, 4, 5, 6).reshape(mem_cat_buffer.size(0), -1, 11, 11, 1, 1),
+
         }
         self._cur_buf_idx = buf_idx
         #self._buf_data = torch.nn.Unfold(self._buf_data, kernel_size=2816, stride=1024)
@@ -136,23 +137,27 @@ class BufferSampler(Sampler):
     """
 
     def __init__(self, dataset, shuffle=True):
-        self.dataset          = dataset 
+        self.dataset          = dataset
         self.samples_per_tile = self.dataset.num_samples_per_tile
         self.buffer_size      = self.dataset.buffer_size
         self.shuffle          = shuffle
         self.epoch            = 0
 
     def set_epoch(self, epoch: int):
-        self.epoch = epoch         
+        self.epoch = epoch
 
     def __iter__(self):
 
-        # Yield indices buffer-by-buffer
+        # Yield indices randomly from buffers.
         for buf in self.dataset.buffer_groups:
+            tile_indices = []
             for tile_id in buf:
                 base = tile_id * self.samples_per_tile
-                for s in range(self.samples_per_tile):
-                    yield base + s
+                tile_indices.extend(range(base, base + self.samples_per_tile))
+            random.seed(42)
+            random.shuffle(tile_indices)
+            for idx in tile_indices:
+                yield idx
 
     def __len__(self):
         return len(self.dataset)
@@ -203,7 +208,7 @@ class GalaxyClusterCachedSimulatedDataModule(CachedSimulatedDataModule):
             transform=transform,
             buffer_size=self.buffer_size,
         )
-    
+
     def _get_dataloader(self, my_dataset):
         distributed_is_used = dist.is_available() and dist.is_initialized()
         #sampler_type = DistributedChunkingSampler if distributed_is_used else BufferSampler
