@@ -17,14 +17,14 @@ try:
 except ImportError:
     logger.info("tqdm not installed. Install with: pip install tqdm")
 
-    def tqdm(iterable, desc="", total=None):
+    def tqdm(iterable, desc="", total=None):  # noqa: WPS440
         return iterable
 
 
-def compress_shear(shear_tensor):
+def compress_shear(shear_tensor, n_tiles_per_side):
     nonzero_vals = shear_tensor[shear_tensor != 0]
     unique_val = torch.unique(nonzero_vals)
-    return unique_val.expand(8, 8, 1)
+    return unique_val.expand(n_tiles_per_side, n_tiles_per_side, 1)
 
 
 def format_time(seconds):
@@ -38,7 +38,13 @@ def format_time(seconds):
     return f"{hours:.1f}h"
 
 
-def convert_save_images_catalogs(images, catalogs, setting="meta", shear_feature="varying"):
+def convert_save_images_catalogs(
+    images,
+    catalogs,
+    n_tiles_per_side,
+    setting="meta",
+    shear_feature="varying",
+):
     """Convert generated catalogs to TileCatalog object and combine with generated images.
 
     Args:
@@ -51,6 +57,8 @@ def convert_save_images_catalogs(images, catalogs, setting="meta", shear_feature
                 "shear_1": (N, M, 1),
                 "shear_2": (N, M, 1),
             }
+        n_tiles_per_side: int
+            Number of tiles per side
         setting: str
             Name of the simulation setting
         shear_feature: str
@@ -66,7 +74,9 @@ def convert_save_images_catalogs(images, catalogs, setting="meta", shear_feature
     logger.info(f"FullCatalog created in {format_time(time.time() - overall_start_time)}")
 
     logger.info("Step 2/3: Converting to TileCatalog object...")
-    tc = fc.to_tile_catalog(256, max_sources_per_tile=500, filter_oob=True)
+    max_sources = catalogs["shear_1"].shape[1]
+    tile_slen = 2048 // n_tiles_per_side
+    tc = fc.to_tile_catalog(tile_slen, max_sources_per_tile=max_sources, filter_oob=True)
     logger.info(f"TileCatalog created in {format_time(time.time() - overall_start_time)}")
 
     save_folder = (
@@ -82,8 +92,8 @@ def convert_save_images_catalogs(images, catalogs, setting="meta", shear_feature
         start = time.time()
 
         tile_catalog = {
-            "shear_1": compress_shear(tc["shear_1"][idx]),
-            "shear_2": compress_shear(tc["shear_2"][idx]),
+            "shear_1": compress_shear(tc["shear_1"][idx], n_tiles_per_side),
+            "shear_2": compress_shear(tc["shear_2"][idx], n_tiles_per_side),
         }
 
         dict_data = {
@@ -134,6 +144,7 @@ def main():
         convert_save_images_catalogs(
             images,
             catalog,
+            n_tiles_per_side=config["n_tiles_per_side"],
             setting=config["setting"],
             shear_feature=config["shear_setting"],
         )
