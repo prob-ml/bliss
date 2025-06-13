@@ -3,6 +3,15 @@ import math
 from torch import nn
 
 
+class Map(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.map = nn.Linear(in_channels, out_channels)
+
+    def forward(self, x):
+        return self.map(x.permute(0, 2, 3, 1))
+
+
 class RN2Block(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
         super().__init__()

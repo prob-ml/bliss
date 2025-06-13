@@ -20,6 +20,10 @@ class WeakLensingEncoder(Encoder):
         n_tiles_per_side: int,
         ch_init: int,
         ch_max: int,
+        initial_downsample: bool,
+        more_up_layers: bool,
+        num_bottleneck_layers: int,
+        final_layer: str,
         image_normalizers: list,
         var_dist: VariationalDist,
         sample_image_renders: MetricCollection,
@@ -34,6 +38,10 @@ class WeakLensingEncoder(Encoder):
         self.n_tiles_per_side = n_tiles_per_side
         self.ch_init = ch_init
         self.ch_max = ch_max
+        self.initial_downsample = initial_downsample
+        self.more_up_layers = more_up_layers
+        self.num_bottleneck_layers = num_bottleneck_layers
+        self.final_layer = final_layer
 
         super().__init__(
             survey_bands=survey_bands,
@@ -71,6 +79,10 @@ class WeakLensingEncoder(Encoder):
             ch_per_band=ch_per_band,
             ch_init=self.ch_init,
             ch_max=self.ch_max,
+            initial_downsample=self.initial_downsample,
+            more_up_layers=self.more_up_layers,
+            num_bottleneck_layers=self.num_bottleneck_layers,
+            final_layer=self.final_layer,
             n_var_params=self.var_dist.n_params_per_source,
         )
 
