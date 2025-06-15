@@ -7,7 +7,7 @@ defaults:
 mode: train
 
 paths:
-    cached_data: /data/scratch/weak_lensing/weak_lensing_img2048_meta_varying_shear
+    cached_data: /data/scratch/weak_lensing/weak_lensing_img2048_meta_2560_cosmic_badcol_irz_bands_varying_shear
     output: /home/twhit/bliss
 
 cached_simulator:
@@ -22,20 +22,18 @@ variational_factors:
     name: shear_2
     nll_gating: null
 
-my_normalizers:
-    nannorm:
+lensing_normalizers_nan:
+    nan:
         _target_: case_studies.weak_lensing.image_normalizer.NanNormalizer
 
-my_metrics:
-    lensingmetrics:
-        _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
-        num_redshift_bins: 1
+lensing_metrics:
+    _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
+    num_redshift_bins: ${surveys.dc2.num_redshift_bins}
 
-my_render:
-    lensingplots:
-        _target_: case_studies.weak_lensing.plots.WeakLensingPlots
-        frequency: 1
-        save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
+lensing_plots:
+    _target_: case_studies.weak_lensing.plots.WeakLensingPlots
+    frequency: 1
+    save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
 
 encoder:
     _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
@@ -46,12 +44,16 @@ encoder:
     n_tiles_per_side: 8
     ch_init: 64
     ch_max: 512
+    initial_downsample: true
+    more_up_layers: false
+    num_bottleneck_layers: 0
+    final_layer: "conv"
     optimizer_params:
         lr: 1e-3
     scheduler_params:
         milestones: [32]
         gamma: 0.1
-    image_normalizers: ${my_normalizers}
+    image_normalizers: ${lensing_normalizers_nan}
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
         tile_slen: ${encoder.tile_slen}
@@ -59,15 +61,15 @@ encoder:
     mode_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
-        metrics: ${my_metrics}
+        metrics: ${lensing_metrics}
     sample_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
-        metrics: ${my_metrics}
+        metrics: ${lensing_metrics}
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
-        metrics: ${my_render}
+        metrics: ${lensing_plots}
     use_double_detect: false
     use_checkerboard: false
     loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
