@@ -3,6 +3,8 @@ from typing import Optional
 
 import torch
 from matplotlib import pyplot as plt
+from torch.optim import Adam
+from torch.optim.lr_scheduler import ExponentialLR
 from torchmetrics import MetricCollection
 
 from bliss.catalog import BaseTileCatalog
@@ -29,7 +31,7 @@ class WeakLensingEncoder(Encoder):
         mode_metrics: MetricCollection,
         sample_metrics: Optional[MetricCollection] = None,
         optimizer_params: Optional[dict] = None,
-        scheduler_params: Optional[dict] = None,
+        exp_scheduler_params: Optional[dict] = None,
         reference_band: int = 2,
         **kwargs,
     ):
@@ -40,6 +42,7 @@ class WeakLensingEncoder(Encoder):
         self.initial_downsample = initial_downsample
         self.more_up_layers = more_up_layers
         self.num_bottleneck_layers = num_bottleneck_layers
+        self.exp_scheduler_params = exp_scheduler_params
 
         super().__init__(
             survey_bands=survey_bands,
@@ -51,7 +54,7 @@ class WeakLensingEncoder(Encoder):
             mode_metrics=mode_metrics,
             sample_metrics=sample_metrics,
             optimizer_params=optimizer_params,
-            scheduler_params=scheduler_params,
+            scheduler_params=None,
             use_double_detect=False,
             use_checkerboard=False,
             reference_band=reference_band,
@@ -221,3 +224,9 @@ class WeakLensingEncoder(Encoder):
 
         fig.tight_layout()
         fig.savefig(f"{self.loss_plots_location}/train_and_val_loss.png")
+
+    def configure_optimizers(self):
+        """Configure optimizers for training (pytorch lightning)."""
+        optimizer = Adam(self.parameters(), **self.optimizer_params)
+        scheduler = ExponentialLR(optimizer, **self.exp_scheduler_params)
+        return [optimizer], [scheduler]

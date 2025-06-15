@@ -49,9 +49,8 @@ encoder:
     num_bottleneck_layers: 0
     optimizer_params:
         lr: 1e-3
-    scheduler_params:
-        milestones: [32]
-        gamma: 0.1
+    exp_scheduler_params:
+        gamma: 0.95
     image_normalizers: ${lensing_normalizers_nan}
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
