@@ -28,7 +28,7 @@ lensing_normalizers_nan:
 
 lensing_metrics:
     _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
-    num_redshift_bins: ${surveys.dc2.num_redshift_bins}
+    num_redshift_bins: 1
 
 lensing_plots:
     _target_: case_studies.weak_lensing.plots.WeakLensingPlots
