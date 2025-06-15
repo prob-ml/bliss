@@ -9,8 +9,6 @@ class Map(nn.Module):
         self.map = nn.Sequential(
             nn.Conv2d(in_channels, 512, 1, 1, 0, bias=True),
             nn.SiLU(inplace=True),
-            nn.Conv2d(512, 512, 1, 1, 0, bias=True),
-            nn.SiLU(inplace=True),
             nn.Conv2d(512, out_channels, 1, 1, 0, bias=True),
         )
 
