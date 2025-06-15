@@ -6,10 +6,16 @@ from torch import nn
 class Map(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.map = nn.Linear(in_channels, out_channels)
+        self.map = nn.Sequential(
+            nn.Conv2d(in_channels, 512, 1, 1, 0, bias=True),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(512, 512, 1, 1, 0, bias=True),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(512, out_channels, 1, 1, 0, bias=True),
+        )
 
     def forward(self, x):
-        return self.map(x.permute(0, 2, 3, 1))
+        return self.map(x).permute([0, 2, 3, 1])
 
 
 class RN2Block(nn.Module):

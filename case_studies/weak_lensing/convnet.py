@@ -2,7 +2,6 @@ import math
 
 from torch import nn
 
-from bliss.encoder.convnet_layers import Detect
 from case_studies.weak_lensing.convnet_layers import Map, RN2Block
 
 
@@ -19,7 +18,6 @@ class WeakLensingNet(nn.Module):
         initial_downsample,
         more_up_layers,
         num_bottleneck_layers,
-        final_layer,
     ):
         super().__init__()
 
@@ -43,12 +41,9 @@ class WeakLensingNet(nn.Module):
             num_bottleneck_layers,
         )
 
-        self.net = nn.ModuleList(layers)
+        self.resnet_blocks = nn.ModuleList(layers)
 
-        if final_layer == "linear":
-            self.final_layer = Map(ch_final, n_var_params)
-        elif final_layer == "conv":
-            self.final_layer = Detect(ch_final, n_var_params)
+        self.final_layer = Map(ch_final, n_var_params)
 
     def _make_layers(
         self,
@@ -94,8 +89,8 @@ class WeakLensingNet(nn.Module):
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
 
-        for layer in self.net:
-            x = layer(x)
+        for block in self.resnet_blocks:
+            x = block(x)
 
         x = self.final_layer(x)
 
