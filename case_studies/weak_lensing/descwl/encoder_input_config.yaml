@@ -1,5 +1,4 @@
-image_path: /data/scratch/taodingr/weak_lensing/descwl/WLD_density_240/images_WLD_density_240.pt
-catalog_path: /data/scratch/taodingr/weak_lensing/descwl/WLD_density_240/catalog_WLD_density_240.pt
-setting: WLD_density_240
+image_path: /data/scratch/taodingr/weak_lensing/descwl/Test_n_tiles/images_Test_n_tiles.pt
+catalog_path: /data/scratch/taodingr/weak_lensing/descwl/Test_n_tiles/catalog_Test_n_tiles.pt
+setting: Test_n_tiles
 shear_setting: varying
-n_tiles_per_side: 1

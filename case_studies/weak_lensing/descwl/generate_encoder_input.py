@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import torch
 import yaml
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import TileCatalog
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -21,10 +21,8 @@ except ImportError:
         return iterable
 
 
-def compress_shear(shear_tensor, n_tiles_per_side):
-    nonzero_vals = shear_tensor[shear_tensor != 0]
-    unique_val = torch.unique(nonzero_vals)
-    return unique_val.expand(n_tiles_per_side, n_tiles_per_side, 1)
+def compress_shear(shear_tensor):
+    return shear_tensor.mean(dim=2)
 
 
 def format_time(seconds):
@@ -41,7 +39,6 @@ def format_time(seconds):
 def convert_save_images_catalogs(
     images,
     catalogs,
-    n_tiles_per_side,
     setting="meta",
     shear_feature="varying",
 ):
@@ -52,13 +49,11 @@ def convert_save_images_catalogs(
             Loaded image tensors with shape [batch_size, num_of_bands, 2048, 2048]
         catalogs: dict
             {
-                "plocs": (N, num_of_sources, 2),
-                "n_sources": (N,),
-                "shear_1": (N, M, 1),
-                "shear_2": (N, M, 1),
+                "locs": (N, n_tiles_per_side, n_tiles_per_side, max_num_of_sources, 2),
+                "n_sources": (N, n_tiles_per_side, n_tiles_per_side),
+                "shear_1": (N, n_tiles_per_side, n_tiles_per_side, max_num_of_sources, 1),
+                "shear_2": (N, n_tiles_per_side, n_tiles_per_side, max_num_of_sources, 1),
             }
-        n_tiles_per_side: int
-            Number of tiles per side
         setting: str
             Name of the simulation setting
         shear_feature: str
@@ -69,14 +64,8 @@ def convert_save_images_catalogs(
 
     overall_start_time = time.time()
 
-    logger.info("Step 1/3: Generating FullCatalog object...")
-    fc = FullCatalog(2048, 2048, catalogs)
-    logger.info(f"FullCatalog created in {format_time(time.time() - overall_start_time)}")
-
-    logger.info("Step 2/3: Converting to TileCatalog object...")
-    max_sources = catalogs["shear_1"].shape[1]
-    tile_slen = 2048 // n_tiles_per_side
-    tc = fc.to_tile_catalog(tile_slen, max_sources_per_tile=max_sources, filter_oob=True)
+    logger.info("Generating TileCatalog object...")
+    tc = TileCatalog(catalogs)
     logger.info(f"TileCatalog created in {format_time(time.time() - overall_start_time)}")
 
     save_folder = (
@@ -92,8 +81,8 @@ def convert_save_images_catalogs(
         start = time.time()
 
         tile_catalog = {
-            "shear_1": compress_shear(tc["shear_1"][idx], n_tiles_per_side),
-            "shear_2": compress_shear(tc["shear_2"][idx], n_tiles_per_side),
+            "shear_1": compress_shear(tc["shear_1"][idx]),
+            "shear_2": compress_shear(tc["shear_2"][idx]),
         }
 
         dict_data = {
@@ -144,7 +133,6 @@ def main():
         convert_save_images_catalogs(
             images,
             catalog,
-            n_tiles_per_side=config["n_tiles_per_side"],
             setting=config["setting"],
             shear_feature=config["shear_setting"],
         )
