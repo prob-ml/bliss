@@ -50,7 +50,7 @@ encoder:
     optimizer_params:
         lr: 1e-3
     exp_scheduler_params:
-        gamma: 0.95
+        gamma: 0.99
     image_normalizers: ${lensing_normalizers_nan}
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
@@ -83,7 +83,7 @@ train:
         precision: 32-true
     callbacks:
         early_stopping:
-            patience: 100
+            patience: 200
     data_source: ${cached_simulator}
     pretrained_weights: null
     seed: 123123
