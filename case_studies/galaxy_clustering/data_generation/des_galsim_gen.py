@@ -78,6 +78,9 @@ def catalog_gen(cfg):
             os.makedirs(catalog_dir)
 
         filename = f"{data_path}/catalogs/{des_subdir}.cat"
+        if os.path.exists(filename):
+            print(f"Catalog for {des_subdir} already exists, skipping.")
+            continue
         catalog_table = Table.from_pandas(des_catalog)
         astro_ascii.write(catalog_table, filename, format="no_header", overwrite=True)
         print(f"Finished processing tile {i + 1}/{len(os.listdir(des_subdirs))}: {des_subdir}")
@@ -184,13 +187,14 @@ def file_data_gen(cfg):
 
         data.append(
             {
+                'des_subdir': des_subdir,
                 "tile_catalog": tile_catalog_dict,
                 "images": stacked_image,
             }
         )
         catalog_counter += 1
         if catalog_counter == n_catalogs_per_file:
-            stackname = f"{file_path}/file_data_{file_counter}_imagesize_{image_size}_size_{n_catalogs_per_file}.pt"
+            stackname = f"{file_path}/file_data_{file_counter}_destile_{des_subdir}_imagesize_{image_size}_size_{n_catalogs_per_file}.pt"
             torch.save(data, stackname)
             file_counter += 1
             data, catalog_counter = [], 0
