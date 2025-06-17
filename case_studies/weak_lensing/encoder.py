@@ -4,7 +4,7 @@ from typing import Optional
 import torch
 from matplotlib import pyplot as plt
 from torch.optim import Adam
-from torch.optim.lr_scheduler import ExponentialLR
+from torch.optim.lr_scheduler import ChainedScheduler, ConstantLR, ExponentialLR
 from torchmetrics import MetricCollection
 
 from bliss.catalog import BaseTileCatalog
@@ -31,6 +31,7 @@ class WeakLensingEncoder(Encoder):
         mode_metrics: MetricCollection,
         sample_metrics: Optional[MetricCollection] = None,
         optimizer_params: Optional[dict] = None,
+        const_scheduler_params: Optional[dict] = None,
         exp_scheduler_params: Optional[dict] = None,
         reference_band: int = 2,
         **kwargs,
@@ -42,6 +43,7 @@ class WeakLensingEncoder(Encoder):
         self.initial_downsample = initial_downsample
         self.more_up_layers = more_up_layers
         self.num_bottleneck_layers = num_bottleneck_layers
+        self.const_scheduler_params = const_scheduler_params
         self.exp_scheduler_params = exp_scheduler_params
 
         super().__init__(
@@ -228,5 +230,7 @@ class WeakLensingEncoder(Encoder):
     def configure_optimizers(self):
         """Configure optimizers for training (pytorch lightning)."""
         optimizer = Adam(self.parameters(), **self.optimizer_params)
-        scheduler = ExponentialLR(optimizer, **self.exp_scheduler_params)
+        const_scheduler = ConstantLR(optimizer, **self.const_scheduler_params)
+        exp_scheduler = ExponentialLR(optimizer, **self.exp_scheduler_params)
+        scheduler = ChainedScheduler([const_scheduler, exp_scheduler])
         return [optimizer], [scheduler]

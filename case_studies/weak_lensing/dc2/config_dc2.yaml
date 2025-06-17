@@ -58,6 +58,9 @@ encoder:
     num_bottleneck_layers: 0
     optimizer_params:
         lr: 1e-3
+    const_scheduler_params:
+        factor: 1.0
+        total_iters: 32
     exp_scheduler_params:
         gamma: 0.99
     image_normalizers: ${lensing_normalizers_nan}
