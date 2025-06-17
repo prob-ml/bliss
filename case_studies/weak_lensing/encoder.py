@@ -22,6 +22,7 @@ class WeakLensingEncoder(Encoder):
         n_tiles_per_side: int,
         ch_init: int,
         ch_max: int,
+        ch_final: int,
         initial_downsample: bool,
         more_up_layers: bool,
         num_bottleneck_layers: int,
@@ -40,6 +41,7 @@ class WeakLensingEncoder(Encoder):
         self.n_tiles_per_side = n_tiles_per_side
         self.ch_init = ch_init
         self.ch_max = ch_max
+        self.ch_final = ch_final
         self.initial_downsample = initial_downsample
         self.more_up_layers = more_up_layers
         self.num_bottleneck_layers = num_bottleneck_layers
@@ -82,6 +84,7 @@ class WeakLensingEncoder(Encoder):
             ch_per_band=ch_per_band,
             ch_init=self.ch_init,
             ch_max=self.ch_max,
+            ch_final=self.ch_final,
             initial_downsample=self.initial_downsample,
             more_up_layers=self.more_up_layers,
             num_bottleneck_layers=self.num_bottleneck_layers,

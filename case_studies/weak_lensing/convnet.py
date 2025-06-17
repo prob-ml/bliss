@@ -14,6 +14,7 @@ class WeakLensingNet(nn.Module):
         n_tiles_per_side,
         ch_init,
         ch_max,
+        ch_final,
         n_var_params,
         initial_downsample,
         more_up_layers,
@@ -21,7 +22,7 @@ class WeakLensingNet(nn.Module):
     ):
         super().__init__()
 
-        ch_final = 2 ** math.ceil(math.log2(n_var_params))
+        ch_final = max(ch_final, 2 ** math.ceil(math.log2(n_var_params)))
 
         n_image_downsamples = int(math.log2(n_pixels_per_side)) - int(math.log2(n_tiles_per_side))
 
