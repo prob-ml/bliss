@@ -39,9 +39,9 @@ encoder:
     _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
     survey_bands: [r,i,z]
     reference_band: 0
-    tile_slen: 256
+    tile_slen: 2048
     n_pixels_per_side: 2048
-    n_tiles_per_side: 8
+    n_tiles_per_side: 1
     ch_init: 64
     ch_max: 512
     ch_final: 64

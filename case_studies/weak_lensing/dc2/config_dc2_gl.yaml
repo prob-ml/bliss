@@ -53,14 +53,14 @@ encoder:
     n_tiles_per_side: 8
     ch_init: 64
     ch_max: 512
-    ch_final: 64
+    ch_final: 128
     initial_downsample: true
     more_up_layers: false
     num_bottleneck_layers: 0
     optimizer_params:
         lr: 1e-3
     scheduler_params:
-        milestones: [16]
+        milestones: [32]
         gamma: 0.1
     image_normalizers: ${lensing_normalizers_nan}
     var_dist:
