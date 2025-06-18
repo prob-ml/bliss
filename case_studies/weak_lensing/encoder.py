@@ -3,8 +3,6 @@ from typing import Optional
 
 import torch
 from matplotlib import pyplot as plt
-from torch.optim import Adam
-from torch.optim.lr_scheduler import ChainedScheduler, ConstantLR, ExponentialLR
 from torchmetrics import MetricCollection
 
 from bliss.catalog import BaseTileCatalog
@@ -229,11 +227,3 @@ class WeakLensingEncoder(Encoder):
 
         fig.tight_layout()
         fig.savefig(f"{self.loss_plots_location}/train_and_val_loss.png")
-
-    def configure_optimizers(self):
-        """Configure optimizers for training (pytorch lightning)."""
-        optimizer = Adam(self.parameters(), **self.optimizer_params)
-        const_scheduler = ConstantLR(optimizer, **self.const_scheduler_params)
-        exp_scheduler = ExponentialLR(optimizer, **self.exp_scheduler_params)
-        scheduler = ChainedScheduler([const_scheduler, exp_scheduler])
-        return [optimizer], [scheduler]

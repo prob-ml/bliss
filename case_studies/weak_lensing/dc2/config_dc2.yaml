@@ -53,16 +53,15 @@ encoder:
     n_tiles_per_side: 8
     ch_init: 64
     ch_max: 512
+    ch_final: 64
     initial_downsample: true
     more_up_layers: false
     num_bottleneck_layers: 0
     optimizer_params:
         lr: 1e-3
-    const_scheduler_params:
-        factor: 1.0
-        total_iters: 32
-    exp_scheduler_params:
-        gamma: 0.99
+    scheduler_params:
+        milestones: [32,96]
+        gamma: 0.1
     image_normalizers: ${lensing_normalizers_nan}
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
@@ -109,7 +108,7 @@ train:
         logger:
             name: WeakLensingResultsDC2
             version: ${now:%Y-%m-%d_%H-%M}
-        max_epochs: 250
+        max_epochs: 300
         devices: 1
         use_distributed_sampler: false
         precision: 32-true
