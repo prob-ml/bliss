@@ -2,7 +2,7 @@ import math
 
 from torch import nn
 
-from case_studies.weak_lensing.convnet_layers import Map, RN2Block
+from case_studies.weak_lensing.convnet_layers import Map, ResNetBlock
 
 
 class WeakLensingNet(nn.Module):
@@ -60,9 +60,9 @@ class WeakLensingNet(nn.Module):
         more_up_layers,
         num_bottleneck_layers,
     ):
-        layers = [RN2Block(ch_init, ch_init, stride=2 if initial_downsample else 1)]
+        layers = [ResNetBlock(ch_init, ch_init, stride=2 if initial_downsample else 1)]
         if more_up_layers:
-            layers.append(RN2Block(ch_init, ch_init))
+            layers.append(ResNetBlock(ch_init, ch_init))
 
         ch_current = ch_init
         res_current = res_init // 2 if initial_downsample else res_init
@@ -76,13 +76,13 @@ class WeakLensingNet(nn.Module):
             res_prev = res_current
             res_current = max(res_prev // 2, res_midpoint)
 
-            layers.append(RN2Block(ch_prev, ch_current, stride=stride))
+            layers.append(ResNetBlock(ch_prev, ch_current, stride=stride))
             if more_up_layers:
-                layers.append(RN2Block(ch_current, ch_current))
+                layers.append(ResNetBlock(ch_current, ch_current))
 
         # additional bottleneck layers
         for _ in range(num_bottleneck_layers):
-            layers.append(RN2Block(ch_current, ch_current))
+            layers.append(ResNetBlock(ch_current, ch_current))
 
         # ch_max -> ch_final, res_midpoint -> res_final
         num_res_downsamples = int(math.log2(res_midpoint) - math.log2(res_final))
@@ -92,7 +92,7 @@ class WeakLensingNet(nn.Module):
             res_prev = res_current
             res_current = max(res_prev // 2, res_final)
             num_res_downsamples -= 1
-            layers.append(RN2Block(ch_current, ch_current, stride=2))
+            layers.append(ResNetBlock(ch_current, ch_current, stride=2))
         while ch_current > ch_final or res_current > res_final:
             ch_prev = ch_current
             ch_current = max(ch_prev // 2, ch_final)
@@ -101,7 +101,7 @@ class WeakLensingNet(nn.Module):
             res_prev = res_current
             res_current = max(res_prev // 2, res_final)
 
-            layers.append(RN2Block(ch_prev, ch_current, stride=stride))
+            layers.append(ResNetBlock(ch_prev, ch_current, stride=stride))
 
         return layers
 

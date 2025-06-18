@@ -60,7 +60,7 @@ encoder:
     optimizer_params:
         lr: 1e-3
     scheduler_params:
-        milestones: [32,96]
+        milestones: [16,96]
         gamma: 0.1
     image_normalizers: ${lensing_normalizers_nan}
     var_dist:
