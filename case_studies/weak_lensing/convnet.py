@@ -24,7 +24,7 @@ class WeakLensingNet(nn.Module):
 
         ch_final = max(ch_final, 2 ** math.ceil(math.log2(n_var_params)))
 
-        n_image_downsamples = int(math.log2(n_pixels_per_side)) - int(math.log2(n_tiles_per_side))
+        res_midpoint = int(math.sqrt(n_pixels_per_side * n_tiles_per_side))
 
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, ch_init, [ch_per_band, 5, 5], padding=[0, 2, 2]),
@@ -36,7 +36,9 @@ class WeakLensingNet(nn.Module):
             ch_init,
             ch_max,
             ch_final,
-            n_image_downsamples,
+            n_pixels_per_side,
+            res_midpoint,
+            n_tiles_per_side,
             initial_downsample,
             more_up_layers,
             num_bottleneck_layers,
@@ -51,25 +53,30 @@ class WeakLensingNet(nn.Module):
         ch_init,
         ch_max,
         ch_final,
-        n_image_downsamples,
+        res_init,
+        res_midpoint,
+        res_final,
         initial_downsample,
         more_up_layers,
         num_bottleneck_layers,
     ):
         layers = [RN2Block(ch_init, ch_init, stride=2 if initial_downsample else 1)]
-        cur_image_downsamples = int(initial_downsample)
-        ch_current = ch_init
+        if more_up_layers:
+            layers.append(RN2Block(ch_init, ch_init))
 
-        # up from ch_init to ch_max
-        while ch_current < ch_max and cur_image_downsamples < n_image_downsamples:
+        ch_current = ch_init
+        res_current = res_init // 2 if initial_downsample else res_init
+
+        # ch_init -> ch_max, res_init -> res_midpoint
+        while ch_current < ch_max or res_current > res_midpoint:
             ch_prev = ch_current
             ch_current = min(ch_prev * 2, ch_max)
-            stride = 2 if cur_image_downsamples < 3 else 1
 
-            if more_up_layers:
-                layers.append(RN2Block(ch_prev, ch_prev))
+            stride = 2 if res_current > res_midpoint else 1
+            res_prev = res_current
+            res_current = max(res_prev // 2, res_midpoint)
+
             layers.append(RN2Block(ch_prev, ch_current, stride=stride))
-            cur_image_downsamples += stride == 2
             if more_up_layers:
                 layers.append(RN2Block(ch_current, ch_current))
 
@@ -77,13 +84,24 @@ class WeakLensingNet(nn.Module):
         for _ in range(num_bottleneck_layers):
             layers.append(RN2Block(ch_current, ch_current))
 
-        # down from ch_max to ch_final
-        while ch_current > ch_final or cur_image_downsamples < n_image_downsamples:
+        # ch_max -> ch_final, res_midpoint -> res_final
+        num_res_downsamples = int(math.log2(res_midpoint) - math.log2(res_final))
+        num_ch_downsamples = int(math.log2(ch_max) - math.log2(ch_final))
+        res_current = res_midpoint
+        while num_res_downsamples > num_ch_downsamples:
+            res_prev = res_current
+            res_current = max(res_prev // 2, res_final)
+            num_res_downsamples -= 1
+            layers.append(RN2Block(ch_current, ch_current, stride=2))
+        while ch_current > ch_final or res_current > res_final:
             ch_prev = ch_current
             ch_current = max(ch_prev // 2, ch_final)
-            stride = 2 if cur_image_downsamples < n_image_downsamples else 1
+
+            stride = 2 if res_current > res_final else 1
+            res_prev = res_current
+            res_current = max(res_prev // 2, res_final)
+
             layers.append(RN2Block(ch_prev, ch_current, stride=stride))
-            cur_image_downsamples += stride == 2
 
         return layers
 
