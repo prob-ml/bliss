@@ -7,7 +7,7 @@ defaults:
 mode: train
 
 paths:
-    cached_data: /scratch/regier_root/regier0/twhit/data/weak_lensing/weak_lensing_img2048_meta_2560_cosmic_badcol_irz_bands_varying_shear
+    cached_data: /scratch/regier_root/regier0/twhit/data/weak_lensing/weak_lensing_img2048_WLD_density_240_varying_shear
     output: /scratch/regier_root/regier0/twhit/bliss
 
 cached_simulator:
@@ -51,7 +51,7 @@ encoder:
     optimizer_params:
         lr: 1e-3
     scheduler_params:
-        milestones: [16,96]
+        milestones: [16]
         gamma: 0.1
     image_normalizers: ${lensing_normalizers_nan}
     var_dist:
@@ -85,7 +85,7 @@ train:
         precision: 32-true
     callbacks:
         early_stopping:
-            patience: 200
+            patience: 100
     data_source: ${cached_simulator}
     pretrained_weights: null
     seed: 123123
