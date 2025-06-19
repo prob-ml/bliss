@@ -20,6 +20,9 @@ import torch
 # Configuration management
 import hydra
 import multiprocessing
+import csv
+import time
+from multiprocessing import Process, Queue
 
 
 DES_PIXEL_SCALE = 0.263
@@ -88,24 +91,56 @@ def catalog_gen(cfg):
 
 
 def image_gen(cfg, des_subdir, catalog_path):
-    """Generate Galsim images for a specific DES subdirectory.
-    Args:
-        cfg: configuration object containing parameters for image generation
-        des_subdir: specific DES subdirectory to process
-    """
-    args_list = [(
-                band,
-                des_subdir,
-                cfg.data_dir,
-                catalog_path,
-                1,  # nfiles
-                cfg.image_size,  # image_size
-                cfg.psf_model_path,
-                cfg.galsim_confpath
-            ) for band in BANDS]
-    
-    with multiprocessing.Pool(processes=4) as pool:
-        band_paths = pool.starmap(galsim_render_band, args_list)
+    timeout_seconds = 180
+    band_paths = []
+    processes = []
+    queues = []
+
+    for band in BANDS:
+        args = (
+            band, des_subdir, cfg.data_dir, catalog_path,
+            1, cfg.image_size, cfg.psf_model_path, cfg.galsim_confpath
+        )
+        q = Queue()
+        def run_band(args, q):
+            try:
+                q.put(galsim_render_band(*args))
+            except Exception as e:
+                q.put(e)
+        p = Process(target=run_band, args=(args, q))
+        p.start()
+        processes.append((p, q))
+        queues.append(q)
+
+    start = time.time()
+    while time.time() - start < timeout_seconds:
+        if all(not p.is_alive() for p, _ in processes):
+            break
+        time.sleep(1)
+
+    if any(p.is_alive() for p, _ in processes):
+        print(f"Tile {des_subdir} exceeded {timeout_seconds} seconds. Timing out and skipping.")
+        for p, _ in processes:
+            p.terminate()
+            p.join()
+        with open("timeout_tiles.csv", "a", newline='') as f:
+            writer = csv.writer(f)
+            if not os.path.exists("timeout_tiles.csv"):
+                writer.writerow(["tile"])
+            writer.writerow([des_subdir])
+        return None
+
+    for q in queues:
+        result = q.get()
+        if isinstance(result, Exception):
+            with open("timeout_tiles.csv", "a", newline='') as f:
+                writer = csv.writer(f)
+                if not os.path.exists("timeout_tiles.csv"):
+                    writer.writerow(["tile"])
+                writer.writerow([des_subdir])
+            return None
+        band_paths.append(result)
+
     print(f"Finished processing tile: {des_subdir}")
     images = [fits.getdata(p).astype(np.float32) for p in band_paths]
     return torch.stack([torch.from_numpy(im) for im in images])
