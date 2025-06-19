@@ -13,6 +13,7 @@ paths:
 cached_simulator:
     batch_size: 1
     train_transforms: []
+    num_workers: 1
 
 variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
