@@ -194,7 +194,7 @@ def file_data_gen(cfg):
         )
         catalog_counter += 1
         if catalog_counter == n_catalogs_per_file:
-            stackname = f"{file_path}/file_data_{file_counter}_destile_{des_subdir}_imagesize_{image_size}_size_{n_catalogs_per_file}.pt"
+            stackname = f"{file_path}/file_data_{file_counter}_destile_{des_subdir}_imagesize_{image_size}_tilesize_{tile_size}_size_{n_catalogs_per_file}.pt"
             torch.save(data, stackname)
             file_counter += 1
             data, catalog_counter = [], 0
