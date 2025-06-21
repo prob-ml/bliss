@@ -6,7 +6,6 @@ from torch.utils.data import DataLoader, Dataset, DistributedSampler, Sampler
 from torchvision import transforms
 from typing import List
 from torch.utils.data import Dataset, Sampler
-import random
 
 
 class GalaxyClusterCachedSimulatedDataset(Dataset):
@@ -31,13 +30,8 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
             self.buffer_groups: list of lists, each containing tile indices
             self.tile2buf: dict mapping tile_id to buffer_id
         """
-        g = torch.Generator()
-        if epoch_seed is None:            # different order every time
-            g.seed()
-        else:                             # sync DDP / reproducibility
-            g.manual_seed(epoch_seed)
 
-        perm = torch.randperm(len(self.sub_file_paths), generator=g).tolist()
+        perm = torch.randperm(len(self.sub_file_paths)).tolist()
         self.buffer_groups = [
             perm[i : i + self.buffer_size]
             for i in range(0, len(perm), self.buffer_size)
@@ -53,7 +47,6 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
             for buf_id, group in enumerate(self.buffer_groups)
             for local, tile_id in enumerate(group)
         }
-
 
     def _load_tile(self, path):
         with open(path, "rb") as f:
@@ -77,48 +70,27 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
         paths = [self.sub_file_paths[i] for i in tile_ids]
         B = len(tile_ids)
 
-        first = self._load_tile(paths[0])[0] # load first tile to get image shape
-        img_buffer = torch.empty(
-                (B, *first['images'].shape),
-                dtype=first['images'].dtype,
-                device=first['images'].device
-            )
-
-        mem_cat_buffer = torch.empty(
-                (B, *first['tile_catalog']['membership'].shape),
-                dtype=first['tile_catalog']['membership'].dtype,
-                device=first['tile_catalog']['membership'].device
-            )
-
-        img_buffer[0].copy_(first['images'])
-        mem_cat_buffer[0].copy_(first['tile_catalog']['membership'])
-
-        for j, path in enumerate(paths[1:], start=1):
-            tile = self._load_tile(path)[0]
-            img_buffer[j].copy_(tile['images'])
-            mem_cat_buffer[j].copy_(tile['tile_catalog']['membership'])
+        tiles = [self._load_tile(p)[0] for p in paths]  
+        img_buffer = torch.stack([t['images']                       for t in tiles])
+        mem_buffer = torch.stack([t['tile_catalog']['membership']   for t in tiles])
 
         self._buf_data    = {
-            'images': img_buffer.unfold(2, 2816, 1024).unfold(3, 2816, 1024).reshape(img_buffer.size(0), -1,  img_buffer.size(1), 2816, 2816),
-            'tile_catalog': mem_cat_buffer.unfold(1, 11, 4).unfold(2, 11, 4).permute(0, 1, 3, 2, 4, 5, 6).reshape(mem_cat_buffer.size(0), -1, 11, 11, 1, 1),
-
+            'images': img_buffer.unfold(2, 3072, 768).unfold(3, 3072, 768).permute(0,2,3,1,4,5).contiguous().reshape(img_buffer.size(0), -1,  img_buffer.size(1), 3024, 3024),
+            'tile_catalog': mem_buffer.unfold(1, 4, 1).unfold(2, 4, 1).permute(0, 1, 2, 5, 6, 3, 4).contiguous().reshape(mem_buffer.size(0), -1, 11, 11, 1, 1),
         }
         self._cur_buf_idx = buf_idx
-        #self._buf_data = torch.nn.Unfold(self._buf_data, kernel_size=2816, stride=1024)
 
     def __len__(self):
         return len(self.sub_file_paths) * self.num_samples_per_tile
 
     def __getitem__(self, idx):
         tile_idx, sample_idx = divmod(idx, self.num_samples_per_tile)
-
         # Make sure the right buffer is in memory
         self._ensure_buffer(tile_idx)
 
         local_idx = self.tile2local[tile_idx]
         subimage_tile = self._buf_data['images'][local_idx, sample_idx]
         subcat_tile = self._buf_data['tile_catalog'][local_idx, sample_idx]
-
         batch = {
             'images': subimage_tile,
             'tile_catalog': {
@@ -154,8 +126,8 @@ class BufferSampler(Sampler):
             for tile_id in buf:
                 base = tile_id * self.samples_per_tile
                 tile_indices.extend(range(base, base + self.samples_per_tile))
-            random.seed(42)
-            random.shuffle(tile_indices)
+            if self.shuffle:
+                tile_indices = [tile_indices[index] for index in torch.randperm(len(tile_indices)).tolist()]
             for idx in tile_indices:
                 yield idx
 
