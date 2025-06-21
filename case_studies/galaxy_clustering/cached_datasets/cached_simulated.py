@@ -19,7 +19,7 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
         self._cur_buf_idx = -1
         self._buf_data   = None
         # When unfolding a tile with subtile size of 2560 and
-        # step size of 1024, we can sample 64 times per tile.
+        # step size of 1024, we can sample 16 times per tile.
         self.num_samples_per_tile = 64
 
 
@@ -95,7 +95,7 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
             'images': subimage_tile,
             'tile_catalog': {
                 'membership': subcat_tile,
-                'locs': torch.zeros((11,11,1,2), dtype=torch.float32),  # placeholder for locs
+                'locs': torch.zeros((2,2,1,2), dtype=torch.float32),  # placeholder for locs
             }
         }
         return batch
@@ -133,6 +133,42 @@ class BufferSampler(Sampler):
 
     def __len__(self):
         return len(self.dataset)
+
+
+class DistributedBufferSampler(DistributedSampler):
+    def __init__(self, dataset, shuffle=True, seed=0, drop_last=False,
+                 num_replicas=None, rank=None):
+        super().__init__(dataset, num_replicas=num_replicas, rank=rank,
+                         shuffle=shuffle, seed=seed, drop_last=drop_last)
+
+        self.buffer_groups = dataset.buffer_groups
+        if len(self.buffer_groups) == 1:
+            self.buffer_groups = self.buffer_groups * dist.get_world_size()
+        self.samples_per_tile = dataset.num_samples_per_tile
+
+    def __iter__(self):
+        buffers = self.buffer_groups
+
+        assigned_buffers = buffers[self.rank::self.num_replicas]
+
+        print(f"[Rank {self.rank}] Assigned buffers: {assigned_buffers}")
+
+        all_indices = []
+        for buf in assigned_buffers:
+            tile_indices = []
+            for tile_id in buf:
+                base = tile_id * self.samples_per_tile
+                tile_indices.extend(range(base, base + self.samples_per_tile))
+
+            if self.shuffle:
+                # without self.epoch, the shuffle of each epoch would be the same
+                buf_seed = self.seed + hash(tuple(buf)) % (2**31)
+                local_rng = random.Random(buf_seed)
+                local_rng.shuffle(tile_indices)
+
+            all_indices.extend(tile_indices)
+
+        return iter(all_indices)
 
 
 class GalaxyClusterCachedSimulatedDataModule(CachedSimulatedDataModule):
@@ -184,7 +220,11 @@ class GalaxyClusterCachedSimulatedDataModule(CachedSimulatedDataModule):
     def _get_dataloader(self, my_dataset):
         distributed_is_used = dist.is_available() and dist.is_initialized()
         #sampler_type = DistributedChunkingSampler if distributed_is_used else BufferSampler
-        sampler_type = BufferSampler
+        if distributed_is_used:
+            print("Using distributed buffer sampler")
+            sampler_type = DistributedBufferSampler
+        else:
+            sampler_type = BufferSampler
         return DataLoader(
             my_dataset,
             batch_size=self.batch_size,
