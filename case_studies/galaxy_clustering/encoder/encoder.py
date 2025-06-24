@@ -3,8 +3,7 @@ import torch
 from bliss.catalog import BaseTileCatalog, TileCatalog
 from bliss.encoder.encoder import Encoder
 from case_studies.galaxy_clustering.encoder.convnet import (
-    GalaxyClusterCatalogNet,
-    GalaxyClusterFeaturesNet,
+    GalaxyClustersNet,
 )
 
 
@@ -18,18 +17,20 @@ class GalaxyClusterEncoder(Encoder):
         This method can be overridden to use different network architectures.
         `checkerboard_net` and `second_net` can be left as None if not needed.
         """
-        power_of_two = (self.tile_slen != 0) & (self.tile_slen & (self.tile_slen - 1) == 0)
-        assert power_of_two, "tile_slen must be a power of two"
+        #power_of_two = (self.tile_slen != 0) & (self.tile_slen & (self.tile_slen - 1) == 0)
+        #assert power_of_two, "tile_slen must be a power of two"
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         num_features = 256
-        self.net = GalaxyClusterFeaturesNet(
+        self.net = GalaxyClustersNet(
             len(self.survey_bands),
             ch_per_band,
             num_features,  # output dimension
             tile_slen=self.tile_slen,
             downsample_at_front=self.downsample_at_front,
+            features_net_hidden_ch=64,
+            catalog_net_hidden_ch=256,
+            out_channels=self.var_dist.n_params_per_source
         )
-        self.catalog_net = GalaxyClusterCatalogNet(num_features, self.var_dist.n_params_per_source)
 
     def make_context(self, history_cat, history_mask, detection2=False):
         detection_id = (
@@ -57,12 +58,7 @@ class GalaxyClusterEncoder(Encoder):
     def get_features_and_parameters(self, batch):
         input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
         x = torch.cat(input_lst, dim=2)
-        batch_size, _n_bands, h, w = batch["images"].shape[0:4]
-        ht, wt = h // self.tile_slen, w // self.tile_slen
-        x_features = self.net(x)
-        mask = torch.zeros([batch_size, ht, wt])
-        context = self.make_context(None, mask).to("cuda")
-        x_cat_marginal = self.catalog_net(x_features, context)
+        x_features, x_cat_marginal = self.net(x)
         return x_features, x_cat_marginal
 
     def sample(self, batch, use_mode=True):
