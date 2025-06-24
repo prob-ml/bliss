@@ -89,6 +89,11 @@ def catalog_gen(cfg):
         print(f"Finished processing tile {i + 1}/{len(os.listdir(des_subdirs))}: {des_subdir}")
     print("Catalog generation completed.")
 
+def run_band(args, q):
+            try:
+                q.put(galsim_render_band(*args))
+            except Exception as e:
+                q.put(e)
 
 def image_gen(cfg, des_subdir, catalog_path):
     timeout_seconds = 180
@@ -102,11 +107,7 @@ def image_gen(cfg, des_subdir, catalog_path):
             1, cfg.image_size, cfg.psf_model_path, cfg.galsim_confpath
         )
         q = Queue()
-        def run_band(args, q):
-            try:
-                q.put(galsim_render_band(*args))
-            except Exception as e:
-                q.put(e)
+        
         p = Process(target=run_band, args=(args, q))
         p.start()
         processes.append((p, q))
@@ -153,13 +154,11 @@ def file_data_gen(cfg):
     tile_size = int(cfg.tile_size)
     data_dir = cfg.data_dir
     n_catalogs_per_file = int(cfg.n_catalogs_per_file)
-    bands = cfg.bands
     min_flux_for_loss = float(cfg.min_flux_for_loss)
     catalogs_path = Path(f"{data_dir}/catalogs/")
-    images_path = f"{data_dir}/images/"
-    file_path = f"{data_dir}/file_data/"
-    if not os.path.exists(file_path):
-        os.makedirs(file_path)
+    file_dir = f"{data_dir}/file_data/"
+    if not os.path.exists(file_dir):
+        os.makedirs(file_dir)
     n_tiles = math.ceil(image_size / tile_size)
     data: List[Dict] = []
     catalog_counter = 0
@@ -170,6 +169,11 @@ def file_data_gen(cfg):
         catalog_path = catalogs_path / f"{des_subdir}.cat"
         if not catalog_path.exists():
             print(f"Catalog for {des_subdir} does not exist, skipping.")
+            continue
+        file_path = Path(f"{file_dir}/file_data_{file_counter}_destile_{des_subdir}_imagesize_{image_size}_tilesize_{tile_size}_size_{n_catalogs_per_file}.pt")
+        if file_path.exists():
+            print(f"File data for {des_subdir} already exists, skipping.")
+            file_counter += 1
             continue
         catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=COL_NAMES)
         # Cropping the catalog to the desired image size
@@ -229,8 +233,7 @@ def file_data_gen(cfg):
         )
         catalog_counter += 1
         if catalog_counter == n_catalogs_per_file:
-            stackname = f"{file_path}/file_data_{file_counter}_destile_{des_subdir}_imagesize_{image_size}_tilesize_{tile_size}_size_{n_catalogs_per_file}.pt"
-            torch.save(data, stackname)
+            torch.save(data, file_path)
             file_counter += 1
             data, catalog_counter = [], 0
 
