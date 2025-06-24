@@ -18,9 +18,8 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
         self._make_random_buffers()
         self._cur_buf_idx = -1
         self._buf_data   = None
-        # When unfolding a tile with subtile size of 2560 and
-        # step size of 1024, we can sample 16 times per tile.
-        self.num_samples_per_tile = 64
+
+        self.num_samples_per_tile = 16
 
 
     def _make_random_buffers(self, epoch_seed=None):
@@ -42,6 +41,9 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
             for buf_id, group in enumerate(self.buffer_groups)
             for tile_id in group
         }
+        # Reverse map: “tile_id → local index in buffer”
+        # This is used to access the tile in the buffer after loading it.
+        # local index is the index of the tile in the buffer group.
         self.tile2local = {
             tile_id: local
             for buf_id, group in enumerate(self.buffer_groups)
@@ -75,8 +77,8 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
         mem_buffer = torch.stack([t['tile_catalog']['membership']   for t in tiles])
 
         self._buf_data    = {
-            'images': img_buffer.unfold(2, 3072, 768).unfold(3, 3072, 768).permute(0,2,3,1,4,5).contiguous().reshape(img_buffer.size(0), -1,  img_buffer.size(1), 3024, 3024),
-            'tile_catalog': mem_buffer.unfold(1, 4, 1).unfold(2, 4, 1).permute(0, 1, 2, 5, 6, 3, 4).contiguous().reshape(mem_buffer.size(0), -1, 11, 11, 1, 1),
+            'images': img_buffer.unfold(2, 3072, 3*768).unfold(3, 3072, 3*768).permute(0,2,3,1,4,5).contiguous().reshape(img_buffer.size(0), -1,  img_buffer.size(1), 3072, 3072),
+            'tile_catalog': mem_buffer.unfold(1, 4, 3*1).unfold(2, 4, 3*1).permute(0, 1, 2, 5, 6, 3, 4).contiguous().reshape(mem_buffer.size(0), -1, 4, 4, 1),
         }
         self._cur_buf_idx = buf_idx
 
@@ -95,7 +97,7 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
             'images': subimage_tile,
             'tile_catalog': {
                 'membership': subcat_tile,
-                'locs': torch.zeros((2,2,1,2), dtype=torch.float32),  # placeholder for locs
+                'locs': torch.zeros((4,4,1,2), dtype=torch.float32),  # placeholder for locs
             }
         }
         return batch
@@ -163,6 +165,7 @@ class DistributedBufferSampler(DistributedSampler):
             if self.shuffle:
                 # without self.epoch, the shuffle of each epoch would be the same
                 buf_seed = self.seed + hash(tuple(buf)) % (2**31)
+                import random
                 local_rng = random.Random(buf_seed)
                 local_rng.shuffle(tile_indices)
 
