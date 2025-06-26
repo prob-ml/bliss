@@ -19,7 +19,9 @@ class GalaxyClusterEncoder(Encoder):
         """
         #power_of_two = (self.tile_slen != 0) & (self.tile_slen & (self.tile_slen - 1) == 0)
         #assert power_of_two, "tile_slen must be a power of two"
-        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+
+        # ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+        ch_per_band = 1
         num_features = 256
         self.net = GalaxyClustersNet(
             len(self.survey_bands),
@@ -27,7 +29,7 @@ class GalaxyClusterEncoder(Encoder):
             num_features,  # output dimension
             tile_slen=self.tile_slen,
             downsample_at_front=self.downsample_at_front,
-            features_net_hidden_ch=64,
+            features_net_hidden_ch=4,
             catalog_net_hidden_ch=256,
             out_channels=self.var_dist.n_params_per_source
         )
@@ -56,7 +58,8 @@ class GalaxyClusterEncoder(Encoder):
         return torch.concat([detection_id, history_mask.unsqueeze(1), masked_history], dim=1)
 
     def get_features_and_parameters(self, batch):
-        input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
+        # input_lst = [inorm.get_input_tensor(batch) for inorm in self.image_normalizers]
+        input_lst = [batch["images"]]
         x = torch.cat(input_lst, dim=2)
         x_features, x_cat_marginal = self.net(x)
         return x_features, x_cat_marginal

@@ -22,13 +22,13 @@ class ConvBlock(nn.Module):
 class GalaxyClustersNet(nn.Module):
     def __init__(
             self,
-            n_bands, 
-            ch_per_band, 
-            num_features, 
-            tile_slen=2, 
-            downsample_at_front=False, 
+            n_bands,
+            ch_per_band,
+            num_features,
+            tile_slen=2,
+            downsample_at_front=False,
             features_net_hidden_ch=64,
-            catalog_net_hidden_ch=256, 
+            catalog_net_hidden_ch=256,
             out_channels=1
             ):
         super().__init__()
@@ -36,12 +36,14 @@ class GalaxyClustersNet(nn.Module):
         nch_hidden = features_net_hidden_ch
         n_hidden_ch = catalog_net_hidden_ch
 
-        self.avg_pool_layer = nn.AvgPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2), padding=(0, 0, 0))
-        self.preprocess3d = nn.Sequential(
-            nn.Conv3d(n_bands, nch_hidden, [ch_per_band//2, 5, 5], padding=[0, 2, 2]),
-            nn.GroupNorm(num_groups=32, num_channels=nch_hidden),
-            nn.SiLU(),
-        )
+        # average pooling layer
+        # self.avg_pool_layer = nn.AvgPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2), padding=(0, 0, 0))
+        # 3D preprocessing layer
+        # self.preprocess3d = nn.Sequential(
+        #     nn.Conv3d(n_bands, nch_hidden, [ch_per_band//2, 5, 5], padding=[0, 2, 2]),
+        #     nn.GroupNorm(num_groups=32, num_channels=nch_hidden),
+        #     nn.SiLU(),
+        # )
 
         log_tile_size = torch.log2(torch.tensor(tile_slen))
         num_total_downsample = int(torch.round(log_tile_size)) - 1
@@ -95,8 +97,8 @@ class GalaxyClustersNet(nn.Module):
         )
 
     def forward(self, x):
-        x = self.avg_pool_layer(x)
-        x = self.preprocess3d(x).squeeze(2)
+        # x = self.avg_pool_layer(x)
+        # x = self.preprocess3d(x).squeeze(2)
         for layer in self.backbone:
             x = layer(x)
         return x, self.detection_net(x)
