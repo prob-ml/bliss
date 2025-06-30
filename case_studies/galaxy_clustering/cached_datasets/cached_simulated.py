@@ -9,94 +9,33 @@ from torch.utils.data import Dataset, Sampler
 
 
 class GalaxyClusterCachedSimulatedDataset(Dataset):
-    def __init__(self, sub_file_paths, transform=None,
-                 buffer_size=10):
+    def __init__(
+            self, 
+            sub_file_paths,
+            transform=None,
+                 ):
         super().__init__()
-        self.sub_file_paths   = sub_file_paths
+        self.sub_file_paths   = [subtile_filepath for subtile_filepath in sub_file_paths if ("_subtile_" in subtile_filepath and subtile_filepath.endswith(".pt"))]
         self.transform        = transform
-        self.buffer_size      = buffer_size
-        self._make_random_buffers()
-        self._cur_buf_idx = -1
-        self._buf_data   = None
-
-        self.num_samples_per_tile = 16
-
-
-    def _make_random_buffers(self, epoch_seed=None):
-        """
-        Shuffle tiles > slice into random buffers.
-        Saves
-            self.buffer_groups: list of lists, each containing tile indices
-            self.tile2buf: dict mapping tile_id to buffer_id
-        """
-
-        perm = torch.randperm(len(self.sub_file_paths)).tolist()
-        self.buffer_groups = [
-            perm[i : i + self.buffer_size]
-            for i in range(0, len(perm), self.buffer_size)
-        ]
-        # Reverse map: “tile_id → buffer_id”
-        self.tile2buf = {
-            tile_id: buf_id
-            for buf_id, group in enumerate(self.buffer_groups)
-            for tile_id in group
-        }
-        # Reverse map: “tile_id → local index in buffer”
-        # This is used to access the tile in the buffer after loading it.
-        # local index is the index of the tile in the buffer group.
-        self.tile2local = {
-            tile_id: local
-            for buf_id, group in enumerate(self.buffer_groups)
-            for local, tile_id in enumerate(group)
-        }
+        
 
     def _load_tile(self, path):
         with open(path, "rb") as f:
             data = torch.load(f, map_location=torch.device('cpu'))
         return self.transform(data) if self.transform else data
 
-    def _ensure_buffer(self, tile_idx):
-        """
-        Ensure that the buffer containing tile_idx is loaded into memory.
-        This is called by __getitem__ to load the appropriate buffer
-        for the requested tile.
-
-        This version is memory-efficient: it only loads the buffer
-        if it is not already loaded, and it does not keep any
-        intermediate data in memory after use.
-        """
-        buf_idx = self.tile2buf[tile_idx]
-        if buf_idx == self._cur_buf_idx:
-            return
-        tile_ids = self.buffer_groups[buf_idx]
-        paths = [self.sub_file_paths[i] for i in tile_ids]
-        B = len(tile_ids)
-
-        tiles = [self._load_tile(p)[0] for p in paths]  
-        img_buffer = torch.stack([t['images']                       for t in tiles])
-        mem_buffer = torch.stack([t['tile_catalog']['membership']   for t in tiles])
-
-        self._buf_data    = {
-            'images': img_buffer.unfold(2, 3072, 3*768).unfold(3, 3072, 3*768).permute(0,2,3,1,4,5).contiguous().reshape(img_buffer.size(0), -1,  img_buffer.size(1), 3072, 3072),
-            'tile_catalog': mem_buffer.unfold(1, 4, 3*1).unfold(2, 4, 3*1).permute(0, 1, 2, 5, 6, 3, 4).contiguous().reshape(mem_buffer.size(0), -1, 4, 4, 1),
-        }
-        self._cur_buf_idx = buf_idx
-
     def __len__(self):
-        return len(self.sub_file_paths) * self.num_samples_per_tile
+        return len(self.sub_file_paths)
 
     def __getitem__(self, idx):
-        tile_idx, sample_idx = divmod(idx, self.num_samples_per_tile)
-        # Make sure the right buffer is in memory
-        self._ensure_buffer(tile_idx)
 
-        local_idx = self.tile2local[tile_idx]
-        subimage_tile = self._buf_data['images'][local_idx, sample_idx]
-        subcat_tile = self._buf_data['tile_catalog'][local_idx, sample_idx]
+        subtile_data = self._load_tile(self.sub_file_paths[idx])
+        if subtile_data is None:
+            raise ValueError(f"Data at index {idx} is None. Check the file path: {self.sub_file_paths[idx]}")
         batch = {
-            'images': subimage_tile,
+            'images': subtile_data['images'],
             'tile_catalog': {
-                'membership': subcat_tile,
+                'membership': subtile_data['tile_catalog']['membership'].squeeze(-1),
                 'locs': torch.zeros((4,4,1,2), dtype=torch.float32),  # placeholder for locs
             }
         }
@@ -104,75 +43,28 @@ class GalaxyClusterCachedSimulatedDataset(Dataset):
 
 
 
-class BufferSampler(Sampler):
-    """
-    Yields sample indices so that a worker consumes all samples from buffer-0,
-    then buffer-1, …  Buffers themselves are randomised every epoch.
-    """
+class GalaxyClusterSampler(Sampler):
+    """Sampler for galaxy cluster datasets that ensures each sample is unique."""
+    def __init__(self, dataset):
+        self.dataset = dataset
 
-    def __init__(self, dataset, shuffle=True):
-        self.dataset          = dataset
-        self.samples_per_tile = self.dataset.num_samples_per_tile
-        self.buffer_size      = self.dataset.buffer_size
-        self.shuffle          = shuffle
-        self.epoch            = 0
-
-    def set_epoch(self, epoch: int):
-        self.epoch = epoch
 
     def __iter__(self):
-
-        # Yield indices randomly from buffers.
-        for buf in self.dataset.buffer_groups:
-            tile_indices = []
-            for tile_id in buf:
-                base = tile_id * self.samples_per_tile
-                tile_indices.extend(range(base, base + self.samples_per_tile))
-            if self.shuffle:
-                tile_indices = [tile_indices[index] for index in torch.randperm(len(tile_indices)).tolist()]
-            for idx in tile_indices:
-                yield idx
+        for i in range(0, len(self.dataset)):
+            yield i
 
     def __len__(self):
         return len(self.dataset)
-
-
-class DistributedBufferSampler(DistributedSampler):
-    def __init__(self, dataset, shuffle=True, seed=0, drop_last=False,
-                 num_replicas=None, rank=None):
-        super().__init__(dataset, num_replicas=num_replicas, rank=rank,
-                         shuffle=shuffle, seed=seed, drop_last=drop_last)
-
-        self.buffer_groups = dataset.buffer_groups
-        if len(self.buffer_groups) == 1:
-            self.buffer_groups = self.buffer_groups * dist.get_world_size()
-        self.samples_per_tile = dataset.num_samples_per_tile
+    
+class DistributedGalaxyClusterSampler(DistributedSampler):
+    """Distributed sampler for galaxy cluster datasets."""
+    def __init__(self, dataset, num_replicas=None, rank=None, shuffle=True):
+        super().__init__(dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle)
+        self.dataset = dataset
 
     def __iter__(self):
-        buffers = self.buffer_groups
-
-        assigned_buffers = buffers[self.rank::self.num_replicas]
-
-        print(f"[Rank {self.rank}] Assigned buffers: {assigned_buffers}")
-
-        all_indices = []
-        for buf in assigned_buffers:
-            tile_indices = []
-            for tile_id in buf:
-                base = tile_id * self.samples_per_tile
-                tile_indices.extend(range(base, base + self.samples_per_tile))
-
-            if self.shuffle:
-                # without self.epoch, the shuffle of each epoch would be the same
-                buf_seed = self.seed + hash(tuple(buf)) % (2**31)
-                import random
-                local_rng = random.Random(buf_seed)
-                local_rng.shuffle(tile_indices)
-
-            all_indices.extend(tile_indices)
-
-        return iter(all_indices)
-
+        indices = list(super().__iter__())
+        return iter(indices)
 
 class GalaxyClusterCachedSimulatedDataModule(CachedSimulatedDataModule):
     """Data module for cached simulated galaxy cluster datasets."""
@@ -217,20 +109,20 @@ class GalaxyClusterCachedSimulatedDataModule(CachedSimulatedDataModule):
         return GalaxyClusterCachedSimulatedDataset(
             sub_file_paths=sub_file_paths,
             transform=transform,
-            buffer_size=self.buffer_size,
         )
 
     def _get_dataloader(self, my_dataset):
         distributed_is_used = dist.is_available() and dist.is_initialized()
         #sampler_type = DistributedChunkingSampler if distributed_is_used else BufferSampler
         if distributed_is_used:
-            print("Using distributed buffer sampler")
-            sampler_type = DistributedBufferSampler
+            print("Using distributed sampler")
+            sampler_type = DistributedGalaxyClusterSampler
         else:
-            sampler_type = BufferSampler
+            sampler_type = GalaxyClusterSampler
         return DataLoader(
             my_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             sampler=sampler_type(my_dataset),
+            #prefetch_factor=2,
         )
