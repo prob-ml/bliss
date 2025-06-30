@@ -12,7 +12,7 @@ from astropy.table import Table
 from case_studies.galaxy_clustering.data_generation.prior import Prior
 # Render Galsim images for galaxy clustering
 from bliss.catalog import FullCatalog
-from case_studies.galaxy_clustering.data_generation.gen_utils import galsim_render_band
+from case_studies.galaxy_clustering.data_generation.gen_utils import run_band, check_existing_and_load_meta, slice_and_save_subtiles
 # Generate file data (with tile catalogs and images) for galaxy clustering
 import numpy as np
 import pandas as pd
@@ -89,12 +89,6 @@ def catalog_gen(cfg):
         print(f"Finished processing tile {i + 1}/{len(os.listdir(des_subdirs))}: {des_subdir}")
     print("Catalog generation completed.")
 
-def run_band(args, q):
-            try:
-                q.put(galsim_render_band(*args))
-            except Exception as e:
-                q.put(e)
-
 def image_gen(cfg, des_subdir, catalog_path):
     timeout_seconds = 180
     band_paths = []
@@ -157,55 +151,32 @@ def file_data_gen(cfg):
     catalogs_path = Path(f"{data_dir}/catalogs/")
     file_dir = Path(f"{data_dir}/file_data/")
     file_dir.mkdir(parents=True, exist_ok=True)
+
     n_tiles = math.ceil(image_size / tile_size)
     subtile_size = 4
     stride = 3
     n_subtiles_per_tile = ((n_tiles - subtile_size) // stride + 1) ** 2
 
-    # Helper function to check if subtile files already exist
-    def subtile_file_exists(des_subdir):
-        for idx in range(n_subtiles_per_tile):
-            path = file_dir / f"file_data_*_destile_{des_subdir}_imagesize_{image_size}_tilesize_{tile_size}_subtile_{idx}.pt"
-            if not any(path.parent.glob(path.name)):
-                return False
-        return True
-
+    file_counter = 0
     for des_subdir in tqdm(sorted(os.listdir(cfg.desdr_subdirs))):
-        # Check if the subtiles already exist
-        if subtile_file_exists(des_subdir):
-            print(f"All subtiles for {des_subdir} already exist. Skipping.")
+        result = check_existing_and_load_meta(
+            file_dir,
+            catalogs_path,
+            des_subdir,
+            n_subtiles_per_tile,
+            des_image_size,
+            image_size,
+            tile_size
+        )
+
+        if result is None:
             continue
 
-        # Look for full file instead
-        full_tile_path = next(file_dir.glob(f"file_data_*_destile_{des_subdir}_imagesize_{image_size}_size_1.pt"), None)
-        if full_tile_path is not None:
-            print(f"Found full file for {des_subdir}, slicing into subtiles...")
-            data = torch.load(full_tile_path)
-            if isinstance(data, list):
-                data = data[0]
-            stacked_image = data["images"]
-            if stacked_image is None:
-                print(f"Skipping {des_subdir} due to None image.")
-                continue
-            tile_catalog_dict = data["tile_catalog"]
-        else:
-            catalog_path = catalogs_path / f"{des_subdir}.cat"
-            if not catalog_path.exists():
-                print(f"Catalog for {des_subdir} does not exist, skipping.")
-                continue
+        if result["type"] == "full_file":
+            stacked_image, tile_catalog_dict = result["images"], result["tile_catalog"]
 
-            catalog = pd.read_csv(catalog_path, sep=" ", header=None, names=COL_NAMES)
-            if des_image_size != image_size:
-                offset = (des_image_size - image_size) // 2
-                catalog["X"] -= offset
-                catalog["Y"] -= offset
-                catalog = catalog[(catalog["X"] >= 0) & (catalog["Y"] >= 0) &
-                                  (catalog["X"] < image_size) & (catalog["Y"] < image_size)]
-                cropped_cat = catalogs_path / f"{des_subdir}_cropped_{image_size}.cat"
-                catalog.to_csv(cropped_cat, sep=" ", index=False, header=False)
-            else:
-                cropped_cat = catalog_path
-
+        elif result["type"] == "catalog":
+            catalog, cropped_cat = result["catalog"], result["cropped_cat"]
             stacked_image = image_gen(cfg, des_subdir, cropped_cat)
             if stacked_image is None:
                 print(f"Skipping {des_subdir} due to None image.")
@@ -234,36 +205,18 @@ def file_data_gen(cfg):
                     )
                     membership_array[tile_coord_x, tile_coord_y] = True
 
-            tile_catalog["membership"] = (
-                torch.tensor(membership_array).unsqueeze(0).unsqueeze(3).unsqueeze(4)
-            )
+            tile_catalog["membership"] = torch.tensor(membership_array).unsqueeze(0).unsqueeze(3).unsqueeze(4)
             tile_catalog_dict = {key: torch.squeeze(val, 0) for key, val in tile_catalog.items()}
 
-        # Slice into subtiles
-        subtile_idx = 0
-        for i in range(0, n_tiles - subtile_size + 1, stride):
-            for j in range(0, n_tiles - subtile_size + 1, stride):
-                subtile_catalog = {
-                    key: val[i:i + subtile_size, j:j + subtile_size]
-                    for key, val in tile_catalog_dict.items()
-                }
-                y_start = i * tile_size
-                y_end = y_start + subtile_size * tile_size
-                x_start = j * tile_size
-                x_end = x_start + subtile_size * tile_size
-                subtile_image = stacked_image[:, y_start:y_end, x_start:x_end]
+        else:
+            continue
 
-                subtile_data = {
-                    "des_subdir": des_subdir,
-                    "tile_catalog": subtile_catalog,
-                    "images": subtile_image,
-                }
+        file_counter = slice_and_save_subtiles(
+            file_dir, stacked_image, tile_catalog_dict,
+            des_subdir, file_counter, n_tiles,
+            subtile_size, stride, tile_size, image_size
+        )
 
-                subtile_path = file_dir / f"file_data_{file_counter}_destile_{des_subdir}_imagesize_{image_size}_tilesize_{tile_size}_subtile_{subtile_idx}.pt"
-                torch.save(subtile_data, subtile_path)
-                subtile_idx += 1
-
-        file_counter += 1
 
 
 @hydra.main(config_path="../conf", config_name="config", version_base=None)
