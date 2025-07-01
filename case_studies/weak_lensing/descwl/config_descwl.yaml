@@ -7,7 +7,7 @@ defaults:
 mode: train
 
 paths:
-    cached_data: /nfs/turbo/lsa-regier/scratch/taodingr/weak_lensing_img2048_WLD_density_240_varying_shear
+    cached_data: /nfs/turbo/lsa-regier/scratch/taodingr/weak_lensing_img2048_WLD_density_80_1x1_varying_shear
     output: /home/twhit/bliss
 
 cached_simulator:
