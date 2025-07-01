@@ -7,12 +7,13 @@ defaults:
 mode: train
 
 paths:
-    cached_data: /scratch/regier_root/regier0/twhit/data/weak_lensing/weak_lensing_img2048_meta_varying_shear
+    cached_data: /scratch/regier_root/regier0/twhit/data/weak_lensing/weak_lensing_img2048_WLD_density_240_varying_shear
     output: /scratch/regier_root/regier0/twhit/bliss
 
 cached_simulator:
     batch_size: 1
     train_transforms: []
+    num_workers: 1
 
 variational_factors:
   - _target_: bliss.encoder.variational_dist.NormalFactor
@@ -22,36 +23,38 @@ variational_factors:
     name: shear_2
     nll_gating: null
 
-my_normalizers:
-    nannorm:
+lensing_normalizers_nan:
+    nan:
         _target_: case_studies.weak_lensing.image_normalizer.NanNormalizer
 
-my_metrics:
-    lensingmetrics:
-        _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
-        num_redshift_bins: 1
+lensing_metrics:
+    _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
+    num_redshift_bins: 1
 
-my_render:
-    lensingplots:
-        _target_: case_studies.weak_lensing.plots.WeakLensingPlots
-        frequency: 1
-        save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
+lensing_plots:
+    _target_: case_studies.weak_lensing.plots.WeakLensingPlots
+    frequency: 1
+    save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
 
 encoder:
     _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
-    survey_bands: [i]
+    survey_bands: [r,i,z]
     reference_band: 0
-    tile_slen: 256
+    tile_slen: 2048
     n_pixels_per_side: 2048
-    n_tiles_per_side: 8
+    n_tiles_per_side: 1
     ch_init: 64
     ch_max: 512
+    ch_final: 64
+    initial_downsample: true
+    more_up_layers: false
+    num_bottleneck_layers: 0
     optimizer_params:
         lr: 1e-3
     scheduler_params:
-        milestones: [32]
+        milestones: [16]
         gamma: 0.1
-    image_normalizers: ${my_normalizers}
+    image_normalizers: ${lensing_normalizers_nan}
     var_dist:
         _target_: bliss.encoder.variational_dist.VariationalDist
         tile_slen: ${encoder.tile_slen}
@@ -59,15 +62,15 @@ encoder:
     mode_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
-        metrics: ${my_metrics}
+        metrics: ${lensing_metrics}
     sample_metrics:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
-        metrics: ${my_metrics}
+        metrics: ${lensing_metrics}
     sample_image_renders:
         _target_: torchmetrics.MetricCollection
         _convert_: partial
-        metrics: ${my_render}
+        metrics: ${lensing_plots}
     use_double_detect: false
     use_checkerboard: false
     loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
@@ -77,7 +80,7 @@ train:
         logger:
             name: WeakLensingResultsDescwl
             version: ${now:%Y-%m-%d_%H-%M}
-        max_epochs: 250
+        max_epochs: 300
         devices: 1
         use_distributed_sampler: false
         precision: 32-true

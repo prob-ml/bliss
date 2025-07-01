@@ -278,7 +278,9 @@ class LensingDC2DataModule(DC2DataModule):
 
         tile_dict["shear_1"] = shear1
         tile_dict["shear_2"] = shear2
+        tile_dict["shear1_shear2"] = torch.cat([shear1, shear2], dim=-1)
         tile_dict["convergence"] = convergence
+        tile_dict["shear1_shear2_convergence"] = torch.cat([shear1, shear2, convergence], dim=-1)
         tile_dict["ellip_lensed"] = ellip_lensed
         tile_dict["ellip_lsst"] = ellip_lsst
         tile_dict["ellip_lsst_wavg"] = compute_weighted_avg_ellip(

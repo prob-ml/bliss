@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import torch
 import yaml
 
-from bliss.catalog import FullCatalog
+from bliss.catalog import TileCatalog
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -17,14 +17,12 @@ try:
 except ImportError:
     logger.info("tqdm not installed. Install with: pip install tqdm")
 
-    def tqdm(iterable, desc="", total=None):
+    def tqdm(iterable, desc="", total=None):  # noqa: WPS440
         return iterable
 
 
 def compress_shear(shear_tensor):
-    nonzero_vals = shear_tensor[shear_tensor != 0]
-    unique_val = torch.unique(nonzero_vals)
-    return unique_val.expand(8, 8, 1)
+    return shear_tensor.mean(dim=2)
 
 
 def format_time(seconds):
@@ -38,7 +36,12 @@ def format_time(seconds):
     return f"{hours:.1f}h"
 
 
-def convert_save_images_catalogs(images, catalogs, setting="meta", shear_feature="varying"):
+def convert_save_images_catalogs(
+    images,
+    catalogs,
+    setting="meta",
+    shear_feature="varying",
+):
     """Convert generated catalogs to TileCatalog object and combine with generated images.
 
     Args:
@@ -46,10 +49,10 @@ def convert_save_images_catalogs(images, catalogs, setting="meta", shear_feature
             Loaded image tensors with shape [batch_size, num_of_bands, 2048, 2048]
         catalogs: dict
             {
-                "plocs": (N, num_of_sources, 2),
-                "n_sources": (N,),
-                "shear_1": (N, M, 1),
-                "shear_2": (N, M, 1),
+                "locs": (N, n_tiles_per_side, n_tiles_per_side, max_num_of_sources, 2),
+                "n_sources": (N, n_tiles_per_side, n_tiles_per_side),
+                "shear_1": (N, n_tiles_per_side, n_tiles_per_side, max_num_of_sources, 1),
+                "shear_2": (N, n_tiles_per_side, n_tiles_per_side, max_num_of_sources, 1),
             }
         setting: str
             Name of the simulation setting
@@ -61,12 +64,8 @@ def convert_save_images_catalogs(images, catalogs, setting="meta", shear_feature
 
     overall_start_time = time.time()
 
-    logger.info("Step 1/3: Generating FullCatalog object...")
-    fc = FullCatalog(2048, 2048, catalogs)
-    logger.info(f"FullCatalog created in {format_time(time.time() - overall_start_time)}")
-
-    logger.info("Step 2/3: Converting to TileCatalog object...")
-    tc = fc.to_tile_catalog(256, max_sources_per_tile=500, filter_oob=True)
+    logger.info("Generating TileCatalog object...")
+    tc = TileCatalog(catalogs)
     logger.info(f"TileCatalog created in {format_time(time.time() - overall_start_time)}")
 
     save_folder = (

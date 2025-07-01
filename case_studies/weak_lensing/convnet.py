@@ -2,8 +2,7 @@ import math
 
 from torch import nn
 
-from bliss.encoder.convnet_layers import Detect
-from case_studies.weak_lensing.convnet_layers import RN2Block
+from case_studies.weak_lensing.convnet_layers import Map, ResNetBlock
 
 
 class WeakLensingNet(nn.Module):
@@ -15,14 +14,17 @@ class WeakLensingNet(nn.Module):
         n_tiles_per_side,
         ch_init,
         ch_max,
+        ch_final,
         n_var_params,
+        initial_downsample,
+        more_up_layers,
+        num_bottleneck_layers,
     ):
         super().__init__()
 
-        ch_final = 2 ** math.ceil(math.log2(n_var_params))
+        ch_final = max(ch_final, 2 ** math.ceil(math.log2(n_var_params)))
 
-        n_image_downsamples = int(math.log2(n_pixels_per_side)) - int(math.log2(n_tiles_per_side))
-        cur_image_downsamples = 0
+        res_midpoint = int(math.sqrt(n_pixels_per_side * n_tiles_per_side))
 
         self.preprocess3d = nn.Sequential(
             nn.Conv3d(n_bands, ch_init, [ch_per_band, 5, 5], padding=[0, 2, 2]),
@@ -30,48 +32,85 @@ class WeakLensingNet(nn.Module):
             nn.SiLU(),
         )
 
-        layers = [RN2Block(ch_init, ch_init)]
+        layers = self._make_layers(
+            ch_init,
+            ch_max,
+            ch_final,
+            n_pixels_per_side,
+            res_midpoint,
+            n_tiles_per_side,
+            initial_downsample,
+            more_up_layers,
+            num_bottleneck_layers,
+        )
+
+        self.resnet_blocks = nn.ModuleList(layers)
+
+        self.final_layer = Map(ch_final, n_var_params)
+
+    def _make_layers(
+        self,
+        ch_init,
+        ch_max,
+        ch_final,
+        res_init,
+        res_midpoint,
+        res_final,
+        initial_downsample,
+        more_up_layers,
+        num_bottleneck_layers,
+    ):
+        layers = [ResNetBlock(ch_init, ch_init, stride=2 if initial_downsample else 1)]
+        if more_up_layers:
+            layers.append(ResNetBlock(ch_init, ch_init))
 
         ch_current = ch_init
+        res_current = res_init // 2 if initial_downsample else res_init
 
-        # up from ch_init to ch_max
-        while ch_current < ch_max and cur_image_downsamples < n_image_downsamples:
+        # ch_init -> ch_max, res_init -> res_midpoint
+        while ch_current < ch_max or res_current > res_midpoint:
             ch_prev = ch_current
             ch_current = min(ch_prev * 2, ch_max)
 
-            stride = 2 if cur_image_downsamples < 3 else 1
+            stride = 2 if res_current > res_midpoint else 1
+            res_prev = res_current
+            res_current = max(res_prev // 2, res_midpoint)
 
-            layers.append(RN2Block(ch_prev, ch_prev))
-
-            layers.append(RN2Block(ch_prev, ch_current, stride=stride))
-            cur_image_downsamples += stride == 2
-
-            layers.append(RN2Block(ch_current, ch_current))
+            layers.append(ResNetBlock(ch_prev, ch_current, stride=stride))
+            if more_up_layers:
+                layers.append(ResNetBlock(ch_current, ch_current))
 
         # additional bottleneck layers
-        layers.append(RN2Block(ch_current, ch_current))
-        layers.append(RN2Block(ch_current, ch_current))
-        layers.append(RN2Block(ch_current, ch_current))
+        for _ in range(num_bottleneck_layers):
+            layers.append(ResNetBlock(ch_current, ch_current))
 
-        # down from ch_max to ch_final
-        while ch_current > ch_final or cur_image_downsamples < n_image_downsamples:
+        # ch_max -> ch_final, res_midpoint -> res_final
+        num_res_downsamples = int(math.log2(res_midpoint) - math.log2(res_final))
+        num_ch_downsamples = int(math.log2(ch_max) - math.log2(ch_final))
+        res_current = res_midpoint
+        while num_res_downsamples > num_ch_downsamples:
+            res_prev = res_current
+            res_current = max(res_prev // 2, res_final)
+            num_res_downsamples -= 1
+            layers.append(ResNetBlock(ch_current, ch_current, stride=2))
+        while ch_current > ch_final or res_current > res_final:
             ch_prev = ch_current
             ch_current = max(ch_prev // 2, ch_final)
 
-            stride = 2 if cur_image_downsamples < n_image_downsamples else 1
+            stride = 2 if res_current > res_final else 1
+            res_prev = res_current
+            res_current = max(res_prev // 2, res_final)
 
-            layers.append(RN2Block(ch_prev, ch_current, stride=stride))
-            cur_image_downsamples += stride == 2
+            layers.append(ResNetBlock(ch_prev, ch_current, stride=stride))
 
-        self.net = nn.ModuleList(layers)
-        self.detect = Detect(ch_final, n_var_params)
+        return layers
 
     def forward(self, x):
         x = self.preprocess3d(x).squeeze(2)
 
-        for layer in self.net:
-            x = layer(x)
+        for block in self.resnet_blocks:
+            x = block(x)
 
-        x = self.detect(x)
+        x = self.final_layer(x)
 
         return x
