@@ -167,6 +167,116 @@ class DetectionRecallwrtBlendedness(GeneralBinMetric):
         }
 
 
+class DetectionwrtBlendedness(GeneralBinMetric):
+    def __init__(self, bin_cutoffs: list, exclude_last_bin: bool = False) -> None:
+        super().__init__(bin_cutoffs, exclude_last_bin)
+        assert self.bin_cutoffs, "bin_cutoffs can't be none or empty"
+
+        detection_metrics = [
+            "n_true_sources",
+            "n_est_sources",
+            "n_true_matches",
+            "n_est_matches",
+        ]
+        for metric in detection_metrics:
+            self.add_bin_state(metric)
+
+    def update(self, true_cat, est_cat, matching):
+        assert isinstance(true_cat, FullCatalog), "true_cat should be FullCatalog"
+        assert isinstance(est_cat, FullCatalog), "est_cat should be FullCatalog"
+
+        true_blendedness = true_cat["blendedness_new"].squeeze(-1)
+        est_blendedness = est_cat["blendedness_new"].squeeze(-1)
+
+        for i in range(true_cat.batch_size):
+            tcat_matches, ecat_matches = matching[i]
+            error_msg = "tcat_matches and ecat_matches should be of the same size"
+            assert len(tcat_matches) == len(ecat_matches), error_msg
+            tcat_matches, ecat_matches = tcat_matches.to(device=self.device), ecat_matches.to(
+                device=self.device
+            )
+            n_true = true_cat["n_sources"][i].sum().item()
+            n_est = est_cat["n_sources"][i].sum().item()
+
+            cur_batch_true_blendedness = true_blendedness[i, :n_true]
+            true_sources_bin_indexes = self.bucketize(cur_batch_true_blendedness)
+            true_matches_bin_indexes = true_sources_bin_indexes[tcat_matches]
+            self.n_true_sources += self.bincount(true_sources_bin_indexes)
+            self.n_true_matches += self.bincount(true_matches_bin_indexes)
+
+            cur_batch_est_blendedness = est_blendedness[i, :n_est]
+            est_sources_bin_indexes = self.bucketize(cur_batch_est_blendedness)
+            est_matches_bin_indexes = est_sources_bin_indexes[ecat_matches]
+            self.n_est_sources += self.bincount(est_sources_bin_indexes)
+            self.n_est_matches += self.bincount(est_matches_bin_indexes)
+
+    def compute(self):
+        n_est_matches = self.get_state_for_report("n_est_matches")
+        n_true_matches = self.get_state_for_report("n_true_matches")
+        n_est_sources = self.get_state_for_report("n_est_sources")
+        n_true_sources = self.get_state_for_report("n_true_sources")
+
+        precision_per_bin = (n_est_matches / n_est_sources).nan_to_num(0)
+        recall_per_bin = (n_true_matches / n_true_sources).nan_to_num(0)
+        f1_per_bin = (
+            2 * precision_per_bin * recall_per_bin / (precision_per_bin + recall_per_bin)
+        ).nan_to_num(0)
+
+        precision = (n_est_matches.sum() / n_est_sources.sum()).nan_to_num(0)
+        recall = (n_true_matches.sum() / n_true_sources.sum()).nan_to_num(0)
+        f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
+
+        precision_bin_results = {
+            f"detection_precision_blendedness_bin_{i}": bin_precision
+            for i, bin_precision in enumerate(precision_per_bin)
+        }
+        recall_bin_results = {
+            f"detection_recall_blendedness_bin_{i}": bin_recall
+            for i, bin_recall in enumerate(recall_per_bin)
+        }
+        f1_bin_results = {
+            f"detection_f1_blendedness_bin_{i}": bin_f1 for i, bin_f1 in enumerate(f1_per_bin)
+        }
+
+        return {
+            "detection_precision_blendedness": precision,
+            "detection_recall_blendedness": recall,
+            "detection_f1_blendedness": f1,
+            **precision_bin_results,
+            **recall_bin_results,
+            **f1_bin_results,
+        }
+
+    def get_results_on_per_bin(self):
+        n_true_matches = self.get_state_for_report("n_true_matches")
+        n_true_sources = self.get_state_for_report("n_true_sources")
+        n_est_matches = self.get_state_for_report("n_est_matches")
+        n_est_sources = self.get_state_for_report("n_est_sources")
+
+        recall = (n_true_matches / n_true_sources).nan_to_num(0)
+        precision = (n_est_matches / n_est_sources).nan_to_num(0)
+        f1 = (2 * precision * recall / (precision + recall)).nan_to_num(0)
+
+        return {
+            "detection_precision_blendedness": precision,
+            "detection_recall_blendedness": recall,
+            "detection_f1_blendedness": f1,
+        }
+
+    def get_internal_states(self):
+        n_true_sources = self.get_state_for_report("n_true_sources")
+        n_est_sources = self.get_state_for_report("n_est_sources")
+        n_true_matches = self.get_state_for_report("n_true_matches")
+        n_est_matches = self.get_state_for_report("n_est_matches")
+
+        return {
+            "n_true_sources": n_true_sources,
+            "n_est_sources": n_est_sources,
+            "n_true_matches": n_true_matches,
+            "n_est_matches": n_est_matches,
+        }
+
+
 class Cosmodc2Filter(CatFilter):
     def get_cur_filter_bools(self, true_cat, est_cat):
         true_filter_bools = true_cat["cosmodc2_mask"].squeeze(2)

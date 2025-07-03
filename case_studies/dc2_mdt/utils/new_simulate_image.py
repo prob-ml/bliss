@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from torch.distributions import Poisson, Categorical, Uniform
+from torch.distributions import Poisson, Categorical, Gamma, MixtureSameFamily, Uniform
 from einops import repeat
 
 
@@ -12,8 +12,6 @@ class ConstantLocsPrior:
     def sample(self, sample_shape):
         mid_point = (self.low + self.high) / 2
         m = sample_shape[-1]
-        # mid_point = torch.stack([mid_point + 0.5 * i for i in range(m)], dim=0)
-        # assert (mid_point <= self.high).all()
         mid_point = torch.stack([mid_point for _ in range(m)], dim=0)
         sample_shape_dict = {f"s{i}": s 
                              for i, s in enumerate(sample_shape[:-1])}
@@ -28,8 +26,9 @@ class CatalogPrior:
         max_objects: int,
         img_height: int,
         img_width: int,
-        min_flux: float,
         pad: int,
+        flux_alpha: float,
+        flux_beta: float,
     ):
         self.max_objects = max_objects
         self.count_dim = self.max_objects + 1
@@ -38,11 +37,10 @@ class CatalogPrior:
         self.img_width = img_width
         self.pad = pad
 
-        self.min_flux = torch.tensor(min_flux)
-
-        self.count_prior = Categorical(torch.eye(self.count_dim)[-1])
-        # self.count_prior = Categorical(torch.tensor([0.0] + [1 / self.max_objects for _ in range(self.max_objects)]))
-        self.flux_prior = Uniform(self.min_flux, 10 * self.min_flux)
+        # self.count_prior = Categorical(torch.eye(self.count_dim)[-1])
+        self.count_prior = Categorical(torch.tensor([0.0] * self.max_objects + [1.0]))
+        # self.flux_prior = Uniform(200, 2000)
+        self.flux_prior = Gamma(torch.tensor(flux_alpha), torch.tensor(flux_beta))
         self.loc_prior = ConstantLocsPrior(
             torch.zeros(2) + self.pad * torch.ones(2),
             torch.tensor((self.img_height, self.img_width)) - self.pad * torch.ones(2),
@@ -75,9 +73,9 @@ class ImageSimulator(nn.Module):
         img_height: int,
         img_width: int,
         max_objects: int,
-        min_flux: float,
         psf_stdev: float,
-        background_intensity: float,
+        flux_alpha: float,
+        flux_beta: float,
     ):
         super().__init__()
 
@@ -86,15 +84,16 @@ class ImageSimulator(nn.Module):
 
         self.max_objects = max_objects
 
-        self.min_flux = min_flux
         self.psf_stdev = psf_stdev
-        self.background_intensity = background_intensity
 
+        self.flux_alpha = flux_alpha
+        self.flux_beta = flux_beta
         self.catalog_prior = CatalogPrior(max_objects=max_objects,
                                           img_height=img_height,
                                           img_width=img_width,
-                                          min_flux=min_flux,
-                                          pad=0)
+                                          pad=0,
+                                          flux_alpha=flux_alpha,
+                                          flux_beta=flux_beta)
 
         self.register_buffer("dummy_param", torch.zeros(0))
         self.register_buffer("psf_marginal_h",
@@ -116,15 +115,17 @@ class ImageSimulator(nn.Module):
     def _generate(self, batch_size):
         tile_cat = self.catalog_prior.sample(num_catalogs=batch_size)
         tile_cat = {k: v.to(device=self.device) for k, v in tile_cat.items()}
+        psf = self.psf(tile_cat["locs"][:, :, 0], tile_cat["locs"][:, :, 1])  # (b, h, w, m)
         source_intensities = (
-            tile_cat["fluxes"].view(batch_size, 1, 1, self.max_objects)
-            * self.psf(tile_cat["locs"][:, :, 0], tile_cat["locs"][:, :, 1])
-        ).sum(dim=3)  # (b, h, w)
-        total_intensities = source_intensities + self.background_intensity
-        images = Poisson(total_intensities).sample()
+            tile_cat["fluxes"].view(batch_size, 1, 1, self.max_objects) * psf
+        )  # (b, h, w, m)
+        images = Poisson(source_intensities).sample()
+        random_perm_func = lambda img: img[..., torch.randperm(img.shape[-1])]
+        images = torch.vmap(random_perm_func, randomness="different")(images)
         return {
             **tile_cat, 
-            "total_intensities": total_intensities, 
+            "source_intensities": source_intensities, 
+            "psf": psf,
             "images": images
         }
     
@@ -136,3 +137,9 @@ class ImageSimulator(nn.Module):
         else:
             output = self._generate(batch_size)
         return output
+    
+    def post_dist(self, output_dict):
+        gamma_dist = Gamma(output_dict["images"].sum(dim=(-2, -3)) + self.flux_alpha,
+                           output_dict["psf"].sum(dim=(-2, -3)) + self.flux_beta)  # (b, m)
+        mix = Categorical(torch.ones_like(output_dict["images"][:, 0, 0, :]))
+        return MixtureSameFamily(mix, gamma_dist)

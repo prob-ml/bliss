@@ -1,6 +1,6 @@
 ---
 defaults:
-    - ../../bliss/conf@_here_: base_config
+    - ../../../bliss/conf@_here_: base_config
     - _self_
     - override hydra/job_logging: stdout
 
@@ -8,7 +8,7 @@ mode: train
 
 surveys:
   dc2:
-    batch_size: 32
+    batch_size: 64
 
 my_variational_factors:
   - _target_: case_studies.dc2_cataloging.utils.variational_dist.MyBernoulliFactor
@@ -34,13 +34,7 @@ my_variational_factors:
     sample_rearrange: b ht wt d -> b ht wt 1 d
     nll_rearrange: b ht wt 1 d -> b ht wt d
     nll_gating:
-      _target_: bliss.encoder.variational_dist.SourcesGating
-  - _target_: bliss.encoder.variational_dist.BivariateNormalFactor
-    name: ellipticity
-    sample_rearrange: b ht wt d -> b ht wt 1 d
-    nll_rearrange: b ht wt 1 d -> b ht wt d
-    nll_gating:
-      _target_: case_studies.dc2_cataloging.utils.variational_dist.Cosmodc2Gating
+      _target_: case_studies.dc2_cataloging.utils.variational_dist.DampenGating
 
 my_metrics:
   detection_performance:
@@ -48,46 +42,6 @@ my_metrics:
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
     mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
-  # detection_performance_star:
-  #   _target_: bliss.encoder.metrics.DetectionPerformance
-  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-  #   mag_zero_point: 3631e9  # for DC2
-  #   report_bin_unit: mag
-  #   filter_list:
-  #     - _target_: bliss.encoder.metrics.SourceTypeFilter
-  #       filter_type: star
-  # detection_performance_galaxy:
-  #   _target_: bliss.encoder.metrics.DetectionPerformance
-  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-  #   mag_zero_point: 3631e9  # for DC2
-  #   report_bin_unit: mag
-  #   filter_list:
-  #     - _target_: bliss.encoder.metrics.SourceTypeFilter
-  #       filter_type: galaxy
-  # detection_performance_one_source_mask:
-  #   _target_: bliss.encoder.metrics.DetectionPerformance
-  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-  #   mag_zero_point: 3631e9  # for DC2
-  #   report_bin_unit: mag
-  #   filter_list:
-  #     - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-  #       filter_source_count: 1m
-  # detection_performance_two_sources_mask:
-  #   _target_: bliss.encoder.metrics.DetectionPerformance
-  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-  #   mag_zero_point: 3631e9  # for DC2
-  #   report_bin_unit: mag
-  #   filter_list:
-  #     - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-  #       filter_source_count: 2m
-  # detection_performance_more_than_two_sources_mask:
-  #   _target_: bliss.encoder.metrics.DetectionPerformance
-  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-  #   mag_zero_point: 3631e9  # for DC2
-  #   report_bin_unit: mag
-  #   filter_list:
-  #     - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-  #       filter_source_count: 2plus
   source_type_accuracy:
     _target_: bliss.encoder.metrics.SourceTypeAccuracy
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
@@ -99,11 +53,6 @@ my_metrics:
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
     mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
-  # ellipticity_error:
-  #   _target_: case_studies.dc2_cataloging.utils.metrics.EllipticityMSE
-  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-  #   mag_zero_point: 3631e9  # for DC2
-  #   report_bin_unit: mag
 
 my_image_normalizers:
   null_noramlize:
@@ -141,27 +90,20 @@ encoder:
         compute_groups: false
         metrics: ${my_metrics}
     sample_image_renders: null
-    use_double_detect: true
-    minimalist_conditioning: true
-    use_checkerboard: true
+    use_double_detect: false
+    minimalist_conditioning: false
+    use_checkerboard: false
     n_sampler_colors: 4
     predict_mode_not_samples: true
 
 train:
     trainer:
         logger:
-            name: DC2_new_cataloging_exp
+            name: DC2_ori_bliss_new_exp
             version: null  # change it before running the code
         devices: null  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
-        max_epochs: 50
     data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: 7272
-    callbacks:
-      early_stopping:
-        _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
-        monitor: val/_loss
-        mode: min
-        patience: 50

@@ -165,7 +165,7 @@ class DiffusionEncoder(pl.LightningModule):
         return torch.cat(input_lst, dim=2)
 
     @torch.inference_mode()
-    def sample(self, batch):
+    def sample(self, batch, return_intermediate=False):
         image = self.get_image(batch)
         diffusion_sampling_config = {
             "model": self.my_net,
@@ -176,13 +176,24 @@ class DiffusionEncoder(pl.LightningModule):
             "model_kwargs": {"image": image}
         }
         if self.d_sampling_method == "ddim":
-            sample = self.sampling_diffusion.ddim_sample_loop(**diffusion_sampling_config, 
-                                                              eta=self.ddim_eta)
+            if not return_intermediate:
+                sample = self.sampling_diffusion.ddim_sample_loop(**diffusion_sampling_config, 
+                                                                 eta=self.ddim_eta)
+            else:
+                sample, inter_samples = self.sampling_diffusion.ddim_sample_loop(**diffusion_sampling_config, 
+                                                                                 eta=self.ddim_eta,
+                                                                                 return_intermediate=True)
         elif self.d_sampling_method == "ddpm":
-            sample = self.sampling_diffusion.p_sample_loop(**diffusion_sampling_config)
+            if not return_intermediate:
+                sample = self.sampling_diffusion.p_sample_loop(**diffusion_sampling_config)
+            else:
+                sample, inter_samples = self.sampling_diffusion.p_sample_loop(**diffusion_sampling_config)
         else:
             raise NotImplementedError()
-        return self.catalog_parser.decode(sample.permute([0, 2, 3, 1]))
+        if not return_intermediate:
+            return self.catalog_parser.decode(sample.permute([0, 2, 3, 1]))
+        else:
+            return self.catalog_parser.decode(sample.permute([0, 2, 3, 1])), [self.catalog_parser.decode(s.permute([0, 2, 3, 1])) for s in inter_samples]
 
     def _compute_loss(self, batch, logging_name):
         raise NotImplementedError()
