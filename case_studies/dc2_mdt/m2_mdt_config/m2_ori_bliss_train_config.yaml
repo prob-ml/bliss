@@ -45,7 +45,7 @@ encoder:
     tile_slen: 2
     survey_bands: ['r']
     reference_band: 0
-    use_checkerboard: true
+    use_checkerboard: false
     use_double_detect: true
     image_normalizers: ${nopsf_image_normalizers}
     matcher:
