@@ -83,7 +83,7 @@ def main(model_name, model_check_point_name, cached_data_path, ddim_sampling_ste
             fluxes_list.append(fluxes.cpu())
         my_encoder.my_net.exit_fast_inference()
 
-        bliss_result_dict = {
+        diffusion_result_dict = {
             "n_sources_list": n_sources_list,
             "locs_list": locs_list,
             "fluxes_list": fluxes_list,
@@ -92,7 +92,7 @@ def main(model_name, model_check_point_name, cached_data_path, ddim_sampling_ste
             "target_locs": target_locs.cpu(),
             "target_fluxes": target_fluxes.cpu(),
         }
-        torch.save(bliss_result_dict, save_path)
+        torch.save(diffusion_result_dict, save_path)
     else:
         print("find the cached file; run nothing")
 

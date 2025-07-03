@@ -1,4 +1,5 @@
 import torch
+import copy
 from einops import rearrange
 from torch.distributions import Independent
 
@@ -15,7 +16,11 @@ class Cosmodc2Gating(NllGating):
     @classmethod
     def __call__(cls, true_tile_cat: TileCatalog):
         return rearrange(true_tile_cat["cosmodc2_mask"], "b ht wt 1 1 -> b ht wt")
-
+    
+class DampenGating(NllGating):
+    @classmethod
+    def __call__(cls, true_tile_cat: TileCatalog):
+        return torch.where(true_tile_cat["n_sources"] > 0, 1.0, 1e-3)
 
 class MyBernoulliFactor(BernoulliFactor):
     def sample(self, params, use_mode=False):
@@ -81,6 +86,8 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
         vsbc = rearrange(vsbc, "b nth ntw d -> b nth ntw 1 d")
 
         nll_gating = qk.nll_gating(true_tile_cat)
+        if nll_gating.dtype != torch.bool:
+            nll_gating = torch.zeros_like(nll_gating, dtype=torch.bool)
         nll_gating = rearrange(nll_gating, "b nth ntw -> b nth ntw 1 1")
         return torch.where(nll_gating, vsbc, torch.nan)
 
@@ -143,3 +150,9 @@ class CalibrationVariationalDist(MyBasicVariationalDist):
         self.cur_context_index = (self.cur_context_index + 1) % len(self.sample_context)
 
         return sample_result
+    
+    def compute_nll(self, x_cat, true_tile_cat):
+        true_tile_cat = copy.copy(true_tile_cat)
+        # in case that you don't use nll gating for flux
+        true_tile_cat["fluxes"] = true_tile_cat["fluxes"].clamp(min=1.0)  
+        return super().compute_nll(x_cat, true_tile_cat)

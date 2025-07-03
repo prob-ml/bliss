@@ -128,7 +128,7 @@ class VariationalFactor:
         gating = self.nll_gating(true_tile_cat)
 
         qk = self.get_dist(params)
-        if gating.shape != target.shape:
+        if gating.dtype == torch.bool and gating.shape != target.shape:
             assert gating.shape == target.shape[:-1]
             target = torch.where(gating.unsqueeze(-1), target, 0)
         assert not torch.isnan(target).any()

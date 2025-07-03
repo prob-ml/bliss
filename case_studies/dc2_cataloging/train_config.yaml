@@ -48,46 +48,46 @@ my_metrics:
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
     mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
-  detection_performance_star:
-    _target_: bliss.encoder.metrics.DetectionPerformance
-    base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631e9  # for DC2
-    report_bin_unit: mag
-    filter_list:
-      - _target_: bliss.encoder.metrics.SourceTypeFilter
-        filter_type: star
-  detection_performance_galaxy:
-    _target_: bliss.encoder.metrics.DetectionPerformance
-    base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631e9  # for DC2
-    report_bin_unit: mag
-    filter_list:
-      - _target_: bliss.encoder.metrics.SourceTypeFilter
-        filter_type: galaxy
-  detection_performance_one_source_mask:
-    _target_: bliss.encoder.metrics.DetectionPerformance
-    base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631e9  # for DC2
-    report_bin_unit: mag
-    filter_list:
-      - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-        filter_source_count: 1m
-  detection_performance_two_sources_mask:
-    _target_: bliss.encoder.metrics.DetectionPerformance
-    base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631e9  # for DC2
-    report_bin_unit: mag
-    filter_list:
-      - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-        filter_source_count: 2m
-  detection_performance_more_than_two_sources_mask:
-    _target_: bliss.encoder.metrics.DetectionPerformance
-    base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631e9  # for DC2
-    report_bin_unit: mag
-    filter_list:
-      - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
-        filter_source_count: 2plus
+  # detection_performance_star:
+  #   _target_: bliss.encoder.metrics.DetectionPerformance
+  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+  #   mag_zero_point: 3631e9  # for DC2
+  #   report_bin_unit: mag
+  #   filter_list:
+  #     - _target_: bliss.encoder.metrics.SourceTypeFilter
+  #       filter_type: star
+  # detection_performance_galaxy:
+  #   _target_: bliss.encoder.metrics.DetectionPerformance
+  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+  #   mag_zero_point: 3631e9  # for DC2
+  #   report_bin_unit: mag
+  #   filter_list:
+  #     - _target_: bliss.encoder.metrics.SourceTypeFilter
+  #       filter_type: galaxy
+  # detection_performance_one_source_mask:
+  #   _target_: bliss.encoder.metrics.DetectionPerformance
+  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+  #   mag_zero_point: 3631e9  # for DC2
+  #   report_bin_unit: mag
+  #   filter_list:
+  #     - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+  #       filter_source_count: 1m
+  # detection_performance_two_sources_mask:
+  #   _target_: bliss.encoder.metrics.DetectionPerformance
+  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+  #   mag_zero_point: 3631e9  # for DC2
+  #   report_bin_unit: mag
+  #   filter_list:
+  #     - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+  #       filter_source_count: 2m
+  # detection_performance_more_than_two_sources_mask:
+  #   _target_: bliss.encoder.metrics.DetectionPerformance
+  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+  #   mag_zero_point: 3631e9  # for DC2
+  #   report_bin_unit: mag
+  #   filter_list:
+  #     - _target_: case_studies.dc2_cataloging.utils.metrics.SourceCountFilter
+  #       filter_source_count: 2plus
   source_type_accuracy:
     _target_: bliss.encoder.metrics.SourceTypeAccuracy
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
@@ -99,11 +99,11 @@ my_metrics:
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
     mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
-  ellipticity_error:
-    _target_: case_studies.dc2_cataloging.utils.metrics.EllipticityMSE
-    base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
-    mag_zero_point: 3631e9  # for DC2
-    report_bin_unit: mag
+  # ellipticity_error:
+  #   _target_: case_studies.dc2_cataloging.utils.metrics.EllipticityMSE
+  #   base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
+  #   mag_zero_point: 3631e9  # for DC2
+  #   report_bin_unit: mag
 
 my_image_normalizers:
   null_noramlize:
@@ -142,19 +142,26 @@ encoder:
         metrics: ${my_metrics}
     sample_image_renders: null
     use_double_detect: true
-    minimalist_conditioning: false
-    use_checkerboard: false
+    minimalist_conditioning: true
+    use_checkerboard: true
     n_sampler_colors: 4
     predict_mode_not_samples: true
 
 train:
     trainer:
         logger:
-            name: DC2_cataloging_exp
-            version: exp_03-30-2  # change it before running the code
-        devices: [6]  # change it before running the code
+            name: DC2_new_cataloging_exp
+            version: null  # change it before running the code
+        devices: null  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
+        max_epochs: 50
     data_source: ${surveys.dc2}
     pretrained_weights: null
     seed: 7272
+    callbacks:
+      early_stopping:
+        _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+        monitor: val/_loss
+        mode: min
+        patience: 50

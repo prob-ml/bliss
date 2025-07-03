@@ -15,7 +15,7 @@ from bliss.global_env import GlobalEnv
 from case_studies.dc2_mdt.utils.catalog_parser import CatalogParser
 from case_studies.dc2_mdt.utils.reverse_markov_learning import RMLDiffusion
 from case_studies.dc2_mdt.utils.resample import create_named_schedule_sampler, ScheduleSampler, SigmoidSampler
-from case_studies.dc2_mdt.utils.mdt_models import M2_MDTv2_RML_S_2
+from case_studies.dc2_mdt.utils.mdt_models import M2_MDTv2_RML_S_2, M2_MDTv2_full_RML_S_2, DC2_MDTv2_RML_S_2
 
 
 class M2RMLEncoder(pl.LightningModule):
@@ -253,8 +253,8 @@ class M2RMLEncoder(pl.LightningModule):
 
     def update_metrics(self, batch, batch_idx):
         target_tile_cat = TileCatalog(batch["tile_catalog"])
-        target_cat = target_tile_cat.to_full_catalog(self.tile_slen)
         target_tile_cat["fluxes"] = target_tile_cat["fluxes"].clamp(max=self.max_fluxes)
+        target_cat = target_tile_cat.to_full_catalog(self.tile_slen)
 
         mode_tile_cat = self.sample(batch)
         mode_cat = mode_tile_cat.to_full_catalog(self.tile_slen)
@@ -317,6 +317,158 @@ class M2MDTRMLEncoder(M2RMLEncoder):
         target_ch = self.catalog_parser.n_params_per_source * 2  # x2 for double detect
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
         self.my_net = M2_MDTv2_RML_S_2(image_n_bands=len(self.survey_bands), 
+                                        image_ch_per_band=ch_per_band, 
+                                        image_feats_ch=128, 
+                                        input_size=self.image_size[0] // self.tile_slen, 
+                                        in_channels=target_ch, 
+                                        decode_layers=6,
+                                        mask_ratio=0.3,
+                                        mlp_ratio=4.0,
+                                        learn_sigma=False)
+        
+    def _compute_diffusion_loss(self, loss_args, model_kwargs):
+        no_mask_loss = self.rml_diffusion.training_losses(**loss_args, model_kwargs=model_kwargs)
+        masked_loss = self.rml_diffusion.training_losses(**loss_args, model_kwargs={**model_kwargs, "enable_mask": True})
+        return {
+            "no_mask_loss": no_mask_loss,
+            "masked_loss": masked_loss,
+        }
+    
+
+class M2RMLFullEncoder(M2RMLEncoder):
+    def _interpolate_n_sources_and_locs(self, sample_cat_dict, true_tile_cat):
+        raise NotImplementedError()
+    
+    @torch.inference_mode()
+    def sample(self, batch):
+        image = self.get_image(batch)
+        diffusion_sampling_config = {
+            "model": self.my_net,
+            "shape": (image.shape[0], 
+                      self.catalog_parser.n_params_per_source * 2,  # x2 for double detect 
+                      self.image_size[0] // self.tile_slen, self.image_size[1] // self.tile_slen),
+            "clip_denoised": True,
+            "model_kwargs": {"image": image},
+            "eta": self.ddim_eta,
+        }
+        sample = self.rml_diffusion.ddim_sample_loop(**diffusion_sampling_config)
+        sample1, sample2 = sample.permute([0, 2, 3, 1]).chunk(2, dim=-1)  # (b, h, w, k)
+        first_cat = self.catalog_parser.decode(sample1)
+        second_cat = self.catalog_parser.decode(sample2)
+        return first_cat.union(second_cat, disjoint=False)
+    
+    def _compute_cur_batch_loss(self, batch):
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        target_cat2 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=1
+        )
+        target_cat1["fluxes"] = target_cat1["fluxes"].clamp(max=self.max_fluxes)
+        target_cat2["fluxes"] = target_cat2["fluxes"].clamp(max=self.max_fluxes)
+        image = self.get_image(batch)  # (b, c, H, W)
+        encoded_cat1 = self.catalog_parser.encode(target_cat1).permute(0, 3, 1, 2)  # (b, k, h, w)
+        encoded_cat2 = self.catalog_parser.encode(target_cat2).permute(0, 3, 1, 2)  # (b, k, h, w)
+        
+        t, batch_sample_weights, batch_loss_weights = \
+            self.schedule_sampler.sample(image.shape[0], device=self.device)
+        train_loss_args = {
+            "model": self.my_net,
+            "x_start": torch.cat([encoded_cat1, encoded_cat2], dim=1),
+            "t": t,
+            "loss_weights": batch_loss_weights
+        }
+        loss_dict = self._compute_diffusion_loss(train_loss_args, model_kwargs={"image": image})
+        return loss_dict, batch_sample_weights
+    
+
+class M2MDTFullRMLEncoder(M2RMLFullEncoder):
+    def initialize_networks(self):
+        assert self.tile_slen == 2
+        assert self.image_size[0] == self.image_size[1]
+        # assert self.image_size[0] == 112
+        target_ch = self.catalog_parser.n_params_per_source * 2  # x2 for double detect
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+        self.my_net = M2_MDTv2_full_RML_S_2(image_n_bands=len(self.survey_bands), 
+                                            image_ch_per_band=ch_per_band, 
+                                            image_feats_ch=128, 
+                                            input_size=self.image_size[0] // self.tile_slen, 
+                                            in_channels=target_ch, 
+                                            decode_layers=6,
+                                            mask_ratio=0.3,
+                                            mlp_ratio=4.0,
+                                            learn_sigma=False)
+        
+    def _compute_diffusion_loss(self, loss_args, model_kwargs):
+        no_mask_loss = self.rml_diffusion.training_losses(**loss_args, model_kwargs=model_kwargs)
+        masked_loss = self.rml_diffusion.training_losses(**loss_args, model_kwargs={**model_kwargs, "enable_mask": True})
+        return {
+            "no_mask_loss": no_mask_loss,
+            "masked_loss": masked_loss,
+        }
+    
+
+class DC2RMLEncoder(M2RMLEncoder):
+    @torch.inference_mode()
+    def sample(self, batch):
+        image = self.get_image(batch)
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        
+        diffusion_sampling_config = {
+            "model": self.my_net,
+            "shape": (image.shape[0], 
+                      self.catalog_parser.n_params_per_source,
+                      self.image_size[0] // self.tile_slen, 
+                      self.image_size[1] // self.tile_slen),
+            "clip_denoised": True,
+            "model_kwargs": {"image": image},
+            "eta": self.ddim_eta,
+        }
+        sample = self.rml_diffusion.ddim_sample_loop(**diffusion_sampling_config)
+        sample = sample.permute([0, 2, 3, 1])
+        pred_cat = self.catalog_parser.decode(sample)
+        pred_cat = self._interpolate_n_sources_and_locs(pred_cat, target_cat1)
+        return pred_cat
+    
+    def _interpolate_n_sources_and_locs(self, sample_cat_dict, true_tile_cat):
+        sample_cat_dict = copy.copy(sample_cat_dict)
+        sample_cat_dict["n_sources"] = true_tile_cat["n_sources"]
+        sample_cat_dict["locs"] = true_tile_cat["locs"]
+        return TileCatalog(sample_cat_dict)
+    
+    def _compute_cur_batch_loss(self, batch):
+        target_cat = TileCatalog(batch["tile_catalog"])
+        target_cat1 = target_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        target_cat1["fluxes"] = target_cat1["fluxes"].clamp(max=self.max_fluxes)
+        image = self.get_image(batch)  # (b, c, H, W)
+        encoded_cat1 = self.catalog_parser.encode(target_cat1).permute(0, 3, 1, 2)  # (b, k, h, w)
+        
+        t, batch_sample_weights, batch_loss_weights = \
+            self.schedule_sampler.sample(image.shape[0], device=self.device)
+        train_loss_args = {
+            "model": self.my_net,
+            "x_start": encoded_cat1,
+            "t": t,
+            "loss_weights": batch_loss_weights
+        }
+        loss_dict = self._compute_diffusion_loss(train_loss_args, model_kwargs={"image": image})
+        return loss_dict, batch_sample_weights
+    
+
+class DC2MDTRMLEncoder(DC2RMLEncoder):
+    def initialize_networks(self):
+        assert self.tile_slen == 4
+        assert self.image_size[0] == self.image_size[1]
+        # assert self.image_size[0] == 112
+        target_ch = self.catalog_parser.n_params_per_source
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+        self.my_net = DC2_MDTv2_RML_S_2(image_n_bands=len(self.survey_bands), 
                                         image_ch_per_band=ch_per_band, 
                                         image_feats_ch=128, 
                                         input_size=self.image_size[0] // self.tile_slen, 

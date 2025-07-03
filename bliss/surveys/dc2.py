@@ -335,6 +335,23 @@ class DC2DataModule(CachedSimulatedDataModule):
         return torch.stack(image_list), wcs_header_str
 
 
+def calculate_blendedness(full_cat: FullCatalog, radius: float, band=2, weight_std=None):
+    dist = torch.square(full_cat["plocs"].unsqueeze(1) - full_cat["plocs"].unsqueeze(2)).sum(dim=-1).sqrt()  # (b, n, n)
+    in_range_mask = dist < radius
+    in_range_mask &= rearrange(full_cat.is_on_mask, "b n -> b n 1")
+    in_range_mask &= rearrange(full_cat.is_on_mask, "b n -> b 1 n")
+    in_range_mask |= rearrange(torch.eye(in_range_mask.shape[1], 
+                                         dtype=torch.bool, 
+                                         device=in_range_mask.device), 
+                               "n1 n2 -> 1 n1 n2")
+    fluxes = rearrange(full_cat["fluxes"][..., band], "b n -> b 1 n")
+    if weight_std is not None:
+        dist_weight = torch.exp(-(dist ** 2) / (2 * weight_std ** 2))
+        in_range_mask = in_range_mask.float() * dist_weight
+    collected_fluxes = (fluxes * in_range_mask).sum(dim=-1).clamp(min=1.0)
+    return ((1.0 - fluxes.squeeze(1).clamp(min=1.0) / collected_fluxes) * full_cat.is_on_mask).unsqueeze(-1)  # (b, n, 1)
+
+
 class DC2FullCatalog(FullCatalog):
     ARCSEC_PER_PIXEL = 0.2
 

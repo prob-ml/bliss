@@ -610,12 +610,14 @@ class GaussianDiffusion:
         device=None,
         progress=False,
         eta=0.0,
+        return_intermediate=False,
     ):
         """
         Generate samples from the model using DDIM.
         Same usage as p_sample_loop().
         """
         final = None
+        intermediate = []
         for sample in self.ddim_sample_loop_progressive(
             model,
             shape,
@@ -629,7 +631,11 @@ class GaussianDiffusion:
             eta=eta,
         ):
             final = sample
-        return final["sample"]
+            intermediate.append(sample["pred_xstart"].cpu())
+        if not return_intermediate:
+            return final["sample"]
+        else:
+            return final["sample"], intermediate
 
     def ddim_sample_loop_progressive(
         self,
