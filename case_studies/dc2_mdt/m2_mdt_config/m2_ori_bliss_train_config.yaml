@@ -56,9 +56,7 @@ encoder:
     mode_metrics:
         _target_: torchmetrics.MetricCollection
         metrics: ${star_metrics}
-    sample_metrics:
-        _target_: torchmetrics.MetricCollection
-        metrics: ${star_metrics}
+    sample_metrics: null
     sample_image_renders: null
     optimizer_params:
         lr: 1e-3
