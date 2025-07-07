@@ -28,6 +28,7 @@ truth_df = truth_cat.get_quantities(
         "cosmodc2_id",
         "id",
         "match_objectId",
+        "tract",
         "truth_type",
         "ra",
         "dec",
