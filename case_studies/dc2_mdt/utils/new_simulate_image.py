@@ -11,13 +11,15 @@ class ConstantLocsPrior:
 
     def sample(self, sample_shape):
         mid_point = (self.low + self.high) / 2
-        m = sample_shape[-1]
-        mid_point = torch.stack([mid_point for _ in range(m)], dim=0)
-        sample_shape_dict = {f"s{i}": s 
-                             for i, s in enumerate(sample_shape[:-1])}
-        return repeat(mid_point, 
-                      "... ->" + " ".join([f"s{i}" for i in range(len(sample_shape[:-1]))]) + " ...",
-                      **sample_shape_dict)
+        return torch.ones(sample_shape).unsqueeze(-1) * mid_point
+    
+class UniformLocsPrior:
+    def __init__(self, low, high):
+        self.low = low
+        self.high = high
+
+    def sample(self, sample_shape):
+        return Uniform(self.low, self.high).sample(sample_shape)
     
 
 class CatalogPrior:
@@ -29,6 +31,8 @@ class CatalogPrior:
         pad: int,
         flux_alpha: float,
         flux_beta: float,
+        always_max_count=True,
+        constant_locs=True,
     ):
         self.max_objects = max_objects
         self.count_dim = self.max_objects + 1
@@ -37,14 +41,22 @@ class CatalogPrior:
         self.img_width = img_width
         self.pad = pad
 
-        # self.count_prior = Categorical(torch.eye(self.count_dim)[-1])
-        self.count_prior = Categorical(torch.tensor([0.0] * self.max_objects + [1.0]))
-        # self.flux_prior = Uniform(200, 2000)
+        if always_max_count:
+            self.count_prior = Categorical(torch.eye(self.count_dim)[-1])
+        else:
+            self.count_prior = Categorical(torch.ones(self.count_dim))
+
         self.flux_prior = Gamma(torch.tensor(flux_alpha), torch.tensor(flux_beta))
-        self.loc_prior = ConstantLocsPrior(
-            torch.zeros(2) + self.pad * torch.ones(2),
-            torch.tensor((self.img_height, self.img_width)) - self.pad * torch.ones(2),
-        )
+        if constant_locs:
+            self.loc_prior = ConstantLocsPrior(
+                torch.zeros(2) + self.pad * torch.ones(2),
+                torch.tensor((self.img_height, self.img_width)) - self.pad * torch.ones(2),
+            )
+        else:
+            self.loc_prior = UniformLocsPrior(
+                torch.zeros(2) + self.pad * torch.ones(2),
+                torch.tensor((self.img_height, self.img_width)) - self.pad * torch.ones(2),
+            )
 
     def sample(
         self,
@@ -76,6 +88,10 @@ class ImageSimulator(nn.Module):
         psf_stdev: float,
         flux_alpha: float,
         flux_beta: float,
+        pad=0,
+        always_max_count=True,
+        constant_locs=True,
+        coadd_images=False,
     ):
         super().__init__()
 
@@ -91,9 +107,12 @@ class ImageSimulator(nn.Module):
         self.catalog_prior = CatalogPrior(max_objects=max_objects,
                                           img_height=img_height,
                                           img_width=img_width,
-                                          pad=0,
+                                          pad=pad,
                                           flux_alpha=flux_alpha,
-                                          flux_beta=flux_beta)
+                                          flux_beta=flux_beta,
+                                          always_max_count=always_max_count,
+                                          constant_locs=constant_locs)
+        self.coadd_images = coadd_images
 
         self.register_buffer("dummy_param", torch.zeros(0))
         self.register_buffer("psf_marginal_h",
@@ -112,22 +131,29 @@ class ImageSimulator(nn.Module):
         ) / (2 * self.psf_stdev ** 2)
         return torch.exp(logpsf - logpsf.logsumexp(dim=(1, 2), keepdim=True))
     
-    def _generate(self, batch_size):
-        tile_cat = self.catalog_prior.sample(num_catalogs=batch_size)
-        tile_cat = {k: v.to(device=self.device) for k, v in tile_cat.items()}
+    def _generate_by_catalog(self, tile_cat):
+        batch_size = tile_cat["fluxes"].shape[0]
         psf = self.psf(tile_cat["locs"][:, :, 0], tile_cat["locs"][:, :, 1])  # (b, h, w, m)
         source_intensities = (
             tile_cat["fluxes"].view(batch_size, 1, 1, self.max_objects) * psf
         )  # (b, h, w, m)
-        images = Poisson(source_intensities).sample()
-        random_perm_func = lambda img: img[..., torch.randperm(img.shape[-1])]
-        images = torch.vmap(random_perm_func, randomness="different")(images)
+        if not self.coadd_images:
+            images = Poisson(source_intensities).sample()
+            random_perm_func = lambda img: img[..., torch.randperm(img.shape[-1])]
+            images = torch.vmap(random_perm_func, randomness="different")(images)
+        else:
+            images = Poisson(source_intensities.sum(dim=-1) + 10).sample()
         return {
             **tile_cat, 
             "source_intensities": source_intensities, 
             "psf": psf,
             "images": images
         }
+    
+    def _generate(self, batch_size):
+        tile_cat = self.catalog_prior.sample(num_catalogs=batch_size)
+        tile_cat = {k: v.to(device=self.device) for k, v in tile_cat.items()}
+        return self._generate_by_catalog(tile_cat)
     
     def generate(self, batch_size, *, seed=None):
         if seed is not None:
@@ -139,6 +165,7 @@ class ImageSimulator(nn.Module):
         return output
     
     def post_dist(self, output_dict):
+        assert not self.coadd_images
         gamma_dist = Gamma(output_dict["images"].sum(dim=(-2, -3)) + self.flux_alpha,
                            output_dict["psf"].sum(dim=(-2, -3)) + self.flux_beta)  # (b, m)
         mix = Categorical(torch.ones_like(output_dict["images"][:, 0, 0, :]))

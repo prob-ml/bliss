@@ -1,0 +1,124 @@
+---
+defaults:
+    - ../../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+mode: train
+
+paths:
+    cached_data: /data/scratch/regier/m2_aug30
+
+m2_flux_cutoffs:
+  - 1.579929
+  - 4.371297
+  - 12.804317
+  - 139.696472
+
+my_diffusion_factors:
+  - _target_: case_studies.dc2_mdt.utils.catalog_parser.OneBitNSourcesLocsFactor
+    n_params: 1
+    name: n_sources
+    bit_value: 1.0
+    threshold: 0.0
+    sample_rearrange: b ht wt 1 -> b ht wt
+    loss_gating: null
+
+my_metrics:
+  detection_performance:
+    _target_: case_studies.dc2_mdt.utils.metrics.DetectionPerformance
+
+my_image_normalizers:
+  clahe:
+    _target_: bliss.encoder.image_normalizer.ClaheNormalizer
+    min_stdev: 200
+  asinh:
+    _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
+    q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+
+encoder:
+    _target_: case_studies.dc2_mdt.utils.rml_encoder.M2MDTFullRMLEncoder
+    survey_bands: ['r']
+    reference_band: 0
+    tile_slen: 2
+    d_training_timesteps: 1000
+    d_sampling_timesteps: 10
+    d_schedule_sampler: sigmoid
+    d_sigmoid_schedule_bias: 0
+    d_rml_m: 4
+    d_rml_lambda: 1.0
+    d_rml_beta: 0.5
+    ddim_eta: 1.0
+    acc_grad_batches: 1
+    max_fluxes: "inf"
+    optimizer_params:
+        lr: 3e-4
+        amsgrad: true  # to make adam more stable
+    scheduler_params:
+        milestones: [150]
+        gamma: 0.1
+    image_normalizers: ${my_image_normalizers}
+    catalog_parser:
+        _target_: case_studies.dc2_mdt.utils.catalog_parser.CatalogParser
+        factors: ${my_diffusion_factors}
+    image_size: [40, 40]
+    matcher:
+        _target_: bliss.encoder.metrics.CatalogMatcher
+        dist_slack: 0.5
+        mag_slack: null
+        mag_band: 0
+    mode_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: partial
+        compute_groups: false
+        metrics: ${my_metrics}
+
+cached_simulator:
+    cached_data_path: ${paths.cached_data}
+    batch_size: 16
+    num_workers: 4
+    train_transforms:
+        - _target_: bliss.cached_dataset.OneBandTransform
+          band_idx: 2
+        - _target_: case_studies.dc2_mdt.utils.transform.RandomCropTransform
+          box_slen: 40
+          boundary_pad: 10
+        - _target_: bliss.cached_dataset.FullCatalogToTileTransform
+          tile_slen: 2
+          max_sources: 12
+        - _target_: bliss.cached_dataset.FluxFilterTransform
+          reference_band: 0  # formerly 2 before the OneBandTransform
+          min_flux: 0.9419
+        - _target_: bliss.data_augmentation.RotateFlipTransform
+    nontrain_transforms:
+        - _target_: bliss.cached_dataset.OneBandTransform
+          band_idx: 2
+        - _target_: case_studies.dc2_mdt.utils.transform.RandomCropTransform
+          box_slen: 40
+          boundary_pad: 10
+        - _target_: bliss.cached_dataset.FullCatalogToTileTransform
+          tile_slen: 2
+          max_sources: 12
+        - _target_: bliss.cached_dataset.FluxFilterTransform
+          reference_band: 0
+          min_flux: 0.9419  # (1.59 is 22 mag; 0.63 is 23 mag; 0.25 is 24 mag)
+
+train:
+    trainer:
+        logger:
+            name: M2_mdt_exp
+            version: null  # change it before running the code
+        devices: null  # change it before running the code
+        use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
+        precision: 32-true
+        max_epochs: 200
+        detect_anomaly: false
+        # gradient_clip_val: 0.0
+    pretrained_weights: null
+    seed: 7272
+    callbacks:
+        early_stopping:
+            _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
+            monitor: val/_loss
+            mode: min
+            patience: 200
