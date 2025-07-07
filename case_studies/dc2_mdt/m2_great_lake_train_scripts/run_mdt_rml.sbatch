@@ -65,8 +65,8 @@ function run_exp() {
 }
 
 
-task_name="m2_mdt_rml"
-print_info "run m2_mdt_rml"
+task_name=$1
+print_info "run ${task_name}"
 exp_name="great_lake_exp_$(date +"%m-%d")-1"
 cuda_devices=4
 run_exp "${task_name}" "${exp_name}" "${cuda_devices}"

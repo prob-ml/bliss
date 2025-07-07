@@ -13,6 +13,9 @@ bliss -cp ~/bliss/case_studies/dc2_mdt/mdt_config -cn flux_only_mdt_rml_train_co
 bliss -cp ~/bliss/case_studies/dc2_mdt/m2_mdt_config -cn m2_mdt_full_rml_train_config \
     train.trainer.logger.version=exp_07-03_full_rml \
     train.trainer.devices=[3]
+bliss -cp ~/bliss/case_studies/dc2_mdt/m2_mdt_config -cn m2_mdt_only_nsources_rml_train_config \
+    train.trainer.logger.version=exp_07-07_only_nsources_rml \
+    train.trainer.devices=[3]
 # run inference
 nohup jupyter nbconvert --execute --to html case_studies/dc2_mdt/inference.ipynb > infer_notebook.out 2>&1 &
 

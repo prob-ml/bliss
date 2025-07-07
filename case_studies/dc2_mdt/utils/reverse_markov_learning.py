@@ -124,7 +124,10 @@ class RMLDiffusion:
         if clip_denoised:
             pred_x0 = pred_x0.clamp(min=-1, max=1)
         mu, variance = self.ddim_mean_variance(x0=pred_x0, xt=xt, s=s, t=t, churn_factor=eta)
-        return mu + variance.sqrt() * noise
+        return {
+            "sample": mu + variance.sqrt() * noise,
+            "pred_x0": pred_x0,
+        }
 
     def ddim_sample_loop(
         self,
@@ -136,8 +139,10 @@ class RMLDiffusion:
         device=None,
         progress=False,
         eta=0.0,
+        return_intermediate=False,
     ):
         final = None
+        intermediate = []
         for sample in self.ddim_sample_loop_progressive(
             model,
             shape,
@@ -148,8 +153,12 @@ class RMLDiffusion:
             progress=progress,
             eta=eta,
         ):
-            final = sample
-        return final
+            final = sample["sample"]
+            intermediate.append(sample["pred_x0"].cpu())
+        if not return_intermediate:
+            return final
+        else:
+            return final, intermediate
 
     def ddim_sample_loop_progressive(
         self,
@@ -191,7 +200,7 @@ class RMLDiffusion:
                     eta=eta,
                 )
                 yield out
-                xt = out
+                xt = out["sample"]
 
     @classmethod
     def _extract_into_tensor(cls, 
