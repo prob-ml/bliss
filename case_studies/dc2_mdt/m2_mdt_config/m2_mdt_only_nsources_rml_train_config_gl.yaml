@@ -1,6 +1,6 @@
 ---
 defaults:
-    - m2_mdt_only_n_sources_rml_train_config
+    - m2_mdt_only_nsources_rml_train_config
     - _self_
     - override hydra/job_logging: stdout
 
