@@ -54,7 +54,7 @@ encoder:
     ch_init: 64
     ch_max: 1024
     ch_final: 128
-    initial_downsample: true
+    initial_downsample: false
     more_up_layers: true
     num_bottleneck_layers: 0
     optimizer_params:
