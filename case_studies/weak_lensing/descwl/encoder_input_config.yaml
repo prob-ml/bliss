@@ -1,4 +1,30 @@
-image_path: /data/scratch/taodingr/weak_lensing/descwl/Test_n_tiles/images_Test_n_tiles.pt
-catalog_path: /data/scratch/taodingr/weak_lensing/descwl/Test_n_tiles/catalog_Test_n_tiles.pt
-setting: Test_n_tiles
+# Batch Processing Configuration
+# Replace the single file paths with directory paths containing batch files
+
+# Directory containing image batch files
+image_dir: /scratch/regier_root/regier0/taodingr/descwl-shear-sims/generated_output/WLD_80_no_star_noise_1_fix_psf
+
+# Directory containing catalog batch files  
+catalog_dir: /scratch/regier_root/regier0/taodingr/descwl-shear-sims/generated_output/WLD_80_no_star_noise_1_fix_psf
+
+# File patterns to match batch files
+image_pattern: "*_images.pt"          # e.g., "batch_*.pt", "images_*.pt"
+catalog_pattern: "*_catalog.pt"        # e.g., "batch_*.pt", "catalogs_*.pt"
+
+# Processing settings
+setting: WLD_80_no_star_noise_1_fix_psf
 shear_setting: varying
+
+# Memory management
+max_memory_gb: 100
+
+# Batch range control (optional)
+start_batch: 1                 # Start from batch 1
+end_batch: null               # Process all batches (set to number to limit)
+
+# Debug settings
+debug_subset: null            # Set to number to limit images per batch for testing
+
+# Original single-file settings (kept for reference, not used in batch mode)
+# image_path: "/path/to/single/image/file.pt"
+# catalog_path: "/path/to/single/catalog/file.pt"
