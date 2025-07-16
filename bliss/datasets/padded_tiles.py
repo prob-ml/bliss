@@ -78,7 +78,7 @@ def generate_padded_tiles(
         galaxy_bool = torch.distributions.Bernoulli(galaxy_prob).sample([1]).item()
 
         if galaxy_bool == 1 and n_sources == 1:
-            galaxy_params, _ = sample_galaxy_params(catsim_table, 1, 1)
+            galaxy_params, _ = sample_galaxy_params(catsim_table, n_galaxies=1, max_n_sources=1)
             galaxy_params = rearrange(galaxy_params, "1 p -> p")
             star_flux = 0.0
             assert galaxy_params.shape == (11,)
@@ -159,7 +159,7 @@ def render_padded_image(
 
         is_galaxy = sample_bernoulli(galaxy_prob, 1).bool().item()
         if is_galaxy:
-            params, _ = sample_galaxy_params(catsim_table, 1, 1)
+            params, _ = sample_galaxy_params(catsim_table, n_galaxies=1, max_n_sources=1)
             assert params.shape == (1, 11)
             one_galaxy_params = params[0]
             galaxy = render_one_galaxy(one_galaxy_params, psf, size, offset)

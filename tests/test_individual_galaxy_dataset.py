@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import numpy as np
 import torch
 from astropy.table import Table
@@ -9,14 +7,13 @@ from bliss.datasets.generate_individual import generate_individual_dataset
 from bliss.datasets.lsst import (
     convert_mag_to_flux,
     get_default_lsst_psf,
-    prepare_final_galaxy_catalog,
 )
 from bliss.reporting import get_single_galaxy_ellipticities
 
 
-def test_galaxy_blend_catalogs(home_dir: Path):
+def test_galaxy_blend_catalogs(home_dir):
     psf = get_default_lsst_psf()
-    final_table = prepare_final_galaxy_catalog()
+    final_table = Table.read(home_dir / "data" / "small_cat.fits")
 
     n_gals = 1000
     ds = generate_individual_dataset(n_gals, final_table, psf, slen=53, replace=False)

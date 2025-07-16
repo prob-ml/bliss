@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Checkout github repo
         uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Install uv and set the python version
         uses: astral-sh/setup-uv@v5

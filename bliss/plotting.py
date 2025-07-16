@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.pyplot import Axes
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from torch import Tensor
 
 CB_color_cycle = [
     "#377eb8",
@@ -23,6 +24,11 @@ CB_color_cycle = [
     "#e41a1c",
     "#dede00",
 ]
+
+c1 = "#1b9e77"
+c2 = "#7570b3"
+c3 = "#d95f02"
+CLR_CYCLE = [c1, c2, c3]
 
 
 def _to_numpy(d: dict):
@@ -228,11 +234,18 @@ def add_loc_legend(ax: mpl.axes.Axes, labels: list, cmap1="cool", cmap2="bwr", s
     )
 
 
-def _bootstrap_quantiles(x, fnc, qs, n_boots=10000) -> float:
+def _bootstrap_quantiles(x, fnc, qs, n_boots=1000) -> float:
     """Return boostrap error of function `fnc` applied to array `x`."""
     x_boot = np.random.choice(x, size=(n_boots, len(x)), replace=True)
     x_hat = fnc(x_boot, axis=-1)
     return np.quantile(x_hat, qs[0]), np.quantile(x_hat, qs[1])
+
+
+def _bootstrap_sigma(x: np.ndarray, fnc, n_boots: int = 1000) -> float:
+    """Return boostrap error of function `fnc` applied to array `x`."""
+    x_boot = np.random.choice(x, size=(n_boots, len(x)), replace=True)
+    x_hat = fnc(x_boot, axis=-1)
+    return np.std(x_hat)
 
 
 def scatter_shade_plot(
@@ -276,3 +289,91 @@ def scatter_shade_plot(
 
     ax.plot(xs, ys, marker="o", c=color, linestyle="-", label=label)
     ax.fill_between(xs, yqs[:, 0], yqs[:, 1], color=color, alpha=alpha)
+
+
+def binned_statistic(
+    *, bins: Tensor, x: Tensor, y: Tensor, statistic: str = "mean"
+) -> dict[str, Tensor]:
+    """Better than scipy, you can use your own bins."""
+    if statistic not in ("mean", "median"):
+        raise ValueError("Statistic not implemented.")
+    assert x.ndim == 1 and y.ndim == 1
+    assert x.shape == y.shape, "x and y must have the same shape."
+    assert torch.isnan(x).sum() == 0 and torch.isnan(y).sum() == 0, "x and y must not contain NaNs."
+    bin_middles = (bins[:-1] + bins[1:]) / 2
+    bin_stats = torch.zeros(bins.shape[0] - 1)
+    bin_errs = torch.zeros(bins.shape[0] - 1)
+    counts = torch.zeros(bins.shape[0] - 1, dtype=torch.int)
+
+    for ii in range(bins.shape[0] - 1):
+        bin_mask = (x >= bins[ii]) & (x < bins[ii + 1])
+        if bin_mask.sum() > 1:
+            y_binned = y[bin_mask]
+            counts[ii] = bin_mask.sum().item()
+            if statistic == "mean":
+                bin_stats[ii] = y_binned.mean()
+                bin_errs[ii] = y_binned.std() / torch.sqrt(bin_mask.sum().float())
+            elif statistic == "median":
+                bin_stats[ii] = y_binned.median()
+                sigma = _bootstrap_sigma(y_binned.numpy(), np.median)
+                bin_errs[ii] = torch.tensor(sigma)
+            else:
+                raise ValueError("Statistic not implemented.")
+        else:
+            bin_stats[ii] = torch.nan
+            bin_errs[ii] = torch.nan
+            counts[ii] = 0
+
+    return {
+        "middles": bin_middles,
+        "edges": bins,
+        "stats": bin_stats,
+        "errs": bin_errs,
+        "counts": counts,
+    }
+
+
+def equal_sized_bin_statistic(
+    x: Tensor, y: Tensor, xlims: tuple[float, float], n_bins: int, statistic: str = "mean"
+) -> dict[str, Tensor]:
+    """Compute statistics of `y` in equal-sized bins of `x`."""
+    if statistic not in ("mean", "median"):
+        raise ValueError("Statistic not implemented.")
+    assert x.ndim == 1 and y.ndim == 1
+    assert x.shape == y.shape, "x and y must have the same shape."
+    assert torch.isnan(x).sum() == 0 and torch.isnan(y).sum() == 0, "x and y must not contain NaNs."
+    mask = (x >= xlims[0]) & (x <= xlims[1])
+    assert mask.any(), "No values in x within the specified limits."
+    x_filtered = x[mask]
+    y_filtered = y[mask]
+    quantiles = torch.linspace(0, 1, n_bins + 1)
+    bin_edges = x_filtered.nanquantile(quantiles, interpolation="linear")
+    bin_middles = (bin_edges[:-1] + bin_edges[1:]) / 2
+    bin_stats = torch.zeros(n_bins)
+    bin_errs = torch.zeros(n_bins)
+    counts = torch.zeros(n_bins, dtype=torch.int)
+    for ii in range(n_bins):
+        bin_mask = (x_filtered >= bin_edges[ii]) & (x_filtered < bin_edges[ii + 1])
+        if bin_mask.sum() > 1:
+            y_binned = y_filtered[bin_mask]
+            counts[ii] = bin_mask.sum().item()
+            if statistic == "mean":
+                bin_stats[ii] = y_binned.mean()
+                bin_errs[ii] = y_binned.std() / torch.sqrt(bin_mask.sum().float())
+            elif statistic == "median":
+                bin_stats[ii] = y_binned.median()
+                sigma = _bootstrap_sigma(y_binned.numpy(), np.median)
+                bin_errs[ii] = torch.tensor(sigma)
+            else:
+                raise ValueError("Statistic not implemented.")
+        else:
+            bin_stats[ii] = torch.nan  # No data in this bin
+            bin_errs[ii] = torch.nan
+
+    return {
+        "middles": bin_middles,
+        "edges": bin_edges,
+        "stats": bin_stats,
+        "errs": bin_errs,
+        "counts": counts,
+    }

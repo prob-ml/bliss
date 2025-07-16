@@ -5,7 +5,7 @@ from astropy.table import Table
 
 
 def test_galaxy_blend_catalogs(home_dir: Path):
-    cat = Table.read(home_dir / "data" / "OneDegSq.fits")
+    cat = Table.read(home_dir / "data" / "small_cat.fits")
 
     pa_bulge = cat["pa_bulge"]
     pa_disk = cat["pa_disk"]

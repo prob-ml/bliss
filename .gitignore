@@ -33,3 +33,5 @@ venv
 **/experiment/data
 !data/stellar_density_lsst.fits.gz
 bliss.egg-info
+experiment/figures/pair_sim
+**/OneDegSq.fits

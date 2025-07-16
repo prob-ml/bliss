@@ -69,7 +69,7 @@ def sample_star_fluxes(all_star_mags: np.ndarray, n_sources: int, max_n_sources:
 
 
 def sample_galaxy_params(
-    catsim_table: Table, n_galaxies: int, max_n_sources: int, replace: bool = True
+    catsim_table: Table, *, n_galaxies: int, max_n_sources: int, replace: bool = True
 ) -> tuple[Tensor, Tensor]:
     indices = np.random.choice(np.arange(len(catsim_table)), size=(n_galaxies,), replace=replace)
 

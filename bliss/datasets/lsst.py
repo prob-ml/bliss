@@ -67,6 +67,7 @@ def get_default_lsst_background() -> float:
 
 
 BACKGROUND = torch.tensor(get_default_lsst_background())
+APERTURE_BACKGROUND = 3797.5581
 
 
 def prepare_final_galaxy_catalog() -> Table:

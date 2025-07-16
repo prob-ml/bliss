@@ -18,7 +18,7 @@ from bliss.encoders.detection import DetectionEncoder
 def test_encoder_forward(home_dir, tmp_path):
     ae_state_dict = home_dir / "experiment" / "models" / "autoencoder_42_42.pt"
 
-    catsim_table = Table.read(home_dir / "data" / "OneDegSq.fits")
+    catsim_table = Table.read(home_dir / "data" / "small_cat.fits")
     all_star_mags = column_to_tensor(
         Table.read(home_dir / "data" / "stars_med_june2018.fits"), "i_ab"
     )

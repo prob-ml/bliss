@@ -11,7 +11,9 @@ def generate_individual_dataset(
 ):
     """Like the function below but it only generates individual galaxies, so much faster to run."""
 
-    params, ids = sample_galaxy_params(catsim_table, n_samples, n_samples, replace=replace)
+    params, ids = sample_galaxy_params(
+        catsim_table, n_galaxies=n_samples, max_n_sources=n_samples, replace=replace
+    )
     assert params.shape == (n_samples, 11)
     gals = torch.zeros((n_samples, 1, slen, slen))
     for ii in tqdm(range(n_samples)):

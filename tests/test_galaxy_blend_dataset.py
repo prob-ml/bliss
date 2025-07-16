@@ -1,17 +1,17 @@
 import torch
+from astropy.table import Table
 
 from bliss.catalog import FullCatalog
 from bliss.datasets.generate_blends import generate_dataset
 from bliss.datasets.lsst import (
     get_default_lsst_psf,
-    prepare_final_galaxy_catalog,
     prepare_final_star_catalog,
 )
 
 
-def test_galaxy_blend_catalogs():
+def test_galaxy_blend_catalogs(home_dir):
     psf = get_default_lsst_psf()
-    catsim_table = prepare_final_galaxy_catalog()
+    catsim_table = Table.read(home_dir / "data" / "small_cat.fits")
     all_star_mags = prepare_final_star_catalog()
     blends_ds = generate_dataset(100, catsim_table, all_star_mags, psf, 10)
 

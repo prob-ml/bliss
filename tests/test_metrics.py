@@ -36,7 +36,7 @@ def test_metrics():
         },
     )
 
-    tp, fp, ntrue = compute_batch_tp_fp(true_params, est_params)
+    tp, fp, ntrue = compute_batch_tp_fp(true_params, est_params, slack=slack)
     precision = tp.sum() / (tp.sum() + fp.sum())
     recall = tp.sum() / ntrue.sum()
 

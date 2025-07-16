@@ -8,8 +8,8 @@ import typer
 from scripts_figures.binary_figures import BinaryFigures
 from scripts_figures.deblend_figures import DeblendingFigures
 from scripts_figures.detection_figures import BlendDetectionFigures
-from scripts_figures.sampling_figure import SamplingFigure
 from scripts_figures.toy_figures import ToySeparationFigure
+from scripts_figures.toy_sampling_figures import ToySamplingFigure
 
 from bliss.encoders.binary import BinaryEncoder
 from bliss.encoders.deblend import GalaxyEncoder
@@ -17,7 +17,7 @@ from bliss.encoders.detection import DetectionEncoder
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-ALL_FIGS = ("detection", "binary", "deblend", "toy", "samples")
+ALL_FIGS = ("detection", "binary", "deblend", "toy", "toy_samples")
 CACHEDIR = "/nfs/turbo/lsa-regier/scratch/ismael/cache/"
 
 
@@ -118,7 +118,6 @@ def _make_binary_figures(
 def _make_toy_figures(
     fpaths: dict[str, str],
     *,
-    aperture: float,
     suffix: str,
     overwrite: bool,
     device: torch.device,
@@ -129,33 +128,35 @@ def _make_toy_figures(
         "figdir": "figures",
         "suffix": suffix,
         "cachedir": CACHEDIR,
-        "aperture": aperture,
     }
     detection = _load_models(fpaths, "detection", device)
     deblender = _load_models(fpaths, "deblend", device)
     ToySeparationFigure(**_init_kwargs)(detection=detection, deblender=deblender)
 
 
-def _make_sample_figure(
+def _make_toy_sampling_figure(
     fpaths: dict[str, str],
-    test_file: str,
     *,
-    aperture: float,
     suffix: str,
     overwrite: bool,
     device: torch.device,
+    aperture: float,
+    toy_cache_fpath: str,
 ):
-    print("INFO: Creating figures for sampling experiment.")
+    print("INFO: Creating figures for toy sampling experiment.")
     _init_kwargs = {
         "overwrite": overwrite,
         "figdir": "figures",
         "suffix": suffix,
         "cachedir": CACHEDIR,
         "aperture": aperture,
+        "n_samples": 100,
     }
     detection = _load_models(fpaths, "detection", device)
     deblender = _load_models(fpaths, "deblend", device)
-    SamplingFigure(**_init_kwargs)(test_file, detection=detection, deblender=deblender)
+    ToySamplingFigure(**_init_kwargs)(
+        detection=detection, deblender=deblender, toy_cache_fpath=toy_cache_fpath
+    )
 
 
 def main(
@@ -224,22 +225,19 @@ def main(
         assert detection_fpath and Path(detection_fpath).exists()
         assert deblend_fpath and Path(deblend_fpath).exists()
         assert ae_fpath and Path(ae_fpath).exists(), "Need to provide AE when deblending."
-        _make_toy_figures(
-            fpaths, aperture=aperture, suffix=suffix, overwrite=overwrite, device=device
-        )
+        _make_toy_figures(fpaths, suffix=suffix, overwrite=overwrite, device=device)
 
-    elif mode == "samples":
+    elif mode == "toy_samples":
         assert detection_fpath and Path(detection_fpath).exists()
         assert deblend_fpath and Path(deblend_fpath).exists()
         assert ae_fpath and Path(ae_fpath).exists(), "Need to provide AE when deblending."
-        assert test_file_blends and Path(test_file_blends).exists()
-        _make_sample_figure(
+        _make_toy_sampling_figure(
             fpaths,
-            test_file=test_file_blends,
-            aperture=aperture,
             suffix=suffix,
             overwrite=overwrite,
             device=device,
+            aperture=aperture,
+            toy_cache_fpath=f"data/cache/toy_separation_{suffix}.pt",
         )
 
     else:

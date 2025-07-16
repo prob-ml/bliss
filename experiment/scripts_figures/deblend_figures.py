@@ -12,7 +12,7 @@ from tqdm import tqdm
 from bliss.catalog import FullCatalog, TileCatalog
 from bliss.datasets.io import load_dataset_npz
 from bliss.encoders.deblend import GalaxyEncoder
-from bliss.plotting import BlissFigure
+from bliss.plotting import CLR_CYCLE, BlissFigure
 from bliss.reporting import (
     get_blendedness,
     get_deblended_reconstructions,
@@ -70,9 +70,13 @@ class DeblendingFigures(BlissFigure):
             "deblend_flux_scatter": {"fontsize": 32},
             "deblend_size_scatter": {"fontsize": 32},
             "deblend_ellips_scatter": {"fontsize": 32},
-            "deblend_flux_bins": {"fontsize": 32},
-            "deblend_size_bins": {"fontsize": 32},
-            "deblend_ellips_bins": {"fontsize": 32},
+            "deblend_bins": {
+                "fontsize": 36,
+                "major_tick_size": 11,
+                "minor_tick_size": 7,
+                "major_tick_width": 1.2,
+                "minor_tick_width": 0.8,
+            },
         }
 
     @property
@@ -85,9 +89,7 @@ class DeblendingFigures(BlissFigure):
             "deblend_flux_scatter",
             "deblend_size_scatter",
             "deblend_ellips_scatter",
-            "deblend_flux_bins",
-            "deblend_size_bins",
-            "deblend_ellips_bins",
+            "deblend_bins",
         )
 
     def compute_data(self, ds_path: str, deblend: GalaxyEncoder):
@@ -358,17 +360,25 @@ class DeblendingFigures(BlissFigure):
 
         return fig
 
-    def _get_deblending_flux_bins(self, data):
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
+    def _get_deblending_results_bin(self, data):
+        fig, axes = plt.subplots(4, 2, figsize=(20, 35))
 
-        snr = data["snr"]
-        bld = data["bld"]
-        fluxes = data["truth"]["flux"]
-        bld_fluxes = data["blended"]["flux"]
-        debld_fluxes = data["deblended"]["flux"]
+        _data = _get_masked_data(data)
 
-        res1 = (bld_fluxes - fluxes) / fluxes
-        res2 = (debld_fluxes - fluxes) / fluxes
+        snr = _data["snr"]
+        bld = _data["bld"]
+        fluxes = _data["truth"]["flux"]
+        bld_fluxes = _data["blended"]["flux"]
+        debld_fluxes = _data["deblended"]["flux"]
+        sizes = _data["truth"]["sigma"]
+        bld_sizes = _data["blended"]["sigma"]
+        debld_sizes = _data["deblended"]["sigma"]
+        e1 = _data["truth"]["e1"]
+        bld_e1 = _data["blended"]["e1"]
+        debld_e1 = _data["deblended"]["e1"]
+        e2 = _data["truth"]["e2"]
+        bld_e2 = _data["blended"]["e2"]
+        debld_e2 = _data["deblended"]["e2"]
 
         # equally sized bins in SNR
         snr_mask = (snr > 3) * (snr <= 1000)
@@ -377,22 +387,6 @@ class DeblendingFigures(BlissFigure):
         qs = np.linspace(0, 1, 10)
         snr_bins = np.quantile(_snr_log, qs)
         snr_middle = (snr_bins[1:] + snr_bins[:-1]) / 2
-
-        meds1, qs11, qs12 = _calculate_statistics(res1[snr_mask], _snr_log, snr_bins)
-        meds2, qs21, qs22 = _calculate_statistics(res2[snr_mask], _snr_log, snr_bins)
-
-        ax1.plot(10**snr_middle, meds1, marker="o", color="r", label=r"\rm No Deblending")
-        ax1.fill_between(10**snr_middle, qs11, qs12, color="r", alpha=0.5)
-
-        ax1.plot(10**snr_middle, meds2, marker="o", color="b", label=r"\rm Deblending")
-        ax1.fill_between(10**snr_middle, qs21, qs22, color="b", alpha=0.5)
-
-        ax1.set_xscale("log")
-        ax1.set_ylim(-0.15, 0.2)
-        ax1.set_xticks([3, 10, 100, 200])
-        ax1.set_xlabel(r"\rm SNR")
-        ax1.set_ylabel(r"$ (f_{\rm pred} - f_{\rm true}) / f_{\rm true}$")
-        ax1.axhline(0.0, linestyle="--", color="k")
 
         # equally size bins in blendedness
         bld_mask = (bld > 1e-2) * (bld <= 1)
@@ -401,198 +395,129 @@ class DeblendingFigures(BlissFigure):
         bld_bins = np.quantile(_bld, qs)
         bld_middle = (bld_bins[1:] + bld_bins[:-1]) / 2
 
+        # fluxes
+        res1 = (bld_fluxes - fluxes) / fluxes
+        res2 = (debld_fluxes - fluxes) / fluxes
+
+        meds1, qs11, qs12 = _calculate_statistics(res1[snr_mask], _snr_log, snr_bins)
+        meds2, qs21, qs22 = _calculate_statistics(res2[snr_mask], _snr_log, snr_bins)
+
+        c1 = CLR_CYCLE[0]
+        c2 = CLR_CYCLE[1]
+        c_zero = "gray"
+        _alpha = 0.35
+
+        ax = axes[0, 0]
+        ax.plot(10**snr_middle, meds1, marker="o", color=c1, label=r"\rm No Deblending")
+        ax.fill_between(10**snr_middle, qs11, qs12, color=c1, alpha=_alpha)
+        ax.plot(10**snr_middle, meds2, marker="o", color=c2, label=r"\rm Deblending")
+        ax.fill_between(10**snr_middle, qs21, qs22, color=c2, alpha=_alpha)
+        ax.set_xscale("log")
+        ax.set_ylim(-0.15, 0.2)
+        ax.set_ylabel(r"$ (f_{\rm pred} - f_{\rm true}) / f_{\rm true}$")
+        ax.axhline(0.0, linestyle="--", color=c_zero)
+        ax.axes.xaxis.set_ticklabels([])
+
         meds1, qs11, qs12 = _calculate_statistics(res1[bld_mask], _bld, bld_bins)
         meds2, qs21, qs22 = _calculate_statistics(res2[bld_mask], _bld, bld_bins)
 
-        ax2.plot(bld_middle, meds1, marker="o", color="r", label=r"\rm No Deblending")
-        ax2.fill_between(bld_middle, qs11, qs12, color="r", alpha=0.5)
+        ax = axes[0, 1]
+        ax.plot(bld_middle, meds1, marker="o", color=c1, label=r"\rm No Deblending")
+        ax.fill_between(bld_middle, qs11, qs12, color=c1, alpha=_alpha)
+        ax.plot(bld_middle, meds2, marker="o", color=c2, label=r"\rm Deblending")
+        ax.fill_between(bld_middle, qs21, qs22, color=c2, alpha=_alpha)
+        ax.legend()
+        ax.set_xscale("log")
+        ax.set_ylim(-0.75, 2.2)
+        ax.axhline(0.0, linestyle="--", color=c_zero)
+        ax.axes.xaxis.set_ticklabels([])
 
-        ax2.plot(bld_middle, meds2, marker="o", color="b", label=r"\rm Deblending")
-        ax2.fill_between(bld_middle, qs21, qs22, color="b", alpha=0.5)
-        ax2.legend()
-        ax2.set_xscale("log")
-        ax2.set_xticks([1e-2, 1e-1, 1])
-        ax2.set_ylim(-0.75, 2.2)
-        ax2.set_xlabel(r"\rm Blendedness")
-        ax2.axhline(0.0, linestyle="--", color="k")
-
-        plt.tight_layout()
-
-        return fig
-
-    def _get_deblending_size_bins(self, data):
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10), sharey=True)
-        _data = _get_masked_data(data)
-
-        snr = _data["snr"]
-        bld = _data["bld"]
-        sizes = _data["truth"]["sigma"]
-        bld_sizes = _data["blended"]["sigma"]
-        debld_sizes = _data["deblended"]["sigma"]
-
+        # sizes
         res1 = (bld_sizes - sizes) / sizes
         res2 = (debld_sizes - sizes) / sizes
 
-        # equally sized bins in SNR
-        snr_mask = (snr > 3) * (snr <= 1000)
-        _snr = snr[snr_mask]
-        _snr_log = np.log10(_snr)
-        qs = np.linspace(0, 1, 10)
-        snr_bins = np.quantile(_snr_log, qs)
-        snr_middle = (snr_bins[1:] + snr_bins[:-1]) / 2
-
         meds1, qs11, qs12 = _calculate_statistics(res1[snr_mask], _snr_log, snr_bins)
         meds2, qs21, qs22 = _calculate_statistics(res2[snr_mask], _snr_log, snr_bins)
 
-        ax1.plot(10**snr_middle, meds1, marker="o", color="r", label=r"\rm No Deblending")
-        ax1.fill_between(10**snr_middle, qs11, qs12, color="r", alpha=0.5)
-
-        ax1.plot(10**snr_middle, meds2, marker="o", color="b", label=r"\rm Deblending")
-        ax1.fill_between(10**snr_middle, qs21, qs22, color="b", alpha=0.5)
-
-        ax1.set_xscale("log")
-        # ax1.set_ylim(-0.15, 0.2)
-        ax1.set_xticks([3, 10, 100, 200])
-        ax1.set_xlabel(r"\rm SNR")
-        ax1.set_ylabel(r"$ (\sigma_{\rm pred} - \sigma_{\rm true}) / \sigma_{\rm true}$")
-        ax1.axhline(0.0, linestyle="--", color="k")
-
-        # blendedness
-        bld_mask = (bld > 1e-2) * (bld <= 1)
-        _bld = bld[bld_mask]
-        qs = np.linspace(0, 1, 12)
-        bld_bins = np.quantile(_bld, qs)
-        bld_middle = (bld_bins[1:] + bld_bins[:-1]) / 2
+        ax = axes[1, 0]
+        ax.plot(10**snr_middle, meds1, marker="o", color=c1, label=r"\rm No Deblending")
+        ax.fill_between(10**snr_middle, qs11, qs12, color=c1, alpha=_alpha)
+        ax.plot(10**snr_middle, meds2, marker="o", color=c2, label=r"\rm Deblending")
+        ax.fill_between(10**snr_middle, qs21, qs22, color=c2, alpha=_alpha)
+        ax.set_xscale("log")
+        ax.set_ylabel(r"$ (T_{\rm pred} - T_{\rm true}) / T_{\rm true}$")
+        ax.axhline(0.0, linestyle="--", color=c_zero)
+        ax.axes.xaxis.set_ticklabels([])
 
         meds1, qs11, qs12 = _calculate_statistics(res1[bld_mask], _bld, bld_bins)
         meds2, qs21, qs22 = _calculate_statistics(res2[bld_mask], _bld, bld_bins)
 
-        ax2.plot(bld_middle, meds1, marker="o", color="r", label=r"\rm No Deblending")
-        ax2.fill_between(bld_middle, qs11, qs12, color="r", alpha=0.5)
+        ax = axes[1, 1]
+        ax.plot(bld_middle, meds1, marker="o", color=c1, label=r"\rm No Deblending")
+        ax.fill_between(bld_middle, qs11, qs12, color=c1, alpha=_alpha)
+        ax.plot(bld_middle, meds2, marker="o", color=c2, label=r"\rm Deblending")
+        ax.fill_between(bld_middle, qs21, qs22, color=c2, alpha=_alpha)
+        ax.set_xscale("log")
+        ax.axhline(0.0, linestyle="--", color=c_zero)
+        ax.axes.xaxis.set_ticklabels([])
 
-        ax2.plot(bld_middle, meds2, marker="o", color="b", label=r"\rm Deblending")
-        ax2.fill_between(bld_middle, qs21, qs22, color="b", alpha=0.5)
-        ax2.legend()
-        ax2.set_xscale("log")
-        ax2.set_xticks([1e-2, 1e-1, 1])
-        # ax2.set_ylim(-0.75, 2.2)
-        ax2.set_xlabel(r"\rm Blendedness")
-        ax2.axhline(0.0, linestyle="--", color="k")
-
-        plt.tight_layout()
-
-        return fig
-
-    def _get_deblending_ellips_bins(self, data):
-        fig, axes = plt.subplots(2, 2, figsize=(20, 20))
-        ax1, ax2, ax3, ax4 = axes.flatten()
-
-        _data = _get_masked_data(data)
-
-        snr = _data["snr"]
-        bld = _data["bld"]
-        e1 = _data["truth"]["e1"]
-        bld_e1 = _data["blended"]["e1"]
-        debld_e1 = _data["deblended"]["e1"]
-        e2 = _data["truth"]["e2"]
-        bld_e2 = _data["blended"]["e2"]
-        debld_e2 = _data["deblended"]["e2"]
-
+        # ellipticities
         res1 = bld_e1 - e1
         res2 = debld_e1 - e1
-
-        # equally sized bins in SNR
-        snr_mask = (snr > 3) * (snr <= 1000)
-        _snr = snr[snr_mask]
-        _snr_log = np.log10(_snr)
-        qs = np.linspace(0, 1, 10)
-        snr_bins = np.quantile(_snr_log, qs)
-        snr_middle = (snr_bins[1:] + snr_bins[:-1]) / 2
-
         meds1, qs11, qs12 = _calculate_statistics(res1[snr_mask], _snr_log, snr_bins)
         meds2, qs21, qs22 = _calculate_statistics(res2[snr_mask], _snr_log, snr_bins)
 
-        ax1.plot(10**snr_middle, meds1, marker="o", color="r", label=r"\rm No Deblending")
-        ax1.fill_between(10**snr_middle, qs11, qs12, color="r", alpha=0.5)
-
-        ax1.plot(10**snr_middle, meds2, marker="o", color="b", label=r"\rm Deblending")
-        ax1.fill_between(10**snr_middle, qs21, qs22, color="b", alpha=0.5)
-
-        # ax1.set_ylim(-0.15, 0.2)
-        ax1.set_xscale("log")
-        ax1.set_xticks([3, 10, 100, 200])
-        ax1.set_ylabel(r"$e_{1,\rm{pred}} -  e_{1,\rm{true}}$")
-        ax1.axhline(0.0, linestyle="--", color="k")
-
-        # equally sized bins in blendedness
-        bld_mask = (bld > 1e-2) * (bld <= 1)
-        _bld = bld[bld_mask]
-        qs = np.linspace(0, 1, 12)
-        bld_bins = np.quantile(_bld, qs)
-        bld_middle = (bld_bins[1:] + bld_bins[:-1]) / 2
+        ax = axes[2, 0]
+        ax.plot(10**snr_middle, meds1, marker="o", color=c1, label=r"\rm No Deblending")
+        ax.fill_between(10**snr_middle, qs11, qs12, color=c1, alpha=_alpha)
+        ax.plot(10**snr_middle, meds2, marker="o", color=c2, label=r"\rm Deblending")
+        ax.fill_between(10**snr_middle, qs21, qs22, color=c2, alpha=_alpha)
+        ax.set_xscale("log")
+        ax.set_ylabel(r"$e_{1,\rm{pred}} -  e_{1,\rm{true}}$")
+        ax.axhline(0.0, linestyle="--", color=c_zero)
+        ax.axes.xaxis.set_ticklabels([])
 
         meds1, qs11, qs12 = _calculate_statistics(res1[bld_mask], _bld, bld_bins)
         meds2, qs21, qs22 = _calculate_statistics(res2[bld_mask], _bld, bld_bins)
 
-        ax2.plot(bld_middle, meds1, marker="o", color="r", label=r"\rm No Deblending")
-        ax2.fill_between(bld_middle, qs11, qs12, color="r", alpha=0.5)
-
-        ax2.plot(bld_middle, meds2, marker="o", color="b", label=r"\rm Deblending")
-        ax2.fill_between(bld_middle, qs21, qs22, color="b", alpha=0.5)
-        ax2.legend()
-        ax2.set_xscale("log")
-        ax2.set_xticks([1e-2, 1e-1, 1])
-        # ax2.set_ylim(-0.75, 2.2)
-        ax2.axhline(0.0, linestyle="--", color="k")
+        ax = axes[2, 1]
+        ax.plot(bld_middle, meds1, marker="o", color=c1, label=r"\rm No Deblending")
+        ax.fill_between(bld_middle, qs11, qs12, color=c1, alpha=_alpha)
+        ax.plot(bld_middle, meds2, marker="o", color=c2, label=r"\rm Deblending")
+        ax.fill_between(bld_middle, qs21, qs22, color=c2, alpha=_alpha)
+        ax.set_xscale("log")
+        ax.axhline(0.0, linestyle="--", color=c_zero)
+        ax.axes.xaxis.set_ticklabels([])
 
         res1 = bld_e2 - e2
         res2 = debld_e2 - e2
 
-        # equally sized bins in SNR
-        snr_mask = (snr > 3) * (snr <= 1000)
-        _snr = snr[snr_mask]
-        _snr_log = np.log10(_snr)
-        qs = np.linspace(0, 1, 10)
-        snr_bins = np.quantile(_snr_log, qs)
-        snr_middle = (snr_bins[1:] + snr_bins[:-1]) / 2
-
         meds1, qs11, qs12 = _calculate_statistics(res1[snr_mask], _snr_log, snr_bins)
         meds2, qs21, qs22 = _calculate_statistics(res2[snr_mask], _snr_log, snr_bins)
 
-        ax3.plot(10**snr_middle, meds1, marker="o", color="r", label=r"\rm No Deblending")
-        ax3.fill_between(10**snr_middle, qs11, qs12, color="r", alpha=0.5)
-
-        ax3.plot(10**snr_middle, meds2, marker="o", color="b", label=r"\rm Deblending")
-        ax3.fill_between(10**snr_middle, qs21, qs22, color="b", alpha=0.5)
-
-        ax3.set_xscale("log")
-        # ax3.set_ylim(-0.15, 0.2)
-        ax3.set_xticks([3, 10, 100, 200])
-        ax3.set_xlabel(r"\rm SNR")
-        ax3.set_ylabel(r"$e_{2,\rm{pred}} -  e_{2,\rm{true}}$")
-        ax3.axhline(0.0, linestyle="--", color="k")
-
-        # equally sized bins in blendedness
-        bld_mask = (bld > 1e-2) * (bld <= 1)
-        _bld = bld[bld_mask]
-        qs = np.linspace(0, 1, 12)
-        bld_bins = np.quantile(_bld, qs)
-        bld_middle = (bld_bins[1:] + bld_bins[:-1]) / 2
+        ax = axes[3, 0]
+        ax.plot(10**snr_middle, meds1, marker="o", color=c1, label=r"\rm No Deblending")
+        ax.fill_between(10**snr_middle, qs11, qs12, color=c1, alpha=_alpha)
+        ax.plot(10**snr_middle, meds2, marker="o", color=c2, label=r"\rm Deblending")
+        ax.fill_between(10**snr_middle, qs21, qs22, color=c2, alpha=_alpha)
+        ax.set_xscale("log")
+        ax.set_xticks([3, 10, 100, 200])
+        ax.set_xlabel(r"\rm SNR")
+        ax.set_ylabel(r"$e_{2,\rm{pred}} -  e_{2,\rm{true}}$")
+        ax.axhline(0.0, linestyle="--", color=c_zero)
 
         meds1, qs11, qs12 = _calculate_statistics(res1[bld_mask], _bld, bld_bins)
         meds2, qs21, qs22 = _calculate_statistics(res2[bld_mask], _bld, bld_bins)
 
-        ax4.plot(bld_middle, meds1, marker="o", color="r", label=r"\rm No Deblending")
-        ax4.fill_between(bld_middle, qs11, qs12, color="r", alpha=0.5)
-
-        ax4.plot(bld_middle, meds2, marker="o", color="b", label=r"\rm Deblending")
-        ax4.fill_between(bld_middle, qs21, qs22, color="b", alpha=0.5)
-        ax4.set_xscale("log")
-        ax4.set_xticks([1e-2, 1e-1, 1])
-        # ax2.set_ylim(-0.75, 2.2)
-        ax4.set_xlabel(r"\rm Blendedness")
-        ax4.axhline(0.0, linestyle="--", color="k")
-
+        ax = axes[3, 1]
+        ax.plot(bld_middle, meds1, marker="o", color=c1, label=r"\rm No Deblending")
+        ax.fill_between(bld_middle, qs11, qs12, color=c1, alpha=_alpha)
+        ax.plot(bld_middle, meds2, marker="o", color=c2, label=r"\rm Deblending")
+        ax.fill_between(bld_middle, qs21, qs22, color=c2, alpha=_alpha)
+        ax.set_xscale("log")
+        ax.set_xticks([1e-2, 1e-1, 1])
+        ax.set_xlabel(r"\rm Blendedness")
+        ax.axhline(0.0, linestyle="--", color=c_zero)
         plt.tight_layout()
 
         return fig
@@ -600,14 +525,10 @@ class DeblendingFigures(BlissFigure):
     def create_figure(self, fname: str, data):
         if fname == "deblend_flux_scatter":
             return self._get_deblending_flux_scatter(data)
-        if fname == "deblend_flux_bins":
-            return self._get_deblending_flux_bins(data)
         if fname == "deblend_size_scatter":
             return self._get_deblending_size_scatter(data)
-        if fname == "deblend_size_bins":
-            return self._get_deblending_size_bins(data)
         if fname == "deblend_ellips_scatter":
             return self._get_deblending_ellips_scatter(data)
-        if fname == "deblend_ellips_bins":
-            return self._get_deblending_ellips_bins(data)
+        if fname == "deblend_bins":
+            return self._get_deblending_results_bin(data)
         raise ValueError(f"Unknown figure name: {fname}")

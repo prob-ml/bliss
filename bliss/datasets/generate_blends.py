@@ -179,7 +179,9 @@ def sample_source_params(
 ) -> dict[str, Tensor]:
     """Returns source parameters corresponding to a single blend."""
     n_sources = sample_poisson_n_sources(mean_sources, max_n_sources)
-    params, _ = sample_galaxy_params(catsim_table, n_sources, max_n_sources)
+    params, _ = sample_galaxy_params(
+        catsim_table, n_galaxies=n_sources, max_n_sources=max_n_sources
+    )
     assert params.shape == (max_n_sources, 11)
 
     star_fluxes = sample_star_fluxes(all_star_mags, n_sources, max_n_sources)
