@@ -9,6 +9,16 @@ Simulation-Based Inference for Probabilistic Galaxy Detection and Deblending
 
 This repository contains the code to reproduce the results of the upcoming paper "Simulation-Based Inference for Probabilistic Galaxy Detection and Deblending". This project uses a custom version of the [BLISS](https://github.com/prob-ml/bliss) codebase.
 
+# Installation
+
+The repository can easily be installed with `pip`:
+
+```bash
+git clone https://github.com/ismael-mendoza/bliss.git
+cd bliss
+pip install -e .
+```
+
 # Reproducing results
 
 Please see the README and instructions in the `experiment` folder.
