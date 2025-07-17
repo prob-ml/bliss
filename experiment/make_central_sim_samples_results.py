@@ -11,13 +11,17 @@ from matplotlib.backends.backend_pdf import PdfPages
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from tqdm import tqdm
 
-from bliss import DATASETS_DIR
+from bliss import CACHE_DIR, DATASETS_DIR
 from bliss.catalog import FullCatalog, turn_samples_into_catalogs
 from bliss.datasets.central_sim import generate_central_sim_dataset
 from bliss.datasets.io import load_dataset_npz, save_dataset_npz
-from bliss.datasets.lsst import get_default_lsst_psf, prepare_final_galaxy_catalog
+from bliss.datasets.lsst import (
+    get_default_lsst_psf,
+    prepare_final_galaxy_catalog,
+)
 from bliss.encoders.deblend import GalaxyEncoder
 from bliss.encoders.detection import DetectionEncoder
+from bliss.plotting import CLR_CYCLE, binned_statistic, equal_sized_bin_statistic, set_rc_params
 from bliss.reporting import (
     get_blendedness,
     get_deblended_reconstructions,
@@ -238,121 +242,8 @@ def _get_sample_results(
     return outs
 
 
-def main(
-    seed: int = 42,
-    tag: str = typer.Option(),
-    indices_fname: str = typer.Option(),
-    n_images: int = 10_000,
-    n_samples: int = 100,
-    slen: int = 35,
-    bp: int = 24,
-    max_n_sources: int = 10,
-    overwrite: bool = False,
-    overwrite_dataset: bool = False,
-):
-    pl.seed_everything(seed)
-
-    tag_txt = f"_{tag}" if (tag and not tag.startswith("_")) else tag
-    device = torch.device("cuda:0")
-    out_dir = Path("figures/pair_sim")
-    deblend_fpath = "models/deblender_23_22.pt"
-    ae_fpath = "models/autoencoder_42_42.pt"
-    detection_fpath = "models/detection_23_23.pt"
-    results_path = out_dir / f"central_sim_results{tag_txt}.pt"
-    dataset_path = DATASETS_DIR / f"central_sim_dataset{tag_txt}.npz"
-    indices_fpath = DATASETS_DIR / indices_fname
-    assert indices_fpath.exists()
-    indices_dict = np.load(indices_fpath)
-    test_indices = indices_dict["test"]
-
-    if not dataset_path.exists() or overwrite_dataset:
-        cat = prepare_final_galaxy_catalog()
-        psf = get_default_lsst_psf()
-        print(f"Number of test galaxies: {len(cat[test_indices])}")
-        ds = generate_central_sim_dataset(
-            n_samples=n_images,
-            catsim_table=cat[test_indices],
-            psf=psf,
-            slen=slen,
-            max_n_sources=10,
-            mag_cut_central=25.3,
-            bp=24,
-        )
-        save_dataset_npz(ds, dataset_path)
-    elif overwrite or not results_path.exists():
-        print(f"Dataset already exists at {dataset_path}. Loading...")
-        ds = load_dataset_npz(dataset_path)
-        print("Dataset loaded successfully.")
-
-    if not results_path.exists() or overwrite:
-        truth = FullCatalog(
-            slen,
-            slen,
-            {
-                "n_sources": ds["n_sources"],
-                "plocs": ds["plocs"],
-                "galaxy_bools": ds["galaxy_bools"],
-            },
-        )
-
-        im1 = ds["uncentered_sources"]
-        im2 = ds["uncentered_sources"].sum(dim=1)
-        blendedness = get_blendedness(im1, im2)
-        assert blendedness.shape == (n_images, max_n_sources)
-        bld = blendedness[:, 0]  # only keep central galaxy for now
-        assert bld.ndim == 1
-        assert bld.shape == (n_images,)
-
-        true_meas = get_residual_measurements(
-            truth,
-            ds["images"],
-            paddings=ds["paddings"],
-            sources=ds["uncentered_sources"],
-            no_bar=False,
-        )
-        true_snr = true_meas["snr"]
-
-        # lets get models
-        detection = DetectionEncoder().to(device).eval()
-        _ = detection.load_state_dict(
-            torch.load(detection_fpath, map_location=device, weights_only=True)
-        )
-        detection = detection.requires_grad_(False).eval().to(device)
-
-        deblender = GalaxyEncoder(ae_fpath)
-        deblender.load_state_dict(torch.load(deblend_fpath, map_location=device, weights_only=True))
-        deblender = deblender.requires_grad_(False).to(device).eval()
-
-        # iterate over images in increasing order of blendedness of first source
-        sorted_indices = np.argsort(bld)
-        outs = _get_sample_results(
-            sorted_indices=sorted_indices,
-            n_samples=n_samples,
-            images=ds["images"],
-            paddings=ds["paddings"],
-            slen=slen,
-            tile_slen=5,
-            bp=bp,
-            detection=detection,
-            deblender=deblender,
-            device=device,
-        )
-        # save results
-        torch.save(
-            {
-                "outs": outs,
-                "bld": bld,
-                "true_snr": true_snr,
-                "true_flux": true_meas["flux"],
-                "true_plocs": truth.plocs,
-                "true_n_sources": truth.n_sources,
-                "images": ds["images"],
-            },
-            results_path,
-        )
-
-    print(f"Results already exist at {results_path}. Loading...")
-    results = torch.load(results_path, weights_only=False)
+def _get_diagnostic_figures(*, out_dir: Path, results: dict, tag_txt: str):
+    # get relevant variables from outs
     outs = results["outs"]
     bld = results["bld"]
     true_snr = results["true_snr"]
@@ -360,8 +251,6 @@ def main(
     true_n_sources = results["true_n_sources"]
     true_flux = results["true_flux"]
     images = results["images"]
-    print("Results loaded successfully.")
-    print("Number of images:", len(outs))
 
     # easy figures
     # snr figure
@@ -391,7 +280,7 @@ def main(
     )
     ax.set_xlabel("Blendedness")
 
-    fig.savefig(out_dir / f"blendedness_histogram_central{tag}.png")
+    fig.savefig(out_dir / f"blendedness_histogram_central{tag_txt}.png")
     plt.close(fig)
 
     # now we make figures across all images using the output
@@ -551,6 +440,300 @@ def main(
             # save the figure to the PDF as a new page
             pdf.savefig(fig)
             plt.close(fig)
+
+
+def _make_final_results_figures(*, out_dir: Path, rslts: dict) -> None:
+    # need to sort things first!!!!
+    sorted_indices = [out["idx"] for out in rslts["outs"]]
+    true_fluxes = rslts["true_flux"][sorted_indices][:, 0, 0]
+    bld = rslts["bld"][sorted_indices]
+    true_snr = rslts["true_snr"][sorted_indices][:, 0, 0]
+
+    samples_fluxes = torch.stack([out["sample_fluxes"] for out in rslts["outs"]])
+    map_fluxes = torch.tensor([out["map_flux"] for out in rslts["outs"]])
+    sep_fluxes = torch.tensor([out["sep_flux"] for out in rslts["outs"]])
+
+    mask = ~torch.isnan(samples_fluxes).all(dim=1) & (true_snr > 0)  # only single galaxy snr < 0
+    samples_fluxes = samples_fluxes[mask]
+    map_fluxes = map_fluxes[mask]
+    sep_fluxes = sep_fluxes[mask]
+    true_fluxes = true_fluxes[mask]
+    true_snr = true_snr[mask]
+    bld = bld[mask]
+
+    res1 = (samples_fluxes.nanmean(dim=1) - true_fluxes) / true_fluxes
+    res2 = (map_fluxes - true_fluxes) / true_fluxes
+    res3 = (sep_fluxes - true_fluxes) / true_fluxes
+
+    stds = []
+    for ii in range(len(samples_fluxes)):
+        mask = ~torch.isnan(samples_fluxes[ii])
+        if mask.sum() > 1:
+            stds.append(torch.std(samples_fluxes[ii][mask]).item())
+        else:
+            stds.append(torch.nan)
+    stds = torch.tensor(stds)
+
+    z_score = (samples_fluxes.nanmean(dim=1) - true_fluxes) / stds
+
+    mask_all = (
+        ~torch.isnan(true_snr)
+        & (true_snr > 0)
+        & ~torch.isnan(bld)
+        & ~torch.isnan(res1)
+        & ~torch.isnan(res2)
+        & ~torch.isnan(z_score)
+        & ~torch.isnan(stds)
+        & ~torch.isnan(sep_fluxes)
+    )
+
+    res1 = res1[mask_all]
+    res2 = res2[mask_all]
+    res3 = res3[mask_all]
+    z_score = z_score[mask_all]
+    bld = bld[mask_all]
+    true_snr = true_snr[mask_all]
+    stds = stds[mask_all]
+
+    # get snr figure
+    set_rc_params()
+
+    # now snr
+    n_bins = 21
+    out1 = equal_sized_bin_statistic(
+        x=true_snr.log10(), y=res1, n_bins=n_bins, xlims=(0.5, 3), statistic="median"
+    )
+    out2 = equal_sized_bin_statistic(
+        x=true_snr.log10(), y=res2, n_bins=n_bins, xlims=(0.5, 3), statistic="median"
+    )
+    out3 = equal_sized_bin_statistic(
+        x=true_snr.log10(), y=res3, n_bins=n_bins, xlims=(0.5, 3), statistic="median"
+    )
+    assert torch.all(out1["middles"] == out2["middles"])
+    x = 10 ** out1["middles"]
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+    ax.plot(x, out3["stats"], label=r"\rm SEP", marker="", color=CLR_CYCLE[2])
+    ax.fill_between(
+        x,
+        out3["stats"] - out3["errs"],
+        out3["stats"] + out3["errs"],
+        alpha=0.2,
+        color=CLR_CYCLE[2],
+    )
+    ax.plot(x, out2["stats"], label=r"\rm MAP", marker="", color=CLR_CYCLE[0])
+    ax.fill_between(
+        x,
+        out2["stats"] - out2["errs"],
+        out2["stats"] + out2["errs"],
+        alpha=0.2,
+        color=CLR_CYCLE[0],
+    )
+    ax.plot(x, out1["stats"], label=r"\rm Samples", marker="", color=CLR_CYCLE[1])
+    ax.fill_between(
+        x,
+        out1["stats"] - out1["errs"],
+        out1["stats"] + out1["errs"],
+        alpha=0.2,
+        color=CLR_CYCLE[1],
+    )
+    ax.set_xlabel(r"\rm SNR", fontsize=28)
+    ax.set_ylabel(r"$\frac{f_{\rm pred} - f_{\rm true}}{f_{\rm true}}$", fontsize=32)
+    ax.axhline(0, color="k", linestyle="--", label=r"\rm Zero Residual")
+    ax.legend()
+    ax.set_xlim(5, 1000)
+    ax.set_xscale("log")
+    fig.savefig(out_dir / "samples_snr_res.png", dpi=500, bbox_inches="tight")
+
+    # as a function of blendedness
+
+    # first define bins (as described in paper)
+    qs = torch.linspace(0.12, 0.99, 31)
+    edges = bld.quantile(qs)
+    bins = torch.tensor([0.0, *edges[1:-1], 1.0])
+
+    out1 = binned_statistic(
+        x=bld,
+        y=res1,
+        bins=bins,
+        statistic="median",
+    )
+    out2 = binned_statistic(
+        x=bld,
+        y=res2,
+        bins=bins,
+        statistic="median",
+    )
+    out3 = binned_statistic(
+        x=bld,
+        y=res3,
+        bins=bins,
+        statistic="median",
+    )
+
+    fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+    ax.plot(out3["middles"], out3["stats"], label=r"\rm SEP", marker="", color=CLR_CYCLE[2])
+    ax.fill_between(
+        out3["middles"],
+        out3["stats"] - out3["errs"],
+        out3["stats"] + out3["errs"],
+        alpha=0.2,
+        color=CLR_CYCLE[2],
+    )
+    ax.plot(out2["middles"], out2["stats"], label=r"\rm MAP", marker="", color=CLR_CYCLE[0])
+    ax.fill_between(
+        out2["middles"],
+        out2["stats"] - out2["errs"],
+        out2["stats"] + out2["errs"],
+        alpha=0.2,
+        color=CLR_CYCLE[0],
+    )
+    ax.plot(out1["middles"], out1["stats"], label=r"\rm Samples", marker="", color=CLR_CYCLE[1])
+    ax.fill_between(
+        out1["middles"],
+        out1["stats"] - out1["errs"],
+        out1["stats"] + out1["errs"],
+        alpha=0.2,
+        color=CLR_CYCLE[1],
+    )
+    ax.set_xlabel(r"\rm Blendedness", fontsize=28)
+    ax.set_ylabel(r"$\frac{f_{\rm pred} - f_{\rm true}}{f_{\rm true}}$", fontsize=32)
+    ax.set_yscale("log")
+    ax.set_ylim(0.004, 10)
+    ax.legend(prop={"size": 22})
+    fig.savefig(out_dir / "samples_bld_res.png", dpi=500, bbox_inches="tight")
+
+    print(
+        f"Last blendedness bins comparisons: SEP {out3['stats'][-1]:.3f}, MAP {out2['stats'][-1]:.3f}, Samples {out1['stats'][-1]:.3f}"
+    )
+
+
+def main(
+    seed: int = 42,
+    tag: str = typer.Option(),
+    indices_fname: str = typer.Option(),
+    n_images: int = 10_000,
+    n_samples: int = 100,
+    slen: int = 35,
+    bp: int = 24,
+    max_n_sources: int = 10,
+    overwrite: bool = False,
+    overwrite_dataset: bool = False,
+    do_diagnostics: bool = False,
+):
+    pl.seed_everything(seed)
+
+    tag_txt = f"_{tag}" if (tag and not tag.startswith("_")) else tag
+    device = torch.device("cuda:0")
+    deblend_fpath = "models/deblender_23_22.pt"
+    ae_fpath = "models/autoencoder_42_42.pt"
+    detection_fpath = "models/detection_23_23.pt"
+    indices_fpath = DATASETS_DIR / indices_fname
+    dataset_path = DATASETS_DIR / f"central_sim_dataset{tag_txt}.npz"
+    results_path = CACHE_DIR / f"central_sim_results{tag_txt}.pt"
+    assert indices_fpath.exists()
+    diagnostics_fpath = CACHE_DIR / "diagnostics_central_sims"
+    figures_fpath = Path(f"figures/{tag}")
+    figures_fpath.mkdir(exist_ok=True)
+    indices_dict = np.load(indices_fpath)
+    test_indices = indices_dict["test"]
+
+    if not dataset_path.exists() or overwrite_dataset:
+        cat = prepare_final_galaxy_catalog()
+        psf = get_default_lsst_psf()
+        print(f"Number of test galaxies: {len(cat[test_indices])}")
+        ds = generate_central_sim_dataset(
+            n_samples=n_images,
+            catsim_table=cat[test_indices],
+            psf=psf,
+            slen=slen,
+            max_n_sources=10,
+            mag_cut_central=25.3,
+            bp=24,
+        )
+        save_dataset_npz(ds, dataset_path)
+
+    elif overwrite or not results_path.exists():
+        print(f"Dataset already exists at {dataset_path}. Loading...")
+        ds = load_dataset_npz(dataset_path)
+        print("Dataset loaded successfully.")
+
+    if not results_path.exists() or overwrite:
+        truth = FullCatalog(
+            slen,
+            slen,
+            {
+                "n_sources": ds["n_sources"],
+                "plocs": ds["plocs"],
+                "galaxy_bools": ds["galaxy_bools"],
+            },
+        )
+
+        im1 = ds["uncentered_sources"]
+        im2 = ds["uncentered_sources"].sum(dim=1)
+        blendedness = get_blendedness(im1, im2)
+        assert blendedness.shape == (n_images, max_n_sources)
+        bld = blendedness[:, 0]  # only keep central galaxy for now
+        assert bld.ndim == 1
+        assert bld.shape == (n_images,)
+
+        true_meas = get_residual_measurements(
+            truth,
+            ds["images"],
+            paddings=ds["paddings"],
+            sources=ds["uncentered_sources"],
+            no_bar=False,
+        )
+        true_snr = true_meas["snr"]
+
+        # lets get models
+        detection = DetectionEncoder().to(device).eval()
+        _ = detection.load_state_dict(
+            torch.load(detection_fpath, map_location=device, weights_only=True)
+        )
+        detection = detection.requires_grad_(False).eval().to(device)
+
+        deblender = GalaxyEncoder(ae_fpath)
+        deblender.load_state_dict(torch.load(deblend_fpath, map_location=device, weights_only=True))
+        deblender = deblender.requires_grad_(False).to(device).eval()
+
+        # iterate over images in increasing order of blendedness of first source
+        sorted_indices = np.argsort(bld)
+        outs = _get_sample_results(
+            sorted_indices=sorted_indices,
+            n_samples=n_samples,
+            images=ds["images"],
+            paddings=ds["paddings"],
+            slen=slen,
+            tile_slen=5,
+            bp=bp,
+            detection=detection,
+            deblender=deblender,
+            device=device,
+        )
+        # save results
+        torch.save(
+            {
+                "outs": outs,
+                "bld": bld,
+                "true_snr": true_snr,
+                "true_flux": true_meas["flux"],
+                "true_plocs": truth.plocs,
+                "true_n_sources": truth.n_sources,
+                "images": ds["images"],
+            },
+            results_path,
+        )
+
+    print(f"Results already exist at {results_path}. Loading...")
+    results = torch.load(results_path, weights_only=False)
+    print("Results loaded successfully.")
+    print("Number of images:", len(results["outs"]))
+
+    if do_diagnostics:
+        _get_diagnostic_figures(diagnostics_fpath, results, tag_txt)
+
+    _make_final_results_figures(out_dir=figures_fpath, rslts=results)
 
 
 if __name__ == "__main__":
