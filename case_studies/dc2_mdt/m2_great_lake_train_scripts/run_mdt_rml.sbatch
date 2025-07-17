@@ -13,7 +13,7 @@
 #SBATCH --mem-per-gpu=32GB
 
 ## wall time hours:minutes:seconds
-#SBATCH --time=96:00:00
+#SBATCH --time=144:00:00
 
 module load python/3.10.4 poetry/1.6.1 cuda/12.6.3 cudnn/12.6-v9.6.0
 module list
