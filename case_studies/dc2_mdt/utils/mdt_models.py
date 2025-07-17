@@ -5,9 +5,9 @@ import math
 from timm.models.vision_transformer import PatchEmbed, Mlp
 from timm.layers import trunc_normal_
 from typing import List
-from einops import repeat
+from einops import repeat, rearrange
 
-from case_studies.dc2_mdt.utils.convnet_layers import FeaturesNet
+from case_studies.dc2_mdt.utils.convnet_layers import FeaturesNet, ShortFeaturesNet
 
 
 def modulate(x, shift, scale):
@@ -355,6 +355,10 @@ class MDTv2(nn.Module):
         nn.init.xavier_uniform_(iw.view([iw.shape[0], -1]))
         nn.init.constant_(self.image_embedder.proj.bias, 0)
 
+        # Initialize timestep embedding MLP:
+        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
+        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
+
     def initialize_weights(self):
         # Initialize transformer layers:
         def _basic_init(module):
@@ -365,10 +369,6 @@ class MDTv2(nn.Module):
         self.apply(_basic_init)
 
         self.initialize_embedding_weights()
-
-        # Initialize timestep embedding MLP:
-        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
-        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
 
         for block in self.en_inblocks:
             nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
@@ -398,7 +398,7 @@ class MDTv2(nn.Module):
     def unpatchify(self, x):
         """
         x: (N, T, patch_size**2 * C)
-        imgs: (N, H, W, C)
+        imgs: (N, C, H, W)
         """
         c = self.out_channels
         p = self.x_embedder.patch_size[0]
@@ -616,6 +616,10 @@ class M2MDTv2CondTrue(MDTv2):
         nn.init.xavier_uniform_(iw.view([iw.shape[0], -1]))
         nn.init.constant_(self.image_embedder.proj.bias, 0)
 
+        # Initialize timestep embedding MLP:
+        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
+        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
+
     def forward(self, x, t, image, true_n_sources_and_locs, enable_mask=False):
         x = torch.cat([x, true_n_sources_and_locs], dim=1)
         return super().forward(x, t, image, enable_mask)
@@ -711,6 +715,14 @@ class M2MDTv2CondTrueRML(MDTv2):
             nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
             nn.init.constant_(embedder.proj.bias, 0)
 
+        iw = self.image_embedder.proj.weight.data
+        nn.init.xavier_uniform_(iw.view([iw.shape[0], -1]))
+        nn.init.constant_(self.image_embedder.proj.bias, 0)
+
+        # Initialize timestep embedding MLP:
+        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
+        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
+
     def enter_fast_inference(self):
         self.fast_inference_mode = True
         assert self.buffer_image is None
@@ -792,6 +804,14 @@ class M2MDTv2FullRML(MDTv2):
             requires_grad=True
         )
 
+        iw = self.image_embedder.proj.weight.data
+        nn.init.xavier_uniform_(iw.view([iw.shape[0], -1]))
+        nn.init.constant_(self.image_embedder.proj.bias, 0)
+
+        # Initialize timestep embedding MLP:
+        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
+        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
+
     def initialize_embedding_weights(self):
         # Initialize pos_embed by sin-cos embedding:
         pos_embed = get_2d_sincos_pos_embed(
@@ -842,6 +862,149 @@ class M2MDTv2FullRML(MDTv2):
         assert x.ndim == 4  # (n, c, h, w)
         assert t.ndim == 1  # (n, )
         assert x.shape[0] == t.shape[0]
+        assert x.shape == epsilon.shape
+        x = torch.cat([x, epsilon], dim=1)  # (n, c + c, h, w)
+        output = super().forward(x, t, image, enable_mask)  # (n, c, h, w)
+        assert not torch.isnan(output).any()
+        return output
+
+
+class DFTimestepEmbedder(nn.Module):
+    def __init__(self, hidden_size, frequency_embedding_size=256):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(frequency_embedding_size * 3, hidden_size, bias=True),
+            nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size, bias=True),
+        )
+        self.frequency_embedding_size = frequency_embedding_size
+
+    @staticmethod
+    def timestep_embedding(t, dim, max_period=10000):
+        # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
+        half = dim // 2
+        freqs = torch.exp(
+            -math.log(max_period) * torch.arange(start=0,
+                                                 end=half, dtype=torch.float32) / half
+        ).to(device=t.device)
+        args = t[..., None].float() * freqs  # (b, c, hidden)
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if dim % 2:
+            embedding = torch.cat(
+                [embedding, torch.zeros_like(embedding[..., :1])], dim=-1)
+        return embedding
+
+    def forward(self, t):
+        sub_t = t[:, (0, 1, 3), 0, 0]
+        t_freq = self.timestep_embedding(sub_t, self.frequency_embedding_size)
+        t_freq = rearrange(t_freq, "b c hidden -> b (c hidden)")
+        t_emb = self.mlp(t_freq)
+        return t_emb
+
+
+class M2MDTv2RMLDFFull(MDTv2):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # https://stackoverflow.com/questions/54752983/calling-supers-forward-method
+        self.v_masked_forward = torch.vmap(super().forward, in_dims=(1, 1, None), out_dims=1, randomness="same")
+        self.v_no_mask_forward = torch.vmap(super().forward, in_dims=(1, 1, None), out_dims=1, randomness="same")
+    
+    def initialize_image_feats_net(self):
+        self.image_features_net = ShortFeaturesNet(self.image_n_bands, 
+                                                    self.image_ch_per_band, 
+                                                    self.image_feats_ch)
+
+    def initialize_embedding(self):
+        assert self.hidden_size % 8 == 0
+        self.x_embedder = DynamicPatchEmbed(self.input_size, 
+                                            self.patch_size, 
+                                            [self.in_channels, self.in_channels],
+                                            (self.hidden_size // 4) * 1, 
+                                            hidden_partitions=[1, 1],
+                                            bias=True)
+        self.image_embedder = PatchEmbed(self.input_size,
+                                         self.patch_size,
+                                         self.image_feats_ch,
+                                         (self.hidden_size // 4) * 3,
+                                         bias=True)
+        self.t_embedder = DFTimestepEmbedder(self.hidden_size)
+        num_patches = self.x_embedder.num_patches
+        # Will use learnbale sin-cos embedding:
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches, self.hidden_size), 
+            requires_grad=True
+        )
+        self.decoder_pos_embed = nn.Parameter(
+            torch.zeros(1, num_patches, self.hidden_size), 
+            requires_grad=True
+        )
+
+    def initialize_embedding_weights(self):
+        # Initialize pos_embed by sin-cos embedding:
+        pos_embed = get_2d_sincos_pos_embed(
+            self.pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5))
+        self.pos_embed.data.copy_(
+            torch.from_numpy(pos_embed).float().unsqueeze(0))
+
+        decoder_pos_embed = get_2d_sincos_pos_embed(
+            self.decoder_pos_embed.shape[-1], int(self.x_embedder.num_patches ** 0.5))
+        self.decoder_pos_embed.data.copy_(
+            torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
+
+        # Initialize patch_embed like nn.Linear (instead of nn.Conv2d):
+        for embedder in self.x_embedder.embedders:
+            w = embedder.proj.weight.data
+            nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
+            nn.init.constant_(embedder.proj.bias, 0)
+
+        iw = self.image_embedder.proj.weight.data
+        nn.init.xavier_uniform_(iw.view([iw.shape[0], -1]))
+        nn.init.constant_(self.image_embedder.proj.bias, 0)
+
+        # Initialize timestep embedding MLP:
+        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
+        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
+
+    def enter_fast_inference(self):
+        self.fast_inference_mode = True
+        assert self.buffer_image is None
+        assert self.buffer_image_feats is None
+
+    def exit_fast_inference(self):
+        self.fast_inference_mode = False
+        assert self.buffer_image is not None
+        self.buffer_image = None
+        assert self.buffer_image_feats is not None
+        self.buffer_image_feats = None
+
+    def forward(self, x, t, image, epsilon, is_training, enable_mask=False):
+        if is_training:
+            assert t.ndim == 5  # (b, m, c, h, w)
+        else:
+            assert t.ndim == 4  # (b, c, h, w)
+        assert t.shape[-3] == 8
+        assert (t[..., :4, :, :] == t[..., 4:, :, :]).all()  # time schedules are same for each source
+        assert (t[..., 1, :, :] == t[..., 2, :, :]).all()  # locs x and y have the same time schedule
+        assert (t[..., 0:1, 0:1] == t).all()  # all tiles have the same time schedule
+
+        if is_training:
+            assert x.ndim == 5  # (n, m, c, h, w)
+            assert t.shape == x.shape
+            assert x.shape == epsilon.shape
+            x = torch.cat([x, epsilon], dim=2)  # (n, m, c + c, h, w)
+            self.enter_fast_inference()
+            self.get_image_feats(image)
+            if enable_mask:
+                output = self.v_masked_forward(x, t, image, enable_mask=True, directly_use_image_buffer=True)
+            else:
+                output = self.v_no_mask_forward(x, t, image, enable_mask=False, directly_use_image_buffer=True)
+            self.exit_fast_inference()
+            assert not torch.isnan(output).any()
+            return output  # (n, m, c, h, w)
+        
+        assert x.ndim == 4  # (n, c, h, w)
+        assert t.shape == x.shape
         assert x.shape == epsilon.shape
         x = torch.cat([x, epsilon], dim=1)  # (n, c + c, h, w)
         output = super().forward(x, t, image, enable_mask)  # (n, c, h, w)
@@ -905,6 +1068,14 @@ class DC2MDTv2RML(MDTv2):
             w = embedder.proj.weight.data
             nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
             nn.init.constant_(embedder.proj.bias, 0)
+
+        iw = self.image_embedder.proj.weight.data
+        nn.init.xavier_uniform_(iw.view([iw.shape[0], -1]))
+        nn.init.constant_(self.image_embedder.proj.bias, 0)
+
+        # Initialize timestep embedding MLP:
+        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
+        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
 
     def enter_fast_inference(self):
         self.fast_inference_mode = True
@@ -1028,6 +1199,9 @@ def M2_MDTv2_RML_S_2(**kwargs):
 
 def M2_MDTv2_full_RML_S_2(**kwargs):
      return M2MDTv2FullRML(depth=12, hidden_size=384, patch_size=2, num_heads=6, **kwargs)
+
+def M2_MDTv2_RML_DF_full_S_2(**kwargs):
+     return M2MDTv2RMLDFFull(depth=12, hidden_size=384, patch_size=2, num_heads=6, **kwargs)
 
 def DC2_MDTv2_RML_S_2(**kwargs):
     return DC2MDTv2RML(depth=12, hidden_size=384, patch_size=2, num_heads=6, **kwargs)

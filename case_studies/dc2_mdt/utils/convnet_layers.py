@@ -74,6 +74,35 @@ class FeaturesNet(nn.Module):
         return self.downsample_net(x)
 
 
+class ShortFeaturesNet(nn.Module):
+    def __init__(self, n_bands, ch_per_band, num_features):
+        super().__init__()
+        self.preprocess3d = nn.Sequential(
+            nn.Conv3d(n_bands, 64, [ch_per_band, 5, 5], padding=[0, 2, 2]),
+            nn.BatchNorm3d(64),
+            nn.SiLU(),
+        )
+
+        self.conv_skip_layers = nn.ModuleList([
+            ConvBlock(64, 64, kernel_size=5) for _ in range(4)
+        ])
+
+        self.postprocess_net = nn.Sequential(
+            ConvBlock(64, 128, stride=2),
+            C3(128, num_features, n=3),
+        )
+
+    def conv_skip_layers_forward(self, x):
+        for m in self.conv_skip_layers:
+            x = m(x) + x
+        return x
+
+    def forward(self, x):
+        x = self.preprocess3d(x).squeeze(2)
+        x = self.conv_skip_layers_forward(x)
+        return self.postprocess_net(x)
+
+
 class UShapeFeaturesNet(nn.Module):
     def __init__(self, n_bands, ch_per_band, num_features, double_downsample=True):
         super().__init__()

@@ -1,0 +1,12 @@
+---
+defaults:
+    - m2_mdt_rml_df_full_train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+train:
+    trainer:
+        logger:
+            name: M2_mdt_rml_df_full_debug
+            version: M2_mdt_rml_df_full_debug
+        devices: [6, 7]
