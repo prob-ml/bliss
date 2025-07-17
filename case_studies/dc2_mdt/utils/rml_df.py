@@ -1,19 +1,18 @@
 import torch
-from einops import repeat, reduce
+from einops import repeat, reduce, rearrange
 
 
-class RMLDiffusion:
+class RMLDF:
     def __init__(self, 
-                 num_timesteps, 
-                 num_sampling_steps, 
+                 num_timesteps,
                  m, 
                  lambda_, 
                  beta,
                  matching_fn=None,
                  loss_mask_fn=None,
-                 pred_x0_rectify_fn=None):
+                 pred_x0_rectify_fn=None,
+                 loss_weight_fn=None):
         self.num_timesteps = num_timesteps
-        self.num_sampling_steps = num_sampling_steps
         self.sigma = torch.linspace(0, 1, steps=self.num_timesteps, dtype=torch.float64)
         self.alpha = 1.0 - self.sigma
         self.m = m
@@ -22,32 +21,52 @@ class RMLDiffusion:
         self.matching_fn = matching_fn
         self.loss_mask_fn = loss_mask_fn
         self.pred_x0_rectify_fn = pred_x0_rectify_fn
+        self.loss_weight_fn = loss_weight_fn
+
+    @classmethod
+    def _extract_arr_by_t(cls, arr: torch.Tensor, t: torch.Tensor):
+        return arr.to(device=t.device)[t.flatten()].view(t.shape)
 
     def q_sample(self, x_start, t, noise=None):
         if noise is None:
             noise = torch.randn_like(x_start)
         assert noise.shape == x_start.shape
+        assert t.shape == x_start.shape
         return (
-            self._extract_into_tensor(self.alpha, t, x_start.shape) * x_start
-            + self._extract_into_tensor(self.sigma, t, x_start.shape) * noise
+            self._extract_arr_by_t(self.alpha, t) * x_start
+            + self._extract_arr_by_t(self.sigma, t) * noise
         ).float()
     
     @classmethod
     def replicate_fn(cls, n: int, m: int, x: torch.Tensor):
         return repeat(x, "n ... -> n m ...", n=n, m=m)
     
-    def compute_rho_diagonal_fn(self, x: torch.Tensor, y: torch.Tensor):
+    def compute_rho_diagonal_fn(self, x: torch.Tensor, y: torch.Tensor, loss_weight=None):
         assert x.shape == y.shape
+        if loss_weight is None:
+            loss_weight = torch.ones_like(x)
+        else:
+            assert loss_weight.ndim == x.ndim - 1
+            loss_weight = loss_weight.unsqueeze(1)
         # +1e-5 to avoid gradient explosion when (x - y) ** 2 == 0
-        l2_norm_beta = (reduce((x - y) ** 2, "n m ... -> n m", reduction="sum") + 1e-5).sqrt() ** self.beta
+        l2_norm_beta = (reduce((x - y) ** 2 * loss_weight, 
+                               "n m ... -> n m", 
+                               reduction="sum") + 1e-5).sqrt() ** self.beta
         return torch.mean(l2_norm_beta, dim=-1)  # (n, )
     
-    def compute_rho_fn(self, x: torch.Tensor, y: torch.Tensor):
+    def compute_rho_fn(self, x: torch.Tensor, y: torch.Tensor, loss_weight=None):
         assert x.shape == y.shape
         x = x.unsqueeze(2)  # (n, m, 1, ...)
         y = y.unsqueeze(1)  # (n, 1, m, ...)
+        if loss_weight is None:
+            loss_weight = torch.ones_like(x)
+        else:
+            assert loss_weight.ndim == x.ndim - 2
+            loss_weight = rearrange(loss_weight, "n ... -> n 1 1 ...")
         # +1e-5 to avoid gradient explosion when (x - y) ** 2 == 0
-        l2_norm_beta = (reduce((x - y) ** 2, "n m1 m2 ... -> n m1 m2", reduction="sum") + 1e-5).sqrt() ** self.beta
+        l2_norm_beta = (reduce((x - y) ** 2 * loss_weight, 
+                               "n m1 m2 ... -> n m1 m2", 
+                               reduction="sum") + 1e-5).sqrt() ** self.beta
         off_diag_mask = (1.0 - torch.eye(l2_norm_beta.shape[-1], 
                                         dtype=l2_norm_beta.dtype, 
                                         device=l2_norm_beta.device)).unsqueeze(0)
@@ -56,6 +75,7 @@ class RMLDiffusion:
     
     def loss_fn(self, t: torch.Tensor, x0: torch.Tensor, xt: torch.Tensor, model_fn):
         n = x0.shape[0]
+        assert t.shape == x0.shape
         x0_population = self.replicate_fn(n=n, m=self.m, x=x0)
         t_population = self.replicate_fn(n=n, m=self.m, x=t)
         xt_population = self.replicate_fn(n=n, m=self.m, x=xt)
@@ -69,8 +89,13 @@ class RMLDiffusion:
         if self.loss_mask_fn is not None:
             output_population = self.loss_mask_fn(x0_population, output_population)
 
-        confinement = self.compute_rho_diagonal_fn(x=x0_population, y=output_population)
-        interaction_prediction = self.compute_rho_fn(x=output_population, y=output_population)
+        if self.loss_weight_fn is not None:
+            loss_weight = self.loss_weight_fn(t, alpha=self.alpha, sigma=self.sigma)
+        else:
+            loss_weight = None
+
+        confinement = self.compute_rho_diagonal_fn(x=x0_population, y=output_population, loss_weight=loss_weight)
+        interaction_prediction = self.compute_rho_fn(x=output_population, y=output_population, loss_weight=loss_weight)
 
         score = 0.5  * self.lambda_ * interaction_prediction - confinement
         return -1 * score
@@ -87,37 +112,36 @@ class RMLDiffusion:
         if noise is None:
             noise = torch.randn_like(x_start)
         xt = self.q_sample(x_start, t, noise=noise)
-        if loss_weights is None:
-            loss_weights = torch.ones_like(t).float()
-        assert loss_weights.ndim == 1 and loss_weights.shape[0] == x_start.shape[0]
+
+        assert loss_weights is None, "please use loss_weight_fn to set the loss weight"
 
         model_fn = lambda t, xt, epsilon: model(xt, t, epsilon=epsilon, is_training=True, **model_kwargs)
         loss = self.loss_fn(t=t, x0=x_start, xt=xt, model_fn=model_fn)
         assert not torch.isnan(loss).any()
-        assert not torch.isnan(loss_weights).any()
-        assert loss.shape == loss_weights.shape
         return {
-            "loss": loss * loss_weights,
+            "loss": loss,
         }
     
-    def r_ij(self, i, j, s, t, broadcast_shape=None):
-        if broadcast_shape is None:
-            broadcast_shape = t.shape
-        alpha_t = self._extract_into_tensor(self.alpha, t, broadcast_shape)
-        alpha_s = self._extract_into_tensor(self.alpha, s, broadcast_shape)
-        sigma_t_2 = self._extract_into_tensor(self.sigma, t, broadcast_shape) ** 2
-        sigma_s_2 = self._extract_into_tensor(self.sigma, s, broadcast_shape) ** 2
-        return ((alpha_t / alpha_s) ** i) * ((sigma_s_2 / sigma_t_2) ** j)
+    def r_ij(self, i, j, s, t):
+        alpha_t = self._extract_arr_by_t(self.alpha, t)
+        alpha_s = self._extract_arr_by_t(self.alpha, s)
+        sigma_t_2 = self._extract_arr_by_t(self.sigma, t) ** 2
+        sigma_s_2 = self._extract_arr_by_t(self.sigma, s) ** 2
+        return torch.where(s != t, 
+                           ((alpha_t / alpha_s) ** i) * ((sigma_s_2 / sigma_t_2) ** j),
+                           1.0)
     
     def ddim_mean_variance(self, x0, xt, s, t, churn_factor):
         assert x0.shape == xt.shape
-        r01 = self.r_ij(0, 1, s, t, broadcast_shape=xt.shape)
-        r11 = self.r_ij(1, 1, s, t, broadcast_shape=xt.shape)
-        r12 = self.r_ij(1, 2, s, t, broadcast_shape=xt.shape)
-        r22 = self.r_ij(2, 2, s, t, broadcast_shape=xt.shape)
+        assert s.shape == x0.shape
+        assert t.shape == s.shape
+        r01 = self.r_ij(0, 1, s, t)
+        r11 = self.r_ij(1, 1, s, t)
+        r12 = self.r_ij(1, 2, s, t)
+        r22 = self.r_ij(2, 2, s, t)
         c2 = churn_factor ** 2
-        alpha_s = self._extract_into_tensor(self.alpha, s, broadcast_shape=xt.shape)
-        sigma_s_2 = self._extract_into_tensor(self.sigma, s, broadcast_shape=xt.shape) ** 2
+        alpha_s = self._extract_arr_by_t(self.alpha, s)
+        sigma_s_2 = self._extract_arr_by_t(self.sigma, s) ** 2
         posterior_mean = (c2 * r12 + (1 - c2) * r01) * xt + \
                           alpha_s * (1 - c2 * r22 - (1 - c2) * r11) * x0
         posterior_variance = sigma_s_2 * (1 - (c2 * r11 + (1 - c2)) ** 2)
@@ -152,6 +176,7 @@ class RMLDiffusion:
         self,
         model,
         shape,
+        k_matrix,
         noise=None,
         clip_denoised=True,
         model_kwargs=None,
@@ -165,6 +190,7 @@ class RMLDiffusion:
         for sample in self.ddim_sample_loop_progressive(
             model,
             shape,
+            k_matrix,
             noise=noise,
             clip_denoised=clip_denoised,
             model_kwargs=model_kwargs,
@@ -183,6 +209,7 @@ class RMLDiffusion:
         self,
         model,
         shape,
+        k_matrix,
         noise=None,
         clip_denoised=True,
         model_kwargs=None,
@@ -193,21 +220,24 @@ class RMLDiffusion:
         if device is None:
             device = next(model.parameters()).device
         assert isinstance(shape, (tuple, list))
+        assert k_matrix.shape[1:] == shape
         if noise is not None:
             xt = noise
         else:
             xt = torch.randn(*shape, device=device)
-        
-        times = torch.linspace(0, self.num_timesteps - 1, steps=self.num_sampling_steps).int().tolist()[::-1]
-        time_pairs = list(zip(times[:-1], times[1:]))  # (t, s)
+
+        m_list = list(range(k_matrix.shape[0]))
+        time_pair_index = list(zip(m_list[:-1], m_list[1:]))
         if progress:
             # Lazy import so that we don't depend on tqdm.
             from tqdm.auto import tqdm
-            time_pairs = tqdm(time_pairs)
-
-        for t, s in time_pairs:
-            t_tensor = torch.tensor([t] * shape[0], device=device)
-            s_tensor = torch.tensor([s] * shape[0], device=device)
+            time_pair_index = tqdm(time_pair_index)
+        for i, (t, s) in enumerate(time_pair_index):
+            t_tensor = k_matrix[t]
+            s_tensor = k_matrix[s]
+            assert (t_tensor >= s_tensor).all()
+            if i == len(time_pair_index) - 1:
+                assert (s_tensor == 0).all()
             with torch.no_grad():
                 out = self.ddim_sample(
                     model,
@@ -220,22 +250,3 @@ class RMLDiffusion:
                 )
                 yield out
                 xt = out["sample"]
-
-    @classmethod
-    def _extract_into_tensor(cls, 
-                             arr: torch.Tensor, 
-                             timesteps: torch.Tensor, 
-                             broadcast_shape: tuple):
-        """
-        Extract values from a 1-D torch tensor for a batch of indices.
-        :param arr: the 1-D torch tensor.
-        :param timesteps: a tensor of indices into the array to extract.
-        :param broadcast_shape: a larger shape of K dimensions with the batch
-                                dimension equal to the length of timesteps.
-        :return: a tensor of shape [batch_size, 1, ...] where the shape has K dims.
-        """
-        arr = arr.to(device=timesteps.device)
-        res = arr[timesteps]
-        while len(res.shape) < len(broadcast_shape):
-            res = res[..., None]
-        return res + torch.zeros(broadcast_shape, device=timesteps.device, dtype=torch.float64)

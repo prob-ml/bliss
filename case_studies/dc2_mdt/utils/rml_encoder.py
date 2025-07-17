@@ -340,7 +340,7 @@ class M2RMLFullEncoder(M2RMLEncoder):
         raise NotImplementedError()
     
     @torch.inference_mode()
-    def sample(self, batch):
+    def sample(self, batch, return_intermediate=False):
         image = self.get_image(batch)
         diffusion_sampling_config = {
             "model": self.my_net,
@@ -351,11 +351,18 @@ class M2RMLFullEncoder(M2RMLEncoder):
             "model_kwargs": {"image": image},
             "eta": self.ddim_eta,
         }
-        sample = self.rml_diffusion.ddim_sample_loop(**diffusion_sampling_config)
+        if not return_intermediate:
+            sample = self.rml_diffusion.ddim_sample_loop(**diffusion_sampling_config)
+        else:
+            sample, inter_pred_x0 = self.rml_diffusion.ddim_sample_loop(**diffusion_sampling_config, 
+                                                                        return_intermediate=return_intermediate)
         sample1, sample2 = sample.permute([0, 2, 3, 1]).chunk(2, dim=-1)  # (b, h, w, k)
         first_cat = self.catalog_parser.decode(sample1)
         second_cat = self.catalog_parser.decode(sample2)
-        return first_cat.union(second_cat, disjoint=False)
+        if not return_intermediate:
+            return first_cat.union(second_cat, disjoint=False)
+        else:
+            return first_cat.union(second_cat, disjoint=False), inter_pred_x0
     
     def _compute_cur_batch_loss(self, batch):
         target_cat = TileCatalog(batch["tile_catalog"])
