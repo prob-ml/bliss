@@ -911,9 +911,13 @@ class M2MDTv2RMLDFFull(MDTv2):
         self.v_no_mask_forward = torch.vmap(super().forward, in_dims=(1, 1, None), out_dims=1, randomness="same")
     
     def initialize_image_feats_net(self):
-        self.image_features_net = ShortFeaturesNet(self.image_n_bands, 
-                                                    self.image_ch_per_band, 
-                                                    self.image_feats_ch)
+        # self.image_features_net = ShortFeaturesNet(self.image_n_bands, 
+        #                                             self.image_ch_per_band, 
+        #                                             self.image_feats_ch)
+        self.image_features_net = FeaturesNet(self.image_n_bands, 
+                                              self.image_ch_per_band, 
+                                              self.image_feats_ch, 
+                                              double_downsample=False)
 
     def initialize_embedding(self):
         assert self.hidden_size % 8 == 0
