@@ -486,8 +486,8 @@ class M2RMLDFFullEncoder(M2RMLEncoder):
                                    lambda_=self.d_rml_lambda,
                                    beta=self.d_rml_beta,
                                    matching_fn=None,
-                                   loss_mask_fn=self.rml_loss_mask_fn,
-                                   pred_x0_rectify_fn=self.rml_pred_x0_rectify_fn,
+                                   loss_mask_fn=None, # self.rml_loss_mask_fn,
+                                   pred_x0_rectify_fn=None, # self.rml_pred_x0_rectify_fn,
                                    loss_weight_fn=lambda t, alpha, sigma: self.rml_sigmoid_loss_weight_fn(t, alpha, sigma, b=self.d_sigmoid_schedule_bias))
     
     def reconfig_sampling(self, new_sampling_time_steps, new_ddim_eta):
