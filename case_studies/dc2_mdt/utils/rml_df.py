@@ -160,7 +160,7 @@ class RMLDF:
         if model_kwargs is None:
             model_kwargs = {}
         epsilon = torch.randn_like(xt)
-        noise = torch.rand_like(xt)
+        noise = torch.randn_like(xt)
         pred_x0 = model(xt, t, epsilon=epsilon, is_training=False, **model_kwargs)
         if clip_denoised:
             pred_x0 = pred_x0.clamp(min=-1, max=1)
