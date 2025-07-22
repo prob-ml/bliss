@@ -193,7 +193,7 @@ class NormalizedFactor(DiffusionFactor):
                                                  torch.ones_like(target_minus_1_to_1) * self.latent_zero_point, 
                                                  target_minus_1_to_1)
         assert ((masked_target_minus_1_to_1 >= -1.0) & (masked_target_minus_1_to_1 <= 1.0)).all()
-        return target_minus_1_to_1 * self.scale
+        return masked_target_minus_1_to_1 * self.scale
 
     def decode_params(self, params):
         assert ((params >= -self.scale) & (params <= self.scale)).all()
@@ -230,7 +230,7 @@ class LogNormalizedFactor(DiffusionFactor):
                                                      torch.ones_like(log_target_minus_1_to_1) * self.latent_zero_point,
                                                      log_target_minus_1_to_1)
         assert ((masked_log_target_minus_1_to_1 >= -1.0) & (masked_log_target_minus_1_to_1 <= 1.0)).all()
-        return log_target_minus_1_to_1 * self.scale
+        return masked_log_target_minus_1_to_1 * self.scale
 
     def decode_params(self, params):
         assert ((params >= -self.scale) & (params <= self.scale)).all()
