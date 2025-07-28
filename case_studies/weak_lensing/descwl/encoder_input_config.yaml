@@ -2,17 +2,17 @@
 # Replace the single file paths with directory paths containing batch files
 
 # Directory containing image batch files
-image_dir: /scratch/regier_root/regier0/taodingr/descwl-shear-sims/generated_output/WLD_80_no_star_noise_1_fix_psf
+image_dir: /scratch/regier_root/regier0/taodingr/descwl-shear-sims/generated_output/WLD_80_star_max_100_draw_bright
 
 # Directory containing catalog batch files  
-catalog_dir: /scratch/regier_root/regier0/taodingr/descwl-shear-sims/generated_output/WLD_80_no_star_noise_1_fix_psf
+catalog_dir: /scratch/regier_root/regier0/taodingr/descwl-shear-sims/generated_output/WLD_80_star_max_100_draw_bright
 
 # File patterns to match batch files
 image_pattern: "*_images.pt"          # e.g., "batch_*.pt", "images_*.pt"
 catalog_pattern: "*_catalog.pt"        # e.g., "batch_*.pt", "catalogs_*.pt"
 
 # Processing settings
-setting: WLD_80_no_star_noise_1_fix_psf
+setting: WLD_80_star_max_100_draw_bright
 shear_setting: varying
 
 # Memory management
