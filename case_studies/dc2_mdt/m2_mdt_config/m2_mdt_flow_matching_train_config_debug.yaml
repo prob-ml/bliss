@@ -1,0 +1,12 @@
+---
+defaults:
+    - m2_mdt_flow_matching_train_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+train:
+    trainer:
+        logger:
+            name: M2_mdt_flow_matching_debug
+            version: M2_mdt_flow_matching_debug
+        devices: [1, 2]
