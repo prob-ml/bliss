@@ -7,7 +7,7 @@ defaults:
 mode: train
 
 paths:
-    cached_data: /data/scratch/weak_lensing/weak_lensing_img2048_WLD_density_80_1x1_varying_shear
+    cached_data: /data/scratch/descwl/weak_lensing_img2048_WLD_80_star_max_100_draw_bright_with_filter_varying_shear
     output: /home/twhit/bliss
 
 cached_simulator:
