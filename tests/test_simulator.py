@@ -24,7 +24,7 @@ class TestSimulate:
     def test_simulate_and_predict(self, cfg):
         """Test simulating an image from a fixed catalog and making predictions on that catalog."""
         # load cached simulated catalog
-        true_catalog = torch.load(cfg.paths.test_data + "/test_image/dataset_0.pt")
+        true_catalog = torch.load(f"{cfg.paths.test_data}/test_image/dataset_0.pt")
         true_catalog["fluxes"][0, 10, 10] = 10.0
         true_catalog = TileCatalog(true_catalog)
 

@@ -594,12 +594,15 @@ class FullCatalog(UserDict):
         # prepare tensors for output #
         tile_cat_shape = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile)
         tile_n_sources = torch.zeros(tile_cat_shape[:3], dtype=torch.int64, device=self.device)
-        tile_params: Dict[str, Tensor] = {}
-        for k, v in self.items():
-            if k in {"plocs", "n_sources"}:
-                continue
-            size = (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, v.shape[-1])
-            tile_params[k] = torch.zeros(size, dtype=v.dtype, device=self.device)
+        tile_params = {
+            key: torch.zeros(
+                (self.batch_size, n_tiles_h, n_tiles_w, max_sources_per_tile, value.shape[-1]),
+                dtype=value.dtype,
+                device=self.device,
+            )
+            for key, value in self.items()
+            if key not in {"plocs", "n_sources"}
+        }
         tile_params["locs"] = torch.zeros((*tile_cat_shape, 2), device=self.device)
         if source_tile_coords.shape[1] == 0:
             tile_params["n_sources"] = tile_n_sources
@@ -703,15 +706,13 @@ class FullCatalog(UserDict):
         # for tile having more than one source, we add an offset to the sources on it #
 
         # assign parameters to their corresponding tiles #
+        key_map = {"locs": "plocs"}
         for tile_k, tile_v in tile_params.items():
             if tile_k == "plocs":
                 raise KeyError("plocs should not be in tile_params")
             if tile_k == "n_sources":
                 raise KeyError("n_sources should not be in tile_params")
-            if tile_k == "locs":
-                k = "plocs"
-            else:
-                k = tile_k
+            k = key_map.get(tile_k, tile_k)
             full_cat_v = self[k]  # (b, bm, k)
             if filter_oob:
                 full_cat_v = torch.where(plocs_mask.unsqueeze(-1), full_cat_v, 0)

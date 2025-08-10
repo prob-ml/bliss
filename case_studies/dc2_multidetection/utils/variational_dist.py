@@ -272,11 +272,15 @@ class MultiVariationalDist(torch.nn.Module):
             padded_true_tile_dict["cosmodc2_mask"] = self._pad_along_max_sources(cosmodc2_mask)
         target_tile_dict = {k: torch.zeros_like(v) for k, v in padded_true_tile_dict.items()}
 
-        for k, v in target_tile_dict.items():
-            true_v = padded_true_tile_dict[k]  # (b, nth, ntw, m + 1, k)
-            expanded_est_to_true_indices = est_to_true_indices.expand_as(true_v)
-            v = torch.gather(true_v, dim=-2, index=expanded_est_to_true_indices)
-            target_tile_dict[k] = v[:, :, :, :-1, :].split(1, dim=-2)
+        # assign parameters to their corresponding tiles #
+        target_tile_dict = {
+            k: torch.gather(
+                padded_true_tile_dict[k],
+                dim=-2,
+                index=est_to_true_indices.expand_as(padded_true_tile_dict[k]),
+            )[:, :, :, :-1, :].split(1, dim=-2)
+            for k in target_tile_dict
+        }
 
         # squeeze n_sources
         target_tile_dict["n_sources"] = [

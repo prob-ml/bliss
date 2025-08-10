@@ -3,8 +3,10 @@ import logging
 import multiprocessing
 import pathlib
 from pathlib import Path
+from typing import List
 
 import torch
+import yaml
 
 from bliss.surveys.dc2 import DC2DataModule, map_nested_dicts, split_list, unpack_dict
 
@@ -15,13 +17,91 @@ class RedshiftDC2DataModule(DC2DataModule):
     def __init__(
         self,
         *args,
+        split_to_use: int = 0,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-
+        self.split_to_use = split_to_use
         self.dc2_image_dir = Path(self.dc2_image_dir)
         self.dc2_cat_path = Path(self.dc2_cat_path)
         self._tract_patches = None
+        self._train_files = None
+        self._val_files = None
+        self._test_files = None
+
+    def _get_split(self) -> List[str]:
+        split_yaml = self.cached_data_path / "splits.yaml"
+        if not split_yaml.exists():
+            raise FileNotFoundError(f"Split file {split_yaml} does not exist.")
+
+        with open(split_yaml, "r") as f:  # pylint: disable=unspecified-encoding
+            splits = yaml.safe_load(f)
+
+        if self.split_to_use < 0 or self.split_to_use >= len(splits["train"]):
+            raise ValueError(f"split_to_use {self.split_to_use} is out of range. ")
+
+        train_tract_patches = ["_".join(x) for x in splits["train"][self.split_to_use]]
+        val_tract_patches = ["_".join(x) for x in splits["val"][self.split_to_use]]
+        test_tract_patches = ["_".join(x) for x in splits["test"][self.split_to_use]]
+
+        set_train_tract_patches = set(train_tract_patches)
+        set_val_tract_patches = set(val_tract_patches)
+        set_test_tract_patches = set(test_tract_patches)
+
+        # Ensure no overlap between train, val, and test splits
+        if (
+            set_train_tract_patches & set_val_tract_patches
+            or set_train_tract_patches & set_test_tract_patches
+            or set_val_tract_patches & set_test_tract_patches
+        ):
+            raise ValueError("Train, val, or test split contains duplicates.")
+
+        # Separate self.file_paths into train/val/test
+        self._train_files = [
+            file_name
+            for file_name in self.file_paths
+            if any(substring in file_name for substring in train_tract_patches)
+        ]
+        self._val_files = [
+            file_name
+            for file_name in self.file_paths
+            if any(substring in file_name for substring in val_tract_patches)
+        ]
+        self._test_files = [
+            file_name
+            for file_name in self.file_paths
+            if any(substring in file_name for substring in test_tract_patches)
+        ]
+
+    def setup(self, stage: str) -> None:  # noqa: WPS324
+        """Setup following super(), but we save train/val/test splits to text files for ease."""
+        if self.file_paths is None or self.slices is None:
+            self._load_file_paths_and_slices()
+        if self._train_files is None or self._val_files is None or self._test_files is None:
+            self._get_split()
+
+        if stage == "fit":
+            self.train_dataset = self._get_dataset(
+                self._train_files, self.train_transforms, shuffle=True
+            )
+
+            self.val_dataset = self._get_dataset(self._val_files, self.nontrain_transforms)
+            return None
+
+        if stage == "validate":
+            if self.val_dataset is None:
+                self.val_dataset = self._get_dataset(self._val_files, self.nontrain_transforms)
+            return None
+
+        if stage == "test":
+            self.test_dataset = self._get_dataset(self._test_files, self.nontrain_transforms)
+            return None
+
+        if stage == "predict":
+            self.predict_dataset = self._get_dataset(self.file_paths, self.nontrain_transforms)
+            return None
+
+        raise RuntimeError(f"setup skips stage {stage}")
 
     def _load_image_and_bg_files_list(self):
         img_pattern = "**/*/calexp*.fits"
@@ -47,7 +127,7 @@ class RedshiftDC2DataModule(DC2DataModule):
         patches = [
             str(file_name).rsplit("-", maxsplit=1)[-1][:3] for file_name in self._image_files[0]
         ]  # TODO: check
-        self._tract_patches = [x[0] + "_" + x[1] for x in zip(tracts, patches)]  # TODO: hack
+        self._tract_patches = [f"{x[0]}_{x[1]}" for x in zip(tracts, patches)]  # TODO: hack
 
         return n_image
 

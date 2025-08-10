@@ -1,0 +1,92 @@
+---
+defaults:
+    - ../../../bliss/conf@_here_: base_config
+    - _self_
+    - override hydra/job_logging: stdout
+
+mode: train
+
+paths:
+    cached_data: /nfs/turbo/lsa-regier/scratch/taodingr/weak_lensing_img2048_WLD_density_80_1x1_varying_shear
+    output: /home/twhit/bliss
+
+cached_simulator:
+    batch_size: 1
+    train_transforms: []
+    num_workers: 1
+
+variational_factors:
+  - _target_: bliss.encoder.variational_dist.NormalFactor
+    name: shear_1
+    nll_gating: null
+  - _target_: bliss.encoder.variational_dist.NormalFactor
+    name: shear_2
+    nll_gating: null
+
+lensing_normalizers_nan:
+    nan:
+        _target_: case_studies.weak_lensing.image_normalizer.NanNormalizer
+
+lensing_metrics:
+    _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
+    num_redshift_bins: 1
+
+lensing_plots:
+    _target_: case_studies.weak_lensing.plots.WeakLensingPlots
+    frequency: 1
+    save_local: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/lensing_plots
+
+encoder:
+    _target_: case_studies.weak_lensing.encoder.WeakLensingEncoder
+    survey_bands: [r,i,z]
+    reference_band: 0
+    tile_slen: 2048
+    n_pixels_per_side: 2048
+    n_tiles_per_side: 1
+    ch_init: 64
+    ch_max: 512
+    ch_final: 64
+    initial_downsample: true
+    more_up_layers: false
+    num_bottleneck_layers: 0
+    optimizer_params:
+        lr: 1e-3
+    scheduler_params:
+        milestones: [16]
+        gamma: 0.1
+    image_normalizers: ${lensing_normalizers_nan}
+    var_dist:
+        _target_: bliss.encoder.variational_dist.VariationalDist
+        tile_slen: ${encoder.tile_slen}
+        factors: ${variational_factors}
+    mode_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: partial
+        metrics: ${lensing_metrics}
+    sample_metrics:
+        _target_: torchmetrics.MetricCollection
+        _convert_: partial
+        metrics: ${lensing_metrics}
+    sample_image_renders:
+        _target_: torchmetrics.MetricCollection
+        _convert_: partial
+        metrics: ${lensing_plots}
+    use_double_detect: false
+    use_checkerboard: false
+    loss_plots_location: ${paths.output}/${train.trainer.logger.name}/${train.trainer.logger.version}/loss_plots
+
+train:
+    trainer:
+        logger:
+            name: WeakLensingResultsDescwl
+            version: ${now:%Y-%m-%d_%H-%M}
+        max_epochs: 300
+        devices: 1
+        use_distributed_sampler: false
+        precision: 32-true
+    callbacks:
+        early_stopping:
+            patience: 100
+    data_source: ${cached_simulator}
+    pretrained_weights: null
+    seed: 123123

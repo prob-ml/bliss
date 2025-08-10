@@ -1,0 +1,4 @@
+image_path: /data/scratch/taodingr/weak_lensing/descwl/Test_n_tiles/images_Test_n_tiles.pt
+catalog_path: /data/scratch/taodingr/weak_lensing/descwl/Test_n_tiles/catalog_Test_n_tiles.pt
+setting: Test_n_tiles
+shear_setting: varying

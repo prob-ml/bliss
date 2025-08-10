@@ -578,7 +578,7 @@ class GeneralBinMetricWithFilter(GeneralBinMetric):
                 postfix_list.append(cur_postfix)
 
         if postfix_list:
-            return "_" + "_".join(postfix_list)
+            return f"_{'_'.join(postfix_list)}"
 
         return ""
 

@@ -253,6 +253,7 @@ class Encoder(pl.LightningModule):
         target_cat1 = target_cat.get_brightest_sources_per_tile(
             band=self.reference_band, exclude_num=0
         )
+        target_cat2 = None  # Will be set if use_double_detect is True
         if self.use_double_detect:
             target_cat2 = target_cat.get_brightest_sources_per_tile(
                 band=self.reference_band, exclude_num=1
@@ -389,7 +390,7 @@ class Encoder(pl.LightningModule):
                 except NotImplementedError:
                     continue
                 name = f"Epoch:{self.current_epoch}" if show_epoch else ""
-                name += f"/{logging_name} {metric_name}"
+                name = f"{name}/{logging_name} {metric_name}"
                 if self.logger and plot_or_none:
                     fig, _axes = plot_or_none
                     self.logger.experiment.add_figure(name, fig)

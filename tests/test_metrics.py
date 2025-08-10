@@ -108,7 +108,7 @@ class TestMetrics:
 
     def test_self_agreement(self, cfg):
         """Test galaxy classification metrics on full catalog."""
-        with open(cfg.paths.test_data + "/multiband_data/dataset_0.pt", "rb") as f:
+        with open(f"{cfg.paths.test_data}/multiband_data/dataset_0.pt", "rb") as f:
             data = torch.load(f)
         multiband_dataloader = DataLoader(data, batch_size=8, shuffle=False)
 
@@ -141,9 +141,10 @@ class TestMetrics:
         sdss.prepare_data()
 
         run, camcol, field = sdss.image_id(0)
+        cat_dir = f"{cfg.paths.sdss}/{run}/{camcol}/{field}"
+        cat_file = f"photoObj-{run:06d}-{camcol}-{field:04d}.fits"
         base_photo_cat = PhotoFullCatalog.from_file(
-            cat_path=cfg.paths.sdss
-            + f"/{run}/{camcol}/{field}/photoObj-{run:06d}-{camcol}-{field:04d}.fits",
+            cat_path=f"{cat_dir}/{cat_file}",
             wcs=sdss[0]["wcs"][2],
             height=1488,
             width=2048,
