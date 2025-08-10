@@ -221,6 +221,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         nontrain_transforms: List,
         subset_fraction: float = None,
         sparse_storage = False,
+        shuffle_file_order: bool = True,
     ):
         super().__init__()
 
@@ -232,6 +233,7 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         self.nontrain_transforms = nontrain_transforms
         self.subset_fraction = subset_fraction
         self.sparse_storage = sparse_storage
+        self.shuffle_file_order = shuffle_file_order
 
         self.file_paths = None
         self.slices = None
@@ -277,7 +279,8 @@ class CachedSimulatedDataModule(pl.LightningDataModule):
         file_names = [
             f for f in sorted(os.listdir(str(self.cached_data_path))) if f.endswith(".pt")
         ]
-        random.shuffle(file_names)
+        if self.shuffle_file_order:
+            random.shuffle(file_names)
         if self.subset_fraction:
             file_names = file_names[: math.ceil(len(file_names) * self.subset_fraction)]
         self.file_paths = [os.path.join(str(self.cached_data_path), f) for f in file_names]

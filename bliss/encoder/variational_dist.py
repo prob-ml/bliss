@@ -3,12 +3,13 @@ from abc import ABC, abstractmethod
 
 import torch
 from einops import rearrange
-from torch.distributions import (
+from torch.distributions import (  # noqa: WPS235
     AffineTransform,
     Categorical,
     Distribution,
     Independent,
     LogNormal,
+    MultivariateNormal,
     Normal,
     SigmoidTransform,
     TransformedDistribution,
@@ -172,6 +173,40 @@ class BivariateNormalFactor(VariationalFactor):
         mean = params[:, :, :, :2]
         sd = params[:, :, :, 2:].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
         return Independent(Normal(mean, sd), 1)
+
+
+class IndependentMVNFactor(VariationalFactor):
+    def __init__(self, *args, dim, low_clamp=-20, high_clamp=20, **kwargs):
+        super().__init__(dim + dim, *args, **kwargs)
+        self.dim = dim
+        self.low_clamp = low_clamp
+        self.high_clamp = high_clamp
+
+    def get_dist(self, params):
+        mean = params[:, :, :, : self.dim]
+        sd = params[:, :, :, self.dim :].clamp(self.low_clamp, self.high_clamp).exp().sqrt()
+        return Independent(Normal(mean, sd), 1)
+
+
+class MVNFactor(VariationalFactor):
+    def __init__(self, *args, dim, low_clamp=-20, high_clamp=20, **kwargs):
+        super().__init__(dim + dim * (dim + 1) // 2, *args, **kwargs)
+        self.dim = dim
+        self.low_clamp = low_clamp
+        self.high_clamp = high_clamp
+        self.offdiag_rows, self.offdiag_cols = torch.tril_indices(self.dim, self.dim, offset=-1)
+
+    def get_dist(self, params):
+        loc = params[..., : self.dim]
+        scale_tril = torch.zeros((*params.shape[:-1], self.dim, self.dim), device=params.device)
+        scale_tril[..., range(self.dim), range(self.dim)] = (
+            params[..., self.dim : (2 * self.dim)]
+            .clamp(self.low_clamp, self.high_clamp)
+            .exp()
+            .sqrt()
+        )
+        scale_tril[..., self.offdiag_rows, self.offdiag_cols] = params[..., (2 * self.dim) :]
+        return MultivariateNormal(loc=loc, scale_tril=scale_tril)
 
 
 class TDBNFactor(VariationalFactor):

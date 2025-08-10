@@ -1,15 +1,5 @@
 [tool.poetry]
-authors = [
-  "Ismael Mendoza <imendoza@umich.edu>",
-  "Runjing Liu",
-  "Derek Hansen",
-  "Yash Patel",
-  "Ziteng Pang",
-  "Zhe Zhao",
-  "Mallory Wang",
-  "Cheng Wang",
-  "Jeffrey Regier",
-]
+authors = ["BLISS developers"]
 description = "Bayesian Light Source Separator"
 documentation = "https://prob-ml.github.io/bliss/"
 keywords = ["cosmology", "blending", "weak lensing", "bayesian", "ml", "pytorch"]
@@ -32,7 +22,7 @@ requests = "^2.31.0"
 torch = "^2.3.1"
 torchvision = "^0.18.1"
 torchmetrics = "^1.4.0.post0"
-pytorch-lightning = "^2.3.3"
+lightning = {extras = ["extra"], version = "^2.3.3"}
 einops = "^0.8.0"
 hydra-core = ">=1.0.4"
 astropy = "^6.1.1"
@@ -41,44 +31,33 @@ reproject = ">=0.11.0"
 pyvo = "^1.4.1"
 colossus = "^1.3.5"
 
-[tool.poetry.dev-dependencies]
-Cython = ">=0.29.21"
+[tool.poetry.group.dev.dependencies]
 Sphinx = ">=4.0.2"
 black = ">=22.3.0"
 darglint = ">=1.8.1"
 flake8 = ">=4.0.1"
 flake8-docstrings = ">=1.6.0"
 git-lfs = ">=1.6"
-ipykernel = "^6.21.0"
+ipykernel = "^6.29.5"
 isort = ">=5.9.3"
 jupyter = ">=1.0.0"
-jupyter_contrib_nbextensions = ">=0.5.1"
 nbstripout = ">=0.5.0"
 plotly = ">=4.14.3"
 pre-commit = ">=2.9.2"
 pre-commit-hooks = "^4.4.0"
-pylint = ">=2.6.0"
+pylint = ">=3.3.5"
 pytest-cov = ">=2.10"
 sphinx-rtd-theme = ">=0.5.2"
-torch-tb-profiler = "^0.4.1"
 tqdm = ">=4.62.3"
 wemake-python-styleguide = ">=0.16.1"
 nbsphinx = "^0.9.2"
 pypandoc = "^1.11"
-types-requests = "^2.31.0.1"
 scikit-learn = ">=0.24.2"
 seaborn = "^0.13.0"
-lsstdesc-gcr-catalogs = "^1.7.0"
 pyarrow = "^15.0.0"
-hmf = "^3.4.4"
 healpy = "^1.16.6"
 h5py = "^3.11.0"
-pyclean = "^3.0.0"
-pathos = "^0.3.2"
 pytest = "^8.2.2"
-
-[tool.poetry.group.dev.dependencies]
-ipykernel = "^6.29.5"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
@@ -86,7 +65,7 @@ requires = ["poetry-core>=1.0.0"]
 
 [tool.black]
 line-length = 100
-target-version = ['py310']
+target-version = ['py312']
 
 [tool.isort]
 multi_line_output = 3
@@ -110,6 +89,7 @@ filterwarnings = [
   "ignore:.*Total length of `CombinedLoader` across ranks is zero.*:UserWarning",
   "ignore:.*Detected call of `lr_scheduler.step()` before `optimizer.step()`.*:UserWarning",
   "ignore:.*AMP with fp16 is not supported on CPU.*:UserWarning",
+  "ignore:.*This process.*is multi-threaded, use of fork.*may lead to deadlocks.*:DeprecationWarning",
 ]
 minversion = "6.0"
 testpaths = [

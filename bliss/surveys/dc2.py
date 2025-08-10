@@ -3,6 +3,7 @@ import copy
 import logging
 import multiprocessing
 import pathlib
+from pathlib import Path
 from typing import List, Dict
 
 import numpy as np
@@ -77,6 +78,7 @@ class DC2DataModule(CachedSimulatedDataModule):
         nontrain_transforms: List,
         subset_fraction: float = None,
         store_sparse_tensor = False,
+        shuffle_file_order: bool = True,
     ):
         super().__init__(
             splits,
@@ -87,6 +89,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             nontrain_transforms,
             subset_fraction,
             store_sparse_tensor
+            shuffle_file_order,
         )
 
         self.dc2_image_dir = dc2_image_dir
@@ -357,7 +360,18 @@ class DC2FullCatalog(FullCatalog):
 
     @classmethod
     def from_file(cls, cat_path, wcs, height, width, **kwargs):
-        catalog = pd.read_pickle(cat_path)
+        # load catalog from either a string path or a Path
+
+        cat_path = Path(cat_path)
+        suffix = cat_path.suffix.lower()
+
+        if suffix == ".parquet":
+            catalog = pd.read_parquet(cat_path)
+        elif suffix in (".pkl", ".pickle"):
+            catalog = pd.read_pickle(cat_path)
+        else:
+            raise ValueError(f"Unsupported catalog file format: {suffix}")
+
         flux_r_band = catalog["flux_r"].values
         catalog = catalog.loc[flux_r_band > kwargs["catalog_min_r_flux"]]
 
@@ -436,15 +450,15 @@ class DC2FullCatalog(FullCatalog):
         flux_list = []
         psf_params_list = []
         for b in bands:
-            flux_list.append(torch.from_numpy((catalog["flux_" + b]).values))
+            flux_list.append(torch.from_numpy((catalog[f"flux_{b}"]).values))
             psf_params_name = ["IxxPSF_pixel_", "IyyPSF_pixel_", "IxyPSF_pixel_", "psf_fwhm_"]
             psf_params_cur_band = []
             for i in psf_params_name:
                 if median:
-                    median_psf = np.nanmedian((catalog[i + b]).values).astype(np.float32)
+                    median_psf = np.nanmedian((catalog[f"{i}{b}"]).values).astype(np.float32)
                     psf_params_cur_band.append(median_psf)
                 else:
-                    psf_params_cur_band.append(catalog[i + b].values.astype(np.float32))
+                    psf_params_cur_band.append(catalog[f"{i}{b}"].values.astype(np.float32))
             psf_params_list.append(
                 torch.tensor(psf_params_cur_band)
             )  # bands x 4 (params per band) x n_obj
