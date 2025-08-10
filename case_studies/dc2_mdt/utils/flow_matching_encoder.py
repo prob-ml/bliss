@@ -103,19 +103,23 @@ class M2FMEncoder(pl.LightningModule):
         return torch.cat(input_lst, dim=2)
 
     @torch.inference_mode()
-    def sample(self, batch):
+    def sample(self, batch, ode_config_dict=None):
         image = self.get_image(batch)
         init_noise = torch.randn(image.shape[0], 
                                     self.catalog_parser.n_params_per_source * 2,  # x2 for double detect 
                                     self.image_size[0] // self.tile_slen, self.image_size[1] // self.tile_slen,
                                 device=image.device)
+        if ode_config_dict is None:
+            ode_config_dict = {
+                "atol": 1e-4,
+                "rtol": 1e-4,
+                "method": "dopri5",
+            }
         traj = torchdiffeq.odeint(
             lambda t, x: self.my_net(x=x, t=t, image=image),
             init_noise,
             torch.linspace(0, 1, 2, device=self.device),
-            atol=1e-4,
-            rtol=1e-4,
-            method="dopri5",
+            **ode_config_dict,
         )
         sample = traj[-1]
         sample = sample.clamp(min=-1.0, max=1.0)

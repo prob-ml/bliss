@@ -224,7 +224,7 @@ class ExactOptimalTransportConditionalFlowMatcher(ConditionalFlowMatcher):
     It overrides the sample_location_and_conditional_flow.
     """
 
-    def __init__(self, sigma: Union[float, int] = 0.0):
+    def __init__(self, sigma: Union[float, int] = 0.0, discrete_labels_guide=False):
         r"""Initialize the ConditionalFlowMatcher class. It requires the hyper-parameter $\sigma$.
 
         Parameters
@@ -234,6 +234,7 @@ class ExactOptimalTransportConditionalFlowMatcher(ConditionalFlowMatcher):
         """
         super().__init__(sigma)
         self.ot_sampler = OTPlanSampler(method="exact")
+        self.discrete_labels_guide = discrete_labels_guide
 
     def sample_location_and_conditional_flow(self, x0, x1, t=None, return_noise=False):
         r"""
@@ -304,7 +305,41 @@ class ExactOptimalTransportConditionalFlowMatcher(ConditionalFlowMatcher):
         ----------
         [1] Improving and Generalizing Flow-Based Generative Models with minibatch optimal transport, Preprint, Tong et al.
         """
-        x0, x1, y0, y1 = self.ot_sampler.sample_plan_with_labels(x0, x1, y0, y1)
+        if not self.discrete_labels_guide:
+            x0, x1, y0, y1 = self.ot_sampler.sample_plan_with_labels(x0, x1, y0, y1)
+        else:
+            assert y1 is not None
+            assert y1.ndim == 1
+            y1_int = y1.int()
+            y1_min, y1_max = y1_int.min(), y1_int.max()
+            assert y1_max - y1_min < 20, "there are too many different labels"
+            sub_x0, sub_x1, sub_y0, sub_y1 = [], [], [], []
+            for i in range(y1_min, y1_max + 1):
+                mask = (y1_int == i)
+                if mask.sum().item() == 0:
+                    continue
+                sub_x0.append(x0[mask])
+                sub_x1.append(x1[mask])
+                sub_y1.append(y1[mask])
+                if y0 is not None:
+                    sub_y0.append(y0[mask])
+                else:
+                    sub_y0.append(None)
+            assert sum([ss_x0.shape[0] for ss_x0 in sub_x0]) == x0.shape[0]
+            
+            r_x0, r_x1, r_y0, r_y1 = [], [], [], []
+            for ss_x0, ss_x1, ss_y0, ss_y1 in zip(sub_x0, sub_x1, sub_y0, sub_y1, strict=True):
+                temp_x0, temp_x1, temp_y0, temp_y1 = self.ot_sampler.sample_plan_with_labels(ss_x0, ss_x1, ss_y0, ss_y1)
+                r_x0.append(temp_x0)
+                r_x1.append(temp_x1)
+                r_y0.append(temp_y0)
+                r_y1.append(temp_y1)
+            x0 = torch.cat(r_x0, dim=0)
+            x1 = torch.cat(r_x1, dim=0)
+            if y0 is not None:
+                y0 = torch.cat(r_y0, dim=0)
+            y1 = torch.cat(r_y1, dim=0)
+
         if return_noise:
             t, xt, ut, eps = super().sample_location_and_conditional_flow(x0, x1, t, return_noise)
             return t, xt, ut, y0, y1, eps
