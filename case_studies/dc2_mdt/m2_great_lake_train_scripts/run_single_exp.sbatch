@@ -67,7 +67,7 @@ function run_exp() {
 
 task_name=$1
 print_info "run ${task_name}"
-exp_name="great_lake_exp_$(date +"%m-%d")-1"
+exp_name="great_lake_exp_$(date +"%m-%d-%M-%S")"
 cuda_devices=4
 run_exp "${task_name}" "${exp_name}" "${cuda_devices}"
 
