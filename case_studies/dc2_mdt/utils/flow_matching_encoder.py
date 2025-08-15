@@ -6,6 +6,7 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
 import torchdiffeq
+import torchsde
 from typing import Union
 
 from bliss.catalog import TileCatalog
@@ -13,8 +14,31 @@ from bliss.encoder.metrics import CatalogMatcher
 from bliss.global_env import GlobalEnv
 
 from case_studies.dc2_mdt.utils.catalog_parser import CatalogParser
-from case_studies.dc2_mdt.utils.mdt_models import M2_MDTv2_full_S_2
-from case_studies.dc2_mdt.utils.flow_matching import ConditionalFlowMatcher, ExactOptimalTransportConditionalFlowMatcher
+from case_studies.dc2_mdt.utils.mdt_models import M2_MDTv2_full_S_2, DC2_MDTv2_full_S_2
+from case_studies.dc2_mdt.utils.flow_matching import (ConditionalFlowMatcher, 
+                                                      ExactOptimalTransportConditionalFlowMatcher,
+                                                      StochasticConditionalFlowMatcher,
+                                                      pad_t_like_x)
+
+class SDEWrapper(torch.nn.Module):
+    noise_type = "diagonal"
+    sde_type = "ito"
+
+    def __init__(self, drift_and_score_fn, sigma, data_ori_shape):
+        super().__init__()
+        self.drift_and_score_fn = drift_and_score_fn
+        self.sigma = sigma
+        self.data_ori_shape = data_ori_shape
+
+    # drift
+    def f(self, t, y):
+        y = y.view(self.data_ori_shape)
+        ode_drift, score = self.drift_and_score_fn(x=y, t=t).chunk(2, dim=1)
+        return ode_drift.flatten(start_dim=1) + score.flatten(start_dim=1)
+
+    # diffusion
+    def g(self, t, y):
+        return torch.full_like(y, fill_value=self.sigma)
 
 
 class M2FMEncoder(pl.LightningModule):
@@ -77,6 +101,8 @@ class M2FMEncoder(pl.LightningModule):
                 self.flow_matcher = ConditionalFlowMatcher(sigma=sigma)
             case "ot":
                 self.flow_matcher = ExactOptimalTransportConditionalFlowMatcher(sigma=sigma)
+            case "stochastic":
+                self.flow_matcher = StochasticConditionalFlowMatcher(sigma=1.0)
             case _:
                 raise NotImplementedError()
 
@@ -94,7 +120,7 @@ class M2FMEncoder(pl.LightningModule):
                                         decode_layers=6,
                                         mask_ratio=0.3,
                                         mlp_ratio=4.0,
-                                        learn_sigma=False)
+                                        learn_sigma=(self.d_flow_matching_type == "stochastic"))  # it doesn't learn sigma; just to double the output channel
 
     def get_image(self, batch):
         assert batch["images"].size(2) % 8 == 0, "image dims must be multiples of 8"
@@ -103,24 +129,44 @@ class M2FMEncoder(pl.LightningModule):
         return torch.cat(input_lst, dim=2)
 
     @torch.inference_mode()
-    def sample(self, batch, ode_config_dict=None):
+    def sample(self, batch, ode_config_dict=None, sde_config_dict=None):
         image = self.get_image(batch)
         init_noise = torch.randn(image.shape[0], 
                                     self.catalog_parser.n_params_per_source * 2,  # x2 for double detect 
                                     self.image_size[0] // self.tile_slen, self.image_size[1] // self.tile_slen,
                                 device=image.device)
-        if ode_config_dict is None:
-            ode_config_dict = {
-                "atol": 1e-4,
-                "rtol": 1e-4,
-                "method": "dopri5",
-            }
-        traj = torchdiffeq.odeint(
-            lambda t, x: self.my_net(x=x, t=t, image=image),
-            init_noise,
-            torch.linspace(0, 1, 2, device=self.device),
-            **ode_config_dict,
-        )
+        self.my_net.enter_fast_inference()
+        if self.d_flow_matching_type != "stochastic":
+            if ode_config_dict is None:
+                ode_config_dict = {
+                    "atol": 1e-4,
+                    "rtol": 1e-4,
+                    "method": "dopri5",
+                }
+            traj = torchdiffeq.odeint(
+                lambda t, x: self.my_net(x=x, t=t, image=image),
+                init_noise,
+                torch.linspace(0, 1, 2, device=self.device),
+                **ode_config_dict,
+            )
+        else:
+            if sde_config_dict is None:
+                sde_config_dict = {
+                    "dt": 0.1,
+                    "atol": 1e-4,
+                    "rtol": 1e-4,
+                }
+            sde_obj = SDEWrapper(lambda x, t: self.my_net(x=x, t=t, image=image),
+                                 sigma=self.flow_matcher.sigma,
+                                 data_ori_shape=init_noise.shape)
+            traj = torchsde.sdeint(
+                sde_obj,
+                init_noise.flatten(start_dim=1),
+                ts=torch.linspace(0, 1, 2, device=image.device),
+                **sde_config_dict,
+            )
+            traj = traj.view(traj.shape[0], traj.shape[1], *init_noise.shape[1:])
+        self.my_net.exit_fast_inference()
         sample = traj[-1]
         sample = sample.clamp(min=-1.0, max=1.0)
         sample1, sample2 = sample.permute([0, 2, 3, 1]).chunk(2, dim=-1)  # (b, h, w, k)
@@ -130,20 +176,43 @@ class M2FMEncoder(pl.LightningModule):
 
     def _compute_flow_matching_loss(self, x1, images):
         if self.d_flow_matching_type == "vanilla":
-            (t, xt, ut), reordered_images = self.flow_matcher.sample_location_and_conditional_flow(x0=torch.randn_like(x1), 
-                                                                                                   x1=x1), images
+            t, xt, ut = self.flow_matcher.sample_location_and_conditional_flow(x0=torch.randn_like(x1), 
+                                                                               x1=x1)
+            reordered_images = images
         elif self.d_flow_matching_type == "ot":
             t, xt, ut, _, reordered_images = self.flow_matcher.guided_sample_location_and_conditional_flow(x0=torch.randn_like(x1), 
                                                                                                             x1=x1, 
                                                                                                             y1=images)
+        elif self.d_flow_matching_type == "stochastic":
+            t, xt, ut, eps = self.flow_matcher.sample_location_and_conditional_flow(x0=torch.randn_like(x1), 
+                                                                                    x1=x1, 
+                                                                                    return_noise=True)
+            reordered_images = images
+            lambda_t = self.flow_matcher.compute_lambda(t)
         else:
             raise NotImplementedError()
+        
         no_mask_pred = self.my_net(x=xt, t=t, image=reordered_images, enable_mask=False)
         masked_pred = self.my_net(x=xt, t=t, image=reordered_images, enable_mask=True)
-        return {
-            "no_mask_loss": (ut - no_mask_pred) ** 2,
-            "masked_loss": (ut - masked_pred) ** 2,
-        }
+        
+        if self.d_flow_matching_type != "stochastic":
+            return {
+                "no_mask_loss": (ut - no_mask_pred) ** 2,
+                "masked_loss": (ut - masked_pred) ** 2,
+            }
+        else:
+            no_mask_pred_ut, no_mask_pred_st = no_mask_pred.chunk(2, dim=1)
+            masked_pred_ut, masked_pred_st = masked_pred.chunk(2, dim=1)
+            lambda_t = pad_t_like_x(lambda_t, no_mask_pred_st)
+            no_mask_flow_loss = (no_mask_pred_ut - ut) ** 2
+            no_mask_score_loss = (lambda_t * no_mask_pred_st + eps) ** 2
+            masked_flow_loss = (masked_pred_ut - ut) ** 2
+            masked_score_loss = (lambda_t * masked_pred_st + eps) ** 2
+            return {
+                "no_mask_loss": no_mask_flow_loss + no_mask_score_loss,
+                "masked_loss": masked_flow_loss + masked_score_loss,
+            }
+
     
     def _compute_cur_batch_loss(self, batch):
         target_cat = TileCatalog(batch["tile_catalog"])
@@ -263,3 +332,20 @@ class M2FMEncoder(pl.LightningModule):
         my_optimizer = Adam(self.my_net.parameters(), **self.optimizer_params)
         my_scheduler = MultiStepLR(my_optimizer, **self.scheduler_params)
         return [my_optimizer], [my_scheduler]
+
+
+class DC2FMEncoder(M2FMEncoder):
+    def initialize_networks(self):
+        assert self.tile_slen == 4
+        assert self.image_size[0] == self.image_size[1]
+        target_ch = self.catalog_parser.n_params_per_source * 2  # x2 for double detect
+        ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
+        self.my_net = DC2_MDTv2_full_S_2(image_n_bands=len(self.survey_bands), 
+                                        image_ch_per_band=ch_per_band, 
+                                        image_feats_ch=128, 
+                                        input_size=self.image_size[0] // self.tile_slen, 
+                                        in_channels=target_ch, 
+                                        decode_layers=6,
+                                        mask_ratio=0.3,
+                                        mlp_ratio=4.0,
+                                        learn_sigma=(self.d_flow_matching_type == "stochastic"))  # it doesn't learn sigma; just to double the output channel

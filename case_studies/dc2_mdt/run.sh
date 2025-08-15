@@ -42,3 +42,13 @@ bliss -cp ~/bliss/case_studies/dc2_mdt/other_config -cn ori_bliss_train_config \
     encoder.use_checkerboard=true \
     train.trainer.logger.version=exp_06-09-2 \
     train.trainer.devices=[3]
+
+bliss -cp ~/bliss/case_studies/dc2_mdt/mdt_config -cn mdt_flow_matching_train_config \
+    encoder.d_flow_matching_type=stochastic \
+    train.trainer.logger.version=exp_08-15-1 \
+    train.trainer.devices=[7]
+
+bliss -cp ~/bliss/case_studies/dc2_mdt/mdt_config -cn mdt_flow_matching_train_config \
+    encoder.d_flow_matching_type=vanilla \
+    train.trainer.logger.version=exp_08-15-2 \
+    train.trainer.devices=[6]
