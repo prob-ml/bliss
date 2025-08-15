@@ -421,6 +421,17 @@ class TargetConditionalFlowMatcher(ConditionalFlowMatcher):
         t = pad_t_like_x(t, x1)
         return (x1 - (1 - self.sigma) * xt) / (1 - (1 - self.sigma) * t)
 
+class StochasticConditionalFlowMatcher(ConditionalFlowMatcher):
+    def compute_sigma_t(self, t):
+        return self.sigma * torch.sqrt(t * (1 - t))
+
+    def compute_conditional_flow(self, x0, x1, t, xt):
+        t = pad_t_like_x(t, x0)
+        mu_t = self.compute_mu_t(x0, x1, t)
+        sigma_t_prime_over_sigma_t = (1 - 2 * t) / (2 * t * (1 - t) + 1e-8)
+        ut = sigma_t_prime_over_sigma_t * (xt - mu_t) + x1 - x0
+        return ut
+
 
 class SchrodingerBridgeConditionalFlowMatcher(ConditionalFlowMatcher):
     """Child class for Schrödinger bridge conditional flow matching method. This class implements

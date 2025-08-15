@@ -88,7 +88,7 @@ class DC2DataModule(CachedSimulatedDataModule):
             train_transforms,
             nontrain_transforms,
             subset_fraction,
-            store_sparse_tensor
+            store_sparse_tensor,
             shuffle_file_order,
         )
 

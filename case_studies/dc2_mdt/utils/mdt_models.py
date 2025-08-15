@@ -461,6 +461,18 @@ class MDTv2(nn.Module):
 
         return x
     
+    def enter_fast_inference(self):
+        self.fast_inference_mode = True
+        assert self.buffer_image is None
+        assert self.buffer_image_feats is None
+
+    def exit_fast_inference(self):
+        self.fast_inference_mode = False
+        assert self.buffer_image is not None
+        self.buffer_image = None
+        assert self.buffer_image_feats is not None
+        self.buffer_image_feats = None
+    
     def get_image_feats(self, image):
         if self.fast_inference_mode:
             if self.buffer_image is None:
@@ -723,18 +735,6 @@ class M2MDTv2CondTrueRML(MDTv2):
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
 
-    def enter_fast_inference(self):
-        self.fast_inference_mode = True
-        assert self.buffer_image is None
-        assert self.buffer_image_feats is None
-
-    def exit_fast_inference(self):
-        self.fast_inference_mode = False
-        assert self.buffer_image is not None
-        self.buffer_image = None
-        assert self.buffer_image_feats is not None
-        self.buffer_image_feats = None
-
     def forward(self, x, t, image, true_n_sources_and_locs, epsilon, is_training, enable_mask=False):
         if is_training:
             assert x.ndim == 5  # (n, m, c, h, w)
@@ -830,18 +830,6 @@ class M2MDTv2FullRML(MDTv2):
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
 
-    def enter_fast_inference(self):
-        self.fast_inference_mode = True
-        assert self.buffer_image is None
-        assert self.buffer_image_feats is None
-
-    def exit_fast_inference(self):
-        self.fast_inference_mode = False
-        assert self.buffer_image is not None
-        self.buffer_image = None
-        assert self.buffer_image_feats is not None
-        self.buffer_image_feats = None
-
     def forward(self, x, t, image, epsilon, is_training, enable_mask=False):
         if is_training:
             assert x.ndim == 5  # (n, m, c, h, w)
@@ -936,6 +924,14 @@ class M2MDTv2Full(MDTv2):
         output = super().forward(x, t, image, enable_mask)  # (n, c, h, w)
         assert not torch.isnan(output).any()
         return output
+
+
+class DC2MDTv2Full(M2MDTv2Full):
+    def initialize_image_feats_net(self):
+        self.image_features_net = FeaturesNet(self.image_n_bands, 
+                                              self.image_ch_per_band, 
+                                              self.image_feats_ch, 
+                                              double_downsample=True)
 
 
 class DFTimestepEmbedder(nn.Module):
@@ -1039,18 +1035,6 @@ class M2MDTv2RMLDFFull(MDTv2):
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
 
-    def enter_fast_inference(self):
-        self.fast_inference_mode = True
-        assert self.buffer_image is None
-        assert self.buffer_image_feats is None
-
-    def exit_fast_inference(self):
-        self.fast_inference_mode = False
-        assert self.buffer_image is not None
-        self.buffer_image = None
-        assert self.buffer_image_feats is not None
-        self.buffer_image_feats = None
-
     def forward(self, x, t, image, epsilon, is_training, enable_mask=False):
         if is_training:
             assert t.ndim == 5  # (b, m, c, h, w)
@@ -1149,18 +1133,6 @@ class DC2MDTv2RML(MDTv2):
         # Initialize timestep embedding MLP:
         nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
         nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
-
-    def enter_fast_inference(self):
-        self.fast_inference_mode = True
-        assert self.buffer_image is None
-        assert self.buffer_image_feats is None
-
-    def exit_fast_inference(self):
-        self.fast_inference_mode = False
-        assert self.buffer_image is not None
-        self.buffer_image = None
-        assert self.buffer_image_feats is not None
-        self.buffer_image_feats = None
 
     def forward(self, x, t, image, epsilon, is_training, enable_mask=False):
         if is_training:
@@ -1272,6 +1244,9 @@ def M2_MDTv2_RML_S_2(**kwargs):
 
 def M2_MDTv2_full_S_2(**kwargs):
      return M2MDTv2Full(depth=12, hidden_size=384, patch_size=2, num_heads=6, **kwargs)
+
+def DC2_MDTv2_full_S_2(**kwargs):
+     return DC2MDTv2Full(depth=12, hidden_size=384, patch_size=2, num_heads=6, **kwargs)
 
 def M2_MDTv2_full_RML_S_2(**kwargs):
      return M2MDTv2FullRML(depth=12, hidden_size=384, patch_size=2, num_heads=6, **kwargs)
