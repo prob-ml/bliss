@@ -15,7 +15,7 @@ dc2_max_flux: 22025.0
 
 surveys:
   dc2:
-    batch_size: 64
+    batch_size: 32
 
 my_diffusion_factors:
   - _target_: case_studies.dc2_mdt.utils.catalog_parser.OneBitFactor
@@ -25,6 +25,7 @@ my_diffusion_factors:
     threshold: 0.0
     sample_rearrange: b ht wt 1 -> b ht wt
     loss_gating: null
+    jitter_scaler: 0.05
   - _target_: case_studies.dc2_mdt.utils.catalog_parser.NormalizedFactor
     n_params: 2
     name: locs
@@ -35,6 +36,7 @@ my_diffusion_factors:
     sample_rearrange: b ht wt d -> b ht wt 1 d
     loss_gating:
       _target_: case_studies.dc2_mdt.utils.catalog_parser.SourcesGating
+    jitter_scaler: 0.05
   - _target_: case_studies.dc2_mdt.utils.catalog_parser.LogNormalizedFactor
     n_params: 6
     name: fluxes
@@ -46,6 +48,7 @@ my_diffusion_factors:
     sample_rearrange: b ht wt d -> b ht wt 1 d
     loss_gating:
       _target_: case_studies.dc2_mdt.utils.catalog_parser.SourcesGating
+    jitter_scaler: 0.05
 
 my_metrics:
   detection_performance:
@@ -73,7 +76,7 @@ encoder:
         lr: 3e-4
         amsgrad: true  # to make adam more stable
     scheduler_params:
-        milestones: [350, 390]
+        milestones: [700, 750]
         gamma: 0.1
     image_normalizers: ${my_image_normalizers}
     catalog_parser:
@@ -99,7 +102,7 @@ train:
         devices: null  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
-        max_epochs: 400
+        max_epochs: 800
         # detect_anomaly: false
         # gradient_clip_val: 0.0
     data_source: ${surveys.dc2}
@@ -110,7 +113,7 @@ train:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
             monitor: val/_loss
             mode: min
-            patience: 400
+            patience: 800
         schedule_checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
             filename: "schedule_saved_encoder_{epoch:03d}"

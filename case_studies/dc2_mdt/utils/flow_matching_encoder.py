@@ -102,7 +102,7 @@ class M2FMEncoder(pl.LightningModule):
             case "ot":
                 self.flow_matcher = ExactOptimalTransportConditionalFlowMatcher(sigma=sigma)
             case "stochastic":
-                self.flow_matcher = StochasticConditionalFlowMatcher(sigma=1.0)
+                self.flow_matcher = StochasticConditionalFlowMatcher(sigma=0.1)
             case _:
                 raise NotImplementedError()
 
@@ -137,6 +137,7 @@ class M2FMEncoder(pl.LightningModule):
                                 device=image.device)
         self.my_net.enter_fast_inference()
         if self.d_flow_matching_type != "stochastic":
+            assert sde_config_dict is None
             if ode_config_dict is None:
                 ode_config_dict = {
                     "atol": 1e-4,
@@ -150,9 +151,11 @@ class M2FMEncoder(pl.LightningModule):
                 **ode_config_dict,
             )
         else:
+            assert ode_config_dict is None
             if sde_config_dict is None:
                 sde_config_dict = {
-                    "dt": 0.1,
+                    "dt": 0.01,
+                    "method": "euler",
                     "atol": 1e-4,
                     "rtol": 1e-4,
                 }
@@ -209,8 +212,10 @@ class M2FMEncoder(pl.LightningModule):
             masked_flow_loss = (masked_pred_ut - ut) ** 2
             masked_score_loss = (lambda_t * masked_pred_st + eps) ** 2
             return {
-                "no_mask_loss": no_mask_flow_loss + no_mask_score_loss,
-                "masked_loss": masked_flow_loss + masked_score_loss,
+                "no_mask_flow_loss": no_mask_flow_loss, 
+                "no_mask_score_loss": no_mask_score_loss,
+                "masked_flow_loss": masked_flow_loss,
+                "masked_score_loss": masked_score_loss,
             }
 
     
@@ -235,22 +240,13 @@ class M2FMEncoder(pl.LightningModule):
         loss_dict = self._compute_cur_batch_loss(batch)
 
         batch_size = batch["images"].size(0)
-        assert "no_mask_loss" in loss_dict
         with torch.inference_mode():
-            self.log(f"{logging_name}/_no_mask_loss", 
-                        loss_dict["no_mask_loss"].mean(), 
-                        batch_size=batch_size, 
-                        sync_dist=True)
-            if "masked_loss" in loss_dict:
-                self.log(f"{logging_name}/_masked_loss", 
-                        loss_dict["masked_loss"].mean(), 
-                        batch_size=batch_size, 
-                        sync_dist=True)
-        if "masked_loss" in loss_dict:
-            loss = (loss_dict["no_mask_loss"]).mean() + \
-                   (loss_dict["masked_loss"]).mean()
-        else:
-            loss = (loss_dict["no_mask_loss"]).mean()
+            for k, v in loss_dict.items():
+                self.log(f"{logging_name}/_{k}", 
+                            v.mean(), 
+                            batch_size=batch_size, 
+                            sync_dist=True)
+        loss = torch.stack([v.mean() for v in loss_dict.values()]).sum()
         self.log(f"{logging_name}/_loss", loss, batch_size=batch_size, sync_dist=True)
         return loss
 

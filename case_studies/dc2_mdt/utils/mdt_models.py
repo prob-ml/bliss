@@ -31,6 +31,7 @@ class Attention(nn.Module):
         self.scale = head_dim ** -0.5
 
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop_float = attn_drop
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -54,23 +55,35 @@ class Attention(nn.Module):
             index=ids_keep.unsqueeze(dim=1).unsqueeze(dim=2).repeat(1, rel_pos_bias.shape[1], ids_keep.shape[1], 1))
         return rel_pos_bias_masked
 
-    def forward(self, x, ids_keep=None):
+    def forward(self, x, ids_keep=None, *, accelerate_attn=True):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C //
                                   self.num_heads).permute(2, 0, 3, 1, 4)  # (3, B, num_heads, N, C // num_heads)
         # make torchscript happy (cannot use tensor as tuple)
         q, k, v = qkv[0], qkv[1], qkv[2]
 
-        attn = (q @ k.transpose(-2, -1)) * self.scale  # (B, num_heads, N, N)
         if ids_keep is not None:
             rp_bias = self.get_masked_rel_bias(B, ids_keep)
         else:
             rp_bias = self.rel_pos_bias()
-        attn += rp_bias
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        
+        if not accelerate_attn:
+            attn = (q @ k.transpose(-2, -1)) * self.scale  # (B, num_heads, N, N)
+            attn += rp_bias
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+            x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        else:
+            x = torch.nn.functional.scaled_dot_product_attention(
+                query=q,
+                key=k,
+                value=v,
+                attn_mask=rp_bias,
+                dropout_p=self.attn_drop_float,
+                scale=self.scale
+            )
+            x = x.transpose(1, 2).reshape(B, N, C)
+        
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
