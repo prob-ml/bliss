@@ -170,12 +170,13 @@ class CatalogParser(torch.nn.Module):
 
 
 class NormalizedFactor(DiffusionFactor):
-    def __init__(self, *args, data_min, data_max, scale, latent_zero_point, **kwargs):
+    def __init__(self, *args, data_min, data_max, scale, latent_zero_point, jitter_scaler=0.0, **kwargs):
         super().__init__(*args, **kwargs)
         self.data_min = data_min
         self.data_max = data_max
         self.scale = scale
         self.latent_zero_point = latent_zero_point
+        self.jitter_scaler = jitter_scaler
         self.invalid_point_flag = False
 
     def encode_tile_cat(self, true_tile_cat):
@@ -193,7 +194,10 @@ class NormalizedFactor(DiffusionFactor):
                                                  torch.ones_like(target_minus_1_to_1) * self.latent_zero_point, 
                                                  target_minus_1_to_1)
         assert ((masked_target_minus_1_to_1 >= -1.0) & (masked_target_minus_1_to_1 <= 1.0)).all()
-        return masked_target_minus_1_to_1 * self.scale
+        output = masked_target_minus_1_to_1 * self.scale
+        return torch.where(invalid_points | (target_n_sources == 0).unsqueeze(-1),
+                           output + torch.randn_like(output) * self.jitter_scaler,
+                           output)
 
     def decode_params(self, params):
         assert ((params >= -self.scale) & (params <= self.scale)).all()
@@ -205,13 +209,14 @@ class NormalizedFactor(DiffusionFactor):
 
 
 class LogNormalizedFactor(DiffusionFactor):
-    def __init__(self, *args, data_min, log_data_min, log_data_max, scale, latent_zero_point, **kwargs):
+    def __init__(self, *args, data_min, log_data_min, log_data_max, scale, latent_zero_point, jitter_scaler=0.0, **kwargs):
         super().__init__(*args, **kwargs)
         self.data_min = data_min
         self.log_data_min = log_data_min
         self.log_data_max = log_data_max
         self.scale = scale
         self.latent_zero_point = latent_zero_point
+        self.jitter_scaler = jitter_scaler
         self.invalid_point_flag = False
 
     def encode_tile_cat(self, true_tile_cat):
@@ -230,7 +235,10 @@ class LogNormalizedFactor(DiffusionFactor):
                                                      torch.ones_like(log_target_minus_1_to_1) * self.latent_zero_point,
                                                      log_target_minus_1_to_1)
         assert ((masked_log_target_minus_1_to_1 >= -1.0) & (masked_log_target_minus_1_to_1 <= 1.0)).all()
-        return masked_log_target_minus_1_to_1 * self.scale
+        output = masked_log_target_minus_1_to_1 * self.scale
+        return torch.where(invalid_points | (target_n_sources == 0).unsqueeze(-1),
+                           output + torch.randn_like(output) * self.jitter_scaler,
+                           output)
 
     def decode_params(self, params):
         assert ((params >= -self.scale) & (params <= self.scale)).all()
@@ -243,23 +251,24 @@ class LogNormalizedFactor(DiffusionFactor):
 
 
 class OneBitFactor(DiffusionFactor):
-    def __init__(self, *args, bit_value, threshold, **kwargs):
+    def __init__(self, *args, bit_value, threshold, jitter_scaler=0.0, **kwargs):
         super().__init__(*args, **kwargs)
         assert self.n_params == 1
         self.bit_value = bit_value
         self.threshold = threshold
+        self.jitter_scaler = jitter_scaler
         assert self.threshold > -self.bit_value and self.threshold < self.bit_value
 
     def encode_tile_cat(self, true_tile_cat):
         if self.name == "n_sources":
             assert len(true_tile_cat[self.name].shape) == 3
             target = true_tile_cat[self.name]  # (b, h, w)
-            return torch.where(target > 0, self.bit_value, -self.bit_value).unsqueeze(-1)
+            return (torch.where(target > 0, self.bit_value, -self.bit_value) + torch.randn_like(target, dtype=torch.float) * self.jitter_scaler).unsqueeze(-1)
         assert len(true_tile_cat[self.name].shape) == 5  # (b, h, w, 1, k)
         assert true_tile_cat[self.name].shape[-2] == 1
         assert true_tile_cat[self.name].shape[-1] == self.n_params
         target = true_tile_cat[self.name][..., 0, :]  # (b, h, w, k)
-        return torch.where(target > 0, self.bit_value, -self.bit_value)
+        return torch.where(target > 0, self.bit_value, -self.bit_value) + torch.randn_like(target, dtype=torch.float) * self.jitter_scaler
 
     def decode_params(self, params):
         assert ((params >= -self.bit_value) & (params <= self.bit_value)).all()

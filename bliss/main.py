@@ -91,6 +91,9 @@ def train(train_cfg: DictConfig):
     if train_cfg.matmul_precision:
         torch.set_float32_matmul_precision(train_cfg.matmul_precision)
 
+    # use flash attn
+    torch.backends.cuda.enable_flash_sdp(enabled=True)
+
     # setup dataset, encoder, callbacks and trainer
     dataset = instantiate(train_cfg.data_source)
     encoder = instantiate(train_cfg.encoder)
