@@ -58,6 +58,7 @@ pyarrow = "^15.0.0"
 healpy = "^1.16.6"
 h5py = "^3.11.0"
 pytest = "^8.2.2"
+tensorboard = "^2.20.0"
 
 [build-system]
 build-backend = "poetry.core.masonry.api"
