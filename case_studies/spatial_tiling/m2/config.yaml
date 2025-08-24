@@ -66,6 +66,7 @@ encoder:
     scheduler_params:
         milestones: []
         gamma: 0.1
+    minimalist_conditioning: true
 
 prior:
     _target_: bliss.simulator.prior.CatalogPrior
