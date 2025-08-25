@@ -16,6 +16,22 @@ dc2_max_flux: 22025.0
 surveys:
   dc2:
     batch_size: 32
+    train_transforms:
+      - _target_: bliss.cached_dataset.OneBandTransform
+        band_idx: 2  # r-band
+      - _target_: bliss.data_augmentation.RotateFlipTransform
+      - _target_: bliss.data_augmentation.RandomShiftTransform
+        tile_slen: ${surveys.dc2.tile_slen}
+        max_sources_per_tile: ${surveys.dc2.max_sources_per_tile}
+      - _target_: bliss.cached_dataset.FluxFilterTransform
+        reference_band: 0  
+        min_flux: 100
+    nontrain_transforms:
+      - _target_: bliss.cached_dataset.OneBandTransform
+        band_idx: 2  # r-band
+      - _target_: bliss.cached_dataset.FluxFilterTransform
+        reference_band: 0  
+        min_flux: 100
 
 my_diffusion_factors:
   - _target_: case_studies.dc2_mdt.utils.catalog_parser.OneBitFactor
@@ -38,7 +54,7 @@ my_diffusion_factors:
       _target_: case_studies.dc2_mdt.utils.catalog_parser.SourcesGating
     jitter_scaler: 0.05
   - _target_: case_studies.dc2_mdt.utils.catalog_parser.LogNormalizedFactor
-    n_params: 6
+    n_params: 1
     name: fluxes
     data_min: ${dc2_min_flux}
     log_data_min: ${dc2_min_log_flux}
@@ -59,16 +75,16 @@ my_metrics:
     base_flux_bin_cutoffs: [200, 400, 600, 800, 1000]
     mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
+    ref_band: 0
 
 my_image_normalizers:
-  asinh:
-    _target_: bliss.encoder.image_normalizer.AsinhQuantileNormalizer
-    q: [0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99, 0.999, 0.9999, 0.99999]
+  null_noramlize:
+    _target_: case_studies.dc2_cataloging.utils.image_normalizer.NullNormalizer
 
 encoder:
     _target_: case_studies.dc2_mdt.utils.flow_matching_encoder.DC2FMEncoder
-    survey_bands: [u, g, r, i, z, y]
-    reference_band: 2
+    survey_bands: [r]
+    reference_band: 0
     d_flow_matching_type: vanilla
     acc_grad_batches: 1
     max_fluxes: ${dc2_max_flux}
@@ -76,7 +92,7 @@ encoder:
         lr: 3e-4
         amsgrad: true  # to make adam more stable
     scheduler_params:
-        milestones: [700, 750]
+        milestones: [700, 790]
         gamma: 0.1
     image_normalizers: ${my_image_normalizers}
     catalog_parser:
