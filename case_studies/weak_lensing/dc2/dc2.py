@@ -102,7 +102,7 @@ class LensingDC2DataModule(DC2DataModule):
             redshift_bin[full_catalog["redshift_nobin"][0, :, 0] > q] = b
 
         for k, v in full_catalog.items():
-            if k in {"plocs", "redshift_nobin", "mag_mask"}:
+            if k in {"plocs", "plocs_binned", "redshift_nobin", "mag_mask"}:
                 continue
 
             v = v.reshape(self.batch_size, plocs.shape[1], -1)
@@ -389,6 +389,7 @@ class LensingDC2Catalog(DC2FullCatalog):
         for i in range(num_redshift_bins):
             redshift_bin[catalog_dict["redshift"] > kwargs["redshift_quantiles"][i]] = i
 
+        plocs_redbin = torch.zeros(catalog_dict["plocs"].shape[0], 2, num_redshift_bins)
         shear1_redbin = torch.zeros(catalog_dict["shear1"].shape[0], num_redshift_bins)
         shear2_redbin = torch.zeros(catalog_dict["shear2"].shape[0], num_redshift_bins)
         convergence_redbin = torch.zeros(catalog_dict["convergence"].shape[0], num_redshift_bins)
@@ -406,6 +407,7 @@ class LensingDC2Catalog(DC2FullCatalog):
 
         for i in range(num_redshift_bins):
             num = torch.sum(redshift_bin == i)
+            plocs_redbin[:num, :, i] = catalog_dict["plocs"][redshift_bin == i]
             shear1_redbin[:num, i] = catalog_dict["shear1"][redshift_bin == i]
             shear2_redbin[:num, i] = catalog_dict["shear2"][redshift_bin == i]
             convergence_redbin[:num, i] = catalog_dict["convergence"][redshift_bin == i]
@@ -421,6 +423,7 @@ class LensingDC2Catalog(DC2FullCatalog):
             "ra": ra_redbin.reshape(1, nobj, num_redshift_bins),
             "dec": dec_redbin.reshape(1, nobj, num_redshift_bins),
             "plocs": catalog_dict["plocs"].reshape(1, nobj, 2),
+            "plocs_binned": plocs_redbin.reshape(1, nobj, 2, num_redshift_bins),
             "shear1": shear1_redbin.reshape(1, nobj, num_redshift_bins),
             "shear2": shear2_redbin.reshape(1, nobj, num_redshift_bins),
             "convergence": convergence_redbin.reshape(1, nobj, num_redshift_bins),

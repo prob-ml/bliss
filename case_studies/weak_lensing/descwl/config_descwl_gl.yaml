@@ -7,11 +7,12 @@ defaults:
 mode: train
 
 paths:
-    cached_data: /scratch/regier_root/regier0/twhit/data/weak_lensing/weak_lensing_img2048_WLD_density_240_varying_shear
-    output: /scratch/regier_root/regier0/twhit/bliss
+    cached_data: /scratch/regier_root/regier0/taodingr/data/weak_lensing/weak_lensing_img2048_WLD_80_star_max_100_draw_bright_varying_shear
+    output: /scratch/regier_root/regier0/taodingr/bliss
 
 cached_simulator:
     batch_size: 1
+    splits: 0:70/70:80/80:100
     train_transforms: []
     num_workers: 1
 
@@ -25,7 +26,7 @@ variational_factors:
 
 lensing_normalizers_nan:
     nan:
-        _target_: case_studies.weak_lensing.image_normalizer.NanNormalizer
+        _target_: case_studies.weak_lensing.image_normalizer.NanClipNormalizer
 
 lensing_metrics:
     _target_: case_studies.weak_lensing.metrics.WeakLensingMetrics
@@ -79,7 +80,7 @@ train:
     trainer:
         logger:
             name: WeakLensingResultsDescwl
-            version: ${now:%Y-%m-%d_%H-%M}
+            version: ${now:%Y-%m-%d_%H-%M}_WLD_80_star_max_100_draw_bright_with_clip_99_percentile
         max_epochs: 300
         devices: 1
         use_distributed_sampler: false
