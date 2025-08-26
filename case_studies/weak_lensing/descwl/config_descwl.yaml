@@ -7,11 +7,12 @@ defaults:
 mode: train
 
 paths:
-    cached_data: /nfs/turbo/lsa-regier/scratch/taodingr/weak_lensing_img2048_WLD_density_80_1x1_varying_shear
+    cached_data: /data/scratch/descwl/weak_lensing_img2048_WLD_80_star_max_100_draw_bright_with_filter_varying_shear
     output: /home/twhit/bliss
 
 cached_simulator:
     batch_size: 1
+    splits: 0:70/70:80/80:100
     train_transforms: []
     num_workers: 1
 
