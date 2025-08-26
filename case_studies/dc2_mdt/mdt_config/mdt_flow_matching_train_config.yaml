@@ -76,6 +76,12 @@ my_metrics:
     mag_zero_point: 3631e9  # for DC2
     report_bin_unit: mag
     ref_band: 0
+  asymmetric_cm:
+    _target_: case_studies.dc2_mdt.utils.metrics.AsymmetricCM
+    max_n_sources: 2
+    locs_bin_boundaries: [0.0, 0.25, 0.5, 0.75, 1.0]
+    flux_bin_boundaries: [21.0, 22.2, 23.4, 24.6, 25.8]
+    flux_bands: ${encoder.survey_bands}
 
 my_image_normalizers:
   clahe:

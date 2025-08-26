@@ -2,6 +2,8 @@ from typing import Optional
 
 import pytorch_lightning as pl
 import torch
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 from torch.optim import Adam
 from torch.optim.lr_scheduler import MultiStepLR
 from torchmetrics import MetricCollection
@@ -274,13 +276,24 @@ class M2FMEncoder(pl.LightningModule):
 
     def update_metrics(self, batch, batch_idx):
         target_tile_cat = TileCatalog(batch["tile_catalog"])
+        target_tile_cat1 = target_tile_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=0
+        )
+        target_tile_cat2 = target_tile_cat.get_brightest_sources_per_tile(
+            band=self.reference_band, exclude_num=1
+        )
         target_tile_cat["fluxes"] = target_tile_cat["fluxes"].clamp(max=self.max_fluxes)
+        target_tile_cat1["fluxes"] = target_tile_cat1["fluxes"].clamp(max=self.max_fluxes)
+        target_tile_cat2["fluxes"] = target_tile_cat2["fluxes"].clamp(max=self.max_fluxes)
         target_cat = target_tile_cat.to_full_catalog(self.tile_slen)
+        target_cat.target_tile_cat1 = target_tile_cat1
+        target_cat.target_tile_cat2 = target_tile_cat2
 
-        mode_tile_cat = self.sample(batch)
-        mode_cat = mode_tile_cat.to_full_catalog(self.tile_slen)
-        mode_matching = self.matcher.match_catalogs(target_cat, mode_cat)
-        self.mode_metrics.update(target_cat, mode_cat, mode_matching)
+        sample_tile_cat = self.sample(batch)
+        sample_cat = sample_tile_cat.to_full_catalog(self.tile_slen)
+        sample_cat.sample_tile_cat = sample_tile_cat
+        sample_matching = self.matcher.match_catalogs(target_cat, sample_cat)
+        self.mode_metrics.update(target_cat, sample_cat, sample_matching)
 
     @torch.inference_mode()
     def validation_step(self, batch, batch_idx):
@@ -290,19 +303,15 @@ class M2FMEncoder(pl.LightningModule):
 
     def report_metrics(self, metrics, logging_name, show_epoch=False):
         for k, v in metrics.compute().items():
-            self.log(f"{logging_name}/{k}", v, sync_dist=True)
-
-        for metric_name, metric in metrics.items():
-            if hasattr(metric, "plot"):  # noqa: WPS421
-                try:
-                    plot_or_none = metric.plot()
-                except NotImplementedError:
-                    continue
+            if isinstance(v, torch.Tensor):
+                self.log(f"{logging_name}/{k}", v, sync_dist=True)
+            elif isinstance(v, Figure):
                 name = f"Epoch:{self.current_epoch}" if show_epoch else ""
-                name += f"/{logging_name} {metric_name}"
-                if self.logger and plot_or_none:
-                    fig, _axes = plot_or_none
-                    self.logger.experiment.add_figure(name, fig)
+                name += f"/{logging_name} {k}"
+                self.logger.experiment.add_figure(name, v)
+                plt.close(v)
+            else:
+                raise NotImplementedError()
 
     def on_validation_epoch_end(self):
         self.report_metrics(self.mode_metrics, "val/mode", show_epoch=True)
