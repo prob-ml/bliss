@@ -17,8 +17,10 @@ surveys:
   dc2:
     batch_size: 32
     train_transforms:
-      - _target_: bliss.cached_dataset.OneBandTransform
+      - _target_: case_studies.dc2_mdt.utils.transform.OneBandTransformKeepingOriImage
         band_idx: 2  # r-band
+      # - _target_: bliss.cached_dataset.OneBandTransform
+      #   band_idx: 2  # r-band
       - _target_: bliss.data_augmentation.RotateFlipTransform
       - _target_: bliss.data_augmentation.RandomShiftTransform
         tile_slen: ${surveys.dc2.tile_slen}
@@ -27,8 +29,10 @@ surveys:
         reference_band: 0  
         min_flux: 100
     nontrain_transforms:
-      - _target_: bliss.cached_dataset.OneBandTransform
+      - _target_: case_studies.dc2_mdt.utils.transform.OneBandTransformKeepingOriImage
         band_idx: 2  # r-band
+      # - _target_: bliss.cached_dataset.OneBandTransform
+      #   band_idx: 2  # r-band
       - _target_: bliss.cached_dataset.FluxFilterTransform
         reference_band: 0  
         min_flux: 100
@@ -128,7 +132,7 @@ train:
         devices: null  # change it before running the code
         use_distributed_sampler: false  # disable this because we use the self-defined distributed sampler
         precision: 32-true
-        max_epochs: 800
+        max_epochs: 850
         # detect_anomaly: false
         # gradient_clip_val: 0.0
     data_source: ${surveys.dc2}
@@ -139,7 +143,7 @@ train:
             _target_: pytorch_lightning.callbacks.early_stopping.EarlyStopping
             monitor: val/_loss
             mode: min
-            patience: 800
+            patience: 850
         schedule_checkpointing:
             _target_: pytorch_lightning.callbacks.ModelCheckpoint
             filename: "schedule_saved_encoder_{epoch:03d}"

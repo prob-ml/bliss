@@ -345,7 +345,7 @@ class DC2FMEncoder(M2FMEncoder):
         assert self.image_size[0] == self.image_size[1]
         target_ch = self.catalog_parser.n_params_per_source * 2  # x2 for double detect
         ch_per_band = sum(inorm.num_channels_per_band() for inorm in self.image_normalizers)
-        self.my_net = DC2_MDTv2_full_S_2(image_n_bands=len(self.survey_bands), 
+        self.my_net = DC2_MDTv2_full_S_2(image_n_bands=6,  # we use the ori image  # image_n_bands=len(self.survey_bands),  
                                         image_ch_per_band=ch_per_band, 
                                         image_feats_ch=128, 
                                         input_size=self.image_size[0] // self.tile_slen, 
