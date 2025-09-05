@@ -1,4 +1,5 @@
 import torch
+from copy import copy
 
 class RandomCropTransform(torch.nn.Module):
     def __init__(self, box_slen: int, boundary_pad: int):
@@ -36,4 +37,27 @@ class RandomCropTransform(torch.nn.Module):
                                                   box_origin[0, 1].item():box_end[0, 1].item()]
         
         datum_out["full_catalog"] = new_full_cat_dict
+        return datum_out
+    
+
+class OneBandTransformKeepingOriImage(torch.nn.Module):
+    def __init__(self, band_idx):
+        super().__init__()
+        self.band_idx = band_idx
+
+    def __call__(self, datum_in):
+        datum_out = {
+            "images": datum_in["images"],  # note that we keep the ori image
+            "psf_params": datum_in["psf_params"][self.band_idx : self.band_idx + 1],
+        }
+
+        for cat_name in ("tile_catalog", "full_catalog"):
+            if cat_name not in datum_in:
+                continue
+            cat = copy(datum_in[cat_name])
+            for k, v in cat.items():
+                if k.endswith("fluxes"):
+                    cat[k] = v[..., self.band_idx : self.band_idx + 1]
+            datum_out[cat_name] = cat
+
         return datum_out
