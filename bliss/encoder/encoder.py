@@ -385,7 +385,8 @@ class Encoder(pl.LightningModule):
         self._compute_loss(batch, "val")
 
         nll = self.compute_sampler_nll(batch)
-        self.log("val/nll", nll.sum())
+        batch_size = batch["images"].size(0)
+        self.log("val/nll", nll.sum(), batch_size=batch_size)
 
         self.update_metrics(batch, batch_idx)
 
