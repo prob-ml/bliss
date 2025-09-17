@@ -198,7 +198,7 @@ def _plot_credible_intervals_for_shear(
         )
 
     ax.set_xlabel(shear_label, fontsize=fontsize)
-    ax.set_ylabel(f"$\\widehat{{{shear_label[1:]}}}$", fontsize=fontsize)
+    ax.set_ylabel(rf"$\widehat{{{shear_label[1:]}}}$", fontsize=fontsize)
     ax.tick_params(axis="both", which="major", labelsize=ticklabelsize)
     ax.legend(loc="upper left", prop={"size": ticklabelsize})
     ax.set_xlim(axmin, axmax)
