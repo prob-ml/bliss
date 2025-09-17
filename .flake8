@@ -158,6 +158,10 @@ ignore =
     # is verbose but necessary for some operations
     WPS338,
 
+    # Non-strict slice operations (WPS478) - Explicit slices
+    # like [0:2] are less readable than [:] for simple cases
+    WPS478,
+
     # Code size metrics (WPS202, WPS213, WPS214) - These
     # limits are too restrictive for our use case
     WPS202,WPS213,WPS214,
@@ -169,6 +173,9 @@ ignore =
     # Function length (WPS231) - Some functions need to be
     # longer to maintain readability
     WPS231,
+
+    # underscore before numbers makes sense if followed by an underscore
+    WPS114,
 
     # ===== Naming Convention Rules =====
     # PyTorch functional import (N812) - Following PyTorch
